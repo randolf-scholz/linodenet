@@ -1,4 +1,12 @@
-from LinODEnet import LinODEnet
+r"""
+
+test
 
 
-__all__ = ['LinODEnet.py']
+"""
+
+
+import linodenet.init as init
+import linodenet.models as models
+
+__all__ = ['init', 'models']

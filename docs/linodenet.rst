@@ -1,7 +1,7 @@
-tsdm package
+LinODE-Net package
 ==================
 
-.. automodule:: tsdm
+.. automodule:: linodenet
     :members:
     :undoc-members:
     :show-inheritance:
@@ -9,8 +9,12 @@ tsdm package
 Submodules
 ----------
 
-.. automodule:: tsdm.util
+.. automodule:: linodenet.models
     :members:
     :undoc-members:
     :show-inheritance:
 
+.. automodule:: linodenet.init
+    :members:
+    :undoc-members:
+    :show-inheritance:

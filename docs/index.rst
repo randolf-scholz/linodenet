@@ -1,19 +1,15 @@
 
-LinODEnet
+LinODE-Net
 ================================================
 
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 3
+    :caption: Contents:
 
-   more_docu
-
-
-Purpose
-_______
-
-Why do we need the package?
-
+    linodenet
+    readme
+    changelog
 
 
 Example
@@ -26,27 +22,18 @@ looks like this:
 
 .. code-block:: python
 
-   import LinODEnet
+   import linodenet
 
-   trained_model = LinODEnet.models.ExponentialDecay().fit(points_in_time, labels)
-   trained_model.predict(points_in_time)
+   model = linodenet.model.LinearContraction
 
-Features
---------
-
-The package implements the following methods
-
-- something
-- something more
 
 Installation
 ------------
 
-Install the glucose package using `pip` by
+Install the LinODE-Net_ package using ``pip`` by
 
 .. code-block:: bash
 
-   cd LinODEnet
    pip install -e .
 
 Here we assume that you want to install the package in editable mode, because

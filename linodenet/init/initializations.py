@@ -15,6 +15,7 @@ from scipy import stats
 
 def gaussian(n: int) -> Tensor:
     r"""
+    Samples a random gaussian matrix $A_{ij}\sim \mathcal N(0, \tfrac{1}{n})$ of size $n$.
 
     Parameters
     ----------
@@ -29,6 +30,7 @@ def gaussian(n: int) -> Tensor:
 
 def symmetric(n: int) -> Tensor:
     r"""
+    Samples a random orthogonal matrix $A^T = A^{-1}$ of size $n$.
 
     Parameters
     ----------
@@ -44,6 +46,7 @@ def symmetric(n: int) -> Tensor:
 
 def skew_symmetric(n: int) -> Tensor:
     r"""
+    Samples a random skew-symmetric matrix, i.e. $A^T = -A$, of size $n$.
 
     Parameters
     ----------
@@ -59,6 +62,7 @@ def skew_symmetric(n: int) -> Tensor:
 
 def orthogonal(n: int) -> Tensor:
     r"""
+    Samples a random orthogonal matrix, i.e. $A^T = A^{-1}$, of size $n$.
 
     Parameters
     ----------
@@ -74,6 +78,7 @@ def orthogonal(n: int) -> Tensor:
 
 def special_orthogonal(n: int) -> Tensor:
     r"""
+    Samples a random special orthogonal matrix, i.e. $A^T = A^{-1}$ with $\det(A)=1$, of size $n$.
 
     Parameters
     ----------

@@ -27,12 +27,14 @@ setuptools.setup(
     description="Linear ODE Network for Time Series Forecasting",
     long_description=read("README.rst"),
     long_description_content_type='test/x-rst',
-    packages=setuptools.find_packages(exclude=('tests')),
-    install_requires=['click'],
-    entry_points={
-        'console_scripts': [
-            'some-magic='
-            'LinODEnet.cli:cli_group'
-        ],
+    packages=setuptools.find_packages(exclude='tests'),           # include all packages in ...
+    install_requires=[
+            'numpy',
+            'torch',
+    ],
+    # include_package_data=True,  <-- This MUST NOT be set https://stackoverflow.com/a/23936405/9318372
+    package_data={
+        #
     },
+    exclude_package_data={"": ["virtualenv.yaml"]},
 )
