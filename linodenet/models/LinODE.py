@@ -1,29 +1,42 @@
 import torch
-from torch import nn, Tensor
+from torch import nn, Tensor, jit
 from typing import Union, List, Callable
 
 
-class LinODECell(torch.jit.ScriptModule):
+class LinODECell(jit.ScriptModule):
     r"""
-    Linear System module
+    Linear System module, solves $\dot x = Ax$
 
-    x' = Ax + Bu + w
-     y = Cx + Du + v
+    **TODO:** Implement the general linear system
 
+    .. math::
+        \begin{aligned}
+         \dot x &= Ax + Bu + w \\
+              y &= Cx + Du + v
+        \end{aligned}
+
+    Parameters
+    ----------
+    input_size: int
+        dimension of input
+    kernel_initialization: :class:`torch.Tensor` or Callable, default=None
+        Either a tensor to assign to the kernel at initialization or a callable f: :class:`int` -> :class:`torch.Tensor`
+    homogeneous: bool, default=True
+        Whether to include bias
+    matrix_type: str, default=None
+        Regularization
+    device: str or :class:`torch.device`, default='cpu'
+    dtype: :class:`torch.dtype`, default=:class:`torch.float32`
     """
 
-    def __init__(self, input_size,
+    def __init__(self, input_size: int,
                  kernel_initialization: Union[torch.Tensor, Callable[int, torch.Tensor]] = None,
                  homogeneous: bool = True,
                  matrix_type: str = None,
-                 device=torch.device('cpu'),
-                 dtype=torch.float32,
+                 device: Union[str, torch.device] = "cpu",
+                 dtype: torch.dtype = torch.float32,
                  ):
-        r"""
-        kernel_initialization: torch.tensor or callable
-            either a tensor to assign to the kernel at initialization
-            or a callable f: int -> torch.Tensor|L
-        """
+
         super(LinODECell, self).__init__()
 
         if kernel_initialization is None:
@@ -41,19 +54,19 @@ class LinODECell(torch.jit.ScriptModule):
 
         self.to(device=device, dtype=dtype)
 
-    @torch.jit.script_method
+    @jit.script_method
     def forward(self, Δt, x):
         r"""
-        Inputs:
-        Δt: (...,)
-        x:  (..., M)
-
-        Outputs:
-        xhat:  (..., M)
-
-
         Forward using matrix exponential
         # TODO: optimize if clauses away by changing definition in constructor.
+        Parameters
+        ----------
+        Δt: :class:`torch.Tensor`
+        x:  :class:`torch.Tensor`
+
+        Returns
+        -------
+        xhat:  :class:`torch.Tensor`
         """
 
         AΔt = torch.einsum('kl, ... -> ...kl', self.kernel, Δt)
@@ -63,12 +76,13 @@ class LinODECell(torch.jit.ScriptModule):
         return xhat
 
 
-class LinODE(torch.jit.ScriptModule):
+class LinODE(jit.ScriptModule):
     r"""
-    linode
+    Linear ODE module
     """
     def __init__(self, *cell_args, **cell_kwargs):
         r"""
+        Initialize Linear ODE
 
         Parameters
         ----------
@@ -78,18 +92,19 @@ class LinODE(torch.jit.ScriptModule):
         super(LinODE, self).__init__()
         self.cell = LinODECell(*cell_args, **cell_kwargs)
 
-    @torch.jit.script_method
+    @jit.script_method
     def forward(self, x0: Tensor, T: Tensor) -> Tensor:
         r"""
+        Propagate x0
 
         Parameters
         ----------
-        x0
-        T
+        x0: :class:`torch.Tensor`
+        T: :class:`torch.Tensor`
 
         Returns
         -------
-
+        Xhat: :class:`torch.Tensor`
         """
         ΔT = torch.diff(T)
         x = torch.jit.annotate(List[Tensor], [])

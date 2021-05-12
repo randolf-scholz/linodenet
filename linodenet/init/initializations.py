@@ -30,7 +30,7 @@ def gaussian(n: int) -> Tensor:
 
 def symmetric(n: int) -> Tensor:
     r"""
-    Samples a random orthogonal matrix $A^T = A^{-1}$ of size $n$.
+    Samples a random orthogonal matrix $A^T = A$ of size $n$.
 
     Parameters
     ----------
@@ -50,27 +50,27 @@ def skew_symmetric(n: int) -> Tensor:
 
     Parameters
     ----------
-    n: int
+    n:  tensor
 
     Returns
     -------
-    :class:`torch.Tensor`
+    output : iResNet
+        return value
     """
     A = torch.normal(mean=torch.zeros(n, n), std=1/np.sqrt(n))
     return (A - A.T)/np.sqrt(2)
 
 
 def orthogonal(n: int) -> Tensor:
-    r"""
+    r"""Summary line.
+
     Samples a random orthogonal matrix, i.e. $A^T = A^{-1}$, of size $n$.
 
-    Parameters
-    ----------
-    n: int
+    Args:
+        n (int): dimension
 
-    Returns
-    -------
-    :class:`torch.Tensor`
+    Returns:
+        tensor: random matrix
     """
     A = stats.ortho_group.rvs(dim=n)
     return torch.Tensor(A)

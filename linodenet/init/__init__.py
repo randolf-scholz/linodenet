@@ -1,4 +1,7 @@
 r"""
+Initializations
+===============
+
 Initializations for the Linear ODE Network
 
 Constants
