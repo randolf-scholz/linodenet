@@ -3,12 +3,12 @@ import warnings
 from typing import Union
 
 import torch
-from torch import nn, Tensor
+from torch import jit, nn, Tensor
 from torch.nn import functional
 from tsdm.util import ACTIVATIONS, deep_dict_update
 
 
-class LinearContraction(nn.Module):
+class LinearContraction(jit.ScriptModule):
     r"""
     LinearContraction implementation
     """
@@ -43,6 +43,7 @@ class LinearContraction(nn.Module):
         if self.bias is not None:
             nn.init.kaiming_uniform_(self.bias, a=math.sqrt(5))
 
+    @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
         return functional.linear(x, self.weight, self.bias)
 
@@ -51,14 +52,14 @@ class LinearContraction(nn.Module):
             self.input_size, self.output_size, self.bias is not None
         )
 
-    # @torch.jit.script_method
-    def forward(self, x: Tensor, c: float = 0.97) -> Tensor:
+    @jit.script_method
+    def alt_forward(self, x: Tensor, c: float = 0.97) -> Tensor:
         σ_max = torch.linalg.norm(self.weight, ord=2)
         fac = torch.minimum(c / σ_max, torch.ones(1))
         return functional.linear(x, fac * self.weight, self.bias)
 
 
-class iResNetBlock(nn.Module):
+class iResNetBlock(jit.ScriptModule):
     r"""
     invertible ResNet-Block implementation
     """
@@ -108,7 +109,7 @@ class iResNetBlock(nn.Module):
             activation(**self.HP['activation_config']),
         )
 
-    # @torch.jit.script_method
+    @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
         r"""
         Forward pass
@@ -125,7 +126,7 @@ class iResNetBlock(nn.Module):
 
         return xhat
 
-    # @torch.jit.script_method
+    @jit.script_method
     def inverse(self, y: Tensor,
                 maxiter: int = 1000, rtol: float = 1e-05, atol: float = 1e-08) -> Tensor:
         r"""
@@ -159,7 +160,7 @@ class iResNetBlock(nn.Module):
         return xhat_dash
 
 
-class iResNet(nn.Module):
+class iResNet(jit.ScriptModule):
     r"""
     invertible ResNet implementation
 
@@ -212,7 +213,7 @@ class iResNet(nn.Module):
 
         self.reversed_blocks = nn.Sequential(*reversed(list(self.blocks)))
 
-    # @torch.jit.script_method
+    @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
         r"""
         Forward pass
@@ -231,7 +232,7 @@ class iResNet(nn.Module):
 
         return x
 
-    # @torch.jit.script_method
+    @jit.script_method
     def inverse(self, y: Tensor) -> Tensor:
         r"""
         Inverse pass
@@ -252,7 +253,7 @@ class iResNet(nn.Module):
 
         return y
 
-    # @torch.jit.script_method
+    @jit.script_method
     def alt_inverse(self, y: Tensor,
                     maxiter: int = 1000, rtol: float = 1e-05, atol: float = 1e-08) -> Tensor:
         r"""

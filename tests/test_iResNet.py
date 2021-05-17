@@ -1,6 +1,8 @@
 import torch
 
-from tsdm.util import visualize_distribution, scaled_norm
+from tsdm.util import scaled_norm
+from tsdm.plot import visualize_distribution
+
 import matplotlib.pyplot as plt
 import numpy as np
 from linodenet.models import LinearContraction, iResNetBlock, iResNet
@@ -82,4 +84,5 @@ def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_si
 
 
 def test_iResNet():
+    iResNet(10)
     pass

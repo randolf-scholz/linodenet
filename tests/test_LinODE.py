@@ -1,11 +1,13 @@
 import numpy as np
 import torch
-from tqdm.trange import range
-from scipy.integrate import odeint
-from tsdm.util import visualize_distribution
+from tqdm.auto import trange
+from tsdm.plot import visualize_distribution
+from tsdm.util import scaled_norm
+from linodenet.models import LinODE
+import matplotlib.pyplot as plt
 
 
-def test_LinODE(dim=None, num=None, tol=1e-3, precision="single", relative_error=True):
+def test_linode(dim=None, num=None, tol=1e-3, precision="single", relative_error=True):
     from scipy.integrate import odeint
 
     if precision == "single":
@@ -27,7 +29,8 @@ def test_LinODE(dim=None, num=None, tol=1e-3, precision="single", relative_error
     T = np.random.uniform(low=t0, high=t1, size=num - 2).astype(numpy_dtype)
     T = np.sort([t0, *T, t1]).astype(numpy_dtype)
 
-    def func(t, x): return A @ x
+    def func(t, x):
+        return A @ x
 
     X = odeint(func, x0, T, tfirst=True)
 
@@ -46,22 +49,24 @@ def test_LinODE(dim=None, num=None, tol=1e-3, precision="single", relative_error
     if relative_error:
         err /= np.abs(X) + eps
 
-    return np.array([scaled_Lp(err, p=p) for p in (1, 2, np.inf)])
+    return np.array([scaled_norm(err, p=p) for p in (1, 2, np.inf)])
 
 
-def test_LinODE_error():
-    err_single = np.array([test_LinODE() for _ in trange(1_000)]).T
-    err_double = np.array([test_LinODE(precision="double") for _ in trange(1_000)]).T
+def test_linode_error():
+    err_single = np.array([test_linode() for _ in trange(1_000)]).T
+    err_double = np.array([test_linode(precision="double") for _ in trange(1_000)]).T
 
     with plt.style.context('bmh'):
-        fig, ax = plt.subplots(ncols=3, nrows=2, figsize=(10, 5), tight_layout=True, sharey=True, sharex=True)
+        fig, ax = plt.subplots(ncols=3, nrows=2, figsize=(10, 5), tight_layout=True, sharey='all', sharex='all')
 
     for i, err in enumerate((err_single, err_double)):
         for j, p in enumerate((1, 2, np.inf)):
             visualize_distribution(err[j], log=True, ax=ax[i, j])
-            if j == 0: ax[i, 0].annotate(F"FP{32 * (i + 1)}", xy=(0, 0.5), xytext=(-ax[i, 0].yaxis.labelpad - 5, 0),
-                                         xycoords=ax[i, 0].yaxis.label, textcoords='offset points',
-                                         size='xx-large', ha='right', va='center')
-            if i == 1: ax[i, j].set_xlabel(F"scaled, relative L{p} error")
+            if j == 0:
+                ax[i, 0].annotate(
+                    F"FP{32 * (i + 1)}", xy=(0, 0.5), xytext=(-ax[i, 0].yaxis.labelpad - 5, 0),
+                    xycoords=ax[i, 0].yaxis.label, textcoords='offset points', size='xx-large', ha='right', va='center')
+            if i == 1:
+                ax[i, j].set_xlabel(F"scaled, relative L{p} error")
 
     fig.savefig('linode_error_plot.svg')

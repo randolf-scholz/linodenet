@@ -1,6 +1,7 @@
 import torch
 from torch import nn, Tensor, jit
 from typing import Union, List, Callable
+import numpy as np
 
 
 class LinODECell(jit.ScriptModule):
@@ -114,7 +115,3 @@ class LinODE(jit.ScriptModule):
             x += [self.cell(Δt, x[-1])]
 
         return torch.stack(x)
-
-
-
-
