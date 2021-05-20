@@ -1,10 +1,25 @@
+r"""
+LinODEnet
+=========
+
+Contains implementations of
+
+- class:`~.LinODECell`
+- class:`~.LinODE`
+- class:`~.LinODEnet`
+"""
+
+from typing import Union, List, Callable, Final
+
 import torch
 from torch import nn, Tensor, jit
-from typing import Union, List, Callable, Final
-import numpy as np
-
 from tsdm.util import deep_dict_update
+
+from linodenet.init import gaussian
 from .iResNet import iResNet
+
+
+Initialization = Union[Tensor, Callable[int, Tensor]]
 
 
 class LinODECell(jit.ScriptModule):
@@ -28,9 +43,7 @@ class LinODECell(jit.ScriptModule):
     kernel: Tensor
     kernel_initialization: Callable[None, Tensor]
 
-    def __init__(self, input_size: int,
-                 kernel_initialization: Union[Tensor, Callable[int, Tensor]] = None,
-                 ):
+    def __init__(self, input_size: int, kernel_initialization: Initialization = None):
         r"""
 
         Parameters
@@ -39,17 +52,17 @@ class LinODECell(jit.ScriptModule):
         kernel_initialization: Union[Tensor, Callable[int, Tensor]]
         """
 
-        super(LinODECell, self).__init__()
-        self.input_size = input_size
+        super().__init__()
+        self.input_size  = input_size
         self.output_size = input_size
 
         if kernel_initialization is None:
-            self.kernel_initialization = lambda: torch.randn(input_size, input_size) / np.sqrt(input_size)
+            self.kernel_initialization = lambda: gaussian(input_size)
         elif callable(kernel_initialization):
             self.kernel_initialization = lambda: Tensor(kernel_initialization(input_size))
-        elif type(kernel_initialization) == torch.Tensor:
+        elif isinstance(kernel_initialization, Tensor):
             self._kernel_initialization = kernel_initialization.clone().detach()
-            self.kernel_initialization = lambda: self._kernel_initialization.clone()
+            self.kernel_initialization = lambda: self._kernel_initialization
         else:
             self.kernel_initialization = lambda: Tensor(kernel_initialization)
 
@@ -57,6 +70,7 @@ class LinODECell(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, Δt: Tensor, x: Tensor) -> Tensor:
+        """This method shows as a :undoc-member: in the documentation"""
         return self.__forward__(Δt, x)
 
     def __forward__(self, Δt: Tensor, x: Tensor) -> Tensor:
@@ -104,15 +118,15 @@ class LinODE(jit.ScriptModule):
     kernel: Tensor
     kernel_initialization: Callable[None, Tensor]
 
-    def __init__(self, input_size: int, kernel_initialization: Union[Tensor, Callable[int, Tensor]] = None):
+    def __init__(self, input_size: int, kernel_initialization: Initialization = None):
         r"""
 
         Parameters
         ----------
         input_size: int
-        kernel_initialization: Union[Tensor, Callable[int, Tensor]]
+        kernel_initialization: Callable[int, Tensor]] or Tensor
         """
-        super(LinODE, self).__init__()
+        super().__init__()
 
         self.input_size = input_size
         self.output_size = input_size
@@ -137,13 +151,14 @@ class LinODE(jit.ScriptModule):
         x = torch.jit.annotate(List[Tensor], [])
         x += [x0]
 
-        for i, Δt in enumerate(ΔT):
+        for Δt in ΔT:
             x += [self.cell(Δt, x[-1])]
 
         return torch.stack(x)
 
     @jit.script_method
     def forward(self, x0: Tensor, T: Tensor) -> Tensor:
+        """This method shows as a :undoc-member: in the documentation"""
         return self.__forward__(x0, T)
 
 
@@ -156,12 +171,10 @@ class LinODEnet(jit.ScriptModule):
     4. Decoder $\pi$  (default: :class:`~.iResNet`)
 
     .. math::
-        \begin{aligned}
-            \hat x_i  &=  \pi(\hat z_i) \\
-            \hat x_i' &= F(\hat x_i, x_i) \\
-            \hat z_i' &= \phi(\hat x_i') \\
-            \hat z_{i+1} &= \Psi(\hat z_i', \Delta t_i)
-        \end{aligned}
+        \hat x_i  &=  \pi(\hat z_i) \\
+        \hat x_i' &= F(\hat x_i, x_i) \\
+        \hat z_i' &= \phi(\hat x_i') \\
+        \hat z_{i+1} &= \Psi(\hat z_i', \Delta t_i)
 
 
     Attributes
@@ -176,25 +189,29 @@ class LinODEnet(jit.ScriptModule):
         The system matrix
     kernel_initialization: Callable[None, Tensor]
         Parameter-less function that draws a initial system matrix
+    padding: Tensor
+        The learned padding parameters
     """
 
     HP = {
-        'input_size': None,
-        'hidden_size': None,
+        'input_size': int,
+        'hidden_size': int,
+        'output_size': int,
         'Process': LinODECell,
-        'Process_cfg': {'input_size': None, 'kernel_initialization': None},
+        'Process_cfg': {'input_size': int, 'kernel_initialization': None},
         'Updater': nn.GRUCell,
-        'Updater_cfg': {'input_size': None, 'hidden_size': None, 'bias': True},
+        'Updater_cfg': {'input_size': int, 'hidden_size': int, 'bias': True},
         'Encoder': iResNet,
-        'Encoder_cfg': {'input_size': None, 'nblocks': 5},
+        'Encoder_cfg': {'input_size': int, 'nblocks': 5},
         'Decoder': iResNet,
-        'Decoder_cfg': {'input_size': None, 'nblocks': 5},
+        'Decoder_cfg': {'input_size': int, 'nblocks': 5},
     }
 
     input_size: Final[int]
     hidden_size: Final[int]
     output_size: Final[int]
     kernel: Tensor
+    padding: Tensor
 
     def __init__(self, input_size: int, hidden_size: int, **HP):
         r"""
@@ -204,49 +221,53 @@ class LinODEnet(jit.ScriptModule):
         input_size:  int
             The dimensionality of the input space.
         hidden_size: int
-            The dimensionality of the latent space. Must be greater than the dimensionality of the input space.
+            The dimensionality of the latent space. Must be greater than ``input_size``.
         HP: dict
             Hyperparameter configuration
         """
         assert hidden_size > input_size
-        super(LinODEnet, self).__init__()
+        super().__init__()
 
         deep_dict_update(self.HP, HP)
         HP = self.HP
 
-        self.input_size = input_size
-        self.hidden_size = input_size
-        self.output_size = input_size
         HP['Process_cfg']['input_size'] = hidden_size
         HP['Encoder_cfg']['input_size'] = hidden_size
         HP['Decoder_cfg']['input_size'] = hidden_size
         HP['Updater_cfg']['hidden_size'] = input_size
         HP['Updater_cfg']['input_size'] = 2 * input_size
 
+        self.input_size = input_size
+        self.hidden_size = input_size
+        self.output_size = input_size
         self.padding = nn.Parameter(torch.randn(hidden_size - input_size))
-        self.Encoder = HP['Encoder'](**HP['Encoder_cfg'])
-        self.Decoder = HP['Decoder'](**HP['Decoder_cfg'])
-        self.Updater = HP['Updater'](**HP['Updater_cfg'])
-        self.Process = HP['Process'](**HP['Process_cfg'])
-        self.kernel = self.Process.kernel
+        self.encoder = HP['Encoder'](**HP['Encoder_cfg'])
+        self.decoder = HP['Decoder'](**HP['Decoder_cfg'])
+        self.updater = HP['Updater'](**HP['Updater_cfg'])
+        self.process = HP['Process'](**HP['Process_cfg'])
+        self.kernel = self.process.kernel
 
     @jit.script_method
     def embed(self, x: Tensor) -> Tensor:
+        """This method shows as a :undoc-member: in the documentation"""
         return torch.cat([x, self.padding], dim=-1)
 
     @jit.script_method
     def project(self, z: Tensor) -> Tensor:
+        """This method shows as a :undoc-member: in the documentation"""
         return z[..., :self.input_size]
 
     def __forward__(self, T: Tensor, X: Tensor) -> Tensor:
-        r"""Implementation inspired by https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
+        r"""Implementation of equations (1-4)
+
+        Optimization notes: https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
 
         Parameters
         ----------
         T: Tensor
             The timestamps of the observations.
         X: Tensor
-            The observed, potentially noisy values at times $t\in T$. Use ``NaN`` to indicate missing values.
+            The observed, noisy values at times $t\in T$. Use ``NaN`` to indicate missing values.
 
         Returns
         -------
@@ -260,28 +281,29 @@ class LinODEnet(jit.ScriptModule):
 
         for Δt, x in zip(ΔT, X):
             # Encode
-            zhat = self.Encoder(self.embed(Xhat[-1]))
+            zhat = self.encoder(self.embed(Xhat[-1]))
 
             # Propagate
-            zhat = self.Process(Δt, zhat)
+            zhat = self.process(Δt, zhat)
 
             # Decode
-            xhat = self.project(self.Decoder(zhat))
+            xhat = self.project(self.decoder(zhat))
 
             # Compute update
             mask = torch.isnan(x)
             xtilde = torch.where(mask, xhat, x)
             chat = torch.unsqueeze(torch.cat([xtilde, mask], dim=-1), dim=0)
-            Xhat += [self.Updater(chat, torch.unsqueeze(xhat, dim=0)).squeeze()]
+            Xhat += [self.updater(chat, torch.unsqueeze(xhat, dim=0)).squeeze()]
 
         return torch.stack(Xhat)
 
     @jit.script_method
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
+        """This method shows as a :undoc-member: in the documentation"""
         return self.__forward__(T, X)
 
 
-class LinODEnet_v2(jit.ScriptModule):
+class LinODEnetv2(jit.ScriptModule):
     r"""Use Linear embedding instead of padding
 
     """
@@ -304,8 +326,8 @@ class LinODEnet_v2(jit.ScriptModule):
     output_size: Final[int]
 
     def __init__(self, input_size: int, hidden_size: int, **HP):
+        super().__init__()
         assert hidden_size > input_size
-        super(LinODEnet_v2, self).__init__()
 
         deep_dict_update(self.HP, HP)
         HP = self.HP
@@ -319,13 +341,13 @@ class LinODEnet_v2(jit.ScriptModule):
         HP['Updater_cfg']['hidden_size'] = input_size
         HP['Updater_cfg']['input_size'] = 2 * input_size
 
-        self.Updater = HP['Updater'](**HP['Updater_cfg'])
-        self.Process = HP['Process'](**HP['Process_cfg'])
-        self.Encoder = nn.Sequential(
+        self.updater = HP['Updater'](**HP['Updater_cfg'])
+        self.process = HP['Process'](**HP['Process_cfg'])
+        self.encoder = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             HP['Encoder'](**HP['Encoder_cfg']),
         )
-        self.Decoder = nn.Sequential(
+        self.decoder = nn.Sequential(
             HP['Decoder'](**HP['Decoder_cfg']),
             nn.Linear(hidden_size, input_size),
         )
@@ -347,19 +369,19 @@ class LinODEnet_v2(jit.ScriptModule):
 
         for i, (Δt, x) in enumerate(zip(ΔT, X)):
             # Encode
-            zhat = self.Encoder(xhat)
+            zhat = self.encoder(xhat)
 
             # Propagate
-            zhat = self.Process(Δt, zhat)
+            zhat = self.process(Δt, zhat)
 
             # Decode
-            xhat = self.Decoder(zhat)
+            xhat = self.decoder(zhat)
 
             # Compute update
             mask = torch.isnan(x)
             xtilde = torch.where(mask, xhat, x)
             chat = torch.unsqueeze(torch.cat([xtilde, mask], dim=-1), dim=0)
-            xhat = self.Updater(chat, torch.unsqueeze(xhat, dim=0)).squeeze()
+            xhat = self.updater(chat, torch.unsqueeze(xhat, dim=0)).squeeze()
             Xhat[i + 1] = xhat
 
         return Xhat

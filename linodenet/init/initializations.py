@@ -4,18 +4,18 @@ We create different initializations
 all initializations are normalized such that if x~N(0,1), then Ax ~ N(0,1) as well
 
 Note that since Var(x+y) = Var(x) + 2Cov(x, y) + Var(y)
-
 """
 
-import torch
-from torch import Tensor
-from scipy import stats
-from typing import Union
 from math import sqrt, prod
+from typing import Union
+
+import torch
+from scipy import stats
+from torch import Tensor
 
 
 def gaussian(n: Union[int, tuple[int]]) -> Tensor:
-    r"""Samples a random gaussian matrix, i.e. $A_{ij}\sim \mathcal N(0, \tfrac{1}{n})$, of size $n$.
+    r"""Samples a random gaussian matrix, i.e. $A_{ij}\sim \mathcal N(0,\tfrac{1}{n})$, of size $n$.
 
     Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
 
@@ -28,11 +28,11 @@ def gaussian(n: Union[int, tuple[int]]) -> Tensor:
     :class:`~torch.Tensor`
     """
     # convert to tuple
-    TUPLE = (n,) if type(n) == int else tuple(n)
-    DIM, SIZE = TUPLE[-1], TUPLE[:-1]
-    SHAPE = (*SIZE, DIM, DIM)
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    shape = (*size, dim, dim)
 
-    return torch.normal(mean=torch.zeros(SHAPE), std=1/sqrt(DIM))
+    return torch.normal(mean=torch.zeros(shape), std=1/sqrt(dim))
 
 
 def diagonally_dominant(n: Union[int, tuple[int]]) -> Tensor:
@@ -50,11 +50,11 @@ def diagonally_dominant(n: Union[int, tuple[int]]) -> Tensor:
     :class:`~torch.Tensor`
     """
     # convert to tuple
-    TUPLE = (n,) if type(n) == int else tuple(n)
-    DIM, SIZE = TUPLE[-1], TUPLE[:-1]
-    SHAPE = (*SIZE, DIM, DIM)
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    shape = (*size, dim, dim)
 
-    return torch.eye(DIM) + torch.normal(mean=torch.zeros(SHAPE), std=1/DIM)
+    return torch.eye(dim) + torch.normal(mean=torch.zeros(shape), std=1/dim)
 
 
 def symmetric(n: Union[int, tuple[int]]) -> Tensor:
@@ -71,11 +71,11 @@ def symmetric(n: Union[int, tuple[int]]) -> Tensor:
     :class:`~torch.Tensor`
     """
     # convert to tuple
-    TUPLE = (n,) if type(n) == int else tuple(n)
-    DIM, SIZE = TUPLE[-1], TUPLE[:-1]
-    SHAPE = (*SIZE, DIM, DIM)
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    shape = (*size, dim, dim)
 
-    A = torch.normal(mean=torch.zeros(SHAPE), std=1/sqrt(DIM))
+    A = torch.normal(mean=torch.zeros(shape), std=1/sqrt(dim))
     return (A + A.swapaxes(-1, -2))/sqrt(2)
 
 
@@ -94,11 +94,11 @@ def skew_symmetric(n: Union[int, tuple[int]]) -> Tensor:
     """
     # convert to tuple
     # convert to tuple
-    TUPLE = (n,) if type(n) == int else tuple(n)
-    DIM, SIZE = TUPLE[-1], TUPLE[:-1]
-    SHAPE = (*SIZE, DIM, DIM)
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    shape = (*size, dim, dim)
 
-    A = torch.normal(mean=torch.zeros(SHAPE), std=1/sqrt(DIM))
+    A = torch.normal(mean=torch.zeros(shape), std=1/sqrt(dim))
     return (A - A.swapaxes(-1, -2))/sqrt(2)
 
 
@@ -117,17 +117,18 @@ def orthogonal(n: Union[int, tuple[int]]) -> Tensor:
     :class:`~torch.Tensor`
     """
     # convert to tuple
-    TUPLE = (n,) if type(n) == int else tuple(n)
-    DIM, SIZE = TUPLE[-1], TUPLE[:-1]
-    NUM = prod(SIZE)
-    SHAPE = (*SIZE, DIM, DIM)
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    num = prod(size)
+    shape = (*size, dim, dim)
 
-    A = stats.ortho_group.rvs(dim=DIM, size=NUM).reshape(SHAPE)
+    A = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
     return torch.Tensor(A)
 
 
 def special_orthogonal(n: Union[int, tuple[int]]) -> Tensor:
-    r"""Samples a random special orthogonal matrix, i.e. $A^T = A^{-1}$ with $\det(A)=1$, of size $n$.
+    r"""Samples a random special orthogonal matrix, i.e. $A^T = A^{-1}$ with $\det(A)=1$,
+    of size $n$.
 
     Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
 
@@ -141,10 +142,10 @@ def special_orthogonal(n: Union[int, tuple[int]]) -> Tensor:
     """
 
     # convert to tuple
-    TUPLE = (n,) if type(n) == int else tuple(n)
-    DIM, SIZE = TUPLE[-1], TUPLE[:-1]
-    NUM = prod(SIZE)
-    SHAPE = (*SIZE, DIM, DIM)
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    num = prod(size)
+    shape = (*size, dim, dim)
 
-    A = stats.special_ortho_group.rvs(dim=DIM, size=NUM).reshape(SHAPE)
+    A = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
     return torch.Tensor(A)
