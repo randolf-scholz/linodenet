@@ -6,7 +6,7 @@ Models
 """
 
 
-from .iResNet import LinearContraction, iResNet, iResNetBlock
-from .LinODE import LinODECell, LinODE
+from .iResNet import LinearContraction, iResNet, iResNetBlock, DummyModel
+from .LinODEnet import LinODECell, LinODE, LinODEnet
 
-__all__ = ['LinearContraction', 'iResNet', 'iResNetBlock', 'LinODECell', 'LinODE']
+__all__ = ['DummyModel', 'LinearContraction', 'iResNetBlock', 'iResNet', 'LinODECell', 'LinODE', 'LinODEnet']

@@ -7,7 +7,7 @@ from linodenet.models import LinODE
 import matplotlib.pyplot as plt
 
 
-def test_linode(dim=None, num=None, tol=1e-3, precision="single", relative_error=True):
+def test_linode(dim=None, num=None, tol=1e-3, precision="single", relative_error=True, device='cpu'):
     from scipy.integrate import odeint
 
     if precision == "single":
@@ -34,7 +34,8 @@ def test_linode(dim=None, num=None, tol=1e-3, precision="single", relative_error
 
     X = odeint(func, x0, T, tfirst=True)
 
-    model = LinODE(input_size=dim, kernel_initialization=A, dtype=torch_dtype)
+    model = LinODE(input_size=dim, kernel_initialization=A)
+    model.to(dtype=torch_dtype, device=torch.device(device))
     ΔT = torch.diff(torch.tensor(T))
     Xhat = torch.empty(num, dim, dtype=torch_dtype)
     Xhat[0] = torch.tensor(x0)

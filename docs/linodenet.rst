@@ -11,8 +11,8 @@ Submodules
 
 .. automodule:: linodenet.models
     :members:
-    :undoc-members:
     :show-inheritance:
+    :special-members: __init__, __forward__, __inverse__
 
 .. automodule:: linodenet.init
     :members:
