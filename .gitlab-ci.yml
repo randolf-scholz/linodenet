@@ -10,9 +10,17 @@ installtion:
   stage: setup
   script:
   - python setup.py bdist_wheel
-  artifacts:
-    paths:
-    - dist/*.whl
+#  artifacts:
+#    paths:
+#    - dist/*.whl
+
+flake8:
+  stage: code analysis
+  allow_failure: true
+  before_script:
+    - pip install flake8
+  script:
+    - flake8 --max-line-length=100 --ignore=E203,E221,E226,E241 linodenet
 
 pylint:
   stage: code analysis
@@ -29,13 +37,6 @@ pylint:
     paths:
       - ./pylint/
 
-flake8:
-  stage: code analysis
-  allow_failure: true
-  before_script:
-    - pip install flake8
-  script:
-    - flake8 --max-line-length=100 --ignore=E203,E221,E226,E241 linodenet
 
 pages:
   stage: documentation
