@@ -9,8 +9,7 @@ stages:
 installtion:
   stage: setup
   script:
-  - apt install python3-pip
-  - python3 setup.py bdist_wheel
+  - python setup.py bdist_wheel
   artifacts:
     paths:
     - dist/*.whl
@@ -42,7 +41,7 @@ pages:
   stage: documentation
   allow_failure: true
   script:
-    - pip3 install -U sphinx sphinx-rtd-theme sphinx-math-dollar
+    - pip install -U sphinx sphinx-rtd-theme sphinx-math-dollar
     - cd docs
     - make html
     - mv _build/html/ ../public/
