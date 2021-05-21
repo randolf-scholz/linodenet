@@ -8,8 +8,6 @@ Contains implementations of
 - class:`~.iResNetBlock`
 - class:`~.iResNet`
 """
-import logging
-import warnings
 from math import sqrt
 from typing import Union, Final
 
@@ -17,8 +15,6 @@ import torch
 from torch import jit, nn, Tensor
 from torch.nn import functional
 from tsdm.util import ACTIVATIONS, deep_dict_update
-
-logger = logging.getLogger(__name__)
 
 
 class DummyModel(jit.ScriptModule):
@@ -156,18 +152,19 @@ class iResNetBlock(jit.ScriptModule):
     hidden_size: Final[int]
     output_size: Final[int]
     maxiter:     Final[int] = 10
-    atol:        Tensor = torch.tensor(1e-08)
-    rtol:        Tensor = torch.tensor(1e-05)
+    atol:        Final[float] = 1e-08
+    rtol:        Final[float] = 1e-05
 
-    HP: dict = {
+    HP = {
         'atol' : 1e-08,
         'rtol' : 1e-05,
         'maxiter': 10,
         'activation': 'ReLU',
         'activation_config': {'inplace': False},
         'bias': True,
-        'hidden_size': None,
-        'input_size': None,
+        'output_size' : None,
+        'hidden_size' : None,
+        'input_size'  : None,
     }
 
     def __init__(self, input_size: int, **HP):
@@ -183,20 +180,21 @@ class iResNetBlock(jit.ScriptModule):
 
         self.HP['input_size'] = input_size
         deep_dict_update(self.HP, HP)
+        HP = self.HP
 
-        self.input_size = input_size
-        self.output_size = input_size
-        self.hidden_size = self.HP['hidden_size'] or int(sqrt(input_size))
+        self.input_size  = HP['input_size'] = input_size
+        self.output_size = HP['input_size'] = input_size
+        self.hidden_size = HP['hidden_size'] = HP['hidden_size'] or int(sqrt(input_size))
 
-        self.maxiter = self.HP['maxiter']
-        self.bias = self.HP['bias']
-
-        activation = ACTIVATIONS[self.HP['activation']]
+        self.atol = HP['atol']
+        self.rtol = HP['rtol']
+        self.maxiter = HP['maxiter']
+        self.bias = HP['bias']
 
         self.bottleneck = nn.Sequential(
             LinearContraction(self.input_size, self.hidden_size, self.bias),
             LinearContraction(self.hidden_size, self.input_size, self.bias),
-            activation(**self.HP['activation_config']),
+            ACTIVATIONS[HP['activation']](**HP['activation_config']),
         )
 
     def __forward__(self, x: Tensor) -> Tensor:
@@ -232,17 +230,16 @@ class iResNetBlock(jit.ScriptModule):
         xhat_dash = y.clone()
         residual = torch.zeros_like(y)
 
-        for k in range(self.maxiter):
+        for _ in range(self.maxiter):
             xhat = xhat_dash
             xhat_dash = y - self.bottleneck(xhat)
             residual = torch.abs(xhat_dash - xhat) - self.rtol * torch.absolute(xhat)
 
             if torch.all(residual <= self.atol):
-                logger.info("Finished early in iteration %d/%d", k, self.maxiter)
                 break
-        else:
-            warnings.warn(F"No convergence in {self.maxiter} iterations. "
-                          F"Max residual:{torch.max(residual)} > {self.atol}.")
+        # if k == self.maxiter:
+        #     warnings.warn(F"No convergence in {self.maxiter} iterations. "
+        #                   F"Max residual:{torch.max(residual)} > {self.atol}.")
         return xhat_dash
 
     @jit.script_method
