@@ -155,7 +155,7 @@ class iResNetBlock(jit.ScriptModule):
     atol:        Final[float] = 1e-08
     rtol:        Final[float] = 1e-05
 
-    HP = {
+    HP: dict = {
         'atol' : 1e-08,
         'rtol' : 1e-05,
         'maxiter': 10,
@@ -197,7 +197,8 @@ class iResNetBlock(jit.ScriptModule):
             ACTIVATIONS[HP['activation']](**HP['activation_config']),
         )
 
-    def __forward__(self, x: Tensor) -> Tensor:
+    @jit.script_method
+    def forward(self, x: Tensor) -> Tensor:
         r"""
         Parameters
         ----------
@@ -210,11 +211,7 @@ class iResNetBlock(jit.ScriptModule):
         return x + self.bottleneck(x)
 
     @jit.script_method
-    def forward(self, x: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__forward__(x)
-
-    def __inverse__(self, y: Tensor) -> Tensor:
+    def inverse(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration. Terminates once ``maxiter``
         or tolerance threshold :math:`|x'-x| \le \text{atol} + \text{rtol}\cdot |x|` is reached.
 
@@ -241,11 +238,6 @@ class iResNetBlock(jit.ScriptModule):
         #     warnings.warn(F"No convergence in {self.maxiter} iterations. "
         #                   F"Max residual:{torch.max(residual)} > {self.atol}.")
         return xhat_dash
-
-    @jit.script_method
-    def inverse(self, y: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__inverse__(y)
 
 
 class iResNet(jit.ScriptModule):
@@ -313,7 +305,8 @@ class iResNet(jit.ScriptModule):
         self.blocks = nn.Sequential(*blocks)
         self.reversed_blocks = nn.Sequential(*reversed(blocks))
 
-    def __forward__(self, x: Tensor) -> Tensor:
+    @jit.script_method
+    def forward(self, x: Tensor) -> Tensor:
         r"""
         Parameters
         ----------
@@ -327,11 +320,7 @@ class iResNet(jit.ScriptModule):
         return self.blocks(x)
 
     @jit.script_method
-    def forward(self, x: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__forward__(x)
-
-    def __inverse__(self, y: Tensor) -> Tensor:
+    def inverse(self, y: Tensor) -> Tensor:
         r"""Computes the inverse through fix point iteration in each block in reversed order.
 
         Parameters
@@ -347,11 +336,6 @@ class iResNet(jit.ScriptModule):
             y = block.inverse(y)
 
         return y
-
-    @jit.script_method
-    def inverse(self, y: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__inverse__(y)
 
     # TODO: delete this?
     # @jit.script_method

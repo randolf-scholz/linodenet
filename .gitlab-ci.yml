@@ -28,7 +28,7 @@ pylint:
   stage: code analysis
   allow_failure: true
   before_script:
-      - pip install pylint pylint-exit anybadge
+      - pip install pylint pylint-exit anybadge torch scipy
   script:
     - mkdir ./pylint
     - pylint linodenet --generated-members=numpy.*,torch.* --disable=C0103,C0144 --output-format=text | tee ./pylint/pylint.log || pylint-exit $?

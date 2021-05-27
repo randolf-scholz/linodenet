@@ -3,7 +3,6 @@ Models
 ======
 """
 
-
 from .iResNet import LinearContraction, iResNet, iResNetBlock, DummyModel
 from .LinODEnet import LinODECell, LinODE, LinODEnet, LinODEnetv2
 

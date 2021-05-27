@@ -5,7 +5,7 @@ from tsdm.plot import visualize_distribution
 
 import matplotlib.pyplot as plt
 import numpy as np
-from linodenet.models import LinearContraction, iResNetBlock, iResNet
+from linodenet.models import LinearContraction, iResNetBlock
 
 
 def test_LinearContraction(n_samples: int = 10_000, dim_in: int = None, dim_out: int = None) -> None:
@@ -81,8 +81,3 @@ def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_si
     fig.suptitle(
         F"iResNetBlock -- Inversion property (samples:{n_samples}, dim-in:{input_size}, dim-hidden:{hidden_size})",
         fontsize=16)
-
-
-def test_iResNet():
-    iResNet(10)
-    pass

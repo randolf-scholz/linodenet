@@ -70,10 +70,6 @@ class LinODECell(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, Δt: Tensor, x: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__forward__(Δt, x)
-
-    def __forward__(self, Δt: Tensor, x: Tensor) -> Tensor:
         r"""Forward using the matrix exponential $\hat x = e^{A\Delta t}x$
 
         TODO: optimize if clauses away by changing definition in constructor.
@@ -133,7 +129,8 @@ class LinODE(jit.ScriptModule):
         self.cell = LinODECell(input_size, kernel_initialization)
         self.kernel = self.cell.kernel
 
-    def __forward__(self, x0: Tensor, T: Tensor) -> Tensor:
+    @jit.script_method
+    def forward(self, x0: Tensor, T: Tensor) -> Tensor:
         r"""
         Propagate x0
 
@@ -155,11 +152,6 @@ class LinODE(jit.ScriptModule):
             x += [self.cell(Δt, x[-1])]
 
         return torch.stack(x)
-
-    @jit.script_method
-    def forward(self, x0: Tensor, T: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__forward__(x0, T)
 
 
 class LinODEnet(jit.ScriptModule):
@@ -193,7 +185,7 @@ class LinODEnet(jit.ScriptModule):
         The learned padding parameters
     """
 
-    HP = {
+    HP: dict = {
         'input_size': int,
         'hidden_size': int,
         'output_size': int,
@@ -249,15 +241,34 @@ class LinODEnet(jit.ScriptModule):
 
     @jit.script_method
     def embed(self, x: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
+        r"""Maps $x\mapsto \big(\begin{smallmatrix}x\\w\end{smallmatrix}\big)$
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
         return torch.cat([x, self.padding], dim=-1)
 
     @jit.script_method
     def project(self, z: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
+        r"""Maps $x = \big(\begin{smallmatrix}x\\w\end{smallmatrix}\big) \mapsto x$
+
+        Parameters
+        ----------
+        z: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
         return z[..., :self.input_size]
 
-    def __forward__(self, T: Tensor, X: Tensor) -> Tensor:
+    @jit.script_method
+    def forward(self, T: Tensor, X: Tensor) -> Tensor:
         r"""Implementation of equations (1-4)
 
         Optimization notes: https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
@@ -297,18 +308,13 @@ class LinODEnet(jit.ScriptModule):
 
         return torch.stack(Xhat)
 
-    @jit.script_method
-    def forward(self, T: Tensor, X: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__forward__(T, X)
-
 
 class LinODEnetv2(jit.ScriptModule):
     r"""Use Linear embedding instead of padding
 
     """
 
-    HP = {
+    HP: dict = {
         'input_size': int,
         'hidden_size': int,
         'Process': LinODECell,

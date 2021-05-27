@@ -1,15 +1,20 @@
-
 LinODE-Net
 ================================================
 
+**Lin**\ ear **O**\ rdinary **D**\ ifferential **E**\ quation **Net**\ work
+
+
+.. autosummary::
+    :toctree:
+    :template: mytemplate.rst
+
+    linodenet.init
+    linodenet.models
 
 .. toctree::
-    :maxdepth: 3
-    :caption: Contents:
 
-    linodenet
-    readme
-    changelog
+   readme
+   changelog
 
 
 Example

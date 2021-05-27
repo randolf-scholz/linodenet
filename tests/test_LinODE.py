@@ -1,10 +1,10 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from linodenet.models import LinODE
 from tqdm.auto import trange
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
-from linodenet.models import LinODE
-import matplotlib.pyplot as plt
 
 
 def test_linode(dim=None, num=None, tol=1e-3, precision="single", relative_error=True, device='cpu'):
