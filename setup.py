@@ -26,7 +26,7 @@ setuptools.setup(
 
     description="Linear ODE Network for Time Series Forecasting",
     long_description=read("README.rst"),
-    long_description_content_type='test/x-rst',
+    long_description_content_type='test/X-rst',
     packages=setuptools.find_packages(exclude='tests'),           # include all packages in ...
     install_requires=[
             'numpy',

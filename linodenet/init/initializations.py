@@ -1,9 +1,9 @@
 r"""
 We create different initializations
 
-all initializations are normalized such that if x~N(0,1), then Ax ~ N(0,1) as well
+all initializations are normalized such that if X~N(0,1), then Ax ~ N(0,1) as well
 
-Note that since Var(x+y) = Var(x) + 2Cov(x, y) + Var(y)
+Note that since Var(X+y) = Var(X) + 2Cov(X, y) + Var(y)
 """
 
 from math import sqrt, prod
@@ -17,7 +17,7 @@ from torch import Tensor
 def gaussian(n: Union[int, tuple[int]]) -> Tensor:
     r"""Samples a random gaussian matrix, i.e. $A_{ij}\sim \mathcal N(0,\tfrac{1}{n})$, of size $n$.
 
-    Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
+    Normalized such that if $X\sim \mathcal N(0,1)$, then $A\cdot X\sim\mathcal N(0,1)$
 
     Parameters
     ----------
@@ -39,7 +39,7 @@ def diagonally_dominant(n: Union[int, tuple[int]]) -> Tensor:
     r"""Samples a random diagonally dominant matrix, i.e. $A = I_n + B$,
     with $B_{ij}\sim \mathcal N(0, \tfrac{1}{n^2})$, of size $n$.
 
-    Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
+    Normalized such that if $X\sim \mathcal N(0,1)$, then $A\cdot X\sim\mathcal N(0,1)$
 
     Parameters
     ----------
@@ -60,7 +60,7 @@ def diagonally_dominant(n: Union[int, tuple[int]]) -> Tensor:
 def symmetric(n: Union[int, tuple[int]]) -> Tensor:
     r"""Samples a symmetric matrix, i.e. $A^T = A$, of size $n$.
 
-    Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
+    Normalized such that if $X\sim \mathcal N(0,1)$, then $A\cdot X\sim\mathcal N(0,1)$
 
     Parameters
     ----------
@@ -82,7 +82,7 @@ def symmetric(n: Union[int, tuple[int]]) -> Tensor:
 def skew_symmetric(n: Union[int, tuple[int]]) -> Tensor:
     r"""Samples a random skew-symmetric matrix, i.e. $A^T = -A$, of size $n$.
 
-    Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
+    Normalized such that if $X\sim \mathcal N(0,1)$, then $A\cdot X\sim\mathcal N(0,1)$
 
     Parameters
     ----------
@@ -106,7 +106,7 @@ def orthogonal(n: Union[int, tuple[int]]) -> Tensor:
     r"""
     Samples a random orthogonal matrix, i.e. $A^T = A$, of size $n$.
 
-    Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
+    Normalized such that if $X\sim \mathcal N(0,1)$, then $A\cdot X\sim\mathcal N(0,1)$
 
     Parameters
     ----------
@@ -130,7 +130,7 @@ def special_orthogonal(n: Union[int, tuple[int]]) -> Tensor:
     r"""Samples a random special orthogonal matrix, i.e. $A^T = A^{-1}$ with $\det(A)=1$,
     of size $n$.
 
-    Normalized such that if $x\sim \mathcal N(0,1)$, then $A\cdot x\sim\mathcal N(0,1)$
+    Normalized such that if $X\sim \mathcal N(0,1)$, then $A\cdot X\sim\mathcal N(0,1)$
 
     Parameters
     ----------

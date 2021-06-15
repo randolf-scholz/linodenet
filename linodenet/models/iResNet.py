@@ -35,8 +35,8 @@ class DummyModel(jit.ScriptModule):
 
 
 class LinearContraction(jit.ScriptModule):
-    r"""A linear layer $f(x) = A\cdot x$ satisfying the contraction property
-    $\|f(x)-f(y)\|_2 \le \|x-y\|_2$
+    r"""A linear layer $f(X) = A\cdot X$ satisfying the contraction property
+    $\|f(X)-f(y)\|_2 \le \|X-y\|_2$
 
     This is achieved by normalizing the weight matrix by
     $\tilde{A} = A \cdot \min\big(\tfrac{c}{\|A\|_2}, 1\big)$, where $c<1$ is a hyperparameter.
@@ -101,7 +101,7 @@ class LinearContraction(jit.ScriptModule):
     def __forward__(self, x: Tensor) -> Tensor:
         r"""
 
-        $x\mapsto \tilde A\cdot x$ where $\tilde{A} = A \cdot \min\big(\tfrac{c}{\|A\|_2}, 1\big)$
+        $X\mapsto \tilde A\cdot X$ where $\tilde{A} = A \cdot \min\big(\tfrac{c}{\|A\|_2}, 1\big)$
 
         Parameters
         ----------
@@ -112,7 +112,8 @@ class LinearContraction(jit.ScriptModule):
         Tensor
         """
         σ_max = torch.linalg.norm(self.weight, ord=2)
-        fac = torch.minimum(self.c / σ_max, torch.ones(1))
+        one = torch.tensor(1, dtype=x.dtype, device=x.device)
+        fac = torch.minimum(self.c / σ_max, one)
         return functional.linear(x, fac * self.weight, self.bias)
 
     @jit.script_method
@@ -122,10 +123,10 @@ class LinearContraction(jit.ScriptModule):
 
 
 class iResNetBlock(jit.ScriptModule):
-    r"""Invertible ResNet-Block of the form $g(x)=\phi(W_1\cdot W_2\cdot x)$,
+    r"""Invertible ResNet-Block of the form $g(X)=\phi(W_1\cdot W_2\cdot X)$,
     where $W_1 \cdot W_2$ is a low rank factorization.
 
-    Alternative: $g(x) = W_3\phi(W_2\phi(W_1\cdot x))$
+    Alternative: $g(X) = W_3\phi(W_2\phi(W_1\cdot X))$
 
     All linear layers must be :class:`LinearContraction` layers.
     The activation function must have Lipschitz constant $\le 1$ such as :class:`~torch.nn.ReLU`,
@@ -213,7 +214,7 @@ class iResNetBlock(jit.ScriptModule):
     @jit.script_method
     def inverse(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration. Terminates once ``maxiter``
-        or tolerance threshold :math:`|x'-x| \le \text{atol} + \text{rtol}\cdot |x|` is reached.
+        or tolerance threshold :math:`|X'-X| \le \text{atol} + \text{rtol}\cdot |X|` is reached.
 
 
         Parameters

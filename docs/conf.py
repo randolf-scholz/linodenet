@@ -151,7 +151,7 @@ autodoc_docstring_signature = True
 # signature. This is useful for declaring overloaded function signatures.
 autodoc_mock_imports = []
 # This value contains a list of modules to be mocked up.
-# This is useful when some external dependencies are not met at build time and break the building process.
+# This is useful when some external dependencies are not met at build time and break the building system.
 # You may only specify the root package of the dependencies themselves and omit the sub-modules:
 autodoc_typehints = "none"
 # This value controls how to represent typehints. The setting takes the following values:

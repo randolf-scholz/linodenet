@@ -8,6 +8,8 @@ from torch import Tensor
 from linodenet.models import LinearContraction, iResNetBlock, iResNet, \
     LinODECell, LinODE, LinODEnet
 
+# TODO: add test for cuda + add test for batch mode!
+
 b, n, k = 20, 5, 7
 X = torch.randn(b, k)
 T = torch.randn(b)
