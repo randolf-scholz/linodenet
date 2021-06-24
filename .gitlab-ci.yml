@@ -2,6 +2,10 @@ default:
   image: python:3.9
   tags: [docker]
 
+variables:
+  TWINE_PASSWORD: ${CI_JOB_TOKEN}
+  TWINE_USERNAME: gitlab-ci-token
+
 stages:
   - setup
   - code analysis
@@ -28,8 +32,6 @@ installtion:
     # upload as a PyPi package to gitlab registry
     - source BUILDENV/bin/activate
     - pip install twine
-    - TWINE_PASSWORD=${CI_JOB_TOKEN}
-    - TWINE_USERNAME=gitlab-ci-token
     - twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
   artifacts:
     paths:
