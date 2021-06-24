@@ -78,7 +78,7 @@ pylint:
 pages:
   stage: documentation
   allow_failure: true
-    before_script:
+  before_script:
     - pip install -U sphinx sphinx-rtd-theme sphinx-math-dollar
     - cd docs
   script:
