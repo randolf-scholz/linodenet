@@ -3,8 +3,10 @@ Models
 ======
 """
 
-from .iResNet import LinearContraction, iResNet, iResNetBlock, DummyModel
-from .LinODEnet import LinODECell, LinODE, LinODEnet, LinODEnetv2
+from .iResNet import LinearContraction, iResNet, iResNetBlock
+from .LinODEnet import LinODECell, LinODE, LinODEnet, ConcatProjection, ConcatEmbedding
 
-__all__ = ['DummyModel', 'LinearContraction', 'iResNetBlock', 'iResNet',
-           'LinODECell', 'LinODE', 'LinODEnet', 'LinODEnetv2']
+
+__all__ = ['LinearContraction', 'iResNetBlock', 'iResNet',
+           'LinODECell', 'LinODE', 'LinODEnet',
+           'ConcatProjection', 'ConcatEmbedding']

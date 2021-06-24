@@ -285,7 +285,8 @@ class LinODEnet(jit.ScriptModule):
 
     # @jit.script_method
     # def embedding(self, x: Tensor) -> Tensor:
-    #     r"""Maps $X\mapsto \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big)$ if ``embedding_type='concat'``
+    #     r"""Maps $X\mapsto \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big)$
+    #     if ``embedding_type='concat'``
     #
     #     Else linear function $X\mapsto XA$ if ``embedding_type='linear'``
     #
@@ -301,7 +302,8 @@ class LinODEnet(jit.ScriptModule):
     #
     # @jit.script_method
     # def projection(self, z: Tensor) -> Tensor:
-    #     r"""Maps $Z = \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big) \mapsto X$ if ``embedding_type='concat'``
+    #     r"""Maps $Z = \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big) \mapsto X$
+    #     if ``embedding_type='concat'``
     #
     #     Else linear function $Z\mapsto ZA$ if ``embedding_type='linear'``
     #
@@ -323,9 +325,9 @@ class LinODEnet(jit.ScriptModule):
 
         Parameters
         ----------
-        T: Tensor, shape=(...,LEN)
+        T: Tensor, shape=(...,LEN) or PackedSequence
             The timestamps of the observations.
-        X: Tensor, shape=(...,LEN,DIM)
+        X: Tensor, shape=(...,LEN,DIM) or PackedSequence
             The observed, noisy values at times $t\in T$. Use ``NaN`` to indicate missing values.
 
         Returns
@@ -333,6 +335,7 @@ class LinODEnet(jit.ScriptModule):
         Xhat: Tensor, shape=(...,LEN,DIM)
             The estimated true state of the system at the times $t\in T$.
         """
+
         ΔT = torch.moveaxis(torch.diff(T), -1, 0)
         X = torch.moveaxis(X, -2, 0)
 
@@ -365,15 +368,31 @@ class LinODEnet(jit.ScriptModule):
             # Apply filter
             xhat = self.filter(xtilde, xhat)
 
+            # xhat = self.control(xhat, u)
+            # u: possible controls:
+            #  1. set to value
+            #  2. add to value
+            # do these via indicator variable
+            # u = (time, value, mode-indicator, col-indicator)
+            # => apply control to specific column.
+
             Xhat += [xhat.view(x.shape)]
 
         return torch.stack(Xhat, dim=-2)
 
 
 class ConcatEmbedding(jit.ScriptModule):
-    input_size: Final[int]
-    hidden_size: Final[int]
-    pad_size: Final[int]
+    r"""Maps $X\mapsto \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big)$
+
+    Attributes
+    ----------
+    input_size:  int
+    hidden_size: int
+    pad_size:    int
+    """
+    input_size  : Final[int]
+    hidden_size : Final[int]
+    pad_size    : Final[int]
 
     def __init__(self, input_size: int, hidden_size: int):
         super().__init__()
@@ -399,8 +418,16 @@ class ConcatEmbedding(jit.ScriptModule):
 
 
 class ConcatProjection(jit.ScriptModule):
-    input_size: Final[int]
-    hidden_size: Final[int]
+    r"""Maps $Z = \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big) \mapsto X$
+
+    Attributes
+    ----------
+    input_size:  int
+    hidden_size: int
+    """
+
+    input_size  : Final[int]
+    hidden_size : Final[int]
 
     def __init__(self, input_size: int, hidden_size: int):
         super().__init__()
@@ -420,88 +447,3 @@ class ConcatProjection(jit.ScriptModule):
         Tensor, shape=(...,LEN,DIM)
         """
         return Z[..., :self.input_size]
-
-
-class LinODEnetv2(jit.ScriptModule):
-    r"""Use Linear embedding instead of padding
-
-    """
-
-    HP: dict = {
-        'input_size': int,
-        'hidden_size': int,
-        'Process': LinODECell,
-        'Process_cfg': {'input_size': int, 'kernel_initialization': None},
-        'Updater': nn.GRUCell,
-        'Updater_cfg': {'input_size': int, 'hidden_size': int, 'bias': True},
-        'Encoder': iResNet,
-        'Encoder_cfg': {'input_size': int, 'nblocks': 5},
-        'Decoder': iResNet,
-        'Decoder_cfg': {'input_size': int, 'nblocks': 5},
-    }
-
-    input_size: Final[int]
-    hidden_size: Final[int]
-    output_size: Final[int]
-
-    def __init__(self, input_size: int, hidden_size: int, **HP):
-        super().__init__()
-        assert hidden_size > input_size
-
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
-
-        self.input_size = input_size
-        self.hidden_size = input_size
-        self.output_size = input_size
-        HP['Process_cfg']['input_size'] = hidden_size
-        HP['Encoder_cfg']['input_size'] = hidden_size
-        HP['Decoder_cfg']['input_size'] = hidden_size
-        HP['Updater_cfg']['hidden_size'] = input_size
-        HP['Updater_cfg']['input_size'] = 2 * input_size
-
-        self.updater = HP['Updater'](**HP['Updater_cfg'])
-        self.process = HP['Process'](**HP['Process_cfg'])
-        self.encoder = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            HP['Encoder'](**HP['Encoder_cfg']),
-        )
-        self.decoder = nn.Sequential(
-            HP['Decoder'](**HP['Decoder_cfg']),
-            nn.Linear(hidden_size, input_size),
-        )
-
-    @jit.script_method
-    def forward(self, T: Tensor, X: Tensor) -> Tensor:
-        r"""
-        Input:  times t, measurements X. NaN for missing value.
-
-        Output: prediction y(t_i) for all t
-        """
-
-        ΔT = torch.diff(T)
-        Xhat = torch.empty((len(T), self.output_size))
-
-        # initialize with zero, todo: do something smarter!
-        zero = torch.tensor(0, dtype=X.dtype, device=X.device)
-        xhat = torch.where(torch.isnan(X[0]), zero, X[0])
-        Xhat[0] = xhat
-
-        for i, (Δt, x) in enumerate(zip(ΔT, X)):
-            # Encode
-            zhat = self.encoder(xhat)
-
-            # Propagate
-            zhat = self.process(Δt, zhat)
-
-            # Decode
-            xhat = self.decoder(zhat)
-
-            # Compute update
-            mask = torch.isnan(x)
-            xtilde = torch.where(mask, xhat, x)
-            chat = torch.unsqueeze(torch.cat([xtilde, mask], dim=-1), dim=0)
-            xhat = self.updater(chat, torch.unsqueeze(xhat, dim=0)).squeeze()
-            Xhat[i + 1] = xhat
-
-        return Xhat

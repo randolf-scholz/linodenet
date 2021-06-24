@@ -17,23 +17,6 @@ from torch.nn import functional
 from tsdm.util import ACTIVATIONS, deep_dict_update
 
 
-class DummyModel(jit.ScriptModule):
-    """My dummy model"""
-
-    def __init__(self, const: float):
-        super().__init__()
-        self.const = Tensor(const)
-
-    @jit.script_method
-    def forward(self, x: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.my_forward(x)
-
-    def my_forward(self, x: Tensor) -> Tensor:
-        """This method shows as a :member: in the documentation"""
-        return x + self.const
-
-
 class LinearContraction(jit.ScriptModule):
     r"""A linear layer $f(X) = A\cdot X$ satisfying the contraction property
     $\|f(X)-f(y)\|_2 \le \|X-y\|_2$
@@ -235,7 +218,7 @@ class iResNetBlock(jit.ScriptModule):
 
             if torch.all(residual <= self.atol):
                 break
-        # if k == self.maxiter:
+        # if NDIM == self.maxiter:
         #     warnings.warn(F"No convergence in {self.maxiter} iterations. "
         #                   F"Max residual:{torch.max(residual)} > {self.atol}.")
         return xhat_dash
@@ -358,7 +341,7 @@ class iResNet(jit.ScriptModule):
     #     xhat_dash = y.clone()
     #     residual = torch.zeros_like(y)
     #
-    #     for k in range(self.maxiter):
+    #     for NDIM in range(self.maxiter):
     #         xhat_dash = y - self(xhat)
     #         residual = torch.abs(xhat_dash - xhat) - rtol * torch.absolute(xhat)
     #
