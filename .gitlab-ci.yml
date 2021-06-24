@@ -11,6 +11,7 @@ stages:
   - code analysis
   - documentation
   - unit tests
+  - deployment
 
 installtion:
   stage: setup
@@ -32,7 +33,7 @@ installtion:
       - dist/*.whl
 
 package_upload:
-  stage: setup
+  stage: deployment
   only: [ master ]
   before_script:
     - source BUILDENV/bin/activate
