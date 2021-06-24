@@ -15,9 +15,10 @@ installtion:
     - python -c "import sys; print(sys.version)"
     - pip install --upgrade pip virtualenv
     - python -m venv BUILDENV
+    - source BUILDENV/bin/activate
+    - pip install --upgrade pip wheel
   script:
     - source BUILDENV/bin/activate
-    - pip install --upgrade pip
     # install special dependency
 #    - pip install git+ssh://git@software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.git
 #    - pip install git+ssh://git@git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git
@@ -25,6 +26,7 @@ installtion:
     - python setup.py sdist bdist_wheel
   after_script:
     # upload as a PyPi package to gitlab registry
+    - source BUILDENV/bin/activate
     - pip install twine
     - TWINE_PASSWORD=${CI_JOB_TOKEN}
     - TWINE_USERNAME=gitlab-ci-token
