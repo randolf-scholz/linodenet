@@ -22,25 +22,30 @@ installtion:
     - source BUILDENV/bin/activate
     - pip install --upgrade pip wheel
   script:
-    - source BUILDENV/bin/activate
     # install special dependency
 #    - pip install git+ssh://git@software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.git
 #    - pip install git+ssh://git@git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git
     # install the package
     - python setup.py sdist bdist_wheel
-  after_script:
-    # upload as a PyPi package to gitlab registry
-    - source BUILDENV/bin/activate
-    - pip install twine
-    - twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
   artifacts:
     paths:
       - dist/*.whl
+
+package_upload:
+  stage: setup
+  only: [ master ]
+  before_script:
+    - source BUILDENV/bin/activate
+    - pip install twine
+  script:
+    # upload as a PyPi package to gitlab registry
+    - twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
 
 flake8:
   stage: code analysis
   allow_failure: true
   before_script:
+    - source BUILDENV/bin/activate
     - pip install flake8
   script:
     - >
@@ -59,8 +64,9 @@ pylint:
   stage: code analysis
   allow_failure: true
   before_script:
-      - pip install pylint pylint-exit anybadge torch scipy
-      - mkdir ./pylint
+    - source BUILDENV/bin/activate
+    - pip install pylint pylint-exit anybadge torch scipy
+    - mkdir ./pylint
   script:
     - >
       pylint 
@@ -83,19 +89,19 @@ pylint:
 
 pages:
   stage: documentation
+  only: [ master ]
   allow_failure: true
   before_script:
+    - source BUILDENV/bin/activate
     - pip install -U sphinx sphinx-rtd-theme sphinx-math-dollar
     - cd docs
   script:
     - make html
-  after_script:
     - mv _build/html/ ../public/
   artifacts:
     paths:
       - public
-  only:
-    - master
+
 
 tox:
   stage: unit tests
