@@ -9,11 +9,12 @@ Contains implementations of
 - class:`~.iResNet`
 """
 from math import sqrt
-from typing import Union, Final
+from typing import Union, Final, Any
 
 import torch
 from torch import jit, nn, Tensor
 from torch.nn import functional
+
 from tsdm.util import ACTIVATIONS, deep_dict_update
 
 
@@ -135,9 +136,9 @@ class iResNetBlock(jit.ScriptModule):
     input_size:  Final[int]
     hidden_size: Final[int]
     output_size: Final[int]
-    maxiter:     Final[int] = 10
-    atol:        Final[float] = 1e-08
-    rtol:        Final[float] = 1e-05
+    maxiter:     Final[int]
+    atol:        Final[float]
+    rtol:        Final[float]
 
     HP: dict = {
         'atol' : 1e-08,
@@ -151,7 +152,7 @@ class iResNetBlock(jit.ScriptModule):
         'input_size'  : None,
     }
 
-    def __init__(self, input_size: int, **HP):
+    def __init__(self, input_size: int, **HP: Any):
         r"""
         Parameters
         ----------
@@ -166,9 +167,13 @@ class iResNetBlock(jit.ScriptModule):
         deep_dict_update(self.HP, HP)
         HP = self.HP
 
-        self.input_size  = HP['input_size'] = input_size
-        self.output_size = HP['input_size'] = input_size
-        self.hidden_size = HP['hidden_size'] = HP['hidden_size'] or int(sqrt(input_size))
+        HP['input_size']  = input_size
+        HP['input_size']  = input_size
+        HP['hidden_size'] = HP['hidden_size'] or int(sqrt(input_size))
+
+        self.input_size = HP['input_size']
+        self.output_size = HP['input_size']
+        self.hidden_size = HP['hidden_size']
 
         self.atol = HP['atol']
         self.rtol = HP['rtol']
@@ -217,10 +222,10 @@ class iResNetBlock(jit.ScriptModule):
             residual = torch.abs(xhat_dash - xhat) - self.rtol * torch.absolute(xhat)
 
             if torch.all(residual <= self.atol):
-                break
-        # if NDIM == self.maxiter:
-        #     warnings.warn(F"No convergence in {self.maxiter} iterations. "
-        #                   F"Max residual:{torch.max(residual)} > {self.atol}.")
+                return xhat_dash
+
+        print(F"No convergence in {self.maxiter} iterations. "
+              F"Max residual:{torch.max(residual)} > {self.atol}.")
         return xhat_dash
 
 
@@ -260,7 +265,7 @@ class iResNet(jit.ScriptModule):
         },
     }
 
-    def __init__(self, input_size, **HP):
+    def __init__(self, input_size, **HP: Any):
         r"""
         Parameters
         ----------

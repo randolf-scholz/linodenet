@@ -43,16 +43,17 @@ def linode_error(dim=None, num=None, precision="single", relative_error=True,
     T = np.random.uniform(low=t0, high=t1, size=num - 2).astype(numpy_dtype)
     T = np.sort([t0, *T, t1]).astype(numpy_dtype)
 
-    def func(t, x):
+    def func(t, x):  # noqa
         return A @ x
 
     X = np.array(odeint(func, x0, T, tfirst=True))
+
     T = torch.tensor(T, dtype=torch_dtype, device=device)
     x0 = torch.tensor(x0, dtype=torch_dtype, device=device)
     model = LinODE(input_size=dim, kernel_initialization=A)
     model.to(dtype=torch_dtype, device=device)
 
-    Xhat = model(torch.tensor(T), torch.tensor(x0))
+    Xhat = model(T, x0)
     Xhat = Xhat.clone().detach().cpu().numpy()
 
     err = np.abs(X - Xhat)

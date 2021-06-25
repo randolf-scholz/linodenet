@@ -9,17 +9,18 @@ Contains implementations of
 - class:`~.LinODEnet`
 """
 
-from typing import Union, List, Callable, Final
+from typing import Union, Callable, Final, Any
 
 import torch
+from numpy.typing import ArrayLike
 from torch import nn, Tensor, jit
+
 from tsdm.util import deep_dict_update
 
 from linodenet.init import gaussian
 from .iResNet import iResNet
 
-
-Initialization = Union[Tensor, Callable[int, Tensor]]
+Initialization = Union[ArrayLike, Tensor, Callable[[int], Tensor]]
 
 
 class LinODECell(jit.ScriptModule):
@@ -33,20 +34,22 @@ class LinODECell(jit.ScriptModule):
         The dimensionality of the output space.
     kernel: Tensor
         The system matrix
-    kernel_initialization: Callable[None, Tensor]
+    kernel_initialization: Callable[[], Tensor]
         Parameter-less function that draws a initial system matrix
+    kernel_regularization: Callable[[Tensor], Tensor]
+        Regularization function for the kernel
     """
 
     input_size: Final[int]
     output_size: Final[int]
 
     kernel: Tensor
-    kernel_initialization: Callable[None, Tensor]
-    kernel_regularization: Callable[Tensor, Tensor]
+    kernel_initialization: Callable[[], Tensor]
+    kernel_regularization: Callable[[Tensor], Tensor]
 
     def __init__(self, input_size: int,
                  kernel_initialization: Initialization = None,
-                 kernel_regularization: Callable[Tensor, Tensor] = None):
+                 kernel_regularization: Callable[[Tensor], Tensor] = None):
         r"""
         Parameters
         ----------
@@ -59,36 +62,36 @@ class LinODECell(jit.ScriptModule):
         self.output_size = input_size
 
         if kernel_initialization is None:
-            self.kernel_initialization = lambda: gaussian(input_size)
+            def _kernel_initialization():
+                return gaussian(input_size)
         elif callable(kernel_initialization):
-            self.kernel_initialization = lambda: Tensor(kernel_initialization(input_size))
+            def _kernel_initialization():
+                return Tensor(kernel_initialization(input_size))
         elif isinstance(kernel_initialization, Tensor):
-            self._kernel_initialization = kernel_initialization.clone().detach()
-            self.kernel_initialization = lambda: self._kernel_initialization
+            def _kernel_initialization():
+                return kernel_initialization
         else:
-            self.kernel_initialization = lambda: Tensor(kernel_initialization)
+            def _kernel_initialization():
+                return Tensor(kernel_initialization)
+
+        self.kernel_initialization = _kernel_initialization
+        self.kernel = nn.Parameter(self.kernel_initialization())
 
         if kernel_regularization is None:
             @jit.script
             def _kernel_regularization(w: Tensor) -> Tensor:
                 return w
-            # self._kernel_regularization = jit.script(lambda w: w)
         elif kernel_regularization == "symmetric":
             @jit.script
             def _kernel_regularization(w: Tensor) -> Tensor:
                 return (w+w.T)/2
-            # self._kernel_regularization = jit.script(lambda w: (w - w.T)/2)
-
         elif kernel_regularization == "skew-symmetric":
             @jit.script
             def _kernel_regularization(w: Tensor) -> Tensor:
                 return (w-w.T)/2
-            # self._kernel_regularization = jit.script(lambda w: (w - w.T)/2)
         else:
             raise NotImplementedError(F"{kernel_regularization=} unknown")
         self.kernel_regularization = _kernel_regularization
-
-        self.kernel = nn.Parameter(self.kernel_initialization())
 
     @jit.script_method
     def forward(self, Δt: Tensor, x0: Tensor) -> Tensor:
@@ -133,12 +136,12 @@ class LinODE(jit.ScriptModule):
     output_size: Final[int]
 
     kernel: Tensor
-    kernel_initialization: Callable[None, Tensor]
-    kernel_regularization: Callable[Tensor, Tensor]
+    kernel_initialization: Callable[[], Tensor]
+    kernel_regularization: Callable[[Tensor], Tensor]
 
     def __init__(self, input_size: int,
                  kernel_initialization: Initialization = None,
-                 kernel_regularization: Callable[Tensor, Tensor] = None):
+                 kernel_regularization: Callable[[Tensor], Tensor] = None):
         r"""
 
         Parameters
@@ -169,7 +172,7 @@ class LinODE(jit.ScriptModule):
             The estimated true state of the system at the times $t\in T$
         """
         ΔT = torch.moveaxis(torch.diff(T), -1, 0)
-        X = torch.jit.annotate(List[Tensor], [])
+        X = torch.jit.annotate(list[Tensor], [])
         X += [x0]
 
         # iterate over LEN, this works even when no BATCH dim present.
@@ -236,7 +239,7 @@ class LinODEnet(jit.ScriptModule):
     kernel: Tensor
     padding: Tensor
 
-    def __init__(self, input_size: int, hidden_size: int, **HP):
+    def __init__(self, input_size: int, hidden_size: int, **HP: Any):
         r"""
 
         Parameters
@@ -339,10 +342,23 @@ class LinODEnet(jit.ScriptModule):
         ΔT = torch.moveaxis(torch.diff(T), -1, 0)
         X = torch.moveaxis(X, -2, 0)
 
-        Xhat = torch.jit.annotate(List[Tensor], [])
-        # initialize with zero, todo: do something smarter!
+        Xhat = torch.jit.annotate(list[Tensor], [])
+        # initial imputation: put zeros
+        # TODO: do something smarter!
         zero = torch.tensor(0, device=X.device, dtype=X.dtype)
-        Xhat += [torch.where(torch.isnan(X[0]), zero, X[0])]
+        X0 = torch.where(torch.isnan(X[0]), zero, X[0])
+        Xhat += [X0]
+
+        # IDEA: The problem is the initial state of RNNCell is not defined and typically put equal
+        # to zero. Staying with the idea that the Cell acts as a filter, that is updates the state
+        # estimation given an observation, we could "trust" the original observation in the sense
+        # that we solve the fixed point equation h0 = g(x0, h0) and put the solution as the initial
+        # state.
+        # issue: if x0 is really sparse this is useless.
+        # better idea: we probably should go back and forth.
+        # other idea: use a set-based model and put h = g(T,X), including the whole TS.
+        # This set model can use triplet notation.
+        # bias wheigting towards close time points
 
         for Δt, x in zip(ΔT, X):
             # Encode

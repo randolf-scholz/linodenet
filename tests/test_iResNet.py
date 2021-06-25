@@ -10,6 +10,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch import Tensor
 
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
@@ -33,12 +34,12 @@ def test_LinearContraction(n_samples: int = 10_000, dim_in: int = None, dim_out:
 
     x = torch.randn(n_samples, dim_in)
     y = torch.randn(n_samples, dim_in)
-    distances = torch.cdist(x, y)
+    distances: Tensor = torch.cdist(x, y)
 
     model = LinearContraction(dim_in, dim_out)
     xhat = model(x)
     yhat = model(y)
-    latent_distances = torch.cdist(xhat, yhat)
+    latent_distances: Tensor = torch.cdist(xhat, yhat)
 
     assert torch.all(latent_distances <= distances)
     logger.info("LinearContraction passes test \N{HEAVY CHECK MARK}")
