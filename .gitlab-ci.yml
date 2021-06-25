@@ -1,23 +1,19 @@
 #
 # https://gitlab.com/gitlab-org/gitlab/-/tree/master/lib/gitlab/ci/templates/Python.gitlab-ci.yml
 #
-
 default:
-  image: python 3.9
+  image: python:3.9
   tags: [docker]
-
 
 variables:
   TWINE_PASSWORD: ${CI_JOB_TOKEN}
   TWINE_USERNAME: gitlab-ci-token
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
-
 cache:
   paths:
     - .cache/pip
     - VIRTUALENV/
-
 
 stages:
   - setup
@@ -26,14 +22,12 @@ stages:
   - unit tests
   - deployment
 
-
 before_script:  # global before_script is run before each and every job.
   - python -V
   - pip install --upgrade pip virtualenv
   - virtualenv VIRTUALENV
   - source VIRTUALENV/bin/activate
   - pip install --upgrade pip wheel
-
 
 installtion:
   stage: setup
@@ -46,7 +40,6 @@ installtion:
   artifacts:
     paths:
       - dist/*.whl
-
 
 flake8:
   stage: code analysis
@@ -63,7 +56,6 @@ flake8:
     # E221 multiple spaces before operator
     # E226 missing whitespace around arithmetic operator
     # E241 multiple spaces after ':'
-
 
 pylint:
   stage: code analysis
@@ -90,7 +82,6 @@ pylint:
     paths:
       - ./pylint/
 
-
 pages:
   stage: documentation
   only: [ master ]
@@ -104,14 +95,12 @@ pages:
     paths:
       - public
 
-
 tox:
   stage: unit tests
   allow_failure: true
   script:
     - pip install tox
     - echo "tox --recreate"
-
 
 twine:
   stage: deployment
