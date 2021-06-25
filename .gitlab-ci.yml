@@ -1,10 +1,24 @@
+#
+# https://gitlab.com/gitlab-org/gitlab/-/tree/master/lib/gitlab/ci/templates/Python.gitlab-ci.yml
+#
+image: python 3.9
+
+
 default:
-  image: python:3.9
   tags: [docker]
+
 
 variables:
   TWINE_PASSWORD: ${CI_JOB_TOKEN}
   TWINE_USERNAME: gitlab-ci-token
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+
+cache:
+  paths:
+    - .cache/pip
+    - VIRTUALENV/
+
 
 stages:
   - setup
@@ -13,42 +27,33 @@ stages:
   - unit tests
   - deployment
 
+
+before_script:  # global before_script is run before each and every job.
+  - python -V
+  - pip install --upgrade pip virtualenv
+  - virtualenv VIRTUALENV
+  - source VIRTUALENV/bin/activate
+  - pip install --upgrade pip wheel
+
+
 installtion:
   stage: setup
-  before_script:
-    # setup virtual environment
-    - python -c "import sys; print(sys.version)"
-    - pip install --upgrade pip virtualenv
-    - python -m venv BUILDENV
-    - source BUILDENV/bin/activate
-    - pip install --upgrade pip wheel
   script:
     # install special dependency
-#    - pip install git+ssh://git@software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.git
-#    - pip install git+ssh://git@git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git
+    # - pip install git+ssh://git@software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.git
+    # - pip install git+ssh://git@git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git
     # install the package
     - python setup.py sdist bdist_wheel
   artifacts:
     paths:
       - dist/*.whl
 
-package_upload:
-  stage: deployment
-  only: [ master ]
-  before_script:
-    - source BUILDENV/bin/activate
-    - pip install twine
-  script:
-    # upload as a PyPi package to gitlab registry
-    - twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
 
 flake8:
   stage: code analysis
   allow_failure: true
-  before_script:
-    - source BUILDENV/bin/activate
-    - pip install flake8
   script:
+    - pip install flake8
     - >
       flake8 
       --max-line-length=100
@@ -64,11 +69,9 @@ flake8:
 pylint:
   stage: code analysis
   allow_failure: true
-  before_script:
-    - source BUILDENV/bin/activate
+  script:
     - pip install pylint pylint-exit anybadge torch scipy
     - mkdir ./pylint
-  script:
     - >
       pylint 
       --max-line-length=100
@@ -88,15 +91,14 @@ pylint:
     paths:
       - ./pylint/
 
+
 pages:
   stage: documentation
   only: [ master ]
   allow_failure: true
-  before_script:
-    - source BUILDENV/bin/activate
+  script:
     - pip install -U sphinx sphinx-rtd-theme sphinx-math-dollar
     - cd docs
-  script:
     - make html
     - mv _build/html/ ../public/
   artifacts:
@@ -107,7 +109,15 @@ pages:
 tox:
   stage: unit tests
   allow_failure: true
-  before_script:
-    - pip install tox
   script:
-    echo "tox --recreate"
+    - pip install tox
+    - echo "tox --recreate"
+
+
+twine:
+  stage: deployment
+  only: [ master ]
+  script:
+    - pip install twine
+    # upload as a PyPi package to gitlab registry
+    - twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
