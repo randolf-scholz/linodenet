@@ -44,8 +44,8 @@ class LinODECell(jit.ScriptModule):
     output_size: Final[int]
 
     kernel: Tensor
-    kernel_initialization: Callable[[], Tensor]
-    kernel_regularization: Callable[[Tensor], Tensor]
+    # kernel_initialization: Callable[[], Tensor]
+    # kernel_regularization: Callable[[Tensor], Tensor]
 
     def __init__(self, input_size: int,
                  kernel_initialization: Initialization = None,
@@ -74,24 +74,29 @@ class LinODECell(jit.ScriptModule):
             def _kernel_initialization():
                 return Tensor(kernel_initialization)
 
-        self.kernel_initialization = _kernel_initialization
+        def __kernel_initialization() -> Tensor:
+            return _kernel_initialization()
+
+        self.kernel_initialization = __kernel_initialization
+
         self.kernel = nn.Parameter(self.kernel_initialization())
 
         if kernel_regularization is None:
-            @jit.script
             def _kernel_regularization(w: Tensor) -> Tensor:
                 return w
         elif kernel_regularization == "symmetric":
-            @jit.script
             def _kernel_regularization(w: Tensor) -> Tensor:
                 return (w+w.T)/2
         elif kernel_regularization == "skew-symmetric":
-            @jit.script
             def _kernel_regularization(w: Tensor) -> Tensor:
                 return (w-w.T)/2
         else:
             raise NotImplementedError(F"{kernel_regularization=} unknown")
-        self.kernel_regularization = _kernel_regularization
+        self._kernel_regularization = _kernel_regularization
+
+    @jit.script_method
+    def kernel_regularization(self, w: Tensor) -> Tensor:
+        return self._kernel_regularization(w)
 
     @jit.script_method
     def forward(self, Δt: Tensor, x0: Tensor) -> Tensor:

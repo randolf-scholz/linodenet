@@ -61,7 +61,8 @@ def linode_error(dim=None, num=None, precision="single", relative_error=True,
     if relative_error:
         err /= np.abs(X) + eps
 
-    return np.array([scaled_norm(err, p=p) for p in (1, 2, np.inf)])
+    result = np.array([scaled_norm(err, p=p) for p in (1, 2, np.inf)])
+    return result
 
 
 def test_linode_error():
