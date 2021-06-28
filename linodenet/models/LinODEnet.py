@@ -12,15 +12,14 @@ Contains implementations of
 from typing import Union, Callable, Final, Any
 
 import torch
-from numpy.typing import ArrayLike
 from torch import nn, Tensor, jit
 
-from tsdm.util import deep_dict_update
+from linodenet.util import deep_dict_update
 
 from linodenet.init import gaussian
 from .iResNet import iResNet
 
-Initialization = Union[ArrayLike, Tensor, Callable[[int], Tensor]]
+Initialization = Union[Tensor, Callable[[int], Tensor]]
 
 
 class LinODECell(jit.ScriptModule):
@@ -349,7 +348,7 @@ class LinODEnet(jit.ScriptModule):
 
         Xhat = torch.jit.annotate(list[Tensor], [])
         # initial imputation: put zeros
-        # TODO: do something smarter!
+        # TODO: do something smarter than zero initialization!
         zero = torch.tensor(0, device=X.device, dtype=X.dtype)
         X0 = torch.where(torch.isnan(X[0]), zero, X[0])
         Xhat += [X0]
@@ -363,7 +362,7 @@ class LinODEnet(jit.ScriptModule):
         # better idea: we probably should go back and forth.
         # other idea: use a set-based model and put h = g(T,X), including the whole TS.
         # This set model can use triplet notation.
-        # bias wheigting towards close time points
+        # bias weighting towards close time points
 
         for Δt, x in zip(ΔT, X):
             # Encode

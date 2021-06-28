@@ -29,7 +29,6 @@ setuptools.setup(
     long_description_content_type='test/X-rst',
     packages=setuptools.find_packages(exclude='tests'),           # include all packages in ...
     install_requires=[
-        'numpy',
         'scipy',
         'torch',
     ],

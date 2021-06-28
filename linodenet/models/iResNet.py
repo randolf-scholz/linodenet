@@ -15,7 +15,7 @@ import torch
 from torch import jit, nn, Tensor
 from torch.nn import functional
 
-from tsdm.util import ACTIVATIONS, deep_dict_update
+from linodenet.util import ACTIVATIONS, deep_dict_update
 
 
 class LinearContraction(jit.ScriptModule):
@@ -82,7 +82,8 @@ class LinearContraction(jit.ScriptModule):
             self.input_size, self.output_size, self.bias is not None
         )
 
-    def __forward__(self, x: Tensor) -> Tensor:
+    @jit.script_method
+    def forward(self, x: Tensor) -> Tensor:
         r"""
 
         $X\mapsto \tilde A\cdot X$ where $\tilde{A} = A \cdot \min\big(\tfrac{c}{\|A\|_2}, 1\big)$
@@ -99,11 +100,6 @@ class LinearContraction(jit.ScriptModule):
         one = torch.tensor(1, dtype=x.dtype, device=x.device)
         fac = torch.minimum(self.c / σ_max, one)
         return functional.linear(x, fac * self.weight, self.bias)
-
-    @jit.script_method
-    def forward(self, x: Tensor) -> Tensor:
-        """This method shows as a :undoc-member: in the documentation"""
-        return self.__forward__(x)
 
 
 class iResNetBlock(jit.ScriptModule):
@@ -346,7 +342,7 @@ class iResNet(jit.ScriptModule):
     #     xhat_dash = y.clone()
     #     residual = torch.zeros_like(y)
     #
-    #     for NDIM in range(self.maxiter):
+    #     for k in range(self.maxiter):
     #         xhat_dash = y - self(xhat)
     #         residual = torch.abs(xhat_dash - xhat) - rtol * torch.absolute(xhat)
     #

@@ -22,7 +22,8 @@ logging.getLogger('matplotlib').setLevel(logging.WARNING)
 logging.getLogger('PIL').setLevel(logging.WARNING)
 
 
-def test_LinearContraction(n_samples: int = 10_000, dim_in: int = None, dim_out: int = None):
+def test_LinearContraction(n_samples: int = 10_000, dim_in: int = None, dim_out: int = None,
+                           make_plot: bool = False):
     """
     Tests empirically whether the LinearContraction module is a contraction.
     """
@@ -44,6 +45,9 @@ def test_LinearContraction(n_samples: int = 10_000, dim_in: int = None, dim_out:
     assert torch.all(latent_distances <= distances)
     logger.info("LinearContraction passes test \N{HEAVY CHECK MARK}")
 
+    if not make_plot:
+        return
+
     logger.info("LinearContraction generating figure")
     scaling_factor = (latent_distances / distances).flatten()
     fig, ax = plt.subplots(figsize=(8, 4), tight_layout=True)
@@ -56,7 +60,8 @@ def test_LinearContraction(n_samples: int = 10_000, dim_in: int = None, dim_out:
     logger.info("LinearContraction all done")
 
 
-def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_size: int = None):
+def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_size: int = None,
+                      make_plot: bool = False):
     """
     Tests empirically whether the iResNetBlock is indeed invertible.
     """
@@ -85,6 +90,9 @@ def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_si
     assert torch.quantile(err_rinverse, 0.99) <= 10 ** -6
     logger.info("iResNetBlock passes test \N{HEAVY CHECK MARK}")
 
+    if not make_plot:
+        return
+
     logger.info("iResNetBlock generating figure")
     fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(10, 5), tight_layout=True,
                            sharex='row', sharey='row')
@@ -111,5 +119,5 @@ def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_si
 
 
 if __name__ == "__main__":
-    test_LinearContraction()
-    test_iResNetBlock()
+    test_LinearContraction(make_plot=True)
+    test_iResNetBlock(make_plot=True)

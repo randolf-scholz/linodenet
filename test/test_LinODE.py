@@ -6,18 +6,37 @@ import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from numpy.typing import NDArray
 import torch
 from scipy.integrate import odeint
 from tqdm.auto import trange
+from typing import Union
 
 from tsdm.plot import visualize_distribution
-from tsdm.util import scaled_norm
+# from tsdm.util import scaled_norm
 
 from linodenet.models import LinODE
 
 logger = logging.getLogger(__name__)
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 logging.getLogger('PIL').setLevel(logging.WARNING)
+
+
+def scaled_norm(x: NDArray, p: float = 2, axis=None, keepdims=False) -> NDArray:
+    x = np.abs(x)
+
+    if p == 0:
+        # https://math.stackexchange.com/q/282271/99220
+        return np.exp(np.mean(np.log(x), axis=axis, keepdims=keepdims))
+    if p == 1:
+        return np.mean(x, axis=axis, keepdims=keepdims)
+    if p == 2:
+        return np.sqrt(np.mean(x ** 2, axis=axis, keepdims=keepdims))
+    if p == float('inf'):
+        return np.max(x, axis=axis, keepdims=keepdims)
+    # other p
+    return np.mean(x**p, axis=axis, keepdims=keepdims) ** (1 / p)
 
 
 def linode_error(dim=None, num=None, precision="single", relative_error=True,
@@ -48,6 +67,7 @@ def linode_error(dim=None, num=None, precision="single", relative_error=True,
 
     X = np.array(odeint(func, x0, T, tfirst=True))
 
+    A = torch.Tensor(A)
     T = torch.tensor(T, dtype=torch_dtype, device=device)
     x0 = torch.tensor(x0, dtype=torch_dtype, device=device)
     model = LinODE(input_size=dim, kernel_initialization=A)
@@ -65,7 +85,7 @@ def linode_error(dim=None, num=None, precision="single", relative_error=True,
     return result
 
 
-def test_linode_error():
+def test_linode_error(make_plot=False):
     """Compare LinODE against scipy.odeint on linear system"""
     NSAMPLES = 100
     logger.info("Testing LinODE")
@@ -73,6 +93,9 @@ def test_linode_error():
     err_single = np.array([linode_error(precision="single") for _ in trange(NSAMPLES)]).T
     logger.info("Generating %i samples in double precision", NSAMPLES)
     err_double = np.array([linode_error(precision="double") for _ in trange(NSAMPLES)]).T
+
+    if not make_plot:
+        return
 
     with plt.style.context('bmh'):
         fig, ax = plt.subplots(ncols=3, nrows=2, figsize=(10, 5), tight_layout=True,
@@ -97,4 +120,4 @@ def test_linode_error():
 
 
 if __name__ == "__main__":
-    test_linode_error()
+    test_linode_error(make_plot=True)

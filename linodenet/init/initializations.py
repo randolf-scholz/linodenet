@@ -1,9 +1,8 @@
+# TODO: remove scipy dependency once torch offers orthogonal matrix sampling
 r"""
 We create different initializations
 
-all initializations are normalized such that if X~N(0,1), then Ax ~ N(0,1) as well
-
-Note that since Var(X+y) = Var(X) + 2Cov(X, y) + Var(y)
+All initializations are normalized such that if X~N(0,1), then Ax ~ N(0,1) as well.
 """
 
 from math import sqrt, prod
@@ -25,7 +24,7 @@ def gaussian(n: Union[int, tuple[int, ...]]) -> Tensor:
         If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
     Returns
     -------
-    :class:`~torch.Tensor`
+    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -47,7 +46,7 @@ def diagonally_dominant(n: Union[int, tuple[int, ...]]) -> Tensor:
         If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
     Returns
     -------
-    :class:`~torch.Tensor`
+    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -68,7 +67,7 @@ def symmetric(n: Union[int, tuple[int, ...]]) -> Tensor:
 
     Returns
     -------
-    :class:`~torch.Tensor`
+    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -90,7 +89,7 @@ def skew_symmetric(n: Union[int, tuple[int, ...]]) -> Tensor:
 
     Returns
     -------
-    :class:`~torch.Tensor`
+    Tensor
     """
     # convert to tuple
     # convert to tuple
@@ -114,7 +113,7 @@ def orthogonal(n: Union[int, tuple[int, ...]]) -> Tensor:
 
     Returns
     -------
-    :class:`~torch.Tensor`
+    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -138,7 +137,7 @@ def special_orthogonal(n: Union[int, tuple[int, ...]]) -> Tensor:
 
     Returns
     -------
-    :class:`~torch.Tensor`
+    Tensor
     """
 
     # convert to tuple
