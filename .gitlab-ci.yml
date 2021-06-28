@@ -6,6 +6,7 @@ default:
   tags:  [docker]
 
 variables:
+  MODULENAME:     linodenet
   TWINE_PASSWORD: ${CI_JOB_TOKEN}
   TWINE_USERNAME: gitlab-ci-token
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -23,57 +24,38 @@ stages:
   - deployment
 
 before_script:  # global before_script is run before each and every job.
-  - python -V
-  - pip install --upgrade pip virtualenv
-  - virtualenv VIRTUALENV
   - source VIRTUALENV/bin/activate
-  - pip install --upgrade pip wheel
 
 installtion:
   stage: setup
   script:
+    - python -V
+    - pip install --upgrade pip virtualenv
+    - virtualenv VIRTUALENV
+    - source VIRTUALENV/bin/activate
     # install special dependency
     # - pip install git+ssh://git@software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.git
     # - pip install git+ssh://git@git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git
-    # install the package
+    - pip install -r requirements.txt
+    - pip install -e .
+
+wheel:
+  stage: setup
+  only: [ master ]
+  script:
+    - pip install --upgrade pip wheel
     - python setup.py sdist bdist_wheel
   artifacts:
     paths:
       - dist/*.whl
 
-flake8:
-  stage: code analysis
-  allow_failure: true
-  script:
-    - pip install flake8
-    - >
-      flake8 
-      --max-line-length=100
-      --ignore=E203,E221,E226,E241 
-      linodenet
-    # We ignore the following PEP8 Errors:
-    # E203 whitespace before ':'
-    # E221 multiple spaces before operator
-    # E226 missing whitespace around arithmetic operator
-    # E241 multiple spaces after ':'
-
 pylint:
+  # see .pylintrc for configuration
   stage: code analysis
-  allow_failure: true
   script:
-    - pip install pylint pylint-exit torch scipy
-    - mkdir ./pylint
-    - >
-      pylint 
-      --max-line-length=100
-      --generated-members=numpy.*,torch.*
-      --disable=C0103,C0144
-      --output-format=text
-      linodenet
-      | tee ./pylint/pylint.log || pylint-exit $?
-    # We ignore the following PyLint Errors:
-    # C0103 invalid-name
-    # C0144 non-ascii-name
+    - pip install pylint pylint-exit
+    - mkdir pylint
+    - pylint $MODULENAME | tee ./pylint/pylint.log || pylint-exit $?
   after_script:
     - pip install anybadge
     - PYLINT_SCORE=$(sed -n 's/^Your code has been rated at \([-0-9.]*\)\/.*/\1/p' ./pylint/pylint.log)
@@ -83,12 +65,21 @@ pylint:
     paths:
       - ./pylint/
 
-mypy:
+flake8:
+  # see .flake8 for configuration
   stage: code analysis
-  allow_failure: true
+  script:
+    - pip install flake8
+    - flake8 $MODULENAME
+    - flake8 test
+    - flake8 docs/conf.py
+
+mypy:
+  # see .mpypy.ini for configuration
+  stage: code analysis
   script:
     - pip install mypy
-    - mypy --install-types linodenet
+    - mypy --install-types $MODULENAME
 
 pages:
   stage: documentation
@@ -105,11 +96,11 @@ pages:
       - public
 
 pytest:
+  # see pytest.ini for configuration
   stage: unit tests
   allow_failure: true
   script:
     - pip install pytest
-    - pip install matplotlib
     - pytest
 
 twine:
