@@ -38,7 +38,7 @@ installtion:
     # - pip install git+ssh://git@git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git
     - pip install -r requirements.txt
     # try installing tsdm
-    - pip install tsdm --no-deps --index-url https://linodenet:LnmoJrKD8dbqkwf2Lfx5@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
+    - pip install tsdm --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
     - pip install -e .
 
 wheel:
