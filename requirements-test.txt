@@ -1,5 +1,11 @@
+# tsdm dependencies
+h5py
 matplotlib
 numpy
+numba
 pandas
 scipy
+xarray
+pyyaml
 torch
+tables
