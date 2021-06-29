@@ -56,7 +56,7 @@ def test_LinearContraction(n_samples: int = 10_000, dim_in: int = None, dim_out:
                  F" (samples:{n_samples}, dim-in:{dim_in}, dim-out:{dim_out})")
     ax.set_xlabel(r"$s(X, y) = \frac{\|\phi(X)-\phi(y)\|}{\|X-y\|}$")
     ax.set_ylabel(r"density $p(s\mid X, y)$ where $x_i,y_i\sim \mathcal N(0,1)$")
-    fig.savefig("LinearContraction_ScalingFactor.png")
+    fig.savefig("LinearContraction_ScalingFactor.svg")
     logger.info("LinearContraction all done")
 
 
