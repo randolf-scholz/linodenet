@@ -17,7 +17,7 @@ from tsdm.util import scaled_norm
 
 from linodenet.models import LinearContraction, iResNetBlock
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)   # noqa: E402
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 logging.getLogger('PIL').setLevel(logging.WARNING)
 
@@ -78,16 +78,16 @@ def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_si
     y = torch.randn(n_samples, input_size)
     fx = model(x)
     xhat = model.inverse(fx)
-    ify = model.inverse(y)
+    ify  = model.inverse(y)
     yhat = model(ify)
 
-    dist_lmap    = scaled_norm(x - fx, axis=-1)
-    dist_rmap    = scaled_norm(y - ify, axis=-1)
-    err_linverse = scaled_norm(x - xhat, axis=-1)
-    err_rinverse = scaled_norm(y - yhat, axis=-1)
+    discrepancy_forward  = scaled_norm(x - fx,   axis=-1)
+    discrepancy_backward = scaled_norm(y - ify,  axis=-1)
+    error_left_inverse   = scaled_norm(x - xhat, axis=-1)
+    error_right_inverse  = scaled_norm(y - yhat, axis=-1)
 
-    assert torch.quantile(err_linverse, 0.99) <= 10 ** -6
-    assert torch.quantile(err_rinverse, 0.99) <= 10 ** -6
+    assert torch.quantile(error_left_inverse, 0.99) <= 10 ** -6
+    assert torch.quantile(error_right_inverse, 0.99) <= 10 ** -6
     logger.info("iResNetBlock passes test \N{HEAVY CHECK MARK}")
 
     if not make_plot:
@@ -97,10 +97,10 @@ def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_si
     fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(10, 5), tight_layout=True,
                            sharex='row', sharey='row')
 
-    visualize_distribution(err_linverse, ax=ax[0, 0])
-    visualize_distribution(err_rinverse, ax=ax[0, 1])
-    visualize_distribution(dist_lmap, ax=ax[1, 0])
-    visualize_distribution(dist_rmap, ax=ax[1, 1])
+    visualize_distribution(error_left_inverse, ax=ax[0, 0])
+    visualize_distribution(error_right_inverse, ax=ax[0, 1])
+    visualize_distribution(discrepancy_forward, ax=ax[1, 0])
+    visualize_distribution(discrepancy_backward, ax=ax[1, 1])
 
     ax[0, 0].set_xlabel(r"$r_\text{left}(X) = \|X - \phi^{-1}(\phi(X))\|$")
     ax[0, 0].set_ylabel(r"$p(r_\text{left} \mid X)$ where $x_i \sim \mathcal N(0,1)$")
@@ -114,7 +114,7 @@ def test_iResNetBlock(n_samples: int = 10_000, input_size: int = None, hidden_si
     fig.suptitle(F"iResNetBlock -- Inversion property "
                  F"(samples:{n_samples}, dim-in:{input_size}, dim-hidden:{hidden_size})",
                  fontsize=16)
-    fig.savefig("iResNetBlock_inversion.png")
+    fig.savefig("iResNetBlock_inversion.svg")
     logger.info("iResNetBlock all done")
 
 

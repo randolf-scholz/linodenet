@@ -61,10 +61,10 @@ MODELS = {
 }
 
 
-def _make_tensors(shapes: tuple[tuple[int, ...]], batch_sizes: tuple[int] = (),
+def _make_tensors(shapes: tuple[tuple[int, ...]], batch_sizes: tuple[int, ...] = (),
                   dtype: torch.dtype = torch.float32, device: torch.device = torch.device('cpu')
-                  ) -> tuple[Tensor]:
-    """Makes tensors of required shape with potentially multiple batch dimensions added to all tensors"""
+                  ) -> tuple[Tensor, ...]:
+    """Random tensors of required shape with potentially multiple batch dimensions added"""
     tensors = []
     for shape in shapes:
         batched_shape = (*batch_sizes, *shape)
@@ -101,11 +101,14 @@ def _test_model(Model: type, initialization: tuple[int, ...],
     logger.info(">>> FORWARD \N{HEAVY CHECK MARK}")
 
     logger.info(">>> BACKWARD TEST")
-    loss = sum([torch.mean((output - target)**2) for output, target in zip(outputs, targets)])
+    losses = [torch.mean((output - target)**2) for output, target in zip(outputs, targets)]
+    loss = torch.stack(losses).sum()
+
     try:  # check backward
         loss.backward()
     except Exception as E:
         raise RuntimeError(err_str("backward pass")) from E
+
     logger.info(">>> BACKWARD \N{HEAVY CHECK MARK}")
 
 

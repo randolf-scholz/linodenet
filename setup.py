@@ -17,7 +17,7 @@ def read(filename):
 
 setuptools.setup(
     name="linodenet",
-    version="0.0.2",
+    version="0.0.3",
     url="https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet",
     license='MIT',
 
@@ -27,7 +27,7 @@ setuptools.setup(
     description="Linear ODE Network for Time Series Forecasting",
     long_description=read("README.rst"),
     long_description_content_type='test/X-rst',
-    packages=setuptools.find_packages(exclude='tests'),           # include all packages in ...
+    packages=setuptools.find_packages(exclude='test'),  # include all packages other than test
     install_requires=[
         'scipy',
         'torch',

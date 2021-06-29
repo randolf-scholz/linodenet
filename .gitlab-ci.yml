@@ -6,7 +6,8 @@ default:
   tags:  [docker]
 
 variables:
-  MODULENAME:     linodenet
+  MODULEDIR:      linodenet
+  TESTDIR:        test
   TWINE_PASSWORD: ${CI_JOB_TOKEN}
   TWINE_USERNAME: gitlab-ci-token
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -14,52 +15,51 @@ variables:
 cache:
   paths:
     - .cache/pip
+    - .pytest_cache
+    - .mypy_cache
     - VIRTUALENV/
 
 stages:
-  - setup
-  - code analysis
-  - documentation
-  - unit tests
-  - deployment
+  - build
+  - analysis
+  - test
+  - deploy
 
 before_script:  # global before_script is run before each and every job.
   - source VIRTUALENV/bin/activate
 
-installtion:
-  stage: setup
-  script:
+################
+# STAGE: SETUP #
+################
+
+build:
+  stage: build
+  before_script:
     - python -V
     - pip install --upgrade pip virtualenv
     - virtualenv VIRTUALENV
     - source VIRTUALENV/bin/activate
-    # install special dependency
-    # - pip install git+ssh://git@software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.git
-    # - pip install git+ssh://git@git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git
-    - pip install -r requirements.txt
-    # try installing tsdm
-    - pip install tsdm --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
-    - pip install -e .
-
-wheel:
-  stage: setup
-  only: [ master ]
   script:
-    - pip install --upgrade pip wheel
-    - python setup.py sdist bdist_wheel
-  artifacts:
-    paths:
-      - dist/*.whl
+    - pip install --upgrade -r requirements.txt
+    - pip install --upgrade -r requirements-test.txt
+    - pip install tsdm --upgrade --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
+    - pip install --upgrade -e .
+
+###################
+# STAGE: ANALYSIS #
+###################
 
 pylint:
   # see .pylintrc for configuration
-  stage: code analysis
+  stage: analysis
+  needs: [ "build" ]
   script:
-    - pip install pylint pylint-exit
+    - pip install --upgrade pylint pylint-exit
     - mkdir pylint
-    - pylint $MODULENAME | tee ./pylint/pylint.log || pylint-exit $?
+    - pylint $MODULEDIR | tee ./pylint/pylint.log || pylint-exit $?
+    - pylint $TESTDIR
   after_script:
-    - pip install anybadge
+    - pip install --upgrade anybadge
     - PYLINT_SCORE=$(sed -n 's/^Your code has been rated at \([-0-9.]*\)\/.*/\1/p' ./pylint/pylint.log)
     - anybadge --label=Pylint --file=pylint/pylint.svg --value=$PYLINT_SCORE 2=red 4=orange 8=yellow 10=green
     - echo "Pylint score is $PYLINT_SCORE"
@@ -69,26 +69,66 @@ pylint:
 
 flake8:
   # see .flake8 for configuration
-  stage: code analysis
+  stage: analysis
+  needs: [ "build" ]
   script:
-    - pip install flake8
-    - flake8 $MODULENAME
-    - flake8 test
-    - flake8 docs/conf.py
+    - pip install --upgrade flake8
+    - flake8 $MODULEDIR
+    - flake8 $TESTDIR
 
 mypy:
   # see .mpypy.ini for configuration
-  stage: code analysis
+  stage: analysis
+  needs: [ "build" ]
   script:
-    - pip install mypy
-    - mypy --install-types $MODULENAME
+    - pip install --upgrade mypy
+    - mypy --install-types --non-interactive $MODULEDIR
+    - mypy --install-types --non-interactive $TESTDIR
 
-pages:
-  stage: documentation
+###############
+# STAGE: TEST #
+###############
+
+pytest:
+  # see pytest.ini for configuration
+  stage: test
+  needs: [ "build" ]
+  script:
+    - pip install --upgrade pytest pytest-cov
+    - pytest --junitxml=report.xml --cov=$MODULEDIR $TESTDIR
+    - coverage
+  artifacts:
+    # https://software.ismll.uni-hildesheim.de/help/ci/unit_test_reports
+    when: always
+    reports:
+      cobertura: coverage.xml
+      junit: report.xml
+
+#################
+# STAGE: DEPLOY #
+#################
+
+pypi:
+  # https://docs.gitlab.com/ee/user/packages/pypi_repository/
+  stage: deploy
   only: [ master ]
   allow_failure: true
   script:
-    - pip install -U sphinx sphinx-rtd-theme sphinx-math-dollar
+    - pip install --upgrade pip wheel twine
+    - python setup.py sdist bdist_wheel
+    - twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
+  artifacts:
+    paths:
+      - dist/*.whl
+
+pages:
+  # https://docs.gitlab.com/ee/user/packages/pypi_repository/
+  stage: deploy
+  only: [ master ]
+  allow_failure: true
+  needs: [ "build" ]
+  script:
+    - pip install --upgrade sphinx sphinx-rtd-theme sphinx-math-dollar
     - cd docs
     - make html
   after_script:  # note: after_script resets working dir
@@ -97,18 +137,3 @@ pages:
     paths:
       - public
 
-pytest:
-  # see pytest.ini for configuration
-  stage: unit tests
-  allow_failure: true
-  script:
-    - pip install pytest
-    - pytest
-
-twine:
-  stage: deployment
-  only: [ master ]
-  script:
-    - pip install twine
-    # upload as a PyPi package to gitlab registry
-    - twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
