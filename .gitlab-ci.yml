@@ -40,10 +40,17 @@ build:
     - virtualenv venv
     - source venv/bin/activate
   script:
+    # generate distribution
+    - pip install --upgrade wheel setuptools
+    - python setup.py sdist bdist_wheel
+    # local installation
     - pip install --upgrade -r requirements.txt
     - pip install --upgrade -r requirements-test.txt
     - pip install tsdm --upgrade --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
     - pip install --upgrade -e .
+  artifacts:
+    paths:
+      - dist/
 
 ###################
 # STAGE: ANALYSIS #

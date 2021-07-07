@@ -9,3 +9,5 @@ xarray
 pyyaml
 torch
 tables
+# extra dependencies
+tqdm

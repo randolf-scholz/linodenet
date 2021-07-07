@@ -15,7 +15,7 @@ def _read(filename):
 
 setuptools.setup(
     name="linodenet",
-    version="0.0.4",
+    version="0.0.5",
     url="https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet",
     license="MIT",
     author="Randolf Scholz",
