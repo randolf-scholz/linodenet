@@ -1,45 +1,42 @@
-r"""
-Utility functions
-"""
+r"""Utility functions."""
 
 from collections.abc import Mapping
 
 from torch import nn
 
 ACTIVATIONS = {
-    'AdaptiveLogSoftmaxWithLoss' : nn.AdaptiveLogSoftmaxWithLoss,
-    'ELU'         : nn.ELU,
-    'Hardshrink'  : nn.Hardshrink,
-    'Hardsigmoid' : nn.Hardsigmoid,
-    'Hardtanh'    : nn.Hardtanh,
-    'Hardswish'   : nn.Hardswish,
-    'LeakyReLU'   : nn.LeakyReLU,
-    'LogSigmoid'  : nn.LogSigmoid,
-    'LogSoftmax'  : nn.LogSoftmax,
-    'MultiheadAttention' : nn.MultiheadAttention,
-    'PReLU'       : nn.PReLU,
-    'ReLU'        : nn.ReLU,
-    'ReLU6'       : nn.ReLU6,
-    'RReLU'       : nn.RReLU,
-    'SELU'        : nn.SELU,
-    'CELU'        : nn.CELU,
-    'GELU'        : nn.GELU,
-    'Sigmoid'     : nn.Sigmoid,
-    'SiLU'        : nn.SiLU,
-    'Softmax'     : nn.Softmax,
-    'Softmax2d'   : nn.Softmax2d,
-    'Softplus'    : nn.Softplus,
-    'Softshrink'  : nn.Softshrink,
-    'Softsign'    : nn.Softsign,
-    'Tanh'        : nn.Tanh,
-    'Tanhshrink'  : nn.Tanhshrink,
-    'Threshold'   : nn.Threshold,
+    "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
+    "ELU": nn.ELU,
+    "Hardshrink": nn.Hardshrink,
+    "Hardsigmoid": nn.Hardsigmoid,
+    "Hardtanh": nn.Hardtanh,
+    "Hardswish": nn.Hardswish,
+    "LeakyReLU": nn.LeakyReLU,
+    "LogSigmoid": nn.LogSigmoid,
+    "LogSoftmax": nn.LogSoftmax,
+    "MultiheadAttention": nn.MultiheadAttention,
+    "PReLU": nn.PReLU,
+    "ReLU": nn.ReLU,
+    "ReLU6": nn.ReLU6,
+    "RReLU": nn.RReLU,
+    "SELU": nn.SELU,
+    "CELU": nn.CELU,
+    "GELU": nn.GELU,
+    "Sigmoid": nn.Sigmoid,
+    "SiLU": nn.SiLU,
+    "Softmax": nn.Softmax,
+    "Softmax2d": nn.Softmax2d,
+    "Softplus": nn.Softplus,
+    "Softshrink": nn.Softshrink,
+    "Softsign": nn.Softsign,
+    "Tanh": nn.Tanh,
+    "Tanhshrink": nn.Tanhshrink,
+    "Threshold": nn.Threshold,
 }
 
 
 def deep_dict_update(d: dict, new: Mapping) -> dict:
-    r"""
-    Updates nested dictionary recursively in-place with new dictionary
+    r"""Update nested dictionary recursively in-place with new dictionary.
 
     Reference: https://stackoverflow.com/a/30655448/9318372
 
@@ -48,7 +45,6 @@ def deep_dict_update(d: dict, new: Mapping) -> dict:
     d: dict
     new: Mapping
     """
-
     for key, value in new.items():
         if isinstance(value, Mapping) and value:
             d[key] = deep_dict_update(d.get(key, {}), value)
@@ -57,9 +53,8 @@ def deep_dict_update(d: dict, new: Mapping) -> dict:
     return d
 
 
-def deep_keyval_update(d: dict, **new_kv) -> dict:
-    r"""
-    Updates nested dictionary recursively in-place with key-value pairs
+def deep_keyval_update(d: dict, **new_kv: dict) -> dict:
+    r"""Update nested dictionary recursively in-place with key-value pairs.
 
     Reference: https://stackoverflow.com/a/30655448/9318372
 
@@ -68,7 +63,6 @@ def deep_keyval_update(d: dict, **new_kv) -> dict:
     d: dict
     new_kv: Mapping
     """
-
     for key, value in d.items():
         if isinstance(value, Mapping) and value:
             d[key] = deep_keyval_update(d.get(key, {}), **new_kv)

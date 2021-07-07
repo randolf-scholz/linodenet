@@ -1,12 +1,6 @@
-r"""
-
-test
+r"""Linear Ordinary Differential Equation Recurrent Neural Network."""
 
 
-"""
+from linodenet import init, models
 
-
-import linodenet.init as init
-import linodenet.models as models
-
-__all__ = ['init', 'models']
+__all__ = ["init", "models"]

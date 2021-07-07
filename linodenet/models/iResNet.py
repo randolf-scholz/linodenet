@@ -1,15 +1,14 @@
-r"""
-iResNet
-=======
+r"""Implementation of invertible ResNets.
 
-Contains implementations of
+Provides
+--------
 
 - class:`~.LinearContraction`
 - class:`~.iResNetBlock`
 - class:`~.iResNet`
 """
 from math import sqrt
-from typing import Union, Final, Any
+from typing import Any, Final, Union
 
 import torch
 from torch import jit, nn, Tensor
@@ -19,11 +18,10 @@ from linodenet.util import ACTIVATIONS, deep_dict_update
 
 
 class LinearContraction(jit.ScriptModule):
-    r"""A linear layer $f(X) = A\cdot X$ satisfying the contraction property
-    $\|f(X)-f(y)\|_2 \le \|X-y\|_2$
+    r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2$.
 
     This is achieved by normalizing the weight matrix by
-    $\tilde{A} = A \cdot \min\big(\tfrac{c}{\|A\|_2}, 1\big)$, where $c<1$ is a hyperparameter.
+    $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
 
     Attributes
     ----------
@@ -38,6 +36,7 @@ class LinearContraction(jit.ScriptModule):
     bias: Tensor or None
         The bias Tensor if present, else None.
     """
+
     input_size: Final[int]
     output_size: Final[int]
 
@@ -45,19 +44,9 @@ class LinearContraction(jit.ScriptModule):
     weight: Tensor
     bias: Union[Tensor, None]
 
-    def __init__(self, input_size: int, output_size: int, c: float = 0.97, bias: bool = True):
-        r"""
-        Parameters
-        ----------
-        input_size: int
-            The dimensionality of the input space.
-        output_size: int
-            The dimensionality of the output space.
-        c: float
-            The regularization hyperparameter.
-        bias: bool
-            Whether to include bias term.
-        """
+    def __init__(
+        self, input_size: int, output_size: int, c: float = 0.97, bias: bool = True
+    ):
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -67,26 +56,24 @@ class LinearContraction(jit.ScriptModule):
         if bias:
             self.bias = nn.Parameter(torch.Tensor(output_size))
         else:
-            self.register_parameter('bias', None)
+            self.register_parameter("bias", None)
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        """Reset both weight matrix and bias vector"""
+        r"""Reset both weight matrix and bias vector."""
         nn.init.kaiming_uniform_(self.weight, a=sqrt(5))
         if self.bias is not None:
             bound = 1 / sqrt(self.input_size)
             nn.init.uniform_(self.bias, -bound, bound)
 
-    def extra_repr(self) -> str:
-        return 'input_size={}, output_size={}, bias={}'.format(
-            self.input_size, self.output_size, self.bias is not None
-        )
+    # def extra_repr(self) -> str:
+    #     return "input_size={}, output_size={}, bias={}".format(
+    #         self.input_size, self.output_size, self.bias is not None
+    #     )
 
     @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
-        r"""
-
-        $X\mapsto \tilde A\cdot X$ where $\tilde{A} = A \cdot \min\big(\tfrac{c}{\|A\|_2}, 1\big)$
+        r"""Signature: $[...,n] ⟶ [...,n]$.
 
         Parameters
         ----------
@@ -103,20 +90,21 @@ class LinearContraction(jit.ScriptModule):
 
 
 class iResNetBlock(jit.ScriptModule):
-    r"""Invertible ResNet-Block of the form $g(X)=\phi(W_1\cdot W_2\cdot X)$,
-    where $W_1 \cdot W_2$ is a low rank factorization.
+    r"""Invertible ResNet-Block of the form $g(x)=ϕ(W_1⋅W_2⋅x)$.
 
-    Alternative: $g(X) = W_3\phi(W_2\phi(W_1\cdot X))$
+    By default, $W_1⋅W_2$ is a low rank factorization.
+
+    Alternative: $g(x) = W_3ϕ(W_2ϕ(W_1⋅x))$
 
     All linear layers must be :class:`LinearContraction` layers.
-    The activation function must have Lipschitz constant $\le 1$ such as :class:`~torch.nn.ReLU`,
+    The activation function must have Lipschitz constant $≤1$ such as :class:`~torch.nn.ReLU`,
     :class:`~torch.nn.ELU` or :class:`~torch.nn.Tanh`)
 
     Attributes
     ----------
     input_size:  int
         The dimensionality of the input space.
-    hidden_size: int, default = :math:`\lfloor\sqrt{n}\rfloor`
+    hidden_size: int, default=⌊√n⌋
         The dimensionality of the latent space.
     output_size: int
         The dimensionality of the output space.
@@ -129,62 +117,56 @@ class iResNetBlock(jit.ScriptModule):
     HP: dict
         Nested dictionary containing the hyperparameters.
     """
-    input_size:  Final[int]
+
+    input_size: Final[int]
     hidden_size: Final[int]
     output_size: Final[int]
-    maxiter:     Final[int]
-    atol:        Final[float]
-    rtol:        Final[float]
+    maxiter: Final[int]
+    atol: Final[float]
+    rtol: Final[float]
 
     HP: dict = {
-        'atol' : 1e-08,
-        'rtol' : 1e-05,
-        'maxiter': 10,
-        'activation': 'ReLU',
-        'activation_config': {'inplace': False},
-        'bias': True,
-        'output_size' : None,
-        'hidden_size' : None,
-        'input_size'  : None,
+        "atol": 1e-08,
+        "rtol": 1e-05,
+        "maxiter": 10,
+        "activation": "ReLU",
+        "activation_config": {"inplace": False},
+        "bias": True,
+        "output_size": None,
+        "hidden_size": None,
+        "input_size": None,
     }
 
     def __init__(self, input_size: int, **HP: Any):
-        r"""
-        Parameters
-        ----------
-        input_size: int
-            The dimensionality of the input space.
-        HP: dict
-            Nested dictionary containing the hyperparameters.
-        """
         super().__init__()
 
-        self.HP['input_size'] = input_size
+        self.HP["input_size"] = input_size
         deep_dict_update(self.HP, HP)
         HP = self.HP
 
-        HP['input_size']  = input_size
-        HP['input_size']  = input_size
-        HP['hidden_size'] = HP['hidden_size'] or int(sqrt(input_size))
+        HP["input_size"] = input_size
+        HP["input_size"] = input_size
+        HP["hidden_size"] = HP["hidden_size"] or int(sqrt(input_size))
 
-        self.input_size = HP['input_size']
-        self.output_size = HP['input_size']
-        self.hidden_size = HP['hidden_size']
+        self.input_size = HP["input_size"]
+        self.output_size = HP["input_size"]
+        self.hidden_size = HP["hidden_size"]
 
-        self.atol = HP['atol']
-        self.rtol = HP['rtol']
-        self.maxiter = HP['maxiter']
-        self.bias = HP['bias']
+        self.atol = HP["atol"]
+        self.rtol = HP["rtol"]
+        self.maxiter = HP["maxiter"]
+        self.bias = HP["bias"]
 
         self.bottleneck = nn.Sequential(
             LinearContraction(self.input_size, self.hidden_size, self.bias),
             LinearContraction(self.hidden_size, self.input_size, self.bias),
-            ACTIVATIONS[HP['activation']](**HP['activation_config']),
+            ACTIVATIONS[HP["activation"]](**HP["activation_config"]),
         )
 
     @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
-        r"""
+        r"""Signature: $[...,n] ⟶ [...,n]$.
+
         Parameters
         ----------
         x: Tensor
@@ -197,9 +179,10 @@ class iResNetBlock(jit.ScriptModule):
 
     @jit.script_method
     def inverse(self, y: Tensor) -> Tensor:
-        r"""Compute the inverse through fixed point iteration. Terminates once ``maxiter``
-        or tolerance threshold :math:`|X'-X| \le \text{atol} + \text{rtol}\cdot |X|` is reached.
+        r"""Compute the inverse through fixed point iteration.
 
+        Terminates once `maxiter` or tolerance threshold
+        $|x'-x|≤\text{atol} + \text{rtol}⋅|x|$ is reached.
 
         Parameters
         ----------
@@ -220,8 +203,10 @@ class iResNetBlock(jit.ScriptModule):
             if torch.all(residual <= self.atol):
                 return xhat_dash
 
-        print(F"No convergence in {self.maxiter} iterations. "
-              F"Max residual:{torch.max(residual)} > {self.atol}.")
+        print(
+            f"No convergence in {self.maxiter} iterations. "
+            f"Max residual:{torch.max(residual)} > {self.atol}."
+        )
         return xhat_dash
 
 
@@ -242,49 +227,43 @@ class iResNet(jit.ScriptModule):
         Nested dictionary containing the hyperparameters.
     """
 
-    input_size:  Final[int]
+    input_size: Final[int]
     output_size: Final[int]
 
     HP: dict = {
-        'maxiter': 10,
-        'input_size': None,
-        'dropout': None,
-        'bias': True,
-        'nblocks': 5,
-        'iResNetBlock': {
-            'input_size': None,
-            'activation': 'ReLU',
-            'activation_config': {'inplace': False},
-            'bias': True,
-            'hidden_size': None,
-            'maxiter': 100,
+        "maxiter": 10,
+        "input_size": None,
+        "dropout": None,
+        "bias": True,
+        "nblocks": 5,
+        "iResNetBlock": {
+            "input_size": None,
+            "activation": "ReLU",
+            "activation_config": {"inplace": False},
+            "bias": True,
+            "hidden_size": None,
+            "maxiter": 100,
         },
     }
 
-    def __init__(self, input_size, **HP: Any):
-        r"""
-        Parameters
-        ----------
-        input_size: int
-        HP: dict
-        """
+    def __init__(self, input_size: int, **HP: Any):
         super().__init__()
 
-        self.HP['input_size'] = input_size
+        self.HP["input_size"] = input_size
         deep_dict_update(self.HP, HP)
 
         self.input_size = input_size
         self.output_size = input_size
-        self.HP['iResNetBlock']['input_size'] = self.input_size
+        self.HP["iResNetBlock"]["input_size"] = self.input_size
 
-        self.nblocks = self.HP['nblocks']
-        self.maxiter = self.HP['maxiter']
-        self.bias = self.HP['bias']
+        self.nblocks = self.HP["nblocks"]
+        self.maxiter = self.HP["maxiter"]
+        self.bias = self.HP["bias"]
 
         blocks = []
 
         for _ in range(self.nblocks):
-            blocks += [iResNetBlock(**self.HP['iResNetBlock'])]
+            blocks += [iResNetBlock(**self.HP["iResNetBlock"])]
             # TODO: add regularization
 
         self.blocks = nn.Sequential(*blocks)
@@ -292,7 +271,8 @@ class iResNet(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
-        r"""
+        r"""Signature: $[...,n] ⟶ [...,n]$.
+
         Parameters
         ----------
         x: Tensor
@@ -301,12 +281,11 @@ class iResNet(jit.ScriptModule):
         -------
         xhat: Tensor
         """
-
         return self.blocks(x)
 
     @jit.script_method
     def inverse(self, y: Tensor) -> Tensor:
-        r"""Computes the inverse through fix point iteration in each block in reversed order.
+        r"""Compute the inverse through fix point iteration in each block in reversed order.
 
         Parameters
         ----------

@@ -1,29 +1,32 @@
-r"""
-LinODEnet
-=========
+r"""Contains implementations of ODE models.
 
-Contains implementations of
+Provides
+--------
 
 - class:`~.LinODECell`
 - class:`~.LinODE`
 - class:`~.LinODEnet`
 """
 
-from typing import Union, Callable, Final, Any
+from typing import Any, Callable, Final, Union
 
 import torch
-from torch import nn, Tensor, jit
-
-from linodenet.util import deep_dict_update
+from torch import jit, nn, Tensor
 
 from linodenet.init import gaussian
+from linodenet.util import deep_dict_update
 from .iResNet import iResNet
 
 Initialization = Union[Tensor, Callable[[int], Tensor]]
 
 
 class LinODECell(jit.ScriptModule):
-    r"""Linear System module, solves $\dot X = Ax$
+    r"""Linear System module, solves $ẋ = Ax$, i.e. $x̂ = e^{A\Delta t}x$.
+
+    Parameters
+    ----------
+    input_size: int
+    kernel_initialization: Union[Tensor, Callable[int, Tensor]]
 
     Attributes
     ----------
@@ -46,67 +49,67 @@ class LinODECell(jit.ScriptModule):
     # kernel_initialization: Callable[[], Tensor]
     # kernel_regularization: Callable[[Tensor], Tensor]
 
-    def __init__(self, input_size: int,
-                 kernel_initialization: Initialization = None,
-                 kernel_regularization: Callable[[Tensor], Tensor] = None):
-        r"""
-        Parameters
-        ----------
-        input_size: int
-        kernel_initialization: Union[Tensor, Callable[int, Tensor]]
-        """
-
+    def __init__(
+        self,
+        input_size: int,
+        kernel_initialization: Initialization = None,
+        kernel_regularization: Callable[[Tensor], Tensor] = None,
+    ):
         super().__init__()
-        self.input_size  = input_size
+        self.input_size = input_size
         self.output_size = input_size
 
-        if kernel_initialization is None:
-            def _kernel_initialization():
-                return gaussian(input_size)
-        elif callable(kernel_initialization):
-            def _kernel_initialization():
-                return Tensor(kernel_initialization(input_size))
-        elif isinstance(kernel_initialization, Tensor):
-            def _kernel_initialization():
-                return kernel_initialization
-        else:
-            def _kernel_initialization():
-                return Tensor(kernel_initialization)
+        def kernel_initialization_dispatch():
+            if kernel_initialization is None:
+                return lambda: gaussian(input_size)
+            if callable(kernel_initialization):
+                assert Tensor(kernel_initialization(input_size)).shape == (
+                    input_size,
+                    input_size,
+                )
+                return lambda: Tensor(kernel_initialization(input_size))
+            if isinstance(kernel_initialization, Tensor):
+                assert kernel_initialization.shape == (input_size, input_size)
+                return lambda: kernel_initialization
+            assert Tensor(kernel_initialization).shape == (input_size, input_size)
+            return lambda: Tensor(kernel_initialization)
 
-        def __kernel_initialization() -> Tensor:
-            return _kernel_initialization()
+        # this looks funny, but it needs to be written that way to be compatible with torchscript
+        # fmt: off
+        def kernel_regularization_dispatch():
+            if kernel_regularization is None:
+                def _kernel_regularization(w: Tensor) -> Tensor: return w              # noqa
+            elif kernel_regularization == "skew-symmetric":
+                def _kernel_regularization(w: Tensor) -> Tensor: return (w - w.T) / 2  # noqa
+            elif kernel_regularization == "symmetric":
+                def _kernel_regularization(w: Tensor) -> Tensor: return (w + w.T) / 2  # noqa
+            else:
+                raise NotImplementedError(f"{kernel_regularization=} unknown")
+            return _kernel_regularization
+        # fmt: on
 
-        self.kernel_initialization = __kernel_initialization
+        self._kernel_initialization = kernel_initialization_dispatch()
+        self._kernel_regularization = kernel_regularization_dispatch()
+        self.kernel = nn.Parameter(self._kernel_initialization())
 
-        self.kernel = nn.Parameter(self.kernel_initialization())
-
-        if kernel_regularization is None:
-            def _kernel_regularization(w: Tensor) -> Tensor:
-                return w
-        elif kernel_regularization == "symmetric":
-            def _kernel_regularization(w: Tensor) -> Tensor:
-                return (w+w.T)/2
-        elif kernel_regularization == "skew-symmetric":
-            def _kernel_regularization(w: Tensor) -> Tensor:
-                return (w-w.T)/2
-        else:
-            raise NotImplementedError(F"{kernel_regularization=} unknown")
-        self._kernel_regularization = _kernel_regularization
+    def kernel_initialization(self) -> Tensor:
+        r"""Draw an initial kernel matrix (random or static)."""
+        return self._kernel_initialization()
 
     @jit.script_method
     def kernel_regularization(self, w: Tensor) -> Tensor:
+        r"""Regularize the Kernel, e.g. by projecting onto skew-symmetric matrices."""
         return self._kernel_regularization(w)
 
     @jit.script_method
     def forward(self, Δt: Tensor, x0: Tensor) -> Tensor:
-        r"""Forward using the matrix exponential $\hat X = e^{A\Delta t}X$
-
-        TODO: optimize if clauses away by changing definition in constructor.
+        # TODO: optimize if clauses away by changing definition in constructor.
+        r"""Signature: $[...,]×[...,d] ⟶ [...,d]$.
 
         Parameters
         ----------
         Δt: Tensor, shape=(...,)
-            The time difference $t_1 - t_0$ between $X$ and $\hat X$.
+            The time difference $t_1 - t_0$ between $x_0$ and $x̂$.
         x0:  Tensor, shape=(...,DIM)
             Time observed value at $t_0$
 
@@ -116,14 +119,14 @@ class LinODECell(jit.ScriptModule):
             The predicted value at $t_1$
         """
         A = self.kernel_regularization(self.kernel)
-        AΔt = torch.einsum('kl, ... -> ...kl', A, Δt)
+        AΔt = torch.einsum("kl, ... -> ...kl", A, Δt)
         expAΔt = torch.matrix_exp(AΔt)
-        xhat = torch.einsum('...kl, ...l -> ...k', expAΔt, x0)
+        xhat = torch.einsum("...kl, ...l -> ...k", expAΔt, x0)
         return xhat
 
 
 class LinODE(jit.ScriptModule):
-    r"""Linear ODE module, to be used analogously to :func:`~scipy.integrate.odeint`
+    r"""Linear ODE module, to be used analogously to :func:`scipy.integrate.odeint`.
 
     Attributes
     ----------
@@ -136,6 +139,7 @@ class LinODE(jit.ScriptModule):
     kernel_initialization: Callable[None, Tensor]
         Parameter-less function that draws a initial system matrix
     """
+
     input_size: Final[int]
     output_size: Final[int]
 
@@ -143,16 +147,12 @@ class LinODE(jit.ScriptModule):
     kernel_initialization: Callable[[], Tensor]
     kernel_regularization: Callable[[Tensor], Tensor]
 
-    def __init__(self, input_size: int,
-                 kernel_initialization: Initialization = None,
-                 kernel_regularization: Callable[[Tensor], Tensor] = None):
-        r"""
-
-        Parameters
-        ----------
-        input_size: int
-        kernel_initialization: Callable[int, Tensor]] or Tensor
-        """
+    def __init__(
+        self,
+        input_size: int,
+        kernel_initialization: Initialization = None,
+        kernel_regularization: Callable[[Tensor], Tensor] = None,
+    ):
         super().__init__()
 
         self.input_size = input_size
@@ -162,8 +162,7 @@ class LinODE(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
-        r"""
-        Propagate x0
+        r"""Signature: $[...,N]×[...,d] ⟶ [...,N,d]$.
 
         Parameters
         ----------
@@ -173,7 +172,7 @@ class LinODE(jit.ScriptModule):
         Returns
         -------
         Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times $t\in T$
+            The estimated true state of the system at the times $t∈T$
         """
         ΔT = torch.moveaxis(torch.diff(T), -1, 0)
         X = torch.jit.annotate(list[Tensor], [])
@@ -190,19 +189,19 @@ class LinODE(jit.ScriptModule):
 
 
 class LinODEnet(jit.ScriptModule):
-    r"""Linear ODE Network, consisting of 4 components:
+    r"""Linear ODE Network is a FESD model.
 
-    1. Encoder $\phi$ (default: :class:`~.iResNet`)
-    2. Filter  $F$    (default: :class:`~torch.nn.GRUCell`)
-    3. System  $\Psi$ (default: :class:`~.LinODECell`)
-    4. Decoder $\pi$  (default: :class:`~.iResNet`)
-
-    .. math::
-        \hat x_i  &=  \pi(\hat z_i) \\
-        \hat x_i' &= F(\hat x_i, x_i) \\
-        \hat z_i' &= \phi(\hat x_i') \\
-        \hat z_{i+1} &= \Psi(\hat z_i', \Delta t_i)
-
+    +---------------------------------------------------+--------------------------------------+
+    | Component                                         | Formula                              |
+    +===================================================+======================================+
+    | Filter  $F$ (default: :class:`~torch.nn.GRUCell`) | $\hat x_i' = F(\hat x_i, x_i)$       |
+    +---------------------------------------------------+--------------------------------------+
+    | Encoder $ϕ$ (default: :class:`~.iResNet`)         | $\hat z_i' = ϕ(\hat x_i')$           |
+    +---------------------------------------------------+--------------------------------------+
+    | System  $S$ (default: :class:`~.LinODECell`)      | $\hat z_{i+1} = S(\hat z_i', Δ t_i)$ |
+    +---------------------------------------------------+--------------------------------------+
+    | Decoder $π$ (default: :class:`~.iResNet`)         | $\hat x_{i+1}  =  π(\hat z_{i+1})$   |
+    +---------------------------------------------------+--------------------------------------+
 
     Attributes
     ----------
@@ -221,19 +220,19 @@ class LinODEnet(jit.ScriptModule):
     """
 
     HP: dict = {
-        'input_size': int,
-        'hidden_size': int,
-        'output_size': int,
-        'embedding_type' : 'linear',
-        'concat_mask' : True,
-        'System': LinODECell,
-        'System_cfg': {'input_size': int, 'kernel_initialization': None},
-        'Filter': nn.GRUCell,
-        'Filter_cfg': {'input_size': int, 'hidden_size': int, 'bias': True},
-        'Encoder': iResNet,
-        'Encoder_cfg': {'input_size': int, 'nblocks': 5},
-        'Decoder': iResNet,
-        'Decoder_cfg': {'input_size': int, 'nblocks': 5},
+        "input_size": int,
+        "hidden_size": int,
+        "output_size": int,
+        "embedding_type": "linear",
+        "concat_mask": True,
+        "System": LinODECell,
+        "System_cfg": {"input_size": int, "kernel_initialization": None},
+        "Filter": nn.GRUCell,
+        "Filter_cfg": {"input_size": int, "hidden_size": int, "bias": True},
+        "Encoder": iResNet,
+        "Encoder_cfg": {"input_size": int, "nblocks": 5},
+        "Decoder": iResNet,
+        "Decoder_cfg": {"input_size": int, "nblocks": 5},
     }
 
     input_size: Final[int]
@@ -244,17 +243,6 @@ class LinODEnet(jit.ScriptModule):
     padding: Tensor
 
     def __init__(self, input_size: int, hidden_size: int, **HP: Any):
-        r"""
-
-        Parameters
-        ----------
-        input_size:  int
-            The dimensionality of the input space.
-        hidden_size: int
-            The dimensionality of the latent space. Must be greater than ``input_size``.
-        HP: dict
-            Hyperparameter configuration
-        """
         super().__init__()
 
         deep_dict_update(self.HP, HP)
@@ -263,30 +251,32 @@ class LinODEnet(jit.ScriptModule):
         self.input_size = input_size
         self.hidden_size = input_size
         self.output_size = input_size
-        self.concat_mask = HP['concat_mask']
+        self.concat_mask = HP["concat_mask"]
 
-        HP['Encoder_cfg']['input_size'] = hidden_size
-        HP['Decoder_cfg']['input_size'] = hidden_size
-        HP['System_cfg']['input_size'] = hidden_size
-        HP['Filter_cfg']['hidden_size'] = input_size
-        HP['Filter_cfg']['input_size'] = (1 + self.concat_mask) * input_size
+        HP["Encoder_cfg"]["input_size"] = hidden_size
+        HP["Decoder_cfg"]["input_size"] = hidden_size
+        HP["System_cfg"]["input_size"] = hidden_size
+        HP["Filter_cfg"]["hidden_size"] = input_size
+        HP["Filter_cfg"]["input_size"] = (1 + self.concat_mask) * input_size
 
-        self.encoder = HP['Encoder'](**HP['Encoder_cfg'])
-        self.decoder = HP['Decoder'](**HP['Decoder_cfg'])
-        self.filter = HP['Filter'](**HP['Filter_cfg'])
-        self.system = HP['System'](**HP['System_cfg'])
+        self.encoder = HP["Encoder"](**HP["Encoder_cfg"])
+        self.decoder = HP["Decoder"](**HP["Decoder_cfg"])
+        self.filter = HP["Filter"](**HP["Filter_cfg"])
+        self.system = HP["System"](**HP["System_cfg"])
 
-        embedding_type = HP['embedding_type']
+        embedding_type = HP["embedding_type"]
 
-        if embedding_type == 'linear':
+        if embedding_type == "linear":
             self.embedding = nn.Linear(input_size, hidden_size)
             self.projection = nn.Linear(hidden_size, input_size)
-        elif embedding_type == 'concat':
-            assert input_size <= hidden_size, F"{embedding_type=} not possible"
+        elif embedding_type == "concat":
+            assert input_size <= hidden_size, f"{embedding_type=} not possible"
             self.embedding = ConcatEmbedding(input_size, hidden_size)
             self.projection = ConcatProjection(input_size, hidden_size)
         else:
-            raise NotImplementedError(F"{embedding_type=}" + "not in {'linear', 'concat'}")
+            raise NotImplementedError(
+                f"{embedding_type=}" + "not in {'linear', 'concat'}"
+            )
 
         self.kernel = self.system.kernel
 
@@ -326,23 +316,24 @@ class LinODEnet(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
-        r"""Implementation of equations (1-4)
-
-        Optimization notes: https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
+        r"""Signature: $[...,N]×[...,N,d] ⟶ [...,N,d]$.
 
         Parameters
         ----------
         T: Tensor, shape=(...,LEN) or PackedSequence
             The timestamps of the observations.
         X: Tensor, shape=(...,LEN,DIM) or PackedSequence
-            The observed, noisy values at times $t\in T$. Use ``NaN`` to indicate missing values.
+            The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
 
         Returns
         -------
         Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times $t\in T$.
-        """
+            The estimated true state of the system at the times $t∈T$.
 
+        References
+        ----------
+        - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
+        """
         ΔT = torch.moveaxis(torch.diff(T), -1, 0)
         X = torch.moveaxis(X, -2, 0)
 
@@ -402,7 +393,7 @@ class LinODEnet(jit.ScriptModule):
 
 
 class ConcatEmbedding(jit.ScriptModule):
-    r"""Maps $X\mapsto \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big)$
+    r"""Maps $x ⟼ [x,w]$.
 
     Attributes
     ----------
@@ -410,9 +401,10 @@ class ConcatEmbedding(jit.ScriptModule):
     hidden_size: int
     pad_size:    int
     """
-    input_size  : Final[int]
-    hidden_size : Final[int]
-    pad_size    : Final[int]
+
+    input_size: Final[int]
+    hidden_size: Final[int]
+    pad_size: Final[int]
 
     def __init__(self, input_size: int, hidden_size: int):
         super().__init__()
@@ -424,7 +416,8 @@ class ConcatEmbedding(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, X: Tensor) -> Tensor:
-        """
+        r"""Signature: $[..., d] ⟶ [..., d+e]$.
+
         Parameters
         ----------
         X: Tensor, shape=(...,DIM)
@@ -438,7 +431,7 @@ class ConcatEmbedding(jit.ScriptModule):
 
 
 class ConcatProjection(jit.ScriptModule):
-    r"""Maps $Z = \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big) \mapsto X$
+    r"""Maps $z = [x,w] ⟼ x$.
 
     Attributes
     ----------
@@ -446,8 +439,8 @@ class ConcatProjection(jit.ScriptModule):
     hidden_size: int
     """
 
-    input_size  : Final[int]
-    hidden_size : Final[int]
+    input_size: Final[int]
+    hidden_size: Final[int]
 
     def __init__(self, input_size: int, hidden_size: int):
         super().__init__()
@@ -457,7 +450,8 @@ class ConcatProjection(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, Z: Tensor) -> Tensor:
-        """
+        r"""Signature: $[..., d+e] ⟶ [..., d]$.
+
         Parameters
         ----------
         Z: Tensor, shape=(...,LEN,LAT)
@@ -466,4 +460,7 @@ class ConcatProjection(jit.ScriptModule):
         -------
         Tensor, shape=(...,LEN,DIM)
         """
-        return Z[..., :self.input_size]
+        return Z[..., : self.input_size]
+
+    # TODO: Add variant with filter in latent space
+    # TODO: Add Controls

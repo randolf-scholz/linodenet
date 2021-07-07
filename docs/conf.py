@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-# Configuration file for the Sphinx documentation builder.
-#
-# This file only contains a selection of the most common options. For a full
-# list see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+r"""Configuration file for the Sphinx documentation builder.
+
+This file only contains a selection of the most common options. For a full
+list see the documentation:
+https://www.sphinx-doc.org/en/master/usage/configuration.html
+"""
 
 # -- Path setup --------------------------------------------------------------------------------------------------------
 
@@ -11,24 +12,24 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
+import datetime
 import os
 import sys
-import datetime
 
-sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath("."))
 
 # -- Project information -----------------------------------------------------------------------------------------------
 
 master_doc = "index"
-project = 'LinODE-Net'
-project_copyright = '%(year)s, %(author)s' % dict(
-    year=datetime.date.today().year,
-    author='Randolf Scholz'
-)
-author = 'Randolf Scholz'
+project = "LinODE-Net"
+project_copyright = "%(year)s, %(author)s" % {
+    "year": datetime.date.today().year,
+    "author": "Randolf Scholz",
+}
+author = "Randolf Scholz"
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = "0.0.1"
 
 # -- General configuration ---------------------------------------------------------------------------------------------
 
@@ -37,34 +38,34 @@ release = '0.0.1'
 # ones.
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.doctest',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.todo',
-    'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.napoleon',
-    'sphinx_math_dollar',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.doctest",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.todo",
+    "sphinx.ext.coverage",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "sphinx_math_dollar",
 ]
 
 intersphinx_mapping = {
-    "matplotlib" : ("https://matplotlib.org/stable/", None),
-    "numpy"      : ("https://numpy.org/doc/stable/", None),
-    "python"     : ("https://docs.python.org/3/", None),
-    "scipy"      : ("https://docs.scipy.org/doc/scipy/reference/", None),
-    'pandas'     : ('https://pandas.pydata.org/docs', None),
-    'torch'      : ('https://pytorch.org/docs/stable/', None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "python": ("https://docs.python.org/3/", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/reference/", None),
+    "pandas": ("https://pandas.pydata.org/docs", None),
+    "torch": ("https://pytorch.org/docs/stable/", None),
 }
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # If true, the current module name will be prepended to all description
 # unit titles (such as .. function::).
@@ -73,12 +74,13 @@ add_module_names = False
 # -- Options for HTML output -------------------------------------------------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for a list of builtin themes.
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-# html_static_path = ['_static']
+html_static_path = ["_static"]
+# html_style = "css/my_theme.css"
 
 # -- autosummary options -----------------------------------------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/autosummary.html
@@ -267,7 +269,7 @@ napoleon_preprocess_types = True
 # Defaults to True.
 napoleon_type_aliases = {
     "Tensor": r":class:`~torch.Tensor`",
-    "tensor" : r":class:`~torch.Tensor`",
+    "tensor": r":class:`~torch.Tensor`",
 }
 # A mapping to translate type names to other names or references. Works only when napoleon_use_param = True.
 # Defaults to None.

@@ -1,14 +1,19 @@
-r"""
-Test if model init, forward and backward passes.
-"""
+r"""Test if model init, forward and backward passes."""
 
-import logging
 from itertools import product
+import logging
 
 import torch
 from torch import Tensor
 
-from linodenet.models import LinearContraction, iResNetBlock, iResNet, LinODECell, LinODE, LinODEnet
+from linodenet.models import (
+    iResNet,
+    iResNetBlock,
+    LinearContraction,
+    LinODE,
+    LinODECell,
+    LinODEnet,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,51 +25,54 @@ OUT = 6  # OUTput dimension
 LAT = 8  # LATent dimension
 
 DTYPE = torch.float32
-DEVICES = [torch.device('cpu')]
+DEVICES = [torch.device("cpu")]
 
 if torch.cuda.is_available():
-    DEVICES.append(torch.device('cuda'))
+    DEVICES.append(torch.device("cuda"))
 
 BATCH_SHAPES = [(), (INNER_BATCH,), (OUTER_BATCH, INNER_BATCH)]
 
 MODELS = {
     LinearContraction: {
-        'initialization' : (DIM, OUT),
-        'input_shapes'   : ((LEN, DIM),),  # X
-        'output_shapes'  : ((LEN, OUT),),
+        "initialization": (DIM, OUT),
+        "input_shapes": ((LEN, DIM),),  # X
+        "output_shapes": ((LEN, OUT),),
     },
     iResNetBlock: {
-        'initialization' : (DIM, ),
-        'input_shapes'   : ((LEN, DIM),),  # X
-        'output_shapes'  : ((LEN, DIM),),
+        "initialization": (DIM,),
+        "input_shapes": ((LEN, DIM),),  # X
+        "output_shapes": ((LEN, DIM),),
     },
     iResNet: {
-        'initialization' : (DIM,),
-        'input_shapes'   : ((LEN, DIM),),  # X
-        'output_shapes'  : ((LEN, DIM),),
+        "initialization": (DIM,),
+        "input_shapes": ((LEN, DIM),),  # X
+        "output_shapes": ((LEN, DIM),),
     },
     LinODECell: {
-        'initialization' : (DIM,),
-        'input_shapes'   : ((), (DIM, )),  # Δt, x0
-        'output_shapes'  : ((DIM, ),),
+        "initialization": (DIM,),
+        "input_shapes": ((), (DIM,)),  # Δt, x0
+        "output_shapes": ((DIM,),),
     },
     LinODE: {
-        'initialization' : (DIM,),
-        'input_shapes'   : ((LEN, ), (DIM,)),  # T, x0
-        'output_shapes'  : ((LEN, DIM),),
+        "initialization": (DIM,),
+        "input_shapes": ((LEN,), (DIM,)),  # T, x0
+        "output_shapes": ((LEN, DIM),),
     },
     LinODEnet: {
-        'initialization' : (DIM, LAT),
-        'input_shapes'   : ((LEN,), (LEN, DIM)),  # T, X
-        'output_shapes'  : ((LEN, DIM),),
+        "initialization": (DIM, LAT),
+        "input_shapes": ((LEN,), (LEN, DIM)),  # T, X
+        "output_shapes": ((LEN, DIM),),
     },
 }
 
 
-def _make_tensors(shapes: tuple[tuple[int, ...]], batch_sizes: tuple[int, ...] = (),
-                  dtype: torch.dtype = torch.float32, device: torch.device = torch.device('cpu')
-                  ) -> tuple[Tensor, ...]:
-    """Random tensors of required shape with potentially multiple batch dimensions added"""
+def _make_tensors(
+    shapes: tuple[tuple[int, ...]],
+    batch_sizes: tuple[int, ...] = (),
+    dtype: torch.dtype = torch.float32,
+    device: torch.device = DEVICES[0],
+) -> tuple[Tensor, ...]:
+    r"""Random tensors of required shape with potentially multiple batch dimensions added."""
     tensors = []
     for shape in shapes:
         batched_shape = (*batch_sizes, *shape)
@@ -74,12 +82,15 @@ def _make_tensors(shapes: tuple[tuple[int, ...]], batch_sizes: tuple[int, ...] =
     return tuple(tensors)
 
 
-def _test_model(Model: type, initialization: tuple[int, ...],
-                inputs: tuple[Tensor, ...], targets: tuple[Tensor, ...],
-                device: torch.device = torch.device('cpu')):
-
+def _test_model(
+    Model: type,
+    initialization: tuple[int, ...],
+    inputs: tuple[Tensor, ...],
+    targets: tuple[Tensor, ...],
+    device: torch.device = DEVICES[0],
+):
     def err_str(s: str) -> str:
-        return F"{Model=} failed {s} with {initialization=} and {inputs=}!"
+        return f"{Model=} failed {s} with {initialization=} and {inputs=}!"
 
     logger.info(">>> INITIALIZATION with %s", initialization)
     try:  # check initialization
@@ -97,11 +108,15 @@ def _test_model(Model: type, initialization: tuple[int, ...],
         raise RuntimeError(err_str("forward pass")) from E
 
     assert all(output.shape == target.shape for output, target in zip(outputs, targets))
-    logger.info(">>> Output shapes %s match with targets!", [tuple(x.shape) for x in targets])
+    logger.info(
+        ">>> Output shapes %s match with targets!", [tuple(x.shape) for x in targets]
+    )
     logger.info(">>> FORWARD \N{HEAVY CHECK MARK}")
 
     logger.info(">>> BACKWARD TEST")
-    losses = [torch.mean((output - target)**2) for output, target in zip(outputs, targets)]
+    losses = [
+        torch.mean((output - target) ** 2) for output, target in zip(outputs, targets)
+    ]
     loss = torch.stack(losses).sum()
 
     try:  # check backward
@@ -113,21 +128,30 @@ def _test_model(Model: type, initialization: tuple[int, ...],
 
 
 def test_all_models():
-    """Checks if init, forward and backward runs for all selected models"""
+    r"""Check if init, forward and backward runs for all selected models."""
     for model, params in MODELS.items():
         logger.info("Testing %s", model.__name__)
-        initialization = params['initialization']
-        input_shapes   = params['input_shapes']
-        output_shapes  = params['output_shapes']
+        initialization = params["initialization"]
+        input_shapes = params["input_shapes"]
+        output_shapes = params["output_shapes"]
 
         for device, batch_shape in product(DEVICES, BATCH_SHAPES):
-            logger.info("Testing %s on %s with batch_shape %s", model.__name__, device, batch_shape)
-            inputs  = _make_tensors(input_shapes, batch_shape, dtype=DTYPE, device=device)
-            targets = _make_tensors(output_shapes, batch_shape, dtype=DTYPE, device=device)
+            logger.info(
+                "Testing %s on %s with batch_shape %s",
+                model.__name__,
+                device,
+                batch_shape,
+            )
+            inputs = _make_tensors(
+                input_shapes, batch_shape, dtype=DTYPE, device=device
+            )
+            targets = _make_tensors(
+                output_shapes, batch_shape, dtype=DTYPE, device=device
+            )
             _test_model(model, initialization, inputs, targets, device=device)
 
         logger.info("Model %s passed all tests!!", model.__name__)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_all_models()

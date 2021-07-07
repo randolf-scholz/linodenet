@@ -1,4 +1,6 @@
-﻿linodenet.init
+﻿.. include:: /includes.rst.txt
+
+linodenet.init
 ==============
 
 

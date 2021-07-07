@@ -1,4 +1,6 @@
-﻿linodenet.models
+﻿.. include:: /includes.rst.txt
+
+linodenet.models
 ================
 
 

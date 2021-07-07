@@ -1,12 +1,15 @@
-r"""
-Models
-======
-"""
+r"""Models of the LinODE-Net package."""
 
-from .iResNet import LinearContraction, iResNet, iResNetBlock
-from .LinODEnet import LinODECell, LinODE, LinODEnet, ConcatProjection, ConcatEmbedding
+from .iResNet import iResNet, iResNetBlock, LinearContraction
+from .LinODEnet import ConcatEmbedding, ConcatProjection, LinODE, LinODECell, LinODEnet
 
-
-__all__ = ['LinearContraction', 'iResNetBlock', 'iResNet',
-           'LinODECell', 'LinODE', 'LinODEnet',
-           'ConcatProjection', 'ConcatEmbedding']
+__all__ = [
+    "LinearContraction",
+    "iResNetBlock",
+    "iResNet",
+    "LinODECell",
+    "LinODE",
+    "LinODEnet",
+    "ConcatProjection",
+    "ConcatEmbedding",
+]
