@@ -78,11 +78,11 @@ class LinODECell(jit.ScriptModule):
         # fmt: off
         def kernel_regularization_dispatch():
             if kernel_regularization is None:
-                def _kernel_regularization(w: Tensor) -> Tensor: return w              # noqa
+                def _kernel_regularization(w: Tensor) -> Tensor: return w              # noqa pylint: disable=C0321
             elif kernel_regularization == "skew-symmetric":
-                def _kernel_regularization(w: Tensor) -> Tensor: return (w - w.T) / 2  # noqa
+                def _kernel_regularization(w: Tensor) -> Tensor: return (w - w.T) / 2  # noqa pylint: disable=C0321
             elif kernel_regularization == "symmetric":
-                def _kernel_regularization(w: Tensor) -> Tensor: return (w + w.T) / 2  # noqa
+                def _kernel_regularization(w: Tensor) -> Tensor: return (w + w.T) / 2  # noqa pylint: disable=C0321
             else:
                 raise NotImplementedError(f"{kernel_regularization=} unknown")
             return _kernel_regularization

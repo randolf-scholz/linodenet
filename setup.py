@@ -5,6 +5,15 @@ import re
 
 import setuptools
 
+NAME = "linodenet"
+
+with open(f"{NAME}/VERSION", "r") as file:
+    VERSION = file.read()
+
+if "CI_PIPELINE_IID" in os.environ:
+    BUILD_NUMBER = os.environ["CI_PIPELINE_IID"]
+    VERSION += f".dev{BUILD_NUMBER}"
+
 
 def _read(filename):
     filename = os.path.join(os.path.dirname(__file__), filename)
@@ -14,8 +23,8 @@ def _read(filename):
 
 
 setuptools.setup(
-    name="linodenet",
-    version="0.0.5",
+    name=NAME,
+    version=VERSION,
     url="https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet",
     license="MIT",
     author="Randolf Scholz",
