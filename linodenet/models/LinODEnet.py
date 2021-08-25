@@ -7,15 +7,25 @@ Provides
 - class:`~.LinODE`
 - class:`~.LinODEnet`
 """
-
+import logging
 from typing import Any, Callable, Final, Union
 
 import torch
 from torch import jit, nn, Tensor
 
 from linodenet.init import gaussian
+from linodenet.models.iResNet import iResNet
 from linodenet.util import deep_dict_update
-from .iResNet import iResNet
+
+logger = logging.getLogger(__name__)
+
+__all__: Final[list[str]] = [
+    "ConcatEmbedding",
+    "ConcatProjection",
+    "LinODE",
+    "LinODECell",
+    "LinODEnet",
+]
 
 Initialization = Union[Tensor, Callable[[int], Tensor]]
 

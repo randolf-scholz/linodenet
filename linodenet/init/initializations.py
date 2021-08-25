@@ -3,16 +3,29 @@ r"""Initializations for the Linear ODE Networks.
 
 All initializations are normalized such that if $x~𝓝(0,1)$, then $Ax~𝓝(0,1)$ as well.
 """
-
+import logging
 from math import prod, sqrt
-from typing import Union
+from typing import Final, Union
 
 from scipy import stats
 import torch
 from torch import Tensor
 
+logger = logging.getLogger(__name__)
 
-def gaussian(n: Union[int, tuple[int, ...]]) -> Tensor:
+__all__: Final[list[str]] = [
+    "SizeLike",
+    "gaussian",
+    "symmetric",
+    "skew_symmetric",
+    "orthogonal",
+    "special_orthogonal",
+]
+
+SizeLike = Union[int, tuple[int, ...]]  # type: ignore
+
+
+def gaussian(n: SizeLike) -> Tensor:
     r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
@@ -33,7 +46,7 @@ def gaussian(n: Union[int, tuple[int, ...]]) -> Tensor:
     return torch.normal(mean=torch.zeros(shape), std=1 / sqrt(dim))
 
 
-def diagonally_dominant(n: Union[int, tuple[int, ...]]) -> Tensor:
+def diagonally_dominant(n: SizeLike) -> Tensor:
     r"""Sample a random diagonally dominant matrix, i.e. $A = I_n + B$,with $B_{ij}∼𝓝(0,1/n²)$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
@@ -54,7 +67,7 @@ def diagonally_dominant(n: Union[int, tuple[int, ...]]) -> Tensor:
     return torch.eye(dim) + torch.normal(mean=torch.zeros(shape), std=1 / dim)
 
 
-def symmetric(n: Union[int, tuple[int, ...]]) -> Tensor:
+def symmetric(n: SizeLike) -> Tensor:
     r"""Sample a symmetric matrix, i.e. $A^⊤ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
@@ -76,7 +89,7 @@ def symmetric(n: Union[int, tuple[int, ...]]) -> Tensor:
     return (A + A.swapaxes(-1, -2)) / sqrt(2)
 
 
-def skew_symmetric(n: Union[int, tuple[int, ...]]) -> Tensor:
+def skew_symmetric(n: SizeLike) -> Tensor:
     r"""Sample a random skew-symmetric matrix, i.e. $A^⊤ = -A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
@@ -99,7 +112,7 @@ def skew_symmetric(n: Union[int, tuple[int, ...]]) -> Tensor:
     return (A - A.swapaxes(-1, -2)) / sqrt(2)
 
 
-def orthogonal(n: Union[int, tuple[int, ...]]) -> Tensor:
+def orthogonal(n: SizeLike) -> Tensor:
     r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
@@ -122,7 +135,7 @@ def orthogonal(n: Union[int, tuple[int, ...]]) -> Tensor:
     return torch.Tensor(A)
 
 
-def special_orthogonal(n: Union[int, tuple[int, ...]]) -> Tensor:
+def special_orthogonal(n: SizeLike) -> Tensor:
     r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A^{-1}$ with $\det(A)=1$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$

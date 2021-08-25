@@ -7,6 +7,7 @@ Provides
 - class:`~.iResNetBlock`
 - class:`~.iResNet`
 """
+import logging
 from math import sqrt
 from typing import Any, Final, Union
 
@@ -15,6 +16,14 @@ from torch import jit, nn, Tensor
 from torch.nn import functional
 
 from linodenet.util import ACTIVATIONS, deep_dict_update
+
+logger = logging.getLogger(__name__)
+
+__all__: Final[list[str]] = [
+    "iResNet",
+    "iResNetBlock",
+    "LinearContraction",
+]
 
 
 class LinearContraction(jit.ScriptModule):
