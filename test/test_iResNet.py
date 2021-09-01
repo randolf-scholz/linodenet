@@ -11,10 +11,9 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from linodenet.models import LinearContraction, iResNetBlock
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
-
-from linodenet.models import iResNetBlock, LinearContraction
 
 logger = logging.getLogger(__name__)  # noqa: E402
 logging.getLogger("matplotlib").setLevel(logging.WARNING)

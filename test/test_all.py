@@ -1,18 +1,18 @@
 r"""Test if model init, forward and backward passes."""
 
-from itertools import product
 import logging
+from itertools import product
 
 import torch
 from torch import Tensor
 
 from linodenet.models import (
-    iResNet,
-    iResNetBlock,
     LinearContraction,
     LinODE,
     LinODECell,
     LinODEnet,
+    iResNet,
+    iResNetBlock,
 )
 
 logger = logging.getLogger(__name__)

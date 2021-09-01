@@ -12,7 +12,7 @@ from math import sqrt
 from typing import Any, Final, Union
 
 import torch
-from torch import jit, nn, Tensor
+from torch import Tensor, jit, nn
 from torch.nn import functional
 
 from linodenet.util import ACTIVATIONS, deep_dict_update
@@ -169,7 +169,7 @@ class iResNetBlock(jit.ScriptModule):
         self.bottleneck = nn.Sequential(
             LinearContraction(self.input_size, self.hidden_size, self.bias),
             LinearContraction(self.hidden_size, self.input_size, self.bias),
-            ACTIVATIONS[HP["activation"]](**HP["activation_config"]),
+            ACTIVATIONS[HP["activation"]](**HP["activation_config"]),  # type: ignore
         )
 
     @jit.script_method

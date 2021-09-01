@@ -50,6 +50,6 @@ allow-untyped-defs = True
 docstring-convention = numpy
 
 # import-order-plugin
-import-order-style = appnexus
-application-import-names = linodenet
-application-package-names = tsdm
+# flake8-profiles: appnexus, cryptography, edited, google, pep8, pycharm, smarkets
+import-order-style = pep8
+application-import-names = linodenet,tsdm

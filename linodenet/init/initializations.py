@@ -7,8 +7,8 @@ import logging
 from math import prod, sqrt
 from typing import Final, Union
 
-from scipy import stats
 import torch
+from scipy import stats
 from torch import Tensor
 
 logger = logging.getLogger(__name__)

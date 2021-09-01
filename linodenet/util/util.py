@@ -1,10 +1,19 @@
 r"""Utility functions."""
-
+import logging
 from collections.abc import Mapping
+from typing import Final, Type
 
 from torch import nn
 
-ACTIVATIONS = {
+logger = logging.getLogger(__name__)
+
+__all__: Final[list[str]] = [
+    "ACTIVATIONS",
+    "deep_dict_update",
+    "deep_keyval_update",
+]
+
+ACTIVATIONS: Final[dict[str, Type[nn.Module]]] = {
     "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
     "ELU": nn.ELU,
     "Hardshrink": nn.Hardshrink,

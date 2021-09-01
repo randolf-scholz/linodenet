@@ -4,14 +4,13 @@ import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.integrate import odeint
 import torch
+from scipy.integrate import odeint
 from tqdm.auto import trange
 
+from linodenet.models import LinODE
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
-
-from linodenet.models import LinODE
 
 logger = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)

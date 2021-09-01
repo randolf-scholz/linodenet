@@ -1,27 +1,13 @@
-r"""Initializations for the Linear ODE Networks.
-
-linodenet.init
-==============
-
-Constants
----------
-
-.. data:: INIT
-
-    Dictionary containing all the available initializations
-
-Functions
----------
-"""
+r"""Initializations for the Linear ODE Networks."""
 import logging
 from typing import Callable, Final
 
 from torch import Tensor
 
-from .initializations import (
+from linodenet.init.initializations import (
+    SizeLike,
     gaussian,
     orthogonal,
-    SizeLike,
     skew_symmetric,
     special_orthogonal,
     symmetric,
@@ -37,7 +23,8 @@ from .initializations import (
 logger = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
-    "INITS",
+    "INITIALIZATIONS",
+    "Initialization",
     "SizeLike",
     "gaussian",
     "symmetric",
@@ -46,8 +33,8 @@ __all__: Final[list[str]] = [
     "special_orthogonal",
 ]
 
-
-INITS: Final[dict[str, Callable[[SizeLike], Tensor]]] = {
+Initialization = Callable[[SizeLike], Tensor]
+INITIALIZATIONS: Final[dict[str, Initialization]] = {
     "gaussian": gaussian,
     "symmetric": symmetric,
     "skew-symmetric": skew_symmetric,

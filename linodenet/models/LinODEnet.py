@@ -8,13 +8,14 @@ Provides
 - class:`~.LinODEnet`
 """
 import logging
-from typing import Any, Callable, Final, Union
+from typing import Any, Callable, Final, Optional, Union
 
 import torch
-from torch import jit, nn, Tensor
+from torch import Tensor, jit, nn
 
-from linodenet.init import gaussian
+from linodenet.init import INITIALIZATIONS, Initialization, gaussian
 from linodenet.models.iResNet import iResNet
+from linodenet.projections import PROJECTIONS, Projection
 from linodenet.util import deep_dict_update
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,6 @@ __all__: Final[list[str]] = [
     "LinODECell",
     "LinODEnet",
 ]
-
-Initialization = Union[Tensor, Callable[[int], Tensor]]
 
 
 class LinODECell(jit.ScriptModule):
@@ -48,7 +47,7 @@ class LinODECell(jit.ScriptModule):
         The system matrix
     kernel_initialization: Callable[[], Tensor]
         Parameter-less function that draws a initial system matrix
-    kernel_regularization: Callable[[Tensor], Tensor]
+    kernel_projection: Callable[[Tensor], Tensor]
         Regularization function for the kernel
     """
 
@@ -62,8 +61,8 @@ class LinODECell(jit.ScriptModule):
     def __init__(
         self,
         input_size: int,
-        kernel_initialization: Initialization = None,
-        kernel_regularization: Callable[[Tensor], Tensor] = None,
+        kernel_initialization: Optional[Union[str, Tensor, Initialization]] = None,
+        kernel_projection: Optional[Union[str, Projection]] = None,
     ):
         super().__init__()
         self.input_size = input_size
@@ -72,6 +71,9 @@ class LinODECell(jit.ScriptModule):
         def kernel_initialization_dispatch():
             if kernel_initialization is None:
                 return lambda: gaussian(input_size)
+            if kernel_initialization in INITIALIZATIONS:
+                _init = INITIALIZATIONS[kernel_initialization]
+                return lambda: _init(input_size)
             if callable(kernel_initialization):
                 assert Tensor(kernel_initialization(input_size)).shape == (
                     input_size,
@@ -85,18 +87,16 @@ class LinODECell(jit.ScriptModule):
             return lambda: Tensor(kernel_initialization)
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript
-        # fmt: off
         def kernel_regularization_dispatch():
-            if kernel_regularization is None:
-                def _kernel_regularization(w: Tensor) -> Tensor: return w              # noqa pylint: disable=C0321
-            elif kernel_regularization == "skew-symmetric":
-                def _kernel_regularization(w: Tensor) -> Tensor: return (w - w.T) / 2  # noqa pylint: disable=C0321
-            elif kernel_regularization == "symmetric":
-                def _kernel_regularization(w: Tensor) -> Tensor: return (w + w.T) / 2  # noqa pylint: disable=C0321
+            if kernel_projection is None:
+                _kernel_regularization = PROJECTIONS["identity"]
+            elif kernel_projection in PROJECTIONS:
+                _kernel_regularization = PROJECTIONS[kernel_projection]
+            elif callable(kernel_projection):
+                _kernel_regularization = kernel_projection
             else:
-                raise NotImplementedError(f"{kernel_regularization=} unknown")
+                raise NotImplementedError(f"{kernel_projection=} unknown")
             return _kernel_regularization
-        # fmt: on
 
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_regularization = kernel_regularization_dispatch()
@@ -229,14 +229,14 @@ class LinODEnet(jit.ScriptModule):
         The learned padding parameters
     """
 
-    HP: dict = {
+    HP: dict[str, Any] = {
         "input_size": int,
         "hidden_size": int,
         "output_size": int,
         "embedding_type": "linear",
         "concat_mask": True,
         "System": LinODECell,
-        "System_cfg": {"input_size": int, "kernel_initialization": None},
+        "System_cfg": {"input_size": int, "kernel_initialization": "skew-symmetric"},
         "Filter": nn.GRUCell,
         "Filter_cfg": {"input_size": int, "hidden_size": int, "bias": True},
         "Encoder": iResNet,

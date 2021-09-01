@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import torch
 
-from linodenet.init import INITS
+from linodenet.init import INITIALIZATIONS
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +25,11 @@ def test_all_initializations(rep: int = 10000, num: int = 1000, dim: int = 100):
     .. warning::
         Requires up to 16 GB RAM with default settings.
     """
-    logger.info("Testing all available initializations %s", set(INITS))
+    logger.info("Testing all available initializations %s", set(INITIALIZATIONS))
 
     x = torch.randn(rep, num, dim)
 
-    for key, method in INITS.items():
+    for key, method in INITIALIZATIONS.items():
 
         logger.info("Testing %s", key)
 
@@ -51,7 +51,9 @@ def test_all_initializations(rep: int = 10000, num: int = 1000, dim: int = 100):
     # todo: add plot
     # todo: add experiment after applying matrix exponential
 
-    logger.info("All initializations %s passed \N{HEAVY CHECK MARK}", set(INITS))
+    logger.info(
+        "All initializations %s passed \N{HEAVY CHECK MARK}", set(INITIALIZATIONS)
+    )
 
 
 if __name__ == "__main__":
