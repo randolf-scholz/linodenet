@@ -29,7 +29,7 @@ __all__: Final[list[str]] = [
 Projection = Callable[[Tensor], Tensor]
 PROJECTIONS: Final[dict[str, Projection]] = {
     "symmetric": symmetric,
-    "skew_symmetric": skew_symmetric,
+    "skew-symmetric": skew_symmetric,
     "orthogonal": orthogonal,
     "diagonal": diagonal,
     "identity": identity,

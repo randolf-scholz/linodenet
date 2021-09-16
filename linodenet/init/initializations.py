@@ -22,7 +22,7 @@ __all__: Final[list[str]] = [
     "special_orthogonal",
 ]
 
-SizeLike = Union[int, tuple[int, ...]]  # type: ignore
+SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 3.10
 
 
 def gaussian(n: SizeLike) -> Tensor:
@@ -156,3 +156,28 @@ def special_orthogonal(n: SizeLike) -> Tensor:
 
     A = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
     return torch.Tensor(A)
+
+
+def canonical_skew_symmetric(n: SizeLike) -> Tensor:
+    r"""Return the canonical skew symmetric matrix of size $2n$.
+
+    $$𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}$$
+
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+
+    Parameters
+    ----------
+    n: int or tuple[int]
+
+    Returns
+    -------
+    Tensor
+    """
+    # convert to tuple
+    # convert to tuple
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    shape = (*size, dim, dim)
+
+    A = torch.normal(mean=torch.zeros(shape), std=1 / sqrt(dim))
+    return (A - A.swapaxes(-1, -2)) / sqrt(2)

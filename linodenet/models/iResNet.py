@@ -17,6 +17,9 @@ from torch.nn import functional
 
 from linodenet.util import ACTIVATIONS, deep_dict_update
 
+# from torch.nn.utils.parametrizations import spectral_norm
+
+
 logger = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
@@ -24,6 +27,53 @@ __all__: Final[list[str]] = [
     "iResNetBlock",
     "LinearContraction",
 ]
+
+
+@jit.script
+def spectral_norm(
+    A: Tensor, atol: float = 1e-4, rtol: float = 1e-3, maxiter: int = 10
+) -> Tensor:
+    r"""Compute the spectral norm $‖A‖_2$.
+
+    Simple power iteration, using the fact that $‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)$.
+    """
+    m, n = A.shape
+
+    with torch.no_grad():
+        x = torch.randn(n, device=A.device, dtype=A.dtype)
+        x = x / torch.linalg.norm(x)
+
+        z = A.T @ (A @ x)
+        c, d = torch.linalg.norm(z, dim=0), torch.linalg.norm(x, dim=0)
+        λ = c / d
+        r = z - λ * x
+
+        for _ in range(maxiter):
+            x = z / c
+            z = A.T @ (A @ x)
+            c, d = torch.linalg.norm(z, dim=0), torch.linalg.norm(x, dim=0)
+            λ = c / d
+            r = z - λ * x
+            if torch.linalg.norm(r) <= rtol * torch.linalg.norm(λ * x) + atol:
+                break
+        # raise RuntimeWarning("No convergence in {maxiter} iterations.")
+        return torch.sqrt(λ)
+
+
+class SpectralNorm(jit.ScriptModule):
+    r"""$‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)$.
+
+    The spectral norm $∥A∥_2 ≔ 𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
+    $σ_\max(A) = √{λ_{𝗆𝖺𝗑} (AᵀA)}$, the largest singular value of $A$.
+
+    It can be computed efficiently via Power iteration.
+
+    One can show that the derivative is equal to:
+
+    $$\frac{∂½∥A∥_2}/{∂A} = uvᵀ$$
+
+    where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
+    """
 
 
 class LinearContraction(jit.ScriptModule):
@@ -49,7 +99,9 @@ class LinearContraction(jit.ScriptModule):
     input_size: Final[int]
     output_size: Final[int]
 
-    c: Tensor
+    C: Tensor
+    ONE: Tensor
+
     weight: Tensor
     bias: Union[Tensor, None]
 
@@ -59,8 +111,8 @@ class LinearContraction(jit.ScriptModule):
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.c = torch.tensor(float(c))
-
+        self.C = torch.tensor(float(c), requires_grad=False)
+        self.ONE = torch.tensor(1.0, requires_grad=False)
         self.weight = nn.Parameter(torch.Tensor(output_size, input_size))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(output_size))
@@ -92,10 +144,88 @@ class LinearContraction(jit.ScriptModule):
         -------
         Tensor
         """
-        σ_max = torch.linalg.norm(self.weight, ord=2)
-        one = torch.tensor(1, dtype=x.dtype, device=x.device)
-        fac = torch.minimum(self.c / σ_max, one)
+        # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
+        # σ_max = torch.linalg.norm(self.weight, ord=2)
+        σ_max = spectral_norm(self.weight)
+        fac = torch.minimum(self.C / σ_max, self.ONE)
         return functional.linear(x, fac * self.weight, self.bias)
+
+
+#
+#
+#
+# class LinearContraction(jit.ScriptModule):
+#     r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2$.
+#
+#     This is achieved by normalizing the weight matrix by
+#     $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
+#     Equivalently, we can scale the input by the appropriate factor.
+#
+#     Attributes
+#     ----------
+#     input_size:  int
+#         The dimensionality of the input space.
+#     output_size: int
+#         The dimensionality of the output space.
+#     c: Tensor
+#         The regularization hyperparameter
+#     weight: Tensor
+#         The weight matrix
+#     bias: Tensor or None
+#         The bias Tensor if present, else None.
+#     """
+#
+#     input_size: Final[int]
+#     output_size: Final[int]
+#
+#     C: Tensor
+#     ONE: Tensor
+#
+#     weight: Tensor
+#     bias: Tensor
+#     # linear: nn.Module
+#
+#     def __init__(
+#         self, input_size: int, output_size: int, c: float = 0.97, bias: bool = True
+#     ):
+#         super().__init__()
+#         self.input_size = input_size
+#         self.output_size = output_size
+#         self.C = torch.tensor(float(c))
+#         self.ONE = torch.tensor(1.0)
+#         self.linear = spectral_norm(nn.Linear(input_size, output_size, bias=bias))
+#         self.weight = self.linear.weight
+#         self.bias = self.linear.bias
+#         self.reset_parameters()
+#
+#     def reset_parameters(self) -> None:
+#         r"""Reset both weight matrix and bias vector."""
+#         nn.init.kaiming_uniform_(self.weight, a=sqrt(5))
+#         if self.bias is not None:
+#             bound = 1 / sqrt(self.input_size)
+#             nn.init.uniform_(self.bias, -bound, bound)
+#
+#     # def extra_repr(self) -> str:
+#     #     return "input_size={}, output_size={}, bias={}".format(
+#     #         self.input_size, self.output_size, self.bias is not None
+#     #     )
+#
+#     @jit.script_method
+#     def forward(self, x: Tensor) -> Tensor:
+#         r"""Signature: $[...,n] ⟶ [...,n]$.
+#
+#         Parameters
+#         ----------
+#         x: Tensor
+#
+#         Returns
+#         -------
+#         Tensor
+#         """
+#         # σ_max = torch.linalg.norm(self.weight, ord=2)
+#         # fac = torch.minimum(self.C / σ_max, self.ONE)
+#         return self.linear(self.C*x)
+#         # return functional.linear(x, fac * self.weight, self.bias)
 
 
 class iResNetBlock(jit.ScriptModule):

@@ -8,7 +8,7 @@ Provides
 - class:`~.LinODEnet`
 """
 import logging
-from typing import Any, Callable, Final, Optional, Union
+from typing import Any, Final, Optional, Union
 
 import torch
 from torch import Tensor, jit, nn
@@ -56,7 +56,7 @@ class LinODECell(jit.ScriptModule):
 
     kernel: Tensor
     # kernel_initialization: Callable[[], Tensor]
-    # kernel_regularization: Callable[[Tensor], Tensor]
+    kernel_projection: Projection
 
     def __init__(
         self,
@@ -154,20 +154,20 @@ class LinODE(jit.ScriptModule):
     output_size: Final[int]
 
     kernel: Tensor
-    kernel_initialization: Callable[[], Tensor]
-    kernel_regularization: Callable[[Tensor], Tensor]
+    # kernel_initialization: Callable[[], Tensor]
+    kernel_projection: Projection
 
     def __init__(
         self,
         input_size: int,
         kernel_initialization: Initialization = None,
-        kernel_regularization: Callable[[Tensor], Tensor] = None,
+        kernel_projection: Projection = None,
     ):
         super().__init__()
 
         self.input_size = input_size
         self.output_size = input_size
-        self.cell = LinODECell(input_size, kernel_initialization, kernel_regularization)
+        self.cell = LinODECell(input_size, kernel_initialization, kernel_projection)
         self.kernel = self.cell.kernel
 
     @jit.script_method
@@ -289,40 +289,6 @@ class LinODEnet(jit.ScriptModule):
             )
 
         self.kernel = self.system.kernel
-
-    # @jit.script_method
-    # def embedding(self, x: Tensor) -> Tensor:
-    #     r"""Maps $X\mapsto \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big)$
-    #     if ``embedding_type='concat'``
-    #
-    #     Else linear function $X\mapsto XA$ if ``embedding_type='linear'``
-    #
-    #     Parameters
-    #     ----------
-    #     x: Tensor, shape=(...,DIM)
-    #
-    #     Returns
-    #     -------
-    #     Tensor, shape=(...,LAT)
-    #     """
-    #     return torch.cat([x, self.padding], dim=-1)
-    #
-    # @jit.script_method
-    # def projection(self, z: Tensor) -> Tensor:
-    #     r"""Maps $Z = \big(\begin{smallmatrix}X\\w\end{smallmatrix}\big) \mapsto X$
-    #     if ``embedding_type='concat'``
-    #
-    #     Else linear function $Z\mapsto ZA$ if ``embedding_type='linear'``
-    #
-    #     Parameters
-    #     ----------
-    #     z: Tensor, shape=(...,LAT)
-    #
-    #     Returns
-    #     -------
-    #     Tensor, shape=(...,DIM)
-    #     """
-    #     return z[..., :self.input_size]
 
     @jit.script_method
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
