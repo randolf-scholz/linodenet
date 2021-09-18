@@ -1,7 +1,7 @@
 r"""Regularizations for LinODE kernel matrix.
 
 Functional version.
-"""  # pylint: disable=line-too-long # noqa
+"""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def skew_symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
     r = x - projections.skew_symmetric(x)
     if p is None:
         return torch.linalg.matrix_norm(r)
-    return torch.linalg.matrix_norm(r, p=p)
+    return torch.linalg.matrix_norm(r, p)
 
 
 @jit.script
@@ -99,7 +99,7 @@ def symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
     r = x - projections.symmetric(x)
     if p is None:
         return torch.linalg.matrix_norm(r)
-    return torch.linalg.matrix_norm(r, p=p)
+    return torch.linalg.matrix_norm(r, p)
 
 
 @jit.script
@@ -129,16 +129,12 @@ def orthogonal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r = x - projections.orthogonal(x)
     if p is None:
         return torch.linalg.matrix_norm(r)
-    return torch.linalg.matrix_norm(r, p=p)
+    return torch.linalg.matrix_norm(r, p)
 
 
 @jit.script
 def normal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r"""Bias the matrix towards being normal.
-
-    Signature
-    ---------
-    (..., n,n) ⟶ (...,)
 
     Signature
     ---------
@@ -156,7 +152,7 @@ def normal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r = x - projections.normal(x)
     if p is None:
         return torch.linalg.matrix_norm(r)
-    return torch.linalg.matrix_norm(r, p=p)
+    return torch.linalg.matrix_norm(r, p)
 
 
 @jit.script
@@ -179,4 +175,4 @@ def diagonal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r = x - projections.diagonal(x)
     if p is None:
         return torch.linalg.matrix_norm(r)
-    return torch.linalg.matrix_norm(r, p=p)
+    return torch.linalg.matrix_norm(r, p)

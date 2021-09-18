@@ -1,4 +1,5 @@
 r"""Initializations for the Linear ODE Networks."""
+
 import logging
 from typing import Callable, Final
 
@@ -31,6 +32,7 @@ __all__: Final[list[str]] = [
 ]
 
 Initialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
+
 INITIALIZATIONS: Final[dict[str, Initialization]] = {
     "gaussian": gaussian,
     "symmetric": symmetric,

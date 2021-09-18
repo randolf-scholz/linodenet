@@ -16,6 +16,7 @@ import datetime
 import os
 import sys
 
+os.environ["GENERATING_DOCS"] = "true"
 sys.path.insert(0, os.path.abspath("."))
 
 # -- Project information -----------------------------------------------------------------------------------------------
@@ -29,7 +30,8 @@ project_copyright = "%(year)s, %(author)s" % {
 author = "Randolf Scholz"
 
 # The full version, including alpha/beta/rc tags
-release = "0.0.1"
+with open("../linodenet/VERSION", "r") as file:
+    release = file.read()
 
 # -- General configuration ---------------------------------------------------------------------------------------------
 
@@ -276,7 +278,7 @@ napoleon_type_aliases = {
 napoleon_attr_annotations = True
 # True to allow using PEP 526 attributes annotations in classes. If an attribute is documented in the docstring without
 # a type and has an annotation in the class body, that type is used.
-napoleon_custom_sections = []
+napoleon_custom_sections = ["Signature"]
 # Add a list of custom sections to include, expanding the list of parsed sections. Defaults to None.
 
 # -- end of configuration ----------------------------------------------------------------------------------------------

@@ -3,6 +3,9 @@ r"""Initializations for the Linear ODE Networks.
 
 All initializations are normalized such that if $x~𝓝(0,1)$, then $Ax~𝓝(0,1)$ as well.
 """
+
+from __future__ import annotations
+
 import logging
 from math import prod, sqrt
 from typing import Final, Union

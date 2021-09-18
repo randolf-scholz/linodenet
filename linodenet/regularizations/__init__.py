@@ -17,6 +17,7 @@ from linodenet.regularizations.regularizations import (
 )
 
 logger = logging.getLogger(__name__)
+
 __all__: Final[list[str]] = [
     "REGULARIZATIONS",
     "Regularization",
@@ -29,6 +30,7 @@ __all__: Final[list[str]] = [
 ]
 
 Regularization = Callable[[Tensor], Tensor]  # matrix to scalar
+
 REGULARIZATIONS: Final[dict[str, Regularization]] = {
     "diagonal": diagonal,
     "logdetexp": logdetexp,

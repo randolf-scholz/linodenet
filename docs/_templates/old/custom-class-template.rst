@@ -2,22 +2,20 @@
 
 .. currentmodule:: {{ module }}
 
-.. autoclass:: {{ name }}
-   :members:
-   :show-inheritance:
-   :inherited-members:
-   :special-members: __call__, __add__, __mul__
+.. autoclass:: {{ objname }}
+   :members:                                    <-- add at least this line
+   :show-inheritance:                           <-- plus I want to show inheritance...
+   :inherited-members:                          <-- ...and inherited members too
 
    {% block methods %}
+   .. automethod:: __init__
+
    {% if methods %}
    .. rubric:: {{ _('Methods') }}
 
    .. autosummary::
-      :nosignatures:
    {% for item in methods %}
-      {%- if not item.startswith('_') %}
       ~{{ name }}.{{ item }}
-      {%- endif -%}
    {%- endfor %}
    {% endif %}
    {% endblock %}
