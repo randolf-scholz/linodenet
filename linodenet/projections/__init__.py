@@ -9,6 +9,7 @@ from torch import Tensor
 from linodenet.projections.projections import (
     diagonal,
     identity,
+    normal,
     orthogonal,
     skew_symmetric,
     symmetric,
@@ -24,13 +25,15 @@ __all__: Final[list[str]] = [
     "orthogonal",
     "diagonal",
     "identity",
+    "normal",
 ]
 
-Projection = Callable[[Tensor], Tensor]
+Projection = Callable[[Tensor], Tensor]  # matrix to matrix
 PROJECTIONS: Final[dict[str, Projection]] = {
     "symmetric": symmetric,
     "skew-symmetric": skew_symmetric,
     "orthogonal": orthogonal,
     "diagonal": diagonal,
     "identity": identity,
+    "normal": normal,
 }

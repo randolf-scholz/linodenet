@@ -4,10 +4,16 @@ import logging
 from pathlib import Path
 from typing import Final
 
-from linodenet import init, models
+from linodenet import initializations, models, projections, regularizations
 
 logger = logging.getLogger(__name__)
-__all__: Final[list[str]] = ["__version__", "init", "models"]
+__all__: Final[list[str]] = [
+    "__version__",
+    "models",
+    "initializations",
+    "regularizations",
+    "projections",
+]
 
 with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf-8") as file:
     __version__ = file.read()

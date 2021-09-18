@@ -113,9 +113,9 @@ class LinearContraction(jit.ScriptModule):
         self.output_size = output_size
         self.C = torch.tensor(float(c), requires_grad=False)
         self.ONE = torch.tensor(1.0, requires_grad=False)
-        self.weight = nn.Parameter(torch.Tensor(output_size, input_size))
+        self.weight = nn.Parameter(Tensor(output_size, input_size))
         if bias:
-            self.bias = nn.Parameter(torch.Tensor(output_size))
+            self.bias = nn.Parameter(Tensor(output_size))
         else:
             self.register_parameter("bias", None)
         self.reset_parameters()
@@ -200,10 +200,10 @@ class LinearContraction(jit.ScriptModule):
 #
 #     def reset_parameters(self) -> None:
 #         r"""Reset both weight matrix and bias vector."""
-#         nn.init.kaiming_uniform_(self.weight, a=sqrt(5))
+#         nn.initializations.kaiming_uniform_(self.weight, a=sqrt(5))
 #         if self.bias is not None:
 #             bound = 1 / sqrt(self.input_size)
-#             nn.init.uniform_(self.bias, -bound, bound)
+#             nn.initializations.uniform_(self.bias, -bound, bound)
 #
 #     # def extra_repr(self) -> str:
 #     #     return "input_size={}, output_size={}, bias={}".format(

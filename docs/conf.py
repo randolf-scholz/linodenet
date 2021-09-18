@@ -112,7 +112,7 @@ autoclass_content = "class"
 # You can still document __init__ as a separate method using automethod or the members option to autoclass.
 # "both"
 # Both the class’ and the __init__ method’s docstring are concatenated and inserted.
-# "init"
+# "initializations"
 # Only the __init__ method’s docstring is inserted.
 # If the class has no __init__ method or if the __init__ method’s docstring is empty,
 # but the class has a __new__ method’s docstring, it is used instead.

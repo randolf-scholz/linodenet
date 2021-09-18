@@ -1,4 +1,4 @@
-r"""Test if model init, forward and backward passes."""
+r"""Test if model initializations, forward and backward passes."""
 
 import logging
 from itertools import product
@@ -128,7 +128,7 @@ def _test_model(
 
 
 def test_all_models():
-    r"""Check if init, forward and backward runs for all selected models."""
+    r"""Check if initializations, forward and backward runs for all selected models."""
     for model, params in MODELS.items():
         logger.info("Testing %s", model.__name__)
         initialization = params["initialization"]

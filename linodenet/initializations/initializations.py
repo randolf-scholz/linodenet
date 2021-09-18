@@ -20,6 +20,8 @@ __all__: Final[list[str]] = [
     "skew_symmetric",
     "orthogonal",
     "special_orthogonal",
+    "diagonally_dominant",
+    "canonical_skew_symmetric",
 ]
 
 SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 3.10
@@ -34,6 +36,7 @@ def gaussian(n: SizeLike) -> Tensor:
     ----------
     n: int or tuple[int]
         If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
+
     Returns
     -------
     Tensor
@@ -55,6 +58,7 @@ def diagonally_dominant(n: SizeLike) -> Tensor:
     ----------
     n: int or tuple[int]
         If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
+
     Returns
     -------
     Tensor
@@ -132,7 +136,7 @@ def orthogonal(n: SizeLike) -> Tensor:
     shape = (*size, dim, dim)
 
     A = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
-    return torch.Tensor(A)
+    return Tensor(A)
 
 
 def special_orthogonal(n: SizeLike) -> Tensor:
@@ -155,13 +159,14 @@ def special_orthogonal(n: SizeLike) -> Tensor:
     shape = (*size, dim, dim)
 
     A = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
-    return torch.Tensor(A)
+    return Tensor(A)
 
 
 def canonical_skew_symmetric(n: SizeLike) -> Tensor:
     r"""Return the canonical skew symmetric matrix of size $2n$.
 
-    $$𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}$$
+    .. math::
+        𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
 

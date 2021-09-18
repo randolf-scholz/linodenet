@@ -13,7 +13,7 @@ from typing import Any, Final, Optional, Union
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.init import INITIALIZATIONS, Initialization, gaussian
+from linodenet.initializations import INITIALIZATIONS, Initialization, gaussian
 from linodenet.models.iResNet import iResNet
 from linodenet.projections import PROJECTIONS, Projection
 from linodenet.util import deep_dict_update

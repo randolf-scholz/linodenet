@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import torch
 
-from linodenet.init import INITIALIZATIONS
+from linodenet.initializations import INITIALIZATIONS
 
 logger = logging.getLogger(__name__)
 
