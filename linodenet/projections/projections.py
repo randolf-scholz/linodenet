@@ -26,9 +26,7 @@ def identity(x: Tensor) -> Tensor:
     .. math::
         \min_Y ½∥X-Y∥_F^2
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (..., n, n)
+    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
 
     Parameters
     ----------
@@ -50,9 +48,7 @@ def symmetric(x: Tensor) -> Tensor:
 
     One can show analytically that Y = ½(X + Xᵀ) is the unique minimizer.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (..., n, n)
+    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
 
     Parameters
     ----------
@@ -74,9 +70,7 @@ def skew_symmetric(x: Tensor) -> Tensor:
 
     One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (..., n, n)
+    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
 
     Parameters
     ----------
@@ -117,9 +111,7 @@ def normal(x: Tensor) -> Tensor:
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|𝕀⊗𝕀 + Λ⊗𝕀 − 𝕀⊗Λ|S⟩ ≥ 0
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (..., n, n)
+    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
 
     Parameters
     ----------
@@ -139,12 +131,10 @@ def orthogonal(x: Tensor) -> Tensor:
     .. math::
         \min_Y ½∥X-Y∥_F^2 s.t. YᵀY = 𝕀 = YYᵀ
 
-    One can show analytically that $Y = UVᵀ$ is the unique minimizer,
-    where $X=UΣVᵀ$ is the SVD of $X$.
+    One can show analytically that `Y = UVᵀ` is the unique minimizer,
+    where `X=UΣVᵀ` is the SVD of `X`.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (..., n, n)
+    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
 
     References
     ----------
@@ -169,11 +159,9 @@ def diagonal(x: Tensor) -> Tensor:
     .. math::
         \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
 
-    One can show analytically that $Y = diag(X)$ is the unique minimizer.
+    One can show analytically that `Y = diag(X)` is the unique minimizer.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (..., n, n)
+    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
 
     Parameters
     ----------

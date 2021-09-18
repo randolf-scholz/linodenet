@@ -25,7 +25,7 @@ __all__: Final[list[str]] = [
 
 
 def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
-    r"""Bias $\det(e^A)$ towards 1.
+    r"""Bias `\det(e^A)` towards 1.
 
     By Jacobis formula
 
@@ -39,9 +39,7 @@ def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
 
         |𝗍𝗋(A)|
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (...,)
+    **Signature:** ``(..., n,n) ⟶ (...,)``
 
     Parameters
     ----------
@@ -60,9 +58,7 @@ def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
 def skew_symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
     r"""Bias the matrix towards being skew-symmetric.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (...,)
+    **Signature:** ``(..., n,n) ⟶ (...,)``
 
     Parameters
     ----------
@@ -83,9 +79,7 @@ def skew_symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
 def symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
     r"""Bias the matrix towards being symmetric.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (...,)
+    **Signature:** ``(..., n,n) ⟶ (...,)``
 
     Parameters
     ----------
@@ -106,16 +100,14 @@ def symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
 def orthogonal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r"""Bias the matrix towards being orthogonal.
 
-    Note that, given $n×n$ matrix $X$ with SVD $X=UΣVᵀ$ holds
+    Note that, given `n×n` matrix `X` with SVD `X=UΣVᵀ` holds
 
     .. math::
           &(1) &  ‖ X - ΠX‖_F &= ‖ Σ - 𝕀 ‖_F
         \\&(1) &  ‖XᵀX - 𝕀‖_F &= ‖ΣᵀΣ - 𝕀‖_F
         \\&(1) &  ‖XXᵀ - X‖_F &= ‖ΣΣᵀ - 𝕀‖_F
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (...,)
+    **Signature:** ``(..., n,n) ⟶ (...,)``
 
     Parameters
     ----------
@@ -136,9 +128,7 @@ def orthogonal(x: Tensor, p: Optional[float] = None) -> Tensor:
 def normal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r"""Bias the matrix towards being normal.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (...,)
+    **Signature:** ``(..., n,n) ⟶ (...,)``
 
     Parameters
     ----------
@@ -159,9 +149,7 @@ def normal(x: Tensor, p: Optional[float] = None) -> Tensor:
 def diagonal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r"""Bias the matrix towards being diagonal.
 
-    Signature
-    ---------
-    (..., n,n) ⟶ (...,)
+    **Signature:** ``(..., n,n) ⟶ (...,)``
 
     Parameters
     ----------

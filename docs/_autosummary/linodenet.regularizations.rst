@@ -2,6 +2,10 @@ linodenet.regularizations
 =========================
 
 .. automodule:: linodenet.regularizations
+    :members:
+    :noindex:
+    
+
     
     
     .. rubric:: Sub-Modules

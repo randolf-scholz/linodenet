@@ -1,12 +1,5 @@
-r"""Contains implementations of ODE models.
+r"""Contains implementations of ODE models."""
 
-Provides
---------
-
-- class:`~.LinODECell`
-- class:`~.LinODE`
-- class:`~.LinODEnet`
-"""
 import logging
 from typing import Any, Final, Optional, Union
 
@@ -30,7 +23,7 @@ __all__: Final[list[str]] = [
 
 
 class LinODECell(jit.ScriptModule):
-    r"""Linear System module, solves $ẋ = Ax$, i.e. $x̂ = e^{A\Delta t}x$.
+    r"""Linear System module, solves `ẋ = Ax`, i.e. `x̂ = e^{A\Delta t}x`.
 
     Parameters
     ----------
@@ -114,19 +107,19 @@ class LinODECell(jit.ScriptModule):
     @jit.script_method
     def forward(self, Δt: Tensor, x0: Tensor) -> Tensor:
         # TODO: optimize if clauses away by changing definition in constructor.
-        r"""Signature: $[...,]×[...,d] ⟶ [...,d]$.
+        r"""Signature: :math:`[...,]×[...,d] ⟶ [...,d]`.
 
         Parameters
         ----------
         Δt: Tensor, shape=(...,)
-            The time difference $t_1 - t_0$ between $x_0$ and $x̂$.
+            The time difference `t_1 - t_0` between `x_0` and `x̂`.
         x0:  Tensor, shape=(...,DIM)
-            Time observed value at $t_0$
+            Time observed value at `t_0`
 
         Returns
         -------
         xhat:  Tensor, shape=(...,DIM)
-            The predicted value at $t_1$
+            The predicted value at `t_1`
         """
         A = self.kernel_regularization(self.kernel)
         AΔt = torch.einsum("kl, ... -> ...kl", A, Δt)
@@ -172,7 +165,7 @@ class LinODE(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
-        r"""Signature: $[...,N]×[...,d] ⟶ [...,N,d]$.
+        r"""Signature: :math:`[...,N]×[...,d] ⟶ [...,N,d]`.
 
         Parameters
         ----------
@@ -182,7 +175,7 @@ class LinODE(jit.ScriptModule):
         Returns
         -------
         Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times $t∈T$
+            The estimated true state of the system at the times `t∈T`
         """
         ΔT = torch.moveaxis(torch.diff(T), -1, 0)
         X = torch.jit.annotate(list[Tensor], [])
@@ -204,13 +197,13 @@ class LinODEnet(jit.ScriptModule):
     +---------------------------------------------------+--------------------------------------+
     | Component                                         | Formula                              |
     +===================================================+======================================+
-    | Filter  $F$ (default: :class:`~torch.nn.GRUCell`) | $\hat x_i' = F(\hat x_i, x_i)$       |
+    | Filter  `F` (default: :class:`~torch.nn.GRUCell`) | `\hat x_i' = F(\hat x_i, x_i)`       |
     +---------------------------------------------------+--------------------------------------+
-    | Encoder $ϕ$ (default: :class:`~.iResNet`)         | $\hat z_i' = ϕ(\hat x_i')$           |
+    | Encoder `ϕ` (default: :class:`~.iResNet`)         | `\hat z_i' = ϕ(\hat x_i')`           |
     +---------------------------------------------------+--------------------------------------+
-    | System  $S$ (default: :class:`~.LinODECell`)      | $\hat z_{i+1} = S(\hat z_i', Δ t_i)$ |
+    | System  `S` (default: :class:`~.LinODECell`)      | `\hat z_{i+1} = S(\hat z_i', Δ t_i)` |
     +---------------------------------------------------+--------------------------------------+
-    | Decoder $π$ (default: :class:`~.iResNet`)         | $\hat x_{i+1}  =  π(\hat z_{i+1})$   |
+    | Decoder `π` (default: :class:`~.iResNet`)         | `\hat x_{i+1}  =  π(\hat z_{i+1})`   |
     +---------------------------------------------------+--------------------------------------+
 
     Attributes
@@ -292,19 +285,19 @@ class LinODEnet(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
-        r"""Signature: $[...,N]×[...,N,d] ⟶ [...,N,d]$.
+        r"""Signature: :math:`[...,N]×[...,N,d] ⟶ [...,N,d]`.
 
         Parameters
         ----------
         T: Tensor, shape=(...,LEN) or PackedSequence
             The timestamps of the observations.
         X: Tensor, shape=(...,LEN,DIM) or PackedSequence
-            The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
+            The observed, noisy values at times `t∈T`. Use ``NaN`` to indicate missing values.
 
         Returns
         -------
         Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times $t∈T$.
+            The estimated true state of the system at the times `t∈T`.
 
         References
         ----------
@@ -369,7 +362,7 @@ class LinODEnet(jit.ScriptModule):
 
 
 class ConcatEmbedding(jit.ScriptModule):
-    r"""Maps $x ⟼ [x,w]$.
+    r"""Maps `x ⟼ [x,w]`.
 
     Attributes
     ----------
@@ -392,7 +385,7 @@ class ConcatEmbedding(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, X: Tensor) -> Tensor:
-        r"""Signature: $[..., d] ⟶ [..., d+e]$.
+        r"""Signature: `[..., d] ⟶ [..., d+e]`.
 
         Parameters
         ----------
@@ -407,7 +400,7 @@ class ConcatEmbedding(jit.ScriptModule):
 
 
 class ConcatProjection(jit.ScriptModule):
-    r"""Maps $z = [x,w] ⟼ x$.
+    r"""Maps `z = [x,w] ⟼ x`.
 
     Attributes
     ----------
@@ -426,7 +419,7 @@ class ConcatProjection(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, Z: Tensor) -> Tensor:
-        r"""Signature: $[..., d+e] ⟶ [..., d]$.
+        r"""Signature: `[..., d+e] ⟶ [..., d]`.
 
         Parameters
         ----------

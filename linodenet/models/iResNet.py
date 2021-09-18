@@ -1,12 +1,5 @@
-r"""Implementation of invertible ResNets.
+r"""Implementation of invertible ResNets."""
 
-Provides
---------
-
-- class:`~.LinearContraction`
-- class:`~.iResNetBlock`
-- class:`~.iResNet`
-"""
 import logging
 from math import sqrt
 from typing import Any, Final, Union
@@ -33,9 +26,9 @@ __all__: Final[list[str]] = [
 def spectral_norm(
     A: Tensor, atol: float = 1e-4, rtol: float = 1e-3, maxiter: int = 10
 ) -> Tensor:
-    r"""Compute the spectral norm $‖A‖_2$.
+    r"""Compute the spectral norm :math:`‖A‖_2`.
 
-    Simple power iteration, using the fact that $‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)$.
+    Simple power iteration, using the fact that :math:`‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)`.
     """
     m, n = A.shape
 
@@ -61,26 +54,27 @@ def spectral_norm(
 
 
 class SpectralNorm(jit.ScriptModule):
-    r"""$‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)$.
+    r"""`‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)`.
 
-    The spectral norm $∥A∥_2 ≔ 𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
-    $σ_\max(A) = √{λ_{𝗆𝖺𝗑} (AᵀA)}$, the largest singular value of $A$.
+    The spectral norm `∥A∥_2 ≔ 𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2` can be shown to be equal to
+    `σ_\max(A) = √{λ_{𝗆𝖺𝗑} (AᵀA)}`, the largest singular value of `A`.
 
     It can be computed efficiently via Power iteration.
 
     One can show that the derivative is equal to:
 
-    $$\frac{∂½∥A∥_2}/{∂A} = uvᵀ$$
+    .. math::
+        \frac{∂½∥A∥_2}/{∂A} = uvᵀ
 
-    where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
+    where `u,v` are the left/right-singular vector corresponding to `σ_\max`
     """
 
 
 class LinearContraction(jit.ScriptModule):
-    r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2$.
+    r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
 
     This is achieved by normalizing the weight matrix by
-    $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
+    `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
 
     Attributes
     ----------
@@ -134,7 +128,7 @@ class LinearContraction(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: $[...,n] ⟶ [...,n]$.
+        r"""Signature: `[...,n] ⟶ [...,n]`.
 
         Parameters
         ----------
@@ -155,10 +149,10 @@ class LinearContraction(jit.ScriptModule):
 #
 #
 # class LinearContraction(jit.ScriptModule):
-#     r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2$.
+#     r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
 #
 #     This is achieved by normalizing the weight matrix by
-#     $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
+#     `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
 #     Equivalently, we can scale the input by the appropriate factor.
 #
 #     Attributes
@@ -212,7 +206,7 @@ class LinearContraction(jit.ScriptModule):
 #
 #     @jit.script_method
 #     def forward(self, x: Tensor) -> Tensor:
-#         r"""Signature: $[...,n] ⟶ [...,n]$.
+#         r"""Signature: `[...,n] ⟶ [...,n]`.
 #
 #         Parameters
 #         ----------
@@ -229,14 +223,14 @@ class LinearContraction(jit.ScriptModule):
 
 
 class iResNetBlock(jit.ScriptModule):
-    r"""Invertible ResNet-Block of the form $g(x)=ϕ(W_1⋅W_2⋅x)$.
+    r"""Invertible ResNet-Block of the form `g(x)=ϕ(W_1⋅W_2⋅x)`.
 
-    By default, $W_1⋅W_2$ is a low rank factorization.
+    By default, `W_1⋅W_2` is a low rank factorization.
 
-    Alternative: $g(x) = W_3ϕ(W_2ϕ(W_1⋅x))$
+    Alternative: `g(x) = W_3ϕ(W_2ϕ(W_1⋅x))`
 
     All linear layers must be :class:`LinearContraction` layers.
-    The activation function must have Lipschitz constant $≤1$ such as :class:`~torch.nn.ReLU`,
+    The activation function must have Lipschitz constant `≤1` such as :class:`~torch.nn.ReLU`,
     :class:`~torch.nn.ELU` or :class:`~torch.nn.Tanh`)
 
     Attributes
@@ -304,7 +298,7 @@ class iResNetBlock(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: $[...,n] ⟶ [...,n]$.
+        r"""Signature: `[...,n] ⟶ [...,n]`.
 
         Parameters
         ----------
@@ -321,7 +315,7 @@ class iResNetBlock(jit.ScriptModule):
         r"""Compute the inverse through fixed point iteration.
 
         Terminates once `maxiter` or tolerance threshold
-        $|x'-x|≤\text{atol} + \text{rtol}⋅|x|$ is reached.
+        `|x'-x|≤\text{atol} + \text{rtol}⋅|x|` is reached.
 
         Parameters
         ----------
@@ -410,7 +404,7 @@ class iResNet(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: $[...,n] ⟶ [...,n]$.
+        r"""Signature: `[...,n] ⟶ [...,n]`.
 
         Parameters
         ----------

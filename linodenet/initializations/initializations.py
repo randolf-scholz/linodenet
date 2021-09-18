@@ -1,7 +1,7 @@
 # TODO: remove scipy dependency once torch offers orthogonal matrix sampling
 r"""Initializations for the Linear ODE Networks.
 
-All initializations are normalized such that if $x~𝓝(0,1)$, then $Ax~𝓝(0,1)$ as well.
+All initializations are normalized such that if `x~𝓝(0,1)`, then `Ax~𝓝(0,1)` as well.
 """
 
 from __future__ import annotations
@@ -31,9 +31,9 @@ SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 
 
 
 def gaussian(n: SizeLike) -> Tensor:
-    r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
+    r"""Sample a random gaussian matrix, i.e. `A_{ij}∼𝓝(0,1/n)`.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
     Parameters
     ----------
@@ -53,9 +53,9 @@ def gaussian(n: SizeLike) -> Tensor:
 
 
 def diagonally_dominant(n: SizeLike) -> Tensor:
-    r"""Sample a random diagonally dominant matrix, i.e. $A = I_n + B$,with $B_{ij}∼𝓝(0,1/n²)$.
+    r"""Sample a random diagonally dominant matrix, i.e. `A = I_n + B`,with `B_{ij}∼𝓝(0,1/n²)`.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
     Parameters
     ----------
@@ -75,9 +75,9 @@ def diagonally_dominant(n: SizeLike) -> Tensor:
 
 
 def symmetric(n: SizeLike) -> Tensor:
-    r"""Sample a symmetric matrix, i.e. $A^⊤ = A$.
+    r"""Sample a symmetric matrix, i.e. `A^⊤ = A`.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
     Parameters
     ----------
@@ -97,9 +97,9 @@ def symmetric(n: SizeLike) -> Tensor:
 
 
 def skew_symmetric(n: SizeLike) -> Tensor:
-    r"""Sample a random skew-symmetric matrix, i.e. $A^⊤ = -A$.
+    r"""Sample a random skew-symmetric matrix, i.e. `A^⊤ = -A`.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
     Parameters
     ----------
@@ -120,9 +120,9 @@ def skew_symmetric(n: SizeLike) -> Tensor:
 
 
 def orthogonal(n: SizeLike) -> Tensor:
-    r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
+    r"""Sample a random orthogonal matrix, i.e. `A^⊤ = A`.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
     Parameters
     ----------
@@ -143,9 +143,9 @@ def orthogonal(n: SizeLike) -> Tensor:
 
 
 def special_orthogonal(n: SizeLike) -> Tensor:
-    r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A^{-1}$ with $\det(A)=1$.
+    r"""Sample a random special orthogonal matrix, i.e. `A^⊤ = A^{-1}` with `\det(A)=1`.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
     Parameters
     ----------
@@ -166,12 +166,12 @@ def special_orthogonal(n: SizeLike) -> Tensor:
 
 
 def canonical_skew_symmetric(n: SizeLike) -> Tensor:
-    r"""Return the canonical skew symmetric matrix of size $2n$.
+    r"""Return the canonical skew symmetric matrix of size `2n`.
 
     .. math::
         𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
     Parameters
     ----------

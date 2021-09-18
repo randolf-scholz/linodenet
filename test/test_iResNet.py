@@ -56,8 +56,8 @@ def test_LinearContraction(
         f"LinearContraction -- Scaling Factor Distribution"
         f" (samples:{n_samples}, dim-in:{dim_in}, dim-out:{dim_out})"
     )
-    ax.set_xlabel(r"$s(X, y) = \frac{\|\phi(X)-\phi(y)\|}{\|X-y\|}$")
-    ax.set_ylabel(r"density $p(s\mid X, y)$ where $x_i,y_i\sim \mathcal N(0,1)$")
+    ax.set_xlabel(r"`s(X, y) = \frac{\|\phi(X)-\phi(y)\|}{\|X-y\|}`")
+    ax.set_ylabel(r"density `p(s\mid X, y)` where `x_i,y_i\sim \mathcal N(0,1)`")
     fig.savefig("LinearContraction_ScalingFactor.svg")
     logger.info("LinearContraction all done")
 
@@ -108,15 +108,15 @@ def test_iResNetBlock(
     visualize_distribution(discrepancy_forward, ax=ax[1, 0])
     visualize_distribution(discrepancy_backward, ax=ax[1, 1])
 
-    ax[0, 0].set_xlabel(r"$r_\text{left}(X) = \|X - \phi^{-1}(\phi(X))\|$")
-    ax[0, 0].set_ylabel(r"$p(r_\text{left} \mid X)$ where $x_i \sim \mathcal N(0,1)$")
-    ax[0, 1].set_xlabel(r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$")
-    ax[0, 1].set_ylabel(r"$p(r_\text{right}\mid y)$ where $y_j \sim \mathcal N(0,1)$")
+    ax[0, 0].set_xlabel(r"`r_\text{left}(X) = \|X - \phi^{-1}(\phi(X))\|`")
+    ax[0, 0].set_ylabel(r"`p(r_\text{left} \mid X)` where `x_i \sim \mathcal N(0,1)`")
+    ax[0, 1].set_xlabel(r"`r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|`")
+    ax[0, 1].set_ylabel(r"`p(r_\text{right}\mid y)` where `y_j \sim \mathcal N(0,1)`")
 
-    ax[1, 0].set_xlabel(r"$d_\text{left}(X) = \|X - \phi(X)\|$")
-    ax[1, 0].set_ylabel(r"$p(d_\text{left} \mid X)$ where $x_i \sim \mathcal N(0,1)$")
-    ax[1, 1].set_xlabel(r"$d_\text{right}(y) = \|y - \phi^{-1}(y)\|$")
-    ax[1, 1].set_ylabel(r"$p(d_\text{right} \mid y)$ where $y_j \sim \mathcal N(0,1)$")
+    ax[1, 0].set_xlabel(r"`d_\text{left}(X) = \|X - \phi(X)\|`")
+    ax[1, 0].set_ylabel(r"`p(d_\text{left} \mid X)` where `x_i \sim \mathcal N(0,1)`")
+    ax[1, 1].set_xlabel(r"`d_\text{right}(y) = \|y - \phi^{-1}(y)\|`")
+    ax[1, 1].set_ylabel(r"`p(d_\text{right} \mid y)` where `y_j \sim \mathcal N(0,1)`")
     fig.suptitle(
         f"iResNetBlock -- Inversion property "
         f"(samples:{n_samples}, dim-in:{input_size}, dim-hidden:{hidden_size})",

@@ -49,8 +49,10 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
-    "sphinx_math_dollar",
+    "autoapi.extension",
 ]
+autoapi_type = 'python'
+autoapi_dirs = ['.', '../linodenet']
 
 intersphinx_mapping = {
     "matplotlib": ("https://matplotlib.org/stable/", None),
@@ -72,6 +74,10 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # If true, the current module name will be prepended to all description
 # unit titles (such as .. function::).
 add_module_names = False
+
+# This option causes `<latex>` to behave like $<latex>$ in markdown
+# We use this instead of sphinx-math-dollar because that package does not work everywhere.
+default_role = "math"
 
 # -- Options for HTML output -------------------------------------------------------------------------------------------
 
