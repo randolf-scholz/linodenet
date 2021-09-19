@@ -1,9 +1,7 @@
 {{ fullname | escape | underline}}
 
 .. automodule:: {{ fullname }}
-    {% if modules %}:members:
-    :noindex:
-    {% endif %}
+    :members:
 
     {% block modules %}
     {% if modules %}
