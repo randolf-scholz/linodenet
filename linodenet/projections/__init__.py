@@ -18,8 +18,8 @@ from linodenet.projections.projections import (
 LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
-    "Projection",
     "PROJECTIONS",
+    "Projection",
     "symmetric",
     "skew_symmetric",
     "orthogonal",

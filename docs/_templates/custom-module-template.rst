@@ -63,3 +63,16 @@
     {% endif %}
     {% endblock %}
 
+    {# Do not use this block for now
+    {% block members %}
+    {% if members %}
+    .. rubric:: {{ _('Module Members') }}
+    .. autosummary::
+      :toctree: {{ objname }}
+    {% for item in members %}
+      {{ item }}
+    {%- endfor %}
+    {% endif %}
+    {% endblock %}
+    #}
+
