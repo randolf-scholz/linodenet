@@ -49,10 +49,12 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
-    "autoapi.extension",
 ]
-autoapi_type = 'python'
-autoapi_dirs = ['.', '../linodenet']
+
+# AUTOAPI
+# extensions.append("autoapi.extension")
+# autoapi_type = 'python'
+# autoapi_dirs = ['.', '../tsdm']
 
 intersphinx_mapping = {
     "matplotlib": ("https://matplotlib.org/stable/", None),
