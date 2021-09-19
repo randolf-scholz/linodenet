@@ -5,10 +5,10 @@ r"""Test the iResNet components.
 """
 
 import logging
+import random
 from typing import Optional
 
 import matplotlib.pyplot as plt
-import numpy as np
 import torch
 from torch import Tensor
 
@@ -16,119 +16,213 @@ from linodenet.models import LinearContraction, iResNetBlock
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
 
-logger = logging.getLogger(__name__)  # noqa: E402
-logging.getLogger("matplotlib").setLevel(logging.WARNING)
-logging.getLogger("PIL").setLevel(logging.WARNING)
+LOGGER = logging.getLogger(__name__)  # noqa: E402
 
 
 def test_LinearContraction(
-    n_samples: Optional[int] = None,
-    dim_in: Optional[int] = None,
-    dim_out: Optional[int] = None,
+    num_sample: Optional[int] = None,
+    dim_inputs: Optional[int] = None,
+    dim_output: Optional[int] = None,
     make_plot: bool = False,
 ):
-    r"""Test empirically whether the LinearContraction module is a contraction."""
-    logger.info(">>> Testing LinearContraction <<<")
-    n_samples = n_samples or np.random.randint(low=1000, high=10_000)
-    dim_in = dim_in or np.random.randint(low=2, high=100)
-    dim_out = dim_out or np.random.randint(low=2, high=100)
-    logger.info("nsamples=%i, dim_in=%i, dim_out=%i", n_samples, dim_in, dim_out)
+    r"""Test whether the LinearContraction really is a linear contraction.
 
-    x = torch.randn(n_samples, dim_in)
-    y = torch.randn(n_samples, dim_in)
+    Parameters
+    ----------
+    num_sample: Optional[int] = None
+        default: sample randomly from [1000, 2000, ..., 5000]
+    dim_inputs: Optional[int] = None
+        default: sample randomly from [2, 4, 8, , .., 128]
+    dim_output: Optional[int] = None
+            default: sample randomly from [2, 4, 8, , .., 128]
+    make_plot: bool
+    """
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
+        LOGGER.info("Using CUDA")
+    else:
+        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
+
+    r"""Test empirically whether the LinearContraction module is a contraction."""
+    LOGGER.info(">>> Testing LinearContraction <<<")
+    num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
+    dim_inputs = dim_inputs or random.choice([2 ** k for k in range(2, 8)])
+    dim_output = dim_output or random.choice([2 ** k for k in range(2, 8)])
+    extra_stats = {
+        "Samples": f"{num_sample}",
+        "Dim-in": f"{dim_inputs}",
+        "Dim-out": f"{dim_output}",
+    }
+    LOGGER.info("Configuration: %s", extra_stats)
+
+    x = torch.randn(num_sample, dim_inputs)
+    y = torch.randn(num_sample, dim_inputs)
     distances: Tensor = torch.cdist(x, y)
 
-    model = LinearContraction(dim_in, dim_out)
+    model = LinearContraction(dim_inputs, dim_output)
     xhat = model(x)
     yhat = model(y)
     latent_distances: Tensor = torch.cdist(xhat, yhat)
 
+    # Test whether contraction property holds
     assert torch.all(latent_distances <= distances)
-    logger.info("LinearContraction passes test \N{HEAVY CHECK MARK}")
+    LOGGER.info("LinearContraction passes test \N{HEAVY CHECK MARK}")
 
     if not make_plot:
         return
 
-    logger.info("LinearContraction generating figure")
+    LOGGER.info("LinearContraction generating figure")
     scaling_factor = (latent_distances / distances).flatten()
-    fig, ax = plt.subplots(figsize=(8, 4), tight_layout=True)
-    visualize_distribution(scaling_factor, ax=ax)
-    ax.set_title(
-        f"LinearContraction -- Scaling Factor Distribution"
-        f" (samples:{n_samples}, dim-in:{dim_in}, dim-out:{dim_out})"
+
+    # TODO: Switch to PGF backend with matplotlib 3.5 release
+    fig, ax = plt.subplots(figsize=(5.5, 3.4), tight_layout=True)
+    ax.set_title(r"LinearContraction -- Scaling Factor Distribution")
+    ax.set_xlabel(
+        r"$s(x, y) = \frac{\|\phi(x)-\phi(y)\|}{\|x-y\|}$ where "
+        r"$x_i, y_j \overset{\text{i.i.d}}{\sim} \mathcal N(0, 1)$"
     )
-    ax.set_xlabel(r"`s(X, y) = \frac{\|\phi(X)-\phi(y)\|}{\|X-y\|}`")
-    ax.set_ylabel(r"density `p(s\mid X, y)` where `x_i,y_i\sim \mathcal N(0,1)`")
-    fig.savefig("LinearContraction_ScalingFactor.svg")
-    logger.info("LinearContraction all done")
+    ax.set_ylabel(r"density $p(s \mid x, y)$")
+
+    visualize_distribution(scaling_factor, ax=ax, extra_stats=extra_stats)
+
+    fig.savefig("LinearContraction_ScalingFactor.pdf")
+    LOGGER.info("LinearContraction all done")
 
 
 def test_iResNetBlock(
-    n_samples: Optional[int] = None,
-    input_size: Optional[int] = None,
-    hidden_size: Optional[int] = None,
+    num_sample: Optional[int] = None,
+    dim_inputs: Optional[int] = None,
+    dim_output: Optional[int] = None,
+    maxiter: int = 20,
     make_plot: bool = False,
+    quantiles: tuple[float, ...] = (.5, .68, .95, .997),
+    targets: tuple[float, ...] = (0.005, 0.005, 0.01, 0.01),
 ):
-    r"""Tests empirically whether the iResNetBlock is indeed invertible."""
-    logger.info(">>> Testing iResNetBlock <<<")
-    n_samples = n_samples or np.random.randint(low=1000, high=10_000)
-    input_size = input_size or np.random.randint(low=2, high=100)
-    hidden_size = hidden_size or np.random.randint(low=2, high=100)
-    logger.info(
-        "nsamples=%i, input_size=%i, hidden_size=%i", n_samples, input_size, hidden_size
-    )
 
-    # HP = {'hidden_size' : hidden_size}
-    model = iResNetBlock(input_size, hidden_size=hidden_size)
-    x = torch.randn(n_samples, input_size)
-    y = torch.randn(n_samples, input_size)
-    fx = model(x)
-    xhat = model.inverse(fx)
-    ify = model.inverse(y)
-    yhat = model(ify)
+    r"""Test empirically whether the iResNetBlock is indeed invertible.
 
-    discrepancy_forward = scaled_norm(x - fx, axis=-1)
-    discrepancy_backward = scaled_norm(y - ify, axis=-1)
-    error_left_inverse = scaled_norm(x - xhat, axis=-1)
-    error_right_inverse = scaled_norm(y - yhat, axis=-1)
+    Parameters
+    ----------
+    num_sample: Optional[int] = None
+        default: sample randomly from [1000, 2000, ..., 10000]
+    dim_inputs: Optional[int] = None
+        default: sample randomly from [2, 4, 8, , .., 128]
+    dim_output: Optional[int] = None
+            default: sample randomly from [2, 4, 8, , .., 128]
+    make_plot: bool
+    """
+    LOGGER.info(">>> Testing iResNetBlock <<<")
+    num_sample = num_sample or random.choice([1000 * k for k in range(1, 11)])
+    dim_inputs = dim_inputs or random.choice([2 ** k for k in range(2, 8)])
+    dim_output = dim_output or random.choice([2 ** k for k in range(2, 8)])
+    extra_stats = {
+        "Samples": f"{num_sample}",
+        "Dim-in": f"{dim_inputs}",
+        "Dim-out": f"{dim_output}",
+        "maxiter": f"{maxiter}",
+    }
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
+        LOGGER.info("Using CUDA")
+    else:
+        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
 
-    assert torch.quantile(error_left_inverse, 0.99) <= 10 ** -6
-    assert torch.quantile(error_right_inverse, 0.99) <= 10 ** -6
-    logger.info("iResNetBlock passes test \N{HEAVY CHECK MARK}")
+    QUANTILES = torch.tensor(quantiles)
+    TARGETS = torch.tensor(targets)
+
+    LOGGER.info("Configuration: %s", extra_stats)
+    LOGGER.info("QUANTILES: %s", QUANTILES)
+    LOGGER.info("TARGETS  : %s", TARGETS)
+
+    with torch.no_grad():
+        model = iResNetBlock(dim_inputs, hidden_size=dim_output, maxiter=maxiter)
+        x = torch.randn(num_sample, dim_inputs)
+        y = torch.randn(num_sample, dim_inputs)
+        fx = model(x)
+        xhat = model.inverse(fx)
+        ify = model.inverse(y)
+        yhat = model(ify)
+
+    # Test if ϕ⁻¹∘ϕ=id, i.e. the right inverse is working
+    forward_inverse_error = scaled_norm(x - xhat, axis=-1)
+    forward_inverse_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
+    assert forward_inverse_error.shape == (num_sample,)
+    assert (forward_inverse_quantiles <= TARGETS).all(), f"{forward_inverse_quantiles=}"
+    LOGGER.info("iResNetBlock satisfies ϕ⁻¹∘ϕ≈id \N{HEAVY CHECK MARK}")
+    LOGGER.info("Quantiles: %s", forward_inverse_quantiles)
+
+    # Test if ϕ∘ϕ⁻¹=id, i.e. the right inverse is working
+    inverse_forward_error = scaled_norm(y - yhat, axis=-1)
+    inverse_forward_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
+    assert inverse_forward_error.shape == (num_sample,)
+    assert (inverse_forward_quantiles <= TARGETS).all(), f"{inverse_forward_quantiles=}"
+    LOGGER.info("iResNetBlock satisfies ϕ∘ϕ⁻¹≈id \N{HEAVY CHECK MARK}")
+    LOGGER.info("Quantiles: %s", inverse_forward_quantiles)
+
+    # Test if ϕ≠id, i.e. the forward map is different from the identity
+    forward_difference = scaled_norm(x - fx, axis=-1)
+    forward_quantiles = torch.quantile(forward_difference, 1 - QUANTILES)
+    assert forward_difference.shape == (num_sample,)
+    assert (forward_quantiles >= TARGETS).all(), f"{forward_quantiles}"
+    LOGGER.info("iResNetBlock satisfies ϕ≉id \N{HEAVY CHECK MARK}")
+    LOGGER.info("Quantiles: %s", forward_quantiles)
+
+    # Test if ϕ⁻¹≠id, i.e. the inverse map is different from an identity
+    inverse_difference = scaled_norm(y - ify, axis=-1)
+    inverse_quantiles = torch.quantile(inverse_difference, 1 - QUANTILES)
+    assert inverse_difference.shape == (num_sample,)
+    assert (inverse_quantiles >= TARGETS).all(), f"{inverse_quantiles}"
+    LOGGER.info("iResNetBlock satisfies ϕ⁻¹≉id \N{HEAVY CHECK MARK}")
+    LOGGER.info("Quantiles: %s", inverse_quantiles)
 
     if not make_plot:
         return
 
-    logger.info("iResNetBlock generating figure")
+    LOGGER.info("iResNetBlock generating figure")
     fig, ax = plt.subplots(
-        ncols=2, nrows=2, figsize=(10, 5), tight_layout=True, sharex="row", sharey="row"
+        ncols=2, nrows=2, figsize=(8, 5), tight_layout=True, sharex="row", sharey="row"
     )
 
-    visualize_distribution(error_left_inverse, ax=ax[0, 0])
-    visualize_distribution(error_right_inverse, ax=ax[0, 1])
-    visualize_distribution(discrepancy_forward, ax=ax[1, 0])
-    visualize_distribution(discrepancy_backward, ax=ax[1, 1])
+    visualize_distribution(forward_inverse_error, ax=ax[0, 0], extra_stats=extra_stats)
+    visualize_distribution(inverse_forward_error, ax=ax[0, 1], extra_stats=extra_stats)
+    visualize_distribution(forward_difference, ax=ax[1, 0], extra_stats=extra_stats)
+    visualize_distribution(inverse_difference, ax=ax[1, 1], extra_stats=extra_stats)
 
-    ax[0, 0].set_xlabel(r"`r_\text{left}(X) = \|X - \phi^{-1}(\phi(X))\|`")
-    ax[0, 0].set_ylabel(r"`p(r_\text{left} \mid X)` where `x_i \sim \mathcal N(0,1)`")
-    ax[0, 1].set_xlabel(r"`r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|`")
-    ax[0, 1].set_ylabel(r"`p(r_\text{right}\mid y)` where `y_j \sim \mathcal N(0,1)`")
-
-    ax[1, 0].set_xlabel(r"`d_\text{left}(X) = \|X - \phi(X)\|`")
-    ax[1, 0].set_ylabel(r"`p(d_\text{left} \mid X)` where `x_i \sim \mathcal N(0,1)`")
-    ax[1, 1].set_xlabel(r"`d_\text{right}(y) = \|y - \phi^{-1}(y)\|`")
-    ax[1, 1].set_ylabel(r"`p(d_\text{right} \mid y)` where `y_j \sim \mathcal N(0,1)`")
-    fig.suptitle(
-        f"iResNetBlock -- Inversion property "
-        f"(samples:{n_samples}, dim-in:{input_size}, dim-hidden:{hidden_size})",
-        fontsize=16,
+    ax[0, 0].set_xlabel(
+        r"$r_\text{left}(x) = \|x - \phi^{-1}(\phi(x))\|$  where $x_i \sim \mathcal N(0,1)$"
     )
-    fig.savefig("iResNetBlock_inversion.svg")
-    logger.info("iResNetBlock all done")
+    ax[0, 0].set_ylabel(r"density $p(r_\text{left} \mid x)$")
+    ax[0, 1].set_xlabel(
+        r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$ where $y_j \sim \mathcal N(0,1)$"
+    )
+    ax[0, 1].set_ylabel(r"denisty $p(r_\text{right}\mid y)$")
+
+    ax[1, 0].set_xlabel(
+        r"$d_\text{left}(x) = \|x - \phi(x)\|$ where $x_i \sim \mathcal N(0,1)$"
+    )
+    ax[1, 0].set_ylabel(r"density $p(d_\text{left} \mid x)$")
+    ax[1, 1].set_xlabel(
+        r"$d_\text{right}(y) = \|y - \phi^{-1}(y)\|$ where $y_j \sim \mathcal N(0,1)$"
+    )
+    ax[1, 1].set_ylabel(r"density $p(d_\text{right} \mid y)$")
+    fig.suptitle("iResNetBlock -- Inversion Property", fontsize=16)
+    fig.savefig("iResNetBlock_inversion.pdf")
+    LOGGER.info("iResNetBlock all done")
+
+
+def __main__():
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
+
+    LOGGER.info("Testing LinearContraction started!")
+    test_LinearContraction(make_plot=True)
+    LOGGER.info("Testing LinearContraction finished!")
+
+    LOGGER.info("Testing iResNetBlock started!")
+    test_iResNetBlock(make_plot=True)
+    LOGGER.info("Testing iResNetBlock finished!")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    LOGGER.info("Testing INITIALIZATIONS started!")
-    test_LinearContraction(make_plot=True)
-    test_iResNetBlock(make_plot=True)
+    __main__()

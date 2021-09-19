@@ -128,7 +128,7 @@ def test_linode_error(nsamples: int = 100, make_plot: bool = False):
                 ax[i, j].set_xlabel(f"scaled, relative L{p} distance")
 
     fig.suptitle(
-        r"Discrepancy between `x^\text{(LinODE)}` and `x^\text{(odeint)}`, "
+        r"Discrepancy between $x^\text{(LinODE)}$ and $x^\text{(odeint)}$, "
         f"{nsamples} samples"
     )
     fig.savefig("LinODE_odeint_comparison.svg")

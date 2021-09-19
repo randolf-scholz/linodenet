@@ -10,4 +10,19 @@ pyyaml
 torch
 tables
 # extra dependencies
+docutils<0.17
+sphinx
+sphinx-rtd-theme
+sphinx-math-dollar
+# Linting
+black
+isort
+mypy
+pylint
+pylint-gitlab
+pycodestyle
+pydocstyle
+pytest
+pytest-cov
+pytest-rerunfailures
 tqdm

@@ -261,7 +261,7 @@ class iResNetBlock(jit.ScriptModule):
     HP: dict = {
         "atol": 1e-08,
         "rtol": 1e-05,
-        "maxiter": 10,
+        "maxiter": 20,
         "activation": "ReLU",
         "activation_config": {"inplace": False},
         "bias": True,

@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from math import prod, sqrt
 from typing import Final, Union
-from string import ascii_lowercase as abc
 
 import torch
 from scipy import stats
@@ -186,11 +185,10 @@ def canonical_skew_symmetric(n: SizeLike) -> Tensor:
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
     dim, size = tup[-1], tup[:-1]
-    assert not dim % 2, "The dimension must be divisible by 2!"
+    assert dim % 2 == 0, "The dimension must be divisible by 2!"
     dim //= 2
-    shape = (*size, dim, dim)
 
-    J1 = torch.tensor([[0,1], [-1, 0]])
+    J1 = torch.tensor([[0, 1], [-1, 0]])
     J = torch.kron(J1, torch.eye(dim))
     ONES = torch.ones(size)
     return torch.einsum("..., de -> ...de", ONES, J)
