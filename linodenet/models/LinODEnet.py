@@ -153,8 +153,8 @@ class LinODE(jit.ScriptModule):
     def __init__(
         self,
         input_size: int,
-        kernel_initialization: Initialization = None,
-        kernel_projection: Projection = None,
+        kernel_initialization: Optional[Union[str, Tensor, Initialization]] = None,
+        kernel_projection: Optional[Union[str, Projection]] = None,
     ):
         super().__init__()
 

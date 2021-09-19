@@ -2,6 +2,7 @@ r"""Test error of linear ODE against odeint."""
 
 import logging
 from typing import Literal, Optional
+import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,21 +14,32 @@ from linodenet.models import LinODE
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
 def linode_error(
-    dim: Optional[int] = None,
     num: Optional[int] = None,
+    dim: Optional[int] = None,
     precision: Literal["single", "double"] = "single",
     relative_error: bool = True,
     device: Optional[torch.device] = None,
 ):
-    r"""Compare LinODE against scipy.odeint on linear system."""
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    r"""Compare LinODE against scipy.odeint on linear system.
+
+    Parameters
+    ----------
+    num: Optional[int] = None
+    dim: Optional[int] = None
+    precision: "single" or "double"
+    relative_error: bool
+    device: Optional[torch.device]
+    """
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
+    else:
+        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
 
     if precision == "single":
         eps = 2 ** -24
@@ -40,8 +52,8 @@ def linode_error(
     else:
         raise ValueError
 
-    num = num or np.random.randint(low=20, high=1000)
-    dim = dim or np.random.randint(low=2, high=100)
+    num = num or random.choice([10*k for k in range(1, 11)])
+    dim = dim or random.choice([2**k for k in range(1, 8)])
     t0, t1 = np.random.uniform(low=-10, high=10, size=(2,))
     A = (np.random.randn(dim, dim) / np.sqrt(dim)).astype(numpy_dtype)
     x0 = np.random.randn(dim).astype(numpy_dtype)
@@ -72,29 +84,44 @@ def linode_error(
     return result
 
 
-def test_linode_error(nsamples: int = 100, make_plot: bool = False):
-    r"""Compare LinODE against scipy.odeint on linear system."""
-    logger.info("Testing LinODE")
-    logger.info("Generating %i samples in single precision", nsamples)
+def test_linode_error(num_samples: int = 100, make_plot: bool = False):
+    r"""Compare LinODE against scipy.odeint on random linear system.
+
+    Parameters
+    ----------
+    num_samples: int = 100
+    make_plot: bool = False
+    """
+    if torch.cuda.is_available():
+        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
+        LOGGER.info("Using CUDA")
+    else:
+        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
+
+    LOGGER.info("Testing LinODE")
+    extra_stats = {"Samples": num_samples}
+
+    LOGGER.info("Generating %i samples in single precision", num_samples)
     err_single = np.array(
-        [linode_error(precision="single") for _ in trange(nsamples)]
+        [linode_error(precision="single") for _ in trange(num_samples)]
     ).T
-    logger.info("Generating %i samples in double precision", nsamples)
+
+    LOGGER.info("Generating %i samples in double precision", num_samples)
     err_double = np.array(
-        [linode_error(precision="double") for _ in trange(nsamples)]
+        [linode_error(precision="double") for _ in trange(num_samples)]
     ).T
 
     for err, tol in zip(err_single, (10 ** 0, 10 ** 2, 10 ** 4)):
         q = np.nanquantile(err, 0.99)
-        logger.info("99%% quantile %f", q)
+        LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
     # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
     # Since 10^4 ~ 2^13
     for err, tol in zip(err_double, (10 ** -4, 10 ** -2, 10 ** 0)):
         q = np.nanquantile(err, 0.99)
-        logger.info("99%% quantile %f", q)
+        LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
-    logger.info("LinODE passes test \N{HEAVY CHECK MARK}")
+    LOGGER.info("LinODE passes test \N{HEAVY CHECK MARK}")
 
     if not make_plot:
         return
@@ -109,10 +136,10 @@ def test_linode_error(nsamples: int = 100, make_plot: bool = False):
             sharex="all",
         )
 
-    logger.info("LinODE generating figure")
+    LOGGER.info("LinODE generating figure")
     for i, err in enumerate((err_single, err_double)):
         for j, p in enumerate((1, 2, np.inf)):
-            visualize_distribution(err[j], log=True, ax=ax[i, j])
+            visualize_distribution(err[j], log=True, ax=ax[i, j], extra_stats=extra_stats)
             if j == 0:
                 ax[i, 0].annotate(
                     f"FP{32 * (i + 1)}",
@@ -128,12 +155,20 @@ def test_linode_error(nsamples: int = 100, make_plot: bool = False):
                 ax[i, j].set_xlabel(f"scaled, relative L{p} distance")
 
     fig.suptitle(
-        r"Discrepancy between $x^\text{(LinODE)}$ and $x^\text{(odeint)}$, "
-        f"{nsamples} samples"
+        r"Difference $x^\text{(LinODE)}$ and $x^\text{(odeint)}$"
+        f" -- {num_samples} random systems"
     )
-    fig.savefig("LinODE_odeint_comparison.svg")
-    logger.info("LinearContraction all done")
+
+    fig.savefig("LinODE_odeint_comparison.pdf")
+    LOGGER.info("LinODE all done")
+
+
+def __main__():
+    logging.basicConfig(level=logging.INFO)
+    LOGGER.info("Testing LinearODE started!")
+    test_linode_error(num_samples=1000, make_plot=True)
+    LOGGER.info("Testing LinearODE finished!")
 
 
 if __name__ == "__main__":
-    test_linode_error(nsamples=1000, make_plot=True)
+    __main__()

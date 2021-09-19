@@ -95,10 +95,9 @@ def test_iResNetBlock(
     dim_output: Optional[int] = None,
     maxiter: int = 20,
     make_plot: bool = False,
-    quantiles: tuple[float, ...] = (.5, .68, .95, .997),
+    quantiles: tuple[float, ...] = (0.5, 0.68, 0.95, 0.997),
     targets: tuple[float, ...] = (0.005, 0.005, 0.01, 0.01),
 ):
-
     r"""Test empirically whether the iResNetBlock is indeed invertible.
 
     Parameters
@@ -108,8 +107,12 @@ def test_iResNetBlock(
     dim_inputs: Optional[int] = None
         default: sample randomly from [2, 4, 8, , .., 128]
     dim_output: Optional[int] = None
-            default: sample randomly from [2, 4, 8, , .., 128]
+        default: sample randomly from [2, 4, 8, , .., 128]
     make_plot: bool
+    quantiles: tuple[float, ...]
+        The quantiles of the error distribution
+    targets: tuple[float, ...]
+        The target values for the quantiles of the error distribution
     """
     LOGGER.info(">>> Testing iResNetBlock <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 11)])
