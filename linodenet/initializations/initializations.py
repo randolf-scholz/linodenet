@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from math import prod, sqrt
 from typing import Final, Union
+from string import ascii_lowercase as abc
 
 import torch
 from scipy import stats
@@ -166,7 +167,7 @@ def special_orthogonal(n: SizeLike) -> Tensor:
 
 
 def canonical_skew_symmetric(n: SizeLike) -> Tensor:
-    r"""Return the canonical skew symmetric matrix of size `2n`.
+    r"""Return the canonical skew symmetric matrix of size `n=2k`.
 
     .. math::
         𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
@@ -185,7 +186,11 @@ def canonical_skew_symmetric(n: SizeLike) -> Tensor:
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
     dim, size = tup[-1], tup[:-1]
+    assert not dim % 2, "The dimension must be divisible by 2!"
+    dim //= 2
     shape = (*size, dim, dim)
 
-    A = torch.normal(mean=torch.zeros(shape), std=1 / sqrt(dim))
-    return (A - A.swapaxes(-1, -2)) / sqrt(2)
+    J1 = torch.tensor([[0,1], [-1, 0]])
+    J = torch.kron(J1, torch.eye(dim))
+    ONES = torch.ones(size)
+    return torch.einsum("..., de -> ...de", ONES, J)

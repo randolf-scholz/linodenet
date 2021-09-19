@@ -5,6 +5,7 @@ r"""Test the iResNet components.
 """
 
 import logging
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,9 +22,9 @@ logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
 def test_LinearContraction(
-    n_samples: int = 10_000,
-    dim_in: int = None,
-    dim_out: int = None,
+    n_samples: Optional[int] = None,
+    dim_in: Optional[int] = None,
+    dim_out: Optional[int] = None,
     make_plot: bool = False,
 ):
     r"""Test empirically whether the LinearContraction module is a contraction."""
@@ -63,9 +64,9 @@ def test_LinearContraction(
 
 
 def test_iResNetBlock(
-    n_samples: int = 10_000,
-    input_size: int = None,
-    hidden_size: int = None,
+    n_samples: Optional[int] = None,
+    input_size: Optional[int] = None,
+    hidden_size: Optional[int] = None,
     make_plot: bool = False,
 ):
     r"""Tests empirically whether the iResNetBlock is indeed invertible."""
@@ -127,5 +128,7 @@ def test_iResNetBlock(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    LOGGER.info("Testing INITIALIZATIONS started!")
     test_LinearContraction(make_plot=True)
     test_iResNetBlock(make_plot=True)

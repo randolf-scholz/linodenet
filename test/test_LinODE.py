@@ -1,6 +1,7 @@
 r"""Test error of linear ODE against odeint."""
 
 import logging
+from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,11 +19,11 @@ logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
 def linode_error(
-    dim=None,
-    num=None,
-    precision="single",
-    relative_error=True,
-    device=None,
+    dim: Optional[int] = None,
+    num: Optional[int] = None,
+    precision: Literal["single", "double"] = "single",
+    relative_error: bool = True,
+    device: Optional[torch.device] = None,
 ):
     r"""Compare LinODE against scipy.odeint on linear system."""
     if device is None:
@@ -39,8 +40,8 @@ def linode_error(
     else:
         raise ValueError
 
-    num = np.random.randint(low=20, high=1000) or num
-    dim = np.random.randint(low=2, high=100) or dim
+    num = num or np.random.randint(low=20, high=1000)
+    dim = dim or np.random.randint(low=2, high=100)
     t0, t1 = np.random.uniform(low=-10, high=10, size=(2,))
     A = (np.random.randn(dim, dim) / np.sqrt(dim)).astype(numpy_dtype)
     x0 = np.random.randn(dim).astype(numpy_dtype)
@@ -71,7 +72,7 @@ def linode_error(
     return result
 
 
-def test_linode_error(nsamples=100, make_plot=False):
+def test_linode_error(nsamples: int = 100, make_plot: bool = False):
     r"""Compare LinODE against scipy.odeint on linear system."""
     logger.info("Testing LinODE")
     logger.info("Generating %i samples in single precision", nsamples)
