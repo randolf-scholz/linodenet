@@ -11,7 +11,7 @@ from linodenet.models.iResNet import iResNet
 from linodenet.projections import PROJECTIONS, Projection
 from linodenet.util import deep_dict_update
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
     "ConcatEmbedding",

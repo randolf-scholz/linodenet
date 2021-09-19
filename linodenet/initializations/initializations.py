@@ -14,7 +14,7 @@ import torch
 from scipy import stats
 from torch import Tensor
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
     "SizeLike",

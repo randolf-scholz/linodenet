@@ -13,7 +13,7 @@ from linodenet.util import ACTIVATIONS, deep_dict_update
 # from torch.nn.utils.parametrizations import spectral_norm
 
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
     "iResNet",

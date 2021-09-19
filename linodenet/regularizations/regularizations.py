@@ -13,7 +13,7 @@ from torch import Tensor, jit
 
 from linodenet import projections
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 __all__: Final[list[str]] = [
     "logdetexp",
     "symmetric",

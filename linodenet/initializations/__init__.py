@@ -16,7 +16,7 @@ from linodenet.initializations.initializations import (
     symmetric,
 )
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
     "INITIALIZATIONS",

@@ -15,7 +15,7 @@ from linodenet.projections.projections import (
     symmetric,
 )
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
     "Projection",

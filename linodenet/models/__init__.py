@@ -12,7 +12,7 @@ from linodenet.models.LinODEnet import (
     LinODEnet,
 )
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
     "LinearContraction",

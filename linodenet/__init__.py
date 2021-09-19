@@ -6,7 +6,7 @@ from typing import Final
 
 from linodenet import initializations, models, projections, regularizations
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 __all__: Final[list[str]] = [
     "__version__",
     "models",
