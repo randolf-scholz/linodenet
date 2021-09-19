@@ -13,7 +13,10 @@ __all__: Final[list[str]] = [
     "deep_keyval_update",
 ]
 
-ACTIVATIONS: Final[dict[str, Type[nn.Module]]] = {
+Activation = Type[nn.Module]
+r"""Type hint for models."""
+
+ACTIVATIONS: Final[dict[str, Activation]] = {
     "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
     "ELU": nn.ELU,
     "Hardshrink": nn.Hardshrink,
@@ -42,6 +45,7 @@ ACTIVATIONS: Final[dict[str, Type[nn.Module]]] = {
     "Tanhshrink": nn.Tanhshrink,
     "Threshold": nn.Threshold,
 }
+r"""Dictionary containing all available activations."""
 
 
 def deep_dict_update(d: dict, new: Mapping) -> dict:

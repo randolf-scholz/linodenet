@@ -1,4 +1,4 @@
-{{ fullname | escape | underline}}
+{{ objname | escape | underline }}
 
 .. automodule:: {{ fullname }}
     :members:
@@ -7,7 +7,7 @@
     {% if modules %}
     .. rubric:: {{ _('Sub-Modules') }}
     .. autosummary::
-       :toctree:
+       :toctree: {{ objname }}
        :template: custom-module-template.rst
        :recursive:
     {% for item in modules %}
@@ -20,7 +20,7 @@
     {% if attributes %}
     .. rubric:: {{ _('Module Attributes') }}
     .. autosummary::
-      :toctree:
+      :toctree: {{ objname }}
     {% for item in attributes %}
       {{ item }}
     {%- endfor %}
@@ -31,7 +31,7 @@
     {% if functions %}
     .. rubric:: {{ _('Module Functions') }}
     .. autosummary::
-      :toctree:
+      :toctree: {{ objname }}
       :nosignatures:
     {% for item in functions %}
       {{ item }}
@@ -43,7 +43,7 @@
     {% if classes %}
     .. rubric:: {{ _('Module Classes') }}
     .. autosummary::
-      :toctree:
+      :toctree: {{ objname }}
       :template: custom-class-template.rst
       :nosignatures:
     {% for item in classes %}
@@ -56,7 +56,7 @@
     {% if exceptions %}
     .. rubric:: {{ _('Module Exceptions') }}
     .. autosummary::
-      :toctree:
+      :toctree: {{ objname }}
     {% for item in exceptions %}
       {{ item }}
     {%- endfor %}

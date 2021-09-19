@@ -30,6 +30,7 @@ __all__: Final[list[str]] = [
 ]
 
 Regularization = Callable[[Tensor], Tensor]  # matrix to scalar
+r"""Type hint for regularizations."""
 
 REGULARIZATIONS: Final[dict[str, Regularization]] = {
     "diagonal": diagonal,
@@ -39,3 +40,4 @@ REGULARIZATIONS: Final[dict[str, Regularization]] = {
     "symmetric": symmetric,
     "skew_symmetric": skew_symmetric,
 }
+r"""Dictionary containing all available regularizations."""

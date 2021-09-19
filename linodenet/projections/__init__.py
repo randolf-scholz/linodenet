@@ -29,6 +29,8 @@ __all__: Final[list[str]] = [
 ]
 
 Projection = Callable[[Tensor], Tensor]  # matrix to matrix
+r"""Type hint for projections."""
+
 PROJECTIONS: Final[dict[str, Projection]] = {
     "symmetric": symmetric,
     "skew-symmetric": skew_symmetric,
@@ -37,3 +39,4 @@ PROJECTIONS: Final[dict[str, Projection]] = {
     "identity": identity,
     "normal": normal,
 }
+r"""Dictionary containing all available projections."""

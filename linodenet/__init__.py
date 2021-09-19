@@ -15,5 +15,5 @@ __all__: Final[list[str]] = [
     "projections",
 ]
 
-with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf-8") as file:
+with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf8") as file:
     __version__ = file.read()

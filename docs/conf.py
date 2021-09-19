@@ -54,12 +54,13 @@ extensions = [
 # AUTOAPI
 # extensions.append("autoapi.extension")
 # autoapi_type = 'python'
-# autoapi_dirs = ['.', '../tsdm']
+# autoapi_dirs = ['../linodenet/']
+# autoapi_root = "_autoapi"
 
 intersphinx_mapping = {
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
-    "python": ("https://docs.python.org/3/", None),
+    "python": ("https://docs.python.org/3/", (None, 'python-inv.txt')),
     "scipy": ("https://docs.scipy.org/doc/scipy/reference/", None),
     "pandas": ("https://pandas.pydata.org/docs", None),
     "torch": ("https://pytorch.org/docs/stable/", None),

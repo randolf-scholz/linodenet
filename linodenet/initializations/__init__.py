@@ -32,6 +32,7 @@ __all__: Final[list[str]] = [
 ]
 
 Initialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
+r"""Type hint for Initializations."""
 
 INITIALIZATIONS: Final[dict[str, Initialization]] = {
     "gaussian": gaussian,
@@ -42,3 +43,4 @@ INITIALIZATIONS: Final[dict[str, Initialization]] = {
     "diagonally_dominant": diagonally_dominant,
     "canonical_skew_symmetric": canonical_skew_symmetric,
 }
+r"""Dictionary containing all available initializations."""

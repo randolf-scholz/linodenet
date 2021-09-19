@@ -28,6 +28,7 @@ __all__: Final[list[str]] = [
 ]
 
 SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 3.10
+"""Type hint for shape-like inputs."""
 
 
 def gaussian(n: SizeLike) -> Tensor:

@@ -90,21 +90,18 @@ def normal(x: Tensor) -> Tensor:
     .. math::
         \min_Y ½∥X-Y∥_F^2 s.t. YᵀY = YYᵀ
 
-    The Lagrangian
-    --------------
+    **The Lagrangian:**
 
     .. math::
         ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Yᵀ]⟩
 
-    First order necessary KKT condition
-    -----------------------------------
+    **First order necessary KKT condition:**
 
     .. math::
             0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λᵀ) - (Λ + Λᵀ)Y
         \\⟺ Y &= X + [Y, Λ]
 
-    Second order sufficient KKT condition
-    -------------------------------------
+    **Second order sufficient KKT condition:**
 
     .. math::
              ⟨∇h|S⟩=0     &⟹ ⟨S|∇²ℒ|S⟩ ≥ 0
