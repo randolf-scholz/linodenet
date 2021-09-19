@@ -12,7 +12,7 @@ with open(f"{NAME}/VERSION", "r") as file:
 
 if "CI_PIPELINE_IID" in os.environ:
     BUILD_NUMBER = os.environ["CI_PIPELINE_IID"]
-    VERSION += f".dev{BUILD_NUMBER}"
+    VERSION += f".{BUILD_NUMBER}"
 
 
 def _read(filename):
