@@ -1,12 +1,13 @@
 r"""Test error of linear ODE against odeint."""
 
 import logging
-from typing import Literal, Optional
 import random
+from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from scipy.integrate import odeint
 from tqdm.auto import trange
 
@@ -25,7 +26,7 @@ def linode_error(
     precision: Literal["single", "double"] = "single",
     relative_error: bool = True,
     device: Optional[torch.device] = None,
-):
+) -> NDArray:
     r"""Compare LinODE against scipy.odeint on linear system.
 
     Parameters
@@ -52,8 +53,8 @@ def linode_error(
     else:
         raise ValueError
 
-    num = num or random.choice([10*k for k in range(1, 11)])
-    dim = dim or random.choice([2**k for k in range(1, 8)])
+    num = num or random.choice([10 * k for k in range(1, 11)])
+    dim = dim or random.choice([2 ** k for k in range(1, 8)])
     t0, t1 = np.random.uniform(low=-10, high=10, size=(2,))
     A = (np.random.randn(dim, dim) / np.sqrt(dim)).astype(numpy_dtype)
     x0 = np.random.randn(dim).astype(numpy_dtype)
@@ -103,21 +104,23 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
 
     LOGGER.info("Generating %i samples in single precision", num_samples)
     err_single = np.array(
-        [linode_error(precision="single") for _ in trange(num_samples)]
+        [linode_error(precision="single") for _ in trange(num_samples)],
+        dtype=np.float32,
     ).T
 
     LOGGER.info("Generating %i samples in double precision", num_samples)
     err_double = np.array(
-        [linode_error(precision="double") for _ in trange(num_samples)]
+        [linode_error(precision="double") for _ in trange(num_samples)],
+        dtype=np.float64,
     ).T
 
-    for err, tol in zip(err_single, (10 ** 0, 10 ** 2, 10 ** 4)):
+    for err, tol in zip(err_single, (10.0 ** k for k in (0, 2, 4))):
         q = np.nanquantile(err, 0.99)
         LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
     # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
     # Since 10^4 ~ 2^13
-    for err, tol in zip(err_double, (10 ** -4, 10 ** -2, 10 ** 0)):
+    for err, tol in zip(err_double, (10.0 ** k for k in (-4, -2, -0))):
         q = np.nanquantile(err, 0.99)
         LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
@@ -139,7 +142,9 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
     LOGGER.info("LinODE generating figure")
     for i, err in enumerate((err_single, err_double)):
         for j, p in enumerate((1, 2, np.inf)):
-            visualize_distribution(err[j], log=True, ax=ax[i, j], extra_stats=extra_stats)
+            visualize_distribution(
+                err[j], log=True, ax=ax[i, j], extra_stats=extra_stats
+            )
             if j == 0:
                 ax[i, 0].annotate(
                     f"FP{32 * (i + 1)}",

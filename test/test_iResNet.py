@@ -25,7 +25,7 @@ def test_LinearContraction(
     dim_output: Optional[int] = None,
     make_plot: bool = False,
 ):
-    r"""Test whether the LinearContraction really is a linear contraction.
+    r"""Test empirically if the LinearContraction really is a linear contraction.
 
     Parameters
     ----------
@@ -43,7 +43,6 @@ def test_LinearContraction(
     else:
         torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
 
-    r"""Test empirically whether the LinearContraction module is a contraction."""
     LOGGER.info(">>> Testing LinearContraction <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
     dim_inputs = dim_inputs or random.choice([2 ** k for k in range(2, 8)])

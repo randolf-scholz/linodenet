@@ -34,3 +34,4 @@ generated-members=numpy.*,torch.*
 # mypackage.mymodule.MyReporterClass.
 output-format=text
 
+ignored-modules=tsdm
