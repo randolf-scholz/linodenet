@@ -37,7 +37,14 @@ setuptools.setup(
     ),  # include all packages other than test
     install_requires=[
         "scipy",
-        "torch",
+        "torch>=1.9.0",
+    ],
+    tests_require=[
+        "scipy",
+        "numpy>=1.21",
+        "matplotlib",
+        "torch>=1.9.0",
+        "tqdm",
     ],
     # include_package_data=True,  # <-- This MUST NOT be set https://stackoverflow.com/a/23936405/9318372  # noqa
     package_data={
