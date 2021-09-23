@@ -380,7 +380,7 @@ class LinODEnet(jit.ScriptModule):
 
         X̂_pre = torch.stack(X̂_pre, dim=-2)
         X̂_post = torch.stack(X̂_post, dim=-2)
-        return X̂_pre, X̂_post
+        return X̂_post, X̂_pre
 
 
 class ConcatEmbedding(jit.ScriptModule):
