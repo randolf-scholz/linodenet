@@ -245,6 +245,8 @@ class LinODEnet(jit.ScriptModule):
     kernel: Tensor
     padding: Tensor
 
+    ZERO: Tensor
+
     def __init__(self, input_size: int, hidden_size: int, **HP: Any):
         super().__init__()
 
@@ -282,10 +284,22 @@ class LinODEnet(jit.ScriptModule):
             )
 
         self.kernel = self.system.kernel
+        self.register_buffer("ZERO", torch.tensor(0.0))
+        # self.ZERO = torch.tensor(0.0)
 
     @jit.script_method
-    def forward(self, T: Tensor, X: Tensor) -> Tensor:
-        r"""Signature: :math:`[...,N]×[...,N,d] ⟶ [...,N,d]`.
+    def forward(self, T: Tensor, X: Tensor) -> tuple[Tensor, Tensor]:
+        r"""Signature: `[...,N]×[...,N,d] ⟶ [...,N,d]`.
+
+        **Model Sketch:**
+
+            ⟶ [ODE] ⟶ (ẑᵢ)                (ẑᵢ') ⟶ [ODE] ⟶
+                       ↓                   ↑
+                      [Ψ]                 [Φ]
+                       ↓                   ↑
+                      (x̂ᵢ) → [ filter ] → (x̂ᵢ')
+                                 ↑
+                              (tᵢ, xᵢ)
 
         Parameters
         ----------
@@ -296,8 +310,10 @@ class LinODEnet(jit.ScriptModule):
 
         Returns
         -------
-        Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times `t∈T`.
+        X̂_pre: Tensor, shape=(...,LEN,DIM)
+            The estimated true state of the system at the times `t⁻∈T` (pre-update).
+        X̂_post: Tensor, shape=(...,LEN,DIM)
+            The estimated true state of the system at the times `t⁺∈T` (post-update).
 
         References
         ----------
@@ -306,12 +322,15 @@ class LinODEnet(jit.ScriptModule):
         ΔT = torch.moveaxis(torch.diff(T), -1, 0)
         X = torch.moveaxis(X, -2, 0)
 
-        Xhat = torch.jit.annotate(list[Tensor], [])
-        # initial imputation: put zeros
+        X̂_pre = torch.jit.annotate(list[Tensor], [])
+        X̂_post = torch.jit.annotate(list[Tensor], [])
+
+        # Initialization
         # TODO: do something smarter than zero initialization!
-        zero = torch.tensor(0, device=X.device, dtype=X.dtype)
-        X0 = torch.where(torch.isnan(X[0]), zero, X[0])
-        Xhat += [X0]
+        X0 = torch.where(torch.isnan(X[0]), self.ZERO, X[0])
+
+        X̂_pre += [X0]  # here one would expect zero or some other initialization
+        X̂_post += [X0]
 
         # IDEA: The problem is the initial state of RNNCell is not defined and typically put equal
         # to zero. Staying with the idea that the Cell acts as a filter, that is updates the state
@@ -326,27 +345,27 @@ class LinODEnet(jit.ScriptModule):
 
         for Δt, x in zip(ΔT, X):
             # Encode
-            zhat = self.encoder(self.embedding(Xhat[-1]))
+            ẑ_post = self.encoder(self.embedding(X̂_post[-1]))
 
             # Propagate
-            zhat = self.system(Δt, zhat)
+            ẑ_pre = self.system(Δt, ẑ_post)
 
             # Decode
-            xhat = self.projection(self.decoder(zhat))
+            x̂_pre = self.projection(self.decoder(ẑ_pre))
 
             # Compute update
             mask = torch.isnan(x)
-            xtilde = torch.where(mask, xhat, x)
+            x̃ = torch.where(mask, x̂_pre, x)
 
             if self.concat_mask:
-                xtilde = torch.cat([xtilde, mask], dim=-1)
+                x̃ = torch.cat([x̃, mask], dim=-1)
 
             # Flatten for GRU-Cell
-            xhat = xhat.view(-1, xhat.shape[-1])
-            xtilde = xtilde.view(-1, xtilde.shape[-1])
+            x̂_pre = x̂_pre.view(-1, x̂_pre.shape[-1])
+            x̃ = x̃.view(-1, x̃.shape[-1])
 
             # Apply filter
-            xhat = self.filter(xtilde, xhat)
+            x̂_post = self.filter(x̃, x̂_pre)
 
             # xhat = self.control(xhat, u)
             # u: possible controls:
@@ -356,9 +375,12 @@ class LinODEnet(jit.ScriptModule):
             # u = (time, value, mode-indicator, col-indicator)
             # => apply control to specific column.
 
-            Xhat += [xhat.view(x.shape)]
+            X̂_pre += [x̂_pre.view(x.shape)]
+            X̂_post += [x̂_post.view(x.shape)]
 
-        return torch.stack(Xhat, dim=-2)
+        X̂_pre = torch.stack(X̂_pre, dim=-2)
+        X̂_post = torch.stack(X̂_post, dim=-2)
+        return X̂_pre, X̂_post
 
 
 class ConcatEmbedding(jit.ScriptModule):

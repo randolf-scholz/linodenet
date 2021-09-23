@@ -6,6 +6,7 @@ from typing import Any, Final, Union
 
 import torch
 from torch import Tensor, jit, nn
+from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
 from linodenet.util import ACTIVATIONS, deep_dict_update
@@ -19,6 +20,8 @@ __all__: Final[list[str]] = [
     "iResNet",
     "iResNetBlock",
     "LinearContraction",
+    "spectral_norm",
+    "SpectralNorm",
 ]
 
 
@@ -26,34 +29,48 @@ __all__: Final[list[str]] = [
 def spectral_norm(
     A: Tensor, atol: float = 1e-4, rtol: float = 1e-3, maxiter: int = 10
 ) -> Tensor:
-    r"""Compute the spectral norm :math:`‖A‖_2`.
+    r"""Compute the spectral norm `‖A‖_2` by power iteration.
 
-    Simple power iteration, using the fact that :math:`‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)`.
+    Stopping criterion:
+    - maxiter reached
+    - `‖ (A^TA -λI)x ‖_2 ≤ 𝗋𝗍𝗈𝗅⋅‖ λx ‖_2 + 𝖺𝗍𝗈𝗅`
+
+    Parameters
+    ----------
+    A: tensor
+    atol: float = 1e-4
+    rtol: float =  1e-3,
+    maxiter: int = 10
+
+    Returns
+    -------
+    Tensor
     """
     m, n = A.shape
 
     with torch.no_grad():
         x = torch.randn(n, device=A.device, dtype=A.dtype)
-        x = x / torch.linalg.norm(x)
+        x = x / vector_norm(x)
 
         z = A.T @ (A @ x)
-        c, d = torch.linalg.norm(z, dim=0), torch.linalg.norm(x, dim=0)
+        c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
         λ = c / d
         r = z - λ * x
 
         for _ in range(maxiter):
             x = z / c
             z = A.T @ (A @ x)
-            c, d = torch.linalg.norm(z, dim=0), torch.linalg.norm(x, dim=0)
+            c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
             λ = c / d
             r = z - λ * x
-            if torch.linalg.norm(r) <= rtol * torch.linalg.norm(λ * x) + atol:
+            if vector_norm(r) <= rtol * vector_norm(λ * x) + atol:
                 break
-        # raise RuntimeWarning("No convergence in {maxiter} iterations.")
-        return torch.sqrt(λ)
+
+        σ_max = torch.sqrt(λ)
+        return σ_max
 
 
-class SpectralNorm(jit.ScriptModule):
+class SpectralNorm(torch.autograd.Function):
     r"""`‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)`.
 
     The spectral norm `∥A∥_2 ≔ 𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2` can be shown to be equal to
@@ -68,6 +85,61 @@ class SpectralNorm(jit.ScriptModule):
 
     where `u,v` are the left/right-singular vector corresponding to `σ_\max`
     """
+
+    @staticmethod
+    def forward(ctx: Any, *tensors: Tensor, **kwargs: Any) -> Tensor:
+        r"""Forward pass.
+
+        Parameters
+        ----------
+        ctx
+        tensors
+        kwargs
+
+        Returns
+        -------
+        Tensor
+        """
+        A = tensors[0]
+        atol: float = kwargs["atol"] if "atol" in kwargs else 1e-6
+        rtol: float = kwargs["rtol"] if "rtol" in kwargs else 1e-6
+        maxiter: int = kwargs["maxiter"] if "maxiter" in kwargs else 1000
+        m, n = A.shape
+        x = torch.randn(n, device=A.device, dtype=A.dtype)
+        x = x / vector_norm(x)
+
+        z = A.T @ (A @ x)
+        c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
+        λ = c / d
+        r = z - λ * x
+
+        for _ in range(maxiter):
+            x = z / c
+            z = A.T @ (A @ x)
+            c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
+            λ = c / d
+            r = z - λ * x
+            if vector_norm(r) <= rtol * vector_norm(λ * x) + atol:
+                break
+
+        σ_max = torch.sqrt(λ)
+        v = x / vector_norm(x)
+        u = A @ v / σ_max
+        u /= vector_norm(u)
+        ctx.save_for_backward(u, v)
+        return σ_max
+
+    @staticmethod
+    def backward(ctx: Any, *grad_outputs: Tensor) -> Tensor:
+        r"""Backward pass.
+
+        Parameters
+        ----------
+        ctx
+        grad_outputs
+        """
+        u, v = ctx.saved_tensors
+        return grad_outputs[0] * torch.outer(u, v)
 
 
 class LinearContraction(jit.ScriptModule):
@@ -140,7 +212,9 @@ class LinearContraction(jit.ScriptModule):
         """
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
-        σ_max = spectral_norm(self.weight)
+        # σ_max = spectral_norm(self.weight)
+        # σ_max = torch.linalg.svdvals(self.weight)[0]
+        σ_max = matrix_norm(self.weight, ord=2)
         fac = torch.minimum(self.C / σ_max, self.ONE)
         return functional.linear(x, fac * self.weight, self.bias)
 
@@ -261,7 +335,7 @@ class iResNetBlock(jit.ScriptModule):
     HP: dict = {
         "atol": 1e-08,
         "rtol": 1e-05,
-        "maxiter": 20,
+        "maxiter": 10,
         "activation": "ReLU",
         "activation_config": {"inplace": False},
         "bias": True,
@@ -400,7 +474,8 @@ class iResNet(jit.ScriptModule):
             # TODO: add regularization
 
         self.blocks = nn.Sequential(*blocks)
-        self.reversed_blocks = nn.Sequential(*reversed(blocks))
+        self.reversed_blocks = self.blocks
+        # self.reversed_blocks = nn.Sequential(*reversed(blocks))
 
     @jit.script_method
     def forward(self, x: Tensor) -> Tensor:

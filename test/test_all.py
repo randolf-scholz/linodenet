@@ -15,7 +15,7 @@ from linodenet.models import (
     iResNetBlock,
 )
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 OUTER_BATCH = 3
 INNER_BATCH = 5
@@ -92,15 +92,15 @@ def _test_model(
     def err_str(s: str) -> str:
         return f"{Model=} failed {s} with {initialization=} and {inputs=}!"
 
-    logger.info(">>> INITIALIZATION with %s", initialization)
+    LOGGER.info(">>> INITIALIZATION with %s", initialization)
     try:  # check initialization
         model = Model(*initialization)
         model.to(dtype=DTYPE, device=device)
     except Exception as E:
         raise RuntimeError(err_str("initialization")) from E
-    logger.info(">>> INITIALIZATION \N{HEAVY CHECK MARK}")
+    LOGGER.info(">>> INITIALIZATION \N{HEAVY CHECK MARK}")
 
-    logger.info(">>> FORWARD with input shapes %s", [tuple(x.shape) for x in inputs])
+    LOGGER.info(">>> FORWARD with input shapes %s", [tuple(x.shape) for x in inputs])
     try:  # check forward
         outputs = model(*inputs)
         outputs = outputs if isinstance(outputs, tuple) else (outputs,)
@@ -108,12 +108,12 @@ def _test_model(
         raise RuntimeError(err_str("forward pass")) from E
 
     assert all(output.shape == target.shape for output, target in zip(outputs, targets))
-    logger.info(
+    LOGGER.info(
         ">>> Output shapes %s match with targets!", [tuple(x.shape) for x in targets]
     )
-    logger.info(">>> FORWARD \N{HEAVY CHECK MARK}")
+    LOGGER.info(">>> FORWARD \N{HEAVY CHECK MARK}")
 
-    logger.info(">>> BACKWARD TEST")
+    LOGGER.info(">>> BACKWARD TEST")
     losses = [
         torch.mean((output - target) ** 2) for output, target in zip(outputs, targets)
     ]
@@ -124,19 +124,19 @@ def _test_model(
     except Exception as E:
         raise RuntimeError(err_str("backward pass")) from E
 
-    logger.info(">>> BACKWARD \N{HEAVY CHECK MARK}")
+    LOGGER.info(">>> BACKWARD \N{HEAVY CHECK MARK}")
 
 
 def test_all_models():
     r"""Check if initializations, forward and backward runs for all selected models."""
     for model, params in MODELS.items():
-        logger.info("Testing %s", model.__name__)
+        LOGGER.info("Testing %s", model.__name__)
         initialization = params["initialization"]
         input_shapes = params["input_shapes"]
         output_shapes = params["output_shapes"]
 
         for device, batch_shape in product(DEVICES, BATCH_SHAPES):
-            logger.info(
+            LOGGER.info(
                 "Testing %s on %s with batch_shape %s",
                 model.__name__,
                 device,
@@ -150,8 +150,15 @@ def test_all_models():
             )
             _test_model(model, initialization, inputs, targets, device=device)
 
-        logger.info("Model %s passed all tests!!", model.__name__)
+        LOGGER.info("Model %s passed all tests!!", model.__name__)
+
+
+def __main__():
+    test_all_models()
 
 
 if __name__ == "__main__":
-    test_all_models()
+    logging.basicConfig(level=logging.INFO)
+    LOGGER.info("Testing forward/backward passes started!")
+    __main__()
+    LOGGER.info("Testing forward/backward passes finished!")
