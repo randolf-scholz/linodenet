@@ -107,7 +107,7 @@ class LinODECell(jit.ScriptModule):
     @jit.script_method
     def forward(self, Δt: Tensor, x0: Tensor) -> Tensor:
         # TODO: optimize if clauses away by changing definition in constructor.
-        r"""Signature: :math:`[...,]×[...,d] ⟶ [...,d]`.
+        r"""Signature: `[...,]×[...,d] ⟶ [...,d]`.
 
         Parameters
         ----------
@@ -165,7 +165,7 @@ class LinODE(jit.ScriptModule):
 
     @jit.script_method
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
-        r"""Signature: :math:`[...,N]×[...,d] ⟶ [...,N,d]`.
+        r"""Signature: `[...,N]×[...,d] ⟶ [...,N,d]`.
 
         Parameters
         ----------
