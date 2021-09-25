@@ -2,7 +2,7 @@ r"""Implementation of invertible ResNets."""
 
 import logging
 from math import sqrt
-from typing import Any, Final, Union
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -167,7 +167,7 @@ class LinearContraction(nn.Module):
     spectral_norm: Tensor
 
     weight: Tensor
-    bias: Union[Tensor, None]
+    bias: Optional[Tensor]
 
     def __init__(
         self, input_size: int, output_size: int, c: float = 0.97, bias: bool = True
@@ -221,6 +221,116 @@ class LinearContraction(nn.Module):
         return functional.linear(x, fac * self.weight, self.bias)
 
 
+class AltLinearContraction(nn.Module):
+    r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
+
+    This is achieved by normalizing the weight matrix by
+    `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
+
+    Attributes
+    ----------
+    input_size:  int
+        The dimensionality of the input space.
+    output_size: int
+        The dimensionality of the output space.
+    c: Tensor
+        The regularization hyperparameter
+    weight: Tensor
+        The weight matrix
+    bias: Tensor or None
+        The bias Tensor if present, else None.
+    """
+
+    # Constants
+    input_size: Final[int]
+    r"""CONST:  Number of inputs"""
+    output_size: Final[int]
+    r"""CONST: Number of outputs"""
+    maxiter: Final[int]
+    r"""CONST: Maximum number of steps in power-iteration"""
+
+    # Buffers
+    C: Tensor
+    r"""BUFFER: The regularization strength."""
+    ONE: Tensor
+    r"""BUFFER: Constant value of float(1.0)."""
+    spectral_norm: Tensor
+    r"""BUFFER: The largest singular value."""
+    u: Tensor
+    r"""BUFFER: The left singular vector."""
+    v: Tensor
+    r"""BUFFER: The right singular vector."""
+
+    # Parameters
+    kernel: Tensor
+    r"""PARAM: the weight matrix"""
+    bias: Optional[Tensor]
+    r"""PARAM: The bias term"""
+
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        c: float = 0.97,
+        bias: bool = True,
+        maxiter: int = 1,
+    ):
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.maxiter = maxiter
+
+        self.kernel = nn.Parameter(Tensor(output_size, input_size))
+        if bias:
+            self.bias = nn.Parameter(Tensor(output_size))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+        # self.spectral_norm = matrix_norm(self.weight, ord=2)
+        self.register_buffer("ONE", torch.tensor(1.0))
+        self.register_buffer("C", torch.tensor(float(c)))
+        self.register_buffer("spectral_norm", matrix_norm(self.kernel, ord=2))
+        # self.register_buffer(
+        #     "u",
+        # )
+        # self.register_buffer(
+        #     "v",
+        # )
+
+    def reset_parameters(self) -> None:
+        r"""Reset both weight matrix and bias vector."""
+        nn.init.kaiming_uniform_(self.kernel, a=sqrt(5))
+        if self.bias is not None:
+            bound = 1 / sqrt(self.input_size)
+            nn.init.uniform_(self.bias, -bound, bound)
+
+    # def extra_repr(self) -> str:
+    #     return "input_size={}, output_size={}, bias={}".format(
+    #         self.input_size, self.output_size, self.bias is not None
+    #     )
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Signature: `[...,n] ⟶ [...,n]`.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
+        # σ_max = torch.linalg.norm(self.weight, ord=2)
+        # σ_max = spectral_norm(self.weight)
+        # σ_max = torch.linalg.svdvals(self.weight)[0]
+        self.spectral_norm = matrix_norm(self.kernel, ord=2)
+        fac = torch.minimum(self.C / self.spectral_norm, self.ONE)
+        return functional.linear(x, fac * self.kernel, self.bias)
+
+
 class iResNetBlock(nn.Module):
     r"""Invertible ResNet-Block of the form `g(x)=ϕ(W_1⋅W_2⋅x)`.
 
@@ -250,12 +360,19 @@ class iResNetBlock(nn.Module):
         Nested dictionary containing the hyperparameters.
     """
 
+    # Constants
     input_size: Final[int]
+    r"""CONST: The dimensionality of the inputs."""
     hidden_size: Final[int]
+    r"""CONST: The dimensionality of the latents."""
     output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
     maxiter: Final[int]
+    r"""CONST: The maximum number of steps in inverse pass."""
     atol: Final[float]
+    r"""CONST: The absolute tolerance threshold value."""
     rtol: Final[float]
+    r"""CONST: The relative tolerance threshold value."""
 
     HP: dict = {
         "atol": 1e-08,
@@ -268,6 +385,7 @@ class iResNetBlock(nn.Module):
         "hidden_size": None,
         "input_size": None,
     }
+    r"""The hyperparameter dictionary"""
 
     def __init__(self, input_size: int, **HP: Any):
         super().__init__()
@@ -360,8 +478,11 @@ class iResNet(nn.Module):
         Nested dictionary containing the hyperparameters.
     """
 
+    # Constants
     input_size: Final[int]
+    r"""CONST: The dimensionality of the inputs."""
     output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
 
     HP: dict = {
         "maxiter": 10,
@@ -378,6 +499,7 @@ class iResNet(nn.Module):
             "maxiter": 100,
         },
     }
+    r"""The hyperparameter dictionary"""
 
     def __init__(self, input_size: int, **HP: Any):
         super().__init__()

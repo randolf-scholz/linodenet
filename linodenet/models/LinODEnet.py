@@ -46,12 +46,15 @@ class LinODECell(nn.Module):
         Regularization function for the kernel
     """
 
+    # Constants
     input_size: Final[int]
+    r"""CONST: The dimensionality of inputs."""
     output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
 
+    # Parameters
     kernel: Tensor
-    # kernel_initialization: Callable[[], Tensor]
-    kernel_projection: Projection
+    r"""PARAM: The system matrix of the linear ODE component."""
 
     def __init__(
         self,
@@ -144,11 +147,18 @@ class LinODE(nn.Module):
         Parameter-less function that draws a initial system matrix
     """
 
+    # Constants
     input_size: Final[int]
+    r"""CONST: The dimensionality of inputs."""
     output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
 
+    # Parameters
     kernel: Tensor
-    # kernel_initialization: Callable[[], Tensor]
+    r"""PARAM: The system matrix of the linear ODE component."""
+
+    # Functions
+    kernel_initialization: Initialization
     kernel_projection: Projection
 
     def __init__(
@@ -239,17 +249,23 @@ class LinODEnet(nn.Module):
         "Decoder_cfg": {"input_size": int, "nblocks": 5},
     }
 
+    # Constants
     input_size: Final[int]
+    r"""CONST: The dimensionality of the inputs."""
     hidden_size: Final[int]
+    r"""CONST: The dimensionality of the linear ODE."""
     output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
     concat_mask: Final[bool]
-    ZERO: Tensor
+    r"""CONST: Whether to concatenate mask as extra features."""
 
+    # Buffers
+    ZERO: Tensor
+    r"""BUFFER: A constant tensor of value float(0.0)"""
+
+    # Parameters:
     kernel: Tensor
-    embedding: nn.Module
-    projection: nn.Module
-    filter: nn.Module
-    system: nn.Module
+    r"""PARAM: The system matrix of the linear ODE component."""
 
     def __init__(self, input_size: int, hidden_size: int, **HP: Any):
         super().__init__()
@@ -276,8 +292,8 @@ class LinODEnet(nn.Module):
         embedding_type = HP["embedding_type"]
 
         if embedding_type == "linear":
-            self.embedding = nn.Linear(input_size, hidden_size)
-            self.projection = nn.Linear(hidden_size, input_size)
+            self.embedding: nn.Module = nn.Linear(input_size, hidden_size)
+            self.projection: nn.Module = nn.Linear(hidden_size, input_size)
         elif embedding_type == "concat":
             assert input_size <= hidden_size, f"{embedding_type=} not possible"
             self.embedding = ConcatEmbedding(input_size, hidden_size)
@@ -331,7 +347,9 @@ class LinODEnet(nn.Module):
         # TODO: do something smarter than zero initialization!
         X0 = torch.where(torch.isnan(X[0]), self.ZERO, X[0])
 
-        X̂_pre: list[Tensor] = [X0]  # here one would expect zero or some other initialization
+        X̂_pre: list[Tensor] = [
+            X0
+        ]  # here one would expect zero or some other initialization
         X̂_post: list[Tensor] = [X0]
 
         # IDEA: The problem is the initial state of RNNCell is not defined and typically put equal
@@ -393,11 +411,20 @@ class ConcatEmbedding(nn.Module):
     input_size:  int
     hidden_size: int
     pad_size:    int
+    padding: Tensor
     """
 
+    # Constants
     input_size: Final[int]
+    r"""CONST: The dimensionality of the inputs."""
     hidden_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
     pad_size: Final[int]
+    r"""CONST: The size of the padding."""
+
+    # Parameters
+    padding: Tensor
+    r"""PARAM: The padding vector."""
 
     def __init__(self, input_size: int, hidden_size: int):
         super().__init__()
@@ -422,6 +449,22 @@ class ConcatEmbedding(nn.Module):
         shape = list(X.shape[:-1]) + [self.pad_size]
         return torch.cat([X, self.padding.expand(shape)], dim=-1)
 
+    @jit.export
+    def inverse(self, Z: Tensor) -> Tensor:
+        r"""Signature: `[..., d+e] ⟶ [..., d]`.
+
+        The reverse of the forward. Satisfies inverse(forward(x)) = x for any input.
+
+        Parameters
+        ----------
+        Z: Tensor, shape=(...,LEN,LAT)
+
+        Returns
+        -------
+        Tensor, shape=(...,LEN,DIM)
+        """
+        return Z[..., : self.input_size]
+
 
 class ConcatProjection(nn.Module):
     r"""Maps `z = [x,w] ⟼ x`.
@@ -432,8 +475,11 @@ class ConcatProjection(nn.Module):
     hidden_size: int
     """
 
+    # Constants
     input_size: Final[int]
+    r"""CONST: The dimensionality of the inputs."""
     hidden_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
 
     def __init__(self, input_size: int, hidden_size: int):
         super().__init__()
