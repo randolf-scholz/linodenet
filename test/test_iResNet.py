@@ -65,7 +65,7 @@ def test_LinearContraction(
 
     # Test whether contraction property holds
     assert torch.all(latent_distances <= distances)
-    LOGGER.info("LinearContraction passes test \N{HEAVY CHECK MARK}")
+    LOGGER.info("LinearContraction passes test ✔ ")
 
     if not make_plot:
         return
@@ -150,7 +150,7 @@ def test_iResNetBlock(
     forward_inverse_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert forward_inverse_error.shape == (num_sample,)
     assert (forward_inverse_quantiles <= TARGETS).all(), f"{forward_inverse_quantiles=}"
-    LOGGER.info("iResNetBlock satisfies ϕ⁻¹∘ϕ≈id \N{HEAVY CHECK MARK}")
+    LOGGER.info("iResNetBlock satisfies ϕ⁻¹∘ϕ≈id ✔ ")
     LOGGER.info("Quantiles: %s", forward_inverse_quantiles)
 
     # Test if ϕ∘ϕ⁻¹=id, i.e. the right inverse is working
@@ -158,7 +158,7 @@ def test_iResNetBlock(
     inverse_forward_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert inverse_forward_error.shape == (num_sample,)
     assert (inverse_forward_quantiles <= TARGETS).all(), f"{inverse_forward_quantiles=}"
-    LOGGER.info("iResNetBlock satisfies ϕ∘ϕ⁻¹≈id \N{HEAVY CHECK MARK}")
+    LOGGER.info("iResNetBlock satisfies ϕ∘ϕ⁻¹≈id ✔ ")
     LOGGER.info("Quantiles: %s", inverse_forward_quantiles)
 
     # Test if ϕ≠id, i.e. the forward map is different from the identity
@@ -166,7 +166,7 @@ def test_iResNetBlock(
     forward_quantiles = torch.quantile(forward_difference, 1 - QUANTILES)
     assert forward_difference.shape == (num_sample,)
     assert (forward_quantiles >= TARGETS).all(), f"{forward_quantiles}"
-    LOGGER.info("iResNetBlock satisfies ϕ≉id \N{HEAVY CHECK MARK}")
+    LOGGER.info("iResNetBlock satisfies ϕ≉id ✔ ")
     LOGGER.info("Quantiles: %s", forward_quantiles)
 
     # Test if ϕ⁻¹≠id, i.e. the inverse map is different from an identity
@@ -174,7 +174,7 @@ def test_iResNetBlock(
     inverse_quantiles = torch.quantile(inverse_difference, 1 - QUANTILES)
     assert inverse_difference.shape == (num_sample,)
     assert (inverse_quantiles >= TARGETS).all(), f"{inverse_quantiles}"
-    LOGGER.info("iResNetBlock satisfies ϕ⁻¹≉id \N{HEAVY CHECK MARK}")
+    LOGGER.info("iResNetBlock satisfies ϕ⁻¹≉id ✔ ")
     LOGGER.info("Quantiles: %s", inverse_quantiles)
 
     if not make_plot:

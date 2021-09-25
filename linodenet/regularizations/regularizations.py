@@ -24,10 +24,11 @@ __all__: Final[list[str]] = [
 ]
 
 
+@jit.script
 def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
     r"""Bias `\det(e^A)` towards 1.
 
-    By Jacobis formula
+    By Jacobi's formula
 
     .. math::
 
@@ -100,12 +101,12 @@ def symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
 def orthogonal(x: Tensor, p: Optional[float] = None) -> Tensor:
     r"""Bias the matrix towards being orthogonal.
 
-    Note that, given `n×n` matrix `X` with SVD `X=UΣVᵀ` holds
+    Note that, given `n×n` matrix `X` with SVD `X=U⋅Σ⋅V^𝖳` holds
 
     .. math::
-          &(1) &  ‖ X - ΠX‖_F &= ‖ Σ - 𝕀 ‖_F
-        \\&(1) &  ‖XᵀX - 𝕀‖_F &= ‖ΣᵀΣ - 𝕀‖_F
-        \\&(1) &  ‖XXᵀ - X‖_F &= ‖ΣΣᵀ - 𝕀‖_F
+          &(1) &  ‖  X - ΠX‖_F &= ‖   Σ - 𝕀 ‖_F
+        \\&(1) &  ‖X^𝖳 X - 𝕀‖_F &= ‖Σ^𝖳 Σ - 𝕀‖_F
+        \\&(1) &  ‖X X^𝖳 - X‖_F &= ‖ΣΣ^𝖳 - 𝕀‖_F
 
     **Signature:** ``(..., n,n) ⟶ (...,)``
 

@@ -52,20 +52,20 @@ def test_all_initializations(
         valid_mean = torch.isclose(means, ZERO, rtol=1e-2, atol=1e-2).float().mean()
         assert valid_mean > 0.9, f"Only {valid_mean=:.2%} of means were clsoe to 0!"
         LOGGER.info(
-            "%s of means are close to 0 \N{HEAVY CHECK MARK}", f"{valid_mean=:.2%}"
+            "%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}"
         )
 
         # check if 𝐕[A⋅x] ≈ 1
         valid_stdv = torch.isclose(stdvs, ONE, rtol=1e-2, atol=1e-2).float().mean()
         assert valid_stdv > 0.9, f"Only {valid_mean=:.2%} of stdvs were clsoe to 1!"
         LOGGER.info(
-            "%s of stdvs are close to 1 \N{HEAVY CHECK MARK}", f"{valid_stdv=:.2%}"
+            "%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}"
         )
 
     # todo: add plot
     # todo: add experiment after applying matrix exponential
 
-    LOGGER.info("All initializations passed!" + " " + "\N{HEAVY CHECK MARK}" * 3)
+    LOGGER.info("All initializations passed! ✔ ")
 
 
 def __main__():

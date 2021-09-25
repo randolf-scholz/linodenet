@@ -21,8 +21,10 @@ __all__: Final[list[str]] = [
     "LinODEnet",
 ]
 
+# TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
 
-class LinODECell(jit.ScriptModule):
+
+class LinODECell(nn.Module):
     r"""Linear System module, solves `ẋ = Ax`, i.e. `x̂ = e^{A\Delta t}x`.
 
     Parameters
@@ -99,19 +101,18 @@ class LinODECell(jit.ScriptModule):
         r"""Draw an initial kernel matrix (random or static)."""
         return self._kernel_initialization()
 
-    @jit.script_method
+    @jit.export
     def kernel_regularization(self, w: Tensor) -> Tensor:
         r"""Regularize the Kernel, e.g. by projecting onto skew-symmetric matrices."""
         return self._kernel_regularization(w)
 
-    @jit.script_method
-    def forward(self, Δt: Tensor, x0: Tensor) -> Tensor:
-        # TODO: optimize if clauses away by changing definition in constructor.
+    @jit.export
+    def forward(self, dt: Tensor, x0: Tensor) -> Tensor:
         r"""Signature: `[...,]×[...,d] ⟶ [...,d]`.
 
         Parameters
         ----------
-        Δt: Tensor, shape=(...,)
+        dt: Tensor, shape=(...,)
             The time difference `t_1 - t_0` between `x_0` and `x̂`.
         x0:  Tensor, shape=(...,DIM)
             Time observed value at `t_0`
@@ -122,13 +123,13 @@ class LinODECell(jit.ScriptModule):
             The predicted value at `t_1`
         """
         A = self.kernel_regularization(self.kernel)
-        AΔt = torch.einsum("kl, ... -> ...kl", A, Δt)
-        expAΔt = torch.matrix_exp(AΔt)
-        xhat = torch.einsum("...kl, ...l -> ...k", expAΔt, x0)
+        Adt = torch.einsum("kl, ... -> ...kl", A, dt)
+        expAdt = torch.matrix_exp(Adt)
+        xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)
         return xhat
 
 
-class LinODE(jit.ScriptModule):
+class LinODE(nn.Module):
     r"""Linear ODE module, to be used analogously to :func:`scipy.integrate.odeint`.
 
     Attributes
@@ -163,7 +164,7 @@ class LinODE(jit.ScriptModule):
         self.cell = LinODECell(input_size, kernel_initialization, kernel_projection)
         self.kernel = self.cell.kernel
 
-    @jit.script_method
+    @jit.export
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
         r"""Signature: `[...,N]×[...,d] ⟶ [...,N,d]`.
 
@@ -177,13 +178,13 @@ class LinODE(jit.ScriptModule):
         Xhat: Tensor, shape=(...,LEN,DIM)
             The estimated true state of the system at the times `t∈T`
         """
-        ΔT = torch.moveaxis(torch.diff(T), -1, 0)
-        X = torch.jit.annotate(list[Tensor], [])
+        DT = torch.moveaxis(torch.diff(T), -1, 0)
+        X: list[Tensor] = []
         X += [x0]
 
         # iterate over LEN, this works even when no BATCH dim present.
-        for Δt in ΔT:
-            X += [self.cell(Δt, X[-1])]
+        for dt in DT:
+            X += [self.cell(dt, X[-1])]
 
         # shape: [LEN, ..., DIM]
         Xhat = torch.stack(X, dim=0)
@@ -191,7 +192,7 @@ class LinODE(jit.ScriptModule):
         return torch.moveaxis(Xhat, 0, -2)
 
 
-class LinODEnet(jit.ScriptModule):
+class LinODEnet(nn.Module):
     r"""Linear ODE Network is a FESD model.
 
     +---------------------------------------------------+--------------------------------------+
@@ -242,10 +243,13 @@ class LinODEnet(jit.ScriptModule):
     hidden_size: Final[int]
     output_size: Final[int]
     concat_mask: Final[bool]
-    kernel: Tensor
-    padding: Tensor
-
     ZERO: Tensor
+
+    kernel: Tensor
+    embedding: nn.Module
+    projection: nn.Module
+    filter: nn.Module
+    system: nn.Module
 
     def __init__(self, input_size: int, hidden_size: int, **HP: Any):
         super().__init__()
@@ -283,11 +287,12 @@ class LinODEnet(jit.ScriptModule):
                 f"{embedding_type=}" + "not in {'linear', 'concat'}"
             )
 
+        assert isinstance(self.system.kernel, Tensor)
         self.kernel = self.system.kernel
         self.register_buffer("ZERO", torch.tensor(0.0))
         # self.ZERO = torch.tensor(0.0)
 
-    @jit.script_method
+    @jit.export
     def forward(self, T: Tensor, X: Tensor) -> tuple[Tensor, Tensor]:
         r"""Signature: `[...,N]×[...,N,d] ⟶ [...,N,d]`.
 
@@ -319,18 +324,15 @@ class LinODEnet(jit.ScriptModule):
         ----------
         - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
         """
-        ΔT = torch.moveaxis(torch.diff(T), -1, 0)
+        DT = torch.moveaxis(torch.diff(T), -1, 0)
         X = torch.moveaxis(X, -2, 0)
-
-        X̂_pre = torch.jit.annotate(list[Tensor], [])
-        X̂_post = torch.jit.annotate(list[Tensor], [])
 
         # Initialization
         # TODO: do something smarter than zero initialization!
         X0 = torch.where(torch.isnan(X[0]), self.ZERO, X[0])
 
-        X̂_pre += [X0]  # here one would expect zero or some other initialization
-        X̂_post += [X0]
+        X̂_pre: list[Tensor] = [X0]  # here one would expect zero or some other initialization
+        X̂_post: list[Tensor] = [X0]
 
         # IDEA: The problem is the initial state of RNNCell is not defined and typically put equal
         # to zero. Staying with the idea that the Cell acts as a filter, that is updates the state
@@ -343,12 +345,12 @@ class LinODEnet(jit.ScriptModule):
         # This set model can use triplet notation.
         # bias weighting towards close time points
 
-        for Δt, x in zip(ΔT, X):
+        for dt, x in zip(DT, X):
             # Encode
             ẑ_post = self.encoder(self.embedding(X̂_post[-1]))
 
             # Propagate
-            ẑ_pre = self.system(Δt, ẑ_post)
+            ẑ_pre = self.system(dt, ẑ_post)
 
             # Decode
             x̂_pre = self.projection(self.decoder(ẑ_pre))
@@ -378,12 +380,12 @@ class LinODEnet(jit.ScriptModule):
             X̂_pre += [x̂_pre.view(x.shape)]
             X̂_post += [x̂_post.view(x.shape)]
 
-        X̂_pre = torch.stack(X̂_pre, dim=-2)
-        X̂_post = torch.stack(X̂_post, dim=-2)
-        return X̂_post, X̂_pre
+        # X̂_pre = torch.stack(X̂_pre, dim=-2)
+        # X̂_post = torch.stack(X̂_post, dim=-2)
+        return torch.stack(X̂_post, dim=-2), torch.stack(X̂_pre, dim=-2)
 
 
-class ConcatEmbedding(jit.ScriptModule):
+class ConcatEmbedding(nn.Module):
     r"""Maps `x ⟼ [x,w]`.
 
     Attributes
@@ -405,7 +407,7 @@ class ConcatEmbedding(jit.ScriptModule):
         self.pad_size = hidden_size - input_size
         self.padding = nn.Parameter(torch.randn(self.pad_size))
 
-    @jit.script_method
+    @jit.export
     def forward(self, X: Tensor) -> Tensor:
         r"""Signature: `[..., d] ⟶ [..., d+e]`.
 
@@ -421,7 +423,7 @@ class ConcatEmbedding(jit.ScriptModule):
         return torch.cat([X, self.padding.expand(shape)], dim=-1)
 
 
-class ConcatProjection(jit.ScriptModule):
+class ConcatProjection(nn.Module):
     r"""Maps `z = [x,w] ⟼ x`.
 
     Attributes
@@ -439,7 +441,7 @@ class ConcatProjection(jit.ScriptModule):
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-    @jit.script_method
+    @jit.export
     def forward(self, Z: Tensor) -> Tensor:
         r"""Signature: `[..., d+e] ⟶ [..., d]`.
 

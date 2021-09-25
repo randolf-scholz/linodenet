@@ -2,9 +2,11 @@ r"""Test if model initializations, forward and backward passes."""
 
 import logging
 from itertools import product
+from pathlib import Path
 
 import torch
 from torch import Tensor
+from torch.nn.functional import mse_loss
 
 from linodenet.models import (
     LinearContraction,
@@ -92,39 +94,62 @@ def _test_model(
     def err_str(s: str) -> str:
         return f"{Model=} failed {s} with {initialization=} and {inputs=}!"
 
-    LOGGER.info(">>> INITIALIZATION with %s", initialization)
     try:  # check initialization
+        LOGGER.info(">>> INITIALIZATION TEST")
+        LOGGER.info(">>> input shapes: %s", initialization)
         model = Model(*initialization)
         model.to(dtype=DTYPE, device=device)
     except Exception as E:
         raise RuntimeError(err_str("initialization")) from E
-    LOGGER.info(">>> INITIALIZATION \N{HEAVY CHECK MARK}")
+    else:
+        LOGGER.info(">>> INITIALIZATION ✔ ")
 
-    LOGGER.info(">>> FORWARD with input shapes %s", [tuple(x.shape) for x in inputs])
+    try:  # check JIT-compatibility
+        LOGGER.info(">>> JIT-COMPILATION TEST")
+        model = torch.jit.script(model)
+    except Exception as E:
+        raise RuntimeError(err_str("JIT-compilation")) from E
+    else:
+        LOGGER.info(">>> JIT-compilation ✔ ")
+
     try:  # check forward
+        LOGGER.info(
+            ">>> FORWARD with input shapes %s", [tuple(x.shape) for x in inputs]
+        )
         outputs = model(*inputs)
         outputs = outputs if isinstance(outputs, tuple) else (outputs,)
     except Exception as E:
         raise RuntimeError(err_str("forward pass")) from E
-
-    assert all(output.shape == target.shape for output, target in zip(outputs, targets))
-    LOGGER.info(
-        ">>> Output shapes %s match with targets!", [tuple(x.shape) for x in targets]
-    )
-    LOGGER.info(">>> FORWARD \N{HEAVY CHECK MARK}")
-
-    LOGGER.info(">>> BACKWARD TEST")
-    losses = [
-        torch.mean((output - target) ** 2) for output, target in zip(outputs, targets)
-    ]
-    loss = torch.stack(losses).sum()
+    else:
+        assert all(
+            output.shape == target.shape for output, target in zip(outputs, targets)
+        )
+        LOGGER.info(
+            ">>> Output shapes %s match with targets!",
+            [tuple(x.shape) for x in targets],
+        )
+        LOGGER.info(">>> FORWARD ✔ ")
 
     try:  # check backward
+        LOGGER.info(">>> BACKWARD TEST")
+        losses = [mse_loss(output, target) for output, target in zip(outputs, targets)]
+        loss = torch.stack(losses).sum()
         loss.backward()
     except Exception as E:
         raise RuntimeError(err_str("backward pass")) from E
+    else:
+        LOGGER.info(">>> BACKWARD ✔ ")
 
-    LOGGER.info(">>> BACKWARD \N{HEAVY CHECK MARK}")
+    try:  # check model saving
+        LOGGER.info(">>> CHECKPOINTING TEST")
+        filepath = Path.cwd().joinpath(f"models/{Model.__name__}.pt")
+        filepath.parent.mkdir(exist_ok=True)
+        torch.jit.save(model, filepath)
+        torch.jit.load(filepath)
+    except Exception as E:
+        raise RuntimeError(err_str("checkpointing")) from E
+    else:
+        LOGGER.info(">>> CHECKPOINTING ✔ ")
 
 
 def test_all_models():

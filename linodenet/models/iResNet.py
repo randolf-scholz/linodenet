@@ -11,9 +11,6 @@ from torch.nn import functional
 
 from linodenet.util import ACTIVATIONS, deep_dict_update
 
-# from torch.nn.utils.parametrizations import spectral_norm
-
-
 LOGGER = logging.getLogger(__name__)
 
 __all__: Final[list[str]] = [
@@ -58,13 +55,13 @@ def spectral_norm(
         r = z - λ * x
 
         for _ in range(maxiter):
+            if vector_norm(r) <= rtol * vector_norm(λ * x) + atol:
+                break
             x = z / c
             z = A.T @ (A @ x)
             c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
             λ = c / d
             r = z - λ * x
-            if vector_norm(r) <= rtol * vector_norm(λ * x) + atol:
-                break
 
         σ_max = torch.sqrt(λ)
         return σ_max
@@ -114,13 +111,13 @@ class SpectralNorm(torch.autograd.Function):
         r = z - λ * x
 
         for _ in range(maxiter):
+            if vector_norm(r) <= rtol * vector_norm(λ * x) + atol:
+                break
             x = z / c
             z = A.T @ (A @ x)
             c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
             λ = c / d
             r = z - λ * x
-            if vector_norm(r) <= rtol * vector_norm(λ * x) + atol:
-                break
 
         σ_max = torch.sqrt(λ)
         v = x / vector_norm(x)
@@ -142,7 +139,7 @@ class SpectralNorm(torch.autograd.Function):
         return grad_outputs[0] * torch.outer(u, v)
 
 
-class LinearContraction(jit.ScriptModule):
+class LinearContraction(nn.Module):
     r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
 
     This is achieved by normalizing the weight matrix by
@@ -167,6 +164,7 @@ class LinearContraction(jit.ScriptModule):
 
     C: Tensor
     ONE: Tensor
+    spectral_norm: Tensor
 
     weight: Tensor
     bias: Union[Tensor, None]
@@ -177,14 +175,18 @@ class LinearContraction(jit.ScriptModule):
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.C = torch.tensor(float(c), requires_grad=False)
-        self.ONE = torch.tensor(1.0, requires_grad=False)
+
         self.weight = nn.Parameter(Tensor(output_size, input_size))
         if bias:
             self.bias = nn.Parameter(Tensor(output_size))
         else:
             self.register_parameter("bias", None)
         self.reset_parameters()
+
+        # self.spectral_norm = matrix_norm(self.weight, ord=2)
+        self.register_buffer("ONE", torch.tensor(1.0))
+        self.register_buffer("C", torch.tensor(float(c)))
+        self.register_buffer("spectral_norm", matrix_norm(self.weight, ord=2))
 
     def reset_parameters(self) -> None:
         r"""Reset both weight matrix and bias vector."""
@@ -198,7 +200,7 @@ class LinearContraction(jit.ScriptModule):
     #         self.input_size, self.output_size, self.bias is not None
     #     )
 
-    @jit.script_method
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Signature: `[...,n] ⟶ [...,n]`.
 
@@ -214,89 +216,12 @@ class LinearContraction(jit.ScriptModule):
         # σ_max = torch.linalg.norm(self.weight, ord=2)
         # σ_max = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
-        σ_max = matrix_norm(self.weight, ord=2)
-        fac = torch.minimum(self.C / σ_max, self.ONE)
+        self.spectral_norm = matrix_norm(self.weight, ord=2)
+        fac = torch.minimum(self.C / self.spectral_norm, self.ONE)
         return functional.linear(x, fac * self.weight, self.bias)
 
 
-#
-#
-#
-# class LinearContraction(jit.ScriptModule):
-#     r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
-#
-#     This is achieved by normalizing the weight matrix by
-#     `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
-#     Equivalently, we can scale the input by the appropriate factor.
-#
-#     Attributes
-#     ----------
-#     input_size:  int
-#         The dimensionality of the input space.
-#     output_size: int
-#         The dimensionality of the output space.
-#     c: Tensor
-#         The regularization hyperparameter
-#     weight: Tensor
-#         The weight matrix
-#     bias: Tensor or None
-#         The bias Tensor if present, else None.
-#     """
-#
-#     input_size: Final[int]
-#     output_size: Final[int]
-#
-#     C: Tensor
-#     ONE: Tensor
-#
-#     weight: Tensor
-#     bias: Tensor
-#     # linear: nn.Module
-#
-#     def __init__(
-#         self, input_size: int, output_size: int, c: float = 0.97, bias: bool = True
-#     ):
-#         super().__init__()
-#         self.input_size = input_size
-#         self.output_size = output_size
-#         self.C = torch.tensor(float(c))
-#         self.ONE = torch.tensor(1.0)
-#         self.linear = spectral_norm(nn.Linear(input_size, output_size, bias=bias))
-#         self.weight = self.linear.weight
-#         self.bias = self.linear.bias
-#         self.reset_parameters()
-#
-#     def reset_parameters(self) -> None:
-#         r"""Reset both weight matrix and bias vector."""
-#         nn.initializations.kaiming_uniform_(self.weight, a=sqrt(5))
-#         if self.bias is not None:
-#             bound = 1 / sqrt(self.input_size)
-#             nn.initializations.uniform_(self.bias, -bound, bound)
-#
-#     # def extra_repr(self) -> str:
-#     #     return "input_size={}, output_size={}, bias={}".format(
-#     #         self.input_size, self.output_size, self.bias is not None
-#     #     )
-#
-#     @jit.script_method
-#     def forward(self, x: Tensor) -> Tensor:
-#         r"""Signature: `[...,n] ⟶ [...,n]`.
-#
-#         Parameters
-#         ----------
-#         x: Tensor
-#
-#         Returns
-#         -------
-#         Tensor
-#         """
-#         # σ_max = torch.linalg.norm(self.weight, ord=2)
-#         # fac = torch.minimum(self.C / σ_max, self.ONE)
-#         return self.linear(self.C*x)
-#         # return functional.linear(x, fac * self.weight, self.bias)
-
-
-class iResNetBlock(jit.ScriptModule):
+class iResNetBlock(nn.Module):
     r"""Invertible ResNet-Block of the form `g(x)=ϕ(W_1⋅W_2⋅x)`.
 
     By default, `W_1⋅W_2` is a low rank factorization.
@@ -363,14 +288,15 @@ class iResNetBlock(jit.ScriptModule):
         self.rtol = HP["rtol"]
         self.maxiter = HP["maxiter"]
         self.bias = HP["bias"]
+        self.activation = ACTIVATIONS[HP["activation"]](**HP["activation_config"])  # type: ignore
 
         self.bottleneck = nn.Sequential(
             LinearContraction(self.input_size, self.hidden_size, self.bias),
             LinearContraction(self.hidden_size, self.input_size, self.bias),
-            ACTIVATIONS[HP["activation"]](**HP["activation_config"]),  # type: ignore
+            self.activation,
         )
 
-    @jit.script_method
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Signature: `[...,n] ⟶ [...,n]`.
 
@@ -384,7 +310,7 @@ class iResNetBlock(jit.ScriptModule):
         """
         return x + self.bottleneck(x)
 
-    @jit.script_method
+    @jit.export
     def inverse(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
@@ -417,7 +343,7 @@ class iResNetBlock(jit.ScriptModule):
         return xhat_dash
 
 
-class iResNet(jit.ScriptModule):
+class iResNet(nn.Module):
     r"""Invertible ResNet consists of a stack of :class:`iResNetBlock` modules.
 
     Attributes
@@ -471,13 +397,12 @@ class iResNet(jit.ScriptModule):
 
         for _ in range(self.nblocks):
             blocks += [iResNetBlock(**self.HP["iResNetBlock"])]
-            # TODO: add regularization
 
         self.blocks = nn.Sequential(*blocks)
         self.reversed_blocks = self.blocks
         # self.reversed_blocks = nn.Sequential(*reversed(blocks))
 
-    @jit.script_method
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Signature: `[...,n] ⟶ [...,n]`.
 
@@ -491,7 +416,7 @@ class iResNet(jit.ScriptModule):
         """
         return self.blocks(x)
 
-    @jit.script_method
+    @jit.export
     def inverse(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fix point iteration in each block in reversed order.
 
@@ -510,7 +435,7 @@ class iResNet(jit.ScriptModule):
         return y
 
     # TODO: delete this?
-    # @jit.script_method
+    # @jit.export
     # def alt_inverse(self, y: Tensor,
     #                 maxiter: int = 1000, rtol: float = 1e-05, atol: float = 1e-08) -> Tensor:
     #     r"""

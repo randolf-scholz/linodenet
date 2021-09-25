@@ -124,7 +124,7 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
         q = np.nanquantile(err, 0.99)
         LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
-    LOGGER.info("LinODE passes test \N{HEAVY CHECK MARK}")
+    LOGGER.info("LinODE passes test ✔ ")
 
     if not make_plot:
         return
