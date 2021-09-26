@@ -5,7 +5,7 @@ from typing import Callable, Final
 
 from torch import Tensor
 
-from linodenet.initializations.initializations import (
+from linodenet.initializations.functional import (
     SizeLike,
     canonical_skew_symmetric,
     diagonally_dominant,

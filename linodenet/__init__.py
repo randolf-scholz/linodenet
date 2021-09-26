@@ -4,11 +4,12 @@ import logging
 from pathlib import Path
 from typing import Final
 
-from linodenet import initializations, models, projections, regularizations
+from linodenet import config, initializations, models, projections, regularizations
 
 LOGGER = logging.getLogger(__name__)
 __all__: Final[list[str]] = [
     "__version__",
+    "config",
     "models",
     "initializations",
     "regularizations",

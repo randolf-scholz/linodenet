@@ -1,22 +1,28 @@
 r"""Utility functions."""
 import logging
 from collections.abc import Mapping
-from typing import Final, Type
+from functools import wraps
+from typing import Final
 
-from torch import nn
+from torch import jit, nn
+
+from linodenet import config
 
 LOGGER = logging.getLogger(__name__)
 
-__all__: Final[list[str]] = [
+__all__: Final[list[str]] = [  # Meta-objects
+    "Activation",
     "ACTIVATIONS",
+] + [  # Functions
+    "autojit",
     "deep_dict_update",
     "deep_keyval_update",
 ]
 
-Activation = Type[nn.Module]
+Activation = nn.Module
 r"""Type hint for models."""
 
-ACTIVATIONS: Final[dict[str, Activation]] = {
+ACTIVATIONS: Final[dict[str, type[Activation]]] = {
     "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
     "ELU": nn.ELU,
     "Hardshrink": nn.Hardshrink,
@@ -82,3 +88,52 @@ def deep_keyval_update(d: dict, **new_kv: dict) -> dict:
         elif key in new_kv:
             d[key] = new_kv[key]
     return d
+
+
+def autojit(base_class: type[nn.Module]) -> type[nn.Module]:
+    r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
+
+    Makes it so that
+
+    .. code-block:: python
+
+        class MyModule():
+            ...
+
+        model = jit.script(MyModule())
+
+    and
+
+    .. code-block:: python
+
+        @autojit
+        class MyModule():
+            ...
+
+        model = MyModule()
+
+    are (roughly?) equivalent
+
+    Parameters
+    ----------
+    base_class: type[nn.Module]
+
+    Returns
+    -------
+    type
+    """
+    assert issubclass(base_class, nn.Module)
+
+    @wraps(base_class, updated=())
+    class WrappedClass(base_class):  # type: ignore
+        r"""A simple Wrapper."""
+
+        # noinspection PyArgumentList
+        def __new__(cls, *args, **kwargs):
+            instance = base_class(*args, **kwargs)
+
+            if config.autojit:  # pylint: disable=no-member
+                return jit.script(instance)
+            return instance
+
+    return WrappedClass

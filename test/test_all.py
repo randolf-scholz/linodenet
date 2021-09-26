@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 from torch.nn.functional import mse_loss
 
+import linodenet
 from linodenet.models import (
     LinearContraction,
     LinODE,
@@ -19,6 +20,8 @@ from linodenet.models import (
 
 LOGGER = logging.getLogger(__name__)
 
+
+linodenet.config.autojit = False
 OUTER_BATCH = 3
 INNER_BATCH = 5
 LEN = 9  # sequence LENgth
@@ -142,7 +145,7 @@ def _test_model(
 
     try:  # check model saving
         LOGGER.info(">>> CHECKPOINTING TEST")
-        filepath = Path.cwd().joinpath(f"models/{Model.__name__}.pt")
+        filepath = Path.cwd().joinpath(f"model_checkpoints/{Model.__name__}.pt")
         filepath.parent.mkdir(exist_ok=True)
         torch.jit.save(model, filepath)
         torch.jit.load(filepath)

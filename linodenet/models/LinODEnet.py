@@ -9,11 +9,11 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import INITIALIZATIONS, Initialization, gaussian
 from linodenet.models.iResNet import iResNet
 from linodenet.projections import PROJECTIONS, Projection
-from linodenet.util import deep_dict_update
+from linodenet.util import autojit, deep_dict_update
 
 LOGGER = logging.getLogger(__name__)
 
-__all__: Final[list[str]] = [
+__all__: Final[list[str]] = [  # Classes
     "ConcatEmbedding",
     "ConcatProjection",
     "LinODE",
@@ -24,6 +24,7 @@ __all__: Final[list[str]] = [
 # TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
 
 
+@autojit
 class LinODECell(nn.Module):
     r"""Linear System module, solves `ẋ = Ax`, i.e. `x̂ = e^{A\Delta t}x`.
 
@@ -132,6 +133,7 @@ class LinODECell(nn.Module):
         return xhat
 
 
+@autojit
 class LinODE(nn.Module):
     r"""Linear ODE module, to be used analogously to :func:`scipy.integrate.odeint`.
 
@@ -202,6 +204,7 @@ class LinODE(nn.Module):
         return torch.moveaxis(Xhat, 0, -2)
 
 
+@autojit
 class LinODEnet(nn.Module):
     r"""Linear ODE Network is a FESD model.
 
@@ -403,6 +406,7 @@ class LinODEnet(nn.Module):
         return torch.stack(X̂_post, dim=-2), torch.stack(X̂_pre, dim=-2)
 
 
+@autojit
 class ConcatEmbedding(nn.Module):
     r"""Maps `x ⟼ [x,w]`.
 
@@ -466,6 +470,7 @@ class ConcatEmbedding(nn.Module):
         return Z[..., : self.input_size]
 
 
+@autojit
 class ConcatProjection(nn.Module):
     r"""Maps `z = [x,w] ⟼ x`.
 

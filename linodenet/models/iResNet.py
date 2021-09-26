@@ -9,11 +9,11 @@ from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
-from linodenet.util import ACTIVATIONS, deep_dict_update
+from linodenet.util import ACTIVATIONS, Activation, autojit, deep_dict_update
 
 LOGGER = logging.getLogger(__name__)
 
-__all__: Final[list[str]] = [
+__all__: Final[list[str]] = [  # Classes
     "iResNet",
     "iResNetBlock",
     "LinearContraction",
@@ -139,6 +139,7 @@ class SpectralNorm(torch.autograd.Function):
         return grad_outputs[0] * torch.outer(u, v)
 
 
+@autojit
 class LinearContraction(nn.Module):
     r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
 
@@ -221,6 +222,7 @@ class LinearContraction(nn.Module):
         return functional.linear(x, fac * self.weight, self.bias)
 
 
+@autojit
 class AltLinearContraction(nn.Module):
     r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
 
@@ -235,7 +237,7 @@ class AltLinearContraction(nn.Module):
         The dimensionality of the output space.
     c: Tensor
         The regularization hyperparameter
-    weight: Tensor
+    kernel: Tensor
         The weight matrix
     bias: Tensor or None
         The bias Tensor if present, else None.
@@ -331,6 +333,7 @@ class AltLinearContraction(nn.Module):
         return functional.linear(x, fac * self.kernel, self.bias)
 
 
+@autojit
 class iResNetBlock(nn.Module):
     r"""Invertible ResNet-Block of the form `g(x)=ϕ(W_1⋅W_2⋅x)`.
 
@@ -406,7 +409,8 @@ class iResNetBlock(nn.Module):
         self.rtol = HP["rtol"]
         self.maxiter = HP["maxiter"]
         self.bias = HP["bias"]
-        self.activation = ACTIVATIONS[HP["activation"]](**HP["activation_config"])  # type: ignore
+        self._Activation: type[Activation] = ACTIVATIONS[HP["activation"]]
+        self.activation = self._Activation(**HP["activation_config"])  # type: ignore[call-arg]
 
         self.bottleneck = nn.Sequential(
             LinearContraction(self.input_size, self.hidden_size, self.bias),
@@ -461,6 +465,7 @@ class iResNetBlock(nn.Module):
         return xhat_dash
 
 
+@autojit
 class iResNet(nn.Module):
     r"""Invertible ResNet consists of a stack of :class:`iResNetBlock` modules.
 

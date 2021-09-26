@@ -1,7 +1,7 @@
 r"""Models of the LinODE-Net package."""
 
 import logging
-from typing import Final, Type
+from typing import Final
 
 from torch.nn import Module
 
@@ -16,9 +16,7 @@ from linodenet.models.LinODEnet import (
 
 LOGGER = logging.getLogger(__name__)
 
-__all__: Final[list[str]] = [
-    "MODELS",
-    "Model",
+__all__: Final[list[str]] = ["MODELS", "Model"] + [  # Classes
     "LinearContraction",
     "iResNetBlock",
     "iResNet",
@@ -29,10 +27,10 @@ __all__: Final[list[str]] = [
     "ConcatEmbedding",
 ]
 
-Model = Type[Module]
+Model = Module
 r"""Type hint for models."""
 
-MODELS: Final[dict[str, Model]] = {
+MODELS: Final[dict[str, type[Model]]] = {
     "LinearContraction": LinearContraction,
     "iResNetBlock": iResNetBlock,
     "iResNet": iResNet,
