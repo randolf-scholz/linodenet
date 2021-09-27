@@ -377,6 +377,9 @@ class iResNetBlock(nn.Module):
     rtol: Final[float]
     r"""CONST: The relative tolerance threshold value."""
 
+    # Buffers
+    residual: Tensor
+
     HP: dict = {
         "atol": 1e-08,
         "rtol": 1e-05,
@@ -447,22 +450,21 @@ class iResNetBlock(nn.Module):
         -------
         Tensor
         """
-        xhat_dash = y.clone()
+        x = y.clone()
         residual = torch.zeros_like(y)
 
         for _ in range(self.maxiter):
-            xhat = xhat_dash
-            xhat_dash = y - self.bottleneck(xhat)
-            residual = torch.abs(xhat_dash - xhat) - self.rtol * torch.absolute(xhat)
+            x, x_prev = y - self.bottleneck(x), x
+            residual = torch.abs(x - x_prev) - self.rtol * torch.absolute(x_prev)
 
             if torch.all(residual <= self.atol):
-                return xhat_dash
+                return x
 
         print(
             f"No convergence in {self.maxiter} iterations. "
             f"Max residual:{torch.max(residual)} > {self.atol}."
         )
-        return xhat_dash
+        return x
 
 
 @autojit
@@ -526,8 +528,6 @@ class iResNet(nn.Module):
             blocks += [iResNetBlock(**self.HP["iResNetBlock"])]
 
         self.blocks = nn.Sequential(*blocks)
-        self.reversed_blocks = self.blocks
-        # self.reversed_blocks = nn.Sequential(*reversed(blocks))
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -555,8 +555,7 @@ class iResNet(nn.Module):
         -------
         yhat: Tensor
         """
-        for block in self.reversed_blocks:
-            # `reversed` does not work in torchscript v1.8.1
+        for block in self.blocks[::-1]:  # traverse in reverse
             y = block.inverse(y)
 
         return y
