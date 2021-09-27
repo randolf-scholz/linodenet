@@ -13,7 +13,6 @@ import logging
 from pathlib import Path
 
 from linodenet.config import GlobalConfig as config  # noqa # isort: skip
-
 from linodenet import (  # isort: skip
     initializations,
     models,
