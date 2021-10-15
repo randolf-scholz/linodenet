@@ -61,6 +61,7 @@ class LinODECell(nn.Module):
     def __init__(
         self,
         input_size: int,
+        *,
         kernel_initialization: Optional[Union[str, Tensor, Initialization]] = None,
         kernel_projection: Optional[Union[str, Projection]] = None,
     ):
@@ -160,13 +161,20 @@ class LinODE(nn.Module):
     kernel: Tensor
     r"""PARAM: The system matrix of the linear ODE component."""
 
+    # Buffers
+    xhat: Tensor
+    r"""BUFFER: The forward prediction."""
+
     # Functions
     kernel_initialization: Initialization
+    r"""FUNC: Parameter-less function that draws a initial system matrix."""
     kernel_projection: Projection
+    r"""FUNC: Regularization function for the kernel."""
 
     def __init__(
         self,
         input_size: int,
+        *,
         kernel_initialization: Optional[Union[str, Tensor, Initialization]] = None,
         kernel_projection: Optional[Union[str, Projection]] = None,
     ):
@@ -174,8 +182,15 @@ class LinODE(nn.Module):
 
         self.input_size = input_size
         self.output_size = input_size
-        self.cell = LinODECell(input_size, kernel_initialization, kernel_projection)
-        self.kernel = self.cell.kernel
+        self.cell = LinODECell(
+            input_size,
+            kernel_initialization=kernel_initialization,
+            kernel_projection=kernel_projection,
+        )
+
+        # Buffers
+        self.register_buffer("xhat", torch.tensor(()), persistent=False)
+        self.register_buffer("kernel", self.cell.kernel, persistent=False)
 
     @jit.export
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
@@ -192,17 +207,18 @@ class LinODE(nn.Module):
             The estimated true state of the system at the times `t∈T`
         """
         DT = torch.moveaxis(torch.diff(T), -1, 0)
-        X: list[Tensor] = []
-        X += [x0]
+        X: list[Tensor] = [x0]
 
         # iterate over LEN, this works even when no BATCH dim present.
         for dt in DT:
-            X += [self.cell(dt, X[-1])]
+            X.append(self.cell(dt, X[-1]))
 
         # shape: [LEN, ..., DIM]
         Xhat = torch.stack(X, dim=0)
+        # shape: [..., LEN, DIM]
+        self.xhat = torch.moveaxis(Xhat, 0, -2)
 
-        return torch.moveaxis(Xhat, 0, -2)
+        return self.xhat
 
 
 @autojit
@@ -229,12 +245,6 @@ class LinODEnet(nn.Module):
         The dimensionality of the latent space.
     output_size: int
         The dimensionality of the output space.
-    kernel: Tensor
-        The system matrix
-    kernel_initialization: Callable[None, Tensor]
-        Parameter-less function that draws a initial system matrix
-    padding: Tensor
-        The learned padding parameters
     ZERO: Tensor
         BUFFER: A constant tensor of value float(0.0)
     xhat_pre: Tensor
@@ -246,19 +256,19 @@ class LinODEnet(nn.Module):
     zhat_post: Tensor
         BUFFER: Stores post-jump latent values.
     kernel: Tensor
-    PARAM: The system matrix of the linear ODE component.
+        PARAM: The system matrix of the linear ODE component.
     encoder: nn.Module
-    MODULE: Responsible for embedding `x̂→ẑ`.
+        MODULE: Responsible for embedding `x̂→ẑ`.
     embedding: nn.Module
-    MODULE: Responsible for embedding `x̂→ẑ`.
+        MODULE: Responsible for embedding `x̂→ẑ`.
     system: nn.Module
-    MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`.
+        MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`.
     decoder: nn.Module
-    MODULE: Responsible for projecting `ẑ→x̂`.
+        MODULE: Responsible for projecting `ẑ→x̂`.
     projection: nn.Module
-    MODULE: Responsible for projecting `ẑ→x̂`.
+        MODULE: Responsible for projecting `ẑ→x̂`.
     filter: nn.Module
-    MODULE: Responsible for updating `(x̂, x_obs) →x̂'`.
+        MODULE: Responsible for updating `(x̂, x_obs) →x̂'`.
     """
 
     HP: dict[str, Any] = {
@@ -288,8 +298,8 @@ class LinODEnet(nn.Module):
     r"""CONST: Whether to concatenate mask as extra features."""
 
     # Buffers
-    ZERO: Tensor
-    r"""BUFFER: A constant tensor of value float(0.0)"""
+    zero: Tensor
+    r"""BUFFER: A tensor of value float(0.0)"""
     xhat_pre: Tensor
     r"""BUFFER: Stores pre-jump values."""
     xhat_post: Tensor
@@ -304,7 +314,7 @@ class LinODEnet(nn.Module):
     r"""PARAM: The system matrix of the linear ODE component."""
 
     # Sub-Modules
-    # encoder: nn.Module
+    # encoder: Any
     # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
     # embedding: nn.Module
     # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
@@ -346,6 +356,13 @@ class LinODEnet(nn.Module):
             )
 
         # TODO: replace with add_module once supported!
+        # self.add_module("embedding", _embedding)
+        # self.add_module("encoder", HP["Encoder"](**HP["Encoder_cfg"]))
+        # self.add_module("system", HP["System"](**HP["System_cfg"]))
+        # self.add_module("decoder", HP["Decoder"](**HP["Decoder_cfg"]))
+        # self.add_module("projection", _projection)
+        # self.add_module("filter", HP["Filter"](**HP["Filter_cfg"]))
+        print(HP["Encoder_cfg"])
         self.embedding: nn.Module = _embedding
         self.encoder: nn.Module = HP["Encoder"](**HP["Encoder_cfg"])
         self.system: nn.Module = HP["System"](**HP["System_cfg"])
@@ -357,11 +374,11 @@ class LinODEnet(nn.Module):
         self.kernel = self.system.kernel
 
         # Buffers
-        self.register_buffer("ZERO", torch.tensor(0.0))
-        self.register_buffer("xhat_pre", torch.tensor(()))
-        self.register_buffer("xhat_post", torch.tensor(()))
-        self.register_buffer("zhat_pre", torch.tensor(()))
-        self.register_buffer("zhat_post", torch.tensor(()))
+        self.register_buffer("zero", torch.tensor(0.0), persistent=False)
+        self.register_buffer("xhat_pre", torch.tensor(()), persistent=False)
+        self.register_buffer("xhat_post", torch.tensor(()), persistent=False)
+        self.register_buffer("zhat_pre", torch.tensor(()), persistent=False)
+        self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
 
     @jit.export
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
@@ -400,7 +417,7 @@ class LinODEnet(nn.Module):
 
         # Initialization
         # TODO: do something smarter than zero initialization!
-        X0 = torch.where(torch.isnan(X[0]), self.ZERO, X[0])
+        X0 = torch.where(torch.isnan(X[0]), self.zero, X[0])
 
         X̂_pre: list[Tensor] = [
             X0
@@ -462,11 +479,3 @@ class LinODEnet(nn.Module):
         self.zhat_post = torch.stack(Ẑ_post, dim=-2)
 
         return self.xhat_post
-
-    # @property
-    # def signature(self) -> list[tuple[int, ...]], tuple[int, ...]:
-    #     assert len(inputs) == 2, "Only Allows two inputs!"
-    #     assert
-
-
-# prec # post

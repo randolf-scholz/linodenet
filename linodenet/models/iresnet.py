@@ -44,7 +44,7 @@ def spectral_norm(
     -------
     Tensor
     """
-    m, n = A.shape
+    _, n = A.shape
 
     with torch.no_grad():
         x = torch.randn(n, device=A.device, dtype=A.dtype)
@@ -102,7 +102,7 @@ class SpectralNorm(torch.autograd.Function):
         atol: float = kwargs["atol"] if "atol" in kwargs else 1e-6
         rtol: float = kwargs["rtol"] if "rtol" in kwargs else 1e-6
         maxiter: int = kwargs["maxiter"] if "maxiter" in kwargs else 1000
-        m, n = A.shape
+        _, n = A.shape
         x = torch.randn(n, device=A.device, dtype=A.dtype)
         x = x / vector_norm(x)
 
@@ -154,9 +154,11 @@ class LinearContraction(nn.Module):
     output_size: int
         The dimensionality of the output space.
     c: Tensor
-        The regularization hyperparameter
+        The regularization hyperparameter.
+    spectral_norm: Tensor
+        BUFFER: The value of `‖W‖_2`
     weight: Tensor
-        The weight matrix
+        The weight matrix.
     bias: Tensor or None
         The bias Tensor if present, else None.
     """
@@ -164,15 +166,24 @@ class LinearContraction(nn.Module):
     input_size: Final[int]
     output_size: Final[int]
 
-    C: Tensor
-    ONE: Tensor
-    spectral_norm: Tensor
+    # Constants
+    c: Tensor
+    r"""CONST: The regularization hyperparameter."""
+    one: Tensor
+    r"""CONST: A tensor with value 1.0"""
 
+    # Buffers
+    spectral_norm: Tensor
+    r"""BUFFER: The value of `‖W‖_2`"""
+
+    # Parameters
     weight: Tensor
+    r"""PARAM: The weight matrix."""
     bias: Optional[Tensor]
+    r"""PARAM: The bias term."""
 
     def __init__(
-        self, input_size: int, output_size: int, c: float = 0.97, bias: bool = True
+        self, input_size: int, output_size: int, *, c: float = 0.97, bias: bool = True
     ):
         super().__init__()
         self.input_size = input_size
@@ -185,10 +196,11 @@ class LinearContraction(nn.Module):
             self.register_parameter("bias", None)
         self.reset_parameters()
 
-        # self.spectral_norm = matrix_norm(self.weight, ord=2)
-        self.register_buffer("ONE", torch.tensor(1.0))
-        self.register_buffer("C", torch.tensor(float(c)))
-        self.register_buffer("spectral_norm", matrix_norm(self.weight, ord=2))
+        self.register_buffer("one", torch.tensor(1.0), persistent=True)
+        self.register_buffer("c", torch.tensor(float(c)), persistent=True)
+        self.register_buffer(
+            "spectral_norm", matrix_norm(self.weight, ord=2), persistent=False
+        )
 
     def reset_parameters(self) -> None:
         r"""Reset both weight matrix and bias vector."""
@@ -219,7 +231,7 @@ class LinearContraction(nn.Module):
         # σ_max = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
         self.spectral_norm = matrix_norm(self.weight, ord=2)
-        fac = torch.minimum(self.C / self.spectral_norm, self.ONE)
+        fac = torch.minimum(self.c / self.spectral_norm, self.one)
         return functional.linear(x, fac * self.weight, self.bias)
 
 
@@ -253,9 +265,9 @@ class AltLinearContraction(nn.Module):
     r"""CONST: Maximum number of steps in power-iteration"""
 
     # Buffers
-    C: Tensor
+    c: Tensor
     r"""BUFFER: The regularization strength."""
-    ONE: Tensor
+    one: Tensor
     r"""BUFFER: Constant value of float(1.0)."""
     spectral_norm: Tensor
     r"""BUFFER: The largest singular value."""
@@ -274,6 +286,7 @@ class AltLinearContraction(nn.Module):
         self,
         input_size: int,
         output_size: int,
+        *,
         c: float = 0.97,
         bias: bool = True,
         maxiter: int = 1,
@@ -291,8 +304,8 @@ class AltLinearContraction(nn.Module):
         self.reset_parameters()
 
         # self.spectral_norm = matrix_norm(self.weight, ord=2)
-        self.register_buffer("ONE", torch.tensor(1.0))
-        self.register_buffer("C", torch.tensor(float(c)))
+        self.register_buffer("one", torch.tensor(1.0))
+        self.register_buffer("c", torch.tensor(float(c)))
         self.register_buffer("spectral_norm", matrix_norm(self.kernel, ord=2))
         # self.register_buffer(
         #     "u",
@@ -330,7 +343,7 @@ class AltLinearContraction(nn.Module):
         # σ_max = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
         self.spectral_norm = matrix_norm(self.kernel, ord=2)
-        fac = torch.minimum(self.C / self.spectral_norm, self.ONE)
+        fac = torch.minimum(self.c / self.spectral_norm, self.one)
         return functional.linear(x, fac * self.kernel, self.bias)
 
 
@@ -362,6 +375,10 @@ class iResNetBlock(nn.Module):
         Whether to use bias
     HP: dict
         Nested dictionary containing the hyperparameters.
+    residual: Tensor
+        BUFFER: The termination error during backward propagation.
+    bottleneck: nn.Sequential
+        The bottleneck layer.
     """
 
     # Constants
@@ -380,6 +397,7 @@ class iResNetBlock(nn.Module):
 
     # Buffers
     residual: Tensor
+    r"""BUFFER: The termination error during backward propagation."""
 
     HP: dict = {
         "atol": 1e-08,
@@ -417,10 +435,12 @@ class iResNetBlock(nn.Module):
         self.activation = self._Activation(**HP["activation_config"])  # type: ignore[call-arg]
 
         self.bottleneck = nn.Sequential(
-            LinearContraction(self.input_size, self.hidden_size, self.bias),
-            LinearContraction(self.hidden_size, self.input_size, self.bias),
+            LinearContraction(self.input_size, self.hidden_size, bias=self.bias),
+            LinearContraction(self.hidden_size, self.input_size, bias=self.bias),
             self.activation,
         )
+
+        self.register_buffer("residual", torch.tensor(()), persistent=False)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -456,9 +476,9 @@ class iResNetBlock(nn.Module):
 
         for _ in range(self.maxiter):
             x, x_prev = y - self.bottleneck(x), x
-            residual = torch.abs(x - x_prev) - self.rtol * torch.absolute(x_prev)
+            self.residual = torch.abs(x - x_prev) - self.rtol * torch.absolute(x_prev)
 
-            if torch.all(residual <= self.atol):
+            if torch.all(self.residual <= self.atol):
                 return x
 
         print(

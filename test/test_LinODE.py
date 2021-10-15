@@ -61,7 +61,7 @@ def linode_error(
     T = np.random.uniform(low=t0, high=t1, size=num - 2)
     T = np.sort([t0, *T, t1]).astype(numpy_dtype)
 
-    def func(t, x):  # noqa
+    def func(_, x):
         return A @ x
 
     X = np.array(odeint(func, x0, T, tfirst=True))

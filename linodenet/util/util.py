@@ -158,7 +158,6 @@ def flatten(inputs: Union[Tensor, Iterable[Tensor]]) -> Tensor:
     """
     if isinstance(inputs, Tensor):
         return torch.flatten(inputs)
-    elif isinstance(inputs, Iterable):
+    if isinstance(inputs, Iterable):
         return torch.cat([flatten(x) for x in inputs])
-    else:
-        raise ValueError(f"{inputs=} not understood")
+    raise ValueError(f"{inputs=} not understood")
