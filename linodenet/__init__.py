@@ -1,19 +1,23 @@
 r"""Linear Ordinary Differential Equation Recurrent Neural Network."""
 
-__all__ = (
+__all__ = [
+    # Constants
     "__version__",
+    # Sub-Modules
     "config",
-    "models",
+    "embeddings",
     "initializations",
-    "regularizations",
+    "models",
     "projections",
-)
+    "regularizations",
+]
 
 import logging
 from pathlib import Path
 
 from linodenet.config import GlobalConfig as config  # noqa # isort: skip
 from linodenet import (  # isort: skip
+    embeddings,
     initializations,
     models,
     projections,

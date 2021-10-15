@@ -1,5 +1,21 @@
 r"""Initializations for the Linear ODE Networks."""
 
+__all__ = [
+    # Types
+    "Initialization",
+    "SizeLike",
+    # Constants
+    "INITIALIZATIONS",
+    # Functions
+    "gaussian",
+    "symmetric",
+    "skew_symmetric",
+    "orthogonal",
+    "special_orthogonal",
+    "diagonally_dominant",
+    "canonical_skew_symmetric",
+]
+
 import logging
 from typing import Callable, Final
 
@@ -17,19 +33,6 @@ from linodenet.initializations.functional import (
 )
 
 LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [
-    "INITIALIZATIONS",
-    "Initialization",
-    "SizeLike",
-    "gaussian",
-    "symmetric",
-    "skew_symmetric",
-    "orthogonal",
-    "special_orthogonal",
-    "diagonally_dominant",
-    "canonical_skew_symmetric",
-]
 
 Initialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
 r"""Type hint for Initializations."""

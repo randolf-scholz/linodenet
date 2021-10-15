@@ -17,9 +17,9 @@ from linodenet.models import (
     iResNet,
     iResNetBlock,
 )
+from linodenet.util import flatten
 
 LOGGER = logging.getLogger(__name__)
-
 
 linodenet.config.autojit = False
 
@@ -149,7 +149,11 @@ def _test_model(
         filepath = Path.cwd().joinpath(f"model_checkpoints/{Model.__name__}.pt")
         filepath.parent.mkdir(exist_ok=True)
         torch.jit.save(model, filepath)
-        torch.jit.load(filepath)
+        LOGGER.info(">>> Model saved successfully ✔ ")
+        model2 = torch.jit.load(filepath)
+        LOGGER.info(">>> Model loaded successfully ✔ ")
+        assert (flatten(model(*inputs)) == flatten(model2(*inputs))).all()
+        LOGGER.info(">>> Loaded Model produces equivalent outputs ✔ ")
     except Exception as E:
         raise RuntimeError(err_str("checkpointing")) from E
     else:

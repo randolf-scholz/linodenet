@@ -1,12 +1,26 @@
 r"""Projection Mappings."""
-from __future__ import annotations
+
+__all__ = [
+    # Types
+    "Projection",
+    # Constants
+    "PROJECTIONS",
+    # Functions
+    "symmetric",
+    "skew_symmetric",
+    "orthogonal",
+    "diagonal",
+    "identity",
+    "normal",
+]
+
 
 import logging
 from typing import Callable, Final
 
 from torch import Tensor
 
-from linodenet.projections.projections import (
+from linodenet.projections.functional import (
     diagonal,
     identity,
     normal,
@@ -17,16 +31,6 @@ from linodenet.projections.projections import (
 
 LOGGER = logging.getLogger(__name__)
 
-__all__: Final[list[str]] = [
-    "PROJECTIONS",
-    "Projection",
-    "symmetric",
-    "skew_symmetric",
-    "orthogonal",
-    "diagonal",
-    "identity",
-    "normal",
-]
 
 Projection = Callable[[Tensor], Tensor]  # matrix to matrix
 r"""Type hint for projections."""

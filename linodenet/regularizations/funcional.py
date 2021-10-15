@@ -3,18 +3,8 @@ r"""Regularizations for LinODE kernel matrix.
 Functional version.
 """
 
-from __future__ import annotations
-
-import logging
-from typing import Final, Optional
-
-import torch.linalg
-from torch import Tensor, jit
-
-from linodenet import projections
-
-LOGGER = logging.getLogger(__name__)
-__all__: Final[list[str]] = [
+__all__ = [
+    # Functions
     "logdetexp",
     "symmetric",
     "skew_symmetric",
@@ -22,6 +12,16 @@ __all__: Final[list[str]] = [
     "orthogonal",
     "normal",
 ]
+
+import logging
+from typing import Optional
+
+import torch.linalg
+from torch import Tensor, jit
+
+from linodenet import projections
+
+LOGGER = logging.getLogger(__name__)
 
 
 @jit.script
@@ -31,13 +31,11 @@ def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
     By Jacobi's formula
 
     .. math::
-
         \det(e^A) = e^{𝗍𝗋(A)} ⟺ \log(\det(e^A)) = 𝗍𝗋(A) ⟺ \log(\det(A)) = 𝗍𝗋(\log(A))
 
     In particular, we can regularize the LinODE model by adding a regularization term of the form
 
     .. math::
-
         |𝗍𝗋(A)|
 
     **Signature:** ``(..., n,n) ⟶ (...,)``
@@ -64,7 +62,8 @@ def skew_symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
     Parameters
     ----------
     x: Tensor
-    p: Optional[float], If `None` uses Frobenius norm
+    p: Optional[float]
+        If :obj:`None` uses Frobenius norm
 
     Returns
     -------
@@ -85,7 +84,8 @@ def symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
     Parameters
     ----------
     x: Tensor
-    p: Optional[float], If `None` uses Frobenius norm
+    p: Optional[float]
+        If :obj:`None` uses Frobenius norm
 
     Returns
     -------
@@ -113,7 +113,8 @@ def orthogonal(x: Tensor, p: Optional[float] = None) -> Tensor:
     Parameters
     ----------
     x: Tensor
-    p: Optional[float], If `None` uses Frobenius norm
+    p: Optional[float]
+        If :obj:`None` uses Frobenius norm
 
     Returns
     -------
@@ -134,7 +135,8 @@ def normal(x: Tensor, p: Optional[float] = None) -> Tensor:
     Parameters
     ----------
     x: Tensor
-    p: Optional[float], If `None` uses Frobenius norm
+    p: Optional[float]
+        If :obj:`None` uses Frobenius norm
 
     Returns
     -------
@@ -155,7 +157,8 @@ def diagonal(x: Tensor, p: Optional[float] = None) -> Tensor:
     Parameters
     ----------
     x: Tensor
-    p: Optional[float], If `None` uses Frobenius norm
+    p: Optional[float]
+        If :obj:`None` uses Frobenius norm
 
     Returns
     -------

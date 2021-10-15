@@ -1,25 +1,26 @@
 r"""Contains implementations of ODE models."""
 
+__all__ = [
+    # Classes
+    "LinODE",
+    "LinODECell",
+    "LinODEnet",
+]
+
 import logging
 from typing import Any, Final, Optional, Union
 
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.initializations import INITIALIZATIONS, Initialization, gaussian
-from linodenet.models.iResNet import iResNet
+from linodenet.models.iresnet import iResNet
 from linodenet.projections import PROJECTIONS, Projection
 from linodenet.util import autojit, deep_dict_update
 
 LOGGER = logging.getLogger(__name__)
 
-__all__: Final[list[str]] = [  # Classes
-    "ConcatEmbedding",
-    "ConcatProjection",
-    "LinODE",
-    "LinODECell",
-    "LinODEnet",
-]
 
 # TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
 
@@ -234,6 +235,30 @@ class LinODEnet(nn.Module):
         Parameter-less function that draws a initial system matrix
     padding: Tensor
         The learned padding parameters
+    ZERO: Tensor
+        BUFFER: A constant tensor of value float(0.0)
+    xhat_pre: Tensor
+        BUFFER: Stores pre-jump values.
+    xhat_post: Tensor
+        BUFFER: Stores post-jump values.
+    zhat_pre: Tensor
+        BUFFER: Stores pre-jump latent values.
+    zhat_post: Tensor
+        BUFFER: Stores post-jump latent values.
+    kernel: Tensor
+    PARAM: The system matrix of the linear ODE component.
+    encoder: nn.Module
+    MODULE: Responsible for embedding `x̂→ẑ`.
+    embedding: nn.Module
+    MODULE: Responsible for embedding `x̂→ẑ`.
+    system: nn.Module
+    MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`.
+    decoder: nn.Module
+    MODULE: Responsible for projecting `ẑ→x̂`.
+    projection: nn.Module
+    MODULE: Responsible for projecting `ẑ→x̂`.
+    filter: nn.Module
+    MODULE: Responsible for updating `(x̂, x_obs) →x̂'`.
     """
 
     HP: dict[str, Any] = {
@@ -265,10 +290,32 @@ class LinODEnet(nn.Module):
     # Buffers
     ZERO: Tensor
     r"""BUFFER: A constant tensor of value float(0.0)"""
+    xhat_pre: Tensor
+    r"""BUFFER: Stores pre-jump values."""
+    xhat_post: Tensor
+    r"""BUFFER: Stores post-jump values."""
+    zhat_pre: Tensor
+    r"""BUFFER: Stores pre-jump latent values."""
+    zhat_post: Tensor
+    r"""BUFFER: Stores post-jump latent values."""
 
     # Parameters:
     kernel: Tensor
     r"""PARAM: The system matrix of the linear ODE component."""
+
+    # Sub-Modules
+    # encoder: nn.Module
+    # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
+    # embedding: nn.Module
+    # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
+    # system: nn.Module
+    # r"""MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`."""
+    # decoder: nn.Module
+    # r"""MODULE: Responsible for projecting `ẑ→x̂`."""
+    # projection: nn.Module
+    # r"""MODULE: Responsible for projecting `ẑ→x̂`."""
+    # filter: nn.Module
+    # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
     def __init__(self, input_size: int, hidden_size: int, **HP: Any):
         super().__init__()
@@ -287,32 +334,37 @@ class LinODEnet(nn.Module):
         HP["Filter_cfg"]["hidden_size"] = input_size
         HP["Filter_cfg"]["input_size"] = (1 + self.concat_mask) * input_size
 
-        self.encoder = HP["Encoder"](**HP["Encoder_cfg"])
-        self.decoder = HP["Decoder"](**HP["Decoder_cfg"])
-        self.filter = HP["Filter"](**HP["Filter_cfg"])
-        self.system = HP["System"](**HP["System_cfg"])
-
-        embedding_type = HP["embedding_type"]
-
-        if embedding_type == "linear":
-            self.embedding: nn.Module = nn.Linear(input_size, hidden_size)
-            self.projection: nn.Module = nn.Linear(hidden_size, input_size)
-        elif embedding_type == "concat":
-            assert input_size <= hidden_size, f"{embedding_type=} not possible"
-            self.embedding = ConcatEmbedding(input_size, hidden_size)
-            self.projection = ConcatProjection(input_size, hidden_size)
+        if HP["embedding_type"] == "linear":
+            _embedding: nn.Module = nn.Linear(input_size, hidden_size)
+            _projection: nn.Module = nn.Linear(hidden_size, input_size)
+        elif HP["embedding_type"] == "concat":
+            _embedding = ConcatEmbedding(input_size, hidden_size)
+            _projection = ConcatProjection(input_size, hidden_size)
         else:
             raise NotImplementedError(
-                f"{embedding_type=}" + "not in {'linear', 'concat'}"
+                f"{HP['embedding_type']=}" + "not in {'linear', 'concat'}"
             )
+
+        # TODO: replace with add_module once supported!
+        self.embedding: nn.Module = _embedding
+        self.encoder: nn.Module = HP["Encoder"](**HP["Encoder_cfg"])
+        self.system: nn.Module = HP["System"](**HP["System_cfg"])
+        self.decoder: nn.Module = HP["Decoder"](**HP["Decoder_cfg"])
+        self.projection: nn.Module = _projection
+        self.filter: nn.Module = HP["Filter"](**HP["Filter_cfg"])
 
         assert isinstance(self.system.kernel, Tensor)
         self.kernel = self.system.kernel
+
+        # Buffers
         self.register_buffer("ZERO", torch.tensor(0.0))
-        # self.ZERO = torch.tensor(0.0)
+        self.register_buffer("xhat_pre", torch.tensor(()))
+        self.register_buffer("xhat_post", torch.tensor(()))
+        self.register_buffer("zhat_pre", torch.tensor(()))
+        self.register_buffer("zhat_post", torch.tensor(()))
 
     @jit.export
-    def forward(self, T: Tensor, X: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, T: Tensor, X: Tensor) -> Tensor:
         r"""Signature: `[...,N]×[...,N,d] ⟶ [...,N,d]`.
 
         **Model Sketch:**
@@ -354,6 +406,8 @@ class LinODEnet(nn.Module):
             X0
         ]  # here one would expect zero or some other initialization
         X̂_post: list[Tensor] = [X0]
+        Ẑ_pre: list[Tensor] = []
+        Ẑ_post: list[Tensor] = []
 
         # IDEA: The problem is the initial state of RNNCell is not defined and typically put equal
         # to zero. Staying with the idea that the Cell acts as a filter, that is updates the state
@@ -397,114 +451,22 @@ class LinODEnet(nn.Module):
             # do these via indicator variable
             # u = (time, value, mode-indicator, col-indicator)
             # => apply control to specific column.
+            Ẑ_pre.append(ẑ_pre)
+            Ẑ_post.append(ẑ_post)
+            X̂_pre.append(x̂_pre.view(x.shape))
+            X̂_post.append(x̂_post.view(x.shape))
 
-            X̂_pre += [x̂_pre.view(x.shape)]
-            X̂_post += [x̂_post.view(x.shape)]
+        self.xhat_pre = torch.stack(X̂_pre, dim=-2)
+        self.xhat_post = torch.stack(X̂_post, dim=-2)
+        self.zhat_pre = torch.stack(Ẑ_pre, dim=-2)
+        self.zhat_post = torch.stack(Ẑ_post, dim=-2)
 
-        # X̂_pre = torch.stack(X̂_pre, dim=-2)
-        # X̂_post = torch.stack(X̂_post, dim=-2)
-        return torch.stack(X̂_post, dim=-2), torch.stack(X̂_pre, dim=-2)
+        return self.xhat_post
 
-
-@autojit
-class ConcatEmbedding(nn.Module):
-    r"""Maps `x ⟼ [x,w]`.
-
-    Attributes
-    ----------
-    input_size:  int
-    hidden_size: int
-    pad_size:    int
-    padding: Tensor
-    """
-
-    # Constants
-    input_size: Final[int]
-    r"""CONST: The dimensionality of the inputs."""
-    hidden_size: Final[int]
-    r"""CONST: The dimensionality of the outputs."""
-    pad_size: Final[int]
-    r"""CONST: The size of the padding."""
-
-    # Parameters
-    padding: Tensor
-    r"""PARAM: The padding vector."""
-
-    def __init__(self, input_size: int, hidden_size: int):
-        super().__init__()
-        assert input_size <= hidden_size
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.pad_size = hidden_size - input_size
-        self.padding = nn.Parameter(torch.randn(self.pad_size))
-
-    @jit.export
-    def forward(self, X: Tensor) -> Tensor:
-        r"""Signature: `[..., d] ⟶ [..., d+e]`.
-
-        Parameters
-        ----------
-        X: Tensor, shape=(...,DIM)
-
-        Returns
-        -------
-        Tensor, shape=(...,LAT)
-        """
-        shape = list(X.shape[:-1]) + [self.pad_size]
-        return torch.cat([X, self.padding.expand(shape)], dim=-1)
-
-    @jit.export
-    def inverse(self, Z: Tensor) -> Tensor:
-        r"""Signature: `[..., d+e] ⟶ [..., d]`.
-
-        The reverse of the forward. Satisfies inverse(forward(x)) = x for any input.
-
-        Parameters
-        ----------
-        Z: Tensor, shape=(...,LEN,LAT)
-
-        Returns
-        -------
-        Tensor, shape=(...,LEN,DIM)
-        """
-        return Z[..., : self.input_size]
+    # @property
+    # def signature(self) -> list[tuple[int, ...]], tuple[int, ...]:
+    #     assert len(inputs) == 2, "Only Allows two inputs!"
+    #     assert
 
 
-@autojit
-class ConcatProjection(nn.Module):
-    r"""Maps `z = [x,w] ⟼ x`.
-
-    Attributes
-    ----------
-    input_size:  int
-    hidden_size: int
-    """
-
-    # Constants
-    input_size: Final[int]
-    r"""CONST: The dimensionality of the inputs."""
-    hidden_size: Final[int]
-    r"""CONST: The dimensionality of the outputs."""
-
-    def __init__(self, input_size: int, hidden_size: int):
-        super().__init__()
-        assert input_size <= hidden_size
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-
-    @jit.export
-    def forward(self, Z: Tensor) -> Tensor:
-        r"""Signature: `[..., d+e] ⟶ [..., d]`.
-
-        Parameters
-        ----------
-        Z: Tensor, shape=(...,LEN,LAT)
-
-        Returns
-        -------
-        Tensor, shape=(...,LEN,DIM)
-        """
-        return Z[..., : self.input_size]
-
-    # TODO: Add variant with filter in latent space
-    # TODO: Add Controls
+# prec # post

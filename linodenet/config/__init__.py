@@ -1,15 +1,16 @@
 r"""LinODE-Net Configuration."""
 # TODO: There must be a better way to handle global config
 
-from __future__ import annotations
-
-__all__ = ["GlobalConfig"]
+__all__ = [
+    # Constants
+    "GlobalConfig",
+]
 
 import logging
 import os
 from types import ModuleType
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 
 class Config(ModuleType):

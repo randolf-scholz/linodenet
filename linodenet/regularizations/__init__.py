@@ -1,13 +1,25 @@
 r"""Regularizations for LinODE kernel matrix."""
 
-from __future__ import annotations
+__all__ = [
+    # Types
+    "Regularization",
+    # Constants
+    "REGULARIZATIONS",
+    # Functions
+    "diagonal",
+    "logdetexp",
+    "normal",
+    "orthogonal",
+    "skew_symmetric",
+    "symmetric",
+]
 
 import logging
 from typing import Callable, Final
 
 from torch import Tensor
 
-from linodenet.regularizations.regularizations import (
+from linodenet.regularizations.funcional import (
     diagonal,
     logdetexp,
     normal,
@@ -17,17 +29,6 @@ from linodenet.regularizations.regularizations import (
 )
 
 LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [
-    "REGULARIZATIONS",
-    "Regularization",
-    "diagonal",
-    "logdetexp",
-    "normal",
-    "orthogonal",
-    "skew_symmetric",
-    "symmetric",
-]
 
 Regularization = Callable[[Tensor], Tensor]  # matrix to scalar
 r"""Type hint for regularizations."""

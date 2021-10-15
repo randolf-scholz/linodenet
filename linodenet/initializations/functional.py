@@ -4,20 +4,10 @@ r"""Initializations for the Linear ODE Networks.
 All initializations are normalized such that if `x~𝓝(0,1)`, then `Ax~𝓝(0,1)` as well.
 """
 
-from __future__ import annotations
-
-import logging
-from math import prod, sqrt
-from typing import Final, Union
-
-import torch
-from scipy import stats
-from torch import Tensor
-
-LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [
+__all__ = [
+    # Types
     "SizeLike",
+    # Functions
     "gaussian",
     "symmetric",
     "skew_symmetric",
@@ -26,6 +16,17 @@ __all__: Final[list[str]] = [
     "diagonally_dominant",
     "canonical_skew_symmetric",
 ]
+
+import logging
+from math import prod, sqrt
+from typing import Union
+
+import torch
+from scipy import stats
+from torch import Tensor
+
+LOGGER = logging.getLogger(__name__)
+
 
 SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 3.10
 """Type hint for shape-like inputs."""

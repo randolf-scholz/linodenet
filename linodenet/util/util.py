@@ -1,23 +1,29 @@
 r"""Utility functions."""
-import logging
-from collections.abc import Mapping
-from functools import wraps
-from typing import Final
 
-from torch import jit, nn
+__all__ = [
+    # Types
+    "Activation",
+    # Constants
+    "ACTIVATIONS",
+    # Classes
+    # Functions
+    "autojit",
+    "deep_dict_update",
+    "deep_keyval_update",
+    "flatten",
+]
+
+import logging
+from collections.abc import Iterable, Mapping
+from functools import wraps
+from typing import Final, Union
+
+import torch
+from torch import Tensor, jit, nn
 
 from linodenet import config
 
 LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [  # Meta-objects
-    "Activation",
-    "ACTIVATIONS",
-] + [  # Functions
-    "autojit",
-    "deep_dict_update",
-    "deep_keyval_update",
-]
 
 Activation = nn.Module
 r"""Type hint for models."""
@@ -137,3 +143,22 @@ def autojit(base_class: type[nn.Module]) -> type[nn.Module]:
             return instance
 
     return WrappedClass
+
+
+def flatten(inputs: Union[Tensor, Iterable[Tensor]]) -> Tensor:
+    r"""Flattens element of general Hilbert space.
+
+    Parameters
+    ----------
+    inputs: Tensor
+
+    Returns
+    -------
+    Tensor
+    """
+    if isinstance(inputs, Tensor):
+        return torch.flatten(inputs)
+    elif isinstance(inputs, Iterable):
+        return torch.cat([flatten(x) for x in inputs])
+    else:
+        raise ValueError(f"{inputs=} not understood")

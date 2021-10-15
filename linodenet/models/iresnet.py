@@ -1,5 +1,14 @@
 r"""Implementation of invertible ResNets."""
 
+__all__ = [
+    # Classes
+    "iResNet",
+    "iResNetBlock",
+    "LinearContraction",
+    "spectral_norm",
+    "SpectralNorm",
+]
+
 import logging
 from math import sqrt
 from typing import Any, Final, Optional
@@ -12,14 +21,6 @@ from torch.nn import functional
 from linodenet.util import ACTIVATIONS, Activation, autojit, deep_dict_update
 
 LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [  # Classes
-    "iResNet",
-    "iResNetBlock",
-    "LinearContraction",
-    "spectral_norm",
-    "SpectralNorm",
-]
 
 
 @jit.script

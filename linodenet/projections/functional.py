@@ -1,15 +1,7 @@
 r"""Projection Mappings."""
-from __future__ import annotations
 
-import logging
-from typing import Final
-
-import torch
-from torch import Tensor, jit
-
-LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [
+__all__ = [
+    # Functions
     "identity",
     "symmetric",
     "skew_symmetric",
@@ -17,6 +9,13 @@ __all__: Final[list[str]] = [
     "diagonal",
     "normal",
 ]
+
+import logging
+
+import torch
+from torch import Tensor, jit
+
+LOGGER = logging.getLogger(__name__)
 
 
 @jit.script
