@@ -384,7 +384,7 @@ class LinODEnet(nn.Module):
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
         r"""Signature: `[...,N]×[...,N,d] ⟶ [...,N,d]`.
 
-        **Model Sketch:**
+        **Model Sketch**::
 
             ⟶ [ODE] ⟶ (ẑᵢ)                (ẑᵢ') ⟶ [ODE] ⟶
                        ↓                   ↑

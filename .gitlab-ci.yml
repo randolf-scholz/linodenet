@@ -3,7 +3,7 @@
 #
 default:
   image: python:3.9
-  tags:  [ docker ]
+  tags:  [docker]
 
 variables:
   MODULEDIR:      linodenet
@@ -37,7 +37,7 @@ before_script:  # global before_script is run before each and every job.
 build:
   stage: build
   before_script:
-      # make directories
+    # make directories
     - mkdir badges
     - mkdir reports
     # python setup
@@ -47,12 +47,9 @@ build:
     - source venv/bin/activate
     - pip install --upgrade pip pybadges
   script:
-    # generate distribution
-    - pip install --upgrade wheel setuptools
-    - python setup.py sdist bdist_wheel
     # install dependencies
     - pip install --upgrade -r requirements.txt
-    - pip install --upgrade -r requirements-test.txt
+    - pip install --upgrade -r requirements-extra.txt
     - >
       if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
         pip install tsdm --upgrade --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple
@@ -62,6 +59,7 @@ build:
         exit 1
       fi
     # build and install package
+    - python setup.py sdist bdist_wheel
     - pip install dist/*.whl
     - pip list
   after_script:
@@ -71,7 +69,7 @@ build:
       --left-text="python"
       --right-text="3.9"
       --whole-link="https://www.python.org/"
-      --logo="https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/python.svg"
+      --logo="https://upload.wikimedia.org/wikipedia/commons/c/c3/Python-logo-notext.svg"
       --embed-logo
       > badges/python.svg
     - > # generate package version badge
@@ -94,8 +92,6 @@ pylint:
   stage: analysis
   needs: [ "build" ]
   script:
-    # install dependencies
-    - pip install --upgrade pylint pylint-gitlab
     # generate reports
     - pylint $MODULEDIR 
       --exit-zero 
@@ -128,7 +124,6 @@ flake8:
   stage: analysis
   needs: [ "build" ]
   script:
-    - pip install --upgrade -r requirements-flake8.txt
     - flake8 $MODULEDIR
     - flake8 $TESTDIR
   after_script:
@@ -158,9 +153,8 @@ mypy:
   stage: analysis
   needs: [ "build" ]
   script:
-    - pip install --upgrade mypy
-    - mypy $MODULEDIR --install-types --non-interactive  --junit-xml reports/mypy.xml
-    - mypy $TESTDIR --install-types --non-interactive  --junit-xml reports/mypy_test.xml
+    - mypy $MODULEDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy.xml
+    - mypy $TESTDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy_test.xml
   after_script:
     - source venv/bin/activate
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
@@ -189,7 +183,6 @@ pytest:
   stage: test
   needs: [ "build" ]
   script:
-    - pip install --upgrade pytest pytest-cov pytest-rerunfailures
     - pytest --junitxml=reports/pytest.xml --cov=$MODULEDIR $TESTDIR --reruns 3 --only-rerun AssertionError
     - coverage xml -o reports/coverage.xml
     - coverage report
@@ -225,7 +218,6 @@ pypi:
   only: [ master ]
   allow_failure: true
   script:
-    - pip install --upgrade twine
     - twine upload --verbose  dist/*
   after_script:
     - source venv/bin/activate
@@ -251,10 +243,9 @@ pages:
   only: [ master ]
   allow_failure: true
   script:
-    - pip install --upgrade sphinx sphinx-rtd-theme
     - cd docs
     - make html
-    - mv  _build/html/  ../public/
+    - mv  _build ../public/
   after_script:
     - source venv/bin/activate
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")

@@ -1,9 +1,4 @@
-r"""Provides utility functions.
-
-.. data:: ACTIVATIONS
-
-    A :class:`dict` containing string names as keys and corresponding :mod:`torch` functions.
-"""
+r"""Utility functions."""
 
 __all__ = [
     # Types

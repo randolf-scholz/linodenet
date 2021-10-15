@@ -2,13 +2,16 @@ LinODEnet - **Lin**\ ear **O**\ rdinary **D**\ ifferential **E**\ quation **Net*
 =======================================================================================
 
 .. toctree::
+   :titlesonly:
+   :maxdepth: 2
+   :name: mastertoc
 
-    Home page <self>
-    API <_autosummary/linodenet>
-    CHANGELOG <CHANGELOG>
-    CONTRIBUTING <CONTRIBUTING>
-    LICENSE <LICENSE>
-    README <README>
+   Home page <self>
+   API <autoapi/linodenet/index.rst>
+   CHANGELOG <CHANGELOG>
+   CONTRIBUTING <CONTRIBUTING>
+   LICENSE <LICENSE>
+   README <README>
 
 Installation
 ============
