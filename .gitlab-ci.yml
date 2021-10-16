@@ -35,7 +35,8 @@ stages:
   - deploy
 
 before_script:  # global before_script is run before each and every job.
-  - source ${VENV_DIR}/bin/activate
+  - source ${VENVNAME}/bin/activate
+
 
 ################
 # STAGE: SETUP #
@@ -56,7 +57,8 @@ build:
     - python -V
     - pip install --upgrade pip virtualenv
     - virtualenv ${VENVNAME}
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - pip install --upgrade pip pybadges
   script:
     # install dependencies
@@ -75,7 +77,8 @@ build:
     - pip install dist/*.whl
     - pip list
   after_script:
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - > # generate python version badge
       python -m pybadges
       --left-text="python"
@@ -117,7 +120,8 @@ pylint:
     - pylint $TESTDIR --exit-zero --output-format=colorized
     - pylint $MODULEDIR --exit-zero --output-format=colorized | tee pylint.log
   after_script:
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - SCORE=$(sed -n 's/^Your code has been rated at \([-0-9.]*\)\/.*/\1/p' pylint.log)
     - >
       COLOR=$(python -c "print({0: 'black', 2:'red', 4:'orange', 6:'yellow', 8:'green'}[int($SCORE-$SCORE%2)])")
@@ -146,7 +150,8 @@ flake8:
     - flake8 $TESTDIR
     - isort $MODULEDIR --check-only --diff
   after_script:
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate flake8 badge
@@ -180,7 +185,8 @@ mypy:
     - mypy $MODULEDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy.xml
     - mypy $TESTDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy_test.xml
   after_script:
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate mypy badge
@@ -216,7 +222,8 @@ pytest:
     - coverage xml -o reports/coverage.xml
     - coverage report
   after_script:
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate pytest badge
@@ -252,7 +259,8 @@ pypi:
   script:
     - twine upload --verbose  dist/*
   after_script:
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate pypi badge
@@ -282,7 +290,8 @@ pages:
     - make html
     - mv  _build ../public/
   after_script:
-    - source ${VENV_DIR}/bin/activate
+    - source ${VENVNAME}/bin/activate
+
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate sphinx badge
