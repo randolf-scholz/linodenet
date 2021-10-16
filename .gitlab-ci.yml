@@ -18,15 +18,19 @@ variables:
   TWINE_USERNAME: gitlab-ci-token
   TWINE_REPOSITORY_URL: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
 
-cache:
-  - key: pip
-    paths: [ "${PIP_CACHE_DIR}" ]
-  - key: mypy
-    paths: [ "${MYPY_CACHE_DIR}" ]
-  - key: pytest
-    paths: [ "${PYTEST_CACHE_DIR}" ]
-  - key: venv
-    paths: [ "${VENV_DIR}" ]
+cache: &pip_cache
+  key: pip
+  paths: [ "${PIP_CACHE_DIR}" ]
+cache: &venv_cache
+  key: venv
+  paths: [ "${VENV_DIR}" ]
+  policy: pull
+cache: &mypy_cache
+  key: mypy
+  paths: [ "${MYPY_CACHE_DIR}" ]
+cache: &pytest_cache
+  key: pytest
+  paths: [ "${PYTEST_CACHE_DIR}" ]
 
 stages:
   - build
@@ -45,10 +49,11 @@ before_script:  # global before_script is run before each and every job.
 build:
   stage: build
   cache:
-      - key: pip
-        policy: pull-push
-      - key: venv
-        policy: pull-push
+    # inherit all global cache settings
+    <<: *pip_cache
+    <<: *venv_cache
+    # override the policy
+    policy: pull-push
   before_script:
     # make directories
     - mkdir badges
@@ -106,8 +111,7 @@ pylint:
   # see .pylintrc for configuration
   stage: analysis
   cache:
-    key: venv
-    policy: pull
+    <<: *venv_cache
   needs: [ "build" ]
   script:
     # generate reports
@@ -142,8 +146,7 @@ flake8:
   # see .flake8 for configuration
   stage: analysis
   cache:
-    key: venv
-    policy: pull
+    <<: *venv_cache
   needs: [ "build" ]
   script:
     - flake8 $MODULEDIR
@@ -176,10 +179,8 @@ mypy:
   # see .mpypy.ini for configuration
   stage: analysis
   cache:
-    - key: venv
-      policy: pull
-    - key: mypy
-      policy: pull-push
+    <<: *venv_cache
+    <<: *mypy_cache
   needs: [ "build" ]
   script:
     - mypy $MODULEDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy.xml
@@ -212,10 +213,8 @@ pytest:
   # see pytest.ini for configuration
   stage: test
   cache:
-    - key: venv
-      policy: pull
-    - key: pytest
-      policy: pull-push
+    <<: *venv_cache
+    <<: *pytest_cache
   needs: [ "build" ]
   script:
     - pytest --junitxml=reports/pytest.xml --cov=$MODULEDIR $TESTDIR --reruns 3 --only-rerun AssertionError
@@ -251,8 +250,7 @@ pypi:
   # https://docs.gitlab.com/ee/user/packages/pypi_repository/
   stage: deploy
   cache:
-    - key: venv
-      policy: pull
+    <<: *venv_cache
   needs: [ "build" ]
   only: [ master ]
   cache: [ ]
@@ -280,8 +278,7 @@ pages:
   # https://docs.gitlab.com/ee/user/packages/pypi_repository/
   stage: deploy
   cache:
-    - key: venv
-      policy: pull
+    <<: *venv_cache
   needs: [ "build" ]
   only: [ master ]
   cache: [ ]
