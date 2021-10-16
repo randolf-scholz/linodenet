@@ -169,8 +169,8 @@ mypy:
       paths: [ "${MYPY_CACHE_DIR}" ]
   needs: [ "setup" ]
   script:
-    - mypy $MODULEDIR --show-error-codes --pretty --non-interactive --junit-xml reports/mypy.xml
-    - mypy $TESTDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy_test.xml
+    - mypy $MODULEDIR --show-error-codes --pretty --junit-xml reports/mypy.xml
+    - mypy $TESTDIR --show-error-codes --pretty --junit-xml reports/mypy_test.xml
   after_script:
     - source ${VENVNAME}/bin/activate
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
