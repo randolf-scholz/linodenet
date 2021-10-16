@@ -27,7 +27,6 @@ stages:
 before_script:  # global before_script is run before each and every job.
   - source ${VENVNAME}/bin/activate
 
-
 ################
 # STAGE: SETUP #
 ################
@@ -48,7 +47,6 @@ setup:
     - pip install --upgrade pip virtualenv
     - virtualenv ${VENVNAME}
     - source ${VENVNAME}/bin/activate
-
     - pip install --upgrade pip pybadges
   script:
     # install dependencies
@@ -68,7 +66,6 @@ setup:
     - pip list
   after_script:
     - source ${VENVNAME}/bin/activate
-
     - > # generate python version badge
       python -m pybadges
       --left-text="python"
@@ -112,7 +109,6 @@ pylint:
     - pylint $MODULEDIR --exit-zero --output-format=colorized | tee pylint.log
   after_script:
     - source ${VENVNAME}/bin/activate
-
     - SCORE=$(sed -n 's/^Your code has been rated at \([-0-9.]*\)\/.*/\1/p' pylint.log)
     - >
       COLOR=$(python -c "print({0: 'black', 2:'red', 4:'orange', 6:'yellow', 8:'green'}[int($SCORE-$SCORE%2)])")
@@ -143,7 +139,6 @@ flake8:
     - isort $MODULEDIR --check-only --diff
   after_script:
     - source ${VENVNAME}/bin/activate
-
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate flake8 badge
@@ -170,16 +165,14 @@ mypy:
   cache:
     - key: venv
       paths: [ "${VENV_DIR}" ]
-      policy: pull
     - key: mypy
       paths: [ "${MYPY_CACHE_DIR}" ]
   needs: [ "setup" ]
   script:
-    - mypy $MODULEDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy.xml
+    - mypy $MODULEDIR --show-error-codes --pretty --non-interactive --junit-xml reports/mypy.xml
     - mypy $TESTDIR --show-error-codes --pretty --install-types --non-interactive --junit-xml reports/mypy_test.xml
   after_script:
     - source ${VENVNAME}/bin/activate
-
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate mypy badge
@@ -217,7 +210,6 @@ pytest:
     - coverage report
   after_script:
     - source ${VENVNAME}/bin/activate
-
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate pytest badge
@@ -250,12 +242,10 @@ pypi:
       policy: pull
   needs: [ "setup", "pytest" ]
   only: [ master ]
-  cache: [ ]
   script:
     - twine upload --verbose  dist/*
   after_script:
     - source ${VENVNAME}/bin/activate
-
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate pypi badge
@@ -280,14 +270,12 @@ pages:
       policy: pull
   needs: [ "setup", "pytest" ]
   only: [ master ]
-  cache: [ ]
   script:
     - cd docs
     - make html
     - mv  _build ../public/
   after_script:
     - source ${VENVNAME}/bin/activate
-
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     - > # generate sphinx badge
