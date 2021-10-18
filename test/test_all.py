@@ -17,11 +17,11 @@ from linodenet.models import (
     iResNet,
     iResNetBlock,
 )
+from linodenet.util import flatten
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
-
-linodenet.config.autojit = False
+linodenet.conf.autojit = False
 
 OUTER_BATCH = 3
 INNER_BATCH = 5
@@ -99,25 +99,25 @@ def _test_model(
         return f"{Model=} failed {s} with {initialization=} and {inputs=}!"
 
     try:  # check initialization
-        LOGGER.info(">>> INITIALIZATION TEST")
-        LOGGER.info(">>> input shapes: %s", initialization)
+        __logger__.info(">>> INITIALIZATION TEST")
+        __logger__.info(">>> input shapes: %s", initialization)
         model = Model(*initialization)
         model.to(dtype=DTYPE, device=device)
     except Exception as E:
         raise RuntimeError(err_str("initialization")) from E
     else:
-        LOGGER.info(">>> INITIALIZATION ✔ ")
+        __logger__.info(">>> INITIALIZATION ✔ ")
 
     try:  # check JIT-compatibility
-        LOGGER.info(">>> JIT-COMPILATION TEST")
+        __logger__.info(">>> JIT-COMPILATION TEST")
         model = torch.jit.script(model)
     except Exception as E:
         raise RuntimeError(err_str("JIT-compilation")) from E
     else:
-        LOGGER.info(">>> JIT-compilation ✔ ")
+        __logger__.info(">>> JIT-compilation ✔ ")
 
     try:  # check forward
-        LOGGER.info(
+        __logger__.info(
             ">>> FORWARD with input shapes %s", [tuple(x.shape) for x in inputs]
         )
         outputs = model(*inputs)
@@ -128,44 +128,48 @@ def _test_model(
         assert all(
             output.shape == target.shape for output, target in zip(outputs, targets)
         )
-        LOGGER.info(
+        __logger__.info(
             ">>> Output shapes %s match with targets!",
             [tuple(x.shape) for x in targets],
         )
-        LOGGER.info(">>> FORWARD ✔ ")
+        __logger__.info(">>> FORWARD ✔ ")
 
     try:  # check backward
-        LOGGER.info(">>> BACKWARD TEST")
+        __logger__.info(">>> BACKWARD TEST")
         losses = [mse_loss(output, target) for output, target in zip(outputs, targets)]
         loss = torch.stack(losses).sum()
         loss.backward()
     except Exception as E:
         raise RuntimeError(err_str("backward pass")) from E
     else:
-        LOGGER.info(">>> BACKWARD ✔ ")
+        __logger__.info(">>> BACKWARD ✔ ")
 
     try:  # check model saving
-        LOGGER.info(">>> CHECKPOINTING TEST")
+        __logger__.info(">>> CHECKPOINTING TEST")
         filepath = Path.cwd().joinpath(f"model_checkpoints/{Model.__name__}.pt")
         filepath.parent.mkdir(exist_ok=True)
         torch.jit.save(model, filepath)
-        torch.jit.load(filepath)
+        __logger__.info(">>> Model saved successfully ✔ ")
+        model2 = torch.jit.load(filepath)
+        __logger__.info(">>> Model loaded successfully ✔ ")
+        assert (flatten(model(*inputs)) == flatten(model2(*inputs))).all()
+        __logger__.info(">>> Loaded Model produces equivalent outputs ✔ ")
     except Exception as E:
         raise RuntimeError(err_str("checkpointing")) from E
     else:
-        LOGGER.info(">>> CHECKPOINTING ✔ ")
+        __logger__.info(">>> CHECKPOINTING ✔ ")
 
 
 def test_all_models():
     r"""Check if initializations, forward and backward runs for all selected models."""
     for model, params in MODELS.items():
-        LOGGER.info("Testing %s", model.__name__)
+        __logger__.info("Testing %s", model.__name__)
         initialization = params["initialization"]
         input_shapes = params["input_shapes"]
         output_shapes = params["output_shapes"]
 
         for device, batch_shape in product(DEVICES, BATCH_SHAPES):
-            LOGGER.info(
+            __logger__.info(
                 "Testing %s on %s with batch_shape %s",
                 model.__name__,
                 device,
@@ -179,7 +183,7 @@ def test_all_models():
             )
             _test_model(model, initialization, inputs, targets, device=device)
 
-        LOGGER.info("Model %s passed all tests!!", model.__name__)
+        __logger__.info("Model %s passed all tests!!", model.__name__)
 
 
 def __main__():
@@ -188,6 +192,6 @@ def __main__():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    LOGGER.info("Testing forward/backward passes started!")
+    __logger__.info("Testing forward/backward passes started!")
     __main__()
-    LOGGER.info("Testing forward/backward passes finished!")
+    __logger__.info("Testing forward/backward passes finished!")

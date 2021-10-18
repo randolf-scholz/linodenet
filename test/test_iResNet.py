@@ -16,7 +16,7 @@ from linodenet.models import LinearContraction, iResNetBlock
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
 
-LOGGER = logging.getLogger(__name__)  # noqa: E402
+__logger__ = logging.getLogger(__name__)  # noqa: E402
 
 
 def test_LinearContraction(
@@ -39,11 +39,11 @@ def test_LinearContraction(
     """
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        LOGGER.info("Using CUDA")
+        __logger__.info("Using CUDA")
     else:
         torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
 
-    LOGGER.info(">>> Testing LinearContraction <<<")
+    __logger__.info(">>> Testing LinearContraction <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
     dim_inputs = dim_inputs or random.choice([2 ** k for k in range(2, 8)])
     dim_output = dim_output or random.choice([2 ** k for k in range(2, 8)])
@@ -52,7 +52,7 @@ def test_LinearContraction(
         "Dim-in": f"{dim_inputs}",
         "Dim-out": f"{dim_output}",
     }
-    LOGGER.info("Configuration: %s", extra_stats)
+    __logger__.info("Configuration: %s", extra_stats)
 
     x = torch.randn(num_sample, dim_inputs)
     y = torch.randn(num_sample, dim_inputs)
@@ -65,12 +65,12 @@ def test_LinearContraction(
 
     # Test whether contraction property holds
     assert torch.all(latent_distances <= distances)
-    LOGGER.info("LinearContraction passes test ✔ ")
+    __logger__.info("LinearContraction passes test ✔ ")
 
     if not make_plot:
         return
 
-    LOGGER.info("LinearContraction generating figure")
+    __logger__.info("LinearContraction generating figure")
     scaling_factor = (latent_distances / distances).flatten()
 
     # TODO: Switch to PGF backend with matplotlib 3.5 release
@@ -85,7 +85,7 @@ def test_LinearContraction(
     visualize_distribution(scaling_factor, ax=ax, extra_stats=extra_stats)
 
     fig.savefig("LinearContraction_ScalingFactor.pdf")
-    LOGGER.info("LinearContraction all done")
+    __logger__.info("LinearContraction all done")
 
 
 def test_iResNetBlock(
@@ -113,7 +113,7 @@ def test_iResNetBlock(
     targets: tuple[float, ...]
         The target values for the quantiles of the error distribution
     """
-    LOGGER.info(">>> Testing iResNetBlock <<<")
+    __logger__.info(">>> Testing iResNetBlock <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 11)])
     dim_inputs = dim_inputs or random.choice([2 ** k for k in range(2, 8)])
     dim_output = dim_output or random.choice([2 ** k for k in range(2, 8)])
@@ -125,16 +125,16 @@ def test_iResNetBlock(
     }
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        LOGGER.info("Using CUDA")
+        __logger__.info("Using CUDA")
     else:
         torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
 
     QUANTILES = torch.tensor(quantiles)
     TARGETS = torch.tensor(targets)
 
-    LOGGER.info("Configuration: %s", extra_stats)
-    LOGGER.info("QUANTILES: %s", QUANTILES)
-    LOGGER.info("TARGETS  : %s", TARGETS)
+    __logger__.info("Configuration: %s", extra_stats)
+    __logger__.info("QUANTILES: %s", QUANTILES)
+    __logger__.info("TARGETS  : %s", TARGETS)
 
     with torch.no_grad():
         model = iResNetBlock(dim_inputs, hidden_size=dim_output, maxiter=maxiter)
@@ -150,37 +150,37 @@ def test_iResNetBlock(
     forward_inverse_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert forward_inverse_error.shape == (num_sample,)
     assert (forward_inverse_quantiles <= TARGETS).all(), f"{forward_inverse_quantiles=}"
-    LOGGER.info("iResNetBlock satisfies ϕ⁻¹∘ϕ≈id ✔ ")
-    LOGGER.info("Quantiles: %s", forward_inverse_quantiles)
+    __logger__.info("iResNetBlock satisfies ϕ⁻¹∘ϕ≈id ✔ ")
+    __logger__.info("Quantiles: %s", forward_inverse_quantiles)
 
     # Test if ϕ∘ϕ⁻¹=id, i.e. the right inverse is working
     inverse_forward_error = scaled_norm(y - yhat, axis=-1)
     inverse_forward_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert inverse_forward_error.shape == (num_sample,)
     assert (inverse_forward_quantiles <= TARGETS).all(), f"{inverse_forward_quantiles=}"
-    LOGGER.info("iResNetBlock satisfies ϕ∘ϕ⁻¹≈id ✔ ")
-    LOGGER.info("Quantiles: %s", inverse_forward_quantiles)
+    __logger__.info("iResNetBlock satisfies ϕ∘ϕ⁻¹≈id ✔ ")
+    __logger__.info("Quantiles: %s", inverse_forward_quantiles)
 
     # Test if ϕ≠id, i.e. the forward map is different from the identity
     forward_difference = scaled_norm(x - fx, axis=-1)
     forward_quantiles = torch.quantile(forward_difference, 1 - QUANTILES)
     assert forward_difference.shape == (num_sample,)
     assert (forward_quantiles >= TARGETS).all(), f"{forward_quantiles}"
-    LOGGER.info("iResNetBlock satisfies ϕ≉id ✔ ")
-    LOGGER.info("Quantiles: %s", forward_quantiles)
+    __logger__.info("iResNetBlock satisfies ϕ≉id ✔ ")
+    __logger__.info("Quantiles: %s", forward_quantiles)
 
     # Test if ϕ⁻¹≠id, i.e. the inverse map is different from an identity
     inverse_difference = scaled_norm(y - ify, axis=-1)
     inverse_quantiles = torch.quantile(inverse_difference, 1 - QUANTILES)
     assert inverse_difference.shape == (num_sample,)
     assert (inverse_quantiles >= TARGETS).all(), f"{inverse_quantiles}"
-    LOGGER.info("iResNetBlock satisfies ϕ⁻¹≉id ✔ ")
-    LOGGER.info("Quantiles: %s", inverse_quantiles)
+    __logger__.info("iResNetBlock satisfies ϕ⁻¹≉id ✔ ")
+    __logger__.info("Quantiles: %s", inverse_quantiles)
 
     if not make_plot:
         return
 
-    LOGGER.info("iResNetBlock generating figure")
+    __logger__.info("iResNetBlock generating figure")
     fig, ax = plt.subplots(
         ncols=2, nrows=2, figsize=(8, 5), tight_layout=True, sharex="row", sharey="row"
     )
@@ -209,7 +209,7 @@ def test_iResNetBlock(
     ax[1, 1].set_ylabel(r"density $p(d_\text{right} \mid y)$")
     fig.suptitle("iResNetBlock -- Inversion Property", fontsize=16)
     fig.savefig("iResNetBlock_inversion.pdf")
-    LOGGER.info("iResNetBlock all done")
+    __logger__.info("iResNetBlock all done")
 
 
 def __main__():
@@ -217,13 +217,13 @@ def __main__():
     logging.getLogger("PIL").setLevel(logging.WARNING)
     logging.basicConfig(level=logging.INFO)
 
-    LOGGER.info("Testing LinearContraction started!")
+    __logger__.info("Testing LinearContraction started!")
     test_LinearContraction(make_plot=True)
-    LOGGER.info("Testing LinearContraction finished!")
+    __logger__.info("Testing LinearContraction finished!")
 
-    LOGGER.info("Testing iResNetBlock started!")
+    __logger__.info("Testing iResNetBlock started!")
     test_iResNetBlock(make_plot=True)
-    LOGGER.info("Testing iResNetBlock finished!")
+    __logger__.info("Testing iResNetBlock finished!")
 
 
 if __name__ == "__main__":

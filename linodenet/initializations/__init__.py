@@ -1,46 +1,50 @@
-r"""Initializations for the Linear ODE Networks."""
+r"""Initializations for the Linear ODE Networks.
 
-import logging
-from typing import Callable, Final
+All initializations are normalized such that if `x∼𝓝(0,1)`, then `Ax∼𝓝(0,1)` as well.
 
-from torch import Tensor
+Notes
+-----
+Contains initializations in both modular and functional form.
+  - See :mod:`~linodenet.initializations.functional` for functional implementations.
+  - See :mod:`~linodenet.initializations.modular` for modular implementations.
+"""
 
-from linodenet.initializations.functional import (
-    SizeLike,
-    canonical_skew_symmetric,
-    diagonally_dominant,
-    gaussian,
-    orthogonal,
-    skew_symmetric,
-    special_orthogonal,
-    symmetric,
-)
-
-LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [
-    "INITIALIZATIONS",
+__all__ = [
+    # Types
     "Initialization",
-    "SizeLike",
-    "gaussian",
-    "symmetric",
-    "skew_symmetric",
-    "orthogonal",
-    "special_orthogonal",
-    "diagonally_dominant",
-    "canonical_skew_symmetric",
+    "FunctionalInitialization",
+    "ModularInitialization",
+    # Constants
+    "FunctionalInitializations",
+    "ModularInitializations",
+    "INITIALIZATIONS",
+    # Sub-Modules
+    "functional",
+    "modular",
 ]
 
-Initialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
-r"""Type hint for Initializations."""
+import logging
+from typing import Final, Union
 
-INITIALIZATIONS: Final[dict[str, Initialization]] = {
-    "gaussian": gaussian,
-    "symmetric": symmetric,
-    "skew-symmetric": skew_symmetric,
-    "orthogonal": orthogonal,
-    "special-orthogonal": special_orthogonal,
-    "diagonally_dominant": diagonally_dominant,
-    "canonical_skew_symmetric": canonical_skew_symmetric,
+from linodenet.initializations import functional, modular
+from linodenet.initializations.functional import (
+    FunctionalInitialization,
+    FunctionalInitializations,
+)
+from linodenet.initializations.modular import (
+    ModularInitialization,
+    ModularInitializations,
+)
+
+Initialization = Union[FunctionalInitialization, ModularInitialization]
+r"""Type hint for initializations."""
+
+INITIALIZATIONS: Final[
+    dict[str, Union[FunctionalInitialization, type[ModularInitialization]]]
+] = {
+    **FunctionalInitializations,
+    **ModularInitializations,
 }
-r"""Dictionary containing all available initializations."""
+r"""Dictionary of all available initializations."""
+
+__logger__ = logging.getLogger(__name__)

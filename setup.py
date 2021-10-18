@@ -1,8 +1,14 @@
-r"""Setup File - replace with toml once PEP 660 has widespread adoption."""
+r"""Setup File.
+
+We will move to pyproject.toml setup once PEP 660 is resolved and part of setuptools/poetry
+"""
+
 import io
 import os
 import re
+from pathlib import Path
 
+import pkg_resources
 import setuptools
 
 NAME = "linodenet"
@@ -10,12 +16,18 @@ NAME = "linodenet"
 with open(f"{NAME}/VERSION", "r") as file:
     VERSION = file.read()
 
+with Path("requirements.txt").open() as requirements_txt:
+    install_requires = [
+        str(requirement)
+        for requirement in pkg_resources.parse_requirements(requirements_txt)
+    ]
+
 if "CI_PIPELINE_IID" in os.environ:
     BUILD_NUMBER = os.environ["CI_PIPELINE_IID"]
     VERSION += f".{BUILD_NUMBER}"
 
 
-def _read(filename):
+def _read(filename: str) -> str:
     filename = os.path.join(os.path.dirname(__file__), filename)
     text_type = type("")
     with io.open(filename, mode="r", encoding="utf-8") as fd:
@@ -31,10 +43,8 @@ setuptools.setup(
     author_email="scholz@ismll.uni-hildesheim.de",
     description="Linear ODE Network for Time Series Forecasting",
     long_description=_read("README.rst"),
-    long_description_content_type="test/X-rst",
-    packages=setuptools.find_packages(
-        exclude="test"
-    ),  # include all packages other than test
+    long_description_content_type="test/x-rst",
+    packages=setuptools.find_packages(exclude=["test"]),  # include all packages in ...
     install_requires=[
         "scipy",
         "torch>=1.9.0",
@@ -46,9 +56,9 @@ setuptools.setup(
         "torch>=1.9.0",
         "tqdm",
     ],
-    # include_package_data=True,  # <-- This MUST NOT be set https://stackoverflow.com/a/23936405/9318372  # noqa
-    package_data={
-        #
-    },
+    # Files that listed in MANIFEST.in and also are in python packages,
+    # i.e. contained in folders with and __init__.py, will be included.
+    include_package_data=True,
+    # ...but exclude virtualenv.yaml from all packages
     exclude_package_data={"": ["virtualenv.yaml"]},
 )

@@ -1,14 +1,22 @@
 LinODEnet - **Lin**\ ear **O**\ rdinary **D**\ ifferential **E**\ quation **Net**\ work
 =======================================================================================
 
-.. toctree::
+.. image:: ../linodenet/linodenet-sketch.svg
+   :width: 100%
+   :alt: LinODEnet-sketch
 
-    Home page <self>
-    API <_autosummary/linodenet>
-    CHANGELOG <CHANGELOG>
-    CONTRIBUTING <CONTRIBUTING>
-    LICENSE <LICENSE>
-    README <README>
+
+.. toctree::
+   :titlesonly:
+   :maxdepth: 2
+   :name: mastertoc
+
+   Home page <self>
+   API <autoapi/linodenet/index.rst>
+   CHANGELOG <CHANGELOG>
+   CONTRIBUTING <CONTRIBUTING>
+   LICENSE <LICENSE>
+   README <README>
 
 Installation
 ============
