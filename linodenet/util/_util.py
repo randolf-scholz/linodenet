@@ -23,7 +23,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.config import conf
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 Activation = nn.Module
 r"""Type hint for models."""

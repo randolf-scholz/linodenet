@@ -24,4 +24,4 @@ from linodenet.util._util import (  # Types; Constants; Classes; Functions
     flatten,
 )
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)

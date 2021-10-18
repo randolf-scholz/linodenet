@@ -40,7 +40,7 @@ from linodenet.initializations.functional._functional import (
     symmetric,
 )
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 FunctionalInitialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
 r"""Type hint for Initializations."""

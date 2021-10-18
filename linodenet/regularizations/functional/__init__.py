@@ -35,7 +35,7 @@ from linodenet.regularizations.functional._functional import (
     symmetric,
 )
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 FunctionalRegularization = Callable[[Tensor], Tensor]
 r"""Type hint for modular regularizations."""

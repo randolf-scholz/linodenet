@@ -13,4 +13,4 @@ import logging
 
 from linodenet.embeddings._embeddings import ConcatEmbedding, ConcatProjection
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)

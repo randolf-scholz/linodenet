@@ -21,7 +21,7 @@ import logging
 import torch
 from torch import Tensor, jit
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 
 @jit.script

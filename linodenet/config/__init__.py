@@ -14,4 +14,4 @@ import logging
 
 from linodenet.config._config import Config, conf
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)

@@ -34,7 +34,7 @@ from linodenet.projections.functional._functional import (
     symmetric,
 )
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 FunctionalProjection = Callable[[Tensor], Tensor]
 r"""Type hint for modular regularizations."""

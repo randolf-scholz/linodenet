@@ -20,7 +20,7 @@ from torch.nn import functional
 
 from linodenet.util import ACTIVATIONS, Activation, autojit, deep_dict_update
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 
 @jit.script

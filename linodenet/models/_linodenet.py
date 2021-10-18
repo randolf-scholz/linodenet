@@ -23,7 +23,7 @@ from linodenet.models._iresnet import iResNet
 from linodenet.projections import PROJECTIONS, Projection
 from linodenet.util import autojit, deep_dict_update
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 
 # TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.

@@ -30,7 +30,7 @@ from linodenet.projections import functional, modular
 from linodenet.projections.functional import FunctionalProjection, FunctionalProjections
 from linodenet.projections.modular import ModularProjection, ModularProjections
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 Projection = Union[FunctionalProjection, ModularProjection]  # matrix to matrix
 r"""Type hint for projections."""

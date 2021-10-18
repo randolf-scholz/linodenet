@@ -27,7 +27,7 @@ from linodenet import (
 )
 from linodenet.config import conf
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf8") as file:
     __version__ = file.read()
@@ -36,23 +36,23 @@ with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf8") as fi
 
 # Recursively clean up namespaces to only show what the user should see.
 # def clean_namespace(module: ModuleType):
-#     LOGGER.info(f"Cleaning {module=}")
+#     __logger__.info(f"Cleaning {module=}")
 #     variables = vars(module)
-#     LOGGER.info(f"Content: {list(variables)}")
+#     __logger__.info(f"Content: {list(variables)}")
 #
 #     assert hasattr(module, "__name__"), f"{module=} has no __name__ ?!?!"
 #     assert hasattr(module, "__all__"), f"{module=} has no __all__!"
 #
 #     for key in list(variables):
-#         LOGGER.info(f"Investigating {key=} ...")
+#         __logger__.info(f"Investigating {key=} ...")
 #         obj = variables[key]
-#         # ignore LOGGER, clean_namespace and ModuleType
-#         if key in ("LOGGER", "ModuleType", "clean_namespace"):
-#             LOGGER.info("\t skipped!")
+#         # ignore __logger__, clean_namespace and ModuleType
+#         if key in ("__logger__", "ModuleType", "clean_namespace"):
+#             __logger__.info("\t skipped!")
 #             continue
 #         # ignore dunder keys
 #         if key.startswith("__") and key.endswith("__"):
-#             LOGGER.info("\t skipped!")
+#             __logger__.info("\t skipped!")
 #             continue
 #         # special treatment for ModuleTypes
 #         elif isinstance(obj, ModuleType):
@@ -63,12 +63,12 @@ with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf8") as fi
 #             # 3rd party!
 #             else:
 #
-#             LOGGER.info("\t recursion!")
+#             __logger__.info("\t recursion!")
 #             clean_namespace(obj)
 #         # delete everything not in __all__
 #         if key not in module.__all__:       # type: ignore[attr-defined]
 #             delattr(module, key)
-#             LOGGER.info("\t killed!")
+#             __logger__.info("\t killed!")
 #
 #         # set __module__ of elements from private modules to parent module
 #         elif (
@@ -76,12 +76,12 @@ with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf8") as fi
 #             and module.__name__.startswith("_")
 #             and not module.__name__.startswith("__")
 #         ):
-#             LOGGER.info("\t fixing __module__!")
+#             __logger__.info("\t fixing __module__!")
 #             parent, _ = module.__name__.rsplit(".", maxsplit=1)
 #             obj.__module__ = parent
 #     else:
 #         # Clean up the rest
-#         for key in ("LOGGER", "ModuleType", "clean_namespace"):
+#         for key in ("__logger__", "ModuleType", "clean_namespace"):
 #             if key in variables:
 #                 delattr(module, key)
 
@@ -114,7 +114,7 @@ def clean_namespace(module: ModuleType):
         elif (isinstance(obj, type) or callable(obj)) and module.__name__.startswith(
             "_"
         ):
-            LOGGER.info("\t fixing __module__!")
+            __logger__.info("\t fixing __module__!")
             parent, _ = module.__name__.rsplit(".", maxsplit=1)
             print(module.__package__)
             obj.__module__ = module.__package__

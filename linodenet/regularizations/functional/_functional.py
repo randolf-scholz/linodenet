@@ -25,7 +25,7 @@ from torch import Tensor, jit
 
 from linodenet.projections import functional as projections
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 
 @jit.script

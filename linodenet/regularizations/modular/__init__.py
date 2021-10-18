@@ -19,7 +19,7 @@ from typing import Final
 
 from torch.nn import Module
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 ModularRegularization = Module
 r"""Type hint for modular regularizations."""

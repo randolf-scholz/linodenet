@@ -17,7 +17,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.util import autojit
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 
 @autojit

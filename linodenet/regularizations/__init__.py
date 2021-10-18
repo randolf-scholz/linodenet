@@ -35,7 +35,7 @@ from linodenet.regularizations.modular import (
     ModularRegularizations,
 )
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 Regularization = Union[
     FunctionalRegularization, ModularRegularization

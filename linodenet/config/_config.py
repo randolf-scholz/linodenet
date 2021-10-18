@@ -11,7 +11,7 @@ __all__ = [
 import logging
 import os
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 os.environ["LINODENET_AUTOJIT"] = "True"
 """Default value."""

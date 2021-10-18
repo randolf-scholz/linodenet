@@ -31,7 +31,7 @@ from linodenet.models._iresnet import (
 )
 from linodenet.models._linodenet import LinODE, LinODECell, LinODEnet
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 Model = Module
 r"""Type hint for models."""

@@ -29,7 +29,7 @@ import torch
 from scipy import stats
 from torch import Tensor
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 
 
 SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 3.10

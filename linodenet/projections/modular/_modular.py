@@ -8,4 +8,4 @@ Contains projections in modular form.
 
 import logging
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)

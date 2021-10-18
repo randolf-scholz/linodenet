@@ -47,4 +47,4 @@ INITIALIZATIONS: Final[
 }
 r"""Dictionary of all available initializations."""
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
