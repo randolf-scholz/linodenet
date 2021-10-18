@@ -35,95 +35,82 @@ with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf8") as fi
 
 
 # Recursively clean up namespaces to only show what the user should see.
-# def clean_namespace(module: ModuleType):
-#     __logger__.info(f"Cleaning {module=}")
-#     variables = vars(module)
-#     __logger__.info(f"Content: {list(variables)}")
-#
-#     assert hasattr(module, "__name__"), f"{module=} has no __name__ ?!?!"
-#     assert hasattr(module, "__all__"), f"{module=} has no __all__!"
-#
-#     for key in list(variables):
-#         __logger__.info(f"Investigating {key=} ...")
-#         obj = variables[key]
-#         # ignore __logger__, clean_namespace and ModuleType
-#         if key in ("__logger__", "ModuleType", "clean_namespace"):
-#             __logger__.info("\t skipped!")
-#             continue
-#         # ignore dunder keys
-#         if key.startswith("__") and key.endswith("__"):
-#             __logger__.info("\t skipped!")
-#             continue
-#         # special treatment for ModuleTypes
-#         elif isinstance(obj, ModuleType):
-#             # submodule!
-#             if obj.__package__ == module.__name__:
-#             # subpackage!
-#             elif obj.__package__.rsplit(".", maxsplit=1)[0] == module.__name__:
-#             # 3rd party!
-#             else:
-#
-#             __logger__.info("\t recursion!")
-#             clean_namespace(obj)
-#         # delete everything not in __all__
-#         if key not in module.__all__:       # type: ignore[attr-defined]
-#             delattr(module, key)
-#             __logger__.info("\t killed!")
-#
-#         # set __module__ of elements from private modules to parent module
-#         elif (
-#             (isinstance(obj, type) or callable(obj))
-#             and module.__name__.startswith("_")
-#             and not module.__name__.startswith("__")
-#         ):
-#             __logger__.info("\t fixing __module__!")
-#             parent, _ = module.__name__.rsplit(".", maxsplit=1)
-#             obj.__module__ = parent
-#     else:
-#         # Clean up the rest
-#         for key in ("__logger__", "ModuleType", "clean_namespace"):
-#             if key in variables:
-#                 delattr(module, key)
+def _clean_namespace(module: ModuleType):
+    r"""Recursively cleans up the namespace.
 
+    Parameters
+    ----------
+    module: ModuleType
+    """
+    __logger__.info("Cleaning module=%s", module)
+    variables = vars(module)
 
-#
-def clean_namespace(module: ModuleType):
+    def is_private(s: str) -> bool:
+        return s.startswith("_") and not s.startswith("__")
+
+    def get_module(obj: object) -> str:
+        return obj.__module__.rsplit(".", maxsplit=1)[-1]
+
     assert hasattr(module, "__name__"), f"{module=} has no __name__ ?!?!"
     assert hasattr(module, "__package__"), f"{module=} has no __package__ ?!?!"
     assert hasattr(module, "__all__"), f"{module=} has no __all__!"
+    assert module.__name__ == module.__package__, f"{module=} is not a package!"
 
-    # if module.__name__ != module.__package__:
-    #     return
+    maxlen = max((len(key) for key in variables))
 
-    variables = vars(module)
+    def _format(key: str) -> str:
+        return key.ljust(maxlen)
+
     for key in list(variables):
+        key_repr = _format(key)
         obj = variables[key]
-        # ignore clean_namespace and ModuleType
-        if key in ("ModuleType", "clean_namespace"):
+        # ignore _clean_namespace and ModuleType
+        if key in ("ModuleType", "_clean_namespace"):
+            __logger__.debug("key=%s  skipped! - protected object!", key_repr)
             continue
         # ignore dunder keys
         if key.startswith("__") and key.endswith("__"):
+            __logger__.debug("key=%s  skipped! - dunder object!", key_repr)
             continue
-        # delete everything not in __all__
-        if key not in module.__all__:  # type: ignore[attr-defined]
+        # special treatment for ModuleTypes
+        if isinstance(obj, ModuleType):
+            if obj.__package__ is None:
+                __logger__.debug(
+                    "key=%s  skipped! Module with no __package__!", key_repr
+                )
+                continue
+            # subpackage!
+            if obj.__package__.rsplit(".", maxsplit=1)[0] == module.__name__:
+                __logger__.debug("key=%s  recursion!", key_repr)
+                _clean_namespace(obj)
+            # submodule!
+            elif obj.__package__ == module.__name__:
+                __logger__.debug("key=%s  skipped! Sub-Module!", key_repr)
+                continue
+            # 3rd party!
+            else:
+                __logger__.debug("key=%s  skipped! 3rd party Module!", key_repr)
+                continue
+        # key is found:
+        if key in module.__all__:  # type: ignore[attr-defined]
+            # set __module__ attribute to __package__ for functions/classes originating from private modules.
+            if isinstance(obj, type) or callable(obj):
+                mod = get_module(obj)
+                if is_private(mod):
+                    __logger__.debug(
+                        "key=%s  changed {obj.__module__=} to {module.__package__}!",
+                        key_repr,
+                    )
+                    obj.__module__ = module.__package__
+        else:
+            # kill the object
             delattr(module, key)
-        # special treatment for keys in __all__
-        elif isinstance(obj, ModuleType):
-            clean_namespace(obj)
-        # set __module__ of functions/classes from private modules to parent package
-        elif (isinstance(obj, type) or callable(obj)) and module.__name__.startswith(
-            "_"
-        ):
-            __logger__.info("\t fixing __module__!")
-            parent, _ = module.__name__.rsplit(".", maxsplit=1)
-            print(module.__package__)
-            obj.__module__ = module.__package__
-
-    else:
-        # Clean up the rest
-        for key in ("ModuleType", "clean_namespace"):
-            if key in variables:
-                delattr(module, key)
+            __logger__.debug("key=%s  killed!", key_repr)
+    # Post Loop - clean up the rest
+    for key in ("ModuleType", "_clean_namespace"):
+        if key in variables:
+            delattr(module, key)
+            __logger__.debug("key=%s  killed!", key_repr)
 
 
-clean_namespace(__import__(__name__))
+_clean_namespace(__import__(__name__))
