@@ -1,49 +1,50 @@
-r"""Initializations for the Linear ODE Networks."""
+r"""Initializations for the Linear ODE Networks.
+
+All initializations are normalized such that if `x~𝓝(0,1)`, then `Ax~𝓝(0,1)` as well.
+
+Notes
+-----
+Contains initializations in both modular and functional form.
+  - See :mod:`~.functional` for functional implementations.
+  - See :mod:`~.modular` for modular implementations.
+"""
 
 __all__ = [
     # Types
     "Initialization",
-    "SizeLike",
+    "FunctionalInitialization",
+    "ModularInitialization",
     # Constants
+    "FunctionalInitializations",
+    "ModularInitializations",
     "INITIALIZATIONS",
-    # Functions
-    "gaussian",
-    "symmetric",
-    "skew_symmetric",
-    "orthogonal",
-    "special_orthogonal",
-    "diagonally_dominant",
-    "canonical_skew_symmetric",
+    # Sub-Modules
+    "functional",
+    "modular",
 ]
 
 import logging
-from typing import Callable, Final
+from typing import Final, Union
 
-from torch import Tensor
-
+from linodenet.initializations import functional, modular
 from linodenet.initializations.functional import (
-    SizeLike,
-    canonical_skew_symmetric,
-    diagonally_dominant,
-    gaussian,
-    orthogonal,
-    skew_symmetric,
-    special_orthogonal,
-    symmetric,
+    FunctionalInitialization,
+    FunctionalInitializations,
+)
+from linodenet.initializations.modular import (
+    ModularInitialization,
+    ModularInitializations,
 )
 
-LOGGER = logging.getLogger(__name__)
+Initialization = Union[FunctionalInitialization, ModularInitialization]
+r"""Type hint for initializations."""
 
-Initialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
-r"""Type hint for Initializations."""
-
-INITIALIZATIONS: Final[dict[str, Initialization]] = {
-    "gaussian": gaussian,
-    "symmetric": symmetric,
-    "skew-symmetric": skew_symmetric,
-    "orthogonal": orthogonal,
-    "special-orthogonal": special_orthogonal,
-    "diagonally_dominant": diagonally_dominant,
-    "canonical_skew_symmetric": canonical_skew_symmetric,
+INITIALIZATIONS: Final[
+    dict[str, Union[FunctionalInitialization, type[ModularInitialization]]]
+] = {
+    **FunctionalInitializations,
+    **ModularInitializations,
 }
-r"""Dictionary containing all available initializations."""
+r"""Dictionary of all available initializations."""
+
+LOGGER = logging.getLogger(__name__)

@@ -144,10 +144,10 @@ dmypy.json
 .pyre/
 
 # PyCharm
-.idea
+.idea/
 
 # VSCode
-.virtual_documents
+.virtual_documents/
 
 # dask
 dask-worker-space/

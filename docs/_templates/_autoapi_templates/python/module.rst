@@ -1,7 +1,3 @@
-{% if not obj.display %}
-:orphan:
-{% endif %}
-
 {# PRE-CONFIGURATION #########################################################}
 {% if obj.all is not none %}
    {% set visible_children = obj.children|selectattr("short_name", "in", obj.all)|list %}
@@ -17,6 +13,11 @@
 {% set visible_subpackages = obj.subpackages|selectattr("display")|list %}
 {% set visible_submodules = obj.submodules|selectattr("display")|list %}
 
+{% if not visible_subpackages or visible_submodules %}
+:orphan:
+{% endif %}
+
+
 :py:mod:`{{ obj.name }}`
 =========={{ "=" * obj.name|length }}
 
@@ -31,7 +32,6 @@
 
 {# SUB-PACAKGES ##############################################################}
 {% block subpackages %}
-{% set visible_subpackages = obj.subpackages|selectattr("display")|list %}
 {% if visible_subpackages %}
 .. toctree::
    :titlesonly:

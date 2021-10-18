@@ -1,44 +1,51 @@
-r"""Regularizations for LinODE kernel matrix."""
+r"""Regularizations for the Linear ODE Networks.
+
+Notes
+-----
+Contains regularizations in both modular and functional form.
+  - See :mod:`~.functional` for functional implementations.
+  - See :mod:`~.modular` for modular implementations.
+"""
 
 __all__ = [
     # Types
     "Regularization",
+    "FunctionalRegularization",
+    "ModularRegularization",
     # Constants
     "REGULARIZATIONS",
-    # Functions
-    "diagonal",
-    "logdetexp",
-    "normal",
-    "orthogonal",
-    "skew_symmetric",
-    "symmetric",
+    "FunctionalRegularizations",
+    "ModularRegularizations",
+    # Sub-Modules
+    "functional",
+    "modular",
 ]
 
+
 import logging
-from typing import Callable, Final
+from typing import Final, Union
 
-from torch import Tensor
-
-from linodenet.regularizations.funcional import (
-    diagonal,
-    logdetexp,
-    normal,
-    orthogonal,
-    skew_symmetric,
-    symmetric,
+from linodenet.regularizations import functional, modular
+from linodenet.regularizations.functional import (
+    FunctionalRegularization,
+    FunctionalRegularizations,
+)
+from linodenet.regularizations.modular import (
+    ModularRegularization,
+    ModularRegularizations,
 )
 
 LOGGER = logging.getLogger(__name__)
 
-Regularization = Callable[[Tensor], Tensor]  # matrix to scalar
-r"""Type hint for regularizations."""
+Regularization = Union[
+    FunctionalRegularization, ModularRegularization
+]  # matrix to matrix
+r"""Type hint for projections."""
 
-REGULARIZATIONS: Final[dict[str, Regularization]] = {
-    "diagonal": diagonal,
-    "logdetexp": logdetexp,
-    "normal": normal,
-    "orthogonal": orthogonal,
-    "symmetric": symmetric,
-    "skew_symmetric": skew_symmetric,
+REGULARIZATIONS: Final[
+    dict[str, Union[FunctionalRegularization, type[ModularRegularization]]]
+] = {
+    **FunctionalRegularizations,
+    **ModularRegularizations,
 }
-r"""Dictionary containing all available regularizations."""
+r"""Dictionary containing all available projections."""

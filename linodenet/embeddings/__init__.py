@@ -11,6 +11,6 @@ __all__ = [
 
 import logging
 
-from linodenet.embeddings.modules import ConcatEmbedding, ConcatProjection
+from linodenet.embeddings._embeddings import ConcatEmbedding, ConcatProjection
 
 LOGGER = logging.getLogger(__name__)

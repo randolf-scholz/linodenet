@@ -15,7 +15,7 @@ __all__ = [
 
 import logging
 
-from linodenet.util.util import (  # Types; Constants; Classes; Functions
+from linodenet.util._util import (  # Types; Constants; Classes; Functions
     ACTIVATIONS,
     Activation,
     autojit,

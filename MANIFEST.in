@@ -10,6 +10,7 @@ include LICENSE.rst
 include README.rst
 include CHANGELOG.rst
 include linodenet/VERSION
+include linodenet/linodenet-sketch.svg
 
 include requirements.txt
 

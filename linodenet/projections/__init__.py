@@ -1,46 +1,42 @@
-r"""Projection Mappings."""
+r"""Projections for the Linear ODE Networks.
+
+Notes
+-----
+Contains projections in both modular and functional form.
+  - See :mod:`~.functional` for functional implementations.
+  - See :mod:`~.modular` for modular implementations.
+"""
+
 
 __all__ = [
     # Types
     "Projection",
+    "FunctionalProjection",
+    "ModularProjection",
     # Constants
     "PROJECTIONS",
-    # Functions
-    "symmetric",
-    "skew_symmetric",
-    "orthogonal",
-    "diagonal",
-    "identity",
-    "normal",
+    "FunctionalProjections",
+    "ModularProjections",
+    # Sub-Modules
+    "functional",
+    "modular",
 ]
 
 
 import logging
-from typing import Callable, Final
+from typing import Final, Union
 
-from torch import Tensor
-
-from linodenet.projections.functional import (
-    diagonal,
-    identity,
-    normal,
-    orthogonal,
-    skew_symmetric,
-    symmetric,
-)
+from linodenet.projections import functional, modular
+from linodenet.projections.functional import FunctionalProjection, FunctionalProjections
+from linodenet.projections.modular import ModularProjection, ModularProjections
 
 LOGGER = logging.getLogger(__name__)
 
-
-Projection = Callable[[Tensor], Tensor]  # matrix to matrix
+Projection = Union[FunctionalProjection, ModularProjection]  # matrix to matrix
 r"""Type hint for projections."""
 
-PROJECTIONS: Final[dict[str, Projection]] = {
-    "symmetric": symmetric,
-    "skew-symmetric": skew_symmetric,
-    "orthogonal": orthogonal,
-    "diagonal": diagonal,
-    "identity": identity,
-    "normal": normal,
+PROJECTIONS: Final[dict[str, Union[FunctionalProjection, type[ModularProjection]]]] = {
+    **FunctionalProjections,
+    **ModularProjections,
 }
 r"""Dictionary containing all available projections."""

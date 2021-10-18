@@ -4,7 +4,7 @@ import logging
 
 import torch
 
-from linodenet.initializations import INITIALIZATIONS
+from linodenet.initializations.functional import FunctionalInitializations
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ def test_all_initializations(
     .. warning::
         Requires up to 16 GB RAM with default settings.
     """
-    LOGGER.info("Testing all available initializations %s", set(INITIALIZATIONS))
+    LOGGER.info(
+        "Testing all available initializations %s", set(FunctionalInitializations)
+    )
 
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
@@ -37,7 +39,7 @@ def test_all_initializations(
     ONE = torch.tensor(1.0)
     x = torch.randn(num_runs, num_samples, dim)
 
-    for key, initialization in INITIALIZATIONS.items():
+    for key, initialization in FunctionalInitializations.items():
 
         LOGGER.info("Testing %s", key)
 
@@ -66,9 +68,9 @@ def test_all_initializations(
 
 def __main__():
     logging.basicConfig(level=logging.INFO)
-    LOGGER.info("Testing INITIALIZATIONS started!")
+    LOGGER.info("Testing FunctionalInitializations started!")
     test_all_initializations()
-    LOGGER.info("Testing INITIALIZATIONS finished!")
+    LOGGER.info("Testing FunctionalInitializations finished!")
 
 
 if __name__ == "__main__":

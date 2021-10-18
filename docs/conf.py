@@ -56,7 +56,7 @@ release = version
 
 extensions = [
     "sphinx.ext.autodoc",
-    # "sphinx.ext.autosummary",
+    "sphinx.ext.autosummary",
     "sphinx.ext.coverage",
     "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
@@ -126,7 +126,7 @@ autoapi_generate_api_docs = True
 autoapi_options = [
     "members",
     "undoc-members",
-    "private-members",
+    # "private-members",
     "show-inheritance",
     "show-module-summary",
     "special-members",

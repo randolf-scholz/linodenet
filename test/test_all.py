@@ -21,7 +21,7 @@ from linodenet.util import flatten
 
 LOGGER = logging.getLogger(__name__)
 
-linodenet.config.autojit = False
+linodenet.conf.autojit = False
 
 OUTER_BATCH = 3
 INNER_BATCH = 5
