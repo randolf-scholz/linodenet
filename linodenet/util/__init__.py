@@ -1,30 +1,27 @@
-r"""Provides utility functions.
+r"""Utility functions."""
 
-linodenet.util
-==============
+__all__ = [
+    # Types
+    "Activation",
+    # Constants
+    "ACTIVATIONS",
+    # Classes
+    # Functions
+    "autojit",
+    "deep_dict_update",
+    "deep_keyval_update",
+    "flatten",
+]
 
-.. data:: ACTIVATIONS
-
-    A :class:`dict` containing string names as keys and corresponding :mod:`torch` functions.
-"""
 import logging
-from typing import Final
 
-from linodenet.util.util import (
+from linodenet.util._util import (  # Types; Constants; Classes; Functions
     ACTIVATIONS,
     Activation,
     autojit,
     deep_dict_update,
     deep_keyval_update,
+    flatten,
 )
 
-LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [  # Meta-objects
-    "Activation",
-    "ACTIVATIONS",
-] + [  # Functions
-    "autojit",
-    "deep_dict_update",
-    "deep_keyval_update",
-]
+__logger__ = logging.getLogger(__name__)

@@ -1,43 +1,51 @@
-r"""Regularizations for LinODE kernel matrix."""
+r"""Regularizations for the Linear ODE Networks.
 
-from __future__ import annotations
+Notes
+-----
+Contains regularizations in both modular and functional form.
+  - See :mod:`~linodenet.regularizations.functional` for functional implementations.
+  - See :mod:`~linodenet.regularizations..modular` for modular implementations.
+"""
 
-import logging
-from typing import Callable, Final
-
-from torch import Tensor
-
-from linodenet.regularizations.regularizations import (
-    diagonal,
-    logdetexp,
-    normal,
-    orthogonal,
-    skew_symmetric,
-    symmetric,
-)
-
-LOGGER = logging.getLogger(__name__)
-
-__all__: Final[list[str]] = [
-    "REGULARIZATIONS",
+__all__ = [
+    # Types
     "Regularization",
-    "diagonal",
-    "logdetexp",
-    "normal",
-    "orthogonal",
-    "skew_symmetric",
-    "symmetric",
+    "FunctionalRegularization",
+    "ModularRegularization",
+    # Constants
+    "REGULARIZATIONS",
+    "FunctionalRegularizations",
+    "ModularRegularizations",
+    # Sub-Modules
+    "functional",
+    "modular",
 ]
 
-Regularization = Callable[[Tensor], Tensor]  # matrix to scalar
-r"""Type hint for regularizations."""
 
-REGULARIZATIONS: Final[dict[str, Regularization]] = {
-    "diagonal": diagonal,
-    "logdetexp": logdetexp,
-    "normal": normal,
-    "orthogonal": orthogonal,
-    "symmetric": symmetric,
-    "skew_symmetric": skew_symmetric,
+import logging
+from typing import Final, Union
+
+from linodenet.regularizations import functional, modular
+from linodenet.regularizations.functional import (
+    FunctionalRegularization,
+    FunctionalRegularizations,
+)
+from linodenet.regularizations.modular import (
+    ModularRegularization,
+    ModularRegularizations,
+)
+
+__logger__ = logging.getLogger(__name__)
+
+Regularization = Union[
+    FunctionalRegularization, ModularRegularization
+]  # matrix to matrix
+r"""Type hint for projections."""
+
+REGULARIZATIONS: Final[
+    dict[str, Union[FunctionalRegularization, type[ModularRegularization]]]
+] = {
+    **FunctionalRegularizations,
+    **ModularRegularizations,
 }
-r"""Dictionary containing all available regularizations."""
+r"""Dictionary containing all available projections."""

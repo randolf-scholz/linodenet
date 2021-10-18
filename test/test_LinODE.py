@@ -15,7 +15,7 @@ from linodenet.models import LinODE
 from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
 
-LOGGER = logging.getLogger(__name__)
+__logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
 
@@ -61,7 +61,7 @@ def linode_error(
     T = np.random.uniform(low=t0, high=t1, size=num - 2)
     T = np.sort([t0, *T, t1]).astype(numpy_dtype)
 
-    def func(t, x):  # noqa
+    def func(_, x):
         return A @ x
 
     X = np.array(odeint(func, x0, T, tfirst=True))
@@ -95,20 +95,20 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
     """
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        LOGGER.info("Using CUDA")
+        __logger__.info("Using CUDA")
     else:
         torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
 
-    LOGGER.info("Testing LinODE")
+    __logger__.info("Testing LinODE")
     extra_stats = {"Samples": num_samples}
 
-    LOGGER.info("Generating %i samples in single precision", num_samples)
+    __logger__.info("Generating %i samples in single precision", num_samples)
     err_single = np.array(
         [linode_error(precision="single") for _ in trange(num_samples)],
         dtype=np.float32,
     ).T
 
-    LOGGER.info("Generating %i samples in double precision", num_samples)
+    __logger__.info("Generating %i samples in double precision", num_samples)
     err_double = np.array(
         [linode_error(precision="double") for _ in trange(num_samples)],
         dtype=np.float64,
@@ -116,15 +116,15 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
 
     for err, tol in zip(err_single, (10.0 ** k for k in (0, 2, 4))):
         q = np.nanquantile(err, 0.99)
-        LOGGER.info("99%% quantile %f", q)
+        __logger__.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
     # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
     # Since 10^4 ~ 2^13
     for err, tol in zip(err_double, (10.0 ** k for k in (-4, -2, -0))):
         q = np.nanquantile(err, 0.99)
-        LOGGER.info("99%% quantile %f", q)
+        __logger__.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
-    LOGGER.info("LinODE passes test ✔ ")
+    __logger__.info("LinODE passes test ✔ ")
 
     if not make_plot:
         return
@@ -139,7 +139,7 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
             sharex="all",
         )
 
-    LOGGER.info("LinODE generating figure")
+    __logger__.info("LinODE generating figure")
     for i, err in enumerate((err_single, err_double)):
         for j, p in enumerate((1, 2, np.inf)):
             visualize_distribution(
@@ -165,14 +165,14 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
     )
 
     fig.savefig("LinODE_odeint_comparison.pdf")
-    LOGGER.info("LinODE all done")
+    __logger__.info("LinODE all done")
 
 
 def __main__():
     logging.basicConfig(level=logging.INFO)
-    LOGGER.info("Testing LinearODE started!")
+    __logger__.info("Testing LinearODE started!")
     test_linode_error(num_samples=1000, make_plot=True)
-    LOGGER.info("Testing LinearODE finished!")
+    __logger__.info("Testing LinearODE finished!")
 
 
 if __name__ == "__main__":

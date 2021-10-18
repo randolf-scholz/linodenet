@@ -10,6 +10,7 @@ include LICENSE.rst
 include README.rst
 include CHANGELOG.rst
 include linodenet/VERSION
+include linodenet/linodenet-sketch.svg
 
 include requirements.txt
 
@@ -18,4 +19,6 @@ recursive-include docs *.*
 recursive-include test *.*
 
 prune */__pycache__
+prune */.ipynb_checkpoints
+
 global-exclude *.o *.so *.dylib *.a .git *.pyc *.swp

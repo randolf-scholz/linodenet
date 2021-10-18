@@ -2,12 +2,19 @@
 runs/
 model_checkpoints/
 
+# model checkpoints
+checkpoints/
+*.pt
+
+# latex aux files
+__tex__/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# C extensions
+# c extensions
 *.so
 
 # Distribution / packaging
@@ -77,6 +84,7 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs/_autosummary/
+/docs/autoapi/
 
 # PyBuilder
 target/
@@ -135,8 +143,15 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-#PyCharm
-.idea
+# PyCharm
+.idea/
 
-# Compiling Latex things
-__tex__/
+# VSCode
+.virtual_documents/
+
+# dask
+dask-worker-space/
+
+# LibreOffice lock files
+.~lock.*
+
