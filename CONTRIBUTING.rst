@@ -55,3 +55,54 @@ Getting started
      git push origin feature-xyz
 
 11. Create a merge request
+
+
+Setting up multiple remotes
+---------------------------
+
+**T**\ ime **S**\ eries **D**\ atasets and **M**\ odels
+=======================================================
+
+This repository contains tools to import important time series datasets and baseline models
+
+Installation guide
+------------------
+
+.. code-block:: bash
+
+    pip install -e .
+
+Multiple Origins Push
+---------------------
+
+1. Remove all remotes::
+
+    git remote -v
+    git remote remove ...
+
+2. Add both remotes::
+
+    git remote add berlin https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git
+    git remote add hildesheim --mirror=push https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git
+
+3. Add additional push urls to both of them::
+
+    git remote set-url --add --push berlin https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git
+    git remote set-url --add --push berlin https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git
+
+    git remote set-url --add --push hildesheim https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git
+    git remote set-url --add --push hildesheim https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git
+
+4. Check if everything is set up correctly. Running ``git remote -v`` should show::
+
+    berlin  https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git (fetch)
+    berlin  https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git (push)
+    berlin  https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git (push)
+    hildesheim      https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git (fetch)
+    hildesheim      https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git (push)
+    hildesheim      https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git (push)
+
+5. Fetch & set the remote that takes precedence, for example for berlin::
+
+    git fetch berlin
+    git branch --set-upstream-to=berlin/master  master
