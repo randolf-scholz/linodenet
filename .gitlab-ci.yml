@@ -1,8 +1,16 @@
 #
 # https://gitlab.com/gitlab-org/gitlab/-/tree/master/lib/gitlab/ci/templates/Python.gitlab-ci.yml
 #
+
+image: python:3.9
+
+stages:
+- build
+- analysis
+- test
+- deploy
+
 default:
-  image: python:3.9
   tags:
   - docker
 
@@ -19,11 +27,7 @@ variables:
   TWINE_USERNAME: gitlab-ci-token
   TWINE_REPOSITORY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
 
-stages:
-- build
-- analysis
-- test
-- deploy
+
 
 # global before_script is run before each and every job.
 before_script:

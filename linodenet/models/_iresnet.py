@@ -25,7 +25,7 @@ __logger__ = logging.getLogger(__name__)
 
 @jit.script
 def spectral_norm(
-    A: Tensor, atol: float = 1e-4, rtol: float = 1e-3, maxiter: int = 10
+    A: Tensor, atol: float = 1e-4, rtol: float = 1e-3, maxiter: int = 1
 ) -> Tensor:
     r"""Compute the spectral norm `‖A‖_2` by power iteration.
 
@@ -238,9 +238,9 @@ class LinearContraction(nn.Module):
         """
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
-        # σ_max = spectral_norm(self.weight)
+        self.spectral_norm  = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
-        self.spectral_norm = matrix_norm(self.weight, ord=2)
+        # self.spectral_norm = matrix_norm(self.weight, ord=2)
         fac = torch.minimum(self.c / self.spectral_norm, self.one)
         return functional.linear(x, fac * self.weight, self.bias)
 
