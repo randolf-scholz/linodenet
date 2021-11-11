@@ -370,7 +370,6 @@ class LinODEnet(nn.Module):
         # self.add_module("decoder", HP["Decoder"](**HP["Decoder_cfg"]))
         # self.add_module("projection", _projection)
         # self.add_module("filter", HP["Filter"](**HP["Filter_cfg"]))
-        print(HP["Encoder_cfg"])
         self.embedding: nn.Module = _embedding
         self.encoder: nn.Module = HP["Encoder"](**HP["Encoder_cfg"])
         self.system: nn.Module = HP["System"](**HP["System_cfg"])
