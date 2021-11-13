@@ -93,6 +93,11 @@ class SpectralNorm(torch.autograd.Function):
     """
 
     @staticmethod
+    def jvp(ctx: Any, *grad_inputs: Any) -> Any:
+        u, v = ctx.saved_tensors
+        return torch.outer(u, v) @ grad_inputs[0]
+
+    @staticmethod
     def forward(ctx: Any, *tensors: Tensor, **kwargs: Any) -> Tensor:
         r"""Forward pass.
 
@@ -113,8 +118,8 @@ class SpectralNorm(torch.autograd.Function):
         m, n, *other = A.shape
         assert not other, "Expected 2D input."
         # initialize u and v, median should be useful guess.
-        u_next: Tensor = A.median(dim=1).values
-        v_next: Tensor = A.median(dim=0).values
+        u = u_next = A.median(dim=1).values
+        v = v_next = A.median(dim=0).values
 
         for _ in range(maxiter):
             u = u_next / torch.norm(u_next)
@@ -238,7 +243,7 @@ class LinearContraction(nn.Module):
         """
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
-        self.spectral_norm  = spectral_norm(self.weight)
+        self.spectral_norm = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
         # self.spectral_norm = matrix_norm(self.weight, ord=2)
         fac = torch.minimum(self.c / self.spectral_norm, self.one)
