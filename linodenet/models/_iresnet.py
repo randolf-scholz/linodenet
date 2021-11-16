@@ -94,6 +94,7 @@ class SpectralNorm(torch.autograd.Function):
 
     @staticmethod
     def jvp(ctx: Any, *grad_inputs: Any) -> Any:
+        r"""Jacobian-vector product."""
         u, v = ctx.saved_tensors
         return torch.outer(u, v) @ grad_inputs[0]
 

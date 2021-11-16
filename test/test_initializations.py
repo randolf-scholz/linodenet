@@ -66,6 +66,13 @@ def test_all_initializations(
     __logger__.info("All initializations passed! ✔ ")
 
 
+def test_matrix_exponential(
+    num_runs: int = 1000, num_samples: int = 1000, dim: int = 100
+):
+    r"""What is the distribution of exp(AΔt)x ?."""
+    ...
+
+
 def __main__():
     logging.basicConfig(level=logging.INFO)
     __logger__.info("Testing FunctionalInitializations started!")

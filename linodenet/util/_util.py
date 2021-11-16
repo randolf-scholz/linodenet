@@ -3,6 +3,7 @@ r"""Utility functions."""
 __all__ = [
     # Types
     "Activation",
+    "LookupTable",
     # Constants
     "ACTIVATIONS",
     # Classes
@@ -11,12 +12,13 @@ __all__ = [
     "deep_dict_update",
     "deep_keyval_update",
     "flatten",
+    "initialize_from",
 ]
 
 import logging
 from collections.abc import Iterable, Mapping
-from functools import wraps
-from typing import Final, Union
+from functools import wraps, partial
+from typing import Final, Union, Any, TypeVar
 
 import torch
 from torch import Tensor, jit, nn
@@ -25,16 +27,23 @@ from linodenet.config import conf
 
 __logger__ = logging.getLogger(__name__)
 
+ObjectType = TypeVar("ObjectType")
+r"""Generic type hint for instances."""
+
+LookupTable = dict[str, type[ObjectType]]
+r"""Table of object classes."""
+
 Activation = nn.Module
 r"""Type hint for models."""
 
-ACTIVATIONS: Final[dict[str, type[Activation]]] = {
+ACTIVATIONS: Final[LookupTable[Activation]] = {
     "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
     "ELU": nn.ELU,
     "Hardshrink": nn.Hardshrink,
     "Hardsigmoid": nn.Hardsigmoid,
     "Hardtanh": nn.Hardtanh,
     "Hardswish": nn.Hardswish,
+    "Identity": nn.Identity,
     "LeakyReLU": nn.LeakyReLU,
     "LogSigmoid": nn.LogSigmoid,
     "LogSoftmax": nn.LogSoftmax,
@@ -161,3 +170,43 @@ def flatten(inputs: Union[Tensor, Iterable[Tensor]]) -> Tensor:
     if isinstance(inputs, Iterable):
         return torch.cat([flatten(x) for x in inputs])
     raise ValueError(f"{inputs=} not understood")
+
+
+def initialize_from(
+    lookup_table: LookupTable[ObjectType],
+    /,
+    __name__: str,
+    **kwargs: Any,
+) -> ObjectType:
+    r"""Lookup class/function from dictionary and initialize it.
+
+    Roughly equivalent to:
+
+    .. code-block:: python
+
+        obj = lookup_table[__name__]
+        if isclass(obj):
+            return obj(**kwargs)
+        return partial(obj, **kwargs)
+
+    Parameters
+    ----------
+    lookup_table: dict[str, Callable]
+    __name__: str
+        The name of the class/function
+    kwargs: Any
+        Optional arguments to initialize class/function
+
+    Returns
+    -------
+    Callable
+        The initialized class/function
+    """
+    obj = lookup_table[__name__]
+    assert callable(obj), f"Looked up object {obj} not callable class/function."
+
+    # check that obj is a class, but not metaclass or instance.
+    if isinstance(obj, type) and not issubclass(obj, type):
+        return obj(**kwargs)  # type: ignore[call-arg]
+    # if it is function, fix kwargs
+    return partial(obj, **kwargs)
