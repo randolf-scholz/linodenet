@@ -7,10 +7,16 @@ A Filter takes two positional inputs:
 """
 
 __all__ = [
+    # Constants
+    "CELLS",
+    # Types
+    "Cell",
+    # Classes
     "FilterABC",
     "KalmanBlockCell",
     "KalmanFilter",
     "KalmanCell",
+    "RecurrentCellFilter",
 ]
 
 import logging
@@ -20,9 +26,26 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util import ACTIVATIONS, autojit, deep_dict_update
+from linodenet.util import (
+    ACTIVATIONS,
+    LookupTable,
+    autojit,
+    deep_dict_update,
+    deep_keyval_update,
+    initialize_from,
+)
 
 __logger__ = logging.getLogger(__name__)
+
+Cell = nn.Module
+r"""Type hint for Cells."""
+
+CELLS: Final[LookupTable[Cell]] = {
+    "RNNCell": nn.RNNCell,
+    "GRUCell": nn.GRUCell,
+    "LSTMCell": nn.LSTMCell,
+}
+r"""Lookup table for cells."""
 
 
 class FilterABC(nn.Module):
@@ -228,6 +251,7 @@ class KalmanBlockCell(FilterABC):
         return x
 
 
+@autojit
 class RecurrentCellFilter(FilterABC):
     """Any Recurrent Cell allowed."""
 
@@ -244,7 +268,7 @@ class RecurrentCellFilter(FilterABC):
     }
 
     # CONSTANTS
-    concat: Final[bool]
+    concat_mask: Final[bool]
     """CONST: Whether to concatenate the mask to the inputs."""
     input_size: Final[int]
     """CONST: The input size."""
@@ -257,37 +281,42 @@ class RecurrentCellFilter(FilterABC):
         deep_dict_update(self.HP, HP)
         HP = self.HP
 
-        self.concat = HP["concat"]
-        self.input_size = input_size * (1 + self.concat)
+        # CONSTANTS
+        self.concat_mask = HP["concat"]
+        self.input_size = input_size * (1 + self.concat_mask)
         self.hidden_size = hidden_size
 
-        self.cell = HP["Cell"]
+        deep_keyval_update(
+            self.HP, input_size=self.input_size, hidden_size=self.hidden_size
+        )
 
-    #
-    # def forward(self, x: Tensor, y: Tensor, /) -> Tensor:
-    #     """
-    #
-    #     Parameters
-    #     ----------
-    #     x
-    #     y
-    #
-    #     Returns
-    #     -------
-    #
-    #     """
-    #
-    #     mask = torch.isnan(y)
-    #
-    #     # impute missing value in observation with state estimate
-    #     y = torch.where(mask, x, y)
-    #
-    #     if self.concat_mask:
-    #         x̃ = torch.cat([x̃, mask], dim=-1)
-    #
-    #     # Flatten for GRU-Cell
-    #     x̂_pre = x̂_pre.view(-1, x̂_pre.shape[-1])
-    #     x̃ = x̃.view(-1, x̃.shape[-1])
-    #
-    #     # Apply filter
-    #     x̂_post = self.filter(x̃, x̂_pre)
+        # MODULES
+        self.cell = initialize_from(CELLS, HP["Cell"])
+
+    @jit.export
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        r"""Perform the forward pass.
+
+        Parameters
+        ----------
+        y: Tensor
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        mask = torch.isnan(y)
+
+        # impute missing value in observation with state estimate
+        y = torch.where(mask, x, y)
+
+        if self.concat_mask:
+            y = torch.cat([y, mask], dim=-1)
+
+        # Flatten for GRU-Cell
+        y = y.view(-1, y.shape[-1])
+        x = x.view(-1, x.shape[-1])
+
+        # Apply filter
+        return self.cell(y, x).view(x.shape)

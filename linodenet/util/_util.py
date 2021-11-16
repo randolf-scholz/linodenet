@@ -87,7 +87,7 @@ def deep_dict_update(d: dict, new: Mapping) -> dict:
     return d
 
 
-def deep_keyval_update(d: dict, **new_kv: dict) -> dict:
+def deep_keyval_update(d: dict, **new_kv: Any) -> dict:
     r"""Update nested dictionary recursively in-place with key-value pairs.
 
     Reference: https://stackoverflow.com/a/30655448/9318372
@@ -209,4 +209,4 @@ def initialize_from(
     if isinstance(obj, type) and not issubclass(obj, type):
         return obj(**kwargs)  # type: ignore[call-arg]
     # if it is function, fix kwargs
-    return partial(obj, **kwargs)
+    return partial(obj, **kwargs)  # type: ignore[return-value]

@@ -244,9 +244,9 @@ class LinearContraction(nn.Module):
         """
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
-        self.spectral_norm = spectral_norm(self.weight)
+        # self.spectral_norm = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
-        # self.spectral_norm = matrix_norm(self.weight, ord=2)
+        self.spectral_norm = matrix_norm(self.weight, ord=2)
         fac = torch.minimum(self.c / self.spectral_norm, self.one)
         return functional.linear(x, fac * self.weight, self.bias)
 
