@@ -96,7 +96,7 @@ def _test_model(
     device: torch.device = DEVICES[0],
 ):
     def err_str(s: str) -> str:
-        return f"{Model=} failed {s} with {initialization=} and {inputs=}!"
+        return f"{Model=} failed {s} with {initialization=} and input shapes {tuple(i.shape for i in inputs)}!"
 
     try:  # check initialization
         __logger__.info(">>> INITIALIZATION TEST")
@@ -152,7 +152,9 @@ def _test_model(
         __logger__.info(">>> Model saved successfully ✔ ")
         model2 = torch.jit.load(filepath)
         __logger__.info(">>> Model loaded successfully ✔ ")
-        assert (flatten(model(*inputs)) == flatten(model2(*inputs))).all()
+
+        residual = flatten(model(*inputs)) - flatten(model2(*inputs))
+        assert (residual == 0.0).all(), f"{torch.mean(residual**2)=}"
         __logger__.info(">>> Loaded Model produces equivalent outputs ✔ ")
     except Exception as E:
         raise RuntimeError(err_str("checkpointing")) from E
