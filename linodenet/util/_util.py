@@ -17,8 +17,8 @@ __all__ = [
 
 import logging
 from collections.abc import Iterable, Mapping
-from functools import wraps, partial
-from typing import Final, Union, Any, TypeVar
+from functools import partial, wraps
+from typing import Any, Final, TypeVar, Union
 
 import torch
 from torch import Tensor, jit, nn
