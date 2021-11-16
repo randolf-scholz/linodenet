@@ -36,15 +36,16 @@ SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 
 """Type hint for shape-like inputs."""
 
 
-def gaussian(n: SizeLike) -> Tensor:
+def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
     r"""Sample a random gaussian matrix, i.e. `A_{ij}∼𝓝(0,1/n)`.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)` if `σ=1`.
 
     Parameters
     ----------
     n: int or tuple[int]
         If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
+    sigma: float = 1.0
 
     Returns
     -------
@@ -55,7 +56,7 @@ def gaussian(n: SizeLike) -> Tensor:
     dim, size = tup[-1], tup[:-1]
     shape = (*size, dim, dim)
 
-    return torch.normal(mean=torch.zeros(shape), std=1 / sqrt(dim))
+    return torch.normal(mean=torch.zeros(shape), std=sigma / sqrt(dim))
 
 
 def diagonally_dominant(n: SizeLike) -> Tensor:
