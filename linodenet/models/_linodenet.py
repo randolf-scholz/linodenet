@@ -22,6 +22,8 @@ from linodenet.initializations.functional import (
 from linodenet.models._iresnet import iResNet
 from linodenet.projections import PROJECTIONS, Projection
 from linodenet.util import autojit, deep_dict_update
+from linodenet.filters import FILTERS, Filter, RecurrentCellFilter
+
 
 __logger__ = logging.getLogger(__name__)
 
@@ -460,19 +462,8 @@ class LinODEnet(nn.Module):
             # Decode
             x̂_pre = self.projection(self.decoder(ẑ_pre))
 
-            # Compute update
-            mask = torch.isnan(x)
-            x̃ = torch.where(mask, x̂_pre, x)
-
-            if self.concat_mask:
-                x̃ = torch.cat([x̃, mask], dim=-1)
-
-            # Flatten for GRU-Cell
-            x̂_pre = x̂_pre.view(-1, x̂_pre.shape[-1])
-            x̃ = x̃.view(-1, x̃.shape[-1])
-
             # Apply filter
-            x̂_post = self.filter(x̃, x̂_pre)
+            x̂_post = self.filter(x, x̂_pre)
 
             # xhat = self.control(xhat, u)
             # u: possible controls:
