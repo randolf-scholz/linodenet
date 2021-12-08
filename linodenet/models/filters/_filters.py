@@ -109,7 +109,7 @@ class KalmanFilter(FilterABC):
         nn.init.kaiming_normal_(self.R, nonlinearity="linear")
 
     @jit.export
-    def forward(self, /, y: Tensor, x: Tensor, *, P: Optional[Tensor] = None) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor, *, P: Optional[Tensor] = None) -> Tensor:
         r"""Forward pass of the filter.
 
         Parameters
@@ -300,6 +300,9 @@ class RecurrentCellFilter(FilterABC):
 
     HP: dict = {
         "concat": True,
+        "input_size": None,
+        "hidden_size": None,
+        "autoregressive": True,
         "Cell": {
             "__name__": "GRUCell",
             "input_size": None,
@@ -317,6 +320,12 @@ class RecurrentCellFilter(FilterABC):
     """CONST: The input size."""
     hidden_size: Final[int]
     """CONST: The hidden size."""
+    autoregressive: Final[bool]
+    """CONST: Whether the filter is autoregressive or not."""
+
+    # PARAMETERS
+    H: Tensor
+    r"""PARAM: the observation matrix."""
 
     def __init__(self, /, input_size: int, hidden_size: int, **HP: Any):
         super().__init__()
@@ -328,17 +337,43 @@ class RecurrentCellFilter(FilterABC):
         self.concat_mask = HP["concat"]
         self.input_size = input_size * (1 + self.concat_mask)
         self.hidden_size = hidden_size
+        self.autoregressive = HP["autoregressive"]
+
+        if self.autoregressive:
+            assert (
+                hidden_size == input_size
+            ), "Autoregressive filter requires x_dim == y_dim"
+            self.H = torch.eye(input_size)
+        else:
+            self.H = nn.Parameter(torch.empty(input_size, hidden_size))
+            nn.init.kaiming_normal_(self.H, nonlinearity="linear")
 
         deep_keyval_update(
             self.HP, input_size=self.input_size, hidden_size=self.hidden_size
         )
 
         # MODULES
-        self.cell = initialize_from(CELLS, HP["Cell"])
+        self.cell = initialize_from(CELLS, **HP["Cell"])
 
     @jit.export
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
-        r"""Perform the forward pass.
+    def h(self, x: Tensor) -> Tensor:
+        r"""Apply the observation function.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        if self.autoregressive:
+            return x
+        return torch.einsum("ij, ...j -> ...i", self.H, x)
+
+    @jit.export
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Signature: `[...,m], [...,n] ⟶ [...,n]`.
 
         Parameters
         ----------
@@ -352,14 +387,21 @@ class RecurrentCellFilter(FilterABC):
         mask = torch.isnan(y)
 
         # impute missing value in observation with state estimate
-        y = torch.where(mask, x, y)
+        if self.autoregressive:
+            y = torch.where(mask, x, y)
+        else:
+            # TODO: something smarter in non-autoregressive case
+            y = torch.where(mask, self.h(x), y)
 
         if self.concat_mask:
             y = torch.cat([y, mask], dim=-1)
 
-        # Flatten for GRU-Cell
+        # Flatten for RNN-Cell
         y = y.view(-1, y.shape[-1])
         x = x.view(-1, x.shape[-1])
 
         # Apply filter
-        return self.cell(y, x).view(x.shape)
+        result = self.cell(y, x)
+
+        # De-Flatten return value
+        return result.view(mask.shape)

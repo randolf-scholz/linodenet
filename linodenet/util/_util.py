@@ -30,7 +30,7 @@ __logger__ = logging.getLogger(__name__)
 ObjectType = TypeVar("ObjectType")
 r"""Generic type hint for instances."""
 
-LookupTable = dict[str, type[ObjectType]]
+LookupTable = Mapping[str, type[ObjectType]]
 r"""Table of object classes."""
 
 Activation = nn.Module

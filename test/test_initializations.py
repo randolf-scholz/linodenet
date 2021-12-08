@@ -1,7 +1,9 @@
 r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
+from pathlib import Path
 
+import matplotlib.pyplot as plt
 import torch
 
 from linodenet.initializations.functional import FunctionalInitializations
@@ -9,8 +11,29 @@ from linodenet.initializations.functional import FunctionalInitializations
 __logger__ = logging.getLogger(__name__)
 
 
+def _make_fig(path, means, stdvs, key):
+    with plt.style.context("bmh"):
+        fig, ax = plt.subplots(
+            ncols=2, figsize=(8, 4), constrained_layout=True, sharey=True
+        )
+        ax[0].hist(means.cpu().numpy(), bins="auto", density=True, log=True)
+        ax[0].set_title("Mean across multiple random inits.")
+        ax[1].hist(stdvs.cpu().numpy(), bins="auto", density=True, log=True)
+        ax[1].set_title("Std. across multiple random inits.")
+        ax[0].set_ylim((10 ** 0, 10 ** 3))
+        ax[0].set_xlim((-0.01, +0.01))
+        ax[1].set_xlim((0.85, 1.15))
+        # ax[1].set_xscale("log", base=2)
+        fig.suptitle(f"{key}")
+        fig.supylabel("log-odds")
+        fig.savefig(path.joinpath(f"{key}.svg"))
+
+
 def test_all_initializations(
-    num_runs: int = 1000, num_samples: int = 1000, dim: int = 100
+    num_runs: int = 1000,
+    num_samples: int = 1000,
+    dim: int = 200,
+    make_plot: bool = True,
 ):
     r"""Test normalization property empirically for all initializations.
 
@@ -30,6 +53,10 @@ def test_all_initializations(
         "Testing all available initializations %s", set(FunctionalInitializations)
     )
 
+    # initialize results directory
+    path = Path(__file__).parent.joinpath("test_results/initializations")
+    path.mkdir(parents=True, exist_ok=True)
+
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
     else:
@@ -44,20 +71,24 @@ def test_all_initializations(
         __logger__.info("Testing %s", key)
 
         # Batch compute A⋅x for num_samples of x and num_runs many samples of A
-        matrices = initialization((num_runs, dim))  # num_runs many dim×dim matrices.
-        y = torch.einsum("rkl, rnl -> rnk", matrices, x)
-        y = y.flatten(start_dim=1)
-        means = torch.mean(y, dim=-1)
-        stdvs = torch.std(y, dim=-1)
+        matrices = initialization((num_runs, dim))  # (num_runs, dim, dim)
+        y = torch.einsum("rkl, rnl -> rnk", matrices, x)  # (num_runs, num_samples, dim)
+        y = y.flatten(start_dim=1)  # (num_runs, num_samples * dim)
+        means = torch.mean(y, dim=-1)  # (num_runs, )
+        stdvs = torch.std(y, dim=-1)  # (num_runs, )
+
+        # save results
+        if make_plot:
+            _make_fig(path, means, stdvs, key)
 
         # check if 𝐄[A⋅x] ≈ 0
         valid_mean = torch.isclose(means, ZERO, rtol=1e-2, atol=1e-2).float().mean()
-        assert valid_mean > 0.9, f"Only {valid_mean=:.2%} of means were clsoe to 0!"
+        assert valid_mean > 0.9, f"Only {valid_mean=:.2%} of means were close to 0!"
         __logger__.info("%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}")
 
         # check if 𝐕[A⋅x] ≈ 1
         valid_stdv = torch.isclose(stdvs, ONE, rtol=1e-2, atol=1e-2).float().mean()
-        assert valid_stdv > 0.9, f"Only {valid_mean=:.2%} of stdvs were clsoe to 1!"
+        assert valid_stdv > 0.9, f"Only {valid_stdv=:.2%} of stdvs were close to 1!"
         __logger__.info("%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}")
 
     # todo: add plot

@@ -4,7 +4,7 @@ import logging
 
 import torch
 
-from linodenet.filters import KalmanBlockCell, KalmanCell
+from linodenet.models.filters import KalmanBlockCell, KalmanCell
 
 __logger__ = logging.getLogger(__name__)
 NAN = torch.tensor(float("nan"))
