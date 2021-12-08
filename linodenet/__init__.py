@@ -6,7 +6,6 @@ __all__ = [
     "conf",
     # Sub-Modules
     "config",
-    "embeddings",
     "initializations",
     "models",
     "projections",
@@ -17,14 +16,7 @@ import logging
 from pathlib import Path
 from types import ModuleType
 
-from linodenet import (
-    config,
-    embeddings,
-    initializations,
-    models,
-    projections,
-    regularizations,
-)
+from linodenet import config, initializations, models, projections, regularizations
 from linodenet.config import conf
 
 __logger__ = logging.getLogger(__name__)

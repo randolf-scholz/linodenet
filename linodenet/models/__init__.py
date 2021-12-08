@@ -1,6 +1,10 @@
 r"""Models of the LinODE-Net package."""
 
 __all__ = [
+    # Sub-Packages
+    "filters",
+    "encoders",
+    "embeddings",
     # Type Hint
     "Model",
     # Constants
@@ -10,7 +14,6 @@ __all__ = [
     "LinearContraction",
     "iResNetBlock",
     "iResNet",
-    "LinODECell",
     "LinODE",
     "LinODEnet",
     # Functions
@@ -22,14 +25,16 @@ from typing import Final
 
 from torch.nn import Module
 
-from linodenet.models._iresnet import (
+from linodenet.models import embeddings, encoders, filters
+from linodenet.models._linodenet import LinODE, LinODEnet
+from linodenet.models.encoders.iresnet import (
     LinearContraction,
     SpectralNorm,
     iResNet,
     iResNetBlock,
     spectral_norm,
 )
-from linodenet.models._linodenet import LinODE, LinODECell, LinODEnet
+from linodenet.models.system import LinODECell
 
 __logger__ = logging.getLogger(__name__)
 

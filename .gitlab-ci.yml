@@ -27,8 +27,6 @@ variables:
   TWINE_USERNAME: gitlab-ci-token
   TWINE_REPOSITORY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
 
-
-
 # global before_script is run before each and every job.
 before_script:
 - source ${VENVNAME}/bin/activate
@@ -180,7 +178,7 @@ flake8:
     - badges/
 
 mypy:
-  # see .mypy.ini for configuration
+  # see pyproject.toml for configuration
   stage: analysis
   cache:
   - key: venv
@@ -191,6 +189,7 @@ mypy:
     - "${MYPY_CACHE_DIR}"
   needs:
   - setup
+  allow_failure: true
   script:
   - mypy $MODULEDIR --show-error-codes --pretty --junit-xml reports/mypy.xml
   - mypy $TESTDIR --show-error-codes --pretty --junit-xml reports/mypy_test.xml
@@ -271,7 +270,7 @@ pypi:
   - setup
   - pytest
   only:
-  - master
+  - main
   script:
   - twine upload --verbose  dist/*
   after_script:
@@ -303,7 +302,7 @@ pages:
   - setup
   - pytest
   only:
-  - master
+  - main
   script:
   - cd docs
   - make html

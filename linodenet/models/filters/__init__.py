@@ -19,7 +19,7 @@ from typing import Final
 
 from torch import nn
 
-from linodenet.filters._filters import (
+from linodenet.models.filters._filters import (
     FilterABC,
     KalmanBlockCell,
     KalmanCell,
@@ -30,7 +30,7 @@ from linodenet.filters._filters import (
 __logger__ = logging.getLogger(__name__)
 
 Filter = nn.Module
-"""Type hint for Filters"""
+r"""Type hint for Filters"""
 
 FILTERS: Final[dict[str, type[Filter]]] = {
     "FilterABc": FilterABC,
@@ -39,3 +39,4 @@ FILTERS: Final[dict[str, type[Filter]]] = {
     "KalmanBlockCell": KalmanBlockCell,
     "RecurrentCellFilter": RecurrentCellFilter,
 }
+"""Dictionary of all available filters."""

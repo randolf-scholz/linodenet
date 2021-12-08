@@ -18,6 +18,7 @@ from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
+from linodenet.initializations.functional import low_rank
 from linodenet.util import ACTIVATIONS, Activation, autojit, deep_dict_update
 
 __logger__ = logging.getLogger(__name__)
@@ -449,11 +450,12 @@ class iResNetBlock(nn.Module):
         self.bias = HP["bias"]
         self._Activation: type[Activation] = ACTIVATIONS[HP["activation"]]
         self.activation = self._Activation(**HP["activation_config"])  # type: ignore[call-arg]
-
+        # gain = nn.init.calculate_gain(self._Activation)
         self.bottleneck = nn.Sequential(
             LinearContraction(self.input_size, self.hidden_size, bias=self.bias),
             LinearContraction(self.hidden_size, self.input_size, bias=self.bias),
-            self.activation,
+            nn.Identity(),
+            # self.activation,
         )
 
         self.register_buffer("residual", torch.tensor(()), persistent=False)
@@ -507,6 +509,13 @@ class iResNetBlock(nn.Module):
 @autojit
 class iResNet(nn.Module):
     r"""Invertible ResNet consists of a stack of :class:`iResNetBlock` modules.
+
+    References
+    ----------
+    - | Invertible Residual Networks
+      | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
+      | International Conference on Machine Learning 2019
+      | http://proceedings.mlr.press/v97/behrmann19a.html
 
     Attributes
     ----------
@@ -629,3 +638,77 @@ class iResNet(nn.Module):
     # warnings.warn(F"No convergence in {maxiter} iterations. "
     #               F"Max residual:{torch.max(residual)} > {atol}.")
     #     return xhat_dash
+
+
+class iLowRankLayer(nn.Module):
+    r"""An invertible, efficient low rank perturbation layer.
+
+    With the help of the Matrix Inversion Lemma (also known as Woodbury matrix identity),
+    we have
+
+    .. math::
+        (𝕀_n + UV^⊤)^{-1} = 𝕀_n - U(𝕀_k + V^⊤U)^{-1}V^⊤
+
+    I.e. to compute the inverse of the perturbed matrix, it is sufficient to compute the
+    inverse of the lower dimensional low rank matrix `𝕀_k + V^⊤U`.
+    In particular, when `k=1` the formula reduces to
+
+    .. math..
+        (𝕀_n + uv^⊤)^{-1} = 𝕀_n - \frac{1}{1+u^⊤v} uv^⊤
+    """
+
+    # CONSTANTS
+    rank: Final[int]
+    r"""CONST: The rank of the low rank matrix."""
+
+    # PARAMETERS
+    U: Tensor
+    """PARAM: `n×k` tensor"""
+    V: Tensor
+    """PARAM: `n×k` tensor"""
+
+    def __init__(self, input_size: int, rank: int, **HP: Any):
+        super().__init__()
+        self.U = low_rank(input_size)
+        self.V = low_rank(input_size)
+        self.rank = rank
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Signature: `[...,n] ⟶ [...,n]`.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        z = torch.einsum("...n, nk -> ...k", self.V, x)
+        y = torch.einsum("...k, nk -> ...n", self.U, z)
+        return x + y
+
+    def inverse(self, x: Tensor) -> Tensor:
+        r"""Signature: `[...,n] ⟶ [...,n]`.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        z = torch.einsum("...n, nk -> ...k", self.V, x)
+        A = torch.eye(self.rank) + torch.einsum("nk, nk -> kk", self.U, self.V)
+        y = torch.linalg.solve(A, z)
+        return x - torch.einsum("...k, nk -> ...n", self.U, y)
+
+    # def __invert__(self):
+    #     r"""Compute the inverse of the low rank layer.
+    #
+    #     Returns
+    #     -------
+    #     iLowRankLayer
+    #     """
+    #     return iLowRankLayer(self.V, self.U)
