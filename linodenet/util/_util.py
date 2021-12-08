@@ -18,6 +18,7 @@ __all__ = [
 import logging
 from collections.abc import Iterable, Mapping
 from functools import partial, wraps
+from types import ModuleType
 from typing import Any, Final, TypeVar, Union
 
 import torch
@@ -173,7 +174,7 @@ def flatten(inputs: Union[Tensor, Iterable[Tensor]]) -> Tensor:
 
 
 def initialize_from(
-    lookup_table: LookupTable[ObjectType],
+    lookup_table: Union[LookupTable[ObjectType], ModuleType],
     /,
     __name__: str,
     **kwargs: Any,
@@ -202,7 +203,12 @@ def initialize_from(
     Callable
         The initialized class/function
     """
-    obj = lookup_table[__name__]
+    if isinstance(lookup_table, ModuleType):
+        assert hasattr(lookup_table, __name__)
+        obj: type[ObjectType] = getattr(lookup_table, __name__)
+    else:
+        obj = lookup_table[__name__]
+
     assert callable(obj), f"Looked up object {obj} not callable class/function."
 
     # check that obj is a class, but not metaclass or instance.

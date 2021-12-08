@@ -11,13 +11,12 @@ from typing import Any, Final, Optional, Union
 
 import torch
 from torch import Tensor, jit, nn
-from torch.nn import Module
 
 from linodenet.initializations.functional import FunctionalInitialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
-from linodenet.models.encoders import ENCODERS, Encoder
+from linodenet.models.encoders import ENCODERS
 from linodenet.models.filters import FILTERS, Filter
-from linodenet.models.system import SYSTEMS, LinODECell, System
+from linodenet.models.system import SYSTEMS, LinODECell
 from linodenet.projections import Projection
 from linodenet.util import autojit, deep_dict_update, initialize_from
 

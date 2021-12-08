@@ -1,4 +1,4 @@
-r"""Feature Tokenizer Transformer.
+r"""Feature Tokenizer FT_Transformer.
 
 Modified variant of the implementation from https://github.com/yandex-research/rtdl
 
@@ -12,7 +12,7 @@ __all__ = [
     "get_nonglu_activation_fn",
     # Classes
     "Tokenizer",
-    "Transformer",
+    "FT_Transformer",
     "MultiheadAttention",
 ]
 
@@ -280,8 +280,8 @@ class MultiheadAttention(nn.Module):
 
 
 @autojit
-class Transformer(nn.Module):
-    """Transformer Model.
+class FT_Transformer(nn.Module):
+    """FT_Transformer Model.
 
     References
     ----------

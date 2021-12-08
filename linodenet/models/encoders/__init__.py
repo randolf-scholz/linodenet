@@ -8,6 +8,8 @@ __all__ = [
     # Classes
     "iResNet",
     "ResNet",
+    "FT_Transformer",
+    "TransformerEncoder",
     "Transformer",
 ]
 
@@ -16,9 +18,10 @@ from typing import Final
 
 from torch import nn
 
-from linodenet.models.encoders.ft_transformer import Transformer
+from linodenet.models.encoders.ft_transformer import FT_Transformer
 from linodenet.models.encoders.iresnet import iResNet
 from linodenet.models.encoders.resnet import ResNet
+from linodenet.models.encoders.transformer import Transformer, TransformerEncoder
 
 __logger__ = logging.getLogger(__name__)
 
@@ -28,6 +31,7 @@ r"""Type hint for Encoders."""
 ENCODERS: Final[dict[str, type[Encoder]]] = {
     "iResNet": iResNet,
     "ResNet": ResNet,
-    "Transformer": Transformer,
+    "FT_Transformer": FT_Transformer,
+    "TransformerEncoder": TransformerEncoder,
 }
 r"""Dictionary containing all available encoders."""
