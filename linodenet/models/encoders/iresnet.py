@@ -18,7 +18,8 @@ from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
-from linodenet.util import ACTIVATIONS, Activation, autojit, deep_dict_update
+from linodenet.initializations.functional import low_rank
+from linodenet.util import ACTIVATIONS, Activation, ReZero, autojit, deep_dict_update
 
 __logger__ = logging.getLogger(__name__)
 
@@ -93,6 +94,12 @@ class SpectralNorm(torch.autograd.Function):
     """
 
     @staticmethod
+    def jvp(ctx: Any, *grad_inputs: Any) -> Any:
+        r"""Jacobian-vector product."""
+        u, v = ctx.saved_tensors
+        return torch.outer(u, v) @ grad_inputs[0]
+
+    @staticmethod
     def forward(ctx: Any, *tensors: Tensor, **kwargs: Any) -> Tensor:
         r"""Forward pass.
 
@@ -113,8 +120,8 @@ class SpectralNorm(torch.autograd.Function):
         m, n, *other = A.shape
         assert not other, "Expected 2D input."
         # initialize u and v, median should be useful guess.
-        u_next: Tensor = A.median(dim=1).values
-        v_next: Tensor = A.median(dim=0).values
+        u = u_next = A.median(dim=1).values
+        v = v_next = A.median(dim=0).values
 
         for _ in range(maxiter):
             u = u_next / torch.norm(u_next)
@@ -238,9 +245,9 @@ class LinearContraction(nn.Module):
         """
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
-        self.spectral_norm  = spectral_norm(self.weight)
+        # self.spectral_norm = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
-        # self.spectral_norm = matrix_norm(self.weight, ord=2)
+        self.spectral_norm = matrix_norm(self.weight, ord=2)
         fac = torch.minimum(self.c / self.spectral_norm, self.one)
         return functional.linear(x, fac * self.weight, self.bias)
 
@@ -404,18 +411,24 @@ class iResNetBlock(nn.Module):
     r"""CONST: The absolute tolerance threshold value."""
     rtol: Final[float]
     r"""CONST: The relative tolerance threshold value."""
+    use_rezero: Final[bool]
+    r"""CONST: Whether to apply ReZero technique."""
 
     # Buffers
     residual: Tensor
     r"""BUFFER: The termination error during backward propagation."""
 
     HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
         "atol": 1e-08,
         "rtol": 1e-05,
         "maxiter": 10,
         "activation": "ReLU",
         "activation_config": {"inplace": False},
         "bias": True,
+        "rezero": False,
         "output_size": None,
         "hidden_size": None,
         "input_size": None,
@@ -443,12 +456,19 @@ class iResNetBlock(nn.Module):
         self.bias = HP["bias"]
         self._Activation: type[Activation] = ACTIVATIONS[HP["activation"]]
         self.activation = self._Activation(**HP["activation_config"])  # type: ignore[call-arg]
+        # gain = nn.init.calculate_gain(self._Activation)
 
-        self.bottleneck = nn.Sequential(
+        layers: list[nn.Module] = [
             LinearContraction(self.input_size, self.hidden_size, bias=self.bias),
             LinearContraction(self.hidden_size, self.input_size, bias=self.bias),
-            self.activation,
-        )
+        ]
+
+        self.use_rezero = HP["rezero"]
+        self.rezero = ReZero() if self.use_rezero else None
+        if self.use_rezero:
+            layers.append(self.rezero)  # type: ignore[arg-type]
+
+        self.bottleneck = nn.Sequential(*layers)
 
         self.register_buffer("residual", torch.tensor(()), persistent=False)
 
@@ -502,6 +522,13 @@ class iResNetBlock(nn.Module):
 class iResNet(nn.Module):
     r"""Invertible ResNet consists of a stack of :class:`iResNetBlock` modules.
 
+    References
+    ----------
+    - | Invertible Residual Networks
+      | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
+      | International Conference on Machine Learning 2019
+      | http://proceedings.mlr.press/v97/behrmann19a.html
+
     Attributes
     ----------
     input_size: int
@@ -523,6 +550,9 @@ class iResNet(nn.Module):
     r"""CONST: The dimensionality of the outputs."""
 
     HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
         "maxiter": 10,
         "input_size": None,
         "dropout": None,
@@ -623,3 +653,77 @@ class iResNet(nn.Module):
     # warnings.warn(F"No convergence in {maxiter} iterations. "
     #               F"Max residual:{torch.max(residual)} > {atol}.")
     #     return xhat_dash
+
+
+class iLowRankLayer(nn.Module):
+    r"""An invertible, efficient low rank perturbation layer.
+
+    With the help of the Matrix Inversion Lemma (also known as Woodbury matrix identity),
+    we have
+
+    .. math::
+        (𝕀_n + UV^⊤)^{-1} = 𝕀_n - U(𝕀_k + V^⊤U)^{-1}V^⊤
+
+    I.e. to compute the inverse of the perturbed matrix, it is sufficient to compute the
+    inverse of the lower dimensional low rank matrix `𝕀_k + V^⊤U`.
+    In particular, when `k=1` the formula reduces to
+
+    .. math..
+        (𝕀_n + uv^⊤)^{-1} = 𝕀_n - \frac{1}{1+u^⊤v} uv^⊤
+    """
+
+    # CONSTANTS
+    rank: Final[int]
+    r"""CONST: The rank of the low rank matrix."""
+
+    # PARAMETERS
+    U: Tensor
+    """PARAM: `n×k` tensor"""
+    V: Tensor
+    """PARAM: `n×k` tensor"""
+
+    def __init__(self, input_size: int, rank: int, **HP: Any):
+        super().__init__()
+        self.U = low_rank(input_size)
+        self.V = low_rank(input_size)
+        self.rank = rank
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Signature: `[...,n] ⟶ [...,n]`.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        z = torch.einsum("...n, nk -> ...k", self.V, x)
+        y = torch.einsum("...k, nk -> ...n", self.U, z)
+        return x + y
+
+    def inverse(self, x: Tensor) -> Tensor:
+        r"""Signature: `[...,n] ⟶ [...,n]`.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        z = torch.einsum("...n, nk -> ...k", self.V, x)
+        A = torch.eye(self.rank) + torch.einsum("nk, nk -> kk", self.U, self.V)
+        y = torch.linalg.solve(A, z)
+        return x - torch.einsum("...k, nk -> ...n", self.U, y)
+
+    # def __invert__(self):
+    #     r"""Compute the inverse of the low rank layer.
+    #
+    #     Returns
+    #     -------
+    #     iLowRankLayer
+    #     """
+    #     return iLowRankLayer(self.V, self.U)

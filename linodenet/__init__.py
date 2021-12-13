@@ -6,7 +6,6 @@ __all__ = [
     "conf",
     # Sub-Modules
     "config",
-    "embeddings",
     "initializations",
     "models",
     "projections",
@@ -17,14 +16,7 @@ import logging
 from pathlib import Path
 from types import ModuleType
 
-from linodenet import (
-    config,
-    embeddings,
-    initializations,
-    models,
-    projections,
-    regularizations,
-)
+from linodenet import config, initializations, models, projections, regularizations
 from linodenet.config import conf
 
 __logger__ = logging.getLogger(__name__)
@@ -93,7 +85,8 @@ def _clean_namespace(module: ModuleType):
                 continue
         # key is found:
         if key in module.__all__:  # type: ignore[attr-defined]
-            # set __module__ attribute to __package__ for functions/classes originating from private modules.
+            # set __module__ attribute to __package__ for functions/classes
+            # originating from private modules.
             if isinstance(obj, type) or callable(obj):
                 mod = get_module(obj)
                 if is_private(mod):

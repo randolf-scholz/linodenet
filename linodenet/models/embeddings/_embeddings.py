@@ -40,6 +40,10 @@ class ConcatEmbedding(nn.Module):
     pad_size: Final[int]
     r"""CONST: The size of the padding."""
 
+    # BUFFERS
+    scale: Tensor
+    r"""BUFFER: The scaling scalar."""
+
     # Parameters
     padding: Tensor
     r"""PARAM: The padding vector."""

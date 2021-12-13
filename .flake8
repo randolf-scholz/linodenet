@@ -57,3 +57,4 @@ docstring-convention = numpy
 # flake8-profiles: appnexus, cryptography, edited, google, pep8, pycharm, smarkets
 import-order-style = pep8
 application-import-names = linodenet, tsdm
+application-package-names = tsdm
