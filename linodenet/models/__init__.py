@@ -14,8 +14,11 @@ __all__ = [
     "LinearContraction",
     "iResNetBlock",
     "iResNet",
+    "ResNet",
+    "ResNetBlock",
     "LinODE",
     "LinODEnet",
+    "LinODECell",
     # Functions
     "spectral_norm",
 ]
@@ -27,8 +30,10 @@ from torch.nn import Module
 
 from linodenet.models import embeddings, encoders, filters
 from linodenet.models._linodenet import LinODE, LinODEnet
-from linodenet.models.encoders.iresnet import (
+from linodenet.models.encoders import (
     LinearContraction,
+    ResNet,
+    ResNetBlock,
     SpectralNorm,
     iResNet,
     iResNetBlock,

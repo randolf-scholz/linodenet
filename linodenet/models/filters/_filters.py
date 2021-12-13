@@ -32,7 +32,7 @@ from linodenet.util import (
     autojit,
     deep_dict_update,
     deep_keyval_update,
-    initialize_from,
+    initialize_from_config,
 )
 
 __logger__ = logging.getLogger(__name__)
@@ -141,6 +141,7 @@ class KalmanCell(FilterABC):
     HP: dict = {
         "activation": "Identity",
         "autoregressive": False,
+        "use_rezero": True,
     }
 
     # CONSTANTS
@@ -150,12 +151,16 @@ class KalmanCell(FilterABC):
     """CONST: The input size."""
     hidden_size: Final[int]
     """CONST: The hidden size."""
+    use_rezero: Final[bool]
+    """CONST: Whether to use rezero or not."""
 
     # PARAMETERS
     H: Tensor
     r"""PARAM: the observation matrix."""
     kernel: Tensor
     r"""PARAM: The kernel matrix."""
+    rezero: Tensor
+    r"""PARAM: The rezero scalar."""
 
     # BUFFERS
     ZERO: Tensor
@@ -190,6 +195,9 @@ class KalmanCell(FilterABC):
         else:
             self.H = nn.Parameter(torch.empty(input_size, hidden_size))
             nn.init.kaiming_normal_(self.H, nonlinearity="linear")
+
+        self.use_rezero = HP["use_rezero"]
+        self.rezero = nn.Parameter(torch.tensor(0.0))
 
     @jit.export
     def h(self, x: Tensor) -> Tensor:
@@ -226,7 +234,11 @@ class KalmanCell(FilterABC):
         z = torch.where(
             mask, torch.einsum("ij, ...j -> ...i", self.kernel, r), self.ZERO
         )
-        return x + self.activation(self.h(z))
+        fx = self.activation(self.h(z))
+
+        if self.use_rezero:
+            return x + self.rezero * fx
+        return x + fx
 
 
 class KalmanBlockCell(FilterABC):
@@ -299,12 +311,16 @@ class RecurrentCellFilter(FilterABC):
     """Any Recurrent Cell allowed."""
 
     HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
         "concat": True,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": True,
         "Cell": {
             "__name__": "GRUCell",
+            "__module__": "torch.nn",
             "input_size": None,
             "hidden_size": None,
             "bias": True,
@@ -312,6 +328,7 @@ class RecurrentCellFilter(FilterABC):
             "dtype": None,
         },
     }
+    r"""Dictionary of HyperParameters"""
 
     # CONSTANTS
     concat_mask: Final[bool]
@@ -353,7 +370,7 @@ class RecurrentCellFilter(FilterABC):
         )
 
         # MODULES
-        self.cell = initialize_from(CELLS, **HP["Cell"])
+        self.cell = initialize_from_config(HP["Cell"])
 
     @jit.export
     def h(self, x: Tensor) -> Tensor:

@@ -22,10 +22,9 @@ import math
 from typing import Callable, Optional, cast
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.nn.init as nn_init
-from torch import Tensor
+from torch import Tensor, nn
+from torch.nn import functional as F
+from torch.nn import init as nn_init
 
 from linodenet.util import autojit
 
@@ -33,11 +32,13 @@ __logger__ = logging.getLogger(__name__)
 
 
 def reglu(x: Tensor) -> Tensor:
+    """Regularized gelu activation function."""
     a, b = x.chunk(2, dim=-1)
     return a * F.relu(b)
 
 
 def geglu(x: Tensor) -> Tensor:
+    """Gelu activation function."""
     a, b = x.chunk(2, dim=-1)
     return a * F.gelu(b)
 

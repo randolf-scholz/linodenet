@@ -6,6 +6,7 @@ r"""Test the iResNet components.
 
 import logging
 import random
+from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -17,6 +18,11 @@ from tsdm.plot import visualize_distribution
 from tsdm.util import scaled_norm
 
 __logger__ = logging.getLogger(__name__)  # noqa: E402
+
+
+PATH = Path(__file__)
+TEST_DIR = PATH.parent / "test_results" / PATH.stem
+TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def test_LinearContraction(
@@ -84,7 +90,7 @@ def test_LinearContraction(
 
     visualize_distribution(scaling_factor, ax=ax, extra_stats=extra_stats)
 
-    fig.savefig("LinearContraction_ScalingFactor.pdf")
+    fig.savefig(TEST_DIR / "LinearContraction_ScalingFactor.pdf")
     __logger__.info("LinearContraction all done")
 
 
@@ -207,8 +213,8 @@ def test_iResNetBlock(
         r"$d_\text{right}(y) = \|y - \phi^{-1}(y)\|$ where $y_j \sim \mathcal N(0,1)$"
     )
     ax[1, 1].set_ylabel(r"density $p(d_\text{right} \mid y)$")
-    fig.suptitle("iResNetBlock -- Inversion Property", fontsize=16)
-    fig.savefig("iResNetBlock_inversion.pdf")
+    fig.suptitle(TEST_DIR / "iResNetBlock -- Inversion Property", fontsize=16)
+    fig.savefig(TEST_DIR / "iResNetBlock_inversion.pdf")
     __logger__.info("iResNetBlock all done")
 
 

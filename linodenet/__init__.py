@@ -85,7 +85,8 @@ def _clean_namespace(module: ModuleType):
                 continue
         # key is found:
         if key in module.__all__:  # type: ignore[attr-defined]
-            # set __module__ attribute to __package__ for functions/classes originating from private modules.
+            # set __module__ attribute to __package__ for functions/classes
+            # originating from private modules.
             if isinstance(obj, type) or callable(obj):
                 mod = get_module(obj)
                 if is_private(mod):

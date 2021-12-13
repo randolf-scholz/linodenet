@@ -48,9 +48,9 @@ class Transformer(nn.Module):
         "EncoderLayer": {
             "__name__": "TransformerEncoderLayer",
             # the number of expected features in the input (required).
-            "d_model": int,
+            "d_model": 8,
             # the number of heads in the multi-head-attention models (required).
-            "nhead": int,
+            "nhead": 8,
             # the dimension of the feedforward network model (default=2048).
             "dim_feedforward": 2048,
             # the dropout value (default=0.1).
@@ -62,7 +62,7 @@ class Transformer(nn.Module):
             # If True, then the input and output tensors are provided as (batch, seq, feature).
             # Default: False.
             "batch_first": False,
-            # if True, layer norm is done prior to attention and feedforward operations, respectively.
+            # if True, layer norm is done prior to attention and feedforward operations.
             # Otherwise it’s done after. Default: False (after).
             "norm_first": False,
         },
