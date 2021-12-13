@@ -2,6 +2,7 @@ r"""Test error of linear ODE against odeint."""
 
 import logging
 import random
+from pathlib import Path
 from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
@@ -18,6 +19,10 @@ from tsdm.util import scaled_norm
 __logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
+
+PATH = Path(__file__)
+TEST_DIR = PATH.parent / "test_results" / PATH.stem
+TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def linode_error(
@@ -70,7 +75,7 @@ def linode_error(
     T = torch.tensor(T, dtype=torch_dtype, device=device)  # type: ignore
     x0 = torch.tensor(x0, dtype=torch_dtype, device=device)  # type: ignore
 
-    model = LinODE(input_size=dim, kernel_initialization=A)
+    model = LinODE(input_size=dim, kernel_initialization=A, rezero=False)
     model.to(dtype=torch_dtype, device=device)
 
     Xhat = model(T, x0)
@@ -164,7 +169,7 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
         f" -- {num_samples} random systems"
     )
 
-    fig.savefig("LinODE_odeint_comparison.pdf")
+    fig.savefig(TEST_DIR / "LinODE_odeint_comparison.pdf")
     __logger__.info("LinODE all done")
 
 

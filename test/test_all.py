@@ -15,6 +15,10 @@ from linodenet.util import flatten
 
 __logger__ = logging.getLogger(__name__)
 
+PATH = Path(__file__)
+TEST_DIR = PATH.parent / "test_results" / PATH.stem
+TEST_DIR.mkdir(parents=True, exist_ok=True)
+
 linodenet.conf.autojit = False
 
 OUTER_BATCH = 3
@@ -90,7 +94,10 @@ def _test_model(
     device: torch.device = DEVICES[0],
 ):
     def err_str(s: str) -> str:
-        return f"{Model=} failed {s} with {initialization=} and input shapes {tuple(i.shape for i in inputs)}!"
+        return (
+            f"{Model=} failed {s} with {initialization=} and "
+            f"input shapes {tuple(i.shape for i in inputs)}!"
+        )
 
     try:  # check initialization
         __logger__.info(">>> INITIALIZATION TEST")
@@ -183,11 +190,11 @@ def test_all_models():
 
 
 def __main__():
+    logging.basicConfig(level=logging.INFO)
+    __logger__.info("Testing forward/backward passes started!")
     test_all_models()
+    __logger__.info("Testing forward/backward passes finished!")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    __logger__.info("Testing forward/backward passes started!")
     __main__()
-    __logger__.info("Testing forward/backward passes finished!")

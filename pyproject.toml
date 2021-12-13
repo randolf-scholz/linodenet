@@ -9,7 +9,7 @@ disable= [
     "C0144",  # non-ascii-name
     "R0801",  # similar lines
     "W0511",  # (fixme) (todos)
-]
+    ]
 
 [tool.pylint.REPORTS]
 # Set the output format. Available formats are text, parseable, colorized, json and
@@ -44,7 +44,7 @@ color_output = true
 error_summary = true
 show_error_codes = true
 show_column_numbers = true
-plugins = "numpy.typing.mypy_plugin"
+plugins = [ "numpy.typing.mypy_plugin", "pydantic.mypy" ]
 pretty = true
 
 [[tool.mypy.overrides]]
@@ -58,7 +58,7 @@ module = [
     "scipy.*",
     "tsdm.*",
     "tqdm.*",
-]
+    ]
 ignore_missing_imports = true
 
 

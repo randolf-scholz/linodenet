@@ -7,18 +7,18 @@ __all__ = [
 ]
 
 import logging
-from typing import Any, Final, Optional, Union
+from typing import Any, Final
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.initializations.functional import FunctionalInitialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
-from linodenet.models.encoders import ENCODERS
-from linodenet.models.filters import FILTERS, Filter
-from linodenet.models.system import SYSTEMS, LinODECell
+from linodenet.models.encoders import iResNet
+from linodenet.models.filters import Filter, RecurrentCellFilter
+from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
-from linodenet.util import autojit, deep_dict_update, initialize_from
+from linodenet.util import autojit, deep_dict_update, initialize_from_config
 
 __logger__ = logging.getLogger(__name__)
 
@@ -41,6 +41,16 @@ class LinODE(nn.Module):
     kernel_initialization: Callable[None, Tensor]
         Parameter-less function that draws a initial system matrix
     """
+
+    HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
+        "Cell": LinODECell.HP,
+        "kernel_initialization": None,
+        "kernel_projection": None,
+    }
+    r"""Dictionary of hyperparameters."""
 
     # Constants
     input_size: Final[int]
@@ -65,24 +75,23 @@ class LinODE(nn.Module):
     def __init__(
         self,
         input_size: int,
-        *,
-        kernel_initialization: Optional[
-            Union[str, Tensor, FunctionalInitialization]
-        ] = None,
-        kernel_projection: Optional[Union[str, Projection]] = None,
+        **HP: Any,
     ):
         super().__init__()
 
+        HP = deep_dict_update(self.HP, HP)
+
+        HP["Cell"]["input_size"] = input_size
+        HP["Cell"]["kernel_initialization"] = HP["kernel_initialization"]
+        HP["Cell"]["kernel_parametrization"] = HP["kernel_projection"]
+
         self.input_size = input_size
         self.output_size = input_size
-        self.cell = LinODECell(
-            input_size,
-            kernel_initialization=kernel_initialization,
-            kernel_parametrization=kernel_projection,
-        )
+        self.cell: nn.Module = initialize_from_config(HP["Cell"])
 
         # Buffers
         self.register_buffer("xhat", torch.tensor(()), persistent=False)
+        assert isinstance(self.cell.kernel, Tensor)
         self.register_buffer("kernel", self.cell.kernel, persistent=False)
 
     @jit.export
@@ -165,38 +174,24 @@ class LinODEnet(nn.Module):
     """
 
     HP: dict[str, Any] = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
         "input_size": int,
         "hidden_size": int,
         "output_size": int,
         "embedding_type": "linear",
-        "System": {
-            "__name__": "LinODECell",
-            "input_size": int,
-            "kernel_initialization": "skew-symmetric",
-        },
+        "System": LinODECell.HP,
         "Embedding": {
             "__name__": "ConcatEmbedding",
             "input_size": int,
             "hidden_size": int,
         },
-        "Filter": {
-            "__name__": "RecurrentCellFilter",
-            "concat": True,
-            "input_size": int,
-            "hidden_size": int,
-            "autoregressive": True,
-            "Cell": {
-                "__name__": "GRUCell",
-                "input_size": int,
-                "hidden_size": int,
-                "bias": True,
-                "device": None,
-                "dtype": None,
-            },
-        },
-        "Encoder": {"__name__": "iResNet", "input_size": int, "nblocks": 5},
-        "Decoder": {"__name__": "iResNet", "input_size": int, "nblocks": 5},
+        "Filter": RecurrentCellFilter.HP | {"autoregressive": True},
+        "Encoder": iResNet.HP,
+        "Decoder": iResNet.HP,
     }
+    r"""Dictionary of Hyperparameters."""
 
     # Constants
     input_size: Final[int]
@@ -275,11 +270,11 @@ class LinODEnet(nn.Module):
         # self.add_module("projection", _projection)
         # self.add_module("filter", HP["Filter"](**HP["Filter_cfg"]))
         self.embedding: nn.Module = _embedding
-        self.encoder: nn.Module = initialize_from(ENCODERS, **HP["Encoder"])
-        self.system: nn.Module = initialize_from(SYSTEMS, **HP["System"])
-        self.decoder: nn.Module = initialize_from(ENCODERS, **HP["Decoder"])
+        self.encoder: nn.Module = initialize_from_config(HP["Encoder"])
+        self.system: nn.Module = initialize_from_config(HP["System"])
+        self.decoder: nn.Module = initialize_from_config(HP["Decoder"])
         self.projection: nn.Module = _projection
-        self.filter: Filter = initialize_from(FILTERS, **HP["Filter"])
+        self.filter: Filter = initialize_from_config(HP["Filter"])
 
         assert isinstance(self.system.kernel, Tensor)
         self.kernel = self.system.kernel
@@ -333,10 +328,10 @@ class LinODEnet(nn.Module):
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
         X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
-        Ẑ_pre: list[Tensor] = []
-        X̂_pre: list[Tensor] = []
-        X̂_post: list[Tensor] = []
-        Ẑ_post: list[Tensor] = []
+        Zhat_pre: list[Tensor] = []
+        Xhat_pre: list[Tensor] = []
+        Xhat_post: list[Tensor] = []
+        Zhat_post: list[Tensor] = []
 
         ẑ_post = self.z0
 
@@ -354,15 +349,15 @@ class LinODEnet(nn.Module):
             ẑ_post = self.encoder(self.embedding(x̂_post))  # (...,DIM) → (...,LAT)
 
             # Save all tensors for later.
-            Ẑ_pre.append(ẑ_pre)
-            X̂_pre.append(x̂_pre)
-            X̂_post.append(x̂_post)
-            Ẑ_post.append(ẑ_post)
+            Zhat_pre.append(ẑ_pre)
+            Xhat_pre.append(x̂_pre)
+            Xhat_post.append(x̂_post)
+            Zhat_post.append(ẑ_post)
 
-        self.xhat_pre = torch.stack(X̂_pre, dim=-2)
-        self.xhat_post = torch.stack(X̂_post, dim=-2)
-        self.zhat_pre = torch.stack(Ẑ_pre, dim=-2)
-        self.zhat_post = torch.stack(Ẑ_post, dim=-2)
+        self.xhat_pre = torch.stack(Xhat_pre, dim=-2)
+        self.xhat_post = torch.stack(Xhat_post, dim=-2)
+        self.zhat_pre = torch.stack(Zhat_pre, dim=-2)
+        self.zhat_post = torch.stack(Zhat_post, dim=-2)
         self.timedeltas = DT.moveaxis(0, -1)
 
         return self.xhat_post

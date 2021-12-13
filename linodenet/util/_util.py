@@ -7,17 +7,20 @@ __all__ = [
     # Constants
     "ACTIVATIONS",
     # Classes
+    "ReZero",
     # Functions
     "autojit",
     "deep_dict_update",
     "deep_keyval_update",
     "flatten",
     "initialize_from",
+    "initialize_from_config",
 ]
 
 import logging
 from collections.abc import Iterable, Mapping
 from functools import partial, wraps
+from importlib import import_module
 from types import ModuleType
 from typing import Any, Final, TypeVar, Union
 
@@ -70,7 +73,7 @@ ACTIVATIONS: Final[LookupTable[Activation]] = {
 r"""Dictionary containing all available activations."""
 
 
-def deep_dict_update(d: dict, new: Mapping) -> dict:
+def deep_dict_update(d: dict, new: Mapping, inplace: bool = True) -> dict:
     r"""Update nested dictionary recursively in-place with new dictionary.
 
     Reference: https://stackoverflow.com/a/30655448/9318372
@@ -79,7 +82,11 @@ def deep_dict_update(d: dict, new: Mapping) -> dict:
     ----------
     d: dict
     new: Mapping
+    inplace: bool = False
     """
+    if not inplace:
+        d = d.copy()
+
     for key, value in new.items():
         if isinstance(value, Mapping) and value:
             d[key] = deep_dict_update(d.get(key, {}), value)
@@ -216,3 +223,71 @@ def initialize_from(
         return obj(**kwargs)  # type: ignore[call-arg]
     # if it is function, fix kwargs
     return partial(obj, **kwargs)  # type: ignore[return-value]
+
+
+# def configure()
+
+
+@autojit
+class ReZero(nn.Module):
+    """ReZero module.
+
+    Simply multiplies the inputs by a scalar intitialized to zero.
+    """
+
+    # PARAMETERS
+    scalar: Tensor
+    r"""The scalar to multiply the inputs by."""
+
+    def __init__(self):
+        super().__init__()
+        self.scalar = nn.Parameter(torch.tensor(0.0))
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Forward pass.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        return self.scalar * x
+
+
+def initialize_from_config(config: dict[str, Any]) -> Any:
+    r"""Initialize a class from a dictionary.
+
+    Parameters
+    ----------
+    config: dict[str, Any]
+
+    Returns
+    -------
+    object
+    """
+    assert "__name__" in config, "__name__ not found in dict"
+    assert "__module__" in config, "__module__ not found in dict"
+    __logger__.debug("Initializing %s", config)
+    config = config.copy()
+    module = import_module(config.pop("__module__"))
+    cls = getattr(module, config.pop("__name__"))
+    opts = {key: val for key, val in config.items() if not is_dunder("key")}
+    return cls(**opts)
+
+
+def is_dunder(name: str) -> bool:
+    r"""Check if name is a dunder method.
+
+    Parameters
+    ----------
+    name: str
+
+    Returns
+    -------
+    bool
+    """
+    return name.startswith("__") and name.endswith("__")

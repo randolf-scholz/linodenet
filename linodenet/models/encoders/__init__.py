@@ -7,10 +7,15 @@ __all__ = [
     "ENCODERS",
     # Classes
     "iResNet",
+    "iResNetBlock",
+    "ResNetBlock",
     "ResNet",
     "FT_Transformer",
-    "TransformerEncoder",
     "Transformer",
+    "LinearContraction",
+    "SpectralNorm",
+    # Functions
+    "spectral_norm",
 ]
 
 import logging
@@ -19,9 +24,15 @@ from typing import Final
 from torch import nn
 
 from linodenet.models.encoders.ft_transformer import FT_Transformer
-from linodenet.models.encoders.iresnet import iResNet
-from linodenet.models.encoders.resnet import ResNet
-from linodenet.models.encoders.transformer import Transformer, TransformerEncoder
+from linodenet.models.encoders.iresnet import (
+    LinearContraction,
+    SpectralNorm,
+    iResNet,
+    iResNetBlock,
+    spectral_norm,
+)
+from linodenet.models.encoders.resnet import ResNet, ResNetBlock
+from linodenet.models.encoders.transformer import Transformer
 
 __logger__ = logging.getLogger(__name__)
 
@@ -32,6 +43,6 @@ ENCODERS: Final[dict[str, type[Encoder]]] = {
     "iResNet": iResNet,
     "ResNet": ResNet,
     "FT_Transformer": FT_Transformer,
-    "TransformerEncoder": TransformerEncoder,
+    "Transformer": Transformer,
 }
 r"""Dictionary containing all available encoders."""

@@ -1,12 +1,18 @@
 r"""Test if filters satisfy idempotence property."""
 
 import logging
+from pathlib import Path
 
 import torch
 
 from linodenet.models.filters import KalmanBlockCell, KalmanCell
 
 __logger__ = logging.getLogger(__name__)
+
+PATH = Path(__file__)
+TEST_DIR = PATH.parent / "test_results" / PATH.stem
+TEST_DIR.mkdir(parents=True, exist_ok=True)
+
 NAN = torch.tensor(float("nan"))
 
 

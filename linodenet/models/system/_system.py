@@ -6,18 +6,17 @@ __all__ = [
 ]
 
 import logging
-from typing import Final, Optional, Union
+from typing import Any, Final
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.initializations import (
-    FunctionalInitialization,
     FunctionalInitializations,
 )
 from linodenet.initializations.functional import gaussian
-from linodenet.projections import PROJECTIONS, Projection
-from linodenet.util import autojit
+from linodenet.projections import PROJECTIONS
+from linodenet.util import ReZero, autojit, deep_dict_update
 
 __logger__ = logging.getLogger(__name__)
 
@@ -45,11 +44,24 @@ class LinODECell(nn.Module):
         Parametrization for the kernel
     """
 
+    HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
+        "input_size": int,
+        "kernel_initialization": None,
+        "kernel_parametrization": None,
+        "scale": 1.0,
+        "rezero": False,
+    }
+
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of inputs."""
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
+    use_rezero: Final[bool]
+    r"""CONST: Whether to use rezero."""
 
     # Parameters
     kernel: Tensor
@@ -62,16 +74,22 @@ class LinODECell(nn.Module):
     def __init__(
         self,
         input_size: int,
-        *,
-        kernel_initialization: Optional[
-            Union[str, Tensor, FunctionalInitialization]
-        ] = None,
-        kernel_parametrization: Optional[Union[str, Projection]] = None,
-        scale: float = 1.0,
+        # kernel_initialization: Optional[
+        #     Union[str, Tensor, FunctionalInitialization]
+        # ] = None,
+        # kernel_parametrization: Optional[Union[str, Projection]] = None,
+        **HP: Any,
     ):
         super().__init__()
+
+        HP = deep_dict_update(self.HP, HP)
+
         self.input_size = input_size
         self.output_size = input_size
+        kernel_initialization = HP["kernel_initialization"]
+        kernel_parametrization = HP["kernel_parametrization"]
+
+        print(kernel_initialization)
 
         def kernel_initialization_dispatch():
             if kernel_initialization is None:
@@ -86,10 +104,19 @@ class LinODECell(nn.Module):
                 )
                 return lambda: Tensor(kernel_initialization(input_size))
             if isinstance(kernel_initialization, Tensor):
-                assert kernel_initialization.shape == (input_size, input_size)
-                return lambda: kernel_initialization
-            assert Tensor(kernel_initialization).shape == (input_size, input_size)
-            return lambda: Tensor(kernel_initialization)
+                tensor = kernel_initialization
+                assert tensor.shape == (
+                    input_size,
+                    input_size,
+                ), f"Kernel has bad shape! {tensor.shape} but should be {(input_size, input_size)}"
+                return lambda: tensor
+
+            tensor = Tensor(kernel_initialization)
+            assert tensor.shape == (
+                input_size,
+                input_size,
+            ), f"Kernel has bad shape! {tensor.shape} but should be {(input_size, input_size)}"
+            return lambda: tensor
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript
         def kernel_parametrization_dispatch():
@@ -103,10 +130,15 @@ class LinODECell(nn.Module):
                 raise NotImplementedError(f"{kernel_parametrization=} unknown")
             return _kernel_regularization
 
-        self.register_buffer("scale", torch.tensor(scale), persistent=False)
+        self.register_buffer("scale", torch.tensor(HP["scale"]), persistent=False)
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_parametrization = kernel_parametrization_dispatch()
         self.kernel = nn.Parameter(self._kernel_initialization() * self.scale)
+
+        self.use_rezero = HP["rezero"]
+
+        if self.use_rezero:
+            self.rezero = ReZero()
 
     def kernel_initialization(self) -> Tensor:
         r"""Draw an initial kernel matrix (random or static)."""
@@ -134,6 +166,8 @@ class LinODECell(nn.Module):
             The predicted value at `t_1`
         """
         A = self.kernel_parametrization(self.kernel)
+        if self.use_rezero:
+            A = self.rezero(A)
         Adt = torch.einsum("kl, ... -> ...kl", A, dt)
         expAdt = torch.matrix_exp(Adt)
         xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)

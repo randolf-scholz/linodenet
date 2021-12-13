@@ -19,7 +19,7 @@ from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
 from linodenet.initializations.functional import low_rank
-from linodenet.util import ACTIVATIONS, Activation, autojit, deep_dict_update
+from linodenet.util import ACTIVATIONS, Activation, ReZero, autojit, deep_dict_update
 
 __logger__ = logging.getLogger(__name__)
 
@@ -411,18 +411,24 @@ class iResNetBlock(nn.Module):
     r"""CONST: The absolute tolerance threshold value."""
     rtol: Final[float]
     r"""CONST: The relative tolerance threshold value."""
+    use_rezero: Final[bool]
+    r"""CONST: Whether to apply ReZero technique."""
 
     # Buffers
     residual: Tensor
     r"""BUFFER: The termination error during backward propagation."""
 
     HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
         "atol": 1e-08,
         "rtol": 1e-05,
         "maxiter": 10,
         "activation": "ReLU",
         "activation_config": {"inplace": False},
         "bias": True,
+        "rezero": False,
         "output_size": None,
         "hidden_size": None,
         "input_size": None,
@@ -451,12 +457,18 @@ class iResNetBlock(nn.Module):
         self._Activation: type[Activation] = ACTIVATIONS[HP["activation"]]
         self.activation = self._Activation(**HP["activation_config"])  # type: ignore[call-arg]
         # gain = nn.init.calculate_gain(self._Activation)
-        self.bottleneck = nn.Sequential(
+
+        layers: list[nn.Module] = [
             LinearContraction(self.input_size, self.hidden_size, bias=self.bias),
             LinearContraction(self.hidden_size, self.input_size, bias=self.bias),
-            nn.Identity(),
-            # self.activation,
-        )
+        ]
+
+        self.use_rezero = HP["rezero"]
+        self.rezero = ReZero() if self.use_rezero else None
+        if self.use_rezero:
+            layers.append(self.rezero)  # type: ignore[arg-type]
+
+        self.bottleneck = nn.Sequential(*layers)
 
         self.register_buffer("residual", torch.tensor(()), persistent=False)
 
@@ -538,6 +550,9 @@ class iResNet(nn.Module):
     r"""CONST: The dimensionality of the outputs."""
 
     HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
         "maxiter": 10,
         "input_size": None,
         "dropout": None,
