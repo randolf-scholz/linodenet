@@ -15,13 +15,14 @@ __all__ = [
     # Constants
     "FunctionalInitializations",
     # Functions
-    "gaussian",
-    "symmetric",
-    "skew_symmetric",
-    "orthogonal",
-    "special_orthogonal",
-    "diagonally_dominant",
     "canonical_skew_symmetric",
+    "diagonally_dominant",
+    "gaussian",
+    "low_rank",
+    "orthogonal",
+    "skew_symmetric",
+    "special_orthogonal",
+    "symmetric",
 ]
 
 import logging
@@ -34,6 +35,7 @@ from linodenet.initializations.functional._functional import (
     canonical_skew_symmetric,
     diagonally_dominant,
     gaussian,
+    low_rank,
     orthogonal,
     skew_symmetric,
     special_orthogonal,
@@ -46,12 +48,13 @@ FunctionalInitialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
 r"""Type hint for Initializations."""
 
 FunctionalInitializations: Final[dict[str, FunctionalInitialization]] = {
-    "gaussian": gaussian,
-    "symmetric": symmetric,
-    "skew-symmetric": skew_symmetric,
-    "orthogonal": orthogonal,
-    "special-orthogonal": special_orthogonal,
-    "diagonally_dominant": diagonally_dominant,
     "canonical_skew_symmetric": canonical_skew_symmetric,
+    "diagonally_dominant": diagonally_dominant,
+    "gaussian": gaussian,
+    "low_rank": low_rank,
+    "orthogonal": orthogonal,
+    "skew-symmetric": skew_symmetric,
+    "special-orthogonal": special_orthogonal,
+    "symmetric": symmetric,
 }
 r"""Dictionary containing all available initializations."""

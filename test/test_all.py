@@ -9,17 +9,15 @@ from torch import Tensor
 from torch.nn.functional import mse_loss
 
 import linodenet
-from linodenet.models import (
-    LinearContraction,
-    LinODE,
-    LinODECell,
-    LinODEnet,
-    iResNet,
-    iResNetBlock,
-)
+from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
+from linodenet.models.system import LinODECell
 from linodenet.util import flatten
 
 __logger__ = logging.getLogger(__name__)
+
+PATH = Path(__file__)
+TEST_DIR = PATH.parent / "test_results" / PATH.stem
+TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 linodenet.conf.autojit = False
 
@@ -96,7 +94,10 @@ def _test_model(
     device: torch.device = DEVICES[0],
 ):
     def err_str(s: str) -> str:
-        return f"{Model=} failed {s} with {initialization=} and {inputs=}!"
+        return (
+            f"{Model=} failed {s} with {initialization=} and "
+            f"input shapes {tuple(i.shape for i in inputs)}!"
+        )
 
     try:  # check initialization
         __logger__.info(">>> INITIALIZATION TEST")
@@ -152,7 +153,9 @@ def _test_model(
         __logger__.info(">>> Model saved successfully ✔ ")
         model2 = torch.jit.load(filepath)
         __logger__.info(">>> Model loaded successfully ✔ ")
-        assert (flatten(model(*inputs)) == flatten(model2(*inputs))).all()
+
+        residual = flatten(model(*inputs)) - flatten(model2(*inputs))
+        assert (residual == 0.0).all(), f"{torch.mean(residual**2)=}"
         __logger__.info(">>> Loaded Model produces equivalent outputs ✔ ")
     except Exception as E:
         raise RuntimeError(err_str("checkpointing")) from E
@@ -187,11 +190,11 @@ def test_all_models():
 
 
 def __main__():
+    logging.basicConfig(level=logging.INFO)
+    __logger__.info("Testing forward/backward passes started!")
     test_all_models()
+    __logger__.info("Testing forward/backward passes finished!")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    __logger__.info("Testing forward/backward passes started!")
     __main__()
-    __logger__.info("Testing forward/backward passes finished!")
