@@ -7,7 +7,6 @@ __all__ = [
     # Constants
     "ACTIVATIONS",
     # Classes
-    "ReZero",
     # Functions
     "autojit",
     "deep_dict_update",
@@ -19,6 +18,7 @@ __all__ = [
 
 import logging
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from functools import partial, wraps
 from importlib import import_module
 from types import ModuleType
@@ -85,7 +85,7 @@ def deep_dict_update(d: dict, new: Mapping, inplace: bool = True) -> dict:
     inplace: bool = False
     """
     if not inplace:
-        d = d.copy()
+        d = deepcopy(d)
 
     for key, value in new.items():
         if isinstance(value, Mapping) and value:
@@ -223,39 +223,6 @@ def initialize_from(
         return obj(**kwargs)  # type: ignore[call-arg]
     # if it is function, fix kwargs
     return partial(obj, **kwargs)  # type: ignore[return-value]
-
-
-# def configure()
-
-
-@autojit
-class ReZero(nn.Module):
-    """ReZero module.
-
-    Simply multiplies the inputs by a scalar intitialized to zero.
-    """
-
-    # PARAMETERS
-    scalar: Tensor
-    r"""The scalar to multiply the inputs by."""
-
-    def __init__(self):
-        super().__init__()
-        self.scalar = nn.Parameter(torch.tensor(0.0))
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
-        return self.scalar * x
 
 
 def initialize_from_config(config: dict[str, Any]) -> Any:

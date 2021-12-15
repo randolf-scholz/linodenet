@@ -11,9 +11,7 @@ from typing import Any, Final
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import (
-    FunctionalInitializations,
-)
+from linodenet.initializations import FunctionalInitializations
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
 from linodenet.util import ReZero, autojit, deep_dict_update
@@ -82,7 +80,7 @@ class LinODECell(nn.Module):
     ):
         super().__init__()
 
-        HP = deep_dict_update(self.HP, HP)
+        HP = deep_dict_update(self.HP, HP, inplace=False)
 
         self.input_size = input_size
         self.output_size = input_size

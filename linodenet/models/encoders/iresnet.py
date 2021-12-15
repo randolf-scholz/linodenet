@@ -558,6 +558,7 @@ class iResNet(nn.Module):
         "dropout": None,
         "bias": True,
         "nblocks": 5,
+        "rezero": False,
         "iResNetBlock": {
             "input_size": None,
             "activation": "ReLU",
@@ -578,6 +579,7 @@ class iResNet(nn.Module):
         self.input_size = input_size
         self.output_size = input_size
         self.HP["iResNetBlock"]["input_size"] = self.input_size
+        self.HP["iResNetBlock"]["rezero"] = self.HP["rezero"]
 
         self.nblocks = self.HP["nblocks"]
         self.maxiter = self.HP["maxiter"]
