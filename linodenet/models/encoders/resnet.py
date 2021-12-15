@@ -232,19 +232,18 @@ class ResNet(nn.Module):
 
         assert HP["input_size"] is not None, "input_size is required!"
         assert "input_size" in HP["Block"], "input_size must be a key!"
-        assert "rezero" in HP["Block"], "rezero must be a key!"
 
-        HP["Block"]["rezero"] = HP["rezero"]
         HP["Block"]["input_size"] = HP["input_size"]
 
         blocks: list[nn.Module] = []
 
         for _ in range(HP["num_blocks"]):
             model = initialize_from_config(HP["Block"])
-            blocks.append(model)
 
             if self.use_rezero:
-                blocks.append(ReZero())
+                model = nn.Sequential(model, ReZero())
+
+            blocks.append(model)
 
         self.blocks = nn.Sequential(*blocks)
 
