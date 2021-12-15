@@ -14,7 +14,7 @@ __all__ = [
 
 import logging
 from math import sqrt
-from typing import Any, Optional, cast
+from typing import Any, Final, Optional, cast
 
 import torch
 from torch import Tensor, nn
@@ -24,7 +24,13 @@ from linodenet.models.encoders.ft_transformer import (
     get_activation_fn,
     get_nonglu_activation_fn,
 )
-from linodenet.util import ReZero, autojit, deep_dict_update, initialize_from_config
+from linodenet.util import (
+    ReverseDense,
+    ReZero,
+    autojit,
+    deep_dict_update,
+    initialize_from_config,
+)
 
 __logger__ = logging.getLogger(__name__)
 
@@ -152,34 +158,12 @@ class ResNetBlock(nn.Module):
     """
 
     HP: dict = {
-        "__name__": "ResNetBlock",
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "num_blocks": 2,
-        "rezero": True,
-        "layers": [
-            {
-                "__name__": "BatchNorm1d",
-                "__module__": "torch.nn",
-                "num_features": None,
-                "eps": 1e-05,
-                "momentum": 0.1,
-                "affine": True,
-                "track_running_stats": True,
-            },
-            {
-                "__name__": "ReLU",
-                "__module__": "torch.nn",
-                "inplace": False,
-            },
-            {
-                "__name__": "Linear",
-                "__module__": "torch.nn",
-                "in_features": None,
-                "out_features": None,
-                "bias": True,
-            },
-        ],
+        "layers": [ReverseDense.HP],
     }
 
     def __init__(self, **HP: Any) -> None:
@@ -196,15 +180,14 @@ class ResNetBlock(nn.Module):
                 layer["out_features"] = HP["input_size"]
             if layer["__name__"] == "BatchNorm1d":
                 layer["num_features"] = HP["input_size"]
+            else:
+                layer["input_size"] = HP["input_size"]
+                layer["output_size"] = HP["input_size"]
 
         layers: list[nn.Module] = [
             nn.Sequential(*[initialize_from_config(layer) for layer in HP["layers"]])
             for _ in range(HP["num_blocks"])
         ]
-
-        if HP["rezero"]:
-            # self.rezero = ReZero()
-            layers.append(ReZero())
 
         self.layers = nn.Sequential(*layers)
 
@@ -226,17 +209,26 @@ class ResNetBlock(nn.Module):
 class ResNet(nn.Module):
     """A ResNet model."""
 
-    HP: dict = {
+    DEFAULT_HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "num_blocks": 5,
-        "rezero": True,
+        "rezero": False,
         "Block": ResNetBlock.HP,
     }
 
+    use_rezero: Final[bool]
+    """Whether to use ReZero."""
+
+    # HP: dict[str, Any]
+    # """The concrete hyperparameters of the model."""
+
     def __init__(self, **HP: Any) -> None:
         super().__init__()
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
+        HP = deep_dict_update(self.DEFAULT_HP, HP)
+        self.use_rezero = HP["rezero"]
 
         assert HP["input_size"] is not None, "input_size is required!"
         assert "input_size" in HP["Block"], "input_size must be a key!"
@@ -245,7 +237,14 @@ class ResNet(nn.Module):
         HP["Block"]["rezero"] = HP["rezero"]
         HP["Block"]["input_size"] = HP["input_size"]
 
-        blocks = [initialize_from_config(HP["Block"]) for _ in range(HP["num_blocks"])]
+        blocks: list[nn.Module] = []
+
+        for _ in range(HP["num_blocks"]):
+            model = initialize_from_config(HP["Block"])
+            blocks.append(model)
+
+            if self.use_rezero:
+                blocks.append(ReZero())
 
         self.blocks = nn.Sequential(*blocks)
 

@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 import logging
-from typing import Final
+from typing import Any, Final
 
 import torch
 from torch import Tensor, jit, nn
@@ -32,6 +32,15 @@ class ConcatEmbedding(nn.Module):
     padding: Tensor
     """
 
+    HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
+        "input_size": int,
+        "hidden_size": int,
+    }
+    r"""Dictionary of Hyperparamters."""
+
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
@@ -48,7 +57,7 @@ class ConcatEmbedding(nn.Module):
     padding: Tensor
     r"""PARAM: The padding vector."""
 
-    def __init__(self, input_size: int, hidden_size: int):
+    def __init__(self, input_size: int, hidden_size: int, **HP: Any) -> None:
         super().__init__()
         assert (
             input_size <= hidden_size
@@ -100,17 +109,29 @@ class ConcatProjection(nn.Module):
     hidden_size: int
     """
 
+    HP: dict = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
+        "input_size": int,
+        "hidden_size": int,
+    }
+    r"""Dictionary of Hyperparamters."""
+
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
     hidden_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
+    pad_size: Final[int]
+    r"""CONST: The size of the padding."""
 
-    def __init__(self, input_size: int, hidden_size: int):
+    def __init__(self, input_size: int, hidden_size: int, **HP: Any) -> None:
         super().__init__()
         assert input_size <= hidden_size
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.pad_size = hidden_size - input_size
 
     @jit.export
     def forward(self, Z: Tensor) -> Tensor:

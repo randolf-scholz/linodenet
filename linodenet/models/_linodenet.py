@@ -173,6 +173,9 @@ class LinODEnet(nn.Module):
         MODULE: Responsible for updating `(x̂, x_obs) →x̂'`.
     """
 
+    name: Final[str] = __name__
+    """str: The name of the model."""
+
     HP: dict[str, Any] = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
@@ -180,13 +183,9 @@ class LinODEnet(nn.Module):
         "input_size": int,
         "hidden_size": int,
         "output_size": int,
-        "embedding_type": "linear",
         "System": LinODECell.HP,
-        "Embedding": {
-            "__name__": "ConcatEmbedding",
-            "input_size": int,
-            "hidden_size": int,
-        },
+        "Embedding": ConcatEmbedding.HP,
+        "Projection": ConcatProjection.HP,
         "Filter": RecurrentCellFilter.HP | {"autoregressive": True},
         "Encoder": iResNet.HP,
         "Decoder": iResNet.HP,
@@ -250,17 +249,21 @@ class LinODEnet(nn.Module):
         HP["System"]["input_size"] = hidden_size
         HP["Filter"]["hidden_size"] = input_size
         HP["Filter"]["input_size"] = input_size
+        HP["Embedding"]["input_size"] = input_size
+        HP["Embedding"]["hidden_size"] = hidden_size
+        HP["Projection"]["input_size"] = input_size
+        HP["Projection"]["hidden_size"] = hidden_size
 
-        if HP["embedding_type"] == "linear":
-            _embedding: nn.Module = nn.Linear(input_size, hidden_size)
-            _projection: nn.Module = nn.Linear(hidden_size, input_size)
-        elif HP["embedding_type"] == "concat":
-            _embedding = ConcatEmbedding(input_size, hidden_size)
-            _projection = ConcatProjection(input_size, hidden_size)
-        else:
-            raise NotImplementedError(
-                f"{HP['embedding_type']=}" + "not in {'linear', 'concat'}"
-            )
+        # if HP["embedding_type"] == "linear":
+        #     _embedding: nn.Module = nn.Linear(input_size, hidden_size)
+        #     _projection: nn.Module = nn.Linear(hidden_size, input_size)
+        # elif HP["embedding_type"] == "concat":
+        #     _embedding = ConcatEmbedding(input_size, hidden_size)
+        #     _projection = ConcatProjection(input_size, hidden_size)
+        # else:
+        #     raise NotImplementedError(
+        #         f"{HP['embedding_type']=}" + "not in {'linear', 'concat'}"
+        #     )
 
         # TODO: replace with add_module once supported!
         # self.add_module("embedding", _embedding)
@@ -269,11 +272,17 @@ class LinODEnet(nn.Module):
         # self.add_module("decoder", HP["Decoder"](**HP["Decoder_cfg"]))
         # self.add_module("projection", _projection)
         # self.add_module("filter", HP["Filter"](**HP["Filter_cfg"]))
-        self.embedding: nn.Module = _embedding
+        __logger__.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
+        self.embedding: nn.Module = initialize_from_config(HP["Embedding"])
+        __logger__.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
+        self.projection: nn.Module = initialize_from_config(HP["Projection"])
+        __logger__.debug("%s Initializing Encoder %s", self.name, HP["Encoder"])
         self.encoder: nn.Module = initialize_from_config(HP["Encoder"])
+        __logger__.debug("%s Initializing System %s", self.name, HP["Encoder"])
         self.system: nn.Module = initialize_from_config(HP["System"])
+        __logger__.debug("%s Initializing Decoder %s", self.name, HP["Encoder"])
         self.decoder: nn.Module = initialize_from_config(HP["Decoder"])
-        self.projection: nn.Module = _projection
+        __logger__.debug("%s Initializing Filter %s", self.name, HP["Encoder"])
         self.filter: Filter = initialize_from_config(HP["Filter"])
 
         assert isinstance(self.system.kernel, Tensor)

@@ -7,9 +7,7 @@ import matplotlib.pyplot as plt
 import pytest
 import torch
 
-from linodenet.initializations.functional import (
-    FunctionalInitializations,
-)
+from linodenet.initializations.functional import FunctionalInitializations
 
 __logger__ = logging.getLogger(__name__)
 
