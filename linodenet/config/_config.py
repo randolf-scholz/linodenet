@@ -4,7 +4,9 @@ r"""LinODE-Net Configuration.
 """
 
 __all__ = [
+    # Constants
     "conf",
+    # Classes
     "Config",
 ]
 

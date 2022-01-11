@@ -11,6 +11,10 @@ __all__ = [
     # Classes
     "ReZero",
     "ReverseDense",
+    "Repeat",
+    "Series",
+    "Parallel",
+    "Multiply",
     # Functions
     "autojit",
     "deep_dict_update",
@@ -34,6 +38,7 @@ from linodenet.util._util import (
     initialize_from,
     initialize_from_config,
 )
+from linodenet.util.generic_layers import Multiply, Parallel, Repeat, Series
 from linodenet.util.layers import ReverseDense, ReZero
 
 __logger__ = logging.getLogger(__name__)

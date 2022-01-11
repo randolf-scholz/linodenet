@@ -10,13 +10,21 @@ __all__ = [
     "models",
     "projections",
     "regularizations",
+    "util",
 ]
 
 import logging
 from pathlib import Path
 from types import ModuleType
 
-from linodenet import config, initializations, models, projections, regularizations
+from linodenet import (
+    config,
+    initializations,
+    models,
+    projections,
+    regularizations,
+    util,
+)
 from linodenet.config import conf
 
 __logger__ = logging.getLogger(__name__)
@@ -40,8 +48,8 @@ def _clean_namespace(module: ModuleType):
     def is_private(s: str) -> bool:
         return s.startswith("_") and not s.startswith("__")
 
-    def get_module(obj: object) -> str:
-        return obj.__module__.rsplit(".", maxsplit=1)[-1]
+    def get_module(obj_ref: object) -> str:
+        return obj_ref.__module__.rsplit(".", maxsplit=1)[-1]
 
     assert hasattr(module, "__name__"), f"{module=} has no __name__ ?!?!"
     assert hasattr(module, "__package__"), f"{module=} has no __package__ ?!?!"
@@ -102,6 +110,7 @@ def _clean_namespace(module: ModuleType):
     # Post Loop - clean up the rest
     for key in ("ModuleType", "_clean_namespace"):
         if key in variables:
+            key_repr = _format(key)
             delattr(module, key)
             __logger__.debug("key=%s  killed!", key_repr)
 
