@@ -73,7 +73,7 @@ ACTIVATIONS: Final[LookupTable[Activation]] = {
 r"""Dictionary containing all available activations."""
 
 
-def deep_dict_update(d: dict, new: Mapping, inplace: bool = True) -> dict:
+def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
     r"""Update nested dictionary recursively in-place with new dictionary.
 
     Reference: https://stackoverflow.com/a/30655448/9318372
@@ -153,6 +153,7 @@ def autojit(base_class: type[nn.Module]) -> type[nn.Module]:
 
         # noinspection PyArgumentList
         def __new__(cls, *args, **kwargs):
+
             instance = base_class(*args, **kwargs)
 
             if conf.autojit:  # pylint: disable=no-member

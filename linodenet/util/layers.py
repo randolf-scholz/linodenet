@@ -24,12 +24,11 @@ __logger__ = logging.getLogger(__name__)
 class ReZero(nn.Module):
     """ReZero module.
 
-    Simply multiplies the inputs by a scalar intitialized to zero.
+    Simply multiplies the inputs by a scalar initialized to zero.
     """
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
     }
     r"""The hyperparameter dictionary"""
@@ -61,12 +60,12 @@ class ReZero(nn.Module):
 class ReverseDense(nn.Module):
     """ReverseDense module `x→A⋅ϕ(x)`."""
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "output_size": None,
+        "bias": True,
         "activation": {
             "__name__": "ReLU",
             "__module__": "torch.nn",
@@ -86,18 +85,16 @@ class ReverseDense(nn.Module):
     bias: Optional[Tensor]
     r"""The bias vector."""
 
-    def __init__(self, **HP: Any) -> None:
+    def __init__(self, input_size: int, output_size: int, **HP: Any) -> None:
         super().__init__()
+        self.CFG = HP = deep_dict_update(self.HP, HP)
 
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
+        self.input_size = HP["input_size"] = input_size
+        self.output_size = HP["output_size"] = output_size
 
-        self.input_size = HP["input_size"]
-        self.output_size = HP["output_size"]
+        self.activation: nn.Module = initialize_from_config(HP["activation"])
 
-        self.activation = initialize_from_config(HP["activation"])
-
-        self.linear = nn.Linear(HP["input_size"], HP["output_size"])
+        self.linear = nn.Linear(HP["input_size"], HP["output_size"], HP["bias"])
         self.weight = self.linear.weight
         self.bias = self.linear.bias
 

@@ -42,7 +42,7 @@ class LinODECell(nn.Module):
         Parametrization for the kernel
     """
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
@@ -79,15 +79,12 @@ class LinODECell(nn.Module):
         **HP: Any,
     ):
         super().__init__()
-
-        HP = deep_dict_update(self.HP, HP, inplace=False)
+        self.CFG = HP = deep_dict_update(self.HP, HP)
 
         self.input_size = input_size
         self.output_size = input_size
         kernel_initialization = HP["kernel_initialization"]
         kernel_parametrization = HP["kernel_parametrization"]
-
-        print(kernel_initialization)
 
         def kernel_initialization_dispatch():
             if kernel_initialization is None:

@@ -32,7 +32,7 @@ class ConcatEmbedding(nn.Module):
     padding: Tensor
     """
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
@@ -109,7 +109,7 @@ class ConcatProjection(nn.Module):
     hidden_size: int
     """
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]

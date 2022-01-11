@@ -5,7 +5,7 @@ from pathlib import Path
 
 import torch
 
-from linodenet.models.filters import KalmanBlockCell, KalmanCell
+from linodenet.models.filters import SequentialFilterBlock
 
 __logger__ = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ TEST_DIR.mkdir(parents=True, exist_ok=True)
 NAN = torch.tensor(float("nan"))
 
 
+# @pytest.mark.parametrize("key", FunctionalInitializations)
 def test_idempotency():
     r"""Check whether idempotency holds."""
     batch_dim, m, n = (3, 4, 5), 100, 100
@@ -24,31 +25,31 @@ def test_idempotency():
     mask = y > 0
     y[mask] = NAN
 
-    # Test KalmanCel
-    model = KalmanCell(
+    # # Test KalmanCel
+    # model = KalmanCell(
+    #     input_size=n, hidden_size=m, autoregressive=True, activation="ReLU"
+    # )
+    # result = model(y, x)
+    # assert not torch.isnan(result).any(), "Output contains NANs! ❌ "
+    # __logger__.info("KalmanCell: No NaN outputs ✔ ")
+    #
+    # # verify IDP condition
+    # y[~mask] = x[~mask]
+    # assert torch.allclose(x, model(y, x)), "Idempotency failed! ❌ "
+    # __logger__.info("KalmanCell: Idempotency holds ✔ ")
+
+    # Test SequentialFilterBlock
+    model = SequentialFilterBlock(
         input_size=n, hidden_size=m, autoregressive=True, activation="ReLU"
     )
     result = model(y, x)
-    assert not torch.isnan(result).any(), "Output contains NANs!"
-    __logger__.info("KalmanCell: No NaN outputs ✔ ")
+    assert not torch.isnan(result).any(), "Output contains NANs! ❌ "
+    __logger__.info("SequentialFilterBlock: No NaN outputs ✔ ")
 
     # verify IDP condition
     y[~mask] = x[~mask]
-    assert (x == model(y, x)).all(), "Idempotency failed!"
-    __logger__.info("KalmanCell: Idempotency holds ✔ ")
-
-    # Test KalmanBlockCell
-    model = KalmanBlockCell(
-        input_size=n, hidden_size=m, autoregressive=True, activation="ReLU"
-    )
-    result = model(y, x)
-    assert not torch.isnan(result).any(), "Output contains NANs!"
-    __logger__.info("KalmanBlockCell: No NaN outputs ✔ ")
-
-    # verify IDP condition
-    y[~mask] = x[~mask]
-    assert (x == model(y, x)).all(), "Idempotency failed!"
-    __logger__.info("KalmanBlockCell: Idempotency holds ✔ ")
+    assert torch.allclose(x, model(y, x)), "Idempotency failed! ❌ "
+    __logger__.info("SequentialFilterBlock: Idempotency holds ✔ ")
 
 
 def __main__():

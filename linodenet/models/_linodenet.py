@@ -42,7 +42,7 @@ class LinODE(nn.Module):
         Parameter-less function that draws a initial system matrix
     """
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
@@ -78,8 +78,7 @@ class LinODE(nn.Module):
         **HP: Any,
     ):
         super().__init__()
-
-        HP = deep_dict_update(self.HP, HP)
+        self.CFG = HP = deep_dict_update(self.HP, HP)
 
         HP["Cell"]["input_size"] = input_size
         HP["Cell"]["kernel_initialization"] = HP["kernel_initialization"]
@@ -176,7 +175,7 @@ class LinODEnet(nn.Module):
     name: Final[str] = __name__
     """str: The name of the model."""
 
-    HP: dict[str, Any] = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
@@ -236,10 +235,7 @@ class LinODEnet(nn.Module):
 
     def __init__(self, input_size: int, hidden_size: int, **HP: Any):
         super().__init__()
-
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
-
+        self.CFG = HP = deep_dict_update(self.HP, HP)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = input_size
