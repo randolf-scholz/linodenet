@@ -517,7 +517,7 @@ class iResNetBlock(nn.Module):
         return x
 
 
-# @autojit
+@autojit
 class iResNet(nn.Module):
     r"""Invertible ResNet consists of a stack of :class:`iResNetBlock` modules.
 
