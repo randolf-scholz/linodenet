@@ -148,7 +148,7 @@ class ResNet_(nn.Module):
 
 # noinspection PyUnresolvedReferences
 @autojit
-class ResNetBlock(nn.Module):
+class ResNetBlock(nn.Sequential):
     """Pre-activation ResNet block.
 
     References
@@ -180,6 +180,7 @@ class ResNetBlock(nn.Module):
 
     def __init__(self, **HP: Any) -> None:
         super().__init__()
+
         self.CFG = HP = deep_dict_update(self.HP, HP)
 
         assert HP["input_size"] is not None, "input_size is required!"
@@ -204,26 +205,12 @@ class ResNetBlock(nn.Module):
             self.add_module(key, module)
             subblocks[key] = module
 
-        self.subblocks = nn.Sequential(subblocks)
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
-        return self.subblocks(x)
+        # self.subblocks = nn.Sequential(subblocks)
+        super().__init__(subblocks)
 
 
-# noinspection PyUnresolvedReferences
 @autojit
-class ResNet(nn.Module):
+class ResNet(nn.ModuleList):
     """A ResNet model."""
 
     HP = {
@@ -248,7 +235,7 @@ class ResNet(nn.Module):
             if "input_size" in block_cfg:
                 block_cfg["input_size"] = HP["input_size"]
 
-        blocks: OrderedDict[str, nn.Module] = OrderedDict()
+        blocks: list[nn.Module] = []
 
         for k in range(HP["num_blocks"]):
             key = f"block{k}"
@@ -256,9 +243,9 @@ class ResNet(nn.Module):
                 *[initialize_from_config(layer) for layer in HP["blocks"]]
             )
             self.add_module(key, module)
-            blocks[key] = module
+            blocks.append(module)
 
-        self.blocks = nn.Sequential(blocks)
+        super().__init__(blocks)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -272,7 +259,6 @@ class ResNet(nn.Module):
         -------
         Tensor
         """
-        for block in self.blocks:
+        for block in self:
             x = x + block(x)
-
         return x
