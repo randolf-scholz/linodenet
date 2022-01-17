@@ -228,7 +228,7 @@ def low_rank(size: SizeLike, rank: Optional[int] = None) -> Tensor:
     if isinstance(rank, int) and rank > min(m, n):
         raise ValueError("Rank must be smaller than min(m,n)")
 
-    rank = max(1, min(m, n) // 10) if rank is None else rank
+    rank = max(1, min(m, n) // 2) if rank is None else rank
     U = torch.normal(mean=torch.zeros((*batch, m, rank)), std=1 / sqrt(rank))
     V = torch.normal(mean=torch.zeros((*batch, rank, n)), std=1 / sqrt(n))
 

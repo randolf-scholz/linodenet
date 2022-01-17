@@ -96,13 +96,6 @@ def test_initialization(
     # __logger__.info("All initializations passed! ✔ ")
 
 
-def test_matrix_exponential(
-    num_runs: int = 1000, num_samples: int = 1000, dim: int = 100
-):
-    r"""What is the distribution of exp(AΔt)x ?."""
-    ...
-
-
 @pytest.mark.skip
 def test_all_initializations(make_plot: bool = False):
     r"""Test all initializations."""

@@ -71,14 +71,14 @@ def linode_error(
 
     X = np.array(odeint(func, x0, T, tfirst=True))
 
-    A = torch.tensor(A, dtype=torch_dtype, device=device)
-    T = torch.tensor(T, dtype=torch_dtype, device=device)
-    x0 = torch.tensor(x0, dtype=torch_dtype, device=device)
+    # A_torch = torch.tensor(A, dtype=torch_dtype, device=device)
+    T_torch = torch.tensor(T, dtype=torch_dtype, device=device)
+    x0_torch = torch.tensor(x0, dtype=torch_dtype, device=device)
 
     model = LinODE(input_size=dim, kernel_initialization=A, rezero=False)
     model.to(dtype=torch_dtype, device=device)
 
-    Xhat = model(T, x0)
+    Xhat = model(T_torch, x0_torch)
     Xhat = Xhat.clone().detach().cpu().numpy()
 
     err = np.abs(X - Xhat)
