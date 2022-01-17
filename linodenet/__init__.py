@@ -92,7 +92,7 @@ def _clean_namespace(module: ModuleType):
                 __logger__.debug("key=%s  skipped! 3rd party Module!", key_repr)
                 continue
         # key is found:
-        if key in module.__all__:  # type: ignore[attr-defined]
+        if key in module.__all__:
             # set __module__ attribute to __package__ for functions/classes
             # originating from private modules.
             if isinstance(obj, type) or callable(obj):
@@ -102,7 +102,7 @@ def _clean_namespace(module: ModuleType):
                         "key=%s  changed {obj.__module__=} to {module.__package__}!",
                         key_repr,
                     )
-                    obj.__module__ = module.__package__
+                    obj.__module__ = str(module.__package__)
         else:
             # kill the object
             delattr(module, key)

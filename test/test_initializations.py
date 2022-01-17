@@ -59,7 +59,7 @@ def test_initialization(
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
     else:
-        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
+        torch.set_default_tensor_type(torch.FloatTensor)
 
     ZERO = torch.tensor(0.0)
     ONE = torch.tensor(1.0)

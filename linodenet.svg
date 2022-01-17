@@ -505,7 +505,7 @@
 <!-- linodenet_util -->
 <g id="node29" class="node">
 <title>linodenet_util</title><style>.edge>path:hover{stroke-width:8}</style>
-<ellipse fill="#db0505" stroke="black" cx="277" cy="-441.92" rx="41.59" ry="18"/>
+<ellipse fill="#d10505" stroke="black" cx="277" cy="-441.92" rx="41.59" ry="18"/>
 <text text-anchor="middle" x="277" y="-439.42" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">linodenet.util</text>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet -->
@@ -520,51 +520,51 @@
 <path fill="none" stroke="black" d="M301.73,-456.69C348.97,-483.83 453.62,-548.11 524,-622.34 576.27,-677.46 614,-691.68 614,-767.65"/>
 <path fill="none" stroke="black" d="M614,-769.65C612.59,-813.96 648.91,-842.07 614,-869.41"/>
 <path fill="none" stroke="black" d="M614,-871.41C572.38,-904.01 517.38,-929.88 478.77,-945.77"/>
-<polygon fill="#db0505" stroke="black" points="477.29,-942.6 469.33,-949.6 479.91,-949.09 477.29,-942.6"/>
+<polygon fill="#d10505" stroke="black" points="477.29,-942.6 469.33,-949.6 479.91,-949.09 477.29,-942.6"/>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet_models_embeddings__embeddings -->
 <g id="edge46" class="edge">
 <title>linodenet_util&#45;&gt;linodenet_models_embeddings__embeddings</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M320,-660.11C338.22,-688.67 365.55,-715.11 388.64,-734.62"/>
-<polygon fill="#db0505" stroke="black" points="386.68,-737.54 396.62,-741.23 391.15,-732.15 386.68,-737.54"/>
+<polygon fill="#d10505" stroke="black" points="386.68,-737.54 396.62,-741.23 391.15,-732.15 386.68,-737.54"/>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet_models_encoders_ft_transformer -->
 <g id="edge47" class="edge">
 <title>linodenet_util&#45;&gt;linodenet_models_encoders_ft_transformer</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M175,-586.34C179.87,-599.47 188.39,-611.76 197.62,-622.32"/>
-<polygon fill="#db0505" stroke="black" points="195.07,-624.72 204.42,-629.69 200.21,-619.97 195.07,-624.72"/>
+<polygon fill="#d10505" stroke="black" points="195.07,-624.72 204.42,-629.69 200.21,-619.97 195.07,-624.72"/>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet_models_encoders_iresnet -->
 <g id="edge48" class="edge">
 <title>linodenet_util&#45;&gt;linodenet_models_encoders_iresnet</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M320,-660.11C364.77,-730.29 420.05,-691.79 493,-731.88 496.68,-733.9 500.41,-736.13 504.1,-738.46"/>
-<polygon fill="#db0505" stroke="black" points="502.31,-741.47 512.59,-744.03 506.15,-735.61 502.31,-741.47"/>
+<polygon fill="#d10505" stroke="black" points="502.31,-741.47 512.59,-744.03 506.15,-735.61 502.31,-741.47"/>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet_models_encoders_resnet -->
 <g id="edge49" class="edge">
 <title>linodenet_util&#45;&gt;linodenet_models_encoders_resnet</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M175,-586.34C195.25,-640.95 255.73,-585.7 301,-622.34 314.99,-633.66 310.32,-642.93 320,-658.11"/>
 <path fill="none" stroke="black" d="M320,-660.11C329.68,-675.29 315.17,-684.78 301,-695.88 249.41,-736.3 217.47,-704.33 158,-731.88 154.35,-733.57 150.68,-735.54 147.09,-737.67"/>
-<polygon fill="#db0505" stroke="black" points="144.92,-734.91 138.36,-743.23 148.68,-740.81 144.92,-734.91"/>
+<polygon fill="#d10505" stroke="black" points="144.92,-734.91 138.36,-743.23 148.68,-740.81 144.92,-734.91"/>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet_models_encoders_transformer -->
 <g id="edge50" class="edge">
 <title>linodenet_util&#45;&gt;linodenet_models_encoders_transformer</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M320,-660.11C330.76,-676.97 291.04,-711.93 257.19,-737.43"/>
-<polygon fill="#db0505" stroke="black" points="254.7,-734.92 248.75,-743.69 258.87,-740.54 254.7,-734.92"/>
+<polygon fill="#d10505" stroke="black" points="254.7,-734.92 248.75,-743.69 258.87,-740.54 254.7,-734.92"/>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet_models_filters__filters -->
 <g id="edge51" class="edge">
 <title>linodenet_util&#45;&gt;linodenet_models_filters__filters</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M320,-660.11C331.6,-678.29 332.73,-701.95 330.48,-722.45"/>
-<polygon fill="#db0505" stroke="black" points="326.99,-722.14 329.09,-732.53 333.92,-723.1 326.99,-722.14"/>
+<polygon fill="#d10505" stroke="black" points="326.99,-722.14 329.09,-732.53 333.92,-723.1 326.99,-722.14"/>
 </g>
 <!-- linodenet_util&#45;&gt;linodenet_models_system__system -->
 <g id="edge52" class="edge">
 <title>linodenet_util&#45;&gt;linodenet_models_system__system</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M316.3,-448.09C395.38,-459.21 569.93,-487.63 614,-527.13"/>
 <path fill="none" stroke="black" d="M614,-529.13C642.62,-554.77 665.29,-660.17 676.45,-721.94"/>
-<polygon fill="#db0505" stroke="black" points="673.01,-722.6 678.2,-731.83 679.9,-721.37 673.01,-722.6"/>
+<polygon fill="#d10505" stroke="black" points="673.01,-722.6 678.2,-731.83 679.9,-721.37 673.01,-722.6"/>
 </g>
 <!-- linodenet_util__util&#45;&gt;linodenet_util -->
 <g id="edge53" class="edge">
@@ -573,7 +573,7 @@
 <polygon fill="#c43131" stroke="black" points="273.92,-413.66 277.49,-423.64 280.92,-413.62 273.92,-413.66"/>
 </g>
 <!-- linodenet_util_layers -->
-<g id="node31" class="node">
+<g id="node32" class="node">
 <title>linodenet_util_layers</title><style>.edge>path:hover{stroke-width:8}</style>
 <ellipse fill="#b03a3a" stroke="black" cx="207" cy="-340.16" rx="41.94" ry="28.98"/>
 <text text-anchor="middle" x="207" y="-348.66" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">linodenet.</text>
@@ -586,8 +586,22 @@
 <path fill="none" stroke="black" d="M207,-267.46C207,-277.76 207,-289.62 207,-300.68"/>
 <polygon fill="#c43131" stroke="black" points="203.5,-300.97 207,-310.97 210.5,-300.97 203.5,-300.97"/>
 </g>
-<!-- linodenet_util_layers&#45;&gt;linodenet_util -->
+<!-- linodenet_util_generic_layers -->
+<g id="node31" class="node">
+<title>linodenet_util_generic_layers</title><style>.edge>path:hover{stroke-width:8}</style>
+<ellipse fill="#b83d3d" stroke="black" cx="362" cy="-340.16" rx="56.64" ry="28.98"/>
+<text text-anchor="middle" x="362" y="-348.66" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">linodenet.</text>
+<text text-anchor="middle" x="362" y="-337.66" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">util.</text>
+<text text-anchor="middle" x="362" y="-326.66" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#ffffff">generic_layers</text>
+</g>
+<!-- linodenet_util_generic_layers&#45;&gt;linodenet_util -->
 <g id="edge55" class="edge">
+<title>linodenet_util_generic_layers&#45;&gt;linodenet_util</title><style>.edge>path:hover{stroke-width:8}</style>
+<path fill="none" stroke="black" d="M339.89,-367.11C326.77,-382.5 310.26,-401.88 297.45,-416.92"/>
+<polygon fill="#b83d3d" stroke="black" points="294.58,-414.89 290.76,-424.77 299.91,-419.43 294.58,-414.89"/>
+</g>
+<!-- linodenet_util_layers&#45;&gt;linodenet_util -->
+<g id="edge56" class="edge">
 <title>linodenet_util_layers&#45;&gt;linodenet_util</title><style>.edge>path:hover{stroke-width:8}</style>
 <path fill="none" stroke="black" d="M224.85,-366.59C235.55,-381.84 249.09,-401.14 259.69,-416.25"/>
 <polygon fill="#b03a3a" stroke="black" points="256.94,-418.43 265.55,-424.6 262.67,-414.41 256.94,-418.43"/>

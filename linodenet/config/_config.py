@@ -33,10 +33,9 @@ class Config:
         return self._autojit
 
     @autojit.setter
-    def autojit(self, value: bool):
+    def autojit(self, value: bool) -> None:
         assert isinstance(value, bool)
         self._autojit = bool(value)
-        print(__name__)
         os.environ["LINODENET_AUTOJIT"] = str(value)
 
 

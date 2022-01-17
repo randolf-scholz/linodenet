@@ -34,7 +34,7 @@ from torch import Tensor
 __logger__ = logging.getLogger(__name__)
 
 
-SizeLike = Union[int, tuple[int, ...]]  # type: ignore # TODO: use AliasType in 3.10
+SizeLike = Union[int, tuple[int, ...]]
 """Type hint for shape-like inputs."""
 
 
