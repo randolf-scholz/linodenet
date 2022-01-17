@@ -571,7 +571,7 @@ class iResNet(nn.Module):
 
     def __init__(self, input_size: int, **HP: Any):
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        self.HP = HP = deep_dict_update(self.HP, HP)
 
         HP["input_size"] = input_size
 
@@ -673,6 +673,12 @@ class iLowRankLayer(nn.Module):
         (𝕀_n + uv^⊤)^{-1} = 𝕀_n - \frac{1}{1+u^⊤v} uv^⊤
     """
 
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
+    }
+    r"""The hyperparameter dictionary"""
+
     # CONSTANTS
     rank: Final[int]
     r"""CONST: The rank of the low rank matrix."""
@@ -685,6 +691,7 @@ class iLowRankLayer(nn.Module):
 
     def __init__(self, input_size: int, rank: int, **HP: Any):
         super().__init__()
+        self.HP = deep_dict_update(self.HP, HP)
         self.U = low_rank(input_size)
         self.V = low_rank(input_size)
         self.rank = rank

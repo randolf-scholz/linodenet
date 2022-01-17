@@ -83,30 +83,33 @@ class LinODECell(nn.Module):
 
         self.input_size = input_size
         self.output_size = input_size
-        kernel_initialization = HP["kernel_initialization"]
+        kernel_init = HP["kernel_initialization"]
         kernel_parametrization = HP["kernel_parametrization"]
 
         def kernel_initialization_dispatch():
-            if kernel_initialization is None:
+            if kernel_init is None:
                 return lambda: gaussian(input_size)
-            if kernel_initialization in FunctionalInitializations:
-                _init = FunctionalInitializations[kernel_initialization]
+            if isinstance(kernel_init, str):
+                assert (
+                    kernel_init in FunctionalInitializations
+                ), "Unknown initialization!"
+                _init = FunctionalInitializations[kernel_init]
                 return lambda: _init(input_size)
-            if callable(kernel_initialization):
-                assert Tensor(kernel_initialization(input_size)).shape == (
+            if callable(kernel_init):
+                assert Tensor(kernel_init(input_size)).shape == (
                     input_size,
                     input_size,
                 )
-                return lambda: Tensor(kernel_initialization(input_size))
-            if isinstance(kernel_initialization, Tensor):
-                tensor = kernel_initialization
+                return lambda: Tensor(kernel_init(input_size))
+            if isinstance(kernel_init, Tensor):
+                tensor = kernel_init
                 assert tensor.shape == (
                     input_size,
                     input_size,
                 ), f"Kernel has bad shape! {tensor.shape} but should be {(input_size, input_size)}"
                 return lambda: tensor
 
-            tensor = Tensor(kernel_initialization)
+            tensor = Tensor(kernel_init)
             assert tensor.shape == (
                 input_size,
                 input_size,
