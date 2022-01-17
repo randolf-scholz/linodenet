@@ -453,7 +453,7 @@ class iResNetBlock(nn.Module):
         self.maxiter = HP["maxiter"]
         self.bias = HP["bias"]
         self._Activation: type[Activation] = ACTIVATIONS[HP["activation"]]
-        self.activation = self._Activation(**HP["activation_config"])  # type: ignore[call-arg]
+        self.activation = self._Activation(**HP["activation_config"])
         # gain = nn.init.calculate_gain(self._Activation)
 
         layers: list[nn.Module] = [

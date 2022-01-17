@@ -34,7 +34,7 @@ __logger__ = logging.getLogger(__name__)
 Filter = nn.Module
 r"""Type hint for Filters"""
 
-FILTERS: Final[dict[str, type[Filter]]] = {
+FILTERS: Final[dict[str, type[nn.Module]]] = {
     "FilterABc": FilterABC,
     "KalmanFilter": KalmanFilter,
     "KalmanCell": KalmanCell,

@@ -37,10 +37,14 @@ r"""Generic type hint for instances."""
 LookupTable = Mapping[str, type[ObjectType]]
 r"""Table of object classes."""
 
-Activation = nn.Module
-r"""Type hint for models."""
 
-ACTIVATIONS: Final[LookupTable[Activation]] = {
+nnModuleType = TypeVar("nnModuleType", bound=nn.Module)
+r"""Type Variable for nn.Modules."""
+
+Activation = nn.Module
+r"""Type hint for activation Functions."""
+
+ACTIVATIONS: Final[LookupTable[nn.Module]] = {
     "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
     "ELU": nn.ELU,
     "Hardshrink": nn.Hardshrink,
@@ -113,7 +117,7 @@ def deep_keyval_update(d: dict, **new_kv: Any) -> dict:
     return d
 
 
-def autojit(base_class: type[nn.Module]) -> type[nn.Module]:
+def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
     r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
 
     Makes it so that
@@ -148,18 +152,21 @@ def autojit(base_class: type[nn.Module]) -> type[nn.Module]:
     assert issubclass(base_class, nn.Module)
 
     @wraps(base_class, updated=())
-    class WrappedClass(base_class):  # type: ignore
+    class WrappedClass(base_class):  # type: ignore[valid-type]
         r"""A simple Wrapper."""
 
         # noinspection PyArgumentList
-        def __new__(cls, *args, **kwargs):
-
-            instance = base_class(*args, **kwargs)
+        def __new__(cls, *args: Any, **kwargs: Any) -> nnModuleType:  # type: ignore[misc]
+            # Note: If __new__() does not return an instance of cls,
+            # then the new instance's __init__() method will not be invoked.
+            instance: nnModuleType = base_class(*args, **kwargs)
 
             if conf.autojit:  # pylint: disable=no-member
-                return jit.script(instance)
+                scripted: nnModuleType = jit.script(instance)
+                return scripted
             return instance
 
+    assert issubclass(WrappedClass, base_class)
     return WrappedClass
 
 
@@ -221,7 +228,7 @@ def initialize_from(
 
     # check that obj is a class, but not metaclass or instance.
     if isinstance(obj, type) and not issubclass(obj, type):
-        return obj(**kwargs)  # type: ignore[call-arg]
+        return obj(**kwargs)
     # if it is function, fix kwargs
     return partial(obj, **kwargs)  # type: ignore[return-value]
 

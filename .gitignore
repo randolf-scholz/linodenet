@@ -1,4 +1,11 @@
-# Tensorboard
+# Pickles
+*.pk
+
+# videos & images
+video/
+pics/
+
+# tensorboard run data
 runs/
 model_checkpoints/
 
@@ -14,7 +21,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# c extensions
+# C extensions
 *.so
 
 # Distribution / packaging
@@ -29,8 +36,8 @@ eggs/
 lib/
 lib64/
 parts/
-reports/
 sdist/
+reports/
 var/
 wheels/
 pip-wheel-metadata/
@@ -84,7 +91,7 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs/_autosummary/
-/docs/autoapi/
+docs/autoapi/
 
 # PyBuilder
 target/
@@ -143,15 +150,17 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Pytype type checker
+.pytype/
+
 # PyCharm
-#.idea/
+# .idea
 
 # VSCode
-.virtual_documents/
+.virtual_documents
 
 # dask
 dask-worker-space/
 
 # LibreOffice lock files
 .~lock.*
-

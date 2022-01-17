@@ -16,12 +16,12 @@ __all__ = [
 import logging
 from typing import Final
 
-from torch.nn import Module
+from torch import nn
 
 __logger__ = logging.getLogger(__name__)
 
-ModularProjection = Module
+ModularProjection = nn.Module
 r"""Type hint for modular regularizations."""
 
-ModularProjections: Final[dict[str, type[ModularProjection]]] = {}
+ModularProjections: Final[dict[str, type[nn.Module]]] = {}
 r"""Dictionary of all available modular metrics."""

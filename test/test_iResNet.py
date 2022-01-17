@@ -47,7 +47,7 @@ def test_LinearContraction(
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
         __logger__.info("Using CUDA")
     else:
-        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
+        torch.set_default_tensor_type(torch.FloatTensor)
 
     __logger__.info(">>> Testing LinearContraction <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
@@ -133,7 +133,7 @@ def test_iResNetBlock(
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
         __logger__.info("Using CUDA")
     else:
-        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
+        torch.set_default_tensor_type(torch.FloatTensor)
 
     QUANTILES = torch.tensor(quantiles)
     TARGETS = torch.tensor(targets)

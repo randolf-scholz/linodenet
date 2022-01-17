@@ -19,7 +19,7 @@ from typing import Any, Final, List, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util import deep_dict_update, initialize_from_config
+from linodenet.util._util import deep_dict_update, initialize_from_config
 
 __logger__ = logging.getLogger(__name__)
 

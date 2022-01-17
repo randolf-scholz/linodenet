@@ -23,7 +23,7 @@ Embedding = nn.Module
 r"""Type hint for Embeddings."""
 
 
-EMBEDDINGS: Final[dict[str, type[Embedding]]] = {
+EMBEDDINGS: Final[dict[str, type[nn.Module]]] = {
     "ConcatEmbedding": ConcatEmbedding,
     "ConcatProjection": ConcatProjection,
 }
