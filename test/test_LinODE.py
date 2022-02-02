@@ -48,18 +48,18 @@ def linode_error(
         torch.set_default_tensor_type(torch.FloatTensor)
 
     if precision == "single":
-        eps = 2 ** -24
+        eps = 2**-24
         numpy_dtype = np.float32
         torch_dtype = torch.float32
     elif precision == "double":
-        eps = 2 ** -53
+        eps = 2**-53
         numpy_dtype = np.float64  # type: ignore
         torch_dtype = torch.float64
     else:
         raise ValueError
 
     num = num or random.choice([10 * k for k in range(1, 11)])
-    dim = dim or random.choice([2 ** k for k in range(1, 8)])
+    dim = dim or random.choice([2**k for k in range(1, 8)])
     t0, t1 = np.random.uniform(low=-10, high=10, size=(2,))
     A = (np.random.randn(dim, dim) / np.sqrt(dim)).astype(numpy_dtype)
     x0 = np.random.randn(dim).astype(numpy_dtype)
@@ -119,13 +119,13 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False):
         dtype=np.float64,
     ).T
 
-    for err, tol in zip(err_single, (10.0 ** k for k in (0, 2, 4))):
+    for err, tol in zip(err_single, (10.0**k for k in (0, 2, 4))):
         q = np.nanquantile(err, 0.99)
         __logger__.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
     # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
     # Since 10^4 ~ 2^13
-    for err, tol in zip(err_double, (10.0 ** k for k in (-4, -2, -0))):
+    for err, tol in zip(err_double, (10.0**k for k in (-4, -2, -0))):
         q = np.nanquantile(err, 0.99)
         __logger__.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"

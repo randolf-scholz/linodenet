@@ -25,7 +25,7 @@ def _make_fig(path, means, stdvs, key):
         ax[0].set_title("Mean across multiple random inits.")
         ax[1].hist(stdvs.cpu().numpy(), bins="auto", density=True, log=True)
         ax[1].set_title("Std. across multiple random inits.")
-        ax[0].set_ylim((10 ** 0, 10 ** 3))
+        ax[0].set_ylim((10**0, 10**3))
         ax[0].set_xlim((-0.01, +0.01))
         ax[1].set_xlim((0.85, 1.15))
         # ax[1].set_xscale("log", base=2)
