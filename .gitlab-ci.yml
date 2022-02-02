@@ -60,7 +60,7 @@ setup:
   script:
   # install dependencies
   - pip install --upgrade -r requirements.txt
-  - pip install --upgrade -r requirements-extra.txt
+  - pip install --upgrade -r requirements-dev.txt
   - |
     if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
       pip install tsdm --upgrade --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple

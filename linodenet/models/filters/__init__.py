@@ -7,10 +7,11 @@ __all__ = [
     "FILTERS",
     # Classes
     "FilterABC",
-    "KalmanBlockCell",
     "KalmanCell",
     "KalmanFilter",
     "RecurrentCellFilter",
+    "SequentialFilterBlock",
+    "SequentialFilter",
 ]
 
 
@@ -21,10 +22,11 @@ from torch import nn
 
 from linodenet.models.filters._filters import (
     FilterABC,
-    KalmanBlockCell,
     KalmanCell,
     KalmanFilter,
     RecurrentCellFilter,
+    SequentialFilter,
+    SequentialFilterBlock,
 )
 
 __logger__ = logging.getLogger(__name__)
@@ -32,11 +34,10 @@ __logger__ = logging.getLogger(__name__)
 Filter = nn.Module
 r"""Type hint for Filters"""
 
-FILTERS: Final[dict[str, type[Filter]]] = {
+FILTERS: Final[dict[str, type[nn.Module]]] = {
     "FilterABc": FilterABC,
     "KalmanFilter": KalmanFilter,
     "KalmanCell": KalmanCell,
-    "KalmanBlockCell": KalmanBlockCell,
     "RecurrentCellFilter": RecurrentCellFilter,
 }
 """Dictionary of all available filters."""

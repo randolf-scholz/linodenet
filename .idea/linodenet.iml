@@ -21,6 +21,9 @@
       <excludeFolder url="file://$MODULE_DIR$/dev/.ipynb_checkpoints" />
       <excludeFolder url="file://$MODULE_DIR$/dev/model_checkpoints" />
       <excludeFolder url="file://$MODULE_DIR$/model_checkpoints" />
+      <excludeFolder url="file://$MODULE_DIR$/.pyre" />
+      <excludeFolder url="file://$MODULE_DIR$/.pytype" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/autoapi" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
     <orderEntry type="inheritedJdk" />
@@ -29,5 +32,12 @@
   <component name="PyDocumentationSettings">
     <option name="format" value="NUMPY" />
     <option name="myDocStringFormat" value="NumPy" />
+  </component>
+  <component name="TemplatesService">
+    <option name="TEMPLATE_FOLDERS">
+      <list>
+        <option value="$MODULE_DIR$/docs/_templates" />
+      </list>
+    </option>
   </component>
 </module>

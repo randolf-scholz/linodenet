@@ -7,9 +7,7 @@ import matplotlib.pyplot as plt
 import pytest
 import torch
 
-from linodenet.initializations.functional import (
-    FunctionalInitializations,
-)
+from linodenet.initializations.functional import FunctionalInitializations
 
 __logger__ = logging.getLogger(__name__)
 
@@ -27,7 +25,7 @@ def _make_fig(path, means, stdvs, key):
         ax[0].set_title("Mean across multiple random inits.")
         ax[1].hist(stdvs.cpu().numpy(), bins="auto", density=True, log=True)
         ax[1].set_title("Std. across multiple random inits.")
-        ax[0].set_ylim((10 ** 0, 10 ** 3))
+        ax[0].set_ylim((10**0, 10**3))
         ax[0].set_xlim((-0.01, +0.01))
         ax[1].set_xlim((0.85, 1.15))
         # ax[1].set_xscale("log", base=2)
@@ -61,7 +59,7 @@ def test_initialization(
     if torch.cuda.is_available():
         torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
     else:
-        torch.set_default_tensor_type(torch.FloatTensor)  # type: ignore
+        torch.set_default_tensor_type(torch.FloatTensor)
 
     ZERO = torch.tensor(0.0)
     ONE = torch.tensor(1.0)
@@ -96,13 +94,6 @@ def test_initialization(
     # todo: add experiment after applying matrix exponential
 
     # __logger__.info("All initializations passed! ✔ ")
-
-
-def test_matrix_exponential(
-    num_runs: int = 1000, num_samples: int = 1000, dim: int = 100
-):
-    r"""What is the distribution of exp(AΔt)x ?."""
-    ...
 
 
 @pytest.mark.skip
