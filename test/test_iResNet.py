@@ -51,8 +51,8 @@ def test_LinearContraction(
 
     __logger__.info(">>> Testing LinearContraction <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
-    dim_inputs = dim_inputs or random.choice([2 ** k for k in range(2, 8)])
-    dim_output = dim_output or random.choice([2 ** k for k in range(2, 8)])
+    dim_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
+    dim_output = dim_output or random.choice([2**k for k in range(2, 8)])
     extra_stats = {
         "Samples": f"{num_sample}",
         "Dim-in": f"{dim_inputs}",
@@ -121,8 +121,8 @@ def test_iResNetBlock(
     """
     __logger__.info(">>> Testing iResNetBlock <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 11)])
-    dim_inputs = dim_inputs or random.choice([2 ** k for k in range(2, 8)])
-    dim_output = dim_output or random.choice([2 ** k for k in range(2, 8)])
+    dim_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
+    dim_output = dim_output or random.choice([2**k for k in range(2, 8)])
     extra_stats = {
         "Samples": f"{num_sample}",
         "Dim-in": f"{dim_inputs}",

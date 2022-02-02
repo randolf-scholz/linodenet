@@ -2,7 +2,7 @@
 # PyLint Configuration #
 ########################
 [tool.pylint]
-[tool.pylint.'MESSAGES CONTROL']
+[tool.pylint."MESSAGES CONTROL"]
 enable= [
     "useless-suppression",
 ]
