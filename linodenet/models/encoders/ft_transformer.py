@@ -170,10 +170,12 @@ class Tokenizer(nn.Module):
             ), "No category embeddings defined!"
             assert self.category_offsets is not None, "No category offsets defined!"
 
-            x = torch.cat(
-                [x, self.category_embeddings(x_cat + self.category_offsets[None])],
-                dim=1,
+            categories = self.category_embeddings(
+                x_cat
+                + self.category_offsets[None]  # pylint: disable=unsubscriptable-object
             )
+
+            x = torch.cat([x, categories], dim=1)
 
         if self.bias is not None:
             bias = torch.cat(

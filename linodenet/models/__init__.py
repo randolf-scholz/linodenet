@@ -26,7 +26,7 @@ __all__ = [
 import logging
 from typing import Final
 
-from torch.nn import Module
+from torch import nn
 
 from linodenet.models import embeddings, encoders, filters
 from linodenet.models._linodenet import LinODE, LinODEnet
@@ -43,10 +43,10 @@ from linodenet.models.system import LinODECell
 
 __logger__ = logging.getLogger(__name__)
 
-Model = Module
+Model = nn.Module
 r"""Type hint for models."""
 
-MODELS: Final[dict[str, type[Model]]] = {
+MODELS: Final[dict[str, type[nn.Module]]] = {
     "LinearContraction": LinearContraction,
     "iResNetBlock": iResNetBlock,
     "iResNet": iResNet,

@@ -41,7 +41,7 @@ class Transformer(nn.Module):
 
     __constants__ = ["norm"]
 
-    HP: dict[str, Any] = {
+    HP = {
         "num_layers": 6,
         # the layer normalization component (optional).
         "norm": None,
@@ -70,9 +70,7 @@ class Transformer(nn.Module):
 
     def __init__(self, **HP: Any):
         super().__init__()
-
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
+        self.CFG = HP = deep_dict_update(self.HP, HP)
 
         self.layers = nn.ModuleList(
             initialize_from(nn, **HP["EncoderLayer"]) for _ in range(HP["num_layers"])

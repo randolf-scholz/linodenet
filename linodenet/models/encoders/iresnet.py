@@ -122,12 +122,13 @@ class SpectralNorm(torch.autograd.Function):
         # initialize u and v, median should be useful guess.
         u = u_next = A.median(dim=1).values
         v = v_next = A.median(dim=0).values
+        σ: Tensor = torch.einsum("ij, i, j ->", A, u, v)
 
         for _ in range(maxiter):
             u = u_next / torch.norm(u_next)
             v = v_next / torch.norm(v_next)
             # choose optimal σ given u and v: σ = argmin ‖A - σuvᵀ‖²
-            σ: Tensor = torch.einsum("ij, i, j ->", A, u, v)  # u.T @ A @ v
+            σ = torch.einsum("ij, i, j ->", A, u, v)  # u.T @ A @ v
             # Residual: if Av = σu and Aᵀu = σv
             u_next = A @ v
             v_next = A.T @ u
@@ -418,9 +419,9 @@ class iResNetBlock(nn.Module):
     residual: Tensor
     r"""BUFFER: The termination error during backward propagation."""
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
+        # "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "atol": 1e-08,
         "rtol": 1e-05,
@@ -437,10 +438,7 @@ class iResNetBlock(nn.Module):
 
     def __init__(self, input_size: int, **HP: Any):
         super().__init__()
-
-        self.HP["input_size"] = input_size
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
+        self.HP = HP = deep_dict_update(self.HP, HP)
 
         HP["input_size"] = input_size
         HP["input_size"] = input_size
@@ -455,7 +453,7 @@ class iResNetBlock(nn.Module):
         self.maxiter = HP["maxiter"]
         self.bias = HP["bias"]
         self._Activation: type[Activation] = ACTIVATIONS[HP["activation"]]
-        self.activation = self._Activation(**HP["activation_config"])  # type: ignore[call-arg]
+        self.activation = self._Activation(**HP["activation_config"])
         # gain = nn.init.calculate_gain(self._Activation)
 
         layers: list[nn.Module] = [
@@ -471,6 +469,7 @@ class iResNetBlock(nn.Module):
         self.bottleneck = nn.Sequential(*layers)
 
         self.register_buffer("residual", torch.tensor(()), persistent=False)
+        # print(json.dumps(self.HP, indent=2))
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -549,15 +548,16 @@ class iResNet(nn.Module):
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
 
-    HP: dict = {
+    HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
+        # "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "maxiter": 10,
         "input_size": None,
         "dropout": None,
         "bias": True,
         "nblocks": 5,
+        "rezero": False,
         "iResNetBlock": {
             "input_size": None,
             "activation": "ReLU",
@@ -571,22 +571,23 @@ class iResNet(nn.Module):
 
     def __init__(self, input_size: int, **HP: Any):
         super().__init__()
+        self.HP = HP = deep_dict_update(self.HP, HP)
 
-        self.HP["input_size"] = input_size
-        deep_dict_update(self.HP, HP)
+        HP["input_size"] = input_size
 
         self.input_size = input_size
         self.output_size = input_size
-        self.HP["iResNetBlock"]["input_size"] = self.input_size
+        HP["iResNetBlock"]["input_size"] = self.input_size
+        HP["iResNetBlock"]["rezero"] = HP["rezero"]
 
-        self.nblocks = self.HP["nblocks"]
-        self.maxiter = self.HP["maxiter"]
-        self.bias = self.HP["bias"]
+        self.nblocks = HP["nblocks"]
+        self.maxiter = HP["maxiter"]
+        self.bias = HP["bias"]
 
         blocks = []
 
         for _ in range(self.nblocks):
-            blocks += [iResNetBlock(**self.HP["iResNetBlock"])]
+            blocks += [iResNetBlock(**HP["iResNetBlock"])]
 
         self.blocks = nn.Sequential(*blocks)
 
@@ -672,6 +673,12 @@ class iLowRankLayer(nn.Module):
         (𝕀_n + uv^⊤)^{-1} = 𝕀_n - \frac{1}{1+u^⊤v} uv^⊤
     """
 
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
+    }
+    r"""The hyperparameter dictionary"""
+
     # CONSTANTS
     rank: Final[int]
     r"""CONST: The rank of the low rank matrix."""
@@ -684,6 +691,7 @@ class iLowRankLayer(nn.Module):
 
     def __init__(self, input_size: int, rank: int, **HP: Any):
         super().__init__()
+        self.HP = deep_dict_update(self.HP, HP)
         self.U = low_rank(input_size)
         self.V = low_rank(input_size)
         self.rank = rank
