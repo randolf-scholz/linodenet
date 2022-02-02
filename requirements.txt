@@ -1,2 +1,2 @@
-scipy
-torch
+scipy>=1.6
+torch>=1.10

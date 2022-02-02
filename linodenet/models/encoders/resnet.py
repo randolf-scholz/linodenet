@@ -13,18 +13,25 @@ __all__ = [
 
 
 import logging
+from collections import OrderedDict
 from math import sqrt
 from typing import Any, Optional, cast
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor, jit, nn
 from torch.nn import functional as F
 
 from linodenet.models.encoders.ft_transformer import (
     get_activation_fn,
     get_nonglu_activation_fn,
 )
-from linodenet.util import ReZero, autojit, deep_dict_update, initialize_from_config
+from linodenet.util import (
+    ReverseDense,
+    ReZero,
+    autojit,
+    deep_dict_update,
+    initialize_from_config,
+)
 
 __logger__ = logging.getLogger(__name__)
 
@@ -139,8 +146,9 @@ class ResNet_(nn.Module):
         return x
 
 
+# noinspection PyUnresolvedReferences
 @autojit
-class ResNetBlock(nn.Module):
+class ResNetBlock(nn.Sequential):
     """Pre-activation ResNet block.
 
     References
@@ -151,104 +159,95 @@ class ResNetBlock(nn.Module):
       | https://link.springer.com/chapter/10.1007/978-3-319-46493-0_38
     """
 
-    HP: dict = {
-        "__name__": "ResNetBlock",
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
-        "num_blocks": 2,
-        "rezero": True,
-        "layers": [
-            {
-                "__name__": "BatchNorm1d",
-                "__module__": "torch.nn",
-                "num_features": None,
-                "eps": 1e-05,
-                "momentum": 0.1,
-                "affine": True,
-                "track_running_stats": True,
-            },
-            {
-                "__name__": "ReLU",
-                "__module__": "torch.nn",
-                "inplace": False,
-            },
-            {
-                "__name__": "Linear",
-                "__module__": "torch.nn",
-                "in_features": None,
-                "out_features": None,
-                "bias": True,
-            },
+        "num_subblocks": 2,
+        "subblocks": [
+            # {
+            #     "__name__": "BatchNorm1d",
+            #     "__module__": "torch.nn",
+            #     "num_features": int,
+            #     "eps": 1e-05,
+            #     "momentum": 0.1,
+            #     "affine": True,
+            #     "track_running_stats": True,
+            # },
+            ReverseDense.HP,
         ],
     }
 
     def __init__(self, **HP: Any) -> None:
         super().__init__()
 
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
+        self.CFG = HP = deep_dict_update(self.HP, HP)
 
         assert HP["input_size"] is not None, "input_size is required!"
 
-        for layer in HP["layers"]:
+        for layer in HP["subblocks"]:
             if layer["__name__"] == "Linear":
                 layer["in_features"] = HP["input_size"]
                 layer["out_features"] = HP["input_size"]
             if layer["__name__"] == "BatchNorm1d":
                 layer["num_features"] = HP["input_size"]
+            else:
+                layer["input_size"] = HP["input_size"]
+                layer["output_size"] = HP["input_size"]
 
-        layers: list[nn.Module] = [
-            nn.Sequential(*[initialize_from_config(layer) for layer in HP["layers"]])
-            for _ in range(HP["num_blocks"])
-        ]
+        subblocks: OrderedDict[str, nn.Module] = OrderedDict()
 
-        if HP["rezero"]:
-            # self.rezero = ReZero()
-            layers.append(ReZero())
+        for k in range(HP["num_subblocks"]):
+            key = f"subblock{k}"
+            module = nn.Sequential(
+                *[initialize_from_config(layer) for layer in HP["subblocks"]]
+            )
+            self.add_module(key, module)
+            subblocks[key] = module
 
-        self.layers = nn.Sequential(*layers)
-
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
-        return self.layers(x)
+        # self.subblocks = nn.Sequential(subblocks)
+        super().__init__(subblocks)
 
 
 @autojit
-class ResNet(nn.Module):
+class ResNet(nn.ModuleList):
     """A ResNet model."""
 
-    HP: dict = {
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "num_blocks": 5,
-        "rezero": True,
-        "Block": ResNetBlock.HP,
+        "blocks": [
+            ResNetBlock.HP,
+            ReZero.HP,
+        ],
     }
 
     def __init__(self, **HP: Any) -> None:
         super().__init__()
-        deep_dict_update(self.HP, HP)
-        HP = self.HP
+        self.CFG = HP = deep_dict_update(self.HP, HP)
 
         assert HP["input_size"] is not None, "input_size is required!"
-        assert "input_size" in HP["Block"], "input_size must be a key!"
-        assert "rezero" in HP["Block"], "rezero must be a key!"
 
-        HP["Block"]["rezero"] = HP["rezero"]
-        HP["Block"]["input_size"] = HP["input_size"]
+        # pass the input_size to the subblocks
+        for block_cfg in HP["blocks"]:
+            if "input_size" in block_cfg:
+                block_cfg["input_size"] = HP["input_size"]
 
-        blocks = [initialize_from_config(HP["Block"]) for _ in range(HP["num_blocks"])]
+        blocks: list[nn.Module] = []
 
-        self.blocks = nn.Sequential(*blocks)
+        for k in range(HP["num_blocks"]):
+            key = f"block{k}"
+            module = nn.Sequential(
+                *[initialize_from_config(layer) for layer in HP["blocks"]]
+            )
+            self.add_module(key, module)
+            blocks.append(module)
 
+        super().__init__(blocks)
+
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Forward pass.
 
@@ -260,7 +259,6 @@ class ResNet(nn.Module):
         -------
         Tensor
         """
-        for block in self.blocks:
+        for block in self:
             x = x + block(x)
-
         return x
