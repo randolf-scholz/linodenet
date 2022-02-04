@@ -70,7 +70,9 @@ setup:
       exit 1
     fi
   # build and install package
-  - python setup.py sdist bdist_wheel
+  # - python setup.py sdist bdist_wheel
+  - poetry version "$(poetry version -s).dev${CI_PIPELINE_IID}"
+  - poetry build
   - pip install dist/*.whl
   - pip list
   after_script:
