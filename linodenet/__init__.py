@@ -115,4 +115,5 @@ def _clean_namespace(module: ModuleType):
             __logger__.debug("key=%s  killed!", key_repr)
 
 
+# recursively clean namespace from self.
 _clean_namespace(__import__(__name__))
