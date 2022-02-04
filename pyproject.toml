@@ -43,7 +43,8 @@ only_rerun = "AssertionError"
 # MyPy Configuration #
 ######################
 [tool.mypy]
-allow_redefinition = true
+files = ["linodenet", "test"]
+python_version = "3.9"
 color_output = true
 error_summary = true
 files = ["linodenet", "test"]
@@ -105,3 +106,7 @@ pythonVersion = "3.9"
 reportMissingImports = false
 reportUnsupportedDunderAll = false
 
+##########################
+# Coverage Configuration #
+##########################
+[tool.coverage]
