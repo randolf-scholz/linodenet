@@ -146,7 +146,6 @@ class ResNet_(nn.Module):
         return x
 
 
-# noinspection PyUnresolvedReferences
 @autojit
 class ResNetBlock(nn.Sequential):
     """Pre-activation ResNet block.
