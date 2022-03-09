@@ -30,7 +30,7 @@ from torch import Tensor, jit, nn
 from linodenet.util import (  # Repeat,
     LookupTable,
     ReverseDense,
-    ReZero,
+    ReZeroCell,
     autojit,
     deep_dict_update,
     deep_keyval_update,
@@ -335,7 +335,7 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "filter": KalmanCell.HP | {"autoregressive": True},
-        "layers": [ReverseDense.HP | {"bias": False}, ReZero.HP],
+        "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
     }
     """The HyperparameterDict of this class."""
 

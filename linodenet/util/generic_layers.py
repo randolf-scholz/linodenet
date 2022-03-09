@@ -187,7 +187,7 @@ class Multiply(nn.Module):
         shape: tuple[int, ...] = (),
         signature: str = "..., -> ...",
         learnable: bool = True,
-        initialization: Optional[Any] = None,
+        initialization: Optional[Callable[tuple[int, ...], Tensor]] = None,
     ) -> None:
         super().__init__()
 

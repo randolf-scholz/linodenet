@@ -14,7 +14,7 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import FunctionalInitializations
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
-from linodenet.util import ReZero, autojit, deep_dict_update
+from linodenet.util import ReZeroCell, autojit, deep_dict_update
 
 __logger__ = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class LinODECell(nn.Module):
         self.use_rezero = HP["rezero"]
 
         if self.use_rezero:
-            self.rezero = ReZero()
+            self.rezero = ReZeroCell()
 
     def kernel_initialization(self) -> Tensor:
         r"""Draw an initial kernel matrix (random or static)."""

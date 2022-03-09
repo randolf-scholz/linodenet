@@ -19,7 +19,7 @@ from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
 from linodenet.initializations.functional import low_rank
-from linodenet.util import ACTIVATIONS, Activation, ReZero, autojit, deep_dict_update
+from linodenet.util import ACTIVATIONS, Activation, ReZeroCell, autojit, deep_dict_update
 
 __logger__ = logging.getLogger(__name__)
 
@@ -462,7 +462,7 @@ class iResNetBlock(nn.Module):
         ]
 
         self.use_rezero = HP["rezero"]
-        self.rezero = ReZero() if self.use_rezero else None
+        self.rezero = ReZeroCell() if self.use_rezero else None
         if self.use_rezero:
             layers.append(self.rezero)  # type: ignore[arg-type]
 
