@@ -137,7 +137,7 @@ intersphinx_timeout = 2
 # When a cross-reference without an explicit inventory specification is being resolved by
 # intersphinx, skip resolution if it matches one of the specifications in this list.
 # The default value is ['std:doc'].
-intersphinx_disabled_reftypes = ['std:doc']
+intersphinx_disabled_reftypes = ["std:doc"]
 
 
 # -- AutoAPI configuration ------------------------------------------------------------------------
