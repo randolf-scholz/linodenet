@@ -89,10 +89,6 @@ class ReZero(nn.Sequential):
         return x
 
 
-
-
-
-
 @autojit
 class ReverseDense(nn.Module):
     """ReverseDense module `x→A⋅ϕ(x)`."""

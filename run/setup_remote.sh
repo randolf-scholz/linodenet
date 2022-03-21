@@ -1,4 +1,7 @@
-for remote_name in $(git remote); do 
+#!/usr/bin/env bash
+# This script is executed to set up multi-remote git repository.
+
+for remote_name in $(git remote); do
     git remote remove "${remote_name}"
 done
 
