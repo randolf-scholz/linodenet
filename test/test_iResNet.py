@@ -203,7 +203,7 @@ def test_iResNetBlock(
     ax[0, 1].set_xlabel(
         r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$ where $y_j \sim \mathcal N(0,1)$"
     )
-    ax[0, 1].set_ylabel(r"denisty $p(r_\text{right}\mid y)$")
+    ax[0, 1].set_ylabel(r"density $p(r_\text{right}\mid y)$")
 
     ax[1, 0].set_xlabel(
         r"$d_\text{left}(x) = \|x - \phi(x)\|$ where $x_i \sim \mathcal N(0,1)$"
