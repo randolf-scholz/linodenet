@@ -27,11 +27,11 @@ from typing import Any, Final, Iterable, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util import (  # Repeat,
+from linodenet.util import autojit  # Repeat,
+from linodenet.util import (
     LookupTable,
     ReverseDense,
     ReZeroCell,
-    autojit,
     deep_dict_update,
     deep_keyval_update,
     initialize_from_config,
