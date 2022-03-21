@@ -22,6 +22,8 @@ from types import ModuleType
 if sys.version_info < (3, 9):
     raise RuntimeError("Python >= 3.9 required")
 
+# pylint: disable=wrong-import-position
+
 from linodenet import (
     config,
     initializations,
@@ -31,6 +33,9 @@ from linodenet import (
     util,
 )
 from linodenet.config import conf
+
+# pylint: enable=wrong-import-position
+
 
 __logger__ = logging.getLogger(__name__)
 __version__ = metadata.version(__package__)
