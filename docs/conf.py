@@ -16,11 +16,15 @@ https://www.sphinx-doc.org/en/master/usage/configuration.html
 import datetime
 import os
 import sys
+from importlib import metadata
+
+import linodenet
 
 os.environ["GENERATING_DOCS"] = "true"
 sys.path.insert(0, os.path.abspath("."))
 
 MODULE = "linodenet"
+MODULE_DIR = "src/linodenet"
 
 # -- Project information ----------------------------------------------------------------------------------------------
 
@@ -40,8 +44,7 @@ project_copyright = "%(year)s, %(author)s" % {
 
 # The major project version, used as the replacement for |version|.
 # For example, for the Python documentation, this may be something like 2.6.
-with open(f"../{MODULE}/VERSION", "r", encoding="utf8") as file:
-    version = file.read()
+version = metadata.version(MODULE)
 
 # The full project version, used as the replacement for |release| and e.g. in the HTML templates.
 # For example, for the Python documentation, this may be something like 2.6.0rc1.
@@ -142,7 +145,7 @@ intersphinx_disabled_reftypes = ['std:doc']
 # Activate the extension
 extensions.append("autoapi.extension")
 # Paths (relative or absolute) to the source code that you wish to generate your API documentation from.
-autoapi_dirs = [f"../{MODULE}"]
+autoapi_dirs = [f"../{MODULE_DIR}"]
 # Set the type of files you are documenting. This depends on the programming language that you are using.
 # Default: "python"
 autoapi_type = "python"
@@ -311,7 +314,7 @@ autoclass_content = "class"
 # If the class has no __init__ method or if the __init__ method’s docstring is empty,
 # but the class has a __new__ method’s docstring, it is used instead.
 autodoc_class_signature = "mixed"
-# This value selects how the signautre will be displayed for the class defined by autoclass directive.
+# This value selects how the signature will be displayed for the class defined by autoclass directive.
 # The possible values are: (default="mixed")
 # "mixed"
 # Display the signature with the class name.
