@@ -3,6 +3,13 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="/.venv/lib/python3.9/site-packages/modin/pandas/test/data/blah.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="/dev/benchmark/forward_backward_error_fp32.csv">
           <value>
             <Attribute>

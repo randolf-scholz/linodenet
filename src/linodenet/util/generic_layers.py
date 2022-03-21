@@ -14,6 +14,7 @@ __all__ = [
 ]
 
 import logging
+from collections.abc import Callable
 from typing import Any, Final, List, Optional
 
 import torch
@@ -187,7 +188,7 @@ class Multiply(nn.Module):
         shape: tuple[int, ...] = (),
         signature: str = "..., -> ...",
         learnable: bool = True,
-        initialization: Optional[Callable[tuple[int, ...], Tensor]] = None,
+        initialization: Optional[Callable[[tuple[int, ...]], Tensor]] = None,
     ) -> None:
         super().__init__()
 

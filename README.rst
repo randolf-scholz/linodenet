@@ -1,7 +1,7 @@
 README
 ======
 
-.. image:: ../linodenet/linodenet-sketch.svg
+.. image:: ../linodenet-sketch.svg
    :width: 50%
    :alt: LinODEnet-sketch
 
