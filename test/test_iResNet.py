@@ -30,7 +30,7 @@ def test_LinearContraction(
     dim_inputs: Optional[int] = None,
     dim_output: Optional[int] = None,
     make_plot: bool = False,
-):
+) -> None:
     r"""Test empirically if the LinearContraction really is a linear contraction.
 
     Parameters
@@ -102,7 +102,7 @@ def test_iResNetBlock(
     make_plot: bool = False,
     quantiles: tuple[float, ...] = (0.5, 0.68, 0.95, 0.997),
     targets: tuple[float, ...] = (0.005, 0.005, 0.01, 0.01),
-):
+) -> None:
     r"""Test empirically whether the iResNetBlock is indeed invertible.
 
     Parameters

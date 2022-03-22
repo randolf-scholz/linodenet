@@ -41,7 +41,7 @@ def test_initialization(
     num_samples: int = 1000,
     dim: int = 200,
     make_plot: bool = False,
-):
+) -> None:
     r"""Test normalization property empirically for all initializations.
 
     Parameters
@@ -97,7 +97,7 @@ def test_initialization(
 
 
 @pytest.mark.skip
-def test_all_initializations(make_plot: bool = False):
+def test_all_initializations(make_plot: bool = False) -> None:
     r"""Test all initializations."""
     __logger__.info(
         "Testing all available initializations %s", set(FunctionalInitializations)

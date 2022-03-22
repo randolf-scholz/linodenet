@@ -92,7 +92,7 @@ def _test_model(
     inputs: tuple[Tensor, ...],
     targets: tuple[Tensor, ...],
     device: torch.device = DEVICES[0],
-):
+) -> None:
     def err_str(s: str) -> str:
         return (
             f"{Model=} failed {s} with {initialization=} and "
