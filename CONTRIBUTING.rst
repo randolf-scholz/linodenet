@@ -4,43 +4,64 @@ CONTRIBUTING
 Getting started
 ---------------
 
-1. Fork the GitLab project from https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tdm.
+1. Fork the GitLab project from https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.
 
-   Use your personal namespace, e.g. https://software.ismll.uni-hildesheim.de/rscholz/tsdm-dev
+   Use your personal namespace, e.g. ``https://software.ismll.uni-hildesheim.de/<user>/tsdm-dev``
 
 2. Clone the forked project locally to your machine. ::
 
-       git clone https://software.ismll.uni-hildesheim.de/rscholz/tsdm-dev
-       cd tsdm-dev
+    git clone https://software.ismll.uni-hildesheim.de/<user>/linodenet-dev
+    cd tsdm-dev
 
-3. Checkout the appropriate branch, typically master. ::
+3. Setup the virtual environment
 
-    git checkout
+   3.1 Via poetry (recommended).::
 
-4. Setup the virtual environment. You may have to install ``python3.9``. ::
+        pip install --upgrade poetry
+        poetry shell
+        poetry install
 
-    which python3.9
-    sudo apt install python3.9
-    python3.9 -m virtualenv venv
-    . venv/bin/activate
-    pip install -e .
+   3.2 Via conda (You may have to rename ``tables`` ⟶ ``pytables`` and ``torch`` ⟶ ``pytorch``).::
 
-   Or with conda, if you prefer. (You may have to rename ``tables`` and ``torch``). ::
+        conda create --name tsdm-dev --file requirements.txt
+        conda activate tsdm-dev
+        conda install --file requirements-dev.txt
 
-    conda create --name tsdm-dev --file requirements.txt
-    conda activate tsdm-dev
+   3.3 Via pip.::
 
-  Verify that the installation was successful. ::
+        sudo apt install python3.9
+        python3.9 -m virtualenv venv
+        . venv/bin/activate
+        pip install -e .
 
-    python -c "import tsdm"
+   Verify that the installation was successful.::
 
-5. Create a new working branch. Choose a descriptive name for what you are trying to achieve. ::
+    python -c "import linodenet"
+
+4. Setup remote repositories and pre-commit hooks.::
+
+    ./run/setup_remote.sh
+    ./run/setup_precommit.sh
+
+4. Create a new working branch. Choose a descriptive name for what you are trying to achieve.::
 
     git checkout -b feature-xyz
 
-7. Write your code, bonus points for also adding unit tests.
+5. Write your code, bonus points for also adding unit tests.
 
-8. Write descriptive commit messages. Try to keep individual commits easy to understand
+   5.1 Write your code in the ``src`` directory.
+
+   5.2 Write your unit tests in the ``tests`` directory.
+
+   5.3 Check if tests are working via ``pytest``.
+
+   5.4 Check for type errors via ``mypy``.
+
+   5.5 Check for style errors via ``flake8``.
+
+   5.6 Check for code quality via ``pylint``.
+
+6. Write descriptive commit messages. Try to keep individual commits easy to understand
    (changing dozens of files, writing 100's of lines of code is not!). ::
 
     git commit -m '#42: Add useful new feature that does this.'
@@ -55,54 +76,3 @@ Getting started
      git push origin feature-xyz
 
 11. Create a merge request
-
-
-Setting up multiple remotes
----------------------------
-
-**T**\ ime **S**\ eries **D**\ atasets and **M**\ odels
-=======================================================
-
-This repository contains tools to import important time series datasets and baseline models
-
-Installation guide
-------------------
-
-.. code-block:: bash
-
-    pip install -e .
-
-Multiple Origins Push
----------------------
-
-1. Remove all remotes::
-
-    git remote -v
-    git remote remove ...
-
-2. Add both remotes::
-
-    git remote add berlin https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git
-    git remote add hildesheim --mirror=push https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git
-
-3. Add additional push urls to both of them::
-
-    git remote set-url --add --push berlin https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git
-    git remote set-url --add --push berlin https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git
-
-    git remote set-url --add --push hildesheim https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git
-    git remote set-url --add --push hildesheim https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git
-
-4. Check if everything is set up correctly. Running ``git remote -v`` should show::
-
-    berlin  https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git (fetch)
-    berlin  https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git (push)
-    berlin  https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git (push)
-    hildesheim      https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git (fetch)
-    hildesheim      https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net.git (push)
-    hildesheim      https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/LinODE-Net.git (push)
-
-5. Fetch & set the remote that takes precedence, for example for berlin::
-
-    git fetch berlin
-    git branch --set-upstream-to=berlin/master  master
