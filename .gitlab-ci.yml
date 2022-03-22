@@ -59,6 +59,7 @@ setup:
     - source ${VENVNAME}/bin/activate
     # install development dependencies
     - poetry install --no-root
+    - pip install -r requirements-tsdm.txt
     - |
       if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
         pip install tsdm --upgrade --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple
