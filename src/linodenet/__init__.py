@@ -43,7 +43,7 @@ r"""The version number of the :mod:`tsdm` package."""
 
 
 # Recursively clean up namespaces to only show what the user should see.
-def _clean_namespace(module: ModuleType):
+def _clean_namespace(module: ModuleType) -> None:
     r"""Recursively cleans up the namespace.
 
     Parameters
