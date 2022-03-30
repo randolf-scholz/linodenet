@@ -39,7 +39,7 @@ class ConcatEmbedding(nn.Module):
         "input_size": int,
         "hidden_size": int,
     }
-    r"""Dictionary of Hyperparamters."""
+    r"""Dictionary of hyperparameters."""
 
     # Constants
     input_size: Final[int]
@@ -116,7 +116,7 @@ class ConcatProjection(nn.Module):
         "input_size": int,
         "hidden_size": int,
     }
-    r"""Dictionary of Hyperparamters."""
+    r"""Dictionary of hyperparameters."""
 
     # Constants
     input_size: Final[int]

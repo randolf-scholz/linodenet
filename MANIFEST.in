@@ -9,16 +9,19 @@ include MANIFEST.in
 include LICENSE.rst
 include README.rst
 include CHANGELOG.rst
-include linodenet/VERSION
-include linodenet/linodenet-sketch.svg
+include pyproject.toml
+graft src/
 
 include requirements.txt
+include requirements-dev.txt
+include requirements-extra.txt
 
-recursive-include linodenet *.*
 recursive-include docs *.*
 recursive-include test *.*
 
 prune */__pycache__
 prune */.ipynb_checkpoints
+prune */.pytest_cache
+prune */.virtual_documents
 
 global-exclude *.o *.so *.dylib *.a .git *.pyc *.swp

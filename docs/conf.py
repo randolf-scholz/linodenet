@@ -16,11 +16,15 @@ https://www.sphinx-doc.org/en/master/usage/configuration.html
 import datetime
 import os
 import sys
+from importlib import metadata
+
+import linodenet
 
 os.environ["GENERATING_DOCS"] = "true"
 sys.path.insert(0, os.path.abspath("."))
 
 MODULE = "linodenet"
+MODULE_DIR = "src/linodenet"
 
 # -- Project information ----------------------------------------------------------------------------------------------
 
@@ -40,8 +44,7 @@ project_copyright = "%(year)s, %(author)s" % {
 
 # The major project version, used as the replacement for |version|.
 # For example, for the Python documentation, this may be something like 2.6.
-with open(f"../{MODULE}/VERSION", "r", encoding="utf8") as file:
-    version = file.read()
+version = metadata.version(MODULE)
 
 # The full project version, used as the replacement for |release| and e.g. in the HTML templates.
 # For example, for the Python documentation, this may be something like 2.6.0rc1.
@@ -70,7 +73,7 @@ extensions = [
 
 # The name of a reST role (builtin or Sphinx extension) to use as the default role, that is,
 # for text marked up `like this`. This can be set to 'py:obj' to make `filter` a cross-reference
-# to the Python function “filter”. The default is None, which doesn’t reassign the default role.
+# to the Python function “filter”. The default is None, which doesn't reassign the default role.
 default_role = (
     "math"  # This option causes `<latex>` to behave like $<latex>$ in markdown.
 )
@@ -88,6 +91,20 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 add_module_names = False
 
 # suppress_warnings = ["epub.duplicated_toc_entry"]
+
+
+# -- AutoSectionLabel configuration ---------------------------------------------------------------
+
+# True to prefix each section label with the name of the document it is in, followed by a colon.
+# For example, index:Introduction for a section called Introduction that appears in document index.rst.
+# Useful for avoiding ambiguity when the same section heading appears in different documents.
+autosectionlabel_prefix_document = True
+
+# If set, autosectionlabel chooses the sections for labeling by its depth. For example, when set 1
+# to autosectionlabel_maxdepth, labels are generated only for top level sections, and deeper sections
+# are not labeled. It defaults to None (disabled).
+autosectionlabel_maxdepth = None
+
 
 # -- Intersphinx configuration --------------------------------------------------------------------
 
@@ -120,7 +137,7 @@ intersphinx_timeout = 2
 # When a cross-reference without an explicit inventory specification is being resolved by
 # intersphinx, skip resolution if it matches one of the specifications in this list.
 # The default value is ['std:doc'].
-intersphinx_disabled_reftypes = ['std:doc']
+intersphinx_disabled_reftypes = ["std:doc"]
 
 
 # -- AutoAPI configuration ------------------------------------------------------------------------
@@ -128,7 +145,7 @@ intersphinx_disabled_reftypes = ['std:doc']
 # Activate the extension
 extensions.append("autoapi.extension")
 # Paths (relative or absolute) to the source code that you wish to generate your API documentation from.
-autoapi_dirs = [f"../{MODULE}"]
+autoapi_dirs = [f"../{MODULE_DIR}"]
 # Set the type of files you are documenting. This depends on the programming language that you are using.
 # Default: "python"
 autoapi_type = "python"
@@ -297,7 +314,7 @@ autoclass_content = "class"
 # If the class has no __init__ method or if the __init__ method’s docstring is empty,
 # but the class has a __new__ method’s docstring, it is used instead.
 autodoc_class_signature = "mixed"
-# This value selects how the signautre will be displayed for the class defined by autoclass directive.
+# This value selects how the signature will be displayed for the class defined by autoclass directive.
 # The possible values are: (default="mixed")
 # "mixed"
 # Display the signature with the class name.

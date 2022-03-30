@@ -46,7 +46,7 @@ def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
     Parameters
     ----------
     n: int or tuple[int]
-        If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
+      If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
     sigma: float = 1.0
 
     Returns

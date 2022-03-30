@@ -27,11 +27,11 @@ from typing import Any, Final, Iterable, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util import (  # Repeat,
+from linodenet.util import autojit  # Repeat,
+from linodenet.util import (
     LookupTable,
     ReverseDense,
-    ReZero,
-    autojit,
+    ReZeroCell,
     deep_dict_update,
     deep_keyval_update,
     initialize_from_config,
@@ -335,7 +335,7 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "filter": KalmanCell.HP | {"autoregressive": True},
-        "layers": [ReverseDense.HP | {"bias": False}, ReZero.HP],
+        "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
     }
     """The HyperparameterDict of this class."""
 

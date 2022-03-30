@@ -14,8 +14,15 @@ __all__ = [
 ]
 
 import logging
-from pathlib import Path
+import sys
+from importlib import metadata
 from types import ModuleType
+
+# version check
+if sys.version_info < (3, 9):
+    raise RuntimeError("Python >= 3.9 required")
+
+# pylint: disable=wrong-import-position
 
 from linodenet import (
     config,
@@ -27,15 +34,16 @@ from linodenet import (
 )
 from linodenet.config import conf
 
-__logger__ = logging.getLogger(__name__)
+# pylint: enable=wrong-import-position
 
-with open(Path(__file__).parent.joinpath("VERSION"), "r", encoding="utf8") as file:
-    __version__ = file.read()
-    r"""The version number of the :mod:`linodenet` package."""
+
+__logger__ = logging.getLogger(__name__)
+__version__ = metadata.version(__package__)
+r"""The version number of the :mod:`tsdm` package."""
 
 
 # Recursively clean up namespaces to only show what the user should see.
-def _clean_namespace(module: ModuleType):
+def _clean_namespace(module: ModuleType) -> None:
     r"""Recursively cleans up the namespace.
 
     Parameters
