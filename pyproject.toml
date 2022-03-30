@@ -22,7 +22,7 @@ readme = "README.rst"
 include = ["CHANGELOG.rst", "LICENSE.rst", "CONTRIBUTING.rst"]
 keywords = ["Time-Series", "Machine-Learning", "Neural ODE", "Kalman-Filter"]
 documentation = "https://www.user.tu-berlin.de/randolf.scholz/linodenet"
-repository = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net"
+repository = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi"
 homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net"
 
 classifiers = [
@@ -72,10 +72,9 @@ pylint-gitlab = ">=1.0.0"
 pytest = ">=6.2.5"
 pytest-cov = ">=3.0.0"
 pytest-rerunfailures = ">=10.2"
-setuptools = ">=60.7.1"
-sphinx = ">=4.4.0"
+sphinx = ">=4.5.0"
 sphinx-autoapi = ">=1.8.4"
-sphinx-copybutton = ">=0.4.0"
+sphinx-copybutton = ">=0.5.0"
 sphinx-rtd-theme = ">=1.0.0"
 twine = ">=3.8.0"
 types-PyYAML = ">=6.0.4"
@@ -92,8 +91,6 @@ types-setuptools = ">=57.4.8"
 types-six = ">=1.16.10"
 types-tabulate = ">=0.8.5"
 types-toml = ">=0.10.3"
-wheel = ">=0.37.1"
-toml = "^0.10.2"
 
 [tool.poetry.scripts]
 
