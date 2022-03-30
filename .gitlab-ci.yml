@@ -62,9 +62,9 @@ setup:
     - pip install -r requirements-tsdm.txt
     - |
       if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
-        pip install tsdm --upgrade --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple
+        pip install tsdm --upgrade --pre --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple
       elif [[ $CI_PROJECT_URL == *"software.ismll.de"* ]]; then
-        pip install tsdm --upgrade --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
+        pip install tsdm --upgrade --pre --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
       else
         exit 1
       fi
