@@ -9,7 +9,7 @@ __all__ = [
     # Constants
     "ACTIVATIONS",
     # Classes
-    "ReZero",
+    "ReZeroCell",
     "ReverseDense",
     "Repeat",
     "Series",
@@ -39,6 +39,6 @@ from linodenet.util._util import (
     initialize_from_config,
 )
 from linodenet.util.generic_layers import Multiply, Parallel, Repeat, Series
-from linodenet.util.layers import ReverseDense, ReZero
+from linodenet.util.layers import ReverseDense, ReZeroCell
 
 __logger__ = logging.getLogger(__name__)

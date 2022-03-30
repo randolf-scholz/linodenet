@@ -30,7 +30,7 @@ def test_LinearContraction(
     dim_inputs: Optional[int] = None,
     dim_output: Optional[int] = None,
     make_plot: bool = False,
-):
+) -> None:
     r"""Test empirically if the LinearContraction really is a linear contraction.
 
     Parameters
@@ -102,7 +102,7 @@ def test_iResNetBlock(
     make_plot: bool = False,
     quantiles: tuple[float, ...] = (0.5, 0.68, 0.95, 0.997),
     targets: tuple[float, ...] = (0.005, 0.005, 0.01, 0.01),
-):
+) -> None:
     r"""Test empirically whether the iResNetBlock is indeed invertible.
 
     Parameters
@@ -203,7 +203,7 @@ def test_iResNetBlock(
     ax[0, 1].set_xlabel(
         r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$ where $y_j \sim \mathcal N(0,1)$"
     )
-    ax[0, 1].set_ylabel(r"denisty $p(r_\text{right}\mid y)$")
+    ax[0, 1].set_ylabel(r"density $p(r_\text{right}\mid y)$")
 
     ax[1, 0].set_xlabel(
         r"$d_\text{left}(x) = \|x - \phi(x)\|$ where $x_i \sim \mathcal N(0,1)$"

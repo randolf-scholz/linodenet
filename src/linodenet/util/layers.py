@@ -5,7 +5,7 @@ r"""#TODO add module summary line.
 
 __all__ = [
     # Classes
-    "ReZero",
+    "ReZeroCell",
     "ReverseDense",
 ]
 
@@ -21,7 +21,7 @@ __logger__ = logging.getLogger(__name__)
 
 
 @autojit
-class ReZero(nn.Module):
+class ReZeroCell(nn.Module):
     """ReZero module.
 
     Simply multiplies the inputs by a scalar initialized to zero.
@@ -37,9 +37,12 @@ class ReZero(nn.Module):
     scalar: Tensor
     r"""The scalar to multiply the inputs by."""
 
-    def __init__(self):
+    def __init__(self, scalar: Optional[Tensor] = None) -> None:
         super().__init__()
-        self.scalar = nn.Parameter(torch.tensor(0.0))
+        if scalar is None:
+            self.scalar = nn.Parameter(torch.tensor(0.0))
+        else:
+            self.scalar = scalar
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -54,6 +57,36 @@ class ReZero(nn.Module):
         Tensor
         """
         return self.scalar * x
+
+
+@autojit
+class ReZero(nn.Sequential):
+    r"""A ReZero model."""
+
+    def __init__(self, *blocks: nn.Module, weights: Optional[Tensor] = None) -> None:
+        super().__init__()
+
+        if weights is None:
+            self.weights = nn.Parameter(torch.zeros(len(blocks)))
+        else:
+            self.weights = nn.Parameter(weights)
+        super().__init__(*blocks)
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Forward pass.
+
+        Parameters
+        ----------
+        x: Tensor
+
+        Returns
+        -------
+        Tensor
+        """
+        for k, block in enumerate(self):
+            x = x + self.weights[k] * block(x)
+        return x
 
 
 @autojit

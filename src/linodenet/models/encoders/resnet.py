@@ -27,7 +27,7 @@ from linodenet.models.encoders.ft_transformer import (
 )
 from linodenet.util import (
     ReverseDense,
-    ReZero,
+    ReZeroCell,
     autojit,
     deep_dict_update,
     initialize_from_config,
@@ -146,7 +146,6 @@ class ResNet_(nn.Module):
         return x
 
 
-# noinspection PyUnresolvedReferences
 @autojit
 class ResNetBlock(nn.Sequential):
     """Pre-activation ResNet block.
@@ -220,7 +219,7 @@ class ResNet(nn.ModuleList):
         "num_blocks": 5,
         "blocks": [
             ResNetBlock.HP,
-            ReZero.HP,
+            ReZeroCell.HP,
         ],
     }
 

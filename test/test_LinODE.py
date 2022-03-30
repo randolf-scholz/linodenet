@@ -90,7 +90,7 @@ def linode_error(
     return result
 
 
-def test_linode_error(num_samples: int = 100, make_plot: bool = False):
+def test_linode_error(num_samples: int = 100, make_plot: bool = False) -> None:
     r"""Compare LinODE against scipy.odeint on random linear system.
 
     Parameters

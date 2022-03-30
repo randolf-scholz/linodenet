@@ -28,7 +28,7 @@ from typing import Final
 
 from torch import nn
 
-from linodenet.models import embeddings, encoders, filters
+from linodenet.models import encoders
 from linodenet.models._linodenet import LinODE, LinODEnet
 from linodenet.models.encoders import (
     LinearContraction,
