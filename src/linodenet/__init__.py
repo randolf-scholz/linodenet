@@ -39,7 +39,7 @@ from linodenet.config import conf
 
 __logger__ = logging.getLogger(__name__)
 __version__ = metadata.version(__package__)
-r"""The version number of the :mod:`tsdm` package."""
+r"""The version number of the :mod:`linodenet` package."""
 
 
 # Recursively clean up namespaces to only show what the user should see.

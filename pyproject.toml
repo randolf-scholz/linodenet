@@ -96,7 +96,17 @@ types-tabulate = ">=0.8.5"
 types-toml = ">=0.10.3"
 wheel = ">=0.37.1"
 
+
+#[tool.poetry.dev-dependencies.tsdm]
+#version = ">=0.2.5"
+#allow-prereleases = true
+
 [tool.poetry.scripts]
+
+[[tool.poetry.source]]
+name = "berlin"
+url = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
+
 
 ########################
 # PyLint Configuration #
@@ -200,7 +210,7 @@ convention = "numpy"
 pythonVersion = "3.9"
 reportMissingImports = false
 reportUnsupportedDunderAll = false
-
+reportPrivateImportUsage = false
 
 ########################
 # PyTest Configuration #
