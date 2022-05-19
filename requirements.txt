@@ -1,2 +1,6 @@
-scipy>=1.7
-torch>=1.10
+--extra-index-url https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple
+
+numpy==1.22.3; python_version >= "3.8" and python_version < "3.11"
+scipy==1.8.1; python_version >= "3.8" and python_version < "3.11"
+torch==1.11.0; python_full_version >= "3.7.0"
+typing-extensions==4.2.0; python_version >= "3.7" and python_full_version >= "3.7.0"
