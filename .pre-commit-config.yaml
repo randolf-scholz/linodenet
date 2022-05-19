@@ -20,6 +20,8 @@ repos:
         description: "prevents giant files from being committed."
       - id: check-builtin-literals
         description: "requires literal syntax when initializing empty or zero python builtin types."
+      - id: check-executables-have-shebangs
+        description: "checks that executables have a shebang."
       - id: end-of-file-fixer
         description: "ensures that a file is either empty, or ends with one newline."
       - id: trailing-whitespace
