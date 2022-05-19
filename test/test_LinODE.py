@@ -43,10 +43,6 @@ def linode_error(
     relative_error: bool
     device: Optional[torch.device]
     """
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
 
     if precision == "single":
         eps = 2**-24
@@ -99,11 +95,6 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False) -> None:
     num_samples: int = 100
     make_plot: bool = False
     """
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        __logger__.info("Using CUDA")
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
 
     __logger__.info("Testing LinODE")
     extra_stats = {"Samples": num_samples}

@@ -86,14 +86,19 @@ tqdm = "^4.64.0"
 
 [tool.poetry.dev-dependencies.tsdm]
 version = ">=0.2.6"
-#allow-prereleases = true
 
 [tool.poetry.scripts]
 
 [[tool.poetry.source]]
 name = "berlin"
 url = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
+default = true
 
+#[[tool.poetry.source]]
+#name = "pytorch"
+#url = "https://download.pytorch.org/whl/cu113"
+#secondary = true
+#default = false
 
 ########################
 # PyLint Configuration #

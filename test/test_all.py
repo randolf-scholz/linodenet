@@ -32,8 +32,8 @@ LAT = 8  # LATent dimension
 DTYPE = torch.float32
 DEVICES = [torch.device("cpu")]
 
-if torch.cuda.is_available():
-    DEVICES.append(torch.device("cuda"))
+# if torch.cuda.is_available():
+#     DEVICES.append(torch.device("cuda"))
 
 BATCH_SHAPES = [(), (INNER_BATCH,), (OUTER_BATCH, INNER_BATCH)]
 
