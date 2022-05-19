@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test if filters satisfy idempotence property."""
 
 import logging

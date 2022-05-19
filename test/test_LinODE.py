@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test error of linear ODE against odeint."""
 
 import logging
