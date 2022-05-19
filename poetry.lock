@@ -3074,7 +3074,7 @@ reference = "berlin"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9, <3.10"
-content-hash = "cacd66a17fab44d875d24129c9fda8662696f4a867bd6d5c37209665a16edc99"
+content-hash = "e92209701867637b5d39de33cdd6c390583a10554de6b23358ee505c3d28aa55"
 
 [metadata.files]
 absl-py = [

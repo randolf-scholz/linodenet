@@ -44,12 +44,6 @@ def test_LinearContraction(
             default: sample randomly from [2, 4, 8, , .., 128]
     make_plot: bool
     """
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        __logger__.info("Using CUDA")
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
-
     __logger__.info(">>> Testing LinearContraction <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
     dim_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
@@ -130,12 +124,6 @@ def test_iResNetBlock(
         "Dim-out": f"{dim_output}",
         "maxiter": f"{maxiter}",
     }
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        __logger__.info("Using CUDA")
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
-
     QUANTILES = torch.tensor(quantiles)
     TARGETS = torch.tensor(targets)
 
