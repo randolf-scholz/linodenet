@@ -22,6 +22,8 @@ repos:
         description: "requires literal syntax when initializing empty or zero python builtin types."
       - id: check-executables-have-shebangs
         description: "checks that executables have a shebang."
+      - id: check-shebang-scripts-are-executable
+        description: ensures that (non-binary) files with a shebang are executable.
       - id: end-of-file-fixer
         description: "ensures that a file is either empty, or ends with one newline."
       - id: trailing-whitespace
