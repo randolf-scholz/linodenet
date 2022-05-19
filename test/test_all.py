@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test if model initializations, forward and backward passes."""
 
 import logging

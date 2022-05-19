@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test the iResNet components.
 
 1. is the LinearContraction layer really a linear contraction?

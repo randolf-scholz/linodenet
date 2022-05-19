@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
