@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 from scipy.integrate import odeint
-from tqdm.auto import trange
+from tqdm.autonotebook import trange
 
 from linodenet.models import LinODE
 from tsdm.plot import visualize_distribution

@@ -50,7 +50,7 @@ class LinODECell(nn.Module):
         "kernel_initialization": None,
         "kernel_parametrization": None,
         "scale": 1.0,
-        "rezero": False,
+        "rezero": True,
     }
 
     # Constants
@@ -87,6 +87,7 @@ class LinODECell(nn.Module):
         kernel_parametrization = HP["kernel_parametrization"]
 
         def kernel_initialization_dispatch():
+            r"""Dispatch the kernel initialization."""
             if kernel_init is None:
                 return lambda: gaussian(input_size)
             if isinstance(kernel_init, str):
@@ -118,6 +119,7 @@ class LinODECell(nn.Module):
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript
         def kernel_parametrization_dispatch():
+            r"""Dispatch the kernel parametrization."""
             if kernel_parametrization is None:
                 _kernel_regularization = PROJECTIONS["identity"]
             elif kernel_parametrization in PROJECTIONS:
