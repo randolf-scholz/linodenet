@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
+import pytest
 import torch
 from torch import Tensor
 
@@ -89,6 +90,7 @@ def test_LinearContraction(
     __logger__.info("LinearContraction all done")
 
 
+@pytest.mark.flaky(reruns=3)
 def test_iResNetBlock(
     num_sample: Optional[int] = None,
     dim_inputs: Optional[int] = None,

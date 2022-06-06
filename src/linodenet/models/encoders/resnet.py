@@ -12,7 +12,6 @@ __all__ = [
 ]
 
 
-import logging
 from collections import OrderedDict
 from math import sqrt
 from typing import Any, Optional, cast
@@ -28,15 +27,11 @@ from linodenet.models.encoders.ft_transformer import (
 from linodenet.util import (
     ReverseDense,
     ReZeroCell,
-    autojit,
     deep_dict_update,
     initialize_from_config,
 )
 
-__logger__ = logging.getLogger(__name__)
 
-
-@autojit
 class ResNet_(nn.Module):
     """Residual Network."""
 
@@ -146,7 +141,6 @@ class ResNet_(nn.Module):
         return x
 
 
-@autojit
 class ResNetBlock(nn.Sequential):
     """Pre-activation ResNet block.
 
@@ -208,7 +202,6 @@ class ResNetBlock(nn.Sequential):
         super().__init__(subblocks)
 
 
-@autojit
 class ResNet(nn.ModuleList):
     """A ResNet model."""
 

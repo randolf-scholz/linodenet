@@ -18,15 +18,13 @@ from linodenet.models.encoders import iResNet
 from linodenet.models.filters import Filter, RecurrentCellFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
-from linodenet.util import autojit, deep_dict_update, initialize_from_config
+from linodenet.util import deep_dict_update, initialize_from_config
+
+# TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
 
 __logger__ = logging.getLogger(__name__)
 
 
-# TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
-
-
-@autojit
 class LinODE(nn.Module):
     r"""Linear ODE module, to be used analogously to :func:`scipy.integrate.odeint`.
 
@@ -122,7 +120,6 @@ class LinODE(nn.Module):
         return self.xhat
 
 
-@autojit
 class LinODEnet(nn.Module):
     r"""Linear ODE Network is a FESD model.
 
@@ -235,6 +232,9 @@ class LinODEnet(nn.Module):
 
     def __init__(self, input_size: int, hidden_size: int, **HP: Any):
         super().__init__()
+
+        LOGGER = __logger__.getChild(self.__class__.__name__)
+
         self.CFG = HP = deep_dict_update(self.HP, HP)
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -268,17 +268,17 @@ class LinODEnet(nn.Module):
         # self.add_module("decoder", HP["Decoder"](**HP["Decoder_cfg"]))
         # self.add_module("projection", _projection)
         # self.add_module("filter", HP["Filter"](**HP["Filter_cfg"]))
-        __logger__.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
+        LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
         self.embedding: nn.Module = initialize_from_config(HP["Embedding"])
-        __logger__.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
+        LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
         self.projection: nn.Module = initialize_from_config(HP["Projection"])
-        __logger__.debug("%s Initializing Encoder %s", self.name, HP["Encoder"])
+        LOGGER.debug("%s Initializing Encoder %s", self.name, HP["Encoder"])
         self.encoder: nn.Module = initialize_from_config(HP["Encoder"])
-        __logger__.debug("%s Initializing System %s", self.name, HP["Encoder"])
+        LOGGER.debug("%s Initializing System %s", self.name, HP["Encoder"])
         self.system: nn.Module = initialize_from_config(HP["System"])
-        __logger__.debug("%s Initializing Decoder %s", self.name, HP["Encoder"])
+        LOGGER.debug("%s Initializing Decoder %s", self.name, HP["Encoder"])
         self.decoder: nn.Module = initialize_from_config(HP["Decoder"])
-        __logger__.debug("%s Initializing Filter %s", self.name, HP["Encoder"])
+        LOGGER.debug("%s Initializing Filter %s", self.name, HP["Encoder"])
         self.filter: Filter = initialize_from_config(HP["Filter"])
 
         assert isinstance(self.system.kernel, Tensor)

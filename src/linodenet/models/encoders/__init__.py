@@ -18,7 +18,6 @@ __all__ = [
     "spectral_norm",
 ]
 
-import logging
 from typing import Final
 
 from torch import nn
@@ -33,8 +32,6 @@ from linodenet.models.encoders.iresnet import (
 )
 from linodenet.models.encoders.resnet import ResNet, ResNetBlock
 from linodenet.models.encoders.transformer import Transformer
-
-__logger__ = logging.getLogger(__name__)
 
 Encoder = nn.Module
 r"""Type hint for Encoders."""

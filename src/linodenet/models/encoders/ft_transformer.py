@@ -16,8 +16,6 @@ __all__ = [
     "MultiheadAttention",
 ]
 
-
-import logging
 import math
 from typing import Callable, Optional, cast
 
@@ -25,10 +23,6 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 from torch.nn import init as nn_init
-
-from linodenet.util import autojit
-
-__logger__ = logging.getLogger(__name__)
 
 
 def reglu(x: Tensor) -> Tensor:
@@ -86,7 +80,8 @@ def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
 
 
 # %%
-@autojit
+
+
 class Tokenizer(nn.Module):
     """Tokenizer Model.
 
@@ -189,7 +184,6 @@ class Tokenizer(nn.Module):
         return x
 
 
-@autojit
 class MultiheadAttention(nn.Module):
     """Multihead attention."""
 
@@ -282,7 +276,6 @@ class MultiheadAttention(nn.Module):
         return x
 
 
-@autojit
 class FT_Transformer(nn.Module):
     """FT_Transformer Model.
 
@@ -314,7 +307,6 @@ class FT_Transformer(nn.Module):
         # linformer
         kv_compression: Optional[float],
         kv_compression_sharing: Optional[str],
-        #
         d_out: int,
     ) -> None:
         super().__init__()

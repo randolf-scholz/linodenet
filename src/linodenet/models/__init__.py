@@ -25,7 +25,6 @@ __all__ = [
     # Filters
 ]
 
-import logging
 from typing import Final
 
 from torch import nn
@@ -42,8 +41,6 @@ from linodenet.models.encoders import (
     spectral_norm,
 )
 from linodenet.models.system import LinODECell
-
-__logger__ = logging.getLogger(__name__)
 
 Model = nn.Module
 r"""Type hint for models."""

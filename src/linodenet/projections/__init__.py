@@ -23,14 +23,11 @@ __all__ = [
 ]
 
 
-import logging
 from typing import Final, Union
 
 from linodenet.projections import functional, modular
 from linodenet.projections.functional import FunctionalProjection, FunctionalProjections
 from linodenet.projections.modular import ModularProjection, ModularProjections
-
-__logger__ = logging.getLogger(__name__)
 
 Projection = Union[FunctionalProjection, ModularProjection]  # matrix to matrix
 r"""Type hint for projections."""

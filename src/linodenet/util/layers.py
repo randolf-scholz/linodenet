@@ -9,18 +9,14 @@ __all__ = [
     "ReverseDense",
 ]
 
-import logging
 from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util._util import autojit, deep_dict_update, initialize_from_config
-
-__logger__ = logging.getLogger(__name__)
+from linodenet.util._util import deep_dict_update, initialize_from_config
 
 
-@autojit
 class ReZeroCell(nn.Module):
     """ReZero module.
 
@@ -59,7 +55,6 @@ class ReZeroCell(nn.Module):
         return self.scalar * x
 
 
-@autojit
 class ReZero(nn.Sequential):
     r"""A ReZero model."""
 
@@ -89,7 +84,6 @@ class ReZero(nn.Sequential):
         return x
 
 
-@autojit
 class ReverseDense(nn.Module):
     """ReverseDense module `x→A⋅ϕ(x)`."""
 
