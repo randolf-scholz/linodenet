@@ -62,12 +62,15 @@ class LinODECell(nn.Module):
     r"""CONST: Whether to use rezero."""
 
     # Parameters
-    kernel: Tensor
+    raw_kernel: Tensor
     r"""PARAM: The system matrix of the linear ODE component."""
 
     # Buffers
     scale: Tensor
     r"""BUFFER: static scaling applied to the kernel."""
+
+    kernel: Tensor
+    r"""BUFFER: The parametrized system matrix of the linear ODE component."""
 
     def __init__(
         self,
