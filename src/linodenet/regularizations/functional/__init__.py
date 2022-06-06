@@ -21,8 +21,8 @@ __all__ = [
     "symmetric",
 ]
 
-import logging
-from typing import Callable, Final
+from collections.abc import Callable
+from typing import Final
 
 from torch import Tensor
 
@@ -34,8 +34,6 @@ from linodenet.regularizations.functional._functional import (
     skew_symmetric,
     symmetric,
 )
-
-__logger__ = logging.getLogger(__name__)
 
 FunctionalRegularization = Callable[[Tensor], Tensor]
 r"""Type hint for modular regularizations."""

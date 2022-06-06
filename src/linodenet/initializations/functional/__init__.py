@@ -25,7 +25,6 @@ __all__ = [
     "symmetric",
 ]
 
-import logging
 from typing import Callable, Final
 
 from torch import Tensor
@@ -41,8 +40,6 @@ from linodenet.initializations.functional._functional import (
     special_orthogonal,
     symmetric,
 )
-
-__logger__ = logging.getLogger(__name__)
 
 FunctionalInitialization = Callable[[SizeLike], Tensor]  # SizeLike to matrix
 r"""Type hint for Initializations."""

@@ -5,7 +5,6 @@ __all__ = [
     "LinODECell",
 ]
 
-import logging
 from typing import Any, Final
 
 import torch
@@ -14,12 +13,9 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import FunctionalInitializations
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
-from linodenet.util import ReZeroCell, autojit, deep_dict_update
-
-__logger__ = logging.getLogger(__name__)
+from linodenet.util import ReZeroCell, deep_dict_update
 
 
-@autojit
 class LinODECell(nn.Module):
     r"""Linear System module, solves `ẋ = Ax`, i.e. `x̂ = e^{A\Delta t}x`.
 

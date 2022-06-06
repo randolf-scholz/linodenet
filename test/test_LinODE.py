@@ -8,6 +8,7 @@ from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 import torch
 from numpy.typing import NDArray
 from scipy.integrate import odeint
@@ -26,6 +27,7 @@ TEST_DIR = PATH.parent / "test_results" / PATH.stem
 TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
+@pytest.mark.flaky(reruns=3)
 def linode_error(
     num: Optional[int] = None,
     dim: Optional[int] = None,
@@ -43,7 +45,6 @@ def linode_error(
     relative_error: bool
     device: Optional[torch.device]
     """
-
     if precision == "single":
         eps = 2**-24
         numpy_dtype = np.float32
@@ -87,6 +88,7 @@ def linode_error(
     return result
 
 
+@pytest.mark.flaky(reruns=3)
 def test_linode_error(num_samples: int = 100, make_plot: bool = False) -> None:
     r"""Compare LinODE against scipy.odeint on random linear system.
 
@@ -95,7 +97,6 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False) -> None:
     num_samples: int = 100
     make_plot: bool = False
     """
-
     __logger__.info("Testing LinODE")
     extra_stats = {"Samples": num_samples}
 

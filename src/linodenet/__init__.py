@@ -46,6 +46,9 @@ r"""The version number of the :mod:`linodenet` package."""
 def _clean_namespace(module: ModuleType) -> None:
     r"""Recursively cleans up the namespace.
 
+    Sets `obj.__module__` equal to `obj.__package__` for all objects listed in
+    `package.__all__` that are originating from private submodules (`package/_module.py`).
+
     Parameters
     ----------
     module: ModuleType
