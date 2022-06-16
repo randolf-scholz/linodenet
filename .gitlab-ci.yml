@@ -99,7 +99,7 @@ setup:
     # TODO: fix pip install errors!!!
     - pip install --prefer-binary --upgrade $(ls dist/*.whl)
     # install dev dependencies.
-    - pip install --prefer-binary --upgrade -r requirements-dev.txt
+    # - pip install --prefer-binary --upgrade -r requirements-dev.txt
     - pip list
   after_script:
     - source ${VENVNAME}/bin/activate
