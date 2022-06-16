@@ -47,6 +47,7 @@ class LinODE(nn.Module):
         "Cell": LinODECell.HP,
         "kernel_initialization": None,
         "kernel_projection": None,
+        "rezero": False,
     }
     r"""Dictionary of hyperparameters."""
 
@@ -81,6 +82,7 @@ class LinODE(nn.Module):
         HP["Cell"]["input_size"] = input_size
         HP["Cell"]["kernel_initialization"] = HP["kernel_initialization"]
         HP["Cell"]["kernel_parametrization"] = HP["kernel_projection"]
+        HP["Cell"]["rezero"] = HP["rezero"]
 
         self.input_size = input_size
         self.output_size = input_size
