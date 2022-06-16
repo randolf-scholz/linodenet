@@ -15,12 +15,9 @@ __all__ = [
     "ModularInitializations",
 ]
 
-import logging
 from typing import Final
 
 from torch.nn import Module
-
-__logger__ = logging.getLogger(__name__)
 
 ModularInitialization = Module
 r"""Type hint for modular regularizations."""

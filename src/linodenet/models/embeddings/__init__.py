@@ -10,14 +10,11 @@ __all__ = [
     "ConcatProjection",
 ]
 
-import logging
 from typing import Final
 
 from torch import nn
 
 from linodenet.models.embeddings._embeddings import ConcatEmbedding, ConcatProjection
-
-__logger__ = logging.getLogger(__name__)
 
 Embedding = nn.Module
 r"""Type hint for Embeddings."""

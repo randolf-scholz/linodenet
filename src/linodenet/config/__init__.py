@@ -10,8 +10,4 @@ __all__ = [
     "conf",
 ]
 
-import logging
-
 from linodenet.config._config import Config, conf
-
-__logger__ = logging.getLogger(__name__)

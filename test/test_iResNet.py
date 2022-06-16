@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test the iResNet components.
 
 1. is the LinearContraction layer really a linear contraction?
@@ -10,12 +11,13 @@ from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
+import pytest
 import torch
 from torch import Tensor
 
 from linodenet.models import LinearContraction, iResNetBlock
+from tsdm.linalg import scaled_norm
 from tsdm.plot import visualize_distribution
-from tsdm.util import scaled_norm
 
 __logger__ = logging.getLogger(__name__)  # noqa: E402
 
@@ -43,12 +45,6 @@ def test_LinearContraction(
             default: sample randomly from [2, 4, 8, , .., 128]
     make_plot: bool
     """
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        __logger__.info("Using CUDA")
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
-
     __logger__.info(">>> Testing LinearContraction <<<")
     num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
     dim_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
@@ -94,6 +90,7 @@ def test_LinearContraction(
     __logger__.info("LinearContraction all done")
 
 
+@pytest.mark.flaky(reruns=3)
 def test_iResNetBlock(
     num_sample: Optional[int] = None,
     dim_inputs: Optional[int] = None,
@@ -129,12 +126,6 @@ def test_iResNetBlock(
         "Dim-out": f"{dim_output}",
         "maxiter": f"{maxiter}",
     }
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        __logger__.info("Using CUDA")
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
-
     QUANTILES = torch.tensor(quantiles)
     TARGETS = torch.tensor(targets)
 

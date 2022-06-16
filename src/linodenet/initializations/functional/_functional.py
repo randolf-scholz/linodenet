@@ -22,7 +22,6 @@ __all__ = [
     "symmetric",
 ]
 
-import logging
 from collections.abc import Sequence
 from math import prod, sqrt
 from typing import Optional, Union
@@ -30,9 +29,6 @@ from typing import Optional, Union
 import torch
 from scipy import stats
 from torch import Tensor
-
-__logger__ = logging.getLogger(__name__)
-
 
 SizeLike = Union[int, tuple[int, ...]]
 """Type hint for shape-like inputs."""

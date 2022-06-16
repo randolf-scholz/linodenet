@@ -9,18 +9,12 @@ __all__ = [
     "ConcatProjection",
 ]
 
-import logging
 from typing import Any, Final
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util import autojit
 
-__logger__ = logging.getLogger(__name__)
-
-
-@autojit
 class ConcatEmbedding(nn.Module):
     r"""Maps `x ⟼ [x,w]`.
 
@@ -99,7 +93,6 @@ class ConcatEmbedding(nn.Module):
         return Z[..., : self.input_size]
 
 
-@autojit
 class ConcatProjection(nn.Module):
     r"""Maps `z = [x,w] ⟼ x`.
 

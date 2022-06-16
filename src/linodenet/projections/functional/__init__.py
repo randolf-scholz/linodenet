@@ -20,8 +20,8 @@ __all__ = [
     "normal",
 ]
 
-import logging
-from typing import Callable, Final
+from collections.abc import Callable
+from typing import Final
 
 from torch import Tensor
 
@@ -33,8 +33,6 @@ from linodenet.projections.functional._functional import (
     skew_symmetric,
     symmetric,
 )
-
-__logger__ = logging.getLogger(__name__)
 
 FunctionalProjection = Callable[[Tensor], Tensor]
 r"""Type hint for modular regularizations."""
