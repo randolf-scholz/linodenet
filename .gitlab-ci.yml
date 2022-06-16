@@ -64,6 +64,7 @@ setup:
     - source ${VENVNAME}/bin/activate
     - pip install --upgrade pip setuptools wheel
     # install development dependencies
+    - poetry config http-basic.berlin gitlab-ci-token "${CI_JOB_TOKEN}"
     - poetry install --no-root
     - pip install -r requirements-tsdm.txt
     - |
