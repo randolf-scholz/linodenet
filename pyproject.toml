@@ -92,7 +92,7 @@ version = ">=0.2.6"
 [[tool.poetry.source]]
 name = "berlin"
 url = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
-default = true
+secondary = true
 
 #[[tool.poetry.source]]
 #name = "pytorch"
