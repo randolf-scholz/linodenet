@@ -23,9 +23,6 @@ __all__ = [
     "initialize_from",
     "initialize_from_config",
 ]
-
-import logging
-
 from linodenet.util import layers
 from linodenet.util._util import (
     ACTIVATIONS,
@@ -40,5 +37,3 @@ from linodenet.util._util import (
 )
 from linodenet.util.generic_layers import Multiply, Parallel, Repeat, Series
 from linodenet.util.layers import ReverseDense, ReZeroCell
-
-__logger__ = logging.getLogger(__name__)

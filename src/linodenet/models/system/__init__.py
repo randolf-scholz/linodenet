@@ -10,15 +10,11 @@ __all__ = [
 ]
 
 
-import logging
 from typing import Final
 
 from torch import nn
 
 from linodenet.models.system._system import LinODECell
-
-__logger__ = logging.getLogger(__name__)
-
 
 System = nn.Module
 """Type hint for the system model."""

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
@@ -56,11 +57,6 @@ def test_initialization(
     .. warning::
         Requires up to 16 GB RAM with default settings.
     """
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
-
     ZERO = torch.tensor(0.0)
     ONE = torch.tensor(1.0)
     x = torch.randn(num_runs, num_samples, dim)

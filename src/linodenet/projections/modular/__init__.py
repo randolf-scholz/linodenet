@@ -13,12 +13,9 @@ __all__ = [
     "ModularProjections",
 ]
 
-import logging
 from typing import Final
 
 from torch import nn
-
-__logger__ = logging.getLogger(__name__)
 
 ModularProjection = nn.Module
 r"""Type hint for modular regularizations."""

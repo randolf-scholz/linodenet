@@ -10,13 +10,13 @@ __all__ = [
     "Config",
 ]
 
-import logging
 import os
-
-__logger__ = logging.getLogger(__name__)
 
 os.environ["LINODENET_AUTOJIT"] = "True"
 """Default value."""
+
+_NAME = __name__
+_FILE = __file__
 
 
 class Config:
@@ -24,8 +24,8 @@ class Config:
 
     # TODO: Should be initialized by a init/toml file.
     _autojit: bool = True
-    __name__ = __name__
-    __file__ = __file__
+    __name__ = _NAME
+    __file__ = _FILE
 
     @property
     def autojit(self) -> bool:
