@@ -133,7 +133,7 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
 
     .. code-block:: python
 
-        @autojit
+
         class MyModule():
             ...
 

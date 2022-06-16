@@ -22,7 +22,6 @@ __all__ = [
 ]
 
 
-import logging
 from typing import Final, Union
 
 from linodenet.regularizations import functional, modular
@@ -34,8 +33,6 @@ from linodenet.regularizations.modular import (
     ModularRegularization,
     ModularRegularizations,
 )
-
-__logger__ = logging.getLogger(__name__)
 
 Regularization = Union[
     FunctionalRegularization, ModularRegularization

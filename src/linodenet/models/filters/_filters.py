@@ -19,15 +19,13 @@ __all__ = [
     "SequentialFilterBlock",
     "SequentialFilter",
 ]
-
-import logging
 from abc import abstractmethod
-from typing import Any, Final, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util import autojit  # Repeat,
 from linodenet.util import (
     LookupTable,
     ReverseDense,
@@ -36,8 +34,6 @@ from linodenet.util import (
     deep_keyval_update,
     initialize_from_config,
 )
-
-__logger__ = logging.getLogger(__name__)
 
 Cell = nn.Module
 r"""Type hint for Cells."""
@@ -85,7 +81,6 @@ class FilterABC(nn.Module):
         """
 
 
-@autojit
 class KalmanFilter(FilterABC):
     r"""Classical Kalman Filter.
 
@@ -179,7 +174,6 @@ class KalmanFilter(FilterABC):
         return x + torch.einsum("ij, jk, ..k -> ...i", P, H.t(), z)
 
 
-@autojit
 class KalmanCell(FilterABC):
     r"""A Kalman-Filter inspired non-linear Filter.
 
@@ -326,7 +320,6 @@ class KalmanCell(FilterABC):
         return torch.einsum("ij, ...j -> ...i", self.B, self.ht(z))
 
 
-@autojit
 class SequentialFilterBlock(FilterABC, nn.ModuleList):
     """Multiple Filters applied sequentially."""
 
@@ -371,7 +364,6 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
         return x + z
 
 
-@autojit
 class SequentialFilter(FilterABC, nn.ModuleList):
     """Multiple Filters applied sequentially."""
 
@@ -416,7 +408,6 @@ class SequentialFilter(FilterABC, nn.ModuleList):
         return x
 
 
-@autojit
 class RecurrentCellFilter(FilterABC):
     """Any Recurrent Cell allowed."""
 

@@ -6,7 +6,6 @@ __all__ = [
     "Transformer",
 ]
 
-import logging
 from typing import Any, Optional
 
 from torch import Tensor, nn
@@ -14,13 +13,10 @@ from torch.nn import TransformerEncoder as _TransformerEncoder
 
 from linodenet.util import autojit, deep_dict_update, initialize_from
 
-__logger__ = logging.getLogger(__name__)
-
 TransformerEncoder = autojit(_TransformerEncoder)
 """TransformerEncoder: Transformer based Encoder model."""
 
 
-@autojit
 class Transformer(nn.Module):
     r"""TransformerEncoder is a stack of N encoder layers.
 

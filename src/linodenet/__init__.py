@@ -39,12 +39,15 @@ from linodenet.config import conf
 
 __logger__ = logging.getLogger(__name__)
 __version__ = metadata.version(__package__)
-r"""The version number of the :mod:`tsdm` package."""
+r"""The version number of the :mod:`linodenet` package."""
 
 
 # Recursively clean up namespaces to only show what the user should see.
 def _clean_namespace(module: ModuleType) -> None:
     r"""Recursively cleans up the namespace.
+
+    Sets `obj.__module__` equal to `obj.__package__` for all objects listed in
+    `package.__all__` that are originating from private submodules (`package/_module.py`).
 
     Parameters
     ----------

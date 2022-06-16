@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 r"""Test error of linear ODE against odeint."""
 
 import logging
@@ -7,14 +8,15 @@ from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pytest
 import torch
 from numpy.typing import NDArray
 from scipy.integrate import odeint
-from tqdm.auto import trange
+from tqdm.autonotebook import trange
 
 from linodenet.models import LinODE
+from tsdm.linalg import scaled_norm
 from tsdm.plot import visualize_distribution
-from tsdm.util import scaled_norm
 
 __logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
@@ -25,6 +27,7 @@ TEST_DIR = PATH.parent / "test_results" / PATH.stem
 TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
+@pytest.mark.flaky(reruns=3)
 def linode_error(
     num: Optional[int] = None,
     dim: Optional[int] = None,
@@ -42,11 +45,6 @@ def linode_error(
     relative_error: bool
     device: Optional[torch.device]
     """
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
-
     if precision == "single":
         eps = 2**-24
         numpy_dtype = np.float32
@@ -90,6 +88,7 @@ def linode_error(
     return result
 
 
+@pytest.mark.flaky(reruns=3)
 def test_linode_error(num_samples: int = 100, make_plot: bool = False) -> None:
     r"""Compare LinODE against scipy.odeint on random linear system.
 
@@ -98,12 +97,6 @@ def test_linode_error(num_samples: int = 100, make_plot: bool = False) -> None:
     num_samples: int = 100
     make_plot: bool = False
     """
-    if torch.cuda.is_available():
-        torch.set_default_tensor_type(torch.cuda.FloatTensor)  # type: ignore
-        __logger__.info("Using CUDA")
-    else:
-        torch.set_default_tensor_type(torch.FloatTensor)
-
     __logger__.info("Testing LinODE")
     extra_stats = {"Samples": num_samples}
 
