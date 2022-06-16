@@ -5,7 +5,6 @@ __all__ = [
     "LinODECell",
 ]
 
-import logging
 from typing import Any, Final
 
 import torch
@@ -14,12 +13,9 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import FunctionalInitializations
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
-from linodenet.util import ReZeroCell, autojit, deep_dict_update
-
-__logger__ = logging.getLogger(__name__)
+from linodenet.util import ReZeroCell, deep_dict_update
 
 
-@autojit
 class LinODECell(nn.Module):
     r"""Linear System module, solves `ẋ = Ax`, i.e. `x̂ = e^{A\Delta t}x`.
 
@@ -50,7 +46,7 @@ class LinODECell(nn.Module):
         "kernel_initialization": None,
         "kernel_parametrization": None,
         "scale": 1.0,
-        "rezero": False,
+        "rezero": True,
     }
 
     # Constants
@@ -62,12 +58,15 @@ class LinODECell(nn.Module):
     r"""CONST: Whether to use rezero."""
 
     # Parameters
-    kernel: Tensor
+    raw_kernel: Tensor
     r"""PARAM: The system matrix of the linear ODE component."""
 
     # Buffers
     scale: Tensor
     r"""BUFFER: static scaling applied to the kernel."""
+
+    kernel: Tensor
+    r"""BUFFER: The parametrized system matrix of the linear ODE component."""
 
     def __init__(
         self,
@@ -87,6 +86,7 @@ class LinODECell(nn.Module):
         kernel_parametrization = HP["kernel_parametrization"]
 
         def kernel_initialization_dispatch():
+            r"""Dispatch the kernel initialization."""
             if kernel_init is None:
                 return lambda: gaussian(input_size)
             if isinstance(kernel_init, str):
@@ -118,6 +118,7 @@ class LinODECell(nn.Module):
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript
         def kernel_parametrization_dispatch():
+            r"""Dispatch the kernel parametrization."""
             if kernel_parametrization is None:
                 _kernel_regularization = PROJECTIONS["identity"]
             elif kernel_parametrization in PROJECTIONS:

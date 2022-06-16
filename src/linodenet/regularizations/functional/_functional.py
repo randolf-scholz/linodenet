@@ -17,15 +17,12 @@ __all__ = [
     "normal",
 ]
 
-import logging
 from typing import Optional
 
 import torch.linalg
 from torch import Tensor, jit
 
 from linodenet.projections import functional as projections
-
-__logger__ = logging.getLogger(__name__)
 
 
 @jit.script

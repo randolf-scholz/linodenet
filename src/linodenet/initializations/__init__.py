@@ -30,7 +30,6 @@ __all__ = [
     "modular",
 ]
 
-import logging
 from typing import Final, Union
 
 from linodenet.initializations import functional, modular
@@ -53,5 +52,3 @@ INITIALIZATIONS: Final[
     **ModularInitializations,
 }
 r"""Dictionary of all available initializations."""
-
-__logger__ = logging.getLogger(__name__)

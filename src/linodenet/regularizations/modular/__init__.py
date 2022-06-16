@@ -14,12 +14,9 @@ __all__ = [
     "ModularRegularizations",
 ]
 
-import logging
 from typing import Final
 
 from torch import nn
-
-__logger__ = logging.getLogger(__name__)
 
 ModularRegularization = nn.Module
 r"""Type hint for modular regularizations."""

@@ -9,7 +9,6 @@ __all__ = [
     "SpectralNorm",
 ]
 
-import logging
 from math import sqrt
 from typing import Any, Final, Optional
 
@@ -19,15 +18,7 @@ from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
 from linodenet.initializations.functional import low_rank
-from linodenet.util import (
-    ACTIVATIONS,
-    Activation,
-    ReZeroCell,
-    autojit,
-    deep_dict_update,
-)
-
-__logger__ = logging.getLogger(__name__)
+from linodenet.util import ACTIVATIONS, Activation, ReZeroCell, deep_dict_update
 
 
 @jit.script
@@ -164,7 +155,6 @@ class SpectralNorm(torch.autograd.Function):
         return grad_outputs[0] * torch.outer(u, v)
 
 
-@autojit
 class LinearContraction(nn.Module):
     r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
 
@@ -259,7 +249,6 @@ class LinearContraction(nn.Module):
         return functional.linear(x, fac * self.weight, self.bias)
 
 
-@autojit
 class AltLinearContraction(nn.Module):
     r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
 
@@ -371,7 +360,6 @@ class AltLinearContraction(nn.Module):
         return functional.linear(x, fac * self.kernel, self.bias)
 
 
-@autojit
 class iResNetBlock(nn.Module):
     r"""Invertible ResNet-Block of the form `g(x)=ϕ(W_1⋅W_2⋅x)`.
 
@@ -523,7 +511,6 @@ class iResNetBlock(nn.Module):
         return x
 
 
-@autojit
 class iResNet(nn.Module):
     r"""Invertible ResNet consists of a stack of :class:`iResNetBlock` modules.
 
@@ -639,7 +626,6 @@ class iResNet(nn.Module):
     #     maxiter: int
     #     rtol: float
     #     atol: float
-    #
     #     Returns
     #     -------
     #     yhat: Tensor
@@ -647,16 +633,13 @@ class iResNet(nn.Module):
     #     xhat = y.clone()
     #     xhat_dash = y.clone()
     #     residual = torch.zeros_like(y)
-    #
     #     for k in range(self.maxiter):
     #         xhat_dash = y - self(xhat)
     #         residual = torch.abs(xhat_dash - xhat) - rtol * torch.absolute(xhat)
-    #
     #         if torch.all(residual <= atol):
     #             return xhat_dash
     #         else:
     #             xhat = xhat_dash
-    #
     # warnings.warn(F"No convergence in {maxiter} iterations. "
     #               F"Max residual:{torch.max(residual)} > {atol}.")
     #     return xhat_dash
@@ -735,7 +718,6 @@ class iLowRankLayer(nn.Module):
 
     # def __invert__(self):
     #     r"""Compute the inverse of the low rank layer.
-    #
     #     Returns
     #     -------
     #     iLowRankLayer

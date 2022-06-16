@@ -7,7 +7,3 @@ Notes
 Contains initializations in modular form.
   - See :mod:`~linodenet.initializations.functional` for functional implementations.
 """
-
-import logging
-
-__logger__ = logging.getLogger(__name__)
