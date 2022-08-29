@@ -152,7 +152,7 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
     assert issubclass(base_class, nn.Module)
 
     @wraps(base_class, updated=())
-    class WrappedClass(base_class):  # type: ignore
+    class WrappedClass(base_class):  # type: ignore[misc, valid-type]
         r"""A simple Wrapper."""
 
         # noinspection PyArgumentList
