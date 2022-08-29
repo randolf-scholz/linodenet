@@ -63,7 +63,7 @@ class ConcatEmbedding(nn.Module):
 
     @jit.export
     def forward(self, X: Tensor) -> Tensor:
-        r"""Signature: `[..., d] ⟶ [..., d+e]`.
+        r""".. Signature:: ``(..., d) -> (..., d+e)``.
 
         Parameters
         ----------
@@ -78,7 +78,7 @@ class ConcatEmbedding(nn.Module):
 
     @jit.export
     def inverse(self, Z: Tensor) -> Tensor:
-        r"""Signature: `[..., d+e] ⟶ [..., d]`.
+        r""".. Signature: ``(..., d+e) -> (..., d)``.
 
         The reverse of the forward. Satisfies inverse(forward(x)) = x for any input.
 
@@ -128,7 +128,7 @@ class ConcatProjection(nn.Module):
 
     @jit.export
     def forward(self, Z: Tensor) -> Tensor:
-        r"""Signature: `[..., d+e] ⟶ [..., d]`.
+        r""".. Signature: ``(..., d+e) -> (..., d)``.
 
         Parameters
         ----------

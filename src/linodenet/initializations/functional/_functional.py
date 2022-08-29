@@ -125,9 +125,9 @@ def skew_symmetric(n: SizeLike) -> Tensor:
 
 
 def orthogonal(n: SizeLike) -> Tensor:
-    r"""Sample a random orthogonal matrix, i.e. `A^⊤ = A`.
+    r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     Parameters
     ----------
@@ -173,8 +173,7 @@ def special_orthogonal(n: SizeLike) -> Tensor:
 def canonical_skew_symmetric(n: SizeLike) -> Tensor:
     r"""Return the canonical skew symmetric matrix of size `n=2k`.
 
-    .. math::
-        𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
+    .. math:: 𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
 
     Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
 
@@ -199,7 +198,7 @@ def canonical_skew_symmetric(n: SizeLike) -> Tensor:
 
 
 def low_rank(size: SizeLike, rank: Optional[int] = None) -> Tensor:
-    r"""Sample a random low-rank m×n matrix, i.e. `A = UV^T`.
+    r"""Sample a random low-rank m×n matrix, i.e. `A = UV^⊤`.
 
     Parameters
     ----------

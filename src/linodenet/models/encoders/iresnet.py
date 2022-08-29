@@ -29,7 +29,7 @@ def spectral_norm(
 
     Stopping criterion:
     - maxiter reached
-    - $‖(A^TA -λ𝕀)x‖_2 ≤ \text{𝗋𝗍𝗈𝗅}⋅‖λx‖_2 + \text{𝖺𝗍𝗈𝗅}$
+    - $‖(A^⊤A -λ𝕀)x‖_2 ≤ \text{𝗋𝗍𝗈𝗅}⋅‖λx‖_2 + \text{𝖺𝗍𝗈𝗅}$
 
     Parameters
     ----------
@@ -155,10 +155,10 @@ class SpectralNorm(torch.autograd.Function):
 
 
 class LinearContraction(nn.Module):
-    r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
+    r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2$.
 
     This is achieved by normalizing the weight matrix by
-    `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
+    $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
 
     Attributes
     ----------
@@ -229,7 +229,7 @@ class LinearContraction(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: `[...,n] ⟶ [...,n]`.
+        r""".. Signature:: ``(..., n) -> (..., n)``.
 
         Parameters
         ----------
@@ -340,7 +340,7 @@ class AltLinearContraction(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: `[...,n] ⟶ [...,n]`.
+        r""".. Signature:: ``(..., n) -> (..., n)``.
 
         Parameters
         ----------
@@ -360,15 +360,15 @@ class AltLinearContraction(nn.Module):
 
 
 class iResNetBlock(nn.Module):
-    r"""Invertible ResNet-Block of the form `g(x)=ϕ(W_1⋅W_2⋅x)`.
+    r"""Invertible ResNet-Block of the form $g(x)=ϕ(W_1⋅W_2⋅x)$.
 
-    By default, `W_1⋅W_2` is a low rank factorization.
+    By default, $W_1⋅W_2$ is a low rank factorization.
 
-    Alternative: `g(x) = W_3ϕ(W_2ϕ(W_1⋅x))`
+    Alternative: $g(x) = W_3ϕ(W_2ϕ(W_1⋅x))$.
 
-    All linear layers must be :class:`LinearContraction` layers.
-    The activation function must have Lipschitz constant `≤1` such as :class:`~torch.nn.ReLU`,
-    :class:`~torch.nn.ELU` or :class:`~torch.nn.Tanh`)
+    All linear layers must be `LinearContraction` layers.
+    The activation function must have Lipschitz constant $≤1$ such as `~torch.nn.ReLU`,
+    `~torch.nn.ELU` or `~torch.nn.Tanh`)
 
     Attributes
     ----------
@@ -466,7 +466,7 @@ class iResNetBlock(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: `[...,n] ⟶ [...,n]`.
+        r""".. Signature:: ``(..., n) -> (..., n)``.
 
         Parameters
         ----------
@@ -482,8 +482,8 @@ class iResNetBlock(nn.Module):
     def inverse(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
-        Terminates once `maxiter` or tolerance threshold
-        `|x'-x|≤\text{atol} + \text{rtol}⋅|x|` is reached.
+        Terminates once ``maxiter`` or tolerance threshold
+        $|x'-x|≤\text{atol} + \text{rtol}⋅|x|$ is reached.
 
         Parameters
         ----------
@@ -511,7 +511,7 @@ class iResNetBlock(nn.Module):
 
 
 class iResNet(nn.Module):
-    r"""Invertible ResNet consists of a stack of :class:`iResNetBlock` modules.
+    r"""Invertible ResNet consists of a stack of `iResNetBlock` modules.
 
     References
     ----------
@@ -585,7 +585,7 @@ class iResNet(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: `[...,n] ⟶ [...,n]`.
+        r""".. Signature:: ``(..., n) -> (..., n)``.
 
         Parameters
         ----------
@@ -650,15 +650,13 @@ class iLowRankLayer(nn.Module):
     With the help of the Matrix Inversion Lemma (also known as Woodbury matrix identity),
     we have
 
-    .. math::
-        (𝕀_n + UV^⊤)^{-1} = 𝕀_n - U(𝕀_k + V^⊤U)^{-1}V^⊤
+    .. math:: (𝕀_n + UV^⊤)^{-1} = 𝕀_n - U(𝕀_k + V^⊤U)^{-1}V^⊤
 
     I.e. to compute the inverse of the perturbed matrix, it is sufficient to compute the
     inverse of the lower dimensional low rank matrix `𝕀_k + V^⊤U`.
     In particular, when `k=1` the formula reduces to
 
-    .. math..
-        (𝕀_n + uv^⊤)^{-1} = 𝕀_n - \frac{1}{1+u^⊤v} uv^⊤
+    .. math:: (𝕀_n + uv^⊤)^{-1} = 𝕀_n - \frac{1}{1+u^⊤v} uv^⊤
     """
 
     HP = {
@@ -685,7 +683,7 @@ class iLowRankLayer(nn.Module):
         self.rank = rank
 
     def forward(self, x: Tensor) -> Tensor:
-        r"""Signature: `[...,n] ⟶ [...,n]`.
+        r""".. Signature:: ``(..., n) -> (..., n)``.
 
         Parameters
         ----------
@@ -700,7 +698,7 @@ class iLowRankLayer(nn.Module):
         return x + y
 
     def inverse(self, x: Tensor) -> Tensor:
-        r"""Signature: `[...,n] ⟶ [...,n]`.
+        r""".. Signature:: ``(..., n) -> (..., n)``.
 
         Parameters
         ----------
