@@ -3,8 +3,8 @@ r"""Projections for the Linear ODE Networks.
 Notes
 -----
 Contains projections in both modular and functional form.
-  - See :mod:`~linodenet.projections.functional` for functional implementations.
-  - See :mod:`~linodenet.projections.modular` for modular implementations.
+  - See `~linodenet.projections.functional` for functional implementations.
+  - See `~linodenet.projections.modular` for modular implementations.
 """
 
 

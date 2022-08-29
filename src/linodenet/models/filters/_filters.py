@@ -51,21 +51,20 @@ class FilterABC(nn.Module):
 
     All filters should have a signature of the form:
 
-    .. math::
-       x' = x + ϕ(y-h(x))
+    .. math::  x' = x + ϕ(y-h(x))
 
-    Where `x` is the current state of the system, `y` is the current measurement, and
-    `x'` is the new state of the system. `ϕ` is a function that maps the measurement
-    to the state of the system. `h` is a function that maps the current state of the
+    Where $x$ is the current state of the system, $y$ is the current measurement, and
+    $x'$ is the new state of the system. $ϕ$ is a function that maps the measurement
+    to the state of the system. $h$ is a function that maps the current state of the
     system to the measurement.
 
     Or multiple blocks of said form. In particular, we are interested in Filters
-    satisfying the idempotence property: if `y=h(x)`, then `x'=x`.
+    satisfying the idempotence property: if $y=h(x)$, then $x'=x$.
     """
 
     @abstractmethod
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        """Forward pass of the filter.
+        r"""Forward pass of the filter.
 
         Parameters
         ----------
@@ -90,8 +89,8 @@ class KalmanFilter(FilterABC):
 
     In the case of missing data:
 
-    Substitute `yₜ← Sₜ⋅yₜ`, `Hₜ ← Sₜ⋅Hₜ` and `Rₜ ← Sₜ⋅Rₜ⋅Sₜᵀ` where `Sₜ`
-    is the `mₜ×m` projection matrix of the missing values. In this case:
+    Substitute $yₜ← Sₜ⋅yₜ$, $Hₜ ← Sₜ⋅Hₜ$ and $Rₜ ← Sₜ⋅Rₜ⋅Sₜᵀ$ where $Sₜ$
+    is the $mₜ×m$ projection matrix of the missing values. In this case:
 
     .. math::
         x̂' &= x̂ + P⋅Hᵀ⋅Sᵀ(SHPHᵀSᵀ + SRSᵀ)⁻¹ (Sy - SHx̂) \\
@@ -112,21 +111,21 @@ class KalmanFilter(FilterABC):
             x̂' &= x̂ + P⋅Hᵀ(HPHᵀ + R)⁻¹ (y - h(x̂)) \\
             P' &= P -  P⋅Hᵀ(HPHᵀ + R)⁻¹ H P
 
-        where `H = \frac{∂h}{∂x}|_{x̂}`. Note that the EKF is generally not an optimal
+        where $H = \frac{∂h}{∂x}|_{x̂}$. Note that the EKF is generally not an optimal
         filter.
     """
 
     # CONSTANTS
     input_size: Final[int]
-    """CONST: The input size."""
+    r"""CONST: The input size."""
     hidden_size: Final[int]
-    """CONST: The hidden size."""
+    r"""CONST: The hidden size."""
 
     # PARAMETERS
     H: Tensor
-    """PARAM: The observation matrix."""
+    r"""PARAM: The observation matrix."""
     R: Tensor
-    """PARAM: The observation noise covariance matrix."""
+    r"""PARAM: The observation noise covariance matrix."""
 
     # BUFFERS
     ZERO: Tensor
@@ -177,27 +176,42 @@ class KalmanFilter(FilterABC):
 class KalmanCell(FilterABC):
     r"""A Kalman-Filter inspired non-linear Filter.
 
-    We assume that `y = h(x)` and `y = H⋅x` in the linear case. We adapt  the formula
-    provided by the regular kalman filter and replace the matrices with learnable
-    parameters `A` and `B` and insert an neural network block `ψ`, typically a
-    non-linear activation function followed by a linear layer `ψ(z)=Wϕ(z)`.
+    We assume that $y = h(x)$ and $y = H⋅x$ in the linear case. We adapt  the formula
+    provided by the regular Kalman Filter and replace the matrices with learnable
+    parameters $A$ and $B$ and insert an neural network block $ψ$, typically a
+    non-linear activation function followed by a linear layer $ψ(z)=Wϕ(z)$.
 
     .. math::
-        x̂' &= x̂ + P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂) \\
-           &⇝ x̂ + B⋅Hᵀ ∏ₘᵀA∏ₘ (y - Hx̂) \\
-           &⇝ x̂ + ψ(B Hᵀ ∏ₘᵀA∏ₘ (y - Hx̂))
+        x̂' &= x̂ + P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂)    \\
+           &⇝ x̂ + B⋅Hᵀ ∏ₘᵀA∏ₘ (y - Hx̂)                 \\
+           &⇝ x̂ + ψ(B Hᵀ ∏ₘᵀA ∏ₘ (y - Hx̂))
 
-    The reason for a another linear transform after ϕ is to stabilize the distribution.
-    Also, when `ϕ=𝖱𝖾𝖫𝖴`, it is necessary to allow negative updates.
+    Here $yₜ$ is the observation vector. and $x̂$ is the state vector.
 
-    Note that in the autoregressive case, i.e. `H=𝕀`, the equation can be simplified
-    towards `x̂' ⇝ x̂ + ψ( B ∏ₘᵀ A ∏ₘ (y - Hx̂) )`.
+
+    .. math::
+        x̂' &= x̂ - P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (Hx̂ - y)    \\
+           &⇝ x̂ - B⋅Hᵀ ∏ₘᵀA∏ₘ (Hx̂ - y)                 \\
+           &⇝ x̂ - ψ(B Hᵀ ∏ₘᵀA ∏ₘ (Hx̂ - y))
+
+    Note that in the autoregressive case, $H=𝕀$ and $P=R$. Thus
+
+    x̂' &= x̂ - ½ (x̂ - y)    \\
+       &= ½(x̂ + y)
+
+    So in this case, the filter precisely always chooses the average between the prediction and the measurement.
+
+    The reason for a another linear transform after $ϕ$ is to stabilize the distribution.
+    Also, when $ϕ=𝖱𝖾𝖫𝖴$, it is necessary to allow negative updates.
+
+    Note that in the autoregressive case, i.e. $H=𝕀$, the equation can be simplified
+    towards $x̂' ⇝ x̂ + ψ( B ∏ₘᵀ A ∏ₘ (y - Hx̂) )$.
 
     References
     ----------
     - | Kalman filter with outliers and missing observations
       | T. Cipra, R. Romera
-      | https://doi.org/10.1007/BF02564705=
+      | https://link.springer.com/article/10.1007/BF02564705
     """
 
     HP = {
@@ -207,15 +221,15 @@ class KalmanCell(FilterABC):
         "hidden_size": int,
         "autoregressive": False,
     }
-    """The HyperparameterDict of this class."""
+    r"""The HyperparameterDict of this class."""
 
     # CONSTANTS
     autoregressive: Final[bool]
-    """CONST: Whether the filter is autoregressive or not."""
+    r"""CONST: Whether the filter is autoregressive or not."""
     input_size: Final[int]
-    """CONST: The input size (=dim x)."""
+    r"""CONST: The input size (=dim x)."""
     hidden_size: Final[int]
-    """CONST: The hidden size (=dim y)."""
+    r"""CONST: The hidden size (=dim y)."""
 
     # PARAMETERS
     H: Optional[Tensor]
@@ -302,7 +316,7 @@ class KalmanCell(FilterABC):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: `[...,m], [...,n] ⟶ [...,n]`.
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``.
 
         Parameters
         ----------
@@ -321,7 +335,7 @@ class KalmanCell(FilterABC):
 
 
 class SequentialFilterBlock(FilterABC, nn.ModuleList):
-    """Multiple Filters applied sequentially."""
+    r"""Multiple Filters applied sequentially."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -330,7 +344,7 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
         "filter": KalmanCell.HP | {"autoregressive": True},
         "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
     }
-    """The HyperparameterDict of this class."""
+    r"""The HyperparameterDict of this class."""
 
     input_size: Final[int]
 
@@ -357,7 +371,7 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        """Signature: `[...,m], [...,n] ⟶ [...,n]`."""
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         z = self.filter(y, x)
         for module in self.layers:
             z = module(z)
@@ -365,7 +379,7 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
 
 
 class SequentialFilter(FilterABC, nn.ModuleList):
-    """Multiple Filters applied sequentially."""
+    r"""Multiple Filters applied sequentially."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -375,7 +389,7 @@ class SequentialFilter(FilterABC, nn.ModuleList):
         "input_size": int,
         "module": SequentialFilterBlock.HP,
     }
-    """The HyperparameterDict of this class."""
+    r"""The HyperparameterDict of this class."""
 
     def __init__(self, **HP: Any) -> None:
         super().__init__()
@@ -402,14 +416,14 @@ class SequentialFilter(FilterABC, nn.ModuleList):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        """Signature: `[...,m], [...,n] ⟶ [...,n]`."""
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         for module in self:
             x = module(y, x)
         return x
 
 
 class RecurrentCellFilter(FilterABC):
-    """Any Recurrent Cell allowed."""
+    r"""Any Recurrent Cell allowed."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -429,17 +443,17 @@ class RecurrentCellFilter(FilterABC):
             "dtype": None,
         },
     }
-    """The HyperparameterDict of this class."""
+    r"""The HyperparameterDict of this class."""
 
     # CONSTANTS
     concat_mask: Final[bool]
-    """CONST: Whether to concatenate the mask to the inputs."""
+    r"""CONST: Whether to concatenate the mask to the inputs."""
     input_size: Final[int]
-    """CONST: The input size."""
+    r"""CONST: The input size."""
     hidden_size: Final[int]
-    """CONST: The hidden size."""
+    r"""CONST: The hidden size."""
     autoregressive: Final[bool]
-    """CONST: Whether the filter is autoregressive or not."""
+    r"""CONST: Whether the filter is autoregressive or not."""
 
     # PARAMETERS
     H: Tensor
@@ -487,7 +501,7 @@ class RecurrentCellFilter(FilterABC):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: `[...,m], [...,n] ⟶ [...,n]`.
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``.
 
         Parameters
         ----------

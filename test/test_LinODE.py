@@ -45,13 +45,16 @@ def linode_error(
     relative_error: bool
     device: Optional[torch.device]
     """
+    numpy_dtype: type[np.number]
+    torch_dtype: torch.dtype
+
     if precision == "single":
         eps = 2**-24
         numpy_dtype = np.float32
         torch_dtype = torch.float32
     elif precision == "double":
         eps = 2**-53
-        numpy_dtype = np.float64  # type: ignore
+        numpy_dtype = np.float64
         torch_dtype = torch.float64
     else:
         raise ValueError

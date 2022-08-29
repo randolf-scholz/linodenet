@@ -1,11 +1,11 @@
 r"""Initializations for the Linear ODE Networks.
 
-All initializations are normalized such that if `x∼𝓝(0,1)`, then `Ax∼𝓝(0,1)` as well.
+All initializations are normalized such that if $x∼𝓝(0,1)$, then $Ax∼𝓝(0,1)$ as well.
 
 Notes
 -----
 Contains initializations in functional form.
-  - See :mod:`~linodenet.initializations.modular` for modular implementations.
+  - See `~linodenet.initializations.modular` for modular implementations.
 """
 
 __all__ = [
@@ -31,18 +31,18 @@ from scipy import stats
 from torch import Tensor
 
 SizeLike = Union[int, tuple[int, ...]]
-"""Type hint for shape-like inputs."""
+r"""Type hint for shape-like inputs."""
 
 
 def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
-    r"""Sample a random gaussian matrix, i.e. `A_{ij}∼𝓝(0,1/n)`.
+    r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)` if `σ=1`.
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$ if $σ=1$.
 
     Parameters
     ----------
     n: int or tuple[int]
-      If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
+      If `tuple`, the last axis is interpreted as dimension and the others as batch
     sigma: float = 1.0
 
     Returns
@@ -58,14 +58,14 @@ def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
 
 
 def diagonally_dominant(n: SizeLike) -> Tensor:
-    r"""Sample a random diagonally dominant matrix, i.e. `A = I_n + B`,with `B_{ij}∼𝓝(0,1/n²)`.
+    r"""Sample a random diagonally dominant matrix, i.e. $A = 𝕀_n + B$,with $B_{ij}∼𝓝(0,1/n²)$.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     Parameters
     ----------
     n: int or tuple[int]
-        If :class:`tuple`, the last axis is interpreted as dimension and the others as batch
+        If `tuple`, the last axis is interpreted as dimension and the others as batch
 
     Returns
     -------
@@ -80,9 +80,9 @@ def diagonally_dominant(n: SizeLike) -> Tensor:
 
 
 def symmetric(n: SizeLike) -> Tensor:
-    r"""Sample a symmetric matrix, i.e. `A^⊤ = A`.
+    r"""Sample a symmetric matrix, i.e. $A^⊤ = A$.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     Parameters
     ----------
@@ -102,9 +102,9 @@ def symmetric(n: SizeLike) -> Tensor:
 
 
 def skew_symmetric(n: SizeLike) -> Tensor:
-    r"""Sample a random skew-symmetric matrix, i.e. `A^⊤ = -A`.
+    r"""Sample a random skew-symmetric matrix, i.e. $A^⊤ = -A$.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     Parameters
     ----------
@@ -125,9 +125,9 @@ def skew_symmetric(n: SizeLike) -> Tensor:
 
 
 def orthogonal(n: SizeLike) -> Tensor:
-    r"""Sample a random orthogonal matrix, i.e. `A^⊤ = A`.
+    r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     Parameters
     ----------
@@ -148,9 +148,9 @@ def orthogonal(n: SizeLike) -> Tensor:
 
 
 def special_orthogonal(n: SizeLike) -> Tensor:
-    r"""Sample a random special orthogonal matrix, i.e. `A^⊤ = A^{-1}` with `\det(A)=1`.
+    r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A^{-1}$ with $\det(A)=1$.
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     Parameters
     ----------
@@ -171,12 +171,11 @@ def special_orthogonal(n: SizeLike) -> Tensor:
 
 
 def canonical_skew_symmetric(n: SizeLike) -> Tensor:
-    r"""Return the canonical skew symmetric matrix of size `n=2k`.
+    r"""Return the canonical skew symmetric matrix of size $n=2k$.
 
-    .. math::
-        𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
+    .. math:: 𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
 
-    Normalized such that if `x∼𝓝(0,1)`, then `A⋅x∼𝓝(0,1)`
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     Parameters
     ----------
@@ -199,7 +198,7 @@ def canonical_skew_symmetric(n: SizeLike) -> Tensor:
 
 
 def low_rank(size: SizeLike, rank: Optional[int] = None) -> Tensor:
-    r"""Sample a random low-rank m×n matrix, i.e. `A = UV^T`.
+    r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$.
 
     Parameters
     ----------

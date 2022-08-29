@@ -26,13 +26,13 @@ from torch.nn import init as nn_init
 
 
 def reglu(x: Tensor) -> Tensor:
-    """Regularized gelu activation function."""
+    r"""Regularized gelu activation function."""
     a, b = x.chunk(2, dim=-1)
     return a * F.relu(b)
 
 
 def geglu(x: Tensor) -> Tensor:
-    """Gelu activation function."""
+    r"""Gelu activation function."""
     a, b = x.chunk(2, dim=-1)
     return a * F.gelu(b)
 
@@ -83,7 +83,7 @@ def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
 
 
 class Tokenizer(nn.Module):
-    """Tokenizer Model.
+    r"""Tokenizer Model.
 
     Parameters
     ----------
@@ -132,13 +132,13 @@ class Tokenizer(nn.Module):
 
     @property
     def n_tokens(self) -> int:
-        """Return number of tokens."""
+        r"""Return number of tokens."""
         return len(self.weight) + (
             0 if self.category_offsets is None else len(self.category_offsets)
         )
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
-        """Forward pass.
+        r"""Forward pass.
 
         Parameters
         ----------
@@ -185,7 +185,7 @@ class Tokenizer(nn.Module):
 
 
 class MultiheadAttention(nn.Module):
-    """Multihead attention."""
+    r"""Multihead attention."""
 
     def __init__(
         self, d: int, n_heads: int, dropout: float, initialization: str
@@ -227,7 +227,7 @@ class MultiheadAttention(nn.Module):
         key_compression: Optional[nn.Linear],
         value_compression: Optional[nn.Linear],
     ) -> Tensor:
-        """Forward pass.
+        r"""Forward pass.
 
         Parameters
         ----------
@@ -277,14 +277,14 @@ class MultiheadAttention(nn.Module):
 
 
 class FT_Transformer(nn.Module):
-    """FT_Transformer Model.
+    r"""FT_Transformer Model.
 
     References
     ----------
       - https://pytorch.org/docs/stable/generated/torch.nn.Transformer.html
       - https://github.com/facebookresearch/pytext/tree/master/pytext/models/representations/transformer
       - https://github.com/pytorch/fairseq/blob/1bba712622b8ae4efb3eb793a8a40da386fe11d0/examples/linformer/linformer_src/modules/multihead_linear_attention.py#L19
-    """  # noqa # pylint: disable=line-too-long
+    """  # noqa: E501 # pylint: disable=line-too-long
 
     def __init__(
         self,
@@ -398,7 +398,7 @@ class FT_Transformer(nn.Module):
         return x
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
-        """Forward pass.
+        r"""Forward pass.
 
         Parameters
         ----------

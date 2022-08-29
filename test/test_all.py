@@ -37,7 +37,7 @@ DEVICES = [torch.device("cpu")]
 
 BATCH_SHAPES = [(), (INNER_BATCH,), (OUTER_BATCH, INNER_BATCH)]
 
-MODELS = {
+MODELS: dict[type, dict] = {
     LinearContraction: {
         "initialization": (DIM, OUT),
         "input_shapes": ((LEN, DIM),),  # X
