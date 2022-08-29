@@ -46,9 +46,9 @@ def symmetric(x: Tensor) -> Tensor:
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Yᵀ = Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = Y
 
-    One can show analytically that Y = ½(X + Xᵀ) is the unique minimizer.
+    One can show analytically that Y = ½(X + X^⊤) is the unique minimizer.
 
     Parameters
     ----------
@@ -67,9 +67,9 @@ def skew_symmetric(x: Tensor) -> Tensor:
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Yᵀ = -Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
 
-    One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
+    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
 
     Parameters
     ----------
@@ -86,16 +86,16 @@ def skew_symmetric(x: Tensor) -> Tensor:
 def normal(x: Tensor) -> Tensor:
     r"""Return the closest normal matrix to X.
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. YᵀY = YYᵀ
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤Y = YY^⊤
 
     **The Lagrangian:**
 
-    .. math:: ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Yᵀ]⟩
+    .. math:: ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Y^⊤]⟩
 
     **First order necessary KKT condition:**
 
     .. math::
-            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λᵀ) - (Λ + Λᵀ)Y
+            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λ^⊤) - (Λ + Λ^⊤)Y
         \\⟺ Y &= X + [Y, Λ]
 
     **Second order sufficient KKT condition:**
@@ -126,12 +126,12 @@ def orthogonal(x: Tensor) -> Tensor:
 
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^𝖳 Y = 𝕀 = YY^𝖳
 
-    One can show analytically that `Y = UV^𝖳` is the unique minimizer,
-    where `X=UΣV^𝖳` is the SVD of `X`.
+    One can show analytically that $Y = UV^𝖳$ is the unique minimizer,
+    where $X=UΣV^𝖳$ is the SVD of $X$.
 
     References
     ----------
-    - <https://math.stackexchange.com/q/2215359>_
+    - `<https://math.stackexchange.com/q/2215359>`_
 
     Parameters
     ----------
@@ -153,7 +153,7 @@ def diagonal(x: Tensor) -> Tensor:
 
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
 
-    One can show analytically that `Y = diag(X)` is the unique minimizer.
+    One can show analytically that $Y = \diag(X)$ is the unique minimizer.
 
     Parameters
     ----------
