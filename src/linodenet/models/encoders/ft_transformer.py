@@ -284,7 +284,7 @@ class FT_Transformer(nn.Module):
       - https://pytorch.org/docs/stable/generated/torch.nn.Transformer.html
       - https://github.com/facebookresearch/pytext/tree/master/pytext/models/representations/transformer
       - https://github.com/pytorch/fairseq/blob/1bba712622b8ae4efb3eb793a8a40da386fe11d0/examples/linformer/linformer_src/modules/multihead_linear_attention.py#L19
-    """  # noqa # pylint: disable=line-too-long
+    """  # noqa: E501 # pylint: disable=line-too-long
 
     def __init__(
         self,
