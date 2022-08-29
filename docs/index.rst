@@ -1,17 +1,15 @@
-LinODEnet - **Lin**\ ear **O**\ rdinary **D**\ ifferential **E**\ quation **Net**\ work
-=======================================================================================
+LinODEnet - 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁work
+========================================================
 
 .. image:: ../diagram/linodenet-sketch.svg
    :width: 100%
    :alt: LinODEnet-sketch
-
 
 .. toctree::
    :titlesonly:
    :maxdepth: 2
    :name: mastertoc
 
-   Home page <self>
    API <autoapi/linodenet/index.rst>
    CHANGELOG <CHANGELOG>
    CONTRIBUTING <CONTRIBUTING>
