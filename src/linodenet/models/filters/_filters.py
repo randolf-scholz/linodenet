@@ -178,14 +178,29 @@ class KalmanCell(FilterABC):
     r"""A Kalman-Filter inspired non-linear Filter.
 
     We assume that `y = h(x)` and `y = H⋅x` in the linear case. We adapt  the formula
-    provided by the regular kalman filter and replace the matrices with learnable
+    provided by the regular Kalman Filter and replace the matrices with learnable
     parameters `A` and `B` and insert an neural network block `ψ`, typically a
     non-linear activation function followed by a linear layer `ψ(z)=Wϕ(z)`.
 
     .. math::
-        x̂' &= x̂ + P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂) \\
-           &⇝ x̂ + B⋅Hᵀ ∏ₘᵀA∏ₘ (y - Hx̂) \\
-           &⇝ x̂ + ψ(B Hᵀ ∏ₘᵀA∏ₘ (y - Hx̂))
+        x̂' &= x̂ + P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂)    \\
+           &⇝ x̂ + B⋅Hᵀ ∏ₘᵀA∏ₘ (y - Hx̂)                 \\
+           &⇝ x̂ + ψ(B Hᵀ ∏ₘᵀA ∏ₘ (y - Hx̂))
+
+    Here $yₜ$ is the observation vector. and $x̂$ is the state vector.
+
+
+    .. math::
+        x̂' &= x̂ - P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (Hx̂ - y)    \\
+           &⇝ x̂ - B⋅Hᵀ ∏ₘᵀA∏ₘ (Hx̂ - y)                 \\
+           &⇝ x̂ - ψ(B Hᵀ ∏ₘᵀA ∏ₘ (Hx̂ - y))
+
+    Note that in the autoregressive case, $H=𝕀$ and $P=R$. Thus
+
+    x̂' &= x̂ - ½ (x̂ - y)    \\
+       &= ½(x̂ + y)
+
+    So in this case, the filter precisely always chooses the average between the prediction and the measurement.
 
     The reason for a another linear transform after ϕ is to stabilize the distribution.
     Also, when `ϕ=𝖱𝖾𝖫𝖴`, it is necessary to allow negative updates.
@@ -197,7 +212,7 @@ class KalmanCell(FilterABC):
     ----------
     - | Kalman filter with outliers and missing observations
       | T. Cipra, R. Romera
-      | https://doi.org/10.1007/BF02564705=
+      | https://link.springer.com/article/10.1007/BF02564705
     """
 
     HP = {
