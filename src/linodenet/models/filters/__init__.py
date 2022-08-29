@@ -40,4 +40,4 @@ FILTERS: Final[dict[str, type[nn.Module]]] = {
     "KalmanCell": KalmanCell,
     "RecurrentCellFilter": RecurrentCellFilter,
 }
-"""Dictionary of all available filters."""
+r"""Dictionary of all available filters."""

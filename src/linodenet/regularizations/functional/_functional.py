@@ -3,7 +3,7 @@ r"""Regularizations for the Linear ODE Networks.
 Notes
 -----
 Contains regularizations in functional form.
-  - See :mod:`~linodenet.regularizations.modular` for modular implementations.
+  - See `~linodenet.regularizations.modular` for modular implementations.
 """
 
 
@@ -27,7 +27,7 @@ from linodenet.projections import functional as projections
 
 @jit.script
 def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
-    r"""Bias `\det(e^A)` towards 1.
+    r"""Bias $\det(e^A)$ towards 1.
 
     By Jacobi's formula
 

@@ -17,7 +17,7 @@ from linodenet.util import ReZeroCell, deep_dict_update
 
 
 class LinODECell(nn.Module):
-    r"""Linear System module, solves `ẋ = Ax`, i.e. `x̂ = e^{A\Delta t}x`.
+    r"""Linear System module, solves $ẋ = Ax$, i.e. $x̂ = e^{A{∆t}}x$.
 
     Parameters
     ----------

@@ -16,7 +16,7 @@ from torch import Tensor, jit, nn
 
 
 class ConcatEmbedding(nn.Module):
-    r"""Maps `x ⟼ [x,w]`.
+    r"""Maps $x ⟼ [x,w]$.
 
     Attributes
     ----------
@@ -94,7 +94,7 @@ class ConcatEmbedding(nn.Module):
 
 
 class ConcatProjection(nn.Module):
-    r"""Maps `z = [x,w] ⟼ x`.
+    r"""Maps $z = [x,w] ⟼ x$.
 
     Attributes
     ----------

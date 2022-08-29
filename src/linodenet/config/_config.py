@@ -13,7 +13,7 @@ __all__ = [
 import os
 
 os.environ["LINODENET_AUTOJIT"] = "True"
-"""Default value."""
+r"""Default value."""
 
 _NAME = __name__
 _FILE = __file__
@@ -40,4 +40,4 @@ class Config:
 
 
 conf: Config = Config()  # = Config(__name__, __doc__)
-"""The unique :class:`~linodenet.config.Config` instance used to configure :mod:`linodenet`."""
+r"""The unique `~linodenet.config.Config` instance used to configure `linodenet`."""

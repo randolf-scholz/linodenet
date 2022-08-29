@@ -33,7 +33,7 @@ from linodenet.util import (
 
 
 class ResNet_(nn.Module):
-    """Residual Network."""
+    r"""Residual Network."""
 
     def __init__(
         self,
@@ -92,7 +92,7 @@ class ResNet_(nn.Module):
         self.head = nn.Linear(d, d_out)
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
-        """Forward pass.
+        r"""Forward pass.
 
         Parameters
         ----------
@@ -142,7 +142,7 @@ class ResNet_(nn.Module):
 
 
 class ResNetBlock(nn.Sequential):
-    """Pre-activation ResNet block.
+    r"""Pre-activation ResNet block.
 
     References
     ----------
@@ -203,7 +203,7 @@ class ResNetBlock(nn.Sequential):
 
 
 class ResNet(nn.ModuleList):
-    """A ResNet model."""
+    r"""A ResNet model."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
