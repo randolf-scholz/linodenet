@@ -70,13 +70,13 @@ class SpectralNorm(torch.autograd.Function):
     r"""$‖A‖_2=λ_{𝗆𝖺𝗑}(A^⊤A)$.
 
     The spectral norm $∥A∥_2 ≔ \𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
-    $σ_\max(A) = √{λ_{𝗆𝖺𝗑} (AᵀA)}$, the largest singular value of $A$.
+    $σ_\max(A) = √{λ_{𝗆𝖺𝗑} (A^⊤A)}$, the largest singular value of $A$.
 
     It can be computed efficiently via Power iteration.
 
     One can show that the derivative is equal to:
 
-    .. math::  \frac{∂½∥A∥_2}/{∂A} = uvᵀ
+    .. math::  \frac{∂½∥A∥_2}/{∂A} = uv^⊤
 
     where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
 
@@ -187,7 +187,7 @@ class LinearContraction(nn.Module):
 
     # Buffers
     spectral_norm: Tensor
-    r"""BUFFER: The value of `‖W‖_2`"""
+    r"""BUFFER: The value of $‖W‖_2$"""
 
     # Parameters
     weight: Tensor
@@ -671,9 +671,9 @@ class iLowRankLayer(nn.Module):
 
     # PARAMETERS
     U: Tensor
-    r"""PARAM: `n×k` tensor"""
+    r"""PARAM: $n×k$ tensor"""
     V: Tensor
-    r"""PARAM: `n×k` tensor"""
+    r"""PARAM: $n×k$ tensor"""
 
     def __init__(self, input_size: int, rank: int, **HP: Any):
         super().__init__()

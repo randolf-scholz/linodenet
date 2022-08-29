@@ -468,7 +468,7 @@ autodoc_type_aliases = {
     "NA": "~pandas.NA",
     "NaT": "~pandas.NaT",
     "DataFrame": "~pandas.DataFrame",
-    "Series": ":class:`~pandas.Series`",
+    "Series": "`~pandas.Series`",
     "Index": "~pandas.Index",
     "MultiIndex": "~pandas.MultiIndex",
     "CategoricalIndex": "~pandas.CategoricalIndex",
@@ -610,23 +610,26 @@ intersphinx_disabled_reftypes = ["std:doc"]
 # See the MathJax Getting Started page for details. If you want MathJax to be available offline or without including
 # resources from a third-party site, you have to download it and set this value to a different path.
 
-mathjax_options = {}
+# mathjax_options = {}
 # The options to script tag for mathjax.
 # The default is empty {}.
 
-mathjax3_config = {}
-# The configuration options for MathJax v3 (which is used by default).
-
-mathjax2_config = {}
-# The configuration options for MathJax v2
-# The default is empty {}.
-
-mathjax_config = {
-    "tex2jax": {
-        "inlineMath": [["\\(", "\\)"]],
-        "displayMath": [["\\[", "\\]"]],
+mathjax3_config = {
+    "loader": {"load": [r"[tex]/physics"]},
+    "tex": {
+        "inlineMath": [[r"\(", r"\)"]],
+        "displayMath": [[r"\[", r"\]"]],
+        "packages": {"[+]": ["physics"]},
+        "macros": {
+            "diag": r"\operatorname{diag}",
+            "relu": r"\operatorname{ReLU}",
+        },
     },
 }
+# The configuration options for MathJax v3 (which is used by default).
+
+
+mathjax_config = {}
 # Former name of mathjax2_config.
 
 # endregion sphinx.ext.mathjax configuration --------------------------------------------------------------------------
@@ -703,7 +706,7 @@ napoleon_preprocess_types = True
 
 napoleon_type_aliases = {
     # torch
-    "torch": ":class:`torch`",
+    "torch": "`torch`",
     "Tensor": "~torch.Tensor",
     "nn.Module": "~torch.nn.Module",
     "SummaryWriter": "~torch.utils.tensorboard.writer.SummaryWriter",

@@ -158,17 +158,17 @@ class LinODEnet(nn.Module):
     kernel: Tensor
         PARAM: The system matrix of the linear ODE component.
     encoder: nn.Module
-        MODULE: Responsible for embedding `x̂→ẑ`.
+        MODULE: Responsible for embedding $x̂→ẑ$.
     embedding: nn.Module
-        MODULE: Responsible for embedding `x̂→ẑ`.
+        MODULE: Responsible for embedding $x̂→ẑ$.
     system: nn.Module
-        MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`.
+        MODULE: Responsible for propagating $ẑ_t→ẑ_{t+{∆t}}$.
     decoder: nn.Module
-        MODULE: Responsible for projecting `ẑ→x̂`.
+        MODULE: Responsible for projecting $ẑ→x̂$.
     projection: nn.Module
-        MODULE: Responsible for projecting `ẑ→x̂`.
+        MODULE: Responsible for projecting $ẑ→x̂$.
     filter: nn.Module
-        MODULE: Responsible for updating `(x̂, x_obs) →x̂'`.
+        MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
 
     name: Final[str] = __name__
@@ -314,14 +314,14 @@ class LinODEnet(nn.Module):
         T: Tensor, shape=(...,LEN) or PackedSequence
             The timestamps of the observations.
         X: Tensor, shape=(...,LEN,DIM) or PackedSequence
-            The observed, noisy values at times `t∈T`. Use ``NaN`` to indicate missing values.
+            The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
 
         Returns
         -------
         X̂_pre: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times `t⁻∈T` (pre-update).
+            The estimated true state of the system at the times $t⁻∈T$ (pre-update).
         X̂_post: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times `t⁺∈T` (post-update).
+            The estimated true state of the system at the times $t⁺∈T$ (post-update).
 
         References
         ----------
