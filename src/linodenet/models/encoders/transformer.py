@@ -14,7 +14,7 @@ from torch.nn import TransformerEncoder as _TransformerEncoder
 from linodenet.util import autojit, deep_dict_update, initialize_from
 
 TransformerEncoder = autojit(_TransformerEncoder)
-"""TransformerEncoder: Transformer based Encoder model."""
+r"""TransformerEncoder: Transformer based Encoder model."""
 
 
 class Transformer(nn.Module):

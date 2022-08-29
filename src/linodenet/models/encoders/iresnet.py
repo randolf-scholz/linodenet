@@ -25,11 +25,11 @@ from linodenet.util import ACTIVATIONS, Activation, ReZeroCell, deep_dict_update
 def spectral_norm(
     A: Tensor, atol: float = 1e-4, rtol: float = 1e-3, maxiter: int = 1
 ) -> Tensor:
-    r"""Compute the spectral norm `‖A‖_2` by power iteration.
+    r"""Compute the spectral norm $‖A‖_2$ by power iteration.
 
     Stopping criterion:
     - maxiter reached
-    - `‖ (A^TA -λI)x ‖_2 ≤ 𝗋𝗍𝗈𝗅⋅‖ λx ‖_2 + 𝖺𝗍𝗈𝗅`
+    - $‖(A^TA -λ𝕀)x‖_2 ≤ \text{𝗋𝗍𝗈𝗅}⋅‖λx‖_2 + \text{𝖺𝗍𝗈𝗅}$
 
     Parameters
     ----------
@@ -67,19 +67,18 @@ def spectral_norm(
 
 
 class SpectralNorm(torch.autograd.Function):
-    r"""`‖A‖_2=λ_{𝗆𝖺𝗑}(A^𝖳A)`.
+    r"""$‖A‖_2=λ_{𝗆𝖺𝗑}(A^⊤A)$.
 
-    The spectral norm `∥A∥_2 ≔ 𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2` can be shown to be equal to
-    `σ_\max(A) = √{λ_{𝗆𝖺𝗑} (AᵀA)}`, the largest singular value of `A`.
+    The spectral norm $∥A∥_2 ≔ \𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
+    $σ_\max(A) = √{λ_{𝗆𝖺𝗑} (AᵀA)}$, the largest singular value of $A$.
 
     It can be computed efficiently via Power iteration.
 
     One can show that the derivative is equal to:
 
-    .. math::
-        \frac{∂½∥A∥_2}/{∂A} = uvᵀ
+    .. math::  \frac{∂½∥A∥_2}/{∂A} = uvᵀ
 
-    where `u,v` are the left/right-singular vector corresponding to `σ_\max`
+    where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
 
     References
     ----------
@@ -674,9 +673,9 @@ class iLowRankLayer(nn.Module):
 
     # PARAMETERS
     U: Tensor
-    """PARAM: `n×k` tensor"""
+    r"""PARAM: `n×k` tensor"""
     V: Tensor
-    """PARAM: `n×k` tensor"""
+    r"""PARAM: `n×k` tensor"""
 
     def __init__(self, input_size: int, rank: int, **HP: Any):
         super().__init__()

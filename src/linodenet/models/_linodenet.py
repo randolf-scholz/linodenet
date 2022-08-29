@@ -26,7 +26,7 @@ __logger__ = logging.getLogger(__name__)
 
 
 class LinODE(nn.Module):
-    r"""Linear ODE module, to be used analogously to :func:`scipy.integrate.odeint`.
+    r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`.
 
     Attributes
     ----------
@@ -105,7 +105,7 @@ class LinODE(nn.Module):
         Returns
         -------
         Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times `t∈T`
+            The estimated true state of the system at the times $t∈T$.
         """
         DT = torch.moveaxis(torch.diff(T), -1, 0)
         X: list[Tensor] = [x0]
@@ -172,7 +172,7 @@ class LinODEnet(nn.Module):
     """
 
     name: Final[str] = __name__
-    """str: The name of the model."""
+    r"""str: The name of the model."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -210,7 +210,7 @@ class LinODEnet(nn.Module):
     zhat_post: Tensor
     r"""BUFFER: Stores post-jump latent values."""
     timedeltas: Tensor
-    """BUFFER: Stores the timedelta values."""
+    r"""BUFFER: Stores the timedelta values."""
 
     # Parameters:
     kernel: Tensor
