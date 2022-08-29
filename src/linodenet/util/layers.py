@@ -18,7 +18,7 @@ from linodenet.util._util import deep_dict_update, initialize_from_config
 
 
 class ReZeroCell(nn.Module):
-    """ReZero module.
+    r"""ReZero module.
 
     Simply multiplies the inputs by a scalar initialized to zero.
     """
@@ -85,7 +85,7 @@ class ReZero(nn.Sequential):
 
 
 class ReverseDense(nn.Module):
-    """ReverseDense module `x→A⋅ϕ(x)`."""
+    r"""ReverseDense module $x→A⋅ϕ(x)$."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -102,9 +102,9 @@ class ReverseDense(nn.Module):
     r"""The hyperparameter dictionary"""
 
     input_size: Final[int]
-    """The size of the input"""
+    r"""The size of the input"""
     output_size: Final[int]
-    """The size of the output"""
+    r"""The size of the output"""
 
     # PARAMETERS
     weight: Tensor

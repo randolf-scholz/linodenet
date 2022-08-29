@@ -1,7 +1,7 @@
 LinODEnet - **Lin**\ ear **O**\ rdinary **D**\ ifferential **E**\ quation **Net**\ work
 =======================================================================================
 
-.. image:: ../linodenet-sketch.svg
+.. image:: ../diagram/linodenet-sketch.svg
    :width: 100%
    :alt: LinODEnet-sketch
 

@@ -17,7 +17,7 @@ from linodenet.util import ReZeroCell, deep_dict_update
 
 
 class LinODECell(nn.Module):
-    r"""Linear System module, solves `ẋ = Ax`, i.e. `x̂ = e^{A\Delta t}x`.
+    r"""Linear System module, solves $ẋ = Ax$, i.e. $x̂ = e^{A{∆t}}x$.
 
     Parameters
     ----------
@@ -150,19 +150,19 @@ class LinODECell(nn.Module):
 
     @jit.export
     def forward(self, dt: Tensor, x0: Tensor) -> Tensor:
-        r"""Signature: `[...,]×[...,d] ⟶ [...,d]`.
+        r"""Signature: ``[(...,), (..., d)] -> (..., d)]``.
 
         Parameters
         ----------
         dt: Tensor, shape=(...,)
-            The time difference `t_1 - t_0` between `x_0` and `x̂`.
+            The time difference $t_1 - t_0$ between $x_0$ and $x̂$.
         x0:  Tensor, shape=(...,DIM)
-            Time observed value at `t_0`
+            Time observed value at $t_0$.
 
         Returns
         -------
         xhat:  Tensor, shape=(...,DIM)
-            The predicted value at `t_1`
+            The predicted value at $t_1$
         """
         A = self.kernel_parametrization(self.kernel)
         if self.use_rezero:

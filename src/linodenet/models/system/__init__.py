@@ -17,8 +17,8 @@ from torch import nn
 from linodenet.models.system._system import LinODECell
 
 System = nn.Module
-"""Type hint for the system model."""
+r"""Type hint for the system model."""
 
 
 SYSTEMS: Final[dict[str, type[System]]] = {"LinODECell": LinODECell}
-"""Dictionary of all available system models."""
+r"""Dictionary of all available system models."""

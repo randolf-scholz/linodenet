@@ -23,7 +23,7 @@ from linodenet.util._util import deep_dict_update, initialize_from_config
 
 
 class Series(nn.Sequential):
-    """An augmentation of nn.Sequential."""
+    r"""An augmentation of nn.Sequential."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -46,25 +46,25 @@ class Series(nn.Sequential):
         super().__init__(*modules)
 
     def __matmul__(self, other: nn.Module) -> Series:
-        """Chain with other module."""
+        r"""Chain with other module."""
         if isinstance(other, Series):
             return Series(*(*self, *other))
         return Series(*(*self, other))
 
     def __rmatmul__(self, other: nn.Module) -> Series:
-        """Chain with other module."""
+        r"""Chain with other module."""
         if isinstance(other, Series):
             return Series(*(*other, *self))
         return Series(*(other, *self))
 
     def __imatmul__(self, other: nn.Module) -> Series:
-        """Chain with other module."""
+        r"""Chain with other module."""
         raise NotImplementedError(
             "`@=` not possible because `nn.Sequential` does not implement an append function."
         )
 
     def simplify(self: Series) -> Series:
-        """Simplify the series by removing nesting."""
+        r"""Simplify the series by removing nesting."""
         modules: list[nn.Module] = []
         for module in self:
             if isinstance(module, Series):
@@ -75,7 +75,7 @@ class Series(nn.Sequential):
 
 
 class Parallel(nn.ModuleList):
-    """Modules in parallel."""
+    r"""Modules in parallel."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -118,24 +118,24 @@ class Parallel(nn.ModuleList):
         return result
 
     def __matmul__(self, other: nn.Module) -> Parallel:
-        """Chain with other module."""
+        r"""Chain with other module."""
         if isinstance(other, Parallel):
             return Parallel(*(*self, *other))
         return Parallel(*(*self, other))
 
     def __rmatmul__(self, other: nn.Module) -> Parallel:
-        """Chain with other module."""
+        r"""Chain with other module."""
         return Parallel(*(other, *self))
 
     def __imatmul__(self, other: nn.Module) -> Parallel:
-        """Chain with other module."""
+        r"""Chain with other module."""
         raise NotImplementedError(
             "`@=` not possible because `nn.Sequential` does not implement an append function."
         )
 
 
 class Repeat(nn.Sequential):
-    """An copies of a module multiple times."""
+    r"""An copies of a module multiple times."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -167,18 +167,18 @@ class Repeat(nn.Sequential):
 
 
 class Multiply(nn.Module):
-    """Multiply inputs with a learnable parameter.
+    r"""Multiply inputs with a learnable parameter.
 
     By default multiply with a scalar.
     """
 
     signature: Final[str]
-    """CONST: The signature"""
+    r"""CONST: The signature"""
     learnable: Final[bool]
-    """CONST: Whether the parameter is learnable."""
+    r"""CONST: Whether the parameter is learnable."""
 
     kernel: Tensor
-    """PARAM: The kernel"""
+    r"""PARAM: The kernel"""
 
     def __init__(
         self,
@@ -196,5 +196,5 @@ class Multiply(nn.Module):
         self.kernel = nn.Parameter(initial_value, requires_grad=learnable)
 
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass."""
+        r"""Forward pass."""
         return torch.einsum(self.signature, x, self.kernel)

@@ -6,6 +6,8 @@
         <entryData>
           <resourceRoots>
             <path value="file://$PROJECT_DIR$/docs/_static" />
+            <path value="file://$PROJECT_DIR$/docs/_ext" />
+            <path value="file://$PROJECT_DIR$/docs/_templates" />
           </resourceRoots>
         </entryData>
       </entry>

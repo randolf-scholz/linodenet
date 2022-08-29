@@ -26,7 +26,7 @@ __logger__ = logging.getLogger(__name__)
 
 
 class LinODE(nn.Module):
-    r"""Linear ODE module, to be used analogously to :func:`scipy.integrate.odeint`.
+    r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`.
 
     Attributes
     ----------
@@ -95,7 +95,7 @@ class LinODE(nn.Module):
 
     @jit.export
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
-        r"""Signature: `[...,N]×[...,d] ⟶ [...,N,d]`.
+        r""".. Signature:: ``[(..., N), (..., d)] -> (..., N, d)``.
 
         Parameters
         ----------
@@ -105,7 +105,7 @@ class LinODE(nn.Module):
         Returns
         -------
         Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times `t∈T`
+            The estimated true state of the system at the times $t∈T$.
         """
         DT = torch.moveaxis(torch.diff(T), -1, 0)
         X: list[Tensor] = [x0]
@@ -158,21 +158,21 @@ class LinODEnet(nn.Module):
     kernel: Tensor
         PARAM: The system matrix of the linear ODE component.
     encoder: nn.Module
-        MODULE: Responsible for embedding `x̂→ẑ`.
+        MODULE: Responsible for embedding $x̂→ẑ$.
     embedding: nn.Module
-        MODULE: Responsible for embedding `x̂→ẑ`.
+        MODULE: Responsible for embedding $x̂→ẑ$.
     system: nn.Module
-        MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`.
+        MODULE: Responsible for propagating $ẑ_t→ẑ_{t+{∆t}}$.
     decoder: nn.Module
-        MODULE: Responsible for projecting `ẑ→x̂`.
+        MODULE: Responsible for projecting $ẑ→x̂$.
     projection: nn.Module
-        MODULE: Responsible for projecting `ẑ→x̂`.
+        MODULE: Responsible for projecting $ẑ→x̂$.
     filter: nn.Module
-        MODULE: Responsible for updating `(x̂, x_obs) →x̂'`.
+        MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
 
     name: Final[str] = __name__
-    """str: The name of the model."""
+    r"""str: The name of the model."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -210,7 +210,7 @@ class LinODEnet(nn.Module):
     zhat_post: Tensor
     r"""BUFFER: Stores post-jump latent values."""
     timedeltas: Tensor
-    """BUFFER: Stores the timedelta values."""
+    r"""BUFFER: Stores the timedelta values."""
 
     # Parameters:
     kernel: Tensor
@@ -297,7 +297,7 @@ class LinODEnet(nn.Module):
 
     @jit.export
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
-        r"""Signature: `[...,N]×[...,N,d] ⟶ [...,N,d]`.
+        r""".. Signature:: ``[(..., n), (...,n,d) -> (..., N, d)``.
 
         **Model Sketch**::
 
@@ -314,14 +314,14 @@ class LinODEnet(nn.Module):
         T: Tensor, shape=(...,LEN) or PackedSequence
             The timestamps of the observations.
         X: Tensor, shape=(...,LEN,DIM) or PackedSequence
-            The observed, noisy values at times `t∈T`. Use ``NaN`` to indicate missing values.
+            The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
 
         Returns
         -------
         X̂_pre: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times `t⁻∈T` (pre-update).
+            The estimated true state of the system at the times $t⁻∈T$ (pre-update).
         X̂_post: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times `t⁺∈T` (post-update).
+            The estimated true state of the system at the times $t⁺∈T$ (post-update).
 
         References
         ----------

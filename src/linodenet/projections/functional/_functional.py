@@ -3,7 +3,7 @@ r"""Projections for the Linear ODE Networks.
 Notes
 -----
 Contains projections in functional form.
-  - See :mod:`~linodenet.projections.modular` for modular implementations.
+  - See `~linodenet.projections.modular` for modular implementations.
 """
 
 __all__ = [
@@ -25,10 +25,9 @@ from torch import Tensor, jit
 def identity(x: Tensor) -> Tensor:
     r"""Return x as-is.
 
-    .. math::
-        \min_Y ½∥X-Y∥_F^2
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
+    .. math:: \min_Y ½∥X-Y∥_F^2
 
     Parameters
     ----------
@@ -45,12 +44,11 @@ def identity(x: Tensor) -> Tensor:
 def symmetric(x: Tensor) -> Tensor:
     r"""Return the closest symmetric matrix to X.
 
-    .. math::
-        \min_Y ½∥X-Y∥_F^2 s.t. Yᵀ = Y
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    One can show analytically that Y = ½(X + Xᵀ) is the unique minimizer.
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = Y
 
-    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
+    One can show analytically that Y = ½(X + X^⊤) is the unique minimizer.
 
     Parameters
     ----------
@@ -67,12 +65,11 @@ def symmetric(x: Tensor) -> Tensor:
 def skew_symmetric(x: Tensor) -> Tensor:
     r"""Return the closest skew-symmetric matrix to X.
 
-    .. math::
-        \min_Y ½∥X-Y∥_F^2 s.t. Yᵀ = -Y
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
 
-    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
+    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
 
     Parameters
     ----------
@@ -89,18 +86,16 @@ def skew_symmetric(x: Tensor) -> Tensor:
 def normal(x: Tensor) -> Tensor:
     r"""Return the closest normal matrix to X.
 
-    .. math::
-        \min_Y ½∥X-Y∥_F^2 s.t. YᵀY = YYᵀ
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤Y = YY^⊤
 
     **The Lagrangian:**
 
-    .. math::
-        ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Yᵀ]⟩
+    .. math:: ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Y^⊤]⟩
 
     **First order necessary KKT condition:**
 
     .. math::
-            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λᵀ) - (Λ + Λᵀ)Y
+            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λ^⊤) - (Λ + Λ^⊤)Y
         \\⟺ Y &= X + [Y, Λ]
 
     **Second order sufficient KKT condition:**
@@ -110,7 +105,7 @@ def normal(x: Tensor) -> Tensor:
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|𝕀⊗𝕀 + Λ⊗𝕀 − 𝕀⊗Λ|S⟩ ≥ 0
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
 
-    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
 
     Parameters
     ----------
@@ -127,17 +122,16 @@ def normal(x: Tensor) -> Tensor:
 def orthogonal(x: Tensor) -> Tensor:
     r"""Return the closest orthogonal matrix to X.
 
-    .. math::
-        \min_Y ½∥X-Y∥_F^2 s.t. Y^𝖳 Y = 𝕀 = YY^𝖳
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    One can show analytically that `Y = UV^𝖳` is the unique minimizer,
-    where `X=UΣV^𝖳` is the SVD of `X`.
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^𝖳 Y = 𝕀 = YY^𝖳
 
-    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
+    One can show analytically that $Y = UV^𝖳$ is the unique minimizer,
+    where $X=UΣV^𝖳$ is the SVD of $X$.
 
     References
     ----------
-    - <https://math.stackexchange.com/q/2215359>_
+    - `<https://math.stackexchange.com/q/2215359>`_
 
     Parameters
     ----------
@@ -155,12 +149,11 @@ def orthogonal(x: Tensor) -> Tensor:
 def diagonal(x: Tensor) -> Tensor:
     r"""Return the closest diagonal matrix to X.
 
-    .. math::
-        \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    One can show analytically that `Y = diag(X)` is the unique minimizer.
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
 
-    **Signature:** ``(..., n,n) ⟶ (..., n, n)``
+    One can show analytically that $Y = \diag(X)$ is the unique minimizer.
 
     Parameters
     ----------
