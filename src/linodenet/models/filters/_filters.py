@@ -176,10 +176,10 @@ class KalmanFilter(FilterABC):
 class KalmanCell(FilterABC):
     r"""A Kalman-Filter inspired non-linear Filter.
 
-    We assume that `y = h(x)` and `y = H⋅x` in the linear case. We adapt  the formula
+    We assume that $y = h(x)$ and $y = H⋅x$ in the linear case. We adapt  the formula
     provided by the regular Kalman Filter and replace the matrices with learnable
-    parameters `A` and `B` and insert an neural network block `ψ`, typically a
-    non-linear activation function followed by a linear layer `ψ(z)=Wϕ(z)`.
+    parameters $A$ and $B$ and insert an neural network block $ψ$, typically a
+    non-linear activation function followed by a linear layer $ψ(z)=Wϕ(z)$.
 
     .. math::
         x̂' &= x̂ + P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂)    \\
@@ -201,11 +201,11 @@ class KalmanCell(FilterABC):
 
     So in this case, the filter precisely always chooses the average between the prediction and the measurement.
 
-    The reason for a another linear transform after ϕ is to stabilize the distribution.
-    Also, when `ϕ=𝖱𝖾𝖫𝖴`, it is necessary to allow negative updates.
+    The reason for a another linear transform after $ϕ$ is to stabilize the distribution.
+    Also, when $ϕ=𝖱𝖾𝖫𝖴$, it is necessary to allow negative updates.
 
-    Note that in the autoregressive case, i.e. `H=𝕀`, the equation can be simplified
-    towards `x̂' ⇝ x̂ + ψ( B ∏ₘᵀ A ∏ₘ (y - Hx̂) )`.
+    Note that in the autoregressive case, i.e. $H=𝕀$, the equation can be simplified
+    towards $x̂' ⇝ x̂ + ψ( B ∏ₘᵀ A ∏ₘ (y - Hx̂) )$.
 
     References
     ----------
@@ -316,7 +316,7 @@ class KalmanCell(FilterABC):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: `[...,m], [...,n] ⟶ [...,n]`.
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``.
 
         Parameters
         ----------
@@ -371,7 +371,7 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: `[...,m], [...,n] ⟶ [...,n]`."""
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         z = self.filter(y, x)
         for module in self.layers:
             z = module(z)
@@ -416,7 +416,7 @@ class SequentialFilter(FilterABC, nn.ModuleList):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: `[...,m], [...,n] ⟶ [...,n]`."""
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         for module in self:
             x = module(y, x)
         return x
@@ -501,7 +501,7 @@ class RecurrentCellFilter(FilterABC):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: `[...,m], [...,n] ⟶ [...,n]`.
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``.
 
         Parameters
         ----------

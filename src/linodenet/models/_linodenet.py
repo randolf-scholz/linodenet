@@ -95,7 +95,7 @@ class LinODE(nn.Module):
 
     @jit.export
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
-        r"""Signature: `[...,N]×[...,d] ⟶ [...,N,d]`.
+        r""".. Signature:: ``[(..., N), (..., d)] -> (..., N, d)``.
 
         Parameters
         ----------
@@ -297,7 +297,7 @@ class LinODEnet(nn.Module):
 
     @jit.export
     def forward(self, T: Tensor, X: Tensor) -> Tensor:
-        r"""Signature: `[...,N]×[...,N,d] ⟶ [...,N,d]`.
+        r""".. Signature:: ``[(..., n), (...,n,d) -> (..., N, d)``.
 
         **Model Sketch**::
 
