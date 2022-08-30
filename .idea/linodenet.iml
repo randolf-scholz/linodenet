@@ -25,7 +25,7 @@
       <excludeFolder url="file://$MODULE_DIR$/docs/autoapi" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="Python 3.10 (linodenet)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

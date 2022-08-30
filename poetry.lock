@@ -91,7 +91,6 @@ python-versions = ">=3.7.2"
 
 [package.dependencies]
 lazy-object-proxy = ">=1.4.0"
-typing-extensions = {version = ">=3.10", markers = "python_version < \"3.10\""}
 wrapt = {version = ">=1.11,<2", markers = "python_version < \"3.11\""}
 
 [[package]]
@@ -180,7 +179,6 @@ pathspec = ">=0.9.0"
 platformdirs = ">=2"
 tokenize-rt = {version = ">=3.2.0", optional = true, markers = "extra == \"jupyter\""}
 tomli = {version = ">=1.1.0", markers = "python_full_version < \"3.11.0a7\""}
-typing-extensions = {version = ">=3.10.0.0", markers = "python_version < \"3.10\""}
 
 [package.extras]
 colorama = ["colorama (>=0.4.3)"]
@@ -982,7 +980,6 @@ python-versions = ">=3.7"
 
 [package.dependencies]
 babel = "*"
-importlib-metadata = {version = ">=3.6", markers = "python_version < \"3.10\""}
 jinja2 = ">=3.0.3"
 json5 = "*"
 jsonschema = ">=3.0.1"
@@ -1011,7 +1008,6 @@ optional = false
 python-versions = ">=3.7"
 
 [package.dependencies]
-importlib-metadata = {version = ">=3.6", markers = "python_version < \"3.10\""}
 jeepney = {version = ">=0.4.2", markers = "sys_platform == \"linux\""}
 pywin32-ctypes = {version = "<0.1.0 || >0.1.0,<0.1.1 || >0.1.1", markers = "sys_platform == \"win32\""}
 SecretStorage = {version = ">=3.2", markers = "sys_platform == \"linux\""}
@@ -1057,9 +1053,6 @@ description = "Python implementation of Markdown."
 category = "dev"
 optional = false
 python-versions = ">=3.7"
-
-[package.dependencies]
-importlib-metadata = {version = ">=4.4", markers = "python_version < \"3.10\""}
 
 [package.extras]
 testing = ["coverage", "pyyaml"]
@@ -1206,7 +1199,6 @@ python-versions = ">=3.7"
 beautifulsoup4 = "*"
 bleach = "*"
 defusedxml = "*"
-importlib-metadata = {version = ">=3.6", markers = "python_version < \"3.10\""}
 jinja2 = ">=3.0"
 jupyter-core = ">=4.7"
 jupyterlab-pygments = "*"
@@ -1360,12 +1352,7 @@ optional = false
 python-versions = ">=3.8"
 
 [package.dependencies]
-numpy = [
-    {version = ">=1.18.5", markers = "platform_machine != \"aarch64\" and platform_machine != \"arm64\" and python_version < \"3.10\""},
-    {version = ">=1.19.2", markers = "platform_machine == \"aarch64\" and python_version < \"3.10\""},
-    {version = ">=1.20.0", markers = "platform_machine == \"arm64\" and python_version < \"3.10\""},
-    {version = ">=1.21.0", markers = "python_version >= \"3.10\""},
-]
+numpy = {version = ">=1.21.0", markers = "python_version >= \"3.10\""}
 python-dateutil = ">=2.8.1"
 pytz = ">=2020.1"
 
@@ -1694,7 +1681,6 @@ mccabe = ">=0.6,<0.8"
 platformdirs = ">=2.2.0"
 tomli = {version = ">=1.1.0", markers = "python_version < \"3.11\""}
 tomlkit = ">=0.10.1"
-typing-extensions = {version = ">=3.10.0", markers = "python_version < \"3.10\""}
 
 [package.extras]
 spelling = ["pyenchant (>=3.2,<4.0)"]
@@ -2117,7 +2103,6 @@ babel = ">=1.3"
 colorama = {version = ">=0.3.5", markers = "sys_platform == \"win32\""}
 docutils = ">=0.14,<0.20"
 imagesize = "*"
-importlib-metadata = {version = ">=4.4", markers = "python_version < \"3.10\""}
 Jinja2 = ">=2.3"
 packaging = "*"
 Pygments = ">=2.0"
@@ -2452,11 +2437,11 @@ test = ["pre-commit", "pytest"]
 
 [[package]]
 name = "tsdm"
-version = "0.2.8.post343"
+version = "0.3.0.post359"
 description = "Time-Series Datasets and Models"
 category = "dev"
 optional = false
-python-versions = ">=3.9,<3.11"
+python-versions = ">=3.10,<3.11"
 
 [package.dependencies]
 h5py = ">=3.4.0"
@@ -2471,8 +2456,8 @@ scipy = ">=1.7"
 tables = ">=3.6"
 tensorboard = ">=2.9"
 torch = ">=1.12"
-tqdm = ">=4.64.0,<5.0.0"
-types-Pillow = ">=9.0.15"
+tqdm = ">=4.64.0"
+typing-extensions = ">=4.3.0"
 
 [package.source]
 type = "legacy"
@@ -2692,8 +2677,8 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 
 [metadata]
 lock-version = "1.1"
-python-versions = ">=3.9, <3.11"
-content-hash = "2eadd73ad40346b39d12c40f22d33667175fd4a0cf3590e154aef07637901473"
+python-versions = ">=3.10, <3.11"
+content-hash = "596b1b8bb9061eddd3b503000f476ebe237f0333c6dced0db669ebce2ec6cb13"
 
 [metadata.files]
 absl-py = [
@@ -4176,8 +4161,8 @@ traitlets = [
     {file = "traitlets-5.3.0.tar.gz", hash = "sha256:0bb9f1f9f017aa8ec187d8b1b2a7a6626a2a1d877116baba52a129bfa124f8e2"},
 ]
 tsdm = [
-    {file = "tsdm-0.2.8.post343-py3-none-any.whl", hash = "sha256:e12bac3d7e3349e19564100857a1003016331e838a68b5f4f667b3bb2658b14a"},
-    {file = "tsdm-0.2.8.post343.tar.gz", hash = "sha256:48a10667317606a38ae50ae29a31dbc2980ecea6efa0f89827993eea69b71866"},
+    {file = "tsdm-0.3.0.post359-py3-none-any.whl", hash = "sha256:1e46cf83026a0388d48e972bad37041f34a967e69f7df46eaefa474c4c23fd35"},
+    {file = "tsdm-0.3.0.post359.tar.gz", hash = "sha256:dba2fa8e4a9048c3c6e12cd711afa21eaf6ea79ab84a6219564a735122824f7d"},
 ]
 twine = [
     {file = "twine-4.0.1-py3-none-any.whl", hash = "sha256:42026c18e394eac3e06693ee52010baa5313e4811d5a11050e7d48436cf41b9e"},
