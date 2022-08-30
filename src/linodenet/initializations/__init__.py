@@ -24,28 +24,65 @@ __all__ = [
     # Constants
     "FunctionalInitializations",
     "ModularInitializations",
-    "INITIALIZATIONS",
+    "Initializations",
     # Sub-Modules
     "functional",
     "modular",
+    # Functions
+    "canonical_skew_symmetric",
+    "diagonally_dominant",
+    "gaussian",
+    "low_rank",
+    "orthogonal",
+    "skew_symmetric",
+    "special_orthogonal",
+    "symmetric",
+    # Classes
 ]
 
-from typing import Final, Union
+from typing import Callable, Final, Union
+
+from torch import Tensor, nn
 
 from linodenet.initializations import functional, modular
 from linodenet.initializations.functional import (
-    FunctionalInitialization,
-    FunctionalInitializations,
+    canonical_skew_symmetric,
+    diagonally_dominant,
+    gaussian,
+    low_rank,
+    orthogonal,
+    skew_symmetric,
+    special_orthogonal,
+    symmetric,
 )
-from linodenet.initializations.modular import (
-    ModularInitialization,
-    ModularInitializations,
-)
+
+ModularInitialization = nn.Module
+r"""Type hint for modular regularizations."""
+
+ModularInitializations: Final[dict[str, type[ModularInitialization]]] = {}
+r"""Dictionary of all available modular metrics."""
+
+FunctionalInitialization = Callable[
+    [int | tuple[int, ...]], Tensor
+]  # SizeLike to matrix
+r"""Type hint for Initializations."""
+
+FunctionalInitializations: Final[dict[str, FunctionalInitialization]] = {
+    "canonical_skew_symmetric": canonical_skew_symmetric,
+    "diagonally_dominant": diagonally_dominant,
+    "gaussian": gaussian,
+    "low_rank": low_rank,
+    "orthogonal": orthogonal,
+    "skew-symmetric": skew_symmetric,
+    "special-orthogonal": special_orthogonal,
+    "symmetric": symmetric,
+}
+r"""Dictionary containing all available initializations."""
 
 Initialization = Union[FunctionalInitialization, ModularInitialization]
 r"""Type hint for initializations."""
 
-INITIALIZATIONS: Final[
+Initializations: Final[
     dict[str, Union[FunctionalInitialization, type[ModularInitialization]]]
 ] = {
     **FunctionalInitializations,

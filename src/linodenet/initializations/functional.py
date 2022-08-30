@@ -9,8 +9,6 @@ Contains initializations in functional form.
 """
 
 __all__ = [
-    # Types
-    "SizeLike",
     # Functions
     "canonical_skew_symmetric",
     "diagonally_dominant",
@@ -24,13 +22,13 @@ __all__ = [
 
 from collections.abc import Sequence
 from math import prod, sqrt
-from typing import Optional, Union
+from typing import Optional, TypeAlias
 
 import torch
 from scipy import stats
 from torch import Tensor
 
-SizeLike = Union[int, tuple[int, ...]]
+SizeLike: TypeAlias = int | tuple[int, ...]
 r"""Type hint for shape-like inputs."""
 
 
@@ -228,3 +226,6 @@ def low_rank(size: SizeLike, rank: Optional[int] = None) -> Tensor:
     V = torch.normal(mean=torch.zeros((*batch, rank, n)), std=1 / sqrt(n))
 
     return torch.einsum("...ij, ...jk -> ...ik", U, V)
+
+
+baba = 2
