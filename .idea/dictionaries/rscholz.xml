@@ -15,6 +15,7 @@
       <w>bysource</w>
       <w>celu</w>
       <w>cipra</w>
+      <w>classmethod</w>
       <w>copybutton</w>
       <w>dtype</w>
       <w>dunder</w>
@@ -68,6 +69,7 @@
       <w>overset</w>
       <w>pageview</w>
       <w>prenormalization</w>
+      <w>pycodestyle</w>
       <w>reftypes</w>
       <w>reglu</w>
       <w>regularizations</w>
@@ -94,6 +96,7 @@
       <w>tput</w>
       <w>tsdm</w>
       <w>undoc</w>
+      <w>unindent</w>
       <w>unsubscriptable</w>
       <w>viewcode</w>
       <w>warningiserror</w>

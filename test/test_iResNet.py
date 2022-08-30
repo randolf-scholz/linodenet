@@ -17,7 +17,7 @@ from torch import Tensor
 
 from linodenet.models import LinearContraction, iResNetBlock
 from tsdm.linalg import scaled_norm
-from tsdm.plot import visualize_distribution
+from tsdm.viz import visualize_distribution
 
 __logger__ = logging.getLogger(__name__)  # noqa: E402
 
