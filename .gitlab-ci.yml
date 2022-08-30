@@ -109,7 +109,7 @@ setup:
       --left-text="python"
       --right-text="3.9"
       --whole-link="https://www.python.org/"
-      --logo="https://upload.wikimedia.org/wikipedia/commons/c/c3/Python-logo-notext.svg"
+      --logo="https://s3.dualstack.us-east-2.amazonaws.com/pythondotorg-assets/media/files/python-logo-only.svg"
       --embed-logo
       > badges/python.svg
     # generate package version badge

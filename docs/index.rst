@@ -1,5 +1,5 @@
 LinODEnet - 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁work
-========================================================
+===========================================================
 
 .. image:: ../diagram/linodenet-sketch.svg
    :width: 100%
