@@ -15,8 +15,3 @@ First create a virtual environment, note that poetry might be currently broken.
   python -m venv .venv
   .venv/bin/activate
   poetry install
-
-
-
-
-
