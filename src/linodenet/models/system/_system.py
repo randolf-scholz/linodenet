@@ -164,6 +164,6 @@ class LinODECell(nn.Module):
         if self.use_rezero:
             A = self.rezero(A)
         Adt = torch.einsum("kl, ... -> ...kl", A, dt)
-        expAdt = torch.matrix_exp(Adt)
+        expAdt = torch.linalg.matrix_exp(Adt)
         xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)
         return xhat

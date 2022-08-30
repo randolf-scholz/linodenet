@@ -98,7 +98,7 @@ nodeenv==1.7.0; python_version >= "3.7" and python_full_version < "3.0.0" or pyt
 notebook==6.4.12; python_version >= "3.7"
 notebook-shim==0.1.0; python_version >= "3.7"
 numexpr==2.8.3; python_version >= "3.10" and python_version < "3.11"
-numpy==1.23.2; python_version >= "3.10" and python_version < "3.11"
+numpy==1.23.2; python_version >= "3.8"
 oauthlib==3.2.0; python_version >= "3.10" and python_full_version < "3.0.0" and python_version < "3.11" or python_version >= "3.10" and python_version < "3.11" and python_full_version >= "3.4.0"
 packaging==21.3; python_version >= "3.10" and python_version < "3.11"
 pandas==1.4.3; python_version >= "3.10" and python_version < "3.11"
