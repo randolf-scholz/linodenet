@@ -22,7 +22,7 @@ class LinODECell(nn.Module):
     Parameters
     ----------
     input_size: int
-    kernel_initialization: Union[Tensor, Callable[int, Tensor]]
+    kernel_initialization: Tensor | Callable[[int], Tensor]
 
     Attributes
     ----------
@@ -71,10 +71,6 @@ class LinODECell(nn.Module):
     def __init__(
         self,
         input_size: int,
-        # kernel_initialization: Optional[
-        #     Union[str, Tensor, FunctionalInitialization]
-        # ] = None,
-        # kernel_parametrization: Optional[Union[str, Projection]] = None,
         **HP: Any,
     ):
         super().__init__()
