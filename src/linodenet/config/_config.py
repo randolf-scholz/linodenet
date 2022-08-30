@@ -18,9 +18,6 @@ r"""Default value."""
 _NAME = __name__
 _FILE = __file__
 
-_NAME = __name__
-_FILE = __file__
-
 
 class Config:
     r"""Configuration Interface."""
