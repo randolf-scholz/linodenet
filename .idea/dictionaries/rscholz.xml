@@ -16,6 +16,7 @@
       <w>celu</w>
       <w>cipra</w>
       <w>classmethod</w>
+      <w>codeclimate</w>
       <w>copybutton</w>
       <w>discretizes</w>
       <w>dtype</w>
@@ -38,6 +39,7 @@
       <w>hyperparameters</w>
       <w>includehidden</w>
       <w>intersphinx</w>
+      <w>ismll</w>
       <w>jacobian</w>
       <w>jian</w>
       <w>jitting</w>
@@ -63,6 +65,7 @@
       <w>mension</w>
       <w>mish</w>
       <w>miyato</w>
+      <w>moduledir</w>
       <w>multihead</w>
       <w>nblocks</w>
       <w>ngth</w>
@@ -96,6 +99,7 @@
       <w>subblocks</w>
       <w>svdvals</w>
       <w>tanhshrink</w>
+      <w>testdir</w>
       <w>tfrac</w>
       <w>timedeltas</w>
       <w>toctree</w>
@@ -106,6 +110,7 @@
       <w>undoc</w>
       <w>unindent</w>
       <w>unsubscriptable</w>
+      <w>venvname</w>
       <w>viewcode</w>
       <w>warningiserror</w>
       <w>weakref</w>
