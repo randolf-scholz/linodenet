@@ -10,7 +10,7 @@ from typing import Any, Final
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import FunctionalInitializations
+from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
 from linodenet.util import ReZeroCell, deep_dict_update
@@ -91,9 +91,9 @@ class LinODECell(nn.Module):
                 return lambda: gaussian(input_size)
             if isinstance(kernel_init, str):
                 assert (
-                    kernel_init in FunctionalInitializations
+                    kernel_init in FUNCTIONAL_INITIALIZATIONS
                 ), "Unknown initialization!"
-                _init = FunctionalInitializations[kernel_init]
+                _init = FUNCTIONAL_INITIALIZATIONS[kernel_init]
                 return lambda: _init(input_size)
             if callable(kernel_init):
                 assert Tensor(kernel_init(input_size)).shape == (

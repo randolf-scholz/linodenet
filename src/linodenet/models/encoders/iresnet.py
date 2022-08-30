@@ -17,8 +17,9 @@ from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
+from linodenet.activations import MODULAR_ACTIVATIONS, ModularActivation
 from linodenet.initializations.functional import low_rank
-from linodenet.util import ACTIVATIONS, Activation, ReZeroCell, deep_dict_update
+from linodenet.util import ReZeroCell, deep_dict_update
 
 
 @jit.script
@@ -445,7 +446,7 @@ class iResNetBlock(nn.Module):
         self.rtol = HP["rtol"]
         self.maxiter = HP["maxiter"]
         self.bias = HP["bias"]
-        self._Activation: type[Activation] = ACTIVATIONS[HP["activation"]]
+        self._Activation: type[ModularActivation] = MODULAR_ACTIVATIONS[HP["activation"]]
         self.activation = self._Activation(**HP["activation_config"])
         # gain = nn.init.calculate_gain(self._Activation)
 
