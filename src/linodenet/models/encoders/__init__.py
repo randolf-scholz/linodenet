@@ -18,7 +18,7 @@ __all__ = [
     "spectral_norm",
 ]
 
-from typing import Final
+from typing import Final, TypeAlias
 
 from torch import nn
 
@@ -33,7 +33,7 @@ from linodenet.models.encoders.iresnet import (
 from linodenet.models.encoders.resnet import ResNet, ResNetBlock
 from linodenet.models.encoders.transformer import Transformer
 
-Encoder = nn.Module
+Encoder: TypeAlias = nn.Module
 r"""Type hint for Encoders."""
 
 ENCODERS: Final[dict[str, type[Encoder]]] = {

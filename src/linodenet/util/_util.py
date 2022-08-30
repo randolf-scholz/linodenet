@@ -1,12 +1,6 @@
 r"""Utility functions."""
 
 __all__ = [
-    # Types
-    "Activation",
-    "LookupTable",
-    # Constants
-    "ACTIVATIONS",
-    # Classes
     # Functions
     "autojit",
     "deep_dict_update",
@@ -14,6 +8,8 @@ __all__ = [
     "flatten",
     "initialize_from",
     "initialize_from_config",
+    "is_dunder",
+    # Classes
 ]
 
 import logging
@@ -22,7 +18,7 @@ from copy import deepcopy
 from functools import partial, wraps
 from importlib import import_module
 from types import ModuleType
-from typing import Any, Final, TypeVar, Union
+from typing import Any, TypeVar
 
 import torch
 from torch import Tensor, jit, nn
@@ -34,47 +30,8 @@ __logger__ = logging.getLogger(__name__)
 ObjectType = TypeVar("ObjectType")
 r"""Generic type hint for instances."""
 
-LookupTable = Mapping[str, type[ObjectType]]
-r"""Table of object classes."""
-
-
 nnModuleType = TypeVar("nnModuleType", bound=nn.Module)
 r"""Type Variable for nn.Modules."""
-
-Activation = nn.Module
-r"""Type hint for activation Functions."""
-
-ACTIVATIONS: Final[LookupTable[nn.Module]] = {
-    "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
-    "ELU": nn.ELU,
-    "Hardshrink": nn.Hardshrink,
-    "Hardsigmoid": nn.Hardsigmoid,
-    "Hardtanh": nn.Hardtanh,
-    "Hardswish": nn.Hardswish,
-    "Identity": nn.Identity,
-    "LeakyReLU": nn.LeakyReLU,
-    "LogSigmoid": nn.LogSigmoid,
-    "LogSoftmax": nn.LogSoftmax,
-    "MultiheadAttention": nn.MultiheadAttention,
-    "PReLU": nn.PReLU,
-    "ReLU": nn.ReLU,
-    "ReLU6": nn.ReLU6,
-    "RReLU": nn.RReLU,
-    "SELU": nn.SELU,
-    "CELU": nn.CELU,
-    "GELU": nn.GELU,
-    "Sigmoid": nn.Sigmoid,
-    "SiLU": nn.SiLU,
-    "Softmax": nn.Softmax,
-    "Softmax2d": nn.Softmax2d,
-    "Softplus": nn.Softplus,
-    "Softshrink": nn.Softshrink,
-    "Softsign": nn.Softsign,
-    "Tanh": nn.Tanh,
-    "Tanhshrink": nn.Tanhshrink,
-    "Threshold": nn.Threshold,
-}
-r"""Dictionary containing all available activations."""
 
 
 def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
@@ -170,7 +127,7 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
     return WrappedClass
 
 
-def flatten(inputs: Union[Tensor, Iterable[Tensor]]) -> Tensor:
+def flatten(inputs: Tensor | Iterable[Tensor]) -> Tensor:
     r"""Flattens element of general Hilbert space.
 
     Parameters
@@ -189,7 +146,7 @@ def flatten(inputs: Union[Tensor, Iterable[Tensor]]) -> Tensor:
 
 
 def initialize_from(
-    lookup_table: Union[LookupTable[ObjectType], ModuleType],
+    lookup_table: ModuleType | dict[str, type[ObjectType]],
     /,
     __name__: str,
     **kwargs: Any,

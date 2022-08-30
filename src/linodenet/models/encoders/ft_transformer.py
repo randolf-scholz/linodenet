@@ -24,17 +24,7 @@ from torch import Tensor, nn
 from torch.nn import init as nn_init
 from torch.nn.functional import dropout, gelu, relu, softmax
 
-
-def reglu(x: Tensor) -> Tensor:
-    r"""Regularized gelu activation function."""
-    a, b = x.chunk(2, dim=-1)
-    return a * relu(b)
-
-
-def geglu(x: Tensor) -> Tensor:
-    r"""Gelu activation function."""
-    a, b = x.chunk(2, dim=-1)
-    return a * gelu(b)
+from linodenet.activations import geglu, reglu
 
 
 def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:

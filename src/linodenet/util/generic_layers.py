@@ -7,10 +7,10 @@ from __future__ import annotations
 
 __all__ = [
     # Classes
+    "Multiply",
+    "Parallel",
     "Repeat",
     "Series",
-    "Parallel",
-    "Multiply",
 ]
 
 from collections.abc import Callable

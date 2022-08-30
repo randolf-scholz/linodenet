@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import pytest
 import torch
 
-from linodenet.initializations.functional import FunctionalInitializations
+from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
 
 __logger__ = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def _make_fig(path, means, stdvs, key):
         fig.savefig(path / f"{key}.svg")
 
 
-@pytest.mark.parametrize("key", FunctionalInitializations)
+@pytest.mark.parametrize("key", FUNCTIONAL_INITIALIZATIONS)
 def test_initialization(
     key: str,
     num_runs: int = 1000,
@@ -62,7 +62,7 @@ def test_initialization(
     x = torch.randn(num_runs, num_samples, dim)
 
     __logger__.info("Testing %s", key)
-    initialization = FunctionalInitializations[key]
+    initialization = FUNCTIONAL_INITIALIZATIONS[key]
     # Batch compute A⋅x for num_samples of x and num_runs many samples of A
     matrices = initialization((num_runs, dim))  # (num_runs, dim, dim)
     y = torch.einsum(
@@ -96,9 +96,9 @@ def test_initialization(
 def test_all_initializations(make_plot: bool = False) -> None:
     r"""Test all initializations."""
     __logger__.info(
-        "Testing all available initializations %s", set(FunctionalInitializations)
+        "Testing all available initializations %s", set(FUNCTIONAL_INITIALIZATIONS)
     )
-    for key in FunctionalInitializations:
+    for key in FUNCTIONAL_INITIALIZATIONS:
         test_initialization(key, make_plot=make_plot)
     __logger__.info("All initializations passed! ✔ ")
 

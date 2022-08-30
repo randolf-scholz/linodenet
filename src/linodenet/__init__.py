@@ -19,8 +19,8 @@ from importlib import metadata
 from types import ModuleType
 
 # version check
-if sys.version_info < (3, 9):
-    raise RuntimeError("Python >= 3.9 required")
+if sys.version_info < (3, 10):
+    raise RuntimeError("Python >= 3.10 required")
 
 # pylint: disable=wrong-import-position
 
