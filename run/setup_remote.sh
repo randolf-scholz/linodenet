@@ -7,8 +7,8 @@ for remote_name in $(git remote); do
     git remote remove "${remote_name}"
 done
 
-BERLIN="https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git"
-HILDESHEIM="https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.git"
+BERLIN="https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet.git"
+HILDESHEIM="https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/linodenet.git"
 
 echo -e "\nAdding remote ${BERLIN}..."
 git remote add berlin $BERLIN
