@@ -68,16 +68,16 @@ def spectral_norm(
 
 
 class SpectralNorm(torch.autograd.Function):
-    r"""$‖A‖_2=λ_{𝗆𝖺𝗑}(A^⊤A)$.
+    r"""$‖A‖_2=λ_\max(A^⊤A)$.
 
-    The spectral norm $∥A∥_2 ≔ \𝗌𝗎𝗉_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
-    $σ_\max(A) = √{λ_{𝗆𝖺𝗑} (A^⊤A)}$, the largest singular value of $A$.
+    The spectral norm $∥A∥_2 ≔ \sup_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
+    $σ_\max(A) = \sqrt{λ_\max (A^⊤A)}$, the largest singular value of $A$.
 
     It can be computed efficiently via Power iteration.
 
     One can show that the derivative is equal to:
 
-    .. math::  \frac{∂½∥A∥_2}/{∂A} = uv^⊤
+    .. math::  \pdv{½∥A∥_2}{A} = uv^⊤
 
     where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
 
@@ -91,14 +91,10 @@ class SpectralNorm(torch.autograd.Function):
     """
 
     @staticmethod
-    def jvp(ctx: Any, *grad_inputs: Any) -> Any:
-        r"""Jacobian-vector product."""
-        u, v = ctx.saved_tensors
-        return torch.outer(u, v) @ grad_inputs[0]
-
-    @staticmethod
     def forward(ctx: Any, *tensors: Tensor, **kwargs: Any) -> Tensor:
         r"""Forward pass.
+
+        .. Signature:: ``(m, n) -> 1``
 
         Parameters
         ----------
@@ -152,7 +148,15 @@ class SpectralNorm(torch.autograd.Function):
         grad_outputs
         """
         u, v = ctx.saved_tensors
-        return grad_outputs[0] * torch.outer(u, v)
+        return torch.einsum("..., i, j -> ...ij", grad_outputs[0], u, v)
+
+    vjp = backward
+
+    @staticmethod
+    def jvp(ctx: Any, *grad_inputs: Any) -> Any:
+        r"""Jacobian-vector product forward mode."""
+        u, v = ctx.saved_tensors
+        return torch.einsum("...ij, i, j -> ...", grad_inputs[0], u, v)
 
 
 class LinearContraction(nn.Module):
@@ -446,7 +450,9 @@ class iResNetBlock(nn.Module):
         self.rtol = HP["rtol"]
         self.maxiter = HP["maxiter"]
         self.bias = HP["bias"]
-        self._Activation: type[ModularActivation] = MODULAR_ACTIVATIONS[HP["activation"]]
+        self._Activation: type[ModularActivation] = MODULAR_ACTIVATIONS[
+            HP["activation"]
+        ]
         self.activation = self._Activation(**HP["activation_config"])
         # gain = nn.init.calculate_gain(self._Activation)
 
