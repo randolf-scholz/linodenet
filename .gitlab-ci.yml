@@ -65,19 +65,20 @@ setup:
     - source ${VENVNAME}/bin/activate
     - pip install --upgrade pip setuptools wheel
     # install development dependencies
+    - poetry config http-basic.berlin gitlab-ci-token "${CI_JOB_TOKEN}"
+    - poetry config http-basic.hildesheim gitlab-ci-token "${CI_JOB_TOKEN}"
     - |
       if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
         echo "Installing TSDM from Berlin Mirror."
-        poetry config http-basic.berlin gitlab-ci-token "${CI_JOB_TOKEN}"
-        # pip install tsdm --upgrade --pre --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple
+        mirror=$(echo "https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple")
       elif [[ $CI_PROJECT_URL == *"software.ismll.uni-hildesheim.de"* ]]; then
         echo "Installing TSDM from Hildesheim Mirror."
-        poetry config http-basic.hildesheim gitlab-ci-token "${CI_JOB_TOKEN}"
-        # pip install tsdm --upgrade --pre --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
+        mirror=$(echo "https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple")
       else
         echo "Package TSDM mirror not found."
         exit 1
       fi
+    - pip install tsdm --upgrade --pre --no-deps --index-url $mirror
     - poetry install --no-root
   script:
     # We first build the package and then install it. Finally, we install the dev dependencies.
