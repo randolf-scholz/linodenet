@@ -15,6 +15,7 @@
       <w>bysource</w>
       <w>celu</w>
       <w>cipra</w>
+      <w>codeclimate</w>
       <w>copybutton</w>
       <w>dtype</w>
       <w>dunder</w>
@@ -30,11 +31,13 @@
       <w>hardswish</w>
       <w>hardtanh</w>
       <w>headwise</w>
+      <w>hildesheim</w>
       <w>hphᵀ</w>
       <w>hyperparameter</w>
       <w>hyperparameters</w>
       <w>includehidden</w>
       <w>intersphinx</w>
+      <w>ismll</w>
       <w>jacobian</w>
       <w>jian</w>
       <w>jitting</w>
@@ -58,6 +61,7 @@
       <w>membername</w>
       <w>mension</w>
       <w>miyato</w>
+      <w>moduledir</w>
       <w>multihead</w>
       <w>nblocks</w>
       <w>ngth</w>
@@ -86,6 +90,7 @@
       <w>subblocks</w>
       <w>svdvals</w>
       <w>tanhshrink</w>
+      <w>testdir</w>
       <w>tfrac</w>
       <w>timedeltas</w>
       <w>toctree</w>

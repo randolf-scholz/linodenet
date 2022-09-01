@@ -2,7 +2,7 @@
 # https://gitlab.com/gitlab-org/gitlab/-/tree/master/lib/gitlab/ci/templates/Python.gitlab-ci.yml
 #
 
-image: python:3.9-bullseye
+image: python:3.10-bullseye
 
 stages:
   - build
@@ -15,9 +15,10 @@ default:
     - docker
 
 variables:
-  MODULEDIR: "src/linodenet"
-  MODULENAME: linodenet
-  TESTDIR: test
+  PYTHON_VERSION: "3.10"
+  MODULEDIR: "src/linodenet/"
+  MODULENAME: "linodenet"
+  TESTDIR: "tests/"
   MAIN_CACHE: "$CI_PROJECT_DIR/.cache"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   MYPY_CACHE_DIR: "${CI_PROJECT_DIR}/.mypy_cache"
@@ -25,7 +26,7 @@ variables:
   VENVNAME: ".venv"
   VENV_DIR: "${CI_PROJECT_DIR}/${VENVNAME}"
   TWINE_PASSWORD: "${CI_JOB_TOKEN}"
-  TWINE_USERNAME: gitlab-ci-token
+  TWINE_USERNAME: "gitlab-ci-token"
   TWINE_REPOSITORY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
 
 # global before_script is run before each and every job.
@@ -107,7 +108,7 @@ setup:
     # generate python version badge
     - python -m pybadges
       --left-text="python"
-      --right-text="3.9"
+      --right-text="$PYTHON_VERSION"
       --whole-link="https://www.python.org/"
       --logo="https://upload.wikimedia.org/wikipedia/commons/c/c3/Python-logo-notext.svg"
       --embed-logo
