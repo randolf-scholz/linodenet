@@ -19,7 +19,7 @@
 ;     No need to traverse our git directory
 ;    "src/",
 ;    # This contains builds of flake8 that we don't want to check
-;    "test/",
+;    "tests/",
 ;    # There's no value in checking cache directories
 ;    "examples/",
 ;    # sphinx config
