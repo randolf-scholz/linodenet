@@ -102,7 +102,7 @@ setup:
     # TODO: fix pip install errors!!!
     - pip install --prefer-binary --upgrade $(ls dist/*.whl)
     # install dev dependencies.
-    - pip install --prefer-binary --upgrade -r requirements-dev.txt
+    # - pip install --prefer-binary --upgrade -r requirements-dev.txt
     - pip list
   after_script:
     - source ${VENVNAME}/bin/activate
@@ -113,7 +113,7 @@ setup:
       --whole-link="https://www.python.org/"
       --logo="https://s3.dualstack.us-east-2.amazonaws.com/pythondotorg-assets/media/files/python-logo-only.svg"
       --embed-logo
-      > badges/python.svg
+      > badges/python.svggit
     # generate package version badge
     - python -m pybadges
       --left-text="version"
