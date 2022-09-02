@@ -14,7 +14,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 name = "linodenet"
 packages = [{include = "linodenet", from="src"}]
-version = "0.1.8"
+version = "0.2.0"
 description = "Linear ODE Network for Time Series Forecasting"
 authors = ["Randolf Scholz <rscholz@ismll.de>"]
 license = "MIT"
@@ -97,7 +97,7 @@ wheel = ">=0.37"
 
 
 [tool.poetry.group.dev.dependencies.tsdm]
-version = ">=0.2.6"
+version = ">=0.3.1"
 
 [tool.poetry.scripts]
 

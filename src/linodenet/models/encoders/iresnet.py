@@ -71,7 +71,7 @@ class SpectralNorm(torch.autograd.Function):
     r"""$‖A‖_2=λ_\max(A^⊤A)$.
 
     The spectral norm $∥A∥_2 ≔ \sup_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
-    $σ_\max(A) = \sqrt{λ_\max (A^⊤A)}$, the largest singular value of $A$.
+    $σ_{\max}(A) = \sqrt{λ_{\max} (A^⊤A)}$, the largest singular value of $A$.
 
     It can be computed efficiently via Power iteration.
 
