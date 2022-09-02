@@ -15,10 +15,8 @@
       <w>bysource</w>
       <w>celu</w>
       <w>cipra</w>
-      <w>classmethod</w>
       <w>codeclimate</w>
       <w>copybutton</w>
-      <w>discretizes</w>
       <w>dtype</w>
       <w>dunder</w>
       <w>duvenaud</w>
@@ -56,14 +54,12 @@
       <w>linodenet</w>
       <w>lobpcg</w>
       <w>logdetexp</w>
-      <w>logsigmoid</w>
       <w>mathcal</w>
       <w>maxdepth</w>
       <w>maxiter</w>
       <w>maxlen</w>
       <w>membername</w>
       <w>mension</w>
-      <w>mish</w>
       <w>miyato</w>
       <w>moduledir</w>
       <w>multihead</w>
@@ -74,21 +70,16 @@
       <w>odeint</w>
       <w>overset</w>
       <w>pageview</w>
-      <w>prelu</w>
       <w>prenormalization</w>
-      <w>pycodestyle</w>
       <w>reftypes</w>
       <w>reglu</w>
       <w>regularizations</w>
       <w>rezero</w>
       <w>romera</w>
-      <w>rrelu</w>
       <w>rtol</w>
       <w>selu</w>
       <w>shaoqing</w>
       <w>shphᵀsᵀ</w>
-      <w>silu</w>
-      <w>softmin</w>
       <w>softplus</w>
       <w>softshrink</w>
       <w>softsign</w>
@@ -104,13 +95,10 @@
       <w>timedeltas</w>
       <w>toctree</w>
       <w>torchscript</w>
-      <w>toshiki</w>
       <w>tput</w>
       <w>tsdm</w>
       <w>undoc</w>
-      <w>unindent</w>
       <w>unsubscriptable</w>
-      <w>venvname</w>
       <w>viewcode</w>
       <w>warningiserror</w>
       <w>weakref</w>
@@ -123,7 +111,6 @@
       <w>xxxxxxxxxx</w>
       <w>yhat</w>
       <w>yoshida</w>
-      <w>yuichi</w>
       <w>zhat</w>
       <w>σuvᵀ</w>
     </words>
