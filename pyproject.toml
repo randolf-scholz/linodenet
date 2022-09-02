@@ -44,58 +44,57 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10, <3.11"
-numpy = ">=1.23"
-scipy = ">=1.9"
 torch = ">=1.12"
+scipy = ">=1.7"
 
 [tool.poetry.dev-dependencies]
-black = {version = ">=22.6", extras = ["jupyter"]}
-blacken-docs = ">=1.12"
+black = {version = ">=22.1.0", extras = ["jupyter"]}
+blacken-docs = ">=1.12.1"
 docutils = ">=0.19"
 flake8 = ">=5.0"
-flake8-annotations = ">=2.9"
-flake8-black = ">=0.3"
-flake8-bugbear = ">=22.8"
-flake8-comprehensions = ">=3.10"
-flake8-docstrings = ">=1.6"
-flake8-pyi = ">=22.8"
-flake8-rst = ">=0.8"
-flake8-rst-docstrings = ">=0.2"
-isort = ">=5.10"
+flake8-annotations = ">=2.7.0"
+flake8-black = ">=0.2.4"
+flake8-bugbear = ">=22.1.11"
+flake8-comprehensions = ">=3.8.0"
+flake8-docstrings = ">=1.6.0"
+flake8-pyi = ">=22.1.0"
+flake8-rst = ">=0.8.0"
+flake8-rst-docstrings = ">=0.2.5"
+isort = ">=5.10.1"
 jupyter = ">=1.0.0"
-jupyterlab = ">=3.4"
-mypy = ">=0.971"
-pre-commit = ">=2.20"
+jupyterlab = ">=3.4.4"
+mypy = ">=0.941"
+pre-commit = ">=2.17.0"
 pybadges = ">=3.0"
-pycodestyle = ">=2.9"
-pydeps = ">=1.10"
-pydata-sphinx-theme = ">=0.10"
-pydocstyle = ">=6.1"
-pylint = ">=2.15"
-pylint-gitlab = ">=1.1"
-pytest = ">=7.1"
-pytest-cov = ">=3.0"
+pycodestyle = ">=2.8.0"
+pydeps = ">=1.10.12"
+pydata-sphinx-theme = ">=0.9.0"
+pydocstyle = ">=6.1.1"
+pylint = ">=2.12.2"
+pylint-gitlab = ">=1.0.0"
+pytest = ">=6.2.5"
+pytest-cov = ">=3.0.0"
 pytest-rerunfailures = ">=10.2"
-setuptools = ">=65.3"
+setuptools = ">=60.7.1"
 sphinx = ">=5.1"
-sphinx-autoapi = ">=1.9"
-sphinx-copybutton = ">=0.5"
+sphinx-autoapi = ">=1.8.4"
+sphinx-copybutton = ">=0.5.0"
 sphinx-math-dollar = ">=1.2"
-tqdm = ">=4.64"
-twine = ">=4.0"
-types-docutils = ">=0.19"
-types-pillow = ">=9.2"
-types-protobuf = ">=3.20"
-types-pyyaml = ">=6.0"
-types-requests = ">=2.28"
-types-setuptools = ">=65.3"
-types-six = ">=1.16"
-types-typing-extensions = ">=3.7"
-wheel = ">=0.37"
+twine = ">=3.8.0"
+types-docutils = ">=0.19.0"
+types-pillow = ">=9.0.15"
+types-pyyaml = ">=6.0.4"
+types-protobuf = ">=3.19.8"
+types-requests = ">=2.27.30"
+types-setuptools = ">=57.4.8"
+types-six = ">=1.16.10"
+types-typing-extensions = ">=3.7.0"
+wheel = ">=0.37.1"
+tqdm = ">=4.64.0"
 
 
 [tool.poetry.dev-dependencies.tsdm]
-version = ">=0.3"
+version = ">=0.2.6"
 
 [tool.poetry.scripts]
 
@@ -156,7 +155,7 @@ generated-members=["numpy.*","torch.*"]
 allow_redefinition = false
 color_output = true
 error_summary = true
-files = ["src/", "test/"]
+files = ["src/", "tests/"]
 plugins = ["numpy.typing.mypy_plugin"]
 pretty = true
 python_version = "3.10"
@@ -195,7 +194,7 @@ ignore_missing_imports = true
 # black-compatible: black, appnexus
 py_version=310
 profile="black"
-src_paths=["src/", "test/"]
+src_paths=["src/", "tests/"]
 known_first_party = ["linodenet", "tsdm"]
 #known_local_folder = ["linodenet"]
 # flake8-profiles: appnexus, cryptography, edited, google, pep8, pycharm, smarkets
@@ -206,7 +205,7 @@ known_first_party = ["linodenet", "tsdm"]
 #######################
 [tool.black]
 line-length = 88
-target-version = ['py39']
+target-version = ['py310']
 color = true
 
 ############################
@@ -225,7 +224,7 @@ venv = ".venv"
 venvPath = "."
 pythonVersion = "3.10"
 pythonPlatform = "Linux"
-include = ["src/", "test/"]
+include = ["src/", "tests/"]
 exclude = [
     "**/node_modules",
     "**/__pycache__",
@@ -240,7 +239,7 @@ reportPrivateImportUsage = false
 ########################
 [tool.pytest]
 [tool.pytest.ini_options]
-testpaths = [ "test/" ]
+testpaths = [ "tests/" ]
 reruns = "3"
 only_rerun = "AssertionError"
 cov = "tsdm"
@@ -269,5 +268,5 @@ exclude_lines = [
 [tool.coverage.run]
 source = [
     "linodenet/",
-    "test/",
+    "tests/",
 ]
