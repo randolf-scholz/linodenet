@@ -3,18 +3,6 @@ r"""Utility functions."""
 __all__ = [
     # Sub-Modules
     "layers",
-    # Types
-    "Activation",
-    "LookupTable",
-    # Constants
-    "ACTIVATIONS",
-    # Classes
-    "ReZeroCell",
-    "ReverseDense",
-    "Repeat",
-    "Series",
-    "Parallel",
-    "Multiply",
     # Functions
     "autojit",
     "deep_dict_update",
@@ -22,12 +10,16 @@ __all__ = [
     "flatten",
     "initialize_from",
     "initialize_from_config",
+    # Classes
+    "ReZeroCell",
+    "ReverseDense",
+    "Repeat",
+    "Series",
+    "Parallel",
+    "Multiply",
 ]
 from linodenet.util import layers
 from linodenet.util._util import (
-    ACTIVATIONS,
-    Activation,
-    LookupTable,
     autojit,
     deep_dict_update,
     deep_keyval_update,

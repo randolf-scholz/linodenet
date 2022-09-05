@@ -21,13 +21,12 @@ __all__ = [
 ]
 from abc import abstractmethod
 from collections.abc import Iterable
-from typing import Any, Final, Optional
+from typing import Any, Final, Optional, TypeAlias
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.util import (
-    LookupTable,
     ReverseDense,
     ReZeroCell,
     deep_dict_update,
@@ -35,10 +34,10 @@ from linodenet.util import (
     initialize_from_config,
 )
 
-Cell = nn.Module
+Cell: TypeAlias = nn.Module
 r"""Type hint for Cells."""
 
-CELLS: Final[LookupTable[Cell]] = {
+CELLS: Final[dict[str, type[Cell]]] = {
     "RNNCell": nn.RNNCell,
     "GRUCell": nn.GRUCell,
     "LSTMCell": nn.LSTMCell,

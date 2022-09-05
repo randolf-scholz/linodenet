@@ -86,6 +86,8 @@ def skew_symmetric(x: Tensor) -> Tensor:
 def normal(x: Tensor) -> Tensor:
     r"""Return the closest normal matrix to X.
 
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤Y = YY^⊤
 
     **The Lagrangian:**
@@ -105,7 +107,6 @@ def normal(x: Tensor) -> Tensor:
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|𝕀⊗𝕀 + Λ⊗𝕀 − 𝕀⊗Λ|S⟩ ≥ 0
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
 
     Parameters
     ----------

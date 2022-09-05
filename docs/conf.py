@@ -610,7 +610,7 @@ intersphinx_disabled_reftypes = ["std:doc"]
 # See the MathJax Getting Started page for details. If you want MathJax to be available offline or without including
 # resources from a third-party site, you have to download it and set this value to a different path.
 
-# mathjax_options = {}
+mathjax_options = {}
 # The options to script tag for mathjax.
 # The default is empty {}.
 
@@ -628,6 +628,9 @@ mathjax3_config = {
 }
 # The configuration options for MathJax v3 (which is used by default).
 
+mathjax2_config = {}
+# The configuration options for MathJax v2
+# The default is empty {}.
 
 mathjax_config = {}
 # Former name of mathjax2_config.
@@ -731,9 +734,6 @@ napoleon_type_aliases = {
     "DataArray": "~xarray.DataArray",
     "Dataset": "~xarray.Dataset",
     "Variable": "~xarray.Variable",
-    # TSDM
-    "TimeDeltaLike": "tsdm.util.TimeDeltaLike",
-    "TimeStampLike": "tsdm.util.TimeStampLike",
 }
 # A mapping to translate type names to other names or references. Works only when napoleon_use_param = True.
 # Defaults to None.

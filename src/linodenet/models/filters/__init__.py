@@ -14,9 +14,7 @@ __all__ = [
     "SequentialFilter",
 ]
 
-
-import logging
-from typing import Final
+from typing import Final, TypeAlias
 
 from torch import nn
 
@@ -29,9 +27,7 @@ from linodenet.models.filters._filters import (
     SequentialFilterBlock,
 )
 
-__logger__ = logging.getLogger(__name__)
-
-Filter = nn.Module
+Filter: TypeAlias = nn.Module
 r"""Type hint for Filters"""
 
 FILTERS: Final[dict[str, type[nn.Module]]] = {

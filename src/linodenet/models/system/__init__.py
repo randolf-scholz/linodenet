@@ -10,13 +10,13 @@ __all__ = [
 ]
 
 
-from typing import Final
+from typing import Final, TypeAlias
 
 from torch import nn
 
 from linodenet.models.system._system import LinODECell
 
-System = nn.Module
+System: TypeAlias = nn.Module
 r"""Type hint for the system model."""
 
 
