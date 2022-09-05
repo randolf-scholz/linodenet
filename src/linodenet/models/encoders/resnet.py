@@ -18,7 +18,7 @@ from typing import Any, Optional, cast
 
 import torch
 from torch import Tensor, jit, nn
-from torch.nn import functional as F
+from torch.nn.functional import dropout
 
 from linodenet.models.encoders.ft_transformer import (
     get_activation_fn,
@@ -32,7 +32,7 @@ from linodenet.util import (
 )
 
 
-class ResNet_(nn.Module):
+class _ResNet(nn.Module):
     r"""Residual Network."""
 
     def __init__(
@@ -126,12 +126,12 @@ class ResNet_(nn.Module):
             z = self.main_activation(z)
 
             if self.hidden_dropout:
-                z = F.dropout(z, self.hidden_dropout, self.training)
+                z = dropout(z, self.hidden_dropout, self.training)
 
             z = layer["linear1"](z)
 
             if self.residual_dropout:
-                z = F.dropout(z, self.residual_dropout, self.training)
+                z = dropout(z, self.residual_dropout, self.training)
             x = x + z
         x = self.last_normalization(x)
         x = self.last_activation(x)

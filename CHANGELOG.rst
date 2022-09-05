@@ -10,8 +10,8 @@ CHANGELOG
     - :class:`linodenet.model.LinODEnet` tracks ``xhat_pre``, ``xhat_post``, ``zhat_pre``, ``zhat_post``,
       but only outputs ``xhat_post`` now.
 - Improved performance of pipeline by >100% through the use of more sensible cache policies
-- Namespace are now cleaner (e.g. ``lindonet.models.iResNet`` instead of ``lindonet.models._iresnet.iResNet``)
-- added ``functional`` and ``modular`` desctinction for ``initializations``, ``projections`` and ``regularizations``
+- Namespace are now cleaner (e.g. ``linodenet.models.iResNet`` instead of ``linodenet.models._iresnet.iResNet``)
+- added ``functional`` and ``modular`` distinction for ``initializations``, ``projections`` and ``regularizations``
 
 2021-09-27 version 0.1.5
 ------------------------

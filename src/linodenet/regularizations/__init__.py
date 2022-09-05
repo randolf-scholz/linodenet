@@ -8,41 +8,69 @@ Contains regularizations in both modular and functional form.
 """
 
 __all__ = [
+    # Constants
+    "REGULARIZATIONS",
+    "FUNCTIONAL_REGULARIZATIONS",
+    "MODULAR_REGULARIZATIONS",
     # Types
     "Regularization",
     "FunctionalRegularization",
     "ModularRegularization",
-    # Constants
-    "REGULARIZATIONS",
-    "FunctionalRegularizations",
-    "ModularRegularizations",
     # Sub-Modules
     "functional",
     "modular",
+    # Functions
+    "diagonal",
+    "logdetexp",
+    "normal",
+    "orthogonal",
+    "skew_symmetric",
+    "symmetric",
+    # Classes
 ]
 
 
-from typing import Final, Union
+from collections.abc import Callable
+from typing import Final, TypeAlias
+
+from torch import Tensor, nn
 
 from linodenet.regularizations import functional, modular
 from linodenet.regularizations.functional import (
-    FunctionalRegularization,
-    FunctionalRegularizations,
-)
-from linodenet.regularizations.modular import (
-    ModularRegularization,
-    ModularRegularizations,
+    diagonal,
+    logdetexp,
+    normal,
+    orthogonal,
+    skew_symmetric,
+    symmetric,
 )
 
-Regularization = Union[
-    FunctionalRegularization, ModularRegularization
-]  # matrix to matrix
+FunctionalRegularization: TypeAlias = Callable[[Tensor], Tensor]
+r"""Type hint for modular regularizations."""
+
+ModularRegularization: TypeAlias = nn.Module
+r"""Type hint for modular regularizations."""
+
+Regularization: TypeAlias = FunctionalRegularization | ModularRegularization
 r"""Type hint for projections."""
 
+FUNCTIONAL_REGULARIZATIONS: Final[dict[str, FunctionalRegularization]] = {
+    "diagonal": diagonal,
+    "logdetexp": logdetexp,
+    "normal": normal,
+    "orthogonal": orthogonal,
+    "skew_symmetric": skew_symmetric,
+    "symmetric": symmetric,
+}
+r"""Dictionary of all available modular metrics."""
+
+MODULAR_REGULARIZATIONS: Final[dict[str, type[nn.Module]]] = {}
+r"""Dictionary of all available modular metrics."""
+
 REGULARIZATIONS: Final[
-    dict[str, Union[FunctionalRegularization, type[ModularRegularization]]]
+    dict[str, FunctionalRegularization | type[ModularRegularization]]
 ] = {
-    **FunctionalRegularizations,
-    **ModularRegularizations,
+    **FUNCTIONAL_REGULARIZATIONS,
+    **MODULAR_REGULARIZATIONS,
 }
 r"""Dictionary containing all available projections."""

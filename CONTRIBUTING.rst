@@ -4,14 +4,14 @@ CONTRIBUTING
 Getting started
 ---------------
 
-1. Fork the GitLab project from https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/tsdm.
+1. Fork the GitLab project from https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/linodenet.
 
-   Use your personal namespace, e.g. ``https://software.ismll.uni-hildesheim.de/<user>/tsdm-dev``
+   Use your personal namespace, e.g. ``https://software.ismll.uni-hildesheim.de/<user>/linodenet-fork``
 
 2. Clone the forked project locally to your machine. ::
 
-    git clone https://software.ismll.uni-hildesheim.de/<user>/linodenet-dev
-    cd tsdm-dev
+    git clone https://software.ismll.uni-hildesheim.de/<user>/linodenet-fork
+    cd linodenet-fork
 
 3. Setup the virtual environment
 
@@ -24,13 +24,13 @@ Getting started
    3.2 Via conda (You may have to rename ``tables`` ⟶ ``pytables`` and ``torch`` ⟶ ``pytorch``).::
 
         conda create --name tsdm-dev --file requirements.txt
-        conda activate tsdm-dev
+        conda activate linodenet-fork
         conda install --file requirements-dev.txt
 
    3.3 Via pip.::
 
         sudo apt install python3.10
-        python3.10 -m virtualenv venv
+        python3.10 -m virtualenv .venv
         . venv/bin/activate
         pip install -e .
 

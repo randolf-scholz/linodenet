@@ -66,19 +66,20 @@ setup:
     - source ${VENVNAME}/bin/activate
     - pip install --upgrade pip setuptools wheel
     # install development dependencies
+    - poetry config http-basic.berlin gitlab-ci-token "${CI_JOB_TOKEN}"
+    - poetry config http-basic.hildesheim gitlab-ci-token "${CI_JOB_TOKEN}"
     - |
       if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
         echo "Installing TSDM from Berlin Mirror."
-        poetry config http-basic.berlin gitlab-ci-token "${CI_JOB_TOKEN}"
-        # pip install tsdm --upgrade --pre --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple
+        mirror=$(echo "https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple")
       elif [[ $CI_PROJECT_URL == *"software.ismll.uni-hildesheim.de"* ]]; then
         echo "Installing TSDM from Hildesheim Mirror."
-        poetry config http-basic.hildesheim gitlab-ci-token "${CI_JOB_TOKEN}"
-        # pip install tsdm --upgrade --pre --no-deps --index-url https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple
+        mirror=$(echo "https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple")
       else
         echo "Package TSDM mirror not found."
         exit 1
       fi
+    - pip install tsdm --upgrade --pre --no-deps --index-url $mirror
     - poetry install --no-root
   script:
     # We first build the package and then install it. Finally, we install the dev dependencies.
@@ -101,7 +102,7 @@ setup:
     # TODO: fix pip install errors!!!
     - pip install --prefer-binary --upgrade $(ls dist/*.whl)
     # install dev dependencies.
-    - pip install --prefer-binary --upgrade -r requirements-dev.txt
+    # - pip install --prefer-binary --upgrade -r requirements-dev.txt
     - pip list
   after_script:
     - source ${VENVNAME}/bin/activate
@@ -110,9 +111,9 @@ setup:
       --left-text="python"
       --right-text="$PYTHON_VERSION"
       --whole-link="https://www.python.org/"
-      --logo="https://upload.wikimedia.org/wikipedia/commons/c/c3/Python-logo-notext.svg"
+      --logo="https://s3.dualstack.us-east-2.amazonaws.com/pythondotorg-assets/media/files/python-logo-only.svg"
       --embed-logo
-      > badges/python.svg
+      > badges/python.svggit
     # generate package version badge
     - python -m pybadges
       --left-text="version"
@@ -168,8 +169,8 @@ pylint:
       --embed-logo
       > badges/pylint.svg
   artifacts:
-    reports:
-      codequality: reports/codeclimate.json
+    # reports:
+    # codequality: reports/codeclimate.json
     paths:
       - badges/
 
