@@ -12,7 +12,7 @@ from typing import Any, Final
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations.functional import FunctionalInitialization
+from linodenet.initializations import FunctionalInitialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import iResNet
 from linodenet.models.filters import Filter, RecurrentCellFilter

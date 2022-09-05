@@ -5,6 +5,7 @@ r"""#TODO add module summary line.
 
 __all__ = [
     # Classes
+    "ReZero",
     "ReZeroCell",
     "ReverseDense",
 ]

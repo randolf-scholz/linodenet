@@ -10,13 +10,13 @@ __all__ = [
     "ConcatProjection",
 ]
 
-from typing import Final
+from typing import Final, TypeAlias
 
 from torch import nn
 
 from linodenet.models.embeddings._embeddings import ConcatEmbedding, ConcatProjection
 
-Embedding = nn.Module
+Embedding: TypeAlias = nn.Module
 r"""Type hint for Embeddings."""
 
 

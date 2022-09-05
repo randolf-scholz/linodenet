@@ -11,9 +11,9 @@ __all__ = [
     "get_activation_fn",
     "get_nonglu_activation_fn",
     # Classes
-    "Tokenizer",
-    "FT_Transformer",
+    "FTTransformer",
     "MultiheadAttention",
+    "Tokenizer",
 ]
 
 import math
@@ -21,20 +21,10 @@ from typing import Callable, Optional, cast
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
 from torch.nn import init as nn_init
+from torch.nn.functional import dropout, gelu, relu, softmax
 
-
-def reglu(x: Tensor) -> Tensor:
-    r"""Regularized gelu activation function."""
-    a, b = x.chunk(2, dim=-1)
-    return a * F.relu(b)
-
-
-def geglu(x: Tensor) -> Tensor:
-    r"""Gelu activation function."""
-    a, b = x.chunk(2, dim=-1)
-    return a * F.gelu(b)
+from linodenet.activations import geglu, reglu
 
 
 def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
@@ -55,7 +45,7 @@ def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
         if name == "geglu"
         else torch.sigmoid
         if name == "sigmoid"
-        else getattr(F, name)
+        else getattr(torch.nn.functional, name)
     )
 
 
@@ -71,9 +61,9 @@ def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
     Callable[[Tensor], Tensor]
     """
     return (
-        F.relu  # type: ignore[return-value]
+        relu  # type: ignore[return-value]
         if name == "reglu"
-        else F.gelu
+        else gelu
         if name == "geglu"
         else get_activation_fn(name)
     )
@@ -188,7 +178,7 @@ class MultiheadAttention(nn.Module):
     r"""Multihead attention."""
 
     def __init__(
-        self, d: int, n_heads: int, dropout: float, initialization: str
+        self, d: int, n_heads: int, dropout_rate: float, initialization: str
     ) -> None:
         super().__init__()
 
@@ -201,7 +191,7 @@ class MultiheadAttention(nn.Module):
         self.W_v = nn.Linear(d, d)
         self.W_out = nn.Linear(d, d) if n_heads > 1 else None
         self.n_heads = n_heads
-        self.dropout = nn.Dropout(dropout) if dropout else None
+        self.dropout = nn.Dropout(dropout_rate) if dropout_rate else None
 
         for m in [self.W_q, self.W_k, self.W_v]:
             if initialization == "xavier" and (n_heads > 1 or m is not self.W_v):
@@ -258,7 +248,7 @@ class MultiheadAttention(nn.Module):
         q = self._reshape(q)
         k = self._reshape(k)
 
-        attention = F.softmax(q @ k.transpose(1, 2) / math.sqrt(d_head_key), dim=-1)
+        attention = softmax(q @ k.transpose(1, 2) / math.sqrt(d_head_key), dim=-1)
 
         if self.dropout is not None:
             attention = self.dropout(attention)
@@ -276,7 +266,7 @@ class MultiheadAttention(nn.Module):
         return x
 
 
-class FT_Transformer(nn.Module):
+class FTTransformer(nn.Module):
     r"""FT_Transformer Model.
 
     References
@@ -391,7 +381,7 @@ class FT_Transformer(nn.Module):
 
     def _end_residual(self, x, x_residual, layer, norm_idx):
         if self.residual_dropout:
-            x_residual = F.dropout(x_residual, self.residual_dropout, self.training)
+            x_residual = dropout(x_residual, self.residual_dropout, self.training)
         x = x + x_residual
         if not self.prenormalization:
             x = layer[f"norm{norm_idx}"](x)
@@ -430,7 +420,7 @@ class FT_Transformer(nn.Module):
             x_residual = layer["linear0"](x_residual)
             x_residual = self.activation(x_residual)
             if self.ffn_dropout:
-                x_residual = F.dropout(x_residual, self.ffn_dropout, self.training)
+                x_residual = dropout(x_residual, self.ffn_dropout, self.training)
             x_residual = layer["linear1"](x_residual)
             x = self._end_residual(x, x_residual, layer, 1)
 
