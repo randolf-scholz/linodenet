@@ -10,7 +10,7 @@ __all__ = [
     "iResNetBlock",
     "ResNetBlock",
     "ResNet",
-    "FT_Transformer",
+    "FTTransformer",
     "Transformer",
     "LinearContraction",
     "SpectralNorm",
@@ -18,11 +18,11 @@ __all__ = [
     "spectral_norm",
 ]
 
-from typing import Final
+from typing import Final, TypeAlias
 
 from torch import nn
 
-from linodenet.models.encoders.ft_transformer import FT_Transformer
+from linodenet.models.encoders.ft_transformer import FTTransformer
 from linodenet.models.encoders.iresnet import (
     LinearContraction,
     SpectralNorm,
@@ -33,13 +33,13 @@ from linodenet.models.encoders.iresnet import (
 from linodenet.models.encoders.resnet import ResNet, ResNetBlock
 from linodenet.models.encoders.transformer import Transformer
 
-Encoder = nn.Module
+Encoder: TypeAlias = nn.Module
 r"""Type hint for Encoders."""
 
 ENCODERS: Final[dict[str, type[Encoder]]] = {
     "iResNet": iResNet,
     "ResNet": ResNet,
-    "FT_Transformer": FT_Transformer,
+    "FTTransformer": FTTransformer,
     "Transformer": Transformer,
 }
 r"""Dictionary containing all available encoders."""

@@ -16,7 +16,7 @@ from tqdm.autonotebook import trange
 
 from linodenet.models import LinODE
 from tsdm.linalg import scaled_norm
-from tsdm.plot import visualize_distribution
+from tsdm.viz import visualize_distribution
 
 __logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)

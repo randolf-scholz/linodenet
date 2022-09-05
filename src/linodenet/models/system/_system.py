@@ -10,7 +10,7 @@ from typing import Any, Final
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import FunctionalInitializations
+from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
 from linodenet.util import ReZeroCell, deep_dict_update
@@ -22,7 +22,7 @@ class LinODECell(nn.Module):
     Parameters
     ----------
     input_size: int
-    kernel_initialization: Union[Tensor, Callable[int, Tensor]]
+    kernel_initialization: Tensor | Callable[[int], Tensor]
 
     Attributes
     ----------
@@ -71,10 +71,6 @@ class LinODECell(nn.Module):
     def __init__(
         self,
         input_size: int,
-        # kernel_initialization: Optional[
-        #     Union[str, Tensor, FunctionalInitialization]
-        # ] = None,
-        # kernel_parametrization: Optional[Union[str, Projection]] = None,
         **HP: Any,
     ):
         super().__init__()
@@ -91,9 +87,9 @@ class LinODECell(nn.Module):
                 return lambda: gaussian(input_size)
             if isinstance(kernel_init, str):
                 assert (
-                    kernel_init in FunctionalInitializations
+                    kernel_init in FUNCTIONAL_INITIALIZATIONS
                 ), "Unknown initialization!"
-                _init = FunctionalInitializations[kernel_init]
+                _init = FUNCTIONAL_INITIALIZATIONS[kernel_init]
                 return lambda: _init(input_size)
             if callable(kernel_init):
                 assert Tensor(kernel_init(input_size)).shape == (
@@ -168,6 +164,6 @@ class LinODECell(nn.Module):
         if self.use_rezero:
             A = self.rezero(A)
         Adt = torch.einsum("kl, ... -> ...kl", A, dt)
-        expAdt = torch.matrix_exp(Adt)
+        expAdt = torch.linalg.matrix_exp(Adt)
         xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)
         return xhat
