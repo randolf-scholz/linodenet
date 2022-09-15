@@ -252,24 +252,6 @@ class LinODEnet(nn.Module):
         HP["Projection"]["input_size"] = input_size
         HP["Projection"]["hidden_size"] = hidden_size
 
-        # if HP["embedding_type"] == "linear":
-        #     _embedding: nn.Module = nn.Linear(input_size, hidden_size)
-        #     _projection: nn.Module = nn.Linear(hidden_size, input_size)
-        # elif HP["embedding_type"] == "concat":
-        #     _embedding = ConcatEmbedding(input_size, hidden_size)
-        #     _projection = ConcatProjection(input_size, hidden_size)
-        # else:
-        #     raise NotImplementedError(
-        #         f"{HP['embedding_type']=}" + "not in {'linear', 'concat'}"
-        #     )
-
-        # TODO: replace with add_module once supported!
-        # self.add_module("embedding", _embedding)
-        # self.add_module("encoder", HP["Encoder"](**HP["Encoder_cfg"]))
-        # self.add_module("system", HP["System"](**HP["System_cfg"]))
-        # self.add_module("decoder", HP["Decoder"](**HP["Decoder_cfg"]))
-        # self.add_module("projection", _projection)
-        # self.add_module("filter", HP["Filter"](**HP["Filter_cfg"]))
         LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
         self.embedding: nn.Module = initialize_from_config(HP["Embedding"])
         LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
@@ -368,24 +350,3 @@ class LinODEnet(nn.Module):
         self.timedeltas = DT.moveaxis(0, -1)
 
         return self.xhat_post
-
-        # TODO: Control variables
-        # xhat = self.control(xhat, u)
-        # u: possible controls:
-        #  1. set to value
-        #  2. add to value
-        # do these via indicator variable
-        # u = (time, value, mode-indicator, col-indicator)
-        # => apply control to specific column.
-
-        # TODO: Smarter initialization
-        # IDEA: The problem is the initial state of RNNCell is not defined and typically put equal
-        # to zero. Staying with the idea that the Cell acts as a filter, that is updates the state
-        # estimation given an observation, we could "trust" the original observation in the sense
-        # that we solve the fixed point equation h0 = g(x0, h0) and put the solution as the initial
-        # state.
-        # issue: if x0 is really sparse this is useless.
-        # better idea: we probably should go back and forth.
-        # other idea: use a set-based model and put h = g(T,X), including the whole TS.
-        # This set model can use triplet notation.
-        # bias weighting towards close time points

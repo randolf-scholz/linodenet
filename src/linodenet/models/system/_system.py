@@ -13,16 +13,35 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
-from linodenet.util import ReZeroCell, deep_dict_update
+from linodenet.util import deep_dict_update
 
 
 class LinODECell(nn.Module):
-    r"""Linear System module, solves $ẋ = Ax$, i.e. $x̂ = e^{A{∆t}}x$.
+    r"""Linear System module, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}x_t$.
+
+    .. Signature:: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
+
+    By default, the Cell is parametrized by
+
+    .. math:: e^{γ⋅A⋅∆t}x
+
+    Attributes
+    ----------
+    scalar: float
+        PARAM - The scalar $γ$ in the parametrization.
+    weight: torch.Tensor
+        PARAM - The weight matrix $A$ in the parametrization.
+    kernel: torch.Tensor
+        BUFFER - The parametrized kernel $γ⋅A$. or $ψ(γ⋅A)$ if parametrized.
+    learnable: bool
+        PARAM - Whether the scalar $γ$ is learnable or not.
 
     Parameters
     ----------
     input_size: int
     kernel_initialization: Tensor | Callable[[int], Tensor]
+    kernel_parametrization: nn.Module
+        The parametrization to apply to the kernel matrix.
 
     Attributes
     ----------
@@ -45,28 +64,27 @@ class LinODECell(nn.Module):
         "input_size": int,
         "kernel_initialization": None,
         "kernel_parametrization": None,
-        "scale": 1.0,
-        "rezero": True,
+        "scalar": 0.0,
+        "scalar_learnable": True,
     }
 
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of inputs."""
+
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
-    use_rezero: Final[bool]
-    r"""CONST: Whether to use rezero."""
-
-    # Parameters
-    raw_kernel: Tensor
-    r"""PARAM: The system matrix of the linear ODE component."""
 
     # Buffers
-    scale: Tensor
-    r"""BUFFER: static scaling applied to the kernel."""
+    scalar: Tensor
+    r"""PARAM: the scalar applied to the kernel."""
 
+    weight: Tensor
+    r"""PARAM: The learnable weight-matrix of the linear ODE component."""
+
+    # Parameters
     kernel: Tensor
-    r"""BUFFER: The parametrized system matrix of the linear ODE component."""
+    r"""BUFFER: The system matrix of the linear ODE component."""
 
     def __init__(
         self,
@@ -116,24 +134,25 @@ class LinODECell(nn.Module):
         def kernel_parametrization_dispatch():
             r"""Dispatch the kernel parametrization."""
             if kernel_parametrization is None:
-                _kernel_regularization = PROJECTIONS["identity"]
+                _kernel_parametrization = PROJECTIONS["identity"]
             elif kernel_parametrization in PROJECTIONS:
-                _kernel_regularization = PROJECTIONS[kernel_parametrization]
+                _kernel_parametrization = PROJECTIONS[kernel_parametrization]
             elif callable(kernel_parametrization):
-                _kernel_regularization = kernel_parametrization
+                _kernel_parametrization = kernel_parametrization
             else:
                 raise NotImplementedError(f"{kernel_parametrization=} unknown")
-            return _kernel_regularization
+            return _kernel_parametrization
 
-        self.register_buffer("scale", torch.tensor(HP["scale"]), persistent=False)
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_parametrization = kernel_parametrization_dispatch()
-        self.kernel = nn.Parameter(self._kernel_initialization() * self.scale)
 
-        self.use_rezero = HP["rezero"]
-
-        if self.use_rezero:
-            self.rezero = ReZeroCell()
+        self.scalar_learnable = HP["scalar_learnable"]
+        self.scalar = nn.Parameter(
+            torch.tensor(HP["scalar"]), requires_grad=self.scalar_learnable
+        )
+        self.weight = nn.Parameter(self._kernel_initialization())
+        parametrized_kernel = self.kernel_parametrization(self.weight)
+        self.register_buffer("kernel", parametrized_kernel, persistent=False)
 
     def kernel_initialization(self) -> Tensor:
         r"""Draw an initial kernel matrix (random or static)."""
@@ -160,10 +179,8 @@ class LinODECell(nn.Module):
         xhat:  Tensor, shape=(...,DIM)
             The predicted value at $t_1$
         """
-        A = self.kernel_parametrization(self.kernel)
-        if self.use_rezero:
-            A = self.rezero(A)
-        Adt = torch.einsum("kl, ... -> ...kl", A, dt)
+        self.kernel = self.scalar * self.kernel_parametrization(self.weight)
+        Adt = torch.einsum("kl, ... -> ...kl", self.kernel, dt)
         expAdt = torch.linalg.matrix_exp(Adt)
         xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)
         return xhat
