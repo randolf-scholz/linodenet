@@ -30,16 +30,29 @@ class ReZeroCell(nn.Module):
     }
     r"""The hyperparameter dictionary"""
 
+    # CONSTANTS
+    learnable: Final[bool]
+    r"""CONST: Whether the scalar is learnable."""
+
     # PARAMETERS
     scalar: Tensor
     r"""The scalar to multiply the inputs by."""
 
-    def __init__(self, scalar: Optional[Tensor] = None) -> None:
+    def __init__(
+        self, *, scalar: Optional[Tensor] = None, learnable: bool = True
+    ) -> None:
         super().__init__()
+        self.learnable = learnable
+
         if scalar is None:
-            self.scalar = nn.Parameter(torch.tensor(0.0))
+            initial_value = torch.tensor(0.0)
         else:
-            self.scalar = scalar
+            initial_value = scalar
+
+        if self.learnable:
+            self.scalar = nn.Parameter(initial_value)
+        else:
+            self.scalar = initial_value
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
