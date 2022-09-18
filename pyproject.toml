@@ -12,18 +12,18 @@ build-backend = "poetry.core.masonry.api"
 ########################
 
 [tool.poetry]
+authors = ["Randolf Scholz <rscholz@ismll.de>"]
+description = "Linear ODE Network for Time Series Forecasting"
+documentation = "https://www.user.tu-berlin.de/randolf.scholz/linodenet"
+homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net"
+include = ["CHANGELOG.rst", "LICENSE.rst", "CONTRIBUTING.rst"]
+keywords = ["time series", "machine learning", "neural ode", "kalman filter"]
+license = "MIT"
 name = "linodenet"
 packages = [{include = "linodenet", from="src"}]
-version = "0.2.0"
-description = "Linear ODE Network for Time Series Forecasting"
-authors = ["Randolf Scholz <rscholz@ismll.de>"]
-license = "MIT"
 readme = "README.rst"
-include = ["CHANGELOG.rst", "LICENSE.rst", "CONTRIBUTING.rst"]
-keywords = ["Time-Series", "Machine-Learning", "Neural ODE", "Kalman-Filter"]
-documentation = "https://www.user.tu-berlin.de/randolf.scholz/linodenet"
 repository = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi"
-homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net"
+version = "0.2.0"
 
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -43,7 +43,7 @@ classifiers = [
 
 
 [tool.poetry.dependencies]
-python = ">=3.10, <3.11"
+python = ">=3.10,<3.12"
 numpy = ">=1.23"
 scipy = ">=1.9"
 torch = ">=1.12"
@@ -65,7 +65,9 @@ isort = ">=5.10"
 jupyter = ">=1.0.0"
 jupyterlab = ">=3.4"
 mypy = ">=0.971"
+piccolo-theme = ">=0.12.0"
 pre-commit = ">=2.20"
+pyall = ">=0.2.0"
 pybadges = ">=3.0"
 pycodestyle = ">=2.9"
 pydata-sphinx-theme = ">=0.10"
@@ -129,12 +131,13 @@ disable= [
     "C0103",  # invalid-name
     "C0144",  # non-ascii-name
     "R0801",  # similar lines
+    "R0902",  # too-many-instance-attributes
+    "R0903",  # too-few-public-methods
+    "R0914",  # too-many-locals
+    "R0915",  # too-many-statements
+    "W0221",  # arguments-differ
     "W0511",  # (fixme) (todos)
     "W1113",  # keyword-arg-before-vararg
-    "R0902",  # too-many-instance-attributes
-    "R0915",  # too-many-statements
-    "R0914",  # too-many-locals
-    "W0221",  # arguments-differ
 ]
 
 [tool.pylint.REPORTS]
@@ -199,7 +202,6 @@ py_version=310
 profile="black"
 src_paths=["src/", "tests/"]
 known_first_party = ["linodenet", "tsdm"]
-#known_local_folder = ["linodenet"]
 # flake8-profiles: appnexus, cryptography, edited, google, pep8, pycharm, smarkets
 # black-compatible: black, appnexus
 
@@ -227,15 +229,23 @@ venv = ".venv"
 venvPath = "."
 pythonVersion = "3.10"
 pythonPlatform = "Linux"
+stubPath = ""
 include = ["src/", "tests/"]
 exclude = [
     "**/node_modules",
     "**/__pycache__",
     "**/.ipynb_checkpoints",
 ]
+executionEnvironments = [
+    {root = "src/", pythonVersion = "3.10", pythonPlatform = "Linux", extraPaths = [""]}
+]
+# region Type Check Diagnostics Settings
 reportMissingImports = false
+reportMissingTypeStubs = false
 reportUnsupportedDunderAll = false
 reportPrivateImportUsage = false
+# endregion
+
 
 ########################
 # PyTest Configuration #
