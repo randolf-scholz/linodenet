@@ -14,13 +14,13 @@ __all__ = [
     "masked",
     "normal",
     "orthogonal",
-    "skewsymmetric",
+    "skew_symmetric",
     "symmetric",
 ]
 
 
 import torch
-from torch import Tensor, jit
+from torch import BoolTensor, Tensor, jit
 
 
 @jit.script
@@ -48,7 +48,7 @@ def symmetric(x: Tensor) -> Tensor:
 
 
 @jit.script
-def skewsymmetric(x: Tensor) -> Tensor:
+def skew_symmetric(x: Tensor) -> Tensor:
     r"""Return the closest skew-symmetric matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -113,7 +113,7 @@ def diagonal(x: Tensor) -> Tensor:
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y⊙𝕀 = Y
 
     One can show analytically that the unique smallest norm minimizer is $Y = 𝕀⊙X$.
     """
@@ -128,7 +128,7 @@ def banded(x: Tensor, u: int = 0, l: int = 0) -> Tensor:
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = B⊙Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y⊙B = Y
 
     One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
     """
@@ -138,12 +138,12 @@ def banded(x: Tensor, u: int = 0, l: int = 0) -> Tensor:
 
 
 @jit.script
-def masked(x: Tensor, m: torch.BoolTensor) -> Tensor:
+def masked(x: Tensor, m: BoolTensor) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = M⊙Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y⊙M = Y
 
     One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
     """

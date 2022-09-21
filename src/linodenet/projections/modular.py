@@ -7,7 +7,7 @@ Contains projections in modular form.
 """
 
 __all__ = [
-    # Functions
+    # Classes
     "Banded",
     "Diagonal",
     "Identity",
@@ -20,7 +20,7 @@ __all__ = [
 
 from typing import Final, Optional
 
-from torch import BoolTensor, Tensor, jit, nn
+from torch import BoolTensor, Tensor, nn
 
 from linodenet.projections.functional import (
     banded,
@@ -29,7 +29,7 @@ from linodenet.projections.functional import (
     masked,
     normal,
     orthogonal,
-    skewsymmetric,
+    skew_symmetric,
     symmetric,
 )
 
@@ -74,7 +74,7 @@ class SkewSymmetric(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of skew-symmetric matrices."""
-        return skewsymmetric(x)
+        return skew_symmetric(x)
 
 
 class Orthogonal(nn.Module):
@@ -97,7 +97,6 @@ class Orthogonal(nn.Module):
         return orthogonal(x)
 
 
-@jit.script
 class Normal(nn.Module):
     r"""Return the closest normal matrix to X.
 
@@ -128,7 +127,6 @@ class Normal(nn.Module):
         return normal(x)
 
 
-@jit.script
 class Diagonal(nn.Module):
     r"""Return the closest diagonal matrix to X.
 
@@ -144,7 +142,6 @@ class Diagonal(nn.Module):
         return diagonal(x)
 
 
-@jit.script
 class Banded(nn.Module):
     r"""Return the closest banded matrix to X.
 
@@ -168,7 +165,6 @@ class Banded(nn.Module):
         return banded(x, self.u, self.l)
 
 
-@jit.script
 class Masked(nn.Module):
     r"""Return the closest banded matrix to X.
 
