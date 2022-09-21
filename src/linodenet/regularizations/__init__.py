@@ -59,7 +59,7 @@ FUNCTIONAL_REGULARIZATIONS: Final[dict[str, FunctionalRegularization]] = {
     "logdetexp": logdetexp,
     "normal": normal,
     "orthogonal": orthogonal,
-    "skew_symmetric": skew_symmetric,
+    "skewsymmetric": skew_symmetric,
     "symmetric": symmetric,
 }
 r"""Dictionary of all available modular metrics."""

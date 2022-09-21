@@ -68,7 +68,7 @@ def skew_symmetric(x: Tensor, p: Optional[float] = None) -> Tensor:
     -------
     Tensor
     """
-    r = x - projections.skew_symmetric(x)
+    r = x - projections.skewsymmetric(x)
     if p is None:
         return torch.linalg.matrix_norm(r)
     return torch.linalg.matrix_norm(r, p)

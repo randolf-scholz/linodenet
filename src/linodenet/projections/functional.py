@@ -8,12 +8,14 @@ Contains projections in functional form.
 
 __all__ = [
     # Functions
-    "identity",
-    "symmetric",
-    "skew_symmetric",
-    "orthogonal",
+    "banded",
     "diagonal",
+    "identity",
+    "masked",
     "normal",
+    "orthogonal",
+    "skewsymmetric",
+    "symmetric",
 ]
 
 
@@ -28,14 +30,6 @@ def identity(x: Tensor) -> Tensor:
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
     .. math:: \min_Y ½∥X-Y∥_F^2
-
-    Parameters
-    ----------
-    x: Tensor
-
-    Returns
-    -------
-    Tensor
     """
     return x
 
@@ -49,20 +43,12 @@ def symmetric(x: Tensor) -> Tensor:
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = Y
 
     One can show analytically that Y = ½(X + X^⊤) is the unique minimizer.
-
-    Parameters
-    ----------
-    x: Tensor
-
-    Returns
-    -------
-    Tensor
     """
     return (x + x.swapaxes(-1, -2)) / 2
 
 
 @jit.script
-def skew_symmetric(x: Tensor) -> Tensor:
+def skewsymmetric(x: Tensor) -> Tensor:
     r"""Return the closest skew-symmetric matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -70,14 +56,6 @@ def skew_symmetric(x: Tensor) -> Tensor:
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
 
     One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
-
-    Parameters
-    ----------
-    x: Tensor
-
-    Returns
-    -------
-    Tensor
     """
     return (x - x.swapaxes(-1, -2)) / 2
 
@@ -106,15 +84,6 @@ def normal(x: Tensor) -> Tensor:
              ⟨∇h|S⟩=0     &⟹ ⟨S|∇²ℒ|S⟩ ≥ 0
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|𝕀⊗𝕀 + Λ⊗𝕀 − 𝕀⊗Λ|S⟩ ≥ 0
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
-
-
-    Parameters
-    ----------
-    x: Tensor
-
-    Returns
-    -------
-    Tensor
     """
     raise NotImplementedError("TODO: implement Fixpoint / Gradient based algorithm.")
 
@@ -133,14 +102,6 @@ def orthogonal(x: Tensor) -> Tensor:
     References
     ----------
     - `<https://math.stackexchange.com/q/2215359>`_
-
-    Parameters
-    ----------
-    x: Tensor
-
-    Returns
-    -------
-    Tensor
     """
     U, _, V = torch.svd(x, some=False, compute_uv=True)
     return torch.einsum("...ij, ...kj -> ...ik", U, V)
@@ -154,16 +115,37 @@ def diagonal(x: Tensor) -> Tensor:
 
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
 
-    One can show analytically that $Y = \diag(X)$ is the unique minimizer.
-
-    Parameters
-    ----------
-    x: Tensor
-
-    Returns
-    -------
-    Tensor
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕀⊙X$.
     """
     eye = torch.eye(x.shape[-1], dtype=torch.bool, device=x.device)
     zero = torch.tensor(0.0, dtype=x.dtype, device=x.device)
     return torch.where(eye, x, zero)
+
+
+@jit.script
+def banded(x: Tensor, u: int = 0, l: int = 0) -> Tensor:
+    r"""Return the closest banded matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = B⊙Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
+    """
+    x = torch.triu(x, diagonal=u)
+    x = torch.tril(x, diagonal=l)
+    return x
+
+
+@jit.script
+def masked(x: Tensor, m: torch.BoolTensor) -> Tensor:
+    r"""Return the closest banded matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = M⊙Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
+    """
+    zero = torch.tensor(0.0, dtype=x.dtype, device=x.device)
+    return torch.where(m, x, zero)

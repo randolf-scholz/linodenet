@@ -21,11 +21,13 @@ __all__ = [
     "functional",
     "modular",
     # Functions
+    "banded",
     "diagonal",
     "identity",
+    "masked",
     "normal",
     "orthogonal",
-    "skew_symmetric",
+    "skewsymmetric",
     "symmetric",
     # Classes
 ]
@@ -38,12 +40,24 @@ from torch import Tensor, nn
 
 from linodenet.projections import functional, modular
 from linodenet.projections.functional import (
+    banded,
     diagonal,
     identity,
+    masked,
     normal,
     orthogonal,
-    skew_symmetric,
+    skewsymmetric,
     symmetric,
+)
+from linodenet.projections.modular import (
+    Banded,
+    Diagonal,
+    Identity,
+    Masked,
+    Normal,
+    Orthogonal,
+    SkewSymmetric,
+    Symmetric,
 )
 
 FunctionalProjection: TypeAlias = Callable[[Tensor], Tensor]
@@ -55,16 +69,27 @@ r"""Type hint for modular regularizations."""
 Projection: TypeAlias = FunctionalProjection | ModularProjection  # matrix to matrix
 r"""Type hint for projections."""
 
-MODULAR_PROJECTIONS: Final[dict[str, type[nn.Module]]] = {}
+MODULAR_PROJECTIONS: Final[dict[str, type[nn.Module]]] = {
+    "Banded": Banded,
+    "Diagonal": Diagonal,
+    "Identity": Identity,
+    "Masked": Masked,
+    "Normal": Normal,
+    "Orthogonal": Orthogonal,
+    "SkewSymmetric": SkewSymmetric,
+    "Symmetric": Symmetric,
+}
 r"""Dictionary of all available modular metrics."""
 
 FUNCTIONAL_PROJECTIONS: Final[dict[str, FunctionalProjection]] = {
-    "identity": identity,
-    "symmetric": symmetric,
-    "skew_symmetric": skew_symmetric,
-    "orthogonal": orthogonal,
+    "banded": banded,
     "diagonal": diagonal,
+    "identity": identity,
+    "masked": masked,
     "normal": normal,
+    "orthogonal": orthogonal,
+    "skewsymmetric": skewsymmetric,
+    "symmetric": symmetric,
 }
 r"""Dictionary of all available modular metrics."""
 
