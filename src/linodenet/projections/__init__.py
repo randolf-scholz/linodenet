@@ -27,7 +27,7 @@ __all__ = [
     "masked",
     "normal",
     "orthogonal",
-    "skewsymmetric",
+    "skew_symmetric",
     "symmetric",
     # Classes
 ]
@@ -46,7 +46,7 @@ from linodenet.projections.functional import (
     masked,
     normal,
     orthogonal,
-    skewsymmetric,
+    skew_symmetric,
     symmetric,
 )
 from linodenet.projections.modular import (
@@ -88,7 +88,7 @@ FUNCTIONAL_PROJECTIONS: Final[dict[str, FunctionalProjection]] = {
     "masked": masked,
     "normal": normal,
     "orthogonal": orthogonal,
-    "skewsymmetric": skewsymmetric,
+    "skew_symmetric": skew_symmetric,
     "symmetric": symmetric,
 }
 r"""Dictionary of all available modular metrics."""

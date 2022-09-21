@@ -20,13 +20,26 @@ __all__ = [
     "functional",
     "modular",
     # Functions
+    "banded",
     "diagonal",
+    "identity",
     "logdetexp",
+    "masked",
+    "matrix_norm",
     "normal",
     "orthogonal",
     "skew_symmetric",
     "symmetric",
     # Classes
+    "Banded",
+    "Diagonal",
+    "Identity",
+    "LogDetExp",
+    "Masked",
+    "Normal",
+    "Orthogonal",
+    "SkewSymmetric",
+    "Symmetric",
 ]
 
 
@@ -37,12 +50,28 @@ from torch import Tensor, nn
 
 from linodenet.regularizations import functional, modular
 from linodenet.regularizations.functional import (
+    banded,
     diagonal,
+    identity,
     logdetexp,
+    masked,
+    matrix_norm,
     normal,
     orthogonal,
     skew_symmetric,
     symmetric,
+)
+from linodenet.regularizations.modular import (
+    Banded,
+    Diagonal,
+    Identity,
+    LogDetExp,
+    Masked,
+    MatrixNorm,
+    Normal,
+    Orthogonal,
+    SkewSymmetric,
+    Symmetric,
 )
 
 FunctionalRegularization: TypeAlias = Callable[[Tensor], Tensor]
@@ -55,16 +84,31 @@ Regularization: TypeAlias = FunctionalRegularization | ModularRegularization
 r"""Type hint for projections."""
 
 FUNCTIONAL_REGULARIZATIONS: Final[dict[str, FunctionalRegularization]] = {
+    "banded": banded,
     "diagonal": diagonal,
+    "identity": identity,
     "logdetexp": logdetexp,
+    "masked": masked,
+    "matrix_norm": matrix_norm,
     "normal": normal,
     "orthogonal": orthogonal,
-    "skewsymmetric": skew_symmetric,
+    "skew_symmetric": skew_symmetric,
     "symmetric": symmetric,
 }
 r"""Dictionary of all available modular metrics."""
 
-MODULAR_REGULARIZATIONS: Final[dict[str, type[nn.Module]]] = {}
+MODULAR_REGULARIZATIONS: Final[dict[str, type[nn.Module]]] = {
+    "Banded": Banded,
+    "Diagonal": Diagonal,
+    "Identity": Identity,
+    "LogDetExp": LogDetExp,
+    "Masked": Masked,
+    "MatrixNorm": MatrixNorm,
+    "Normal": Normal,
+    "Orthogonal": Orthogonal,
+    "SkewSymmetric": SkewSymmetric,
+    "Symmetric": Symmetric,
+}
 r"""Dictionary of all available modular metrics."""
 
 REGULARIZATIONS: Final[
