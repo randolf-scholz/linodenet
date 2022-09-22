@@ -15,6 +15,7 @@
       <w>bysource</w>
       <w>celu</w>
       <w>cipra</w>
+      <w>codeauthor</w>
       <w>codeclimate</w>
       <w>copybutton</w>
       <w>dtype</w>
@@ -66,8 +67,10 @@
       <w>nblocks</w>
       <w>ngth</w>
       <w>nhead</w>
+      <w>nitpicky</w>
       <w>nonglu</w>
       <w>odeint</w>
+      <w>operatorname</w>
       <w>overset</w>
       <w>pageview</w>
       <w>prenormalization</w>
@@ -77,12 +80,16 @@
       <w>rezero</w>
       <w>romera</w>
       <w>rtol</w>
+      <w>sectionauthor</w>
       <w>selu</w>
       <w>shaoqing</w>
       <w>shphᵀsᵀ</w>
+      <w>skewsymmetric</w>
+      <w>smartquotes</w>
       <w>softplus</w>
       <w>softshrink</w>
       <w>softsign</w>
+      <w>sphinxcontrib</w>
       <w>srsᵀ</w>
       <w>stdv</w>
       <w>stdvs</w>

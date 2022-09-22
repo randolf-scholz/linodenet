@@ -44,10 +44,9 @@ class LinODE(nn.Module):
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
-        "Cell": LinODECell.HP,
+        "cell": LinODECell.HP,
         "kernel_initialization": None,
         "kernel_projection": None,
-        "rezero": False,
     }
     r"""Dictionary of hyperparameters."""
 
@@ -79,14 +78,11 @@ class LinODE(nn.Module):
         super().__init__()
         self.CFG = HP = deep_dict_update(self.HP, HP)
 
-        HP["Cell"]["input_size"] = input_size
-        HP["Cell"]["kernel_initialization"] = HP["kernel_initialization"]
-        HP["Cell"]["kernel_parametrization"] = HP["kernel_projection"]
-        HP["Cell"]["rezero"] = HP["rezero"]
+        HP["cell"]["input_size"] = input_size
 
         self.input_size = input_size
         self.output_size = input_size
-        self.cell: nn.Module = initialize_from_config(HP["Cell"])
+        self.cell: nn.Module = initialize_from_config(HP["cell"])
 
         # Buffers
         self.register_buffer("xhat", torch.tensor(()), persistent=False)

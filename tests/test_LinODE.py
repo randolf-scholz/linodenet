@@ -35,7 +35,7 @@ def linode_error(
     relative_error: bool = True,
     device: Optional[torch.device] = None,
 ) -> NDArray:
-    r"""Compare LinODE against scipy.odeint on linear system.
+    r"""Compare `LinODE` against `scipy.odeint` on linear system.
 
     Parameters
     ----------
@@ -76,7 +76,7 @@ def linode_error(
     T_torch = torch.tensor(T, dtype=torch_dtype, device=device)
     x0_torch = torch.tensor(x0, dtype=torch_dtype, device=device)
 
-    model = LinODE(input_size=dim, kernel_initialization=A, rezero=False)
+    model = LinODE(input_size=dim, cell={"kernel_initialization": A, "scalar": 1.0})
     model.to(dtype=torch_dtype, device=device)
 
     Xhat = model(T_torch, x0_torch)
