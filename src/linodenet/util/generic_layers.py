@@ -31,14 +31,14 @@ class Series(nn.Sequential):
         "modules": [None],
     }
 
-    def __init__(self, *args: Any, **HP: Any) -> None:
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(self, *args: Any, **cfg: Any) -> None:
+        config = deep_dict_update(self.HP, cfg)
 
         modules: list[nn.Module] = []
 
-        if HP["modules"] != [None]:
-            del HP["modules"][0]
-            for _, layer in enumerate(HP["modules"]):
+        if config["modules"] != [None]:
+            del config["modules"][0]
+            for _, layer in enumerate(config["modules"]):
                 module = initialize_from_config(layer)
                 modules.append(module)
 
@@ -83,14 +83,14 @@ class Parallel(nn.ModuleList):
         "modules": [None],
     }
 
-    def __init__(self, *args: Any, **HP: Any) -> None:
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(self, *args: Any, **cfg: Any) -> None:
+        config = deep_dict_update(self.HP, cfg)
 
         modules: list[nn.Module] = []
 
-        if HP["modules"] != [None]:
-            del HP["modules"][0]
-            for _, layer in enumerate(HP["modules"]):
+        if config["modules"] != [None]:
+            del config["modules"][0]
+            for _, layer in enumerate(config["modules"]):
                 module = initialize_from_config(layer)
                 modules.append(module)
 
@@ -145,24 +145,24 @@ class Repeat(nn.Sequential):
         "independent": True,
     }
 
-    def __init__(self, **HP: Any) -> None:
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(self, **cfg: Any) -> None:
+        config = deep_dict_update(self.HP, cfg)
 
         copies: list[nn.Module] = []
 
-        for _ in range(HP["copies"]):
-            if isinstance(HP["module"], nn.Module):
-                module = HP["module"]
+        for _ in range(config["copies"]):
+            if isinstance(config["module"], nn.Module):
+                module = config["module"]
             else:
-                module = initialize_from_config(HP["module"])
+                module = initialize_from_config(config["module"])
 
-            if HP["independent"]:
+            if config["independent"]:
                 copies.append(module)
             else:
-                copies = [module] * HP["copies"]
+                copies = [module] * config["copies"]
                 break
 
-        HP["module"] = str(HP["module"])
+        config["module"] = str(config["module"])
         super().__init__(*copies)
 
 

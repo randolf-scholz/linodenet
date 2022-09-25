@@ -6,7 +6,7 @@ __all__ = [
     "Transformer",
 ]
 
-from typing import Any, Optional
+from typing import Optional
 
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder as _TransformerEncoder
@@ -38,6 +38,8 @@ class Transformer(nn.Module):
     __constants__ = ["norm"]
 
     HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
         "num_layers": 6,
         # the layer normalization component (optional).
         "norm": None,
@@ -64,15 +66,16 @@ class Transformer(nn.Module):
         },
     }
 
-    def __init__(self, **HP: Any):
+    def __init__(self, **cfg):
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
         self.layers = nn.ModuleList(
-            initialize_from(nn, **HP["EncoderLayer"]) for _ in range(HP["num_layers"])
+            initialize_from(nn, **config["EncoderLayer"])
+            for _ in range(config["num_layers"])
         )
-        self.num_layers = HP["num_layers"]
-        self.norm = HP["norm"]
+        self.num_layers = config["num_layers"]
+        self.norm = config["norm"]
 
     def forward(
         self,

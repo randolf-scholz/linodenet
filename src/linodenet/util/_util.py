@@ -190,7 +190,7 @@ def initialize_from(
     return partial(obj, **kwargs)  # type: ignore[return-value]
 
 
-def initialize_from_config(config: dict[str, Any]) -> Any:
+def initialize_from_config(config: dict[str, Any]) -> nn.Module:
     r"""Initialize a class from a dictionary.
 
     Parameters
@@ -208,7 +208,9 @@ def initialize_from_config(config: dict[str, Any]) -> Any:
     module = import_module(config.pop("__module__"))
     cls = getattr(module, config.pop("__name__"))
     opts = {key: val for key, val in config.items() if not is_dunder("key")}
-    return cls(**opts)
+    obj = cls(**opts)
+    assert isinstance(obj, nn.Module)
+    return obj
 
 
 def is_dunder(name: str) -> bool:

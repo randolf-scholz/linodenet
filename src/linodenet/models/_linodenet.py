@@ -42,7 +42,6 @@ class LinODE(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "cell": LinODECell.HP,
         "kernel_initialization": None,
@@ -73,16 +72,16 @@ class LinODE(nn.Module):
     def __init__(
         self,
         input_size: int,
-        **HP: Any,
+        **cfg: Any,
     ):
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
-        HP["cell"]["input_size"] = input_size
+        config["cell"]["input_size"] = input_size
 
         self.input_size = input_size
         self.output_size = input_size
-        self.cell: nn.Module = initialize_from_config(HP["cell"])
+        self.cell: nn.Module = initialize_from_config(config["cell"])
 
         # Buffers
         self.register_buffer("xhat", torch.tensor(()), persistent=False)
@@ -172,11 +171,10 @@ class LinODEnet(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
-        "input_size": int,
-        "hidden_size": int,
-        "output_size": int,
+        "input_size": None,
+        "hidden_size": None,
+        "output_size": None,
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
@@ -228,38 +226,38 @@ class LinODEnet(nn.Module):
     # filter: nn.Module
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
-    def __init__(self, input_size: int, hidden_size: int, **HP: Any):
+    def __init__(self, input_size: int, hidden_size: int, **cfg: Any):
         super().__init__()
 
         LOGGER = __logger__.getChild(self.__class__.__name__)
 
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = input_size
 
-        HP["Encoder"]["input_size"] = hidden_size
-        HP["Decoder"]["input_size"] = hidden_size
-        HP["System"]["input_size"] = hidden_size
-        HP["Filter"]["hidden_size"] = input_size
-        HP["Filter"]["input_size"] = input_size
-        HP["Embedding"]["input_size"] = input_size
-        HP["Embedding"]["hidden_size"] = hidden_size
-        HP["Projection"]["input_size"] = input_size
-        HP["Projection"]["hidden_size"] = hidden_size
+        config["Encoder"]["input_size"] = hidden_size
+        config["Decoder"]["input_size"] = hidden_size
+        config["System"]["input_size"] = hidden_size
+        config["Filter"]["hidden_size"] = input_size
+        config["Filter"]["input_size"] = input_size
+        config["Embedding"]["input_size"] = input_size
+        config["Embedding"]["hidden_size"] = hidden_size
+        config["Projection"]["input_size"] = input_size
+        config["Projection"]["hidden_size"] = hidden_size
 
-        LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
-        self.embedding: nn.Module = initialize_from_config(HP["Embedding"])
-        LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
-        self.projection: nn.Module = initialize_from_config(HP["Projection"])
-        LOGGER.debug("%s Initializing Encoder %s", self.name, HP["Encoder"])
-        self.encoder: nn.Module = initialize_from_config(HP["Encoder"])
-        LOGGER.debug("%s Initializing System %s", self.name, HP["Encoder"])
-        self.system: nn.Module = initialize_from_config(HP["System"])
-        LOGGER.debug("%s Initializing Decoder %s", self.name, HP["Encoder"])
-        self.decoder: nn.Module = initialize_from_config(HP["Decoder"])
-        LOGGER.debug("%s Initializing Filter %s", self.name, HP["Encoder"])
-        self.filter: Filter = initialize_from_config(HP["Filter"])
+        LOGGER.debug("%s Initializing Embedding %s", self.name, config["Embedding"])
+        self.embedding: nn.Module = initialize_from_config(config["Embedding"])
+        LOGGER.debug("%s Initializing Embedding %s", self.name, config["Embedding"])
+        self.projection: nn.Module = initialize_from_config(config["Projection"])
+        LOGGER.debug("%s Initializing Encoder %s", self.name, config["Encoder"])
+        self.encoder: nn.Module = initialize_from_config(config["Encoder"])
+        LOGGER.debug("%s Initializing System %s", self.name, config["Encoder"])
+        self.system: nn.Module = initialize_from_config(config["System"])
+        LOGGER.debug("%s Initializing Decoder %s", self.name, config["Encoder"])
+        self.decoder: nn.Module = initialize_from_config(config["Decoder"])
+        LOGGER.debug("%s Initializing Filter %s", self.name, config["Encoder"])
+        self.filter: Filter = initialize_from_config(config["Filter"])
 
         assert isinstance(self.system.kernel, Tensor)
         self.kernel = self.system.kernel
