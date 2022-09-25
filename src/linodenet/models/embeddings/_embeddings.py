@@ -51,7 +51,7 @@ class ConcatEmbedding(nn.Module):
     padding: Tensor
     r"""PARAM: The padding vector."""
 
-    def __init__(self, input_size: int, hidden_size: int, **HP: Any) -> None:
+    def __init__(self, input_size: int, hidden_size: int, **cfg: Any) -> None:
         super().__init__()
         assert (
             input_size <= hidden_size
@@ -118,7 +118,7 @@ class ConcatProjection(nn.Module):
     pad_size: Final[int]
     r"""CONST: The size of the padding."""
 
-    def __init__(self, input_size: int, hidden_size: int, **HP: Any) -> None:
+    def __init__(self, input_size: int, hidden_size: int, **cfg: Any) -> None:
         super().__init__()
         assert input_size <= hidden_size
         self.input_size = input_size

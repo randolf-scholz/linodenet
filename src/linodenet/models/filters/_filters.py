@@ -20,7 +20,6 @@ __all__ = [
     "SequentialFilter",
 ]
 from abc import abstractmethod
-from collections.abc import Iterable
 from typing import Any, Final, Optional, TypeAlias
 
 import torch
@@ -240,18 +239,18 @@ class KalmanCell(FilterABC):
     ZERO: Tensor
     r"""BUFFER: A constant value of zero."""
 
-    def __init__(self, /, **HP: Any):
+    def __init__(self, /, **cfg: Any):
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
         # CONSTANTS
-        self.autoregressive = HP["autoregressive"]
-        self.input_size = input_size = HP["input_size"]
+        self.autoregressive = config["autoregressive"]
+        self.input_size = input_size = config["input_size"]
 
         if self.autoregressive:
-            hidden_size = HP["input_size"]
+            hidden_size = config["input_size"]
         else:
-            hidden_size = HP["hidden_size"]
+            hidden_size = config["hidden_size"]
 
         self.hidden_size = hidden_size
 
@@ -347,16 +346,16 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
 
     input_size: Final[int]
 
-    def __init__(self, *args: Any, **HP: Any) -> None:
+    def __init__(self, *args: Any, **cfg: Any) -> None:
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
-        self.input_size = input_size = HP["input_size"]
-        HP["filter"]["input_size"] = input_size
+        self.input_size = input_size = config["input_size"]
+        config["filter"]["input_size"] = input_size
 
         layers: list[nn.Module] = []
 
-        for layer in HP["layers"]:
+        for layer in config["layers"]:
             if "input_size" in layer:
                 layer["input_size"] = input_size
             if "output_size" in layer:
@@ -365,8 +364,8 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
             layers.append(module)
 
         layers = list(args) + layers
-        self.filter: nn.Module = initialize_from_config(HP["filter"])
-        self.layers: Iterable[nn.Module] = nn.Sequential(*layers)
+        self.filter = initialize_from_config(config["filter"])
+        self.layers = nn.Sequential(*layers)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -426,7 +425,6 @@ class RecurrentCellFilter(FilterABC):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "concat": True,
         "input_size": None,
@@ -458,15 +456,15 @@ class RecurrentCellFilter(FilterABC):
     H: Tensor
     r"""PARAM: the observation matrix."""
 
-    def __init__(self, /, input_size: int, hidden_size: int, **HP: Any):
+    def __init__(self, /, input_size: int, hidden_size: int, **cfg: Any):
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
         # CONSTANTS
-        self.concat_mask = HP["concat"]
+        self.concat_mask = config["concat"]
         self.input_size = input_size * (1 + self.concat_mask)
         self.hidden_size = hidden_size
-        self.autoregressive = HP["autoregressive"]
+        self.autoregressive = config["autoregressive"]
 
         if self.autoregressive:
             assert (
@@ -477,10 +475,12 @@ class RecurrentCellFilter(FilterABC):
             self.H = nn.Parameter(torch.empty(input_size, hidden_size))
             nn.init.kaiming_normal_(self.H, nonlinearity="linear")
 
-        deep_keyval_update(HP, input_size=self.input_size, hidden_size=self.hidden_size)
+        deep_keyval_update(
+            config, input_size=self.input_size, hidden_size=self.hidden_size
+        )
 
         # MODULES
-        self.cell = initialize_from_config(HP["Cell"])
+        self.cell = initialize_from_config(config["Cell"])
 
     @jit.export
     def h(self, x: Tensor) -> Tensor:

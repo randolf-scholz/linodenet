@@ -419,7 +419,6 @@ class iResNetBlock(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        # "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "atol": 1e-08,
         "rtol": 1e-05,
@@ -549,7 +548,6 @@ class iResNet(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        # "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "maxiter": 10,
         "input_size": None,

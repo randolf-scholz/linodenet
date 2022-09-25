@@ -126,20 +126,22 @@ class ReverseDense(nn.Module):
     bias: Optional[Tensor]
     r"""The bias vector."""
 
-    def __init__(self, input_size: int, output_size: int, **HP: Any) -> None:
+    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
-        self.input_size = HP["input_size"] = input_size
-        self.output_size = HP["output_size"] = output_size
+        self.input_size = config["input_size"] = input_size
+        self.output_size = config["output_size"] = output_size
 
-        self.activation: nn.Module = initialize_from_config(HP["activation"])
+        self.activation: nn.Module = initialize_from_config(config["activation"])
 
-        self.linear = nn.Linear(HP["input_size"], HP["output_size"], HP["bias"])
+        self.linear = nn.Linear(
+            config["input_size"], config["output_size"], config["bias"]
+        )
         self.weight = self.linear.weight
         self.bias = self.linear.bias
 
-        activation_name = HP["activation"]["__name__"].lower()
+        activation_name = config["activation"]["__name__"].lower()
         nn.init.kaiming_uniform_(self.weight, nonlinearity=activation_name)
 
         if self.bias is not None:

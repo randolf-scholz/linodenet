@@ -13,6 +13,7 @@ __all__ = [
 
 
 from collections import OrderedDict
+from collections.abc import Iterable
 from math import sqrt
 from typing import Any, Optional, cast
 
@@ -171,29 +172,29 @@ class ResNetBlock(nn.Sequential):
         ],
     }
 
-    def __init__(self, **HP: Any) -> None:
+    def __init__(self, **cfg: Any) -> None:
         super().__init__()
 
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
-        assert HP["input_size"] is not None, "input_size is required!"
+        assert config["input_size"] is not None, "input_size is required!"
 
-        for layer in HP["subblocks"]:
+        for layer in config["subblocks"]:
             if layer["__name__"] == "Linear":
-                layer["in_features"] = HP["input_size"]
-                layer["out_features"] = HP["input_size"]
+                layer["in_features"] = config["input_size"]
+                layer["out_features"] = config["input_size"]
             if layer["__name__"] == "BatchNorm1d":
-                layer["num_features"] = HP["input_size"]
+                layer["num_features"] = config["input_size"]
             else:
-                layer["input_size"] = HP["input_size"]
-                layer["output_size"] = HP["input_size"]
+                layer["input_size"] = config["input_size"]
+                layer["output_size"] = config["input_size"]
 
         subblocks: OrderedDict[str, nn.Module] = OrderedDict()
 
-        for k in range(HP["num_subblocks"]):
+        for k in range(config["num_subblocks"]):
             key = f"subblock{k}"
             module = nn.Sequential(
-                *[initialize_from_config(layer) for layer in HP["subblocks"]]
+                *[initialize_from_config(layer) for layer in config["subblocks"]]
             )
             self.add_module(key, module)
             subblocks[key] = module
@@ -216,28 +217,35 @@ class ResNet(nn.ModuleList):
         ],
     }
 
-    def __init__(self, **HP: Any) -> None:
-        super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(
+        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+    ) -> None:
+        super().__init__(modules)
+        config = deep_dict_update(self.HP, cfg)
 
-        assert HP["input_size"] is not None, "input_size is required!"
+        assert config["input_size"] is not None, "input_size is required!"
 
         # pass the input_size to the subblocks
-        for block_cfg in HP["blocks"]:
+        for block_cfg in config["blocks"]:
             if "input_size" in block_cfg:
-                block_cfg["input_size"] = HP["input_size"]
+                block_cfg["input_size"] = config["input_size"]
 
         blocks: list[nn.Module] = []
 
-        for k in range(HP["num_blocks"]):
+        for k in range(config["num_blocks"]):
             key = f"block{k}"
             module = nn.Sequential(
-                *[initialize_from_config(layer) for layer in HP["blocks"]]
+                *[initialize_from_config(layer) for layer in config["blocks"]]
             )
             self.add_module(key, module)
             blocks.append(module)
 
         super().__init__(blocks)
+
+    # @classmethod
+    # def from_config(cls, config: dict[str, Any]) -> "ResNet":
+    #     r"""Initialize from a config."""
+    #     return cls(**config)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
