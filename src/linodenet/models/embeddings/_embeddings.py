@@ -104,7 +104,6 @@ class ConcatProjection(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": int,
         "hidden_size": int,
