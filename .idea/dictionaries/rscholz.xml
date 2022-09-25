@@ -1,6 +1,7 @@
 <component name="ProjectDictionaryState">
   <dictionary name="rscholz">
     <words>
+      <w>allcaps</w>
       <w>allclose</w>
       <w>argmin</w>
       <w>autoapi</w>
@@ -48,6 +49,7 @@
       <w>kataoka</w>
       <w>keyval</w>
       <w>koyama</w>
+      <w>kwds</w>
       <w>layernorm</w>
       <w>layerwise</w>
       <w>linalg</w>
