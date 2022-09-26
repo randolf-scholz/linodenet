@@ -14,7 +14,7 @@ __all__ = [
     "Sum",
 ]
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any, Final, List, Optional
 
 import torch
@@ -32,10 +32,10 @@ class Series(nn.Sequential):
         "modules": [None],
     }
 
-    def __init__(self, *args: Any, **cfg: Any) -> None:
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
         config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = []
+        modules: list[nn.Module] = list(modules)
 
         if config["modules"] != [None]:
             del config["modules"][0]
@@ -43,7 +43,6 @@ class Series(nn.Sequential):
                 module = initialize_from_config(layer)
                 modules.append(module)
 
-        modules = list(args) + modules
         super().__init__(*modules)
 
     def __matmul__(self, other: nn.Module) -> Series:
@@ -84,7 +83,9 @@ class Parallel(nn.ModuleList):
         "modules": [None],
     }
 
-    def __init__(self, *args: Any, **cfg: Any) -> None:
+    def __init__(
+        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+    ) -> None:
         config = deep_dict_update(self.HP, cfg)
 
         modules: list[nn.Module] = []
@@ -95,7 +96,7 @@ class Parallel(nn.ModuleList):
                 module = initialize_from_config(layer)
                 modules.append(module)
 
-        modules = list(args) + modules
+        modules = list(modules) + modules
 
         super().__init__(modules)
 
@@ -137,10 +138,10 @@ class Repeat(nn.Sequential):
         "independent": True,
     }
 
-    def __init__(self, **cfg: Any) -> None:
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
         config = deep_dict_update(self.HP, cfg)
 
-        copies: list[nn.Module] = []
+        copies: list[nn.Module] = list(modules)
 
         for _ in range(config["copies"]):
             if isinstance(config["module"], nn.Module):
@@ -198,25 +199,22 @@ class Sum(nn.ModuleList):
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
-        "modules": [None],
+        "modules": [],
     }
 
-    def __init__(self, *args: Any, **cfg: Any) -> None:
+    def __init__(
+        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+    ) -> None:
         config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = []
+        modules: list[nn.Module] = [] if modules is None else list(modules)
 
-        if config["modules"] != [None]:
-            del config["modules"][0]
-            for _, layer in enumerate(config["modules"]):
-                module = initialize_from_config(layer)
-                modules.append(module)
-
-        modules = list(args) + modules
+        for layer in config["modules"]:
+            module = initialize_from_config(layer)
+            modules.append(module)
 
         super().__init__(modules)
 
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, *args, **kwargs):
         r"""Forward pass."""
-        return sum(module(x) for module in self)
+        return sum(module(*args, **kwargs) for module in self)

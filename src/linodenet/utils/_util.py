@@ -45,9 +45,7 @@ def pad(
 ) -> Tensor:
     r"""Pad a tensor with a constant value along a given dimension."""
     shape = list(x.shape)
-    print(shape)
     shape[dim] = pad_width
-    print(shape)
     z = torch.full(shape, value, dtype=x.dtype, device=x.device)
 
     if prepend:
