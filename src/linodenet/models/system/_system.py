@@ -150,8 +150,9 @@ class LinODECell(nn.Module):
             torch.tensor(config["scalar"]), requires_grad=self.scalar_learnable
         )
         self.weight = nn.Parameter(self._kernel_initialization())
-        parametrized_kernel = self.kernel_parametrization(self.weight)
-        self.register_buffer("kernel", parametrized_kernel, persistent=False)
+        with torch.no_grad():
+            parametrized_kernel = self.kernel_parametrization(self.weight)
+            self.register_buffer("kernel", parametrized_kernel, persistent=False)
 
     def kernel_initialization(self) -> Tensor:
         r"""Draw an initial kernel matrix (random or static)."""
