@@ -107,7 +107,7 @@ class ConcatProjection(nn.Module):
 
         .. Signature: ``(..., d+e) -> (..., d)``.
         """
-        return x[..., : self.input_size]
+        return x[..., : self.output_size]
 
     @jit.export
     def inverse(self, y: Tensor) -> Tensor:
