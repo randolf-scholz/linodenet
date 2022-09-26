@@ -319,14 +319,17 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
 
     input_size: Final[int]
 
-    def __init__(self, *args: Any, **cfg: Any) -> None:
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
         super().__init__()
         config = deep_dict_update(self.HP, cfg)
 
         self.input_size = input_size = config["input_size"]
         config["filter"]["input_size"] = input_size
 
-        layers: list[nn.Module] = []
+        layers: list[nn.Module] = list(modules)
+
+        self.filter = initialize_from_config(config["filter"])
+        layers.append(self.filter)
 
         for layer in config["layers"]:
             if "input_size" in layer:
@@ -336,16 +339,18 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
             module = initialize_from_config(layer)
             layers.append(module)
 
-        layers = list(args) + layers
-        self.filter = initialize_from_config(config["filter"])
-        self.layers = nn.Sequential(*layers)
+        super().__init__(layers)
+        print(self)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        z = self.filter(y, x)
-        for module in self.layers:
-            z = module(z)
+        z = x
+        for i, module in enumerate(self):
+            if i == 0:
+                z = module(y, z)
+            else:
+                z = module(z)
         return x + z
 
 
@@ -489,7 +494,7 @@ class RecurrentCellFilter(FilterABC):
 
 
 class LinearFilter(FilterABC):
-    r"""A Linear Filter.
+    r"""A Linear, Autoregressive Filter.
 
     .. math::  x̂' = x̂ - αP∏ₘᵀP^{-1}Πₘ(x̂ - x)
 

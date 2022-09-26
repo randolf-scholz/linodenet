@@ -38,14 +38,16 @@ r"""Type Variable for nn.Modules."""
 @jit.script
 def pad(
     x: Tensor,
+    value: float,
     pad_width: int,
-    value: float = float("nan"),
     dim: int = -1,
     prepend: bool = False,
 ) -> Tensor:
     r"""Pad a tensor with a constant value along a given dimension."""
     shape = list(x.shape)
+    print(shape)
     shape[dim] = pad_width
+    print(shape)
     z = torch.full(shape, value, dtype=x.dtype, device=x.device)
 
     if prepend:
