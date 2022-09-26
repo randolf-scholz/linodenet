@@ -18,6 +18,7 @@ __all__ = [
     "RecurrentCellFilter",
     "SequentialFilterBlock",
     "SequentialFilter",
+    "LinearFilter",
 ]
 from abc import abstractmethod
 from typing import Any, Final, Optional, TypeAlias
@@ -25,6 +26,7 @@ from typing import Any, Final, Optional, TypeAlias
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.projections import PROJECTIONS
 from linodenet.util import (
     ReverseDense,
     ReZeroCell,
@@ -183,8 +185,18 @@ class KalmanCell(FilterABC):
 
     Note that in the autoregressive case, $H=𝕀$ and $P=R$. Thus
 
-    x̂' &= x̂ - ½ (x̂ - y)    \\
-       &= ½(x̂ + y)
+    .. math::
+        x̂' &= x̂ - P∏ₘᵀ(2P)⁻¹Πₘ(x̂ - x)        \\
+           &= x̂ - ½ P∏ₘᵀP^{-1}Πₘ(x̂ - y)      \\
+
+    We consider a few cases:
+
+    .. math::  x̂' = x̂ - α(x̂ - x)
+
+    - $α = 1$ is the "last-value" filter
+    - $α = 0$ is the "first-value" filter
+    - $α = ½$ is the standard Kalman filter, which takes the average between the
+      state estimate and the observation.
 
     So in this case, the filter precisely always chooses the average between the prediction and the measurement.
 
@@ -204,8 +216,8 @@ class KalmanCell(FilterABC):
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
-        "input_size": int,
-        "hidden_size": int,
+        "input_size": None,
+        "hidden_size": None,
         "autoregressive": False,
     }
     r"""The HyperparameterDict of this class."""
@@ -343,9 +355,9 @@ class SequentialFilter(FilterABC, nn.ModuleList):
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
+        "input_size": None,
         "independent": True,
         "copies": 2,
-        "input_size": int,
         "module": SequentialFilterBlock.HP,
     }
     r"""The HyperparameterDict of this class."""
@@ -474,3 +486,106 @@ class RecurrentCellFilter(FilterABC):
 
         # De-Flatten return value
         return result.view(mask.shape)
+
+
+class LinearFilter(FilterABC):
+    r"""A Linear Filter.
+
+    .. math::  x̂' = x̂ - αP∏ₘᵀP^{-1}Πₘ(x̂ - x)
+
+    - $α = 1$ is the "last-value" filter
+    - $α = 0$ is the "first-value" filter
+    - $α = ½$ is the standard Kalman filter, which takes the average between the
+      state estimate and the observation.
+
+    One idea: $P = 𝕀 + εA$, where $A$ is symmetric. In this case,
+    the inverse is approximately given by $𝕀-εA$.
+
+    We define the linearized filter as
+
+    .. math::  x̂' = x̂ - α(𝕀 + εA)∏ₘᵀ(𝕀 - εA)Πₘ(x̂ - x)
+
+    Where $ε$ is initialized as zero.
+    """
+
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
+        "input_size": None,
+        "hidden_size": None,
+        "alpha": "last-value",
+        "alpha_learnable": False,
+        "projection": "Symmetric",
+    }
+    r"""The HyperparameterDict of this class."""
+
+    # CONSTANTS
+    input_size: Final[int]
+    r"""CONST: The input size (=dim x)."""
+    hidden_size: Final[int]
+    r"""CONST: The hidden size (=dim y)."""
+
+    # PARAMETERS
+    H: Optional[Tensor]
+    r"""PARAM: the observation matrix."""
+    kernel: Tensor
+    r"""PARAM: The kernel matrix."""
+
+    # BUFFERS
+    ZERO: Tensor
+    r"""BUFFER: A constant value of zero."""
+
+    def __init__(
+        self,
+        input_size: int,
+        alpha: str | float = "last-value",
+        alpha_learnable: bool = True,
+        projection: str | nn.Module = "Symmetric",
+        **cfg: Any,
+    ):
+        super().__init__()
+        config = deep_dict_update(self.HP, cfg)
+
+        # CONSTANTS
+        self.input_size = input_size
+        self.hidden_size = config["hidden_size"]
+
+        # PARAMETERS
+        match alpha:
+            case "first-value":
+                alpha = 0.0
+            case "last-value":
+                alpha = 1.0
+            case "kalman":
+                alpha = 0.5
+            case str():
+                raise ValueError(f"Unknown alpha: {alpha}")
+
+        self.alpha = nn.Parameter(torch.tensor(alpha), requires_grad=alpha_learnable)
+        self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        self.weight = nn.Parameter(torch.empty(self.input_size, self.input_size))
+        if isinstance(projection, str):
+            projection = PROJECTIONS[projection]()
+        self.parametrization = projection
+        nn.init.kaiming_normal_(self.weight, nonlinearity="linear")
+        I = torch.eye(self.input_size, dtype=self.weight.dtype)
+
+        # BUFFERS
+        kernel = self.epsilon * self.parametrization(self.weight)
+        self.register_buffer("kernel", kernel)
+        self.register_buffer("ZERO", torch.zeros(1))
+        self.register_buffer("I", I)
+
+    @jit.export
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        # refresh buffer
+        self.kernel = self.epsilon * self.parametrization(self.weight)
+
+        # create the mask
+        mask = ~torch.isnan(y)  # → [..., m]
+        z = torch.where(mask, y - x, self.ZERO)  # → [..., m]
+        z = torch.einsum("ij, ...j", self.I - self.kernel, z)  # → [..., n]
+        z = torch.where(mask, z, self.ZERO)
+        x = torch.einsum("ij, ...j -> ...i", self.I + self.kernel, z)
+        return x
