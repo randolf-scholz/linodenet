@@ -147,18 +147,7 @@ class KalmanFilter(FilterABC):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor, *, P: Optional[Tensor] = None) -> Tensor:
-        r"""Forward pass of the filter.
-
-        Parameters
-        ----------
-        x: Tensor
-        y: Tensor
-        P: Optional[Tensor] = None
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Forward pass of the filter."""
         P = torch.eye(x.shape[-1]) if P is None else P
         # create the mask
         mask = ~torch.isnan(y)
@@ -274,16 +263,7 @@ class KalmanCell(FilterABC):
 
     @jit.export
     def h(self, x: Tensor) -> Tensor:
-        r"""Apply the observation function.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Apply the observation function."""
         if self.autoregressive:
             return x
 
@@ -294,16 +274,7 @@ class KalmanCell(FilterABC):
 
     @jit.export
     def ht(self, x: Tensor) -> Tensor:
-        r"""Apply the transpose observation function.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Apply the transpose observation function."""
         if self.autoregressive:
             return x
 
@@ -314,17 +285,7 @@ class KalmanCell(FilterABC):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``.
-
-        Parameters
-        ----------
-        y: Tensor
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         # create the mask
         mask = ~torch.isnan(y)  # → [..., m]
         r = torch.where(mask, y - self.h(x), self.ZERO)  # → [..., m]
@@ -389,27 +350,27 @@ class SequentialFilter(FilterABC, nn.ModuleList):
     }
     r"""The HyperparameterDict of this class."""
 
-    def __init__(self, **HP: Any) -> None:
+    def __init__(self, **cfg: Any) -> None:
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
-        HP["module"]["input_size"] = HP["input_size"]
+        config["module"]["input_size"] = config["input_size"]
 
         copies: list[nn.Module] = []
 
-        for _ in range(HP["copies"]):
-            if isinstance(HP["module"], nn.Module):
-                module = HP["module"]
+        for _ in range(config["copies"]):
+            if isinstance(config["module"], nn.Module):
+                module = config["module"]
             else:
-                module = initialize_from_config(HP["module"])
+                module = initialize_from_config(config["module"])
 
-            if HP["independent"]:
+            if config["independent"]:
                 copies.append(module)
             else:
-                copies = [module] * HP["copies"]
+                copies = [module] * config["copies"]
                 break
 
-        HP["module"] = str(HP["module"])
+        config["module"] = str(config["module"])
         nn.ModuleList.__init__(self, copies)
 
     @jit.export
@@ -484,33 +445,14 @@ class RecurrentCellFilter(FilterABC):
 
     @jit.export
     def h(self, x: Tensor) -> Tensor:
-        r"""Apply the observation function.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Apply the observation function."""
         if self.autoregressive:
             return x
         return torch.einsum("ij, ...j -> ...i", self.H, x)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``.
-
-        Parameters
-        ----------
-        y: Tensor
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         mask = torch.isnan(y)
 
         # impute missing value in observation with state estimate
