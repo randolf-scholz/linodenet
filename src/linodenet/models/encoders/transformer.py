@@ -11,7 +11,7 @@ from typing import Optional
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder as _TransformerEncoder
 
-from linodenet.util import autojit, deep_dict_update, initialize_from
+from linodenet.utils import autojit, deep_dict_update, initialize_from
 
 TransformerEncoder = autojit(_TransformerEncoder)
 r"""TransformerEncoder: Transformer based Encoder model."""

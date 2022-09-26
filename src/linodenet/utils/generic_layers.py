@@ -20,7 +20,7 @@ from typing import Any, Final, List, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util._util import deep_dict_update, initialize_from_config
+from linodenet.utils._util import deep_dict_update, initialize_from_config
 
 
 class Series(nn.Sequential):

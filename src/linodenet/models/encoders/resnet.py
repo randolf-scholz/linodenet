@@ -23,7 +23,7 @@ from linodenet.models.encoders.ft_transformer import (
     get_activation_fn,
     get_nonglu_activation_fn,
 )
-from linodenet.util import (
+from linodenet.utils import (
     ReverseDense,
     ReZeroCell,
     deep_dict_update,
