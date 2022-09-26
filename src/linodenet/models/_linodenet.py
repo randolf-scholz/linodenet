@@ -7,7 +7,7 @@ __all__ = [
 ]
 
 import logging
-from typing import Any, Final
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -18,7 +18,7 @@ from linodenet.models.encoders import iResNet
 from linodenet.models.filters import Filter, RecurrentCellFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
-from linodenet.util import deep_dict_update, initialize_from_config
+from linodenet.util import deep_dict_update, initialize_from_config, pad
 
 # TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
 
@@ -174,6 +174,7 @@ class LinODEnet(nn.Module):
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "hidden_size": None,
+        "latent_size": None,
         "output_size": None,
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
@@ -187,8 +188,12 @@ class LinODEnet(nn.Module):
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
-    hidden_size: Final[int]
+    latent_size: Final[int]
     r"""CONST: The dimensionality of the linear ODE."""
+    hidden_size: Final[int]
+    r"""CONST: The dimensionality of the padding."""
+    padded_size: Final[int]
+    r"""CONST: The dimensionality of the padded state."""
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
 
@@ -226,25 +231,33 @@ class LinODEnet(nn.Module):
     # filter: nn.Module
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
-    def __init__(self, input_size: int, hidden_size: int, **cfg: Any):
+    def __init__(
+        self,
+        input_size: int,
+        latent_size: int,
+        hidden_size: Optional[int] = None,
+        **cfg: Any,
+    ):
         super().__init__()
 
         LOGGER = __logger__.getChild(self.__class__.__name__)
 
         config = deep_dict_update(self.HP, cfg)
         self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.hidden_size = hidden_size if hidden_size is not None else input_size
+        self.padded_size = self.hidden_size - self.input_size
+        self.latent_size = latent_size
         self.output_size = input_size
 
-        config["Encoder"]["input_size"] = hidden_size
-        config["Decoder"]["input_size"] = hidden_size
-        config["System"]["input_size"] = hidden_size
-        config["Filter"]["hidden_size"] = input_size
-        config["Filter"]["input_size"] = input_size
-        config["Embedding"]["input_size"] = input_size
-        config["Embedding"]["hidden_size"] = hidden_size
-        config["Projection"]["input_size"] = input_size
-        config["Projection"]["hidden_size"] = hidden_size
+        config["Encoder"]["input_size"] = self.latent_size
+        config["Decoder"]["input_size"] = self.latent_size
+        config["System"]["input_size"] = self.latent_size
+        config["Filter"]["hidden_size"] = self.padded_size
+        config["Filter"]["input_size"] = self.padded_size
+        config["Embedding"]["input_size"] = self.padded_size
+        config["Embedding"]["hidden_size"] = self.latent_size
+        config["Projection"]["input_size"] = self.padded_size
+        config["Projection"]["hidden_size"] = self.latent_size
 
         LOGGER.debug("%s Initializing Embedding %s", self.name, config["Embedding"])
         self.embedding: nn.Module = initialize_from_config(config["Embedding"])
@@ -303,14 +316,18 @@ class LinODEnet(nn.Module):
         ----------
         - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
         """
-        BATCH_SIZE = X.shape[:-2]
+        # Pad the input
+        X = pad(X, self.padded_size)
+
         # prepend a single zero for the first iteration.
-        pad_dim = list(BATCH_SIZE) + [1]
-        pad = torch.zeros(pad_dim, device=T.device, dtype=T.dtype)
-        DT = torch.diff(T, prepend=pad, dim=-1)  # (..., LEN) → (..., LEN)
+        T = pad(T, 1, value=0.0, prepend=True)
+        DT = torch.diff(T)  # (..., LEN) → (..., LEN)
+
+        # Move sequence to the front
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
         X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
+        # Initialize buffers
         Zhat_pre: list[Tensor] = []
         Xhat_pre: list[Tensor] = []
         Xhat_post: list[Tensor] = []
