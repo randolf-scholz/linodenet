@@ -13,7 +13,7 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
-from linodenet.util import deep_dict_update
+from linodenet.utils import deep_dict_update
 
 
 class LinODECell(nn.Module):

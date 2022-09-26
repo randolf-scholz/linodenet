@@ -27,7 +27,7 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.projections import PROJECTIONS
-from linodenet.util import (
+from linodenet.utils import (
     ReverseDense,
     ReZeroCell,
     deep_dict_update,

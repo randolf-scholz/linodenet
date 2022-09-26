@@ -19,7 +19,7 @@ from torch.nn import functional
 
 from linodenet.activations import MODULAR_ACTIVATIONS, ModularActivation
 from linodenet.initializations.functional import low_rank
-from linodenet.util import ReZeroCell, deep_dict_update
+from linodenet.utils import ReZeroCell, deep_dict_update
 
 
 @jit.script
