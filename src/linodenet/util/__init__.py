@@ -10,6 +10,8 @@ __all__ = [
     "flatten",
     "initialize_from",
     "initialize_from_config",
+    "is_dunder",
+    "pad",
     # Classes
     "ReZeroCell",
     "ReverseDense",
@@ -18,6 +20,7 @@ __all__ = [
     "Parallel",
     "Multiply",
 ]
+
 from linodenet.util import layers
 from linodenet.util._util import (
     autojit,
@@ -26,6 +29,8 @@ from linodenet.util._util import (
     flatten,
     initialize_from,
     initialize_from_config,
+    is_dunder,
+    pad,
 )
 from linodenet.util.generic_layers import Multiply, Parallel, Repeat, Series
 from linodenet.util.layers import ReverseDense, ReZeroCell

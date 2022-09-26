@@ -9,6 +9,7 @@ __all__ = [
     "initialize_from",
     "initialize_from_config",
     "is_dunder",
+    "pad",
     # Classes
 ]
 
@@ -32,6 +33,24 @@ r"""Generic type hint for instances."""
 
 nnModuleType = TypeVar("nnModuleType", bound=nn.Module)
 r"""Type Variable for nn.Modules."""
+
+
+@jit.script
+def pad(
+    x: Tensor,
+    pad_width: int,
+    value: float = float("nan"),
+    dim: int = -1,
+    prepend: bool = False,
+) -> Tensor:
+    r"""Pad a tensor with a constant value along a given dimension."""
+    shape = list(x.shape)
+    shape[dim] = pad_width
+    z = torch.full(shape, value, dtype=x.dtype, device=x.device)
+
+    if prepend:
+        return torch.cat((z, x), dim=dim)
+    return torch.cat((x, z), dim=dim)
 
 
 def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
