@@ -323,10 +323,20 @@ class LinODEnet(nn.Module):
         # Pad the input
         if self.padding_size:
             # TODO: write bug report for bogus behaviour
+            # dim = -1
+            # shape = list(X.shape)
+            # shape[dim] = self.padding_size
+            # z = torch.full(shape, float("nan"), dtype=X.dtype, device=X.device)
+            # X = torch.cat([X, z], dim=dim)
             X = pad(X, float("nan"), self.padding_size)
 
         # prepend a single zero for the first iteration.
-        T = pad(T, 0, 1, prepend=True)
+        # dim = 1
+        # shape = list(T.shape)
+        # shape[dim] = 1
+        # z = torch.full(shape, 0.0, dtype=T.dtype, device=T.device)
+        # T = torch.cat((z, T), dim=dim)
+        T = pad(T, 0.0, 1, prepend=True)
         DT = torch.diff(T)  # (..., LEN) → (..., LEN)
 
         # Move sequence to the front
@@ -366,4 +376,6 @@ class LinODEnet(nn.Module):
         self.zhat_post = torch.stack(Zhat_post, dim=-2)
         self.timedeltas = DT.moveaxis(0, -1)
 
-        return self.xhat_post
+        yhat = self.xhat_post[..., : self.output_size]
+
+        return yhat
