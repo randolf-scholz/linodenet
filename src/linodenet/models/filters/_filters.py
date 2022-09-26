@@ -340,7 +340,6 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
             layers.append(module)
 
         super().__init__(layers)
-        print(self)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -351,7 +350,7 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
                 z = module(y, z)
             else:
                 z = module(z)
-        return x + z
+        return x - z
 
 
 class SequentialFilter(FilterABC, nn.ModuleList):
@@ -545,7 +544,7 @@ class LinearFilter(FilterABC):
         input_size: int,
         alpha: str | float = "last-value",
         alpha_learnable: bool = True,
-        projection: str | nn.Module = "Symmetric",
+        projection: str | nn.Module = "symmetric",
         **cfg: Any,
     ):
         super().__init__()
@@ -570,16 +569,17 @@ class LinearFilter(FilterABC):
         self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.weight = nn.Parameter(torch.empty(self.input_size, self.input_size))
         if isinstance(projection, str):
-            projection = PROJECTIONS[projection]()
+            projection = PROJECTIONS[projection]
         self.parametrization = projection
         nn.init.kaiming_normal_(self.weight, nonlinearity="linear")
-        I = torch.eye(self.input_size, dtype=self.weight.dtype)
 
         # BUFFERS
-        kernel = self.epsilon * self.parametrization(self.weight)
-        self.register_buffer("kernel", kernel)
-        self.register_buffer("ZERO", torch.zeros(1))
-        self.register_buffer("I", I)
+        with torch.no_grad():
+            I = torch.eye(self.input_size, dtype=self.weight.dtype)
+            kernel = self.epsilon * self.parametrization(self.weight)
+            self.register_buffer("kernel", kernel)
+            self.register_buffer("ZERO", torch.zeros(1))
+            self.register_buffer("I", I)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -589,8 +589,8 @@ class LinearFilter(FilterABC):
 
         # create the mask
         mask = ~torch.isnan(y)  # → [..., m]
-        z = torch.where(mask, y - x, self.ZERO)  # → [..., m]
+        z = torch.where(mask, x - y, self.ZERO)  # → [..., m]
         z = torch.einsum("ij, ...j", self.I - self.kernel, z)  # → [..., n]
         z = torch.where(mask, z, self.ZERO)
-        x = torch.einsum("ij, ...j -> ...i", self.I + self.kernel, z)
-        return x
+        z = torch.einsum("ij, ...j -> ...i", self.I + self.kernel, z)
+        return self.alpha * z

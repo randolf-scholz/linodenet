@@ -11,6 +11,7 @@ __all__ = [
     "Parallel",
     "Repeat",
     "Series",
+    "Sum",
 ]
 
 from collections.abc import Callable
@@ -99,17 +100,8 @@ class Parallel(nn.ModuleList):
         super().__init__(modules)
 
     @jit.export
-    def forward(self, x: Tensor) -> list[Any]:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+    def forward(self, x: Tensor) -> list[Tensor]:
+        r"""Forward pass."""
         result: List[Any] = []
 
         for module in self:
@@ -198,3 +190,33 @@ class Multiply(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Forward pass."""
         return torch.einsum(self.signature, x, self.kernel)
+
+
+class Sum(nn.ModuleList):
+    r"""Add Module Outputs for same inputs."""
+
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
+        "modules": [None],
+    }
+
+    def __init__(self, *args: Any, **cfg: Any) -> None:
+        config = deep_dict_update(self.HP, cfg)
+
+        modules: list[nn.Module] = []
+
+        if config["modules"] != [None]:
+            del config["modules"][0]
+            for _, layer in enumerate(config["modules"]):
+                module = initialize_from_config(layer)
+                modules.append(module)
+
+        modules = list(args) + modules
+
+        super().__init__(modules)
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Forward pass."""
+        return sum(module(x) for module in self)
