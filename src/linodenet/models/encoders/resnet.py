@@ -161,7 +161,6 @@ class ResNetBlock(nn.Sequential):
     }
 
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
-        super().__init__()
 
         config = deep_dict_update(self.HP, cfg)
 
@@ -177,12 +176,11 @@ class ResNetBlock(nn.Sequential):
             layer["input_size"] = config["input_size"]
             layer["output_size"] = config["input_size"]
 
-        layers: list[nn.Module] = []
+        layers: list[nn.Module] = list(modules)
 
-        for k in range(config["num_layers"]):
-            key = f"subblock{k}"
+        for _ in range(config["num_layers"]):
             module = initialize_from_config(config["layer"])
-            self.add_module(key, module)
+            # self.add_module(f"subblock{k}", module)
             layers.append(module)
 
         if config["rezero"]:
@@ -206,7 +204,6 @@ class ResNet(nn.ModuleList):
     def __init__(
         self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
     ) -> None:
-        super().__init__(modules)
         config = deep_dict_update(self.HP, cfg)
 
         assert config["input_size"] is not None, "input_size is required!"
@@ -216,28 +213,18 @@ class ResNet(nn.ModuleList):
         if "input_size" in block:
             block["input_size"] = config["input_size"]
 
-        blocks: list[nn.Module] = []
+        blocks: list[nn.Module] = [] if modules is None else list(modules)
 
-        for k in range(config["num_blocks"]):
-            key = f"block{k}"
+        for _ in range(config["num_blocks"]):
             module = initialize_from_config(config["block"])
-            self.add_module(key, module)
+            # self.add_module(f"block{k}", module)
             blocks.append(module)
 
         super().__init__(blocks)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Forward pass."""
         for block in self:
             x = x + block(x)
         return x

@@ -174,14 +174,14 @@ class LinearFilter(FilterABC):
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         # refresh buffer
-        self.kernel = self.epsilon * self.parametrization(self.weight)
+        kernel = self.epsilon * self.weight
 
         # create the mask
         mask = ~torch.isnan(y)  # → [..., m]
         z = torch.where(mask, x - y, self.ZERO)  # → [..., m]
-        z = torch.einsum("ij, ...j", self.I - self.kernel, z)  # → [..., n]
+        z = torch.einsum("ij, ...j", self.I - kernel, z)  # → [..., n]
         z = torch.where(mask, z, self.ZERO)
-        z = torch.einsum("ij, ...j -> ...i", self.I + self.kernel, z)
+        z = torch.einsum("ij, ...j -> ...i", self.I + kernel, z)
         return self.alpha * z
 
 
@@ -410,7 +410,51 @@ class KalmanCell(FilterABC):
         return torch.einsum("ij, ...j -> ...i", self.B, self.ht(z))
 
 
-class SequentialFilterBlock(FilterABC, nn.ModuleList):
+# class SequentialFilterBlock(FilterABC, nn.ModuleList):
+#     r"""Multiple Filters applied sequentially."""
+#
+#     HP = {
+#         "__name__": __qualname__,  # type: ignore[name-defined]
+#         "__module__": __module__,  # type: ignore[name-defined]
+#         "input_size": None,
+#         "filter": KalmanCell.HP | {"autoregressive": True},
+#         "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
+#     }
+#     r"""The HyperparameterDict of this class."""
+#
+#     input_size: Final[int]
+#
+#     def __init__(self, *args: Any, **HP: Any) -> None:
+#         super().__init__()
+#         self.CFG = HP = deep_dict_update(self.HP, HP)
+#
+#         self.input_size = input_size = HP["input_size"]
+#         HP["filter"]["input_size"] = input_size
+#
+#         layers: list[nn.Module] = []
+#
+#         for layer in HP["layers"]:
+#             if "input_size" in layer:
+#                 layer["input_size"] = input_size
+#             if "output_size" in layer:
+#                 layer["output_size"] = input_size
+#             module = initialize_from_config(layer)
+#             layers.append(module)
+#
+#         layers = list(args) + layers
+#         self.filter: nn.Module = initialize_from_config(HP["filter"])
+#         self.layers: Iterable[nn.Module] = nn.Sequential(*layers)
+#
+#     @jit.export
+#     def forward(self, y: Tensor, x: Tensor) -> Tensor:
+#         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+#         z = self.filter(y, x)
+#         for module in self.layers:
+#             z = module(z)
+#         return x + z
+
+
+class SequentialFilterBlock(FilterABC, nn.Module):
     r"""Multiple Filters applied sequentially."""
 
     HP = {
@@ -425,22 +469,17 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
 
     input_size: Final[int]
 
-    def __init__(
-        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
-    ) -> None:
+    def __init__(self, **cfg: Any) -> None:
         super().__init__()
         config = deep_dict_update(self.HP, cfg)
 
         self.input_size = input_size = config["input_size"]
         config["filter"]["input_size"] = input_size
 
-        modules = [] if modules is None else list(modules)
-        layers: list[nn.Module] = modules
+        self.linear = LinearFilter(input_size)
+        self.nonlinear = initialize_from_config(config["filter"])
 
-        linear_filter = LinearFilter(input_size)
-        layers.append(linear_filter)
-        generic_filter = initialize_from_config(config["filter"])
-        layers.append(generic_filter)
+        layers: list[nn.Module] = []
 
         for layer in config["layers"]:
             if "input_size" in layer:
@@ -450,19 +489,16 @@ class SequentialFilterBlock(FilterABC, nn.ModuleList):
             module = initialize_from_config(layer)
             layers.append(module)
 
-        super().__init__(layers)
+        self.layers = nn.Sequential(*layers)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        z = x
-        for i, module in enumerate(self):
-            if i == 0:
-                linear = module(y, x)
-            elif i == 1:
-                z = module(y, x)
-            else:
-                z = module(z)
+        linear = self.linear(y, x)
+        z = self.nonlinear(y, x)
+
+        for module in self.layers:
+            z = module(z)
         return x - linear - z
 
 
@@ -474,33 +510,29 @@ class SequentialFilter(FilterABC, nn.ModuleList):
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "independent": True,
-        "copies": 2,
-        "module": SequentialFilterBlock.HP,
+        "num_blocks": 2,
+        "block": SequentialFilterBlock.HP,
     }
     r"""The HyperparameterDict of this class."""
 
-    def __init__(self, **cfg: Any) -> None:
+    def __init__(
+        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+    ) -> None:
         super().__init__()
         config = deep_dict_update(self.HP, cfg)
 
         config["module"]["input_size"] = config["input_size"]
 
-        copies: list[nn.Module] = []
+        modules: list[nn.Module] = [] if modules is None else list(modules)
 
-        for _ in range(config["copies"]):
-            if isinstance(config["module"], nn.Module):
-                module = config["module"]
+        for _ in range(config["num_blocks"]):
+            if isinstance(config["block"], nn.Module):
+                module = config["block"]
             else:
-                module = initialize_from_config(config["module"])
+                module = initialize_from_config(config["block"])
+            modules.append(module)
 
-            if config["independent"]:
-                copies.append(module)
-            else:
-                copies = [module] * config["copies"]
-                break
-
-        config["module"] = str(config["module"])
-        nn.ModuleList.__init__(self, copies)
+        nn.ModuleList.__init__(self, modules)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
