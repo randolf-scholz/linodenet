@@ -245,6 +245,7 @@ class LinODEnet(nn.Module):
         config = deep_dict_update(self.HP, cfg)
         self.input_size = input_size
         self.hidden_size = hidden_size if hidden_size is not None else input_size
+        assert self.hidden_size >= self.input_size
         self.padded_size = self.hidden_size - self.input_size
         self.latent_size = latent_size
         self.output_size = input_size
@@ -252,12 +253,12 @@ class LinODEnet(nn.Module):
         config["Encoder"]["input_size"] = self.latent_size
         config["Decoder"]["input_size"] = self.latent_size
         config["System"]["input_size"] = self.latent_size
-        config["Filter"]["hidden_size"] = self.padded_size
-        config["Filter"]["input_size"] = self.padded_size
-        config["Embedding"]["input_size"] = self.padded_size
-        config["Embedding"]["hidden_size"] = self.latent_size
-        config["Projection"]["input_size"] = self.padded_size
-        config["Projection"]["hidden_size"] = self.latent_size
+        config["Filter"]["input_size"] = self.hidden_size
+        config["Filter"]["output_size"] = self.hidden_size
+        config["Embedding"]["input_size"] = self.hidden_size
+        config["Embedding"]["output_size"] = self.latent_size
+        config["Projection"]["input_size"] = self.latent_size
+        config["Projection"]["output_size"] = self.hidden_size
 
         LOGGER.debug("%s Initializing Embedding %s", self.name, config["Embedding"])
         self.embedding: nn.Module = initialize_from_config(config["Embedding"])
