@@ -707,7 +707,7 @@ sortedcontainers = ">=2.0,<3.0"
 
 [[package]]
 name = "ipykernel"
-version = "6.15.3"
+version = "6.16.0"
 description = "IPython Kernel for Jupyter"
 category = "dev"
 optional = false
@@ -806,7 +806,7 @@ requirements_deprecated_finder = ["pip-api", "pipreqs"]
 
 [[package]]
 name = "jaraco.classes"
-version = "3.2.2"
+version = "3.2.3"
 description = "Utility functions for Python class constructs"
 category = "dev"
 optional = false
@@ -816,8 +816,8 @@ python-versions = ">=3.7"
 more-itertools = "*"
 
 [package.extras]
-docs = ["jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx"]
-testing = ["pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)"]
+docs = ["jaraco.packaging (>=9)", "jaraco.tidelift (>=1.4)", "rst.linker (>=1.9)", "sphinx (>=3.5)"]
+testing = ["flake8 (<5)", "pytest (>=6)", "pytest-black (>=0.3.7)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-enabler (>=1.3)", "pytest-flake8", "pytest-mypy (>=0.9.1)"]
 
 [[package]]
 name = "jedi"
@@ -967,7 +967,7 @@ test = ["ipykernel", "pre-commit", "pytest", "pytest-cov", "pytest-timeout"]
 
 [[package]]
 name = "jupyter-server"
-version = "1.18.1"
+version = "1.19.0"
 description = "The backend—i.e. core services, APIs, and REST endpoints—to Jupyter web applications."
 category = "dev"
 optional = false
@@ -1028,7 +1028,7 @@ python-versions = ">=3.7"
 
 [[package]]
 name = "jupyterlab-server"
-version = "2.15.1"
+version = "2.15.2"
 description = "A set of server components for JupyterLab and JupyterLab like applications."
 category = "dev"
 optional = false
@@ -1045,7 +1045,7 @@ requests = "*"
 
 [package.extras]
 openapi = ["openapi-core (>=0.14.2)", "ruamel-yaml"]
-test = ["codecov", "ipykernel", "jupyter-server[test]", "openapi-core (>=0.14.2)", "openapi-spec-validator (<0.5)", "pytest (>=5.3.2)", "pytest-console-scripts", "pytest-cov", "ruamel-yaml", "strict-rfc3339"]
+test = ["codecov", "ipykernel", "jupyter-server[test]", "openapi-core (>=0.14.2,<0.15.0)", "openapi-spec-validator (<0.5)", "pytest (>=5.3.2)", "pytest-console-scripts", "pytest-cov", "ruamel-yaml", "strict-rfc3339"]
 
 [[package]]
 name = "jupyterlab-widgets"
@@ -1223,11 +1223,11 @@ python-versions = ">=3.5"
 
 [[package]]
 name = "mypy"
-version = "0.971"
+version = "0.981"
 description = "Optional static typing for Python"
 category = "dev"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.7"
 
 [package.dependencies]
 mypy-extensions = ">=0.4.3"
@@ -1334,7 +1334,7 @@ webpdf = ["pyppeteer (>=1,<1.1)"]
 
 [[package]]
 name = "nbformat"
-version = "5.6.0"
+version = "5.6.1"
 description = "The Jupyter Notebook format"
 category = "dev"
 optional = false
@@ -2496,7 +2496,7 @@ widechars = ["wcwidth"]
 
 [[package]]
 name = "tensorboard"
-version = "2.10.0"
+version = "2.10.1"
 description = "TensorBoard lets you watch Tensors Flow"
 category = "dev"
 optional = false
@@ -2945,7 +2945,7 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=6)", "pytest-black (>=
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.10,<3.11"
-content-hash = "96cff1d7ca72d303cd50e35264a30006a851364ce2302b457cea0b0752a03594"
+content-hash = "d21b6df36f726b2c53ea5346199a30cfb15354144b22050f42ef68774a89d208"
 
 [metadata.files]
 absl-py = [
@@ -3501,8 +3501,8 @@ intervaltree = [
     {file = "intervaltree-3.1.0.tar.gz", hash = "sha256:902b1b88936918f9b2a19e0e5eb7ccb430ae45cde4f39ea4b36932920d33952d"},
 ]
 ipykernel = [
-    {file = "ipykernel-6.15.3-py3-none-any.whl", hash = "sha256:befe3736944b21afec8e832725e9a45f254c8bd9afc40b61d6661c97e45aff5a"},
-    {file = "ipykernel-6.15.3.tar.gz", hash = "sha256:b81d57b0e171670844bf29cdc11562b1010d3da87115c4513e0ee660a8368765"},
+    {file = "ipykernel-6.16.0-py3-none-any.whl", hash = "sha256:d3d95241cd4dd302fea9d5747b00509b58997356d1f6333c9a074c3eccb78cb3"},
+    {file = "ipykernel-6.16.0.tar.gz", hash = "sha256:7fe42c0d58435e971dc15fd42189f20d66bf35f3056bda4f6554271bc1fa3d0d"},
 ]
 ipython = [
     {file = "ipython-8.5.0-py3-none-any.whl", hash = "sha256:6f090e29ab8ef8643e521763a4f1f39dc3914db643122b1e9d3328ff2e43ada2"},
@@ -3521,8 +3521,8 @@ isort = [
     {file = "isort-5.10.1.tar.gz", hash = "sha256:e8443a5e7a020e9d7f97f1d7d9cd17c88bcb3bc7e218bf9cf5095fe550be2951"},
 ]
 "jaraco.classes" = [
-    {file = "jaraco.classes-3.2.2-py3-none-any.whl", hash = "sha256:e6ef6fd3fcf4579a7a019d87d1e56a883f4e4c35cfe925f86731abc58804e647"},
-    {file = "jaraco.classes-3.2.2.tar.gz", hash = "sha256:6745f113b0b588239ceb49532aa09c3ebb947433ce311ef2f8e3ad64ebb74594"},
+    {file = "jaraco.classes-3.2.3-py3-none-any.whl", hash = "sha256:2353de3288bc6b82120752201c6b1c1a14b058267fa424ed5ce5984e3b922158"},
+    {file = "jaraco.classes-3.2.3.tar.gz", hash = "sha256:89559fa5c1d3c34eff6f631ad80bb21f378dbcbb35dd161fd2c6b93f5be2f98a"},
 ]
 jedi = [
     {file = "jedi-0.18.1-py2.py3-none-any.whl", hash = "sha256:637c9635fcf47945ceb91cd7f320234a7be540ded6f3e99a50cb6febdfd1ba8d"},
@@ -3566,8 +3566,8 @@ jupyter-core = [
     {file = "jupyter_core-4.11.1.tar.gz", hash = "sha256:2e5f244d44894c4154d06aeae3419dd7f1b0ef4494dc5584929b398c61cfd314"},
 ]
 jupyter-server = [
-    {file = "jupyter_server-1.18.1-py3-none-any.whl", hash = "sha256:022759b09c96a4e2feb95de59ce4283e04e17782efe197b91d23a47521609b77"},
-    {file = "jupyter_server-1.18.1.tar.gz", hash = "sha256:2b72fc595bccae292260aad8157a0ead8da2c703ec6ae1bb7b36dbad0e267ea7"},
+    {file = "jupyter_server-1.19.0-py3-none-any.whl", hash = "sha256:310531a4ed1a5088daec9b930cfda08952d1e3809d0605e4b137af0a6da11669"},
+    {file = "jupyter_server-1.19.0.tar.gz", hash = "sha256:5d9b58c92011db1854a8ddeeac46e16bb37281e8f45156d4d0b2fb745f9561dd"},
 ]
 jupyterlab = [
     {file = "jupyterlab-3.4.7-py3-none-any.whl", hash = "sha256:30c64bc0aa0ba09959ab6fd5c74f08a6ae64656b46a29e2522142a5fda0dc486"},
@@ -3578,8 +3578,8 @@ jupyterlab-pygments = [
     {file = "jupyterlab_pygments-0.2.2.tar.gz", hash = "sha256:7405d7fde60819d905a9fa8ce89e4cd830e318cdad22a0030f7a901da705585d"},
 ]
 jupyterlab-server = [
-    {file = "jupyterlab_server-2.15.1-py3-none-any.whl", hash = "sha256:5e04008a98bfb510471b8b8a7059f7cdbb1797e1f255657f39ea3d838ba00bf6"},
-    {file = "jupyterlab_server-2.15.1.tar.gz", hash = "sha256:305313970e131c590cf77bb6b8ca7e98591bc304111e8d103bc91d212e94796f"},
+    {file = "jupyterlab_server-2.15.2-py3-none-any.whl", hash = "sha256:ec7cc9ddd16c407ba3ecd3579771fa7ae4c8f239ba401649f35e44ecbc3d41cc"},
+    {file = "jupyterlab_server-2.15.2.tar.gz", hash = "sha256:c0bcdd4606e640e6f16d236ceac55336dc8bf98cbbce067af27524ccc2fb2640"},
 ]
 jupyterlab-widgets = [
     {file = "jupyterlab_widgets-3.0.3-py3-none-any.whl", hash = "sha256:6aa1bc0045470d54d76b9c0b7609a8f8f0087573bae25700a370c11f82cb38c8"},
@@ -3910,29 +3910,30 @@ more-itertools = [
     {file = "more_itertools-8.14.0-py3-none-any.whl", hash = "sha256:1bc4f91ee5b1b31ac7ceacc17c09befe6a40a503907baf9c839c229b5095cfd2"},
 ]
 mypy = [
-    {file = "mypy-0.971-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:f2899a3cbd394da157194f913a931edfd4be5f274a88041c9dc2d9cdcb1c315c"},
-    {file = "mypy-0.971-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:98e02d56ebe93981c41211c05adb630d1d26c14195d04d95e49cd97dbc046dc5"},
-    {file = "mypy-0.971-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:19830b7dba7d5356d3e26e2427a2ec91c994cd92d983142cbd025ebe81d69cf3"},
-    {file = "mypy-0.971-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:02ef476f6dcb86e6f502ae39a16b93285fef97e7f1ff22932b657d1ef1f28655"},
-    {file = "mypy-0.971-cp310-cp310-win_amd64.whl", hash = "sha256:25c5750ba5609a0c7550b73a33deb314ecfb559c350bb050b655505e8aed4103"},
-    {file = "mypy-0.971-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:d3348e7eb2eea2472db611486846742d5d52d1290576de99d59edeb7cd4a42ca"},
-    {file = "mypy-0.971-cp36-cp36m-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:3fa7a477b9900be9b7dd4bab30a12759e5abe9586574ceb944bc29cddf8f0417"},
-    {file = "mypy-0.971-cp36-cp36m-win_amd64.whl", hash = "sha256:2ad53cf9c3adc43cf3bea0a7d01a2f2e86db9fe7596dfecb4496a5dda63cbb09"},
-    {file = "mypy-0.971-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:855048b6feb6dfe09d3353466004490b1872887150c5bb5caad7838b57328cc8"},
-    {file = "mypy-0.971-cp37-cp37m-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:23488a14a83bca6e54402c2e6435467a4138785df93ec85aeff64c6170077fb0"},
-    {file = "mypy-0.971-cp37-cp37m-win_amd64.whl", hash = "sha256:4b21e5b1a70dfb972490035128f305c39bc4bc253f34e96a4adf9127cf943eb2"},
-    {file = "mypy-0.971-cp38-cp38-macosx_10_9_universal2.whl", hash = "sha256:9796a2ba7b4b538649caa5cecd398d873f4022ed2333ffde58eaf604c4d2cb27"},
-    {file = "mypy-0.971-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:5a361d92635ad4ada1b1b2d3630fc2f53f2127d51cf2def9db83cba32e47c856"},
-    {file = "mypy-0.971-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:b793b899f7cf563b1e7044a5c97361196b938e92f0a4343a5d27966a53d2ec71"},
-    {file = "mypy-0.971-cp38-cp38-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:d1ea5d12c8e2d266b5fb8c7a5d2e9c0219fedfeb493b7ed60cd350322384ac27"},
-    {file = "mypy-0.971-cp38-cp38-win_amd64.whl", hash = "sha256:23c7ff43fff4b0df93a186581885c8512bc50fc4d4910e0f838e35d6bb6b5e58"},
-    {file = "mypy-0.971-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:1f7656b69974a6933e987ee8ffb951d836272d6c0f81d727f1d0e2696074d9e6"},
-    {file = "mypy-0.971-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:d2022bfadb7a5c2ef410d6a7c9763188afdb7f3533f22a0a32be10d571ee4bbe"},
-    {file = "mypy-0.971-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:ef943c72a786b0f8d90fd76e9b39ce81fb7171172daf84bf43eaf937e9f220a9"},
-    {file = "mypy-0.971-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:d744f72eb39f69312bc6c2abf8ff6656973120e2eb3f3ec4f758ed47e414a4bf"},
-    {file = "mypy-0.971-cp39-cp39-win_amd64.whl", hash = "sha256:77a514ea15d3007d33a9e2157b0ba9c267496acf12a7f2b9b9f8446337aac5b0"},
-    {file = "mypy-0.971-py3-none-any.whl", hash = "sha256:0d054ef16b071149917085f51f89555a576e2618d5d9dd70bd6eea6410af3ac9"},
-    {file = "mypy-0.971.tar.gz", hash = "sha256:40b0f21484238269ae6a57200c807d80debc6459d444c0489a102d7c6a75fa56"},
+    {file = "mypy-0.981-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:4bc460e43b7785f78862dab78674e62ec3cd523485baecfdf81a555ed29ecfa0"},
+    {file = "mypy-0.981-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:756fad8b263b3ba39e4e204ee53042671b660c36c9017412b43af210ddee7b08"},
+    {file = "mypy-0.981-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:a16a0145d6d7d00fbede2da3a3096dcc9ecea091adfa8da48fa6a7b75d35562d"},
+    {file = "mypy-0.981-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ce65f70b14a21fdac84c294cde75e6dbdabbcff22975335e20827b3b94bdbf49"},
+    {file = "mypy-0.981-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:6e35d764784b42c3e256848fb8ed1d4292c9fc0098413adb28d84974c095b279"},
+    {file = "mypy-0.981-cp310-cp310-win_amd64.whl", hash = "sha256:e53773073c864d5f5cec7f3fc72fbbcef65410cde8cc18d4f7242dea60dac52e"},
+    {file = "mypy-0.981-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:6ee196b1d10b8b215e835f438e06965d7a480f6fe016eddbc285f13955cca659"},
+    {file = "mypy-0.981-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8ad21d4c9d3673726cf986ea1d0c9fb66905258709550ddf7944c8f885f208be"},
+    {file = "mypy-0.981-cp37-cp37m-musllinux_1_1_x86_64.whl", hash = "sha256:d1debb09043e1f5ee845fa1e96d180e89115b30e47c5d3ce53bc967bab53f62d"},
+    {file = "mypy-0.981-cp37-cp37m-win_amd64.whl", hash = "sha256:9f362470a3480165c4c6151786b5379351b790d56952005be18bdbdd4c7ce0ae"},
+    {file = "mypy-0.981-cp38-cp38-macosx_10_9_universal2.whl", hash = "sha256:c9e0efb95ed6ca1654951bd5ec2f3fa91b295d78bf6527e026529d4aaa1e0c30"},
+    {file = "mypy-0.981-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:e178eaffc3c5cd211a87965c8c0df6da91ed7d258b5fc72b8e047c3771317ddb"},
+    {file = "mypy-0.981-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:06e1eac8d99bd404ed8dd34ca29673c4346e76dd8e612ea507763dccd7e13c7a"},
+    {file = "mypy-0.981-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fa38f82f53e1e7beb45557ff167c177802ba7b387ad017eab1663d567017c8ee"},
+    {file = "mypy-0.981-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:64e1f6af81c003f85f0dfed52db632817dabb51b65c0318ffbf5ff51995bbb08"},
+    {file = "mypy-0.981-cp38-cp38-win_amd64.whl", hash = "sha256:e1acf62a8c4f7c092462c738aa2c2489e275ed386320c10b2e9bff31f6f7e8d6"},
+    {file = "mypy-0.981-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:b6ede64e52257931315826fdbfc6ea878d89a965580d1a65638ef77cb551f56d"},
+    {file = "mypy-0.981-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:eb3978b191b9fa0488524bb4ffedf2c573340e8c2b4206fc191d44c7093abfb7"},
+    {file = "mypy-0.981-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:77f8fcf7b4b3cc0c74fb33ae54a4cd00bb854d65645c48beccf65fa10b17882c"},
+    {file = "mypy-0.981-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f64d2ce043a209a297df322eb4054dfbaa9de9e8738291706eaafda81ab2b362"},
+    {file = "mypy-0.981-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:2ee3dbc53d4df7e6e3b1c68ac6a971d3a4fb2852bf10a05fda228721dd44fae1"},
+    {file = "mypy-0.981-cp39-cp39-win_amd64.whl", hash = "sha256:8e8e49aa9cc23aa4c926dc200ce32959d3501c4905147a66ce032f05cb5ecb92"},
+    {file = "mypy-0.981-py3-none-any.whl", hash = "sha256:794f385653e2b749387a42afb1e14c2135e18daeb027e0d97162e4b7031210f8"},
+    {file = "mypy-0.981.tar.gz", hash = "sha256:ad77c13037d3402fbeffda07d51e3f228ba078d1c7096a73759c9419ea031bf4"},
 ]
 mypy-extensions = [
     {file = "mypy_extensions-0.4.3-py2.py3-none-any.whl", hash = "sha256:090fedd75945a69ae91ce1303b5824f428daf5a028d2f6ab8a299250a846f15d"},
@@ -3951,8 +3952,8 @@ nbconvert = [
     {file = "nbconvert-7.0.0.tar.gz", hash = "sha256:fd1e361da30e30e4c5a5ae89f7cae95ca2a4d4407389672473312249a7ba0060"},
 ]
 nbformat = [
-    {file = "nbformat-5.6.0-py3-none-any.whl", hash = "sha256:349db50afcf5f44cac6ddcf747fcb9330eafb751044c83994066c48e2f140b35"},
-    {file = "nbformat-5.6.0.tar.gz", hash = "sha256:6f9edb3b70119d82ba89b74b0ecfdbb83f35af8661e491e49ac0893657042674"},
+    {file = "nbformat-5.6.1-py3-none-any.whl", hash = "sha256:9c071f0f615c1b0f4f9bf6745ecfd3294fc02daf279a05c76004c901e9dc5893"},
+    {file = "nbformat-5.6.1.tar.gz", hash = "sha256:146b5b9969391387c2089256359f5da7c718b1d8a88ba814320273ea410e646e"},
 ]
 nest-asyncio = [
     {file = "nest_asyncio-1.5.5-py3-none-any.whl", hash = "sha256:b98e3ec1b246135e4642eceffa5a6c23a3ab12c82ff816a92c612d68205813b2"},
@@ -4697,7 +4698,7 @@ tabulate = [
     {file = "tabulate-0.8.10.tar.gz", hash = "sha256:6c57f3f3dd7ac2782770155f3adb2db0b1a269637e42f27599925e64b114f519"},
 ]
 tensorboard = [
-    {file = "tensorboard-2.10.0-py3-none-any.whl", hash = "sha256:76c91a5e8959cd2208cc32cb17a0cb002badabb66a06ac2af02a7810f49a59e3"},
+    {file = "tensorboard-2.10.1-py3-none-any.whl", hash = "sha256:fb9222c1750e2fa35ef170d998a1e229f626eeced3004494a8849c88c15d8c1c"},
 ]
 tensorboard-data-server = [
     {file = "tensorboard_data_server-0.6.1-py3-none-any.whl", hash = "sha256:809fe9887682d35c1f7d1f54f0f40f98bb1f771b14265b453ca051e2ce58fca7"},
