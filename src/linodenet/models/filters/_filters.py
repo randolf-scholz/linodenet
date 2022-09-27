@@ -66,6 +66,9 @@ class FilterABC(nn.Module):
     satisfying the idempotence property: if $y=h(x)$, then $x'=x$.
     """
 
+    autoregressive: bool
+    r"""Whether the filter is autoregressive or not."""
+
     @abstractmethod
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Forward pass of the filter.
@@ -389,8 +392,10 @@ class NonLinearFilter(FilterABC):
 
         # PARAMETERS
         self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
-        self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        # self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        # self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.A = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
+        self.B = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(n, n)))
         self.H = (
             None
             if autoregressive
@@ -432,9 +437,10 @@ class NonLinearFilter(FilterABC):
         mask = ~torch.isnan(y)  # (..., m)
         z = self.h(x)  # (..., m)
         z = torch.where(mask, z - y, self.ZERO)  # (..., m)
-        z = z + self.epsilonA * torch.einsum("ij, ...j -> ...i", self.A, z)
+        z = torch.einsum("ij, ...j -> ...i", self.A, z)
         z = torch.where(mask, z, self.ZERO)  # (..., m)
         z = self.ht(z)  # (..., n)
+        z = torch.einsum("ij, ...j -> ...i", self.B, z)
         return x - self.epsilon * self.layers(z)
 
 
@@ -768,7 +774,7 @@ class SequentialFilter(FilterABC, nn.Sequential):
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
-        "layers": [LinearFilter.HP, NonLinearFilter.HP],
+        "layers": [LinearFilter.HP, NonLinearFilter.HP, NonLinearFilter.HP],
     }
     r"""The HyperparameterDict of this class."""
 

@@ -14,7 +14,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.initializations import FunctionalInitialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
-from linodenet.models.encoders import iResNet
+from linodenet.models.encoders import ResNet
 from linodenet.models.filters import Filter, RecurrentCellFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
@@ -180,8 +180,8 @@ class LinODEnet(nn.Module):
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
         "Filter": RecurrentCellFilter.HP | {"autoregressive": True},
-        "Encoder": iResNet.HP,
-        "Decoder": iResNet.HP,
+        "Encoder": ResNet.HP,
+        "Decoder": ResNet.HP,
     }
     r"""Dictionary of Hyperparameters."""
 
