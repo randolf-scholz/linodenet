@@ -7,6 +7,7 @@ __all__ = [
     # Classes
     "ConcatEmbedding",
     "ConcatProjection",
+    "LinearEmbedding",
 ]
 
 from typing import Any, Final
@@ -16,31 +17,23 @@ from torch import Tensor, jit, nn
 
 
 class ConcatEmbedding(nn.Module):
-    r"""Maps $x ⟼ [x,w]$.
-
-    Attributes
-    ----------
-    input_size:  int
-    hidden_size: int
-    pad_size:    int
-    padding: Tensor
-    """
+    r"""Maps $x ⟼ [x,w]$."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": int,
-        "hidden_size": int,
+        "output_size": int,
     }
     r"""Dictionary of hyperparameters."""
 
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
-    hidden_size: Final[int]
+    output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
-    pad_size: Final[int]
+    padding_size: Final[int]
     r"""CONST: The size of the padding."""
 
     # BUFFERS
@@ -51,94 +44,134 @@ class ConcatEmbedding(nn.Module):
     padding: Tensor
     r"""PARAM: The padding vector."""
 
-    def __init__(self, input_size: int, hidden_size: int, **HP: Any) -> None:
+    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
         super().__init__()
         assert (
-            input_size <= hidden_size
-        ), f"ConcatEmbedding requires {input_size=} < {hidden_size=}!"
+            input_size <= output_size
+        ), f"ConcatEmbedding requires {input_size=} ≤ {output_size=}!"
         self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.pad_size = hidden_size - input_size
-        self.padding = nn.Parameter(torch.randn(self.pad_size))
+        self.output_size = output_size
+        self.padding_size = output_size - input_size
+        self.padding = nn.Parameter(torch.randn(self.padding_size))
 
     @jit.export
-    def forward(self, X: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., d) -> (..., d+e)``.
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Concatenate the input with the padding.
 
-        Parameters
-        ----------
-        X: Tensor, shape=(...,DIM)
-
-        Returns
-        -------
-        Tensor, shape=(...,LAT)
+        .. Signature:: ``(..., d) -> (..., d+e)``.
         """
-        shape = list(X.shape[:-1]) + [self.pad_size]
-        return torch.cat([X, self.padding.expand(shape)], dim=-1)
+        shape = list(x.shape[:-1]) + [self.padding_size]
+        return torch.cat([x, self.padding.expand(shape)], dim=-1)
 
     @jit.export
-    def inverse(self, Z: Tensor) -> Tensor:
-        r""".. Signature: ``(..., d+e) -> (..., d)``.
+    def inverse(self, y: Tensor) -> Tensor:
+        r"""Remove the padded state.
 
-        The reverse of the forward. Satisfies inverse(forward(x)) = x for any input.
-
-        Parameters
-        ----------
-        Z: Tensor, shape=(...,LEN,LAT)
-
-        Returns
-        -------
-        Tensor, shape=(...,LEN,DIM)
+        .. Signature: ``(..., d+e) -> (..., d)``.
         """
-        return Z[..., : self.input_size]
+        return y[..., : self.input_size]
 
 
 class ConcatProjection(nn.Module):
-    r"""Maps $z = [x,w] ⟼ x$.
-
-    Attributes
-    ----------
-    input_size:  int
-    hidden_size: int
-    """
+    r"""Maps $z = [x,w] ⟼ x$."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": int,
-        "hidden_size": int,
+        "output_size": int,
     }
     r"""Dictionary of hyperparameters."""
 
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
-    hidden_size: Final[int]
+    output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
-    pad_size: Final[int]
+    padding_size: Final[int]
     r"""CONST: The size of the padding."""
 
-    def __init__(self, input_size: int, hidden_size: int, **HP: Any) -> None:
+    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
         super().__init__()
-        assert input_size <= hidden_size
+        assert (
+            input_size >= output_size
+        ), f"ConcatEmbedding requires {input_size=} ≥ {output_size=}!"
         self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.pad_size = hidden_size - input_size
+        self.output_size = output_size
+        self.padding_size = input_size - output_size
+        self.padding = nn.Parameter(torch.randn(self.padding_size))
 
     @jit.export
-    def forward(self, Z: Tensor) -> Tensor:
-        r""".. Signature: ``(..., d+e) -> (..., d)``.
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Remove the padded state.
 
-        Parameters
-        ----------
-        Z: Tensor, shape=(...,LEN,LAT)
-
-        Returns
-        -------
-        Tensor, shape=(...,LEN,DIM)
+        .. Signature: ``(..., d+e) -> (..., d)``.
         """
-        return Z[..., : self.input_size]
+        return x[..., : self.output_size]
+
+    @jit.export
+    def inverse(self, y: Tensor) -> Tensor:
+        r"""Concatenate the input with the padding.
+
+        .. Signature:: ``(..., d) -> (..., d+e)``.
+        """
+        shape = list(y.shape[:-1]) + [self.padding_size]
+        return torch.cat([y, self.padding.expand(shape)], dim=-1)
 
     # TODO: Add variant with filter in latent space
     # TODO: Add Controls
+
+
+class LinearEmbedding(nn.Module):
+    r"""Maps $x ⟼ Ax$ and $y→A⁺y$."""
+
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__doc__": __doc__,
+        "__module__": __module__,  # type: ignore[name-defined]
+        "input_size": int,
+        "output_size": int,
+    }
+    r"""Dictionary of hyperparameters."""
+
+    # Constants
+    input_size: Final[int]
+    r"""CONST: The dimensionality of the inputs."""
+    output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
+
+    # PARAMS
+    weight: Tensor
+    r"""PARAM: The weight matriz."""
+
+    # BUFFERS
+    pinv_weight: Tensor
+    r"""BUFFER: The pseudo-inverse of the weight."""
+
+    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
+        super().__init__()
+        assert (
+            input_size <= output_size
+        ), f"ConcatEmbedding requires {input_size=} ≤ {output_size=}!"
+        self.input_size = input_size
+        self.output_size = output_size
+        self.weight = nn.Parameter(torch.empty(input_size, output_size))
+        nn.init.kaiming_normal_(self.weight, nonlinearity="linear")
+        self.register_buffer("pinv_weight", torch.linalg.pinv(self.weight))
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Concatenate the input with the padding.
+
+        .. Signature:: ``(..., d) -> (..., e)``.
+        """
+        return torch.einsum("...d, de-> ...e", x, self.weight)
+
+    @jit.export
+    def inverse(self, y: Tensor) -> Tensor:
+        r"""Remove the padded state.
+
+        .. Signature: ``(..., d+e) -> (..., d)``.
+        """
+        self.pinv_weight = torch.linalg.pinv(self.weight)
+        return torch.einsum("...d, de-> ...e", y, self.pinv_weight)

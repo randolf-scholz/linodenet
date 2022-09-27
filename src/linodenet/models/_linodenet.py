@@ -7,18 +7,18 @@ __all__ = [
 ]
 
 import logging
-from typing import Any, Final
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.initializations import FunctionalInitialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
-from linodenet.models.encoders import iResNet
+from linodenet.models.encoders import ResNet
 from linodenet.models.filters import Filter, RecurrentCellFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
-from linodenet.util import deep_dict_update, initialize_from_config
+from linodenet.utils import deep_dict_update, initialize_from_config, pad
 
 # TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
 
@@ -42,7 +42,6 @@ class LinODE(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "cell": LinODECell.HP,
         "kernel_initialization": None,
@@ -73,16 +72,16 @@ class LinODE(nn.Module):
     def __init__(
         self,
         input_size: int,
-        **HP: Any,
+        **cfg: Any,
     ):
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
-        HP["cell"]["input_size"] = input_size
+        config["cell"]["input_size"] = input_size
 
         self.input_size = input_size
         self.output_size = input_size
-        self.cell: nn.Module = initialize_from_config(HP["cell"])
+        self.cell: nn.Module = initialize_from_config(config["cell"])
 
         # Buffers
         self.register_buffer("xhat", torch.tensor(()), persistent=False)
@@ -172,30 +171,36 @@ class LinODEnet(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
-        "input_size": int,
-        "hidden_size": int,
-        "output_size": int,
+        "input_size": None,
+        "hidden_size": None,
+        "latent_size": None,
+        "output_size": None,
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
         "Filter": RecurrentCellFilter.HP | {"autoregressive": True},
-        "Encoder": iResNet.HP,
-        "Decoder": iResNet.HP,
+        "Encoder": ResNet.HP,
+        "Decoder": ResNet.HP,
     }
     r"""Dictionary of Hyperparameters."""
 
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
-    hidden_size: Final[int]
+    latent_size: Final[int]
     r"""CONST: The dimensionality of the linear ODE."""
+    hidden_size: Final[int]
+    r"""CONST: The dimensionality of the padding."""
+    padding_size: Final[int]
+    r"""CONST: The dimensionality of the padded state."""
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
 
     # Buffers
-    zero: Tensor
+    ZERO: Tensor
+    r"""BUFFER: A tensor of value float(0.0)"""
+    NAN: Tensor
     r"""BUFFER: A tensor of value float(0.0)"""
     xhat_pre: Tensor
     r"""BUFFER: Stores pre-jump values."""
@@ -228,45 +233,55 @@ class LinODEnet(nn.Module):
     # filter: nn.Module
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
-    def __init__(self, input_size: int, hidden_size: int, **HP: Any):
+    def __init__(
+        self,
+        input_size: int,
+        latent_size: int,
+        hidden_size: Optional[int] = None,
+        **cfg: Any,
+    ):
         super().__init__()
 
         LOGGER = __logger__.getChild(self.__class__.__name__)
 
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
         self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.hidden_size = hidden_size if hidden_size is not None else input_size
+        assert self.hidden_size >= self.input_size
+        self.padding_size = self.hidden_size - self.input_size
+        self.latent_size = latent_size
         self.output_size = input_size
 
-        HP["Encoder"]["input_size"] = hidden_size
-        HP["Decoder"]["input_size"] = hidden_size
-        HP["System"]["input_size"] = hidden_size
-        HP["Filter"]["hidden_size"] = input_size
-        HP["Filter"]["input_size"] = input_size
-        HP["Embedding"]["input_size"] = input_size
-        HP["Embedding"]["hidden_size"] = hidden_size
-        HP["Projection"]["input_size"] = input_size
-        HP["Projection"]["hidden_size"] = hidden_size
+        config["Encoder"]["input_size"] = self.latent_size
+        config["Decoder"]["input_size"] = self.latent_size
+        config["System"]["input_size"] = self.latent_size
+        config["Filter"]["input_size"] = self.hidden_size
+        config["Filter"]["output_size"] = self.hidden_size
+        config["Embedding"]["input_size"] = self.hidden_size
+        config["Embedding"]["output_size"] = self.latent_size
+        config["Projection"]["input_size"] = self.latent_size
+        config["Projection"]["output_size"] = self.hidden_size
 
-        LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
-        self.embedding: nn.Module = initialize_from_config(HP["Embedding"])
-        LOGGER.debug("%s Initializing Embedding %s", self.name, HP["Embedding"])
-        self.projection: nn.Module = initialize_from_config(HP["Projection"])
-        LOGGER.debug("%s Initializing Encoder %s", self.name, HP["Encoder"])
-        self.encoder: nn.Module = initialize_from_config(HP["Encoder"])
-        LOGGER.debug("%s Initializing System %s", self.name, HP["Encoder"])
-        self.system: nn.Module = initialize_from_config(HP["System"])
-        LOGGER.debug("%s Initializing Decoder %s", self.name, HP["Encoder"])
-        self.decoder: nn.Module = initialize_from_config(HP["Decoder"])
-        LOGGER.debug("%s Initializing Filter %s", self.name, HP["Encoder"])
-        self.filter: Filter = initialize_from_config(HP["Filter"])
+        LOGGER.debug("%s Initializing Embedding %s", self.name, config["Embedding"])
+        self.embedding: nn.Module = initialize_from_config(config["Embedding"])
+        LOGGER.debug("%s Initializing Encoder %s", self.name, config["Encoder"])
+        self.encoder: nn.Module = initialize_from_config(config["Encoder"])
+        LOGGER.debug("%s Initializing System %s", self.name, config["Encoder"])
+        self.system: nn.Module = initialize_from_config(config["System"])
+        LOGGER.debug("%s Initializing Decoder %s", self.name, config["Encoder"])
+        self.decoder: nn.Module = initialize_from_config(config["Decoder"])
+        LOGGER.debug("%s Initializing Projection %s", self.name, config["Projection"])
+        self.projection: nn.Module = initialize_from_config(config["Projection"])
+        LOGGER.debug("%s Initializing Filter %s", self.name, config["Encoder"])
+        self.filter: Filter = initialize_from_config(config["Filter"])
 
         assert isinstance(self.system.kernel, Tensor)
         self.kernel = self.system.kernel
-        self.z0 = nn.Parameter(torch.randn(self.hidden_size))
+        self.z0 = nn.Parameter(torch.randn(self.latent_size))
 
         # Buffers
-        self.register_buffer("zero", torch.tensor(0.0), persistent=False)
+        self.register_buffer("ZERO", torch.tensor(0.0), persistent=False)
+        self.register_buffer("NAN", torch.tensor(float("nan")), persistent=False)
         self.register_buffer("timedeltas", torch.tensor(()), persistent=False)
         self.register_buffer("xhat_pre", torch.tensor(()), persistent=False)
         self.register_buffer("xhat_post", torch.tensor(()), persistent=False)
@@ -305,14 +320,30 @@ class LinODEnet(nn.Module):
         ----------
         - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
         """
-        BATCH_SIZE = X.shape[:-2]
+        # Pad the input
+        if self.padding_size:
+            # TODO: write bug report for bogus behaviour
+            # dim = -1
+            # shape = list(X.shape)
+            # shape[dim] = self.padding_size
+            # z = torch.full(shape, float("nan"), dtype=X.dtype, device=X.device)
+            # X = torch.cat([X, z], dim=dim)
+            X = pad(X, float("nan"), self.padding_size)
+
         # prepend a single zero for the first iteration.
-        pad_dim = list(BATCH_SIZE) + [1]
-        pad = torch.zeros(pad_dim, device=T.device, dtype=T.dtype)
-        DT = torch.diff(T, prepend=pad, dim=-1)  # (..., LEN) → (..., LEN)
+        # dim = 1
+        # shape = list(T.shape)
+        # shape[dim] = 1
+        # z = torch.full(shape, 0.0, dtype=T.dtype, device=T.device)
+        # T = torch.cat((z, T), dim=dim)
+        T = pad(T, 0.0, 1, prepend=True)
+        DT = torch.diff(T)  # (..., LEN) → (..., LEN)
+
+        # Move sequence to the front
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
         X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
+        # Initialize buffers
         Zhat_pre: list[Tensor] = []
         Xhat_pre: list[Tensor] = []
         Xhat_post: list[Tensor] = []
@@ -345,4 +376,6 @@ class LinODEnet(nn.Module):
         self.zhat_post = torch.stack(Zhat_post, dim=-2)
         self.timedeltas = DT.moveaxis(0, -1)
 
-        return self.xhat_post
+        yhat = self.xhat_post[..., : self.output_size]
+
+        return yhat
