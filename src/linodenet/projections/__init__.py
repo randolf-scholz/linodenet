@@ -30,6 +30,14 @@ __all__ = [
     "skew_symmetric",
     "symmetric",
     # Classes
+    "Banded",
+    "Diagonal",
+    "Identity",
+    "Masked",
+    "Normal",
+    "Orthogonal",
+    "SkewSymmetric",
+    "Symmetric",
 ]
 
 

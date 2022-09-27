@@ -10,7 +10,7 @@ __all__ = [
     "models",
     "projections",
     "regularizations",
-    "util",
+    "utils",
 ]
 
 import logging
@@ -30,7 +30,7 @@ from linodenet import (
     models,
     projections,
     regularizations,
-    util,
+    utils,
 )
 from linodenet.config import conf
 
