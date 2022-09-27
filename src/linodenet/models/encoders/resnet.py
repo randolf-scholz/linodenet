@@ -157,6 +157,7 @@ class ResNetBlock(nn.Sequential):
         "input_size": None,
         "num_layers": 2,
         "layer": ReverseDense.HP,
+        "layer_cfg": {},
         "rezero": True,
     }
 

@@ -33,7 +33,7 @@ class LinODECell(nn.Module):
         PARAM - The weight matrix $A$ in the parametrization.
     kernel: torch.Tensor
         BUFFER - The parametrized kernel $γ⋅A$. or $ψ(γ⋅A)$ if parametrized.
-    learnable: bool
+    scalar_learnable: bool
         PARAM - Whether the scalar $γ$ is learnable or not.
 
     Parameters
@@ -51,17 +51,13 @@ class LinODECell(nn.Module):
         The dimensionality of the output space.
     kernel: Tensor
         The system matrix
-    kernel_initialization: Callable[[], Tensor]
-        Parameter-less function that draws a initial system matrix
-    kernel_parametrization: Callable[[Tensor], Tensor]
-        Parametrization for the kernel
     """
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
-        "input_size": int,
-        "kernel_initialization": None,
+        "input_size": None,
+        "kernel_initialization": "skew-symmetric",
         "kernel_parametrization": None,
         "scalar": 0.0,
         "scalar_learnable": True,
