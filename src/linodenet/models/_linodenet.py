@@ -7,6 +7,7 @@ __all__ = [
 ]
 
 import logging
+import warnings
 from typing import Any, Final, Optional
 
 import torch
@@ -246,7 +247,15 @@ class LinODEnet(nn.Module):
 
         config = deep_dict_update(self.HP, cfg)
         self.input_size = input_size
-        self.hidden_size = hidden_size if hidden_size is not None else input_size
+        hidden_size = hidden_size if hidden_size is not None else input_size
+
+        if hidden_size < input_size:
+            warnings.warn(
+                "hidden_size < input_size. Falling back to using no hidden units."
+            )
+            hidden_size = input_size
+
+        self.hidden_size = hidden_size
         assert self.hidden_size >= self.input_size
         self.padding_size = self.hidden_size - self.input_size
         self.latent_size = latent_size
@@ -256,7 +265,7 @@ class LinODEnet(nn.Module):
         config["Decoder"]["input_size"] = self.latent_size
         config["System"]["input_size"] = self.latent_size
         config["Filter"]["input_size"] = self.hidden_size
-        config["Filter"]["output_size"] = self.hidden_size
+        config["Filter"]["hidden_size"] = self.hidden_size
         config["Embedding"]["input_size"] = self.hidden_size
         config["Embedding"]["output_size"] = self.latent_size
         config["Projection"]["input_size"] = self.latent_size
@@ -331,13 +340,9 @@ class LinODEnet(nn.Module):
             X = pad(X, float("nan"), self.padding_size)
 
         # prepend a single zero for the first iteration.
-        # dim = 1
-        # shape = list(T.shape)
-        # shape[dim] = 1
-        # z = torch.full(shape, 0.0, dtype=T.dtype, device=T.device)
-        # T = torch.cat((z, T), dim=dim)
-        T = pad(T, 0.0, 1, prepend=True)
-        DT = torch.diff(T)  # (..., LEN) → (..., LEN)
+        # T = pad(T, 0.0, 1, prepend=True)
+        # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
+        DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
 
         # Move sequence to the front
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
