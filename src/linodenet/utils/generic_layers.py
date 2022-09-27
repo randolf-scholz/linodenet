@@ -35,15 +35,15 @@ class Series(nn.Sequential):
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
         config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = list(modules)
+        layers: list[nn.Module] = list(modules)
 
         if config["modules"] != [None]:
             del config["modules"][0]
             for _, layer in enumerate(config["modules"]):
                 module = initialize_from_config(layer)
-                modules.append(module)
+                layers.append(module)
 
-        super().__init__(*modules)
+        super().__init__(*layers)
 
     def __matmul__(self, other: nn.Module) -> Series:
         r"""Chain with other module."""
@@ -88,17 +88,15 @@ class Parallel(nn.ModuleList):
     ) -> None:
         config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = []
+        layers: list[nn.Module] = [] if modules is None else list(modules)
 
         if config["modules"] != [None]:
             del config["modules"][0]
             for _, layer in enumerate(config["modules"]):
                 module = initialize_from_config(layer)
-                modules.append(module)
+                layers.append(module)
 
-        modules = list(modules) + modules
-
-        super().__init__(modules)
+        super().__init__(layers)
 
     @jit.export
     def forward(self, x: Tensor) -> list[Tensor]:
@@ -207,13 +205,13 @@ class Sum(nn.ModuleList):
     ) -> None:
         config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = [] if modules is None else list(modules)
+        layers: list[nn.Module] = [] if modules is None else list(modules)
 
         for layer in config["modules"]:
             module = initialize_from_config(layer)
-            modules.append(module)
+            layers.append(module)
 
-        super().__init__(modules)
+        super().__init__(layers)
 
     def forward(self, *args, **kwargs):
         r"""Forward pass."""

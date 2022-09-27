@@ -24,9 +24,10 @@ def _implement_it():
         "Decoder": ResNet.HP,
         "Embedding": embeddings.ConcatEmbedding.HP,
     }
+    print(MODEL_CONFIG)
     T = torch.randn(N)
     X = torch.randn(N, D)
-    model = LinODEnet(D, MODEL_CONFIG["hidden_size"])
+    model = LinODEnet(D, L)
     model(T, X)
 
 
