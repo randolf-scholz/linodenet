@@ -9,6 +9,7 @@ __all__ = [
     "initialize_from",
     "initialize_from_config",
     "is_dunder",
+    "pad",
     # Classes
 ]
 
@@ -32,6 +33,24 @@ r"""Generic type hint for instances."""
 
 nnModuleType = TypeVar("nnModuleType", bound=nn.Module)
 r"""Type Variable for nn.Modules."""
+
+
+@jit.script
+def pad(
+    x: Tensor,
+    value: float,
+    pad_width: int,
+    dim: int = -1,
+    prepend: bool = False,
+) -> Tensor:
+    r"""Pad a tensor with a constant value along a given dimension."""
+    shape = list(x.shape)
+    shape[dim] = pad_width
+    z = torch.full(shape, value, dtype=x.dtype, device=x.device)
+
+    if prepend:
+        return torch.cat((z, x), dim=dim)
+    return torch.cat((x, z), dim=dim)
 
 
 def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
@@ -190,7 +209,7 @@ def initialize_from(
     return partial(obj, **kwargs)  # type: ignore[return-value]
 
 
-def initialize_from_config(config: dict[str, Any]) -> Any:
+def initialize_from_config(config: dict[str, Any]) -> nn.Module:
     r"""Initialize a class from a dictionary.
 
     Parameters
@@ -208,7 +227,9 @@ def initialize_from_config(config: dict[str, Any]) -> Any:
     module = import_module(config.pop("__module__"))
     cls = getattr(module, config.pop("__name__"))
     opts = {key: val for key, val in config.items() if not is_dunder("key")}
-    return cls(**opts)
+    obj = cls(**opts)
+    assert isinstance(obj, nn.Module)
+    return obj
 
 
 def is_dunder(name: str) -> bool:

@@ -20,7 +20,7 @@ __all__ = [
 
 from typing import Final, Optional
 
-from torch import BoolTensor, Tensor, nn
+from torch import BoolTensor, Tensor, jit, nn
 
 from linodenet.projections.functional import (
     banded,
@@ -42,6 +42,7 @@ class Identity(nn.Module):
     .. math:: \min_Y ½∥X-Y∥_F^2
     """
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of matrices."""
         return identity(x)
@@ -57,6 +58,7 @@ class Symmetric(nn.Module):
     One can show analytically that Y = ½(X + X^⊤) is the unique minimizer.
     """
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of symmetric matrices."""
         return symmetric(x)
@@ -72,6 +74,7 @@ class SkewSymmetric(nn.Module):
     One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
     """
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of skew-symmetric matrices."""
         return skew_symmetric(x)
@@ -92,6 +95,7 @@ class Orthogonal(nn.Module):
     - `<https://math.stackexchange.com/q/2215359>`_
     """
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of orthogonal matrices."""
         return orthogonal(x)
@@ -122,6 +126,7 @@ class Normal(nn.Module):
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
     """
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of normal matrices."""
         return normal(x)
@@ -137,6 +142,7 @@ class Diagonal(nn.Module):
     One can show analytically that the unique smallest norm minimizer is $Y = 𝕀⊙X$.
     """
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of diagonal matrices."""
         return diagonal(x)
@@ -160,9 +166,10 @@ class Banded(nn.Module):
         self.u = u
         self.l = u if l is None else l
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of banded matrices."""
-        return banded(x, self.u, self.l)
+        return banded(x, u=self.u, l=self.l)
 
 
 class Masked(nn.Module):
@@ -181,6 +188,7 @@ class Masked(nn.Module):
         super().__init__()
         self.m = m
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of masked matrices."""
         return masked(x, self.m)

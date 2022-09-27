@@ -11,8 +11,7 @@ __all__ = [
     "ResNetBlock",
 ]
 
-
-from collections import OrderedDict
+from collections.abc import Iterable
 from math import sqrt
 from typing import Any, Optional, cast
 
@@ -24,7 +23,7 @@ from linodenet.models.encoders.ft_transformer import (
     get_activation_fn,
     get_nonglu_activation_fn,
 )
-from linodenet.util import (
+from linodenet.utils import (
     ReverseDense,
     ReZeroCell,
     deep_dict_update,
@@ -156,50 +155,40 @@ class ResNetBlock(nn.Sequential):
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
-        "num_subblocks": 2,
-        "subblocks": [
-            # {
-            #     "__name__": "BatchNorm1d",
-            #     "__module__": "torch.nn",
-            #     "num_features": int,
-            #     "eps": 1e-05,
-            #     "momentum": 0.1,
-            #     "affine": True,
-            #     "track_running_stats": True,
-            # },
-            ReverseDense.HP,
-        ],
+        "num_layers": 2,
+        "layer": ReverseDense.HP,
+        "layer_cfg": {},
+        "rezero": True,
     }
 
-    def __init__(self, **HP: Any) -> None:
-        super().__init__()
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
 
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
-        assert HP["input_size"] is not None, "input_size is required!"
+        assert config["input_size"] is not None, "input_size is required!"
 
-        for layer in HP["subblocks"]:
-            if layer["__name__"] == "Linear":
-                layer["in_features"] = HP["input_size"]
-                layer["out_features"] = HP["input_size"]
-            if layer["__name__"] == "BatchNorm1d":
-                layer["num_features"] = HP["input_size"]
-            else:
-                layer["input_size"] = HP["input_size"]
-                layer["output_size"] = HP["input_size"]
+        layer = config["layer"]
+        if layer["__name__"] == "Linear":
+            layer["in_features"] = config["input_size"]
+            layer["out_features"] = config["input_size"]
+        if layer["__name__"] == "BatchNorm1d":
+            layer["num_features"] = config["input_size"]
+        else:
+            layer["input_size"] = config["input_size"]
+            layer["output_size"] = config["input_size"]
 
-        subblocks: OrderedDict[str, nn.Module] = OrderedDict()
+        layers: list[nn.Module] = list(modules)
 
-        for k in range(HP["num_subblocks"]):
-            key = f"subblock{k}"
-            module = nn.Sequential(
-                *[initialize_from_config(layer) for layer in HP["subblocks"]]
-            )
-            self.add_module(key, module)
-            subblocks[key] = module
+        for _ in range(config["num_layers"]):
+            module = initialize_from_config(config["layer"])
+            # self.add_module(f"subblock{k}", module)
+            layers.append(module)
+
+        if config["rezero"]:
+            layers.append(ReZeroCell())
 
         # self.subblocks = nn.Sequential(subblocks)
-        super().__init__(subblocks)
+        super().__init__(*layers)
 
 
 class ResNet(nn.ModuleList):
@@ -210,47 +199,33 @@ class ResNet(nn.ModuleList):
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
         "num_blocks": 5,
-        "blocks": [
-            ResNetBlock.HP,
-            ReZeroCell.HP,
-        ],
+        "block": ResNetBlock.HP,
     }
 
-    def __init__(self, **HP: Any) -> None:
-        super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(
+        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+    ) -> None:
+        config = deep_dict_update(self.HP, cfg)
 
-        assert HP["input_size"] is not None, "input_size is required!"
+        assert config["input_size"] is not None, "input_size is required!"
 
         # pass the input_size to the subblocks
-        for block_cfg in HP["blocks"]:
-            if "input_size" in block_cfg:
-                block_cfg["input_size"] = HP["input_size"]
+        block = config["block"]
+        if "input_size" in block:
+            block["input_size"] = config["input_size"]
 
-        blocks: list[nn.Module] = []
+        blocks: list[nn.Module] = [] if modules is None else list(modules)
 
-        for k in range(HP["num_blocks"]):
-            key = f"block{k}"
-            module = nn.Sequential(
-                *[initialize_from_config(layer) for layer in HP["blocks"]]
-            )
-            self.add_module(key, module)
+        for _ in range(config["num_blocks"]):
+            module = initialize_from_config(config["block"])
+            # self.add_module(f"block{k}", module)
             blocks.append(module)
 
         super().__init__(blocks)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r"""Forward pass."""
         for block in self:
             x = x + block(x)
         return x
