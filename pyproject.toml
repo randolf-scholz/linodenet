@@ -23,7 +23,7 @@ name = "linodenet"
 packages = [{include = "linodenet", from="src"}]
 readme = "README.rst"
 repository = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi"
-version = "0.2.1"
+version = "0.2.2"
 
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -64,7 +64,7 @@ flake8-rst-docstrings = ">=0.2"
 isort = ">=5.10"
 jupyter = ">=1.0.0"
 jupyterlab = ">=3.4"
-mypy = ">=0.971"
+mypy = ">=0.981"
 piccolo-theme = ">=0.12.0"
 pre-commit = ">=2.20"
 pyall = ">=0.2.0"
