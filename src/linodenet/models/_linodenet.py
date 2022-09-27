@@ -265,7 +265,7 @@ class LinODEnet(nn.Module):
         config["Decoder"]["input_size"] = self.latent_size
         config["System"]["input_size"] = self.latent_size
         config["Filter"]["input_size"] = self.hidden_size
-        config["Filter"]["output_size"] = self.hidden_size
+        config["Filter"]["hidden_size"] = self.hidden_size
         config["Embedding"]["input_size"] = self.hidden_size
         config["Embedding"]["output_size"] = self.latent_size
         config["Projection"]["input_size"] = self.latent_size
