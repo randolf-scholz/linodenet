@@ -12,7 +12,7 @@ from torch.nn.functional import mse_loss
 import linodenet
 from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
 from linodenet.models.system import LinODECell
-from linodenet.util import flatten
+from linodenet.utils import flatten
 
 __logger__ = logging.getLogger(__name__)
 

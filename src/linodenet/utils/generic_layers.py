@@ -11,15 +11,16 @@ __all__ = [
     "Parallel",
     "Repeat",
     "Series",
+    "Sum",
 ]
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any, Final, List, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.util._util import deep_dict_update, initialize_from_config
+from linodenet.utils._util import deep_dict_update, initialize_from_config
 
 
 class Series(nn.Sequential):
@@ -31,19 +32,18 @@ class Series(nn.Sequential):
         "modules": [None],
     }
 
-    def __init__(self, *args: Any, **HP: Any) -> None:
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
+        config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = []
+        layers: list[nn.Module] = list(modules)
 
-        if HP["modules"] != [None]:
-            del HP["modules"][0]
-            for _, layer in enumerate(HP["modules"]):
+        if config["modules"] != [None]:
+            del config["modules"][0]
+            for _, layer in enumerate(config["modules"]):
                 module = initialize_from_config(layer)
-                modules.append(module)
+                layers.append(module)
 
-        modules = list(args) + modules
-        super().__init__(*modules)
+        super().__init__(*layers)
 
     def __matmul__(self, other: nn.Module) -> Series:
         r"""Chain with other module."""
@@ -83,33 +83,24 @@ class Parallel(nn.ModuleList):
         "modules": [None],
     }
 
-    def __init__(self, *args: Any, **HP: Any) -> None:
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(
+        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+    ) -> None:
+        config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = []
+        layers: list[nn.Module] = [] if modules is None else list(modules)
 
-        if HP["modules"] != [None]:
-            del HP["modules"][0]
-            for _, layer in enumerate(HP["modules"]):
+        if config["modules"] != [None]:
+            del config["modules"][0]
+            for _, layer in enumerate(config["modules"]):
                 module = initialize_from_config(layer)
-                modules.append(module)
+                layers.append(module)
 
-        modules = list(args) + modules
-
-        super().__init__(modules)
+        super().__init__(layers)
 
     @jit.export
-    def forward(self, x: Tensor) -> list[Any]:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+    def forward(self, x: Tensor) -> list[Tensor]:
+        r"""Forward pass."""
         result: List[Any] = []
 
         for module in self:
@@ -145,24 +136,24 @@ class Repeat(nn.Sequential):
         "independent": True,
     }
 
-    def __init__(self, **HP: Any) -> None:
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
+        config = deep_dict_update(self.HP, cfg)
 
-        copies: list[nn.Module] = []
+        copies: list[nn.Module] = list(modules)
 
-        for _ in range(HP["copies"]):
-            if isinstance(HP["module"], nn.Module):
-                module = HP["module"]
+        for _ in range(config["copies"]):
+            if isinstance(config["module"], nn.Module):
+                module = config["module"]
             else:
-                module = initialize_from_config(HP["module"])
+                module = initialize_from_config(config["module"])
 
-            if HP["independent"]:
+            if config["independent"]:
                 copies.append(module)
             else:
-                copies = [module] * HP["copies"]
+                copies = [module] * config["copies"]
                 break
 
-        HP["module"] = str(HP["module"])
+        config["module"] = str(config["module"])
         super().__init__(*copies)
 
 
@@ -198,3 +189,30 @@ class Multiply(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Forward pass."""
         return torch.einsum(self.signature, x, self.kernel)
+
+
+class Sum(nn.ModuleList):
+    r"""Add Module Outputs for same inputs."""
+
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
+        "modules": [],
+    }
+
+    def __init__(
+        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+    ) -> None:
+        config = deep_dict_update(self.HP, cfg)
+
+        layers: list[nn.Module] = [] if modules is None else list(modules)
+
+        for layer in config["modules"]:
+            module = initialize_from_config(layer)
+            layers.append(module)
+
+        super().__init__(layers)
+
+    def forward(self, *args, **kwargs):
+        r"""Forward pass."""
+        return sum(module(*args, **kwargs) for module in self)

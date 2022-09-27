@@ -13,7 +13,7 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
-from linodenet.util import deep_dict_update
+from linodenet.utils import deep_dict_update
 
 
 class LinODECell(nn.Module):
@@ -33,7 +33,7 @@ class LinODECell(nn.Module):
         PARAM - The weight matrix $A$ in the parametrization.
     kernel: torch.Tensor
         BUFFER - The parametrized kernel $γ⋅A$. or $ψ(γ⋅A)$ if parametrized.
-    learnable: bool
+    scalar_learnable: bool
         PARAM - Whether the scalar $γ$ is learnable or not.
 
     Parameters
@@ -51,18 +51,13 @@ class LinODECell(nn.Module):
         The dimensionality of the output space.
     kernel: Tensor
         The system matrix
-    kernel_initialization: Callable[[], Tensor]
-        Parameter-less function that draws a initial system matrix
-    kernel_parametrization: Callable[[Tensor], Tensor]
-        Parametrization for the kernel
     """
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
-        "input_size": int,
-        "kernel_initialization": None,
+        "input_size": None,
+        "kernel_initialization": "skew-symmetric",
         "kernel_parametrization": None,
         "scalar": 0.0,
         "scalar_learnable": True,
@@ -89,15 +84,15 @@ class LinODECell(nn.Module):
     def __init__(
         self,
         input_size: int,
-        **HP: Any,
+        **cfg: Any,
     ):
         super().__init__()
-        self.CFG = HP = deep_dict_update(self.HP, HP)
+        config = deep_dict_update(self.HP, cfg)
 
         self.input_size = input_size
         self.output_size = input_size
-        kernel_init = HP["kernel_initialization"]
-        kernel_parametrization = HP["kernel_parametrization"]
+        kernel_init = config["kernel_initialization"]
+        kernel_parametrization = config["kernel_parametrization"]
 
         def kernel_initialization_dispatch():
             r"""Dispatch the kernel initialization."""
@@ -146,13 +141,14 @@ class LinODECell(nn.Module):
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_parametrization = kernel_parametrization_dispatch()
 
-        self.scalar_learnable = HP["scalar_learnable"]
+        self.scalar_learnable = config["scalar_learnable"]
         self.scalar = nn.Parameter(
-            torch.tensor(HP["scalar"]), requires_grad=self.scalar_learnable
+            torch.tensor(config["scalar"]), requires_grad=self.scalar_learnable
         )
         self.weight = nn.Parameter(self._kernel_initialization())
-        parametrized_kernel = self.kernel_parametrization(self.weight)
-        self.register_buffer("kernel", parametrized_kernel, persistent=False)
+        with torch.no_grad():
+            parametrized_kernel = self.kernel_parametrization(self.weight)
+            self.register_buffer("kernel", parametrized_kernel, persistent=False)
 
     def kernel_initialization(self) -> Tensor:
         r"""Draw an initial kernel matrix (random or static)."""

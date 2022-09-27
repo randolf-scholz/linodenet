@@ -19,7 +19,7 @@ from torch.nn import functional
 
 from linodenet.activations import MODULAR_ACTIVATIONS, ModularActivation
 from linodenet.initializations.functional import low_rank
-from linodenet.util import ReZeroCell, deep_dict_update
+from linodenet.utils import ReZeroCell, deep_dict_update
 
 
 @jit.script
@@ -419,7 +419,6 @@ class iResNetBlock(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        # "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "atol": 1e-08,
         "rtol": 1e-05,
@@ -549,7 +548,6 @@ class iResNet(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        # "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "maxiter": 10,
         "input_size": None,
