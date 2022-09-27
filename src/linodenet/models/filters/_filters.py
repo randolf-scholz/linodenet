@@ -30,7 +30,6 @@ from typing import Any, Final, Optional, TypeAlias
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.projections import PROJECTIONS
 from linodenet.utils import (
     ReverseDense,
     ReZeroCell,
@@ -65,9 +64,6 @@ class FilterABC(nn.Module):
     Or multiple blocks of said form. In particular, we are interested in Filters
     satisfying the idempotence property: if $y=h(x)$, then $x'=x$.
     """
-
-    autoregressive: bool
-    r"""Whether the filter is autoregressive or not."""
 
     @abstractmethod
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -163,15 +159,12 @@ class PseudoKalmanFilter(FilterABC):
         self.alpha = nn.Parameter(torch.tensor(alpha), requires_grad=alpha_learnable)
         self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.weight = nn.Parameter(torch.empty(self.input_size, self.input_size))
-        if isinstance(projection, str):
-            projection = PROJECTIONS[projection]
-        self.parametrization = projection
         nn.init.kaiming_normal_(self.weight, nonlinearity="linear")
 
         # BUFFERS
         with torch.no_grad():
             I = torch.eye(self.input_size, dtype=self.weight.dtype)
-            kernel = self.epsilon * self.parametrization(self.weight)
+            kernel = self.epsilon * self.weight
             self.register_buffer("kernel", kernel)
             self.register_buffer("ZERO", torch.zeros(1))
             self.register_buffer("I", I)
@@ -740,9 +733,9 @@ class SequentialFilterBlock(FilterABC):
         self.input_size = input_size = config["input_size"]
         config["filter"]["input_size"] = input_size
 
-        nonlinear = initialize_from_config(config["filter"])
+        self.nonlinear: nn.Module = initialize_from_config(config["filter"])
 
-        self.add_module("nonlinear", nonlinear)
+        # self.add_module("nonlinear", nonlinear)
 
         layers: list[nn.Module] = [] if modules is None else list(modules)
         for layer in config["layers"]:
@@ -753,14 +746,14 @@ class SequentialFilterBlock(FilterABC):
             module = initialize_from_config(layer)
             layers.append(module)
 
-        super().__init__(layers)
-        # self.layers = nn.Sequential(*layers)
+        # super().__init__(layers)
+        self.layers = nn.Sequential(*layers)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         z = self.nonlinear(y, x)
-        for module in self:
+        for module in self.layers:
             z = module(z)
         return x - z
 
@@ -781,7 +774,7 @@ class SequentialFilter(FilterABC, nn.Sequential):
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
         config = deep_dict_update(self.HP, cfg)
 
-        modules: list[nn.Module] = [] if modules is None else list(modules)
+        layers: list[nn.Module] = [] if modules is None else list(modules)
 
         for layer in config["layers"]:
             if isinstance(layer, nn.Module):
@@ -791,10 +784,9 @@ class SequentialFilter(FilterABC, nn.Sequential):
                 layer["input_size"] = config["input_size"]
                 layer["hidden_size"] = config["hidden_size"]
                 module = initialize_from_config(layer)
-            modules.append(module)
+            layers.append(module)
 
-        nn.Sequential.__init__(self, *modules)
-        # super().__init__(*modules)
+        nn.Sequential.__init__(self, *layers)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
