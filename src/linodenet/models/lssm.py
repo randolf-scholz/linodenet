@@ -287,3 +287,7 @@ class LatentStateSpaceModel(nn.Module):
         yhat = self.xhat_post[..., : self.output_size]
 
         return yhat
+
+
+class LinODEnet(LatentStateSpaceModel):
+    """A linear ODE model with a linear observation model."""

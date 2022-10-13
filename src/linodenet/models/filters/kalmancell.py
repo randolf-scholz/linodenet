@@ -19,8 +19,6 @@ The classical Kalman Filter state update has a few nice properties
 
 The KalmanCell filter is a generalization of the classical Kalman Filter.
 
-
-
 Probabilistic Filter:
 
 - We need sampling distribution. What if we have multiple independent measurements
@@ -34,6 +32,7 @@ Transfer observations to the latent linear state.
 
 Experiment with parametrized KalmanCell.
 
-ΣH'(HΣ H' + R)^{-1}(Hx - y)
+.. math:: ΣH'(HΣ H' + R)^{-1}(Hx - y)
 
+R is observed or a hyperparameter.
 """
