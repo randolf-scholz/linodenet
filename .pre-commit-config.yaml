@@ -28,6 +28,8 @@ repos:
         description: "checks xml files for parseable syntax."
       - id: check-yaml
         description: "checks yaml files for parseable syntax."
+      - id: debug-statements
+        description: "checks for debugger imports and py37+ `breakpoint()` calls in python source."
       - id: end-of-file-fixer
         description: "ensures that a file is either empty, or ends with one newline."
       - id: pretty-format-json
