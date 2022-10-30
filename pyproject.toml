@@ -46,7 +46,7 @@ classifiers = [
 python = ">=3.10,<3.11"
 numpy = ">=1.23"
 scipy = ">=1.9"
-torch = ">=1.12"
+torch = ">=1.13"
 
 [tool.poetry.group.dev.dependencies]
 bandit = ">=1.7.4"
@@ -71,7 +71,7 @@ nbsphinx = ">=0.8"
 perflint = ">=0.7"
 piccolo-theme = ">=0.12.0"
 pre-commit = ">=2.20"
-pyall = ">=0.2.0"
+pyall = ">=0.3"
 pybadges = ">=3.0"
 pycodestyle = ">=2.9"
 pydata-sphinx-theme = ">=0.10"
@@ -93,7 +93,7 @@ sphinx-math-dollar = ">=1.2"
 tqdm = ">=4.64"
 twine = ">=4.0"
 types-docutils = ">=0.19"
-types-pillow = ">=9.2"
+types-pillow = ">=9.3"
 types-protobuf = ">=3.20"
 types-pyyaml = ">=6.0"
 types-requests = ">=2.28"
@@ -145,7 +145,10 @@ disable= [
     "W0511",  # (fixme) (todos)
     "W1113",  # keyword-arg-before-vararg
 ]
-
+fail-on= [
+    "C0116",  # missing-function-docstring
+]
+fail-under= 9.0
 [tool.pylint.REPORTS]
 # Set the output format. Available formats are text, parseable, colorized, json and
 # msvs (visual studio). You can also give a reporter class, e.g. mypackage.mymodule.MyReporterClass
@@ -190,10 +193,11 @@ module = [
     "modin.*",
     "numba.*",
     "pandas.*",
-    "sklearn.*",
+    "pyarrow.*",
     "scipy.*",
-    "tsdm.*",
+    "sklearn.*",
     "tqdm.*",
+    "tsdm.*",
 ]
 ignore_missing_imports = true
 
@@ -227,6 +231,7 @@ convention = "numpy"
 #count = true
 add-ignore = [
     "D105",    # Missing docstring in magic method
+    "D102",    # Missing docstring in public method
 ]
 
 #########################
