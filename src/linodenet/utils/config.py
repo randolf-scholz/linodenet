@@ -11,7 +11,7 @@ __all__ = [
 ]
 
 from abc import ABCMeta
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass, field
 from typing import Any
 
@@ -131,15 +131,15 @@ def flatten_dict(
     /,
     *,
     recursive: bool = True,
-    how: Callable[[Iterable[str]], str] = ".".join,
+    join_fn: Callable[[Sequence[str]], str] = ".".join,
 ) -> dict[str, Any]:
-    r"""Flatten a dictionary containing iterables to a list of tuples."""
+    r"""Flatten dictionaries recursively."""
     result = {}
     for key, item in d.items():
         if isinstance(item, dict) and recursive:
-            subdict = flatten_dict(item, recursive=True, how=how)
+            subdict = flatten_dict(item, recursive=True, join_fn=join_fn)
             for subkey, subitem in subdict.items():
-                result[how((key, subkey))] = subitem
+                result[join_fn((key, subkey))] = subitem
         else:
             result[key] = item
     return result
@@ -150,12 +150,19 @@ def unflatten_dict(
     /,
     *,
     recursive: bool = True,
-    how: Callable[[str], Sequence[str]] = str.split,
+    split_fn: Callable[[str], Sequence[str]] = lambda s: s.split(".", maxsplit=1),
 ) -> dict[str, Any]:
-    r"""Flatten a dictionary containing iterables to a list of tuples."""
-    result = {}
+    r"""Unflatten dictionaries recursively."""
+    result: dict[str, Any] = {}
     for key, item in d.items():
-        if len(how(key)) > 1 and recursive:
-            subdict = unflatten_dict({how(key)[-1]: item}, recursive=True, how=how)
-            result[how(key)[0]] = subdict
+        split = split_fn(key)
+        result.setdefault(split[0], {})
+        if len(split) > 1 and recursive:
+            assert len(split) == 2
+            subdict = unflatten_dict(
+                {split[1]: item}, recursive=recursive, split_fn=split_fn
+            )
+            result[split[0]] |= subdict
+        else:
+            result[split[0]] = item
     return result
