@@ -101,13 +101,11 @@ types-setuptools = ">=65.5"
 types-six = ">=1.16"
 types-typing-extensions = ">=3.7"
 types-urllib3 = ">=1.26"
-wheel = ">=0.37"
+wheel = ">=0.38"
 
 
 [tool.poetry.group.dev.dependencies.tsdm]
 version = ">=0.3.5"
-
-[tool.poetry.scripts]
 
 [[tool.poetry.source]]
 name = "berlin"
@@ -119,11 +117,7 @@ name = "hildesheim"
 url = "https://software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi"
 secondary = true
 
-#[[tool.poetry.source]]
-#name = "pytorch"
-#url = "https://download.pytorch.org/whl/cu113"
-#secondary = true
-#default = false
+[tool.poetry.scripts]
 
 ########################
 # PyLint Configuration #
