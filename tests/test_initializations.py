@@ -36,11 +36,12 @@ def _make_fig(path, means, stdvs, key):
 
 
 @pytest.mark.parametrize("key", FUNCTIONAL_INITIALIZATIONS)
+@pytest.mark.flaky(reruns=3)
 def test_initialization(
     key: str,
-    num_runs: int = 1000,
-    num_samples: int = 1000,
-    dim: int = 200,
+    num_runs: int = 64,
+    num_samples: int = 1024,
+    dim: int = 128,
     make_plot: bool = False,
 ) -> None:
     r"""Test normalization property empirically for all initializations.
@@ -77,7 +78,7 @@ def test_initialization(
         _make_fig(TEST_DIR, means, stdvs, key)
 
     # check if 𝐄[A⋅x] ≈ 0
-    valid_mean = torch.isclose(means, ZERO, rtol=1e-2, atol=1e-2).float().mean()
+    valid_mean = torch.isclose(means, ZERO, rtol=1e-8, atol=1e-2).float().mean()
     assert valid_mean > 0.9, f"Only {valid_mean=:.2%} of means were close to 0!"
     __logger__.info("%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}")
 

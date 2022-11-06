@@ -265,11 +265,12 @@ reportPrivateImportUsage = false
 # PyTest Configuration #
 ########################
 [tool.pytest]
-[tool.pytest.ini_options]
-testpaths = [ "tests/" ]
-reruns = "3"
+cov = "linodenet"
 only_rerun = "AssertionError"
-cov = "tsdm"
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = ["--doctest-modules"]
+testpaths = [ "tests/", "src/" ]
 
 ##########################
 # Coverage Configuration #
