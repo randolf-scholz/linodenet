@@ -27,7 +27,6 @@ TEST_DIR = PATH.parent / "test_results" / PATH.stem
 TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@pytest.mark.flaky(reruns=3)
 def linode_error(
     num: Optional[int] = None,
     dim: Optional[int] = None,

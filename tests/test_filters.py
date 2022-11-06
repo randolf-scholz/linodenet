@@ -4,6 +4,7 @@ r"""Test if filters satisfy idempotence property."""
 import logging
 from pathlib import Path
 
+import pytest
 import torch
 
 from linodenet.models.filters import SequentialFilterBlock
@@ -18,6 +19,7 @@ NAN = torch.tensor(float("nan"))
 
 
 # @pytest.mark.parametrize("key", FunctionalInitializations)
+@pytest.mark.flaky(reruns=3)
 def test_idempotency():
     r"""Check whether idempotency holds."""
     batch_dim, m, n = (3, 4, 5), 100, 100

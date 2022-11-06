@@ -27,6 +27,7 @@ TEST_DIR = PATH.parent / "test_results" / PATH.stem
 TEST_DIR.mkdir(parents=True, exist_ok=True)
 
 
+@pytest.mark.flaky(reruns=3)
 def test_LinearContraction(
     num_sample: Optional[int] = None,
     dim_inputs: Optional[int] = None,

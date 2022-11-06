@@ -50,7 +50,7 @@ class ConfigMetaclass(ABCMeta):  # noqa: B024
         name: str,
         bases: tuple[type, ...],
         attrs: dict[str, Any],
-        **kwds: dict[str, Any],
+        **kwds: Any,
     ) -> type:
         r"""Create a new class, patch in dataclass fields, and return it."""
         if "__annotations__" not in attrs:
@@ -98,6 +98,10 @@ class ConfigMetaclass(ABCMeta):  # noqa: B024
 
 class Config(Mapping, metaclass=ConfigMetaclass):
     r"""Base Config."""
+
+    def __init__(self, *args, **kwargs):
+        r"""Initialize the dictionary."""
+        self.__dict__.update(*args, **kwargs)
 
     def __iter__(self) -> Iterator[str]:
         r"""Return an iterator over the keys of the dictionary."""
