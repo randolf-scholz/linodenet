@@ -56,16 +56,6 @@ class ReZeroCell(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
         return self.scalar * x
 
 
@@ -83,16 +73,6 @@ class ReZero(nn.Sequential):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
         for k, block in enumerate(self):
             x = x + self.weights[k] * block(x)
         return x
@@ -148,5 +128,5 @@ class ReverseDense(nn.Module):
             nn.init.kaiming_uniform_(self.bias[None], nonlinearity=activation_name)
 
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass."""
+        r""".. Signature:: ``(..., m) -> (..., n)``."""
         return self.linear(self.activation(x))

@@ -85,11 +85,10 @@ class Transformer(nn.Module):
     ) -> Tensor:
         r"""Pass the input through the encoder layers in turn.
 
-        Parameters
-        ----------
-        src: the sequence to the encoder (required).
-        mask: the mask for the src sequence (optional).
-        src_key_padding_mask: the mask for the src keys per batch (optional).
+        Args:
+            src: the sequence to the encoder (required).
+            mask: the mask for the src sequence (optional).
+            src_key_padding_mask: the mask for the src keys per batch (optional).
         """
         output = src
 

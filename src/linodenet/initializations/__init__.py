@@ -7,8 +7,6 @@ Lemma
 
 In this case: $e^{A}$
 
-
-
 Notes
 -----
 Contains initializations in both modular and functional form.

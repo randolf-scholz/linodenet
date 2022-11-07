@@ -48,10 +48,6 @@ def _clean_namespace(module: ModuleType) -> None:
 
     Sets `obj.__module__` equal to `obj.__package__` for all objects listed in
     `package.__all__` that are originating from private submodules (`package/_module.py`).
-
-    Parameters
-    ----------
-    module: ModuleType
     """
     __logger__.info("Cleaning module=%s", module)
     variables = vars(module)

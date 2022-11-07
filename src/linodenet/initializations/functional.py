@@ -37,15 +37,7 @@ def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$ if $σ=1$.
 
-    Parameters
-    ----------
-    n: int or tuple[int]
-      If `tuple`, the last axis is interpreted as dimension and the others as batch
-    sigma: float = 1.0
-
-    Returns
-    -------
-    Tensor
+    If n is `tuple`, the last axis is interpreted as dimension and the others as batch.
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -60,14 +52,7 @@ def diagonally_dominant(n: SizeLike) -> Tensor:
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
-    Parameters
-    ----------
-    n: int or tuple[int]
-        If `tuple`, the last axis is interpreted as dimension and the others as batch
-
-    Returns
-    -------
-    Tensor
+    If n is `tuple`, the last axis is interpreted as dimension and the others as batch.
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -81,14 +66,6 @@ def symmetric(n: SizeLike) -> Tensor:
     r"""Sample a symmetric matrix, i.e. $A^⊤ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
-
-    Parameters
-    ----------
-    n: int or tuple[int]
-
-    Returns
-    -------
-    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -103,14 +80,6 @@ def skew_symmetric(n: SizeLike) -> Tensor:
     r"""Sample a random skew-symmetric matrix, i.e. $A^⊤ = -A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
-
-    Parameters
-    ----------
-    n: int or tuple[int]
-
-    Returns
-    -------
-    Tensor
     """
     # convert to tuple
     # convert to tuple
@@ -126,14 +95,6 @@ def orthogonal(n: SizeLike) -> Tensor:
     r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
-
-    Parameters
-    ----------
-    n: int or tuple[int]
-
-    Returns
-    -------
-    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -149,14 +110,6 @@ def special_orthogonal(n: SizeLike) -> Tensor:
     r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A^{-1}$ with $\det(A)=1$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
-
-    Parameters
-    ----------
-    n: int
-
-    Returns
-    -------
-    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -174,14 +127,6 @@ def canonical_skew_symmetric(n: SizeLike) -> Tensor:
     .. math:: 𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
-
-    Parameters
-    ----------
-    n: int or tuple[int]
-
-    Returns
-    -------
-    Tensor
     """
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
@@ -196,19 +141,7 @@ def canonical_skew_symmetric(n: SizeLike) -> Tensor:
 
 
 def low_rank(size: SizeLike, rank: Optional[int] = None) -> Tensor:
-    r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$.
-
-    Parameters
-    ----------
-    size: tuple[int] = ()
-        Optional batch dimensions.
-    rank: int
-        Rank of the matrix
-
-    Returns
-    -------
-    Tensor
-    """
+    r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$."""
     if isinstance(size, int):
         shape: tuple[int, ...] = (size, size)
     elif isinstance(size, Sequence) and len(size) == 1:
@@ -226,6 +159,3 @@ def low_rank(size: SizeLike, rank: Optional[int] = None) -> Tensor:
     V = torch.normal(mean=torch.zeros((*batch, rank, n)), std=1 / sqrt(n))
 
     return torch.einsum("...ij, ...jk -> ...ik", U, V)
-
-
-baba = 2
