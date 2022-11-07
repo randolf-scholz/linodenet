@@ -56,13 +56,9 @@ def pad(
 def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
     r"""Update nested dictionary recursively in-place with new dictionary.
 
-    Reference: https://stackoverflow.com/a/30655448/9318372
-
-    Parameters
+    References
     ----------
-    d: dict
-    new: Mapping
-    inplace: bool = False
+    - https://stackoverflow.com/a/30655448/9318372
     """
     if not inplace:
         d = deepcopy(d)
@@ -78,12 +74,9 @@ def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
 def deep_keyval_update(d: dict, **new_kv: Any) -> dict:
     r"""Update nested dictionary recursively in-place with key-value pairs.
 
-    Reference: https://stackoverflow.com/a/30655448/9318372
-
-    Parameters
+    References
     ----------
-    d: dict
-    new_kv: Mapping
+    - https://stackoverflow.com/a/30655448/9318372
     """
     for key, value in d.items():
         if isinstance(value, Mapping) and value:
@@ -116,14 +109,6 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
         model = MyModule()
 
     are (roughly?) equivalent
-
-    Parameters
-    ----------
-    base_class: type[nn.Module]
-
-    Returns
-    -------
-    type
     """
     assert issubclass(base_class, nn.Module)
 
@@ -147,16 +132,7 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
 
 
 def flatten(inputs: Tensor | Iterable[Tensor]) -> Tensor:
-    r"""Flattens element of general Hilbert space.
-
-    Parameters
-    ----------
-    inputs: Tensor
-
-    Returns
-    -------
-    Tensor
-    """
+    r"""Flattens element of general Hilbert space."""
     if isinstance(inputs, Tensor):
         return torch.flatten(inputs)
     if isinstance(inputs, Iterable):
@@ -180,19 +156,6 @@ def initialize_from(
         if isclass(obj):
             return obj(**kwargs)
         return partial(obj, **kwargs)
-
-    Parameters
-    ----------
-    lookup_table: dict[str, Callable]
-    __name__: str
-        The name of the class/function
-    kwargs: Any
-        Optional arguments to initialize class/function
-
-    Returns
-    -------
-    Callable
-        The initialized class/function
     """
     if isinstance(lookup_table, ModuleType):
         assert hasattr(lookup_table, __name__)
@@ -210,16 +173,7 @@ def initialize_from(
 
 
 def initialize_from_config(config: dict[str, Any]) -> nn.Module:
-    r"""Initialize a class from a dictionary.
-
-    Parameters
-    ----------
-    config: dict[str, Any]
-
-    Returns
-    -------
-    object
-    """
+    r"""Initialize a class from a dictionary."""
     assert "__name__" in config, "__name__ not found in dict"
     assert "__module__" in config, "__module__ not found in dict"
     __logger__.debug("Initializing %s", config)
@@ -232,15 +186,6 @@ def initialize_from_config(config: dict[str, Any]) -> nn.Module:
     return obj
 
 
-def is_dunder(name: str) -> bool:
-    r"""Check if name is a dunder method.
-
-    Parameters
-    ----------
-    name: str
-
-    Returns
-    -------
-    bool
-    """
-    return name.startswith("__") and name.endswith("__")
+def is_dunder(s: str, /) -> bool:
+    r"""Check if name is a dunder method."""
+    return s.isidentifier() and s.startswith("__") and s.endswith("__")

@@ -28,16 +28,7 @@ from linodenet.activations import geglu, reglu
 
 
 def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
-    r"""Get activation function by name.
-
-    Parameters
-    ----------
-    name: str
-
-    Returns
-    -------
-    Callable[[Tensor], Tensor]
-    """
+    r"""Get activation function by name."""
     return (
         reglu
         if name == "reglu"
@@ -50,16 +41,7 @@ def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
 
 
 def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
-    r"""Get activation function by name.
-
-    Parameters
-    ----------
-    name: str
-
-    Returns
-    -------
-    Callable[[Tensor], Tensor]
-    """
+    r"""Get activation function by name."""
     return (
         relu  # type: ignore[return-value]
         if name == "reglu"
@@ -73,15 +55,7 @@ def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
 
 
 class Tokenizer(nn.Module):
-    r"""Tokenizer Model.
-
-    Parameters
-    ----------
-    d_numerical
-    categories
-    d_token
-    bias
-    """
+    r"""Tokenizer Model."""
 
     # BUFFERS
     category_offsets: Optional[Tensor]
@@ -128,17 +102,6 @@ class Tokenizer(nn.Module):
         )
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x_num: Tensor
-        x_cat: Optional[Tensor] = None
-
-        Returns
-        -------
-        Tensor
-        """
         x_some = x_num if x_cat is None else x_cat
 
         x_num = torch.cat(
@@ -217,19 +180,6 @@ class MultiheadAttention(nn.Module):
         key_compression: Optional[nn.Linear],
         value_compression: Optional[nn.Linear],
     ) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x_q: Tensor
-        x_kv: Tensor
-        key_compression: Optional[nn.Linear]
-        value_compression: Optional[nn.Linear]
-
-        Returns
-        -------
-        Tensor
-        """
         q, k, v = self.W_q(x_q), self.W_k(x_kv), self.W_v(x_kv)
         for tensor in [q, k, v]:
             assert tensor.shape[-1] % self.n_heads == 0
@@ -388,17 +338,6 @@ class FTTransformer(nn.Module):
         return x
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x_num: Tensor
-        x_cat: Optional[Tensor] = None
-
-        Returns
-        -------
-        Tensor
-        """
         x = self.tokenizer(x_num, x_cat)
 
         for layer_idx, layer in enumerate(self.layers):

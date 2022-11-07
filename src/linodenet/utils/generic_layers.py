@@ -100,7 +100,7 @@ class Parallel(nn.ModuleList):
 
     @jit.export
     def forward(self, x: Tensor) -> list[Tensor]:
-        r"""Forward pass."""
+        r""".. Signature:: ``(..., n) -> [..., (..., n)]``."""
         result: List[Any] = []
 
         for module in self:
@@ -187,7 +187,7 @@ class Multiply(nn.Module):
         self.kernel = nn.Parameter(initial_value, requires_grad=learnable)
 
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass."""
+        r""".. Signature:: ``... -> ...``."""
         return torch.einsum(self.signature, x, self.kernel)
 
 
@@ -214,5 +214,5 @@ class Sum(nn.ModuleList):
         super().__init__(layers)
 
     def forward(self, *args, **kwargs):
-        r"""Forward pass."""
+        r""".. Signature:: ``... -> ...``."""
         return sum(module(*args, **kwargs) for module in self)

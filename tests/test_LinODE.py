@@ -34,16 +34,7 @@ def linode_error(
     relative_error: bool = True,
     device: Optional[torch.device] = None,
 ) -> NDArray:
-    r"""Compare `LinODE` against `scipy.odeint` on linear system.
-
-    Parameters
-    ----------
-    num: Optional[int] = None
-    dim: Optional[int] = None
-    precision: "single" or "double"
-    relative_error: bool
-    device: Optional[torch.device]
-    """
+    r"""Compare `LinODE` against `scipy.odeint` on linear system."""
     numpy_dtype: type[np.number]
     torch_dtype: torch.dtype
 
@@ -92,13 +83,7 @@ def linode_error(
 
 @pytest.mark.flaky(reruns=3)
 def test_linode_error(num_samples: int = 100, make_plot: bool = False) -> None:
-    r"""Compare LinODE against scipy.odeint on random linear system.
-
-    Parameters
-    ----------
-    num_samples: int = 100
-    make_plot: bool = False
-    """
+    r"""Compare LinODE against scipy.odeint on random linear system."""
     __logger__.info("Testing LinODE")
     extra_stats = {"Samples": num_samples}
 

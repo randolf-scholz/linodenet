@@ -161,19 +161,14 @@ class LinODECell(nn.Module):
 
     @jit.export
     def forward(self, dt: Tensor, x0: Tensor) -> Tensor:
-        r"""Signature: ``[(...,), (..., d)] -> (..., d)]``.
+        r"""Signature: ``[(...,), (..., d)] -> (..., d)``.
 
-        Parameters
-        ----------
-        dt: Tensor, shape=(...,)
-            The time difference $t_1 - t_0$ between $x_0$ and $x̂$.
-        x0:  Tensor, shape=(...,DIM)
-            Time observed value at $t_0$.
+        Args:
+            dt: The time difference $t_1 - t_0$ between $x_0$ and $x̂$.
+            x0: Time observed value at $t_0$.
 
-        Returns
-        -------
-        xhat:  Tensor, shape=(...,DIM)
-            The predicted value at $t_1$
+        Returns:
+            xhat: The predicted value at $t_1$
         """
         self.kernel = self.scalar * self.kernel_parametrization(self.weight)
         Adt = torch.einsum("kl, ... -> ...kl", self.kernel, dt)

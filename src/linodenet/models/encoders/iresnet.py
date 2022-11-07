@@ -31,17 +31,6 @@ def spectral_norm(
     Stopping criterion:
     - maxiter reached
     - $‖(A^⊤A -λ𝕀)x‖_2 ≤ \text{𝗋𝗍𝗈𝗅}⋅‖λx‖_2 + \text{𝖺𝗍𝗈𝗅}$
-
-    Parameters
-    ----------
-    A: tensor
-    atol: float = 1e-4
-    rtol: float =  1e-3,
-    maxiter: int = 10
-
-    Returns
-    -------
-    Tensor
     """
     _, n = A.shape
 
@@ -92,20 +81,7 @@ class SpectralNorm(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx: Any, *tensors: Tensor, **kwargs: Any) -> Tensor:
-        r"""Forward pass.
-
-        .. Signature:: ``(m, n) -> 1``
-
-        Parameters
-        ----------
-        ctx
-        tensors
-        kwargs
-
-        Returns
-        -------
-        Tensor
-        """
+        r""".. Signature:: ``(m, n) -> 1``."""
         A = tensors[0]
         atol: float = kwargs["atol"] if "atol" in kwargs else 1e-6
         rtol: float = kwargs["rtol"] if "rtol" in kwargs else 1e-6
@@ -140,13 +116,6 @@ class SpectralNorm(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs: Tensor) -> Tensor:
-        r"""Backward pass.
-
-        Parameters
-        ----------
-        ctx
-        grad_outputs
-        """
         u, v = ctx.saved_tensors
         return torch.einsum("..., i, j -> ...ij", grad_outputs[0], u, v)
 
@@ -234,16 +203,7 @@ class LinearContraction(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
         # self.spectral_norm = spectral_norm(self.weight)
@@ -345,16 +305,7 @@ class AltLinearContraction(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
         # σ_max = spectral_norm(self.weight)
@@ -472,16 +423,7 @@ class iResNetBlock(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         return x + self.bottleneck(x)
 
     @jit.export
@@ -490,14 +432,6 @@ class iResNetBlock(nn.Module):
 
         Terminates once ``maxiter`` or tolerance threshold
         $|x'-x|≤\text{atol} + \text{rtol}⋅|x|$ is reached.
-
-        Parameters
-        ----------
-        y: Tensor
-
-        Returns
-        -------
-        Tensor
         """
         x = y.clone()
         residual = torch.zeros_like(y)
@@ -590,30 +524,12 @@ class iResNet(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        xhat: Tensor
-        """
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         return self.blocks(x)
 
     @jit.export
     def inverse(self, y: Tensor) -> Tensor:
-        r"""Compute the inverse through fix point iteration in each block in reversed order.
-
-        Parameters
-        ----------
-        y: Tensor
-
-        Returns
-        -------
-        yhat: Tensor
-        """
+        r"""Compute the inverse through fix point iteration in each block in reversed order."""
         for block in self.blocks[::-1]:  # traverse in reverse
             y = block.inverse(y)
 
@@ -688,31 +604,13 @@ class iLowRankLayer(nn.Module):
         self.rank = rank
 
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         z = torch.einsum("...n, nk -> ...k", self.V, x)
         y = torch.einsum("...k, nk -> ...n", self.U, z)
         return x + y
 
     def inverse(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         z = torch.einsum("...n, nk -> ...k", self.V, x)
         A = torch.eye(self.rank) + torch.einsum("nk, nk -> kk", self.U, self.V)
         y = torch.linalg.solve(A, z)
