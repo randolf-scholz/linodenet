@@ -2,11 +2,9 @@
 r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
-import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import psutil
 import pytest
 import torch
 
@@ -56,15 +54,13 @@ def test_initialization(
         dim: Number of dimensions
         make_plots: Whether to plot
     """
-    __logger__.info("Testing %s", key)
-
-    if psutil.virtual_memory().available < 16 * 1024**3:
-        warnings.warn("Requires up to 16GiB of RAM", UserWarning)
+    initialization = FUNCTIONAL_INITIALIZATIONS[key]
+    LOGGER = logging.getLogger(initialization.__name__)
+    LOGGER.info("Testing...")
 
     ZERO = torch.tensor(0.0)
     ONE = torch.tensor(1.0)
     x = torch.randn(num_runs, num_samples, dim)
-    initialization = FUNCTIONAL_INITIALIZATIONS[key]
     # Batch compute A⋅x for num_samples of x and num_runs many samples of A
     matrices = initialization((num_runs, dim))  # (num_runs, dim, dim)
     y = torch.einsum(
@@ -81,17 +77,14 @@ def test_initialization(
     # check if 𝐄[A⋅x] ≈ 0
     valid_mean = torch.isclose(means, ZERO, rtol=1e-8, atol=1e-2).float().mean()
     assert valid_mean > 0.9, f"Only {valid_mean=:.2%} of means were close to 0!"
-    __logger__.info("%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}")
+    LOGGER.info("%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}")
 
     # check if 𝐕[A⋅x] ≈ 1
     valid_stdv = torch.isclose(stdvs, ONE, rtol=1e-2, atol=1e-2).float().mean()
     assert valid_stdv > 0.9, f"Only {valid_stdv=:.2%} of stdvs were close to 1!"
-    __logger__.info("%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}")
+    LOGGER.info("%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}")
 
-    # todo: add plot
-    # todo: add experiment after applying matrix exponential
-
-    # __logger__.info("All initializations passed! ✔ ")
+    # todo: add plot after applying matrix exponential
 
 
 @pytest.mark.skip

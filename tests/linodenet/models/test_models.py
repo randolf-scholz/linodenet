@@ -115,7 +115,7 @@ def _test_model(
         LOGGER.info(">>> INITIALIZATION ✔ ")
 
     try:  # check JIT-compatibility
-        __logger__.info(">>> JIT-COMPILATION TEST")
+        LOGGER.info(">>> JIT-COMPILATION TEST")
         model = torch.jit.script(model)
     except Exception as E:
         raise RuntimeError(err_str("JIT-compilation")) from E
@@ -203,7 +203,7 @@ def test_all_models() -> None:
 
         LOGGER.info("Model passed all tests!!")
 
-    __logger__.info("Finished testing forward/backward of %s.", MODELS)
+    __logger__.info("Finished testing forward/backward of %s.", set(MODELS))
 
 
 def _main() -> None:
