@@ -41,9 +41,10 @@ before_script:
 setup:
   stage: build
   cache:
-    - key: package_cache
+    - key: pip
       paths:
-        - "$MAIN_CACHE"
+        - "$PIP_CACHE_DIR"
+      policy: pull-push
     - key: venv
       paths:
         - "$VENV_DIR"
@@ -52,7 +53,7 @@ setup:
     - mkdir -p $MAIN_CACHE public reports badges
     - echo "${CI_RUNNER_ID}"
     - echo "${CI_RUNNER_TAGS}"
-    - du -h --max-depth=1 "${CI_PROJECT_DIR}/.cache"
+    - du -h --max-depth=1 "${MAIN_CACHE}"
     # Check kernel and python version
     - uname -a
     - python -V
@@ -87,11 +88,11 @@ setup:
     # set version number depending on CI_PIPELINE_ID
     - pip list
     - VERSION=$(poetry version -s)
-    - poetry version "$(poetry version -s).post${CI_PIPELINE_IID}"
+    - poetry version "$VERSION.post${CI_PIPELINE_IID}"
     # verify version number OK (cf. https://peps.python.org/pep-0440/#appendix-b-parsing-version-strings-with-regular-expressions)
     - regex='r"^([1-9][0-9]*!)?(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*((a|b|rc)(0|[1-9][0-9]*))?(\.post(0|[1-9][0-9]*))?(\.dev(0|[1-9][0-9]*))?$"'
-    - version='"'$(poetry version -s)'"'
-    - python -c "import re; assert re.match($regex, $version)"
+    - VERSION='"'$(poetry version -s)'"'
+    - python -c "import re; assert re.match($regex, $VERSION)"
     # update the requirements.txt files.
     - ./run/generate_requirements.sh
     # build the package.
@@ -105,6 +106,8 @@ setup:
     - pip list
   after_script:
     - source ${VENVNAME}/bin/activate
+    - VERSION=$(poetry version -s)
+    - VERSION="${VERSION%.*}"
     # generate python version badge
     - python -m pybadges
       --left-text="python"
@@ -116,7 +119,7 @@ setup:
     # generate package version badge
     - python -m pybadges
       --left-text="version"
-      --right-text=$VERSION
+      --right-text="$VERSION"
       > badges/version.svg
     # generate license badge
     - python -m pybadges
@@ -216,9 +219,11 @@ mypy:
     - key: venv
       paths:
         - "$VENV_DIR"
+      policy: pull
     - key: mypy
       paths:
         - "$MYPY_CACHE_DIR"
+      policy: pull-push
   needs:
     - setup
   allow_failure: true
@@ -249,7 +254,6 @@ mypy:
 ###############
 
 pytest:
-  # see pytest.ini for configuration
   stage: test
   cache:
     - key: venv
@@ -259,10 +263,11 @@ pytest:
     - key: pytest
       paths:
         - "$PYTEST_CACHE_DIR"
+      policy: pull-push
   needs:
     - setup
   script:
-    - pytest --junitxml=reports/pytest.xml --cov=$MODULENAME $TESTDIR --reruns 3 --only-rerun AssertionError
+    - pytest -k "not slow"
     - coverage xml -o reports/cobertura-coverage.xml
     - coverage report
   after_script:
