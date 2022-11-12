@@ -65,6 +65,9 @@ setup:
     - pip install --upgrade pip poetry virtualenv
     - virtualenv ${VENVNAME} --download
     - source ${VENVNAME}/bin/activate
+    # check versions
+    - python --version
+    - poetry --version
     - pip install --upgrade pip setuptools wheel
     # install tsdm
     - poetry config http-basic.berlin gitlab-ci-token "${CI_JOB_TOKEN}"
