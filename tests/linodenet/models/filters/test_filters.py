@@ -35,12 +35,12 @@ def test_filter_idempotency() -> None:
     # )
     # result = model(y, x)
     # assert not torch.isnan(result).any(), "Output contains NANs! ❌ "
-    # __logger__.info("KalmanCell: No NaN outputs ✔ ")
+    # LOGGER.info("KalmanCell: No NaN outputs ✔ ")
     #
     # # verify IDP condition
     # y[~mask] = x[~mask]
     # assert torch.allclose(x, model(y, x)), "Idempotency failed! ❌ "
-    # __logger__.info("KalmanCell: Idempotency holds ✔ ")
+    # LOGGER.info("KalmanCell: Idempotency holds ✔ ")
 
     # Test SequentialFilterBlock
     model = SequentialFilterBlock(

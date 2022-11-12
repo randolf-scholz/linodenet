@@ -2950,14 +2950,6 @@ optional = false
 python-versions = "*"
 
 [[package]]
-name = "types-psutil"
-version = "5.9.5.4"
-description = "Typing stubs for psutil"
-category = "dev"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "types-pyyaml"
 version = "6.0.12.2"
 description = "Typing stubs for PyYAML"
@@ -3051,7 +3043,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 
 [[package]]
 name = "virtualenv"
-version = "20.16.6"
+version = "20.16.7"
 description = "Virtual Python Environment builder"
 category = "dev"
 optional = false
@@ -3151,7 +3143,7 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "8dd6d81cb083bf5ccd23efdb16637d8589313784d0740b757e476979a3fa74a0"
+content-hash = "ee1d6aae87c41337a6bdf67e9a4f8207dbdf4759594b6542dd2b4e6f58caa4e5"
 
 [metadata.files]
 absl-py = [
@@ -5012,10 +5004,6 @@ types-protobuf = [
     {file = "types-protobuf-3.20.4.4.tar.gz", hash = "sha256:55feb2bb48b860aad5592db201c80d1598889ebec06bf554610f0a62880f5685"},
     {file = "types_protobuf-3.20.4.4-py3-none-any.whl", hash = "sha256:01d1c5bd42cbec4fc41e7c0980e8827378f0d670e91bd08edb0bcbf34b2989fe"},
 ]
-types-psutil = [
-    {file = "types-psutil-5.9.5.4.tar.gz", hash = "sha256:aa09102b80c65a3b4573216614372398dab78972d650488eaff1ff05482cc18f"},
-    {file = "types_psutil-5.9.5.4-py3-none-any.whl", hash = "sha256:28e59764630187e462d43788efa16d59d5e77b510115f9e25901b2d4007fca62"},
-]
 types-pyyaml = [
     {file = "types-PyYAML-6.0.12.2.tar.gz", hash = "sha256:6840819871c92deebe6a2067fb800c11b8a063632eb4e3e755914e7ab3604e83"},
     {file = "types_PyYAML-6.0.12.2-py3-none-any.whl", hash = "sha256:1e94e80aafee07a7e798addb2a320e32956a373f376655128ae20637adb2655b"},
@@ -5056,8 +5044,8 @@ urllib3 = [
     {file = "urllib3-1.26.12.tar.gz", hash = "sha256:3fa96cf423e6987997fc326ae8df396db2a8b7c667747d47ddd8ecba91f4a74e"},
 ]
 virtualenv = [
-    {file = "virtualenv-20.16.6-py3-none-any.whl", hash = "sha256:186ca84254abcbde98180fd17092f9628c5fe742273c02724972a1d8a2035108"},
-    {file = "virtualenv-20.16.6.tar.gz", hash = "sha256:530b850b523c6449406dfba859d6345e48ef19b8439606c5d74d7d3c9e14d76e"},
+    {file = "virtualenv-20.16.7-py3-none-any.whl", hash = "sha256:efd66b00386fdb7dbe4822d172303f40cd05e50e01740b19ea42425cbe653e29"},
+    {file = "virtualenv-20.16.7.tar.gz", hash = "sha256:8691e3ff9387f743e00f6bb20f70121f5e4f596cae754531f2b3b3a1b1ac696e"},
 ]
 wcwidth = [
     {file = "wcwidth-0.2.5-py2.py3-none-any.whl", hash = "sha256:beb4802a9cebb9144e99086eff703a642a13d6a0052920003a230f3294bbe784"},
