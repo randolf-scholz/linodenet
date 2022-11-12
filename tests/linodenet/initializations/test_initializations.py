@@ -2,9 +2,11 @@
 r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
+import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import psutil
 import pytest
 import torch
 
@@ -57,6 +59,9 @@ def test_initialization(
     initialization = FUNCTIONAL_INITIALIZATIONS[key]
     LOGGER = logging.getLogger(initialization.__name__)
     LOGGER.info("Testing...")
+
+    if psutil.virtual_memory().available < 16 * 1024**3:
+        warnings.warn("Requires up to 16GiB of RAM", UserWarning)
 
     ZERO = torch.tensor(0.0)
     ONE = torch.tensor(1.0)
