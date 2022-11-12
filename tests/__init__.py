@@ -1,5 +1,4 @@
-r"""Tests for the LinODE-Net package.
+"""Tests for linodenet.
 
-This is only here to make ``pylint test`` possible.
-The test folder should be ignored in setup.py anyway.
+NOTE: We use `/tests/linodenet/...` layout to ensure that the tests are not imported.
 """

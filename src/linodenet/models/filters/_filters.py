@@ -868,7 +868,6 @@ class RecurrentCellFilter(FilterABC):
         if self.autoregressive:
             y = torch.where(mask, x, y)
         else:
-            # TODO: something smarter in non-autoregressive case
             y = torch.where(mask, self.h(x), y)
 
         if self.concat_mask:

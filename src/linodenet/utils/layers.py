@@ -15,7 +15,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.utils._util import deep_dict_update, initialize_from_config
+from linodenet.utils._utils import deep_dict_update, initialize_from_config
 
 
 class ReZeroCell(nn.Module):
@@ -56,6 +56,7 @@ class ReZeroCell(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(...,) -> (...,)``."""
         return self.scalar * x
 
 
