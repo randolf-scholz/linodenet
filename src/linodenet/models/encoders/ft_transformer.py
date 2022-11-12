@@ -102,6 +102,7 @@ class Tokenizer(nn.Module):
         )
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
+        r""".. Signature:: ``(..., d) -> (..., e)``."""
         x_some = x_num if x_cat is None else x_cat
 
         x_num = torch.cat(
@@ -180,6 +181,7 @@ class MultiheadAttention(nn.Module):
         key_compression: Optional[nn.Linear],
         value_compression: Optional[nn.Linear],
     ) -> Tensor:
+        r""".. Signature:: ``[(..., q), (...k) -> (..., d)``."""
         q, k, v = self.W_q(x_q), self.W_k(x_kv), self.W_v(x_kv)
         for tensor in [q, k, v]:
             assert tensor.shape[-1] % self.n_heads == 0
@@ -338,6 +340,7 @@ class FTTransformer(nn.Module):
         return x
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
+        r""".. Signature:: ``(..., e) -> (..., e)``."""
         x = self.tokenizer(x_num, x_cat)
 
         for layer_idx, layer in enumerate(self.layers):

@@ -91,6 +91,7 @@ class _ResNet(nn.Module):
         self.head = nn.Linear(d, d_out)
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
+        r""".. Signature:: ``(..., d) -> (..., d)``."""
         tensors = []
         if x_num is not None:
             tensors.append(x_num)
