@@ -93,15 +93,7 @@ class LinODE(nn.Module):
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
         r""".. Signature:: ``[(..., N), (..., d)] -> (..., N, d)``.
 
-        Parameters
-        ----------
-        T: Tensor, shape=(...,LEN)
-        x0: Tensor, shape=(...,DIM)
-
-        Returns
-        -------
-        Xhat: Tensor, shape=(...,LEN,DIM)
-            The estimated true state of the system at the times $t∈T$.
+        Returns the estimated true state of the system at the times $t∈T$.
         """
         DT = torch.moveaxis(torch.diff(T), -1, 0)
         X: list[Tensor] = [x0]
