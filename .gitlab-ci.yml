@@ -70,20 +70,6 @@ setup:
     - poetry --version
     - pip install --upgrade pip setuptools wheel
     # install tsdm
-    - poetry config http-basic.berlin gitlab-ci-token "${CI_JOB_TOKEN}"
-    - poetry config http-basic.hildesheim gitlab-ci-token "${CI_JOB_TOKEN}"
-    - |
-      if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
-        echo "Installing TSDM from Berlin Mirror."
-        mirror=$(echo "https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple")
-      elif [[ $CI_PROJECT_URL == *"software.ismll.uni-hildesheim.de"* ]]; then
-        echo "Installing TSDM from Hildesheim Mirror."
-        mirror=$(echo "https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple")
-      else
-        echo "Package TSDM mirror not found."
-        exit 1
-      fi
-    - pip install tsdm --upgrade --pre --no-deps --index-url $mirror
   script:
     # We first build the package and then install it. Finally, we install the dev dependencies.
     # This makes sure that the package can be built and installed.
@@ -96,16 +82,30 @@ setup:
     - regex='r"^([1-9][0-9]*!)?(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*((a|b|rc)(0|[1-9][0-9]*))?(\.post(0|[1-9][0-9]*))?(\.dev(0|[1-9][0-9]*))?$"'
     - VERSION='"'$(poetry version -s)'"'
     - python -c "import re; assert re.match($regex, $VERSION)"
+    - echo ">>> Installing version $VERSION <<<"
+    - poetry build
+    - pip install --prefer-binary --upgrade $(ls dist/*.whl)
+    # install dev dependencies
     # update the requirements.txt files.
     - ./run/generate_requirements.sh
-    # build the package.
-    - poetry build
-    # install package
-    #- poetry install
-    # TODO: fix pip install errors!!!
-    - pip install --prefer-binary $(ls dist/*.whl)
-    # install dev dependencies.
-    - pip install --prefer-binary -r requirements-dev.txt
+    # setup remote for in-house dependencies
+    - |
+      if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
+        echo "Installing TSDM from Berlin Mirror."
+        mirror="https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
+      elif [[ $CI_PROJECT_URL == *"software.ismll.uni-hildesheim.de"* ]]; then
+        echo "Installing TSDM from Hildesheim Mirror."
+        mirror="https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple"
+      else
+        echo "Package TSDM mirror not found."
+        exit 1
+      fi
+    - export PIP_EXTRA_INDEX_URL=$mirror
+    - poetry config repositories.tsdm $mirror
+    - poetry config http-basic.tsdm gitlab-ci-token "${CI_JOB_TOKEN}"
+    # install dev dependencies
+    - pip install tsdm --upgrade --pre --no-deps --index-url $mirror
+    - pip install --prefer-binary --upgrade -r requirements-dev.txt
     - pip list
   after_script:
     - source ${VENVNAME}/bin/activate
