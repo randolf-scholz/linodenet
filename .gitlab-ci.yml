@@ -67,7 +67,7 @@ setup:
     - which pip
     - pip --version
     - pip cache info
-    - pip install --user --upgrade pip poetry virtualenv
+    - pip install --upgrade pip poetry virtualenv
     - virtualenv ${VENVNAME} --download
     # Activate virtualenv and check again.
     - source ${VENVNAME}/bin/activate
