@@ -42,7 +42,6 @@ classifiers = [
 #modin = {version = ">=0.14", extras = ["ray"]}
 #ray = {version = ">=1.9", extras = ["default", "tune"]}
 
-
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
 numpy = ">=1.23"
@@ -109,17 +108,19 @@ types-typing-extensions = ">=3.7"
 types-urllib3 = ">=1.26"
 wheel = ">=0.38"
 
-[tool.poetry.group.dev.dependencies.tsdm]
-version = ">=0.3.7"
+[tool.poetry.group.inhouse.dependencies]
+tsdm = ">=0.3.7"
 
 [[tool.poetry.source]]
 name = "berlin"
 url = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
+default = false
 secondary = true
 
 [[tool.poetry.source]]
 name = "hildesheim"
 url = "https://software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi"
+default = false
 secondary = true
 
 [tool.poetry.scripts]

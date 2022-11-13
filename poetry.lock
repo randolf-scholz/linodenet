@@ -1603,7 +1603,7 @@ testing = ["docopt", "pytest (<6.0.0)"]
 
 [[package]]
 name = "pathspec"
-version = "0.10.1"
+version = "0.10.2"
 description = "Utility library for gitignore style pattern matching of file paths."
 category = "dev"
 optional = false
@@ -1691,7 +1691,7 @@ testing = ["coverage", "nose"]
 
 [[package]]
 name = "platformdirs"
-version = "2.5.3"
+version = "2.5.4"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
 category = "dev"
 optional = false
@@ -2867,7 +2867,7 @@ test = ["pre-commit", "pytest"]
 
 [[package]]
 name = "tsdm"
-version = "0.3.7.post492"
+version = "0.3.7.post497"
 description = "Time-Series Datasets and Models"
 category = "dev"
 optional = false
@@ -2951,7 +2951,7 @@ python-versions = "*"
 
 [[package]]
 name = "types-psutil"
-version = "5.9.5.4"
+version = "5.9.5.5"
 description = "Typing stubs for psutil"
 category = "dev"
 optional = false
@@ -3151,7 +3151,7 @@ testing = ["flake8 (<5)", "func-timeout", "jaraco.functools", "jaraco.itertools"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "0e83342acee6617911c942a8dbe5a07a20ef197ab4b727a2686eb3e228b005d9"
+content-hash = "6e4cb243da36452ab14603210dfb5b4e29435ddf0313f2d8a4bae329445e6513"
 
 [metadata.files]
 absl-py = [
@@ -4242,8 +4242,8 @@ parso = [
     {file = "parso-0.8.3.tar.gz", hash = "sha256:8c07be290bb59f03588915921e29e8a50002acaf2cdc5fa0e0114f91709fafa0"},
 ]
 pathspec = [
-    {file = "pathspec-0.10.1-py3-none-any.whl", hash = "sha256:46846318467efc4556ccfd27816e004270a9eeeeb4d062ce5e6fc7a87c573f93"},
-    {file = "pathspec-0.10.1.tar.gz", hash = "sha256:7ace6161b621d31e7902eb6b5ae148d12cfd23f4a249b9ffb6b9fee12084323d"},
+    {file = "pathspec-0.10.2-py3-none-any.whl", hash = "sha256:88c2606f2c1e818b978540f73ecc908e13999c6c3a383daf3705652ae79807a5"},
+    {file = "pathspec-0.10.2.tar.gz", hash = "sha256:8f6bf73e5758fd365ef5d58ce09ac7c27d2833a8d7da51712eac6e27e35141b0"},
 ]
 pbr = [
     {file = "pbr-5.11.0-py2.py3-none-any.whl", hash = "sha256:db2317ff07c84c4c63648c9064a79fe9d9f5c7ce85a9099d4b6258b3db83225a"},
@@ -4335,8 +4335,8 @@ pkginfo = [
     {file = "pkginfo-1.8.3.tar.gz", hash = "sha256:a84da4318dd86f870a9447a8c98340aa06216bfc6f2b7bdc4b8766984ae1867c"},
 ]
 platformdirs = [
-    {file = "platformdirs-2.5.3-py3-none-any.whl", hash = "sha256:0cb405749187a194f444c25c82ef7225232f11564721eabffc6ec70df83b11cb"},
-    {file = "platformdirs-2.5.3.tar.gz", hash = "sha256:6e52c21afff35cb659c6e52d8b4d61b9bd544557180440538f255d9382c8cbe0"},
+    {file = "platformdirs-2.5.4-py3-none-any.whl", hash = "sha256:af0276409f9a02373d540bf8480021a048711d572745aef4b7842dad245eba10"},
+    {file = "platformdirs-2.5.4.tar.gz", hash = "sha256:1006647646d80f16130f052404c6b901e80ee4ed6bef6792e1f238a8969106f7"},
 ]
 pluggy = [
     {file = "pluggy-1.0.0-py2.py3-none-any.whl", hash = "sha256:74134bbf457f031a36d68416e1509f34bd5ccc019f0bcc952c7b909d06b37bd3"},
@@ -4989,8 +4989,8 @@ traitlets = [
     {file = "traitlets-5.5.0.tar.gz", hash = "sha256:b122f9ff2f2f6c1709dab289a05555be011c87828e911c0cf4074b85cb780a79"},
 ]
 tsdm = [
-    {file = "tsdm-0.3.7.post492-py3-none-any.whl", hash = "sha256:5ace4a01ac8eeda90a728f3d4e283fdd9de3a6effb7014bbc940cebeacec5481"},
-    {file = "tsdm-0.3.7.post492.tar.gz", hash = "sha256:1d85a8b86aac0217ec164e6b102ce953dc4bc4c4d829056c94b3fcd53f5180b6"},
+    {file = "tsdm-0.3.7.post497-py3-none-any.whl", hash = "sha256:4f834db6f4778bec10e448cbee62b70fc1c6ce59571a0ce9f0c7cf9c9c4cad43"},
+    {file = "tsdm-0.3.7.post497.tar.gz", hash = "sha256:ecb9db6bd7b9d67e5ed622082a584361dc55de83bb1108f3120311cbe9c84f82"},
 ]
 twine = [
     {file = "twine-4.0.1-py3-none-any.whl", hash = "sha256:42026c18e394eac3e06693ee52010baa5313e4811d5a11050e7d48436cf41b9e"},
@@ -5013,8 +5013,8 @@ types-protobuf = [
     {file = "types_protobuf-3.20.4.4-py3-none-any.whl", hash = "sha256:01d1c5bd42cbec4fc41e7c0980e8827378f0d670e91bd08edb0bcbf34b2989fe"},
 ]
 types-psutil = [
-    {file = "types-psutil-5.9.5.4.tar.gz", hash = "sha256:aa09102b80c65a3b4573216614372398dab78972d650488eaff1ff05482cc18f"},
-    {file = "types_psutil-5.9.5.4-py3-none-any.whl", hash = "sha256:28e59764630187e462d43788efa16d59d5e77b510115f9e25901b2d4007fca62"},
+    {file = "types-psutil-5.9.5.5.tar.gz", hash = "sha256:4f26fdb2cb064b274cbc6359fba4abf3b3a2993d7d4abc336ad0947568212c62"},
+    {file = "types_psutil-5.9.5.5-py3-none-any.whl", hash = "sha256:e576bb81c74f7443b067e94f92435894d5dd561161bec3d6401727b63df009f0"},
 ]
 types-pyyaml = [
     {file = "types-PyYAML-6.0.12.2.tar.gz", hash = "sha256:6840819871c92deebe6a2067fb800c11b8a063632eb4e3e755914e7ab3604e83"},
