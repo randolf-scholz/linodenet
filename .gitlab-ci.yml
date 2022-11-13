@@ -19,8 +19,9 @@ variables:
   MODULEDIR: "src/linodenet/"
   MODULENAME: "linodenet"
   TESTDIR: "tests/"
-  MAIN_CACHE: "$CI_PROJECT_DIR/.cache"
+  MAIN_CACHE: "$~/.cache"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PYRE_CACHE_DIR: "${CI_PROJECT_DIR}/.pyre"
   MYPY_CACHE_DIR: "${CI_PROJECT_DIR}/.mypy_cache"
   PYTEST_CACHE_DIR: "${CI_PROJECT_DIR}/.pytest_cache"
   VENVNAME: ".venv"
@@ -68,6 +69,9 @@ setup:
     # check versions
     - python --version
     - poetry --version
+    - pip --version
+    - pip cache info
+    - pip cache dir
     - pip install --upgrade pip setuptools wheel
     # install tsdm
   script:
