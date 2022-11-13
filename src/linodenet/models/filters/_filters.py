@@ -69,17 +69,12 @@ class FilterABC(nn.Module):
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Forward pass of the filter.
 
-        Parameters
-        ----------
-        x: Tensor
-            The current estimation of the state of the system.
-        y: Tensor
-            The current measurement of the system.
+        Args:
+            y: The current measurement of the system.
+            x: The current estimation of the state of the system.
 
-        Returns
-        -------
-        Tensor:
-            The updated state of the system.
+        Returns:
+            x̂: The updated state of the system.
         """
 
 
@@ -506,7 +501,6 @@ class KalmanFilter(FilterABC):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor, *, P: Optional[Tensor] = None) -> Tensor:
-        r"""Forward pass of the filter."""
         P = torch.eye(x.shape[-1]) if P is None else P
         # create the mask
         mask = ~torch.isnan(y)
@@ -874,7 +868,6 @@ class RecurrentCellFilter(FilterABC):
         if self.autoregressive:
             y = torch.where(mask, x, y)
         else:
-            # TODO: something smarter in non-autoregressive case
             y = torch.where(mask, self.h(x), y)
 
         if self.concat_mask:

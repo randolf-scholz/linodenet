@@ -15,7 +15,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.utils._util import deep_dict_update, initialize_from_config
+from linodenet.utils._utils import deep_dict_update, initialize_from_config
 
 
 class ReZeroCell(nn.Module):
@@ -56,16 +56,7 @@ class ReZeroCell(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
+        """.. Signature:: ``(...,) -> (...,)``."""
         return self.scalar * x
 
 
@@ -83,16 +74,6 @@ class ReZero(nn.Sequential):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x: Tensor
-
-        Returns
-        -------
-        Tensor
-        """
         for k, block in enumerate(self):
             x = x + self.weights[k] * block(x)
         return x
@@ -148,5 +129,5 @@ class ReverseDense(nn.Module):
             nn.init.kaiming_uniform_(self.bias[None], nonlinearity=activation_name)
 
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass."""
+        r""".. Signature:: ``(..., m) -> (..., n)``."""
         return self.linear(self.activation(x))

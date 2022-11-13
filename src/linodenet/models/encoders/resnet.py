@@ -91,17 +91,7 @@ class _ResNet(nn.Module):
         self.head = nn.Linear(d, d_out)
 
     def forward(self, x_num: Tensor, x_cat: Optional[Tensor] = None) -> Tensor:
-        r"""Forward pass.
-
-        Parameters
-        ----------
-        x_num: Tensor
-        x_cat: Optional[Tensor]
-
-        Returns
-        -------
-        Tensor
-        """
+        r""".. Signature:: ``(..., d) -> (..., d)``."""
         tensors = []
         if x_num is not None:
             tensors.append(x_num)
@@ -225,7 +215,7 @@ class ResNet(nn.ModuleList):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Forward pass."""
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         for block in self:
             x = x + block(x)
         return x
