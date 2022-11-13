@@ -63,7 +63,7 @@ setup:
     - uname -a
     # python setup
     - which python
-    - python -version
+    - python --version
     - which pip
     - pip --version
     - pip cache info
