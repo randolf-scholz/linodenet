@@ -311,7 +311,7 @@ class LinearFilter(FilterABC):
         z = self.h(x)
         z = torch.where(mask, z - y, self.ZERO)  # → [..., m]
         z = z + self.epsilonA * torch.einsum("ij, ...j -> ...i", self.A, z)
-        z = torch.where(mask, z, self.ZERO)
+        #z = torch.where(mask, z, self.ZERO)
         z = self.ht(z)
         z = z + self.epsilonB * torch.einsum("ij, ...j -> ...i", self.B, z)
         return x - self.alpha * z
@@ -326,7 +326,7 @@ class NonLinearFilter(FilterABC):
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
-        "num_blocks": 2,
+        "num_blocks": 5,
         "block": ReverseDense.HP | {"bias": False},
     }
     r"""The HyperparameterDict of this class."""
@@ -395,7 +395,7 @@ class NonLinearFilter(FilterABC):
             else nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
         )
         # TODO: PARAMETRIZATIONS
-
+        print("nonlinear filter changed!")
         # BUFFERS
         self.register_buffer("ZERO", torch.zeros(1))
 
@@ -429,7 +429,129 @@ class NonLinearFilter(FilterABC):
         """
         mask = ~torch.isnan(y)  # (..., m)
         z = self.h(x)  # (..., m)
-        z = torch.where(mask, z - y, self.ZERO)  # (..., m)
+        z = torch.where(mask, z - y, self.ZERO)
+        #z = torch.cat([z,torch.float32(mask)],-1)  
+        # (..., m)
+        #z = torch.einsum("ij, ...j -> ...i", self.A, z)
+        #z = torch.where(mask, z, self.ZERO)  # (..., m)
+        z = self.ht(z)  # (..., n)
+        #z = torch.einsum("ij, ...j -> ...i", self.B, z)
+        return x - self.epsilon * self.layers(z)
+    
+class NonLinearFilter2(FilterABC):
+    r"""Non-linear Layers stacked on top of linear core."""
+
+    HP = {
+        "__name__": __qualname__,  # type: ignore[name-defined]
+        "__module__": __module__,  # type: ignore[name-defined]
+        "input_size": None,
+        "hidden_size": None,
+        "autoregressive": False,
+        "num_blocks": 4,
+        "block": ReverseDense.HP | {"bias": False},
+    }
+    r"""The HyperparameterDict of this class."""
+
+    # CONSTANTS
+    autoregressive: Final[bool]
+    r"""CONST: Whether the filter is autoregressive or not."""
+    input_size: Final[int]
+    r"""CONST: The input size (=dim x)."""
+    hidden_size: Final[int]
+    r"""CONST: The hidden size (=dim y)."""
+
+    # PARAMETERS
+    H: Optional[Tensor]
+    r"""PARAM: the observation matrix."""
+    kernel: Tensor
+    r"""PARAM: The kernel matrix."""
+
+    # BUFFERS
+    ZERO: Tensor
+    r"""BUFFER: A constant value of zero."""
+
+    def __init__(
+        self,
+        input_size: int,
+        # hidden_size: Optional[int] = None,
+        # alpha: str | float = "last-value",
+        # alpha_learnable: bool = True,
+        # autoregressive: bool = False,
+        **cfg: Any,
+    ):
+        super().__init__()
+        config = deep_dict_update(self.HP, cfg)
+        hidden_size = (
+            input_size if config["hidden_size"] is None else config["hidden_size"]
+        )
+        autoregressive = config["autoregressive"]
+        config["block"]["input_size"] = input_size
+        config["block"]["output_size"] = input_size
+        assert not autoregressive or input_size == hidden_size
+
+        # CONSTANTS
+        self.input_size = n = input_size
+        self.hidden_size = m = hidden_size
+        self.autoregressive = config["autoregressive"]
+
+        # MODULES
+        blocks: list[nn.Module] = []
+        for _ in range(config["num_blocks"]):
+            module = initialize_from_config(config["block"])
+            if hasattr(module, "bias"):
+                assert module.bias is None, "Avoid bias term!"
+            blocks.append(module)
+
+        self.layers = nn.Sequential(*blocks)
+
+        # PARAMETERS
+        self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        # self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        # self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        self.A = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
+        self.B = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(n, n)))
+        self.H = (
+            None
+            if autoregressive
+            else nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
+        )
+        # TODO: PARAMETRIZATIONS
+        print("nonlinear filter changed!")
+        # BUFFERS
+        self.register_buffer("ZERO", torch.zeros(1))
+
+    @jit.export
+    def h(self, x: Tensor) -> Tensor:
+        r"""Apply the observation function."""
+        if self.autoregressive:
+            return x
+
+        # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
+        H = self.H  # need to assign to local for torchscript....
+        assert H is not None, "H must be given in non-autoregressive mode!"
+        return torch.einsum("ij, ...j -> ...i", H, x)
+
+    @jit.export
+    def ht(self, x: Tensor) -> Tensor:
+        r"""Apply the transpose observation function."""
+        if self.autoregressive:
+            return x
+
+        # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
+        H = self.H  # need to assign to local for torchscript....
+        assert H is not None, "H must be given in non-autoregressive mode!"
+        return torch.einsum("ji, ...j -> ...i", H, x)
+
+    @jit.export
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Return $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$.
+
+        .. Signature:: ``[(..., m), (..., n)] -> (..., n)``.
+        """
+        mask = ~torch.isnan(y)  # (..., m)
+        z = self.h(x)  # (..., m)
+        z = torch.where(mask, z - y, self.ZERO)
+        # (..., m)
         z = torch.einsum("ij, ...j -> ...i", self.A, z)
         z = torch.where(mask, z, self.ZERO)  # (..., m)
         z = self.ht(z)  # (..., n)
@@ -661,6 +783,8 @@ class KalmanCell(FilterABC):
         mask = ~torch.isnan(y)  # → [..., m]
         r = torch.where(mask, self.h(x) - y, self.ZERO)  # → [..., m]
         z = torch.where(mask, torch.einsum("ij, ...j -> ...i", self.A, r), self.ZERO)
+        # REMARK for me: should better be
+        # z = torch.einsum("ij, ...j -> ...i", self.A, r)
         return torch.einsum("ij, ...j -> ...i", self.B, self.ht(z))
 
 
