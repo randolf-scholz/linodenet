@@ -85,8 +85,15 @@ def create_dataset_from_many_systems(n=1000, freq_nan=0.0, n_times=300, from_tim
 
 
 def MSE_NAN(y,yhat):
-    squares = torch.square(y-yhat) 
-    loss = torch.mean (squares[~squares.isnan()])
+    positions = ~y.isnan()
+    squares = torch.square(y[positions]-yhat[positions]) 
+    
+    loss = torch.mean (squares)
+    return loss
+
+def MSE_NAN_TO_ZERO(y,yhat):
+    squares = torch.nan_to_num(torch.square(y-yhat)) 
+    loss = torch.mean (squares)
     return loss
 
 LOSS = torch.jit.script(MSE_NAN)
@@ -113,7 +120,7 @@ if __name__=="__main__":
     times, results = create_samples_from_volterra_lotka()
     kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.0)
 
-    data_t, data_x = create_dataset_from_many_systems(10000, freq_nan=0.0)#,kwargs)
+    data_t, data_x = create_dataset_from_many_systems(10000, freq_nan=0.1)#,kwargs)
 
     DTYPE = torch.float32
     #DEVICE = 'cpu'
@@ -154,7 +161,8 @@ if __name__=="__main__":
         x_train_past = torch.ones_like(x_train).copy_(x_train).to(DEVICE)
         past =  PAST
         x_train_past[:,past:,:] = torch.nan
-        
+        x_train_past[0,0,0] = torch.nan
+        x_train[0,0,0] = torch.nan
         
         t_test = torch.from_numpy(data_t[test_index]).type(DTYPE).to(DEVICE)
         x_test = torch.from_numpy(data_x[test_index]).type(DTYPE).to(DEVICE)
@@ -193,8 +201,11 @@ if __name__=="__main__":
                 image_array = fig2data(fig)
                 plt.close()
                 writer.add_image(f'img/{epoch}_{i}', image_array,dataformats='HWC')
-            squares = torch.square(out[:,:,:]- x_test[:,:,:]) 
-            loss = torch.mean (squares[~squares.isnan()])
+            
+            loss = LOSS(x_test[:,:,:], out[:,:,:])
+            
+            #squares = torch.square(out[:,:,:]- x_test[:,:,:]) 
+            #loss = torch.mean (squares[~squares.isnan()])
         
             print("Test: ", epoch,loss.item())
             writer.add_scalar(f'Train/loss fold{fold}',np.mean(train_losses),epoch)
