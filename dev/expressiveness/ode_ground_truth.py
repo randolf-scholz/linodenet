@@ -16,6 +16,7 @@ import matplotlib
 from torch.utils.tensorboard import SummaryWriter
 from tsdm.logutils import StandardLogger
 import os
+import argparse
 
 matplotlib.use('agg')
 
@@ -92,8 +93,16 @@ LOSS = torch.jit.script(MSE_NAN)
 
 if __name__=="__main__":
 
-
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--HIDDEN",type=int, default=8)
+    parser.add_argument("--LATENT", type=int, default=64)
+    parser.add_argument("--DIM", type=int, default=2)
+    parser.add_argument("--PAST", type=int, default=150)
+    parser.add_argument("--DEVICE", type=str, default='cpu')
+    parser.add_argument("--BATCH_SIZE",type=int, default=50)
+    parser.add_argument("--EXPERIMENT_NAME", type=str,  default = 'r1')
+    args = parser.parse_args('')
+    globals().update(args.__dict__)
    
 
 
@@ -101,11 +110,11 @@ if __name__=="__main__":
     kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.0)
 
     data_t, data_x = create_dataset_from_many_systems(10000)#,kwargs)
-    HIDDEN_SIZE = 0
+
     DTYPE = torch.float32
-    DEVICE = 'cpu'
-    PAST = 150
-    BATCH_SIZE = 50
+    #DEVICE = 'cpu'
+    #PAST = 150
+    #BATCH_SIZE = 50
     
     rs = ShuffleSplit(n_splits=5, test_size=0.2)
     
@@ -119,11 +128,11 @@ if __name__=="__main__":
    # "kernel_parametrization":partial(projections.functional.banded,l=-3,u=3)},
    # }
 
-    DIM = 2
-    LATENT = 64
-    HIDDEN = 8
+    #DIM = 2
+    #LATENT = 64
+    #HIDDEN = 8
 
-    directory = f"./.logs/r8_{LATENT}_{HIDDEN}/"
+    directory = f"./.logs/{EXPERIMENT_NAME}_{LATENT}_{HIDDEN}/"
 
     for fold,(train_index, test_index) in enumerate(rs.split(data_t)):
         writer = SummaryWriter(directory)
@@ -131,6 +140,7 @@ if __name__=="__main__":
         last_test_loss = 1e20
         counts = 0
         model = LinODEnet(DIM,LATENT,HIDDEN, **HP).to(DEVICE)
+        model = torch.jit.script(model)
         t_train = torch.Tensor(data_t[train_index]).type(DTYPE).to(DEVICE)
         x_train = torch.Tensor(data_x[train_index]).type(DTYPE).to(DEVICE)
         x_train_past = torch.ones_like(x_train).copy_(x_train).to(DEVICE)

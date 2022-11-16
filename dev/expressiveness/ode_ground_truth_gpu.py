@@ -16,6 +16,8 @@ import matplotlib
 from torch.utils.tensorboard import SummaryWriter
 from tsdm.logutils import StandardLogger
 import os
+import argparse
+
 
 matplotlib.use('agg')
 
@@ -131,7 +133,7 @@ if __name__=="__main__":
         last_test_loss = 1e20
         counts = 0
         model = LinODEnet(DIM,LATENT,HIDDEN, **HP).to(DEVICE)
-        t_train = torch.Tensor(data_t[train_index]).type(DTYPE).to(DECICE)
+        t_train = torch.Tensor(data_t[train_index]).type(DTYPE).to(DEVICE)
         x_train = torch.Tensor(data_x[train_index]).type(DTYPE).to(DEVICE)
         x_train_past = torch.ones_like(x_train).copy_(x_train).to(DEVICE)
         past = np.random.randint(PAST-50, PAST+50)
