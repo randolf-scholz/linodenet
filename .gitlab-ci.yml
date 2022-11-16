@@ -357,7 +357,7 @@ pages:
   script:
     - cd docs
     - make html
-    - cp -r  _build/html/* ../$PUBLIC_DIR/
+    - cp -r  _build/html/* $PUBLIC_DIR/
   after_script:
     - source ${VENVNAME}/bin/activate
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
