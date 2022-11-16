@@ -118,3 +118,5 @@ REGULARIZATIONS: Final[
     **MODULAR_REGULARIZATIONS,
 }
 r"""Dictionary containing all available projections."""
+
+del Final, TypeAlias, nn, Callable, Tensor

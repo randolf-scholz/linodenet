@@ -25,3 +25,5 @@ EMBEDDINGS: Final[dict[str, type[nn.Module]]] = {
     "ConcatProjection": ConcatProjection,
 }
 r"""Dictionary of available embeddings."""
+
+del Final, TypeAlias, nn

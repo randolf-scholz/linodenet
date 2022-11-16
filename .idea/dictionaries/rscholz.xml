@@ -17,6 +17,7 @@
       <w>bysource</w>
       <w>celu</w>
       <w>cipra</w>
+      <w>classmethod</w>
       <w>codeauthor</w>
       <w>codeclimate</w>
       <w>copybutton</w>
@@ -110,7 +111,9 @@
       <w>tput</w>
       <w>tsdm</w>
       <w>undoc</w>
+      <w>unindent</w>
       <w>unsubscriptable</w>
+      <w>venvname</w>
       <w>viewcode</w>
       <w>warningiserror</w>
       <w>weakref</w>
