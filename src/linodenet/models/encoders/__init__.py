@@ -46,3 +46,5 @@ ENCODERS: Final[dict[str, type[Encoder]]] = {
     "iResNet": iResNet,
 }
 r"""Dictionary containing all available encoders."""
+
+del Final, TypeAlias, nn
