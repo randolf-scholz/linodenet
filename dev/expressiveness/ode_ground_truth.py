@@ -14,7 +14,7 @@ from scipy.stats import expon
 import matplotlib.pyplot as plt
 import matplotlib
 from torch.utils.tensorboard import SummaryWriter
-from tsdm.logutils import StandardLogger
+#from tsdm.logutils import StandardLogger
 import os
 import argparse
 
