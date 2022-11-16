@@ -1,9 +1,7 @@
-"""Used for configuring pytest.
+r"""Used for configuring pytest.
 
 https://docs.pytest.org/en/7.1.x/example/parametrize.html#generating-parameters-combinations-depending-on-command-line
 """
-
-import warnings
 
 from pytest import Metafunc, Parser
 
