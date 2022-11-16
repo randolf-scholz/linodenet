@@ -101,7 +101,7 @@ if __name__=="__main__":
     parser.add_argument("--DEVICE", type=str, default='cpu')
     parser.add_argument("--BATCH_SIZE",type=int, default=50)
     parser.add_argument("--EXPERIMENT_NAME", type=str,  default = 'r1')
-    args = parser.parse_args('')
+    #args = parser.parse_args('')
     globals().update(args.__dict__)
    
 
