@@ -170,8 +170,8 @@ if __name__=="__main__":
                 #print([t.grad for t in model.parameters()])
             
             print("Av. train loss", np.mean(train_losses))
-
-            out = model(t_test, x_test_past)
+            with torch.no_grad():
+                out = model(t_test, x_test_past)
             
             for j in range(50):
 
