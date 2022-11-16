@@ -103,7 +103,7 @@ if __name__=="__main__":
     data_t, data_x = create_dataset_from_many_systems(10000)#,kwargs)
     HIDDEN_SIZE = 0
     DTYPE = torch.float32
-    DEVICE = 'cpu'
+    DEVICE = 'cuda:0'
     PAST = 150
     BATCH_SIZE = 50
     
