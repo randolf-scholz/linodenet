@@ -106,3 +106,5 @@ PROJECTIONS: Final[dict[str, FunctionalProjection | type[ModularProjection]]] = 
     **MODULAR_PROJECTIONS,
 }
 r"""Dictionary containing all available projections."""
+
+del Final, TypeAlias, Callable, Tensor, nn
