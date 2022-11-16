@@ -52,7 +52,7 @@ def create_samples_from_volterra_lotka(alpha=0.66, beta=1.33,gamma=1., delta=1.,
     results = solve_ivp(partial(vl,**locals()),(from_time,to_time),v0,
     t_eval=times, method='LSODA')
     v = results['y']
-    v[:,:] = np.where(np.random.rand(*v[:,:].shape)<freq_nan, np.nan*np.ones_like(v[:,:]),v[:,:])
+    v[:,:] = np.where(np.random.rand(*v[:,:].shape)<freq_nan,np.nan*np.ones_like(v[:,:]),v[:,:])
     return results['t'],v
 
 
@@ -68,7 +68,7 @@ def create_dataset_from_one_system(n=100,kwargs = dict(alpha=0.66, beta=1.33,gam
     return np.array(data_t), np.array(data_x)
 
 
-def create_dataset_from_many_systems(n=1000):
+def create_dataset_from_many_systems(n=1000, freq_nan=0.0, n_times=300, from_time=0, to_time=30):
     data_x = []
     data_t = []
     for i in range(n):
@@ -77,11 +77,11 @@ def create_dataset_from_many_systems(n=1000):
         gamma = 0.5*expon.rvs()+0.5
         delta = 0.5*expon.rvs()+0.5
         #print(alpha,beta)
-        kwargs = dict(alpha=alpha, beta=beta,gamma=gamma, delta=delta, from_time=0., to_time=30., n_times =300,freq_nan=0.0) 
+        kwargs = dict(alpha=alpha, beta=beta,gamma=gamma, delta=delta, from_time=from_time, to_time=to_time, n_times = n_times,freq_nan=freq_nan) 
         t,v = create_dataset_from_one_system(1, kwargs)
         data_t.append(t[0])
         data_x.append(v[0])
-    return np.array(data_t,dtype=np.float), np.array(data_x,dtype=np.float)
+    return np.array(data_t,dtype=float), np.array(data_x,dtype=float)
 
 
 def MSE_NAN(y,yhat):
@@ -113,12 +113,12 @@ if __name__=="__main__":
     times, results = create_samples_from_volterra_lotka()
     kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.0)
 
-    data_t, data_x = create_dataset_from_many_systems(10000)#,kwargs)
+    data_t, data_x = create_dataset_from_many_systems(10000, freq_nan=0.0)#,kwargs)
 
     DTYPE = torch.float32
     #DEVICE = 'cpu'
     #PAST = 150
-    #BATCH_SIZE = 50
+    #BATCH_SIZE = 
     
     rs = ShuffleSplit(n_splits=5, test_size=0.2)
     
@@ -138,6 +138,8 @@ if __name__=="__main__":
 
     directory = f"./.logs/{EXPERIMENT_NAME}_{LATENT}_{HIDDEN}/"
 
+    npnan = torch.tensor(np.nan) 
+
     for fold,(train_index, test_index) in enumerate(rs.split(data_t)):
         writer = SummaryWriter(directory)
         #writer.add_hparams(HP,{})
@@ -145,13 +147,17 @@ if __name__=="__main__":
         counts = 0
         model = LinODEnet(DIM,LATENT,HIDDEN, **HP).to(DEVICE)
         model = torch.jit.script(model)
-        t_train = torch.Tensor(data_t[train_index]).type(DTYPE).to(DEVICE)
-        x_train = torch.Tensor(data_x[train_index]).type(DTYPE).to(DEVICE)
+        t_train = torch.from_numpy(data_t[train_index]).type(DTYPE).to(DEVICE)
+        x_train = torch.from_numpy(data_x[train_index]).type(DTYPE).to(DEVICE)
+        x_train = torch.ones_like(x_train).copy_(x_train).to(DEVICE)
+        #x_train[x_train.isnan()] = float("nan")
         x_train_past = torch.ones_like(x_train).copy_(x_train).to(DEVICE)
-        past = np.random.randint(PAST-50, PAST+50)
+        past =  PAST
         x_train_past[:,past:,:] = torch.nan
-        t_test = torch.Tensor(data_t[test_index]).type(DTYPE).to(DEVICE)
-        x_test = torch.Tensor(data_x[test_index]).type(DTYPE).to(DEVICE)
+        
+        
+        t_test = torch.from_numpy(data_t[test_index]).type(DTYPE).to(DEVICE)
+        x_test = torch.from_numpy(data_x[test_index]).type(DTYPE).to(DEVICE)
         x_test_past = torch.ones_like(x_test).copy_(x_test).to(DEVICE)
         x_test_past[:,past:,:] = torch.nan
         optimizer = torch.optim.Adam(model.parameters(),lr=3e-3)
@@ -203,7 +209,7 @@ if __name__=="__main__":
             else:
                 counts = 0
                 torch.save(model.state_dict(), os.path.join(directory,f'checkpoint_{fold}.torch'))
-            last_test_loss = loss.item()
+                last_test_loss = loss.item()
         models.append(model.to('cpu'))
 
 
