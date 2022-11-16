@@ -204,7 +204,7 @@ if __name__=="__main__":
                 counts = 0
                 torch.save(model.state_dict(), os.path.join(directory,f'checkpoint_{fold}.torch'))
             last_test_loss = loss.item()
-        models.append(model)
+        models.append(model.to('cpu'))
 
 
 
