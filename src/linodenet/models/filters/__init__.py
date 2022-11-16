@@ -9,6 +9,8 @@ __all__ = [
     "FilterABC",
     "KalmanCell",
     "KalmanFilter",
+    "LinearFilter",
+    "NonLinearFilter",
     "PseudoKalmanFilter",
     "RecurrentCellFilter",
     "SequentialFilter",
@@ -23,6 +25,8 @@ from linodenet.models.filters._filters import (
     FilterABC,
     KalmanCell,
     KalmanFilter,
+    LinearFilter,
+    NonLinearFilter,
     PseudoKalmanFilter,
     RecurrentCellFilter,
     SequentialFilter,
@@ -37,8 +41,11 @@ FILTERS: Final[dict[str, type[nn.Module]]] = {
     "KalmanCell": KalmanCell,
     "KalmanFilter": KalmanFilter,
     "LinearFilter": PseudoKalmanFilter,
+    "NonLinearFilter": NonLinearFilter,
     "RecurrentCellFilter": RecurrentCellFilter,
     "SequentialFilter": SequentialFilter,
     "SequentialFilterBlock": SequentialFilterBlock,
 }
 r"""Dictionary of all available filters."""
+
+del Final, TypeAlias, nn
