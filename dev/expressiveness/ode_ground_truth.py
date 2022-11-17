@@ -200,7 +200,7 @@ if __name__=="__main__":
                 plt.plot(example_t, example_gt[:,1],color='red', linestyle='dashed')
                 image_array = fig2data(fig)
                 plt.close()
-                writer.add_image(f'img/{epoch}_{i}', image_array,dataformats='HWC')
+                writer.add_image(f'img/{fold}_{epoch}_{i}', image_array,dataformats='HWC')
             
             loss = LOSS(x_test[:,:,:], out[:,:,:])
             
