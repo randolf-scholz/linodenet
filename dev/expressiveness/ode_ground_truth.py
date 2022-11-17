@@ -171,6 +171,10 @@ if __name__=="__main__":
         optimizer = torch.optim.Adam(model.parameters(),lr=3e-3)
         for epoch in range(1000):
             train_losses = []
+            reshuffling = np.random.permutation(list(range(x_train.shape[0])))
+            x_train = x_train[reshuffling]
+            x_train_past = x_train_past[reshuffling]
+            t_train = t_train[reshuffling]
             for i,batch in enumerate(gen_batches(len(x_train),BATCH_SIZE)):
                 optimizer.zero_grad()
                 out = model(t_train[batch], x_train_past[batch])
