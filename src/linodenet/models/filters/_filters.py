@@ -383,14 +383,14 @@ class NonLinearFilter(FilterABC):
 
         self.layers = nn.Sequential(*blocks)
 
-        blocks2: list[nn.Module] = []
-        for _ in range(config["num_blocks"]):
-            module = initialize_from_config(config["block"])
-            if hasattr(module, "bias"):
-                assert module.bias is None, "Avoid bias term!"
-            blocks2.append(module)
+        # blocks2: list[nn.Module] = []
+        # for _ in range(config["num_blocks"]):
+        #     module = initialize_from_config(config["block"])
+        #     if hasattr(module, "bias"):
+        #         assert module.bias is None, "Avoid bias term!"
+        #     blocks2.append(module)
 
-        self.layers2 = nn.Sequential(*blocks2)
+        # self.layers2 = nn.Sequential(*blocks2)
 
         # PARAMETERS
         self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
@@ -446,7 +446,7 @@ class NonLinearFilter(FilterABC):
         #z = torch.where(mask, z, self.ZERO)  # (..., m)
         z = self.ht(z)  # (..., n)
         #z = torch.einsum("ij, ...j -> ...i", self.B, z)
-        return x - self.epsilon * self.layers(z)*self.layers2(maskf)
+        return x - self.epsilon * self.layers(z)
     
 class NonLinearFilter2(FilterABC):
     r"""Non-linear Layers stacked on top of linear core."""
