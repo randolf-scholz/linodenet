@@ -223,7 +223,8 @@ if __name__=="__main__":
                     break
             else:
                 counts = 0
-                torch.save(model.state_dict(), os.path.join(directory,f'checkpoint_{fold}.torch'))
+                torch.jit.save(model, os.path.join(directory,f'checkpoint_{fold}.torch'))
+                #torch.save(model.state_dict(), os.path.join(directory,f'checkpoint_{fold}.torch'))
                 last_test_loss = loss.item()
         models.append(model.to('cpu'))
 
