@@ -446,7 +446,7 @@ class NonLinearFilter(FilterABC):
         #z = torch.where(mask, z, self.ZERO)  # (..., m)
         z = self.ht(z)  # (..., n)
         #z = torch.einsum("ij, ...j -> ...i", self.B, z)
-        return x - self.epsilon * self.layers(z)*self.layers(maskf)
+        return x - self.epsilon * self.layers(z)*self.layers2(maskf)
     
 class NonLinearFilter2(FilterABC):
     r"""Non-linear Layers stacked on top of linear core."""
