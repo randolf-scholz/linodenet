@@ -7,6 +7,7 @@ __all__ = [
     "ENCODERS",
     # Classes
     "FTTransformer",
+    "Identity",
     "LinearContraction",
     "MLP",
     "ResNet",
@@ -22,6 +23,7 @@ __all__ = [
 from typing import Final, TypeAlias
 
 from torch import nn
+from torch.nn import Identity
 
 from linodenet.models.encoders.ft_transformer import FTTransformer
 from linodenet.models.encoders.iresnet import (
@@ -40,6 +42,7 @@ r"""Type hint for Encoders."""
 
 ENCODERS: Final[dict[str, type[Encoder]]] = {
     "FTTransformer": FTTransformer,
+    "Identity": Identity,
     "MLP": MLP,
     "ResNet": ResNet,
     "Transformer": Transformer,
