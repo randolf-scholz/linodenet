@@ -136,9 +136,9 @@ if __name__=="__main__":
     "System": system.LinODECell.HP | {"kernel_initialization": 'skew-symmetric'}, 
     "Encoder": ResNet.HP | {"num_blocks":4}
     }
+
    # "kernel_parametrization":partial(projections.functional.banded,l=-3,u=3)},
    # }
-
     #DIM = 2
     #LATENT = 64
     #HIDDEN = 8
@@ -218,7 +218,7 @@ if __name__=="__main__":
 
             if loss.item()>last_test_loss:
                 counts +=1
-                if counts > 3:
+                if counts > 5:
                     print("Early stopping")
                     break
             else:
