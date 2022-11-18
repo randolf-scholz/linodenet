@@ -311,7 +311,7 @@ class LinearFilter(FilterABC):
         z = self.h(x)
         z = torch.where(mask, z - y, self.ZERO)  # → [..., m]
         z = z + self.epsilonA * torch.einsum("ij, ...j -> ...i", self.A, z)
-        #z = torch.where(mask, z, self.ZERO)
+        z = torch.where(mask, z, self.ZERO)
         z = self.ht(z)
         z = z + self.epsilonB * torch.einsum("ij, ...j -> ...i", self.B, z)
         return x - self.alpha * z

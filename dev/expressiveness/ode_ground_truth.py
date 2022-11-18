@@ -46,7 +46,7 @@ def vl(t,v,**kwargs):
 
 
 
-def create_samples_from_volterra_lotka(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.3,v0=np.array([1.,1.]), rel_noise=0.)):
+def create_samples_from_volterra_lotka(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.3,v0=np.array([1.,1.]), rel_noise=0.):
 
     times =  np.linspace(from_time,to_time,n_times)
     results = solve_ivp(partial(vl,**locals()),(from_time,to_time),v0,
