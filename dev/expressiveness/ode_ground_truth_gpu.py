@@ -109,7 +109,7 @@ if __name__=="__main__":
     PAST = 150
     BATCH_SIZE = 50
     
-    rs = ShuffleSplit(n_splits=5, test_size=0.2)
+    rs = ShuffleSplit(n_splits=5, test_size=0.0)
     
     models = []
     
@@ -138,6 +138,7 @@ if __name__=="__main__":
         x_train_past = torch.ones_like(x_train).copy_(x_train).to(DEVICE)
         past = np.random.randint(PAST-50, PAST+50)
         x_train_past[:,past:,:] = torch.nan
+        x_train_past[0,0,0] = torch.nan
         t_test = torch.Tensor(data_t[test_index]).type(DTYPE).to(DEVICE)
         x_test = torch.Tensor(data_x[test_index]).type(DTYPE).to(DEVICE)
         x_test_past = torch.ones_like(x_test).copy_(x_test).to(DEVICE)

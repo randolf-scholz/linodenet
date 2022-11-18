@@ -46,17 +46,19 @@ def vl(t,v,**kwargs):
 
 
 
-def create_samples_from_volterra_lotka(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.3,v0=np.array([1.,1.])):
+def create_samples_from_volterra_lotka(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.3,v0=np.array([1.,1.]), rel_noise=0.)):
 
     times =  np.linspace(from_time,to_time,n_times)
     results = solve_ivp(partial(vl,**locals()),(from_time,to_time),v0,
     t_eval=times, method='LSODA')
     v = results['y']
+    v = np.exp(np.log(v) + rel_noise*np.random.randn(*v.shape))
     v[:,:] = np.where(np.random.rand(*v[:,:].shape)<freq_nan,np.nan*np.ones_like(v[:,:]),v[:,:])
+
     return results['t'],v
 
 
-def create_dataset_from_one_system(n=100,kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.3)):
+def create_dataset_from_one_system(n=100,kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.3, rel_noise=0.)):
     data_x = []
     data_t = []
     for i in range(n):
@@ -68,7 +70,7 @@ def create_dataset_from_one_system(n=100,kwargs = dict(alpha=0.66, beta=1.33,gam
     return np.array(data_t), np.array(data_x)
 
 
-def create_dataset_from_many_systems(n=1000, freq_nan=0.0, n_times=300, from_time=0, to_time=30):
+def create_dataset_from_many_systems(n=1000, freq_nan=0.0, n_times=300, from_time=0, to_time=30,rel_noise=0.):
     data_x = []
     data_t = []
     for i in range(n):
@@ -77,7 +79,7 @@ def create_dataset_from_many_systems(n=1000, freq_nan=0.0, n_times=300, from_tim
         gamma = 0.5*expon.rvs()+0.5
         delta = 0.5*expon.rvs()+0.5
         #print(alpha,beta)
-        kwargs = dict(alpha=alpha, beta=beta,gamma=gamma, delta=delta, from_time=from_time, to_time=to_time, n_times = n_times,freq_nan=freq_nan) 
+        kwargs = dict(alpha=alpha, beta=beta,gamma=gamma, delta=delta, from_time=from_time, to_time=to_time, n_times = n_times,freq_nan=freq_nan,rel_noise=rel_noise) 
         t,v = create_dataset_from_one_system(1, kwargs)
         data_t.append(t[0])
         data_x.append(v[0])
@@ -109,6 +111,9 @@ if __name__=="__main__":
     parser.add_argument("--BATCH_SIZE",type=int, default=50)
     parser.add_argument("--EXPERIMENT_NAME", type=str,  default = 'r1')
     parser.add_argument("--PATIENCE",type=int, default=5)
+    parser.add_argument("--FREQ_NAN",type=float, default=0.0)
+    parser.add_argument("--REL_NOISE",type=float, default=0.01)
+
     try:
         args = parser.parse_args()
     except:
@@ -121,7 +126,7 @@ if __name__=="__main__":
     times, results = create_samples_from_volterra_lotka()
     kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.0)
 
-    data_t, data_x = create_dataset_from_many_systems(10000, freq_nan=0.1)#,kwargs)
+    data_t, data_x = create_dataset_from_many_systems(100, freq_nan=FREQ_NAN, rel_noise=REL_NOISE)#,kwargs)
 
     DTYPE = torch.float32
     #DEVICE = 'cpu'
@@ -135,7 +140,7 @@ if __name__=="__main__":
     HP = {
     "Filter": filters.SequentialFilter.HP | {"autoregressive": True},
     "System": system.LinODECell.HP | {"kernel_initialization": 'skew-symmetric'}, 
-    "Encoder": ResNet.HP | {"num_blocks":4}
+    "Encoder": ResNet.HP | {"num_blocks":5}
     }
 
    # "kernel_parametrization":partial(projections.functional.banded,l=-3,u=3)},
@@ -162,8 +167,6 @@ if __name__=="__main__":
         x_train_past = torch.ones_like(x_train).copy_(x_train).to(DEVICE)
         past =  PAST
         x_train_past[:,past:,:] = torch.nan
-        x_train_past[0,0,0] = torch.nan
-        x_train[0,0,0] = torch.nan
         
         t_test = torch.from_numpy(data_t[test_index]).type(DTYPE).to(DEVICE)
         x_test = torch.from_numpy(data_x[test_index]).type(DTYPE).to(DEVICE)
