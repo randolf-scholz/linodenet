@@ -796,7 +796,7 @@ class RecurrentCellFilter(FilterABC):
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
-        "concat": True,
+        "concat_mask": True,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": True,
@@ -831,7 +831,7 @@ class RecurrentCellFilter(FilterABC):
         config = deep_dict_update(self.HP, cfg)
 
         # CONSTANTS
-        self.concat_mask = config["concat"]
+        self.concat_mask = config["concat_mask"]
         self.input_size = input_size * (1 + self.concat_mask)
         self.hidden_size = hidden_size
         self.autoregressive = config["autoregressive"]
