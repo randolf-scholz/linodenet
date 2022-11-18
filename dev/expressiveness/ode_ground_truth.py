@@ -108,6 +108,7 @@ if __name__=="__main__":
     parser.add_argument("--DEVICE", type=str, default='cpu')
     parser.add_argument("--BATCH_SIZE",type=int, default=50)
     parser.add_argument("--EXPERIMENT_NAME", type=str,  default = 'r1')
+    parser.add_argument("--PATIENCE",type=int, default=5)
     try:
         args = parser.parse_args()
     except:
@@ -218,7 +219,7 @@ if __name__=="__main__":
 
             if loss.item()>last_test_loss:
                 counts +=1
-                if counts > 5:
+                if counts > PATIENCE:
                     print("Early stopping")
                     break
             else:
