@@ -126,7 +126,7 @@ if __name__=="__main__":
     times, results = create_samples_from_volterra_lotka()
     kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.0)
 
-    data_t, data_x = create_dataset_from_many_systems(100, freq_nan=FREQ_NAN, rel_noise=REL_NOISE)#,kwargs)
+    data_t, data_x = create_dataset_from_many_systems(10000, freq_nan=FREQ_NAN, rel_noise=REL_NOISE)#,kwargs)
 
     DTYPE = torch.float32
     #DEVICE = 'cpu'
