@@ -901,7 +901,7 @@ class SequentialFilter(FilterABC, nn.Sequential):
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
-        "layers": [LinearFilter.HP, NonLinearFilter2.HP, NonLinearFilter2.HP],
+        "layers": [LinearFilter.HP, NonLinearFilter.HP, NonLinearFilter.HP],
     }
     r"""The HyperparameterDict of this class."""
 
