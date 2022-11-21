@@ -26,6 +26,9 @@ from linodenet.models.filters._filters import (
     FilterABC,
     KalmanCell,
     KalmanFilter,
+    LinearFilter,
+    NonLinearFilter,
+    NonLinearFilter2,
     PseudoKalmanFilter,
     RecurrentCellFilter,
     SequentialFilter,
@@ -36,10 +39,13 @@ Filter: TypeAlias = nn.Module
 r"""Type hint for Filters"""
 
 FILTERS: Final[dict[str, type[nn.Module]]] = {
+    "NonLinearFilter": NonLinearFilter,
+    "NonLinearFilter2": NonLinearFilter2,
     "FilterABC": FilterABC,
     "KalmanCell": KalmanCell,
     "KalmanFilter": KalmanFilter,
-    "LinearFilter": PseudoKalmanFilter,
+    "LinearFilter": LinearFilter,
+    "PseudoKalmanFilter": PseudoKalmanFilter,
     "RecurrentCellFilter": RecurrentCellFilter,
     "SequentialFilter": SequentialFilter,
     "SequentialFilterBlock": SequentialFilterBlock,

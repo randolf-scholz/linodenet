@@ -1,6 +1,7 @@
 from scipy.sparse import data
 from linodenet.models import LinODEnet, filters, system, ResNet
-from linodenet.models.filters import KalmanCell, LinearFilter, NonlinearFilter, SequentialFilter
+from linodenet.models.filters import KalmanCell, SequentialFilter, PseudoKalmanFilter
+from linodenet.models.filters._filters import  LinearFilter, NonLinearFilter, NonLinearFilter2
 from linodenet import projections
 
 import numpy as np
