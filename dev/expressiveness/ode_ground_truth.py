@@ -245,7 +245,7 @@ if __name__=="__main__":
                 torch.jit.save(model, os.path.join(directory,f'checkpoint_{fold}.torch'))
                 #torch.save(model.state_dict(), os.path.join(directory,f'checkpoint_{fold}.torch'))
                 last_test_loss = loss.item()
-        writer.add_hparams(HP|args.__dict__,{'train_loss', np.mean(train_losses), 'test loss':last_test_loss})
+        writer.add_hparams(HP|args.__dict__,{'train_loss': np.mean(train_losses), 'test loss':last_test_loss})
         models.append(model.to('cpu'))
 
 
