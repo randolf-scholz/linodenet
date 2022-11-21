@@ -17,6 +17,7 @@ __all__ = [
     "KalmanFilter",
     "LinearFilter",
     "NonLinearFilter",
+    "NonLinearFilter2",
     "PseudoKalmanFilter",
     "RecurrentCellFilter",
     "SequentialFilter",
