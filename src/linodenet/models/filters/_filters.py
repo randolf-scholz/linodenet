@@ -317,7 +317,7 @@ class LinearFilter(FilterABC):
         return x - self.alpha * z
 
 
-class NonLinearFilter(FilterABC):
+class NonLinearFilter2(FilterABC):
     r"""Non-linear Layers stacked on top of linear core."""
 
     HP = {
@@ -448,7 +448,7 @@ class NonLinearFilter(FilterABC):
         #z = torch.einsum("ij, ...j -> ...i", self.B, z)
         return x - self.epsilon * self.layers(z)
     
-class NonLinearFilter2(FilterABC):
+class NonLinearFilter(FilterABC):
     r"""Non-linear Layers stacked on top of linear core."""
 
     HP = {
@@ -901,7 +901,7 @@ class SequentialFilter(FilterABC, nn.Sequential):
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
-        "layers": [LinearFilter.HP, NonLinearFilter2.HP, NonLinearFilter2.HP],
+        "layers": [LinearFilter.HP, NonLinearFilter.HP, NonLinearFilter.HP],
     }
     r"""The HyperparameterDict of this class."""
 
