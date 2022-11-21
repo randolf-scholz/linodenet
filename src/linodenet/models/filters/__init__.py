@@ -7,6 +7,9 @@ __all__ = [
     "FILTERS",
     # Classes
     "FilterABC",
+    "LinearFilter",
+    "NonLinearFilter",
+    "NonLinearFilter2",
     "KalmanCell",
     "KalmanFilter",
     "PseudoKalmanFilter",

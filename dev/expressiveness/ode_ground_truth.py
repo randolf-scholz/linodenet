@@ -1,6 +1,6 @@
 from scipy.sparse import data
 from linodenet.models import LinODEnet, filters, system, ResNet
-from linodenet.models.filters import KalmanCell
+from linodenet.models.filters import KalmanCell, LinearFilter, NonlinearFilter, SequentialFilter
 from linodenet import projections
 
 import numpy as np
@@ -113,6 +113,7 @@ if __name__=="__main__":
     parser.add_argument("--PATIENCE",type=int, default=5)
     parser.add_argument("--FREQ_NAN",type=float, default=0.0)
     parser.add_argument("--REL_NOISE",type=float, default=0.01)
+    parser.add_argument("--FILTER_TYPE", type=int, default=0)
 
     try:
         args = parser.parse_args()
@@ -126,7 +127,7 @@ if __name__=="__main__":
     times, results = create_samples_from_volterra_lotka()
     kwargs = dict(alpha=0.66, beta=1.33,gamma=1., delta=1., from_time=0., to_time=30., n_times =300,freq_nan=0.0)
 
-    data_t, data_x = create_dataset_from_many_systems(10000, freq_nan=FREQ_NAN, rel_noise=REL_NOISE)#,kwargs)
+    data_t, data_x = create_dataset_from_many_systems(100, freq_nan=FREQ_NAN, rel_noise=REL_NOISE)#,kwargs)
 
     DTYPE = torch.float32
     #DEVICE = 'cpu'
@@ -143,19 +144,30 @@ if __name__=="__main__":
     "Encoder": ResNet.HP | {"num_blocks":5}
     }
 
+    
+    if FILTER_TYPE==1:
+        HP["Filter"]["layers"] = [LinearFilter.HP, NonLinearFilter2.HP, NonLinearFilter2.HP]
+    elif FILTER_TYPE==2:
+        HP["Filter"]["layers"] = [LinearFilter.HP, NonLinearFilter.HP]
+    elif FILTER_TYPE==3:
+        HP["Filter"]["layers"] = [LinearFilter.HP, NonLinearFilter.HP,NonLinearFilter.HP,NonLinearFilter.HP]
+    elif FILTER_TYPE==4:
+        nonlinear_filter_hp = NonlinearFilter.HP | {"num_blocks":6}
+        HP["Filter"]["layers"] = [LinearFilter.HP, nonlinear_filter_hp]
+
    # "kernel_parametrization":partial(projections.functional.banded,l=-3,u=3)},
    # }
     #DIM = 2
     #LATENT = 64
     #HIDDEN = 8
 
-    directory = f"./.logs/{EXPERIMENT_NAME}_{LATENT}_{HIDDEN}/"
+    directory = f"./.logs_2/{EXPERIMENT_NAME}_{LATENT}_{HIDDEN}_{FILTER_TYPE}/"
 
     npnan = torch.tensor(np.nan) 
 
     for fold,(train_index, test_index) in enumerate(rs.split(data_t)):
         writer = SummaryWriter(directory)
-        #writer.add_hparams(HP,{})
+        
         last_test_loss = 1e20
         counts = 0
         model = LinODEnet(DIM,LATENT,HIDDEN, **HP).to(DEVICE)
@@ -219,6 +231,8 @@ if __name__=="__main__":
             writer.add_scalar(f'Train/loss fold{fold}',np.mean(train_losses),epoch)
             writer.add_scalar(f'Test/loss fold{fold}', loss.item(),epoch)
 
+            if np.isnan(loss.item()):
+                break
 
             if loss.item()>last_test_loss:
                 counts +=1
@@ -230,6 +244,7 @@ if __name__=="__main__":
                 torch.jit.save(model, os.path.join(directory,f'checkpoint_{fold}.torch'))
                 #torch.save(model.state_dict(), os.path.join(directory,f'checkpoint_{fold}.torch'))
                 last_test_loss = loss.item()
+        writer.add_hparams(HP|args,{'test loss',last_test_loss})
         models.append(model.to('cpu'))
 
 
