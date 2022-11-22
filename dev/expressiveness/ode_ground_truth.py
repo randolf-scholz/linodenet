@@ -155,6 +155,9 @@ if __name__=="__main__":
     elif FILTER_TYPE==4:
         nonlinear_filter_hp = NonLinearFilter.HP | {"num_blocks":6}
         HP["Filter"]["layers"] = [LinearFilter.HP, nonlinear_filter_hp]
+    elif FILTER_TYPE==5:
+        nonlinear_filter_hp = NonLinearFilter.HP | {"num_blocks":6}
+        HP["Filter"]["layers"] = [LinearFilter.HP, nonlinear_filter_hp, nonlinear_filter_hp]
 
    # "kernel_parametrization":partial(projections.functional.banded,l=-3,u=3)},
    # }
