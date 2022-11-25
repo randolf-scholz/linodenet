@@ -23,8 +23,8 @@ __all__ = [
 from typing import Final, TypeAlias
 
 from torch import nn
-from torch.nn import Identity
 
+from linodenet.models.encoders._encoders import Identity
 from linodenet.models.encoders.ft_transformer import FTTransformer
 from linodenet.models.encoders.iresnet import (
     LinearContraction,
