@@ -70,14 +70,14 @@ class LinODECell(nn.Module):
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
 
-    # Buffers
+    # Parameters
     scalar: Tensor
     r"""PARAM: the scalar applied to the kernel."""
 
     weight: Tensor
     r"""PARAM: The learnable weight-matrix of the linear ODE component."""
 
-    # Parameters
+    # Buffers
     kernel: Tensor
     r"""BUFFER: The system matrix of the linear ODE component."""
 
@@ -138,14 +138,18 @@ class LinODECell(nn.Module):
                 raise NotImplementedError(f"{kernel_parametrization=} unknown")
             return _kernel_parametrization
 
+        # initialize constants
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_parametrization = kernel_parametrization_dispatch()
-
         self.scalar_learnable = config["scalar_learnable"]
+
+        # initialize parameters
         self.scalar = nn.Parameter(
             torch.tensor(config["scalar"]), requires_grad=self.scalar_learnable
         )
         self.weight = nn.Parameter(self._kernel_initialization())
+
+        # initialize buffers
         with torch.no_grad():
             parametrized_kernel = self.kernel_parametrization(self.weight)
             self.register_buffer("kernel", parametrized_kernel, persistent=False)
