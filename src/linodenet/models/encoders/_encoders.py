@@ -28,4 +28,5 @@ class Identity(nn.Module):
         super().__init__()
 
     def forward(self, x):
+        r""".. Signature: ``... -> ...``."""
         return x

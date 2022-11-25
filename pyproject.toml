@@ -138,6 +138,7 @@ enable= [
 disable= [
     "C0103",  # invalid-name
     "C0144",  # non-ascii-name
+    "E0611",  # no-name-in-module
     "R0801",  # similar lines
     "R0902",  # too-many-instance-attributes
     "R0903",  # too-few-public-methods
