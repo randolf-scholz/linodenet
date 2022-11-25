@@ -25,6 +25,7 @@
       <excludeFolder url="file://$MODULE_DIR$/tests/model_checkpoints" />
       <excludeFolder url="file://$MODULE_DIR$/dev/filter/.ipynb_checkpoints" />
       <excludeFolder url="file://$MODULE_DIR$/tests/reports" />
+      <excludeFolder url="file://$MODULE_DIR$/dev/experiments/.ipynb_checkpoints" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
     <orderEntry type="jdk" jdkName="Poetry (linodenet)" jdkType="Python SDK" />
