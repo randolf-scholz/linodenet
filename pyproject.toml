@@ -3,7 +3,7 @@
 #build-backend = "setuptools.build_meta"
 
 [build-system]
-requires = ["poetry-core>=1.2.2"]
+requires = ["poetry-core>=1.3.1"]
 build-backend = "poetry.core.masonry.api"
 
 
@@ -14,8 +14,8 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 authors = ["Randolf Scholz <rscholz@ismll.de>"]
 description = "Linear ODE Network for Time Series Forecasting"
-documentation = "https://www.user.tu-berlin.de/randolf.scholz/linodenet"
-homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/LinODE-Net"
+documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
+homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet"
 include = ["CHANGELOG.rst", "LICENSE.rst", "CONTRIBUTING.rst"]
 keywords = ["time series", "machine learning", "neural ode", "kalman filter"]
 license = "MIT"
