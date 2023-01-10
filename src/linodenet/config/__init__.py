@@ -1,13 +1,9 @@
-r"""LinODE-Net Configuration.
-
-# TODO: There must be a better way to handle global config
-"""
+r"""LinODE-Net Configuration."""
 
 __all__ = [
-    # Classes
-    "Config",
-    # Constants
-    "conf",
+    # CONSTANTS
+    "CONFIG",
+    "PROJECT",
 ]
 
-from linodenet.config._config import Config, conf
+from linodenet.config._config import CONFIG, PROJECT
