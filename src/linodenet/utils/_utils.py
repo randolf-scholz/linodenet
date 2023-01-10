@@ -2,20 +2,14 @@ r"""Utility functions."""
 
 __all__ = [
     # Constants
-    "PROJECT_ROOT",
-    "PROJECT_TEST",
-    "PROJECT_SOURCE",
     # Functions
     "autojit",
     "deep_dict_update",
     "deep_keyval_update",
     "flatten_nested_tensor",
-    "get_package_structure",
-    "get_project_root_package",
     "initialize_from",
     "initialize_from_config",
     "is_dunder",
-    "make_test_folders",
     "pad",
     # Classes
 ]
@@ -26,15 +20,13 @@ from collections.abc import Iterable, Mapping
 from copy import deepcopy
 from functools import partial, wraps
 from importlib import import_module
-from itertools import chain
-from pathlib import Path
 from types import ModuleType
-from typing import Any, Final, TypeVar
+from typing import Any, TypeVar
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.config import conf
+from linodenet.config import CONFIG
 
 __logger__ = logging.getLogger(__name__)
 
@@ -134,7 +126,7 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
             # then the new instance's __init__() method will not be invoked.
             instance: nnModuleType = base_class(*args, **kwargs)
 
-            if conf.autojit:
+            if CONFIG.autojit:
                 scripted: nnModuleType = jit.script(instance)
                 return scripted
             return instance
@@ -202,80 +194,3 @@ def initialize_from_config(config: dict[str, Any]) -> nn.Module:
 def is_dunder(s: str, /) -> bool:
     r"""Check if name is a dunder method."""
     return s.isidentifier() and s.startswith("__") and s.endswith("__")
-
-
-def get_project_root_package() -> ModuleType:
-    r"""Get project root package."""
-    return import_module(__package__.split(".", maxsplit=1)[0])
-
-
-def _get_project_root_directory() -> Path:
-    r"""Get project root directory."""
-    root_package = get_project_root_package()
-    assert len(root_package.__path__) == 1
-    root_path = Path(root_package.__path__[0])
-    assert root_path.parent.stem == "src", f"{root_path=} must be in src/*"
-    return root_path.parent.parent
-
-
-PROJECT_ROOT: Final[Path] = _get_project_root_directory()
-"""Project root directory."""
-
-PROJECT_TEST: Final[Path] = PROJECT_ROOT / "tests"
-"""Project test directory."""
-
-PROJECT_SOURCE: Final[Path] = PROJECT_ROOT / "src"
-"""Project source directory."""
-
-
-def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
-    r"""Create nested dictionary of the package structure."""
-    d = {}
-    for name in dir(root_module):
-        attr = getattr(root_module, name)
-        if isinstance(attr, ModuleType):
-            # check if it is a subpackage
-            if (
-                attr.__name__.startswith(root_module.__name__)
-                and attr.__package__ != root_module.__package__
-                and attr.__package__ is not None
-            ):
-                d[attr.__package__] = get_package_structure(attr)
-    return d
-
-
-def make_test_folders(dry_run: bool = True) -> None:
-    r"""Make the tests folder if it does not exist."""
-    root_package = get_project_root_package()
-    package_structure = get_package_structure(root_package)
-
-    def _flatten(d: dict[str, Any], /) -> list[str]:
-        r"""Flatten nested dictionary."""
-        return list(d) + list(chain.from_iterable(map(_flatten, d.values())))
-
-    packages: list[str] = _flatten(package_structure)
-    for package in packages:
-        test_package_path = PROJECT_TEST / package.replace(".", "/")
-        test_package_init = test_package_path / "__init__.py"
-
-        if not test_package_path.exists():
-            if dry_run:
-                print(f"Dry-Run: Creating {test_package_path}")
-            else:
-                print("Creating {test_package_path}")
-                test_package_path.mkdir(parents=True, exist_ok=True)
-        if not test_package_path.exists():
-            if dry_run:
-                print(f"Dry-Run: Creating {test_package_init}")
-            else:
-                raise RuntimeError(f"Creation of {test_package_path} failed!")
-        elif not test_package_init.exists():
-            if dry_run:
-                print(f"Dry-Run: Creating {test_package_init}")
-            else:
-                print(f"Creating {test_package_init}")
-                with open(test_package_init, "w", encoding="utf8") as file:
-                    file.write(f'"""Tests for {package}."""\n')
-
-    if dry_run:
-        print("Pass option `dry_run=False` to actually create the folders.")
