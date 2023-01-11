@@ -19,7 +19,7 @@ name = "linodenet"
 packages = [{include = "linodenet", from="src"}]
 readme = "README.rst"
 repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi"
-version = "0.2.4"
+version = "0.2.5"
 
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -41,15 +41,15 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
-numpy = ">=1.23"
-scipy = ">=1.9"
+numpy = ">=1.24"
+scipy = ">=1.10"
 torch = ">=1.13"
 
 [tool.poetry.group.dev.dependencies]
 bandit = ">=1.7.4"
 black = {version = ">=22.8", extras = ["jupyter"]}
 blacken-docs = ">=1.12"
-coverage = ">=6.5"
+coverage = ">=7.0"
 docutils = ">=0.19"
 flake8 = ">=6.0"
 flake8-annotations = ">=2.9"
@@ -61,7 +61,7 @@ flake8-pyi = ">=22.11"
 flake8-rst = ">=0.8"
 flake8-rst-docstrings = ">=0.2"
 ipywidgets = ">=8.0"
-isort = ">=5.10"
+isort = ">=5.11"
 jupyterlab = ">=3.5"
 mypy = ">=0.991"
 nbsphinx = ">=0.8"
@@ -87,15 +87,16 @@ pytest-cov = ">=4.0"
 pytest-rerunfailures = ">=10.3"
 setuptools = ">=65.6"
 slotscheck = ">=0.16"
-sphinx = ">=5.3"
+sphinx = ">=6.1"
 sphinx-autoapi = ">=2.0"
 sphinx-automodapi = ">=0.14"
 sphinx-copybutton = ">=0.5"
 sphinx-math-dollar = ">=1.2"
+sphinx-typo3-theme = ">=4.7"
 tqdm = ">=4.64"
 twine = ">=4.0"
 types-docutils = ">=0.19"
-types-pillow = ">=9.3"
+types-pillow = ">=9.4"
 types-protobuf = ">=4.20"
 types-psutil = ">=5.9"
 types-pyyaml = ">=6.0"
@@ -107,7 +108,7 @@ types-urllib3 = ">=1.26"
 wheel = ">=0.38"
 
 [tool.poetry.group.inhouse.dependencies]
-tsdm = ">=0.3.8"
+tsdm = ">=0.4.0"
 
 [[tool.poetry.source]]
 name = "berlin"
@@ -135,9 +136,11 @@ disable= [
     "C0103",  # invalid-name
     "C0144",  # non-ascii-name
     "E0611",  # no-name-in-module
+    "E1130",  # invalid-unary-operand-type
     "R0801",  # similar lines
     "R0902",  # too-many-instance-attributes
     "R0903",  # too-few-public-methods
+    "R0911",  # too-many-return-statements
     "R0914",  # too-many-locals
     "R0915",  # too-many-statements
     "W0221",  # arguments-differ
@@ -170,6 +173,7 @@ generated-members=["numpy.*", "torch.*"]
 allow_redefinition = false
 color_output = true
 error_summary = true
+#enable_incomplete_feature = ["Self"]
 files = ["src/", "tests/"]
 plugins = ["numpy.typing.mypy_plugin"]
 pretty = true
