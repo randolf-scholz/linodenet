@@ -175,7 +175,7 @@ class LinODECell(nn.Module):
             xhat: The predicted value at $t_1$
         """
         self.kernel = self.scalar * self.kernel_parametrization(self.weight)
-        Adt = torch.einsum("kl, ... -> ...kl", self.kernel, dt)
+        Adt = torch.einsum("..., kl -> ...kl", dt, self.kernel)
         expAdt = torch.linalg.matrix_exp(Adt)
         xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)
         return xhat
