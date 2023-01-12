@@ -15,14 +15,14 @@ import pytest
 import torch
 from torch import Tensor
 
+from linodenet.config import PROJECT
 from linodenet.models import LinearContraction, iResNetBlock
-from linodenet.utils import PROJECT_TEST
 from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)  # noqa: E402
-RESULT_DIR = PROJECT_TEST / "results" / Path(__file__).stem
+RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 

@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 import torch
 
+from linodenet.config import PROJECT
 from linodenet.models.filters import SequentialFilterBlock
-from linodenet.utils import PROJECT_TEST
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 LOGGER = __logger__.getChild(SequentialFilterBlock.__name__)
-RESULT_DIR = PROJECT_TEST / "results" / Path(__file__).stem
+RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 NAN = torch.tensor(float("nan"))
 

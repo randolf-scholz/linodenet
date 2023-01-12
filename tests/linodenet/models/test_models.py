@@ -10,16 +10,17 @@ from torch import Tensor
 from torch.nn.functional import mse_loss
 
 import linodenet
+from linodenet.config import PROJECT
 from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
 from linodenet.models.system import LinODECell
-from linodenet.utils import PROJECT_TEST, flatten_nested_tensor
+from linodenet.utils import flatten_nested_tensor
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT_TEST / "results" / Path(__file__).stem
+RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
-linodenet.conf.autojit = False
+linodenet.CONFIG.autojit = False
 
 OUTER_BATCH = 3
 INNER_BATCH = 5

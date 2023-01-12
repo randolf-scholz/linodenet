@@ -290,7 +290,13 @@ class LinODEnet(nn.Module):
         self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
 
     @jit.export
-    def forward(self, T: Tensor, X: Tensor) -> Tensor:
+    def forward(
+        self,
+        T: Tensor,
+        X: Tensor,
+        t0: Optional[Tensor] = None,
+        z0: Optional[Tensor] = None,
+    ) -> Tensor:
         r""".. Signature:: ``[(..., n), (...,n,d) -> (..., N, d)``.
 
         **Model Sketch**::
@@ -307,8 +313,12 @@ class LinODEnet(nn.Module):
         ----------
         T: Tensor, shape=(...,LEN) or PackedSequence
             The timestamps of the observations.
-        X: Tensor, shape=(...,LEN,DIM) or PackedSequence
+        X: Tensor, shape=(..., LEN, DIM) or PackedSequence
             The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
+        t0: Tensor, shape=(...,1), optional
+            The timestamps of the initial condition. Defaults to ``T[...,0]``.
+        z0: Tensor, shape=(...,DIM), optional
+            The initial condition. Defaults to ``z0 = self.z0``.
 
         Returns
         -------
@@ -334,7 +344,8 @@ class LinODEnet(nn.Module):
         # prepend a single zero for the first iteration.
         # T = pad(T, 0.0, 1, prepend=True)
         # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
-        DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
+        t0 = t0 if t0 is not None else T[..., 0].unsqueeze(-1)
+        DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
 
         # Move sequence to the front
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
@@ -346,7 +357,7 @@ class LinODEnet(nn.Module):
         Xhat_post: list[Tensor] = []
         Zhat_post: list[Tensor] = []
 
-        ẑ_post = self.z0
+        ẑ_post = z0 if z0 is not None else self.z0
 
         for dt, x_obs in zip(DT, X):
             # Propagate the latent state forward in time.
