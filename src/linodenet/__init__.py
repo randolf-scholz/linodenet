@@ -3,7 +3,7 @@ r"""Linear Ordinary Differential Equation Recurrent Neural Network."""
 __all__ = [
     # Constants
     "__version__",
-    "conf",
+    "CONFIG",
     # Sub-Modules
     "config",
     "initializations",
@@ -32,7 +32,7 @@ from linodenet import (
     regularizations,
     utils,
 )
-from linodenet.config import conf
+from linodenet.config import CONFIG
 
 # pylint: enable=wrong-import-position
 

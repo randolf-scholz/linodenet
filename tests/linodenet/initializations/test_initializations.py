@@ -10,12 +10,12 @@ import psutil
 import pytest
 import torch
 
+from linodenet.config import PROJECT
 from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
-from linodenet.utils import PROJECT_TEST
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT_TEST / "results" / Path(__file__).stem
+RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 

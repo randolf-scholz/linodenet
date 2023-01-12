@@ -14,8 +14,8 @@ from numpy.typing import NDArray
 from scipy.integrate import odeint
 from tqdm.autonotebook import trange
 
+from linodenet.config import PROJECT
 from linodenet.models import LinODE
-from linodenet.utils import PROJECT_TEST
 from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
-RESULT_DIR = PROJECT_TEST / "results" / Path(__file__).stem
+RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
