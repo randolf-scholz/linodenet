@@ -294,7 +294,6 @@ class LinODEnet(nn.Module):
         self,
         T: Tensor,
         X: Tensor,
-        *,
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
@@ -345,7 +344,7 @@ class LinODEnet(nn.Module):
         # prepend a single zero for the first iteration.
         # T = pad(T, 0.0, 1, prepend=True)
         # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
-        t0 = t0 if t0 is not None else T[..., [0]]
+        t0 = t0 if t0 is not None else T[..., 0].unsqueeze(-1)
         DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
 
         # Move sequence to the front
