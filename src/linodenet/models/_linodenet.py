@@ -387,3 +387,24 @@ class LinODEnet(nn.Module):
         yhat = self.xhat_post[..., : self.output_size]
 
         return yhat
+
+
+# def get_predictions(s: Tensor, t: Tensor, x: Tensor, t0: Tensor, z0: Tensor) -> Tensor:
+#     """Get predictions at query points `s`.
+#
+#     Assumptions:
+#         t0 ≤ t and s.
+#         t is sorted monotonically increasing.
+#     """
+#     inds = torch.searchsorted(t, s, right=True)
+#
+#     # compute xhat_pre, xhat_post, zhat_pre, zhat_post, timedeltas
+#     T = torch.concat([t0, t])
+#     t_insert = T[inds]
+#     x_insert = xhat[inds]
+#
+#
+#     # only propagate next state forward in time.
+#     dt_insert = t_insert - s
+#     for i, dt, x in enumerate(dt_insert, x_insert):
+#         ...
