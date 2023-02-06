@@ -152,7 +152,6 @@ class ResNetBlock(nn.Sequential):
     }
 
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
-
         config = deep_dict_update(self.HP, cfg)
 
         assert config["input_size"] is not None, "input_size is required!"
