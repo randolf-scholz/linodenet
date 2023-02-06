@@ -118,7 +118,7 @@ class LinODEnet(nn.Module):
     +===================================================+======================================+
     | Filter  `F` (default: :class:`~torch.nn.GRUCell`) | `\hat x_i' = F(\hat x_i, x_i)`       |
     +---------------------------------------------------+--------------------------------------+
-    | Encoder `ϕ` (default: :class:`~iResNet`)          | `\hat z_i' = ϕ(\hat x_i')`           |
+    | Encoder `Φ` (default: :class:`~iResNet`)          | `\hat z_i' = Φ(\hat x_i')`           |
     +---------------------------------------------------+--------------------------------------+
     | System  `S` (default: :class:`~LinODECell`)       | `\hat z_{i+1} = S(\hat z_i', Δ t_i)` |
     +---------------------------------------------------+--------------------------------------+
@@ -352,38 +352,90 @@ class LinODEnet(nn.Module):
         X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
         # Initialize buffers
-        Zhat_pre: list[Tensor] = []
-        Xhat_pre: list[Tensor] = []
-        Xhat_post: list[Tensor] = []
-        Zhat_post: list[Tensor] = []
+        zhat_pre_list: list[Tensor] = []
+        xhat_pre_list: list[Tensor] = []
+        xhat_post_list: list[Tensor] = []
+        zhat_post_list: list[Tensor] = []
 
-        ẑ_post = z0 if z0 is not None else self.z0
+        z_post = z0 if z0 is not None else self.z0
 
         for dt, x_obs in zip(DT, X):
             # Propagate the latent state forward in time.
-            ẑ_pre = self.system(dt, ẑ_post)  # (...,), (...,LAT) -> (...,LAT)
+            z_pre = self.system(dt, z_post)  # (...,), (...,LAT) -> (...,LAT)
 
             # Decode the latent state at the observation time.
-            x̂_pre = self.projection(self.decoder(ẑ_pre))  # (...,LAT) -> (...,DIM)
+            x_pre = self.projection(self.decoder(z_pre))  # (...,LAT) -> (...,DIM)
 
             # Update the state estimate by filtering the observation.
-            x̂_post = self.filter(x_obs, x̂_pre)  # (...,DIM), (..., DIM) → (...,DIM)
+            x_post = self.filter(x_obs, x_pre)  # (...,DIM), (..., DIM) → (...,DIM)
 
             # Encode the latent state at the observation time.
-            ẑ_post = self.encoder(self.embedding(x̂_post))  # (...,DIM) → (...,LAT)
+            z_post = self.encoder(self.embedding(x_post))  # (...,DIM) → (...,LAT)
 
             # Save all tensors for later.
-            Zhat_pre.append(ẑ_pre)
-            Xhat_pre.append(x̂_pre)
-            Xhat_post.append(x̂_post)
-            Zhat_post.append(ẑ_post)
+            zhat_pre_list.append(z_pre)
+            xhat_pre_list.append(x_pre)
+            xhat_post_list.append(x_post)
+            zhat_post_list.append(z_post)
 
-        self.xhat_pre = torch.stack(Xhat_pre, dim=-2)
-        self.xhat_post = torch.stack(Xhat_post, dim=-2)
-        self.zhat_pre = torch.stack(Zhat_pre, dim=-2)
-        self.zhat_post = torch.stack(Zhat_post, dim=-2)
+        self.xhat_pre = torch.stack(xhat_pre_list, dim=-2)
+        self.xhat_post = torch.stack(xhat_post_list, dim=-2)
+        self.zhat_pre = torch.stack(zhat_pre_list, dim=-2)
+        self.zhat_post = torch.stack(zhat_post_list, dim=-2)
         self.timedeltas = DT.moveaxis(0, -1)
 
         yhat = self.xhat_post[..., : self.output_size]
-
         return yhat
+
+    @jit.export
+    def predict(
+        self,
+        q: Tensor,
+        t: Tensor,
+        x: Tensor,
+        t0: Optional[Tensor] = None,
+        z0: Optional[Tensor] = None,
+    ) -> Tensor:
+        """Predict the future of the system.
+
+        .. Signature:: ``[(..., m), (..., n), (..., n, d) -> (..., m, d)``.
+        """
+        # check compatible shapes
+        assert t.shape == x.shape[:-1]
+        assert q.shape[:-1] == t.shape[:-1]
+        assert t0.shape == t.shape[:-1]
+        assert z0.shape[:-1] == x.shape[-1:]
+        assert all(t0 < t)
+        assert all(t < q)
+        t0 = t0 if t0 is not None else t[..., 0].unsqueeze(-1)
+
+        # mix the time and the query points
+        time = torch.cat([t, q], dim=-1)
+        sorted_index = torch.argsort(time, dim=-1)
+        time = time.gather(-1, sorted_index)
+
+        # mix the observations and dummy observations
+        x_padding = torch.full(q.shape + x.shape[-1], fill_value=torch.nan)
+        values = torch.cat([x, x_padding], dim=-2)
+        values = values.gather(-2, sorted_index.unsqueeze(-1).expand_as(values))
+
+        # create a mask for the query points
+        query_mask = torch.cat(
+            [
+                torch.zeros_like(t, dtype=torch.bool),
+                torch.ones_like(q, dtype=torch.bool),
+            ],
+            dim=-1,
+        )
+        query_mask = query_mask.gather(-1, sorted_index)
+
+        return values
+
+
+# from typing import NamedTuple
+#
+#
+# class Context(NamedTuple):
+#     observations: tuple[Tensor, Tensor]
+#     covariates: tuple[Tensor, Tensor]
+#     metadata: Tensor
