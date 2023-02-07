@@ -400,6 +400,9 @@ class LinODEnet(nn.Module):
 
         .. Signature:: ``[(..., m), (..., n), (..., n, d) -> (..., m, d)``.
         """
+        t0 = t0 if t0 is not None else t[..., 0].unsqueeze(-1)
+        z0 = z0 if z0 is not None else self.z0
+
         # check compatible shapes
         assert t.shape == x.shape[:-1]
         assert q.shape[:-1] == t.shape[:-1]
@@ -407,7 +410,6 @@ class LinODEnet(nn.Module):
         assert z0.shape[:-1] == x.shape[-1:]
         assert all(t0 < t)
         assert all(t < q)
-        t0 = t0 if t0 is not None else t[..., 0].unsqueeze(-1)
 
         # mix the time and the query points
         time = torch.cat([t, q], dim=-1)
@@ -415,7 +417,7 @@ class LinODEnet(nn.Module):
         time = time.gather(-1, sorted_index)
 
         # mix the observations and dummy observations
-        x_padding = torch.full(q.shape + x.shape[-1], fill_value=torch.nan)
+        x_padding = torch.full(q.shape + x.shape[-1:], fill_value=torch.nan)
         values = torch.cat([x, x_padding], dim=-2)
         values = values.gather(-2, sorted_index.unsqueeze(-1).expand_as(values))
 

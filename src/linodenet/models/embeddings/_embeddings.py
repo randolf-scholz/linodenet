@@ -10,7 +10,7 @@ __all__ = [
     "LinearEmbedding",
 ]
 
-from typing import Any, Final
+from typing import Final
 
 import torch
 from torch import Tensor, jit, nn
@@ -44,7 +44,7 @@ class ConcatEmbedding(nn.Module):
     padding: Tensor
     r"""PARAM: The padding vector."""
 
-    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
+    def __init__(self, input_size: int, output_size: int) -> None:
         super().__init__()
         assert (
             input_size <= output_size
@@ -91,7 +91,7 @@ class ConcatProjection(nn.Module):
     padding_size: Final[int]
     r"""CONST: The size of the padding."""
 
-    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
+    def __init__(self, input_size: int, output_size: int) -> None:
         super().__init__()
         assert (
             input_size >= output_size
@@ -148,7 +148,7 @@ class LinearEmbedding(nn.Module):
     pinv_weight: Tensor
     r"""BUFFER: The pseudo-inverse of the weight."""
 
-    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
+    def __init__(self, input_size: int, output_size: int) -> None:
         super().__init__()
         assert (
             input_size <= output_size

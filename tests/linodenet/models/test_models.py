@@ -112,16 +112,14 @@ def _test_model(
         model.to(dtype=DTYPE, device=device)
     except Exception as E:
         raise RuntimeError(err_str("initialization")) from E
-    else:
-        LOGGER.info(">>> INITIALIZATION ✔ ")
+    LOGGER.info(">>> INITIALIZATION ✔ ")
 
     try:  # check JIT-compatibility
         LOGGER.info(">>> JIT-COMPILATION TEST")
         model = torch.jit.script(model)
     except Exception as E:
         raise RuntimeError(err_str("JIT-compilation")) from E
-    else:
-        LOGGER.info(">>> JIT-compilation ✔ ")
+    LOGGER.info(">>> JIT-compilation ✔ ")
 
     try:  # check forward
         LOGGER.info(
@@ -131,15 +129,12 @@ def _test_model(
         outputs = outputs if isinstance(outputs, tuple) else (outputs,)
     except Exception as E:
         raise RuntimeError(err_str("forward pass")) from E
-    else:
-        assert all(
-            output.shape == target.shape for output, target in zip(outputs, targets)
-        )
-        LOGGER.info(
-            ">>> Output shapes %s match with targets!",
-            [tuple(x.shape) for x in targets],
-        )
-        LOGGER.info(">>> FORWARD ✔ ")
+    assert all(output.shape == target.shape for output, target in zip(outputs, targets))
+    LOGGER.info(
+        ">>> Output shapes %s match with targets!",
+        [tuple(x.shape) for x in targets],
+    )
+    LOGGER.info(">>> FORWARD ✔ ")
 
     try:  # check backward
         LOGGER.info(">>> BACKWARD TEST")
@@ -148,8 +143,7 @@ def _test_model(
         loss.backward()
     except Exception as E:
         raise RuntimeError(err_str("backward pass")) from E
-    else:
-        LOGGER.info(">>> BACKWARD ✔ ")
+    LOGGER.info(">>> BACKWARD ✔ ")
 
     try:  # check model saving
         LOGGER.info(">>> CHECKPOINTING TEST")
@@ -167,8 +161,7 @@ def _test_model(
         LOGGER.info(">>> Loaded Model produces equivalent outputs ✔ ")
     except Exception as E:
         raise RuntimeError(err_str("checkpointing")) from E
-    else:
-        LOGGER.info(">>> CHECKPOINTING ✔ ")
+    LOGGER.info(">>> CHECKPOINTING ✔ ")
 
 
 def test_all_models() -> None:
