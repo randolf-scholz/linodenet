@@ -63,7 +63,7 @@ flake8-rst-docstrings = ">=0.3.0"
 ipywidgets = ">=8.0.4"
 isort = ">=5.12.0"
 jupyterlab = ">=3.6.1"
-mypy = ">=0.991"
+mypy = ">=1.0.0"
 nbsphinx = ">=0.8.12"
 perflint = ">=0.7.3"
 piccolo-theme = ">=0.14.0"
@@ -98,7 +98,7 @@ twine = ">=4.0.2"
 types-docutils = ">=0.19.1"
 types-pillow = ">=9.4"
 types-protobuf = ">=4.21.0"
-types-psutil = ">=5.9.4"
+types-psutil = ">=5.9.5"
 types-pyyaml = ">=6.0"
 types-requests = ">=2.28.11"
 types-setuptools = ">=67.1.0"
@@ -135,6 +135,7 @@ enable= [
 disable= [
     "C0103",  # invalid-name
     "C0144",  # non-ascii-name
+    "C0204",  # bad-mcs-classmethod-argument
     "E0611",  # no-name-in-module
     "E1130",  # invalid-unary-operand-type
     "R0801",  # similar lines
@@ -144,8 +145,8 @@ disable= [
     "R0914",  # too-many-locals
     "R0915",  # too-many-statements
     "W0221",  # arguments-differ
-#    "W0511",  # (fixme) (todos)
     "W1113",  # keyword-arg-before-vararg
+#    "W0511",  # (fixme) (todos)
 ]
 fail-on= [
     "C0116",  # missing-function-docstring

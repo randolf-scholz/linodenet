@@ -130,7 +130,6 @@ class PseudoKalmanFilter(FilterABC):
         input_size: int,
         alpha: str | float = "last-value",
         alpha_learnable: bool = True,
-        projection: str | nn.Module = "symmetric",
         **cfg: Any,
     ):
         super().__init__()

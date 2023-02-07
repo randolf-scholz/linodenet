@@ -9,11 +9,6 @@ r"""Logging utilities for linodenet."""
 # Object = TypeVar("Object", bound=object, contravariant=True)
 # FileWriter: TypeAlias = object
 #
-# @runtime_checkable
-# class Callback(Protocol[Object]):
-#     def __call__(self, i: int, /, writer: FileWriter, logged_object: Object) -> None:
-#         # FIXME: works if '_' is renamed to 'score'
-#         pass
 #
 # def log_score(i: int, score: float, /, writer: FileWriter) -> None: pass
 # def log_id(i: int, identity: int, /, writer: FileWriter) -> None: pass
