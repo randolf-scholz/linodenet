@@ -345,9 +345,10 @@ class LinODEnet(nn.Module):
         # T = pad(T, 0.0, 1, prepend=True)
         # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
         t0 = t0 if t0 is not None else T[..., 0].unsqueeze(-1)
-        DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
+        z0 = z0 if z0 is not None else self.z0
 
         # Move sequence to the front
+        DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
         X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
@@ -357,20 +358,20 @@ class LinODEnet(nn.Module):
         xhat_post_list: list[Tensor] = []
         zhat_post_list: list[Tensor] = []
 
-        z_post = z0 if z0 is not None else self.z0
+        z_post = z0
 
         for dt, x_obs in zip(DT, X):
             # Propagate the latent state forward in time.
-            z_pre = self.system(dt, z_post)  # (...,), (...,LAT) -> (...,LAT)
+            z_pre = self.system(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
 
             # Decode the latent state at the observation time.
-            x_pre = self.projection(self.decoder(z_pre))  # (...,LAT) -> (...,DIM)
+            x_pre = self.projection(self.decoder(z_pre))  # (..., LAT) -> (..., DIM)
 
             # Update the state estimate by filtering the observation.
-            x_post = self.filter(x_obs, x_pre)  # (...,DIM), (..., DIM) → (...,DIM)
+            x_post = self.filter(x_obs, x_pre)  # (..., DIM), (..., DIM) → (..., DIM)
 
             # Encode the latent state at the observation time.
-            z_post = self.encoder(self.embedding(x_post))  # (...,DIM) → (...,LAT)
+            z_post = self.encoder(self.embedding(x_post))  # (..., DIM) → (..., LAT)
 
             # Save all tensors for later.
             zhat_pre_list.append(z_pre)
@@ -404,12 +405,7 @@ class LinODEnet(nn.Module):
         z0 = z0 if z0 is not None else self.z0
 
         # check compatible shapes
-        assert t.shape == x.shape[:-1]
-        assert q.shape[:-1] == t.shape[:-1]
-        assert t0.shape == t.shape[:-1]
-        assert z0.shape[:-1] == x.shape[-1:]
-        assert all(t0 < t)
-        assert all(t < q)
+        self._validate_inputs(q, t, x, t0, z0)
 
         # mix the time and the query points
         time = torch.cat([t, q], dim=-1)
@@ -432,6 +428,16 @@ class LinODEnet(nn.Module):
         query_mask = query_mask.gather(-1, sorted_index)
 
         return values
+
+    @staticmethod
+    def _validate_inputs(q: Tensor, t: Tensor, x: Tensor, t0: Tensor, z0: Tensor):
+        """Validate the inputs to the model."""
+        assert t.shape == x.shape[:-1]
+        assert q.shape[:-1] == t.shape[:-1]
+        assert t0.shape == t.shape[:-1]
+        assert z0.shape[:-1] == x.shape[-1:]
+        assert all(t0 < t)
+        assert all(t < q)
 
 
 # from typing import NamedTuple

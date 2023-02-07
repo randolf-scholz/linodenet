@@ -168,11 +168,11 @@ class LinODECell(nn.Module):
         r"""Signature: ``[(...,), (..., d)] -> (..., d)``.
 
         Args:
-            dt: The time difference $t_1 - t_0$ between $x_0$ and $x̂$.
-            x0: Time observed value at $t_0$.
+            dt: The time difference t₁ - t₀ between x₀ and x̂.
+            x0: Time observed value at t₀.
 
         Returns:
-            xhat: The predicted value at $t_1$
+            xhat: The predicted value at t₁
         """
         self.kernel = self.scalar * self.kernel_parametrization(self.weight)
         Adt = torch.einsum("..., kl -> ...kl", dt, self.kernel)
