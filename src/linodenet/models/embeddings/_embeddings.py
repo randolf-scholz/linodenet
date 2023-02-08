@@ -5,15 +5,46 @@ r"""#TODO add module summary line.
 
 __all__ = [
     # Classes
+    "Embedding",
+    "EmbeddingABC",
     "ConcatEmbedding",
     "ConcatProjection",
     "LinearEmbedding",
 ]
 
-from typing import Final
+from abc import abstractmethod
+from typing import Final, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
+
+
+@runtime_checkable
+class Embedding(Protocol):
+    """Protocol for Embedding Components."""
+
+    def __call__(self, x: Tensor, /) -> Tensor:
+        """Forward pass of the embedding.
+
+        .. Signature: ``... -> ...``.
+        """
+
+
+class EmbeddingABC(nn.Module):
+    """Abstract Base Class for Embedding components."""
+
+    @abstractmethod
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Forward pass of the embedding.
+
+        .. Signature: ``... -> ...``.
+
+        Args:
+            x: The input tensor to be embedded.
+
+        Returns:
+            z: The embedded input tensor.
+        """
 
 
 class ConcatEmbedding(nn.Module):
@@ -21,7 +52,6 @@ class ConcatEmbedding(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": int,
         "output_size": int,
@@ -127,7 +157,6 @@ class LinearEmbedding(nn.Module):
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
-        "__doc__": __doc__,
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": int,
         "output_size": int,

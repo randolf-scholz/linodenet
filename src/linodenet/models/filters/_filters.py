@@ -11,8 +11,10 @@ __all__ = [
     "CELLS",
     # Types
     "Cell",
-    # Classes
+    # Base Classes
+    "Filter",
     "FilterABC",
+    # Classes
     "KalmanCell",
     "KalmanFilter",
     "LinearFilter",
@@ -25,7 +27,7 @@ __all__ = [
 from abc import abstractmethod
 from collections.abc import Iterable
 from math import sqrt
-from typing import Any, Final, Optional, TypeAlias
+from typing import Any, Final, Optional, Protocol, TypeAlias, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -47,6 +49,17 @@ CELLS: Final[dict[str, type[Cell]]] = {
     "LSTMCell": nn.LSTMCell,
 }
 r"""Lookup table for cells."""
+
+
+@runtime_checkable
+class Filter(Protocol):
+    """Protocol for Filters components."""
+
+    def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
+        """Forward pass of the filter.
+
+        .. Signature: ``[(..., n), (..., m)] -> (..., n)``.
+        """
 
 
 class FilterABC(nn.Module):
@@ -765,6 +778,7 @@ class SequentialFilter(FilterABC, nn.Sequential):
     r"""The HyperparameterDict of this class."""
 
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
+        super().__init__()
         config = deep_dict_update(self.HP, cfg)
 
         layers: list[nn.Module] = [] if modules is None else list(modules)
