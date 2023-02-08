@@ -8,12 +8,41 @@ A Filter takes two positional inputs:
 
 __all__ = [
     # Classes
+    "Encoder",
+    "EncoderABC",
     "Identity",
 ]
 
-from typing import Any
+from abc import abstractmethod
+from typing import Any, Protocol, runtime_checkable
 
-from torch import nn
+from torch import Tensor, nn
+
+
+@runtime_checkable
+class Encoder(Protocol):
+    """Protocol for Encoder Components."""
+
+    def __call__(self, x: Tensor, /) -> Tensor:
+        """Forward pass of the encoder.
+
+        .. Signature: ``(..., d) -> (..., d)``.
+        """
+
+
+class EncoderABC(nn.Module):
+    """Abstract Base Class for Encoder components."""
+
+    @abstractmethod
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Forward pass of the encoder.
+
+        Args:
+            x: The input tensor to be encoded.
+
+        Returns:
+            z: The encoded tensor.
+        """
 
 
 class Identity(nn.Module):

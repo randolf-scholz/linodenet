@@ -765,6 +765,7 @@ class SequentialFilter(FilterABC, nn.Sequential):
     r"""The HyperparameterDict of this class."""
 
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
+        super().__init__()
         config = deep_dict_update(self.HP, cfg)
 
         layers: list[nn.Module] = [] if modules is None else list(modules)
