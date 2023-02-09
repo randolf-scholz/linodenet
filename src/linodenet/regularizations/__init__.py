@@ -35,6 +35,7 @@ __all__ = [
     "Identity",
     "LogDetExp",
     "Masked",
+    "MatrixNorm",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",

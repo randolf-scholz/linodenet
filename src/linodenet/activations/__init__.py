@@ -14,8 +14,7 @@ __all__ = [
     "modular",
     # Types
     "Activation",
-    "FunctionalActivation",
-    "ModularActivation",
+    "ActivationABC",
     # Constants
     "ACTIVATIONS",
     "FUNCTIONAL_ACTIVATIONS",
@@ -28,25 +27,13 @@ __all__ = [
     "geglu",
     # Classes
 ]
-
-from collections.abc import Callable
-from typing import Final, TypeAlias
-
-from torch import Tensor, nn
+from torch import nn
 
 from linodenet.activations import functional, modular
+from linodenet.activations._activations import Activation, ActivationABC
 from linodenet.activations.functional import geglu, reglu
 
-ModularActivation: TypeAlias = nn.Module
-r"""Type hint for activation Functions."""
-
-FunctionalActivation: TypeAlias = Callable[..., Tensor]
-r"""Type hint for activation Functions."""
-
-Activation: TypeAlias = FunctionalActivation | ModularActivation
-r"""Type hint for activation Functions."""
-
-TORCH_FUNCTIONAL_ACTIVATIONS: Final[dict[str, FunctionalActivation]] = {
+TORCH_FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     "threshold": nn.functional.threshold,
     # Thresholds each element of the input Tensor.
     "threshold_": nn.functional.threshold_,  # type: ignore[attr-defined]
@@ -130,7 +117,7 @@ TORCH_FUNCTIONAL_ACTIVATIONS: Final[dict[str, FunctionalActivation]] = {
 }
 r"""Dictionary containing all available functional activations in torch."""
 
-FUNCTIONAL_ACTIVATIONS: Final[dict[str, FunctionalActivation]] = {
+FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     **TORCH_FUNCTIONAL_ACTIVATIONS,
     **{
         "reglu": reglu,
@@ -139,7 +126,7 @@ FUNCTIONAL_ACTIVATIONS: Final[dict[str, FunctionalActivation]] = {
 }
 r"""Dictionary containing all available functional activations."""
 
-TORCH_MODULAR_ACTIVATIONS: Final[dict[str, type[ModularActivation]]] = {
+TORCH_MODULAR_ACTIVATIONS: dict[str, type[Activation]] = {
     "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,
     "ELU": nn.ELU,
     "Hardshrink": nn.Hardshrink,
@@ -171,25 +158,24 @@ TORCH_MODULAR_ACTIVATIONS: Final[dict[str, type[ModularActivation]]] = {
 }
 r"""Dictionary containing all available activations in torch."""
 
-MODULAR_ACTIVATIONS: Final[dict[str, type[ModularActivation]]] = {
+MODULAR_ACTIVATIONS: dict[str, type[Activation]] = {
     **TORCH_MODULAR_ACTIVATIONS,
     **{},
 }
 r"""Dictionary containing all available activations."""
 
-TORCH_ACTIVATIONS: Final[dict[str, FunctionalActivation | type[ModularActivation]]] = {
+TORCH_ACTIVATIONS: dict[str, Activation | type[Activation]] = {
     **TORCH_FUNCTIONAL_ACTIVATIONS,
     **TORCH_MODULAR_ACTIVATIONS,
 }
 r"""Dictionary containing all available activations."""
 
 
-ACTIVATIONS: Final[dict[str, FunctionalActivation | type[ModularActivation]]] = {
+ACTIVATIONS: dict[str, Activation | type[Activation]] = {
     **TORCH_ACTIVATIONS,
     **MODULAR_ACTIVATIONS,
     **FUNCTIONAL_ACTIVATIONS,
 }
 r"""Dictionary containing all available activations."""
 
-
-del Final, TypeAlias, nn
+del nn
