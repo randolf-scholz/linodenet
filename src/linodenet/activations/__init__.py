@@ -27,6 +27,7 @@ __all__ = [
     "geglu",
     # Classes
 ]
+
 from torch import nn
 
 from linodenet.activations import functional, modular
