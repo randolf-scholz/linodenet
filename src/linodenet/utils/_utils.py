@@ -7,18 +7,17 @@ __all__ = [
     "deep_dict_update",
     "deep_keyval_update",
     "flatten_nested_tensor",
-    "initialize_from",
     "initialize_from_config",
     "is_dunder",
+    "is_private",
     "pad",
     # Classes
 ]
 
 import logging
-import warnings
 from collections.abc import Iterable, Mapping
 from copy import deepcopy
-from functools import partial, wraps
+from functools import wraps
 from importlib import import_module
 from types import ModuleType
 from typing import Any, TypeVar
@@ -144,46 +143,13 @@ def flatten_nested_tensor(inputs: Tensor | Iterable[Tensor]) -> Tensor:
     raise ValueError(f"{inputs=} not understood")
 
 
-def initialize_from(
-    lookup_table: ModuleType | dict[str, type[ObjectType]],
-    /,
-    __name__: str,
-    **kwargs: Any,
-) -> ObjectType:
-    r"""Lookup class/function from dictionary and initialize it.
-
-    Roughly equivalent to:
-
-    .. code-block:: python
-
-        obj = lookup_table[__name__]
-        if isclass(obj):
-            return obj(**kwargs)
-        return partial(obj, **kwargs)
-    """
-    warnings.warn("Use initialize_from_config instead", DeprecationWarning)
-    if isinstance(lookup_table, ModuleType):
-        assert hasattr(lookup_table, __name__)
-        obj: type[ObjectType] = getattr(lookup_table, __name__)
-    else:
-        obj = lookup_table[__name__]
-
-    assert callable(obj), f"Looked up object {obj} not callable class/function."
-
-    # check that obj is a class, but not metaclass or instance.
-    if isinstance(obj, type) and not issubclass(obj, type):
-        return obj(**kwargs)
-    # if it is function, fix kwargs
-    return partial(obj, **kwargs)  # type: ignore[return-value]
-
-
 def initialize_from_config(config: dict[str, Any]) -> nn.Module:
     r"""Initialize a class from a dictionary."""
     assert "__name__" in config, "__name__ not found in dict"
     assert "__module__" in config, "__module__ not found in dict"
     __logger__.debug("Initializing %s", config)
     config = config.copy()
-    module = import_module(config.pop("__module__"))
+    module: ModuleType = import_module(config.pop("__module__"))
     cls = getattr(module, config.pop("__name__"))
     opts = {key: val for key, val in config.items() if not is_dunder("key")}
     obj = cls(**opts)
@@ -194,3 +160,8 @@ def initialize_from_config(config: dict[str, Any]) -> nn.Module:
 def is_dunder(s: str, /) -> bool:
     r"""Check if name is a dunder method."""
     return s.isidentifier() and s.startswith("__") and s.endswith("__")
+
+
+def is_private(s: str, /) -> bool:
+    r"""Check if name is a private method."""
+    return s.isidentifier() and s.startswith("_") and not s.endswith("__")
