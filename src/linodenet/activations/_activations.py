@@ -18,8 +18,7 @@ class Activation(Protocol[P]):
     """Protocol for Activation Components."""
 
     __call__: Callable[Concatenate[Tensor, P], Tensor]
-    # def __call__(self, x: Tensor, *args: P.args, **kwargs: P.kwargs) -> Tensor:
-    #     """Forward pass of the activation."""
+    """Forward pass of the activation."""
 
 
 class ActivationABC(nn.Module):
