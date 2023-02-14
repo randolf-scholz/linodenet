@@ -158,7 +158,11 @@ class LatentLinODECell(nn.Module):
 
         hidden_size = hidden_size if hidden_size is not None else input_size
         if hidden_size < input_size:
-            warnings.warn("hidden_size < input_size. Setting hidden_size=input_size.")
+            warnings.warn(
+                "hidden_size < input_size. Setting hidden_size=input_size.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             hidden_size = input_size
 
         # CONSTANTS
@@ -320,7 +324,11 @@ class LinODEnet(nn.Module):
         # Fix the hidden size
         hidden_size = hidden_size if hidden_size is not None else input_size
         if hidden_size < input_size:
-            warnings.warn("hidden_size < input_size. Setting hidden_size=input_size.")
+            warnings.warn(
+                "hidden_size < input_size. Setting hidden_size=input_size.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             hidden_size = input_size
 
         # Config
