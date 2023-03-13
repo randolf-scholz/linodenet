@@ -11,7 +11,7 @@ from typing import Optional
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder as _TransformerEncoder
 
-from linodenet.utils import autojit, deep_dict_update, initialize_from
+from linodenet.utils import autojit, deep_dict_update, initialize_from_config
 
 TransformerEncoder = autojit(_TransformerEncoder)
 r"""TransformerEncoder: Transformer based Encoder model."""
@@ -44,7 +44,10 @@ class Transformer(nn.Module):
         # the layer normalization component (optional).
         "norm": None,
         "EncoderLayer": {
+            # the class name of the encoder layer
             "__name__": "TransformerEncoderLayer",
+            # the module name of the encoder layer
+            "__module__": "torch.nn.",
             # the number of expected features in the input (required).
             "d_model": 8,
             # the number of heads in the multi-head-attention models (required).
@@ -71,7 +74,7 @@ class Transformer(nn.Module):
         config = deep_dict_update(self.HP, cfg)
 
         self.layers = nn.ModuleList(
-            initialize_from(nn, **config["EncoderLayer"])
+            initialize_from_config(config["EncoderLayer"])
             for _ in range(config["num_layers"])
         )
         self.num_layers = config["num_layers"]

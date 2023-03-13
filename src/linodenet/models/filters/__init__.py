@@ -17,11 +17,8 @@ __all__ = [
     "SequentialFilterBlock",
 ]
 
-from typing import Final, TypeAlias
-
-from torch import nn
-
 from linodenet.models.filters._filters import (
+    Filter,
     FilterABC,
     KalmanCell,
     KalmanFilter,
@@ -33,10 +30,7 @@ from linodenet.models.filters._filters import (
     SequentialFilterBlock,
 )
 
-Filter: TypeAlias = nn.Module
-r"""Type hint for Filters"""
-
-FILTERS: Final[dict[str, type[nn.Module]]] = {
+FILTERS: dict[str, type[Filter]] = {
     "FilterABC": FilterABC,
     "KalmanCell": KalmanCell,
     "KalmanFilter": KalmanFilter,
@@ -47,5 +41,3 @@ FILTERS: Final[dict[str, type[nn.Module]]] = {
     "SequentialFilterBlock": SequentialFilterBlock,
 }
 r"""Dictionary of all available filters."""
-
-del Final, TypeAlias, nn

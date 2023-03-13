@@ -154,8 +154,11 @@ class LatentStateSpaceModel(nn.Module):
 
         if hidden_size < input_size:
             warnings.warn(
-                "hidden_size < input_size. Falling back to using no hidden units."
+                "hidden_size < input_size. Falling back to using no hidden units.",
+                RuntimeWarning,
+                stacklevel=2,
             )
+
             hidden_size = input_size
 
         self.hidden_size = hidden_size

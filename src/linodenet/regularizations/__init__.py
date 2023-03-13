@@ -14,8 +14,7 @@ __all__ = [
     "MODULAR_REGULARIZATIONS",
     # Types
     "Regularization",
-    "FunctionalRegularization",
-    "ModularRegularization",
+    "RegularizationABC",
     # Sub-Modules
     "functional",
     "modular",
@@ -36,19 +35,15 @@ __all__ = [
     "Identity",
     "LogDetExp",
     "Masked",
+    "MatrixNorm",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
 ]
 
-
-from collections.abc import Callable
-from typing import Final, TypeAlias
-
-from torch import Tensor, nn
-
 from linodenet.regularizations import functional, modular
+from linodenet.regularizations._regularizations import Regularization, RegularizationABC
 from linodenet.regularizations.functional import (
     banded,
     diagonal,
@@ -74,16 +69,7 @@ from linodenet.regularizations.modular import (
     Symmetric,
 )
 
-FunctionalRegularization: TypeAlias = Callable[[Tensor], Tensor]
-r"""Type hint for modular regularizations."""
-
-ModularRegularization: TypeAlias = nn.Module
-r"""Type hint for modular regularizations."""
-
-Regularization: TypeAlias = FunctionalRegularization | ModularRegularization
-r"""Type hint for projections."""
-
-FUNCTIONAL_REGULARIZATIONS: Final[dict[str, FunctionalRegularization]] = {
+FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
     "banded": banded,
     "diagonal": diagonal,
     "identity": identity,
@@ -97,7 +83,7 @@ FUNCTIONAL_REGULARIZATIONS: Final[dict[str, FunctionalRegularization]] = {
 }
 r"""Dictionary of all available modular metrics."""
 
-MODULAR_REGULARIZATIONS: Final[dict[str, type[nn.Module]]] = {
+MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Banded": Banded,
     "Diagonal": Diagonal,
     "Identity": Identity,
@@ -111,12 +97,8 @@ MODULAR_REGULARIZATIONS: Final[dict[str, type[nn.Module]]] = {
 }
 r"""Dictionary of all available modular metrics."""
 
-REGULARIZATIONS: Final[
-    dict[str, FunctionalRegularization | type[ModularRegularization]]
-] = {
+REGULARIZATIONS: dict[str, Regularization | type[Regularization]] = {
     **FUNCTIONAL_REGULARIZATIONS,
     **MODULAR_REGULARIZATIONS,
 }
 r"""Dictionary containing all available projections."""
-
-del Final, TypeAlias, nn, Callable, Tensor

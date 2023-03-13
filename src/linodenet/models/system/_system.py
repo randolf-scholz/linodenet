@@ -1,11 +1,14 @@
 r"""Models for the latent dynamical system."""
 
 __all__ = [
+    "System",
+    "SystemABC",
     # Classes
     "LinODECell",
 ]
 
-from typing import Any, Final
+from abc import abstractmethod
+from typing import Any, Final, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -14,6 +17,33 @@ from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
 from linodenet.utils import deep_dict_update
+
+
+@runtime_checkable
+class System(Protocol):
+    """Protocol for System Components."""
+
+    def __call__(self, dt: Tensor, z: Tensor, /) -> Tensor:
+        """Forward pass of the system.
+
+        .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
+        """
+
+
+class SystemABC(nn.Module):
+    """Abstract Base Class for System components."""
+
+    @abstractmethod
+    def forward(self, dt: Tensor, z: Tensor, /) -> Tensor:
+        r"""Forward pass of the system.
+
+        Args:
+            dt: The time-step to advance the system.
+            z: The state estimate at time t.
+
+        Returns:
+            z': The updated state of the system at time t + ∆t.
+        """
 
 
 class LinODECell(nn.Module):
@@ -168,11 +198,11 @@ class LinODECell(nn.Module):
         r"""Signature: ``[(...,), (..., d)] -> (..., d)``.
 
         Args:
-            dt: The time difference $t_1 - t_0$ between $x_0$ and $x̂$.
-            x0: Time observed value at $t_0$.
+            dt: The time difference t₁ - t₀ between x₀ and x̂.
+            x0: Time observed value at t₀.
 
         Returns:
-            xhat: The predicted value at $t_1$
+            xhat: The predicted value at t₁
         """
         self.kernel = self.scalar * self.kernel_parametrization(self.weight)
         Adt = torch.einsum("..., kl -> ...kl", dt, self.kernel)

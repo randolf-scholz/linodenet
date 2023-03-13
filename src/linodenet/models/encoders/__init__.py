@@ -3,6 +3,7 @@ r"""Encoder Models."""
 __all__ = [
     # Types
     "Encoder",
+    "EncoderABC",
     # Meta-Objects
     "ENCODERS",
     # Classes
@@ -20,11 +21,8 @@ __all__ = [
     "spectral_norm",
 ]
 
-from typing import Final, TypeAlias
 
-from torch import nn
-
-from linodenet.models.encoders._encoders import Identity
+from linodenet.models.encoders._encoders import Encoder, EncoderABC, Identity
 from linodenet.models.encoders.ft_transformer import FTTransformer
 from linodenet.models.encoders.iresnet import (
     LinearContraction,
@@ -37,10 +35,7 @@ from linodenet.models.encoders.mlp import MLP
 from linodenet.models.encoders.resnet import ResNet, ResNetBlock
 from linodenet.models.encoders.transformer import Transformer
 
-Encoder: TypeAlias = nn.Module
-r"""Type hint for Encoders."""
-
-ENCODERS: Final[dict[str, type[Encoder]]] = {
+ENCODERS: dict[str, type[Encoder]] = {
     "FTTransformer": FTTransformer,
     "Identity": Identity,
     "MLP": MLP,
@@ -49,5 +44,3 @@ ENCODERS: Final[dict[str, type[Encoder]]] = {
     "iResNet": iResNet,
 }
 r"""Dictionary containing all available encoders."""
-
-del Final, TypeAlias, nn
