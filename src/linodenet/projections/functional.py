@@ -123,7 +123,7 @@ def diagonal(x: Tensor) -> Tensor:
 
 
 @jit.script
-def banded(x: Tensor, u: int = 0, l: int = 0) -> Tensor:
+def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -132,8 +132,8 @@ def banded(x: Tensor, u: int = 0, l: int = 0) -> Tensor:
 
     One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
     """
-    x = torch.triu(x, diagonal=u)
-    x = torch.tril(x, diagonal=l)
+    x = torch.triu(x, diagonal=upper)
+    x = torch.tril(x, diagonal=lower)
     return x
 
 
