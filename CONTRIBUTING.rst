@@ -4,7 +4,7 @@ CONTRIBUTING
 Getting started
 ---------------
 
-1. Fork the GitLab project from https://software.ismll.uni-hildesheim.de/ISMLL-internal/special-interest-group-time-series/linodenet.
+1. Fork the GitLab project from https://software.ismll.uni-hildesheim.de/ISMLL-internal/time-series/linodenet.
 
    Use your personal namespace, e.g. ``https://software.ismll.uni-hildesheim.de/<user>/linodenet-fork``
 
