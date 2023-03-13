@@ -150,8 +150,8 @@ def diagonal(
 @jit.script
 def banded(
     x: Tensor,
-    u: int = 0,
-    l: int = 0,
+    upper: int = 0,
+    lower: int = 0,
     p: Optional[float] = None,
     size_normalize: bool = False,
 ) -> Tensor:
@@ -161,7 +161,7 @@ def banded(
 
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙B = X
     """
-    r = x - projections.banded(x, u=u, l=l)
+    r = x - projections.banded(x, upper=upper, lower=lower)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

@@ -20,7 +20,7 @@ __all__ = [
     "Symmetric",
 ]
 
-from typing import Optional
+from typing import Final, Optional
 
 from torch import BoolTensor, Tensor, nn
 
@@ -191,23 +191,32 @@ class Banded(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙B = X
     """
 
+    upper: Final[int]
+    lower: Final[int]
+    p: Final[Optional[float]]
+    size_normalize: Final[bool]
+
     def __init__(
         self,
-        u: int = 0,
-        l: int = 0,
+        upper: int = 0,
+        lower: int = 0,
         p: Optional[float] = None,
         size_normalize: bool = True,
     ):
         super().__init__()
-        self.u = u
-        self.l = l
+        self.upper = upper
+        self.lower = lower
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards banded matrix."""
         return banded(
-            x, u=self.u, l=self.l, p=self.p, size_normalize=self.size_normalize
+            x,
+            upper=self.upper,
+            lower=self.lower,
+            p=self.p,
+            size_normalize=self.size_normalize,
         )
 
 

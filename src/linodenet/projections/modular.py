@@ -158,18 +158,18 @@ class Banded(nn.Module):
     One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
     """
 
-    u: Final[int]
-    l: Final[int]
+    upper: Final[int]
+    lower: Final[int]
 
-    def __init__(self, u: int = 0, l: Optional[int] = None) -> None:
+    def __init__(self, upper: int = 0, lower: Optional[int] = None) -> None:
         super().__init__()
-        self.u = u
-        self.l = u if l is None else l
+        self.upper = upper
+        self.lower = upper if lower is None else lower
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of banded matrices."""
-        return banded(x, u=self.u, l=self.l)
+        return banded(x, upper=self.upper, lower=self.lower)
 
 
 class Masked(nn.Module):

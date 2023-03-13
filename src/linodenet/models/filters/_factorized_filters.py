@@ -157,11 +157,9 @@ class PseudoKalmanFilter(FilterABC):
 
         # BUFFERS
         with torch.no_grad():
-            I = torch.eye(self.input_size, dtype=self.weight.dtype)
             kernel = self.epsilon * self.weight
             self.register_buffer("kernel", kernel)
             self.register_buffer("ZERO", torch.zeros(1))
-            self.register_buffer("I", I)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -172,9 +170,9 @@ class PseudoKalmanFilter(FilterABC):
         # create the mask
         mask = ~torch.isnan(y)  # → [..., m]
         z = torch.where(mask, x - y, self.ZERO)  # → [..., m]
-        z = torch.einsum("ij, ...j", self.I - kernel, z)  # → [..., n]
+        z = z - torch.einsum("ij, ...j", kernel, z)  # → [..., n]
         z = torch.where(mask, z, self.ZERO)
-        z = torch.einsum("ij, ...j -> ...i", self.I + kernel, z)
+        z = z + torch.einsum("ij, ...j -> ...i", kernel, z)
         return x - self.alpha * z
 
 
