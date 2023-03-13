@@ -19,7 +19,7 @@ name = "linodenet"
 packages = [{include = "linodenet", from="src"}]
 readme = "README.rst"
 repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi"
-version = "0.2.6"
+version = "0.2.7"
 
 classifiers = [
     "Development Status :: 3 - Alpha",
