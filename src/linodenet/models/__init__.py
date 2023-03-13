@@ -6,8 +6,9 @@ __all__ = [
     "encoders",
     "embeddings",
     "system",
-    # Type Hint
+    # Types
     "Model",
+    "ModelABC",
     # Constants
     "MODELS",
     # Classes
@@ -25,12 +26,9 @@ __all__ = [
     # Filters
 ]
 
-from typing import Final
-
-from torch import nn
-
 from linodenet.models import embeddings, encoders, filters, system
 from linodenet.models._linodenet import LinODE, LinODEnet
+from linodenet.models._models import Model, ModelABC
 from linodenet.models.encoders import (
     LinearContraction,
     ResNet,
@@ -42,10 +40,7 @@ from linodenet.models.encoders import (
 )
 from linodenet.models.system import LinODECell
 
-Model = nn.Module
-r"""Type hint for models."""
-
-MODELS: Final[dict[str, type[nn.Module]]] = {
+MODELS: dict[str, type[Model]] = {
     "LinearContraction": LinearContraction,
     "iResNetBlock": iResNetBlock,
     "iResNet": iResNet,

@@ -61,7 +61,7 @@ def test_initialization(
     LOGGER.info("Testing...")
 
     if psutil.virtual_memory().available < 16 * 1024**3:
-        warnings.warn("Requires up to 16GiB of RAM", UserWarning)
+        warnings.warn("Requires up to 16GiB of RAM", UserWarning, stacklevel=2)
 
     ZERO = torch.tensor(0.0)
     ONE = torch.tensor(1.0)

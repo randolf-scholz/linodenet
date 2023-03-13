@@ -21,7 +21,7 @@ from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
 logging.basicConfig(level=logging.INFO)
-__logger__ = logging.getLogger(__name__)  # noqa: E402
+__logger__ = logging.getLogger(__name__)
 RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
