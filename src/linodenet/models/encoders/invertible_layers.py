@@ -1,6 +1,3 @@
-"""TODO: add package summary.
-
-TODO: add package description.
-"""
+"""Implementation of invertible layers."""
 
 __all__ = []
