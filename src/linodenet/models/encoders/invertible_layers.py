@@ -13,8 +13,6 @@ Layers:
     - Contractive: $y = F(x)$ with $‖F‖<1$
     - Low Rank Perturbation: $y = x + ABx$
 - Continuous Time Flows: $ẋ=f(t, x)$
-
-
 """
 
 __all__ = []
