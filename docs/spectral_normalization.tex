@@ -1,0 +1,126 @@
+\RequirePackage{iftex}
+\RequirePDFTeX
+\NeedsTeXFormat{LaTeX2e}
+\documentclass[10pt]{article}
+\usepackage{ismll-packages}
+\usepackage{ismll-mathoperators}
+\usepackage{ismll-style}
+\usepackage{unicode-symbols}
+
+\title{Derivative of the first order SVD}
+\author{Randolf Scholz}
+\begin{document}
+
+\maketitle
+
+
+Consider computing the first order SVD expansion. By the Eckart–Young–Mirsky theorem, this is equivalent to solving
+
+
+%
+\begin{align*}%
+\minimize_{σ，u，v} ½‖A - σuv^⊤‖²_F \qq{s.t.}  ‖u‖=1 \qq{and} ‖v‖=1%
+\end{align*}%
+%
+Any triplet $(σ，u，v)$ for a \textbf{unique} singular value satisfies
+
+%
+\begin{align*}%
+	σ &= u^⊤ A v
+\\  Av &= σu
+\\  A^⊤u &= σv%
+\end{align*}%
+%
+from this we can derive
+%
+\begin{align*}%
+∆σ &= {∆u}^⊤ A v + u^⊤{∆A}v + u^⊤A{∆v}
+\\ &= {∆u}^⊤u + u^⊤{∆A}v + v^⊤{∆v}
+\\ &= u^⊤{∆A}v%
+\end{align*}%
+%
+Where in the last step we used $∆u⟂u$ and $∆v⟂v$, which follows from the side condition. Further we have:
+%
+\begin{align*}%
+\begin{aligned}
+   {∆A}v  + A{∆v} &= {∆σ}u + σ{∆u}
+\\ {∆A}^⊤u + A^⊤{∆u} &= {∆σ}v + σ{∆v}%
+\end{aligned}
+\iff
+\underbrace{\bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}}_{≕K}⋅\bmat{∆u\\∆v} = \bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}
+\end{align*}%
+%
+\section{The VJP}
+The last equation allows us to compute the VJP at ease:
+%
+\begin{align*}%
+\Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert}\bmat{∆u\\∆v}\Bigr{⟩}
+&= \Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert} K^{-1}\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}\Bigr{⟩}
+\\&= \Bigl{⟨}K^{-⊤}\bmat{ϕ\\ψ}\Bigm{\vert}\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}\Bigr{⟩}%
+\\&= \Bigl{⟨}\bmat{\tilde{ϕ}\\\tilde{ψ}}\Bigm{\vert}\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}\Bigr{⟩}%
+\end{align*}%
+%
+Now, we compute the terms individually:
+%
+\begin{align*}%
+⟨\tilde{ϕ}∣ {∆A}v - {∆σ}u⟩
+&= ⟨\tilde{ϕ}v^⊤∣ {∆A}⟩ - ⟨u^⊤\tilde{ϕ}∣{∆σ}⟩%
+\\&= ⟨\tilde{ϕ}v^⊤∣ {∆A}⟩ - ⟨u^⊤\tilde{ϕ}∣u^⊤{∆A}v⟩%
+\\&= ⟨(𝕀ₘ - uu^⊤)\tilde{ϕ}v^⊤∣{∆A}⟩
+\end{align*}%
+%
+And for the second term we get
+%
+\begin{align*}%
+⟨\tilde{ψ} ∣ {∆A}^⊤ u - {∆σ}v⟩
+&= ⟨\tilde{ψ}u^⊤∣ {∆A}^⊤⟩ - ⟨v^⊤\tilde{ψ}∣{∆σ}⟩%
+\\&= ⟨u\tilde{ψ}^⊤∣ {∆A}⟩ - ⟨\tilde{ψ}^⊤v∣u^⊤{∆A}v⟩%
+\\&= ⟨u\tilde{ψ}(𝕀ₙ - vv^⊤)∣{∆A}⟩
+\end{align*}%
+%
+Using the formula for inverting a block-matrix, we can give an explicit solution to $K^{-⊤}$:
+%
+\begin{align*}%
+\bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}^{-1}
+&= \bmat{(σ𝕀ₘ - \frac{1}{σ}AA^⊤)^{-1} & 𝟎_{m×n} \\ 𝟎_{n×m} & (σ𝕀ₙ - \frac{1}{σ}A^⊤A)^{-1}}⋅\bmat{𝕀ₘ & \frac{1}{σ}A \\ \frac{1}{σ}A^⊤ & 𝕀ₙ}%
+\\&= \bmat{\tfrac{1}{σ}(𝕀ₘ - \frac{1}{σ²}AA^⊤)^{-1} & \tfrac{1}{σ²}(𝕀ₘ - \frac{1}{σ²}AA^⊤)^{-1}A \\ \frac{1}{σ²}(𝕀ₙ - \frac{1}{σ²}A^⊤A)^{-1}A^⊤ & \tfrac{1}{σ}(𝕀ₙ - \frac{1}{σ²}A^⊤A)^{-1} }
+\\&= \frac{1}{σ}\bmat{(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A} \\ (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}\tilde{A}^⊤ & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1} }
+\end{align*}%
+%
+And we see it's basically projection operators with respect to the image/kernel of $\tilde{A} = \frac{1}{σ}A$.
+%
+In summary, we obtain the following formula for the VJP:
+
+%
+\begin{align*}%
+\bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}^{-⊤}\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \bmat{ϕ\\ψ}
+&⟺
+\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \frac{1}{σ}\bmat{
+		(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A}
+	\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}\tilde{A}^⊤ & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
+}^⊤ \bmat{ϕ\\ψ}%
+\\&⟺
+\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \frac{1}{σ}\bmat{
+		(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & \tilde{A}(𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
+	\\  \tilde{A}^⊤(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}  & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
+} \bmat{ϕ\\ψ}%
+\end{align*}%
+%
+Thus, we need to solve 4 linear systems:
+%
+\begin{align*}%
+(𝕀ₘ - \tilde{A}\tilde{A}^⊤)x &= ϕ
+& (𝕀ₙ - \tilde{A}^⊤\tilde{A})y &= \tilde{A}ψ%
+\\ (𝕀ₘ - \tilde{A}\tilde{A}^⊤)z &= \tilde{A}^⊤ϕ%
+& (𝕀ₙ - \tilde{A}^⊤\tilde{A})w &= ψ
+\end{align*}%
+%
+Then $\tilde{ϕ} = \frac{1}{σ}(x+y)$ and $\tilde{ψ} = \frac{1}{σ}(z+w)$, and the VJP are given by the previous equations:
+%
+\begin{align*}%
+	ξ^⊤\frac{∂σ}{∂A} &= ξuv^⊤
+\\  ϕ^⊤\frac{∂u}{∂A} &= (𝕀ₘ - uu^⊤)\tilde{ϕ}v^⊤%
+\\  ψ^⊤\frac{∂v}{∂A} &= u\tilde{ψ}(𝕀ₙ - vv^⊤)%
+\end{align*}%
+%
+\end{document}
