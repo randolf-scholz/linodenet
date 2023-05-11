@@ -24,6 +24,49 @@ Consider computing the first order SVD expansion. By the Eckart–Young–Mirsky
 %
 Any triplet $(σ，u，v)$ for a \textbf{unique} singular value satisfies
 
+
+\paragraph{The jacobian and lagrangian}
+%
+The derivative of the objective function is
+
+\begin{align*}%
+𝐉_f(A，\bsmat{σ \\ u \\ v}) = \bmat{ A-σuv^⊤ &  \mat{ σ - u^⊤Av \\ σ²u - σAv \\ σ²v - σA^⊤u}}
+⟹ 𝐇_f(\bsmat{σ \\ u \\ v}) = \bmat{ 1 & 2σu - Av & 2σv - A^⊤u \\ -Av & σ²𝕀ₘ  & -σA \\ -A^⊤u & -σA^⊤ & σ²𝕀ₙ }
+\end{align*}%
+%
+Consider the function
+%
+\begin{align*}%
+f(A，\bsmat{σ \\ u \\ v}) = \pmat{ σ - u^⊤Av \\ σ²u - σAv \\ σ²v - σA^⊤u} ≡ 𝟎%
+⟹ 𝐉_f(A，\bsmat{σ \\ u \\ v}) = \barr{c|ccc}{-ξvu^⊤ & 1 & 2σu - Av & 2σv - A^⊤u \\ -σvϕ^⊤ & -Av & σ²𝕀ₘ  & -σA \\ -σuψ^⊤ & -A^⊤u & -σA^⊤ & σ²𝕀ₙ }
+\end{align*}%
+%
+Thus, gradient descent schema is
+
+%
+\begin{align*}%
+\begin{aligned}
+σ' &= σ - η_σ(σ - u^⊤Av) \\
+u' &= u - η_u(σ²u - σAv) \\
+v' &= v - η_v(σ²v - σA^⊤u)
+\end{aligned}
+\end{align*}%
+%
+And the newton step with diagonal approximation of the hessian:
+%
+\begin{align*}%
+\begin{aligned}
+σ' &= σ - 1(σ - u^⊤Av)              &&= u^⊤Av \\
+u' &= u - \tfrac{1}{σ²}(σ²u - σAv)  &&= \tfrac{1}{σ}Av \\
+v' &= v - \tfrac{1}{σ²}(σ²v - σA^⊤u)&&= \tfrac{1}{σ}A^⊤u
+\end{aligned}
+\end{align*}%
+%
+
+
+
+
+
 %
 \begin{align*}%
 	σ &= u^⊤ A v
