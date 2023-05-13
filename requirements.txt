@@ -21,7 +21,7 @@ nvidia-nccl-cu11==2.14.3 ; platform_system == "Linux" and platform_machine == "x
 nvidia-nvtx-cu11==11.7.91 ; platform_system == "Linux" and platform_machine == "x86_64" and python_version >= "3.10" and python_version < "3.12"
 scipy==1.10.1 ; python_version >= "3.10" and python_version < "3.12"
 setuptools==67.7.2 ; platform_system == "Linux" and platform_machine == "x86_64" and python_version >= "3.10" and python_version < "3.12"
-sympy==1.11.1 ; python_version >= "3.10" and python_version < "3.12"
+sympy==1.12 ; python_version >= "3.10" and python_version < "3.12"
 torch==2.0.1 ; python_version >= "3.10" and python_version < "3.12"
 triton==2.0.0 ; platform_system == "Linux" and platform_machine == "x86_64" and python_version >= "3.10" and python_version < "3.12"
 typing-extensions==4.5.0 ; python_version >= "3.10" and python_version < "3.12"
