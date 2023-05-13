@@ -68,7 +68,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-src/linodenet/lib/
 lib64/
 parts/
 sdist/
