@@ -25,7 +25,7 @@ Consider computing the first order SVD expansion. By the Eckart–Young–Mirsky
 Any triplet $(σ，u，v)$ for a \textbf{unique} singular value satisfies
 
 
-\paragraph{The jacobian and lagrangian}
+\paragraph{The Jacobian and Lagrangian}
 %
 The derivative of the objective function is
 
@@ -136,7 +136,7 @@ In summary, we obtain the following formula for the VJP:
 
 %
 \begin{align*}%
-\bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}^{-⊤}\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \bmat{ϕ\\ψ}
+\bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}^⊤\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \bmat{ϕ\\ψ}
 &⟺
 \bmat{\tilde{ϕ}\\ \tilde{ψ}} = \frac{1}{σ}\bmat{
 		(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A}
@@ -149,21 +149,27 @@ In summary, we obtain the following formula for the VJP:
 } \bmat{ϕ\\ψ}%
 \end{align*}%
 %
-Thus, we need to solve 4 linear systems:
+We can use the \textbf{push-through identity} to convert these into 4 linear systems:
 %
 \begin{align*}%
-(𝕀ₘ - \tilde{A}\tilde{A}^⊤)x &= ϕ
-& (𝕀ₙ - \tilde{A}^⊤\tilde{A})y &= \tilde{A}ψ%
-\\ (𝕀ₘ - \tilde{A}\tilde{A}^⊤)z &= \tilde{A}^⊤ϕ%
-& (𝕀ₙ - \tilde{A}^⊤\tilde{A})w &= ψ
+	(𝕀ₘ - \tilde{A}\tilde{A}^⊤)x &= ϕ             & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)y &= \tilde{A}ψ%
+\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})z &= \tilde{A}^⊤ϕ  & (𝕀ₙ - \tilde{A}^⊤\tilde{A})w &= ψ
+\end{align*}%
+%
+%
+We can use the \textbf{push-through identity} to convert these into 4 linear systems:
+%
+\begin{align*}%
+	Px &= ϕ             & Py &= \tilde{A}ψ%
+\\  Qz &= \tilde{A}^⊤ϕ  & Qw &= ψ
 \end{align*}%
 %
 Then $\tilde{ϕ} = \frac{1}{σ}(x+y)$ and $\tilde{ψ} = \frac{1}{σ}(z+w)$, and the VJP are given by the previous equations:
 %
 \begin{align*}%
 	ξ^⊤\frac{∂σ}{∂A} &= ξuv^⊤
-\\  ϕ^⊤\frac{∂u}{∂A} &= (𝕀ₘ - uu^⊤)\tilde{ϕ}v^⊤%
-\\  ψ^⊤\frac{∂v}{∂A} &= u\tilde{ψ}(𝕀ₙ - vv^⊤)%
+\\  ϕ^⊤\frac{∂u}{∂A} &= (𝕀ₘ - uu^⊤)\tilde{ϕ}v^⊤ = (\tilde{ϕ} - (u^⊤\tilde{ϕ})u)v^⊤%
+\\  ψ^⊤\frac{∂v}{∂A} &= u\tilde{ψ}^⊤(𝕀ₙ - vv^⊤) = u(\tilde{ψ} - (v^⊤\tilde{ψ})v)^⊤%
 \end{align*}%
 %
 \end{document}

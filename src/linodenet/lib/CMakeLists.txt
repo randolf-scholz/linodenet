@@ -18,10 +18,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 # find_package(OpenCV REQUIRED)
 
 # Define our library target
-add_library(spectral_norm SHARED spectral_norm.cpp)
+add_library(linodenet SHARED spectral_norm.cpp singular_triplet.cpp)
 # Enable C++14
-target_compile_features(spectral_norm PRIVATE cxx_std_14)
+target_compile_features(linodenet PRIVATE cxx_std_14)
 # Link against LibTorch
-target_link_libraries(spectral_norm "${TORCH_LIBRARIES}")
+target_link_libraries(linodenet "${TORCH_LIBRARIES}")
 # # Link against OpenCV
 # target_link_libraries(spectral_norm opencv_core opencv_imgproc)

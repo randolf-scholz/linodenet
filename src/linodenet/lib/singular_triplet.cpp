@@ -4,17 +4,19 @@
 #include <torch/linalg.h>
 #include <cstddef>
 #include <string>
-
+#include <vector>
 
 //import someLib as sl      ⟶  namespace sl = someLib;
 //from someLib import func  ⟶  using someLib::func;
 //from someLib import *     ⟶  using namespace someLib;
 
-using torch::linalg::vector_norm;
 using torch::Tensor;
 using c10::optional;
+using torch::linalg::solve;
+using torch::outer;
+using torch::dot;
 
-struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
+struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
     /** test
      * Formalizing as a optimization problem:
      * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖_F^2 s.t. ‖u‖₂ = ‖v‖₂ = 1
@@ -52,7 +54,7 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
      * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
      */
 
-    static Tensor forward(
+    static std::vector<Tensor> forward(
         torch::autograd::AutogradContext *ctx,
         Tensor A,
         optional<Tensor> u0,
@@ -91,13 +93,13 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
             Tensor v_old = v;
 
             u = A.mv(v);
-            sigma = u.dot(u_old);
+            sigma = dot(u,u_old);
             Tensor left_residual = (u - sigma * u_old).norm();
             u /= u.norm();
             assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
 
             v = A.t().mv(u);
-            sigma = v.dot(v_old);
+            sigma = dot(v, v_old);
             Tensor right_residual = (v - sigma * v_old).norm();
             v /= v.norm();
             assert(sigma.item().toDouble() > 0);
@@ -111,8 +113,9 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
             TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.");
         }
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
-        ctx->save_for_backward({u, v});
-        return sigma;
+        ctx->save_for_backward({A, sigma, u, v});
+        auto result = {sigma, u, v};
+        return result;
     }
 
     static torch::autograd::variable_list backward(
@@ -120,23 +123,58 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         torch::autograd::variable_list grad_output
     ) {
         /** Backward Pass.
-         * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
-         *
+         * INPUTS:
          * @param ctx: context object
          * @param grad_output: outer gradients
          * @return gradient with respect to inputs
+         *
+         * Analytically, the VJPs are
+         * ξᵀ(∂σ/∂A) = ξ⋅uvᵀ
+         * Φᵀ(∂u/∂A) = (𝕀ₘ-uuᵀ)Φ'vᵀ
+         * Ψᵀ(∂v/∂A) = uΨ'(𝕀ₙ-vvᵀ)
+         *
+         * Here, Φ' and Ψ' are given as the solutions to the linar system
+         * [σ𝕀ₘ, -Aᵀ]  [Φ'] = [Φ]
+         * [-Aᵀ, σ𝕀ₙ]  [Ψ'] = [Ψ]
+         *
+         * We can use the formula for the 2x2 block inverse to see that we can solve 4 smaller systems instead.
+         *  [𝕀ₘ - BBᵀ]x = Φ  [𝕀ₙ - BᵀB]y = BΨ
+         *  [𝕀ₙ - BᵀB]w = BᵀΦ  [𝕀ₘ - BBᵀ]z = Ψ
+         *
          */
         auto saved = ctx->get_saved_variables();
-        auto u = saved[0];
-        auto v = saved[1];
-        auto outer_grad = grad_output[0];
-        auto g_sigma = outer_grad * at::outer(u, v);
-        torch::autograd::variable_list output = {g_sigma};
+        auto A = saved[0];
+        auto sigma = saved[1];
+        auto u = saved[2];
+        auto v = saved[3];
+        auto xi = grad_output[0];
+        auto phi = grad_output[1];
+        auto psi = grad_output[2];
+
+        const int m = A.size(0);
+        const int n = A.size(1);
+        A /= sigma;
+
+        // Compute the 2x2 block inverses
+        Tensor P = torch::eye(m) - A.mm(A.t());
+        Tensor Q = torch::eye(n) - A.t().mm(A);
+
+        Tensor x = solve(P, phi, true);
+        Tensor y = solve(P, A.dot(psi), true);
+        Tensor w = solve(Q, A.t().dot(phi), true);
+        Tensor z = solve(Q, psi, true);
+
+        phi = (x+y)/sigma;
+        psi = (w+z)/sigma;
+        Tensor g_sigma = xi * outer(u, v);
+        Tensor g_u = outer(phi - dot(u, phi)*u, v);
+        Tensor g_v = outer(u, psi - dot(v, psi)*v);
+        torch::autograd::variable_list output = {g_sigma, g_u, g_v};
         return output;
     }
 };
 
-Tensor spectral_norm(
+std::vector<Tensor> singular_triplet(
         Tensor A,
         optional<Tensor> u0,
         optional<Tensor> v0,
@@ -147,12 +185,12 @@ Tensor spectral_norm(
     /**
      * Wrap the struct into function.
      */
-    return SpectralNorm::apply(A, u0, v0, maxiter, atol, rtol);
+    return SingularTriplet::apply(A, u0, v0, maxiter, atol, rtol);
 }
 
 TORCH_LIBRARY_FRAGMENT(custom, m) {
     m.def(
-        "spectral_norm(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> Tensor",
-        spectral_norm
+        "singular_triplet(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> tuple[Tensor, Tensor, Tensor]",
+        singular_triplet
     );
 }
