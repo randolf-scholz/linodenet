@@ -9,7 +9,7 @@ execute_process (
         COMMAND bash -c "git rev-parse --show-toplevel | xargs echo -n"
         OUTPUT_VARIABLE PROJECT_ROOT
 )
-list(APPEND CMAKE_PREFIX_PATH "${PROJECT_ROOT}/kineto/libkineto/build/CMakeFiles/Export/12060e67814ad64b001bb7818b5234f4/")
+
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_ROOT}/libtorch/share/cmake/Torch")
 
 #message(STATUS "paths=${CMAKE_PREFIX_PATH}")
