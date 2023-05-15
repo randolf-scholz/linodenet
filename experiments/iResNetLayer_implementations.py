@@ -3,11 +3,14 @@
 from math import sqrt
 from typing import Final, Optional
 
+import numpy as np
 import torch
+from scipy.spatial import distance_matrix
 from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm
 from torch.nn import functional
-from torch.optim import SGD
+
+from linodenet.utils import timer
 
 
 class iResNetLayer(nn.Module):
@@ -208,8 +211,8 @@ class LinearContraction(nn.Module):
     @staticmethod
     def raise_flag(self, grad_output: list[Tensor]) -> None:
         # pass  # WTF! just pass will throw an error?!
-        print("here!")
-        # self.refresh_cache = torch.tensor(True)
+        # print("here!")
+        self.refresh_cache = torch.tensor(True)
 
     # with torch.no_grad():
     #      self.refresh_cache = torch.tensor(True)
@@ -251,23 +254,38 @@ class NaiveContraction(nn.Module):
         # return self.layer(x / sigma)
 
 
-def test_naive_contraction(model: nn.Module, x: Tensor, xi: Tensor) -> Tensor:
+def test_implementation(model: nn.Module, x: Tensor, xi: Tensor) -> Tensor:
     # test naive contraction
-    model.zero_grad(set_to_none=True)
-    r = torch.tensor(0.0)
-    for y in Y:
-        x = model.inverse(y)
-        r += (x * xi).sum()
-    r.backward()
+    with timer() as t:
+        model.zero_grad(set_to_none=True)
+        r = torch.tensor(0.0)
+        for y in Y:
+            x = model.inverse(y)
+            r += (x * xi).sum()
+        r.backward()
+    print(f"Finished in {t.elapsed:.3f} s")
     return model.layer.weight.grad.clone().detach().flatten()
 
 
 if __name__ == "__main__":
     # main program
-    T, N, m, n = 32, 128, 256, 128
+    T, N, m, n = 64, 128, 256, 128
     A0 = torch.randn(m, m)
     X = torch.randn(T, N, m)
     Y = torch.randn(T, N, m)
     xi = torch.randn(N, m)
 
-    pass
+    models = {
+        "naive": jit.script(iResNetLayer(NaiveContraction(m, m))),
+        "cached": jit.script(iResNetLayer(LinearContraction(m, m))),
+        "optimized": jit.script(OptimizediResNetLayer(m)),
+    }
+
+    grads = {}
+    for name, model in models.items():
+        print(f"Testing {name}")
+        model.layer.weight.data = A0.clone()
+        grads[name] = test_implementation(model, X, xi).numpy()
+
+    G = np.array(list(grads.values()))
+    print(distance_matrix(G, G))
