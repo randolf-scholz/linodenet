@@ -12,6 +12,7 @@ __all__ = [
     "initialize_from_config",
     "is_dunder",
     "pad",
+    "timer",
     # Classes
     "ReZeroCell",
     "ReverseDense",
@@ -30,6 +31,7 @@ from linodenet.utils._utils import (
     initialize_from_config,
     is_dunder,
     pad,
+    timer,
 )
 from linodenet.utils.generic_layers import Multiply, Parallel, Repeat, Series
 from linodenet.utils.layers import ReverseDense, ReZeroCell

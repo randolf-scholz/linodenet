@@ -12,25 +12,31 @@ __all__ = [
     "is_private",
     "pad",
     # Classes
+    "timer",
 ]
 
+import gc
 import logging
+import sys
 from collections.abc import Iterable, Mapping
+from contextlib import ContextDecorator
 from copy import deepcopy
 from functools import wraps
 from importlib import import_module
-from types import ModuleType
-from typing import Any, TypeVar
+from time import perf_counter_ns
+from types import ModuleType, TracebackType
+from typing import Any, ClassVar, Literal, TypeVar
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Self
 
 from linodenet.config import CONFIG
 
 __logger__ = logging.getLogger(__name__)
 
-ObjectType = TypeVar("ObjectType")
-r"""Generic type hint for instances."""
+R = TypeVar("R")
+r"""Type hint return value."""
 
 nnModuleType = TypeVar("nnModuleType", bound=nn.Module)
 r"""Type Variable for nn.Modules."""
@@ -57,9 +63,8 @@ def pad(
 def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
     r"""Update nested dictionary recursively in-place with new dictionary.
 
-    References
-    ----------
-    - https://stackoverflow.com/a/30655448/9318372
+    References:
+        - https://stackoverflow.com/a/30655448/9318372
     """
     if not inplace:
         d = deepcopy(d)
@@ -75,9 +80,8 @@ def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
 def deep_keyval_update(d: dict, **new_kv: Any) -> dict:
     r"""Update nested dictionary recursively in-place with key-value pairs.
 
-    References
-    ----------
-    - https://stackoverflow.com/a/30655448/9318372
+    References:
+        - https://stackoverflow.com/a/30655448/9318372
     """
     for key, value in d.items():
         if isinstance(value, Mapping) and value:
@@ -103,7 +107,6 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
     and
 
     .. code-block:: python
-
 
         class MyModule:
             ...
@@ -165,3 +168,40 @@ def is_dunder(s: str, /) -> bool:
 def is_private(s: str, /) -> bool:
     r"""Check if name is a private method."""
     return s.isidentifier() and s.startswith("_") and not s.endswith("__")
+
+
+class timer(ContextDecorator):
+    """Context manager for timing a block of code."""
+
+    LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__module__}/{__qualname__}")  # type: ignore[name-defined]
+
+    start_time: int
+    """Start time of the timer."""
+    end_time: int
+    """End time of the timer."""
+    elapsed: float
+    """Elapsed time of the timer in seconds."""
+
+    def __enter__(self) -> Self:
+        self.LOGGER.info("Flushing pending writes.")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        self.LOGGER.info("Disabling garbage collection.")
+        gc.collect()
+        gc.disable()
+        self.LOGGER.info("Starting timer.")
+        self.start_time = perf_counter_ns()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
+        self.end_time = perf_counter_ns()
+        self.elapsed = (self.end_time - self.start_time) / 10**9
+        self.LOGGER.info("Stopped timer.")
+        gc.enable()
+        self.LOGGER.info("Re-Enabled garbage collection.")
+        return False
