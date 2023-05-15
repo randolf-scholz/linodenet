@@ -10,11 +10,11 @@
 //from someLib import func  ⟶  using someLib::func;
 //from someLib import *     ⟶  using namespace someLib;
 
-using torch::Tensor;
 using c10::optional;
-using torch::linalg::solve;
+using torch::Tensor;
 using torch::outer;
 using torch::dot;
+using torch::linalg::solve;
 
 struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
     /** test
@@ -96,26 +96,26 @@ struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
             sigma = dot(u,u_old);
             Tensor left_residual = (u - sigma * u_old).norm();
             u /= u.norm();
-            assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
+            // assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
 
             v = A.t().mv(u);
             sigma = dot(v, v_old);
             Tensor right_residual = (v - sigma * v_old).norm();
             v /= v.norm();
-            assert(sigma.item().toDouble() > 0);
+            // assert(sigma.item().toDouble() > 0);
 
             Tensor tol = atol + rtol * sigma;
-            converged = (left_residual < tol).item().toBool() && (right_residual < tol).item().toBool();
+            converged = (left_residual < tol).item<bool>() && (right_residual < tol).item<bool>();
             if (converged) {break;}
         }
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
             TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.");
         }
+        assert(sigma.item<double>() > 0);
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
         ctx->save_for_backward({A, sigma, u, v});
-        auto result = {sigma, u, v};
-        return result;
+        return {sigma, u, v};
     }
 
     static torch::autograd::variable_list backward(
@@ -133,14 +133,13 @@ struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
          * Φᵀ(∂u/∂A) = (𝕀ₘ-uuᵀ)Φ'vᵀ
          * Ψᵀ(∂v/∂A) = uΨ'(𝕀ₙ-vvᵀ)
          *
-         * Here, Φ' and Ψ' are given as the solutions to the linar system
+         * Here, Φ' and Ψ' are given as the solutions to the linear system
          * [σ𝕀ₘ, -Aᵀ]  [Φ'] = [Φ]
          * [-Aᵀ, σ𝕀ₙ]  [Ψ'] = [Ψ]
          *
          * We can use the formula for the 2x2 block inverse to see that we can solve 4 smaller systems instead.
          *  [𝕀ₘ - BBᵀ]x = Φ  [𝕀ₙ - BᵀB]y = BΨ
          *  [𝕀ₙ - BᵀB]w = BᵀΦ  [𝕀ₘ - BBᵀ]z = Ψ
-         *
          */
         auto saved = ctx->get_saved_variables();
         auto A = saved[0];
@@ -151,25 +150,52 @@ struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
         auto phi = grad_output[1];
         auto psi = grad_output[2];
 
+        auto options = A.options();
+
         const int m = A.size(0);
         const int n = A.size(1);
-        A /= sigma;
+
+        Tensor g_sigma = xi * outer(u, v);
+
+
+
+        auto b = (phi != 0).any().item<bool>();
+
+//        if (phi != 0).any().item().toBool() {
+//            Tensor B = A / sigma;
+//            Tensor P = torch::eye(m, options) - B.mm(B.t());
+//            Tensor Q = torch::eye(n, options) - B.t().mm(B);
+//            Tensor x = solve(P, phi, true);
+//            Tensor y = solve(Q, B.t().mv(phi), true);
+//            phi = (x+y)/sigma;
+//        };
+
+
+//        A /= sigma;  // Normalize A, we actually modify the weight here!
+        Tensor B = A / sigma;
 
         // Compute the 2x2 block inverses
-        Tensor P = torch::eye(m) - A.mm(A.t());
-        Tensor Q = torch::eye(n) - A.t().mm(A);
+        Tensor P = torch::eye(m, options) - B.mm(B.t());
+        Tensor Q = torch::eye(n, options) - B.t().mm(B);
 
         Tensor x = solve(P, phi, true);
-        Tensor y = solve(P, A.dot(psi), true);
-        Tensor w = solve(Q, A.t().dot(phi), true);
+        Tensor y = solve(P, B.mv(psi), true);
+        Tensor w = solve(Q, B.t().mv(phi), true);
         Tensor z = solve(Q, psi, true);
 
         phi = (x+y)/sigma;
         psi = (w+z)/sigma;
-        Tensor g_sigma = xi * outer(u, v);
         Tensor g_u = outer(phi - dot(u, phi)*u, v);
         Tensor g_v = outer(u, psi - dot(v, psi)*v);
-        torch::autograd::variable_list output = {g_sigma, g_u, g_v};
+
+        torch::autograd::variable_list output = {
+                g_sigma,
+                Tensor(),
+                Tensor(),
+                Tensor(),
+                Tensor(),
+                Tensor(),
+        };
         return output;
     }
 };
@@ -190,7 +216,8 @@ std::vector<Tensor> singular_triplet(
 
 TORCH_LIBRARY_FRAGMENT(custom, m) {
     m.def(
-        "singular_triplet(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> tuple[Tensor, Tensor, Tensor]",
+        "singular_triplet(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> Tensor[]",
         singular_triplet
     );
 }
+//(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> *Tensor

@@ -10,9 +10,11 @@
 //from someLib import func  ⟶  using someLib::func;
 //from someLib import *     ⟶  using namespace someLib;
 
-using torch::linalg::vector_norm;
-using torch::Tensor;
 using c10::optional;
+using torch::Tensor;
+using torch::outer;
+using torch::dot;
+using torch::linalg::solve;
 
 struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
     /** test
@@ -91,25 +93,26 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
             Tensor v_old = v;
 
             u = A.mv(v);
-            sigma = u.dot(u_old);
+            sigma = dot(u, u_old);
             Tensor left_residual = (u - sigma * u_old).norm();
             u /= u.norm();
-            assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
+            // assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
 
             v = A.t().mv(u);
-            sigma = v.dot(v_old);
+            sigma = dot(v, v_old);
             Tensor right_residual = (v - sigma * v_old).norm();
             v /= v.norm();
-            assert(sigma.item().toDouble() > 0);
+            // assert(sigma.item().toDouble() > 0);
 
             Tensor tol = atol + rtol * sigma;
-            converged = (left_residual < tol).item().toBool() && (right_residual < tol).item().toBool();
+            converged = (left_residual < tol).item<bool>() && (right_residual < tol).item<bool>();
             if (converged) {break;}
         }
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
             TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.");
         }
+        assert(sigma.item<double>() > 0);
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
         ctx->save_for_backward({u, v});
         return sigma;
@@ -130,8 +133,15 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         auto u = saved[0];
         auto v = saved[1];
         auto outer_grad = grad_output[0];
-        auto g_sigma = outer_grad * at::outer(u, v);
-        torch::autograd::variable_list output = {g_sigma};
+        auto g_sigma = outer_grad * outer(u, v);
+        torch::autograd::variable_list output = {
+            g_sigma,
+            Tensor(),
+            Tensor(),
+            Tensor(),
+            Tensor(),
+            Tensor(),
+        };
         return output;
     }
 };
