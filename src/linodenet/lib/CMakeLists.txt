@@ -1,22 +1,26 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
-project(spectral_norm)
+project(liblinodenet)
+
+
 set(ENV{USE_CUDNN} "1")
 set(USE_CUDNN "1")
 
 message(STATUS "USE_CUDNN=${USE_CUDNN}")
 
 execute_process (
-        COMMAND bash -c "git rev-parse --show-toplevel | xargs echo -n"
-        OUTPUT_VARIABLE PROJECT_ROOT
+    COMMAND bash -c "git rev-parse --show-toplevel | xargs echo -n"
+    OUTPUT_VARIABLE PROJECT_ROOT
 )
+message(STATUS "PROJECT_ROOT=${PROJECT_ROOT}")
 
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_ROOT}/libtorch/share/cmake/Torch")
 
 #message(STATUS "paths=${CMAKE_PREFIX_PATH}")
-find_package(Torch REQUIRED)
+find_package(Torch REQUIRED PATHS "${PROJECT_ROOT}/libtorch/share/cmake/Torch")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-# find_package(OpenCV REQUIRED)
+
+#set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=*")
 
 # Define our library target
 add_library(linodenet SHARED spectral_norm.cpp singular_triplet.cpp)
