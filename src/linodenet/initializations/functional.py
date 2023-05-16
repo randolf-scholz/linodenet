@@ -5,10 +5,11 @@ All initializations are normalized such that if $x∼𝓝(0,1)$, then $Ax∼𝓝
 Notes
 -----
 Contains initializations in functional form.
-  - See `~linodenet.initializations.modular` for modular implementations.
 """
 
 __all__ = [
+    # Protocol
+    "Initialization",
     # Functions
     "canonical_skew_symmetric",
     "diagonally_dominant",
@@ -22,7 +23,7 @@ __all__ = [
 
 from collections.abc import Sequence
 from math import prod, sqrt
-from typing import Optional, TypeAlias
+from typing import Optional, Protocol, TypeAlias, runtime_checkable
 
 import torch
 from scipy import stats
@@ -30,6 +31,16 @@ from torch import Tensor
 
 SizeLike: TypeAlias = int | tuple[int, ...]
 r"""Type hint for shape-like inputs."""
+
+
+@runtime_checkable
+class Initialization(Protocol):
+    r"""Protocol for Initializations."""
+    __name__: str
+    r"""Name of the initialization."""
+
+    def __call__(self, n: SizeLike, /) -> Tensor:
+        """Create a random matrix of shape `n`."""
 
 
 def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
@@ -140,7 +151,7 @@ def canonical_skew_symmetric(n: SizeLike) -> Tensor:
     return torch.einsum("..., de -> ...de", ONES, J)
 
 
-def low_rank(size: SizeLike, rank: Optional[int] = None) -> Tensor:
+def low_rank(size: SizeLike, *, rank: Optional[int] = None) -> Tensor:
     r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$."""
     if isinstance(size, int):
         shape: tuple[int, ...] = (size, size)

@@ -21,6 +21,5 @@ Our implementation addresses these issues:
 
 References
 ----------
-[1] https://pytorch.org/docs/stable/_modules/torch/nn/utils/spectral_norm.html#spectral_norm
+.. [1] https://pytorch.org/docs/stable/_modules/torch/nn/utils/spectral_norm.html#spectral_norm
 """
-# TODO: Add reasons

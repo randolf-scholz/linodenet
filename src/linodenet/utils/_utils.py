@@ -245,7 +245,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor]) -> No
             f = getattr(obj, f"recompute_{key}")
             f()
 
-    self.recompute_all = MethodType(recompute_all, self)
+    self.recompute_all = MethodType(recompute_all, self)  # type: ignore[assignment]
 
 
 class reset_caches(ContextDecorator):
@@ -270,7 +270,7 @@ class reset_caches(ContextDecorator):
                 num_caches += 1
         self.LOGGER.info("Found %d caches.", num_caches)
         if num_caches == 0:
-            warnings.warn("No caches found.")
+            warnings.warn("No caches found.", RuntimeWarning, stacklevel=2)
 
     def recompute_all(self) -> None:
         """Recompute all cached tensors."""
