@@ -25,7 +25,7 @@ __all__ = [
 from abc import abstractmethod
 from collections.abc import Iterable
 from math import sqrt
-from typing import Any, Final, Optional, Protocol
+from typing import Any, Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -39,6 +39,7 @@ from linodenet.utils import (
 )
 
 
+@runtime_checkable
 class Cell(Protocol):
     """Protocol for all cells."""
 

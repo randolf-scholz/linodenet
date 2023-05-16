@@ -13,7 +13,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import FunctionalInitialization
+from linodenet.initializations import Initialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
 from linodenet.models.filters import Filter, RecurrentCellFilter
@@ -53,7 +53,7 @@ class LinODE(nn.Module):
     r"""PARAM: The system matrix of the linear ODE component."""
 
     # Functions
-    kernel_initialization: FunctionalInitialization
+    kernel_initialization: Initialization
     r"""FUNC: Parameter-less function that draws a initial system matrix."""
     kernel_projection: Projection
     r"""FUNC: Regularization function for the kernel."""
