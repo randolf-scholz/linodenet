@@ -1,4 +1,15 @@
 #!/usr/bin/env python
+"""Test how best to implement the iResNet layer.
+
+TAKEAWAYS:
+- We can save HUGE amounts of time by caching the normalized weight matrix.
+- JIT does not support backward hooks properly.
+- Idea: create a "register_parametrization(name: str, func: Callable[[], Tensor])"
+    - creates a buffer that stores the result of func().
+    - creates a "recompute_{name}" that updates the buffer.
+    - creates a "recompute_all" that recomputes all buffers in order.
+    - creates a "cached_tensors" that returns a dictionary of all buffers.
+"""
 
 from math import sqrt
 from typing import Final, Optional
@@ -11,6 +22,132 @@ from torch.linalg import matrix_norm
 from torch.nn import functional
 
 from linodenet.utils import timer
+
+
+class NaiveContraction(nn.Module):
+    # Parameters
+    weight: Tensor
+    r"""PARAM: The weight matrix."""
+    bias: Optional[Tensor]
+    r"""PARAM: The bias term."""
+
+    def __init__(
+        self, input_size: int, output_size: int, *, c: float = 1.0, bias: bool = False
+    ):
+        super().__init__()
+        self.layer = nn.Linear(input_size, output_size, bias=bias)
+        self.weight = self.layer.weight
+        self.bias = self.layer.bias
+
+    def forward(self, x):
+        sigma = matrix_norm(self.weight, ord=2)
+        return functional.linear(x, self.weight / sigma, self.bias)
+        # return self.layer(x / sigma)
+
+
+class LinearContraction(nn.Module):
+    # Constants
+    input_size: Final[int]
+    output_size: Final[int]
+    c: Final[float]
+    r"""CONST: The maximal Lipschitz constant."""
+    one: Tensor
+    r"""CONST: A tensor with value 1.0"""
+
+    # Buffers
+    cached_sigma: Tensor
+    r"""BUFFER: Cached value of $‖W‖_2$"""
+    cached_weight: Tensor
+    r"""BUFFER: Cached value of $W$/‖W‖₂."""
+    refresh_cache: Tensor
+    r"""BUFFER: A boolean tensor indicating whether to recompute $‖W‖_2$"""
+    u: Tensor
+    r"""BUFFER: Cached left singular vector of $W$."""
+    v: Tensor
+    r"""BUFFER: Cached right singular vector of $W$."""
+
+    # Parameters
+    weight: Tensor
+    r"""PARAM: The weight matrix."""
+    bias: Optional[Tensor]
+    r"""PARAM: The bias term."""
+
+    def __init__(
+        self, input_size: int, output_size: int, *, c: float = 1.0, bias: bool = False
+    ):
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.weight = nn.Parameter(Tensor(output_size, input_size))
+        self.c = c
+
+        if bias:
+            self.bias = nn.Parameter(Tensor(output_size))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+        self.register_buffer("one", torch.tensor(1.0), persistent=True)
+        # self.register_buffer("c", torch.tensor(float(c)), persistent=True)
+        self.register_buffer(
+            "spectral_norm", matrix_norm(self.weight, ord=2), persistent=False
+        )
+        self.register_buffer("cached_sigma", torch.tensor(1.0))
+        self.register_buffer("cached_weight", self.weight.clone())
+        self.register_buffer("refresh_cache", torch.tensor(True))
+
+        self.register_forward_pre_hook(self.__renormalize_weight)
+        self.register_full_backward_pre_hook(self.raise_flag)  # NEVER WORKS WHEN JITTED
+
+    def reset_parameters(self) -> None:
+        r"""Reset both weight matrix and bias vector."""
+        nn.init.kaiming_uniform_(self.weight, a=sqrt(5))
+        if self.bias is not None:
+            bound = 1 / sqrt(self.input_size)
+            nn.init.uniform_(self.bias, -bound, bound)
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
+        return functional.linear(x, self.cached_weight, self.bias)
+
+    @jit.export
+    def renormalize_weight(self, inputs: tuple[Tensor] = (torch.tensor([]),)) -> None:
+        """Renormalizes weight so that ‖W‖₂ ≤ 1-δ."""
+        if self.refresh_cache:
+            self.refresh_cache = torch.tensor(False)
+            self.cached_sigma = matrix_norm(self.weight, ord=2)
+            gamma = 1 / self.cached_sigma
+            self.cached_weight = gamma * self.weight
+            # self.weight[:] = gamma * self.weight
+
+    @staticmethod
+    def __renormalize_weight(self, inputs: tuple[Tensor]) -> None:
+        return self.renormalize_weight()
+
+    @staticmethod
+    def raise_flag(self, grad_output: list[Tensor]) -> None:
+        # pass  # WTF! just pass will throw an error?!
+        # print("here!")
+        self.refresh_cache = torch.tensor(True)
+
+    # with torch.no_grad():
+    #      self.refresh_cache = torch.tensor(True)
+
+    #     @staticmethod
+    #     def __raise_refresh_cache_flag(self, grad_output: list[Tensor] = ()) -> None:
+    #         self.raise_refresh_cache_flag()
+
+    #     # @jit.export
+    #     def raise_refresh_cache_flag(self) -> None:
+    #         # print(grad_output)
+    #         # self.refresh_cache = torch.tensor(True)
+    #         # self.cached_weight = torch.tensor([])
+    #         # self.cached_sigma = torch.tensor([])
+    #         pass
+
+    # fac = 1.0 / (self.c + self.sigma_cached)
+    # return functional.linear(x, fac * self.weight, self.bias)
 
 
 class iResNetLayer(nn.Module):
@@ -128,134 +265,13 @@ class OptimizediResNetLayer(nn.Module):
         return x
 
 
-class LinearContraction(nn.Module):
-    # Constants
-    input_size: Final[int]
-    output_size: Final[int]
-    c: Final[float]
-    r"""CONST: The maximal Lipschitz constant."""
-    one: Tensor
-    r"""CONST: A tensor with value 1.0"""
+def test_implementation(
+    model: nn.Module, Y: Tensor, xi: Tensor, script: bool
+) -> Tensor:
+    if script:
+        print("Compiling model")
+        model = torch.jit.script(model)
 
-    # Buffers
-    cached_sigma: Tensor
-    r"""BUFFER: Cached value of $‖W‖_2$"""
-    cached_weight: Tensor
-    r"""BUFFER: Cached value of $W$/‖W‖₂."""
-    refresh_cache: Tensor
-    r"""BUFFER: A boolean tensor indicating whether to recompute $‖W‖_2$"""
-    u: Tensor
-    r"""BUFFER: Cached left singular vector of $W$."""
-    v: Tensor
-    r"""BUFFER: Cached right singular vector of $W$."""
-
-    # Parameters
-    weight: Tensor
-    r"""PARAM: The weight matrix."""
-    bias: Optional[Tensor]
-    r"""PARAM: The bias term."""
-
-    def __init__(
-        self, input_size: int, output_size: int, *, c: float = 1.0, bias: bool = False
-    ):
-        super().__init__()
-        self.input_size = input_size
-        self.output_size = output_size
-        self.weight = nn.Parameter(Tensor(output_size, input_size))
-        self.c = c
-
-        if bias:
-            self.bias = nn.Parameter(Tensor(output_size))
-        else:
-            self.register_parameter("bias", None)
-        self.reset_parameters()
-
-        self.register_buffer("one", torch.tensor(1.0), persistent=True)
-        # self.register_buffer("c", torch.tensor(float(c)), persistent=True)
-        self.register_buffer(
-            "spectral_norm", matrix_norm(self.weight, ord=2), persistent=False
-        )
-        self.register_buffer("cached_sigma", torch.tensor(1.0))
-        self.register_buffer("cached_weight", self.weight.clone())
-        self.register_buffer("refresh_cache", torch.tensor(True))
-
-        self.register_forward_pre_hook(self.__renormalize_weight)
-        self.register_full_backward_pre_hook(self.raise_flag)
-
-    def reset_parameters(self) -> None:
-        r"""Reset both weight matrix and bias vector."""
-        nn.init.kaiming_uniform_(self.weight, a=sqrt(5))
-        if self.bias is not None:
-            bound = 1 / sqrt(self.input_size)
-            nn.init.uniform_(self.bias, -bound, bound)
-
-    # @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
-        return functional.linear(x, self.cached_weight, self.bias)
-
-    # @jit.export
-    def renormalize_weight(self, inputs: tuple[Tensor] = (torch.tensor([]),)) -> None:
-        """Renormalizes weight so that ‖W‖₂ ≤ 1-δ."""
-        if self.refresh_cache:
-            self.refresh_cache = torch.tensor(False)
-            self.cached_sigma = matrix_norm(self.weight, ord=2)
-            gamma = 1 / self.cached_sigma
-            self.cached_weight = gamma * self.weight
-            # self.weight[:] = gamma * self.weight
-
-    @staticmethod
-    def __renormalize_weight(self, inputs: tuple[Tensor]) -> None:
-        return self.renormalize_weight()
-
-    @staticmethod
-    def raise_flag(self, grad_output: list[Tensor]) -> None:
-        # pass  # WTF! just pass will throw an error?!
-        # print("here!")
-        self.refresh_cache = torch.tensor(True)
-
-    # with torch.no_grad():
-    #      self.refresh_cache = torch.tensor(True)
-
-    #     @staticmethod
-    #     def __raise_refresh_cache_flag(self, grad_output: list[Tensor] = ()) -> None:
-    #         self.raise_refresh_cache_flag()
-
-    #     # @jit.export
-    #     def raise_refresh_cache_flag(self) -> None:
-    #         # print(grad_output)
-    #         # self.refresh_cache = torch.tensor(True)
-    #         # self.cached_weight = torch.tensor([])
-    #         # self.cached_sigma = torch.tensor([])
-    #         pass
-
-    # fac = 1.0 / (self.c + self.sigma_cached)
-    # return functional.linear(x, fac * self.weight, self.bias)
-
-
-class NaiveContraction(nn.Module):
-    # Parameters
-    weight: Tensor
-    r"""PARAM: The weight matrix."""
-    bias: Optional[Tensor]
-    r"""PARAM: The bias term."""
-
-    def __init__(
-        self, input_size: int, output_size: int, *, c: float = 1.0, bias: bool = False
-    ):
-        super().__init__()
-        self.layer = nn.Linear(input_size, output_size, bias=bias)
-        self.weight = self.layer.weight
-        self.bias = self.layer.bias
-
-    def forward(self, x):
-        sigma = matrix_norm(self.weight, ord=2)
-        return functional.linear(x, self.weight / sigma, self.bias)
-        # return self.layer(x / sigma)
-
-
-def test_implementation(model: nn.Module, x: Tensor, xi: Tensor) -> Tensor:
-    # test naive contraction
     with timer() as t:
         model.zero_grad(set_to_none=True)
         r = torch.tensor(0.0)
@@ -263,29 +279,63 @@ def test_implementation(model: nn.Module, x: Tensor, xi: Tensor) -> Tensor:
             x = model.inverse(y)
             r += (x * xi).sum()
         r.backward()
-    print(f"Finished in {t.elapsed:.3f} s")
-    return model.layer.weight.grad.clone().detach().flatten()
+    print(f"1st run: {t.elapsed:.3f} s")
+    grad = model.layer.weight.grad.clone().detach().flatten()
+
+    try:
+        with timer() as t:
+            model.zero_grad(set_to_none=True)
+            r = torch.tensor(0.0)
+            for y in Y:
+                x = model.inverse(y)
+                r += (x * xi).sum()
+            r.backward()
+        print(f"2nd run: {t.elapsed:.3f} s")
+    except RuntimeError:
+        print(f"2nd run failed!")
+    else:
+        assert torch.allclose(grad, model.layer.weight.grad.flatten())
+
+    return grad
 
 
-if __name__ == "__main__":
-    # main program
+def test_all() -> None:
     T, N, m, n = 64, 128, 256, 128
     A0 = torch.randn(m, m)
-    X = torch.randn(T, N, m)
     Y = torch.randn(T, N, m)
     xi = torch.randn(N, m)
 
     models = {
-        "naive": jit.script(iResNetLayer(NaiveContraction(m, m))),
-        "cached": jit.script(iResNetLayer(LinearContraction(m, m))),
-        "optimized": jit.script(OptimizediResNetLayer(m)),
+        "naive": iResNetLayer(NaiveContraction(m, m)),
+        "cached": iResNetLayer(LinearContraction(m, m)),
+        "optimized": OptimizediResNetLayer(m),
     }
 
     grads = {}
     for name, model in models.items():
-        print(f"Testing {name}")
+        print(f"Testing {name}", flush=True)
         model.layer.weight.data = A0.clone()
-        grads[name] = test_implementation(model, X, xi).numpy()
+        grads[name] = test_implementation(model, Y, xi, False).numpy()
 
+    print("Gradient discrepancies:")
     G = np.array(list(grads.values()))
     print(distance_matrix(G, G))
+
+    print("JITTED")
+    grads = {}
+    for name, model in models.items():
+        print(f"Testing {name}", flush=True)
+        model.layer.weight.data = A0.clone()
+        grads[name] = test_implementation(model, Y, xi, True).numpy()
+
+    print("Gradient discrepancies:")
+    G = np.array(list(grads.values()))
+    print(distance_matrix(G, G))
+
+
+def _main() -> None:
+    test_all()
+
+
+if __name__ == "__main__":
+    _main()

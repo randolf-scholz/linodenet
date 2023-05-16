@@ -56,6 +56,7 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     # Native Backward
     with timer() as time:
         s_native.backward()
+        assert A_native.grad is not None
         g_native = A_native.grad.clone().detach()
     time_grad_native = time.elapsed
 
@@ -68,6 +69,7 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     # Custom Backward
     with timer() as time:
         s_custom.backward()
+        assert A_custom.grad is not None
         g_custom = A_custom.grad.clone().detach()
     time_grad_custom = time.elapsed
 
@@ -106,6 +108,7 @@ def test_singular_triplet(device: str, shape: tuple[int, int]) -> None:
     with timer() as time:
         r_native = xi * s_native + phi.dot(u_native) + psi.dot(v_native)
         r_native.backward()
+        assert A_native.grad is not None
         g_native = A_native.grad.clone().detach()
     time_grad_native = time.elapsed
 
@@ -125,6 +128,7 @@ def test_singular_triplet(device: str, shape: tuple[int, int]) -> None:
         # NOTE: We flip signs if appropriate to match the native implementation
         r_custom = xi * s_custom + phi.dot(u_custom) + psi.dot(v_custom)
         r_custom.backward()
+        assert A_custom.grad is not None
         g_custom = A_custom.grad.clone().detach()
     time_grad_custom = time.elapsed
 
