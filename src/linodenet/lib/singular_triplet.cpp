@@ -92,6 +92,8 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         // Initialize u and v with random values if not given
         Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
         Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
+        u /= u.norm();
+        v /= v.norm();
         Tensor sigma = A.mv(v).dot(u);
 
         // Perform power-iteration for maxiter times or until convergence.
