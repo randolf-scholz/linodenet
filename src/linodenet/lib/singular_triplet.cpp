@@ -179,9 +179,9 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
 
         // augmented K matrix: (m+n+2) x (m+n)
         Tensor K = cat({
-                               cat({sigma * eye(m, A.options()), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),
-                               cat({-A.t(), sigma * eye(n, A.options()), zeros_like(v).unsqueeze(-1), v.unsqueeze(-1)},
-                                   1)}, 0);
+            cat({sigma * eye(m, A.options()), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),
+            cat({-A.t(), sigma * eye(n, A.options()), zeros_like(v).unsqueeze(-1), v.unsqueeze(-1)}, 1)
+        }, 0);
         Tensor c = torch::cat({phi, psi}, 0);
 
         // solve the underdetermined system

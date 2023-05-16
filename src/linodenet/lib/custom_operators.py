@@ -60,7 +60,7 @@ else:
     try:
         torch.utils.cpp_extension.load(
             name="singular_triplet",
-            sources=[lib_base_path / "singular_triplet.cpp"],
+            sources=[lib_base_path / "singular_triplet.cpp"],  # type: ignore[list-item]
             is_python_module=False,
             verbose=True,
         )
@@ -68,7 +68,7 @@ else:
 
         torch.utils.cpp_extension.load(
             name="spectral_norm",
-            sources=[lib_base_path / "spectral_norm.cpp"],
+            sources=[lib_base_path / "spectral_norm.cpp"],  # type: ignore[list-item]
             is_python_module=False,
             verbose=True,
         )
