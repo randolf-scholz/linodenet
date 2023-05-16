@@ -161,24 +161,100 @@ We can augment the original system with these:
 \\ -A^⊤ & σ𝕀ₙ & 𝟎ₙ & v
 }\bsmat{p\\q\\λ\\μ} = \bmat{ϕ\\ψ} \Bigm{\vert}\bsmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v \\ 0 \\ 0}\Bigr{⟩}%
 \end{align*}%
-\subsection{augmented part multiplied with inverse K}
+\subsection{Augmented block inversion}
+
+\textbf{NOTE: Tested this and the issue is that it vastly increases the condition number!}
+
+We use the technique \href{https://en.wikipedia.org/wiki/Block_matrix_pseudoinverse#Column-wise_partitioning_in_over-determined_least_squares}{\underline{Column-wise partitioning in over-determined least squares}}.
 %
 \begin{align*}%
-K^{-1}\bmat{u & 0 \\ 0 & v}
-&= \bmat{
-	σ(σ²𝕀ₘ - AA^⊤)^{-1} & (σ²𝕀ₘ - AA^⊤)^{-1}A
-\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ & σ(σ²𝕀ₙ - A^⊤A)^{-1}
-}\bmat{u & 0 \\ 0 & v}  %
-\\&= \bmat{
-	(σ²𝕀ₘ - AA^⊤)^{-1}σu & (σ²𝕀ₘ - AA^⊤)^{-1}Av
-\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤u & (σ²𝕀ₙ - A^⊤A)^{-1}σv
-}
-\\&= \bmat{
-	(σ²𝕀ₘ - AA^⊤)^{-1}σu & (σ²𝕀ₘ - AA^⊤)^{-1}Av
-\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤u & σ(σ²𝕀ₙ - A^⊤A)^{-1}v
-}
+\bmat{A & B} \bmat{x₁ \\ x₂} = d ⟸ x = \bmat{A & B}⁺d = \bmat{(P_B^⟂ A)⁺ \\ (P_A^⟂ B)⁺}d%
 \end{align*}%
 %
+In particular, in our case this means that the relevant part of the solution is
+%
+\begin{align*}%
+\bmat{p\\q} = (P_B^⟂K)⁺\bmat{ϕ\\ψ}%
+\end{align*}%
+%
+Here
+%
+\begin{align*}%
+P_B^⟂  &= 𝕀 - BB⁺
+\\&= 𝕀 - B(BᵀB)^{-1}B^⊤%
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}(\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤} \bmat{u & 0 \\ 0 & v})^{-1} \bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}(\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤} \bmat{u & 0 \\ 0 & v})^{-1} \bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}\bmat{1/‖u‖² & 0 \\ 0& 1/‖v‖²}\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}\bmat{1/‖u‖² & 0 \\ 0& 1/‖v‖²}\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= \bmat{𝕀ₘ - uu^⊤ & 𝟎_{m×n} \\ 𝟎_{n×m} & 𝕀ₙ - vv^⊤}
+\end{align*}%
+%
+So
+%
+\begin{align*}%
+P_B^⟂ K
+&= \bmat{𝕀ₘ - uu^⊤ & 𝟎_{m×n} \\ 𝟎_{n×m} & 𝕀ₙ - vv^⊤} \bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}%
+\\&= \bmat{σ(𝕀ₘ - uu^⊤) & -A + σuv^⊤ \\ -A^⊤ + σvu^⊤ & σ(𝕀ₙ - vv^⊤)}
+\\&= K - σ\bmat{uu^⊤ & -uv^⊤ \\ -vu^⊤ & \sigma vv^⊤ }
+\\&= K - σzz^⊤  \qquad z = \bsmat{u \\ -v}
+\end{align*}%
+%
+In particular, we see that effectively this is a low rank update of the original matrix!
+%
+We can use the inversion formula for 2×2 block matrices, combined with the inverse of rank-1 update formulas:
+%
+\begin{align*}%
+β ≔ 1 - σ z^⊤ K⁺ z = ? \text{[.. proof ...]} = 0
+\end{align*}%
+%
+Also $z∈\Im(K)$, so, in particular, the case (vi) of the paper \href{https://epubs.siam.org/doi/abs/10.1137/0124033}{Generalized Inversion of Modified Matrices} holds:
+
+%
+\begin{align*}%
+(A + cdᵀ)⁺ &= A⁺ - kk⁺A⁺ - A⁺h⁺h + (k⁺A⁺h⁺)kh  \qq{with} k = A⁺c， h = d^⊤A⁺
+\end{align*}
+%
+Assuming $A$ is symmetric, $c=d=x$ and noting that $v⁺ = \frac{1}{‖v‖²}v^⊤$ we can simplify since
+%
+\begin{align*}%
+k = h^⊤ &= A⁺x    &  k⁺ &= \frac{1}{‖A⁺x‖²}x^⊤A⁺
+\\ h = k^⊤ &= x^⊤A⁺  &  h⁺ &= \frac{1}{‖A⁺x‖²}A⁺x
+\end{align*}%
+%
+\begin{align*}%
+(A + xxᵀ)⁺ &= A⁺ - \frac{A⁺xx^⊤A⁺A⁺}{‖A⁺x‖²} - \frac{A⁺A⁺xx^⊤A⁺}{‖A⁺x‖²} + \frac{(x^⊤(A⁺)³x)A⁺xx^⊤A⁺}{‖A⁺x‖⁴}
+\end{align*}
+%
+With an additional scalar $γ$:
+%
+\begin{align*}%
+(A + γxxᵀ)⁺ &= A⁺ - \frac{A⁺xx^⊤A⁺A⁺}{‖A⁺x‖²} - \frac{A⁺A⁺xx^⊤A⁺}{‖A⁺x‖²} + \frac{(x^⊤(A⁺)³x)A⁺xx^⊤A⁺}{‖A⁺x‖⁴}
+\end{align*}
+%
+Now, in our case $x$ happens to be an eigenvector: $Kz = 2σz$, $K⁺z = \tfrac{1}{2σ}z$, $‖z‖² = 2$, hence $‖K⁺z‖² = \tfrac{1}{2σ²}$ and $K⁺zz^⊤K⁺ = \tfrac{1}{4σ²}zz^⊤$.
+%
+\begin{align*}%
+(K - σzzᵀ)⁺ &= K⁺ - \tfrac{1/(2σ)³}{1/2σ²}zz^⊤  - \tfrac{1/(2σ)³}{1/2σ²}zz^⊤ +
+\tfrac{2/(2σ)³}{1/2σ²}\tfrac{1/(2σ)²}{1/2σ²}zz^⊤%
+\\&= K⁺ - \tfrac{1}{4σ}zz^⊤ - \tfrac{1}{4σ}zz^⊤ + \tfrac{1}{4σ}zz^⊤
+\\&= K⁺ - \tfrac{1}{4σ}zz^⊤
+\end{align*}%
+%
+
+
+%
+\begin{align*}%
+⟹(A + xxᵀ)⁺ &=
+%\\&= A⁺ - A⁺xx^⊤(A⁺)^⊤A⁺ - A⁺(A⁺)^⊤ xx^⊤A⁺ + (x^⊤(A⁺)^⊤A⁺(A⁺)^⊤ x)A⁺xx^⊤A⁺
+%\\(K - σzz^⊤)⁺ &= K⁺ + σK⁺ zzᵀKK⁺ + σK⁺KzzᵀK⁺ + σ²(zᵀKK⁺Kz)K⁺zzᵀK⁺
+%\\&=K⁺ + σK⁺(zzᵀK + Kzzᵀ + σzzᵀKzzᵀ)K⁺
+%\\&=K⁺ + 4σ(σ+σ²)K⁺zzᵀK⁺   \qq{using} Kz = 2σ \qq{and} ‖z‖² = 2
+\end{align*}%
+%
+Note that $v⁺ = \frac{1}{‖v‖²}v^⊤$.
+
+
+
 
 
 
