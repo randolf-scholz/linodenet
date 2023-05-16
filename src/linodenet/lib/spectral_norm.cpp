@@ -79,13 +79,13 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         // Initialize maxiter depending on the size of the matrix.
         const int m = A.size(0);
         const int n = A.size(1);
-        int64_t MAXITER = maxiter.has_value() ? maxiter.value() : m + n;
+        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 4*(m + n);
+        bool converged = false;
 
         // Initialize u and v with random values if not given
         Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
         Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
         Tensor sigma = A.mv(v).dot(u);
-        bool converged = false;
 
         // Perform power-iteration for maxiter times or until convergence.
         for (const auto i : c10::irange(MAXITER)) {
@@ -106,7 +106,9 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
 
             Tensor tol = atol + rtol * sigma;
             converged = (left_residual < tol).item<bool>() && (right_residual < tol).item<bool>();
-            if (converged) {break;}
+            if (converged) {
+                break;
+            }
         }
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
@@ -134,25 +136,17 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         auto v = saved[1];
         auto outer_grad = grad_output[0];
         auto g_sigma = outer_grad * outer(u, v);
-        torch::autograd::variable_list output = {
-            g_sigma,
-            Tensor(),
-            Tensor(),
-            Tensor(),
-            Tensor(),
-            Tensor(),
-        };
-        return output;
+        return { g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
     }
 };
 
 Tensor spectral_norm(
-        Tensor A,
-        optional<Tensor> u0,
-        optional<Tensor> v0,
-        optional<int64_t> maxiter,
-        double atol = 1e-8,
-        double rtol = 1e-5
+    Tensor A,
+    optional<Tensor> u0,
+    optional<Tensor> v0,
+    optional<int64_t> maxiter,
+    double atol = 1e-8,
+    double rtol = 1e-5
 ) {
     /**
      * Wrap the struct into function.

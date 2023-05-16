@@ -93,7 +93,7 @@ v' &= v - \tfrac{1}{σ²}(σ²v - σA^⊤u)&&= \tfrac{1}{σ}A^⊤u
 At the equilibrium point, we have:
 %
 \begin{align*}%
-	σ &= u^⊤ A v &  Av &= σu & A^⊤u &= σv%
+σ &= u^⊤ A v &  Av &= σu & A^⊤u &= σv & u^⊤ u &= 1  & v^⊤v &=1%
 \end{align*}%
 %
 Note that this states that $σ$ is an eigenvalue:
@@ -124,6 +124,64 @@ Where in the last step we used $∆u⟂u$ and $∆v⟂v$, which follows from the
 \end{align*}%
 %
 which allows us to express $∆u$ and $∆v$ in terms of $∆A$.
+The constraints yield
+%
+\begin{align*}%
+  u^⊤ ∆u + {∆u}^⊤u &= 0  ⟺ u⟂∆u  %
+\\v^⊤ ∆v + {∆v}^⊤v &= 0  ⟺ v⟂∆v  %
+\end{align*}%
+%
+We can augment the original system with these:
+%
+\begin{align*}%
+\underbrace{\bmat[c]{
+	σ𝕀ₘ & -A
+\\ -A^⊤ & σ𝕀ₙ
+\\ u^⊤ & 𝟎ₙ^⊤
+\\ 𝟎ₘ^⊤ & v^⊤
+}}_{≕\Tilde{K}}⋅\bmat{∆u\\∆v}
+= \underbrace{\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v \\ 0 \\ 0}}_{≕\Tilde{c}}%
+\end{align*}%
+%
+
+
+\section{VJP with modified K matrix}
+\begin{align*}%
+\Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert}\bmat{∆u\\∆v}\Bigr{⟩}
+&= \Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert} \Tilde{K}^{-1}\Tilde{c}\Bigr{⟩}
+\\&= \Bigl{⟨}\Tilde{K}^{-⊤}\bmat{ϕ\\ψ}\Bigm{\vert}\Tilde{c}\Bigr{⟩}%
+\\&= \Bigl{⟨}
+\bmat[c]{
+	σ𝕀ₘ & -A & u & 𝟎ₘ
+\\ -A^⊤ & σ𝕀ₙ & 𝟎ₙ & v
+}^{-1}\bmat{ϕ\\ψ}
+\Bigm{\vert}\bsmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v \\ 0 \\ 0}\Bigr{⟩}%
+\\&= \Bigl{⟨}\bmat[c]{
+	σ𝕀ₘ & -A & u & 𝟎ₘ
+\\ -A^⊤ & σ𝕀ₙ & 𝟎ₙ & v
+}\bsmat{p\\q\\λ\\μ} = \bmat{ϕ\\ψ} \Bigm{\vert}\bsmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v \\ 0 \\ 0}\Bigr{⟩}%
+\end{align*}%
+\subsection{augmented part multiplied with inverse K}
+%
+\begin{align*}%
+K^{-1}\bmat{u & 0 \\ 0 & v}
+&= \bmat{
+	σ(σ²𝕀ₘ - AA^⊤)^{-1} & (σ²𝕀ₘ - AA^⊤)^{-1}A
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ & σ(σ²𝕀ₙ - A^⊤A)^{-1}
+}\bmat{u & 0 \\ 0 & v}  %
+\\&= \bmat{
+	(σ²𝕀ₘ - AA^⊤)^{-1}σu & (σ²𝕀ₘ - AA^⊤)^{-1}Av
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤u & (σ²𝕀ₙ - A^⊤A)^{-1}σv
+}
+\\&= \bmat{
+	(σ²𝕀ₘ - AA^⊤)^{-1}σu & (σ²𝕀ₘ - AA^⊤)^{-1}Av
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤u & σ(σ²𝕀ₙ - A^⊤A)^{-1}v
+}
+\end{align*}%
+%
+
+
+
 %
 \section{The VJP}
 The last equation allows us to compute the VJP at ease:
@@ -156,21 +214,14 @@ And for the second term we get
 Using the formula for inverting a 2×2 block-matrix, we can give an explicit solution to $K^{-⊤}\bsmat{ϕ\\ψ}$:
 %
 \begin{align*}%
-K^{-⊤} = \bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}^{-1}
+K^{-1} = \bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}^{-1}
 &= \bmat{
 	(σ𝕀ₘ - \frac{1}{σ}AA^⊤)^{-1} & 𝟎_{m×n} \\ 𝟎_{n×m} & (σ𝕀ₙ - \frac{1}{σ}A^⊤A)^{-1}}
 	⋅\bmat{𝕀ₘ & \frac{1}{σ}A \\ \frac{1}{σ}A^⊤ & 𝕀ₙ}%
 \\&= \bmat{
-	\tfrac{1}{σ}(𝕀ₘ - \frac{1}{σ²}AA^⊤)^{-1} & \tfrac{1}{σ²}(𝕀ₘ - \frac{1}{σ²}AA^⊤)^{-1}A
-\\  \frac{1}{σ²}(𝕀ₙ - \frac{1}{σ²}A^⊤A)^{-1}A^⊤ & \tfrac{1}{σ}(𝕀ₙ - \frac{1}{σ²}A^⊤A)^{-1}
+	σ(σ²𝕀ₘ - AA^⊤)^{-1} & (σ²𝕀ₘ - AA^⊤)^{-1}A
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ & σ(σ²𝕀ₙ - A^⊤A)^{-1}
 }
-\\&= \frac{1}{σ}\bmat{
-	(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A}
-\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}\tilde{A}^⊤ & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
-}
-\\&= \frac{1}{σ}\bmat{
-	(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A}
-\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}\tilde{A}^⊤ & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1} }
 \end{align*}%
 %
 And we see it's basically projection operators with respect to the image/kernel of $\tilde{A} = \frac{1}{σ}A$.
@@ -179,12 +230,14 @@ In summary, we obtain the following formula for the VJP:
 
 %
 \begin{align*}%
-K \bmat{\tilde{ϕ}\\ \tilde{ψ}} = \bmat{ϕ\\ψ}
+K \bmat{p \\ q} = \bmat{ϕ\\ψ}
 &⟺
-\frac{1}{σ}\bmat{
-	(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A}
-\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}\tilde{A}^⊤ & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
-} \bmat{ϕ\\ψ}%
+\bmat{p \\ q} =
+\bmat{
+	σ(σ²𝕀ₘ - AA^⊤)^{-1} & (σ²𝕀ₘ - AA^⊤)^{-1}A
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ & σ(σ²𝕀ₙ - A^⊤A)^{-1}
+}
+\bmat{ϕ\\ψ}%
 %\\&\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \frac{1}{σ}\bmat{
 %		(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A}
 %	\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}\tilde{A}^⊤ & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
@@ -199,18 +252,21 @@ K \bmat{\tilde{ϕ}\\ \tilde{ψ}} = \bmat{ϕ\\ψ}
 In particular, we can find the solution by solving 4 smaller linear systems:
 %
 \begin{align*}%
-	(𝕀ₘ - \tilde{A}\tilde{A}^⊤)x &= \tfrac{1}{σ}ϕ             & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)y &= \tfrac{1}{σ}\tilde{A}ψ%
-\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})w &= \tfrac{1}{σ}\tilde{A}^⊤ϕ  & (𝕀ₙ - \tilde{A}^⊤\tilde{A})z &= \tfrac{1}{σ}ψ
+	σ(σ²𝕀ₘ - AA^⊤)^{-1} ϕ  &= x & (σ²𝕀ₘ - AA^⊤)^{-1}Aψ &= y%
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ϕ &= w & σ(σ²𝕀ₙ - A^⊤A)^{-1}ψ &= z
 \end{align*}%
 %
-Or, equivalently
+Or, equivalently:
 %
 \begin{align*}%
-	(σ²𝕀ₘ - AA^⊤)x &= σϕ      & (σ²𝕀ₘ - AA^⊤)y &= Aψ%
-\\  (σ²𝕀ₙ - A^⊤A)w   &= A^⊤ϕ  & (σ²𝕀ₙ - A^⊤A)z &= σψ
+	(σ²𝕀ₘ - AA^⊤)x &=  σϕ  & (σ²𝕀ₘ - AA^⊤)y  &= Aψ%
+\\  (σ²𝕀ₙ - A^⊤A)w &= A^⊤ϕ &  (σ²𝕀ₙ - A^⊤A)z &= σψ
 \end{align*}%
 %
-Note how this shows that the off-diagonal entries are obviously regularized least squares problems!
+
+
+%
+Note how this shows that the off-diagonal entries are solutions to regularized least squares problems!
 %
 However, we really do not want to compute the matrices $AA^⊤$ and $A^⊤A$ since this leads to numerical stability (squared condition number!)
 %
@@ -221,10 +277,37 @@ To circumvent this issue, we do a reformulation
 \begin{alignat*}{3}%
 (σ²𝕀ₘ - AA^⊤)y &= Aψ &⟺ y &=\argmin_y ‖-A^⊤y - ψ‖₂² - σ²‖y‖₂²
 \\  &&⟺ y &= \argmin_y \Bigl{‖} \bmat{A^⊤ \\ σ²𝕀ₘ} y - \bmat{-ψ \\ 𝟎ₘ}\Bigr{‖}₂²%
-\\  (σ²𝕀ₙ - A^⊤A)w   &= A^⊤ϕ  &⟺  w &= \argmin_w ‖-Aw - ϕ‖₂² - σ²‖w‖₂²
+\\  (σ²𝕀ₙ - A^⊤A)w   &= A^⊤ϕ  &⟺  w &= \argmin_w ‖Aw + ϕ‖₂²   -σ²‖w‖₂²
 \\  &&⟺ w &= \argmin_w \Bigl{‖} \bmat{A \\ σ²𝕀ₙ} w - \bmat{-ϕ \\ 𝟎ₙ}\Bigr{‖}₂²%
 \end{alignat*}%
 %
+
+%
+\begin{remark}[When is Ridge Regression unconstrained?]%
+\label{rem: label}%
+Consider the problem
+%
+\begin{align*}%
+β^* = \argmin_β ‖Xβ-y‖² + λ‖β‖²%
+\end{align*}%
+%
+Question: When is there an unconstrained solution?
+%
+The solution satisfies the normal equation
+%
+\begin{align*}%
+(XᵀX  + λ𝕀)β = X^⊤y%
+\end{align*}%
+%
+If $λ>0$, then $(XᵀX  + λ𝕀)$ is positive definite and hence invertible. If $λ<0$, then $(XᵀX  + λ𝕀)$ is singular whenever $λ$ is an eigenvalue of $XᵀX$.
+%
+In particular, the 4 systems listed before are all ill-conditioned! The central issue is that the constraint is missing! $‖u‖² = 1$ and $‖v‖²=1$ translate to $u⟂∆u$ and $v⟂∆v$. Since $u$, $v$ are singular vectors, this means we avoid the singular subspace when solving these equations!
+
+What we should do is use \textbf{Riemannian Optimization}.
+%
+\end{remark}%
+
+
 \subsection{What happens if ϕ or ψ are zero?}
 %
 In this case we want to fast track the calculation, meaning skip half of the necessary inversions.
@@ -334,7 +417,7 @@ Moreover, we want:
 \1 During forward, compute $\frac{A}{‖A‖₂}$ only once and then reuse this node.
 \1 Compute $‖A‖₂$ effectively between gradient updates.
 	\2 Avoid built-in torch algos, as they make use of full SVD algos.
-\1 After gradient update, perform projection step. (maybe unecessary)
+\1 After gradient update, perform projection step. (maybe unnecessary)
 \end{outline}%
 %
 NOTE: gradients are different if we include normalization!

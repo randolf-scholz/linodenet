@@ -11,12 +11,19 @@
 //from someLib import *     ⟶  using namespace someLib;
 
 using c10::optional;
+using c10::nullopt;
 using torch::Tensor;
+using torch::Scalar;
+using torch::cat;
+using at::zeros_like;
 using torch::outer;
 using torch::dot;
+using torch::eye;
+using torch::addmm;
 using torch::linalg::solve;
+using torch::linalg::lstsq;
 
-struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
+struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
     /** test
      * Formalizing as a optimization problem:
      * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖_F^2 s.t. ‖u‖₂ = ‖v‖₂ = 1
@@ -79,21 +86,21 @@ struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
         // Initialize maxiter depending on the size of the matrix.
         const int m = A.size(0);
         const int n = A.size(1);
-        int64_t MAXITER = maxiter.has_value() ? maxiter.value() : m + n;
+        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 4 * (m + n);
+        bool converged = false;
 
         // Initialize u and v with random values if not given
         Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
         Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
         Tensor sigma = A.mv(v).dot(u);
-        bool converged = false;
 
         // Perform power-iteration for maxiter times or until convergence.
-        for (const auto i : c10::irange(MAXITER)) {
+        for (const auto i: c10::irange(MAXITER)) {
             Tensor u_old = u;
             Tensor v_old = v;
 
             u = A.mv(v);
-            sigma = dot(u,u_old);
+            sigma = dot(u, u_old);
             Tensor left_residual = (u - sigma * u_old).norm();
             u /= u.norm();
             // assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
@@ -106,7 +113,9 @@ struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
 
             Tensor tol = atol + rtol * sigma;
             converged = (left_residual < tol).item<bool>() && (right_residual < tol).item<bool>();
-            if (converged) {break;}
+            if (converged) {
+                break;
+            }
         }
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
@@ -150,63 +159,83 @@ struct SingularTriplet: public torch::autograd::Function<SingularTriplet> {
         auto phi = grad_output[1];
         auto psi = grad_output[2];
 
-        auto options = A.options();
+        // Computing reference values via SVD
+        // auto SVD = torch::linalg::svd(A, true, nullopt);
+        // Tensor u = std::get<0>(SVD).index({torch::indexing::Slice(), 0});
+        // Tensor s = std::get<1>(SVD).index({0});
+        // Tensor v = std::get<2>(SVD).index({0, torch::indexing::Slice()});
+
+        Tensor g_sigma = xi * outer(u, v);
+
+        // exit early if grad_output is zero for both u and v.
+        bool phi_nonzero = (phi != 0).any().item<bool>();
+        bool psi_nonzero = (psi != 0).any().item<bool>();
+        if (!phi_nonzero && !psi_nonzero) {
+            return {g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
+        }
 
         const int m = A.size(0);
         const int n = A.size(1);
 
-        Tensor g_sigma = xi * outer(u, v);
+        // augmented K matrix: (m+n+2) x (m+n)
+        Tensor K = cat({
+                               cat({sigma * eye(m, A.options()), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),
+                               cat({-A.t(), sigma * eye(n, A.options()), zeros_like(v).unsqueeze(-1), v.unsqueeze(-1)},
+                                   1)}, 0);
+        Tensor c = torch::cat({phi, psi}, 0);
 
+        // solve the underdetermined system
+        Tensor x = std::get<0>(lstsq(K, c, nullopt, nullopt));
+        Tensor p = x.slice(0, 0, m);
+        Tensor q = x.slice(0, m, m + n);
+        // Tensor mu = x.slice(0, m+n, m+n+1);
+        // Tensor nu = x.slice(0, m+n+1, m+n+2);
 
-
-        auto b = (phi != 0).any().item<bool>();
-
-//        if (phi != 0).any().item().toBool() {
-//            Tensor B = A / sigma;
-//            Tensor P = torch::eye(m, options) - B.mm(B.t());
-//            Tensor Q = torch::eye(n, options) - B.t().mm(B);
-//            Tensor x = solve(P, phi, true);
-//            Tensor y = solve(Q, B.t().mv(phi), true);
-//            phi = (x+y)/sigma;
-//        };
-
-
-//        A /= sigma;  // Normalize A, we actually modify the weight here!
-        Tensor B = A / sigma;
-
-        // Compute the 2x2 block inverses
-        Tensor P = torch::eye(m, options) - B.mm(B.t());
-        Tensor Q = torch::eye(n, options) - B.t().mm(B);
-
-        Tensor x = solve(P, phi, true);
-        Tensor y = solve(P, B.mv(psi), true);
-        Tensor w = solve(Q, B.t().mv(phi), true);
-        Tensor z = solve(Q, psi, true);
-
-        phi = (x+y)/sigma;
-        psi = (w+z)/sigma;
-        Tensor g_u = outer(phi - dot(u, phi)*u, v);
-        Tensor g_v = outer(u, psi - dot(v, psi)*v);
-
-        torch::autograd::variable_list output = {
-                g_sigma,
-                Tensor(),
-                Tensor(),
-                Tensor(),
-                Tensor(),
-                Tensor(),
-        };
-        return output;
+        // compute the VJP
+        Tensor g_u = outer(p - dot(u, p) * u, v);
+        Tensor g_v = outer(u, q - dot(v, q) * v);
+        return {g_sigma + g_u + g_v, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
     }
 };
 
+/**
+ * Solving 2 m×m and 2 n×n systems instead.
+ * torch::Scalar sigma2 = (sigma * sigma).item();
+ * Tensor P = addmm(eye(m, A.options()), A, A.t(), sigma2, -1.0);  // σ²𝕀ₘ - AAᵀ
+ * Tensor Q = addmm(eye(n, A.options()), A.t(), A, sigma2, -1.0);  // σ²𝕀ₙ - AᵀA
+ *
+ * Tensor x = std::get<0>(lstsq(P, sigma*phi, nullopt, nullopt));
+ * Tensor w = std::get<0>(lstsq(Q, A.t().mv(phi), nullopt, nullopt));
+ * Tensor y = std::get<0>(lstsq(P, A.mv(psi), nullopt, nullopt));
+ * Tensor z = std::get<0>(lstsq(Q, sigma*psi, nullopt, nullopt));
+ * Tensor p = x + y;
+ * Tensor q = w + z;
+
+ * Tensor x, y, z, w;
+ * if (phi_nonzero) {
+ *     x = std::get<0>(lstsq(P, sigma*phi, nullopt, nullopt));
+ *     w = std::get<0>(lstsq(Q, A.t().mv(phi), nullopt, nullopt));
+ * } else {
+ *     x = torch::zeros_like(phi);
+ *     w = torch::zeros_like(psi);
+ * }
+ * if (psi_nonzero) {
+ *     y = std::get<0>(lstsq(P, A.mv(psi), nullopt, nullopt));
+ *     z = std::get<0>(lstsq(Q, sigma*psi, nullopt, nullopt));
+ * } else {
+ *     y = torch::zeros_like(phi);
+ *     z = torch::zeros_like(psi);
+ * }
+ */
+
+
 std::vector<Tensor> singular_triplet(
-        Tensor A,
-        optional<Tensor> u0,
-        optional<Tensor> v0,
-        optional<int64_t> maxiter,
-        double atol = 1e-8,
-        double rtol = 1e-5
+    Tensor A,
+    optional<Tensor> u0,
+    optional<Tensor> v0,
+    optional<int64_t> maxiter,
+    double atol = 1e-8,
+    double rtol = 1e-5
 ) {
     /**
      * Wrap the struct into function.

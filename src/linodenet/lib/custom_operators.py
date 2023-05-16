@@ -15,8 +15,6 @@ import torch
 import torch.utils.cpp_extension
 from torch import Tensor
 
-import linodenet.lib as lib
-
 
 def singular_triplet_native(
     A: torch.Tensor,
@@ -44,7 +42,7 @@ def spectral_norm_native(
     return torch.linalg.matrix_norm(A, ord=2)
 
 
-lib_base_path = Path(lib.__path__[0])
+lib_base_path = Path(__file__).parent
 lib_path = lib_base_path / "build" / "liblinodenet.so"
 
 if lib_path.exists():
@@ -87,18 +85,6 @@ else:
         _spectral_norm = spectral_norm_native
 
 
-def spectral_norm(
-    A: torch.Tensor,
-    u0: Optional[torch.Tensor] = None,
-    v0: Optional[torch.Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = 1e-8,
-    rtol: float = 1e-5,
-) -> Tensor:
-    """Computes the spectral norm."""
-    return _spectral_norm(A, u0, v0, maxiter, atol, rtol)
-
-
 def singular_triplet(
     A: torch.Tensor,
     u0: Optional[torch.Tensor] = None,
@@ -109,3 +95,15 @@ def singular_triplet(
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Computes the singular triplet."""
     return _singular_triplet(A, u0, v0, maxiter, atol, rtol)
+
+
+def spectral_norm(
+    A: torch.Tensor,
+    u0: Optional[torch.Tensor] = None,
+    v0: Optional[torch.Tensor] = None,
+    maxiter: Optional[int] = None,
+    atol: float = 1e-8,
+    rtol: float = 1e-5,
+) -> Tensor:
+    """Computes the spectral norm."""
+    return _spectral_norm(A, u0, v0, maxiter, atol, rtol)

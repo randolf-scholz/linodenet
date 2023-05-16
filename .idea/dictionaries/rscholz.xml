@@ -24,6 +24,7 @@
       <w>copybutton</w>
       <w>covariate</w>
       <w>covariates</w>
+      <w>cstddef</w>
       <w>dtype</w>
       <w>dunder</w>
       <w>duvenaud</w>
@@ -45,6 +46,7 @@
       <w>hyperparameters</w>
       <w>includehidden</w>
       <w>intersphinx</w>
+      <w>irange</w>
       <w>ismll</w>
       <w>jacobian</w>
       <w>jian</w>
@@ -58,6 +60,7 @@
       <w>kwds</w>
       <w>layernorm</w>
       <w>layerwise</w>
+      <w>liblinodenet</w>
       <w>linalg</w>
       <w>linformer</w>
       <w>linodenet</w>
@@ -83,6 +86,7 @@
       <w>pageview</w>
       <w>parametrizations</w>
       <w>prenormalization</w>
+      <w>randn</w>
       <w>reftypes</w>
       <w>reglu</w>
       <w>regularizations</w>
