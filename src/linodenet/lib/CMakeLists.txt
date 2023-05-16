@@ -16,7 +16,7 @@ message(STATUS "PROJECT_ROOT=${PROJECT_ROOT}")
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_ROOT}/libtorch/share/cmake/Torch")
 
 #message(STATUS "paths=${CMAKE_PREFIX_PATH}")
-find_package(Torch REQUIRED PATHS "${PROJECT_ROOT}/libtorch/share/cmake/Torch")
+find_package(Torch REQUIRED)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
