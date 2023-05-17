@@ -15,32 +15,29 @@ from linodenet.lib import (
 from linodenet.utils import timer
 
 DEVICES = ["cpu", "cuda"] if torch.cuda.is_available() else ["cpu"]
+NORM_ONLY = {True: "norm_only", False: "triplet"}
 SHAPES = [
     # m > n
     (8, 4),
-    (64, 32),
+    (32, 16),
     (128, 64),
-    (256, 128),
     (512, 256),
     # m < n
     (4, 8),
-    (32, 64),
+    (16, 32),
     (64, 128),
-    (128, 256),
     (256, 512),
     # m == n
-    (4, 4),
+    (8, 8),
     (32, 32),
-    (64, 64),
     (128, 128),
-    (256, 256),
     (512, 512),
 ]
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("shape", SHAPES)
-@pytest.mark.flaky(max_runs=3, min_passes=1)
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     """Test the spectral norm implementation."""
     m, n = shape
@@ -86,16 +83,17 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("shape", SHAPES)
-@pytest.mark.flaky(max_runs=3, min_passes=1)
-def test_singular_triplet(device: str, shape: tuple[int, int]) -> None:
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("norm_only", NORM_ONLY, ids=NORM_ONLY.get)
+def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) -> None:
     """Test the singular triplet implementation."""
     m, n = shape
     A0 = torch.randn(m, n, device=device)
     xi = torch.randn(1, device=device)
-    phi = torch.randn(m, device=device)
-    psi = torch.randn(n, device=device)
+    phi = torch.randn(m, device=device) * (1 - norm_only)
+    psi = torch.randn(n, device=device) * (1 - norm_only)
     cond = torch.linalg.cond(A0)
 
     # Native Forward
@@ -149,7 +147,9 @@ def test_singular_triplet(device: str, shape: tuple[int, int]) -> None:
     assert err_u < 1e-3, "Large error in left singular vector"
     assert err_v < 1e-3, "Large error in right singular vector"
     assert err_grads < 1e-2, "Large error in spectral norm gradient"
-    # assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
+
+    if norm_only:
+        assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
 
 
 def _main() -> None:

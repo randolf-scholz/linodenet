@@ -170,15 +170,15 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         Tensor g_sigma = xi * outer(u, v);
 
         // exit early if grad_output is zero for both u and v.
-        bool phi_nonzero = (phi != 0).any().item<bool>();
-        bool psi_nonzero = (psi != 0).any().item<bool>();
-        if (!phi_nonzero && !psi_nonzero) {
+        bool phi_nonzero = phi.any().item<bool>();   // any should be faster than all
+        bool psi_nonzero = psi.any().item<bool>();   // any should be faster than all
+        if ( !(phi_nonzero || psi_nonzero) ) {
             return {g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
         }
 
+        // Consider the additional outer gradients for u and v.
         const int m = A.size(0);
         const int n = A.size(1);
-
         // augmented K matrix: (m+n+2) x (m+n)
         Tensor K = cat({
             cat({sigma * eye(m, A.options()), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),

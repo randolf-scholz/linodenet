@@ -21,6 +21,7 @@
       <w>classmethod</w>
       <w>codeauthor</w>
       <w>codeclimate</w>
+      <w>contractive</w>
       <w>copybutton</w>
       <w>covariate</w>
       <w>covariates</w>
@@ -118,6 +119,7 @@
       <w>toctree</w>
       <w>torchscript</w>
       <w>tput</w>
+      <w>tridiagonal</w>
       <w>tsdm</w>
       <w>undoc</w>
       <w>unindent</w>
