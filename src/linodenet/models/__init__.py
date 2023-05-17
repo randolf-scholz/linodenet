@@ -21,6 +21,7 @@ __all__ = [
     "LinODE",
     "LinODEnet",
     "LinODECell",
+    "LatentStateSpaceModel",
     # Functions
     "spectral_norm",
     # Filters
@@ -38,6 +39,7 @@ from linodenet.models.encoders import (
     iResNetBlock,
     spectral_norm,
 )
+from linodenet.models.lssm import LatentStateSpaceModel
 from linodenet.models.system import LinODECell
 
 MODELS: dict[str, type[Model]] = {

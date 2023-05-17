@@ -155,7 +155,7 @@ def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) 
 def _main() -> None:
     """Run the main function."""
     test_spectral_norm("cpu", (128, 128))
-    test_singular_triplet("cpu", (128, 128))
+    test_singular_triplet("cpu", (128, 128), False)
 
 
 if __name__ == "__main__":

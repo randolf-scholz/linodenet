@@ -21,8 +21,6 @@ from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
 from linodenet.utils import deep_dict_update, initialize_from_config, pad
 
-# TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
-
 __logger__ = logging.getLogger(__name__)
 
 

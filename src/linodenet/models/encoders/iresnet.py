@@ -587,7 +587,6 @@ class iResNet(nn.Module):
         r"""Compute the inverse through fix point iteration in each block in reversed order."""
         for block in self.blocks[::-1]:  # traverse in reverse
             y = block.inverse(y)
-
         return y
 
     # TODO: delete this?
