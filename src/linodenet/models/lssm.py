@@ -188,6 +188,7 @@ class LatentStateSpaceModel(nn.Module):
         system: nn.Module,
         decoder: nn.Module,
         filter: nn.Module,
+        padding_size: int = 0,
         **cfg: Any,
     ):
         super().__init__()
@@ -196,11 +197,17 @@ class LatentStateSpaceModel(nn.Module):
         self.decoder = decoder
         self.filter: Filter = filter
 
-        self.input_size = filter.input_size  # type: ignore[assignment]
-        self.output_size = filter.output_size  # type: ignore[assignment]
-        self.latent_size = system.input_size  # type: ignore[assignment]
-        self.hidden_size = filter.hidden_size  # type: ignore[assignment]
-        self.padding_size = self.hidden_size - self.input_size
+        self.input_size = -1
+        self.output_size = -1
+        self.latent_size = -1
+        self.hidden_size = -1
+        self.padding_size = padding_size
+
+        # self.input_size =  filter.input_size  # type: ignore[assignment]
+        # self.output_size = filter.output_size  # type: ignore[assignment]
+        # self.latent_size = system.input_size  # type: ignore[assignment]
+        # self.hidden_size = filter.hidden_size  # type: ignore[assignment]
+        # self.padding_size = padding_size
 
         assert isinstance(self.system.kernel, Tensor)
         self.kernel = self.system.kernel
