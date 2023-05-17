@@ -231,7 +231,7 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
  */
 
 
-std::vector<Tensor> singular_triplet(
+std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     Tensor A,
     optional<Tensor> u0,
     optional<Tensor> v0,
@@ -242,13 +242,15 @@ std::vector<Tensor> singular_triplet(
     /**
      * Wrap the struct into function.
      */
-    return SingularTriplet::apply(A, u0, v0, maxiter, atol, rtol);
+    auto output = SingularTriplet::apply(A, u0, v0, maxiter, atol, rtol);
+    assert(output.size() == 3);
+    return std::make_tuple(output[0], output[1], output[2]);
 }
 
 TORCH_LIBRARY_FRAGMENT(custom, m) {
     m.def(
-        "singular_triplet(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> Tensor[]",
+        "singular_triplet(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> (Tensor, Tensor, Tensor)",
         singular_triplet
     );
 }
-//(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> *Tensor
+// "singular_triplet(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> Tensor[]",
