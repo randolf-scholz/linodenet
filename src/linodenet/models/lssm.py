@@ -7,10 +7,11 @@ __all__ = [
 
 import logging
 import warnings
-from typing import Any, Final, Optional
+from typing import Any, Final
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Self
 
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
@@ -69,6 +70,7 @@ class LatentStateSpaceModel(nn.Module):
     filter: nn.Module
         MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
+    LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")
 
     name: Final[str] = __name__
     r"""str: The name of the model."""
@@ -137,20 +139,15 @@ class LatentStateSpaceModel(nn.Module):
     # filter: nn.Module
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
-    def __init__(
-        self,
-        input_size: int,
-        latent_size: int,
-        hidden_size: Optional[int] = None,
-        **cfg: Any,
-    ):
-        super().__init__()
-
-        LOGGER = __logger__.getChild(self.__class__.__name__)
-
-        config = deep_dict_update(self.HP, cfg)
-        self.input_size = input_size
-        hidden_size = hidden_size if hidden_size is not None else input_size
+    @classmethod
+    def from_config(cls, cfg: dict[str, Any]) -> Self:
+        r"""Constructs a new model from a configuration dictionary."""
+        config = deep_dict_update(cls.HP, cfg)
+        input_size = config["input_size"]
+        latent_size = config["latent_size"]
+        hidden_size = config.get("hidden_size", input_size)
+        # padding_size = hidden_size - input_size
+        # output_size = config.get("output_size", input_size)
 
         if hidden_size < input_size:
             warnings.warn(
@@ -160,35 +157,50 @@ class LatentStateSpaceModel(nn.Module):
             )
 
             hidden_size = input_size
+        assert hidden_size >= input_size
 
-        self.hidden_size = hidden_size
-        assert self.hidden_size >= self.input_size
+        config["Encoder"]["input_size"] = latent_size
+        config["Decoder"]["input_size"] = latent_size
+        config["System"]["input_size"] = latent_size
+        config["Filter"]["input_size"] = hidden_size
+        config["Filter"]["hidden_size"] = hidden_size
+
+        cls.LOGGER.debug("Initializing Encoder %s", config["Encoder"])
+        encoder: nn.Module = initialize_from_config(config["Encoder"])
+        cls.LOGGER.debug("Initializing System %s", config["Encoder"])
+        system: nn.Module = initialize_from_config(config["System"])
+        cls.LOGGER.debug("Initializing Decoder %s", config["Encoder"])
+        decoder: nn.Module = initialize_from_config(config["Decoder"])
+        cls.LOGGER.debug("Initializing Filter %s", config["Encoder"])
+        filter: Filter = initialize_from_config(config["Filter"])
+
+        return cls(
+            encoder=encoder,
+            system=system,
+            decoder=decoder,
+            filter=filter,
+        )
+
+    def __init__(
+        self,
+        *,
+        encoder: nn.Module,
+        system: nn.Module,
+        decoder: nn.Module,
+        filter: nn.Module,
+        **cfg: Any,
+    ):
+        super().__init__()
+        self.encoder = encoder
+        self.system = system
+        self.decoder = decoder
+        self.filter: Filter = filter
+
+        self.input_size = filter.input_size  # type: ignore[assignment]
+        self.output_size = filter.output_size  # type: ignore[assignment]
+        self.latent_size = system.input_size  # type: ignore[assignment]
+        self.hidden_size = filter.hidden_size  # type: ignore[assignment]
         self.padding_size = self.hidden_size - self.input_size
-        self.latent_size = latent_size
-        self.output_size = input_size
-
-        config["Encoder"]["input_size"] = self.latent_size
-        config["Decoder"]["input_size"] = self.latent_size
-        config["System"]["input_size"] = self.latent_size
-        config["Filter"]["input_size"] = self.hidden_size
-        config["Filter"]["hidden_size"] = self.hidden_size
-        config["Embedding"]["input_size"] = self.hidden_size
-        config["Embedding"]["output_size"] = self.latent_size
-        config["Projection"]["input_size"] = self.latent_size
-        config["Projection"]["output_size"] = self.hidden_size
-
-        LOGGER.debug("%s Initializing Embedding %s", self.name, config["Embedding"])
-        self.embedding: nn.Module = initialize_from_config(config["Embedding"])
-        LOGGER.debug("%s Initializing Encoder %s", self.name, config["Encoder"])
-        self.encoder: nn.Module = initialize_from_config(config["Encoder"])
-        LOGGER.debug("%s Initializing System %s", self.name, config["Encoder"])
-        self.system: nn.Module = initialize_from_config(config["System"])
-        LOGGER.debug("%s Initializing Decoder %s", self.name, config["Encoder"])
-        self.decoder: nn.Module = initialize_from_config(config["Decoder"])
-        LOGGER.debug("%s Initializing Projection %s", self.name, config["Projection"])
-        self.projection: nn.Module = initialize_from_config(config["Projection"])
-        LOGGER.debug("%s Initializing Filter %s", self.name, config["Encoder"])
-        self.filter: Filter = initialize_from_config(config["Filter"])
 
         assert isinstance(self.system.kernel, Tensor)
         self.kernel = self.system.kernel
@@ -259,13 +271,13 @@ class LatentStateSpaceModel(nn.Module):
             ẑ_pre = self.system(dt, ẑ_post)  # (...,), (...,LAT) -> (...,LAT)
 
             # Decode the latent state at the observation time.
-            x̂_pre = self.projection(self.decoder(ẑ_pre))  # (...,LAT) -> (...,DIM)
+            x̂_pre = self.decoder(ẑ_pre)  # (...,LAT) -> (...,DIM)
 
             # Update the state estimate by filtering the observation.
             x̂_post = self.filter(x_obs, x̂_pre)  # (...,DIM), (..., DIM) → (...,DIM)
 
             # Encode the latent state at the observation time.
-            ẑ_post = self.encoder(self.embedding(x̂_post))  # (...,DIM) → (...,LAT)
+            ẑ_post = self.encoder(x̂_post)  # (...,DIM) → (...,LAT)
 
             # Save all tensors for later.
             Zhat_pre.append(ẑ_pre)
@@ -282,7 +294,3 @@ class LatentStateSpaceModel(nn.Module):
         yhat = self.xhat_post[..., : self.output_size]
 
         return yhat
-
-
-class LinODEnet(LatentStateSpaceModel):
-    """A linear ODE model with a linear observation model."""
