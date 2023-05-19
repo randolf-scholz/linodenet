@@ -150,11 +150,17 @@ class LinearContraction(nn.Module):
     def recompute_cache(self) -> None:
         # Compute the cached weight matrix
         sigma, u, v = singular_triplet(self.weight, u0=self.u, v0=self.v)
-        self.sigma = sigma
-        self.u = u
-        self.v = v
-        gamma = torch.minimum(self.one, self.c / self.sigma)
-        self.cached_weight = gamma * self.weight
+        gamma = torch.minimum(self.one, self.c / sigma)
+        cached_weight = gamma * self.weight
+
+        # NOTE: We **MUST** use inplace operations here! Otherwise, we run into the issue that another module
+        # that uses weight sharing (e.g. a Linear layer with the same weight matrix) doesn't have the correct *version*
+        # of the cached weight matrix when computing backward.
+        self.sigma.copy_(sigma)
+        self.u.copy_(u)
+        self.v.copy_(v)
+        self.cached_weight.copy_(cached_weight)  # ✔
+        # self.cached_weight = cached_weight  # ✘ (leads to RuntimeError [modified by an inplace operation])
 
     @jit.export
     def projection(self) -> None:
@@ -234,7 +240,7 @@ class iResNetBlock(nn.Module):
         inverse: Optional[Self] = None,
     ) -> None:
         super().__init__()
-        self.layer = layer
+        self.block = layer
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
@@ -277,7 +283,7 @@ class iResNetBlock(nn.Module):
 
     @jit.export
     def _encode(self, x: Tensor) -> Tensor:
-        return x + self.layer(x)
+        return x + self.block(x)
 
     @jit.export
     def _decode(self, y: Tensor) -> Tensor:
@@ -287,7 +293,7 @@ class iResNetBlock(nn.Module):
 
         for _ in range(self.maxiter):
             x_prev = x
-            x = y - self.layer(x)
+            x = y - self.block(x)
             with torch.no_grad():
                 residual = torch.sqrt(torch.nansum((x - x_prev).pow(2)))
                 tol = self.atol + self.rtol * torch.sqrt(torch.nansum(x_prev.pow(2)))
