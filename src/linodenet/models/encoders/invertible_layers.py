@@ -16,11 +16,13 @@ Layers:
 """
 
 __all__ = [
+    "NaiveLinearContraction",
     "LinearContraction",
     "iResNetBlock",
     "iSequential",
 ]
 
+import warnings
 from typing import Any, Final, Optional
 
 import torch
@@ -29,6 +31,40 @@ from torch.nn import functional
 from typing_extensions import Self
 
 from linodenet.lib import singular_triplet
+
+
+class NaiveLinearContraction(nn.Module):
+    """Linear layer with a Lipschitz constant.
+
+    Note:
+        Naive implementation using the builtin matrix_norm function.
+        This is very slow and should only be used for testing.
+        The backward is unstable and will often fail.
+    """
+
+    # Parameters
+    weight: Tensor
+    r"""PARAM: The weight matrix."""
+    bias: Optional[Tensor]
+    r"""PARAM: The bias term."""
+    one: Tensor
+    c: Tensor
+
+    def __init__(
+        self, input_size: int, output_size: int, *, c: float = 1.0, bias: bool = False
+    ):
+        super().__init__()
+        self.layer = nn.Linear(input_size, output_size, bias=bias)
+        self.weight = self.layer.weight
+        self.bias = self.layer.bias
+        self.register_buffer("c", torch.tensor(float(c)), persistent=True)
+        self.register_buffer("one", torch.tensor(1.0), persistent=True)
+
+    def forward(self, x):
+        sigma = torch.linalg.matrix_norm(self.weight, ord=2)
+        gamma = torch.minimum(self.c / sigma, self.one)
+        return functional.linear(x, gamma * self.weight, self.bias)
+        # return self.layer(x / sigma)
 
 
 class LinearContraction(nn.Module):
@@ -40,6 +76,10 @@ class LinearContraction(nn.Module):
     """CONST: The output size."""
     L: Final[float]
     """CONST: The Lipschitz constant."""
+    c: Tensor
+    r"""CONST: The regularization hyperparameter."""
+    one: Tensor
+    r"""CONST: A tensor with value 1.0"""
 
     weight: Tensor
     """PARAM: The weight matrix."""
@@ -74,6 +114,8 @@ class LinearContraction(nn.Module):
         self.register_buffer("u", torch.randn(output_size))
         self.register_buffer("v", torch.randn(input_size))
         self.register_buffer("cached_weight", torch.empty_like(self.weight))
+        self.register_buffer("one", torch.ones(1))
+        self.register_buffer("c", torch.tensor(self.L))
         self.reset_cache()
 
     @jit.export
@@ -111,7 +153,7 @@ class LinearContraction(nn.Module):
         self.sigma = sigma
         self.u = u
         self.v = v
-        gamma = torch.minimum(torch.ones_like(sigma), self.L / self.sigma)
+        gamma = torch.minimum(self.one, self.c / self.sigma)
         self.cached_weight = gamma * self.weight
 
     @jit.export
@@ -186,9 +228,9 @@ class iResNetBlock(nn.Module):
         self,
         layer: nn.Module,
         *,
-        maxiter: int = 1000,
-        atol: float = 1e-8,
-        rtol: float = 1e-5,
+        maxiter: int = 100,
+        atol: float = 1e-5,
+        rtol: float = 1e-4,
         inverse: Optional[Self] = None,
     ) -> None:
         super().__init__()
@@ -239,20 +281,24 @@ class iResNetBlock(nn.Module):
 
     @jit.export
     def _decode(self, y: Tensor) -> Tensor:
-        x = y.clone()
+        x = y.clone().detach()
+        # m = torch.isnan(y)
         residual = torch.zeros_like(y)
 
         for _ in range(self.maxiter):
             x_prev = x
             x = y - self.layer(x)
-            residual = (x - x_prev).norm()
-            self.converged = residual < self.atol + self.rtol * x_prev.norm()
-            if self.converged:
-                break
+            with torch.no_grad():
+                residual = torch.sqrt(torch.nansum((x - x_prev).pow(2)))
+                tol = self.atol + self.rtol * torch.sqrt(torch.nansum(x_prev.pow(2)))
+                self.converged = residual < tol
+                if self.converged:
+                    break
         if not self.converged:
-            print(
+            warnings.warn(
                 f"No convergence in {self.maxiter} iterations. "
-                f"Max residual:{residual} > {self.atol}."
+                f"Max residual:{residual} > {self.atol}.",
+                stacklevel=2,
             )
         return x
 
@@ -315,8 +361,11 @@ class iSequential(nn.Module):
         if hparams:
             raise ValueError
 
-        self.input_size = blocks[0].input_size  # type: ignore[assignment]
-        self.output_size = blocks[-1].output_size  # type: ignore[assignment]
+        self.input_size = -1
+        self.output_size = -1
+
+        # self.input_size = blocks[0].input_size  # type: ignore[assignment]
+        # self.output_size = blocks[-1].output_size  # type: ignore[assignment]
         self.blocks = nn.Sequential(*blocks)
 
         # print([layer.is_inverse for layer in self])
@@ -324,7 +373,9 @@ class iSequential(nn.Module):
         self.is_inverse = inverse is not None
         if not self.is_inverse:
             cls = type(self)
-            self.inverse = cls(*[block.inverse for block in self.blocks], inverse=self)
+            self.inverse = cls(
+                *[block.inverse for block in reversed(self.blocks)], inverse=self
+            )
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:

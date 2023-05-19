@@ -380,7 +380,7 @@ class LinODEnet(nn.Module):
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
-        r""".. Signature:: ``[(..., n), (..., n, d)] -> (..., N, d)``.
+        r""".. Signature:: ``[(..., n), (..., n, d)] -> (..., n, d)``.
 
         **Model Sketch**::
 
