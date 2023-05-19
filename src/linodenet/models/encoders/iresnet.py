@@ -210,8 +210,8 @@ class LinearContraction(nn.Module):
         # self.spectral_norm = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
         self.spectral_norm = matrix_norm(self.weight, ord=2)
-        fac = torch.minimum(self.c / self.spectral_norm, self.one)
-        return functional.linear(x, fac * self.weight, self.bias)
+        gamma = torch.minimum(self.c / self.spectral_norm, self.one)
+        return functional.linear(x, gamma * self.weight, self.bias)
 
 
 class AltLinearContraction(nn.Module):
