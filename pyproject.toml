@@ -107,14 +107,9 @@ dev = [
 
 
 [project.urls]
-homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm"
-documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/tsdm/"
-repository = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi"
-
-
-
-
-
+homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet"
+documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
+repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi"
 
 
 ########################
@@ -359,15 +354,15 @@ line-length = 120
 [tool.poetry]
 authors = ["Randolf Scholz <rscholz@ismll.de>"]
 description = "Linear ODE Network for Time Series Forecasting"
-documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
 homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet"
+documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
+repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi"
 include = ["CHANGELOG.rst", "LICENSE.rst", "CONTRIBUTING.rst"]
 keywords = ["time series", "machine learning", "neural ode", "kalman filter"]
 license = "MIT"
 name = "linodenet"
 packages = [{include = "linodenet", from="src"}]
 readme = "README.rst"
-repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi"
 version = "0.3.0"
 
 classifiers = [
