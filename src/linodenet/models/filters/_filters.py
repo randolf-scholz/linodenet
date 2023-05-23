@@ -799,8 +799,8 @@ class SequentialFilter(FilterABC, nn.Sequential):
         return cls(*layers)
 
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
-        self.input_size = modules[0].input_size
-        self.output_size = modules[-1].output_size
+        self.input_size = modules[0].input_size  # type: ignore[assignment]
+        self.output_size = modules[-1].output_size  # type: ignore[assignment]
 
         super().__init__()
         nn.Sequential.__init__(self, *modules)
