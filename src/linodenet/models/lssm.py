@@ -70,7 +70,7 @@ class LatentStateSpaceModel(nn.Module):
     filter: nn.Module
         MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
-    LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")
+    LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")  # type: ignore[name-defined]
 
     name: Final[str] = __name__
     r"""str: The name of the model."""
@@ -172,7 +172,7 @@ class LatentStateSpaceModel(nn.Module):
         cls.LOGGER.debug("Initializing Decoder %s", config["Encoder"])
         decoder: nn.Module = initialize_from_config(config["Decoder"])
         cls.LOGGER.debug("Initializing Filter %s", config["Encoder"])
-        filter: Filter = initialize_from_config(config["Filter"])
+        filter: nn.Module = initialize_from_config(config["Filter"])
 
         return cls(
             encoder=encoder,

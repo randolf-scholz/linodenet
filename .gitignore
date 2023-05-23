@@ -21,6 +21,7 @@ reports/
 
 # pytorch model files
 *.pt
+*.torch
 
 # Pytorch profiling
 *.pt.trace.json
