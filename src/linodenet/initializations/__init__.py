@@ -11,21 +11,15 @@ Notes
 -----
 Contains initializations in both modular and functional form.
   - See `~linodenet.initializations.functional` for functional implementations.
-  - See `~linodenet.initializations.modular` for modular implementations.
 """
 
 __all__ = [
     # Constants
     "INITIALIZATIONS",
-    "FUNCTIONAL_INITIALIZATIONS",
-    "MODULAR_INITIALIZATIONS",
     # Types
     "Initialization",
-    "FunctionalInitialization",
-    "ModularInitialization",
     # Sub-Modules
     "functional",
-    "modular",
     # Functions
     "canonical_skew_symmetric",
     "diagonally_dominant",
@@ -38,12 +32,9 @@ __all__ = [
     # Classes
 ]
 
-from typing import Callable, Final, TypeAlias
-
-from torch import Tensor, nn
-
-from linodenet.initializations import functional, modular
+from linodenet.initializations import functional
 from linodenet.initializations.functional import (
+    Initialization,
     canonical_skew_symmetric,
     diagonally_dominant,
     gaussian,
@@ -54,21 +45,7 @@ from linodenet.initializations.functional import (
     symmetric,
 )
 
-FunctionalInitialization: TypeAlias = Callable[
-    [int | tuple[int, ...]], Tensor
-]  # SizeLike to matrix
-r"""Type hint for Initializations."""
-
-ModularInitialization: TypeAlias = nn.Module
-r"""Type hint for modular regularizations."""
-
-Initialization: TypeAlias = FunctionalInitialization | ModularInitialization
-r"""Type hint for initializations."""
-
-MODULAR_INITIALIZATIONS: Final[dict[str, type[ModularInitialization]]] = {}
-r"""Dictionary of all available modular metrics."""
-
-FUNCTIONAL_INITIALIZATIONS: Final[dict[str, FunctionalInitialization]] = {
+INITIALIZATIONS: dict[str, Initialization] = {
     "canonical_skew_symmetric": canonical_skew_symmetric,
     "diagonally_dominant": diagonally_dominant,
     "gaussian": gaussian,
@@ -79,14 +56,3 @@ FUNCTIONAL_INITIALIZATIONS: Final[dict[str, FunctionalInitialization]] = {
     "symmetric": symmetric,
 }
 r"""Dictionary containing all available initializations."""
-
-INITIALIZATIONS: Final[
-    dict[str, FunctionalInitialization | type[ModularInitialization]]
-] = {
-    **FUNCTIONAL_INITIALIZATIONS,
-    **MODULAR_INITIALIZATIONS,
-}
-r"""Dictionary of all available initializations."""
-
-
-del Final, TypeAlias, nn, Callable, Tensor

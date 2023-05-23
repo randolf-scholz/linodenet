@@ -13,7 +13,7 @@ from typing import Any, Final, Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
+from linodenet.initializations import INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
 from linodenet.projections import PROJECTIONS
 from linodenet.utils import deep_dict_update
@@ -129,10 +129,8 @@ class LinODECell(nn.Module):
             if kernel_init is None:
                 return lambda: gaussian(input_size)
             if isinstance(kernel_init, str):
-                assert (
-                    kernel_init in FUNCTIONAL_INITIALIZATIONS
-                ), "Unknown initialization!"
-                _init = FUNCTIONAL_INITIALIZATIONS[kernel_init]
+                assert kernel_init in INITIALIZATIONS, "Unknown initialization!"
+                _init = INITIALIZATIONS[kernel_init]
                 return lambda: _init(input_size)
             if callable(kernel_init):
                 assert Tensor(kernel_init(input_size)).shape == (

@@ -1,0 +1,501 @@
+\RequirePackage{iftex}
+\RequirePDFTeX
+\NeedsTeXFormat{LaTeX2e}
+\documentclass[10pt]{article}
+\usepackage{ismll-packages}
+\usepackage{ismll-mathoperators}
+\usepackage{ismll-style}
+\usepackage{unicode-symbols}
+
+\title{Derivative of the first order SVD}
+\author{Randolf Scholz}
+\begin{document}
+
+\maketitle
+
+
+Consider computing the first order SVD expansion. By the Eckart–Young–Mirsky theorem, this is equivalent to solving
+
+
+%
+\begin{align*}%
+\minimize_{σ，u，v} ½‖A - σuv^⊤‖²_F \qq{s.t.}  ‖u‖=1 \qq{and} ‖v‖=1 \qq{and} σ≥0%
+\end{align*}%
+%
+Equivalently this may be formalized as
+%
+\begin{align*}%
+σ = \max_{u，v} u^⊤ A v \qq{s.t.}  ‖u‖=1 \qq{and} ‖v‖=1%%
+\end{align*}%
+%
+Which is a non-convex quadratically constrained quadratic program (QCQP)
+%
+\begin{align*}%
+σ = \max_{u,v}
+\frac{1}{2}\bmat{u \\ v}^⊤
+⋅\bmat{𝟎_{m×m} & A \\  A^⊤ & 𝟎_{n×n}}
+⋅\bmat{u \\ v}
+\;\text{s.t.}\;
+\begin{aligned}
+\bmat{u \\ v}^⊤
+⋅\,\bmat{𝕀_m & 𝟎_{m×n} \\  𝟎_{n×m} & 𝟎_{n×n}}
+⋅\bmat{u \\ v}
+&= 1
+\\
+\bmat{u \\ v}^⊤
+⋅\bmat{𝟎_{m×m} & 𝟎_{m×n} \\  𝟎_{n×m} & 𝕀_n}
+⋅\bmat{u \\ v}
+&= 1
+\end{aligned}
+\end{align*}%
+%
+
+
+
+\paragraph{The Jacobian and Lagrangian}
+%
+The derivative of the objective function is
+
+\begin{align*}%
+𝐉_f(A，\bsmat{σ \\ u \\ v}) = \bmat{ A-σuv^⊤ &  \mat{ σ - u^⊤Av \\ σ²u - σAv \\ σ²v - σA^⊤u}}
+⟹ 𝐇_f(\bsmat{σ \\ u \\ v}) = \bmat{ 1 & 2σu - Av & 2σv - A^⊤u \\ -Av & σ²𝕀ₘ  & -σA \\ -A^⊤u & -σA^⊤ & σ²𝕀ₙ }
+\end{align*}%
+%
+Consider the function
+%
+\begin{align*}%
+f(A，\bsmat{σ \\ u \\ v}) = \pmat{ σ - u^⊤Av \\ σ²u - σAv \\ σ²v - σA^⊤u} ≡ 𝟎%
+⟹ 𝐉_f(A，\bsmat{σ \\ u \\ v}) = \barr{c|ccc}{-ξvu^⊤ & 1 & 2σu - Av & 2σv - A^⊤u \\ -σvϕ^⊤ & -Av & σ²𝕀ₘ  & -σA \\ -σuψ^⊤ & -A^⊤u & -σA^⊤ & σ²𝕀ₙ }
+\end{align*}%
+%
+Thus, gradient descent schema is
+
+%
+\begin{align*}%
+σ' &= σ - η_σ(σ - u^⊤Av) \\
+u' &= u - η_u(σ²u - σAv) \\
+v' &= v - η_v(σ²v - σA^⊤u)
+\end{align*}%
+%
+And the newton step with diagonal approximation of the hessian:
+%
+\begin{align*}%
+\begin{aligned}
+σ' &= σ - 1(σ - u^⊤Av)              &&= u^⊤Av \\
+u' &= u - \tfrac{1}{σ²}(σ²u - σAv)  &&= \tfrac{1}{σ}Av \\
+v' &= v - \tfrac{1}{σ²}(σ²v - σA^⊤u)&&= \tfrac{1}{σ}A^⊤u
+\end{aligned}
+\end{align*}%
+%
+
+\section{Analysis of the backward}
+
+At the equilibrium point, we have:
+%
+\begin{align*}%
+σ &= u^⊤ A v &  Av &= σu & A^⊤u &= σv & u^⊤ u &= 1  & v^⊤v &=1%
+\end{align*}%
+%
+Note that this states that $σ$ is an eigenvalue:
+%
+\begin{align*}%
+\bmat{0 & A \\ A^⊤ & 0}\bmat{u\\v} = σ\bmat{u\\v}%
+\end{align*}%
+%
+In particular, Rayleigh iteration could be useful.
+%
+from this we can derive
+%
+\begin{alignat*}{3}%
+∆σ &= {∆u}^⊤ A v + u^⊤{∆A}v + u^⊤A{∆v}
+&&= {∆u}^⊤ u + u^⊤ {∆A}v + v^⊤ {∆v}
+&&= u^⊤{∆A}v%
+\end{alignat*}%
+%
+Where in the last step we used $∆u⟂u$ and $∆v⟂v$, which follows from the side condition. Further we have:
+%
+\begin{align*}%
+\begin{aligned}
+   {∆σ}u + σ{∆u} &= {∆A}v  + A{∆v}
+\\  {∆σ}v + σ{∆v} &= {∆A}^⊤u + A^⊤{∆u}%
+\end{aligned}
+\iff
+\underbrace{\bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}}_{≕K}⋅\bmat{∆u\\∆v} = \bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}
+\end{align*}%
+%
+which allows us to express $∆u$ and $∆v$ in terms of $∆A$.
+The constraints yield
+%
+\begin{align*}%
+  u^⊤ ∆u + {∆u}^⊤u &= 0  ⟺ u⟂∆u  %
+\\v^⊤ ∆v + {∆v}^⊤v &= 0  ⟺ v⟂∆v  %
+\end{align*}%
+%
+We can augment the original system with these:
+%
+\begin{align*}%
+\underbrace{\bmat[c]{
+	σ𝕀ₘ & -A
+\\ -A^⊤ & σ𝕀ₙ
+\\ u^⊤ & 𝟎ₙ^⊤
+\\ 𝟎ₘ^⊤ & v^⊤
+}}_{≕\Tilde{K}}⋅\bmat{∆u\\∆v}
+= \underbrace{\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v \\ 0 \\ 0}}_{≕\Tilde{c}}%
+\end{align*}%
+%
+
+
+\section{VJP with modified K matrix}
+\begin{align*}%
+\Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert}\bmat{∆u\\∆v}\Bigr{⟩}
+&= \Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert} \Tilde{K}^{-1}\Tilde{c}\Bigr{⟩}
+\\&= \Bigl{⟨}\Tilde{K}^{-⊤}\bmat{ϕ\\ψ}\Bigm{\vert}\Tilde{c}\Bigr{⟩}%
+\\&= \Bigl{⟨}
+\bmat[c]{
+	σ𝕀ₘ & -A & u & 𝟎ₘ
+\\ -A^⊤ & σ𝕀ₙ & 𝟎ₙ & v
+}^{-1}\bmat{ϕ\\ψ}
+\Bigm{\vert}\bsmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v \\ 0 \\ 0}\Bigr{⟩}%
+\\&= \Bigl{⟨}\bmat[c]{
+	σ𝕀ₘ & -A & u & 𝟎ₘ
+\\ -A^⊤ & σ𝕀ₙ & 𝟎ₙ & v
+}\bsmat{p\\q\\λ\\μ} = \bmat{ϕ\\ψ} \Bigm{\vert}\bsmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v \\ 0 \\ 0}\Bigr{⟩}%
+\end{align*}%
+\subsection{Augmented block inversion}
+
+\textbf{NOTE: Tested this and the issue is that it vastly increases the condition number!}
+
+We use the technique \href{https://en.wikipedia.org/wiki/Block_matrix_pseudoinverse#Column-wise_partitioning_in_over-determined_least_squares}{\underline{Column-wise partitioning in over-determined least squares}}.
+%
+\begin{align*}%
+\bmat{A & B} \bmat{x₁ \\ x₂} = d ⟸ x = \bmat{A & B}⁺d = \bmat{(P_B^⟂ A)⁺ \\ (P_A^⟂ B)⁺}d%
+\end{align*}%
+%
+In particular, in our case this means that the relevant part of the solution is
+%
+\begin{align*}%
+\bmat{p\\q} = (P_B^⟂K)⁺\bmat{ϕ\\ψ}%
+\end{align*}%
+%
+Here
+%
+\begin{align*}%
+P_B^⟂  &= 𝕀 - BB⁺
+\\&= 𝕀 - B(BᵀB)^{-1}B^⊤%
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}(\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤} \bmat{u & 0 \\ 0 & v})^{-1} \bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}(\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤} \bmat{u & 0 \\ 0 & v})^{-1} \bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}\bmat{1/‖u‖² & 0 \\ 0& 1/‖v‖²}\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= 𝕀 - \bmat{u & 0 \\ 0 & v}\bmat{1/‖u‖² & 0 \\ 0& 1/‖v‖²}\bmat{u^⊤ & 0^⊤ \\ 0^⊤ & v^⊤}
+\\&= \bmat{𝕀ₘ - uu^⊤ & 𝟎_{m×n} \\ 𝟎_{n×m} & 𝕀ₙ - vv^⊤}
+\end{align*}%
+%
+So
+%
+\begin{align*}%
+P_B^⟂ K
+&= \bmat{𝕀ₘ - uu^⊤ & 𝟎_{m×n} \\ 𝟎_{n×m} & 𝕀ₙ - vv^⊤} \bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}%
+\\&= \bmat{σ(𝕀ₘ - uu^⊤) & -A + σuv^⊤ \\ -A^⊤ + σvu^⊤ & σ(𝕀ₙ - vv^⊤)}
+\\&= K - σ\bmat{uu^⊤ & -uv^⊤ \\ -vu^⊤ & \sigma vv^⊤ }
+\\&= K - σzz^⊤  \qquad z = \bsmat{u \\ -v}
+\end{align*}%
+%
+In particular, we see that effectively this is a low rank update of the original matrix!
+%
+We can use the inversion formula for 2×2 block matrices, combined with the inverse of rank-1 update formulas:
+%
+\begin{align*}%
+β ≔ 1 - σ z^⊤ K⁺ z = ? \text{[.. proof ...]} = 0
+\end{align*}%
+%
+Also $z∈\Im(K)$, so, in particular, the case (vi) of the paper \href{https://epubs.siam.org/doi/abs/10.1137/0124033}{Generalized Inversion of Modified Matrices} holds:
+
+%
+\begin{align*}%
+(A + cdᵀ)⁺ &= A⁺ - kk⁺A⁺ - A⁺h⁺h + (k⁺A⁺h⁺)kh  \qq{with} k = A⁺c， h = d^⊤A⁺
+\end{align*}
+%
+Assuming $A$ is symmetric, $c=d=x$ and noting that $v⁺ = \frac{1}{‖v‖²}v^⊤$ we can simplify since
+%
+\begin{align*}%
+k = h^⊤ &= A⁺x    &  k⁺ &= \frac{1}{‖A⁺x‖²}x^⊤A⁺
+\\ h = k^⊤ &= x^⊤A⁺  &  h⁺ &= \frac{1}{‖A⁺x‖²}A⁺x
+\end{align*}%
+%
+\begin{align*}%
+(A + xxᵀ)⁺ &= A⁺ - \frac{A⁺xx^⊤A⁺A⁺}{‖A⁺x‖²} - \frac{A⁺A⁺xx^⊤A⁺}{‖A⁺x‖²} + \frac{(x^⊤(A⁺)³x)A⁺xx^⊤A⁺}{‖A⁺x‖⁴}
+\end{align*}
+%
+With an additional scalar $γ$:
+%
+\begin{align*}%
+(A + γxxᵀ)⁺ &= A⁺ - \frac{A⁺xx^⊤A⁺A⁺}{‖A⁺x‖²} - \frac{A⁺A⁺xx^⊤A⁺}{‖A⁺x‖²} + \frac{(x^⊤(A⁺)³x)A⁺xx^⊤A⁺}{‖A⁺x‖⁴}
+\end{align*}
+%
+Now, in our case $x$ happens to be an eigenvector: $Kz = 2σz$, $K⁺z = \tfrac{1}{2σ}z$, $‖z‖² = 2$, hence $‖K⁺z‖² = \tfrac{1}{2σ²}$ and $K⁺zz^⊤K⁺ = \tfrac{1}{4σ²}zz^⊤$.
+%
+\begin{align*}%
+(K - σzzᵀ)⁺ &= K⁺ - \tfrac{1/(2σ)³}{1/2σ²}zz^⊤  - \tfrac{1/(2σ)³}{1/2σ²}zz^⊤ +
+\tfrac{2/(2σ)³}{1/2σ²}\tfrac{1/(2σ)²}{1/2σ²}zz^⊤%
+\\&= K⁺ - \tfrac{1}{4σ}zz^⊤ - \tfrac{1}{4σ}zz^⊤ + \tfrac{1}{4σ}zz^⊤
+\\&= K⁺ - \tfrac{1}{4σ}zz^⊤
+\end{align*}%
+%
+
+
+%
+\begin{align*}%
+⟹(A + xxᵀ)⁺ &=
+%\\&= A⁺ - A⁺xx^⊤(A⁺)^⊤A⁺ - A⁺(A⁺)^⊤ xx^⊤A⁺ + (x^⊤(A⁺)^⊤A⁺(A⁺)^⊤ x)A⁺xx^⊤A⁺
+%\\(K - σzz^⊤)⁺ &= K⁺ + σK⁺ zzᵀKK⁺ + σK⁺KzzᵀK⁺ + σ²(zᵀKK⁺Kz)K⁺zzᵀK⁺
+%\\&=K⁺ + σK⁺(zzᵀK + Kzzᵀ + σzzᵀKzzᵀ)K⁺
+%\\&=K⁺ + 4σ(σ+σ²)K⁺zzᵀK⁺   \qq{using} Kz = 2σ \qq{and} ‖z‖² = 2
+\end{align*}%
+%
+Note that $v⁺ = \frac{1}{‖v‖²}v^⊤$.
+
+
+
+
+
+
+%
+\section{The VJP}
+The last equation allows us to compute the VJP at ease:
+%
+\begin{align*}%
+\Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert}\bmat{∆u\\∆v}\Bigr{⟩}
+&= \Bigl{⟨}\bmat{ϕ\\ψ}\Bigm{\vert} K^{-1}\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}\Bigr{⟩}
+\\&= \Bigl{⟨}K^{-⊤}\bmat{ϕ\\ψ}\Bigm{\vert}\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}\Bigr{⟩}%
+\\&= \Bigl{⟨}\bmat{\tilde{ϕ}\\\tilde{ψ}}\Bigm{\vert}\bmat{{∆A}v - {∆σ}u \\ {∆A}^⊤u - {∆σ}v}\Bigr{⟩}%
+\end{align*}%
+%
+Now, we compute the terms individually:
+%
+\begin{align*}%
+⟨\tilde{ϕ}∣ {∆A}v - {∆σ}u⟩
+&= ⟨\tilde{ϕ}v^⊤∣ {∆A}⟩ - ⟨u^⊤\tilde{ϕ}∣{∆σ}⟩%
+\\&= ⟨\tilde{ϕ}v^⊤∣ {∆A}⟩ - ⟨u^⊤\tilde{ϕ}∣u^⊤{∆A}v⟩%
+\\&= ⟨(𝕀ₘ - uu^⊤)\tilde{ϕ}v^⊤∣{∆A}⟩
+\end{align*}%
+%
+And for the second term we get
+%
+\begin{align*}%
+⟨\tilde{ψ} ∣ {∆A}^⊤ u - {∆σ}v⟩
+&= ⟨\tilde{ψ}u^⊤∣ {∆A}^⊤⟩ - ⟨v^⊤\tilde{ψ}∣{∆σ}⟩%
+\\&= ⟨u\tilde{ψ}^⊤∣ {∆A}⟩ - ⟨\tilde{ψ}^⊤v∣u^⊤{∆A}v⟩%
+\\&= ⟨u\tilde{ψ}(𝕀ₙ - vv^⊤)∣{∆A}⟩
+\end{align*}%
+%
+Using the formula for inverting a 2×2 block-matrix, we can give an explicit solution to $K^{-⊤}\bsmat{ϕ\\ψ}$:
+%
+\begin{align*}%
+K^{-1} = \bmat[c]{σ𝕀ₘ & -A \\ -A^⊤ & σ𝕀ₙ}^{-1}
+&= \bmat{
+	(σ𝕀ₘ - \frac{1}{σ}AA^⊤)^{-1} & 𝟎_{m×n} \\ 𝟎_{n×m} & (σ𝕀ₙ - \frac{1}{σ}A^⊤A)^{-1}}
+	⋅\bmat{𝕀ₘ & \frac{1}{σ}A \\ \frac{1}{σ}A^⊤ & 𝕀ₙ}%
+\\&= \bmat{
+	σ(σ²𝕀ₘ - AA^⊤)^{-1} & (σ²𝕀ₘ - AA^⊤)^{-1}A
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ & σ(σ²𝕀ₙ - A^⊤A)^{-1}
+}
+\end{align*}%
+%
+And we see it's basically projection operators with respect to the image/kernel of $\tilde{A} = \frac{1}{σ}A$.
+%
+In summary, we obtain the following formula for the VJP:
+
+%
+\begin{align*}%
+K \bmat{p \\ q} = \bmat{ϕ\\ψ}
+&⟺
+\bmat{p \\ q} =
+\bmat{
+	σ(σ²𝕀ₘ - AA^⊤)^{-1} & (σ²𝕀ₘ - AA^⊤)^{-1}A
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ & σ(σ²𝕀ₙ - A^⊤A)^{-1}
+}
+\bmat{ϕ\\ψ}%
+%\\&\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \frac{1}{σ}\bmat{
+%		(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & (𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}\tilde{A}
+%	\\  (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}\tilde{A}^⊤ & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
+%}^⊤ \bmat{ϕ\\ψ}%
+%\\&⟺
+%\bmat{\tilde{ϕ}\\ \tilde{ψ}} = \frac{1}{σ}\bmat{
+%		(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1} & \tilde{A}(𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
+%	\\  \tilde{A}^⊤(𝕀ₘ - \tilde{A}\tilde{A}^⊤)^{-1}  & (𝕀ₙ - \tilde{A}^⊤\tilde{A})^{-1}
+%} \bmat{ϕ\\ψ}%
+\end{align*}%
+%
+In particular, we can find the solution by solving 4 smaller linear systems:
+%
+\begin{align*}%
+	σ(σ²𝕀ₘ - AA^⊤)^{-1} ϕ  &= x & (σ²𝕀ₘ - AA^⊤)^{-1}Aψ &= y%
+\\  (σ²𝕀ₙ - A^⊤A)^{-1}A^⊤ϕ &= w & σ(σ²𝕀ₙ - A^⊤A)^{-1}ψ &= z
+\end{align*}%
+%
+Or, equivalently:
+%
+\begin{align*}%
+	(σ²𝕀ₘ - AA^⊤)x &=  σϕ  & (σ²𝕀ₘ - AA^⊤)y  &= Aψ%
+\\  (σ²𝕀ₙ - A^⊤A)w &= A^⊤ϕ &  (σ²𝕀ₙ - A^⊤A)z &= σψ
+\end{align*}%
+%
+
+
+%
+Note how this shows that the off-diagonal entries are solutions to regularized least squares problems!
+%
+However, we really do not want to compute the matrices $AA^⊤$ and $A^⊤A$ since this leads to numerical stability (squared condition number!)
+%
+To circumvent this issue, we do a reformulation
+%
+
+%
+\begin{alignat*}{3}%
+(σ²𝕀ₘ - AA^⊤)y &= Aψ &⟺ y &=\argmin_y ‖-A^⊤y - ψ‖₂² - σ²‖y‖₂²
+\\  &&⟺ y &= \argmin_y \Bigl{‖} \bmat{A^⊤ \\ σ²𝕀ₘ} y - \bmat{-ψ \\ 𝟎ₘ}\Bigr{‖}₂²%
+\\  (σ²𝕀ₙ - A^⊤A)w   &= A^⊤ϕ  &⟺  w &= \argmin_w ‖Aw + ϕ‖₂²   -σ²‖w‖₂²
+\\  &&⟺ w &= \argmin_w \Bigl{‖} \bmat{A \\ σ²𝕀ₙ} w - \bmat{-ϕ \\ 𝟎ₙ}\Bigr{‖}₂²%
+\end{alignat*}%
+%
+
+%
+\begin{remark}[When is Ridge Regression unconstrained?]%
+\label{rem: label}%
+Consider the problem
+%
+\begin{align*}%
+β^* = \argmin_β ‖Xβ-y‖² + λ‖β‖²%
+\end{align*}%
+%
+Question: When is there an unconstrained solution?
+%
+The solution satisfies the normal equation
+%
+\begin{align*}%
+(XᵀX  + λ𝕀)β = X^⊤y%
+\end{align*}%
+%
+If $λ>0$, then $(XᵀX  + λ𝕀)$ is positive definite and hence invertible. If $λ<0$, then $(XᵀX  + λ𝕀)$ is singular whenever $λ$ is an eigenvalue of $XᵀX$.
+%
+In particular, the 4 systems listed before are all ill-conditioned! The central issue is that the constraint is missing! $‖u‖² = 1$ and $‖v‖²=1$ translate to $u⟂∆u$ and $v⟂∆v$. Since $u$, $v$ are singular vectors, this means we avoid the singular subspace when solving these equations!
+
+What we should do is use \textbf{Riemannian Optimization}.
+%
+\end{remark}%
+
+
+\subsection{What happens if ϕ or ψ are zero?}
+%
+In this case we want to fast track the calculation, meaning skip half of the necessary inversions.
+Looking at the equations we find that if $ϕ=0$ then $x=0$ and $w=0$, and if $ψ=0$ then $y=0$ and $z=0$.
+This suggests that backward substitution is better than forward substitution, since it allows decoupling of the two gradient contributions.
+
+
+
+\subsection{Via Forward Substitution}
+Now, the diagonal entries we have a problem: the RHS lacks the $A$ matrix. Thus, we solve in two steps instead:
+%
+%
+\begin{alignat*}{3}%
+	Aμ &= σϕ &⟹ x &= \argmin_x \Bigl{‖} \bmat{A^⊤ \\ σ²𝕀ₘ} x - \bmat{-μ\\𝟎ₘ}\Bigr{‖}₂² %%
+\\  A^⊤ν &= σψ &⟹ z &= \argmin_z \Bigl{‖} \bmat{A \\ σ²𝕀ₙ} z - \bmat{-ν\\𝟎ₙ}\Bigr{‖}₂² %%
+\end{alignat*}%
+%
+We can optimize further by performing a simultaneous solve:
+%
+\begin{align*}%
+	\bmat{x，y} &= \argmin_{x,y} \Bigl{‖} \bmat{A^⊤ \\ σ²𝕀ₘ} \bmat{x，y} - \bmat{-μ & -ψ \\ 𝟎ₘ & 𝟎ₘ}\Bigr{‖}₂²%
+& μ &= \argmin_μ ‖Aμ - σϕ‖₂²
+\\  \bmat{w，z} &= \argmin_{w,z} \Bigl{‖} \bmat{A   \\ σ²𝕀ₙ} \bmat{w，z} - \bmat{-ϕ &-ν \\ 𝟎ₙ & 𝟎ₙ}\Bigr{‖}₂²%
+& ν &= \argmin_ν ‖A^⊤ν - σψ‖₂²
+\end{align*}%
+%
+\subsection{Via Backward Substitution}
+
+We need to introduce an additional modification:
+
+If $Aμ = σϕ$ not solveable, we instead can multiply the equation by $A^⊤$ to obtain:
+%
+\begin{align*}%
+	(σ²𝕀ₘ - AA^⊤)x &= σϕ  &&⟹&  (σ²𝕀ₙ - A^⊤A)μ &= σA^⊤ϕ  & A^⊤x &= μ%
+\\  (σ²𝕀ₙ - A^⊤A)z &= σψ  &&⟹&  (σ²𝕀ₙ - A^⊤A)Aν &= σAψ    & Az &= ν%
+\end{align*}%
+%
+So:
+%
+\begin{align*}%
+	μ &= \argmin_μ \Bigl{‖} \bmat{A \\ σ²𝕀ₙ} μ - \bmat{-σϕ\\𝟎ₙ}\Bigr{‖}₂²  & A^⊤x &= μ%
+\\  ν &= \argmin_μ \Bigl{‖} \bmat{A^⊤ \\ σ²𝕀ₘ} ν - \bmat{-σψ\\𝟎ₘ}\Bigr{‖}₂²  & Az &= ν%
+\end{align*}%
+%
+So
+%
+\begin{align*}%
+	\bmat{μ & w} &= \bmat{A \\ σ²𝕀ₙ} \bmat{-σϕ & -ϕ\\𝟎ₙ & 𝟎ₙ} %
+\\  \bmat{y & ν}   &= \bmat{A^⊤ \\ σ²𝕀ₘ} \bmat{-ψ & -σψ\\𝟎ₘ & 𝟎ₘ} %
+\end{align*}%
+%
+
+
+
+
+
+%
+In principle, one could try to rephrase these as smaller problems, but for now, it's better to just stick to the bigger system.
+%
+We can use the \textbf{push-through identity} to convert these into 4 linear systems:
+%
+\begin{align*}%
+	Px &= ϕ             & Py &= \tilde{A}ψ%
+\\  Qz &= \tilde{A}^⊤ϕ  & Qw &= ψ
+\end{align*}%
+%
+Then $\tilde{ϕ} = x+y$ and $\tilde{ψ} = z+w$, and the VJP are given by the previous equations:
+%
+\begin{align*}%
+	ξ^⊤\frac{∂σ}{∂A} &= ξuv^⊤
+\\  ϕ^⊤\frac{∂u}{∂A} &= (𝕀ₘ - uu^⊤)\tilde{ϕ}v^⊤ = (\tilde{ϕ} - (u^⊤\tilde{ϕ})u)v^⊤%
+\\  ψ^⊤\frac{∂v}{∂A} &= u\tilde{ψ}^⊤(𝕀ₙ - vv^⊤) = u(\tilde{ψ} - (v^⊤\tilde{ψ})v)^⊤%
+\end{align*}%
+%
+\section{Spectral Normalization}
+The VJP of spectral normalization can be computed as follows: let $g(A) = ‖A‖₂$ and $V$ be the vector in the VJP. then
+%
+\begin{align*}%
+∇_A⟨V ∣ \frac{A}{‖A‖₂}⟩
+	&= ⟨V | \frac{A+∆A}{g(A+∆A)} - \frac{A}{g(A)}⟩
+\\  &= ⟨V | \frac{A+∆A}{g(A)+∇g(A)∆A} - \frac{A}{g(A)}⟩
+\\  &= ⟨V | \frac{(A+∆A)(g(A)-∇g(A)∆A)}{(g(A)+∇g(A)∆A)(g(A) - ∇g(A)∆A)} - \frac{A}{g(A)}⟩
+\\  &= ⟨V | \frac{ ∆Ag(A)- A∇g(A)∆A}{g(A)²}⟩
+\\  &= ⟨\tfrac{1}{g(A)}V - \tfrac{⟨V∣A⟩}{g(A)}∇g(A) | ∆A⟩
+\end{align*}%
+%
+%
+\begin{align*}%
+g(A)=1 ⟹ ∇_A⟨V ∣ \frac{A}{‖A‖₂}⟩ = ⟨V - ⟨V∣A⟩∇g(A)∣∆A⟩%
+\end{align*}%
+%
+
+\section{Projected gradient}
+
+When using spectral normalization we want to do the following:
+
+%
+\begin{alignat*}{3}%
+   &\text{update:}\quad& A' &= A - ∇_A 𝓛(\frac{A}{‖A‖₂})%
+\\ &\text{project:}\quad& A &= \frac{A'}{‖A'‖₂}
+\end{alignat*}%
+%
+Moreover, we want:
+%
+\begin{outline}%
+%\renewcommand{\outlineii}{enumerate}
+\1 During forward, compute $\frac{A}{‖A‖₂}$ only once and then reuse this node.
+\1 Compute $‖A‖₂$ effectively between gradient updates.
+	\2 Avoid built-in torch algos, as they make use of full SVD algos.
+\1 After gradient update, perform projection step. (maybe unnecessary)
+\end{outline}%
+%
+NOTE: gradients are different if we include normalization!
+
+\end{document}

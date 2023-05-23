@@ -27,10 +27,11 @@ __all__ = [
 from abc import abstractmethod
 from collections.abc import Iterable
 from math import sqrt
-from typing import Any, Final, Optional, Protocol, TypeAlias, runtime_checkable
+from typing import Any, Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Self
 
 from linodenet.utils import (
     ReverseDense,
@@ -40,10 +41,16 @@ from linodenet.utils import (
     initialize_from_config,
 )
 
-Cell: TypeAlias = nn.Module
-r"""Type hint for Cells."""
 
-CELLS: Final[dict[str, type[Cell]]] = {
+@runtime_checkable
+class Cell(Protocol):
+    """Protocol for all cells."""
+
+    def __call__(self, y: Tensor, x: Tensor) -> Tensor:
+        """Forward pass of the cell."""
+
+
+CELLS: dict[str, type[Cell]] = {
     "RNNCell": nn.RNNCell,
     "GRUCell": nn.GRUCell,
     "LSTMCell": nn.LSTMCell,
@@ -207,8 +214,6 @@ class LinearFilter(FilterABC):
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
-        "input_size": None,
-        "hidden_size": None,
         "alpha": "last-value",
         "alpha_learnable": False,
         "autoregressive": False,
@@ -220,7 +225,7 @@ class LinearFilter(FilterABC):
     r"""CONST: Whether the filter is autoregressive or not."""
     input_size: Final[int]
     r"""CONST: The input size (=dim x)."""
-    hidden_size: Final[int]
+    output_size: Final[int]
     r"""CONST: The hidden size (=dim y)."""
 
     # PARAMETERS
@@ -244,9 +249,7 @@ class LinearFilter(FilterABC):
     ):
         super().__init__()
         config = deep_dict_update(self.HP, cfg)
-        hidden_size = (
-            input_size if config["hidden_size"] is None else config["hidden_size"]
-        )
+        hidden_size = config.get("hidden_size", input_size)
         alpha = config["alpha"]
         alpha_learnable = config["alpha_learnable"]
         autoregressive = config["autoregressive"]
@@ -254,7 +257,7 @@ class LinearFilter(FilterABC):
 
         # CONSTANTS
         self.input_size = n = input_size
-        self.hidden_size = m = hidden_size
+        self.output_size = m = hidden_size
         self.autoregressive = config["autoregressive"]
 
         # PARAMETERS
@@ -341,7 +344,7 @@ class NonLinearFilter(FilterABC):
     r"""CONST: Whether the filter is autoregressive or not."""
     input_size: Final[int]
     r"""CONST: The input size (=dim x)."""
-    hidden_size: Final[int]
+    output_size: Final[int]
     r"""CONST: The hidden size (=dim y)."""
 
     # PARAMETERS
@@ -375,7 +378,7 @@ class NonLinearFilter(FilterABC):
 
         # CONSTANTS
         self.input_size = n = input_size
-        self.hidden_size = m = hidden_size
+        self.output_size = m = hidden_size
         self.autoregressive = config["autoregressive"]
 
         # MODULES
@@ -764,6 +767,10 @@ class SequentialFilterBlock(FilterABC):
 
 class SequentialFilter(FilterABC, nn.Sequential):
     r"""Multiple Filters applied sequentially."""
+    input_size: Final[int]
+    """The input size of the filter."""
+    output_size: Final[int]
+    """The output size of the filter."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -775,11 +782,10 @@ class SequentialFilter(FilterABC, nn.Sequential):
     }
     r"""The HyperparameterDict of this class."""
 
-    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
-        super().__init__()
-        config = deep_dict_update(self.HP, cfg)
-
-        layers: list[nn.Module] = [] if modules is None else list(modules)
+    @classmethod
+    def from_config(cls, cfg: dict[str, Any]) -> Self:
+        config = deep_dict_update(cls.HP, cfg)
+        layers: list[nn.Module] = []
 
         for layer in config["layers"]:
             if isinstance(layer, nn.Module):
@@ -790,8 +796,14 @@ class SequentialFilter(FilterABC, nn.Sequential):
                 layer["hidden_size"] = config["hidden_size"]
                 module = initialize_from_config(layer)
             layers.append(module)
+        return cls(*layers)
 
-        nn.Sequential.__init__(self, *layers)
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
+        self.input_size = modules[0].input_size  # type: ignore[assignment]
+        self.output_size = modules[-1].output_size  # type: ignore[assignment]
+
+        super().__init__()
+        nn.Sequential.__init__(self, *modules)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
