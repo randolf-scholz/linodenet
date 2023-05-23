@@ -6,7 +6,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "linodenet"
-version = "0.2.7"
+version = "0.3.0"
 requires-python = ">=3.10,<3.12"
 description = "Linear ODE Network for Time Series Forecasting"
 readme = "README.rst"
