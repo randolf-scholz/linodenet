@@ -13,10 +13,12 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Final, Protocol, runtime_checkable
+from typing import Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
+from torch.nn import functional
+from typing_extensions import Self
 
 
 @runtime_checkable
@@ -74,7 +76,13 @@ class ConcatEmbedding(nn.Module):
     padding: Tensor
     r"""PARAM: The padding vector."""
 
-    def __init__(self, input_size: int, output_size: int) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        inverse: Optional[nn.Module] = None,
+    ) -> None:
         super().__init__()
         assert (
             input_size <= output_size
@@ -83,6 +91,12 @@ class ConcatEmbedding(nn.Module):
         self.output_size = output_size
         self.padding_size = output_size - input_size
         self.padding = nn.Parameter(torch.randn(self.padding_size))
+
+        if inverse is None:
+            self.inverse = ConcatProjection(
+                input_size=output_size, output_size=input_size, inverse=self
+            )
+            self.inverse.padding = self.padding
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -94,7 +108,16 @@ class ConcatEmbedding(nn.Module):
         return torch.cat([x, self.padding.expand(shape)], dim=-1)
 
     @jit.export
-    def inverse(self, y: Tensor) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
+        r"""Concatenate the input with the padding.
+
+        .. Signature:: ``(..., d) -> (..., d+e)``.
+        """
+        shape = list(x.shape[:-1]) + [self.padding_size]
+        return torch.cat([x, self.padding.expand(shape)], dim=-1)
+
+    @jit.export
+    def decode(self, y: Tensor) -> Tensor:
         r"""Remove the padded state.
 
         .. Signature: ``(..., d+e) -> (..., d)``.
@@ -121,7 +144,13 @@ class ConcatProjection(nn.Module):
     padding_size: Final[int]
     r"""CONST: The size of the padding."""
 
-    def __init__(self, input_size: int, output_size: int) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        inverse: Optional[nn.Module] = None,
+    ) -> None:
         super().__init__()
         assert (
             input_size >= output_size
@@ -131,8 +160,22 @@ class ConcatProjection(nn.Module):
         self.padding_size = input_size - output_size
         self.padding = nn.Parameter(torch.randn(self.padding_size))
 
+        if inverse is None:
+            self.inverse = ConcatEmbedding(
+                input_size=output_size, output_size=input_size, inverse=self
+            )
+            self.inverse.padding = self.padding
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
+        r"""Remove the padded state.
+
+        .. Signature: ``(..., d+e) -> (..., d)``.
+        """
+        return self.encode(x)
+
+    @jit.export
+    def encode(self, x: Tensor) -> Tensor:
         r"""Remove the padded state.
 
         .. Signature: ``(..., d+e) -> (..., d)``.
@@ -140,7 +183,7 @@ class ConcatProjection(nn.Module):
         return x[..., : self.output_size]
 
     @jit.export
-    def inverse(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor) -> Tensor:
         r"""Concatenate the input with the padding.
 
         .. Signature:: ``(..., d) -> (..., d+e)``.
@@ -148,12 +191,9 @@ class ConcatProjection(nn.Module):
         shape = list(y.shape[:-1]) + [self.padding_size]
         return torch.cat([y, self.padding.expand(shape)], dim=-1)
 
-    # TODO: Add variant with filter in latent space
-    # TODO: Add Controls
-
 
 class LinearEmbedding(nn.Module):
-    r"""Maps $x ⟼ Ax$ and $y→A⁺y$."""
+    r"""Maps $x ↦ Ax + b$ and $y ↦ A⁺(y-b)$."""
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
@@ -168,25 +208,55 @@ class LinearEmbedding(nn.Module):
     r"""CONST: The dimensionality of the inputs."""
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
+    is_inverse: Final[bool]
+    r"""CONST: Whether this is the inverse of another module."""
+    with_bias: Final[bool]
+    r"""CONST: Whether this module has a bias."""
 
     # PARAMS
     weight: Tensor
     r"""PARAM: The weight matriz."""
+    bias: Tensor
+    r"""PARAM: The bias vector."""
 
-    # BUFFERS
-    pinv_weight: Tensor
-    r"""BUFFER: The pseudo-inverse of the weight."""
-
-    def __init__(self, input_size: int, output_size: int) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        bias: bool = True,
+        inverse: Optional[Self] = None,
+    ) -> None:
         super().__init__()
         assert (
             input_size <= output_size
         ), f"ConcatEmbedding requires {input_size=} ≤ {output_size=}!"
         self.input_size = input_size
         self.output_size = output_size
-        self.weight = nn.Parameter(torch.empty(input_size, output_size))
-        nn.init.kaiming_normal_(self.weight, nonlinearity="linear")
-        self.register_buffer("pinv_weight", torch.linalg.pinv(self.weight))
+        self.with_bias = bias
+
+        self.weight = nn.Parameter(torch.empty((output_size, input_size)))
+        self.register_parameter(
+            "bias", nn.Parameter(torch.empty(output_size)) if bias else None
+        )
+        self.reset_parameters()
+
+        self.is_inverse = inverse is not None
+        if not self.is_inverse:
+            self.inverse = LinearEmbedding(
+                input_size=output_size, output_size=input_size, inverse=self
+            )
+            self.inverse.weight = self.weight
+            self.inverse.bias = self.bias
+
+    @jit.export
+    def reset_parameters(self) -> None:
+        r"""Reset both weight matrix and bias vector."""
+        with torch.no_grad():
+            bound = float(torch.rsqrt(torch.tensor(self.input_size)))
+            self.weight.uniform_(-bound, bound)
+            if self.bias is not None:
+                self.bias.uniform_(-bound, bound)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -194,13 +264,36 @@ class LinearEmbedding(nn.Module):
 
         .. Signature:: ``(..., d) -> (..., e)``.
         """
-        return torch.einsum("...d, de-> ...e", x, self.weight)
+        if self.is_inverse:
+            return self._decode(x)
+        return self._encode(x)
 
     @jit.export
-    def inverse(self, y: Tensor) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
+        r"""Concatenate the input with the padding.
+
+        .. Signature:: ``(..., d) -> (..., e)``.
+        """
+        if self.is_inverse:
+            return self._decode(x)
+        return self._encode(x)
+
+    @jit.export
+    def decode(self, y: Tensor) -> Tensor:
         r"""Remove the padded state.
 
         .. Signature: ``(..., d+e) -> (..., d)``.
         """
-        self.pinv_weight = torch.linalg.pinv(self.weight)
-        return torch.einsum("...d, de-> ...e", y, self.pinv_weight)
+        if self.is_inverse:
+            return self._encode(y)
+        return self._decode(y)
+
+    @jit.export
+    def _encode(self, x: Tensor) -> Tensor:
+        return functional.linear(x, self.weight, self.bias)
+
+    @jit.export
+    def _decode(self, y: Tensor) -> Tensor:
+        if self.with_bias:
+            y = y - self.bias
+        return torch.linalg.lstsq(self.weight, y)[0]

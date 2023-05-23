@@ -13,15 +13,13 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import FunctionalInitialization
+from linodenet.initializations import Initialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
 from linodenet.models.filters import Filter, RecurrentCellFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
 from linodenet.utils import deep_dict_update, initialize_from_config, pad
-
-# TODO: Use Unicode variable names once https://github.com/pytorch/pytorch/issues/65653 is fixed.
 
 __logger__ = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ class LinODE(nn.Module):
     r"""PARAM: The system matrix of the linear ODE component."""
 
     # Functions
-    kernel_initialization: FunctionalInitialization
+    kernel_initialization: Initialization
     r"""FUNC: Parameter-less function that draws a initial system matrix."""
     kernel_projection: Projection
     r"""FUNC: Regularization function for the kernel."""
@@ -382,7 +380,7 @@ class LinODEnet(nn.Module):
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
-        r""".. Signature:: ``[(..., n), (..., n, d)] -> (..., N, d)``.
+        r""".. Signature:: ``[(..., n), (..., n, d)] -> (..., n, d)``.
 
         **Model Sketch**::
 

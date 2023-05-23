@@ -11,7 +11,7 @@ import pytest
 import torch
 
 from linodenet.config import PROJECT
-from linodenet.initializations import FUNCTIONAL_INITIALIZATIONS
+from linodenet.initializations import INITIALIZATIONS
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def _make_fig(path, means, stdvs, key):
         fig.savefig(path / f"{key}.svg")
 
 
-@pytest.mark.parametrize("key", FUNCTIONAL_INITIALIZATIONS)
+@pytest.mark.parametrize("key", INITIALIZATIONS)
 @pytest.mark.flaky(reruns=3)
 def test_initialization(
     key: str,
@@ -56,7 +56,7 @@ def test_initialization(
         dim: Number of dimensions
         make_plots: Whether to plot
     """
-    initialization = FUNCTIONAL_INITIALIZATIONS[key]
+    initialization = INITIALIZATIONS[key]
     LOGGER = logging.getLogger(initialization.__name__)
     LOGGER.info("Testing...")
 
@@ -95,8 +95,8 @@ def test_initialization(
 @pytest.mark.skip
 def test_all_initializations(make_plots: bool) -> None:
     r"""Test all initializations."""
-    __logger__.info("Testing initializations %s", set(FUNCTIONAL_INITIALIZATIONS))
-    for key in FUNCTIONAL_INITIALIZATIONS:
+    __logger__.info("Testing initializations %s", set(INITIALIZATIONS))
+    for key in INITIALIZATIONS:
         test_initialization(key, make_plots=make_plots)
     __logger__.info("All initializations passed! ✔ ")
 

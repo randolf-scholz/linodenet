@@ -25,7 +25,7 @@ __all__ = [
 from abc import abstractmethod
 from collections.abc import Iterable
 from math import sqrt
-from typing import Any, Final, Optional, TypeAlias
+from typing import Any, Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -38,10 +38,16 @@ from linodenet.utils import (
     initialize_from_config,
 )
 
-Cell: TypeAlias = nn.Module
-r"""Type hint for Cells."""
 
-CELLS: Final[dict[str, type[Cell]]] = {
+@runtime_checkable
+class Cell(Protocol):
+    """Protocol for all cells."""
+
+    def __call__(self, y: Tensor, x: Tensor) -> Tensor:
+        """Forward pass of the cell."""
+
+
+CELLS: dict[str, type[Cell]] = {
     "RNNCell": nn.RNNCell,
     "GRUCell": nn.GRUCell,
     "LSTMCell": nn.LSTMCell,

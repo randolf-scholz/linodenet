@@ -4,6 +4,7 @@ __all__ = [
     # Classes
     "iResNet",
     "iResNetBlock",
+    "iResNetLayer",
     "LinearContraction",
     "spectral_norm",
     "SpectralNorm",
@@ -209,8 +210,8 @@ class LinearContraction(nn.Module):
         # self.spectral_norm = spectral_norm(self.weight)
         # σ_max = torch.linalg.svdvals(self.weight)[0]
         self.spectral_norm = matrix_norm(self.weight, ord=2)
-        fac = torch.minimum(self.c / self.spectral_norm, self.one)
-        return functional.linear(x, fac * self.weight, self.bias)
+        gamma = torch.minimum(self.c / self.spectral_norm, self.one)
+        return functional.linear(x, gamma * self.weight, self.bias)
 
 
 class AltLinearContraction(nn.Module):
@@ -313,6 +314,62 @@ class AltLinearContraction(nn.Module):
         self.spectral_norm = matrix_norm(self.kernel, ord=2)
         fac = torch.minimum(self.c / self.spectral_norm, self.one)
         return functional.linear(x, fac * self.kernel, self.bias)
+
+
+class iResNetLayer(nn.Module):
+    """A single layer of an iResNet."""
+
+    maxiter: Final[int]
+    r"""CONST: Maximum number of steps in power-iteration"""
+    atol: Final[float]
+    r"""CONST: Absolute tolerance for fixed point iteration"""
+    rtol: Final[float]
+    r"""CONST: Relative tolerance for fixed point iteration"""
+    converged: Tensor
+    r"""BUFFER: Boolean tensor indicating convergence"""
+
+    def __init__(
+        self,
+        layer: nn.Module,
+        *,
+        maxiter: int = 1000,
+        atol: float = 1e-8,
+        rtol: float = 1e-5,
+    ) -> None:
+        super().__init__()
+        self.layer = layer
+        self.maxiter = maxiter
+        self.atol = atol
+        self.rtol = rtol
+        self.register_buffer("converged", torch.tensor(False))
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        return x + self.layer(x)
+
+    @jit.export
+    def inverse(self, y: Tensor) -> Tensor:
+        r"""Compute the inverse through fixed point iteration.
+
+        Terminates once ``maxiter`` or tolerance threshold
+        $|x'-x|≤\text{atol} + \text{rtol}⋅|x|$ is reached.
+        """
+        x = y.clone()
+        residual = torch.zeros_like(y)
+
+        for _ in range(self.maxiter):
+            x_prev = x
+            x = y - self.layer(x)
+            residual = (x - x_prev).norm()
+            self.converged = residual < self.atol + self.rtol * x_prev.norm()
+            if self.converged:
+                break
+        if not self.converged:
+            print(
+                f"No convergence in {self.maxiter} iterations. "
+                f"Max residual:{residual} > {self.atol}."
+            )
+        return x
 
 
 class iResNetBlock(nn.Module):
@@ -530,7 +587,6 @@ class iResNet(nn.Module):
         r"""Compute the inverse through fix point iteration in each block in reversed order."""
         for block in self.blocks[::-1]:  # traverse in reverse
             y = block.inverse(y)
-
         return y
 
     # TODO: delete this?

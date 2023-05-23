@@ -2,6 +2,9 @@
 # Custom GitIgnore                                                                    #
 #######################################################################################
 
+# libtorch
+libtorch/
+
 # zip files
 *.zip
 
@@ -18,6 +21,7 @@ reports/
 
 # pytorch model files
 *.pt
+*.torch
 
 # Pytorch profiling
 *.pt.trace.json
@@ -65,7 +69,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/

@@ -18,7 +18,6 @@ RESULT_DIR.mkdir(parents=True, exist_ok=True)
 NAN = torch.tensor(float("nan"))
 
 
-# @pytest.mark.parametrize("key", FunctionalInitializations)
 @pytest.mark.flaky(reruns=3)
 def test_filter_idempotency() -> None:
     r"""Check whether idempotency holds."""
