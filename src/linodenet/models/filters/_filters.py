@@ -36,6 +36,7 @@ from typing_extensions import Self
 from linodenet.utils import (
     ReverseDense,
     ReZeroCell,
+    assert_issubclass,
     deep_dict_update,
     deep_keyval_update,
     initialize_from_config,
@@ -69,6 +70,7 @@ class Filter(Protocol):
         """
 
 
+@assert_issubclass(Filter)
 class FilterABC(nn.Module):
     r"""Base class for all filters.
 
@@ -98,7 +100,8 @@ class FilterABC(nn.Module):
         """
 
 
-class PseudoKalmanFilter(FilterABC):
+@assert_issubclass(Filter)
+class PseudoKalmanFilter(nn.Module):
     r"""A Linear, Autoregressive Filter.
 
     .. math::  x̂' = x̂ - αP∏ₘᵀP^{-1}Πₘ(x̂ - x)
@@ -196,7 +199,8 @@ class PseudoKalmanFilter(FilterABC):
         return x - self.alpha * z
 
 
-class LinearFilter(FilterABC):
+@assert_issubclass(Filter)
+class LinearFilter(nn.Module):
     r"""A Linear Filter.
 
     .. math::  x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)
@@ -325,7 +329,8 @@ class LinearFilter(FilterABC):
         return x - self.alpha * z
 
 
-class NonLinearFilter(FilterABC):
+@assert_issubclass(Filter)
+class NonLinearFilter(nn.Module):
     r"""Non-linear Layers stacked on top of linear core."""
 
     HP = {
@@ -445,7 +450,8 @@ class NonLinearFilter(FilterABC):
         return x - self.epsilon * self.layers(z)
 
 
-class KalmanFilter(FilterABC):
+@assert_issubclass(Filter)
+class KalmanFilter(nn.Module):
     r"""Classical Kalman Filter.
 
     .. math::
@@ -526,7 +532,8 @@ class KalmanFilter(FilterABC):
         return x - torch.einsum("ij, jk, ..k -> ...i", P, H.t(), z)
 
 
-class KalmanCell(FilterABC):
+@assert_issubclass(Filter)
+class KalmanCell(nn.Module):
     r"""A Kalman-Filter inspired non-linear Filter.
 
     We assume that $y = h(x)$ and $y = H⋅x$ in the linear case. We adapt  the formula
@@ -765,7 +772,8 @@ class SequentialFilterBlock(FilterABC):
         return x - z
 
 
-class SequentialFilter(FilterABC, nn.Sequential):
+# @assert_issubclass(Filter)
+class SequentialFilter(nn.Sequential):
     r"""Multiple Filters applied sequentially."""
     input_size: Final[int]
     """The input size of the filter."""
@@ -791,19 +799,30 @@ class SequentialFilter(FilterABC, nn.Sequential):
             if isinstance(layer, nn.Module):
                 module = layer
             else:
-                layer["autoregressive"] = config["autoregressive"]
-                layer["input_size"] = config["input_size"]
-                layer["hidden_size"] = config["hidden_size"]
+                layer |= {
+                    "input_size": config["input_size"],
+                    "hidden_size": config["hidden_size"],
+                    "autoregressive": config["autoregressive"],
+                }
                 module = initialize_from_config(layer)
             layers.append(module)
+
         return cls(*layers)
 
-    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
-        self.input_size = modules[0].input_size  # type: ignore[assignment]
-        self.output_size = modules[-1].output_size  # type: ignore[assignment]
+    def __new__(cls, *modules: nn.Module, **cfg: Any) -> Self:
+        r"""Initialize from hyperparameters."""
+        layers: list[nn.Module] = [] if modules is None else list(modules)
+        assert len(layers) ^ len(cfg), "Provide either blocks, or hyperparameters!"
+        return cls.from_config(cfg) if cfg else super().__new__(cls)
 
-        super().__init__()
-        nn.Sequential.__init__(self, *modules)
+    def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
+        if not modules and cfg:
+            return  # must have been initialized from config
+
+        self.input_size = modules[0].input_size if modules else None  # type: ignore[assignment]
+        self.output_size = modules[-1].output_size if modules else None  # type: ignore[assignment]
+
+        super().__init__(*modules)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:

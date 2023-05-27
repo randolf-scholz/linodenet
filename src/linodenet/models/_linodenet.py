@@ -392,27 +392,22 @@ class LinODEnet(nn.Module):
                                  ↑
                               (tᵢ, xᵢ)
 
-        Parameters
-        ----------
-        T: Tensor, shape=(...,LEN) or PackedSequence
-            The timestamps of the observations.
-        X: Tensor, shape=(..., LEN, DIM) or PackedSequence
-            The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
-        t0: Tensor, shape=(..., 1), optional
-            The timestamps of the initial condition. Defaults to ``T[...,0]``.
-        z0: Tensor, shape=(..., DIM), optional
-            The initial condition. Defaults to ``z0 = self.z0``.
+        Args:
+            T: Tensor, shape=(...,LEN) or PackedSequence
+                The timestamps of the observations.
+            X: Tensor, shape=(..., LEN, DIM) or PackedSequence
+                The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
+            t0: Tensor, shape=(..., 1), optional
+                The timestamps of the initial condition. Defaults to ``T[...,0]``.
+            z0: Tensor, shape=(..., DIM), optional
+                The initial condition. Defaults to ``z0 = self.z0``.
 
-        Returns
-        -------
-        X̂_pre: Tensor, shape=(..., LEN, DIM)
-            The estimated true state of the system at the times $t⁻∈T$ (pre-update).
-        X̂_post: Tensor, shape=(..., LEN, DIM)
-            The estimated true state of the system at the times $t⁺∈T$ (post-update).
+        Returns:
+            X̂_post: Tensor, shape=(..., LEN, DIM)
+                The estimated true state of the system at the times $t⁺∈T$ (post-update).
 
-        References
-        ----------
-        - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
+        References:
+            - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
         """
         # Pad the input
         if self.padding_size:
