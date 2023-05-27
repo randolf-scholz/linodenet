@@ -4,6 +4,7 @@ __all__ = [
     # Constants
     # Functions
     "autojit",
+    "assert_issubclass",
     "deep_dict_update",
     "deep_keyval_update",
     "flatten_nested_tensor",
@@ -37,6 +38,9 @@ from typing_extensions import Self
 from linodenet.config import CONFIG
 
 __logger__ = logging.getLogger(__name__)
+
+T = TypeVar("T", bound=type)
+r"""Type hint for classes."""
 
 R = TypeVar("R")
 r"""Type hint return value."""
@@ -294,3 +298,14 @@ class reset_caches(ContextDecorator):
             self.LOGGER.info("Resetting caches.")
             self.module.recompute_all()  # type: ignore[operator]
         return False
+
+
+def assert_issubclass(proto: type) -> Callable[[T], T]:
+    """Assert that an object satisfies a protocol."""
+
+    def decorator(cls: T) -> T:
+        """Assert that a class satisfies a protocol."""
+        assert issubclass(cls, proto), f"{cls} is not a {proto}"
+        return cls  # type: ignore[return-value]
+
+    return decorator

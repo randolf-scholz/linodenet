@@ -6,6 +6,7 @@ __all__ = [
     # Constants
     # Functions
     "autojit",
+    "assert_issubclass",
     "deep_dict_update",
     "deep_keyval_update",
     "flatten_nested_tensor",
@@ -26,6 +27,7 @@ __all__ = [
 
 from linodenet.utils import layers
 from linodenet.utils._utils import (
+    assert_issubclass,
     autojit,
     deep_dict_update,
     deep_keyval_update,

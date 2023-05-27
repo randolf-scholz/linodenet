@@ -7,7 +7,7 @@ __all__ = [
 
 import logging
 import warnings
-from typing import Any, Final
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -159,11 +159,11 @@ class LatentStateSpaceModel(nn.Module):
             hidden_size = input_size
         assert hidden_size >= input_size
 
-        config["Encoder"]["input_size"] = latent_size
-        config["Decoder"]["input_size"] = latent_size
-        config["System"]["input_size"] = latent_size
-        config["Filter"]["input_size"] = hidden_size
-        config["Filter"]["hidden_size"] = hidden_size
+        config["Encoder"] |= {"input_size": latent_size}
+        config["Decoder"] |= {"input_size": latent_size}
+        config["System"] |= {"input_size": latent_size}
+        config["Filter"] |= {"input_size": hidden_size}
+        config["Filter"] |= {"hidden_size": hidden_size}
 
         cls.LOGGER.debug("Initializing Encoder %s", config["Encoder"])
         encoder: nn.Module = initialize_from_config(config["Encoder"])
@@ -179,6 +179,7 @@ class LatentStateSpaceModel(nn.Module):
             system=system,
             decoder=decoder,
             filter=filter,
+            padding_size=hidden_size - input_size,
         )
 
     def __init__(
@@ -223,7 +224,13 @@ class LatentStateSpaceModel(nn.Module):
         self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
 
     @jit.export
-    def forward(self, T: Tensor, X: Tensor) -> Tensor:
+    def forward(
+        self,
+        T: Tensor,
+        X: Tensor,
+        t0: Optional[Tensor] = None,
+        z0: Optional[Tensor] = None,
+    ) -> Tensor:
         r""".. Signature:: ``[(..., n), (...,n,d) -> (..., N, d)``.
 
         **Model Sketch**::
@@ -237,11 +244,18 @@ class LatentStateSpaceModel(nn.Module):
                               (tᵢ, xᵢ)
 
         Args:
-            T: The timestamps of the observations.
-            X: The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
+            T: Tensor, shape=(...,LEN) or PackedSequence
+                The timestamps of the observations.
+            X: Tensor, shape=(..., LEN, DIM) or PackedSequence
+                The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
+            t0: Tensor, shape=(..., 1), optional
+                The timestamps of the initial condition. Defaults to ``T[...,0]``.
+            z0: Tensor, shape=(..., DIM), optional
+                The initial condition. Defaults to ``z0 = self.z0``.
 
         Returns:
-            X̂_post: The estimated true state of the system at the times $t⁺∈T$ (post-update).
+            X̂_post: Tensor, shape=(..., LEN, DIM)
+                The estimated true state of the system at the times $t⁺∈T$ (post-update).
 
         References:
             - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
@@ -256,12 +270,23 @@ class LatentStateSpaceModel(nn.Module):
             # X = torch.cat([X, z], dim=dim)
             X = pad(X, float("nan"), self.padding_size)
 
+        # # prepend a single zero for the first iteration.
+        # # T = pad(T, 0.0, 1, prepend=True)
+        # # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
+        # DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
+        #
+        # # Move sequence to the front
+        # DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
+        # X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
+
         # prepend a single zero for the first iteration.
         # T = pad(T, 0.0, 1, prepend=True)
         # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
-        DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
+        t0 = t0 if t0 is not None else T[..., 0].unsqueeze(-1)
+        z0 = z0 if z0 is not None else self.z0
 
         # Move sequence to the front
+        DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
         X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
@@ -271,26 +296,26 @@ class LatentStateSpaceModel(nn.Module):
         Xhat_post: list[Tensor] = []
         Zhat_post: list[Tensor] = []
 
-        ẑ_post = self.z0
+        z_post = z0
 
         for dt, x_obs in zip(DT, X):
             # Propagate the latent state forward in time.
-            ẑ_pre = self.system(dt, ẑ_post)  # (...,), (...,LAT) -> (...,LAT)
+            z_pre = self.system(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
 
             # Decode the latent state at the observation time.
-            x̂_pre = self.decoder(ẑ_pre)  # (...,LAT) -> (...,DIM)
+            x_pre = self.decoder(z_pre)  # (..., LAT) -> (..., DIM)
 
             # Update the state estimate by filtering the observation.
-            x̂_post = self.filter(x_obs, x̂_pre)  # (...,DIM), (..., DIM) → (...,DIM)
+            x_post = self.filter(x_obs, x_pre)  # (..., DIM), (..., DIM) → (..., DIM)
 
             # Encode the latent state at the observation time.
-            ẑ_post = self.encoder(x̂_post)  # (...,DIM) → (...,LAT)
+            z_post = self.encoder(x_post)  # (..., DIM) → (..., LAT)
 
             # Save all tensors for later.
-            Zhat_pre.append(ẑ_pre)
-            Xhat_pre.append(x̂_pre)
-            Xhat_post.append(x̂_post)
-            Zhat_post.append(ẑ_post)
+            Zhat_pre.append(z_pre)
+            Xhat_pre.append(x_pre)
+            Xhat_post.append(x_post)
+            Zhat_post.append(z_post)
 
         self.xhat_pre = torch.stack(Xhat_pre, dim=-2)
         self.xhat_post = torch.stack(Xhat_post, dim=-2)
@@ -298,6 +323,5 @@ class LatentStateSpaceModel(nn.Module):
         self.zhat_post = torch.stack(Zhat_post, dim=-2)
         self.timedeltas = DT.moveaxis(0, -1)
 
-        yhat = self.xhat_post[..., : self.output_size]
-
+        yhat = self.xhat_pre[..., : self.output_size]
         return yhat

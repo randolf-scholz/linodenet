@@ -303,7 +303,7 @@ class iResNetBlock(nn.Module):
         if not self.converged:
             warnings.warn(
                 f"No convergence in {self.maxiter} iterations. "
-                f"Max residual:{residual} > {self.atol}.",
+                f"Max residual:{residual.item()} > {self.atol}.",
                 stacklevel=2,
             )
         return x
@@ -341,31 +341,29 @@ class iSequential(nn.Module):
     r"""The hyperparameter dictionary"""
 
     @classmethod
-    def from_hyperparameters(cls, **cfg: Any) -> Self:
+    def from_config(cls, **cfg: Any) -> Self:
         raise NotImplementedError
 
     def __new__(
-        cls, *modules: nn.Module, inverse: Optional[Self] = None, **hparams: Any
+        cls, *modules: nn.Module, inverse: Optional[Self] = None, **cfg: Any
     ) -> Self:
         r"""Initialize from hyperparameters."""
         blocks: list[nn.Module] = [] if modules is None else list(modules)
-        assert len(blocks) ^ len(hparams), "Provide either blocks, or hyperparameters!"
+        assert len(blocks) ^ len(cfg), "Provide either blocks, or hyperparameters!"
 
-        if hparams:
-            return cls.from_hyperparameters(**hparams)
+        if cfg:
+            return cls.from_config(**cfg)
 
         return super().__new__(cls)
 
-    def __init__(
-        self, *modules: nn.Module, inverse: Optional[Self] = None, **hparams: Any
-    ) -> None:
+    def __init__(self, *modules: nn.Module, inverse: Optional[Self] = None) -> None:
         r"""Initialize from hyperparameters."""
         super().__init__()
 
         blocks: list[nn.Module] = [] if modules is None else list(modules)
-        assert len(blocks) ^ len(hparams), "Provide either blocks, or hyperparameters!"
-        if hparams:
-            raise ValueError
+        # assert len(blocks) ^ len(hparams), "Provide either blocks, or hyperparameters!"
+        # if hparams:
+        #     raise ValueError
 
         self.input_size = -1
         self.output_size = -1
