@@ -1,17 +1,23 @@
 LinODEnet - 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁work
 ===========================================================
 
-.. image:: ../diagram/linodenet-sketch.svg
+.. image:: ../diagram/lssm-new-notation.png
    :width: 50%
    :alt: LinODEnet-sketch
 
-Installation
-============
+Installation guide
+------------------
 
-First create a virtual environment, note that poetry might be currently broken.
+Install via [poetry](https://python-poetry.org/):
 
-.. code:: bash
+.. code-block:: bash
 
-  python -m venv .venv
-  .venv/bin/activate
-  poetry install
+    poetry shell
+    poetry install
+
+
+Install via pip:
+
+.. code-block:: bash
+
+    pip install -e .
