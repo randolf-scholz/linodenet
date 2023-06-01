@@ -2,6 +2,7 @@
 #include <c10/util/irange.h>
 #include <torch/script.h>
 #include <torch/linalg.h>
+#include <torch/nn.h>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -22,6 +23,9 @@ using torch::eye;
 using torch::addmm;
 using torch::linalg::solve;
 using torch::linalg::lstsq;
+using torch::nn::functional::normalize;
+namespace F = torch::nn::functional;
+
 
 struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
     /** test
@@ -86,45 +90,52 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         // Initialize maxiter depending on the size of the matrix.
         const int m = A.size(0);
         const int n = A.size(1);
-        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 4 * (m + n);
+        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m+n);
         bool converged = false;
 
         // Initialize u and v with random values if not given
         Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
         Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
-        u /= u.norm();
-        v /= v.norm();
-        Tensor sigma = A.mv(v).dot(u);
+
+        v = normalize(A.t().mv(u), F::NormalizeFuncOptions().p(2).dim(-1));
+        u = normalize(A.mv(v), F::NormalizeFuncOptions().p(2).dim(-1));
+        Tensor sigma = dot(u, A.mv(v));
+
+        // NOTE: After performing 2 iterations, σ>0 should be guaranteed as
+        // σ = vᵀv' ∝ v^⊤A^⊤Av>0 and σ = uᵀu' ∝ u^⊤AA^⊤u > 0
 
         // Perform power-iteration for maxiter times or until convergence.
         for (const auto i: c10::irange(MAXITER)) {
             Tensor u_old = u;
             Tensor v_old = v;
 
-            u = A.mv(v);
-            sigma = dot(u, u_old);
-            Tensor left_residual = (u - sigma * u_old).norm();
-            u /= u.norm();
-            // assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
-
             v = A.t().mv(u);
             sigma = dot(v, v_old);
             Tensor right_residual = (v - sigma * v_old).norm();
             v /= v.norm();
-            // assert(sigma.item().toDouble() > 0);
 
+            u = A.mv(v);
+            sigma = dot(u, u_old);
+            Tensor left_residual = (u - sigma * u_old).norm();
+            u /= u.norm();
+
+            // Check convergence.
             Tensor tol = atol + rtol * sigma;
-            converged = (left_residual < tol).item<bool>() && (right_residual < tol).item<bool>();
-            if (converged) {
-                break;
-            }
+            converged = (
+                (left_residual < tol).item<bool>()
+                && (right_residual < tol).item<bool>()
+            );
+            if (converged) {break;}
         }
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.");
+            TORCH_WARN("No convergence in ", MAXITER, " iterations. σ=", sigma.item<double>());
         }
-        assert(sigma.item<double>() > 0);
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
+        if (sigma.item<double>() < 0) {
+            TORCH_WARN("Singular value estimate is negative!?!?!?");
+            assert((sigma.item<double>() > 0) && "Singular value estimate is negative.");
+        }
         ctx->save_for_backward({A, sigma, u, v});
         return {sigma, u, v};
     }
