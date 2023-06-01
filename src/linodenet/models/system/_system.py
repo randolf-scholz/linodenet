@@ -204,6 +204,6 @@ class LinODECell(nn.Module):
         """
         self.kernel = self.scalar * self.kernel_parametrization(self.weight)
         Adt = torch.einsum("..., kl -> ...kl", dt, self.kernel)
-        expAdt = torch.linalg.matrix_exp(Adt.float())
+        expAdt = torch.linalg.matrix_exp(Adt)
         xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)
         return xhat
