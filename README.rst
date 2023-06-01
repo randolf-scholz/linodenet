@@ -14,7 +14,7 @@ The documentation is hosted at https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/t
 Installation guide
 ------------------
 
-Install via [poetry](https://python-poetry.org/):
+Install via poetry (https://python-poetry.org/)
 
 .. code-block:: bash
 
