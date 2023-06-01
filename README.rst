@@ -2,7 +2,7 @@ LinODEnet — 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲�
 ===========================================================
 
 .. image:: /diagram/lssm-new-notation.png
-   :width: 50%
+   :width: 100%
    :alt: LinODEnet-sketch
 
 Documentation
