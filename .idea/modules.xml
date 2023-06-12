@@ -3,7 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/linodenet.iml" filepath="$PROJECT_DIR$/.idea/linodenet.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/spectral_norm.iml" filepath="$PROJECT_DIR$/.idea/spectral_norm.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/linodenet2.iml" filepath="$PROJECT_DIR$/.idea/linodenet2.iml" />
     </modules>
   </component>
 </project>
