@@ -1,5 +1,9 @@
 # TODOs
 
+- [ ] Parallel Scan Algorithm Matrix Exponential
+- [ ] VJP Matrix Exponential
+
+
 ## LinODEnet
 
 ### TODO: Control variables
