@@ -191,6 +191,8 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         const int m = A.size(0);
         const int n = A.size(1);
         // augmented K matrix: (m+n+2) x (m+n)
+        // [ σ𝕀ₘ | -A  | u | 0 ] ⋅ [p, q, μ, ν] = [ϕ]
+        // [ -Aᵀ | σ𝕀ₙ | 0 | v ]                  [ψ]
         Tensor K = cat({
             cat({sigma * eye(m, A.options()), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),
             cat({-A.t(), sigma * eye(n, A.options()), zeros_like(v).unsqueeze(-1), v.unsqueeze(-1)}, 1)
