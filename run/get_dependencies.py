@@ -6,10 +6,11 @@ import importlib
 import pkgutil
 import sys
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 
 
 def extract_imports(node: ast.Import) -> set[str]:
-    """Visit an `import` statement node and extract third-party dependencies."""
+    """Extract third-party dependencies from an `import` statement node."""
     dependencies = set()
     for alias in node.names:
         module = alias.name.split(".")[0]
@@ -19,7 +20,7 @@ def extract_imports(node: ast.Import) -> set[str]:
 
 
 def extract_import_from(node: ast.ImportFrom) -> set[str]:
-    """Visit an `import from` statement node and extract third-party dependencies."""
+    """Extract third-party dependencies from an `import from` statement node."""
     dependencies = set()
     module = node.module.split(".")[0]
     if not module.startswith("_"):
@@ -32,13 +33,31 @@ def is_submodule(submodule_name: str, module_name: str) -> bool:
     return submodule_name.startswith(module_name + ".")
 
 
-def get_dependencies(module_name: str, recursive: bool = True) -> set[str]:
+def get_file_dependencies(file_path: Path) -> set[str]:
+    """Retrieve the list of third-party dependencies imported by a file."""
+    dependencies = set()
+    path = Path(file_path)
+
+    if path.suffix != ".py":
+        return dependencies
+
+    with open(path, "r", encoding="utf8") as file:
+        tree = ast.parse(file.read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                dependencies |= extract_imports(node)
+            elif isinstance(node, ast.ImportFrom):
+                dependencies |= extract_import_from(node)
+    return dependencies
+
+
+def get_module_dependencies(module_name: str, recursive: bool = True) -> set[str]:
     """Retrieve the list of third-party dependencies imported by a module."""
     module = importlib.import_module(module_name)
     dependencies = set()
 
     # Visit the current module
-    with open(module.__file__, "r") as file:
+    with open(module.__file__, "r", encoding="utf8") as file:
         tree = ast.parse(file.read())
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -50,7 +69,6 @@ def get_dependencies(module_name: str, recursive: bool = True) -> set[str]:
         return dependencies
 
     # if it is a package, recurse into it.
-
     if hasattr(module, "__path__"):
         # Visit the sub-packages/modules of the package
         for module_info in pkgutil.walk_packages(module.__path__):
@@ -58,7 +76,9 @@ def get_dependencies(module_name: str, recursive: bool = True) -> set[str]:
             submodule_name = submodule.__name__
 
             if is_submodule(submodule_name, module_name):
-                dependencies |= get_dependencies(submodule_name, recursive=recursive)
+                dependencies |= get_module_dependencies(
+                    submodule_name, recursive=recursive
+                )
 
     return dependencies
 
@@ -77,15 +97,35 @@ def group_dependencies(dependencies: set[str]) -> tuple[list[str], list[str]]:
     return sorted(stdlib_dependencies), sorted(third_party_dependencies)
 
 
+def collect_dependencies(name: str | Path) -> set[str]:
+    """Collect the third-party dependencies from files in the given path."""
+    dependencies = set()
+    path = Path(name)
+
+    if not path.exists():  # assume module
+        dependencies = get_module_dependencies(name)
+    elif path.is_file():  # Single file
+        dependencies |= get_file_dependencies(path)
+    elif path.is_dir():  # Directory
+        for file_path in path.rglob("*"):
+            if file_path.is_file():
+                dependencies |= get_file_dependencies(file_path)
+    else:
+        raise ValueError(f"Invalid path: {path}")
+
+    return dependencies
+
+
 def main() -> None:
+    """Print the third-party dependencies of a module."""
     if len(sys.argv) != 2:
         print("Usage: python get_dependencies.py [module_name]")
         sys.exit(1)
 
-    module_name = sys.argv[1]
+    name = sys.argv[1]
 
     with redirect_stdout(None), redirect_stderr(None):
-        dependencies = get_dependencies(module_name)
+        dependencies = collect_dependencies(name)
 
     _, third_party_dependencies = group_dependencies(dependencies)
 
