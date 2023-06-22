@@ -25,6 +25,7 @@ repos:
         description: "ensures that (non-binary) executables have a shebang."
       - id: check-shebang-scripts-are-executable
         description: "ensures that (non-binary) files with a shebang are executable."
+        stages: [commit]
       - id: check-symlinks
         description: "checks for symlinks which do not point to anything."
       - id: check-toml
@@ -84,12 +85,18 @@ repos:
       - id: black-jupyter
   # blacken-docs
   - repo: https://github.com/asottile/blacken-docs
-    rev: 1.13.0
+    rev: 1.14.0
     hooks:
       - id: blacken-docs
         files: (^src/|^tests/)
         types: [python]
         description: " Run `black` on python code blocks in documentation files "
+  # ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.0.274
+    hooks:
+      - id: ruff
+        files: (^src/|^tests/)
   # flake8
   - repo: https://github.com/pycqa/flake8
     rev: 6.0.0
@@ -104,12 +111,13 @@ repos:
           - flake8-docstrings # wraps pydocstyle
           - flake8-nb
           - flake8-pyi
+          - flake8-pyproject
           - flake8-rst
           - flake8-rst-docstrings
   # yesqa
   # TODO: remove if https://github.com/PyCQA/flake8/issues/603 is fixed
   - repo: https://github.com/asottile/yesqa
-    rev: v1.4.0
+    rev: v1.5.0
     hooks:
       - id: yesqa
         files: (^src/|^tests/)
