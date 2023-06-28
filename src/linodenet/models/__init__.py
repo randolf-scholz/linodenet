@@ -40,8 +40,7 @@ from linodenet.models.encoders import (
     iResNetBlock,
     spectral_norm,
 )
-from linodenet.models.lssm import LatentStateSpaceModel
-from linodenet.models.lssm import LatentStateSpaceModel as LSSM
+from linodenet.models.lssm import LatentStateSpaceModel, LatentStateSpaceModel as LSSM
 from linodenet.models.system import LinODECell
 
 MODELS: dict[str, type[Model]] = {
