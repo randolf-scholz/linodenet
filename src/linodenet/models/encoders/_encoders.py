@@ -28,6 +28,7 @@ class Encoder(Protocol):
 
         .. Signature: ``(..., d) -> (..., d)``.
         """
+        ...
 
 
 class EncoderABC(nn.Module):

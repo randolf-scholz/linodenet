@@ -60,7 +60,8 @@ class NaiveLinearContraction(nn.Module):
         self.register_buffer("c", torch.tensor(float(c)), persistent=True)
         self.register_buffer("one", torch.tensor(1.0), persistent=True)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         sigma = torch.linalg.matrix_norm(self.weight, ord=2)
         gamma = torch.minimum(self.c / sigma, self.one)
         return functional.linear(x, gamma * self.weight, self.bias)
@@ -148,6 +149,7 @@ class LinearContraction(nn.Module):
 
     @jit.export
     def recompute_cache(self) -> None:
+        r"""Recompute the cached weight matrix."""
         # Compute the cached weight matrix
         sigma, u, v = singular_triplet(self.weight, u0=self.u, v0=self.v)
         gamma = torch.minimum(self.one, self.c / sigma)
@@ -259,6 +261,7 @@ class iResNetBlock(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n) -> (..., n)``."""
         if self.is_inverse:
             return self._decode(x)
         return self._encode(x)
@@ -342,6 +345,7 @@ class iSequential(nn.Module):
 
     @classmethod
     def from_config(cls, **cfg: Any) -> Self:
+        r"""Initialize from hyperparameters."""
         raise NotImplementedError
 
     def __new__(

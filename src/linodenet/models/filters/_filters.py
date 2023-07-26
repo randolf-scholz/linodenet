@@ -49,6 +49,7 @@ class Cell(Protocol):
 
     def __call__(self, y: Tensor, x: Tensor) -> Tensor:
         """Forward pass of the cell."""
+        ...
 
 
 CELLS: dict[str, type[Cell]] = {
@@ -68,6 +69,7 @@ class Filter(Protocol):
 
         .. Signature: ``[(..., n), (..., m)] -> (..., n)``.
         """
+        ...
 
 
 @assert_issubclass(Filter)
@@ -520,6 +522,7 @@ class KalmanFilter(nn.Module):
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor, *, P: Optional[Tensor] = None) -> Tensor:
+        r"""Return $x' = x + P⋅Hᵀ∏ₘᵀ(HPHᵀ + R)⁻¹ ∏ₘ (y - Hx)$."""
         P = torch.eye(x.shape[-1]) if P is None else P
         # create the mask
         mask = ~torch.isnan(y)
@@ -773,7 +776,7 @@ class SequentialFilterBlock(FilterABC):
 
 
 # @assert_issubclass(Filter)
-class SequentialFilter(nn.Sequential):
+class SequentialFilter(nn.Sequential):  # FIXME: use ModuleList instead?
     r"""Multiple Filters applied sequentially."""
     input_size: Final[int]
     """The input size of the filter."""
@@ -792,6 +795,7 @@ class SequentialFilter(nn.Sequential):
 
     @classmethod
     def from_config(cls, cfg: dict[str, Any]) -> Self:
+        r"""Initialize from hyperparameters."""
         config = deep_dict_update(cls.HP, cfg)
         layers: list[nn.Module] = []
 

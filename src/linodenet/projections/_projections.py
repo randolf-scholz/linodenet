@@ -21,6 +21,7 @@ class Projection(Protocol):
 
         .. Signature: ``(..., d) -> (..., f)``.
         """
+        ...
 
 
 class ProjectionABC(nn.Module):

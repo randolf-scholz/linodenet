@@ -21,6 +21,7 @@ class Model(Protocol):
 
     def __call__(self, *args: TensorLike, **kwargs: TensorLike) -> TensorLike:
         """Forward pass of the model."""
+        ...
 
 
 class ModelABC(nn.Module):

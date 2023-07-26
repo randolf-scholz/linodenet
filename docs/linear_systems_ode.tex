@@ -1,0 +1,153 @@
+\RequirePackage{iftex}
+\RequirePDFTeX
+\NeedsTeXFormat{LaTeX2e}
+\documentclass[a4paper, 10pt, margin=2cm]{scrartcl}
+\usepackage{ismll-packages}
+\usepackage{ismll-mathoperators}
+\usepackage{ismll-style}
+\usepackage{unicode-symbols}
+
+\usepackage[margin=2cm]{geometry}
+
+\title{Linear Systems}
+\author{Randolf Scholz}
+\begin{document}
+
+\maketitle
+
+
+
+
+\section{Determininistic Linear Systems}
+
+In the most general case we consider
+%
+\begin{align*}%
+\dot{x} = A(t)x(t) + b(t)%
+\end{align*}%
+%
+Sometimes, we consider, redundantly, the factorization
+%
+\begin{align*}%
+\dot{x} = A(t)x(t) + B(t)u(t)%%
+\end{align*}%
+%
+
+%
+\begin{table}[H]%
+\centering%
+\caption{caption}%
+\label{tab: label}%
+\begin{tabular}{l|ll|ll}%
+\toprule
+& \multicolumn{2}{c|}{deterministic} & \multicolumn{2}{c}{stochastic}
+\\                  & homogeneous & inhomogenenous & homogeneous & inhomogenenous
+\\ \midrule
+    constant-coeff. & $̇x = Ax$       & $̇x = Ax + b$       & $̇x = Ax + ν$    & $̇x = Ax + b + ν$
+\\  time-invariant  & $̇x = Ax$       & $̇x = Ax + b(t)$    & $̇x = Ax + ν$    & $̇x = Ax + b(t) + ν$
+\\  time-variant    & $̇x = A(t)x$    & $̇x = A(t)x + b(t)$ & $̇x = A(t)x + ν$ & $̇x = A(t)x + b(t) + ν$
+\\ \bottomrule
+\end{tabular}%
+\end{table}%
+
+
+Solutions
+
+
+%
+\begin{table}[H]%
+\centering%
+\caption{}%
+\label{tab: label}%
+\begin{tabular}{l|ll}%
+\toprule
+& \multicolumn{2}{c|}{deterministic}
+\\                  & homogeneous & inhomogenenous
+\\ \midrule
+    constant-coeff.               & $x(t+∆t) = e^{A∆t}x(t)$       & $x(t+∆t) = e^{A∆t}x(t) + φ₁(A∆t)b$
+\\  time-invariant                & $x(t+∆t) = e^{A∆t}x(t)$       & $x(t+∆t) = e^{A∆t}x(t) + ∫_0^{∆t} e^{A(∆t-∆τ)}b(t+∆τ)\dd{∆τ}$
+\\  time-variant (commutative)    & $̇x(t+∆t) = e^{∫ₜ^{t+∆t}A(τ)\dd{τ}}x(t)$ & $̇x(t+∆t) = e^{∫ₜ^{t+∆t}A(τ)\dd{τ}}x(t) + ∫ₜ^{t+∆t} e^{-∫_{τ}^{t+∆t}A(s)\dd{s}}b(τ)\dd{τ}$
+\\  time-variant                  & no closed form                  & no closed form
+\\ \bottomrule
+\end{tabular}%
+\end{table}%
+
+
+
+
+
+\subsection{Linear-Gaussian Systems}
+
+We assume $xₜ∼𝓝(μₜ，Σₜ)$. Then what is the distribution of $x(t+∆t)$?
+
+
+\begin{lemma}[Expectation/Variance under linear/affine transformations]%
+\label{lem: linear transformation exepctation variance}
+\begin{align*}%
+𝐄[Ax + b] &= A𝐄[x]+b   & 𝐕[Ax+b] &= A𝐕[x]A^⊤
+\end{align*}%
+\end{lemma}%
+
+%
+\begin{lemma}[Normal under linear/affine transformation]%
+\label{lem: gaussian linear}%
+%
+\begin{align*}%
+x∼𝓝(μ，Σ) ⟹ Ax + b ∼𝓝(Aμ+b，AΣA^⊤)%
+\end{align*}%
+%
+\begin{proof}
+Via characteristic functions. Note that $φ_{AX+b}(𝐭) = e^{ib^⊤𝐭}φ_X(A^⊤𝐭)$.
+then
+
+%
+\begin{align*}%
+φ_y(𝐭) = 𝐄_y[e^{i 𝐲^⊤ 𝐭}] = 𝐄_x[e^{i (A𝐱+b)^⊤ 𝐭}] = 𝐄_x[e^{i (A𝐱+b)^⊤ 𝐭}] =  e^{ib^⊤ 𝐭}𝐄_x[e^{i 𝐱^⊤A^⊤𝐭}]
+\\ =  e^{ib^⊤ 𝐭}  e^{iμ^⊤A^⊤𝐭 - ½𝐭AΣA^⊤𝐭} =  e^{i(Aμ+b)^⊤𝐭 - ½𝐭AΣA^⊤𝐭}%
+\end{align*}%
+%
+\end{proof}
+%
+\end{lemma}%
+
+
+%
+\begin{lemma}[characteristic function of gaussian]%
+\label{lem: label}%
+%
+\begin{align*}%
+x∼𝓝(μ，Σ) ⟹ φ(𝐭) = 𝐄_x [e^{i x^⊤𝐭}] = e^{iμ^⊤ 𝐭 - ½𝐭^⊤Σ𝐭}%
+\end{align*}%
+%
+%
+\end{lemma}%
+
+
+
+
+
+\section{Stochastic Linear Systems}
+
+
+First consider the homogeneous case:
+%
+\begin{align*}%
+ ̇xₜ = Aₜxₜ + νₜ%
+\end{align*}%
+%
+where $νₜ$ is a zero-mean white noise process, i.e. $𝐄[νₜ] = 0$ and $𝐄[νₜνₛ] = δ_{ts} Qₜ$.
+
+Then
+
+%
+\begin{align*}%
+\dot{Σ} = AₜΣₜ + ΣₜAₜ^⊤ + Qₜ%
+\end{align*}%
+%
+
+
+
+
+
+
+\end{document}

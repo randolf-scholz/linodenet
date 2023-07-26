@@ -110,6 +110,7 @@ def _clean_namespace(module: ModuleType) -> None:
         elif (isinstance(obj, type) or callable(obj)) and is_private(get_module(obj)):
             # set __module__ attribute to __package__ for functions/classes originating from private modules.
             logger.debug("Changing %s to %s!", obj.__module__, module.__package__)
+            assert module.__package__ is not None, f"{module=} has no __package__ ?!?!"
             obj.__module__ = module.__package__
 
 

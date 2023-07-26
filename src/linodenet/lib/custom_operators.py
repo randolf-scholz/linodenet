@@ -8,6 +8,7 @@ __all__ = [
 ]
 
 import warnings
+from collections.abc import Callable
 from pathlib import Path
 from typing import Optional
 
@@ -45,6 +46,14 @@ def spectral_norm_native(
 lib_base_path = Path(__file__).parent
 lib_path = lib_base_path / "build" / "liblinodenet.so"
 
+_singular_triplet: Callable[
+    [Tensor, Optional[Tensor], Optional[Tensor], Optional[int], float, float],
+    tuple[Tensor, Tensor, Tensor],
+]
+_spectral_norm: Callable[
+    [Tensor, Optional[Tensor], Optional[Tensor], Optional[int], float, float], Tensor
+]
+
 if lib_path.exists():
     torch.ops.load_library(lib_path)
     _spectral_norm = torch.ops.custom.spectral_norm
@@ -73,7 +82,7 @@ else:
             verbose=True,
         )
         _spectral_norm = torch.ops.custom.spectral_norm
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         warnings.warn(
             "Could not compile the custom binaries!"
             " Using torch.linalg.svd and torch.linalg.matrix_norm instead."

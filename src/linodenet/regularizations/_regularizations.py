@@ -17,6 +17,7 @@ class Regularization(Protocol):
 
     def __call__(self, x: Tensor, /) -> Tensor:
         """Forward pass of the regularization."""
+        ...
 
 
 class RegularizationABC(nn.Module):

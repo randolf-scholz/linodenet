@@ -18,7 +18,6 @@ __all__ = [
     "symmetric",
 ]
 
-
 import torch
 from torch import BoolTensor, Tensor, jit
 
@@ -148,4 +147,5 @@ def masked(x: Tensor, m: BoolTensor) -> Tensor:
     One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
     """
     zero = torch.tensor(0.0, dtype=x.dtype, device=x.device)
-    return torch.where(m, x, zero)
+    mask = torch.as_tensor(m, dtype=torch.bool, device=x.device)
+    return torch.where(mask, x, zero)

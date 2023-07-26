@@ -41,6 +41,7 @@ class Initialization(Protocol):
 
     def __call__(self, n: SizeLike, /) -> Tensor:
         """Create a random matrix of shape `n`."""
+        ...
 
 
 def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:

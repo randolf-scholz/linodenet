@@ -30,6 +30,7 @@ class Embedding(Protocol):
 
         .. Signature: ``... -> ...``.
         """
+        ...
 
 
 class EmbeddingABC(nn.Module):

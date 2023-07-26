@@ -28,6 +28,7 @@ class System(Protocol):
 
         .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
         """
+        ...
 
 
 class SystemABC(nn.Module):

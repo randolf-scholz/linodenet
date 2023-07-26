@@ -45,6 +45,7 @@ class Cell(Protocol):
 
     def __call__(self, y: Tensor, x: Tensor) -> Tensor:
         """Forward pass of the cell."""
+        ...
 
 
 CELLS: dict[str, type[Cell]] = {

@@ -111,12 +111,12 @@ class Parallel(nn.ModuleList):
     def __matmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""
         if isinstance(other, Parallel):
-            return Parallel(*(*self, *other))
-        return Parallel(*(*self, other))
+            return Parallel((*self, *other))
+        return Parallel((*self, other))
 
     def __rmatmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""
-        return Parallel(*(other, *self))
+        return Parallel((other, *self))
 
     def __imatmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""

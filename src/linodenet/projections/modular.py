@@ -20,6 +20,7 @@ __all__ = [
 
 from typing import Final, Optional
 
+import torch
 from torch import BoolTensor, Tensor, jit, nn
 
 from linodenet.projections.functional import (
@@ -182,13 +183,13 @@ class Masked(nn.Module):
     One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
     """
 
-    m: BoolTensor
+    mask: BoolTensor
 
-    def __init__(self, m: BoolTensor) -> None:
+    def __init__(self, mask: bool | Tensor) -> None:
         super().__init__()
-        self.m = m
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of masked matrices."""
-        return masked(x, self.m)
+        return masked(x, self.mask)
