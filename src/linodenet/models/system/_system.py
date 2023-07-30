@@ -15,7 +15,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.initializations import INITIALIZATIONS
 from linodenet.initializations.functional import gaussian
-from linodenet.projections import PROJECTIONS
+from linodenet.projections import FUNCTIONAL_PROJECTIONS
 from linodenet.utils import deep_dict_update
 
 
@@ -158,9 +158,9 @@ class LinODECell(nn.Module):
         def kernel_parametrization_dispatch():
             r"""Dispatch the kernel parametrization."""
             if kernel_parametrization is None:
-                _kernel_parametrization = PROJECTIONS["identity"]
-            elif kernel_parametrization in PROJECTIONS:
-                _kernel_parametrization = PROJECTIONS[kernel_parametrization]
+                _kernel_parametrization = FUNCTIONAL_PROJECTIONS["identity"]
+            elif kernel_parametrization in FUNCTIONAL_PROJECTIONS:
+                _kernel_parametrization = FUNCTIONAL_PROJECTIONS[kernel_parametrization]
             elif callable(kernel_parametrization):
                 _kernel_parametrization = kernel_parametrization
             else:

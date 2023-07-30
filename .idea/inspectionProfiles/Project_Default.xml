@@ -29,6 +29,8 @@
     <inspection_tool class="AppEngineDeprecatedRuntimeInspection" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="AppEngineThreadsafeCGIHandlerInspection" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="AppEngineThreadsafeInspection" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="ArgumentSelectionDefects" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="ArrayIndexOutOfBounds" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="AssignmentResultUsedJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="AssignmentToForLoopParameterJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="AssignmentToFunctionParameterJS" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -37,15 +39,21 @@
     <inspection_tool class="BreakStatementJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="BreakStatementWithLabelJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="BuildoutUnresolvedPartInspection" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="CMakeDeprecatedCommands" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="CMakeMismatchedCommandArguments" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="CallerJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="ChainedEqualityJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ChainedFunctionCallJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="CheckDtdRefs" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="CheckEmptyScriptTag" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="CheckImageSize" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="CheckNodeTest" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="CheckTagEmptyBody" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="CheckValidXmlInScriptTagBody" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="CheckXmlFileWithXercesValidator" enabled="true" level="ERROR" enabled_by_default="true" />
+    <inspection_tool class="ClangTidy" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="ClangdErrorsAndWarnings" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="Clazy" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="CoffeeScriptArgumentsOutsideFunction" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="CoffeeScriptFunctionSignatures" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
     <inspection_tool class="CoffeeScriptInfiniteLoop" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -65,8 +73,11 @@
     <inspection_tool class="ConfusingFloatingPointLiteralJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ConfusingPlusesOrMinusesJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ConstantConditionalExpressionJS" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="ConstantConditionsOC" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="ConstantFunctionResult" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ConstantOnLHSOfComparisonJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ConstantOnRHSOfComparisonJS" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="ConstantParameter" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ContinueOrBreakFromFinallyBlockJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="ContinueStatementJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ContinueStatementWithLabelJS" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -81,6 +92,7 @@
     <inspection_tool class="CssInvalidHtmlTagReference" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="CssInvalidImport" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="CssInvalidMediaFeature" enabled="true" level="ERROR" enabled_by_default="true" />
+    <inspection_tool class="CssInvalidNestedSelector" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="CssInvalidPropertyValue" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="CssInvalidPseudoSelector" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="CssMissingComma" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -117,6 +129,7 @@
       <option name="m_limit" value="10" />
     </inspection_tool>
     <inspection_tool class="CythonUsageBeforeDeclarationInspection" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="DanglingPointer" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DebuggerStatementJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DefaultNotLastCaseInSwitchJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DivideByZeroJS" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -152,11 +165,7 @@
     <inspection_tool class="DuplicatePropertyInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="DuplicateSectionInFile" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="DuplicatedBlockNamesInspection" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="DuplicatedCode" enabled="false" level="WEAK WARNING" enabled_by_default="false">
-      <Languages>
-        <language minSize="201" name="Python" />
-      </Languages>
-    </inspection_tool>
+    <inspection_tool class="DuplicatedCode" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
     <inspection_tool class="DynamicallyGeneratedCodeJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ES6BindWithArrowFunction" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="ES6CheckImport" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
@@ -203,8 +212,10 @@
     <inspection_tool class="EditorConfigUnusedDeclaration" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="EditorConfigValueCorrectness" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="EditorConfigValueUniqueness" enabled="true" level="ERROR" enabled_by_default="true" />
+    <inspection_tool class="EditorConfigVerifyByCore" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="EditorConfigWildcardRedundancy" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="EmptyCatchBlockJS" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="EmptyDeclOrStmt" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="EmptyDirectory" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="EmptyFinallyBlockJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="EmptyStatementBodyJS" enabled="true" level="WARNING" enabled_by_default="true">
@@ -212,6 +223,7 @@
     </inspection_tool>
     <inspection_tool class="EmptyTryBlockJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="EndBlockNamesInspection" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="EndlessLoop" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="ExceptionCaughtLocallyJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="ExtendsTagPositionInspection" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -237,6 +249,8 @@
     <inspection_tool class="GherkinScenarioToScenarioOutline" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="GrazieInspection" enabled="false" level="TYPO" enabled_by_default="false" />
     <inspection_tool class="HamlNestedTagContent" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="HardwiredNamespacePrefix" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="HidingNonVirtualFunction" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="HtmlDeprecatedAttribute" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="HtmlDeprecatedTag" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="HtmlExtraClosingTag" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -285,18 +299,16 @@
     <inspection_tool class="IfStatementWithTooManyBranchesJS" enabled="false" level="WARNING" enabled_by_default="false">
       <option name="m_limit" value="3" />
     </inspection_tool>
-    <inspection_tool class="IgnoreCoverEntry" enabled="false" level="WARNING" enabled_by_default="false" />
-    <inspection_tool class="IgnoreDuplicateEntry" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="IgnoreFileDuplicateEntry" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="IgnoreIncorrectEntry" enabled="false" level="ERROR" enabled_by_default="false" />
-    <inspection_tool class="IgnoreRelativeEntry" enabled="false" level="ERROR" enabled_by_default="false" />
-    <inspection_tool class="IgnoreSyntaxEntry" enabled="false" level="ERROR" enabled_by_default="false" />
+    <inspection_tool class="ImplicitTypeConversion" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="IncompatibleMaskJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="InconsistentLineSeparators" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="IncorrectFormatting" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
     <inspection_tool class="IncorrectHttpHeaderInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="IncrementDecrementResultUsedJS" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="IndexZeroUsage" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="InfiniteLoopJS" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="InfiniteRecursion" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="InfiniteRecursionJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="InjectedReferences" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="InnerHTMLJS" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -383,6 +395,7 @@
     <inspection_tool class="JSXNamespaceValidation" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
     <inspection_tool class="JSXSyntaxUsed" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="JSXUnresolvedComponent" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
+    <inspection_tool class="JsCoverageInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="Json5StandardCompliance" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="JsonDuplicatePropertyKeys" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="JsonPathEvaluateUnknownKey" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -400,12 +413,14 @@
     <inspection_tool class="LessResolvedByNameOnly" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
     <inspection_tool class="LessUnresolvedMixin" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="LessUnresolvedVariable" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="LocalValueEscapesScope" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="LocalVariableNamingConventionJS" enabled="false" level="WARNING" enabled_by_default="false">
       <option name="m_regex" value="[a-z][A-Za-z]*" />
       <option name="m_minLength" value="1" />
       <option name="m_maxLength" value="32" />
     </inspection_tool>
     <inspection_tool class="LongLine" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="LoopDoesntUseConditionVariable" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="LoopStatementThatDoesntLoopJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="LossyEncoding" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="MagicNumberJS" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -419,6 +434,7 @@
     <inspection_tool class="MarkdownUnresolvedFileReference" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="MarkdownUnresolvedHeaderReference" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="MarkdownUnresolvedLinkLabel" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="Misra" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="MongoJSDeprecationInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="MongoJSExtDeprecationInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="MongoJSExtResolveInspection" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -445,7 +461,22 @@
     <inspection_tool class="NodeCoreCodingAssistance" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="NonAsciiCharacters" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="NonBlockStatementBodyJS" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="NotImplementedFunctions" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="NpmUsedModulesInstalled" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
+    <inspection_tool class="NullDereference" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCDFA" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCInconsistentNaming" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedClass" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedConcept" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedGlobalDeclaration" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedIncludeDirective" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedInstanceVariable" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedMacro" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedMethod" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedProperty" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedStruct" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedTemplateParameter" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="OCUnusedTypeAlias" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ObjectAllocationIgnoredJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="OraDeprecateTypeInspection" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="OraMissingBodyInspection" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -479,6 +510,7 @@
     <inspection_tool class="PostCssMediaRange" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="PostCssNesting" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="PostCssUnresolvedModuleValueReference" enabled="false" level="ERROR" enabled_by_default="false" />
+    <inspection_tool class="PreprocessorComment" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="ProblematicWhitespace" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="Puppet3Deprecations" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="Puppet4Deprecations" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -554,6 +586,7 @@
         </value>
       </option>
     </inspection_tool>
+    <inspection_tool class="PyPandasSeriesToListInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="PyPep8Inspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
       <option name="ignoredErrors">
         <list>
@@ -625,13 +658,18 @@
       </option>
     </inspection_tool>
     <inspection_tool class="PyUnusedLocalInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
+    <inspection_tool class="PydanticInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="PydanticTypeCheckerInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyprojectInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="PyramidSetupInspection" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="QodanaSanity" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="QodanaServiceMessage" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="Query_bound_parameters" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="Query_index_required" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="Query_restricted" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="ReassignedToPlainText" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="RedundantSuppression" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="RedundantTypeConversion" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="RegExpAnonymousGroup" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="RegExpDuplicateAlternationBranch" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="RegExpDuplicateCharacterInClass" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -670,6 +708,7 @@
     <inspection_tool class="ShellCheck" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="ShiftOutOfRangeJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="SillyAssignmentJS" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="Simplify" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="SpellCheckingInspection" enabled="true" level="TYPO" enabled_by_default="true">
       <option name="processCode" value="true" />
       <option name="processLiterals" value="true" />
@@ -736,6 +775,10 @@
     <inspection_tool class="StringLiteralBreaksHTMLJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="Stylelint" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="SuspiciousTypeOfGuard" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="SwJsonMaybeSpecificationInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="SwJsonUnresolvedReferencesInspection" enabled="false" level="ERROR" enabled_by_default="false" />
+    <inspection_tool class="SwYamlMaybeSpecificationInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="SwYamlUnresolvedReferencesInspection" enabled="false" level="ERROR" enabled_by_default="false" />
     <inspection_tool class="SyntaxError" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="TailRecursionJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="TaskProblemsInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
@@ -771,6 +814,7 @@
     <inspection_tool class="TypeScriptValidateGenericTypes" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="TypeScriptValidateJSTypes" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
     <inspection_tool class="TypeScriptValidateTypes" enabled="true" level="ERROR" enabled_by_default="true" />
+    <inspection_tool class="UnconstrainedVariableType" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="UnnecessaryContinueJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="UnnecessaryLabelJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="UnnecessaryLabelOnBreakStatementJS" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -780,6 +824,8 @@
       <option name="m_ignoreAnnotatedVariables" value="false" />
     </inspection_tool>
     <inspection_tool class="UnnecessaryReturnJS" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="UnreachableCallsOfFunction" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="UnreachableCode" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="UnreachableCodeJS" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="UnresolvedReference" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="UnterminatedStatementJS" enabled="false" level="WARNING" enabled_by_default="false">
@@ -789,9 +835,15 @@
       <option name="m_ignoreCatchBlocksWithComments" value="false" />
     </inspection_tool>
     <inspection_tool class="UnusedDefine" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="UnusedImportStatement" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="UnusedLocalVariable" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="UnusedLocalization" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="UnusedParameter" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="UnusedProperty" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="UnusedValue" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="UpdateDependencyToLatestVersion" enabled="false" level="INFORMATION" enabled_by_default="false" />
     <inspection_tool class="UseEllipsisInPropertyInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="VirtualCallInCtorOrDtor" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="VoidExpressionJS" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="VueDataFunction" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="VueDeprecatedSymbol" enabled="false" level="WARNING" enabled_by_default="false" />
@@ -814,17 +866,16 @@
     <inspection_tool class="XmlUnboundNsPrefix" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="XmlUnusedNamespaceDeclaration" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="XmlWrongRootElement" enabled="true" level="ERROR" enabled_by_default="true" />
+    <inspection_tool class="XsltDeclarations" enabled="false" level="ERROR" enabled_by_default="false" />
+    <inspection_tool class="XsltTemplateInvocation" enabled="false" level="ERROR" enabled_by_default="false" />
+    <inspection_tool class="XsltUnusedDeclaration" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="XsltVariableShadowing" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="YAMLDuplicatedKeys" enabled="true" level="ERROR" enabled_by_default="true" />
+    <inspection_tool class="YAMLIncompatibleTypes" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="YAMLRecursiveAlias" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="YAMLSchemaDeprecation" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
     <inspection_tool class="YAMLSchemaValidation" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="YAMLUnresolvedAlias" enabled="true" level="ERROR" enabled_by_default="true" />
     <inspection_tool class="YAMLUnusedAnchor" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="requirements.DuplicatedInspection" enabled="false" level="WARNING" enabled_by_default="false" />
-    <inspection_tool class="requirements.InstalledPackageInspection" enabled="false" level="WARNING" enabled_by_default="false" />
-    <inspection_tool class="requirements.MergeExtrasInspection" enabled="false" level="WARNING" enabled_by_default="false" />
-    <inspection_tool class="requirements.ReferenceExistsInspection" enabled="false" level="ERROR" enabled_by_default="false" />
-    <inspection_tool class="requirements.UninstalledPackageInspection" enabled="false" level="WARNING" enabled_by_default="false" />
-    <inspection_tool class="requirements.UnusedInspection" enabled="false" level="WARNING" enabled_by_default="false" />
   </profile>
 </component>

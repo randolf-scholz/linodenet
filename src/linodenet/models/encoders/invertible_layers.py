@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 import warnings
-from typing import Any, Final, Optional
+from typing import Any, Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -31,6 +31,34 @@ from torch.nn import functional
 from typing_extensions import Self
 
 from linodenet.lib import singular_triplet
+
+
+@runtime_checkable
+class InvertibleModule(Protocol):
+    """Protocol for invertible layers."""
+
+    # NOTE: Theoretically, this must be a subclass of nn.Module.
+    # but typing system currently does not support this.
+
+    def inverse(self) -> Self:
+        """Return the inverse of the layer."""
+        ...
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Forward pass of the layer."""
+        ...
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        """Forward pass of the layer."""
+        ...
+
+    def encode(self, *args: Any, **kwargs: Any) -> Any:
+        """Inverse pass of the layer."""
+        ...
+
+    def decode(self, *args: Any, **kwargs: Any) -> Any:
+        """Inverse pass of the layer."""
+        ...
 
 
 class NaiveLinearContraction(nn.Module):
@@ -123,7 +151,7 @@ class LinearContraction(nn.Module):
     def reset_parameters(self) -> None:
         r"""Reset both weight matrix and bias vector."""
         with torch.no_grad():
-            bound = float(torch.rsqrt(torch.tensor(self.input_size)))
+            bound: float = float(torch.rsqrt(torch.tensor(self.input_size)))
             self.weight.uniform_(-bound, bound)
             if self.bias is not None:
                 self.bias.uniform_(-bound, bound)
@@ -375,8 +403,6 @@ class iSequential(nn.Module):
         # self.input_size = blocks[0].input_size  # type: ignore[assignment]
         # self.output_size = blocks[-1].output_size  # type: ignore[assignment]
         self.blocks = nn.Sequential(*blocks)
-
-        # print([layer.is_inverse for layer in self])
 
         self.is_inverse = inverse is not None
         if not self.is_inverse:

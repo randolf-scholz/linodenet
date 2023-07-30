@@ -524,8 +524,6 @@ class iResNet(nn.Module):
         The dimensionality of the output space.
     blocks:  nn.Sequential
         Sequential model consisting of the iResNetBlocks
-    reversed_blocks: nn.Sequential
-        The same blocks in reversed order
     HP: dict
         Nested dictionary containing the hyperparameters.
     """

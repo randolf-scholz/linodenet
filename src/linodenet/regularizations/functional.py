@@ -27,6 +27,7 @@ import torch.linalg
 from torch import BoolTensor, Tensor, jit
 
 from linodenet.projections import functional as projections
+from linodenet.utils.constants import TRUE
 
 
 @jit.script
@@ -168,7 +169,7 @@ def banded(
 @jit.script
 def masked(
     x: Tensor,
-    m: BoolTensor,
+    m: BoolTensor = TRUE,
     p: Optional[float] = None,
     size_normalize: bool = False,
 ) -> Tensor:

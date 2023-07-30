@@ -21,6 +21,8 @@ __all__ = [
 import torch
 from torch import BoolTensor, Tensor, jit
 
+from linodenet.utils.constants import TRUE
+
 
 @jit.script
 def identity(x: Tensor) -> Tensor:
@@ -137,7 +139,7 @@ def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
 
 
 @jit.script
-def masked(x: Tensor, m: BoolTensor) -> Tensor:
+def masked(x: Tensor, m: BoolTensor = TRUE) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``

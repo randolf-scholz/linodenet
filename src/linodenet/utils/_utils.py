@@ -136,11 +136,11 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
             instance: nnModuleType = base_class(*args, **kwargs)
 
             if CONFIG.autojit:
-                scripted: nnModuleType = jit.script(instance)
+                scripted: nnModuleType = jit.script(instance)  # pyright: ignore
                 return scripted
             return instance
 
-    assert issubclass(WrappedClass, base_class)
+    assert issubclass(WrappedClass, base_class)  # pyright: ignore
     return WrappedClass
 
 

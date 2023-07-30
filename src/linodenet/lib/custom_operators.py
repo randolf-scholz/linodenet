@@ -56,8 +56,8 @@ _spectral_norm: Callable[
 
 if lib_path.exists():
     torch.ops.load_library(lib_path)
-    _spectral_norm = torch.ops.custom.spectral_norm
-    _singular_triplet = torch.ops.custom.singular_triplet
+    _spectral_norm = torch.ops.custom.spectral_norm  # pyright: ignore
+    _singular_triplet = torch.ops.custom.singular_triplet  # pyright: ignore
 else:
     warnings.warn(
         "Custom binaries not found! Trying to compile them on the fly!."
@@ -73,7 +73,7 @@ else:
             is_python_module=False,
             verbose=True,
         )
-        _singular_triplet = torch.ops.custom.singular_triplet
+        _singular_triplet = torch.ops.custom.singular_triplet  # pyright: ignore
 
         torch.utils.cpp_extension.load(
             name="spectral_norm",
@@ -81,7 +81,7 @@ else:
             is_python_module=False,
             verbose=True,
         )
-        _spectral_norm = torch.ops.custom.spectral_norm
+        _spectral_norm = torch.ops.custom.spectral_norm  # pyright: ignore
     except Exception as e:  # pylint: disable=broad-except
         warnings.warn(
             "Could not compile the custom binaries!"
