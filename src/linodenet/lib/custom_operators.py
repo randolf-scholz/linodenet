@@ -82,11 +82,11 @@ else:
             verbose=True,
         )
         _spectral_norm = torch.ops.custom.spectral_norm  # pyright: ignore
-    except Exception as e:  # pylint: disable=broad-except
+    except Exception as exc:  # pylint: disable=broad-except
         warnings.warn(
             "Could not compile the custom binaries!"
             " Using torch.linalg.svd and torch.linalg.matrix_norm instead."
-            f" Error: {e}",
+            f" Error: {exc}",
             UserWarning,
             stacklevel=2,
         )
