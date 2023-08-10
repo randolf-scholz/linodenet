@@ -17,7 +17,8 @@ using torch::dot;
 using torch::linalg::solve;
 
 struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
-    /** test
+    /** @brief Spectral norm of a matrix.
+     *
      * Formalizing as a optimization problem:
      * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖_F^2 s.t. ‖u‖₂ = ‖v‖₂ = 1
      * Equivalently: max_{u,v} ⟨A∣uv^⊤⟩ s.t. ‖u‖₂ = ‖v‖₂ = 1
@@ -27,9 +28,8 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
      * s.t. [u, v]ᵀ [[𝕀ₘ, 0], [0, 0]] [u, v] - 1 =0
      * and  [u, v]ᵀ [[0, 0], [0, 𝕀ₙ]] [u, v] - 1 =0
      *
-     * Related:
-     * - https://math.stackexchange.com/questions/4658991
-     * - https://math.stackexchange.com/questions/4697688
+     * @related https://math.stackexchange.com/questions/4658991
+     * @related https://math.stackexchange.com/questions/4697688
      *
      * Lagrangian: L(u,v,λ,μ) = uᵀAv - λ(uᵀu - 1) - μ(vᵀv - 1)
      * KKT conditions: ∇L = 0 ⟺ A v - 2λu = 0 ⟺ [-2λ𝕀ₘ, A    ] [u] = [0]
@@ -60,11 +60,11 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         optional<Tensor> u0,
         optional<Tensor> v0,
         optional<int64_t> maxiter,
-        double atol = 1e-8,
-        double rtol = 1e-5
+        const double atol = 1e-8,
+        const double rtol = 1e-5
     ) {
-        /**
-         * INPUTS:
+        /** @brief Forward pass.
+         *
          * @param ctx: context object
          * @param A: m x n matrix
          * @param u0: initial guess for left singular vector
@@ -72,14 +72,12 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
          * @param maxiter: maximum number of iterations
          * @param atol: absolute tolerance
          * @param rtol: relative tolerance
-         * @return
-         * OUTPUTS:
-         * sigma: singular value
+         * @returns sigma: singular value
          */
         // Initialize maxiter depending on the size of the matrix.
         const auto m = A.size(0);
         const auto n = A.size(1);
-        const auto MAXITER = maxiter.has_value() ? maxiter.value() : 4*(m + n);
+        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 4*(m + n);
         bool converged = false;
 
         // Initialize u and v with random values if not given
@@ -88,7 +86,8 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         Tensor sigma = A.mv(v).dot(u);
 
         // Perform power-iteration for maxiter times or until convergence.
-        for (const auto i : c10::irange(MAXITER)) {
+        // for (const auto i : c10::irange(MAXITER)) {
+        for (auto i=MAXITER; i--;) {
             Tensor u_old = u;
             Tensor v_old = v;
 
@@ -124,19 +123,19 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         torch::autograd::AutogradContext *ctx,
         torch::autograd::variable_list grad_output
     ) {
-        /** Backward Pass.
+        /** @brief Backward Pass.
+         *
          * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
          *
          * @param ctx: context object
          * @param grad_output: outer gradients
-         * @return gradient with respect to inputs
+         * @returns g: gradient with respect to inputs
          */
-        auto saved = ctx->get_saved_variables();
-        auto u = saved[0];
-        auto v = saved[1];
-        auto outer_grad = grad_output[0];
-        auto g_sigma = outer_grad * outer(u, v);
-        return { g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
+        const auto saved = ctx->get_saved_variables();
+        const auto u = saved[0];
+        const auto v = saved[1];
+        auto g_sigma = grad_output[0] * outer(u, v);
+        return { g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor() };
     }
 };
 

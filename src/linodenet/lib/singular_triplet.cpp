@@ -28,21 +28,22 @@ namespace F = torch::nn::functional;
 
 
 struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
-    /** test
-     * Formalizing as a optimization problem:
+    /** @brief Compute the singular triplet of a matrix.
+     *
+     * @details Formalizing as a optimization problem:
      * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖_F^2 s.t. ‖u‖₂ = ‖v‖₂ = 1
      * Equivalently: max_{u,v} ⟨A∣uv^⊤⟩ s.t. ‖u‖₂ = ‖v‖₂ = 1
      *
-     * This is a non-convex QCQP, in standard form:
+     * @details This is a non-convex QCQP, in standard form:
      * max_{(u,v)}  ½ [u, v]ᵀ [[0, A], [Aᵀ, 0]] [u, v]
      * s.t. [u, v]ᵀ [[𝕀ₘ, 0], [0, 0]] [u, v] - 1 =0
      * and  [u, v]ᵀ [[0, 0], [0, 𝕀ₙ]] [u, v] - 1 =0
      *
-     * Related:
-     * - https://math.stackexchange.com/questions/4658991
-     * - https://math.stackexchange.com/questions/4697688
+     * @related https://math.stackexchange.com/questions/4658991
+     * @related https://math.stackexchange.com/questions/4697688
      *
      * Lagrangian: L(u,v,λ,μ) = uᵀAv - λ(uᵀu - 1) - μ(vᵀv - 1)
+     *
      * KKT conditions: ∇L = 0 ⟺ A v - 2λu = 0 ⟺ [-2λ𝕀ₘ, A    ] [u] = [0]
      *                          Aᵀu - 2μv = 0   [Aᵀ   , -2μ𝕀ₙ] [v] = [0]
      *
@@ -63,19 +64,20 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
      * ‖u' -  u'ᵀ ũᵀũ‖
      * Error estimate: Note that
      * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
+     * note@
      */
 
     static std::vector<Tensor> forward(
         torch::autograd::AutogradContext *ctx,
         const Tensor& A,
-        optional<Tensor> u0,
-        optional<Tensor> v0,
+        const optional<Tensor>& u0,
+        const optional<Tensor>& v0,
         optional<int64_t> maxiter,
         double atol = 1e-8,
         double rtol = 1e-5
     ) {
-        /**
-         * INPUTS:
+        /** @brief Forward pass.
+         *
          * @param ctx: context object
          * @param A: m x n matrix
          * @param u0: initial guess for left singular vector
@@ -83,12 +85,12 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
          * @param maxiter: maximum number of iterations
          * @param atol: absolute tolerance
          * @param rtol: relative tolerance
-         * @return sigma, u, v: singular value, left singular vector, right singular vector
+         * @returns sigma, u, v: singular value, left singular vector, right singular vector
          */
         // Initialize maxiter depending on the size of the matrix.
         const auto m = A.size(0);
         const auto n = A.size(1);
-        const auto MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m+n);
+        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m+n);
         bool converged = false;
 
         // Initialize u and v with random values if not given
@@ -142,11 +144,11 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         torch::autograd::AutogradContext *ctx,
         torch::autograd::variable_list grad_output
     ) {
-        /** Backward Pass.
-         * INPUTS:
+        /** @brief Backward Pass.
+         *
          * @param ctx: context object
          * @param grad_output: outer gradients
-         * @return gradient with respect to inputs
+         * @returns g: gradient with respect to inputs
          *
          * Analytically, the VJPs are
          * ξᵀ(∂σ/∂A) = ξ⋅uvᵀ
@@ -161,14 +163,14 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
          *  [𝕀ₘ - BBᵀ]x = Φ  [𝕀ₙ - BᵀB]y = BΨ
          *  [𝕀ₙ - BᵀB]w = BᵀΦ  [𝕀ₘ - BBᵀ]z = Ψ
          */
-        auto saved = ctx->get_saved_variables();
-        auto A = saved[0];
-        auto sigma = saved[1];
-        auto u = saved[2];
-        auto v = saved[3];
-        auto xi = grad_output[0];
-        auto phi = grad_output[1];
-        auto psi = grad_output[2];
+        const auto saved = ctx->get_saved_variables();
+        const auto A = saved[0];
+        const auto sigma = saved[1];
+        const auto u = saved[2];
+        const auto v = saved[3];
+        const auto xi = grad_output[0];
+        const auto phi = grad_output[1];
+        const auto psi = grad_output[2];
 
         // Computing reference values via SVD
         // auto SVD = torch::linalg::svd(A, true, nullopt);
@@ -181,6 +183,7 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         // exit early if grad_output is zero for both u and v.
         bool phi_nonzero = phi.any().item<bool>();   // any should be faster than all
         bool psi_nonzero = psi.any().item<bool>();   // any should be faster than all
+
         if ( !(phi_nonzero || psi_nonzero) ) {
             return {g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
         }
@@ -207,7 +210,7 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         // compute the VJP
         Tensor g_u = outer(p - dot(u, p) * u, v);
         Tensor g_v = outer(u, q - dot(v, q) * v);
-        return {g_sigma + g_u + g_v, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
+        return { g_sigma + g_u + g_v, Tensor(), Tensor(), Tensor(), Tensor(), Tensor() };
     }
 };
 
