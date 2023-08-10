@@ -2,8 +2,8 @@
 #include <c10/util/irange.h>
 #include <torch/script.h>
 #include <torch/linalg.h>
-#include <cstddef>
-#include <string>
+//#include <cstddef>
+//#include <string>
 
 
 //import someLib as sl      ⟶  namespace sl = someLib;
@@ -56,7 +56,7 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
 
     static Tensor forward(
         torch::autograd::AutogradContext *ctx,
-        Tensor A,
+        const Tensor& A,
         optional<Tensor> u0,
         optional<Tensor> v0,
         optional<int64_t> maxiter,
@@ -77,9 +77,9 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
          * sigma: singular value
          */
         // Initialize maxiter depending on the size of the matrix.
-        const int m = A.size(0);
-        const int n = A.size(1);
-        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 4*(m + n);
+        const auto m = A.size(0);
+        const auto n = A.size(1);
+        const auto MAXITER = maxiter.has_value() ? maxiter.value() : 4*(m + n);
         bool converged = false;
 
         // Initialize u and v with random values if not given
@@ -112,7 +112,7 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
         }
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.");
+            TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.")
         }
         assert(sigma.item<double>() > 0);
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
@@ -141,9 +141,9 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
 };
 
 Tensor spectral_norm(
-    Tensor A,
-    optional<Tensor> u0,
-    optional<Tensor> v0,
+    const Tensor& A,
+    const optional<Tensor>& u0,
+    const optional<Tensor>& v0,
     optional<int64_t> maxiter,
     double atol = 1e-8,
     double rtol = 1e-5

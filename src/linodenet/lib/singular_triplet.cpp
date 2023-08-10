@@ -3,9 +3,9 @@
 #include <torch/script.h>
 #include <torch/linalg.h>
 #include <torch/nn.h>
-#include <cstddef>
-#include <string>
 #include <vector>
+//#include <cstddef>
+//#include <string>
 
 //import someLib as sl      ⟶  namespace sl = someLib;
 //from someLib import func  ⟶  using someLib::func;
@@ -67,7 +67,7 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
 
     static std::vector<Tensor> forward(
         torch::autograd::AutogradContext *ctx,
-        Tensor A,
+        const Tensor& A,
         optional<Tensor> u0,
         optional<Tensor> v0,
         optional<int64_t> maxiter,
@@ -83,14 +83,12 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
          * @param maxiter: maximum number of iterations
          * @param atol: absolute tolerance
          * @param rtol: relative tolerance
-         * @return
-         * OUTPUTS:
-         * sigma: singular value
+         * @return sigma, u, v: singular value, left singular vector, right singular vector
          */
         // Initialize maxiter depending on the size of the matrix.
-        const int m = A.size(0);
-        const int n = A.size(1);
-        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m+n);
+        const auto m = A.size(0);
+        const auto n = A.size(1);
+        const auto MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m+n);
         bool converged = false;
 
         // Initialize u and v with random values if not given
@@ -129,11 +127,11 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         }
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN("No convergence in ", MAXITER, " iterations. σ=", sigma.item<double>());
+            TORCH_WARN("No convergence in ", MAXITER, " iterations. σ=", sigma.item<double>())
         }
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
         if (sigma.item<double>() < 0) {
-            TORCH_WARN("Singular value estimate is negative!?!?!?");
+            TORCH_WARN("Singular value estimate is negative!?!?!?")
             assert((sigma.item<double>() > 0) && "Singular value estimate is negative.");
         }
         ctx->save_for_backward({A, sigma, u, v});
@@ -188,8 +186,8 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         }
 
         // Consider the additional outer gradients for u and v.
-        const int m = A.size(0);
-        const int n = A.size(1);
+        const auto m = A.size(0);
+        const auto n = A.size(1);
         // augmented K matrix: (m+n+2) x (m+n)
         // [ σ𝕀ₘ | -A  | u | 0 ] ⋅ [p, q, μ, ν] = [ϕ]
         // [ -Aᵀ | σ𝕀ₙ | 0 | v ]                  [ψ]
@@ -245,9 +243,9 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
 
 
 std::tuple<Tensor, Tensor, Tensor> singular_triplet(
-    Tensor A,
-    optional<Tensor> u0,
-    optional<Tensor> v0,
+    const Tensor& A,
+    const optional<Tensor>& u0,
+    const optional<Tensor>& v0,
     optional<int64_t> maxiter,
     double atol = 1e-8,
     double rtol = 1e-5
