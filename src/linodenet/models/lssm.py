@@ -194,9 +194,9 @@ class LatentStateSpaceModel(nn.Module):
         self.decoder = decoder
         self.filter: Filter = filter
 
-        self.input_size = int(self.filter.input_size)  # type: ignore[assignment]
-        self.output_size = int(self.filter.output_size)  # type: ignore[assignment]
-        self.latent_size = int(self.system.input_size)  # type: ignore[assignment]
+        self.input_size = int(self.filter.input_size)  # type: ignore[arg-type]
+        self.output_size = int(self.filter.output_size)  # type: ignore[arg-type]
+        self.latent_size = int(self.system.input_size)  # type: ignore[arg-type]
         self.hidden_size = -1
         self.padding_size = padding_size
 

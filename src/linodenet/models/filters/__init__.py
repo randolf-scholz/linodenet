@@ -31,7 +31,7 @@ from linodenet.models.filters._filters import (
 )
 
 FILTERS: dict[str, type[Filter]] = {
-    "FilterABC": FilterABC,
+    # "FilterABC": FilterABC,
     "KalmanCell": KalmanCell,
     "KalmanFilter": KalmanFilter,
     "LinearFilter": PseudoKalmanFilter,

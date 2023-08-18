@@ -26,6 +26,7 @@ from math import prod, sqrt
 from typing import Optional, Protocol, TypeAlias, runtime_checkable
 
 import torch
+from numpy.typing import NDArray
 from scipy import stats
 from torch import Tensor
 
@@ -44,7 +45,7 @@ class Initialization(Protocol):
         ...
 
 
-def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
+def gaussian(n: SizeLike, /, *, mean: float = 0.0, std: float = 1.0) -> Tensor:
     r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$ if $σ=1$.
@@ -56,7 +57,7 @@ def gaussian(n: SizeLike, sigma: float = 1.0) -> Tensor:
     dim, size = tup[-1], tup[:-1]
     shape = (*size, dim, dim)
 
-    return torch.normal(mean=torch.zeros(shape), std=sigma / sqrt(dim))
+    return torch.normal(mean=torch.full(shape, mean), std=std / sqrt(dim))
 
 
 def diagonally_dominant(n: SizeLike) -> Tensor:
@@ -114,7 +115,7 @@ def orthogonal(n: SizeLike) -> Tensor:
     num = prod(size)
     shape = (*size, dim, dim)
 
-    A = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
+    A: NDArray = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
     return Tensor(A)
 
 
@@ -129,7 +130,7 @@ def special_orthogonal(n: SizeLike) -> Tensor:
     num = prod(size)
     shape = (*size, dim, dim)
 
-    A = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
+    A: NDArray = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
     return Tensor(A)
 
 
