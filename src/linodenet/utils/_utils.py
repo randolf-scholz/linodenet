@@ -22,14 +22,14 @@ import gc
 import logging
 import sys
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import ContextDecorator
 from copy import deepcopy
 from functools import wraps
 from importlib import import_module
 from time import perf_counter_ns
 from types import MethodType, ModuleType, TracebackType
-from typing import Any, Callable, ClassVar, Literal, TypeVar
+from typing import Any, ClassVar, Literal, TypeVar
 
 import torch
 from torch import Tensor, jit, nn
@@ -67,7 +67,7 @@ def pad(
     return torch.cat((x, z), dim=dim)
 
 
-def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
+def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict:
     r"""Update nested dictionary recursively in-place with new dictionary.
 
     References:
@@ -84,7 +84,7 @@ def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
     return d
 
 
-def deep_keyval_update(d: dict, **new_kv: Any) -> dict:
+def deep_keyval_update(d: dict, /, **new_kv: Any) -> dict:
     r"""Update nested dictionary recursively in-place with key-value pairs.
 
     References:
@@ -214,7 +214,7 @@ class timer(ContextDecorator):
         return False
 
 
-def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor]) -> None:
+def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) -> None:
     """Register a cache to a module.
 
     - creates a buffer that stores the result of func().

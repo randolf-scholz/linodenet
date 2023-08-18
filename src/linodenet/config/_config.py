@@ -42,7 +42,7 @@ def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
     return d
 
 
-def generate_folders(d: dict, current_path: Path) -> None:
+def generate_folders(d: dict, /, *, current_path: Path) -> None:
     r"""Create nested folder structure based on nested dictionary index.
 
     References
@@ -55,7 +55,7 @@ def generate_folders(d: dict, current_path: Path) -> None:
             __logger__.debug("creating folder %s", path)
             path.mkdir(parents=True, exist_ok=True)
         else:
-            generate_folders(d[directory], path)
+            generate_folders(d[directory], current_path=path)
 
 
 class Config:

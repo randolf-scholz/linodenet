@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Iterable
-from typing import Any, Final, List, Optional
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -101,7 +101,7 @@ class Parallel(nn.ModuleList):
     @jit.export
     def forward(self, x: Tensor) -> list[Tensor]:
         r""".. Signature:: ``(..., n) -> [..., (..., n)]``."""
-        result: List[Any] = []
+        result: list[Tensor] = []
 
         for module in self:
             result.append(module(x))

@@ -18,9 +18,9 @@ from torch import Tensor
 
 
 def singular_triplet_native(
-    A: torch.Tensor,
-    u0: Optional[torch.Tensor] = None,
-    v0: Optional[torch.Tensor] = None,
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
     atol: float = 1e-8,
     rtol: float = 1e-5,
@@ -32,9 +32,9 @@ def singular_triplet_native(
 
 
 def spectral_norm_native(
-    A: torch.Tensor,
-    u0: Optional[torch.Tensor] = None,
-    v0: Optional[torch.Tensor] = None,
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
     atol: float = 1e-8,
     rtol: float = 1e-5,
@@ -95,9 +95,9 @@ else:
 
 
 def singular_triplet(
-    A: torch.Tensor,
-    u0: Optional[torch.Tensor] = None,
-    v0: Optional[torch.Tensor] = None,
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
     atol: float = 1e-8,
     rtol: float = 1e-5,
@@ -107,9 +107,9 @@ def singular_triplet(
 
 
 def spectral_norm(
-    A: torch.Tensor,
-    u0: Optional[torch.Tensor] = None,
-    v0: Optional[torch.Tensor] = None,
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
     atol: float = 1e-8,
     rtol: float = 1e-5,

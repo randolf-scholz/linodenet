@@ -6,7 +6,8 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Callable, Concatenate, ParamSpec, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Concatenate, ParamSpec, Protocol, runtime_checkable
 
 from torch import Tensor, nn
 

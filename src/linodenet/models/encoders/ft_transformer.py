@@ -17,7 +17,8 @@ __all__ = [
 ]
 
 import math
-from typing import Callable, Optional, cast
+from collections.abc import Callable
+from typing import Optional, cast
 
 import torch
 from torch import Tensor, nn
@@ -36,7 +37,7 @@ def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
         if name == "geglu"
         else torch.sigmoid
         if name == "sigmoid"
-        else getattr(torch.nn.functional, name)
+        else getattr(nn.functional, name)
     )
 
 

@@ -57,9 +57,9 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
     static Tensor forward(
         torch::autograd::AutogradContext *ctx,
         const Tensor& A,
-        optional<Tensor> u0,
-        optional<Tensor> v0,
-        optional<int64_t> maxiter,
+        const optional<Tensor>& u0,
+        const optional<Tensor>& v0,
+        const optional<int64_t> maxiter,
         const double atol = 1e-8,
         const double rtol = 1e-5
     ) {
@@ -87,7 +87,7 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
 
         // Perform power-iteration for maxiter times or until convergence.
         // for (const auto i : c10::irange(MAXITER)) {
-        for (auto i=MAXITER; i--;) {
+        for (int64_t i = 0; i < MAXITER; ++i) {
             Tensor u_old = u;
             Tensor v_old = v;
 
@@ -120,8 +120,8 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
     }
 
     static torch::autograd::variable_list backward(
-        torch::autograd::AutogradContext *ctx,
-        torch::autograd::variable_list grad_output
+        const torch::autograd::AutogradContext *ctx,
+        const torch::autograd::variable_list grad_output
     ) {
         /** @brief Backward Pass.
          *
@@ -139,13 +139,13 @@ struct SpectralNorm: public torch::autograd::Function<SpectralNorm> {
     }
 };
 
-Tensor spectral_norm(
+static Tensor spectral_norm(
     const Tensor& A,
     const optional<Tensor>& u0,
     const optional<Tensor>& v0,
-    optional<int64_t> maxiter,
-    double atol = 1e-8,
-    double rtol = 1e-5
+    const optional<int64_t> maxiter,
+    const double atol = 1e-8,
+    const double rtol = 1e-5
 ) {
     /**
      * Wrap the struct into function.
@@ -159,3 +159,63 @@ TORCH_LIBRARY_FRAGMENT(custom, m) {
         spectral_norm
     );
 }
+
+
+
+
+//using c10::optional;
+//using torch::Tensor;
+//
+//static Tensor forward(
+//    torch::autograd::AutogradContext *ctx,
+//    const Tensor& A,
+//    const optional<Tensor>& u0,
+//    const optional<Tensor>& v0,
+//    const optional<int64_t> maxiter,
+//    const double atol = 1e-8,
+//    const double rtol = 1e-5
+//) {
+//    // Initialize maxiter depending on the size of the matrix.
+//    const auto m = A.size(0);
+//    const auto n = A.size(1);
+//    const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 4*(m + n);
+//    bool converged = false;
+//
+//    // Initialize u and v with random values if not given
+//    Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
+//    Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
+//    Tensor sigma = A.mv(v).dot(u);
+//
+//    // Perform power-iteration for maxiter times or until convergence.
+//    // for (const auto i : c10::irange(MAXITER)) {
+//    for (int64_t i = 0; i < MAXITER; ++i) {
+//        Tensor u_old = u;
+//        Tensor v_old = v;
+//
+//        u = A.mv(v);
+//        sigma = dot(u, u_old);
+//        Tensor left_residual = (u - sigma * u_old).norm();
+//        u /= u.norm();
+//        // assert(sigma.item().toDouble() > 0);  // TODO: is it clear this never happens?!
+//
+//        v = A.t().mv(u);
+//        sigma = dot(v, v_old);
+//        Tensor right_residual = (v - sigma * v_old).norm();
+//        v /= v.norm();
+//        // assert(sigma.item().toDouble() > 0);
+//
+//        Tensor tol = atol + rtol * sigma;
+//        converged = (left_residual < tol).item<bool>() && (right_residual < tol).item<bool>();
+//        if (converged) {
+//            break;
+//        }
+//    }
+//    // Emit warning if no convergence within maxiter iterations.
+//    if (!converged) {
+//        TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.")
+//    }
+//    assert(sigma.item<double>() > 0);
+//    // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
+//    ctx->save_for_backward({u, v});
+//    return sigma;
+//}
