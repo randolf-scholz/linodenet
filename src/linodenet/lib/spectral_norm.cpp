@@ -8,13 +8,14 @@
 // from someLib import func  ⟶  using someLib::func;
 // from someLib import *     ⟶  using namespace someLib;
 using at::optional;
+using at::irange;
 using torch::Tensor;
 using torch::outer;
 using torch::dot;
-using torch::linalg::solve;
 using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
+
 
 struct SpectralNorm: public Function<SpectralNorm> {
     /** @brief Spectral norm of a matrix.
@@ -75,54 +76,63 @@ struct SpectralNorm: public Function<SpectralNorm> {
          * @returns sigma: singular value
          */
         // Initialize maxiter depending on the size of the matrix.
+        const auto A_t = A.t();
         const auto m = A.size(0);
         const auto n = A.size(1);
-        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 4*(m + n);
+        int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m + n);
+        const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
-        torch::NoGradGuard no_grad;
+
         // Initialize u and v with random values if not given
         Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
         Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
-        Tensor sigma = A.mv(v).dot(u);
+
+        // Initialize old values for convergence check
+        // pre-allocate memory for residuals
+        Tensor u_old = torch::empty_like(u);
+        Tensor v_old = torch::empty_like(v);
+        Tensor r_u = torch::empty_like(u);
+        Tensor r_v = torch::empty_like(v);
 
         // Perform power-iteration for maxiter times or until convergence.
-        // for (const auto i : c10::irange(MAXITER)) {
-
-        Tensor u_old;
-        Tensor v_old;
-        Tensor left_residual;
-        Tensor right_residual;
-        Tensor tol;
-
-        const auto A_t = A.t();
-
-        for (int64_t i = 0; i < MAXITER; ++i) {
-            u_old = u;
-            v_old = v;
-
+        for (; MAXITER--;) {
+            // update u
             u = A.mv(v);
-            sigma = dot(u, u_old);
-            left_residual = (u - sigma * u_old).norm();
-            u /= u.norm();  // normalize
+            u /= u.norm();
 
+            // update v
             v = A_t.mv(u);
-            sigma = dot(v, v_old);
-            right_residual = (v - dot(v, v_old) * v_old).norm();
-            v /= v.norm();  // normalize
+            v /= v.norm();
 
-            tol = atol + rtol * sigma;
-            converged = ((left_residual < tol) & (right_residual < tol)).item<bool>();
-            if (converged) {
+            // update u
+            u_old = u;
+            u = A.mv(v);
+            u /= u.norm();
+
+            // update v
+            v_old = v;
+            v = A_t.mv(u);
+            v /= v.norm();
+
+            // performance: do not test convergence after evey iteration
+            r_u = u - u_old;
+            r_v = v - v_old;
+
+            // check convergence
+            if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
                 break;
             }
         }
+
         // Emit warning if no convergence within maxiter iterations.
-        if (!converged) {
-            TORCH_WARN("Spectral norm estimation did not converge in ", MAXITER, " iterations.")
-        }
-        assert(sigma.item<double>() > 0);
+        if (!converged) {TORCH_WARN("Spectral norm did not converge in ", MAXITER, " iterations.")}
+
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
         ctx->save_for_backward({u, v});
+
+        // compute final sigma
+        Tensor sigma = A.mv(v).dot(u);
+        assert(sigma.item<double>() > 0);
         return sigma;
     }
 

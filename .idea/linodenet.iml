@@ -164,6 +164,7 @@
       <excludeFolder url="file://$MODULE_DIR$/CMakeFiles" />
       <excludeFolder url="file://$MODULE_DIR$/CMakeFiles" />
       <excludeFolder url="file://$MODULE_DIR$/CMakeFiles" />
+      <excludeFolder url="file://$MODULE_DIR$/CMakeFiles" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/CMakeFiles" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/CMakeFiles" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/CMakeFiles" />
@@ -176,6 +177,8 @@
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/CMakeFiles" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/CMakeFiles" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/CMakeFiles" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/CMakeFiles" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/cmake-build-debug" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/cmake-build-debug" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/cmake-build-debug" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/cmake-build-debug" />
