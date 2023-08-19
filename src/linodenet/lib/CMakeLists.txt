@@ -1,31 +1,46 @@
-cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
-project(liblinodenet)
+cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
+project(liblinodenet LANGUAGES CXX)
+
+# set global flags
+#set(CMAKE_CXX_STANDARD 17)
+#set(USE_CUDNN true)
+#set(CAFFE2_USE_CUDNN true)
+option(USE_CUDA "Use CUDA" ON)
+option(USE_CUDNN "Use CUDNN" ON)
+option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
 
 
-set(ENV{USE_CUDNN} "1")
-set(USE_CUDNN "1")
-
-message(STATUS "USE_CUDNN=${USE_CUDNN}")
-
+# get dependencies
 execute_process (
     COMMAND bash -c "git rev-parse --show-toplevel | xargs echo -n"
     OUTPUT_VARIABLE PROJECT_ROOT
 )
-message(STATUS "PROJECT_ROOT=${PROJECT_ROOT}")
-
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_ROOT}/libtorch/share/cmake/Torch")
 
-#message(STATUS "paths=${CMAKE_PREFIX_PATH}")
+find_package(Python REQUIRED COMPONENTS Development)
 find_package(Torch REQUIRED)
 
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
+message(STATUS "TORCH_CXX_FLAGS=${TORCH_CXX_FLAGS}")
+
+
+# print debug info
+
+message(STATUS "PROJECT_ROOT=${PROJECT_ROOT}")
+message(STATUS "USE_CUDNN=${USE_CUDNN}")
+
+#message(STATUS "paths=${CMAKE_PREFIX_PATH}")
+
 
 #set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=*")
 
 # Define our library target
 add_library(linodenet SHARED spectral_norm.cpp singular_triplet.cpp)
+
 # Enable C++14
-target_compile_features(linodenet PRIVATE cxx_std_14)
+target_compile_features(linodenet PRIVATE cxx_std_17)
 # Link against LibTorch
 target_link_libraries(linodenet "${TORCH_LIBRARIES}")
 # # Link against OpenCV

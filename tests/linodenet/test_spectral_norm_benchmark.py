@@ -37,11 +37,11 @@ SHAPES = [
 ]
 
 IMPL = {
-    spectral_norm_native: "native",
+    # spectral_norm_native: "native",
     # jit.script(spectral_norm_native): "native+jit",
     # torch.compile(spectral_norm_native): "native+compile",
     spectral_norm: "custom",
-    jit.script(spectral_norm): "custom+jit",
+    # jit.script(spectral_norm): "custom+jit",
     # torch.ops.custom.spectral_norm: "unwrapped",
     # jit.script(torch.ops.custom.spectral_norm): "unwrapped+jit",
     # torch.compile(spectral_norm): "custom+compile",
@@ -50,7 +50,7 @@ IMPL = {
 
 @pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize("shape", [(512, 512)], ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("device", ["cuda"])
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 @torch.no_grad()
 def test_spectral_norm_forward(
@@ -58,7 +58,11 @@ def test_spectral_norm_forward(
 ) -> None:
     """Test the spectral norm implementation."""
     A = nn.Parameter(torch.randn(*shape, device=device))
-    benchmark(impl, A)
+    s_custom = benchmark(impl, A)
+
+    s_native = spectral_norm_native(A)
+    err_value = torch.norm(s_custom - s_native) / torch.norm(s_native)
+    assert err_value < 1e-4, "Large error in spectral norm value"
 
 
 # @pytest.mark.flaky(reruns=3)

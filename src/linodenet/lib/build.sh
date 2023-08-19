@@ -26,4 +26,6 @@ echo "------------------------------------------------------------------------"
 echo "Running tests..."
 source "${PROJECT_DIR}/.venv/bin/activate"
 echo "Python env: $(which python)"
-python -c "import linodenet.lib"
+cd ..
+pwd
+python grad_check.py

@@ -1,18 +1,16 @@
 #include <ATen/ATen.h>
-#include <c10/util/irange.h>
 #include <torch/script.h>
 #include <torch/linalg.h>
 #include <torch/nn.h>
 #include <vector>
-//#include <cstddef>
-//#include <string>
+// #include <cstddef>
+// #include <string>
 
-//import someLib as sl      ⟶  namespace sl = someLib;
-//from someLib import func  ⟶  using someLib::func;
-//from someLib import *     ⟶  using namespace someLib;
-
-using c10::optional;
-using c10::nullopt;
+// import someLib as sl      ⟶  namespace sl = someLib;
+// from someLib import func  ⟶  using someLib::func;
+// from someLib import *     ⟶  using namespace someLib;
+using at::optional;
+using at::nullopt;
 using torch::Tensor;
 using torch::Scalar;
 using torch::cat;
@@ -24,10 +22,13 @@ using torch::addmm;
 using torch::linalg::solve;
 using torch::linalg::lstsq;
 using torch::nn::functional::normalize;
+using torch::autograd::variable_list;
+using torch::autograd::AutogradContext;
+using torch::autograd::Function;
 namespace F = torch::nn::functional;
 
 
-struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
+struct SingularTriplet : public Function<SingularTriplet> {
     /** @brief Compute the singular triplet of a matrix.
      *
      * @details Formalizing as a optimization problem:
@@ -68,10 +69,10 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
      */
 
     static std::vector<Tensor> forward(
-        torch::autograd::AutogradContext *ctx,
-        const Tensor& A,
-        const optional<Tensor>& u0,
-        const optional<Tensor>& v0,
+        AutogradContext *ctx,
+        const Tensor &A,
+        const optional<Tensor> &u0,
+        const optional<Tensor> &v0,
         optional<int64_t> maxiter,
         double atol = 1e-8,
         double rtol = 1e-5
@@ -140,9 +141,9 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
         return {sigma, u, v};
     }
 
-    static torch::autograd::variable_list backward(
-        torch::autograd::AutogradContext *ctx,
-        torch::autograd::variable_list grad_output
+    static variable_list backward(
+        AutogradContext *ctx,
+        const variable_list &grad_output
     ) {
         /** @brief Backward Pass.
          *
@@ -246,9 +247,9 @@ struct SingularTriplet : public torch::autograd::Function<SingularTriplet> {
 
 
 std::tuple<Tensor, Tensor, Tensor> singular_triplet(
-    const Tensor& A,
-    const optional<Tensor>& u0,
-    const optional<Tensor>& v0,
+    const Tensor  &A,
+    const optional<Tensor> &u0,
+    const optional<Tensor> &v0,
     optional<int64_t> maxiter,
     double atol = 1e-8,
     double rtol = 1e-5
