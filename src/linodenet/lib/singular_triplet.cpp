@@ -21,12 +21,11 @@ using torch::eye;
 using torch::addmm;
 using torch::linalg::solve;
 using torch::linalg::lstsq;
-using torch::nn::functional::normalize;
 using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 namespace F = torch::nn::functional;
-
+using torch::indexing::Slice;
 
 struct SingularTriplet : public Function<SingularTriplet> {
     /** @brief Compute the singular triplet of a matrix.
@@ -65,8 +64,8 @@ struct SingularTriplet : public Function<SingularTriplet> {
      * ‖u' -  u'ᵀ ũᵀũ‖
      * Error estimate: Note that
      * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
-     * note@
-     */
+     *
+     **/
 
     static std::vector<Tensor> forward(
         AutogradContext *ctx,
@@ -89,55 +88,64 @@ struct SingularTriplet : public Function<SingularTriplet> {
          * @returns sigma, u, v: singular value, left singular vector, right singular vector
          */
         // Initialize maxiter depending on the size of the matrix.
+        const auto A_t = A.t();
         const auto m = A.size(0);
         const auto n = A.size(1);
-        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m+n);
+        int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m + n);
+        const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
 
         // Initialize u and v with random values if not given
         Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
         Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
 
-        v = normalize(A.t().mv(u), F::NormalizeFuncOptions().p(2).dim(-1));
-        u = normalize(A.mv(v), F::NormalizeFuncOptions().p(2).dim(-1));
-        Tensor sigma = dot(u, A.mv(v));
-
-        // NOTE: After performing 2 iterations, σ>0 should be guaranteed as
-        // σ = vᵀv' ∝ v^⊤A^⊤Av>0 and σ = uᵀu' ∝ u^⊤AA^⊤u > 0
+        // Initialize old values for convergence check
+        // pre-allocate memory for residuals
+        Tensor u_old = torch::empty_like(u);
+        Tensor v_old = torch::empty_like(v);
+        Tensor r_u = torch::empty_like(u);
+        Tensor r_v = torch::empty_like(v);
 
         // Perform power-iteration for maxiter times or until convergence.
-        for (const auto i: c10::irange(MAXITER)) {
-            Tensor u_old = u;
-            Tensor v_old = v;
-
-            v = A.t().mv(u);
-            sigma = dot(v, v_old);
-            Tensor right_residual = (v - sigma * v_old).norm();
-            v /= v.norm();
-
+        for (; MAXITER--;) {
+            // update u
             u = A.mv(v);
-            sigma = dot(u, u_old);
-            Tensor left_residual = (u - sigma * u_old).norm();
             u /= u.norm();
 
-            // Check convergence.
-            Tensor tol = atol + rtol * sigma;
-            converged = (
-                (left_residual < tol).item<bool>()
-                && (right_residual < tol).item<bool>()
-            );
-            if (converged) {break;}
+            // update v
+            v = A_t.mv(u);
+            v /= v.norm();
+
+            // update u
+            u_old = u;
+            u = A.mv(v);
+            u /= u.norm();
+
+            // update v
+            v_old = v;
+            v = A_t.mv(u);
+            v /= v.norm();
+
+            // performance: do not test convergence after evey iteration
+            r_u = u - u_old;
+            r_v = v - v_old;
+
+            // check convergence
+            if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
+                break;
+            }
         }
+
         // Emit warning if no convergence within maxiter iterations.
-        if (!converged) {
-            TORCH_WARN("No convergence in ", MAXITER, " iterations. σ=", sigma.item<double>())
-        }
+        if (!converged) {TORCH_WARN("Spectral norm did not converge in ", MAXITER, " iterations.")}
+
+        // compute final sigma
+        Tensor sigma = A.mv(v).dot(u);
+        assert(sigma.item<double>() > 0 && "Singular value is negative!");
+
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
-        if (sigma.item<double>() < 0) {
-            TORCH_WARN("Singular value estimate is negative!?!?!?")
-            assert((sigma.item<double>() > 0) && "Singular value estimate is negative.");
-        }
         ctx->save_for_backward({A, sigma, u, v});
+
         return {sigma, u, v};
     }
 
@@ -182,10 +190,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor g_sigma = xi * outer(u, v);
 
         // exit early if grad_output is zero for both u and v.
-        bool phi_nonzero = phi.any().item<bool>();   // any should be faster than all
-        bool psi_nonzero = psi.any().item<bool>();   // any should be faster than all
-
-        if ( !(phi_nonzero || psi_nonzero) ) {
+        if ( !(phi.any() | psi.any()).item<bool>() ) {
             return {g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
         }
 
@@ -195,11 +200,23 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // augmented K matrix: (m+n+2) x (m+n)
         // [ σ𝕀ₘ | -A  | u | 0 ] ⋅ [p, q, μ, ν] = [ϕ]
         // [ -Aᵀ | σ𝕀ₙ | 0 | v ]                  [ψ]
-        Tensor K = cat({
-            cat({sigma * eye(m, A.options()), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),
-            cat({-A.t(), sigma * eye(n, A.options()), zeros_like(v).unsqueeze(-1), v.unsqueeze(-1)}, 1)
-        }, 0);
+
+        const auto options = A.options();
+
+        // construct the K matrix
+//        Tensor K = torch::zeros({m+n, m+n+2}, options);
+//        K.index_put_({Slice(0, m+n), Slice(0, m+n)}, sigma*eye(m+n, options));
+//        K.index_put_({Slice(0, m), Slice(m, m+n)}, -A);
+//        K.index_put_({Slice(m, m+n), Slice(0, m)}, -A.t());
+//        K.index_put_({Slice(0, m), m+n}, u);
+//        K.index_put_({Slice(m, m+n), m+n+1}, v);
+
         Tensor c = torch::cat({phi, psi}, 0);
+
+        Tensor K = cat({
+            cat({sigma * eye(m, options), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),
+            cat({-A.t(), sigma * eye(n, options), zeros_like(v).unsqueeze(-1), v.unsqueeze(-1)}, 1)
+        }, 0);
 
         // solve the underdetermined system
         Tensor x = std::get<0>(lstsq(K, c, nullopt, nullopt));

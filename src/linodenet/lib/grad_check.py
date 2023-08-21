@@ -2,6 +2,8 @@
 """Test gradients of custom operators."""
 
 
+__all__ = ["compute_spectral_norm_impl"]
+
 import torch
 from torch import nn
 

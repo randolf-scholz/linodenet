@@ -53,7 +53,16 @@ struct SpectralNorm: public Function<SpectralNorm> {
      * ‖u' -  u'ᵀ ũᵀũ‖
      * Error estimate: Note that
      * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
-     */
+     *
+     * Note (Stopping criterion):
+     *     The standard stopping criterion is ‖ũ - σu‖ ≤ α + β⋅σ
+     *     Plugging in the definition of ũ and σ, and dividing by ‖ũ‖ yields, using u'=  ũ/‖ũ‖
+     *     ‖u'-⟨u∣u'⟩u‖ ≤ α/‖ũ‖ + β ⟨u∣u'⟩
+     *     close to convergence, ⟨u∣u'⟩ ≈ 1, giving the stopping criterion
+     *     ‖u'-u‖ ≤ α/‖ũ‖ + β
+     *     Assuming ‖ũ‖>1, we can the first term. Squaring gives the final criterion:i
+     *     ‖u'-u‖² ≤ β²
+     * */
 
     static Tensor forward(
         AutogradContext *ctx,
@@ -127,12 +136,13 @@ struct SpectralNorm: public Function<SpectralNorm> {
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {TORCH_WARN("Spectral norm did not converge in ", MAXITER, " iterations.")}
 
+        // compute final sigma
+        Tensor sigma = A.mv(v).dot(u);
+        assert(sigma.item<double>() > 0 && "Singular value is negative!");
+
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
         ctx->save_for_backward({u, v});
 
-        // compute final sigma
-        Tensor sigma = A.mv(v).dot(u);
-        assert(sigma.item<double>() > 0);
         return sigma;
     }
 
@@ -156,7 +166,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
     }
 };
 
-static Tensor spectral_norm(
+static inline Tensor spectral_norm(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,

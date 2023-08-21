@@ -39,7 +39,7 @@ test = [
     "coverage>=7.3.0",
     "matplotlib>=3.7.2",
     "psutil>=5.9.5",
-    "pytest-benchmark>=4.0.0",
+    "pytest-benchmark[histogram]>=4.0.0",
     "pytest-cov>=4.1.0",
     "pytest-rerunfailures>=12.0",
     "pytest-xdist>=3.3.1",
@@ -544,7 +544,7 @@ piccolo-theme        =   ">=0.16.1"
 pydata-sphinx-theme  =   ">=0.13.3"
 sphinx               =   ">=7.2.2"
 sphinx-autoapi       =   ">=2.1.1"
-sphinx-automodapi    =   ">=0.15.0"
+sphinx-automodapi    =   ">=0.16.0"
 sphinx-copybutton    =   ">=0.5.2"
 sphinx-math-dollar   =   ">=1.2.1"
 sphinx-typo3-theme   =   ">=4.9.0"

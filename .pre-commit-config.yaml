@@ -132,7 +132,7 @@ repos:
       - id: pydocstyle
         files: (^src/|^tests/)
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.1.23
+    rev: v0.1.26
     hooks:
       - id: pyproject-validate-version
       - id: pyproject-update-deps
@@ -158,6 +158,8 @@ repos:
         files: (^src/|^tests/)
       - id: check-separator-length
         files: (^src/|^tests/)
+      - id: python-check-__all__-exists
+        files: ^src/
   # slotscheck
   - repo: https://github.com/ariebovenberg/slotscheck
     rev: v0.17.0

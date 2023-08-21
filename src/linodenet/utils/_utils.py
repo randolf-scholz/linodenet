@@ -45,7 +45,7 @@ r"""Type hint for classes."""
 R = TypeVar("R")
 r"""Type hint return value."""
 
-nnModuleType = TypeVar("nnModuleType", bound=nn.Module)
+nnModuleType = TypeVar("nnModuleType", bound=type[nn.Module])
 r"""Type Variable for nn.Modules."""
 
 
@@ -98,7 +98,7 @@ def deep_keyval_update(d: dict, /, **new_kv: Any) -> dict:
     return d
 
 
-def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
+def autojit(base_class: nnModuleType) -> nnModuleType:
     r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
 
     Makes it so that
