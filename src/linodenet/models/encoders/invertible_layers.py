@@ -1,6 +1,7 @@
 """Implementation of invertible layers.
 
 Layers:
+
 - Affine: $y = Ax+b$ and $x = A⁻¹(y-b)$
     - A diagonal
     - A triangular
