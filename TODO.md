@@ -3,7 +3,6 @@
 - [ ] Parallel Scan Algorithm Matrix Exponential
 - [ ] VJP Matrix Exponential
 
-
 ## LinODEnet
 
 ### TODO: Control variables
@@ -11,11 +10,11 @@
 xhat = self.control(xhat, u)
 u: possible controls:
 
-1.  set to value
-2.  add to value
-    do these via indicator variable
-    u = (time, value, mode-indicator, col-indicator)
-    => apply control to specific column.
+1. set to value
+2. add to value
+   do these via indicator variable
+   u = (time, value, mode-indicator, col-indicator)
+   => apply control to specific column.
 
 ### TODO: Smarter initialization
 
@@ -30,7 +29,7 @@ other idea: use a set-based model and put h = g(T,X), including the whole TS.
 This set model can use triplet notation.
 bias weighting towards close time points
 
-### TODO: replace with add_module once supported!
+### TODO: replace with add_module once supported
 
 ```python
 self.add_module("embedding", _embedding)
