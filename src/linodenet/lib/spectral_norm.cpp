@@ -1,14 +1,13 @@
 #include <ATen/ATen.h>
 #include <torch/script.h>
-#include <torch/linalg.h>
+// #include <torch/linalg.h>
 // #include <cstddef>
 // #include <string>
 
 // import someLib as sl      ⟶  namespace sl = someLib;
 // from someLib import func  ⟶  using someLib::func;
 // from someLib import *     ⟶  using namespace someLib;
-using at::optional;
-using at::irange;
+using torch::optional;
 using torch::Tensor;
 using torch::outer;
 using torch::dot;
@@ -88,7 +87,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const auto A_t = A.t();
         const auto m = A.size(0);
         const auto n = A.size(1);
-        int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m + n);
+        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m + n);
         const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
 
@@ -104,7 +103,12 @@ struct SpectralNorm: public Function<SpectralNorm> {
         Tensor r_v = torch::empty_like(v);
 
         // Perform power-iteration for maxiter times or until convergence.
-        for (; MAXITER--;) {
+        for (auto i = 0; i<MAXITER; i++) {
+            // NOTE: We apply two iterations per loop. This is a case of duff's device.
+            // This means that we effectively only check the stopping criterion every 2 iterations.
+            // This improves performance on GPU since .item() requires a synchronization with CPU.
+            // The compiler cannot do this optimization on it's own because it would change behavior.
+
             // update u
             u = A.mv(v);
             u /= u.norm();
@@ -134,7 +138,9 @@ struct SpectralNorm: public Function<SpectralNorm> {
         }
 
         // Emit warning if no convergence within maxiter iterations.
-        if (!converged) {TORCH_WARN("Spectral norm did not converge in ", MAXITER, " iterations.")}
+        if (!converged) {TORCH_WARN(
+            "spectral_norm: no convergence in ", MAXITER, " iterations for input of shape ", A.sizes()
+        )}
 
         // compute final sigma
         Tensor sigma = A.mv(v).dot(u);
@@ -152,11 +158,12 @@ struct SpectralNorm: public Function<SpectralNorm> {
     ) {
         /** @brief Backward Pass.
          *
-         * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
-         *
          * @param ctx: context object
          * @param grad_output: outer gradients
          * @returns g: gradient with respect to inputs
+         *
+         * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
+         *
          */
         auto saved = ctx->get_saved_variables();
         auto u = saved[0];

@@ -2,9 +2,10 @@ cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
 project(liblinodenet LANGUAGES CXX)
 
 # set global flags
-#set(CMAKE_CXX_STANDARD 17)
-#set(USE_CUDNN true)
-#set(CAFFE2_USE_CUDNN true)
+set(CMAKE_CXX_STANDARD 17)
+set(USE_CUDA true)
+set(USE_CUDNN true)
+set(CAFFE2_USE_CUDNN true)
 option(USE_CUDA "Use CUDA" ON)
 option(USE_CUDNN "Use CUDNN" ON)
 option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
@@ -22,14 +23,14 @@ find_package(Torch REQUIRED)
 
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-message(STATUS "CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
-message(STATUS "TORCH_CXX_FLAGS=${TORCH_CXX_FLAGS}")
+message(    STATUS "NOTE: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
+message(STATUS "NOTE: TORCH_CXX_FLAGS=${TORCH_CXX_FLAGS}")
 
 
 # print debug info
 
-message(STATUS "PROJECT_ROOT=${PROJECT_ROOT}")
-message(STATUS "USE_CUDNN=${USE_CUDNN}")
+message(STATUS "NOTE: PROJECT_ROOT=${PROJECT_ROOT}")
+message(STATUS "NOTE: USE_CUDNN=${USE_CUDNN}")
 
 #message(STATUS "paths=${CMAKE_PREFIX_PATH}")
 

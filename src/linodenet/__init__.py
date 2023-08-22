@@ -7,11 +7,13 @@ __all__ = [
     # Sub-Modules
     "config",
     "initializations",
+    "lib",
     "models",
     "projections",
     "regularizations",
     "utils",
 ]
+
 import sys
 from importlib import metadata
 from types import ModuleType
@@ -25,6 +27,7 @@ if sys.version_info < (3, 10):
 from linodenet import (
     config,
     initializations,
+    lib,
     models,
     projections,
     regularizations,

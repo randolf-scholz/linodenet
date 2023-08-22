@@ -1,6 +1,10 @@
 """Custom operators for the linodenet package."""
 
 __all__ = [
+    # Protocols
+    "SingularTriplet",
+    "SpectralNorm",
+    # Implementations
     "singular_triplet",
     "spectral_norm",
     "singular_triplet_native",
@@ -10,11 +14,41 @@ __all__ = [
 import warnings
 from collections.abc import Callable
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol
 
 import torch
 import torch.utils.cpp_extension
 from torch import Tensor
+
+
+class SpectralNorm(Protocol):
+    """Protocol for spectral norm implementations."""
+
+    def __call__(
+        self,
+        A: Tensor,
+        u0: Optional[Tensor] = None,
+        v0: Optional[Tensor] = None,
+        maxiter: Optional[int] = None,
+        atol: float = 1e-8,
+        rtol: float = 1e-5,
+    ) -> Tensor:
+        ...
+
+
+class SingularTriplet(Protocol):
+    """Protocol for singular triplet implementations."""
+
+    def __call__(
+        self,
+        A: Tensor,
+        u0: Optional[Tensor] = None,
+        v0: Optional[Tensor] = None,
+        maxiter: Optional[int] = None,
+        atol: float = 1e-8,
+        rtol: float = 1e-5,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        ...
 
 
 def singular_triplet_native(

@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 """Test the spectral norm implementation.""" ""
 
+from collections.abc import Callable
+
 import pytest
 import torch
 import torch.utils.cpp_extension
+from pytest_benchmark.fixture import BenchmarkFixture
 from torch import jit, nn
 
 from linodenet.lib import (
@@ -54,9 +57,12 @@ IMPL = {
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 @torch.no_grad()
 def test_spectral_norm_forward(
-    benchmark, impl, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture, impl, device: str, shape: tuple[int, int]
 ) -> None:
     """Test the spectral norm implementation."""
+
+    raise ValueError(f"{type(benchmark)} {callable(benchmark)}This test is broken")
+
     A = nn.Parameter(torch.randn(*shape, device=device))
 
     # warmup

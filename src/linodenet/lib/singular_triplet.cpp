@@ -1,7 +1,6 @@
-#include <ATen/ATen.h>
+// #include <ATen/ATen.h>
 #include <torch/script.h>
 #include <torch/linalg.h>
-#include <torch/nn.h>
 #include <vector>
 // #include <cstddef>
 // #include <string>
@@ -9,12 +8,11 @@
 // import someLib as sl      ⟶  namespace sl = someLib;
 // from someLib import func  ⟶  using someLib::func;
 // from someLib import *     ⟶  using namespace someLib;
-using at::optional;
-using at::nullopt;
+using torch::optional;
+using torch::nullopt;
 using torch::Tensor;
 using torch::Scalar;
 using torch::cat;
-using at::zeros_like;
 using torch::outer;
 using torch::dot;
 using torch::eye;
@@ -24,7 +22,6 @@ using torch::linalg::lstsq;
 using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
-namespace F = torch::nn::functional;
 using torch::indexing::Slice;
 
 struct SingularTriplet : public Function<SingularTriplet> {
@@ -91,7 +88,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         const auto A_t = A.t();
         const auto m = A.size(0);
         const auto n = A.size(1);
-        int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m + n);
+        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m + n);
         const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
 
@@ -107,7 +104,12 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor r_v = torch::empty_like(v);
 
         // Perform power-iteration for maxiter times or until convergence.
-        for (; MAXITER--;) {
+        for (auto i = 0; i<MAXITER; i++) {
+            // NOTE: We apply two iterations per loop. This is a case of duff's device.
+            // This means that we effectively only check the stopping criterion every 2 iterations.
+            // This improves performance on GPU since .item() requires a synchronization with CPU.
+            // The compiler cannot do this optimization on it's own because it would change behavior.
+
             // update u
             u = A.mv(v);
             u /= u.norm();
@@ -137,7 +139,9 @@ struct SingularTriplet : public Function<SingularTriplet> {
         }
 
         // Emit warning if no convergence within maxiter iterations.
-        if (!converged) {TORCH_WARN("Spectral norm did not converge in ", MAXITER, " iterations.")}
+        if (!converged) {TORCH_WARN(
+            "spectral_norm: no convergence in ", MAXITER, " iterations for input of shape ", A.sizes()
+        )}
 
         // compute final sigma
         Tensor sigma = A.mv(v).dot(u);
@@ -213,9 +217,12 @@ struct SingularTriplet : public Function<SingularTriplet> {
 
         Tensor c = torch::cat({phi, psi}, 0);
 
+        Tensor zero_u = torch::zeros_like(u).unsqueeze(-1);
+        Tensor zero_v = torch::zeros_like(v).unsqueeze(-1);
+
         Tensor K = cat({
-            cat({sigma * eye(m, options), -A, u.unsqueeze(-1), zeros_like(u).unsqueeze(-1)}, 1),
-            cat({-A.t(), sigma * eye(n, options), zeros_like(v).unsqueeze(-1), v.unsqueeze(-1)}, 1)
+            cat({sigma * eye(m, options), -A, u.unsqueeze(-1), zero_u}, 1),
+            cat({-A.t(), sigma * eye(n, options), zero_v, v.unsqueeze(-1)}, 1)
         }, 0);
 
         // solve the underdetermined system

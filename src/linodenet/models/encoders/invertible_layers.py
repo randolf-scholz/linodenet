@@ -217,7 +217,6 @@ class LinearContraction(nn.Module):
             - since ∇w w/‖w‖ = 𝕀/‖w‖ - ww^⊤/‖w‖³ = (𝕀 - ww^⊤), then for outer gradient ξ,
               the VJP is given by ξ - (ξ^⊤w)w which is the projection of ξ onto the tangent space.
 
-
         NOTE: Riemannian optimization on n-sphere:
         Given point p on unit sphere and tangent vector v, the geodesic is given by:
 
