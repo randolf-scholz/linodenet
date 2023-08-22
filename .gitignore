@@ -3,8 +3,8 @@
 **/_*/
 !docs/_static/
 
-# hidden directories
-.*/
+# hidden top-level hidden directories
+/.*/
 
 # libtorch
 libtorch/
