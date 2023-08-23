@@ -3,12 +3,16 @@
 __all__ = ["Parametrization"]
 
 from abc import ABC, abstractmethod
-from typing import Protocol
+from contextlib import AbstractContextManager
+from typing import Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, nn
 
+from linodenet.lib import singular_triplet
 
+
+@runtime_checkable
 class ParametrizationProto(Protocol):
     """Protocol for parametrizations."""
 
@@ -44,20 +48,16 @@ class Parametrization(nn.Module):
     cached_tensors: dict[str, Tensor]
 
     @torch.no_grad()
-    def register_parametrization(self, name: str) -> None:
+    def register_parametrization(self, name: str, param: nn.Parameter) -> None:
         """Register a parametrization."""
-        if name not in self.named_parameters():
-            raise ValueError(f"{name=} is not a known named parameter!")
-
-        # lookup the tensor.
-        tensor = getattr(self, name)
-        assert isinstance(tensor, nn.Parameter)
+        if not isinstance(param, nn.Parameter):
+            raise ValueError(f"Given tensor is not a nn.Parameter!")
 
         # create the cached tensor.
-        self.register_cached_tensor(f"cached_{name}", torch.empty_like(tensor))
+        self.register_cached_tensor(f"cached_{name}", torch.empty_like(param))
 
         # register the parametrization.
-        self.parametrized_tensors[name] = tensor
+        self.parametrized_tensors[name] = param
 
     @torch.no_grad()
     def register_cached_tensor(self, name: str, tensor: Tensor) -> None:
@@ -134,77 +134,67 @@ class Parametrization(nn.Module):
             self.cached_tensors[key].copy_(tensor)
 
 
-class LinearContraction(ParametrizationABC):
-    def __init__(
-        self, input_size: int, output_size: int, L: float = 1.0, *, bias: bool = True
-    ) -> None:
+class SpectralNormalization(Parametrization):
+    """Spectral normalization."""
+
+    # constants
+    GAMMA: Tensor
+    ONE: Tensor
+
+    # cached
+    u: Tensor
+    v: Tensor
+    sigma: Tensor
+
+    # parametrized
+    weight: Tensor
+
+    def __init__(self, weight: nn.Parameter, /, gamma: float = 1.0) -> None:
         super().__init__()
-        self.input_size = input_size
-        self.output_size = output_size
-        self.L = L
 
-        self.weight = nn.Parameter(torch.empty((output_size, input_size)))
-        if bias:
-            self.bias = nn.Parameter(torch.empty(output_size))
-        else:
-            self.register_parameter("bias", None)
-        self.reset_parameters()
+        assert len(weight.shape) == 2
+        m, n = weight.shape
 
-        self.register_buffer("sigma", torch.tensor(1.0))
-        self.register_buffer("u", torch.randn(output_size))
-        self.register_buffer("v", torch.randn(input_size))
-        self.register_buffer("cached_weight", torch.empty_like(self.weight))
-        self.register_buffer("one", torch.ones(1))
-        self.register_buffer("c", torch.tensor(self.L))
-        self.reset_cache()
+        options = {
+            "dtype": weight.dtype,
+            "device": weight.device,
+            "layout": weight.layout,
+        }
 
-    def reset_parameters(self) -> None:
-        r"""Reset both weight matrix and bias vector."""
-        with torch.no_grad():
-            bound: float = float(torch.rsqrt(torch.tensor(self.input_size)))
-            self.weight.uniform_(-bound, bound)
-            if self.bias is not None:
-                self.bias.uniform_(-bound, bound)
+        # parametrized and cached
+        self.register_parametrization("weight", weight)
+        self.register_cached_tensor("u", torch.empty(m, **options))
+        self.register_cached_tensor("v", torch.empty(n, **options))
+        self.register_cached_tensor("sigma", torch.empty(1, **options))
 
-    def reset_cache(self) -> None:
-        """Reset the cached weight matrix.
-
-        Needs to be called after every .backward!
-        """
-        # apply projection step.
-        with torch.no_grad():
-            self.recompute_cache()
-
-        self.projection()
-
-        # detach() is necessary to avoid "Trying to backward through the graph a second time" error
-
-        for key, tensor in self.cached_tensors.items():
-            tensor.detach_()
-
-        self.sigma.detach_()
-        self.u.detach_()
-        self.v.detach_()
-        self.cached_weight.detach_()
-
-        # recompute the cache
-        # NOTE: we need the second run to set up the gradients!
-        self.recompute_cache()
-
-    def recompute_cache(self) -> None:
-        r"""Recompute the cached weight matrix."""
-        new_tensors = self.forward()
-        for key, tensor in new_tensors.items():
-            self.cached_tensors[key].copy_(tensor)
-
-    @torch.no_grad()
-    def projection(self):
-        for key, tensor in self.parametrized_tensors.items():
-            tensor.copy_(self.cached_tensors[key])
+        # constants
+        self.register_buffer("ONE", torch.empty(1, **options))
+        self.register_buffer("GAMMA", torch.empty(gamma, **options))
 
     def forward(self) -> dict[str, Tensor]:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         sigma, u, v = singular_triplet(self.weight, u0=self.u, v0=self.v)
-        gamma = torch.minimum(self.one, self.c / sigma)
+        gamma = torch.minimum(self.ONE, self.GAMMA / sigma)
         weight = gamma * self.weight
-        return {"weight": weight, "sigma": sigma, "u": u, "v": v}
+        return {"weight": weight, "u": u, "v": v, "sigma": sigma}
+
+
+def reset_all_caches(module: nn.Module) -> None:
+    """Reset all caches in a module."""
+    for submodule in module.modules():
+        if isinstance(submodule, ParametrizationABC):
+            submodule.reset_cache()
+
+
+class reset_caches(AbstractContextManager):
+    """reset_caches context manager."""
+
+    def __init__(self, module: nn.Module) -> None:
+        self.module = module
+
+    def __enter__(self):
+        reset_all_caches(self.module)
+        return self.module
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        reset_all_caches(self.module)
+        return False
