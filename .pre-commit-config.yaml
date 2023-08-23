@@ -52,7 +52,6 @@ repos:
         description: "checks for debugger imports and py37+ `breakpoint()` calls in python source."
       - id: end-of-file-fixer
         description: "ensures that a file is either empty, or ends with one newline."
-      #        exclude: ^.*.ipynb$ # FIXME: https://github.com/deshaw/nbstripout-fast/issues/8
       - id: pretty-format-json
         args: ["--autofix"]
         exclude: ^.*.ipynb$ # FIXME: https://github.com/deshaw/nbstripout-fast/issues/8
@@ -140,7 +139,6 @@ repos:
     hooks:
       - id: slotscheck
         language: system
-        #        entry: env PYTHONPATH=src slotscheck --verbose
         files: ^src/
   # mypy
   - repo: https://github.com/pre-commit/mirrors-mypy
