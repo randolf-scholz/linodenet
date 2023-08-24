@@ -7,7 +7,6 @@ __all__ = [
     "assert_issubclass",
     "deep_dict_update",
     "deep_keyval_update",
-    "flatten_nested_tensor",
     "initialize_from_config",
     "is_dunder",
     "is_private",
@@ -22,7 +21,7 @@ import gc
 import logging
 import sys
 import warnings
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from contextlib import ContextDecorator
 from copy import deepcopy
 from functools import wraps
@@ -130,10 +129,10 @@ def autojit(base_class: nnModuleType) -> nnModuleType:
         r"""A simple Wrapper."""
 
         # noinspection PyArgumentList
-        def __new__(cls, *args: Any, **kwargs: Any) -> nnModuleType:  # type: ignore[misc]
+        def __new__(cls, *args: Any, **kwargs: Any) -> nnModuleType:
             # Note: If __new__() does not return an instance of cls,
             # then the new instance's __init__() method will not be invoked.
-            instance: nnModuleType = base_class(*args, **kwargs)
+            instance: nnModuleType = base_class(*args, **kwargs)  # type: ignore[assignment]
 
             if CONFIG.autojit:
                 scripted: nnModuleType = jit.script(instance)  # pyright: ignore
@@ -141,16 +140,7 @@ def autojit(base_class: nnModuleType) -> nnModuleType:
             return instance
 
     assert issubclass(WrappedClass, base_class)  # pyright: ignore
-    return WrappedClass
-
-
-def flatten_nested_tensor(inputs: Tensor | Iterable[Tensor]) -> Tensor:
-    r"""Flattens element of general Hilbert space."""
-    if isinstance(inputs, Tensor):
-        return torch.flatten(inputs)
-    if isinstance(inputs, Iterable):
-        return torch.cat([flatten_nested_tensor(x) for x in inputs])
-    raise ValueError(f"{inputs=} not understood")
+    return WrappedClass  # type: ignore[return-value]
 
 
 def initialize_from_config(config: dict[str, Any]) -> nn.Module:

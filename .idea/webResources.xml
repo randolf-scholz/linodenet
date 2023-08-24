@@ -9,6 +9,8 @@
             <path value="file://$PROJECT_DIR$/docs/_templates" />
             <path value="file://$PROJECT_DIR$/docs/_static" />
             <path value="file://$PROJECT_DIR$/docs/_ext" />
+            <path value="file://$PROJECT_DIR$/docs/content/diagrams" />
+            <path value="file://$PROJECT_DIR$/diagrams" />
           </resourceRoots>
         </entryData>
       </entry>
