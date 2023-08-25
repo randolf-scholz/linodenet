@@ -7,9 +7,14 @@ At he end we want to be able to do something as simple as this:
 model.weight = MyParametrization(model.weight).weight
 """
 
-__all__ = ["Parametrization"]
+__all__ = [
+    "ParametrizationProto",
+    "ParametrizationABC",
+    "Parametrization",
+]
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol, runtime_checkable
 
@@ -137,6 +142,22 @@ class Parametrization(nn.Module):
         # copy the new tensors into the cache
         for key, tensor in new_tensors.items():
             self.cached_tensors[key].copy_(tensor)
+
+
+def parametrize():
+    """Parametrized a single tensor based of a function."""
+    ...
+
+
+def register_parametrization(
+    model: nn.Module,
+    tensor_name: str,
+    parametrization: nn.Module | Callable[[Tensor], Tensor],
+    *,
+    unsafe: bool = False,
+) -> None:
+    """Drop-in replacement for nn.utils.parametrize.register_parametrization."""
+    ...
 
 
 def reset_all_caches(module: nn.Module) -> None:

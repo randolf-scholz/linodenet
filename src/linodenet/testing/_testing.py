@@ -5,6 +5,7 @@ __all__ = ["test_model", "test_model_class"]
 import logging
 import tempfile
 from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional, TypeAlias
 
@@ -101,6 +102,7 @@ def test_model(
     /,
     *,
     inputs: NestedTensor,
+    reference_model: Optional[nn.Module] = None,
     reference_outputs: Optional[NestedTensor] = None,
     reference_gradients: Optional[NestedTensor] = None,
     logger: Optional[logging.Logger] = None,
@@ -114,12 +116,30 @@ def test_model(
     if logger is None:
         logger = __logger__.getChild(model_name)
 
+    # region get reference model -----------------------------------------------
+    if reference_model is not None:
+        assert (
+            reference_outputs is None and reference_gradients is None
+        ), "Cannot specify both reference model and reference outputs/gradients!"
+
+        try:
+            reference_model.to(device=device)
+            reference_outputs = reference_model(inputs)
+            r = get_norm(reference_outputs)
+            r.backward()
+            reference_gradients = get_grads(reference_model)
+            reference_model.zero_grad(set_to_none=True)
+        except Exception as exc:
+            raise RuntimeError("Reference model failed forward/backward pass!") from exc
+        logger.info(">>> Reference model forward/backward ✔ ")
+    # endregion get reference model --------------------------------------------
+
     # region change device -----------------------------------------------------
     if device is None:
         device = get_device(model)
 
     try:
-        model = model.to(device)
+        model = model.to(device=device)
         inputs = to_device_nested_tensor(inputs, device=device)
         if reference_outputs is not None:
             reference_outputs = to_device_nested_tensor(
