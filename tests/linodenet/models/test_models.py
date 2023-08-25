@@ -7,13 +7,12 @@ from pathlib import Path
 
 import torch
 from torch import Tensor
-from torch.nn.functional import mse_loss
 
 import linodenet
 from linodenet.config import PROJECT
 from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
 from linodenet.models.system import LinODECell
-from linodenet.utils import flatten_nested_tensor
+from linodenet.testing import test_model_class
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
@@ -88,82 +87,6 @@ def _make_tensors(
     return tuple(tensors)
 
 
-def _test_model(
-    Model: type,
-    *,
-    initialization: tuple[int, ...],
-    inputs: tuple[Tensor, ...],
-    targets: tuple[Tensor, ...],
-    device: torch.device = DEVICES[0],
-) -> None:
-    LOGGER = __logger__.getChild(Model.__name__)
-    LOGGER.info("Testing...")
-
-    def err_str(s: str) -> str:
-        return (
-            f"{Model=} failed {s} with {initialization=} and "
-            f"input shapes {tuple(i.shape for i in inputs)}!"
-        )
-
-    try:  # check initialization
-        LOGGER.info(">>> INITIALIZATION TEST")
-        LOGGER.info(">>> input shapes: %s", initialization)
-        model = Model(*initialization)
-        model.to(dtype=DTYPE, device=device)
-    except Exception as E:
-        raise RuntimeError(err_str("initialization")) from E
-    LOGGER.info(">>> INITIALIZATION ✔ ")
-
-    try:  # check JIT-compatibility
-        LOGGER.info(">>> JIT-COMPILATION TEST")
-        model = torch.jit.script(model)
-    except Exception as E:
-        raise RuntimeError(err_str("JIT-compilation")) from E
-    LOGGER.info(">>> JIT-compilation ✔ ")
-
-    try:  # check forward
-        LOGGER.info(
-            ">>> FORWARD with input shapes %s", [tuple(x.shape) for x in inputs]
-        )
-        outputs = model(*inputs)
-        outputs = outputs if isinstance(outputs, tuple) else (outputs,)
-    except Exception as E:
-        raise RuntimeError(err_str("forward pass")) from E
-    assert all(output.shape == target.shape for output, target in zip(outputs, targets))
-    LOGGER.info(
-        ">>> Output shapes %s match with targets!",
-        [tuple(x.shape) for x in targets],
-    )
-    LOGGER.info(">>> FORWARD ✔ ")
-
-    try:  # check backward
-        LOGGER.info(">>> BACKWARD TEST")
-        losses = [mse_loss(output, target) for output, target in zip(outputs, targets)]
-        loss = torch.stack(losses).sum()
-        loss.backward()
-    except Exception as E:
-        raise RuntimeError(err_str("backward pass")) from E
-    LOGGER.info(">>> BACKWARD ✔ ")
-
-    try:  # check model saving
-        LOGGER.info(">>> CHECKPOINTING TEST")
-        filepath = Path.cwd().joinpath(f"model_checkpoints/{Model.__name__}.pt")
-        filepath.parent.mkdir(exist_ok=True)
-        torch.jit.save(model, filepath)
-        LOGGER.info(">>> Model saved successfully ✔ ")
-        model2 = torch.jit.load(filepath)
-        LOGGER.info(">>> Model loaded successfully ✔ ")
-
-        residual = flatten_nested_tensor(model(*inputs)) - flatten_nested_tensor(
-            model2(*inputs)
-        )
-        assert (residual == 0.0).all(), f"{torch.mean(residual**2)=}"
-        LOGGER.info(">>> Loaded Model produces equivalent outputs ✔ ")
-    except Exception as E:
-        raise RuntimeError(err_str("checkpointing")) from E
-    LOGGER.info(">>> CHECKPOINTING ✔ ")
-
-
 def test_all_models() -> None:
     r"""Check if initializations, forward and backward runs for all selected models."""
     __logger__.info("Testing forward/backward of %s.", set(MODELS))
@@ -187,7 +110,7 @@ def test_all_models() -> None:
             targets = _make_tensors(
                 output_shapes, batch_sizes=batch_sizes, dtype=DTYPE, device=device
             )
-            _test_model(
+            test_model_class(
                 model,
                 initialization=initialization,
                 inputs=inputs,

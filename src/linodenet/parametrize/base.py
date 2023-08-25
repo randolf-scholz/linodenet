@@ -1,15 +1,25 @@
-"""Parametrizations for Torch."""
+"""Parametrizations for Torch.
 
-__all__ = ["Parametrization"]
+Idea:
+
+At he end we want to be able to do something as simple as this:
+
+model.weight = MyParametrization(model.weight).weight
+"""
+
+__all__ = [
+    "ParametrizationProto",
+    "ParametrizationABC",
+    "Parametrization",
+]
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, nn
-
-from linodenet.lib import singular_triplet
 
 
 @runtime_checkable
@@ -51,7 +61,7 @@ class Parametrization(nn.Module):
     def register_parametrization(self, name: str, param: nn.Parameter) -> None:
         """Register a parametrization."""
         if not isinstance(param, nn.Parameter):
-            raise ValueError(f"Given tensor is not a nn.Parameter!")
+            raise ValueError("Given tensor is not a nn.Parameter!")
 
         # create the cached tensor.
         self.register_cached_tensor(f"cached_{name}", torch.empty_like(param))
@@ -134,48 +144,20 @@ class Parametrization(nn.Module):
             self.cached_tensors[key].copy_(tensor)
 
 
-class SpectralNormalization(Parametrization):
-    """Spectral normalization."""
+def parametrize():
+    """Parametrized a single tensor based of a function."""
+    ...
 
-    # constants
-    GAMMA: Tensor
-    ONE: Tensor
 
-    # cached
-    u: Tensor
-    v: Tensor
-    sigma: Tensor
-
-    # parametrized
-    weight: Tensor
-
-    def __init__(self, weight: nn.Parameter, /, gamma: float = 1.0) -> None:
-        super().__init__()
-
-        assert len(weight.shape) == 2
-        m, n = weight.shape
-
-        options = {
-            "dtype": weight.dtype,
-            "device": weight.device,
-            "layout": weight.layout,
-        }
-
-        # parametrized and cached
-        self.register_parametrization("weight", weight)
-        self.register_cached_tensor("u", torch.empty(m, **options))
-        self.register_cached_tensor("v", torch.empty(n, **options))
-        self.register_cached_tensor("sigma", torch.empty(1, **options))
-
-        # constants
-        self.register_buffer("ONE", torch.empty(1, **options))
-        self.register_buffer("GAMMA", torch.empty(gamma, **options))
-
-    def forward(self) -> dict[str, Tensor]:
-        sigma, u, v = singular_triplet(self.weight, u0=self.u, v0=self.v)
-        gamma = torch.minimum(self.ONE, self.GAMMA / sigma)
-        weight = gamma * self.weight
-        return {"weight": weight, "u": u, "v": v, "sigma": sigma}
+def register_parametrization(
+    model: nn.Module,
+    tensor_name: str,
+    parametrization: nn.Module | Callable[[Tensor], Tensor],
+    *,
+    unsafe: bool = False,
+) -> None:
+    """Drop-in replacement for nn.utils.parametrize.register_parametrization."""
+    ...
 
 
 def reset_all_caches(module: nn.Module) -> None:

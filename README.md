@@ -1,6 +1,6 @@
 # LinODEnet — 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁work
 
-![model-sketch](docs/content/diagrams/lssm-new-notation.png)
+![model-sketch](lssm.png)
 
 ## Documentation
 
