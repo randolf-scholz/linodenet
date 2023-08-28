@@ -55,13 +55,14 @@ IMPL = {
 @pytest.mark.parametrize("shape", [(512, 512)], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.benchmark(group="spectral_norm", min_rounds=512)
 @torch.no_grad()
 def test_spectral_norm_forward(
     benchmark: BenchmarkFixture, impl, device: str, shape: tuple[int, int]
 ) -> None:
     """Test the spectral norm implementation."""
 
-    raise ValueError(f"{type(benchmark)} {callable(benchmark)}This test is broken")
+    # raise ValueError(f"{type(benchmark)} {callable(benchmark)}This test is broken")
 
     A = nn.Parameter(torch.randn(*shape, device=device))
 

@@ -31,9 +31,13 @@ class SpectralNormalization(Parametrization):
 
     # parametrized
     weight: Tensor
+    maxiter: Optional[int]
 
-    def __init__(self, weight: nn.Parameter, /, gamma: float = 1.0) -> None:
+    def __init__(
+        self, weight: nn.Parameter, /, gamma: float = 1.0, maxiter: Optional[int] = None
+    ) -> None:
         super().__init__()
+        self.maxiter = maxiter
 
         assert len(weight.shape) == 2
         m, n = weight.shape
@@ -56,9 +60,12 @@ class SpectralNormalization(Parametrization):
 
     def forward(self) -> dict[str, Tensor]:
         """Perform spectral normalization w ↦ w/‖w‖₂."""
-        sigma, u, v = singular_triplet(self.weight, u0=self.u, v0=self.v)
+        sigma, u, v = singular_triplet(
+            self.weight, u0=self.u, v0=self.v, maxiter=self.maxiter
+        )
         gamma = torch.minimum(self.ONE, self.GAMMA / sigma)
         weight = gamma * self.weight
+
         return {
             "weight": weight,
             "u": u,

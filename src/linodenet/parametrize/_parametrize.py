@@ -62,30 +62,27 @@ class Parametrization(nn.Module):
 
         # initialize the cache
         self.cached_tensors = {}
-        self.parametrized_tensors = {}
+        self.parametrized_tensors = nn.ParameterDict()
 
     @abstractmethod
     def forward(self) -> dict[str, Tensor]:
         """Update all cached tensors."""
         ...
 
-    @torch.no_grad()
     def register_parametrized_tensor(self, name: str, param: nn.Parameter) -> None:
         """Register a parametrization."""
         if not isinstance(param, nn.Parameter):
             raise ValueError("Given tensor is not a nn.Parameter!")
 
-        # register the parameter.
-        # self.register_parameter(name, param)
-        # setattr(self, name, param)
+        # register the parametrized tensor.
+        self.parametrized_tensors[name] = param
 
         # create the cached tensor.
         self.register_cached_tensor(name, torch.empty_like(param))
 
-        # register the parametrization.
-        self.parametrized_tensors[name] = param
+        # engage the autograd engine
+        self.cached_tensors[name].copy_(self.parametrized_tensors[name])
 
-    @torch.no_grad()
     def register_cached_tensor(self, name: str, tensor: Tensor) -> None:
         """Register a cached tensor."""
         if name in self.cached_tensors:
