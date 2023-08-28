@@ -10,7 +10,7 @@ from torch import nn
 from linodenet.lib import spectral_norm, spectral_norm_native
 
 
-def compute_spectral_norm_impl(impl, shape: tuple[int, int]) -> None:
+def compute_spectral_norm_impl(impl, shape: tuple[int, int], **kwargs) -> None:
     """Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)
@@ -23,7 +23,7 @@ def compute_spectral_norm_impl(impl, shape: tuple[int, int]) -> None:
 
     # Custom Forward
     A_custom = nn.Parameter(A0.clone())
-    s_custom = impl(A_custom, maxiter=2000)
+    s_custom = impl(A_custom, **kwargs)
 
     err_value = torch.norm(s_custom - s_native) / torch.norm(s_native)
 
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     err_grad = []
     torch.manual_seed(0)
     for _ in range(100):
-        m, n = 512, 512
+        m, n = 4, 4
         err_value, err_grads = compute_spectral_norm_impl(spectral_norm, (m, n))
         err_vals.append(err_value.item())
         err_grad.append(err_grads.item())

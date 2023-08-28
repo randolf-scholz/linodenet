@@ -1,7 +1,7 @@
-#include <ATen/ATen.h>
+// #include <ATen/ATen.h>
 #include <torch/script.h>
 // #include <torch/linalg.h>
-// #include <cstddef>
+// #include <vector>
 // #include <string>
 
 // import someLib as sl      ⟶  namespace sl = someLib;
@@ -87,13 +87,13 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const auto A_t = A.t();
         const auto m = A.size(0);
         const auto n = A.size(1);
-        const int64_t MAXITER = maxiter.has_value() ? maxiter.value() : 2*(m + n);
+        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(m + n));
         const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
 
         // Initialize u and v with random values if not given
-        Tensor u = u0.has_value() ? u0.value() : torch::randn({m}, A.options());
-        Tensor v = v0.has_value() ? v0.value() : torch::randn({n}, A.options());
+        Tensor u = u0 ? u0.value() : torch::randn({m}, A.options());
+        Tensor v = v0 ? v0.value() : torch::randn({n}, A.options());
 
         // Initialize old values for convergence check
         // pre-allocate memory for residuals
@@ -133,20 +133,25 @@ struct SpectralNorm: public Function<SpectralNorm> {
 
             // check convergence
             if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
-                Tensor sigma = A.mv(v).dot(u);
-                std::cout << "Converged after " << i << " iterations. Sigma=" << sigma.item<double>() << std::endl;
+                // Tensor sigma = A.mv(v).dot(u);
+                // std::cout << "Converged after " << i << " iterations. Sigma=" << sigma.item<double>() << std::endl;
                 break;
             }
         }
 
         // Emit warning if no convergence within maxiter iterations.
-        if (!converged) {TORCH_WARN(
-            "spectral_norm: no convergence in ", MAXITER, " iterations for input of shape ", A.sizes()
-        )}
+        if (!converged) {
+            TORCH_WARN("spectral_norm: no convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
+        }
 
         // compute final sigma
         Tensor sigma = A.mv(v).dot(u);
-        assert(sigma.item<double>() > 0 && "Singular value is negative!");
+
+        // check for NaNs, infinities, and negative values
+        auto sigma_val = sigma.item<double>();
+        if (!(std::isfinite(sigma_val) && sigma_val > 0)) {
+            throw std::runtime_error("Singular value is not a finite positive number! σ=" + std::to_string(sigma_val));
+        }
 
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
         ctx->save_for_backward({u, v});
@@ -175,6 +180,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
     }
 };
 
+
 static inline Tensor spectral_norm(
     const Tensor &A,
     const optional<Tensor> &u0,
@@ -189,9 +195,17 @@ static inline Tensor spectral_norm(
     return SpectralNorm::apply(A, u0, v0, maxiter, atol, rtol);
 }
 
+
 TORCH_LIBRARY_FRAGMENT(custom, m) {
     m.def(
-        "spectral_norm(Tensor A, Tensor? u0=None, Tensor? v0=None, int? maxiter=None, float atol=1e-8, float rtol=1e-5) -> Tensor",
+        "spectral_norm("
+            "Tensor A,"
+            "Tensor? u0=None,"
+            "Tensor? v0=None,"
+            "int? maxiter=None,"
+            "float atol=1e-8,"
+            "float rtol=1e-5"
+        ") -> Tensor",
         spectral_norm
     );
 }
