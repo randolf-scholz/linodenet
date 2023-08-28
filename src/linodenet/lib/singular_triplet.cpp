@@ -134,6 +134,8 @@ struct SingularTriplet : public Function<SingularTriplet> {
 
             // check convergence
             if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
+                Tensor sigma = A.mv(v).dot(u);
+                std::cout << "Converged after " << i << " iterations. Sigma=" << sigma.item<double>() << std::endl;
                 break;
             }
         }

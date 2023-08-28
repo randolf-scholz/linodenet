@@ -1,6 +1,6 @@
 """Utility functions for testing."""
 
-__all__ = ["test_model", "test_model_class"]
+__all__ = ["check_model", "test_model_class"]
 
 import logging
 import tempfile
@@ -97,7 +97,7 @@ def assert_close(
             raise TypeError(f"Unsupported type {type(values)} for `outputs`!")
 
 
-def test_model(
+def check_model(
     model: nn.Module,
     /,
     *,
@@ -200,7 +200,7 @@ def test_model(
     # endregion check forward pass ---------------------------------------------
 
     # region check scripted forward/backward pass ------------------------------
-    test_model(
+    check_model(
         scripted_model,
         inputs=inputs,
         reference_outputs=reference_outputs,
@@ -226,7 +226,7 @@ def test_model(
     # endregion check model saving/loading -------------------------------------
 
     # region check loaded forward/backward pass ------------------------------
-    test_model(
+    check_model(
         loaded_model,
         inputs=inputs,
         reference_outputs=reference_outputs,

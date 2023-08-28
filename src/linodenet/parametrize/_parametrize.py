@@ -57,14 +57,30 @@ class Parametrization(nn.Module):
     parametrized_tensors: dict[str, Tensor]
     cached_tensors: dict[str, Tensor]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # initialize the cache
+        self.cached_tensors = {}
+        self.parametrized_tensors = {}
+
+    @abstractmethod
+    def forward(self) -> dict[str, Tensor]:
+        """Update all cached tensors."""
+        ...
+
     @torch.no_grad()
-    def register_parametrization(self, name: str, param: nn.Parameter) -> None:
+    def register_parametrized_tensor(self, name: str, param: nn.Parameter) -> None:
         """Register a parametrization."""
         if not isinstance(param, nn.Parameter):
             raise ValueError("Given tensor is not a nn.Parameter!")
 
+        # register the parameter.
+        # self.register_parameter(name, param)
+        # setattr(self, name, param)
+
         # create the cached tensor.
-        self.register_cached_tensor(f"cached_{name}", torch.empty_like(param))
+        self.register_cached_tensor(name, torch.empty_like(param))
 
         # register the parametrization.
         self.parametrized_tensors[name] = param
@@ -157,6 +173,11 @@ def register_parametrization(
     unsafe: bool = False,
 ) -> None:
     """Drop-in replacement for nn.utils.parametrize.register_parametrization."""
+    ...
+
+
+def get_parametrizations(module: nn.Module, /) -> dict[str, nn.Module]:
+    """Return all parametrizations in a module."""
     ...
 
 
