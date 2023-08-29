@@ -2,6 +2,7 @@
   <dictionary name="rscholz">
     <words>
       <w>absolufy</w>
+      <w>addmm</w>
       <w>addoption</w>
       <w>allcaps</w>
       <w>allclose</w>
@@ -17,6 +18,7 @@
       <w>bmatrix</w>
       <w>bysource</w>
       <w>celu</w>
+      <w>checkable</w>
       <w>cipra</w>
       <w>classmethod</w>
       <w>codeauthor</w>
@@ -48,6 +50,7 @@
       <w>includehidden</w>
       <w>intersphinx</w>
       <w>irange</w>
+      <w>isfinite</w>
       <w>ismll</w>
       <w>jacobian</w>
       <w>jian</w>
@@ -67,6 +70,7 @@
       <w>linodenet</w>
       <w>lobpcg</w>
       <w>logdetexp</w>
+      <w>lstsq</w>
       <w>markdownlint</w>
       <w>mathcal</w>
       <w>maxdepth</w>
@@ -76,6 +80,7 @@
       <w>mension</w>
       <w>miyato</w>
       <w>moduledir</w>
+      <w>moveaxis</w>
       <w>multihead</w>
       <w>nblocks</w>
       <w>ngth</w>
@@ -113,6 +118,7 @@
       <w>stdvs</w>
       <w>subblock</w>
       <w>subblocks</w>
+      <w>subitem</w>
       <w>svdvals</w>
       <w>tanhshrink</w>
       <w>testdir</w>
@@ -127,6 +133,7 @@
       <w>underdetermined</w>
       <w>undoc</w>
       <w>unindent</w>
+      <w>unsqueeze</w>
       <w>unsubscriptable</w>
       <w>venvname</w>
       <w>viewcode</w>
