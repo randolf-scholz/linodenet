@@ -1,7 +1,6 @@
 import logging
 import sys
 
-import pytest
 import torch
 from torch import Tensor, jit, nn
 from torch.nn.utils import parametrize as torch_parametrize

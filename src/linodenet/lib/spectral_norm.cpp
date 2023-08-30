@@ -53,7 +53,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
      * Error estimate: Note that
      * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
      *
-     * Note (Stopping criterion):
+     * @note (Stopping criterion):
      *     The standard stopping criterion is ‖ũ - σu‖ ≤ α + β⋅σ
      *     Plugging in the definition of ũ and σ, and dividing by ‖ũ‖ yields, using u'=  ũ/‖ũ‖
      *     ‖u'-⟨u∣u'⟩u‖ ≤ α/‖ũ‖ + β ⟨u∣u'⟩
@@ -61,7 +61,22 @@ struct SpectralNorm: public Function<SpectralNorm> {
      *     ‖u'-u‖ ≤ α/‖ũ‖ + β
      *     Assuming ‖ũ‖>1, we can the first term. Squaring gives the final criterion:i
      *     ‖u'-u‖² ≤ β²
-     * */
+     *
+     * @note: positiveness of the result
+     * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
+     * then uᵀAv' = (Av/‖Av‖)ᵀ A (AᵀAv/‖AᵀAv‖) = (AᵀAv)ᵀ(AᵀAv)/(‖Av‖⋅‖AᵀAv‖)
+     *            = ‖AᵀAv‖²/(‖Av‖⋅‖AᵀAv‖) = ‖AᵀAv‖/‖Av‖ ≥ 0
+     * likewise, if we start the iteration with v = Aᵀu/‖Aᵀu‖, then vᵀAᵀu' = ‖AAᵀu‖/‖Aᵀu‖ ≥ 0
+     *
+     * These actually suggest a different iteration scheme:
+     * u <- Av
+     * v <- Aᵀu
+     * σ ← ‖v‖/‖u‖
+     * u <- u/‖u‖
+     * v <- v/‖v‖
+     * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
+     *
+     **/
 
     static Tensor forward(
         AutogradContext *ctx,
@@ -148,9 +163,13 @@ struct SpectralNorm: public Function<SpectralNorm> {
         Tensor sigma = A.mv(v).dot(u);
 
         // check for NaNs, infinities, and negative values
-        auto sigma_val = sigma.item<double>();
+        const auto sigma_val = sigma.item<double>();
         if (!(std::isfinite(sigma_val) && sigma_val > 0)) {
-            throw std::runtime_error("Singular value is not a finite positive number! σ=" + std::to_string(sigma_val));
+            throw std::runtime_error(at::str(
+                "Computation resulted in invalid singular value σ=", sigma_val, " for input of shape ", A.sizes(), ". ",
+                "Try increasing the number of iterations or the tolerance. ",
+                "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
+            ));
         }
 
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
