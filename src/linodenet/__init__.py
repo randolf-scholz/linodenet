@@ -12,6 +12,7 @@ __all__ = [
     "projections",
     "regularizations",
     "utils",
+    "testing",
 ]
 
 import sys
@@ -31,6 +32,7 @@ from linodenet import (
     models,
     projections,
     regularizations,
+    testing,
     utils,
 )
 from linodenet.config import CONFIG

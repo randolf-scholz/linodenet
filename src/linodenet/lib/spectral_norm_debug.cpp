@@ -1,8 +1,4 @@
-// #include <ATen/ATen.h>
 #include <torch/script.h>
-// #include <torch/linalg.h>
-// #include <vector>
-// #include <string>
 
 // import someLib as sl      ⟶  namespace sl = someLib;
 // from someLib import func  ⟶  using someLib::func;
@@ -17,67 +13,6 @@ using torch::autograd::Function;
 
 
 struct SpectralNorm: public Function<SpectralNorm> {
-    /** @brief Spectral norm of a matrix.
-     *
-     * Formalizing as a optimization problem:
-     * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖_F^2 s.t. ‖u‖₂ = ‖v‖₂ = 1
-     * Equivalently: max_{u,v} ⟨A∣uv^⊤⟩ s.t. ‖u‖₂ = ‖v‖₂ = 1
-     *
-     * This is a non-convex QCQP, in standard form:
-     * max_{(u,v)}  ½ [u, v]ᵀ [[0, A], [Aᵀ, 0]] [u, v]
-     * s.t. [u, v]ᵀ [[𝕀ₘ, 0], [0, 0]] [u, v] - 1 =0
-     * and  [u, v]ᵀ [[0, 0], [0, 𝕀ₙ]] [u, v] - 1 =0
-     *
-     * @related https://math.stackexchange.com/questions/4658991
-     * @related https://math.stackexchange.com/questions/4697688
-     *
-     * Lagrangian: L(u,v,λ,μ) = uᵀAv - λ(uᵀu - 1) - μ(vᵀv - 1)
-     * KKT conditions: ∇L = 0 ⟺ A v - 2λu = 0 ⟺ [-2λ𝕀ₘ, A    ] [u] = [0]
-     *                          Aᵀu - 2μv = 0   [Aᵀ   , -2μ𝕀ₙ] [v] = [0]
-     *
-     * Second order conditions:  sᵀ∇²Ls ≥ 0 uf ∇hᵀs = 0
-     * ∇hᵀ = [2uᵀ, 2vᵀ]
-     * ∇²L =  [-2λ𝕀ₘ, A    ]
-     *        [Aᵀ   , -2μ𝕀ₙ]
-     *
-     * NOTE: the gradient is linear, and the problem is a quadratic optimization problem!
-     * in particular, the problem can be solved by a single Newton step!
-     *
-     * Equality constrained optimization problem:
-     * The first order convergence criterion is ‖Av-σu‖₂ = 0 and ‖Aᵀu-σv‖₂ = 0
-     * Plugging in the iteration, we get ‖u' - σũ‖ = 0 and ‖v' - σṽ‖ = 0 (tilde indicates normalized vector)
-     * secondly we can estimate σ in each iteration via one of the 3 formulas
-     * (1) σ = uᵀAv  (2) σᵤ = ũᵀu'  (3) σᵥ = ṽᵀv'
-     * Plugging these into the equations we get
-     * ‖u' -  u'ᵀ ũᵀũ‖
-     * Error estimate: Note that
-     * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
-     *
-     * @note (Stopping criterion):
-     *     The standard stopping criterion is ‖ũ - σu‖ ≤ α + β⋅σ
-     *     Plugging in the definition of ũ and σ, and dividing by ‖ũ‖ yields, using u'=  ũ/‖ũ‖
-     *     ‖u'-⟨u∣u'⟩u‖ ≤ α/‖ũ‖ + β ⟨u∣u'⟩
-     *     close to convergence, ⟨u∣u'⟩ ≈ 1, giving the stopping criterion
-     *     ‖u'-u‖ ≤ α/‖ũ‖ + β
-     *     Assuming ‖ũ‖>1, we can the first term. Squaring gives the final criterion:i
-     *     ‖u'-u‖² ≤ β²
-     *
-     * @note: positiveness of the result
-     * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
-     * then uᵀAv' = (Av/‖Av‖)ᵀ A (AᵀAv/‖AᵀAv‖) = (AᵀAv)ᵀ(AᵀAv)/(‖Av‖⋅‖AᵀAv‖)
-     *            = ‖AᵀAv‖²/(‖Av‖⋅‖AᵀAv‖) = ‖AᵀAv‖/‖Av‖ ≥ 0
-     * likewise, if we start the iteration with v = Aᵀu/‖Aᵀu‖, then vᵀAᵀu' = ‖AAᵀu‖/‖Aᵀu‖ ≥ 0
-     *
-     * These actually suggest a different iteration scheme:
-     * u <- Av
-     * v <- Aᵀu
-     * σ ← ‖v‖/‖u‖
-     * u <- u/‖u‖
-     * v <- v/‖v‖
-     * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
-     *
-     **/
-
     static Tensor forward(
         AutogradContext *ctx,
         const Tensor &A,
@@ -87,23 +22,11 @@ struct SpectralNorm: public Function<SpectralNorm> {
         double atol = 1e-8,
         double rtol = 1e-5
     ) {
-        /** @brief Forward pass.
-         *
-         * @param ctx: context object
-         * @param A: m x n matrix
-         * @param u0: initial guess for left singular vector
-         * @param v0: initial guess for right singular vector
-         * @param maxiter: maximum number of iterations
-         * @param atol: absolute tolerance
-         * @param rtol: relative tolerance
-         * @returns sigma: singular value
-         */
         // Initialize maxiter depending on the size of the matrix.
         const auto A_t = A.t();
         const auto m = A.size(0);
         const auto n = A.size(1);
         const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(m + n));
-        const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
 
         // Initialize u and v with random values if not given
@@ -114,9 +37,10 @@ struct SpectralNorm: public Function<SpectralNorm> {
         // pre-allocate memory for residuals
         Tensor u_old = torch::empty_like(u);
         Tensor v_old = torch::empty_like(v);
-        Tensor r_u = torch::empty_like(u);
-        Tensor r_v = torch::empty_like(v);
+        Tensor sigma_u = torch::empty({1}, u.options());
+        Tensor sigma_v = torch::empty({1}, u.options());
 
+        // NOTE: during iteration u, u_old, v and v_old track the unnormalized vectors!!
         // Perform power-iteration for maxiter times or until convergence.
         for (auto i = 0; i<MAXITER; i++) {
             // NOTE: We apply two iterations per loop. This is a case of duff's device.
@@ -124,32 +48,28 @@ struct SpectralNorm: public Function<SpectralNorm> {
             // This improves performance on GPU since .item() requires a synchronization with CPU.
             // The compiler cannot do this optimization on it's own because it would change behavior.
 
-            // update u
-            u = A.mv(v);
-            u /= u.norm();
-
-            // update v
-            v = A_t.mv(u);
-            v /= v.norm();
-
-            // update u
+            //; store previous values
             u_old = u;
-            u = A.mv(v);
-            u /= u.norm();
+            v_old = v;
+
+            // update u
+            sigma_v = v.norm();
+            u = A.mv(v / sigma_v);
 
             // update v
-            v_old = v;
-            v = A_t.mv(u);
-            v /= v.norm();
-
-            // performance: do not test convergence after evey iteration
-            r_u = u - u_old;
-            r_v = v - v_old;
+            sigma_u = u.norm();
+            v = A_t.mv(u / sigma_u);
 
             // check convergence
-            if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
+            if ((
+                converged =
+                (
+                    ((u - u_old).norm() < atol + rtol*sigma_u)
+                  & ((v - v_old).norm() < atol + rtol*sigma_v)
+                ).item<bool>()
+            )) {
                 // Tensor sigma = A.mv(v).dot(u);
-                // std::cout << "Converged after " << i << " iterations. Sigma=" << sigma.item<double>() << std::endl;
+                // std::cout << at::str("Converged after ", i, " iterations. σ=", sigma) << std::endl;
                 break;
             }
         }
@@ -159,21 +79,15 @@ struct SpectralNorm: public Function<SpectralNorm> {
             TORCH_WARN("spectral_norm: no convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
         }
 
-        // compute final sigma
-        Tensor sigma = A.mv(v).dot(u);
-
-        // check for NaNs, infinities, and negative values
-        const auto sigma_val = sigma.item<double>();
-        if (!(std::isfinite(sigma_val) && sigma_val > 0)) {
-            throw std::runtime_error(at::str(
-                "Computation resulted in invalid singular value σ=", sigma_val, " for input of shape ", A.sizes(), ". ",
-                "Try increasing the number of iterations or the tolerance. ",
-                "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
-            ));
-        }
-
-        // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
+        // store normalized vectors for backward pass
+        sigma_u = u.norm();
+        sigma_v = v.norm();
+        u /= sigma_u;
+        v /= sigma_v;
         ctx->save_for_backward({u, v});
+
+        // compute and return sigma
+        Tensor sigma = (sigma_u + sigma_v)/2;
 
         return sigma;
     }
@@ -200,7 +114,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
 };
 
 
-static inline Tensor spectral_norm(
+static inline Tensor spectral_norm_debug(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
@@ -217,7 +131,7 @@ static inline Tensor spectral_norm(
 
 TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
     m.def(
-        "spectral_norm("
+        "spectral_norm_debug("
             "Tensor A,"
             "Tensor? u0=None,"
             "Tensor? v0=None,"
@@ -225,7 +139,7 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
             "float atol=1e-8,"
             "float rtol=1e-5"
         ") -> Tensor",
-        spectral_norm
+        spectral_norm_debug
     );
 }
 

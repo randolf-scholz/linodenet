@@ -23,15 +23,14 @@ __all__ = [
 
 from collections.abc import Sequence
 from math import prod, sqrt
-from typing import Optional, Protocol, TypeAlias, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 import torch
 from numpy.typing import NDArray
 from scipy import stats
 from torch import Tensor
 
-SizeLike: TypeAlias = int | tuple[int, ...]
-r"""Type hint for shape-like inputs."""
+from linodenet.utils.types import SizeLike
 
 
 @runtime_checkable

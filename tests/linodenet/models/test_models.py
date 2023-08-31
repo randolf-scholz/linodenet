@@ -12,7 +12,7 @@ import linodenet
 from linodenet.config import PROJECT
 from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
 from linodenet.models.system import LinODECell
-from linodenet.testing import test_model_class
+from linodenet.testing import check_class
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ def test_all_models() -> None:
             targets = _make_tensors(
                 output_shapes, batch_sizes=batch_sizes, dtype=DTYPE, device=device
             )
-            test_model_class(
+            check_class(
                 model,
                 initialization=initialization,
                 inputs=inputs,

@@ -6,14 +6,11 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Protocol, TypeAlias, TypeVar
+from typing import Protocol
 
-from torch import Tensor, nn
+from torch import nn
 
-T = TypeVar("T")
-Recursive: TypeAlias = T | list[T] | tuple[T, ...] | dict[str, T]
-Scalars: TypeAlias = int | float | bool | str
-TensorLike: TypeAlias = Recursive[Tensor | Scalars]
+from linodenet.utils.types import TensorLike
 
 
 class Model(Protocol):

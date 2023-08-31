@@ -27,40 +27,19 @@ using torch::indexing::Slice;
 struct SingularTriplet : public Function<SingularTriplet> {
     /** @brief Compute the singular triplet of a matrix.
      *
-     * @details Formalizing as a optimization problem:
-     * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖_F^2 s.t. ‖u‖₂ = ‖v‖₂ = 1
-     * Equivalently: max_{u,v} ⟨A∣uv^⊤⟩ s.t. ‖u‖₂ = ‖v‖₂ = 1
+     * @note: positiveness of the result
+     * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
+     * then uᵀAv' = (Av/‖Av‖)ᵀ A (AᵀAv/‖AᵀAv‖) = (AᵀAv)ᵀ(AᵀAv)/(‖Av‖⋅‖AᵀAv‖)
+     *            = ‖AᵀAv‖²/(‖Av‖⋅‖AᵀAv‖) = ‖AᵀAv‖/‖Av‖ ≥ 0
+     * likewise, if we start the iteration with v = Aᵀu/‖Aᵀu‖, then vᵀAᵀu' = ‖AAᵀu‖/‖Aᵀu‖ ≥ 0
      *
-     * @details This is a non-convex QCQP, in standard form:
-     * max_{(u,v)}  ½ [u, v]ᵀ [[0, A], [Aᵀ, 0]] [u, v]
-     * s.t. [u, v]ᵀ [[𝕀ₘ, 0], [0, 0]] [u, v] - 1 =0
-     * and  [u, v]ᵀ [[0, 0], [0, 𝕀ₙ]] [u, v] - 1 =0
-     *
-     * @related https://math.stackexchange.com/questions/4658991
-     * @related https://math.stackexchange.com/questions/4697688
-     *
-     * Lagrangian: L(u,v,λ,μ) = uᵀAv - λ(uᵀu - 1) - μ(vᵀv - 1)
-     *
-     * KKT conditions: ∇L = 0 ⟺ A v - 2λu = 0 ⟺ [-2λ𝕀ₘ, A    ] [u] = [0]
-     *                          Aᵀu - 2μv = 0   [Aᵀ   , -2μ𝕀ₙ] [v] = [0]
-     *
-     * Second order conditions:  sᵀ∇²Ls ≥ 0 uf ∇hᵀs = 0
-     * ∇hᵀ = [2uᵀ, 2vᵀ]
-     * ∇²L =  [-2λ𝕀ₘ, A    ]
-     *        [Aᵀ   , -2μ𝕀ₙ]
-     *
-     * NOTE: the gradient is linear, and the problem is a quadratic optimization problem!
-     * in particular, the problem can be solved by a single Newton step!
-     *
-     * Equality constrained optimization problem:
-     * The first order convergence criterion is ‖Av-σu‖₂ = 0 and ‖Aᵀu-σv‖₂ = 0
-     * Plugging in the iteration, we get ‖u' - σũ‖ = 0 and ‖v' - σṽ‖ = 0 (tilde indicates normalized vector)
-     * secondly we can estimate σ in each iteration via one of the 3 formulas
-     * (1) σ = uᵀAv  (2) σᵤ = ũᵀu'  (3) σᵥ = ṽᵀv'
-     * Plugging these into the equations we get
-     * ‖u' -  u'ᵀ ũᵀũ‖
-     * Error estimate: Note that
-     * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
+     * These actually suggest a different iteration scheme:
+     * u <- Av
+     * v <- Aᵀu
+     * σ <- ‖v‖/‖u‖
+     * u <- u/‖u‖
+     * v <- v/‖v‖
+     * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
      *
      * @note (Stopping criterion):
      *     The normalized gradient stopping criterion is ‖∇L‖ ≤ α + β⋅‖L‖,
@@ -95,10 +74,6 @@ struct SingularTriplet : public Function<SingularTriplet> {
      *     which begs the question whether the initial guess should be assumed to be normalized or not.
      *     In particular, if no initial guess is given, then the random initialization must be normalized.
      *
-     *     This suggests that one should normalize at the start of the for loop, as well as after
-     *     the final iteration. In particular, this ensures that the prediction yields normalized
-     *     vectors even when MAXITER is set to 0, and the loop is not executed at all.
-     *
      * @note (PL-condition):
      *      The PL-condition is ½‖∇²f(x)‖² ≥ C (f(x) - f⁎),
      *      i.e. the gradient grows as a quadratic function of the distance to the optimum.
@@ -106,23 +81,6 @@ struct SingularTriplet : public Function<SingularTriplet> {
      *      Combining with the assumption that ∇f is lipschitz continuous with constant L,
      *      one can prove that the gradient descent method converges with rate 𝓞(1/k),
      *      even when f is non-convex.
-
-     * @note: positiveness of the result
-     * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
-     * then uᵀAv' = (Av/‖Av‖)ᵀ A (AᵀAv/‖AᵀAv‖) = (AᵀAv)ᵀ(AᵀAv)/(‖Av‖⋅‖AᵀAv‖)
-     *            = ‖AᵀAv‖²/(‖Av‖⋅‖AᵀAv‖) = ‖AᵀAv‖/‖Av‖ = ‖A^⊤(Av/‖Av‖)‖ = ‖Aᵀu‖ = ‖ṽ‖
-     * likewise, if we start the iteration with v = Aᵀu/‖Aᵀu‖, then vᵀAᵀu' = ‖ũ‖ ≥ 0
-     *
-     * These actually suggest a different iteration scheme:
-     * u <- Av
-     * v <- Aᵀu
-     * σ ← ‖v‖/‖u‖
-     * u <- u/‖u‖
-     * v <- v/‖v‖
-     * This has the huge advantage that σ is guaranteed to be positive, whereas the other iteration scheme
-     * can produce negative values for σ due to numerical errors.
-     * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
-     *
      **/
 
     static std::vector<Tensor> forward(
@@ -150,6 +108,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         const auto m = A.size(0);
         const auto n = A.size(1);
         const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(m + n));
+        const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
 
         // Initialize u and v with random values if not given
@@ -157,16 +116,14 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor v = v0 ? v0.value() : torch::randn({n}, A.options());
 
         // Initialize old values for convergence check
-
         // pre-allocate memory for residuals
         Tensor u_old = torch::empty_like(u);
         Tensor v_old = torch::empty_like(v);
         Tensor r_u = torch::empty_like(u);
         Tensor r_v = torch::empty_like(v);
 
-
-        Tensor sigma_u = torch::empty_like(u);
-        Tensor sigma_v = torch::empty_like(u);
+        // Compute initial sigma. NOTE: absolute value ensures non-negativity.
+        Tensor sigma = torch::abs(A.mv(v).dot(u));
 
         // Perform power-iteration for maxiter times or until convergence.
         for (auto i = 0; i<MAXITER; i++) {
@@ -174,31 +131,33 @@ struct SingularTriplet : public Function<SingularTriplet> {
             // This means that we effectively only check the stopping criterion every 2 iterations.
             // This improves performance on GPU since .item() requires a synchronization with CPU.
             // The compiler cannot do this optimization on it's own because it would change behavior.
-            u_old = u;
-            v_old = v;
 
             // update u
-            sigma_v = v.norm();
-            u = A.mv(v / sigma_v);
+            u = A.mv(v);
+            u /= u.norm();
 
             // update v
-            sigma_u = u.norm();
-            v = A_t.mv(u / sigma_u);
+            v = A_t.mv(u);
+            v /= v.norm();
+
+            // update u
+            u_old = u;
+            u = A.mv(v);
+            u /= u.norm();
+
+            // update v
+            v_old = v;
+            v = A_t.mv(u);
+            v /= v.norm();
 
             // performance: do not test convergence after evey iteration
             r_u = u - u_old;
             r_v = v - v_old;
 
             // check convergence
-            if ((
-                converged =
-                (
-                    ((u - u_old).norm() < atol + rtol*sigma_u)
-                  & ((v - v_old).norm() < atol + rtol*sigma_v)
-                ).item<bool>()
-            )) {
+            if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
                 // Tensor sigma = A.mv(v).dot(u);
-                // std::cout << at::str("Converged after ", i, " iterations. σ=", sigma) << std::endl;
+                // std::cout << "Converged after " << i << " iterations. Sigma=" << sigma.item<double>() << std::endl;
                 break;
             }
         }
@@ -209,7 +168,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         }
 
         // compute final sigma
-        Tensor sigma = A.mv(v).dot(u);
+        sigma = A.mv(v).dot(u);
 
         // check for NaNs, infinities, and negative values
         const auto sigma_val = sigma.item<double>();
@@ -344,7 +303,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
  */
 
 
-std::tuple<Tensor, Tensor, Tensor> singular_triplet(
+std::tuple<Tensor, Tensor, Tensor> singular_triplet_debug(
     const Tensor  &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
@@ -363,7 +322,7 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet(
 
 TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
     m.def(
-        "singular_triplet("
+        "singular_triplet_debug("
             "Tensor A,"
             "Tensor? u0=None,"
             "Tensor? v0=None,"
@@ -371,6 +330,6 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
             "float atol=1e-8,"
             "float rtol=1e-5"
         ") -> (Tensor, Tensor, Tensor)",
-        singular_triplet
+        singular_triplet_debug
     );
 }

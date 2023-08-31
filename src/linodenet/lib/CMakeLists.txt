@@ -38,7 +38,14 @@ message(STATUS "NOTE: USE_CUDNN=${USE_CUDNN}")
 #set(CMAKE_CXX_CLANG_TIDY "clang-tidy;-checks=*")
 
 # Define our library target
-add_library(linodenet SHARED spectral_norm.cpp singular_triplet.cpp)
+add_library(
+        linodenet
+        SHARED
+        singular_triplet.cpp
+        singular_triplet_debug.cpp
+        spectral_norm.cpp
+        spectral_norm_debug.cpp
+)
 
 # Enable C++14
 target_compile_features(linodenet PRIVATE cxx_std_17)

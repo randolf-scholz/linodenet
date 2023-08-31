@@ -4,6 +4,7 @@ __all__ = [
     # Sub-Modules
     "layers",
     "constants",
+    "types",
     # Constants
     # Functions
     "autojit",
@@ -25,7 +26,7 @@ __all__ = [
     "Multiply",
 ]
 
-from linodenet.utils import constants, layers
+from linodenet.utils import constants, layers, types
 from linodenet.utils._utils import (
     assert_issubclass,
     autojit,

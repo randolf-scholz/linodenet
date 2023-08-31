@@ -1,5 +1,29 @@
 """Utility functions for testing."""
 
-__all__ = ["check_model", "test_model_class"]
+__all__ = [
+    # functions
+    "check_function",
+    "check_model",
+    "check_class",
+    # helper functions
+    "flatten_nested_tensor",
+    "get_device",
+    "get_grads",
+    "get_norm",
+    "make_tensors_parameters",
+    "to_device",
+    "zero_grad",
+]
 
-from linodenet.testing._testing import check_model, test_model_class
+from linodenet.testing._testing import (
+    check_class,
+    check_function,
+    check_model,
+    flatten_nested_tensor,
+    get_device,
+    get_grads,
+    get_norm,
+    make_tensors_parameters,
+    to_device,
+    zero_grad,
+)

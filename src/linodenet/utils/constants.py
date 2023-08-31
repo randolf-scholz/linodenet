@@ -1,12 +1,25 @@
 """Constants used throughout the library."""
 
-__all__ = ["TRUE", "FALSE", "ZERO", "ONE", "NAN", "POS_INF", "NEG_INF"]
+__all__ = [
+    "EMPTY_MAP",
+    "TRUE",
+    "FALSE",
+    "ZERO",
+    "ONE",
+    "NAN",
+    "POS_INF",
+    "NEG_INF",
+]
 
-from typing import Final
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Any, Final
 
 import torch
 from torch import BoolTensor, FloatTensor
 
+EMPTY_MAP: Final[Mapping[str, Any]] = MappingProxyType({})
+"""CONSTANT: Immutable Empty dictionary."""
 TRUE: Final[BoolTensor] = torch.tensor(True, dtype=torch.bool)  # type: ignore[assignment]
 """A constant tensor representing the boolean value ``True``."""
 FALSE: Final[BoolTensor] = torch.tensor(False, dtype=torch.bool)  # type: ignore[assignment]

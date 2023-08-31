@@ -28,24 +28,16 @@ from functools import wraps
 from importlib import import_module
 from time import perf_counter_ns
 from types import MethodType, ModuleType, TracebackType
-from typing import Any, ClassVar, Literal, TypeVar
+from typing import Any, ClassVar, Literal
 
 import torch
 from torch import Tensor, jit, nn
 from typing_extensions import Self
 
 from linodenet.config import CONFIG
+from linodenet.utils.types import module_var, type_var
 
 __logger__ = logging.getLogger(__name__)
-
-T = TypeVar("T", bound=type)
-r"""Type hint for classes."""
-
-R = TypeVar("R")
-r"""Type hint return value."""
-
-nnModuleType = TypeVar("nnModuleType", bound=type[nn.Module])
-r"""Type Variable for nn.Modules."""
 
 
 @jit.script
@@ -97,7 +89,7 @@ def deep_keyval_update(d: dict, /, **new_kv: Any) -> dict:
     return d
 
 
-def autojit(base_class: nnModuleType) -> nnModuleType:
+def autojit(base_class: module_var) -> module_var:
     r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
 
     Makes it so that
@@ -129,13 +121,13 @@ def autojit(base_class: nnModuleType) -> nnModuleType:
         r"""A simple Wrapper."""
 
         # noinspection PyArgumentList
-        def __new__(cls, *args: Any, **kwargs: Any) -> nnModuleType:
+        def __new__(cls, *args: Any, **kwargs: Any) -> module_var:
             # Note: If __new__() does not return an instance of cls,
             # then the new instance's __init__() method will not be invoked.
-            instance: nnModuleType = base_class(*args, **kwargs)  # type: ignore[assignment]
+            instance: module_var = base_class(*args, **kwargs)  # type: ignore[assignment]
 
             if CONFIG.autojit:
-                scripted: nnModuleType = jit.script(instance)  # pyright: ignore
+                scripted: module_var = jit.script(instance)  # pyright: ignore
                 return scripted
             return instance
 
@@ -290,10 +282,10 @@ class reset_caches(ContextDecorator):
         return False
 
 
-def assert_issubclass(proto: type) -> Callable[[T], T]:
+def assert_issubclass(proto: type) -> Callable[[type_var], type_var]:
     """Assert that an object satisfies a protocol."""
 
-    def decorator(cls: T) -> T:
+    def decorator(cls: type_var) -> type_var:
         """Assert that a class satisfies a protocol."""
         assert issubclass(cls, proto), f"{cls} is not a {proto}"
         return cls  # type: ignore[return-value]
