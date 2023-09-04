@@ -28,4 +28,4 @@ source "${PROJECT_DIR}/.venv/bin/activate"
 echo "Python env: $(which python)"
 cd ..
 pwd
-python grad_check.py
+python check_grad.py

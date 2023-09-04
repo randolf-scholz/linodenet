@@ -9,7 +9,7 @@ __all__ = [
     "spectral_norm_native",
 ]
 
-from linodenet.lib.custom_operators import (
+from linodenet.lib._liblinodenet import (
     singular_triplet,
     singular_triplet_debug,
     singular_triplet_native,

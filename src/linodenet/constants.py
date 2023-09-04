@@ -11,14 +11,15 @@ __all__ = [
     "NEG_INF",
 ]
 
+
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Final
 
 import torch
 from torch import BoolTensor, FloatTensor
 
-EMPTY_MAP: Final[Mapping[str, Any]] = MappingProxyType({})
+EMPTY_MAP: Final[Mapping] = MappingProxyType({})
 """CONSTANT: Immutable Empty dictionary."""
 TRUE: Final[BoolTensor] = torch.tensor(True, dtype=torch.bool)  # type: ignore[assignment]
 """A constant tensor representing the boolean value ``True``."""

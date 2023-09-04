@@ -41,10 +41,10 @@ message(STATUS "NOTE: USE_CUDNN=${USE_CUDNN}")
 add_library(
         linodenet
         SHARED
-        singular_triplet.cpp
-        singular_triplet_debug.cpp
-        spectral_norm.cpp
-        spectral_norm_debug.cpp
+        src/liblinodenet/singular_triplet.cpp
+        src/liblinodenet/singular_triplet_debug.cpp
+        src/liblinodenet/spectral_norm.cpp
+        src/liblinodenet/spectral_norm_debug.cpp
 )
 
 # Enable C++14
