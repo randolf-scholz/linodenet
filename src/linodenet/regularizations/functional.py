@@ -26,8 +26,8 @@ from typing import Optional
 import torch.linalg
 from torch import BoolTensor, Tensor, jit
 
+from linodenet.constants import TRUE
 from linodenet.projections import functional as projections
-from linodenet.utils.constants import TRUE
 
 
 @jit.script

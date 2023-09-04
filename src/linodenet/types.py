@@ -2,9 +2,9 @@
 
 __all__ = [
     # Aliases
-    "NestedTensor",
+    "Nested",
     "Recursive",
-    "Scalars",
+    "Scalar",
     "SizeLike",
     "TensorLike",
     "TensorLike",
@@ -17,21 +17,16 @@ __all__ = [
 ]
 
 from collections.abc import Iterable, Mapping
-from typing import Any, TypeAlias, TypeVar
+from typing import TypeAlias, TypeVar
 
 from torch import Tensor, nn
 
 # region static type aliases -----------------------------------------------------------
-Scalars: TypeAlias = int | float | bool | str
-r"""Type hint for scalar types."""
+Scalar: TypeAlias = None | bool | int | float | str
+r"""Type hint for scalar types allowed by torchscript."""
 
 SizeLike: TypeAlias = int | tuple[int, ...]
 r"""Type hint for shape-like inputs."""
-
-NestedTensor: TypeAlias = (
-    Tensor | Mapping[Any, "NestedTensor"] | Iterable["NestedTensor"]
-)
-r"""Type hint for nested tensors."""
 # endregion static type aliases --------------------------------------------------------
 
 
@@ -47,16 +42,22 @@ r"""Type hint return value."""
 
 module_var = TypeVar("module_var", bound=type[nn.Module])
 r"""Type Variable for nn.Modules."""
-
-NestedTensorVar = TypeVar("NestedTensorVar", bound=NestedTensor)
-r"""Type Variable for NestedTensors."""
 # endregion type variables -------------------------------------------------------------
 
 
 # region generic type aliases ----------------------------------------------------------
+Nested: TypeAlias = T | Mapping[str, "Nested"] | Iterable["Nested"]
+"""Type hint for nested types."""
+
 Recursive: TypeAlias = T | list[T] | tuple[T, ...] | dict[str, T]
 r"""Type hint for recursive types."""
 
-TensorLike: TypeAlias = Recursive[Tensor | Scalars]
+TensorLike: TypeAlias = Recursive[Tensor | Scalar]
 """Type hint for tensor-like inputs."""
 # endregion type aliases ---------------------------------------------------------------
+
+
+# region type variables ----------------------------------------------------------------
+NestedTensorVar = TypeVar("NestedTensorVar", bound=Nested[Tensor])
+r"""Type Variable for NestedTensors."""
+# endregion type variables -------------------------------------------------------------

@@ -112,9 +112,9 @@ def test_all_models() -> None:
             )
             check_class(
                 model,
-                initialization=initialization,
-                inputs=inputs,
-                targets=targets,
+                init_args=initialization,
+                input_args=inputs,
+                reference_outputs=targets,
                 device=device,
             )
 

@@ -46,6 +46,10 @@ def test_builtin_parametrize_fails_jit() -> None:
         scripted(inputs)
 
 
+def test_jit_protocol() -> None:
+    """...."""
+
+
 def test_parametrization() -> None:
     model = nn.Linear(4, 4)
 
@@ -56,7 +60,7 @@ def test_parametrization() -> None:
 
     inputs = torch.randn(2, 4)
 
-    check_model(model, inputs=inputs, test_jit=True)
+    check_model(model, input_args=inputs, test_jit=True)
 
 
 if __name__ == "__main__":

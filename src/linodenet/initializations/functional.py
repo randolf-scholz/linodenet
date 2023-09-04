@@ -30,7 +30,7 @@ from numpy.typing import NDArray
 from scipy import stats
 from torch import Tensor
 
-from linodenet.utils.types import SizeLike
+from linodenet.types import SizeLike
 
 
 @runtime_checkable

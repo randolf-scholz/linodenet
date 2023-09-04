@@ -21,7 +21,7 @@ __all__ = [
 import torch
 from torch import BoolTensor, Tensor, jit
 
-from linodenet.utils.constants import TRUE
+from linodenet.constants import TRUE
 
 
 @jit.script

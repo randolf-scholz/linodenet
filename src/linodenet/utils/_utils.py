@@ -35,7 +35,7 @@ from torch import Tensor, jit, nn
 from typing_extensions import Self
 
 from linodenet.config import CONFIG
-from linodenet.utils.types import module_var, type_var
+from linodenet.types import module_var, type_var
 
 __logger__ = logging.getLogger(__name__)
 

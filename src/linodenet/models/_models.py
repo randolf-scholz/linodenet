@@ -10,7 +10,7 @@ from typing import Protocol
 
 from torch import nn
 
-from linodenet.utils.types import TensorLike
+from linodenet.types import TensorLike
 
 
 class Model(Protocol):
