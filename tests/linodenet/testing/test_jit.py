@@ -4,6 +4,7 @@
 import pytest
 import torch
 from torch import Tensor, jit, nn
+from torch.nn.utils import parametrize as torch_parametrize
 
 
 class ModuleWithSlots(nn.Module):
@@ -51,3 +52,21 @@ def test_jit_error_slots() -> None:
     model_with_slots = ModuleWithSlots(foo, bar)
     with pytest.raises(RuntimeError):
         jit.script(model_with_slots)
+
+
+def test_jit_errors_parametrize() -> None:
+    """Tests that scripting fails for torch builtin parametrization."""
+
+    class Symmetric(nn.Module):
+        def forward(self, x: Tensor) -> Tensor:
+            return x.triu() + x.triu(1).transpose(-1, -2)
+
+    model = nn.Linear(5, 5)
+
+    torch_parametrize.register_parametrization(model, "weight", Symmetric())
+
+    scripted = jit.script(model)
+    inputs = torch.randn(7, 5)
+
+    with pytest.raises(jit.Error):
+        scripted(inputs)
