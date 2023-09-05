@@ -181,8 +181,9 @@ repos:
           - "predict"
           - "--ignore-decorators"
           - "jit.script"
+          - "torch.no_grad"
           - "--ignore-dunder"
-          - "--allow-one"
+          - "--ignore-without-positional-only"
       - id: python-check-standard-generics
         files: (^src/|^tests/)
       - id: check-separator-length

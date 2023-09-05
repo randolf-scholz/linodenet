@@ -12,7 +12,6 @@ __all__ = [
     "geglu",
 ]
 
-import torch
 from torch import Tensor, nn
 
 

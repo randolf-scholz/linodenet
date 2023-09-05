@@ -106,7 +106,7 @@ def flatten_nested_tensor(x: Nested[Tensor], /) -> Tensor:
             raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-def get_norm(x: Nested[Tensor], /, normalize: bool = True) -> Tensor:
+def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
     """Compute the (normalized) 2-norm of a tensor."""
     flattened = flatten_nested_tensor(x)
     if normalize:

@@ -1,13 +1,12 @@
-import logging
+"""Check that spectral norm works as a parametrization."""
+
 import sys
 
 import torch
-from torch import Tensor, jit, nn
-from torch.nn.utils import parametrize as torch_parametrize
+from torch import nn
 
 from linodenet.models.encoders.invertible_layers import LinearContraction
-from linodenet.parametrize import Parametrization, SpectralNormalization
-from linodenet.testing import check_model
+from linodenet.parametrize import SpectralNormalization
 
 if __name__ == "__main__":
     model = LinearContraction(4, 4)
@@ -16,7 +15,7 @@ if __name__ == "__main__":
     model.recompute_cache()
     print(model.weight, model.cached_weight)
 
-    print(f"==============================================================")
+    print("==============================================================")
 
     torch.manual_seed(0)
 
@@ -27,7 +26,7 @@ if __name__ == "__main__":
     print(spec.parametrized_tensors["weight"], spec.weight, sep="\n")
     assert spec.parametrized_tensors["weight"] is param
     assert spec.weight is spec.cached_tensors["weight"]
-    print(f"==============================================================")
+    print("==============================================================")
 
     spec.cached_tensors["weight"].copy_(spec.parametrized_tensors["weight"])
 
