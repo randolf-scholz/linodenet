@@ -19,6 +19,7 @@ __all__ = [
     "orthogonal",
     "skew_symmetric",
     "symmetric",
+    "traceless",
 ]
 
 from typing import Optional
@@ -131,6 +132,20 @@ def normal(
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = XX^⊤
     """
     r = x - projections.normal(x)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
+def traceless(
+    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being normal.
+
+    .. Signature:: ``(..., n, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = XX^⊤
+    """
+    r = x - projections.traceless(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

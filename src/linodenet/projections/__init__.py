@@ -19,6 +19,15 @@ __all__ = [
     # Sub-Modules
     "functional",
     "modular",
+    # checks
+    "is_banded",
+    "is_diagonal",
+    "is_masked",
+    "is_normal",
+    "is_orthogonal",
+    "is_skew_symmetric",
+    "is_symmetric",
+    "is_traceless",
     # Functions
     "banded",
     "diagonal",
@@ -28,6 +37,7 @@ __all__ = [
     "orthogonal",
     "skew_symmetric",
     "symmetric",
+    "traceless",
     # Classes
     "Banded",
     "Diagonal",
@@ -37,6 +47,7 @@ __all__ = [
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Traceless",
 ]
 
 
@@ -51,6 +62,7 @@ from linodenet.projections.functional import (
     orthogonal,
     skew_symmetric,
     symmetric,
+    traceless,
 )
 from linodenet.projections.modular import (
     Banded,
@@ -61,19 +73,18 @@ from linodenet.projections.modular import (
     Orthogonal,
     SkewSymmetric,
     Symmetric,
+    Traceless,
 )
-
-MODULAR_PROJECTIONS: dict[str, type[Projection]] = {
-    "Banded": Banded,
-    "Diagonal": Diagonal,
-    "Identity": Identity,
-    "Masked": Masked,
-    "Normal": Normal,
-    "Orthogonal": Orthogonal,
-    "SkewSymmetric": SkewSymmetric,
-    "Symmetric": Symmetric,
-}
-r"""Dictionary of all available modular metrics."""
+from linodenet.projections.testing import (
+    is_banded,
+    is_diagonal,
+    is_masked,
+    is_normal,
+    is_orthogonal,
+    is_skew_symmetric,
+    is_symmetric,
+    is_traceless,
+)
 
 FUNCTIONAL_PROJECTIONS: dict[str, Projection] = {
     "banded": banded,
@@ -84,6 +95,20 @@ FUNCTIONAL_PROJECTIONS: dict[str, Projection] = {
     "orthogonal": orthogonal,
     "skew_symmetric": skew_symmetric,
     "symmetric": symmetric,
+    "traceless": traceless,
+}
+r"""Dictionary of all available modular metrics."""
+
+MODULAR_PROJECTIONS: dict[str, type[Projection]] = {
+    "Banded": Banded,
+    "Diagonal": Diagonal,
+    "Identity": Identity,
+    "Masked": Masked,
+    "Normal": Normal,
+    "Orthogonal": Orthogonal,
+    "SkewSymmetric": SkewSymmetric,
+    "Symmetric": Symmetric,
+    "Traceless": Traceless,
 }
 r"""Dictionary of all available modular metrics."""
 

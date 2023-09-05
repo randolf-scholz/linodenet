@@ -29,6 +29,7 @@ __all__ = [
     "orthogonal",
     "skew_symmetric",
     "symmetric",
+    "traceless",
     # Classes
     "Banded",
     "Diagonal",
@@ -40,6 +41,7 @@ __all__ = [
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Traceless",
 ]
 
 from linodenet.regularizations import functional, modular
@@ -55,6 +57,7 @@ from linodenet.regularizations.functional import (
     orthogonal,
     skew_symmetric,
     symmetric,
+    traceless,
 )
 from linodenet.regularizations.modular import (
     Banded,
@@ -67,6 +70,7 @@ from linodenet.regularizations.modular import (
     Orthogonal,
     SkewSymmetric,
     Symmetric,
+    Traceless,
 )
 
 FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
@@ -80,6 +84,7 @@ FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
     "orthogonal": orthogonal,
     "skew_symmetric": skew_symmetric,
     "symmetric": symmetric,
+    "traceless": traceless,
 }
 r"""Dictionary of all available modular metrics."""
 
@@ -94,6 +99,7 @@ MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Orthogonal": Orthogonal,
     "SkewSymmetric": SkewSymmetric,
     "Symmetric": Symmetric,
+    "Traceless": Traceless,
 }
 r"""Dictionary of all available modular metrics."""
 

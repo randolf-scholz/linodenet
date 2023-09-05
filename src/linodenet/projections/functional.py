@@ -7,7 +7,7 @@ Contains projections in functional form.
 """
 
 __all__ = [
-    # Functions
+    # Projections
     "banded",
     "diagonal",
     "identity",
@@ -16,6 +16,7 @@ __all__ = [
     "orthogonal",
     "skew_symmetric",
     "symmetric",
+    "traceless",
 ]
 
 import torch
@@ -24,6 +25,7 @@ from torch import BoolTensor, Tensor, jit
 from linodenet.constants import TRUE
 
 
+# region projections -------------------------------------------------------------------
 @jit.script
 def identity(x: Tensor) -> Tensor:
     r"""Return x as-is.
@@ -90,6 +92,22 @@ def normal(x: Tensor) -> Tensor:
 
 
 @jit.script
+def traceless(x: Tensor) -> Tensor:
+    r"""Return the closest traceless matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. tr(Y) = 0
+
+    One can show analytically that Y = X - (1/n)tr(X)𝕀ₙ is the unique minimizer.
+    """
+    n = x.shape[-1]
+    trace = x.diagonal(dim1=-1, dim2=-2).sum(dim=-1)
+    eye = torch.eye(n, dtype=x.dtype, device=x.device)
+    return x - torch.einsum("..., mn -> ...mn", trace / n, eye)
+
+
+@jit.script
 def orthogonal(x: Tensor) -> Tensor:
     r"""Return the closest orthogonal matrix to X.
 
@@ -151,3 +169,6 @@ def masked(x: Tensor, m: BoolTensor = TRUE) -> Tensor:
     zero = torch.tensor(0.0, dtype=x.dtype, device=x.device)
     mask = torch.as_tensor(m, dtype=torch.bool, device=x.device)
     return torch.where(mask, x, zero)
+
+
+# endregion projections ----------------------------------------------------------------

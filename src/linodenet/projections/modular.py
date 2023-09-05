@@ -16,6 +16,7 @@ __all__ = [
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Traceless",
 ]
 
 from typing import Final, Optional
@@ -32,6 +33,7 @@ from linodenet.projections.functional import (
     orthogonal,
     skew_symmetric,
     symmetric,
+    traceless,
 )
 
 
@@ -131,6 +133,22 @@ class Normal(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of normal matrices."""
         return normal(x)
+
+
+class Traceless(nn.Module):
+    r"""Return the closest traceless matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
+
+    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
+    """
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of traceless matrices."""
+        return traceless(x)
 
 
 class Diagonal(nn.Module):

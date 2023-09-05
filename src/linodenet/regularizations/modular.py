@@ -18,6 +18,7 @@ __all__ = [
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Traceless",
 ]
 
 from typing import Final, Optional
@@ -35,6 +36,7 @@ from linodenet.regularizations.functional import (
     orthogonal,
     skew_symmetric,
     symmetric,
+    traceless,
 )
 
 
@@ -163,6 +165,22 @@ class Normal(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards normal matrix."""
         return normal(x, self.p, self.size_normalize)
+
+
+class Traceless(nn.Module):
+    """Bias the matrix towards being traceless.
+
+    .. Signature:: ``(..., n, n) -> ...``
+    """
+
+    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return traceless(x, self.p, self.size_normalize)
 
 
 class Diagonal(nn.Module):
