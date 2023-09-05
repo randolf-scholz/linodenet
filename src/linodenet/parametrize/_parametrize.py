@@ -81,7 +81,7 @@ class Parametrize(nn.Module, ParametrizationProto):
         self.register_buffer("cached_tensor", torch.empty_like(tensor))
 
         # get the parametrization
-        self.__parametrization = parametrization
+        self._parametrization = parametrization
 
     def forward(self) -> Tensor:
         """Apply the parametrization to the weight matrix."""
@@ -90,7 +90,7 @@ class Parametrize(nn.Module, ParametrizationProto):
     @jit.export
     def parametrization(self, x: Tensor) -> Tensor:
         """Apply the parametrization."""
-        return self.__parametrization(x)
+        return self._parametrization(x)
 
     @jit.export
     def recompute_cache(self) -> None:

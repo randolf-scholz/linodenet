@@ -9,7 +9,7 @@ __all__ = [
     "TensorLike",
     # Type Variables
     "NestedTensorVar",
-    "T",
+    "any_var",
     "module_var",
     "return_co",
     "type_var",
@@ -30,7 +30,7 @@ r"""Type hint for shape-like inputs."""
 
 
 # region type variables ----------------------------------------------------------------
-T = TypeVar("T")
+any_var = TypeVar("any_var")
 """Type Variable for generic types."""
 
 type_var = TypeVar("type_var", bound=type)
@@ -45,10 +45,12 @@ r"""Type Variable for nn.Modules."""
 
 
 # region generic type aliases ----------------------------------------------------------
-Nested: TypeAlias = T | Mapping[str, "Nested"] | Iterable["Nested"]
+Nested: TypeAlias = any_var | Mapping[str, "Nested"] | Iterable["Nested"]
 """Type hint for nested types."""
 
-Recursive: TypeAlias = T | list[T] | tuple[T, ...] | dict[str, T]
+Recursive: TypeAlias = (
+    any_var | list[any_var] | tuple[any_var, ...] | dict[str, any_var]
+)
 r"""Type hint for recursive types."""
 
 TensorLike: TypeAlias = Recursive[Tensor | Scalar]
