@@ -23,15 +23,15 @@ if __name__ == "__main__":
     param = nn.Parameter(model.weight.clone().detach() * 2)
     spec = SpectralNormalization(param)
 
-    print(spec.parametrized_tensors["weight"], spec.weight, sep="\n")
-    assert spec.parametrized_tensors["weight"] is param
+    print(spec.parametrized_tensor["weight"], spec.weight, sep="\n")
+    assert spec.parametrized_tensor["weight"] is param
     assert spec.weight is spec.cached_tensors["weight"]
     print("==============================================================")
 
-    spec.cached_tensors["weight"].copy_(spec.parametrized_tensors["weight"])
+    spec.cached_tensors["weight"].copy_(spec.parametrized_tensor["weight"])
 
-    print(spec.parametrized_tensors["weight"], spec.weight, sep="\n")
-    assert spec.parametrized_tensors["weight"] is param
+    print(spec.parametrized_tensor["weight"], spec.weight, sep="\n")
+    assert spec.parametrized_tensor["weight"] is param
     assert spec.weight is spec.cached_tensors["weight"]
 
     sys.exit(0)
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     print("spec.cached_tensors[weight] ----------------------")
     print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
 
-    weight = spec.parametrized_tensors["weight"]
+    weight = spec.parametrized_tensor["weight"]
     print("spec.parametrized_tensors[weight] ----------------------")
     print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
 
