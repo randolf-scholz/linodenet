@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 import warnings
-from typing import Any, Final, Optional, Protocol, runtime_checkable
+from typing import Any, Final, Optional, Protocol, cast, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -406,7 +406,7 @@ class iSequential(nn.Module):
 
         self.is_inverse = inverse is not None
         if not self.is_inverse:
-            cls = type(self)
+            cls = cast(type[Self], type(self))
             self.inverse = cls(
                 *[block.inverse for block in reversed(self.blocks)], inverse=self
             )

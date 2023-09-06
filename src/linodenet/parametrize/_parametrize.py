@@ -21,7 +21,7 @@ __all__ = [
 from abc import abstractmethod
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from typing import Final, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -194,7 +194,7 @@ class Parametrization(nn.Module, ParametrizationProto):
         """Register a cached tensor."""
         if name in self.cached_tensors:
             raise ValueError(f"Cache with {name=!r} already registered!")
-        if name in self.named_buffers():
+        if name in dict(self.named_buffers()):
             raise ValueError(f"Buffer with {name=!r} already taken!")
 
         self.register_buffer(name, tensor)

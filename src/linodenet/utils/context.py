@@ -14,14 +14,13 @@ from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, overload
 
-from linodenet.types import any_var as T, return_co as R
+from linodenet.types import T as T, return_co as R
 
 P = ParamSpec("P")
 
 
 def make_default_message(obj: T, /) -> str:
     """Create a default deprecation message for an object."""
-
     if isinstance(obj, type):
         return f"Class {obj.__name__!r} is deprecated"
 
@@ -86,6 +85,7 @@ def make_wrapper(
     category: type[Warning] = DeprecationWarning,
     stacklevel: int = 1,
 ) -> T:
+    """Create a wrapper for a deprecated object."""
     msg = make_default_message(obj) if msg is NotImplemented else msg
     match obj, category:
         case _, None:

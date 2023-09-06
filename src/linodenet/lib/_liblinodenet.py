@@ -16,9 +16,8 @@ __all__ = [
 ]
 
 import warnings
-from collections.abc import Callable
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Optional, Protocol, cast
 
 import torch
 import torch.utils.cpp_extension
@@ -84,24 +83,20 @@ def spectral_norm_native(
 lib_base_path = Path(__file__).parent
 lib_path = lib_base_path / "build" / "liblinodenet.so"
 
-_singular_triplet: Callable[
-    [Tensor, Optional[Tensor], Optional[Tensor], Optional[int], float, float],
-    tuple[Tensor, Tensor, Tensor],
-]
-_spectral_norm: Callable[
-    [Tensor, Optional[Tensor], Optional[Tensor], Optional[int], float, float], Tensor
-]
+_spectral_norm: SpectralNorm
+_singular_triplet: SingularTriplet
+_singular_triplet_debug: SingularTriplet
+_spectral_norm_debug: SpectralNorm
 
 LIB = torch.ops.liblinodenet
 """The custom library."""
 
 if lib_path.exists():
     torch.ops.load_library(lib_path)
-
-    _spectral_norm = LIB.spectral_norm  # pyright: ignore
-    _spectral_norm_debug = LIB.spectral_norm_debug  # pyright: ignore
-    _singular_triplet = LIB.singular_triplet  # pyright: ignore
-    _singular_triplet_debug = LIB.singular_triplet_debug  # pyright: ignore
+    _spectral_norm = cast(SpectralNorm, LIB.spectral_norm)
+    _spectral_norm_debug = cast(SpectralNorm, LIB.spectral_norm_debug)
+    _singular_triplet = cast(SingularTriplet, LIB.singular_triplet)
+    _singular_triplet_debug = cast(SingularTriplet, LIB.singular_triplet_debug)
 else:
     warnings.warn(
         "Custom binaries not found! Trying to compile them on the fly!."

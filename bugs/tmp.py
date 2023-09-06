@@ -1,19 +1,65 @@
-from typing import Sequence, TypeVar, cast
+import typing
+from collections.abc import Iterable, Mapping, Sequence
+from typing import TypeAlias, TypeVar, Union, overload
 
-X = TypeVar("X")
-Y = TypeVar("Y")
-
-
-x: Sequence[int] | Sequence[str] = cast(Sequence[int] | Sequence[str], [])
-y: Sequence[int | str] = cast(Sequence[int | str], [])
-
-reveal_type(x)
-reveal_type(y)
+T = TypeVar("T")
+Nested: TypeAlias = T | Mapping[str, "Nested[T]"] | Iterable["Nested[T]"]
 
 
-z: Sequence[int | str] = x
-w: Sequence[int] | Sequence[str] = y  # ✘
+def foo(x: float) -> int:
+    return 42
 
 
-reveal_type(z)
-reveal_type(w)
+# fmt: off
+@overload
+def sum_recursive(x: int) -> int: ...
+@overload
+def sum_recursive(x: Mapping[str, Nested[int]]) -> int: ...
+@overload
+def sum_recursive(x: Iterable[Nested[int]]) -> int: ...
+# fmt: on
+def sum_recursive(x):
+    total: int = 0
+    reveal_type(x)
+    match x:
+        case int() as number:
+            total += number
+        case Mapping() as mapping:
+            reveal_type(mapping)
+            for key in mapping:
+                total += sum_recursive(mapping[key])  # error
+        case Iterable() as iterable if not isinstance(iterable, Mapping):
+            for item in iterable:
+                total += sum_recursive(item)
+
+    return total
+
+
+#
+# Union[
+#     Mapping[
+#         str,
+#         Union[
+#             T @ Nested,
+#             Mapping[str, Nested],
+#             Iterable[Nested],
+#         ],
+#     ],
+#     Mapping[
+#         Union[
+#             int,
+#             Mapping[str, T @ Nested | Mapping[str, Nested] | Iterable[Nested]],
+#             Iterable[T @ Nested | Mapping[str, Nested] | Iterable[Nested]],
+#         ],
+#         Unknown,
+#     ],
+# ]
+
+
+#
+# Mapping[str, T @ Nested | Mapping[str, Nested] | Iterable[Nested]] | Mapping[
+#     Tensor
+#     | Mapping[str, T @ Nested | Mapping[str, Nested] | Iterable[Nested]]
+#     | Iterable[T @ Nested | Mapping[str, Nested] | Iterable[Nested]],
+#     Unknown,
+# ]

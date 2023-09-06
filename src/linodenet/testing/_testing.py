@@ -23,46 +23,50 @@ __all__ = [
 import logging
 import tempfile
 import warnings
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from itertools import chain
-from typing import Optional, overload
+from typing import Any, Optional, TypeAlias, overload
 
 import torch
 from torch import Tensor, jit, nn
 from typing_extensions import deprecated
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.types import Nested, Scalar
+from linodenet.types import Nested, Scalar, module_var
 
 __logger__ = logging.getLogger(__name__)
 
 
-# region utility functions for tensors AND scalars -------------------------------------
+# region utility functions for tensors AND scalars -------------------------------------\
+
+Tree: TypeAlias = Nested[Tensor | Scalar]
+
+
+# fmt: off
 @overload
-def to_device(
-    x: Nested[Tensor | Scalar], /, *, device: torch.device
-) -> Nested[Tensor | Scalar]:
-    ...
-
-
+def to_device(x: module_var, /, *, device: str | torch.device = "cpu") -> module_var: ...
 @overload
-def to_device(x: nn.Module, /, *, device: torch.device) -> nn.Module:
-    ...
-
-
-def to_device(x, /, *, device):
+def to_device(x: Tensor, /, *, device: str | torch.device = "cpu") -> Tensor: ...  # type: ignore[misc]
+@overload
+def to_device(x: Scalar, /, *, device: str | torch.device = "cpu") -> Scalar: ...  # type: ignore[misc]
+@overload
+def to_device(x: Mapping[str, Tree], /, *, device: str | torch.device = "cpu") -> dict[str, Tree]: ...  # type: ignore[misc]
+@overload
+def to_device(x: Sequence[Tree], /, *, device: str | torch.device = "cpu") -> tuple[Tree, ...]: ...
+# fmt: on
+def to_device(x, /, *, device="cpu"):
     """Move a nested tensor to a device."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
     if isinstance(x, nn.Module):
         return x.to(device=device)
     if isinstance(x, Tensor):
         return x.to(device=device)
-    if isinstance(x, Scalar):
+    if isinstance(x, Scalar):  # type: ignore[misc, arg-type]
         return x
     if isinstance(x, Mapping):
         return {key: to_device(val, device=device) for key, val in x.items()}
-    if isinstance(x, Iterable):
+    if isinstance(x, Sequence):
         return tuple(to_device(item, device=device) for item in x)
     raise TypeError(f"Unsupported input type {type(x)!r}")
 
@@ -76,22 +80,32 @@ def get_device(x: nn.Module | Nested[Tensor | Scalar], /) -> torch.device:
             return tensor.device
         case Mapping() as mapping:
             return get_device(next(iter(mapping.values())))
-        case Iterable() as iterable:
+        case Sequence() as iterable:
             return get_device(next(iter(iterable)))
         case _:
             raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-def make_tensors_parameters(x: Nested[Tensor | Scalar], /) -> Nested[Tensor | Scalar]:
+# fmt: off
+@overload
+def make_tensors_parameters(x: Tensor, /) -> Tensor: ...  # type: ignore[misc]
+@overload
+def make_tensors_parameters(x: Scalar, /) -> Scalar: ...  # type: ignore[misc]
+@overload
+def make_tensors_parameters(x: Mapping[str, Tree], /) -> dict[str, Tree]: ...  # type: ignore[misc]
+@overload
+def make_tensors_parameters(x: Sequence[Tree], /) -> tuple[Tree, ...]: ...
+# fmt: off
+def make_tensors_parameters(x, /):
     """Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
-    if isinstance(x, Scalar):
+    if isinstance(x, Scalar):  # type: ignore[misc, arg-type]
         return x
     if isinstance(x, Tensor):
         return nn.Parameter(x) if not isinstance(x, nn.Parameter) else x
     if isinstance(x, Mapping):
         return {key: make_tensors_parameters(val) for key, val in x.items()}
-    if isinstance(x, Iterable):
+    if isinstance(x, Sequence):
         return tuple(make_tensors_parameters(item) for item in x)
     raise TypeError(f"Unsupported input type {type(x)!r}")
 
@@ -107,17 +121,17 @@ def flatten_nested_tensor(x: Nested[Tensor], /) -> Tensor:
             return tensor.flatten()
         case Mapping() as mapping:
             return torch.cat([flatten_nested_tensor(val) for val in mapping.values()])
-        case Iterable() as iterable:
+        case Sequence() as iterable:
             return torch.cat([flatten_nested_tensor(item) for item in iterable])
         case _:
             raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-def get_parameters(x: nn.Module | Nested[Tensor], /) -> list[nn.Parameter]:
+def get_parameters(x: nn.Module | Nested[Tensor], /) -> list[Tensor]:
     """Return the parameters of the model / parameters."""
     match x:
         case nn.Module() as model:
-            return list(x for x in model.parameters() if x.requires_grad)
+            return [x for x in model.parameters() if x.requires_grad]
         case Tensor() as tensor:
             if tensor.requires_grad:
                 return [tensor]
@@ -126,7 +140,7 @@ def get_parameters(x: nn.Module | Nested[Tensor], /) -> list[nn.Parameter]:
             return list(
                 chain.from_iterable(get_parameters(item) for item in mapping.values())
             )
-        case Iterable() as iterable:
+        case Sequence() as iterable:
             return list(chain.from_iterable(get_parameters(item) for item in iterable))
         case _:
             raise TypeError(f"Unsupported input type {type(x)!r}")
@@ -140,7 +154,7 @@ def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
     return torch.sqrt(torch.sum(flattened**2))
 
 
-def get_grads(x: nn.Module | Nested[Tensor], /) -> list[Tensor]:
+def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
     """Return a cloned detached copy of the gradients of the model / parameters."""
     match x:
         case nn.Module() as model:
@@ -158,7 +172,7 @@ def get_grads(x: nn.Module | Nested[Tensor], /) -> list[Tensor]:
             return list(
                 chain.from_iterable(get_grads(item) for item in mapping.values())
             )
-        case Iterable() as iterable:
+        case Sequence() as iterable:
             return list(chain.from_iterable(get_grads(item) for item in iterable))
         case _:
             raise TypeError(f"Unsupported input type {type(x)!r}")
@@ -175,7 +189,7 @@ def zero_grad(x: nn.Module | Nested[Tensor], /) -> None:
         case Mapping() as mapping:
             for item in mapping.values():
                 zero_grad(item)
-        case Iterable() as iterable:
+        case Sequence() as iterable:
             for item in iterable:
                 zero_grad(item)
         case _:
@@ -192,20 +206,22 @@ def assert_close(
 ) -> None:
     """Assert that outputs and targets are close."""
     match values:
-        case Tensor():
+        case Tensor() as tensor:
             assert isinstance(reference, Tensor)
-            assert torch.allclose(values, reference, rtol=rtol, atol=atol), (
-                values,
+            assert torch.allclose(tensor, reference, rtol=rtol, atol=atol), (
+                tensor,
                 reference,
             )
-        case Mapping():
+        case Mapping() as mapping:
             assert isinstance(reference, Mapping)
-            assert values.keys() == reference.keys()
-            for key in values.keys():
-                assert_close(values[key], reference[key], rtol=rtol, atol=atol)
-        case Iterable():
-            assert isinstance(reference, Iterable)
-            for output, target in zip(values, reference, strict=True):
+            assert mapping.keys() == reference.keys()
+            for key in mapping.keys():
+                x = mapping[key]
+                y = reference[key]
+                assert_close(x, y, rtol=rtol, atol=atol)
+        case Sequence() as iterable:
+            assert isinstance(reference, Sequence)
+            for output, target in zip(iterable, reference, strict=True):
                 assert_close(output, target, rtol=rtol, atol=atol)
         case _:
             raise TypeError(f"Unsupported type {type(values)} for `outputs`!")
@@ -218,8 +234,8 @@ def check_forward(
     func: Callable[..., Nested[Tensor]],
     /,
     *,
-    input_args: Iterable[Nested[Tensor]] = (),
-    input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     reference_outputs: Optional[Nested[Tensor]] = None,
 ) -> tuple[Nested[Tensor], Nested[Tensor]]:
     """Test a forward pass."""
@@ -238,7 +254,7 @@ def check_forward(
 def check_backward(
     *,
     outputs: Nested[Tensor],
-    parameters: Iterable[nn.Parameter],
+    parameters: Sequence[Tensor],
     reference_gradients: Optional[Nested[Tensor]] = None,
 ) -> tuple[list[Tensor], list[Tensor]]:
     """Test a backward pass."""
@@ -251,9 +267,12 @@ def check_backward(
         raise RuntimeError("Model failed backward pass!") from exc
 
     if reference_gradients is None:
-        reference_gradients = gradients
+        reference_gradients = deepcopy(gradients)
     else:
-        assert_close(gradients, reference_gradients)
+        reference_gradients = get_grads(reference_gradients)
+
+    # check gradients
+    assert_close(gradients, reference_gradients)
 
     return gradients, reference_gradients
 
@@ -276,14 +295,14 @@ def check_jit(module_or_func, /):
 # fmt: off
 @overload
 def check_jit_saving_loading(
-    module: nn.Module, /, *, device: torch.device
+    module: nn.Module, /, *, device: str | torch.device
 ) -> nn.Module: ...
 @overload
 def check_jit_saving_loading(
-    func: Callable[..., Nested[Tensor]], /, *, device: torch.device
+    func: Callable[..., Nested[Tensor]], /, *, device: str | torch.device
 ) -> Callable[..., Nested[Tensor]]: ...
 # fmt: on
-def check_jit_saving_loading(scripted, /, *, device: torch.device):
+def check_jit_saving_loading(scripted, /, *, device):
     """Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
         try:
@@ -300,12 +319,12 @@ def check_jit_saving_loading(scripted, /, *, device: torch.device):
 
 
 def check_initialization(
-    module_class: type[nn.Module],
+    module_class: type[module_var],
     /,
     *,
-    init_args: Iterable[Nested[Tensor | Scalar]] = (),
+    init_args: Sequence[Nested[Tensor | Scalar]] = (),
     init_kwargs: Mapping[str, Nested[Tensor | Scalar]] = EMPTY_MAP,
-) -> nn.Module:
+) -> module_var:
     """Test initialization of a module."""
     try:
         module = module_class(*init_args, **init_kwargs)
@@ -318,11 +337,11 @@ def check_optim(
     model: nn.Module,
     /,
     *,
-    input_args: Iterable[Nested[Tensor]] = (),
-    input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     niter: int = 3,
 ) -> None:
-    """Check if model can be optimized"""
+    """Check if model can be optimized."""
     # create optimizer
     optim = torch.optim.SGD(params=model.parameters(), lr=0.1)
 
@@ -338,11 +357,11 @@ def check_optim(
 def check_combined(
     obj: type[nn.Module] | nn.Module | Callable[..., Nested[Tensor]],
     *,
-    init_args: Iterable[Nested[Tensor | Scalar]] = (),
-    init_kwargs: Mapping[str, Nested[Tensor | Scalar]] = EMPTY_MAP,
+    init_args: Sequence[Any] = (),
+    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
     #
-    input_args: Iterable[Nested[Tensor]] = (),
-    input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     #
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,
@@ -355,7 +374,6 @@ def check_combined(
     test_optim: bool = False,
 ) -> None:
     """Check a module, function or model class."""
-
     # region get configuration -------------------------------------------------
     pass
     # endregion get configuration ----------------------------------------------
@@ -366,8 +384,8 @@ def check_combined(
             model_name = obj.__name__
         case nn.Module() as model:
             model_name = model.__class__.__name__
-        case Callable() as func:
-            model_name = func.__name__
+        case Callable() as func:  # type: ignore[misc]
+            model_name = func.__name__  # type: ignore[unreachable]
         case _:
             raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
 
@@ -376,18 +394,22 @@ def check_combined(
     # endregion get name and logger ----------------------------------------------------
 
     # region get initialized model if class --------------------------------------------
-    if issubclass(obj, nn.Module):
+    if isinstance(obj, nn.Module):
+        model = obj
+    elif issubclass(obj, nn.Module):
         model = check_initialization(obj, init_args=init_args, init_kwargs=init_kwargs)
         logger.info(">>> Initialization ✔ ")
-    else:
+    elif callable(obj):  # type: ignore[unreachable]
         model = obj
+    else:
+        raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
     # endregion get initialized model if class --------------------------------------------
 
     # region get parameters ------------------------------------------------------------
     if isinstance(model, nn.Module):
         model_parameters = get_parameters(model)
     else:
-        model_parameters = []
+        model_parameters = []  # type: ignore[unreachable]
 
     # get parameters of input tensors
     if make_inputs_parameters:
@@ -500,12 +522,12 @@ def check_combined(
     # endregion check loaded forward/backward pass -------------------------------------
 
 
-@deprecated()
+@deprecated("Deprecated")
 def check_function(
     func: Callable[..., Nested[Tensor]],
     /,
     *,
-    input_args: Iterable[Nested[Tensor]] = (),
+    input_args: Sequence[Nested[Tensor]] = (),
     input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
     reference_function: Optional[Callable[..., Nested[Tensor]]] = None,
     reference_outputs: Optional[Nested[Tensor]] = None,
@@ -661,12 +683,12 @@ def check_function(
     # endregion check loaded forward/backward pass -------------------------------------
 
 
-@deprecated
+@deprecated("Deprecated")
 def check_model(
     model: nn.Module,
     /,
     *,
-    input_args: Iterable[Nested[Tensor]] = (),
+    input_args: Sequence[Nested[Tensor]] = (),
     input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
     reference_model: Optional[nn.Module] = None,
     reference_outputs: Optional[Nested[Tensor]] = None,
@@ -819,13 +841,14 @@ def check_model(
     # endregion check loaded forward/backward pass -------------------------------------
 
 
-@deprecated
+@deprecated("Deprecated")
 def check_class(
     model_class: type[nn.Module],
     *,
-    init_args: Iterable[Nested[Tensor | Scalar]] = (),
-    init_kwargs: Mapping[str, Nested[Tensor | Scalar]] = EMPTY_MAP,
-    input_args: Iterable[Nested[Tensor]] = (),
+    init_args: Sequence[Any] = (),
+    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
+    #
+    input_args: Sequence[Nested[Tensor]] = (),
     input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,

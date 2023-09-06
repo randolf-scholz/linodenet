@@ -89,7 +89,7 @@ def deep_keyval_update(d: dict, /, **new_kv: Any) -> dict:
     return d
 
 
-def autojit(base_class: module_var) -> module_var:
+def autojit(base_class: type[module_var]) -> type[module_var]:
     r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
 
     Makes it so that
