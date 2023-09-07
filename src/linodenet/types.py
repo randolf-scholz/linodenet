@@ -7,12 +7,13 @@ __all__ = [
     "SizeLike",
     # Type Variables
     "T",
+    "callable_var",
     "module_var",
     "return_co",
     "type_var",
 ]
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TypeAlias, TypeVar
 
 from torch import nn
@@ -38,6 +39,9 @@ r"""Type hint return value."""
 
 module_var = TypeVar("module_var", bound=nn.Module)
 r"""Type Variable for nn.Modules."""
+
+callable_var = TypeVar("callable_var", bound=Callable)
+r"""Type Variable for callables."""
 # endregion type variables -------------------------------------------------------------
 
 

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
 project(liblinodenet LANGUAGES CXX)
 
+# run clang-tidy
+set(CMAKE_CXX_CLANG_TIDY clang-tidy)
+
 # set global flags
 set(CMAKE_CXX_STANDARD 17)
 set(USE_CUDA true)
