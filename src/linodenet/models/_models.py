@@ -17,8 +17,8 @@ class Model(Protocol):
     """Protocol for all models."""
 
     def __call__(
-        self, *args: Nested[Tensor | Scalar], **kwargs: Nested[Tensor, Scalar]
-    ) -> Nested[Tensor, Scalar]:
+        self, *args: Nested[Tensor | Scalar], **kwargs: Nested[Tensor | Scalar]
+    ) -> Nested[Tensor | Scalar]:
         """Forward pass of the model."""
         ...
 
