@@ -39,13 +39,13 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "coverage>=7.3.1",
-    "matplotlib>=3.7.2",
+    "matplotlib>=3.7.3",
     "psutil>=5.9.5",
     "pytest-benchmark[histogram]>=4.0.0",
     "pytest-cov>=4.1.0",
     "pytest-rerunfailures>=12.0",
     "pytest-xdist>=3.3.1",
-    "pytest>=7.4.1",
+    "pytest>=7.4.2",
     "tqdm>=4.66.1",
     "tsdm @ git+https://github.com/randolf-scholz/tsdm.git@main",
 ]
@@ -63,7 +63,7 @@ docs = [
 ]
 dev = [
     "bandit>=1.7.5",
-    "black[d,jupyter]>=23.7.0",
+    "black[d,jupyter]>=23.9.1",
     "blacken-docs>=1.16.0",
     "cmake>=3.27.4",
     "docutils>=0.20.1",
@@ -80,7 +80,7 @@ dev = [
     "ipywidgets>=8.1.0",
     "isort>=5.12.0",
     "jupyterlab>=4.0.5",
-    "matplotlib>=3.7.2",
+    "matplotlib>=3.7.3",
     "mypy>=1.5.1",
     "openml>=0.14.1",
     "openpyxl>=3.1.2",
@@ -98,8 +98,8 @@ dev = [
     "pylint>=2.17.5",
     "pylint-gitlab>=1.2.0",
     "pyright>=1.1.326",
-    "ruff>=0.0.287",
-    "setuptools>=68.2.0",
+    "ruff>=0.0.288",
+    "setuptools>=68.2.1",
     "slotscheck>=0.17.0",
     "tqdm>=4.66.1",
     "twine>=4.0.2",
@@ -552,9 +552,9 @@ torchinfo = ">=1.8.0"
 
 [tool.poetry.group.test.dependencies]
 coverage = ">=7.3.1"
-matplotlib = ">=3.7.2"
+matplotlib = ">=3.7.3"
 psutil = ">=5.9.5"
-pytest = ">=7.4.1"
+pytest = ">=7.4.2"
 pytest-benchmark = ">=4.0.0"
 pytest-cov = ">=4.1.0"
 pytest-rerunfailures = ">=12.0"
@@ -593,7 +593,7 @@ pipreqs = ">=0.4.13"
 pre-commit = ">=3.4.0"
 pybadges = ">=3.0.0"
 pydeps = ">=1.12.17"
-setuptools = ">=68.2.0"
+setuptools = ">=68.2.1"
 twine = ">=4.0.2"
 wheel = ">=0.41.2"
 
@@ -613,7 +613,7 @@ yesqa = ">=1.5.0"
 
 
 [tool.poetry.group.formatters.dependencies]
-black = { version = ">=23.7.0", extras = ["d", "jupyter"] }
+black = { version = ">=23.9.1", extras = ["d", "jupyter"] }
 blacken-docs = ">=1.16.0"
 isort = ">=5.12.0"
 nbstripout-fast = ">=1.0.1"
@@ -630,8 +630,8 @@ pydocstyle = ">=6.3.0"
 pyflakes = ">=3.1.0"
 pylint = ">=2.17.5"
 pylint-gitlab = ">=1.2.0"
-ruff = ">=0.0.287"
-ruff-lsp = ">=0.0.38"
+ruff = ">=0.0.288"
+ruff-lsp = ">=0.0.39"
 slotscheck = ">=0.17.0"
 
 
