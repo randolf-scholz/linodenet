@@ -131,11 +131,12 @@ if __name__ == "__main__":
     ax.set_xlabel("k")
     ax.set_ylabel("residual")
     ax.set_title(
-        "Takeaway 1: ‖Av-σu‖ and ‖Aᵀu-σv‖ are better convergence proxies than ‖u'-u‖ and ‖v'-v‖.\n"
-        "Takeaway 2: ‖Av-σu‖ and ‖Aᵀu-σv‖ need to be computed immediately after updating v and u respectively.\n"
-        "            otherwise they are not good proxies for convergence.\n"
-        "Takeaway 3: If we start with v update we can run in sign errors for sigma."
-        " If we start with u update this does not happen for some reason."
+        "Takeaway 1: ‖Av-σu‖ and ‖Aᵀu-σv‖ are better convergence proxies than ‖u'-u‖"
+        " and ‖v'-v‖.\nTakeaway 2: ‖Av-σu‖ and ‖Aᵀu-σv‖ need to be computed immediately"
+        " after updating v and u respectively.\n            otherwise they are not good"
+        " proxies for convergence.\nTakeaway 3: If we start with v update we can run in"
+        " sign errors for sigma. If we start with u update this does not happen for"
+        " some reason."
     )
     fig.suptitle(
         "Spectral norm algorithm convergence (dotted: parallel, solid: alternating)"

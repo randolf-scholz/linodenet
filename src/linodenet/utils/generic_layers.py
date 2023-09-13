@@ -60,7 +60,8 @@ class Series(nn.Sequential):
     def __imatmul__(self, other: nn.Module) -> Series:
         r"""Chain with other module."""
         raise NotImplementedError(
-            "`@=` not possible because `nn.Sequential` does not implement an append function."
+            "`@=` not possible because `nn.Sequential` does not implement an append"
+            " function."
         )
 
     def simplify(self: Series) -> Series:
@@ -121,7 +122,8 @@ class Parallel(nn.ModuleList):
     def __imatmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""
         raise NotImplementedError(
-            "`@=` not possible because `nn.Sequential` does not implement an append function."
+            "`@=` not possible because `nn.Sequential` does not implement an append"
+            " function."
         )
 
 

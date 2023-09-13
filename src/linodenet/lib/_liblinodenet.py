@@ -35,8 +35,7 @@ class SpectralNorm(Protocol):
         maxiter: Optional[int] = None,
         atol: float = 1e-8,
         rtol: float = 1e-5,
-    ) -> Tensor:
-        ...
+    ) -> Tensor: ...
 
 
 class SingularTriplet(Protocol):
@@ -50,8 +49,7 @@ class SingularTriplet(Protocol):
         maxiter: Optional[int] = None,
         atol: float = 1e-8,
         rtol: float = 1e-5,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        ...
+    ) -> tuple[Tensor, Tensor, Tensor]: ...
 
 
 def singular_triplet_native(

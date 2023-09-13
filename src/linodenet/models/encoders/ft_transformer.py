@@ -33,11 +33,11 @@ def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
     return (
         reglu
         if name == "reglu"
-        else geglu
-        if name == "geglu"
-        else torch.sigmoid
-        if name == "sigmoid"
-        else getattr(nn.functional, name)
+        else (
+            geglu
+            if name == "geglu"
+            else torch.sigmoid if name == "sigmoid" else getattr(nn.functional, name)
+        )
     )
 
 
@@ -46,9 +46,7 @@ def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
     return (
         relu  # type: ignore[return-value]
         if name == "reglu"
-        else gelu
-        if name == "geglu"
-        else get_activation_fn(name)
+        else gelu if name == "geglu" else get_activation_fn(name)
     )
 
 
@@ -317,11 +315,15 @@ class FTTransformer(nn.Module):
         return (
             (self.shared_kv_compression, self.shared_kv_compression)
             if self.shared_kv_compression is not None
-            else (layer["key_compression"], layer["value_compression"])
-            if "key_compression" in layer and "value_compression" in layer
-            else (layer["key_compression"], layer["key_compression"])
-            if "key_compression" in layer
-            else (None, None)
+            else (
+                (layer["key_compression"], layer["value_compression"])
+                if "key_compression" in layer and "value_compression" in layer
+                else (
+                    (layer["key_compression"], layer["key_compression"])
+                    if "key_compression" in layer
+                    else (None, None)
+                )
+            )
         )
 
     def _start_residual(self, x, layer, norm_idx):

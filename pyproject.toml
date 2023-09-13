@@ -47,7 +47,8 @@ test = [
     "pytest-xdist>=3.3.1",
     "pytest>=7.4.2",
     "tqdm>=4.66.1",
-    "tsdm @ git+https://github.com/randolf-scholz/tsdm.git@main",
+#    "tsdm @ git+https://github.com/randolf-scholz/tsdm.git@main",
+    "tsdm >= 0.4.8",
 ]
 docs = [
     "myst_parser>=2.0",
@@ -69,7 +70,6 @@ dev = [
     "docutils>=0.20.1",
     "flake8>=6.1.0",
     "flake8-annotations>=3.0.1",
-    "flake8-black>=0.3.6",
     "flake8-bugbear>=23.7.10",
     "flake8-comprehensions>=3.14.0",
     "flake8-docstrings>=1.7.0",
@@ -77,7 +77,7 @@ dev = [
     "flake8-pyproject>=1.2.3",
     "flake8-rst>=0.8.0",
     "flake8-rst-docstrings>=0.3.0",
-    "ipywidgets>=8.1.0",
+    "ipywidgets>=8.1.1",
     "isort>=5.12.0",
     "jupyterlab>=4.0.5",
     "matplotlib>=3.7.3",
@@ -98,8 +98,8 @@ dev = [
     "pylint>=2.17.5",
     "pylint-gitlab>=1.2.0",
     "pyright>=1.1.326",
-    "ruff>=0.0.288",
-    "setuptools>=68.2.1",
+    "ruff>=0.0.289",
+    "setuptools>=68.2.2",
     "slotscheck>=0.17.0",
     "tqdm>=4.66.1",
     "twine>=4.0.2",
@@ -124,6 +124,19 @@ homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet"
 documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
 repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi"
 # endregion project configuration ------------------------------------------------------
+
+# region pdm configuration -------------------------------------------------------------
+[[tool.pdm.source]]
+name = "berlin"
+url = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
+verify_ssl = true
+
+[[tool.pdm.source]]
+name = "hildesheim"
+url = "https://software.ismll.uni-hildesheim.de/api/v4/projects/459/packages/pypi/simple"
+verify_ssl = true
+# region pdm project configuration -----------------------------------------------------
+
 
 
 # region flake8 configuration ----------------------------------------------------------
@@ -166,6 +179,7 @@ ignore = [
     "E201",   # E201 whitespace after '('
     "E202",   # E202 whitespace before ']'
     "E203",   # E203 whitespace before ':'
+    "E302",   # E302 expected 2 blank lines, found 1
     "E241",   # E241 multiple spaces after ','
     "E501",   # E501 line too long (use ruff instead)
     "E704",   # E704 multiple statements on one line (def)
@@ -381,6 +395,7 @@ combine_as_imports = true
 line-length = 88
 target-version = ['py310']
 color = true
+preview = true
 # endregion Black Configuration --------------------------------------------------------
 
 
@@ -542,7 +557,7 @@ typing-extensions = ">=4.7.1"
 
 [tool.poetry.group.extra.dependencies]
 ipympl = ">=0.9.3"
-ipywidgets = ">=8.1.0"
+ipywidgets = ">=8.1.1"
 jupyterlab = ">=4.0.5"
 openml = ">=0.14.1"
 openpyxl = ">=3.1.2"
@@ -593,7 +608,7 @@ pipreqs = ">=0.4.13"
 pre-commit = ">=3.4.0"
 pybadges = ">=3.0.0"
 pydeps = ">=1.12.17"
-setuptools = ">=68.2.1"
+setuptools = ">=68.2.2"
 twine = ">=4.0.2"
 wheel = ">=0.41.2"
 
@@ -601,7 +616,6 @@ wheel = ">=0.41.2"
 [tool.poetry.group.flake8.dependencies]
 flake8 = ">=6.1.0"
 flake8-annotations = ">=3.0.1"
-flake8-black = ">=0.3.6"
 flake8-bugbear = ">=23.7.10"
 flake8-comprehensions = ">=3.14.0"
 flake8-docstrings = ">=1.7.0"
@@ -630,7 +644,7 @@ pydocstyle = ">=6.3.0"
 pyflakes = ">=3.1.0"
 pylint = ">=2.17.5"
 pylint-gitlab = ">=1.2.0"
-ruff = ">=0.0.288"
+ruff = ">=0.0.289"
 ruff-lsp = ">=0.0.39"
 slotscheck = ">=0.17.0"
 

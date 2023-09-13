@@ -103,7 +103,6 @@ def make_wrapper(
     return wrapped
 
 
-# fmt: off
 @overload
 def deprecated() -> Callable[[T], T]: ...
 @overload
@@ -116,7 +115,6 @@ def deprecated(decorated: Callable[P, R], msg: str, /) -> Callable[P, R]: ...
 def deprecated(decorated: type[T], /) -> type[T]: ...
 @overload
 def deprecated(decorated: type[T], msg: str, /) -> type[T]: ...
-# fmt: on
 def deprecated(
     decorated=NotImplemented,
     msg=NotImplemented,

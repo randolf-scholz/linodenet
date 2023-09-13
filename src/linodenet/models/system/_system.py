@@ -144,14 +144,20 @@ class LinODECell(nn.Module):
                 assert tensor.shape == (
                     input_size,
                     input_size,
-                ), f"Kernel has bad shape! {tensor.shape} but should be {(input_size, input_size)}"
+                ), (
+                    f"Kernel has bad shape! {tensor.shape} but should be"
+                    f" {(input_size, input_size)}"
+                )
                 return lambda: tensor
 
             tensor = Tensor(kernel_init)
             assert tensor.shape == (
                 input_size,
                 input_size,
-            ), f"Kernel has bad shape! {tensor.shape} but should be {(input_size, input_size)}"
+            ), (
+                f"Kernel has bad shape! {tensor.shape} but should be"
+                f" {(input_size, input_size)}"
+            )
             return lambda: tensor
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript

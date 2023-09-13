@@ -43,18 +43,24 @@ __logger__ = logging.getLogger(__name__)
 Tree: TypeAlias = Nested[Tensor | Scalar]
 
 
-# fmt: off
 @overload
-def to_device(x: module_var, /, *, device: str | torch.device = "cpu") -> module_var: ...
+def to_device(
+    x: module_var, /, *, device: str | torch.device = "cpu"
+) -> module_var: ...
 @overload
 def to_device(x: Tensor, /, *, device: str | torch.device = "cpu") -> Tensor: ...
 @overload
-def to_device(x: Scalar, /, *, device: str | torch.device = "cpu") -> Scalar: ...  # type: ignore[misc]
+def to_device(
+    x: Scalar, /, *, device: str | torch.device = "cpu"
+) -> Scalar: ...  # type: ignore[misc]
 @overload
-def to_device(x: Mapping[str, T], /, *, device: str | torch.device = "cpu") -> dict[str, T]: ...
+def to_device(
+    x: Mapping[str, T], /, *, device: str | torch.device = "cpu"
+) -> dict[str, T]: ...
 @overload
-def to_device(x: Sequence[T], /, *, device: str | torch.device = "cpu") -> tuple[T, ...]: ...
-# fmt: on
+def to_device(
+    x: Sequence[T], /, *, device: str | torch.device = "cpu"
+) -> tuple[T, ...]: ...
 def to_device(x: Any, /, *, device: str | torch.device = "cpu") -> Any:
     """Move a nested tensor to a device."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
@@ -86,7 +92,6 @@ def get_device(x: nn.Module | Nested[Tensor | Scalar], /) -> torch.device:
             raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-# fmt: off
 @overload
 def make_tensors_parameters(x: Tensor, /) -> nn.Parameter: ...
 @overload
@@ -95,7 +100,6 @@ def make_tensors_parameters(x: Scalar, /) -> Scalar: ...  # type: ignore[misc]
 def make_tensors_parameters(x: Mapping[str, T], /) -> dict[str, T]: ...
 @overload
 def make_tensors_parameters(x: Sequence[T], /) -> tuple[T, ...]: ...
-# fmt: on
 def make_tensors_parameters(x, /):
     """Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
@@ -276,12 +280,12 @@ def check_backward(
     return gradients, reference_gradients
 
 
-# fmt: off
 @overload
 def check_jit(module: nn.Module, /) -> nn.Module: ...
 @overload
-def check_jit(func: Callable[..., Nested[Tensor]], /) -> Callable[..., Nested[Tensor]]: ...
-# fmt: on
+def check_jit(
+    func: Callable[..., Nested[Tensor]], /
+) -> Callable[..., Nested[Tensor]]: ...
 def check_jit(module_or_func, /):
     """Test JIT compilation."""
     try:
@@ -291,7 +295,6 @@ def check_jit(module_or_func, /):
     return scripted
 
 
-# fmt: off
 @overload
 def check_jit_saving_loading(
     module: nn.Module, /, *, device: str | torch.device
@@ -300,7 +303,6 @@ def check_jit_saving_loading(
 def check_jit_saving_loading(
     func: Callable[..., Nested[Tensor]], /, *, device: str | torch.device
 ) -> Callable[..., Nested[Tensor]]: ...
-# fmt: on
 def check_jit_saving_loading(scripted, /, *, device):
     """Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
@@ -317,7 +319,6 @@ def check_jit_saving_loading(scripted, /, *, device):
     return loaded
 
 
-# fmt: off
 @overload
 def check_initialization(
     obj: type[module_var],
@@ -342,7 +343,6 @@ def check_initialization(
     init_args: Sequence[Nested[Tensor | Scalar]] = (),
     init_kwargs: Mapping[str, Nested[Tensor | Scalar]] = EMPTY_MAP,
 ) -> callable_var: ...
-# fmt: on
 def check_initialization(obj, /, *, init_args=(), init_kwargs=EMPTY_MAP):
     """Test initialization of a module."""
     if issubclass(obj, nn.Module):

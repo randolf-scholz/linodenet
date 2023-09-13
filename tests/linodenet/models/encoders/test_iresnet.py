@@ -183,11 +183,13 @@ def test_iResNetBlock(
     visualize_distribution(inverse_difference, ax=ax[1, 1], extra_stats=extra_stats)
 
     ax[0, 0].set_xlabel(
-        r"$r_\text{left}(x) = \|x - \phi^{-1}(\phi(x))\|$  where $x_i \sim \mathcal N(0,1)$"
+        r"$r_\text{left}(x) = \|x - \phi^{-1}(\phi(x))\|$  where $x_i \sim \mathcal"
+        r" N(0,1)$"
     )
     ax[0, 0].set_ylabel(r"density $p(r_\text{left} \mid x)$")
     ax[0, 1].set_xlabel(
-        r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$ where $y_j \sim \mathcal N(0,1)$"
+        r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$ where $y_j \sim \mathcal"
+        r" N(0,1)$"
     )
     ax[0, 1].set_ylabel(r"density $p(r_\text{right}\mid y)$")
 
