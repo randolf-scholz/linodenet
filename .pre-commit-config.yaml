@@ -152,8 +152,26 @@ repos:
     rev: v1.1.327
     hooks:
       - id: pyright
-        files: (^src/|^tests/)
-        stages: [pre-push]
+        # not everything works with pyright yet
+        # verbose regex
+        files: |
+          (?x)^(
+            (?!)  # intentionally matches nothing
+            |tests/
+            |src/linodenet/activations
+            |src/linodenet/config
+            |src/linodenet/initializations
+            |src/linodenet/lib
+            |src/linodenet/logutils
+            |src/linodenet/models
+            |src/linodenet/parametrize
+            |src/linodenet/projections
+            |src/linodenet/regularizations
+            |src/linodenet/testing
+            |src/linodenet/utils
+            |src/linodenet/constants.py
+            |src/linodenet/types.py
+          )
   # nbstripout-fast
   - repo: https://github.com/randolf-scholz/nbstripout-fast.git
     rev: v1.0.3
