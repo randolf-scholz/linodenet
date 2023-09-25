@@ -7,7 +7,6 @@ r"""Test the iResNet components.
 
 import logging
 import random
-from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -23,7 +22,7 @@ from tsdm.viz import visualize_distribution
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 
-RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
+RESULT_DIR = PROJECT.TEST_RESULTS_PATH / (PROJECT.TEST_RESULTS_PATH / __file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 

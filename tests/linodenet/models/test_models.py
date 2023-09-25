@@ -3,7 +3,6 @@ r"""Test if model initializations, forward and backward passes."""
 
 import logging
 from itertools import product
-from pathlib import Path
 
 import torch
 from torch import Tensor
@@ -16,7 +15,7 @@ from linodenet.testing import check_class
 
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
+RESULT_DIR = PROJECT.TEST_RESULTS_PATH / (PROJECT.TEST_RESULTS_PATH / __file__).stem
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 linodenet.CONFIG.autojit = False

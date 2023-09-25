@@ -110,7 +110,7 @@ linters = [
     "pycodestyle>=2.11.0",
     "pydocstyle>=6.3.0",
     "pyflakes>=3.1.0",
-    "pylint>=2.17.5",
+    "pylint>=2.17.6",
     "pylint-gitlab>=1.2.0",
     "ruff>=0.0.291",
     "ruff-lsp>=0.0.39",
@@ -637,7 +637,7 @@ perflint = ">=0.7.3"
 pycodestyle = ">=2.11.0"
 pydocstyle = ">=6.3.0"
 pyflakes = ">=3.1.0"
-pylint = ">=2.17.5"
+pylint = ">=2.17.6"
 pylint-gitlab = ">=1.2.0"
 ruff = ">=0.0.291"
 ruff-lsp = ">=0.0.39"

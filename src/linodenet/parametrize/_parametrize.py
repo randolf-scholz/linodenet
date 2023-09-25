@@ -1,7 +1,5 @@
 """Parametrizations for Torch.
 
-Idea:
-
 At he end we want to be able to do something as simple as this:
 
 model.weight = MyParametrization(model.weight).weight
