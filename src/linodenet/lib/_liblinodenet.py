@@ -17,13 +17,14 @@ __all__ = [
 
 import warnings
 from pathlib import Path
-from typing import Optional, Protocol, cast
+from typing import Any, Optional, Protocol, cast, runtime_checkable
 
 import torch
 import torch.utils.cpp_extension
 from torch import Tensor
 
 
+@runtime_checkable
 class SpectralNorm(Protocol):
     """Protocol for spectral norm implementations."""
 
@@ -38,6 +39,7 @@ class SpectralNorm(Protocol):
     ) -> Tensor: ...
 
 
+@runtime_checkable
 class SingularTriplet(Protocol):
     """Protocol for singular triplet implementations."""
 
@@ -78,8 +80,31 @@ def spectral_norm_native(
     return torch.linalg.matrix_norm(A, ord=2)
 
 
+def load_function(name: str, /) -> Any:
+    """Load a function from the custom library."""
+    # compile the function
+    try:
+        torch.utils.cpp_extension.load(
+            name=name,
+            sources=[source_dir / f"{name}.cpp"],  # type: ignore[list-item]
+            is_python_module=False,
+            verbose=True,
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        raise RuntimeError(f"Could not compile {name}! Error: {exc}")
+
+    # load the function
+    try:
+        function = getattr(LIB, name)
+    except AttributeError as exc:
+        raise RuntimeError(f"Could not load {name}! Error: {exc}")
+
+    return function
+
+
 lib_base_path = Path(__file__).parent
-lib_path = lib_base_path / "build" / "liblinodenet.so"
+build_dir = lib_base_path / "build" / "liblinodenet.so"
+source_dir = lib_base_path / "src" / "liblinodenet"
 
 _singular_triplet: SingularTriplet
 _singular_triplet_debug: SingularTriplet
@@ -89,8 +114,8 @@ _spectral_norm_debug: SpectralNorm
 LIB = torch.ops.liblinodenet
 """The custom library."""
 
-if lib_path.exists():
-    torch.ops.load_library(lib_path)
+if build_dir.exists():
+    torch.ops.load_library(build_dir)
     _singular_triplet = cast(SingularTriplet, LIB.singular_triplet)
     _singular_triplet_debug = cast(SingularTriplet, LIB.singular_triplet_debug)
     _spectral_norm = cast(SpectralNorm, LIB.spectral_norm)
@@ -102,52 +127,29 @@ else:
         UserWarning,
         stacklevel=2,
     )
-
-    try:
-        torch.utils.cpp_extension.load(
-            name="spectral_norm",
-            sources=[lib_base_path / "spectral_norm.cpp"],  # type: ignore[list-item]
-            is_python_module=False,
-            verbose=True,
+    compiled_fns = {
+        name: load_function(name)
+        for name in (
+            "spectral_norm",
+            "singular_triplet",
+            "singular_triplet_debug",
+            "spectral_norm_debug",
         )
-        _spectral_norm = LIB.spectral_norm  # pyright: ignore
+    }
+    _singular_triplet_debug = compiled_fns["singular_triplet_debug"]
+    _singular_triplet = compiled_fns["singular_triplet"]
+    _spectral_norm = compiled_fns["spectral_norm"]
+    _spectral_norm_debug = compiled_fns["spectral_norm_debug"]
 
-        torch.utils.cpp_extension.load(
-            name="spectral_norm_debug",
-            sources=[lib_base_path / "spectral_norm_debug.cpp"],  # type: ignore[list-item]
-            is_python_module=False,
-            verbose=True,
-        )
-        _spectral_norm_debug = LIB.spectral_norm_debug  # pyright: ignore
+    # _singular_triplet = singular_triplet_native
+    # _singular_triplet_debug = singular_triplet_native
+    # _spectral_norm = spectral_norm_native
+    # _spectral_norm_debug = spectral_norm_native
 
-        torch.utils.cpp_extension.load(
-            name="singular_triplet",
-            sources=[lib_base_path / "singular_triplet.cpp"],  # type: ignore[list-item]
-            is_python_module=False,
-            verbose=True,
-        )
-        _singular_triplet = LIB.singular_triplet  # pyright: ignore
-
-        torch.utils.cpp_extension.load(
-            name="singular_triplet",
-            sources=[lib_base_path / "singular_triplet.cpp"],  # type: ignore[list-item]
-            is_python_module=False,
-            verbose=True,
-        )
-        _singular_triplet_debug = LIB.singular_triplet_debug  # pyright: ignore
-
-    except Exception as exc:  # pylint: disable=broad-except
-        warnings.warn(
-            "Could not compile the custom binaries!"
-            " Using torch.linalg.svd and torch.linalg.matrix_norm instead."
-            f" Error: {exc}",
-            UserWarning,
-            stacklevel=2,
-        )
-        _singular_triplet = singular_triplet_native
-        _singular_triplet_debug = singular_triplet_native
-        _spectral_norm = spectral_norm_native
-        _spectral_norm_debug = spectral_norm_native
+assert isinstance(_singular_triplet, SingularTriplet)
+assert isinstance(_singular_triplet_debug, SingularTriplet)
+assert isinstance(_spectral_norm, SpectralNorm)
+assert isinstance(_spectral_norm_debug, SpectralNorm)
 
 
 def singular_triplet(

@@ -1,0 +1,2 @@
+// https://stackoverflow.com/questions/26333823/clang-doesnt-see-basic-headers
+g++-12  # or whatever shown by clang -v

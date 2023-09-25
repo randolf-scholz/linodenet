@@ -19,6 +19,7 @@ def compute_spectral_norm_impl(impl, shape, **kwargs):
     A_native = nn.Parameter(A0.clone())
     s_native = spectral_norm_native(A_native)
     s_native.backward()
+    assert A_native.grad is not None
     g_native = A_native.grad.clone().detach()
 
     # Custom Forward
