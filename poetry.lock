@@ -2657,13 +2657,13 @@ files = [
 
 [[package]]
 name = "minio"
-version = "7.1.16"
+version = "7.1.17"
 description = "MinIO Python SDK for Amazon S3 Compatible Cloud Storage"
 optional = false
 python-versions = "*"
 files = [
-    {file = "minio-7.1.16-py3-none-any.whl", hash = "sha256:8073bed2b4b1853f3d69ab2f01a0de86264071083032985921201cfbb0950b15"},
-    {file = "minio-7.1.16.tar.gz", hash = "sha256:56ecb1e7e0103d2dc212fb460fdb70ab2abb7fa5685db378429325d96d95587a"},
+    {file = "minio-7.1.17-py3-none-any.whl", hash = "sha256:0aa525d77a3bc61378444c2400b0ba2685ad4cd6ecb3fba4141a0d0765e25f40"},
+    {file = "minio-7.1.17.tar.gz", hash = "sha256:b0b687c1ec9be422a1f8b04c65fb8e43a1c090f9508178db57c434a17341c404"},
 ]
 
 [package.dependencies]
@@ -3098,6 +3098,29 @@ files = [
 
 [package.dependencies]
 setuptools = "*"
+
+[[package]]
+name = "notebook"
+version = "7.0.4"
+description = "Jupyter Notebook - A web-based notebook environment for interactive computing"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "notebook-7.0.4-py3-none-any.whl", hash = "sha256:ee738414ac01773c1ad6834cf76cc6f1ce140ac8197fd13b3e2d44d89e257f72"},
+    {file = "notebook-7.0.4.tar.gz", hash = "sha256:0c1b458f72ce8774445c8ef9ed2492bd0b9ce9605ac996e2b066114f69795e71"},
+]
+
+[package.dependencies]
+jupyter-server = ">=2.4.0,<3"
+jupyterlab = ">=4.0.2,<5"
+jupyterlab-server = ">=2.22.1,<3"
+notebook-shim = ">=0.2,<0.3"
+tornado = ">=6.2.0"
+
+[package.extras]
+dev = ["hatch", "pre-commit"]
+docs = ["myst-parser", "nbsphinx", "pydata-sphinx-theme", "sphinx (>=1.3.6)", "sphinxcontrib-github-alt", "sphinxcontrib-spelling"]
+test = ["importlib-resources (>=5.0)", "ipykernel", "jupyter-server[test] (>=2.4.0,<3)", "jupyterlab-server[test] (>=2.22.1,<3)", "nbval", "pytest (>=7.0)", "pytest-console-scripts", "pytest-timeout", "pytest-tornasync", "requests"]
 
 [[package]]
 name = "notebook-shim"
@@ -4027,17 +4050,6 @@ tomlkit = "*"
 typing-extensions = "*"
 wrapt = "*"
 zipp = "*"
-
-[[package]]
-name = "pyment"
-version = "0.3.3"
-description = "Generate/convert automatically the docstrings from code signature"
-optional = false
-python-versions = "*"
-files = [
-    {file = "Pyment-0.3.3-py2.py3-none-any.whl", hash = "sha256:a0c6ec59d06d24aeec3eaecb22115d0dc95d09e14209b2df838381fdf47a78cc"},
-    {file = "Pyment-0.3.3.tar.gz", hash = "sha256:951a4c52d6791ccec55bc739811169eed69917d3874f5fe722866623a697f39d"},
-]
 
 [[package]]
 name = "pyparsing"
@@ -5549,13 +5561,13 @@ test = ["argcomplete (>=3.0.3)", "mypy (>=1.5.1)", "pre-commit", "pytest (>=7.0,
 
 [[package]]
 name = "tsdm"
-version = "0.5.0.post827"
+version = "0.5.1.post834"
 description = "Time-Series Datasets and Models"
 optional = false
 python-versions = ">=3.10,<3.12"
 files = [
-    {file = "tsdm-0.5.0.post827-py3-none-any.whl", hash = "sha256:0b8140576eb9a49a35ff906351f2d47ae5290e7a6b488950c8ac05a2ae19e1dd"},
-    {file = "tsdm-0.5.0.post827.tar.gz", hash = "sha256:5d10fae0a52e235f3416306306e4f4444a1545535491f86be99ab92eed31145f"},
+    {file = "tsdm-0.5.1.post834-py3-none-any.whl", hash = "sha256:96f9f46ecc5cb2c79b16d552d2f39563ac89cd93345e50268052eb9921e78a4e"},
+    {file = "tsdm-0.5.1.post834.tar.gz", hash = "sha256:02616be4f5c4559e9152a2bb7959ec72b1fa10aa9122a1c21f3485cacb7e4014"},
 ]
 
 [package.dependencies]
@@ -5628,6 +5640,17 @@ python-versions = "*"
 files = [
     {file = "types-colorama-0.4.15.12.tar.gz", hash = "sha256:fbdfc5d9d24d85c33bd054fbe33adc6cec44eedb19cfbbabfbbb57dc257ae4b8"},
     {file = "types_colorama-0.4.15.12-py3-none-any.whl", hash = "sha256:23c9d4a00961227f7ef018d5a1c190c4bbc282119c3ee76a17677a793f13bb82"},
+]
+
+[[package]]
+name = "types-decorator"
+version = "5.1.8.4"
+description = "Typing stubs for decorator"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-decorator-5.1.8.4.tar.gz", hash = "sha256:a8c39024634e99834bef146cec2e36c585f47884addf4dc65d6d0b7b1f627517"},
+    {file = "types_decorator-5.1.8.4-py3-none-any.whl", hash = "sha256:e411203e0ec0116964dcd491e162a951e4a68cd2d4a946172690bee43c4ebe6e"},
 ]
 
 [[package]]
@@ -5734,6 +5757,28 @@ python-versions = "*"
 files = [
     {file = "types-six-1.16.21.9.tar.gz", hash = "sha256:746e6c25b8c48b3c8ab9efe7f68022839111de423d35ba4b206b88b12d75f233"},
     {file = "types_six-1.16.21.9-py3-none-any.whl", hash = "sha256:1591a09430a3035326da5fdb71692d0b3cc36b25a440cc5929ca6241f3984705"},
+]
+
+[[package]]
+name = "types-tabulate"
+version = "0.9.0.3"
+description = "Typing stubs for tabulate"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-tabulate-0.9.0.3.tar.gz", hash = "sha256:197651f9d6467193cd166d8500116a6d3a26f2a4eb2db093bc9535ee1c0be55e"},
+    {file = "types_tabulate-0.9.0.3-py3-none-any.whl", hash = "sha256:462d1b62e01728416e8277614d6a3eb172d53a8efaf04a04a973ff2dd45238f6"},
+]
+
+[[package]]
+name = "types-tqdm"
+version = "4.66.0.2"
+description = "Typing stubs for tqdm"
+optional = false
+python-versions = "*"
+files = [
+    {file = "types-tqdm-4.66.0.2.tar.gz", hash = "sha256:9553a5e44c1d485fce19f505b8bd65c0c3e87e870678d1f2ed764ae59a55d45f"},
+    {file = "types_tqdm-4.66.0.2-py3-none-any.whl", hash = "sha256:13dddd38908834abdf0acdc2b70cab7ac4bcc5ad7356ced450471662e58a0ffc"},
 ]
 
 [[package]]
@@ -6122,21 +6167,6 @@ idna = ">=2.0"
 multidict = ">=4.0"
 
 [[package]]
-name = "yesqa"
-version = "1.5.0"
-description = "Automatically remove unnecessary `# noqa` comments."
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "yesqa-1.5.0-py2.py3-none-any.whl", hash = "sha256:600c6d6e59aff9d85422c28c0d0ff016c040f4eb653636632c18fb6c43453e00"},
-    {file = "yesqa-1.5.0.tar.gz", hash = "sha256:209c17274f3c0cc22195ddb26f93df3523634d0756f756913ed05cba970efad9"},
-]
-
-[package.dependencies]
-flake8 = ">=3.9"
-tokenize-rt = ">=2.1"
-
-[[package]]
 name = "zipp"
 version = "3.17.0"
 description = "Backport of pathlib-compatible object wrapper for zip files"
@@ -6154,4 +6184,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "bbe67ae54f3a8559ce2c28b14920b05a1853d19db01a769b562a37e3fde29eb7"
+content-hash = "313e193bd6b7a2d2b221b519699039b53ec6e5897adb7bf1910c29ffd7bc228b"

@@ -54,7 +54,7 @@ repos:
         description: "ensures that a file is either empty, or ends with one newline."
       - id: pretty-format-json
         args: ["--autofix"]
-        exclude: ^.*.ipynb$ # FIXME: https://github.com/deshaw/nbstripout-fast/issues/8
+        exclude: ^.*.ipynb$
         description: "sets a standard for formatting json files."
       - id: requirements-txt-fixer
         description: "sorts entries in requirements.txt"
@@ -101,7 +101,7 @@ repos:
         types: [python]
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.0.290
+    rev: v0.0.291
     hooks:
       - id: ruff
         files: (^src/|^tests/)
@@ -121,18 +121,18 @@ repos:
           - flake8-rst
           - flake8-rst-docstrings
   # yesqa
-  - repo: https://github.com/asottile/yesqa
-    rev: v1.5.0
-    hooks:
-      - id: yesqa
-        files: (^src/|^tests/)
+  #  - repo: https://github.com/asottile/yesqa
+  #    rev: v1.5.0
+  #    hooks:
+  #      - id: yesqa
+  #        files: (^src/|^tests/)
   # pydocstyle
   - repo: https://github.com/PyCQA/pydocstyle
     rev: 6.3.0
     hooks:
       - id: pydocstyle
         files: (^src/|^tests/)
-  #  # slotscheck
+  # slotscheck
   #  - repo: https://github.com/ariebovenberg/slotscheck
   #    rev: v0.17.0
   #    hooks:
@@ -147,6 +147,12 @@ repos:
         files: (^src/|^tests/)
         additional_dependencies: [types-all]
         stages: [pre-push]
+  # nbstripout-fast
+  - repo: https://github.com/deshaw/nbstripout-fast.git
+    rev: v1.0.2
+    hooks:
+      - id: nbstripout-fast
+        files: ^dev/
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.327
@@ -172,14 +178,8 @@ repos:
             |src/linodenet/constants.py
             |src/linodenet/types.py
           )
-  # nbstripout-fast
-  - repo: https://github.com/randolf-scholz/nbstripout-fast.git
-    rev: v1.0.3
-    hooks:
-      - id: nbstripout-fast
-        files: ^dev/
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.1.36
+    rev: v0.1.38
     hooks:
       - id: pyproject-validate-version
       - id: pyproject-update-deps
@@ -209,3 +209,4 @@ repos:
         files: ^src/
       - id: python-check-clean-interface
         files: ^src/
+        args: ["--no-load-silent"]
