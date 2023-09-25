@@ -5,6 +5,7 @@ __all__ = [
     "check_function",
     "check_model",
     "check_class",
+    "check_combined",
     # helper functions
     "flatten_nested_tensor",
     "get_device",
@@ -17,6 +18,7 @@ __all__ = [
 
 from linodenet.testing._testing import (
     check_class,
+    check_combined,
     check_function,
     check_model,
     flatten_nested_tensor,

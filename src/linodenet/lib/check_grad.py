@@ -10,7 +10,7 @@ from torch import nn
 from linodenet.lib import spectral_norm, spectral_norm_native
 
 
-def compute_spectral_norm_impl(impl, shape: tuple[int, int], **kwargs) -> None:
+def compute_spectral_norm_impl(impl, shape, **kwargs):
     """Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)

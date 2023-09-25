@@ -9,7 +9,7 @@ __all__ = [
     # Classes
     "ParametrizationProto",
     "Parametrization",
-    "Parametrize",
+    "SimpleParametrization",
     # functions
     "register_parametrization",
     "get_parametrizations",
@@ -57,103 +57,6 @@ class ParametrizationProto(Protocol):
     def reset_parameters(self) -> None:
         """Reapply the initialization."""
         raise NotImplementedError
-
-
-class Parametrize(nn.Module, ParametrizationProto):
-    """Parametrization of a single tensor."""
-
-    # Parameters:
-    parametrized_tensor: Tensor
-    # Buffers:
-    cached_tensor: Tensor
-
-    def __init__(
-        self,
-        tensor: Tensor,
-        parametrization: Callable[[Tensor], Tensor],
-    ) -> None:
-        super().__init__()
-
-        # get the tensor to parametrize
-        self.register_parameter("parametrized_tensor", tensor)
-        self.register_buffer("cached_tensor", torch.empty_like(tensor))
-
-        # get the parametrization
-        self._parametrization = parametrization
-
-    def forward(self) -> Tensor:
-        """Apply the parametrization to the weight matrix."""
-        return self.parametrization(self.parametrized_tensor)
-
-    @jit.export
-    def parametrization(self, x: Tensor) -> Tensor:
-        """Apply the parametrization."""
-        return self._parametrization(x)
-
-    @jit.export
-    def recompute_cache(self) -> None:
-        # Compute the cached weight matrix
-        new_tensor = self.forward()
-        self.cached_tensor.copy_(new_tensor)
-
-    @jit.export
-    def projection(self) -> None:
-        with torch.no_grad():
-            # update the cached weight matrix
-            self.recompute_cache()
-            self.parametrized_tensor.copy_(self.cached_tensor)
-
-    @jit.export
-    def reset_cache(self) -> None:
-        # apply projection step.
-        self.projection()
-
-        # reengage the autograd engine
-        # detach() is necessary to avoid "Trying to backward through the graph a second time" error
-        self.cached_tensor.detach_()
-
-        # recompute the cache
-        # Note: we need the second run to set up the gradients
-        self.recompute_cache()
-
-    @jit.export
-    def reset_cache_expanded(self) -> None:
-        with torch.no_grad():
-            new_tensor = self.forward()
-            self.cached_tensor.copy_(new_tensor)
-            self.parametrized_tensor.copy_(self.cached_tensor)
-
-        # reengage the autograd engine
-        # detach() is necessary to avoid "Trying to backward through the graph a second time" error
-        self.cached_tensor.detach_()
-
-        # recompute the cache
-        # Note: we need the second run to set up the gradients
-        new_tensor = self.forward()
-        self.cached_tensor.copy_(new_tensor)
-
-
-def register_parametrization(
-    model: nn.Module,
-    tensor_name: str,
-    parametrization: nn.Module | Callable[[Tensor], Tensor],
-    *,
-    unsafe: bool = False,
-) -> None:
-    """Drop-in replacement for nn.utils.parametrize.register_parametrization."""
-    if hasattr(model, f"{tensor_name}_parametrization"):
-        raise NameError(f"{tensor_name}_parametrization already exists!")
-
-    tensor = getattr(model, tensor_name)
-
-    if isinstance(parametrization, nn.Module):
-        raise NotImplementedError
-    else:
-        parametrization = Parametrize(tensor, parametrization)
-
-    # add parametrization to model and rewire the tensor
-    setattr(model, f"{tensor_name}_parametrization", parametrization)
-    setattr(model, tensor_name, parametrization.parametrized_tensor)
 
 
 class Parametrization(nn.Module, ParametrizationProto):
@@ -260,6 +163,103 @@ class Parametrization(nn.Module, ParametrizationProto):
         # copy the new tensors into the cache
         for key, tensor in new_tensors.items():
             self.cached_tensors[key].copy_(tensor)
+
+
+class SimpleParametrization(nn.Module, ParametrizationProto):
+    """Parametrization of a single tensor."""
+
+    # Parameters:
+    parametrized_tensor: Tensor
+    # Buffers:
+    cached_tensor: Tensor
+
+    def __init__(
+        self,
+        tensor: Tensor,
+        parametrization: Callable[[Tensor], Tensor],
+    ) -> None:
+        super().__init__()
+
+        # get the tensor to parametrize
+        self.register_parameter("parametrized_tensor", tensor)
+        self.register_buffer("cached_tensor", torch.empty_like(tensor))
+
+        # get the parametrization
+        self._parametrization = parametrization
+
+    def forward(self) -> Tensor:
+        """Apply the parametrization to the weight matrix."""
+        return self.parametrization(self.parametrized_tensor)
+
+    @jit.export
+    def parametrization(self, x: Tensor) -> Tensor:
+        """Apply the parametrization."""
+        return self._parametrization(x)
+
+    @jit.export
+    def recompute_cache(self) -> None:
+        # Compute the cached weight matrix
+        new_tensor = self.forward()
+        self.cached_tensor.copy_(new_tensor)
+
+    @jit.export
+    def projection(self) -> None:
+        with torch.no_grad():
+            # update the cached weight matrix
+            self.recompute_cache()
+            self.parametrized_tensor.copy_(self.cached_tensor)
+
+    @jit.export
+    def reset_cache(self) -> None:
+        # apply projection step.
+        self.projection()
+
+        # reengage the autograd engine
+        # detach() is necessary to avoid "Trying to backward through the graph a second time" error
+        self.cached_tensor.detach_()
+
+        # recompute the cache
+        # Note: we need the second run to set up the gradients
+        self.recompute_cache()
+
+    @jit.export
+    def reset_cache_expanded(self) -> None:
+        with torch.no_grad():
+            new_tensor = self.forward()
+            self.cached_tensor.copy_(new_tensor)
+            self.parametrized_tensor.copy_(self.cached_tensor)
+
+        # reengage the autograd engine
+        # detach() is necessary to avoid "Trying to backward through the graph a second time" error
+        self.cached_tensor.detach_()
+
+        # recompute the cache
+        # Note: we need the second run to set up the gradients
+        new_tensor = self.forward()
+        self.cached_tensor.copy_(new_tensor)
+
+
+def register_parametrization(
+    model: nn.Module,
+    tensor_name: str,
+    parametrization: nn.Module | Callable[[Tensor], Tensor],
+    *,
+    unsafe: bool = False,
+) -> None:
+    """Drop-in replacement for nn.utils.parametrize.register_parametrization."""
+    if hasattr(model, f"{tensor_name}_parametrization"):
+        raise NameError(f"{tensor_name}_parametrization already exists!")
+
+    tensor = getattr(model, tensor_name)
+
+    if isinstance(parametrization, nn.Module):
+        raise NotImplementedError
+    else:
+        parametrization = SimpleParametrization(tensor, parametrization)
+
+    # add parametrization to model and rewire the tensor
+    setattr(model, f"{tensor_name}_parametrization", parametrization)
+    setattr(model, tensor_name, parametrization.parametrized_tensor)
 
 
 def get_parametrizations(module: nn.Module, /) -> dict[str, nn.Module]:

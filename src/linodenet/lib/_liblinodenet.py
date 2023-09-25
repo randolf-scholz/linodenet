@@ -81,9 +81,9 @@ def spectral_norm_native(
 lib_base_path = Path(__file__).parent
 lib_path = lib_base_path / "build" / "liblinodenet.so"
 
-_spectral_norm: SpectralNorm
 _singular_triplet: SingularTriplet
 _singular_triplet_debug: SingularTriplet
+_spectral_norm: SpectralNorm
 _spectral_norm_debug: SpectralNorm
 
 LIB = torch.ops.liblinodenet
@@ -91,10 +91,10 @@ LIB = torch.ops.liblinodenet
 
 if lib_path.exists():
     torch.ops.load_library(lib_path)
-    _spectral_norm = cast(SpectralNorm, LIB.spectral_norm)
-    _spectral_norm_debug = cast(SpectralNorm, LIB.spectral_norm_debug)
     _singular_triplet = cast(SingularTriplet, LIB.singular_triplet)
     _singular_triplet_debug = cast(SingularTriplet, LIB.singular_triplet_debug)
+    _spectral_norm = cast(SpectralNorm, LIB.spectral_norm)
+    _spectral_norm_debug = cast(SpectralNorm, LIB.spectral_norm_debug)
 else:
     warnings.warn(
         "Custom binaries not found! Trying to compile them on the fly!."

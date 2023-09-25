@@ -15,6 +15,7 @@ __all__ = [
     "get_grads",
     "get_parameters",
     "get_norm",
+    "get_shapes",
     "make_tensors_parameters",
     "to_device",
     "zero_grad",
@@ -117,7 +118,7 @@ def make_tensors_parameters(x, /):
 def get_parameters(x: nn.Module | Tree, /) -> list[Tensor]:
     """Return the parameters of the model / parameters."""
     if isinstance(x, nn.Module):
-        return [y for y in x.parameters() if x.requires_grad]
+        return [y for y in x.parameters() if y.requires_grad]
     if isinstance(x, Tensor):
         if x.requires_grad:
             return [x]
@@ -148,6 +149,21 @@ def zero_grad(x: nn.Module | Tree, /) -> None:
             zero_grad(item)
     else:
         raise TypeError(f"Unsupported input type {type(x)!r}")
+
+
+def get_shapes(x: Tree, /) -> list[tuple[int, ...]]:
+    """Return the shapes of the tensors."""
+    match x:
+        case Tensor() as tensor:
+            return [tensor.shape]
+        case Mapping() as mapping:
+            return list(
+                chain.from_iterable(get_shapes(item) for item in mapping.values())
+            )
+        case Sequence() as iterable:
+            return list(chain.from_iterable(get_shapes(item) for item in iterable))
+        case _:
+            raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
 # endregion utility functions for tensors AND scalars ----------------------------------
@@ -240,18 +256,30 @@ def check_forward(
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     reference_outputs: Optional[Nested[Tensor]] = None,
+    reference_shapes: Optional[Sequence[tuple[int, ...]]] = None,
 ) -> tuple[Nested[Tensor], Nested[Tensor]]:
     """Test a forward pass."""
     try:
         outputs = func(*input_args, **input_kwargs)
+        output_shapes = get_shapes(outputs)
     except Exception as exc:
         raise RuntimeError("Forward pass failed!!") from exc
 
+    # validate shapes
+    if reference_shapes is None:
+        reference_shapes = output_shapes
+    else:
+        assert isinstance(
+            reference_shapes, list
+        ), "reference_shapes must be a list of integer tuples!"
+    assert reference_shapes == output_shapes, f"{reference_shapes=} {output_shapes=}"
+
+    # validate values
     if reference_outputs is None:
         reference_outputs = outputs
-    else:
-        assert_close(outputs, reference_outputs)
-    return outputs, reference_outputs
+    assert_close(outputs, reference_outputs)
+
+    return outputs, reference_outputs, reference_shapes
 
 
 def check_backward(
@@ -350,6 +378,8 @@ def check_initialization(obj, /, *, init_args=(), init_kwargs=EMPTY_MAP):
             module = obj(*init_args, **init_kwargs)
         except Exception as exc:
             raise RuntimeError("Model initialization failed!") from exc
+    elif isinstance(obj, type):
+        raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
     elif isinstance(obj, nn.Module) or callable(obj):
         module = obj
     else:
@@ -390,6 +420,7 @@ def check_combined(
     #
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
     reference_outputs: Optional[Nested[Tensor]] = None,
     # extra arguments
     device: Optional[torch.device] = None,
@@ -477,11 +508,12 @@ def check_combined(
     # endregion change device ----------------------------------------------------------
 
     # region check forward pass --------------------------------------------------------
-    outputs, reference_outputs = check_forward(
+    outputs, reference_outputs, reference_shapes = check_forward(
         model,
         input_args=input_args,
         input_kwargs=input_kwargs,
         reference_outputs=reference_outputs,
+        reference_shapes=reference_shapes,
     )
     logger.info(">>> Forward ✔ ")
     # endregion check forward pass -----------------------------------------------------
@@ -520,6 +552,7 @@ def check_combined(
         scripted_model,
         input_args=input_args,
         reference_outputs=reference_outputs,
+        reference_shapes=reference_shapes,
         reference_gradients=reference_gradients,
         logger=__logger__.getChild(f"{model_name}@JIT"),
     )
@@ -535,6 +568,7 @@ def check_combined(
         loaded_model,
         input_args=input_args,
         reference_outputs=reference_outputs,
+        reference_shapes=reference_shapes,
         reference_gradients=reference_gradients,
         logger=__logger__.getChild(f"{model_name}@DESERIALIZED"),
     )

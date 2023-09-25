@@ -4,7 +4,7 @@ __all__ = [
     # Classes
     "ParametrizationProto",
     "Parametrization",
-    "Parametrize",
+    "SimpleParametrization",
     # functions
     "register_parametrization",
     "get_parametrizations",
@@ -19,7 +19,7 @@ __all__ = [
 from linodenet.parametrize._parametrize import (
     Parametrization,
     ParametrizationProto,
-    Parametrize,
+    SimpleParametrization,
     get_parametrizations,
     register_parametrization,
     reset_all_caches,

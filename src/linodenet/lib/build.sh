@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 mkdir -p build
+rm -rf build/*
 cd build || exit
+
+# prepend correct CUDA version
+export PATH=/usr/local/cuda-11.8/bin:$PATH
 
 # determine project dir
 PROJECT_DIR=$(git rev-parse --show-toplevel | xargs echo -n)

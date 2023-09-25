@@ -74,7 +74,7 @@ class SpectralNormalization(Parametrization):
         }
 
 
-class ReZero:
+class ReZero(Parametrization):
     """ReZero."""
 
     scalar: Tensor

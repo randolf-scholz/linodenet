@@ -65,6 +65,10 @@ struct SingularTriplet : public Function<SingularTriplet> {
      * @note (Stopping criterion):
      *     The normalized gradient stopping criterion is ‖∇L‖ ≤ α + β⋅‖L‖,
      *     which takes into account the magnitude of the gradient and the magnitude of the function value.
+     *     In our case ‖L‖ = |vᵀAu| is the estimated singular value
+     *     and ‖∇L‖² = ‖(Av-2λu, Aᵀu-2μv)‖² = ‖Av-2λu‖² + ‖Aᵀu-2μv‖² = ‖Av-σu‖² + ‖Aᵀu-σv‖²
+     *
+     *     Specifically, in the first residual σ=‖ũ‖ and in the second residual σ=‖ṽ‖.
      *     When working with IEEE 754 floating point numbers, we generally need to use a relative tolerance,
      *     since the absolute tolerance depends on the magnitude of the function value.
      *
@@ -157,48 +161,46 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor v = v0 ? v0.value() : torch::randn({n}, A.options());
 
         // Initialize old values for convergence check
-
         // pre-allocate memory for residuals
-        Tensor u_old = torch::empty_like(u);
-        Tensor v_old = torch::empty_like(v);
         Tensor r_u = torch::empty_like(u);
         Tensor r_v = torch::empty_like(v);
-
-
-        Tensor sigma_u = torch::empty_like(u);
-        Tensor sigma_v = torch::empty_like(u);
+        Tensor sigma_u = torch::empty({}, A.options());
+        Tensor sigma_v = torch::empty({}, A.options());
+        Tensor converged_u = torch::empty({}, A.options());
+        Tensor converged_v = torch::empty({}, A.options());
 
         // Perform power-iteration for maxiter times or until convergence.
         for (auto i = 0; i<MAXITER; i++) {
+            // TODO: Test Anderson Acceleration
             // NOTE: We apply two iterations per loop. This is a case of duff's device.
             // This means that we effectively only check the stopping criterion every 2 iterations.
             // This improves performance on GPU since .item() requires a synchronization with CPU.
             // The compiler cannot do this optimization on it's own because it would change behavior.
-            u_old = u;
-            v_old = v;
 
             // update u
-            sigma_v = v.norm();
-            u = A.mv(v / sigma_v);
+            u = A.mv(v / v.norm());
 
             // update v
+            v = A_t.mv(u / u.norm());
+
+            // update u
+            r_u = -u;
+            sigma_v = v.norm();
+            u = A.mv(v / sigma_v);
+            r_u += u;
+            converged_u = r_u.norm() < atol + rtol*sigma_u;
+
+            // update v
+            r_v = -v;
             sigma_u = u.norm();
             v = A_t.mv(u / sigma_u);
+            r_v += v;
+            converged_v = r_v.norm() < atol + rtol*sigma_v;
 
-            // performance: do not test convergence after evey iteration
-            r_u = u - u_old;
-            r_v = v - v_old;
-
-            // check convergence
-            if ((
-                converged =
-                (
-                    ((u - u_old).norm() < atol + rtol*sigma_u)
-                  & ((v - v_old).norm() < atol + rtol*sigma_v)
-                ).item<bool>()
-            )) {
+            // check convergence  ‖ũₖ﹢₁ - σₖuₖ‖ ≤ α + β⋅σₖ and ‖ṽₖ﹢₁ - σₖvₖ‖ ≤ α + β⋅σₖ
+            if ((converged = (converged_u & converged_v).item<bool>())) {
                 // Tensor sigma = A.mv(v).dot(u);
-                // std::cout << at::str("Converged after ", i, " iterations. σ=", sigma) << std::endl;
+                // std::cout << at::str("Converged after ", i, " iterations. σ=", sigma_u) << std::endl;
                 break;
             }
         }
@@ -208,6 +210,9 @@ struct SingularTriplet : public Function<SingularTriplet> {
             TORCH_WARN(": no convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
         }
 
+        // normalize u and v
+        u /= u.norm();
+        v /= v.norm();
         // compute final sigma
         Tensor sigma = A.mv(v).dot(u);
 

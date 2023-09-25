@@ -6,7 +6,7 @@ import logging
 import torch
 from torch import Tensor, nn
 
-from linodenet.parametrize import Parametrize, SpectralNormalization
+from linodenet.parametrize import SimpleParametrization, SpectralNormalization
 from linodenet.projections import is_symmetric, symmetric
 from linodenet.testing import check_model
 
@@ -64,7 +64,7 @@ def test_param() -> None:
 
     # now, parametrize
     weight = model.weight
-    param = Parametrize(weight, symmetric)
+    param = SimpleParametrization(weight, symmetric)
     param.zero_grad(set_to_none=True)
     model.weight = param.parametrized_tensor
     model.param = param

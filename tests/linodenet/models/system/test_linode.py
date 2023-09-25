@@ -70,12 +70,12 @@ def compute_linode_error(
     model.to(dtype=torch_dtype, device=device)
 
     Xhat = model(T_torch, x0_torch)
-    Xhat = Xhat.clone().detach().cpu().numpy()
+    Xhat = Xhat.clone().detach().cpu()
 
-    err = np.abs(X - Xhat)
+    err = (X - Xhat).abs()
 
     if relative_error:
-        err /= np.abs(X) + eps
+        err /= abs(X) + eps
 
     result = np.array([scaled_norm(err, p=p) for p in (1, 2, np.inf)])
     return result
