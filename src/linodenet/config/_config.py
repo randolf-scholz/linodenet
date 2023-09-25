@@ -1,24 +1,22 @@
 r"""LinODE-Net Configuration."""
 
 __all__ = [
-    # CONSTANTS
-    "CONFIG",
-    "PROJECT",
     # Classes
-    "Project",
     "Config",
+    "Project",
     # Functions
-    "get_package_structure",
     "generate_folders",
+    "get_package_structure",
 ]
 
 import logging
 import os
+from functools import cached_property
 from importlib import import_module, resources
 from itertools import chain
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Final
+from typing import Any, ClassVar
 
 import torch
 import yaml
@@ -45,9 +43,8 @@ def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
 def generate_folders(d: dict, /, *, current_path: Path) -> None:
     r"""Create nested folder structure based on nested dictionary index.
 
-    References
-    ----------
-    `StackOverflow <https://stackoverflow.com/a/22058144/9318372>`_
+    References:
+        - https://stackoverflow.com/a/22058144/9318372
     """
     for directory in d:
         path = current_path.joinpath(directory)
@@ -58,14 +55,29 @@ def generate_folders(d: dict, /, *, current_path: Path) -> None:
             generate_folders(d[directory], current_path=path)
 
 
-class Config:
+class ConfigMeta(type):
+    """Metaclass for Config."""
+
+    def __init__(
+        cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwds: Any
+    ) -> None:
+        super().__init__(name, bases, namespace, **kwds)
+
+        if "LOGGER" not in namespace:
+            cls.LOGGER = logging.getLogger(f"{cls.__module__}.{cls.__name__}")
+
+
+class Config(metaclass=ConfigMeta):
     r"""Configuration Interface."""
+
+    LOGGER: ClassVar[logging.Logger]
+    r"""Logger for the class."""
 
     DEFAULT_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     r"""The default `torch` device to use."""
     DEFAULT_DTYPE = torch.float32
     r"""The default `torch` datatype to use."""
-    _autojit: bool
+    _autojit: bool = True
 
     def __init__(self):
         r"""Initialize the configuration."""
@@ -84,10 +96,10 @@ class Config:
         self._autojit = bool(value)
         os.environ["LINODENET_AUTOJIT"] = str(value)
 
-    @property
+    @cached_property
     def CONFIG_FILE(self) -> dict:
         r"""Return dictionary containing basic configuration of TSDM."""
-        path = resources.files(__package__).joinpath("config.yaml")
+        path = resources.files(__package__) / "config.yaml"
         with path.open("r", encoding="utf8") as file:
             # with open(file, "r", encoding="utf8") as f:
             return yaml.safe_load(file)
@@ -96,50 +108,60 @@ class Config:
 class Project:
     """Holds Project related data."""
 
-    @property
+    DOC_URL = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
+
+    @cached_property
     def NAME(self) -> str:
         r"""Get project name."""
         return self.ROOT_PACKAGE.__name__
 
-    @property
+    @cached_property
     def ROOT_PACKAGE(self) -> ModuleType:
         r"""Get project root package."""
         hierarchy = __package__.split(".")
         return import_module(hierarchy[0])
 
-    @property
+    @cached_property
     def ROOT_PATH(self) -> Path:
         r"""Return the root directory."""
         assert len(self.ROOT_PACKAGE.__path__) == 1
-        return Path(self.ROOT_PACKAGE.__path__[0])
+        path = Path(self.ROOT_PACKAGE.__path__[0])
 
-    @property
-    def TESTS_PATH(self) -> Path:
-        r"""Return the test directory."""
-        tests_path = self.ROOT_PATH.parent.parent / "tests"
-
-        if self.ROOT_PATH.parent.stem != "src":
+        if path.parent.stem != "src":
             raise ValueError(
                 f"This seems to be an installed version of {self.NAME},"
-                f" as {self.ROOT_PATH} is not in src/*"
+                f" as {path} is not in src/*"
             )
+        return path.parent.parent
+
+    @cached_property
+    def DOCS_PATH(self) -> Path:
+        r"""Return the docs directory."""
+        docs_path = self.ROOT_PATH / "docs"
+        if not docs_path.exists():
+            raise ValueError(f"Docs directory {docs_path} does not exist!")
+        return docs_path
+
+    @cached_property
+    def SOURCE_PATH(self) -> Path:
+        r"""Return the source directory."""
+        source_path = self.ROOT_PATH / "src"
+        if not source_path.exists():
+            raise ValueError(f"Source directory {source_path} does not exist!")
+        return source_path
+
+    @cached_property
+    def TESTS_PATH(self) -> Path:
+        r"""Return the test directory."""
+        tests_path = self.ROOT_PATH / "tests"
         if not tests_path.exists():
             raise ValueError(f"Tests directory {tests_path} does not exist!")
         return tests_path
 
-    @property
-    def SOURCE_PATH(self) -> Path:
-        r"""Return the source directory."""
-        source_path = self.ROOT_PATH.parent.parent / "src"
-
-        if self.ROOT_PATH.parent.stem != "src":
-            raise ValueError(
-                f"This seems to be an installed version of {self.NAME},"
-                f" as {self.ROOT_PATH} is not in src/*"
-            )
-        if not source_path.exists():
-            raise ValueError(f"Source directory {source_path} does not exist!")
-        return source_path
+    @cached_property
+    def TEST_RESULTS_PATH(self) -> Path:
+        r"""Return the test results directory."""
+        return self.TESTS_PATH / "results"
 
     def make_test_folders(self, dry_run: bool = True) -> None:
         r"""Make the tests folder if it does not exist."""
@@ -150,7 +172,7 @@ class Project:
             return list(d) + list(chain.from_iterable(map(flattened, d.values())))
 
         for package in flattened(package_structure):
-            test_package_path = PROJECT.TESTS_PATH / package.replace(".", "/")
+            test_package_path = self.TESTS_PATH / package.replace(".", "/")
             test_package_init = test_package_path / "__init__.py"
 
             if not test_package_path.exists():
@@ -171,16 +193,9 @@ class Project:
                     print(f"Creating {test_package_init}")
                     with open(test_package_init, "w", encoding="utf8") as file:
                         file.write(f'"""Tests for {package}."""\n')
-
         if dry_run:
             print("Pass option `dry_run=False` to actually create the folders.")
 
-
-CONFIG: Final[Config] = Config()
-r"""The unique `~linodenet.config.Config` instance used to configure `linodenet`."""
-
-PROJECT: Final[Project] = Project()
-"""Project singleton."""
 
 # logging.basicConfig(
 #     filename=str(LOGDIR.joinpath("example.log")),
