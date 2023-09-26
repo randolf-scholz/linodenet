@@ -91,10 +91,6 @@ setup:
     - poetry build
     # install package
     - pip install --upgrade $(ls dist/*.whl)
-    # install dev dependencies.
-    - pip install --upgrade -e .[dev]
-    # update the requirements.txt files.
-    - ./run/generate_requirements.sh
     # setup remote for in-house dependencies
     - |
       if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
@@ -112,6 +108,8 @@ setup:
     - poetry config http-basic.tsdm gitlab-ci-token "${CI_JOB_TOKEN}"
     # install dev dependencies
     - pip install tsdm --upgrade --pre --no-deps --index-url $mirror
+    # install other dependencies
+    - pip install --upgrade -e .[dev]
     - pip install --prefer-binary --upgrade -r requirements-dev.txt
     - pip list
     - echo "validating that package can be imported"

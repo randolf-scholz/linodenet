@@ -78,7 +78,7 @@ def test_LinearContraction(
     ax.set_title(f"{LinearContraction.__name__} -- Scaling Factor Distribution")
     ax.set_xlabel(
         r"$s(x, y) = \frac{\|\phi(x)-\phi(y)\|}{\|x-y\|}$ where "
-        r"$x_i, y_j \overset{\text{i.i.d}}{\sim} \mathcal N(0, 1)$"
+        r"$x_i, y_j \overset{\text{i.i.d}}{\sim} \mathcal{N}(0, 1)$"
     )
     ax.set_ylabel(r"density $p(s \mid x, y)$")
 
@@ -183,22 +183,23 @@ def test_iResNetBlock(
     visualize_distribution(inverse_difference, ax=ax[1, 1], extra_stats=extra_stats)
 
     ax[0, 0].set_xlabel(
-        r"$r_\text{left}(x) = \|x - \phi^{-1}(\phi(x))\|$  where $x_i \sim \mathcal"
-        r" N(0,1)$"
+        r"$r_\text{left}(x) = \|x - \phi^{-1}(\phi(x))\|$ "
+        r" where $x_i \sim \mathcal{N}(0,1)$"
     )
     ax[0, 0].set_ylabel(r"density $p(r_\text{left} \mid x)$")
     ax[0, 1].set_xlabel(
-        r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$ where $y_j \sim \mathcal"
-        r" N(0,1)$"
+        r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$"
+        r" where $y_j \sim \mathcal{N}(0,1)$"
     )
     ax[0, 1].set_ylabel(r"density $p(r_\text{right}\mid y)$")
 
     ax[1, 0].set_xlabel(
-        r"$d_\text{left}(x) = \|x - \phi(x)\|$ where $x_i \sim \mathcal N(0,1)$"
+        r"$d_\text{left}(x) = \|x - \phi(x)\|$" r" where $x_i \sim \mathcal{N}(0,1)$"
     )
     ax[1, 0].set_ylabel(r"density $p(d_\text{left} \mid x)$")
     ax[1, 1].set_xlabel(
-        r"$d_\text{right}(y) = \|y - \phi^{-1}(y)\|$ where $y_j \sim \mathcal N(0,1)$"
+        r"$d_\text{right}(y) = \|y - \phi^{-1}(y)\|$"
+        r" where $y_j \sim \mathcal{N}(0,1)$"
     )
     ax[1, 1].set_ylabel(r"density $p(d_\text{right} \mid y)$")
     fig.suptitle("iResNetBlock -- Inversion Property", fontsize=16)
