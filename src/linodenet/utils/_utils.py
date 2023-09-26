@@ -121,10 +121,10 @@ def autojit(base_class: type[module_var]) -> type[module_var]:
         r"""A simple Wrapper."""
 
         # noinspection PyArgumentList
-        def __new__(cls, *args: Any, **kwargs: Any) -> module_var:
+        def __new__(cls, *args: Any, **kwargs: Any) -> module_var:  # type: ignore[misc]
             # Note: If __new__() does not return an instance of cls,
             # then the new instance's __init__() method will not be invoked.
-            instance: module_var = base_class(*args, **kwargs)  # type: ignore[assignment]
+            instance: module_var = base_class(*args, **kwargs)
 
             if CONFIG.autojit:
                 scripted: module_var = jit.script(instance)  # pyright: ignore
@@ -132,7 +132,7 @@ def autojit(base_class: type[module_var]) -> type[module_var]:
             return instance
 
     assert issubclass(WrappedClass, base_class)  # pyright: ignore
-    return WrappedClass  # type: ignore[return-value]
+    return WrappedClass
 
 
 def initialize_from_config(config: dict[str, Any]) -> nn.Module:

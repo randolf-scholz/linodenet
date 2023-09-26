@@ -51,9 +51,7 @@ def to_device(
 @overload
 def to_device(x: Tensor, /, *, device: str | torch.device = "cpu") -> Tensor: ...
 @overload
-def to_device(
-    x: Scalar, /, *, device: str | torch.device = "cpu"
-) -> Scalar: ...  # type: ignore[misc]
+def to_device(x: Scalar, /, *, device: str | torch.device = "cpu") -> Scalar: ...  # type: ignore[misc]
 @overload
 def to_device(
     x: Mapping[str, T], /, *, device: str | torch.device = "cpu"
@@ -257,7 +255,7 @@ def check_forward(
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     reference_outputs: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[Sequence[tuple[int, ...]]] = None,
-) -> tuple[Nested[Tensor], Nested[Tensor]]:
+) -> tuple[Nested[Tensor], Nested[Tensor], list[tuple[int, ...]]]:
     """Test a forward pass."""
     try:
         outputs = func(*input_args, **input_kwargs)

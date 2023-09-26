@@ -60,7 +60,7 @@ def compute_linode_error(
     def func(_, x):
         return A @ x
 
-    X = np.array(odeint(func, x0, T, tfirst=True))
+    X = torch.tensor(odeint(func, x0, T, tfirst=True), dtype=torch_dtype)
 
     # A_torch = torch.tensor(A, dtype=torch_dtype, device=device)
     T_torch = torch.tensor(T, dtype=torch_dtype, device=device)
@@ -75,7 +75,7 @@ def compute_linode_error(
     err = (X - Xhat).abs()
 
     if relative_error:
-        err /= abs(X) + eps
+        err /= X.abs() + eps
 
     result = np.array([scaled_norm(err, p=p) for p in (1, 2, np.inf)])
     return result

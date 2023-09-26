@@ -163,17 +163,31 @@ repos:
         files: |
           (?x)^(
             (?!)  # intentionally matches nothing
-            |tests/
+            #|tests/linodenet
+            |tests/linodenet/activations
+            |tests/linodenet/config
+            |tests/linodenet/initializations
+            |tests/linodenet/lib
+            |tests/linodenet/logutils
+            #|tests/linodenet/models
+            #|tests/linodenet/parametrize
+            |tests/linodenet/projections
+            |tests/linodenet/regularizations
+            #|tests/linodenet/testing
+            |tests/linodenet/utils
+            |tests/linodenet/constants.py
+            |tests/linodenet/types.py
+            #|src/linodenet/
             |src/linodenet/activations
             |src/linodenet/config
             |src/linodenet/initializations
             |src/linodenet/lib
             |src/linodenet/logutils
-            |src/linodenet/models
-            |src/linodenet/parametrize
+            #|src/linodenet/models
+            #|src/linodenet/parametrize
             |src/linodenet/projections
             |src/linodenet/regularizations
-            |src/linodenet/testing
+            #|src/linodenet/testing
             |src/linodenet/utils
             |src/linodenet/constants.py
             |src/linodenet/types.py

@@ -8,7 +8,7 @@ There are 2 types of parametrizations:
 
 __all__ = ["SpectralNormalization", "ReZero"]
 
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -42,7 +42,7 @@ class SpectralNormalization(Parametrization):
         assert len(weight.shape) == 2
         m, n = weight.shape
 
-        options = {
+        options: Any = {
             "dtype": weight.dtype,
             "device": weight.device,
             "layout": weight.layout,
