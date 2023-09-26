@@ -65,7 +65,7 @@ class LinODECell(nn.Module):
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
-        "kernel_initialization": "skew-symmetric",
+        "kernel_initialization": None,
         "kernel_parametrization": None,
         "scalar": 0.0,
         "scalar_learnable": True,
@@ -105,11 +105,16 @@ class LinODECell(nn.Module):
                 "input_size": input_size,
                 "kernel_initialization": kernel_initialization,
                 "kernel_parametrization": kernel_parametrization,
+                "scalar": scalar,
+                "scalar_learnable": scalar_learnable,
             },
         )
 
         kernel_initialization = config["kernel_initialization"]
         kernel_parametrization = config["kernel_parametrization"]
+        scalar = config["scalar"]
+        scalar_learnable = config["scalar_learnable"]
+        del config
 
         def kernel_initialization_dispatch():
             r"""Dispatch the kernel initialization."""
@@ -158,18 +163,17 @@ class LinODECell(nn.Module):
         self.output_size = input_size
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_parametrization = kernel_parametrization_dispatch()
-        self.scalar_learnable = config["scalar_learnable"]
+        self.scalar_learnable = scalar_learnable
 
         # initialize parameters
         self.scalar = nn.Parameter(
-            torch.tensor(config["scalar"]), requires_grad=self.scalar_learnable
+            torch.tensor(scalar), requires_grad=self.scalar_learnable
         )
         self.weight = nn.Parameter(self._kernel_initialization())
 
         # initialize buffers
-        with torch.no_grad():
-            parametrized_kernel = self.kernel_parametrization(self.weight)
-            self.register_buffer("kernel", parametrized_kernel, persistent=False)
+        # NOTE: do we need persistent=False?
+        self.register_buffer("kernel", self.kernel_parametrization(self.weight))
 
     def kernel_initialization(self) -> Tensor:
         r"""Draw an initial kernel matrix (random or static)."""
