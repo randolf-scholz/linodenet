@@ -138,7 +138,7 @@ def test_iResNetBlock(
         yhat = model(ify)
 
     # Test if ϕ⁻¹∘ϕ=id, i.e. the right inverse is working
-    forward_inverse_error = scaled_norm(x - xhat, axis=-1)
+    forward_inverse_error = scaled_norm(x - xhat, axis=-1, keepdim=False)
     forward_inverse_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert forward_inverse_error.shape == (num_sample,)
     assert (forward_inverse_quantiles <= TARGETS).all(), f"{forward_inverse_quantiles=}"
@@ -146,7 +146,7 @@ def test_iResNetBlock(
     LOGGER.info("Quantiles: %s", forward_inverse_quantiles)
 
     # Test if ϕ∘ϕ⁻¹=id, i.e. the right inverse is working
-    inverse_forward_error = scaled_norm(y - yhat, axis=-1)
+    inverse_forward_error = scaled_norm(y - yhat, axis=-1, keepdim=False)
     inverse_forward_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert inverse_forward_error.shape == (num_sample,)
     assert (inverse_forward_quantiles <= TARGETS).all(), f"{inverse_forward_quantiles=}"
@@ -154,7 +154,7 @@ def test_iResNetBlock(
     LOGGER.info("Quantiles: %s", inverse_forward_quantiles)
 
     # Test if ϕ≠id, i.e. the forward map is different from the identity
-    forward_difference = scaled_norm(x - fx, axis=-1)
+    forward_difference = scaled_norm(x - fx, axis=-1, keepdim=False)
     forward_quantiles = torch.quantile(forward_difference, 1 - QUANTILES)
     assert forward_difference.shape == (num_sample,)
     assert (forward_quantiles >= TARGETS).all(), f"{forward_quantiles}"
@@ -162,7 +162,7 @@ def test_iResNetBlock(
     LOGGER.info("Quantiles: %s", forward_quantiles)
 
     # Test if ϕ⁻¹≠id, i.e. the inverse map is different from an identity
-    inverse_difference = scaled_norm(y - ify, axis=-1)
+    inverse_difference = scaled_norm(y - ify, axis=-1, keepdim=False)
     inverse_quantiles = torch.quantile(inverse_difference, 1 - QUANTILES)
     assert inverse_difference.shape == (num_sample,)
     assert (inverse_quantiles >= TARGETS).all(), f"{inverse_quantiles}"
