@@ -38,6 +38,8 @@ def compute_linode_error(
 
     .. Signature:: `` -> (q, N)``
     """
+    logger = __logger__.getChild(f"{LinODE.__name__}-test-{num}-{dim}")
+
     numpy_dtype: type[np.number]
     torch_dtype: torch.dtype
 
@@ -84,8 +86,9 @@ def compute_linode_error(
     if relative_error:
         err /= X.abs() + eps
 
-    result = np.array([scaled_norm(err, p=p) for p in (1, 2, np.inf)])
-    return result
+    # NOTE: shape:
+    logger.debug("shapes: X:%s Xhat:%s err:5%s", X.shape, Xhat.shape, err.shape)
+    return np.array([scaled_norm(err, p=p, keepdim=False) for p in (1, 2, np.inf)])
 
 
 def make_error_plots(
