@@ -110,7 +110,6 @@ setup:
     - pip install tsdm --upgrade --pre --no-deps --index-url $mirror
     # install other dependencies
     - pip install --upgrade -e .[dev]
-    - pip install --prefer-binary --upgrade -r requirements-dev.txt
     - pip list
     - echo "validating that package can be imported"
     - python -c "import ${MODULENAME}"
