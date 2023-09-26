@@ -56,11 +56,7 @@ class LinODE(nn.Module):
     kernel_projection: Projection
     r"""FUNC: Regularization function for the kernel."""
 
-    def __init__(
-        self,
-        input_size: int,
-        **cfg: Any,
-    ):
+    def __init__(self, input_size: int, **cfg: Any) -> None:
         super().__init__()
         config = deep_dict_update(self.HP, cfg)
 

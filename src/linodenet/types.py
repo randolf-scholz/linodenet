@@ -11,10 +11,12 @@ __all__ = [
     "module_var",
     "return_co",
     "type_var",
+    # Protocols
+    "SelfMap",
 ]
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import TypeAlias, TypeVar
+from typing import Protocol, TypeAlias, TypeVar
 
 from torch import nn
 
@@ -49,3 +51,15 @@ r"""Type Variable for callables."""
 Nested: TypeAlias = T | Mapping[str, "Nested[T]"] | Sequence["Nested[T]"]
 """Type hint for nested types."""
 # endregion type aliases ---------------------------------------------------------------
+
+
+# region Protocols ---------------------------------------------------------------------
+class SelfMap(Protocol[T]):
+    """Protocol for functions that map a type onto itself."""
+
+    def __call__(self, x: T, /) -> T:
+        """Maps T -> T."""
+        ...
+
+
+# endregion Protocol -------------------------------------------------------------------
