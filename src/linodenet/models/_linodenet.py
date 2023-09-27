@@ -549,9 +549,8 @@ class LinODEnet(nn.Module):
 
         return self.predictions
 
-    @staticmethod
     def _validate_inputs(
-        q: Tensor, t: Tensor, x: Tensor, t0: Tensor, z0: Tensor, /
+        self, q: Tensor, t: Tensor, x: Tensor, t0: Tensor, z0: Tensor
     ) -> None:
         """Validate the inputs to the model."""
         assert t.shape == x.shape[:-1]
