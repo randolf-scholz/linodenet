@@ -233,6 +233,8 @@ class LinearFilter(nn.Module):
     r"""CONST: The input size (=dim x)."""
     output_size: Final[int]
     r"""CONST: The hidden size (=dim y)."""
+    alpha_learnable: Final[bool]
+    r"""CONST: Whether alpha is a learnable parameter."""
 
     # PARAMETERS
     H: Optional[Tensor]
@@ -243,6 +245,8 @@ class LinearFilter(nn.Module):
     # BUFFERS
     ZERO: Tensor
     r"""BUFFER: A constant value of zero."""
+    alpha: Tensor
+    r"""PARAM/BUFFER: The alpha parameter."""
 
     def __init__(
         self,
@@ -257,7 +261,7 @@ class LinearFilter(nn.Module):
         config = deep_dict_update(self.HP, cfg)
         hidden_size = config.get("hidden_size", input_size)
         alpha = config["alpha"]
-        alpha_learnable = config["alpha_learnable"]
+        self.alpha_learnable = config["alpha_learnable"]
         autoregressive = config["autoregressive"]
         assert not autoregressive or input_size == hidden_size
 
@@ -278,7 +282,10 @@ class LinearFilter(nn.Module):
                 raise ValueError(f"Unknown alpha: {alpha}")
 
         # PARAMETERS
-        self.alpha = nn.Parameter(torch.tensor(alpha), requires_grad=alpha_learnable)
+        if self.alpha_learnable:
+            self.alpha = nn.Parameter(torch.tensor(alpha))
+        else:
+            self.register_buffer("alpha", torch.tensor(alpha))
         self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.A = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))

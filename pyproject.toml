@@ -31,7 +31,7 @@ requires-python = ">=3.10,<3.12"
 dependencies = [
     "numpy>=1.26.0",
     "pyyaml>=6.0.1",
-    "scipy>=1.11.2",
+    "scipy>=1.11.3",
     "torch>=2.0.1",
     "typing-extensions>=4.8.0",
 ]
@@ -48,7 +48,7 @@ test = [
     "pytest-xdist>=3.3.1",
     "pytest>=7.4.2",
     "tqdm>=4.66.1",
-    "tsdm@git+https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git"
+    #"tsdm@git+https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git"
 ]
 docs = [
     "docutils>=0.20.1",
@@ -56,7 +56,7 @@ docs = [
     "nbsphinx>=0.9.3",
     "piccolo-theme>=0.18.0",
     "pydata-sphinx-theme>=0.14.1",
-    "sphinx-autoapi>=2.1.1",
+    "sphinx-autoapi>=3.0.0",
     "sphinx-automodapi>=0.16.0",
     "sphinx-copybutton>=0.5.2",
     "sphinx-math-dollar>=1.2.1",
@@ -76,7 +76,7 @@ extras = [
 ]
 typing = [
     "mypy>=1.5.1",
-    "pyright>=1.1.327",
+    "pyright>=1.1.329",
     "types-colorama>=0.4.15",
     "types-decorator>=5.1.8",
     "types-docutils>=0.20.0",
@@ -549,7 +549,7 @@ priority = "explicit"
 python = ">=3.10,<3.12"
 numpy = ">=1.26.0"
 pyyaml = ">=6.0.1"
-scipy = ">=1.11.2"
+scipy = ">=1.11.3"
 torch = ">=2.0.1"
 typing-extensions = ">=4.8.0"
 
@@ -588,7 +588,7 @@ nbsphinx = ">=0.9.3"
 piccolo-theme = ">=0.18.0"
 pydata-sphinx-theme = ">=0.14.1"
 sphinx = ">=7.2.6"
-sphinx-autoapi = ">=2.1.1"
+sphinx-autoapi = ">=3.0.0"
 sphinx-autodoc-typehints = ">=1.24.0"
 sphinx-automodapi = ">=0.16.0"
 sphinx-copybutton = ">=0.5.2"
@@ -651,7 +651,7 @@ slotscheck = ">=0.17.0"
 
 [tool.poetry.group.typing.dependencies]
 mypy = ">=1.5.1"
-pyright = ">=1.1.327"
+pyright = ">=1.1.329"
 types-colorama = ">=0.4.15"
 types-decorator = ">=5.1.8"
 types-docutils = ">=0.20.0"
