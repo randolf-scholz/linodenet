@@ -102,8 +102,8 @@ class Parametrization(nn.Module, ParametrizationProto):
         super().__init__(*args, **kwargs)
 
         # initialize the cache
-        self.cached_tensors = {}
-        self.parametrized_tensors = nn.ParameterDict()
+        self.cached_tensors = {}  # Q: Use nn.BufferDict?
+        self.parametrized_tensors = {}  # NOTE: JIT error with nn.ParameterDict.
 
     @abstractmethod
     def forward(self) -> dict[str, Tensor]:
@@ -187,7 +187,9 @@ class Parametrization(nn.Module, ParametrizationProto):
 
             if new_tensors.keys() != self.cached_tensors.keys():
                 raise ValueError(
-                    f"{new_tensors.keys()=} != {self.cached_tensors.keys()=}"
+                    "Forward's returned dictionary must match cached tensors!"
+                    f"\nKnown cached_tensors: {self.cached_tensors.keys()}"
+                    f"\nKeys in returned dictionary: {new_tensors.keys()}"
                 )
 
             # copy the new tensors into the cache

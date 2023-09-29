@@ -99,7 +99,7 @@ def test_dummy():
     model = nn.Linear(4, 4)
 
     spec = SpectralNormalization(nn.Parameter(model.weight.clone().detach()))
-
+    del model.weight
     model.spec = spec
     spec._update_cached_tensors()
     model.register_buffer("weight", model.spec.weight)

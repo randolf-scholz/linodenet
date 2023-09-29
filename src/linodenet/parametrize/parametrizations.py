@@ -21,8 +21,8 @@ class SpectralNormalization(Parametrization):
     """Spectral normalization."""
 
     # constants
-    GAMMA: Final[Tensor]
-    ONE: Final[Tensor]
+    GAMMA: Tensor
+    ONE: Tensor
     maxiter: Final[Optional[int]]
 
     # cached
