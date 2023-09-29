@@ -110,7 +110,37 @@ struct SingularTriplet : public Function<SingularTriplet> {
      *      Combining with the assumption that ∇f is lipschitz continuous with constant L,
      *      one can prove that the gradient descent method converges with rate 𝓞(1/k),
      *      even when f is non-convex.
-
+     *
+     * @note Yet another stopping criterion:
+     *      Fundamentally it is about finding uvᵀ, hence we should consider ‖ũṽᵀ - uvᵀ‖ ≤ α + β‖uvᵀ‖
+     *      Assuming the vectors are normalized, and noting that ‖uvᵀ‖² = ‖u‖²‖v‖², we get
+     *
+     *      ‖ũṽᵀ - uvᵀ‖² = ‖ũ‖²‖ṽ‖² -2⟨ũ,u⟩⟨ṽ,v⟩ + ‖u‖²‖v‖² = 2(1-⟨ũ,u⟩⟨ṽ,v⟩)
+     *
+     *      Which simplifies the stopping criterion towards: ⟨ũ,u⟩⟨ṽ,v⟩ ≥ 2 - (α + β)²
+     *      In particular, we could get away with only a single tolerance parameter ξ = α + β.
+     *      Note that this has a failure mode: if ũ ≈ -u and ṽ ≈ -v, then the criterion is satisfied.
+     *      But this can never happen in practice, since effectively ũ ∝ AAᵀu and ṽ ∝ AᵀAv.
+     *      And both AAᵀ and AᵀA are positive semi-definite, hence ũ and ṽ can never be anti-parallel.
+     *
+     *      Adding σ into the equation:
+     *
+     *      ‖σ̃ũṽᵀ - σuvᵀ‖² = σ̃²‖ũ‖²‖ṽ‖² -2σ̃σ⟨ũ,u⟩⟨ṽ,v⟩ + σ²‖u‖²‖v‖²
+     *                     = σ̃² + σ² - 2σ̃σ⟨ũ,u⟩⟨ṽ,v⟩
+     *
+     *      Our goal is to transform this into c²⋅(1-x), so that we can make use of the upper bound
+     *      √(1-x) ≤ 1 - ½x and avoid the expensive square root.
+     *
+     *                     = (σ̃ + σ)² - 2σ̃σ(1 + ⟨ũ,u⟩⟨ṽ,v⟩)
+     *                     = (σ̃ + σ)²(1 - 2⋅(σ̃σ/(σ̃ + σ)²)⋅(1 + ⟨ũ,u⟩⟨ṽ,v⟩))
+     *                     = (σ̃ + σ)²(1 - x) where x= 2(1 + ⟨ũ,u⟩⟨ṽ,v⟩)σ̃σ/(σ̃ + σ)²
+     *
+     *      Taking the square root and applying the upper bound yields
+     *
+     *      √(c²(1-x)) = |c|⋅√(1-x)
+     *                 ≤ |c|⋅(1-½x) = (σ̃ + σ)⋅(1 - σ̃σ/(σ̃ + σ)²⋅(1 + ⟨ũ,u⟩⟨ṽ,v⟩))
+     *                              = σ̃ + σ - σ̃σ/(σ̃ + σ)(1 + ⟨ũ,u⟩⟨ṽ,v⟩)
+     *
      * @note: positiveness of the result
      * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
      * then uᵀAv' = (Av/‖Av‖)ᵀ A (AᵀAv/‖AᵀAv‖) = (AᵀAv)ᵀ(AᵀAv)/(‖Av‖⋅‖AᵀAv‖)
@@ -152,7 +182,8 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // Initialize maxiter depending on the size of the matrix.
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
-        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(M + N));
+        const auto OPTIONS = A_in.options();
+        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(128, 2*(M + N));
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
@@ -163,17 +194,17 @@ struct SingularTriplet : public Function<SingularTriplet> {
         bool converged = false;
 
         // Initialize u and v with random values if not given
-        Tensor u = u0 ? u0.value() : torch::randn({M}, A.options());
-        Tensor v = v0 ? v0.value() : torch::randn({N}, A.options());
+        Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
+        Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
 
         // Initialize old values for convergence check
         // pre-allocate memory for residuals
         Tensor r_u = torch::empty_like(u);
         Tensor r_v = torch::empty_like(v);
-        Tensor sigma_u = torch::empty({}, A.options());
-        Tensor sigma_v = torch::empty({}, A.options());
-        Tensor converged_u = torch::empty({}, A.options());
-        Tensor converged_v = torch::empty({}, A.options());
+        Tensor sigma_u = torch::empty({}, OPTIONS);
+        Tensor sigma_v = torch::empty({}, OPTIONS);
+        Tensor converged_u = torch::empty({}, OPTIONS);
+        Tensor converged_v = torch::empty({}, OPTIONS);
 
         // Perform power-iteration for maxiter times or until convergence.
         for (auto i = 0; i<MAXITER; i++) {
@@ -192,16 +223,21 @@ struct SingularTriplet : public Function<SingularTriplet> {
             // update u
             r_u = -u;
             sigma_v = v.norm();
-            u = A.mv(v / sigma_v);
+            v /= sigma_v;
+            u = A.mv(v);
             r_u += u;
             converged_u = r_u.norm() < atol + rtol*sigma_u;
 
             // update v
             r_v = -v;
             sigma_u = u.norm();
-            v = A_t.mv(u / sigma_u);
+            u /= sigma_u;
+            v = A_t.mv(u);
             r_v += v;
             converged_v = r_v.norm() < atol + rtol*sigma_v;
+
+            // rho = 1/(sigma/sigma_old + sigma_old/sigma)
+            // converged = sigma + sigma_old + rho*(1 + u.dot(u_old) * v.dot(v_old)) <= atol + rtol*sigma_old;
 
             // check convergence  ‖ũₖ﹢₁ - σₖuₖ‖ ≤ α + β⋅σₖ and ‖ṽₖ﹢₁ - σₖvₖ‖ ≤ α + β⋅σₖ
             if ((converged = (converged_u & converged_v).item<bool>())) {
@@ -213,17 +249,23 @@ struct SingularTriplet : public Function<SingularTriplet> {
 
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN(": no convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
+            TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
         }
 
         // normalize u and v
         u /= u.norm();
         v /= v.norm();
-        // compute final sigma, reversing the preconditioning
-        Tensor sigma = SCALE * A.mv(v).dot(u);
+        // compute pre-conditioned sigma
+        const Tensor sigma = A.mv(v).dot(u);
+
+        // store pre-conditioned tensors for backward
+        ctx->save_for_backward({A, sigma, u, v, SCALE});
+
+        // reverse pre-conditioning
+        const Tensor sigma_out = sigma * SCALE;
 
         // check for NaNs, infinities, and negative values
-        const auto sigma_val = sigma.item<double>();
+        const auto sigma_val = sigma_out.item<double>();
         if (!(std::isfinite(sigma_val) && sigma_val > 0)) {
             throw std::runtime_error(at::str(
                 "Computation resulted in invalid singular value σ=", sigma_val, " for input of shape ", A.sizes(), ". ",
@@ -232,10 +274,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
             ));
         }
 
-        // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
-        ctx->save_for_backward({A, sigma, u, v});
-
-        return {sigma, u, v};
+        return {sigma_out, u, v};
     }
 
     static variable_list backward(
@@ -266,6 +305,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         const auto sigma = saved[1];
         const auto u = saved[2];
         const auto v = saved[3];
+        const auto SCALE = saved[4];
         const auto xi = grad_output[0];
         const auto phi = grad_output[1];
         const auto psi = grad_output[2];
@@ -284,13 +324,13 @@ struct SingularTriplet : public Function<SingularTriplet> {
         }
 
         // Consider the additional outer gradients for u and v.
-        const auto m = A.size(0);
-        const auto n = A.size(1);
+        const auto M = A.size(0);
+        const auto N = A.size(1);
+        const auto OPTIONS = A.options();
         // augmented K matrix: (m+n+2) x (m+n)
         // [ σ𝕀ₘ | -A  | u | 0 ] ⋅ [p, q, μ, ν] = [ϕ]
         // [ -Aᵀ | σ𝕀ₙ | 0 | v ]                  [ψ]
 
-        const auto options = A.options();
 
         // construct the K matrix
 //        Tensor K = torch::zeros({m+n, m+n+2}, options);
@@ -300,20 +340,26 @@ struct SingularTriplet : public Function<SingularTriplet> {
 //        K.index_put_({Slice(0, m), m+n}, u);
 //        K.index_put_({Slice(m, m+n), m+n+1}, v);
 
-        Tensor c = torch::cat({phi, psi}, 0);
-
         Tensor zero_u = torch::zeros_like(u).unsqueeze(-1);
         Tensor zero_v = torch::zeros_like(v).unsqueeze(-1);
+        Tensor eye_m = eye(M, OPTIONS);
+        Tensor eye_n = eye(N, OPTIONS);
 
-        Tensor K = cat({
-            cat({sigma * eye(m, options), -A, u.unsqueeze(-1), zero_u}, 1),
-            cat({-A.t(), sigma * eye(n, options), zero_v, v.unsqueeze(-1)}, 1)
-        }, 0);
+        Tensor K = cat(
+            {
+                cat({sigma * eye_m, -A,     u.unsqueeze(-1), zero_u}, 1),
+                cat({-A.t(), sigma * eye_n, zero_v, v.unsqueeze(-1)}, 1)
+            },
+            0
+        );
+        Tensor c = torch::cat({phi, psi}, 0);
 
         // solve the underdetermined system
         Tensor x = std::get<0>(lstsq(K, c, nullopt, nullopt));
-        Tensor p = x.slice(0, 0, m);
-        Tensor q = x.slice(0, m, m + n);
+
+        // extract the solution, reverse pre-conditioning
+        Tensor p = x.slice(0, 0, M) / SCALE;
+        Tensor q = x.slice(0, M, M + N) / SCALE;
         // Tensor mu = x.slice(0, m+n, m+n+1);
         // Tensor nu = x.slice(0, m+n+1, m+n+2);
 

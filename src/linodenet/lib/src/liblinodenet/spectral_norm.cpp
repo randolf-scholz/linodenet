@@ -101,7 +101,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
         // Initialize maxiter depending on the size of the matrix.
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
-        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(M + N));
+        const auto OPTIONS = A_in.options();
+        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(128, 2*(M + N));
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
@@ -115,8 +116,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const Tensor tol = torch::tensor(rtol * rtol);
 
         // Initialize u and v with random values if not given
-        Tensor u = u0 ? u0.value() : torch::randn({M}, A.options());
-        Tensor v = v0 ? v0.value() : torch::randn({N}, A.options());
+        Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
+        Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
 
         // Initialize old values for convergence check
         // pre-allocate memory for residuals
@@ -158,21 +159,30 @@ struct SpectralNorm: public Function<SpectralNorm> {
             // check convergence
             if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
                 // Tensor sigma = A.mv(v).dot(u);
-                // std::cout << "Converged after " << i << " iterations. Sigma=" << sigma.item<double>() << std::endl;
+                // std::cout << at::str("Converged after ", i, " iterations. σ=", sigma_u) << std::endl;
                 break;
             }
         }
 
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN("spectral_norm: no convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
+            TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
         }
 
-        // compute final sigma, reversing the preconditioning
-        Tensor sigma = SCALE * A.mv(v).dot(u);
+        // normalize u and v
+        u /= u.norm();
+        v /= v.norm();
+        // compute pre-conditioned sigma
+        const Tensor sigma = A.mv(v).dot(u);
+
+        // store pre-conditioned tensors for backward
+        ctx->save_for_backward({u, v});
+
+        // reverse pre-conditioning
+        const Tensor sigma_out = sigma * SCALE;
 
         // check for NaNs, infinities, and negative values
-        const auto sigma_val = sigma.item<double>();
+        const auto sigma_val = sigma_out.item<double>();
         if (!(std::isfinite(sigma_val) && sigma_val > 0)) {
             throw std::runtime_error(at::str(
                 "Computation resulted in invalid singular value σ=", sigma_val, " for input of shape ", A.sizes(), ". ",
@@ -181,10 +191,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
             ));
         }
 
-        // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
-        ctx->save_for_backward({u, v});
-
-        return sigma;
+        return sigma_out;
     }
 
     static variable_list backward(

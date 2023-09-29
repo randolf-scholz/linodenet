@@ -107,7 +107,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         const auto A_t = A.t();
         const auto m = A.size(0);
         const auto n = A.size(1);
-        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(m + n));
+        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(128, 2*(m + n));
         const Tensor tol = torch::tensor(rtol * rtol);
         bool converged = false;
 
