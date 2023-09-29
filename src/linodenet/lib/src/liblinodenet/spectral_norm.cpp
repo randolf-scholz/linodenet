@@ -80,7 +80,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
 
     static Tensor forward(
         AutogradContext *ctx,
-        const Tensor &A,
+        const Tensor &A_in,
         const optional<Tensor> &u0,
         const optional<Tensor> &v0,
         optional<int64_t> maxiter,
@@ -99,16 +99,24 @@ struct SpectralNorm: public Function<SpectralNorm> {
          * @returns sigma: singular value
          */
         // Initialize maxiter depending on the size of the matrix.
-        const auto A_t = A.t();
-        const auto m = A.size(0);
-        const auto n = A.size(1);
-        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(m + n));
-        const Tensor tol = torch::tensor(rtol * rtol);
+        const auto M = A_in.size(0);
+        const auto N = A_in.size(1);
+        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(100, 2*(M + N));
+
+        // Preconditioning: normalize A by its infinity norm
+        const Tensor SCALE = A_in.abs().max();
+        const auto A = A_in / SCALE;
+        const auto A_t = A.t();  // precompute transpose (maybe skip for small MAXITER?)
+
+        // Initialize convergence flag
         bool converged = false;
 
+        // initialize convergence thingy
+        const Tensor tol = torch::tensor(rtol * rtol);
+
         // Initialize u and v with random values if not given
-        Tensor u = u0 ? u0.value() : torch::randn({m}, A.options());
-        Tensor v = v0 ? v0.value() : torch::randn({n}, A.options());
+        Tensor u = u0 ? u0.value() : torch::randn({M}, A.options());
+        Tensor v = v0 ? v0.value() : torch::randn({N}, A.options());
 
         // Initialize old values for convergence check
         // pre-allocate memory for residuals
@@ -119,6 +127,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
 
         // Perform power-iteration for maxiter times or until convergence.
         for (auto i = 0; i<MAXITER; i++) {
+            // TODO: Test Anderson Acceleration
             // NOTE: We apply two iterations per loop. This is a case of duff's device.
             // This means that we effectively only check the stopping criterion every 2 iterations.
             // This improves performance on GPU since .item() requires a synchronization with CPU.
@@ -159,8 +168,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
             TORCH_WARN("spectral_norm: no convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
         }
 
-        // compute final sigma
-        Tensor sigma = A.mv(v).dot(u);
+        // compute final sigma, reversing the preconditioning
+        Tensor sigma = SCALE * A.mv(v).dot(u);
 
         // check for NaNs, infinities, and negative values
         const auto sigma_val = sigma.item<double>();
