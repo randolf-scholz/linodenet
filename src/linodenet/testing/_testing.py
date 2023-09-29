@@ -24,7 +24,7 @@ __all__ = [
 import logging
 import tempfile
 import warnings
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from itertools import chain
 from typing import Any, Optional, TypeAlias, overload
@@ -189,28 +189,27 @@ def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
     return torch.sqrt(torch.sum(flattened**2))
 
 
-def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
+def _get_grads(x: nn.Module | Tree | Iterable, /) -> Iterator[Tensor]:
     """Return a cloned detached copy of the gradients of the model / parameters."""
     match x:
         case nn.Module() as model:
-            return [
-                param.grad.clone().detach()
-                for param in model.parameters()
-                if param.grad is not None
-            ]
+            yield from _get_grads(model.parameters())
         case Tensor() as tensor:
             if tensor.requires_grad and tensor.grad is not None:
-                return [tensor.grad.clone().detach()]
-            return []
-
+                yield tensor.grad.clone().detach()
         case Mapping() as mapping:
-            return list(
-                chain.from_iterable(get_grads(item) for item in mapping.values())
+            yield from chain.from_iterable(
+                _get_grads(item) for item in mapping.values()
             )
-        case Sequence() as iterable:
-            return list(chain.from_iterable(get_grads(item) for item in iterable))
+        case Iterable() as iterable:
+            yield from chain.from_iterable(_get_grads(item) for item in iterable)
         case _:
             raise TypeError(f"Unsupported input type {type(x)!r}")
+
+
+def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
+    """Return a cloned detached copy of the gradients of the model / parameters."""
+    return list(_get_grads(x))
 
 
 def assert_close(
@@ -371,15 +370,13 @@ def check_initialization(
 ) -> callable_var: ...
 def check_initialization(obj, /, *, init_args=(), init_kwargs=EMPTY_MAP):
     """Test initialization of a module."""
+    if not isinstance(obj, type):
+        return obj
     if issubclass(obj, nn.Module):
         try:
             module = obj(*init_args, **init_kwargs)
         except Exception as exc:
             raise RuntimeError("Model initialization failed!") from exc
-    elif isinstance(obj, type):
-        raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
-    elif isinstance(obj, nn.Module) or callable(obj):
-        module = obj
     else:
         raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
 
@@ -424,7 +421,7 @@ def check_combined(
     device: Optional[torch.device] = None,
     logger: Optional[logging.Logger] = None,
     make_inputs_parameters: bool = True,
-    test_jit: bool = False,
+    test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
     """Check a module, function or model class."""
@@ -553,6 +550,7 @@ def check_combined(
         reference_shapes=reference_shapes,
         reference_gradients=reference_gradients,
         logger=__logger__.getChild(f"{model_name}@JIT"),
+        test_jit=False,
     )
     # endregion check scripted forward/backward pass -----------------------------------
 
@@ -569,6 +567,7 @@ def check_combined(
         reference_shapes=reference_shapes,
         reference_gradients=reference_gradients,
         logger=__logger__.getChild(f"{model_name}@DESERIALIZED"),
+        test_jit=False,
     )
     # endregion check loaded forward/backward pass -------------------------------------
 
