@@ -297,7 +297,7 @@ def check_backward(
     if reference_gradients is None:
         reference_gradients = deepcopy(gradients)
     else:
-        reference_gradients = get_grads(reference_gradients)
+        reference_gradients = reference_gradients
 
     # check gradients
     assert_close(gradients, reference_gradients)

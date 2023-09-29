@@ -8,30 +8,31 @@ There are 2 types of parametrizations:
 
 __all__ = ["SpectralNormalization", "ReZero"]
 
-from typing import Any, Optional
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.lib import singular_triplet
-from linodenet.parametrize._parametrize import Parametrization
+from linodenet.parametrize.base import Parametrization
 
 
 class SpectralNormalization(Parametrization):
     """Spectral normalization."""
 
     # constants
-    GAMMA: Tensor
-    ONE: Tensor
+    GAMMA: Final[Tensor]
+    ONE: Final[Tensor]
+    maxiter: Final[Optional[int]]
 
     # cached
     u: Tensor
     v: Tensor
     sigma: Tensor
-
-    # parametrized
     weight: Tensor
-    maxiter: Optional[int]
+
+    # Parameters
+    original_weight: Tensor
 
     def __init__(
         self, weight: nn.Parameter, /, gamma: float = 1.0, maxiter: Optional[int] = None
@@ -60,17 +61,22 @@ class SpectralNormalization(Parametrization):
 
     def forward(self) -> dict[str, Tensor]:
         """Perform spectral normalization w ↦ w/‖w‖₂."""
+        # IMPORTANT: Use the original weight, not the cached weight!
+        # For auxiliary tensors, use the cached tensors.
         sigma, u, v = singular_triplet(
-            self.weight, u0=self.u, v0=self.v, maxiter=self.maxiter
+            self.original_weight,
+            u0=self.u,
+            v0=self.v,
+            maxiter=self.maxiter,
         )
         gamma = torch.minimum(self.ONE, self.GAMMA / sigma)
-        weight = gamma * self.weight
+        weight = gamma * self.original_weight
 
         return {
             "weight": weight,
+            "sigma": sigma,
             "u": u,
             "v": v,
-            "sigma": sigma,
         }
 
 

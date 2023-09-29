@@ -16,7 +16,7 @@ __all__ = [
     "PARAMETRIZATIONS",
 ]
 
-from linodenet.parametrize._parametrize import (
+from linodenet.parametrize.base import (
     Parametrization,
     ParametrizationProto,
     SimpleParametrization,

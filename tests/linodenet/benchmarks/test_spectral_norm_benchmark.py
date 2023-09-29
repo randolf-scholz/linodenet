@@ -1,21 +1,16 @@
 #!/usr/bin/env python
 """Test the spectral norm implementation.""" ""
 
+
 from collections.abc import Callable
 
 import pytest
 import torch
 import torch.utils.cpp_extension
 from pytest_benchmark.fixture import BenchmarkFixture
-from torch import jit, nn
+from torch import nn
 
-from linodenet.lib import (
-    singular_triplet,
-    singular_triplet_native,
-    spectral_norm,
-    spectral_norm_native,
-)
-from linodenet.utils import timer
+from linodenet.lib import spectral_norm, spectral_norm_native
 
 torch.manual_seed(0)
 
@@ -58,10 +53,9 @@ IMPL = {
 @pytest.mark.benchmark(group="spectral_norm", min_rounds=512)
 @torch.no_grad()
 def test_spectral_norm_forward(
-    benchmark: BenchmarkFixture, impl, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
     """Test the spectral norm implementation."""
-
     # raise ValueError(f"{type(benchmark)} {callable(benchmark)}This test is broken")
 
     A = nn.Parameter(torch.randn(*shape, device=device))
@@ -83,7 +77,7 @@ def test_spectral_norm_forward(
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 @torch.no_grad()
 def test_spectral_norm_backward(
-    benchmark, impl, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
     """Test the spectral norm implementation."""
     A = nn.Parameter(torch.randn(*shape, device=device))
@@ -186,12 +180,5 @@ def test_spectral_norm_backward(
 #     if norm_only:
 #         assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
 
-
-def _main() -> None:
-    """Run the main function."""
-    test_spectral_norm("cpu", (128, 128))
-    test_singular_triplet("cpu", (128, 128), False)
-
-
 if __name__ == "__main__":
-    _main()
+    pass

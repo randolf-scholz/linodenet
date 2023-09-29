@@ -1,8 +1,10 @@
 """Parametrizations for Torch.
 
-At he end we want to be able to do something as simple as this:
-
-model.weight = MyParametrization(model.weight).weight
+Methods:
+- Parametrization: General purpose parametrization
+- SimpleParametrization: Parametrization of a single tensor with a callable
+- get_parametrizations: recurisvely returns all parametrizations in a module
+- register_parametrization: adds a parametrization to a specific tensor
 """
 
 __all__ = [
@@ -60,7 +62,14 @@ class ParametrizationProto(Protocol):
 
 
 class Parametrization(nn.Module, ParametrizationProto):
-    """A parametrization that should be subclassed."""
+    """A parametrization that should be subclassed.
+
+    Usage:
+        # create a model
+        model = nn.Linear(4,4)
+        # plant a parametrization
+        spec = SpectralNormalization(model.weight)
+    """
 
     parametrized_tensor: dict[str, Tensor]
     cached_tensors: dict[str, Tensor]

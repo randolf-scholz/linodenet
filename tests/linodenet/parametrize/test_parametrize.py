@@ -1,10 +1,12 @@
 #!/usr/bin/env python
-
+"""Test parametrization of modules."""
 
 import logging
 
 import torch
+from pytest import mark
 from torch import Tensor, nn
+from torch.linalg import matrix_norm
 
 from linodenet.parametrize import SimpleParametrization, SpectralNormalization
 from linodenet.projections import is_symmetric, symmetric
@@ -24,11 +26,60 @@ def test_overwrite_module_attribute():
     model = nn.Linear(4, 3)
     inputs = torch.randn(2, 4)
 
-    reference_outputs = model(inputs)
+    model(inputs)
 
 
+@mark.skip(reason="Not implemented")
 def test_jit_protocol() -> None:
-    """...."""
+    """Test that subclasses of Protocol-class work with JIT."""
+    raise NotImplementedError
+
+
+def test_surgery() -> None:
+    # create model, parametrization and inputs
+    inputs = torch.randn(2, 3)
+    model = nn.Linear(3, 3)
+    spec = SpectralNormalization(model.weight)
+    # cloned_model = deepcopy(model)
+
+    # register the parametrization
+    model.register_module("spec", spec)
+    # remove the weight attribute (it still exists on the parametrization)
+    del model.weight
+
+    # register the parametrization's weight-buffer as a buffer
+    model.register_buffer("weight", model.spec.weight.clone().detach())
+    assert not model.weight.requires_grad
+    # copy the parametrized weight to the buffer.
+    model.weight.copy_(model.spec.parametrized_tensors["weight"])
+    assert model.weight.requires_grad
+
+    # register the parametrization's weight as a parameter (optional)
+    model.parametrized_weight = model.spec.parametrized_tensors["weight"]
+
+    # perform forward and backward pass
+    r = model(inputs)
+    r.norm().backward()
+    assert model.parametrized_weight.grad is not None
+    assert model.weight.grad is None
+
+
+def test_surgery_extended() -> None:
+    # create model, parametrization and inputs
+    torch.randn(2, 3)
+    model = nn.Linear(3, 3)
+
+    # plant specific weights
+    weight = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    with torch.no_grad():
+        model.weight.copy_(weight)
+        assert matrix_norm(model.weight, ord=2) > 1
+
+    spec = SpectralNormalization(model.weight)
+    spec.reset_cache()
+    assert matrix_norm(spec.weight, ord=2) <= 1.0
+    spec.weight.norm().backward()
+    spec.zero_grad(set_to_none=True)
 
 
 def test_parametrization() -> None:
@@ -37,8 +88,24 @@ def test_parametrization() -> None:
     spec = SpectralNormalization(nn.Parameter(model.weight.clone().detach()))
 
     model.spec = spec
-    spec.recompute_cache()
+    spec._update_cached_tensors()
 
+    inputs = torch.randn(2, 4)
+
+    check_model(model, input_args=inputs, test_jit=True)
+
+
+def test_dummy():
+    model = nn.Linear(4, 4)
+
+    spec = SpectralNormalization(nn.Parameter(model.weight.clone().detach()))
+
+    model.spec = spec
+    spec._update_cached_tensors()
+    model.register_buffer("weight", model.spec.weight)
+    model.register_parameter(
+        "parametrized_weight", model.spec.parametrized_tensors["weight"]
+    )
     inputs = torch.randn(2, 4)
 
     check_model(model, input_args=inputs, test_jit=True)
