@@ -110,7 +110,7 @@ linters = [
     "pycodestyle>=2.11.0",
     "pydocstyle>=6.3.0",
     "pyflakes>=3.1.0",
-    "pylint>=2.17.6",
+    "pylint>=2.17.7",
     "pylint-gitlab>=1.2.0",
     "ruff>=0.0.291",
     "ruff-lsp>=0.0.39",
@@ -599,7 +599,7 @@ sphinx-typo3-theme = ">=4.9.0"
 
 
 [tool.poetry.group.devtools.dependencies]
-cmake = ">=3.27.5"
+cmake = ">=3.27.6"
 devtools = ">=0.12.2"
 johnnydep = ">=1.20.3"
 ninja = ">=1.11.1"
@@ -642,7 +642,7 @@ perflint = ">=0.7.3"
 pycodestyle = ">=2.11.0"
 pydocstyle = ">=6.3.0"
 pyflakes = ">=3.1.0"
-pylint = ">=2.17.6"
+pylint = ">=2.17.7"
 pylint-gitlab = ">=1.2.0"
 ruff = ">=0.0.291"
 ruff-lsp = ">=0.0.39"
