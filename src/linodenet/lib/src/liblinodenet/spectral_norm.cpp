@@ -102,7 +102,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        const int64_t MAXITER = maxiter ? maxiter.value() : std::max<int64_t>(128, 2*(M + N));
+        // NOTE: 2*(M+N) since we do two iterations per loop
+        const int64_t MAXITER = maxiter ? maxiter.value() : 2*(M+N) + 100;
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();

@@ -21,8 +21,19 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2d819eaa-bff8-4d0d-95ce-99f382ddbcc7" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/../../../experiments/singular_vectors.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../dev/untitled.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/untitled.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../poetry.lock" beforeDir="false" afterPath="$PROJECT_DIR$/../../../poetry.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../pyproject.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/_liblinodenet.py" beforeDir="false" afterPath="$PROJECT_DIR$/_liblinodenet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/build.sh" beforeDir="false" afterPath="$PROJECT_DIR$/build.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/check_grad.py" beforeDir="false" afterPath="$PROJECT_DIR$/check_grad.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../tests/linodenet/models/filters/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../tests/linodenet/models/filters/__init__.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -33,6 +44,13 @@
     <option name="formatViaClangd" value="false" />
   </component>
   <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Default" />
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../../.." />
   </component>
@@ -96,7 +114,7 @@
       <recent name="$PROJECT_DIR$/src/liblinodenet" />
     </key>
   </component>
-  <component name="RunManager" selected="CMake Application.linodenet">
+  <component name="RunManager" selected="Python tests.Python tests for test_singular_triplet_simple.test_diagonal_matrix">
     <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="CLION.EXTERNAL.BUILD" enabled="true" />
@@ -107,73 +125,109 @@
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration name="check_grad" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/check_grad.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <configuration name="custom_operators" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/custom_operators.py" />
-      <option name="PARAMETERS" value="" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-    <configuration name="Python tests in check_grad.py" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+    <configuration name="Python tests for test_singular_triplet_simple.test_diagonal_matrix" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="lib" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/check_grad.py&quot;" />
+      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_diagonal_matrix&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests for test_singular_triplet_simple.test_grad_rank_one" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_grad_rank_one&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests for test_singular_triplet_simple.test_rank_one_matrix" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_rank_one_matrix&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests for test_singular_triplet_simple.test_with_gradcheck" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_with_gradcheck&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="Python tests in test_singular_triplet_simple.py" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="$PROJECT_DIR$/../../../.venv/bin/python" />
+      <option name="SDK_NAME" value="Python 3.10 (.venv)" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_additionalArguments" value="&quot;-n 4&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="py.test">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="$PROJECT_DIR$/../../../.venv/bin/python" />
+      <option name="SDK_NAME" value="Python 3.10 (linodenet)" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;-n 4&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
     <list>
       <item itemvalue="CMake Application.linodenet" />
-      <item itemvalue="Python.check_grad" />
-      <item itemvalue="Python.custom_operators" />
-      <item itemvalue="Python tests.Python tests in check_grad.py" />
+      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_diagonal_matrix" />
+      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_grad_rank_one" />
+      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_rank_one_matrix" />
+      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_with_gradcheck" />
+      <item itemvalue="Python tests.Python tests in test_singular_triplet_simple.py" />
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python tests.Python tests in check_grad.py" />
-        <item itemvalue="Python.custom_operators" />
-        <item itemvalue="Python.check_grad" />
+        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_diagonal_matrix" />
+        <item itemvalue="Python tests.Python tests in test_singular_triplet_simple.py" />
+        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_with_gradcheck" />
+        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_rank_one_matrix" />
+        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_grad_rank_one" />
       </list>
     </recent_temporary>
   </component>
@@ -214,7 +268,7 @@
       <workItem from="1695977913509" duration="3072000" />
       <workItem from="1695986852353" duration="7384000" />
       <workItem from="1696247217553" duration="66000" />
-      <workItem from="1696249035276" duration="1972000" />
+      <workItem from="1696249035276" duration="11958000" />
     </task>
     <servers />
   </component>

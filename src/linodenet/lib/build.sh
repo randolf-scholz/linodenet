@@ -33,4 +33,5 @@ source "${PROJECT_DIR}/.venv/bin/activate"
 echo "Python env: $(which python)"
 cd ..
 pwd
+pytest tests
 python check_grad.py

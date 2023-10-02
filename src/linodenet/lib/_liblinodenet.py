@@ -36,7 +36,21 @@ class SpectralNorm(Protocol):
         maxiter: Optional[int] = None,
         atol: float = 1e-8,
         rtol: float = 1e-5,
-    ) -> Tensor: ...
+    ) -> Tensor:
+        """Computes the spectral norm.
+
+        Args:
+            A: The input matrix (shape: M×N).
+            u0: The initial guess for the left singular vector (shape: M).
+            v0: The initial guess for the right singular vector (shape: N).
+            maxiter: The maximum number of iterations. (Default: 4⋅(M+N) + 100)
+            atol: The absolute tolerance. (Default: 1e-8)
+            rtol: The relative tolerance. (Default: 1e-5)
+
+        Returns:
+            sigma: The singular value (scaler).
+        """
+        ...
 
 
 @runtime_checkable
@@ -51,7 +65,23 @@ class SingularTriplet(Protocol):
         maxiter: Optional[int] = None,
         atol: float = 1e-8,
         rtol: float = 1e-5,
-    ) -> tuple[Tensor, Tensor, Tensor]: ...
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Computes the singular triplet.
+
+        Args:
+            A: The input matrix (shape: M×N).
+            u0: The initial guess for the left singular vector (shape: M).
+            v0: The initial guess for the right singular vector (shape: N).
+            maxiter: The maximum number of iterations. (Default: 4⋅(M+N) + 100)
+            atol: The absolute tolerance. (Default: 1e-8)
+            rtol: The relative tolerance. (Default: 1e-5)
+
+        Returns:
+            sigma: The singular value (scaler).
+            u: The left singular vector (shape: M).
+            v: The right singular vector (shape: N).
+        """
+        ...
 
 
 def singular_triplet_native(
@@ -63,9 +93,9 @@ def singular_triplet_native(
     rtol: float = 1e-5,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Computes the singular triplet."""
-    U, S, V = torch.linalg.svd(A)
-    u, s, v = U[:, 0], S[0], V[0, :]
-    return s, u, v
+    U, S, Vh = torch.linalg.svd(A)
+    # cols of U = LSV, rows of Vh: RSV
+    return S[0], U[:, 0], Vh[0, :]
 
 
 def spectral_norm_native(
