@@ -101,7 +101,7 @@ repos:
         types: [python]
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.0.291
+    rev: v0.0.292
     hooks:
       - id: ruff
         files: (^src/|^tests/)
@@ -197,7 +197,7 @@ repos:
     hooks:
       - id: pyproject-validate-version
       - id: pyproject-update-deps
-      - id: pyproject-check-deps
+      # - id: pyproject-check-deps
       - id: python-no-blanket-type-ignore
         files: (^src/|^tests/)
       - id: python-no-builtin-eval

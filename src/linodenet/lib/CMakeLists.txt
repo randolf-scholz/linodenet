@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
-project(liblinodenet LANGUAGES CXX)
+project(linodenet LANGUAGES CXX)
 
 # run clang-tidy
 set(CMAKE_CXX_CLANG_TIDY clang-tidy)
@@ -13,6 +13,8 @@ option(USE_CUDA "Use CUDA" ON)
 option(USE_CUDNN "Use CUDNN" ON)
 option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
 
+# equivalent of export PATH=/usr/local/cuda-11.7/bin:$PATH
+set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-11.7")
 
 # get dependencies
 execute_process (
@@ -28,7 +30,6 @@ find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 message(    STATUS "NOTE: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 message(STATUS "NOTE: TORCH_CXX_FLAGS=${TORCH_CXX_FLAGS}")
-
 
 # print debug info
 
@@ -48,6 +49,7 @@ add_library(
         src/liblinodenet/singular_triplet_debug.cpp
         src/liblinodenet/spectral_norm.cpp
         src/liblinodenet/spectral_norm_debug.cpp
+        src/liblinodenet/utils.cpp
 )
 
 # Enable C++14

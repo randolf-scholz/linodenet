@@ -128,18 +128,23 @@ struct SingularTriplet : public Function<SingularTriplet> {
      *      ‖σ̃ũṽᵀ - σuvᵀ‖² = σ̃²‖ũ‖²‖ṽ‖² -2σ̃σ⟨ũ,u⟩⟨ṽ,v⟩ + σ²‖u‖²‖v‖²
      *                     = σ̃² + σ² - 2σ̃σ⟨ũ,u⟩⟨ṽ,v⟩
      *
-     *      Our goal is to transform this into c²⋅(1-x), so that we can make use of the upper bound
-     *      √(1-x) ≤ 1 - ½x and avoid the expensive square root.
+     *      Our goal is to transform this into c²⋅(1+x), so that we can make use of the upper bound
+     *      √(1+x) ≤ 1 + ½x and avoid the expensive square root.
      *
-     *                     = (σ̃ + σ)² - 2σ̃σ(1 + ⟨ũ,u⟩⟨ṽ,v⟩)
-     *                     = (σ̃ + σ)²(1 - 2⋅(σ̃σ/(σ̃ + σ)²)⋅(1 + ⟨ũ,u⟩⟨ṽ,v⟩))
-     *                     = (σ̃ + σ)²(1 - x) where x= 2(1 + ⟨ũ,u⟩⟨ṽ,v⟩)σ̃σ/(σ̃ + σ)²
+     *                     = (σ̃ - σ)² + 2σ̃σ(1 - ⟨ũ,u⟩⟨ṽ,v⟩)
+     *                     = (σ̃ - σ)²(1 + 2⋅(σ̃σ/(σ̃ - σ)²)⋅(1 - ⟨ũ,u⟩⟨ṽ,v⟩))
+     *                     = (σ̃ - σ)²(1 + x) where x=2(σ̃σ/(σ̃ - σ)²)(1 - ⟨ũ,u⟩⟨ṽ,v⟩)
      *
      *      Taking the square root and applying the upper bound yields
      *
-     *      √(c²(1-x)) = |c|⋅√(1-x)
-     *                 ≤ |c|⋅(1-½x) = (σ̃ + σ)⋅(1 - σ̃σ/(σ̃ + σ)²⋅(1 + ⟨ũ,u⟩⟨ṽ,v⟩))
-     *                              = σ̃ + σ - σ̃σ/(σ̃ + σ)(1 + ⟨ũ,u⟩⟨ṽ,v⟩)
+     *      √(c²(1+x)) = |c|⋅√(1+x)
+     *                 ≤ |c|⋅(1+½x) = |σ̃ - σ|⋅(1 + (σ̃σ/(σ̃ - σ)²)(1 - ⟨ũ,u⟩⟨ṽ,v⟩))
+     *                              = |σ̃ - σ| + σ̃σ/|σ̃ - σ|(1 - ⟨ũ,u⟩⟨ṽ,v⟩)
+     *                              = |σ̃ - σ| + (1 - ⟨ũ,u⟩⟨ṽ,v⟩)/|σ̃⁻¹-σ⁻¹|
+     *
+     *      In order for this to be small, we need |σ̃ - σ| to be small and ⟨ũ,u⟩⟨ṽ,v⟩ to be close to 1.
+     *      Since the second term is scaled by |σ̃⁻¹-σ⁻¹|⁻¹, the residual in the vectors must be small.
+     *      To avoid division by zero, we can use the harmonic mean instead of the arithmetic mean:
      *
      * @note: positiveness of the result
      * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
@@ -165,8 +170,8 @@ struct SingularTriplet : public Function<SingularTriplet> {
         const optional<Tensor> &u0,
         const optional<Tensor> &v0,
         optional<int64_t> maxiter,
-        double atol = 1e-8,
-        double rtol = 1e-5
+        double atol = 1e-6,
+        double rtol = 1e-6
     ) {
         /** @brief Forward pass.
          *
@@ -184,7 +189,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         const auto N = A_in.size(1);
         const auto OPTIONS = A_in.options();
         // NOTE: 2*(M+N) since we do two iterations per loop
-        const int64_t MAXITER = maxiter ? maxiter.value() : 2*(M+N) + 100;
+        const int64_t MAXITER = maxiter ? maxiter.value() : 4*(M+N) + 100;
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
@@ -198,14 +203,18 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
         Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
 
-        // Initialize old values for convergence check
-        // pre-allocate memory for residuals
-        Tensor r_u = torch::empty_like(u);
-        Tensor r_v = torch::empty_like(v);
+        // pre-allocate buffers
+        Tensor u_old = torch::empty_like(u);
+        Tensor v_old = torch::empty_like(v);
         Tensor sigma_u = torch::empty({}, OPTIONS);
         Tensor sigma_v = torch::empty({}, OPTIONS);
-        Tensor converged_u = torch::empty({}, OPTIONS);
-        Tensor converged_v = torch::empty({}, OPTIONS);
+        Tensor rho = torch::empty({}, OPTIONS);
+        Tensor sigma = torch::empty({}, OPTIONS);
+        Tensor sigma_old = torch::empty({}, OPTIONS);
+
+        v /= v.norm();
+        u /= u.norm();
+        sigma = A.mv(v).dot(u);
 
         // Perform power-iteration for maxiter times or until convergence.
         for (auto i = 0; i<MAXITER; i++) {
@@ -214,38 +223,70 @@ struct SingularTriplet : public Function<SingularTriplet> {
             // This means that we effectively only check the stopping criterion every 2 iterations.
             // This improves performance on GPU since .item() requires a synchronization with CPU.
             // The compiler cannot do this optimization on it's own because it would change behavior.
+            sigma_old = sigma;
+            u_old = u.clone();
+            v_old = v.clone();
 
             // update u
-            u = A.mv(v / v.norm());
-
-            // update v
-            v = A_t.mv(u / u.norm());
-
-            // update u
-            r_u = -u;
-            sigma_v = v.norm();
-            v /= sigma_v;
             u = A.mv(v);
-            r_u += u;
-            converged_u = r_u.norm() < atol + rtol*sigma_u;
+            u /= u.norm();
 
             // update v
-            r_v = -v;
-            sigma_u = u.norm();
-            u /= sigma_u;
             v = A_t.mv(u);
-            r_v += v;
-            converged_v = r_v.norm() < atol + rtol*sigma_v;
+            v /= v.norm();
 
-            // rho = 1/(sigma/sigma_old + sigma_old/sigma)
+            sigma = A.mv(v).dot(u);
+
             // converged = sigma + sigma_old + rho*(1 + u.dot(u_old) * v.dot(v_old)) <= atol + rtol*sigma_old;
 
+            // |σ̃ - σ| + (1 - ⟨ũ,u⟩⟨ṽ,v⟩)/|σ̃⁻¹-σ⁻¹| ≤ atol + rtol*σ
             // check convergence  ‖ũₖ﹢₁ - σₖuₖ‖ ≤ α + β⋅σₖ and ‖ṽₖ﹢₁ - σₖvₖ‖ ≤ α + β⋅σₖ
-            if ((converged = (converged_u & converged_v).item<bool>())) {
-                // Tensor sigma = A.mv(v).dot(u);
-                // std::cout << at::str("Converged after ", i, " iterations. σ=", sigma_u) << std::endl;
-                break;
-            }
+
+//            if (  // canonical convergence criterion
+//                (converged = (
+//                        torch::cat({A.mv(v) - sigma*u, A_t.mv(u) - sigma*v}).norm()
+//                        <= atol + rtol*torch::cat({sigma*u, sigma*v}).norm()
+//                ).item<bool>())
+//            ) {break;}
+
+//            if (  // canonical convergence criterion
+//                (converged = (
+//                        ((A.mv(v) - sigma*u).norm() <=  atol + rtol*sigma)
+//                        & ((A_t.mv(u) - sigma*v).norm() <=  atol + rtol*sigma)
+//                ).item<bool>())
+//            ) {break;}
+
+//            if (  // substituted
+//                (converged = (
+//                      ((sigma*u - sigma_old*u_old).norm() <=  atol + rtol*sigma)
+//                      & ((sigma*v - sigma_old*v_old).norm() <=  atol + rtol*sigma)
+//                ).item<bool>())
+//            ) {break;}
+
+            if (  // substituted
+                (converged = (
+                    linalg_matrix_norm(sigma * torch::outer(u, v) - sigma_old * torch::outer(u_old, v_old))
+                    <= atol + rtol*sigma_old
+                ).item<bool>())
+            ) {break;}
+
+//            if (  // naive  σ̃² + σ² - 2σ̃σ⟨ũ,u⟩⟨ṽ,v⟩
+//                (converged = (
+//                    torch::sqrt(sigma.pow(2) - 2*sigma*sigma_old*u.dot(u_old)*v.dot(v_old) + sigma_old.pow(2))
+//                    <= atol + rtol*sigma_old
+//                ).item<bool>())
+//            ) {break;}
+
+//            rho = 1/(1/sigma - 1/sigma_old).abs();
+//            if (  // using upper bound
+//                (converged = (
+//                    (sigma - sigma_old).abs() + rho * (1 - dot(u, u_old) * dot(v, v_old)) <= atol + rtol*sigma_old
+//                ).item<bool>())
+//            ) {break;}
+
+//                 Tensor sigma = A.mv(v).dot(u);
+//                 std::cout << at::str("Converged after ", i, " iterations. σ=", sigma_u) << std::endl;
+
         }
 
         // Emit warning if no convergence within maxiter iterations.
@@ -257,7 +298,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         u /= u.norm();
         v /= v.norm();
         // compute pre-conditioned sigma
-        const Tensor sigma = A.mv(v).dot(u);
+        sigma = A.mv(v).dot(u);
 
         // store pre-conditioned tensors for backward
         ctx->save_for_backward({A, sigma, u, v, SCALE});

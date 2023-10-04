@@ -11,29 +11,29 @@
   </component>
   <component name="CMakeRunConfigurationManager">
     <generated>
-      <config projectName="liblinodenet" targetName="linodenet" />
+      <config projectName="liblinodenet" targetName="liblinodenet" />
     </generated>
   </component>
   <component name="CMakeSettings">
     <configurations>
-      <configuration PROFILE_NAME="Default" ENABLED="true" />
+      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2d819eaa-bff8-4d0d-95ce-99f382ddbcc7" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/../../../experiments/singular_vectors.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../dev/untitled.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/untitled.ipynb" afterDir="false" />
+    <list default="true" id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/src/liblinodenet/utils.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.pre-commit-config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.pre-commit-config.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../poetry.lock" beforeDir="false" afterPath="$PROJECT_DIR$/../../../poetry.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/_liblinodenet.py" beforeDir="false" afterPath="$PROJECT_DIR$/_liblinodenet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build.sh" beforeDir="false" afterPath="$PROJECT_DIR$/build.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/check_grad.py" beforeDir="false" afterPath="$PROJECT_DIR$/check_grad.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../tests/linodenet/models/filters/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../tests/linodenet/models/filters/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,44 +43,29 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Default" />
-  <component name="FileTemplateManagerImpl">
-    <option name="RECENT_TEMPLATES">
-      <list>
-        <option value="Python Script" />
-      </list>
-    </option>
-  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../../.." />
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$PROJECT_DIR$/../../../libtorch/include/ATen/ops/zeros_like.h" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/../../../libtorch/include/torch/csrc/autograd/generated/variable_factories.h" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/../__init__.py" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/CMakeLists.txt" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/README.md" root0="FORCE_HIGHLIGHTING" root1="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/__init__.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/_liblinodenet.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/build.sh" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/check_grad.py" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/src/liblinodenet/matrix_exponential.cpp" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/src/liblinodenet/singular_triplet_debug.cpp" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/src/liblinodenet/spectral_norm_debug.cpp" root0="FORCE_HIGHLIGHTING" />
-  </component>
-  <component name="MacroExpansionManager">
-    <option name="directoryName" value="isael5wm" />
+    <setting file="file://$PROJECT_DIR$/src/liblinodenet/utils.cpp" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectApplicationVersion">
+    <option name="ide" value="CLion" />
+    <option name="majorVersion" value="2023" />
+    <option name="minorVersion" value="2.2" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;customColor&quot;: &quot;&quot;,
   &quot;associatedIndex&quot;: 7
 }</component>
-  <component name="ProjectId" id="2UKswsdGZlzQtwJY4dEV6Dm4nVI" />
+  <component name="ProjectId" id="2WH0Ge1dxcIggNPSf0SxPwXpbBl" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -90,118 +75,37 @@
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
-    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "WebServerToolWindowFactoryState": "false",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "git-widget-placeholder": "randolf",
-    "last_opened_file_path": "/home/rscholz/Projects/KIWI/linodenet/src/linodenet/lib",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
-    "two.files.diff.last.used.file": "/home/rscholz/Projects/KIWI/linodenet/src/linodenet/lib/singular_triplet.cpp",
+    "structure.view.defaults.are.configured": "true",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
-  <component name="RecentsManager">
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$" />
-    </key>
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="$PROJECT_DIR$/src/liblinodenet" />
-    </key>
-  </component>
-  <component name="RunManager" selected="Python tests.Python tests for test_singular_triplet_simple.test_diagonal_matrix">
-    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
-      <method v="2">
-        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
-      </method>
-    </configuration>
-    <configuration name="linodenet" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="liblinodenet" TARGET_NAME="linodenet" CONFIG_NAME="Default">
+  <component name="RunManager" selected="Python tests.pytest in tests">
+    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
     </configuration>
-    <configuration name="Python tests for test_singular_triplet_simple.test_diagonal_matrix" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_diagonal_matrix&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
+    <configuration name="liblinodenet" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="liblinodenet" TARGET_NAME="liblinodenet" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
     </configuration>
-    <configuration name="Python tests for test_singular_triplet_simple.test_grad_rank_one" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_grad_rank_one&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="Python tests for test_singular_triplet_simple.test_rank_one_matrix" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_rank_one_matrix&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="Python tests for test_singular_triplet_simple.test_with_gradcheck" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_singular_triplet_simple.test_with_gradcheck&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration name="Python tests in test_singular_triplet_simple.py" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+    <configuration name="pytest in tests" type="tests" factoryName="py.test" nameIsGenerated="true">
       <module name="lib" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="$PROJECT_DIR$/../../../.venv/bin/python" />
       <option name="SDK_NAME" value="Python 3.10 (.venv)" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="_new_additionalArguments" value="&quot;-n 4&quot;" />
-      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py&quot;" />
-      <option name="_new_targetType" value="&quot;PATH&quot;" />
-      <method v="2" />
-    </configuration>
-    <configuration default="true" type="tests" factoryName="py.test">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="$PROJECT_DIR$/../../../.venv/bin/python" />
-      <option name="SDK_NAME" value="Python 3.10 (linodenet)" />
       <option name="WORKING_DIRECTORY" value="" />
       <option name="IS_MODULE_SDK" value="false" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
@@ -209,66 +113,25 @@
       <option name="_new_keywords" value="&quot;&quot;" />
       <option name="_new_parameters" value="&quot;&quot;" />
       <option name="_new_additionalArguments" value="&quot;-n 4&quot;" />
-      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests&quot;" />
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="CMake Application.linodenet" />
-      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_diagonal_matrix" />
-      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_grad_rank_one" />
-      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_rank_one_matrix" />
-      <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_with_gradcheck" />
-      <item itemvalue="Python tests.Python tests in test_singular_triplet_simple.py" />
+      <item itemvalue="CMake Application.liblinodenet" />
+      <item itemvalue="Python tests.pytest in tests" />
     </list>
-    <recent_temporary>
-      <list>
-        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_diagonal_matrix" />
-        <item itemvalue="Python tests.Python tests in test_singular_triplet_simple.py" />
-        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_with_gradcheck" />
-        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_rank_one_matrix" />
-        <item itemvalue="Python tests.Python tests for test_singular_triplet_simple.test_grad_rank_one" />
-      </list>
-    </recent_temporary>
   </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="2d819eaa-bff8-4d0d-95ce-99f382ddbcc7" name="Changes" comment="" />
-      <created>1692699849256</created>
+      <changelist id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="" />
+      <created>1696374104009</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1692699849256</updated>
-      <workItem from="1692699851601" duration="216000" />
-      <workItem from="1692701208956" duration="2332000" />
-      <workItem from="1692707662970" duration="1541000" />
-      <workItem from="1692709273204" duration="8192000" />
-      <workItem from="1692793708019" duration="1145000" />
-      <workItem from="1693211893327" duration="1850000" />
-      <workItem from="1693301720087" duration="614000" />
-      <workItem from="1693319518126" duration="3000" />
-      <workItem from="1693389122014" duration="6831000" />
-      <workItem from="1693473298267" duration="14303000" />
-      <workItem from="1693566263461" duration="5664000" />
-      <workItem from="1693815148269" duration="1820000" />
-      <workItem from="1694021746357" duration="901000" />
-      <workItem from="1694025552991" duration="2000" />
-      <workItem from="1694025637181" duration="601000" />
-      <workItem from="1694079312819" duration="3791000" />
-      <workItem from="1694167700774" duration="2309000" />
-      <workItem from="1694519733662" duration="2413000" />
-      <workItem from="1694587753618" duration="951000" />
-      <workItem from="1694804565520" duration="4000" />
-      <workItem from="1695026285017" duration="594000" />
-      <workItem from="1695062281699" duration="1048000" />
-      <workItem from="1695652060492" duration="3143000" />
-      <workItem from="1695838245365" duration="307000" />
-      <workItem from="1695857836148" duration="2000" />
-      <workItem from="1695891322030" duration="1000" />
-      <workItem from="1695977913509" duration="3072000" />
-      <workItem from="1695986852353" duration="7384000" />
-      <workItem from="1696247217553" duration="66000" />
-      <workItem from="1696249035276" duration="11958000" />
+      <updated>1696374104009</updated>
+      <workItem from="1696374105175" duration="2306000" />
+      <workItem from="1696376852552" duration="5412000" />
     </task>
     <servers />
   </component>
@@ -280,17 +143,6 @@
     <isAutomaticCheckingOnLaunch value="false" />
     <isAutomaticFoundErrors value="true" />
     <isAutomaticFoundErrors value="true" />
-  </component>
-  <component name="Vcs.Log.History.Properties">
-    <option name="COLUMN_ID_ORDER">
-      <list>
-        <option value="Default.Root" />
-        <option value="Default.Author" />
-        <option value="Default.Date" />
-        <option value="Default.Subject" />
-        <option value="Space.CommitStatus" />
-      </list>
-    </option>
   </component>
   <component name="XSLT-Support.FileAssociations.UIState">
     <expand />

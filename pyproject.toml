@@ -39,7 +39,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["linodenet[test,docs,extras,typing,flake8,linters,formatters,devtools]"]
 test = [
-    "coverage>=7.3.1",
+    "coverage>=7.3.2",
     "matplotlib>=3.8.0",
     "psutil>=5.9.5",
     "pytest-benchmark[histogram]>=4.0.0",
@@ -113,8 +113,8 @@ linters = [
     "pyflakes>=3.1.0",
     "pylint>=2.17.7",
     "pylint-gitlab>=1.2.0",
-    "ruff>=0.0.291",
-    "ruff-lsp>=0.0.39",
+    "ruff>=0.0.292",
+    "ruff-lsp>=0.0.40",
     "slotscheck>=0.17.0",
 ]
 formatters = [
@@ -568,7 +568,7 @@ torchinfo = ">=1.8.0"
 
 
 [tool.poetry.group.test.dependencies]
-coverage = ">=7.3.1"
+coverage = ">=7.3.2"
 matplotlib = ">=3.8.0"
 psutil = ">=5.9.5"
 pytest = ">=7.4.2"
@@ -647,8 +647,8 @@ pydocstyle = ">=6.3.0"
 pyflakes = ">=3.1.0"
 pylint = ">=2.17.7"
 pylint-gitlab = ">=1.2.0"
-ruff = ">=0.0.291"
-ruff-lsp = ">=0.0.39"
+ruff = ">=0.0.292"
+ruff-lsp = ">=0.0.40"
 slotscheck = ">=0.17.0"
 
 
