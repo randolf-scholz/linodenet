@@ -11,7 +11,7 @@
   </component>
   <component name="CMakeRunConfigurationManager">
     <generated>
-      <config projectName="liblinodenet" targetName="liblinodenet" />
+      <config projectName="linodenet" targetName="linodenet" />
     </generated>
   </component>
   <component name="CMakeSettings">
@@ -21,19 +21,23 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/liblinodenet/utils.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../untitled/CMakeLists.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../untitled/library.cpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../untitled/library.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.idea/linodenet.iml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.idea/linodenet.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../.pre-commit-config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.pre-commit-config.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../experiments/singular_vectors.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../experiments/singular_vectors.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../poetry.lock" beforeDir="false" afterPath="$PROJECT_DIR$/../../../poetry.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.name" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.name" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/_liblinodenet.py" beforeDir="false" afterPath="$PROJECT_DIR$/_liblinodenet.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/build.sh" beforeDir="false" afterPath="$PROJECT_DIR$/build.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../tests/linodenet/models/filters/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../tests/linodenet/models/filters/__init__.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -46,6 +50,20 @@
   <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug" />
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../../.." />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "randolf-scholz"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings">
+    <option name="selectedUrlAndAccountId">
+      <UrlAndAccount>
+        <option name="accountId" value="6dde6ab4-849e-4900-a3ae-972eca616bb7" />
+        <option name="url" value="https://github.com/randolf-scholz/linodenet.git" />
+      </UrlAndAccount>
+    </option>
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/CMakeLists.txt" root0="FORCE_HIGHLIGHTING" />
@@ -84,18 +102,18 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
+    "settings.editor.selected.configurable": "CMakeSettings",
     "structure.view.defaults.are.configured": "true",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
   <component name="RunManager" selected="Python tests.pytest in tests">
-    <configuration default="true" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
-        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
       </method>
     </configuration>
-    <configuration name="liblinodenet" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="liblinodenet" TARGET_NAME="liblinodenet" CONFIG_NAME="Debug">
+    <configuration name="linodenet" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="linodenet" TARGET_NAME="linodenet" CONFIG_NAME="Debug">
       <method v="2">
         <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
       </method>
@@ -118,7 +136,7 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="CMake Application.liblinodenet" />
+      <item itemvalue="CMake Application.linodenet" />
       <item itemvalue="Python tests.pytest in tests" />
     </list>
   </component>
@@ -132,6 +150,7 @@
       <updated>1696374104009</updated>
       <workItem from="1696374105175" duration="2306000" />
       <workItem from="1696376852552" duration="5412000" />
+      <workItem from="1696410480383" duration="9480000" />
     </task>
     <servers />
   </component>

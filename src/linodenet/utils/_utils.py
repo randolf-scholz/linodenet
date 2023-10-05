@@ -212,7 +212,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) ->
         self.cached_tensors = cached_tensors  # type: ignore[assignment]
         self.__annotations__["cached_tensors"] = dict[str, Tensor]
 
-    cached_tensors = self.cached_tensors  # type: ignore[assignment]
+    cached_tensors = self.cached_tensors
 
     # register the buffer
     self.register_buffer("name", func())
@@ -227,7 +227,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) ->
 
     # register the recompute all function
     def recompute_all(obj: nn.Module) -> None:
-        for key in obj.cached_tensors:  # type: ignore[union-attr]
+        for key in obj.cached_tensors:
             f = getattr(obj, f"recompute_{key}")
             f()
 
@@ -278,7 +278,7 @@ class reset_caches(ContextDecorator):
     ) -> Literal[False]:
         if self.on_exit:
             self.LOGGER.info("Resetting caches.")
-            self.module.recompute_all()  # type: ignore[operator]
+            self.module.recompute_all()
         return False
 
 

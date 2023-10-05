@@ -32,7 +32,7 @@ dependencies = [
     "numpy>=1.26.0",
     "pyyaml>=6.0.1",
     "scipy>=1.11.3",
-    "torch>=2.0.1",
+    "torch>=2.1.0",
     "typing-extensions>=4.8.0",
 ]
 
@@ -373,6 +373,7 @@ pdb = false
 module = [
     "pandas.*",
     "pyarrow.*",
+    "pytest_benchmark.*",
     "scipy.*",
     "sklearn.*",
 ]
@@ -460,6 +461,9 @@ addopts = [
     #    "--reruns=",          # number of times to re-run failed tests. defaults to 0.
     #    "--reruns-delay=",    # add time (seconds) delay between reruns.
     #    "--only-rerun=",      # If passed, only rerun errors matching the regex provided.
+    # xdists options
+    "--numprocesses=4",  # use 4 parallel processes
+    # "--dist=loadfile", # loadscope, loadfile, load, each, no
     # coverage options
     "--cov=linodenet",  # Path or package name to measure during execution (multi-allowed).
     "--cov-report=term:skip-covered",
@@ -522,7 +526,6 @@ readme = "README.md"
 documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
 homepage = "https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet"
 repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi/simple"
-
 # meta-information
 keywords = ["time-series", "machine-learning", "neural-ode", "kalman-filter"]
 classifiers = [
@@ -552,7 +555,7 @@ python = ">=3.10,<3.12"
 numpy = ">=1.26.0"
 pyyaml = ">=6.0.1"
 scipy = ">=1.11.3"
-torch = ">=2.0.1"
+torch = ">=2.1.0"
 typing-extensions = ">=4.8.0"
 
 

@@ -23,6 +23,9 @@ import torch
 import torch.utils.cpp_extension
 from torch import Tensor
 
+ATOL = 1e-6
+RTOL = 1e-6
+
 
 @runtime_checkable
 class SpectralNorm(Protocol):
@@ -34,8 +37,8 @@ class SpectralNorm(Protocol):
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
         maxiter: Optional[int] = None,
-        atol: float = 1e-8,
-        rtol: float = 1e-5,
+        atol: float = ATOL,
+        rtol: float = RTOL,
     ) -> Tensor:
         """Computes the spectral norm.
 
@@ -63,8 +66,8 @@ class SingularTriplet(Protocol):
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
         maxiter: Optional[int] = None,
-        atol: float = 1e-8,
-        rtol: float = 1e-5,
+        atol: float = ATOL,
+        rtol: float = RTOL,
     ) -> tuple[Tensor, Tensor, Tensor]:
         """Computes the singular triplet.
 
@@ -187,8 +190,8 @@ def singular_triplet(
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
-    atol: float = 1e-8,
-    rtol: float = 1e-5,
+    atol: float = ATOL,
+    rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Computes the singular triplet."""
     return _singular_triplet(A, u0, v0, maxiter, atol, rtol)
@@ -199,8 +202,8 @@ def singular_triplet_debug(
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
-    atol: float = 1e-8,
-    rtol: float = 1e-5,
+    atol: float = ATOL,
+    rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Computes the singular triplet."""
     return _singular_triplet_debug(A, u0, v0, maxiter, atol, rtol)
@@ -211,8 +214,8 @@ def spectral_norm(
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
-    atol: float = 1e-8,
-    rtol: float = 1e-5,
+    atol: float = ATOL,
+    rtol: float = RTOL,
 ) -> Tensor:
     """Computes the spectral norm."""
     return _spectral_norm(A, u0, v0, maxiter, atol, rtol)
@@ -223,8 +226,8 @@ def spectral_norm_debug(
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
-    atol: float = 1e-8,
-    rtol: float = 1e-5,
+    atol: float = ATOL,
+    rtol: float = RTOL,
 ) -> Tensor:
     """Computes the spectral norm."""
     return _spectral_norm_debug(A, u0, v0, maxiter, atol, rtol)

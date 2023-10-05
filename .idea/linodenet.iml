@@ -221,6 +221,15 @@
       <excludeFolder url="file://$MODULE_DIR$/docs/_previous_build" />
       <excludeFolder url="file://$MODULE_DIR$/tests/results/test_filters" />
       <excludeFolder url="file://$MODULE_DIR$/tests/results/test_models" />
+      <excludeFolder url="file://$MODULE_DIR$/.benchmarks (copy)" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/reports" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/tests/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/tests/liblinodenet/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/tests/liblinodenet/reports" />
+      <excludeFolder url="file://$MODULE_DIR$/src/linodenet/lib/tests/reports" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/.benchmarks_bak" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/results" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
     <orderEntry type="jdk" jdkName="Poetry (linodenet)" jdkType="Python SDK" />

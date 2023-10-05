@@ -830,8 +830,8 @@ class SequentialFilter(nn.Sequential):  # FIXME: use ModuleList instead?
         if not modules and cfg:
             return  # must have been initialized from config
 
-        self.input_size = modules[0].input_size if modules else None  # type: ignore[assignment]
-        self.output_size = modules[-1].output_size if modules else None  # type: ignore[assignment]
+        self.input_size = modules[0].input_size if modules else None
+        self.output_size = modules[-1].output_size if modules else None
 
         super().__init__(*modules)
 

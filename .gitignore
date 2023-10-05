@@ -7,11 +7,10 @@
 _*/
 
 # libtorch
-libtorch/
+**/libtorch/
 
 # zip files
 *.zip
-!src/**/*.zip
 
 # Project related Files
 dev/**/*.parquet

@@ -100,9 +100,9 @@ class _ResNet(nn.Module):
             assert self.category_offsets is not None, "No category offsets!"
 
             tensors.append(
-                self.category_embeddings(
-                    x_cat + self.category_offsets[None]  # type: ignore[index]
-                ).view(x_cat.size(0), -1)
+                self.category_embeddings(x_cat + self.category_offsets[None]).view(
+                    x_cat.size(0), -1
+                )
             )
         x = torch.cat(tensors, dim=-1)
 

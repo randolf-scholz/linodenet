@@ -448,8 +448,8 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     optional<int64_t> maxiter,
-    double atol = 1e-8,
-    double rtol = 1e-5
+    double atol = 1e-6,
+    double rtol = 1e-6
 ) {
     /**
      * Wrap the struct into function.

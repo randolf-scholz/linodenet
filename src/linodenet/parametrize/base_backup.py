@@ -79,7 +79,7 @@ class Parametrization(nn.Module, ParametrizationProto):
 
         # initialize the cache
         self.cached_tensors = {}
-        self.parametrized_tensor = nn.ParameterDict()
+        self.parametrized_tensor = nn.ParameterDict()  # type: ignore[assignment]
 
     @abstractmethod
     def forward(self) -> dict[str, Tensor]:

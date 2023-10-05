@@ -27,6 +27,11 @@ from scipy.stats import ortho_group
 import linodenet
 
 
+def snorm(x: torch.Tensor) -> torch.Tensor:
+    """Scaled norm of a tensor."""
+    return x.pow(2).mean().sqrt()
+
+
 def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
     rng = default_rng(seed=0)
     ustar = rng.standard_normal(m)
@@ -190,7 +195,7 @@ def test_diagonal(
 
     # check backward pass
     assert A.grad is not None
-    assert (A.grad - analytical_grad).norm() < atol + rtol * analytical_grad.norm()
+    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad)
     assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol)
 
 
@@ -202,11 +207,14 @@ def test_diagonal(
         (4, 4),
         (16, 16),
         (64, 64),
+        (256, 256),
         # rectangular matrices
         (2, 16),
         (16, 2),
         (64, 16),
         (16, 64),
+        (256, 64),
+        (64, 256),
     ],
     ids=str,
 )
@@ -261,10 +269,10 @@ def test_analytical(
 
     # check backward pass
     assert A.grad is not None
-    assert (A.grad - analytical_grad).norm() < atol + rtol * analytical_grad.norm()
+    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad)
     assert torch.allclose(
         A.grad, analytical_grad, atol=atol, rtol=rtol
-    ), f"Max elwise error: {(A.grad - analytical_grad).abs().max()}"
+    ), f"Max element-wise error: {(A.grad - analytical_grad).abs().max()}"
 
 
 if __name__ == "__main__":
