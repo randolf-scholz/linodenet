@@ -2,20 +2,26 @@
 
 __all__ = [
     # functions
-    "check_forward",
     "check_backward",
+    "check_class",
+    "check_combined",
+    "check_forward",
+    "check_function",
+    "check_initialization",
     "check_jit",
     "check_jit_saving_loading",
-    "check_function",
     "check_model",
-    "check_class",
+    "check_optim",
     # helper functions
+    "assert_close",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
     "get_parameters",
     "get_norm",
     "get_shapes",
+    "iter_parameters",
+    "iter_tensors",
     "make_tensors_parameters",
     "to_device",
     "zero_grad",
@@ -42,6 +48,21 @@ __logger__ = logging.getLogger(__name__)
 # region utility functions for tensors AND scalars -------------------------------------\
 
 Tree: TypeAlias = Nested[Tensor | Scalar]
+
+
+def get_device(x: nn.Module | Nested[Tensor | Scalar], /) -> torch.device:
+    """Return the device of the model / parameters."""
+    match x:
+        case nn.Module() as model:
+            return next(t.device for t in model.parameters())
+        case Tensor() as tensor:
+            return tensor.device
+        case Mapping() as mapping:
+            return get_device(next(iter(mapping.values())))
+        case Iterable() as iterable:
+            return get_device(next(iter(iterable)))
+        case _:
+            raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
 @overload
@@ -71,24 +92,81 @@ def to_device(x: Any, /, *, device: str | torch.device = "cpu") -> Any:
         return x
     if isinstance(x, Mapping):
         return {key: to_device(val, device=device) for key, val in x.items()}
-    if isinstance(x, Sequence):
+    if isinstance(x, Iterable):
         return tuple(to_device(item, device=device) for item in x)
     raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-def get_device(x: nn.Module | Nested[Tensor | Scalar], /) -> torch.device:
-    """Return the device of the model / parameters."""
-    match x:
-        case nn.Module() as model:
-            return next(t.device for t in model.parameters())
-        case Tensor() as tensor:
-            return tensor.device
-        case Mapping() as mapping:
-            return get_device(next(iter(mapping.values())))
-        case Sequence() as iterable:
-            return get_device(next(iter(iterable)))
-        case _:
-            raise TypeError(f"Unsupported input type {type(x)!r}")
+def iter_tensors(x: nn.Module | Tree, /) -> Iterator[Tensor]:
+    """Iterate over the parameters of the model / parameters."""
+    if isinstance(x, nn.Module):
+        yield from x.parameters()
+    elif isinstance(x, Tensor):
+        yield x
+    elif isinstance(x, Scalar):  # type: ignore[misc, arg-type]
+        pass
+    elif isinstance(x, Mapping):
+        yield from chain.from_iterable(iter_tensors(item) for item in x.values())
+    elif isinstance(x, Iterable):
+        yield from chain.from_iterable(iter_tensors(item) for item in x)
+    else:
+        raise TypeError(f"Unsupported input type {type(x)!r}")
+
+
+def iter_parameters(x: nn.Module | Tree, /) -> Iterator[nn.Parameter]:
+    """Iterate over the parameters of the model / parameters."""
+    for w in iter_tensors(x):
+        if isinstance(w, nn.Parameter):
+            yield w
+
+
+def get_parameters(x: nn.Module | Tree, /) -> list[Tensor]:
+    """Return the parameters of the model / parameters."""
+    return [w for w in iter_tensors(x) if w.requires_grad]
+
+
+def zero_grad(x: nn.Module | Tree, /) -> None:
+    """Sets gradients of the model / parameters to None."""
+    if isinstance(x, nn.Module):
+        x.zero_grad(set_to_none=True)
+        return
+
+    for w in iter_tensors(x):
+        if w.requires_grad:
+            w.grad = None
+
+
+# endregion utility functions for tensors AND scalars ----------------------------------
+
+
+# region utility functions  for outputs (always tensor) --------------------------------
+
+
+def flatten_nested_tensor(x: nn.Module | Tree, /) -> Tensor:
+    r"""Flattens element of general Hilbert space, skips over scalars."""
+    return torch.cat([x.flatten() for x in iter_tensors(x)])
+
+
+def get_shapes(x: nn.Module | Tree, /) -> list[tuple[int, ...]]:
+    """Return the shapes of the tensors."""
+    return [item.shape for item in iter_tensors(x)]
+
+
+def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
+    """Return a cloned detached copy of the gradients."""
+    return [
+        w.grad.clone().detach()
+        for w in iter_tensors(x)
+        if w.requires_grad and w.grad is not None
+    ]
+
+
+def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
+    """Compute the (normalized) 2-norm of a tensor."""
+    flattened = flatten_nested_tensor(x)
+    if normalize:
+        return torch.sqrt(torch.mean(flattened**2))
+    return torch.sqrt(torch.sum(flattened**2))
 
 
 @overload
@@ -108,108 +186,9 @@ def make_tensors_parameters(x, /):
         return x
     if isinstance(x, Mapping):
         return {key: make_tensors_parameters(val) for key, val in x.items()}
-    if isinstance(x, Sequence):
+    if isinstance(x, Iterable):
         return tuple(make_tensors_parameters(item) for item in x)
     raise TypeError(f"Unsupported input type {type(x)!r}")
-
-
-def get_parameters(x: nn.Module | Tree, /) -> list[Tensor]:
-    """Return the parameters of the model / parameters."""
-    if isinstance(x, nn.Module):
-        return [y for y in x.parameters() if y.requires_grad]
-    if isinstance(x, Tensor):
-        if x.requires_grad:
-            return [x]
-        return []
-    if isinstance(x, Scalar):  # type: ignore[misc, arg-type]
-        return []
-    if isinstance(x, Mapping):
-        return list(chain.from_iterable(get_parameters(item) for item in x.values()))
-    if isinstance(x, Sequence):
-        return list(chain.from_iterable(get_parameters(item) for item in x))
-    raise TypeError(f"Unsupported input type {type(x)!r}")
-
-
-def zero_grad(x: nn.Module | Tree, /) -> None:
-    """Sets gradients of the model / parameters to None."""
-    if isinstance(x, nn.Module):
-        x.zero_grad(set_to_none=True)
-    elif isinstance(x, Tensor):
-        if x.requires_grad:
-            x.grad = None
-    elif isinstance(x, Scalar):  # type: ignore[misc, arg-type]
-        pass
-    elif isinstance(x, Mapping):
-        for item in x.values():
-            zero_grad(item)
-    elif isinstance(x, Sequence):
-        for item in x:
-            zero_grad(item)
-    else:
-        raise TypeError(f"Unsupported input type {type(x)!r}")
-
-
-def get_shapes(x: Tree, /) -> list[tuple[int, ...]]:
-    """Return the shapes of the tensors."""
-    match x:
-        case Tensor() as tensor:
-            return [tensor.shape]
-        case Mapping() as mapping:
-            return list(
-                chain.from_iterable(get_shapes(item) for item in mapping.values())
-            )
-        case Sequence() as iterable:
-            return list(chain.from_iterable(get_shapes(item) for item in iterable))
-        case _:
-            raise TypeError(f"Unsupported input type {type(x)!r}")
-
-
-# endregion utility functions for tensors AND scalars ----------------------------------
-
-
-# region utility functions  for outputs (always tensor) --------------------------------
-def flatten_nested_tensor(x: Nested[Tensor], /) -> Tensor:
-    r"""Flattens element of general Hilbert space, skips over scalars."""
-    match x:
-        case Tensor() as tensor:
-            return tensor.flatten()
-        case Mapping() as mapping:
-            return torch.cat([flatten_nested_tensor(val) for val in mapping.values()])
-        case Sequence() as iterable:
-            return torch.cat([flatten_nested_tensor(item) for item in iterable])
-        case _:
-            raise TypeError(f"Unsupported input type {type(x)!r}")
-
-
-def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
-    """Compute the (normalized) 2-norm of a tensor."""
-    flattened = flatten_nested_tensor(x)
-    if normalize:
-        return torch.sqrt(torch.mean(flattened**2))
-    return torch.sqrt(torch.sum(flattened**2))
-
-
-def _get_grads(x: nn.Module | Tree | Iterable, /) -> Iterator[Tensor]:
-    """Return a cloned detached copy of the gradients."""
-    match x:
-        case nn.Module() as model:
-            yield from _get_grads(model.parameters())
-        case Tensor() as tensor:
-            if tensor.requires_grad and tensor.grad is not None:
-                yield tensor.grad.clone().detach()
-        case Mapping() as mapping:
-            yield from chain.from_iterable(
-                _get_grads(item) for item in mapping.values()
-            )
-        case Iterable() as iterable:
-            yield from chain.from_iterable(_get_grads(item) for item in iterable)
-        case _:
-            raise TypeError(f"Unsupported input type {type(x)!r}")
-
-
-def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
-    """Return a cloned detached copy of the gradients."""
-    return list(_get_grads(x))
 
 
 def assert_close(
@@ -235,8 +214,8 @@ def assert_close(
                 x = mapping[key]
                 y = reference[key]
                 assert_close(x, y, rtol=rtol, atol=atol)
-        case Sequence() as iterable:
-            assert isinstance(reference, Sequence)
+        case Iterable() as iterable:
+            assert isinstance(reference, Iterable)
             for output, target in zip(iterable, reference, strict=True):
                 assert_close(output, target, rtol=rtol, atol=atol)
         case _:
@@ -295,14 +274,14 @@ def check_backward(
         raise RuntimeError("Model failed backward pass!") from exc
 
     if reference_gradients is None:
-        reference_gradients = deepcopy(gradients)
+        ref_grads = deepcopy(gradients)
     else:
-        reference_gradients = get_grads(reference_gradients)
+        ref_grads = list(iter_tensors(reference_gradients))
 
     # check gradients
-    assert_close(gradients, reference_gradients)
+    assert_close(gradients, ref_grads)
 
-    return gradients, reference_gradients
+    return gradients, ref_grads
 
 
 @overload
