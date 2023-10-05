@@ -10,12 +10,10 @@ from linodenet.config import PROJECT
 from linodenet.constants import NAN
 from linodenet.models.filters import SequentialFilterBlock
 
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 LOGGER = __logger__.getChild(SequentialFilterBlock.__name__)
-
-RESULT_DIR = PROJECT.TEST_RESULTS_PATH / (PROJECT.TEST_RESULTS_PATH / __file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @pytest.mark.flaky(reruns=3)

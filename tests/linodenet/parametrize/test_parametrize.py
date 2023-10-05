@@ -55,7 +55,7 @@ def test_surgery() -> None:
     assert model.weight.requires_grad
 
     # register the parametrization's weight as a parameter (optional)
-    model.parametrized_weight = model.spec.parametrized_tensors["weight"]
+    model.parametrized_weight = model.spec.parametrized_tensors["weight"]  # type: ignore[unreachable]
 
     # perform forward and backward pass
     r = model(inputs)
@@ -92,7 +92,7 @@ def test_parametrization() -> None:
 
     inputs = torch.randn(2, 4)
 
-    check_model(model, input_args=inputs, test_jit=True)
+    check_model(model, input_args=(inputs,), test_jit=True)
 
 
 def test_dummy():
@@ -102,13 +102,14 @@ def test_dummy():
     del model.weight
     model.spec = spec
     spec._update_cached_tensors()
+
     model.register_buffer("weight", model.spec.weight)
     model.register_parameter(
         "parametrized_weight", model.spec.parametrized_tensors["weight"]
     )
     inputs = torch.randn(2, 4)
 
-    check_model(model, input_args=inputs, test_jit=True)
+    check_model(model, input_args=(inputs,), test_jit=True)
 
 
 def test_param() -> None:

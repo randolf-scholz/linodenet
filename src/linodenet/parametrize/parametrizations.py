@@ -35,9 +35,11 @@ class SpectralNormalization(Parametrization):
     original_weight: Tensor
 
     def __init__(
-        self, weight: nn.Parameter, /, gamma: float = 1.0, maxiter: Optional[int] = None
+        self, weight: Tensor, /, gamma: float = 1.0, maxiter: Optional[int] = None
     ) -> None:
         super().__init__()
+        assert isinstance(weight, nn.Parameter), "weight must be a parameter"
+
         self.maxiter = maxiter
 
         assert len(weight.shape) == 2

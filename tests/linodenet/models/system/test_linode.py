@@ -18,12 +18,11 @@ from linodenet.models import LinODE
 from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
-RESULT_DIR = PROJECT.TEST_RESULTS_PATH / (PROJECT.TEST_RESULTS_PATH / __file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def compute_linode_error(

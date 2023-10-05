@@ -19,11 +19,9 @@ from linodenet.models import LinearContraction, iResNetBlock
 from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-
-RESULT_DIR = PROJECT.TEST_RESULTS_PATH / (PROJECT.TEST_RESULTS_PATH / __file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @pytest.mark.flaky(reruns=3)

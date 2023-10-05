@@ -12,10 +12,10 @@ import torch
 from linodenet.config import PROJECT
 from linodenet.initializations import INITIALIZATIONS
 
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
+
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT.TEST_RESULTS_PATH / (PROJECT.TEST_RESULTS_PATH / __file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _make_fig(path, means, stdvs, key):

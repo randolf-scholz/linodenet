@@ -1,3 +1,4 @@
+# type: ignore
 """Parametrizations for Torch.
 
 Methods:

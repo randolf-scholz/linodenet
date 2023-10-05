@@ -14,11 +14,9 @@ from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iRes
 from linodenet.models.system import LinODECell
 from linodenet.testing import check_combined
 
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT.TEST_RESULTS_PATH / (PROJECT.TEST_RESULTS_PATH / __file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
-
 linodenet.CONFIG.autojit = False
 
 OUTER_BATCH = 3

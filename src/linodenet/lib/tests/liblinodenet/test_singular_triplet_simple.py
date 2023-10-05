@@ -87,15 +87,15 @@ def test_svd_algs_rank_one(shape: tuple[int, int], method: Callable) -> None:
             u, s, v = U[:, 0], S[0], Vh[0, :]
             assert np.allclose(s * np.outer(u, v), A)
         case torch.linalg.svd:
-            A = torch.from_numpy(matrix)
-            U, S, Vh = torch.linalg.svd(A)
+            B = torch.from_numpy(matrix)
+            U, S, Vh = torch.linalg.svd(B)
             # cols of U = LSV, rows of Vh: RSV
             u, s, v = U[:, 0], S[0], Vh[0, :]
-            assert torch.allclose(s * torch.outer(u, v), A)
+            assert torch.allclose(s * torch.outer(u, v), B)
         case linodenet.lib.singular_triplet:
-            A = torch.from_numpy(matrix)
-            s, u, v = linodenet.lib.singular_triplet(A)
-            assert torch.allclose(s * np.outer(u, v), A)
+            B = torch.from_numpy(matrix)
+            s, u, v = linodenet.lib.singular_triplet(B)
+            assert torch.allclose(s * np.outer(u, v), B)
         case _:
             raise ValueError(f"Unknown method: {method}")
 

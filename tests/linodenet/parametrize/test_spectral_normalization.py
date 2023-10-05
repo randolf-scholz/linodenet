@@ -9,11 +9,11 @@ from linodenet.models.encoders.invertible_layers import LinearContraction
 from linodenet.parametrize import SpectralNormalization
 
 if __name__ == "__main__":
-    model = LinearContraction(4, 4)
+    model_a = LinearContraction(4, 4)
 
-    print(model.weight, model.cached_weight)
-    model.recompute_cache()
-    print(model.weight, model.cached_weight)
+    print(model_a.weight, model_a.cached_weight)
+    model_a.recompute_cache()
+    print(model_a.weight, model_a.cached_weight)
 
     print("==============================================================")
 
@@ -36,28 +36,28 @@ if __name__ == "__main__":
 
     sys.exit(0)
 
-    print("Param ----------------------")
-    print(param, torch.linalg.cond(param), torch.linalg.matrix_norm(param, ord=2))
-
-    weight = spec.cached_tensors["weight"]
-    print("spec.cached_tensors[weight] ----------------------")
-    print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
-
-    weight = spec.parametrized_tensors["weight"]
-    print("spec.parametrized_tensors[weight] ----------------------")
-    print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
-
-    weight = spec()["weight"]
-    print("spec.forward ----------------------")
-    print(spec())
-
-    model.spec = spec
-    spec._update_cached_tensors()
-
-    weight = spec.cached_tensors["weight"]
-    print("spec.cached_tensors[weight] ----------------------")
-    print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
-
-    weight = spec()["weight"]
-    print(spec())
-    print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
+    # print("Param ----------------------")
+    # print(param, torch.linalg.cond(param), torch.linalg.matrix_norm(param, ord=2))
+    #
+    # weight = spec.cached_tensors["weight"]
+    # print("spec.cached_tensors[weight] ----------------------")
+    # print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
+    #
+    # weight = spec.parametrized_tensors["weight"]
+    # print("spec.parametrized_tensors[weight] ----------------------")
+    # print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
+    #
+    # weight = spec()["weight"]
+    # print("spec.forward ----------------------")
+    # print(spec())
+    #
+    # model.spec = spec
+    # spec._update_cached_tensors()
+    #
+    # weight = spec.cached_tensors["weight"]
+    # print("spec.cached_tensors[weight] ----------------------")
+    # print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
+    #
+    # weight = spec()["weight"]
+    # print(spec())
+    # print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))

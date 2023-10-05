@@ -68,15 +68,15 @@ class ParametrizationProto(Protocol):
         """Apply the parametrization and copy the result into cache."""
         ...
 
-    @jit.export
-    def right_inverse(self) -> None:
-        """Compute the right inverse of the parametrization."""
-        raise NotImplementedError
-
-    @jit.export
-    def reset_parameters(self) -> None:
-        """Reapply the initialization."""
-        raise NotImplementedError
+    # @jit.export
+    # def right_inverse(self) -> None:
+    #     """Compute the right inverse of the parametrization."""
+    #     raise NotImplementedError
+    #
+    # @jit.export
+    # def reset_parameters(self) -> None:
+    #     """Reapply the initialization."""
+    #     raise NotImplementedError
 
 
 class Parametrization(nn.Module, ParametrizationProto):
@@ -95,7 +95,7 @@ class Parametrization(nn.Module, ParametrizationProto):
 
     cached_tensors: dict[str, Tensor]
     """DICT: Holds cached tensors."""
-    parametrized_tensors: dict[str, Tensor]
+    parametrized_tensors: dict[str, nn.Parameter]
     """PARAMDICT: Holds parametrized tensors."""
 
     def __init__(self, *args, **kwargs):
@@ -229,6 +229,7 @@ class SimpleParametrization(nn.Module, ParametrizationProto):
         parametrization: Callable[[Tensor], Tensor],
     ) -> None:
         super().__init__()
+        assert isinstance(tensor, nn.Parameter), "tensor must be a parameter"
 
         # get the tensor to parametrize
         self.register_parameter("parametrized_tensor", tensor)
@@ -319,7 +320,7 @@ def register_optimizer_hook(optim: Optimizer) -> None:
 
 def get_parametrizations(module: nn.Module, /) -> dict[str, nn.Module]:
     """Return all parametrizations in a module."""
-    ...
+    raise NotImplementedError
 
 
 def reset_all_caches(module: nn.Module) -> None:
