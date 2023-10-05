@@ -10,10 +10,15 @@ Therefore, we set the absolute tolerance to 1e-6 and the relative tolerance to 1
 For example tensorflow.debugging.assert_near uses 10⋅eps as the tolerance.
 
 References:
-     numpy.finfo
+     - `numpy.finfo`
 """
 
-__all__ = ["test_svd_algs_rank_one", "test_rank_one", "test_diagonal"]
+__all__ = [
+    "test_svd_rank_one",
+    "test_rank_one",
+    "test_diagonal",
+    "test_analytical",
+]
 
 from collections.abc import Callable
 
@@ -66,9 +71,10 @@ ATOL = 1e-5
 RTOL = 1e-5
 
 
+# noinspection PyTupleAssignmentBalance
 @mark.parametrize("method", SVD_METHODS.values(), ids=SVD_METHODS.keys())
 @mark.parametrize("shape", SHAPES, ids=str)
-def test_svd_algs_rank_one(shape: tuple[int, int], method: Callable) -> None:
+def test_svd_rank_one(shape: tuple[int, int], method: Callable) -> None:
     """Checks that the singular triplet method works for rank one matrices."""
     m, n = shape
     matrix = random_rank_one_matrix(m, n)

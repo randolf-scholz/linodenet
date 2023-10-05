@@ -8,8 +8,7 @@ from collections.abc import Callable
 
 import torch
 from pytest import mark
-from torch import nn
-from torch.autograd import gradcheck
+from torch import autograd, nn
 
 from linodenet.lib import (
     singular_triplet,
@@ -157,7 +156,7 @@ def test_with_gradcheck(impl: Callable) -> None:
     torch.manual_seed(0)
     m, n = 4, 4
     A = torch.randn(m, n, requires_grad=True)
-    assert gradcheck(impl, (A,), eps=1e-4, atol=1e-4, rtol=1e-3)
+    assert autograd.gradcheck(impl, (A,), eps=1e-4, atol=1e-4, rtol=1e-3)
 
 
 if __name__ == "__main__":

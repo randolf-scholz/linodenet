@@ -93,7 +93,7 @@ def test_post_init_jit() -> None:
 
 
 def test_post_init() -> None:
-    """Checks that metaclasses work as expected."""
+    """Checks that meta-classes work as expected."""
     ModuleWithMetaclass(4, 4)
 
     with pytest.raises(ValueError):

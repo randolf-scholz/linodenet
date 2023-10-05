@@ -69,7 +69,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
      *
      *     (V)    ‖σₖ₊₁uₖ₊₁ - σₖuₖ‖ ≤ α + β⋅σₖ and ‖σₖ₊₁vₖ₊₁ - σₖvₖ‖ ≤ α + β⋅σₖ
      *
-     *     which raises the question whether normalized or unnormalized vectors should be
+     *     which raises the question whether normalized or non-normalized vectors should be
      *     memorized between iterations. We allow the user to specify an initial guess,
      *     which begs the question whether the initial guess should be assumed to be normalized or not.
      *     In particular, if no initial guess is given, then the random initialization must be normalized.

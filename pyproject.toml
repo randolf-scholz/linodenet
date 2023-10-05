@@ -1,5 +1,5 @@
 [build-system]
-requires = ["poetry-core>=1.6.0"]
+requires = ["poetry-core>=1.6.1"]
 build-backend = "poetry.core.masonry.api"
 
 
@@ -61,6 +61,7 @@ docs = [
     "sphinx-automodapi>=0.16.0",
     "sphinx-copybutton>=0.5.2",
     "sphinx-math-dollar>=1.2.1",
+    "sphinx-togglebutton>=0.3.2",
     "sphinx-typo3-theme>=4.9.0",
     "sphinx>=7.2.6",
 ]
@@ -142,6 +143,7 @@ documentation = "https://bvt-htbd.gitlab-pages.tu-berlin.de/kiwi/tf1/linodenet/"
 repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi/simple"
 # endregion project configuration ------------------------------------------------------
 
+
 # region pdm configuration -------------------------------------------------------------
 [[tool.pdm.source]]
 name = "berlin"
@@ -152,8 +154,7 @@ verify_ssl = true
 name = "hildesheim"
 url = "https://software.ismll.uni-hildesheim.de/api/v4/projects/459/packages/pypi/simple"
 verify_ssl = true
-# region pdm project configuration -----------------------------------------------------
-
+# endregion pdm project configuration -----------------------------------------------------
 
 
 # region flake8 configuration ----------------------------------------------------------
@@ -252,7 +253,6 @@ rst-roles = [
 ]
 rst-directives = ["Signature", "literalinclude"]
 # endregion flake8 configuration -------------------------------------------------------
-
 
 
 # region PyLint Configuration ----------------------------------------------------------
@@ -586,11 +586,11 @@ tsdm = {version = ">=0.5.3", source="berlin"}
 
 [tool.poetry.group.docs.dependencies]
 docutils = ">=0.20.1"
-#karma_sphinx_theme = ">=0.0.0"
+# karma_sphinx_theme = ">=0.0.0"
 myst_parser = ">=2.0.0"
 nbsphinx = ">=0.9.3"
-#numpydoc = ">=1.5.0"
-#pandoc = ">=2.3"
+# numpydoc = ">=1.5.0"
+# pandoc = ">=2.3"
 piccolo-theme = ">=0.18.0"
 pydata-sphinx-theme = ">=0.14.1"
 sphinx = ">=7.2.6"
@@ -599,9 +599,10 @@ sphinx-autodoc-typehints = ">=1.24.0"
 sphinx-automodapi = ">=0.16.0"
 sphinx-copybutton = ">=0.5.2"
 sphinx-math-dollar = ">=1.2.1"
-#sphinx-pdj-theme = ">=0.4.0"
+# sphinx-pdj-theme = ">=0.4.0"
+sphinx-togglebutton = ">=0.3.2"
 sphinx-typo3-theme = ">=4.9.0"
-#sphinxawesome-theme = ">=4.1.0"
+# sphinxawesome-theme = ">=4.1.0"
 
 
 [tool.poetry.group.devtools.dependencies]

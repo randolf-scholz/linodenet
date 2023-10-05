@@ -1,27 +1,26 @@
 """Parametrizations for Torch.
 
 Methods:
-- Parametrization: General purpose parametrization
-- SimpleParametrization: Parametrization of a single tensor with a callable
-- get_parametrizations: recurisvely returns all parametrizations in a module
-- register_parametrization: adds a parametrization to a specific tensor
-- cache: context manager which refreshes parametrization cache on exit.
-- register_optimizer_hook: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
+    - Parametrization: General purpose parametrization
+    - SimpleParametrization: Parametrization of a single tensor with a callable
+    - get_parametrizations: recursively returns all parametrizations in a module
+    - register_parametrization: adds a parametrization to a specific tensor
+    - cache: context manager which refreshes parametrization cache on exit.
+    - register_optimizer_hook: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
 
 Usage:
-- Create new parametrizations by subclassing Parametrization
-- Autogenerate parametrizations from a callable by SimpleParametrization
-- add parametrizations to an existing nn.Module by register_parametrization
+    - Create new parametrizations by subclassing Parametrization
+    - Autogenerate parametrizations from a callable by SimpleParametrization
+    - add parametrizations to an existing nn.Module by register_parametrization
 
 Issues:
-- It would be useful if without caching, the parametrizations would work like simple properties.
+    - It would be useful if without caching, the parametrizations would work like simple properties.
     - properties are not supported by JIT...
     - One could disable an if branch
         - but if-branches are slow...
     - context decorator could maybe mutate the nn.Module state...
     - In principle the parametrization only needs to recomputed if the tensor values change,
       so after an optimizer.step() or a reset_parameters() call.
-
 """
 
 __all__ = [
@@ -82,7 +81,7 @@ class ParametrizationProto(Protocol):
 class Parametrization(nn.Module, ParametrizationProto):
     """A parametrization that should be subclassed.
 
-    Usage:
+    Example:
         # create a model
         model = nn.Linear(4, 4)
         # create a parametrization
@@ -96,7 +95,7 @@ class Parametrization(nn.Module, ParametrizationProto):
     cached_tensors: dict[str, Tensor]
     """DICT: Holds cached tensors."""
     parametrized_tensors: dict[str, nn.Parameter]
-    """PARAMDICT: Holds parametrized tensors."""
+    """DICT: Holds parametrized tensors."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -313,14 +312,14 @@ def register_parametrization(
     setattr(model, tensor_name, parametrization.parametrized_tensor)
 
 
-def register_optimizer_hook(optim: Optimizer) -> None:
+def register_optimizer_hook(optim: Optimizer, /) -> None:
     """Automatically adds a hook to optimizer.step() which refreshes the cache after each step."""
-    raise NotImplementedError
+    raise NotImplementedError(optim)
 
 
 def get_parametrizations(module: nn.Module, /) -> dict[str, nn.Module]:
     """Return all parametrizations in a module."""
-    raise NotImplementedError
+    raise NotImplementedError(module)
 
 
 def reset_all_caches(module: nn.Module) -> None:

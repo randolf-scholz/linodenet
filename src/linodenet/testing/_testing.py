@@ -190,7 +190,7 @@ def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
 
 
 def _get_grads(x: nn.Module | Tree | Iterable, /) -> Iterator[Tensor]:
-    """Return a cloned detached copy of the gradients of the model / parameters."""
+    """Return a cloned detached copy of the gradients."""
     match x:
         case nn.Module() as model:
             yield from _get_grads(model.parameters())
@@ -208,7 +208,7 @@ def _get_grads(x: nn.Module | Tree | Iterable, /) -> Iterator[Tensor]:
 
 
 def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
-    """Return a cloned detached copy of the gradients of the model / parameters."""
+    """Return a cloned detached copy of the gradients."""
     return list(_get_grads(x))
 
 

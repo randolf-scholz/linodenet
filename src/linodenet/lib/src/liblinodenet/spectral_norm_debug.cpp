@@ -40,7 +40,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
         Tensor sigma_u = torch::empty({1}, u.options());
         Tensor sigma_v = torch::empty({1}, u.options());
 
-        // NOTE: during iteration u, u_old, v and v_old track the unnormalized vectors!!
+        // NOTE: during iteration u, u_old, v and v_old track the non-normalized vectors!!
         // Perform power-iteration for maxiter times or until convergence.
         for (auto i = 0; i<MAXITER; i++) {
             // NOTE: We apply two iterations per loop. This is a case of duff's device.

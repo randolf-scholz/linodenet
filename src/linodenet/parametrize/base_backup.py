@@ -4,7 +4,7 @@
 Methods:
 - Parametrization: General purpose parametrization
 - SimpleParametrization: Parametrization of a single tensor with a callable
-- get_parametrizations: recurisvely returns all parametrizations in a module
+- get_parametrizations: recursively returns all parametrizations in a module
 - register_parametrization: adds a parametrization to a specific tensor
 """
 
@@ -274,7 +274,7 @@ def register_parametrization(
 
 def get_parametrizations(module: nn.Module, /) -> dict[str, nn.Module]:
     """Return all parametrizations in a module."""
-    ...
+    raise NotImplementedError(module)
 
 
 def reset_all_caches(module: nn.Module) -> None:

@@ -577,7 +577,7 @@
     <inspection_tool class="PyListCreationInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
     <inspection_tool class="PyMandatoryEncodingInspection" enabled="false" level="WARNING" enabled_by_default="false" />
     <inspection_tool class="PyMethodFirstArgAssignmentInspection" enabled="true" level="WARNING" enabled_by_default="true" />
-    <inspection_tool class="PyMethodMayBeStaticInspection" enabled="true" level="WEAK WARNING" enabled_by_default="true" />
+    <inspection_tool class="PyMethodMayBeStaticInspection" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
     <inspection_tool class="PyMethodOverridingInspection" enabled="true" level="WARNING" enabled_by_default="true" />
     <inspection_tool class="PyMethodParametersInspection" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
     <inspection_tool class="PyMissingConstructorInspection" enabled="true" level="WARNING" enabled_by_default="true" />
@@ -620,6 +620,7 @@
           <option value="N801" />
           <option value="N803" />
           <option value="N802" />
+          <option value="N812" />
         </list>
       </option>
     </inspection_tool>
@@ -667,6 +668,7 @@
           <option value="torch.optim.lr_scheduler._LRScheduler" />
           <option value="importlib.util" />
           <option value="type.__getitem__" />
+          <option value="bool.*" />
         </list>
       </option>
     </inspection_tool>

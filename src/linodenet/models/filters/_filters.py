@@ -114,7 +114,7 @@ class PseudoKalmanFilter(nn.Module):
       state estimate and the observation.
 
     One idea: $P = 𝕀 + εA$, where $A$ is symmetric. In this case,
-    the inverse is approximately given by $𝕀-εA$.
+    $𝕀-εA$ is approximately equal to the inverse.
 
     We define the linearized filter as
 
