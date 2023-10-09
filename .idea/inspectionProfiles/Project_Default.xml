@@ -669,6 +669,7 @@
           <option value="importlib.util" />
           <option value="type.__getitem__" />
           <option value="bool.*" />
+          <option value="typing_extensions.*" />
         </list>
       </option>
     </inspection_tool>

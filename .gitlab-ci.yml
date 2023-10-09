@@ -87,6 +87,8 @@ setup:
     - VERSION='"'$(poetry version -s)'"'
     - python -c "import re; assert re.match($regex, $VERSION)"
     - echo ">>> Installing version $VERSION <<<"
+    # uninstall previous if applicable
+    - pip uninstall -y $MODULENAME
     # build the package.
     - poetry build
     # install package
@@ -111,6 +113,7 @@ setup:
     # install other dependencies
     - pip install --upgrade -e .[dev]
     - pip list
+    - python -c "import torch as module; print(module.__version__)"
     - echo "Validating that package $MODULENAME can be imported..."
     - python -c "import $MODULENAME as module; print(module.__version__)"
   after_script:

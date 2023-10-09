@@ -43,13 +43,10 @@ from linodenet.constants import EMPTY_MAP
 from linodenet.types import Nested, Scalar, T, callable_var, module_var
 
 __logger__ = logging.getLogger(__name__)
-
-
-# region utility functions for tensors AND scalars -------------------------------------\
-
 Tree: TypeAlias = Nested[Tensor | Scalar]
 
 
+# region utility functions for tensors AND scalars -------------------------------------\
 def get_device(x: nn.Module | Nested[Tensor | Scalar], /) -> torch.device:
     """Return the device of the model / parameters."""
     match x:
@@ -83,34 +80,37 @@ def to_device(
 ) -> tuple[T, ...]: ...
 def to_device(x: Any, /, *, device: str | torch.device = "cpu") -> Any:
     """Move a nested tensor to a device."""
-    # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
-    if isinstance(x, nn.Module):
-        return x.to(device=device)  # type: ignore[arg-type]
-    if isinstance(x, Tensor):
-        return x.to(device=device)
-    if isinstance(x, Scalar):  # type: ignore[misc, arg-type]
-        return x
-    if isinstance(x, Mapping):
-        return {key: to_device(val, device=device) for key, val in x.items()}
-    if isinstance(x, Iterable):
-        return tuple(to_device(item, device=device) for item in x)
+    match x:
+        case Tensor() as tensor:
+            return tensor.to(device=torch.device(device))
+        case nn.Module() as module:
+            return module.to(device=torch.device(device))
+        case None | bool() | int() | float() | str() as scalar:  # Scalar
+            # FIXME: https://github.com/python/cpython/issues/106246
+            return scalar
+        case Mapping() as mapping:
+            return {key: to_device(val, device=device) for key, val in mapping.items()}
+        case Iterable() as iterable:
+            return tuple(to_device(item, device=device) for item in iterable)
     raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
 def iter_tensors(x: nn.Module | Tree, /) -> Iterator[Tensor]:
     """Iterate over the parameters of the model / parameters."""
-    if isinstance(x, nn.Module):
-        yield from x.parameters()
-    elif isinstance(x, Tensor):
-        yield x
-    elif isinstance(x, Scalar):  # type: ignore[misc, arg-type]
-        pass
-    elif isinstance(x, Mapping):
-        yield from chain.from_iterable(iter_tensors(item) for item in x.values())
-    elif isinstance(x, Iterable):
-        yield from chain.from_iterable(iter_tensors(item) for item in x)
-    else:
-        raise TypeError(f"Unsupported input type {type(x)!r}")
+    match x:
+        case Tensor() as tensor:
+            yield tensor
+        case nn.Module() as module:
+            yield from module.parameters()
+        case None | bool() | int() | float() | str():  # Scalar
+            # FIXME: https://github.com/python/cpython/issues/106246
+            pass
+        case Mapping() as mapping:
+            yield from chain.from_iterable(iter_tensors(v) for v in mapping.values())
+        case Iterable() as iterable:
+            yield from chain.from_iterable(iter_tensors(item) for item in iterable)
+        case _:
+            raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
 def iter_parameters(x: nn.Module | Tree, /) -> Iterator[nn.Parameter]:
@@ -140,8 +140,6 @@ def zero_grad(x: nn.Module | Tree, /) -> None:
 
 
 # region utility functions  for outputs (always tensor) --------------------------------
-
-
 def flatten_nested_tensor(x: nn.Module | Tree, /) -> Tensor:
     r"""Flattens element of general Hilbert space, skips over scalars."""
     return torch.cat([x.flatten() for x in iter_tensors(x)])
@@ -225,6 +223,7 @@ def assert_close(
 # endregion utility functions  for outputs (always tensor) -----------------------------
 
 
+# region check helper functions --------------------------------------------------------
 def check_forward(
     func: Callable[..., Nested[Tensor]],
     /,
@@ -381,6 +380,9 @@ def check_optim(
         r = get_norm(outputs)
         r.backward()
         optim.step()
+
+
+# endregion check helper functions -----------------------------------------------------
 
 
 def check_combined(
