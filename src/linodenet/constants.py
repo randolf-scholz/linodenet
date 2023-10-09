@@ -9,6 +9,9 @@ __all__ = [
     "NAN",
     "POS_INF",
     "NEG_INF",
+    "ATOL",
+    "RTOL",
+    "EPS",
 ]
 
 
@@ -22,16 +25,33 @@ from torch import BoolTensor, FloatTensor
 EMPTY_MAP: Final[Mapping] = MappingProxyType({})
 """CONSTANT: Immutable Empty dictionary."""
 TRUE: Final[BoolTensor] = torch.tensor(True, dtype=torch.bool)  # type: ignore[assignment]
-"""A constant tensor representing the boolean value ``True``."""
+"""A constant tensor representing the boolean value `True`."""
 FALSE: Final[BoolTensor] = torch.tensor(False, dtype=torch.bool)  # type: ignore[assignment]
-"""A constant tensor representing the boolean value ``False``."""
+"""A constant tensor representing the boolean value `False`."""
 ZERO: Final[FloatTensor] = torch.tensor(0.0, dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number ``0``."""
+"""A constant tensor representing the number `0`."""
 ONE: Final[FloatTensor] = torch.tensor(1.0, dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number ``1``."""
+"""A constant tensor representing the number `1`."""
 NAN: Final[FloatTensor] = torch.tensor(float("nan"), dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number ``NaN``."""
+"""A constant tensor representing the number `NaN`."""
 POS_INF: Final[FloatTensor] = torch.tensor(float("inf"), dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number ``+∞``."""
+"""A constant tensor representing the number `+∞`."""
 NEG_INF: Final[FloatTensor] = torch.tensor(float("-inf"), dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number ``-∞``."""
+"""A constant tensor representing the number `-∞`."""
+ATOL: Final[float] = 1e-6
+"""CONST: Default absolute precision."""
+RTOL: Final[float] = 1e-6
+"""CONST: Default relative precision."""
+EPS: Final[dict[torch.dtype, float]] = {
+    # other floats
+    torch.bfloat16: 1e-2,
+    # floats
+    torch.float16: 1e-3,
+    torch.float32: 1e-6,
+    torch.float64: 1e-15,
+    # complex floats
+    torch.complex32: 1e-3,
+    torch.complex64: 1e-6,
+    torch.complex128: 1e-15,
+}
+"""CONST: Default epsilon for each dtype."""

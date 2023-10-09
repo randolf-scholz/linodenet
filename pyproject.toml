@@ -65,6 +65,22 @@ docs = [
     "sphinx-typo3-theme>=4.9.0",
     "sphinx>=7.2.6",
 ]
+devtools = [
+    "cmake>=3.27.6",
+    "devtools>=0.12.2",
+    "johnnydep>=1.20.3",
+    "ninja>=1.11.1",
+    "pip>=23.2.1",
+    "pip-tools>=7.3.0",
+    "pipdeptree>=2.13.0",
+    "pipreqs>=0.4.13",
+    "pre-commit>=3.4.0",
+    "pybadges>=3.0.0",
+    "pydeps>=1.12.17",
+    "setuptools>=68.2.2",
+    "twine>=4.0.2",
+    "wheel>=0.41.2",
+]
 extras = [
     "ipympl>=0.9.3",
     "ipywidgets>=8.1.1",
@@ -125,16 +141,7 @@ formatters = [
     "nbstripout-fast>=1.0.2",
     "ssort>=0.11.6",
 ]
-devtools = [
-    "pip>=23.2.1",
-    "pre-commit>=3.4.0",
-    "pybadges>=3.0.0",
-    "pydeps>=1.12.17",
-    "pygments>=2.16.1",
-    "setuptools>=68.2.2",
-    "twine>=4.0.2",
-    "wheel>=0.41.2",
-]
+
 
 
 [project.urls]
