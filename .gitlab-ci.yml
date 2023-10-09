@@ -109,7 +109,7 @@ setup:
     - poetry config repositories.tsdm $mirror
     - poetry config http-basic.tsdm gitlab-ci-token "${CI_JOB_TOKEN}"
     # install dev dependencies
-    - pip install tsdm --upgrade --pre --no-deps --index-url $mirror
+    - pip install tsdm --upgrade --index-url $mirror
     # install other dependencies
     - pip install --upgrade -e .[dev]
     - pip list
