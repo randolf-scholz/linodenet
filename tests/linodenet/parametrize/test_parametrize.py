@@ -8,7 +8,7 @@ from pytest import mark
 from torch import Tensor, nn
 from torch.linalg import matrix_norm
 
-from linodenet.parametrize import SimpleParametrization, SpectralNormalization
+from linodenet.parametrize import SpectralNormalization, parametrize
 from linodenet.projections import is_symmetric, symmetric
 from linodenet.testing import check_model
 
@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 def test_overwrite_module_attribute():
-    class parametrize(nn.Module):
+    class parametrize_alt(nn.Module):
         weight: Tensor
 
         def __init__(self, weight: Tensor) -> None:
@@ -76,7 +76,7 @@ def test_surgery_extended() -> None:
         assert matrix_norm(model.weight, ord=2) > 1
 
     spec = SpectralNormalization(model.weight)
-    spec.reset_cache()
+    spec.update_parametrization()
     assert matrix_norm(spec.weight, ord=2) <= 1.0
     spec.weight.norm().backward()
     spec.zero_grad(set_to_none=True)
@@ -88,7 +88,7 @@ def test_parametrization() -> None:
     spec = SpectralNormalization(nn.Parameter(model.weight.clone().detach()))
 
     model.spec = spec
-    spec._update_cached_tensors()
+    spec.update_cache()
 
     inputs = torch.randn(2, 4)
 
@@ -101,7 +101,7 @@ def test_dummy():
     spec = SpectralNormalization(nn.Parameter(model.weight.clone().detach()))
     del model.weight
     model.spec = spec
-    spec._update_cached_tensors()
+    spec.update_cache()
 
     model.register_buffer("weight", model.spec.weight)
     model.register_parameter(
@@ -110,6 +110,9 @@ def test_dummy():
     inputs = torch.randn(2, 4)
 
     check_model(model, input_args=(inputs,), test_jit=True)
+
+
+def test_parametrizations() -> None: ...
 
 
 def test_param() -> None:
@@ -132,7 +135,7 @@ def test_param() -> None:
 
     # now, parametrize
     weight = model.weight
-    param = SimpleParametrization(weight, symmetric)
+    param = parametrize(weight, symmetric)
     param.zero_grad(set_to_none=True)
     model.weight = param.parametrized_tensor
     model.param = param

@@ -19,6 +19,7 @@ __all__ = [
     "skew_symmetric",
     "special_orthogonal",
     "symmetric",
+    "traceless",
 ]
 
 from collections.abc import Sequence
@@ -171,3 +172,14 @@ def low_rank(size: SizeLike, *, rank: Optional[int] = None) -> Tensor:
     V = torch.normal(mean=torch.zeros((*batch, rank, n)), std=1 / sqrt(n))
 
     return torch.einsum("...ij, ...jk -> ...ik", U, V)
+
+
+def traceless(n: SizeLike) -> Tensor:
+    r"""Sample a random traceless matrix, i.e. $\tr(A)=0$."""
+    # convert to tuple
+    tup = (n,) if isinstance(n, int) else tuple(n)
+    dim, size = tup[-1], tup[:-1]
+    shape = (*size, dim, dim)
+
+    A = torch.normal(mean=torch.zeros(shape), std=1 / sqrt(dim))
+    return A - torch.einsum("..., ii -> ...", A, torch.eye(dim))

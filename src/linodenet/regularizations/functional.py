@@ -74,7 +74,8 @@ def identity(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X∥_F^2
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X∥_F^2
     """
     return matrix_norm(x, p=p, size_normalize=size_normalize)
 
@@ -87,7 +88,8 @@ def skew_symmetric(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
     """
     r = x - projections.skew_symmetric(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -101,7 +103,8 @@ def symmetric(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = +X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = +X
     """
     r = x - projections.symmetric(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -115,7 +118,8 @@ def orthogonal(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
     """
     r = x - projections.orthogonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -129,7 +133,8 @@ def normal(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = XX^⊤
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = XX^⊤
     """
     r = x - projections.normal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -143,7 +148,13 @@ def traceless(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = XX^⊤
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. tr(X) = 0
+
+    Note:
+        Traceless matrices are also called *trace-free* or *trace-zero* matrices.
+        They have the important property that $\det(\exp(X)) = 1$,
+        which follows from the fact that $\det(\exp(X)) = \exp(\r(X))$.
     """
     r = x - projections.traceless(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -157,7 +168,8 @@ def diagonal(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙𝕀 = X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙𝕀 = X
     """
     r = x - projections.diagonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -175,7 +187,8 @@ def banded(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙B = X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙B = X
     """
     r = x - projections.banded(x, upper=upper, lower=lower)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -192,7 +205,8 @@ def masked(
 
     .. Signature:: ``(..., n, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙M = X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙M = X
     """
     r = x - projections.masked(x, m=m)
     return matrix_norm(r, p=p, size_normalize=size_normalize)

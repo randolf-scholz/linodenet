@@ -29,6 +29,7 @@ __all__ = [
     "skew_symmetric",
     "special_orthogonal",
     "symmetric",
+    "traceless",
     # Classes
 ]
 
@@ -43,6 +44,7 @@ from linodenet.initializations.functional import (
     skew_symmetric,
     special_orthogonal,
     symmetric,
+    traceless,
 )
 
 INITIALIZATIONS: dict[str, Initialization] = {
@@ -54,5 +56,6 @@ INITIALIZATIONS: dict[str, Initialization] = {
     "skew-symmetric": skew_symmetric,
     "special-orthogonal": special_orthogonal,
     "symmetric": symmetric,
+    "traceless": traceless,
 }
 r"""Dictionary containing all available initializations."""
