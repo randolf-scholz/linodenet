@@ -1,12 +1,29 @@
-"""Parametrizations for Torch.
+"""Alternative to builtin parametrizations of torch.
 
-Methods:
-    - Parametrization: General purpose parametrization
-    - SimpleParametrization: Parametrization of a single tensor with a callable
+Goals:
+    - Support for JIT. In particular, we do not use `@property`.
+    - Class-based parametrizations that allow more complex parametrizations.
+        - Example: SpectralNormalization uses an iterative algorithm to compute the spectral norm,
+            which is accelerated by caching the singular vectors and reusing them in the next iteration.
+    - More fine grained control over what is cached and what is not.
+        - In particular, we do not use any global variables
+
+Content:
+    - `Parametrization`: Protocol class for parametrizations.
+    - `ParametrizationBase`: Parametrization of a single tensor
+    - `ParametrizationDict`: Parametrization of multiple tensors
+    - `parametrize`: plug-in replacement for `torch.nn.utils.parametrize`
+        wraps a function Tensor -> Tensor into a parametrization.
+    - `cached`: (quasi) plug-in replacement for `torch.nn.utils.parametrize.cached`
+        context manager which refreshes parametrization cache on exit.
+
     - get_parametrizations: recursively returns all parametrizations in a module
     - register_parametrization: adds a parametrization to a specific tensor
-    - cache: context manager which refreshes parametrization cache on exit.
     - register_optimizer_hook: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
+
+Differences:
+    - By default, parametrizations
+
 
 Usage:
     - Create new parametrizations by subclassing Parametrization
@@ -21,7 +38,6 @@ Issues:
     - context decorator could maybe mutate the nn.Module state...
     - In principle the parametrization only needs to recomputed if the tensor values change,
       so after an optimizer.step() or a reset_parameters() call.
-
 
 Classes:
     - `ParametrizationProto`: Protocol for all parametrizations.
@@ -330,9 +346,11 @@ def register_optimizer_hook(optim: Optimizer, /) -> None:
     raise NotImplementedError(optim)
 
 
-def get_parametrizations(module: nn.Module, /) -> dict[str, nn.Module]:
+def get_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
     """Return all parametrizations in a module."""
-    raise NotImplementedError(module)
+    for m in module.modules():
+        if isinstance(m, Parametrization):
+            yield m
 
 
 def reset_all_caches(module: nn.Module) -> None:
@@ -342,16 +360,18 @@ def reset_all_caches(module: nn.Module) -> None:
             submodule.update_parametrization()
 
 
-class reset_caches(AbstractContextManager):
-    """reset_caches context manager."""
+class cached(AbstractContextManager):
+    """Context Manager to update the caches of all the given modules."""
 
-    def __init__(self, module: nn.Module) -> None:
-        self.module = module
+    def __init__(self, *modules: nn.Module) -> None:
+        self.modules = modules
 
     def __enter__(self):
-        reset_all_caches(self.module)
-        return self.module
+        pass
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        reset_all_caches(self.module)
+        for module in self.modules:
+            for param in get_parametrizations(module):
+                param.update_parametrization()
+
         return False
