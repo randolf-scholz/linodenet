@@ -7,11 +7,13 @@ There are 2 types of parametrizations:
 """
 
 __all__ = [
+    # Parametrizations
     "CayleyMap",
     "GramMatrix",
     "MatrixExponential",
-    "ReZero",
     "SpectralNormalization",
+    # Learnable parametrizations
+    "ReZero",
     # linodenet.projections
     "Hamiltonian",
     "Normal",

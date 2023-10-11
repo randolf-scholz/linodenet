@@ -3,6 +3,8 @@
 __all__ = [
     # Protocol
     "Parametrization",
+    # Constants
+    "PARAMETRIZATIONS",
     # Classes
     "ParametrizationBase",
     "ParametrizationDict",
@@ -15,15 +17,23 @@ __all__ = [
     "CayleyMap",
     "GramMatrix",
     "MatrixExponential",
+    "SpectralNormalization",
+    # Learnable parametrizations
     "ReZero",
     # linodenet.projections
-    "Diagonal",
+    "Hamiltonian",
+    "Normal",
+    "Orthogonal",
     "SkewSymmetric",
-    "SpectralNormalization",
     "Symmetric",
+    "Symplectic",
     "Traceless",
-    # Constants
-    "PARAMETRIZATIONS",
+    # linodenet.projections masked
+    "Banded",
+    "Diagonal",
+    "LowerTriangular",
+    "Masked",
+    "UpperTriangular",
 ]
 
 from linodenet.parametrize.base import (
@@ -36,26 +46,45 @@ from linodenet.parametrize.base import (
     reset_all_caches,
 )
 from linodenet.parametrize.parametrizations import (
+    Banded,
     CayleyMap,
     Diagonal,
     GramMatrix,
+    Hamiltonian,
+    LowerTriangular,
+    Masked,
     MatrixExponential,
+    Normal,
+    Orthogonal,
     ReZero,
     SkewSymmetric,
     SpectralNormalization,
     Symmetric,
+    Symplectic,
     Traceless,
+    UpperTriangular,
 )
 
 PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
+    # Parametrizations
     "CayleyMap": CayleyMap,
     "GramMatrix": GramMatrix,
     "MatrixExponential": MatrixExponential,
+    "SpectralNormalization": SpectralNormalization,
+    # Learnable parametrizations
     "ReZero": ReZero,
     # linodenet.projections
-    "Diagonal": Diagonal,
+    "Hamiltonian": Hamiltonian,
+    "Normal": Normal,
+    "Orthogonal": Orthogonal,
     "SkewSymmetric": SkewSymmetric,
-    "SpectralNormalization": SpectralNormalization,
     "Symmetric": Symmetric,
+    "Symplectic": Symplectic,
     "Traceless": Traceless,
+    # linodenet.projections masked
+    "Banded": Banded,
+    "Diagonal": Diagonal,
+    "LowerTriangular": LowerTriangular,
+    "Masked": Masked,
+    "UpperTriangular": UpperTriangular,
 }

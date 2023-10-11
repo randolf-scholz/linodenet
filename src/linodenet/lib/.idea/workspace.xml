@@ -21,20 +21,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../../../dev/parametrization/demo.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/parametrization/demo.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../initializations/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../initializations/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../initializations/functional.py" beforeDir="false" afterPath="$PROJECT_DIR$/../initializations/functional.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../parametrize/parametrizations.py" beforeDir="false" afterPath="$PROJECT_DIR$/../parametrize/parametrizations.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../projections/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../projections/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../projections/_projections.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../projections/functional.py" beforeDir="false" afterPath="$PROJECT_DIR$/../projections/functional.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../projections/modular.py" beforeDir="false" afterPath="$PROJECT_DIR$/../projections/modular.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../projections/testing.py" beforeDir="false" afterPath="$PROJECT_DIR$/../projections/testing.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../regularizations/functional.py" beforeDir="false" afterPath="$PROJECT_DIR$/../regularizations/functional.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../regularizations/modular.py" beforeDir="false" afterPath="$PROJECT_DIR$/../regularizations/modular.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../types.py" beforeDir="false" afterPath="$PROJECT_DIR$/../types.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../tests/linodenet/parametrize/test_parametrize.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../tests/linodenet/parametrize/test_parametrize.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -149,7 +136,7 @@
       <workItem from="1696768003364" duration="1208000" />
       <workItem from="1696961710053" duration="286000" />
       <workItem from="1696962017102" duration="46000" />
-      <workItem from="1697015228573" duration="612000" />
+      <workItem from="1697015228573" duration="617000" />
     </task>
     <servers />
   </component>
