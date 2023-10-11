@@ -197,7 +197,7 @@ def banded(
 @jit.script
 def masked(
     x: Tensor,
-    m: BoolTensor = TRUE,
+    mask: BoolTensor = TRUE,
     p: Optional[float] = None,
     size_normalize: bool = False,
 ) -> Tensor:
@@ -208,5 +208,5 @@ def masked(
     .. math:: A ↦ ‖A-Π(A)‖_p
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙M = X
     """
-    r = x - projections.masked(x, m=m)
+    r = x - projections.masked(x, mask=mask)
     return matrix_norm(r, p=p, size_normalize=size_normalize)

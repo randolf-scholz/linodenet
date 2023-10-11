@@ -4,7 +4,9 @@ __all__ = [
     # Aliases
     "Nested",
     "Scalar",
-    "SizeLike",
+    "Device",
+    "Dtype",
+    "Shape",
     # Type Variables
     "T",
     "callable_var",
@@ -18,13 +20,19 @@ __all__ = [
 from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol, TypeAlias, TypeVar
 
-from torch import nn
+from torch import device, dtype, nn
 
 # region static type aliases -----------------------------------------------------------
 Scalar: TypeAlias = None | bool | int | float | str
 r"""Type hint for scalar types allowed by torchscript."""
 
-SizeLike: TypeAlias = int | tuple[int, ...]
+Device: TypeAlias = None | device
+r"""Type hint for device types allowed by torchscript."""
+
+Dtype: TypeAlias = None | dtype
+r"""Type hint for dtype types allowed by torchscript."""
+
+Shape: TypeAlias = int | tuple[int, ...]
 r"""Type hint for shape-like inputs."""
 # endregion static type aliases --------------------------------------------------------
 

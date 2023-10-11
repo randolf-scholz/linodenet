@@ -5,34 +5,30 @@ import logging
 
 import torch
 from pytest import mark
-from torch import Tensor, nn
+from torch import nn
 from torch.linalg import matrix_norm
 
 from linodenet.parametrize import SpectralNormalization, parametrize
 from linodenet.projections import is_symmetric, symmetric
 from linodenet.testing import check_model
 
+# from torch.optim import SGD
+
+
 logging.basicConfig(level=logging.INFO)
-
-
-def test_overwrite_module_attribute():
-    class parametrize_alt(nn.Module):
-        weight: Tensor
-
-        def __init__(self, weight: Tensor) -> None:
-            super().__init__()
-            self.weight = weight
-
-    model = nn.Linear(4, 3)
-    inputs = torch.randn(2, 4)
-
-    model(inputs)
 
 
 @mark.skip(reason="Not implemented")
 def test_jit_protocol() -> None:
     """Test that subclasses of Protocol-class work with JIT."""
     raise NotImplementedError
+
+
+# def test_optimization_manual() -> None:
+#     B, N, M = 4, 3, 2
+#     inputs = torch.randn(B, N)
+#     targets = torch.randn(B, M)
+#     model = nn.Linear(in_features=N, out_features=M)
 
 
 def test_surgery() -> None:
@@ -112,6 +108,7 @@ def test_dummy():
     check_model(model, input_args=(inputs,), test_jit=True)
 
 
+@mark.skip(reason="Not implemented")
 def test_parametrizations() -> None: ...
 
 

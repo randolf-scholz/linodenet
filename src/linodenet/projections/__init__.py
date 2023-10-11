@@ -13,102 +13,161 @@ __all__ = [
     "PROJECTIONS",
     "FUNCTIONAL_PROJECTIONS",
     "MODULAR_PROJECTIONS",
-    # Types
+    "MATRIX_TESTS",
+    # Protocols
+    "MatrixTest",
     "Projection",
+    # Base Classes
     "ProjectionABC",
     # Sub-Modules
     "functional",
     "modular",
-    # checks
-    "is_banded",
-    "is_diagonal",
-    "is_masked",
+    # is_*-checks
+    "is_hamiltonian",
     "is_normal",
     "is_orthogonal",
     "is_skew_symmetric",
     "is_symmetric",
+    "is_symplectic",
     "is_traceless",
+    # is_*-masked
+    "is_banded",
+    "is_diagonal",
+    "is_lower_triangular",
+    "is_masked",
+    "is_upper_triangular",
     # Functions
-    "banded",
-    "diagonal",
+    "hamiltonian",
     "identity",
-    "masked",
     "normal",
     "orthogonal",
     "skew_symmetric",
     "symmetric",
+    "symplectic",
     "traceless",
+    # masked
+    "banded",
+    "diagonal",
+    "lower_triangular",
+    "upper_triangular",
+    "masked",
     # Classes
-    "Banded",
-    "Diagonal",
+    "Hamiltonian",
     "Identity",
-    "Masked",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Symplectic",
     "Traceless",
+    # Masked
+    "Banded",
+    "Diagonal",
+    "LowerTriangular",
+    "Masked",
+    "UpperTriangular",
 ]
 
 
 from linodenet.projections import functional, modular
-from linodenet.projections._projections import Projection, ProjectionABC
 from linodenet.projections.functional import (
+    Projection,
     banded,
     diagonal,
+    hamiltonian,
     identity,
+    lower_triangular,
     masked,
     normal,
     orthogonal,
     skew_symmetric,
     symmetric,
+    symplectic,
     traceless,
+    upper_triangular,
 )
 from linodenet.projections.modular import (
     Banded,
     Diagonal,
+    Hamiltonian,
     Identity,
+    LowerTriangular,
     Masked,
     Normal,
     Orthogonal,
+    ProjectionABC,
     SkewSymmetric,
     Symmetric,
+    Symplectic,
     Traceless,
+    UpperTriangular,
 )
 from linodenet.projections.testing import (
+    MatrixTest,
     is_banded,
     is_diagonal,
+    is_hamiltonian,
+    is_lower_triangular,
     is_masked,
     is_normal,
     is_orthogonal,
     is_skew_symmetric,
     is_symmetric,
+    is_symplectic,
     is_traceless,
+    is_upper_triangular,
 )
 
+MATRIX_TESTS: dict[str, MatrixTest] = {
+    "is_hamiltonian": is_hamiltonian,
+    "is_normal": is_normal,
+    "is_orthogonal": is_orthogonal,
+    "is_skew_symmetric": is_skew_symmetric,
+    "is_symmetric": is_symmetric,
+    "is_symplectic": is_symplectic,
+    "is_traceless": is_traceless,
+    # masked
+    "is_banded": is_banded,
+    "is_diagonal": is_diagonal,
+    "is_lower_triangular": is_lower_triangular,
+    "is_masked": is_masked,
+    "is_upper_triangular": is_upper_triangular,
+}
+
 FUNCTIONAL_PROJECTIONS: dict[str, Projection] = {
-    "banded": banded,
-    "diagonal": diagonal,
+    # Projections
+    "hamiltonian": hamiltonian,
     "identity": identity,
-    "masked": masked,
     "normal": normal,
     "orthogonal": orthogonal,
     "skew_symmetric": skew_symmetric,
     "symmetric": symmetric,
+    "symplectic": symplectic,
     "traceless": traceless,
+    # masked
+    "banded": banded,
+    "diagonal": diagonal,
+    "lower_triangular": lower_triangular,
+    "upper_triangular": upper_triangular,
+    "masked": masked,
 }
 r"""Dictionary of all available modular metrics."""
 
 MODULAR_PROJECTIONS: dict[str, type[Projection]] = {
-    "Banded": Banded,
-    "Diagonal": Diagonal,
+    "Hamiltonian": Hamiltonian,
     "Identity": Identity,
-    "Masked": Masked,
     "Normal": Normal,
     "Orthogonal": Orthogonal,
     "SkewSymmetric": SkewSymmetric,
     "Symmetric": Symmetric,
+    "Symplectic": Symplectic,
     "Traceless": Traceless,
+    # Masked
+    "Banded": Banded,
+    "Diagonal": Diagonal,
+    "LowerTriangular": LowerTriangular,
+    "Masked": Masked,
+    "UpperTriangular": UpperTriangular,
 }
 r"""Dictionary of all available modular metrics."""
 

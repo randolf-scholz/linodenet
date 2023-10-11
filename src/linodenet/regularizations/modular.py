@@ -247,13 +247,13 @@ class Masked(nn.Module):
     """
 
     def __init__(
-        self, m: BoolTensor, p: Optional[float] = None, size_normalize: bool = True
+        self, mask: BoolTensor, p: Optional[float] = None, size_normalize: bool = True
     ):
         super().__init__()
-        self.m = m
+        self.mask = mask
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards masked matrix."""
-        return masked(x, m=self.m, p=self.p, size_normalize=self.size_normalize)
+        return masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)

@@ -7,18 +7,26 @@ Contains projections in modular form.
 """
 
 __all__ = [
+    # Base Classes
+    "ProjectionABC",
     # Classes
-    "Banded",
-    "Diagonal",
+    "Hamiltonian",
     "Identity",
-    "Masked",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Symplectic",
     "Traceless",
+    # Masked
+    "Banded",
+    "Diagonal",
+    "LowerTriangular",
+    "Masked",
+    "UpperTriangular",
 ]
 
+from abc import abstractmethod
 from typing import Final, Optional
 
 import torch
@@ -27,16 +35,38 @@ from torch import BoolTensor, Tensor, jit, nn
 from linodenet.projections.functional import (
     banded,
     diagonal,
+    hamiltonian,
     identity,
+    lower_triangular,
     masked,
     normal,
     orthogonal,
     skew_symmetric,
     symmetric,
+    symplectic,
     traceless,
+    upper_triangular,
 )
 
 
+class ProjectionABC(nn.Module):
+    """Abstract Base Class for Projection components."""
+
+    @abstractmethod
+    def forward(self, z: Tensor, /) -> Tensor:
+        r"""Forward pass of the projection.
+
+        .. Signature: ``(..., d) -> (..., f)``.
+
+        Args:
+            z: The input tensor to be projected.
+
+        Returns:
+            x: The projected tensor.
+        """
+
+
+# region projections -------------------------------------------------------------------
 class Identity(nn.Module):
     r"""Return x as-is.
 
@@ -151,6 +181,43 @@ class Traceless(nn.Module):
         return traceless(x)
 
 
+class Hamiltonian(nn.Module):
+    r"""Return the closest symplectic matrix to X.
+
+    .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+
+    Alternatively, the above is equivalent to
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J= 𝔻₊₁-𝔻₋₁
+
+    where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return hamiltonian(x)
+
+
+class Symplectic(nn.Module):
+    r"""Return the closest symplectic matrix to X.
+
+    .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+
+    Alternatively, the above is equivalent to
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J= 𝔻₊₁-𝔻₋₁
+
+    where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return symplectic(x)
+
+
+# region masked projections ------------------------------------------------------------
 class Diagonal(nn.Module):
     r"""Return the closest diagonal matrix to X.
 
@@ -159,6 +226,13 @@ class Diagonal(nn.Module):
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
 
     One can show analytically that the unique smallest norm minimizer is $Y = 𝕀⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
     """
 
     @jit.export
@@ -172,9 +246,16 @@ class Banded(nn.Module):
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = B⊙Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝔹⊙Y
 
-    One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝔹⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
     """
 
     upper: Final[int]
@@ -191,14 +272,79 @@ class Banded(nn.Module):
         return banded(x, upper=self.upper, lower=self.lower)
 
 
+class UpperTriangular(nn.Module):
+    r"""Return the closest upper triangular matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   𝕌⊙Y = Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕌⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
+    """
+
+    upper: Final[int]
+
+    def __init__(self, upper: int = 0) -> None:
+        super().__init__()
+        self.upper = upper
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of upper triangular matrices."""
+        return upper_triangular(x, upper=self.upper)
+
+
+class LowerTriangular(nn.Module):
+    r"""Return the closest lower triangular matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   𝕃⊙Y = Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕃⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
+    """
+
+    lower: Final[int]
+
+    def __init__(self, lower: int = 0) -> None:
+        super().__init__()
+        self.lower = lower
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of lower triangular matrices."""
+        return lower_triangular(x, lower=self.lower)
+
+
 class Masked(nn.Module):
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = M⊙Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕄⊙Y
 
-    One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕄⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
     """
 
     mask: BoolTensor
@@ -211,3 +357,7 @@ class Masked(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of masked matrices."""
         return masked(x, self.mask)
+
+
+# endregion masked projections ---------------------------------------------------------
+# endregion projections ----------------------------------------------------------------
