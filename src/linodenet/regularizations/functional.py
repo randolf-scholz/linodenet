@@ -8,21 +8,29 @@ Contains regularizations in functional form.
 
 
 __all__ = [
+    # Protocol
+    "Regularization",
     # Functions
-    "banded",
-    "diagonal",
-    "identity",
     "logdetexp",
-    "masked",
     "matrix_norm",
+    # linodenet.projections (matrix groups)
+    "hamiltonian",
+    "identity",
     "normal",
     "orthogonal",
     "skew_symmetric",
     "symmetric",
+    "symplectic",
     "traceless",
+    # linodenet.projections (masked)
+    "banded",
+    "diagonal",
+    "lower_triangular",
+    "masked",
+    "upper_triangular",
 ]
 
-from typing import Optional
+from typing import Protocol, Union, runtime_checkable
 
 import torch.linalg
 from torch import BoolTensor, Tensor, jit
@@ -31,8 +39,20 @@ from linodenet.constants import TRUE
 from linodenet.projections import functional as projections
 
 
+@runtime_checkable
+class Regularization(Protocol):
+    """Protocol for Regularization Components."""
+
+    def __call__(
+        self, x: Tensor, /, *, p: int = ..., size_normalize: bool = ...
+    ) -> Tensor:
+        """Forward pass of the regularization."""
+        ...
+
+
+# region regularizations ---------------------------------------------------------------
 @jit.script
-def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
+def logdetexp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     r"""Bias $\det(e^A)$ towards 1.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -45,30 +65,39 @@ def logdetexp(x: Tensor, p: float = 1.0) -> Tensor:
 
     .. math:: |\tr(A)|^p
     """
-    traces = torch.sum(torch.diagonal(x, dim1=-1, dim2=-2), dim=-1)
+    diag = torch.diagonal(x, dim1=-1, dim2=-2)
+
+    if size_normalize:
+        traces = torch.mean(diag, dim=-1)
+    else:
+        traces = torch.sum(diag, dim=-1)
+
     return torch.abs(traces) ** p
 
 
 @jit.script
 def matrix_norm(
-    r: Tensor, p: Optional[float] = None, size_normalize: bool = True
+    r: Tensor, p: Union[str, int] = "fro", size_normalize: bool = True
 ) -> Tensor:
     r"""Return the matrix regularization term.
 
     .. Signature:: ``(..., n, n) -> ...``
     """
-    if p is None:
-        s = torch.linalg.matrix_norm(r)
+    if isinstance(p, str):
+        s = torch.linalg.matrix_norm(r, ord=p, dim=(-2, -1))
     else:
-        s = torch.linalg.matrix_norm(r, ord=p)
+        s = torch.linalg.matrix_norm(r, ord=p, dim=(-2, -1))
+
     if size_normalize:
         s = s / r.shape[-1]
     return s
 
 
+# region linodenet.projections  --------------------------------------------------------
+# region matrix groups -----------------------------------------------------------------
 @jit.script
 def identity(
-    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being zero.
 
@@ -82,7 +111,7 @@ def identity(
 
 @jit.script
 def skew_symmetric(
-    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being skew-symmetric.
 
@@ -97,7 +126,7 @@ def skew_symmetric(
 
 @jit.script
 def symmetric(
-    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being symmetric.
 
@@ -112,7 +141,7 @@ def symmetric(
 
 @jit.script
 def orthogonal(
-    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being orthogonal.
 
@@ -127,7 +156,7 @@ def orthogonal(
 
 @jit.script
 def normal(
-    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being normal.
 
@@ -141,8 +170,38 @@ def normal(
 
 
 @jit.script
+def hamiltonian(
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being hamiltonian.
+
+    .. Signature:: ``(..., 2n, 2n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. (JX)^T = JX
+    """
+    r = x - projections.hamiltonian(x)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
+def symplectic(
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being symplectic.
+
+    .. Signature:: ``(..., 2n, 2n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. J^TXJ = X
+    """
+    r = x - projections.symplectic(x)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
 def traceless(
-    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being normal.
 
@@ -160,16 +219,20 @@ def traceless(
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
+# endregion matrix groups --------------------------------------------------------------
+
+
+# region masked projections ------------------------------------------------------------
 @jit.script
 def diagonal(
-    x: Tensor, p: Optional[float] = None, size_normalize: bool = False
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being diagonal.
 
-    .. Signature:: ``(..., n, n) -> ...``
+    .. Signature:: ``(..., m, n) -> ...``
 
     .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙𝕀 = X
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕀⊙X = X
     """
     r = x - projections.diagonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -180,17 +243,53 @@ def banded(
     x: Tensor,
     upper: int = 0,
     lower: int = 0,
-    p: Optional[float] = None,
+    p: Union[str, int] = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
     r"""Bias the matrix towards being banded.
 
-    .. Signature:: ``(..., n, n) -> ...``
+    .. Signature:: ``(..., m, n) -> ...``
 
     .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙B = X
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝔹⊙X = X
     """
     r = x - projections.banded(x, upper=upper, lower=lower)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
+def lower_triangular(
+    x: Tensor,
+    lower: int = 0,
+    p: Union[str, int] = "fro",
+    size_normalize: bool = False,
+) -> Tensor:
+    r"""Bias the matrix towards being lower triangular.
+
+    .. Signature:: ``(..., m, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕃⊙X = X
+    """
+    r = x - projections.lower_triangular(x, lower=lower)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
+def upper_triangular(
+    x: Tensor,
+    upper: int = 0,
+    p: Union[str, int] = "fro",
+    size_normalize: bool = False,
+) -> Tensor:
+    r"""Bias the matrix towards being upper triangular.
+
+    .. Signature:: ``(..., m, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕌⊙X = X
+    """
+    r = x - projections.upper_triangular(x, upper=upper)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
@@ -198,15 +297,20 @@ def banded(
 def masked(
     x: Tensor,
     mask: BoolTensor = TRUE,
-    p: Optional[float] = None,
+    p: Union[str, int] = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
     r"""Bias the matrix towards being masked.
 
-    .. Signature:: ``(..., n, n) -> ...``
+    .. Signature:: ``(..., m, n) -> ...``
 
     .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙M = X
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕄⊙X = X
     """
     r = x - projections.masked(x, mask=mask)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+# endregion masked projections ---------------------------------------------------------
+# endregion linodenet.projections  -----------------------------------------------------
+# endregion regularizations ------------------------------------------------------------

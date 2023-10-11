@@ -7,39 +7,71 @@ Contains regularizations in modular  form.
 """
 
 __all__ = [
-    # Classes
-    "Banded",
-    "Diagonal",
-    "Identity",
+    # Base Classes
+    "RegularizationABC",
+    # Regularizations
     "LogDetExp",
-    "Masked",
     "MatrixNorm",
+    # matrix groups
+    "Hamiltonian",
+    "Identity",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Symplectic",
     "Traceless",
+    # masked
+    "Banded",
+    "Diagonal",
+    "Masked",
+    "LowerTriangular",
+    "UpperTriangular",
 ]
 
-from typing import Final, Optional
+from abc import abstractmethod
+from typing import Final, Union
 
+import torch
 from torch import BoolTensor, Tensor, nn
 
 from linodenet.regularizations.functional import (
     banded,
     diagonal,
+    hamiltonian,
     identity,
     logdetexp,
+    lower_triangular,
     masked,
     matrix_norm,
     normal,
     orthogonal,
     skew_symmetric,
     symmetric,
+    symplectic,
     traceless,
+    upper_triangular,
 )
 
 
+class RegularizationABC(nn.Module):
+    """Abstract Base Class for Regularization components."""
+
+    @abstractmethod
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Forward pass of the regularization.
+
+        .. Signature: ``... -> 1``.
+
+        Args:
+            x: The input tensor to be regularized.
+
+        Returns:
+            r: The (scalar) regularization value .
+        """
+
+
+# region regularizations ---------------------------------------------------------------
 class LogDetExp(nn.Module):
     r"""Bias $\det(e^A)$ towards 1.
 
@@ -54,13 +86,17 @@ class LogDetExp(nn.Module):
     .. math:: |\tr(A)|^p
     """
 
-    def __init__(self, p: float = 1.0):
+    p: Final[float]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: float = 1.0, size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
+        self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias $\det(e^A)$ towards 1."""
-        return logdetexp(x, self.p)
+        return logdetexp(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class MatrixNorm(nn.Module):
@@ -69,30 +105,37 @@ class MatrixNorm(nn.Module):
     .. Signature:: ``(..., n, n) -> ...``
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards zero matrix."""
-        return matrix_norm(x, self.p, self.size_normalize)
+        return matrix_norm(x, p=self.p, size_normalize=self.size_normalize)
 
 
+# region matrix groups -----------------------------------------------------------------
 class Identity(nn.Module):
     r"""Identity regularization.
 
     .. Signature:: ``(..., n, n) -> ...``
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards zero matrix."""
-        return identity(x, self.p, self.size_normalize)
+        return identity(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class SkewSymmetric(nn.Module):
@@ -103,14 +146,17 @@ class SkewSymmetric(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards skew-symmetric matrix."""
-        return skew_symmetric(x, self.p, self.size_normalize)
+        return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Symmetric(nn.Module):
@@ -121,14 +167,17 @@ class Symmetric(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = +X
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards symmetric matrix."""
-        return symmetric(x, self.p, self.size_normalize)
+        return symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Orthogonal(nn.Module):
@@ -139,14 +188,17 @@ class Orthogonal(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards orthogonal matrix."""
-        return orthogonal(x, self.p, self.size_normalize)
+        return orthogonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Normal(nn.Module):
@@ -157,14 +209,61 @@ class Normal(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards normal matrix."""
-        return normal(x, self.p, self.size_normalize)
+        return normal(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Symplectic(nn.Module):
+    r"""Bias the matrix towards being symplectic.
+
+    .. Signature:: ``(..., 2n, 2n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. J^TXJ = X
+    """
+
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return symplectic(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Hamiltonian(nn.Module):
+    r"""Bias the matrix towards being hamiltonian.
+
+    .. Signature:: ``(..., 2n, 2n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. (JX)^T = JX
+    """
+
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Traceless(nn.Module):
@@ -173,54 +272,122 @@ class Traceless(nn.Module):
     .. Signature:: ``(..., n, n) -> ...``
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards normal matrix."""
-        return traceless(x, self.p, self.size_normalize)
+        return traceless(x, p=self.p, size_normalize=self.size_normalize)
 
 
+# endregion matrix groups --------------------------------------------------------------
+
+
+# region masked projections ------------------------------------------------------------
 class Diagonal(nn.Module):
     r"""Bias the matrix towards being diagonal.
 
-    .. Signature:: ``(..., n, n) -> ...``
+    .. Signature:: ``(..., m, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙𝕀 = X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕀⊙X = X
     """
 
-    def __init__(self, p: Optional[float] = None, size_normalize: bool = True):
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards diagonal matrix."""
-        return diagonal(x, self.p, self.size_normalize)
+        return diagonal(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class LowerTriangular(nn.Module):
+    r"""Bias the matrix towards being lower triangular.
+
+    .. Signature:: ``(..., m, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕃⊙X = X
+    """
+
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+    lower: Final[int]
+
+    def __init__(
+        self, lower: int = 0, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.lower = lower
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards lower triangular matrix."""
+        return lower_triangular(
+            x, lower=self.lower, p=self.p, size_normalize=self.size_normalize
+        )
+
+
+class UpperTriangular(nn.Module):
+    r"""Bias the matrix towards being upper triangular.
+
+    .. Signature:: ``(..., m, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕌⊙X = X
+    """
+
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+    upper: Final[int]
+
+    def __init__(
+        self, upper: int = 0, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.upper = upper
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards upper triangular matrix."""
+        return upper_triangular(
+            x, upper=self.upper, p=self.p, size_normalize=self.size_normalize
+        )
 
 
 class Banded(nn.Module):
     r"""Bias the matrix towards being banded.
 
-    .. Signature:: ``(..., n, n) -> ...``
+    .. Signature:: ``(..., m, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙B = X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝔹⊙X = X
     """
 
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
     upper: Final[int]
     lower: Final[int]
-    p: Final[Optional[float]]
-    size_normalize: Final[bool]
 
     def __init__(
         self,
         upper: int = 0,
         lower: int = 0,
-        p: Optional[float] = None,
+        p: Union[str, int] = "fro",
         size_normalize: bool = True,
-    ):
+    ) -> None:
         super().__init__()
         self.upper = upper
         self.lower = lower
@@ -241,19 +408,31 @@ class Banded(nn.Module):
 class Masked(nn.Module):
     r"""Bias the matrix towards being masked.
 
-    .. Signature:: ``(..., n, n) -> ...``
+    .. Signature:: ``(..., m, n) -> ...``
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X⊙M = X
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕄⊙X = X
     """
 
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+    mask: BoolTensor
+
     def __init__(
-        self, mask: BoolTensor, p: Optional[float] = None, size_normalize: bool = True
-    ):
+        self,
+        mask: BoolTensor,
+        p: Union[str, int] = "fro",
+        size_normalize: bool = True,
+    ) -> None:
         super().__init__()
-        self.mask = mask
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
         self.p = p
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards masked matrix."""
         return masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)
+
+
+# endregion masked projections ---------------------------------------------------------
+# endregion regularizations ------------------------------------------------------------

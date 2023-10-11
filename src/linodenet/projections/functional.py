@@ -47,6 +47,7 @@ class Projection(Protocol):
 
 
 # region projections -------------------------------------------------------------------
+# region matrix groups -----------------------------------------------------------------
 @jit.script
 def identity(x: Tensor) -> Tensor:
     r"""Return x as-is.
@@ -85,34 +86,6 @@ def skew_symmetric(x: Tensor) -> Tensor:
 
 
 @jit.script
-def normal(x: Tensor) -> Tensor:
-    r"""Return the closest normal matrix to X.
-
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^⊤Y = YY^⊤
-
-    **The Lagrangian:**
-
-    .. math:: ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Y^⊤]⟩
-
-    **First order necessary KKT condition:**
-
-    .. math::
-            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λ^⊤) - (Λ + Λ^⊤)Y
-        \\⟺ Y &= X + [Y, Λ]
-
-    **Second order sufficient KKT condition:**
-
-    .. math::
-             ⟨∇h|S⟩=0     &⟹ ⟨S|∇²ℒ|S⟩ ≥ 0
-         \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|𝕀⊗𝕀 + Λ⊗𝕀 − 𝕀⊗Λ|S⟩ ≥ 0
-         \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
-    """
-    raise NotImplementedError("TODO: implement Fixpoint / Gradient based algorithm.")
-
-
-@jit.script
 def traceless(x: Tensor) -> Tensor:
     r"""Return the closest traceless matrix to X.
 
@@ -148,8 +121,36 @@ def orthogonal(x: Tensor) -> Tensor:
     ----------
     - `<https://math.stackexchange.com/q/2215359>`_
     """
-    U, _, V = torch.svd(x, some=False, compute_uv=True)
-    return torch.einsum("...ij, ...kj -> ...ik", U, V)
+    U, _, Vh = torch.linalg.svd(x)
+    return torch.einsum("...ij, ...jk -> ...ik", U, Vh)
+
+
+@jit.script
+def normal(x: Tensor) -> Tensor:
+    r"""Return the closest normal matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^⊤Y = YY^⊤
+
+    **The Lagrangian:**
+
+    .. math:: ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Y^⊤]⟩
+
+    **First order necessary KKT condition:**
+
+    .. math::
+            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λ^⊤) - (Λ + Λ^⊤)Y
+        \\⟺ Y &= X + [Y, Λ]
+
+    **Second order sufficient KKT condition:**
+
+    .. math::
+             ⟨∇h|S⟩=0     &⟹ ⟨S|∇²ℒ|S⟩ ≥ 0
+         \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|𝕀⊗𝕀 + Λ⊗𝕀 − 𝕀⊗Λ|S⟩ ≥ 0
+         \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
+    """
+    raise NotImplementedError("TODO: implement Fixpoint / Gradient based algorithm.")
 
 
 @jit.script
@@ -189,6 +190,9 @@ def hamiltonian(x: Tensor) -> Tensor:
         - The matrix exponential of a Hamiltonian matrix is symplectic.
     """
     raise NotImplementedError("TODO: implement Fixpoint / Gradient based algorithm.")
+
+
+# endregion matrix groups --------------------------------------------------------------
 
 
 # region masked projections ------------------------------------------------------------
@@ -299,5 +303,4 @@ def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
 
 
 # endregion masked projections ---------------------------------------------------------
-
 # endregion projections ----------------------------------------------------------------

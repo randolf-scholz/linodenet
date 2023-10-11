@@ -130,6 +130,8 @@ def orthogonal(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
     shape = (*size, dim, dim)
 
     A: NDArray = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
+    if dtype is None:
+        dtype = torch.float32
     return torch.from_numpy(A).to(dtype=dtype, device=device)
 
 
@@ -145,6 +147,8 @@ def special_orthogonal(n: Shape, dtype: Dtype = None, device: Device = None) -> 
     shape = (*size, dim, dim)
 
     A: NDArray = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
+    if dtype is None:
+        dtype = torch.float32
     return torch.from_numpy(A).to(dtype=dtype, device=device)
 
 
@@ -180,12 +184,9 @@ def traceless(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
     r"""Sample a random traceless matrix, i.e. $\tr(A)=0$."""
     # convert to tuple
     tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
-    shape = (*size, dim, dim)
-    mean = torch.zeros(shape, dtype=dtype, device=device)
-    eye = torch.eye(dim, dtype=dtype, device=device)
-    A = torch.normal(mean=mean, std=1 / sqrt(dim))
-    return A - torch.einsum("..., ii -> ...", A, eye)
+    A = gaussian(n, dtype=dtype, device=device)
+    eye = torch.eye(tup[-1], dtype=dtype, device=device)
+    return A - torch.einsum("...ij, ij -> ...ij", A, eye)
 
 
 # region canonical (non-deterministic) initializations ---------------------------------

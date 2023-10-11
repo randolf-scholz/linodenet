@@ -11,24 +11,70 @@ __all__ = [
     "GramMatrix",
     "MatrixExponential",
     "ReZero",
-    # linodenet.projections
-    "Diagonal",
-    "SkewSymmetric",
     "SpectralNormalization",
+    # linodenet.projections
+    "Hamiltonian",
+    "Normal",
+    "Orthogonal",
+    "SkewSymmetric",
     "Symmetric",
+    "Symplectic",
     "Traceless",
+    # linodenet.projections masked
+    "Banded",
+    "Diagonal",
+    "LowerTriangular",
+    "Masked",
+    "UpperTriangular",
 ]
 
 from typing import Any, Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import BoolTensor, Tensor, jit, nn
 
 from linodenet import projections
 from linodenet.lib import singular_triplet
 from linodenet.parametrize.base import ParametrizationBase, ParametrizationDict
 
 
+# region learnable parametrizations ----------------------------------------------------
+class ReZero(ParametrizationBase):
+    """ReZero."""
+
+    scalar: Tensor
+
+    def __init__(
+        self,
+        tensor: Tensor,
+        /,
+        *,
+        scalar: Optional[Tensor] = None,
+        learnable: bool = True,
+    ) -> None:
+        super().__init__(tensor)
+        self.learnable = learnable
+
+        if scalar is None:
+            initial_value = torch.tensor(0.0)
+        else:
+            initial_value = scalar
+
+        if self.learnable:
+            self.scalar = nn.Parameter(initial_value)
+        else:
+            self.scalar = initial_value
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(...,) -> (...,)``."""
+        return self.scalar * x
+
+
+# endregion learnable parametrizations -------------------------------------------------
+
+
+# region static parametrizations -------------------------------------------------------
 class SpectralNormalization(ParametrizationDict):
     """Spectral normalization."""
 
@@ -94,38 +140,6 @@ class SpectralNormalization(ParametrizationDict):
         }
 
 
-class ReZero(ParametrizationBase):
-    """ReZero."""
-
-    scalar: Tensor
-
-    def __init__(
-        self,
-        tensor: Tensor,
-        /,
-        *,
-        scalar: Optional[Tensor] = None,
-        learnable: bool = True,
-    ) -> None:
-        super().__init__(tensor)
-        self.learnable = learnable
-
-        if scalar is None:
-            initial_value = torch.tensor(0.0)
-        else:
-            initial_value = scalar
-
-        if self.learnable:
-            self.scalar = nn.Parameter(initial_value)
-        else:
-            self.scalar = initial_value
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(...,) -> (...,)``."""
-        return self.scalar * x
-
-
 class CayleyMap(ParametrizationBase):
     """Parametrize a matrix to be orthogonal via Cayley-Map.
 
@@ -179,21 +193,71 @@ class GramMatrix(ParametrizationBase):
         raise NotImplementedError
 
 
+# endregion static parametrizations ----------------------------------------------------
+
+
 # region linodenet.projections ---------------------------------------------------------
-
-
-class Diagonal(ParametrizationBase):
-    """Parametrize a matrix to be diagonal."""
+# region matrix groups -----------------------------------------------------------------
+class Normal(ParametrizationBase):
+    """Parametrize a matrix to be normal."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.diagonal(x)
+        return projections.normal(x)
 
     def right_inverse(self, y: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
         Note:
-            Since `diagonal` is a self-map projection, this is simply the identity.
+            Since `normal` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+class Orthogonal(ParametrizationBase):
+    """Parametrize a matrix to be orthogonal."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return projections.orthogonal(x)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
+
+        Note:
+            Since `orthogonal` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+class Symplectic(ParametrizationBase):
+    """Parametrize a matrix to be symplectic."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return projections.symplectic(x)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
+
+        Note:
+            Since `symplectic` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+class Hamiltonian(ParametrizationBase):
+    """Parametrize a matrix to be Hamiltonian."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return projections.hamiltonian(x)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
+
+        Note:
+            Since `hamiltonian` is a self-map projection, this is simply the identity.
         """
         return y
 
@@ -234,74 +298,6 @@ class SkewSymmetric(ParametrizationBase):
         return y
 
 
-class UpperTriangular(ParametrizationBase):
-    """Parametrize a matrix to be upper triangular."""
-
-    diagonal: Final[int]
-    """CONST: The diagonal to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, diagonal: int = 0) -> None:
-        super().__init__(tensor)
-        self.diagonal = diagonal
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return x.triu(self.diagonal)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
-
-        Note:
-            Since `triu` is a self-map projection, this is simply the identity.
-        """
-        return y
-
-
-class LowerTriangular(ParametrizationBase):
-    diagonal: Final[int]
-    """CONST: The diagonal to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, diagonal: int = 0) -> None:
-        super().__init__(tensor)
-        self.diagonal = diagonal
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return x.tril(self.diagonal)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
-
-        Note:
-            Since `tril` is a self-map projection, this is simply the identity.
-        """
-        return y
-
-
-class Banded(ParametrizationBase):
-    upper: Final[int]
-    """CONST: The upper diagonal to consider"""
-    lower: Final[int]
-    """CONST: The lower diagonal to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, upper: int = 0, lower: int = 0) -> None:
-        super().__init__(tensor)
-        self.upper = upper
-        self.lower = lower
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return projections.banded(x, upper=self.upper, lower=self.lower)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
-
-        Note:
-            Since `banded` is a self-map projection, this is simply the identity.
-        """
-        return y
-
-
 class Traceless(ParametrizationBase):
     """Parametrize a matrix to be traceless."""
 
@@ -317,4 +313,120 @@ class Traceless(ParametrizationBase):
         return Y
 
 
+# endregion matrix groups --------------------------------------------------------------
+
+
+# region masked ------------------------------------------------------------------------
+class Diagonal(ParametrizationBase):
+    """Parametrize a matrix to be diagonal."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return projections.diagonal(x)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
+
+        Note:
+            Since `diagonal` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+class UpperTriangular(ParametrizationBase):
+    """Parametrize a matrix to be upper triangular."""
+
+    upper: Final[int]
+    """CONST: The diagonal to consider"""
+
+    def __init__(self, tensor: Tensor, /, *, upper: int = 0) -> None:
+        super().__init__(tensor)
+        self.upper = upper
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return projections.upper_triangular(x, upper=self.upper)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
+
+        Note:
+            Since `triu` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+class LowerTriangular(ParametrizationBase):
+    """Parametrize a matrix to be lower triangular."""
+
+    lower: Final[int]
+    """CONST: The diagonal to consider"""
+
+    def __init__(self, tensor: Tensor, /, *, lower: int = 0) -> None:
+        super().__init__(tensor)
+        self.lower = lower
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return projections.lower_triangular(x, lower=self.lower)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
+
+        Note:
+            Since `tril` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+class Masked(ParametrizationBase):
+    """Parametrize a matrix to be masked."""
+
+    mask: Tensor
+    """CONST: The mask to consider"""
+
+    def __init__(self, tensor: Tensor, /, *, mask: BoolTensor) -> None:
+        super().__init__(tensor)
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return projections.masked(x, mask=self.mask)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
+
+        Note:
+            Since `masked` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+class Banded(ParametrizationBase):
+    """Parametrize a matrix to be banded."""
+
+    upper: Final[int]
+    """CONST: The upper diagonal to consider"""
+    lower: Final[int]
+    """CONST: The lower diagonal to consider"""
+
+    def __init__(self, tensor: Tensor, /, *, upper: int = 0, lower: int = 0) -> None:
+        super().__init__(tensor)
+        self.upper = upper
+        self.lower = lower
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return projections.banded(x, upper=self.upper, lower=self.lower)
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
+
+        Note:
+            Since `banded` is a self-map projection, this is simply the identity.
+        """
+        return y
+
+
+# endregion masked ---------------------------------------------------------------------
 # endregion linodenet.projections ------------------------------------------------------

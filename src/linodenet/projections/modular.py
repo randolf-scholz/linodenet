@@ -67,6 +67,7 @@ class ProjectionABC(nn.Module):
 
 
 # region projections -------------------------------------------------------------------
+# region matrix groups -----------------------------------------------------------------
 class Identity(nn.Module):
     r"""Return x as-is.
 
@@ -215,6 +216,9 @@ class Symplectic(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return symplectic(x)
+
+
+# endregion matrix groups --------------------------------------------------------------
 
 
 # region masked projections ------------------------------------------------------------

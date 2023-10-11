@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+# FIXME: https://github.com/pytorch/pytorch/issues/110959
 from collections.abc import Mapping
 
 from torch import Tensor, nn
