@@ -30,14 +30,15 @@ __all__ = [
     "UpperTriangular",
 ]
 
-from typing import Any, Final, Optional
+from typing import Final, Optional
 
 import torch
 from torch import BoolTensor, Tensor, jit, nn
 
 from linodenet import projections
+from linodenet.constants import ATOL, RTOL
 from linodenet.lib import singular_triplet
-from linodenet.parametrize.base import ParametrizationBase, ParametrizationDict
+from linodenet.parametrize.base import ParametrizationBase, ParametrizationMulticache
 
 
 # region learnable parametrizations ----------------------------------------------------
@@ -77,69 +78,90 @@ class ReZero(ParametrizationBase):
 
 
 # region static parametrizations -------------------------------------------------------
-class SpectralNormalization(ParametrizationDict):
-    """Spectral normalization."""
+class SpectralNormalization(ParametrizationMulticache):
+    """Spectral normalization $‖A‖₂≤γ$.
 
-    # constants
-    GAMMA: Tensor
-    ONE: Tensor
-    maxiter: Final[Optional[int]]
+    Ensures that the spectral norm of the weight matrix is at most γ (default=1.0).
 
-    # cached
-    u: Tensor
-    v: Tensor
+    Note:
+        For $‖A‖₂<1$, it follows that $x↦Ax$ is a contraction mapping. In particular,
+        the residual mapping $x↦x ± Ax$ is invertible in this case, and the inverse
+        can be computed via fixpoint iteration.
+    """
+
+    original_parameter: nn.Parameter
+    """PARAM: The original parameter, before parametrization."""
+    cached_parameter: Tensor
+    """BUFFER: The cached parameter, after parametrization."""
     sigma: Tensor
-    weight: Tensor
+    """BUFFER: The cached singular value."""
+    u: Tensor
+    """BUFFER: The cached left singular vector."""
+    v: Tensor
+    """BUFFER: The cached right singular vector."""
 
-    # Parameters
-    original_weight: Tensor
+    GAMMA: Tensor
+    """CONST: The constant γ, the transformation ensures $‖A‖₂≤γ$."""
+    ONE: Tensor
+    """CONST: The constant 1."""
+    maxiter: Final[Optional[int]]
+    """CONST: The maximum number of iterations for the power method."""
+    atol: Final[float]
+    """CONST: The absolute tolerance for the power method."""
+    rtol: Final[float]
+    """CONST: The relative tolerance for the power method."""
 
     def __init__(
-        self, weight: Tensor, /, gamma: float = 1.0, maxiter: Optional[int] = None
+        self,
+        weight: Tensor,
+        /,
+        *,
+        gamma: float = 1.0,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+        maxiter: Optional[int] = None,
     ) -> None:
-        super().__init__()
-        assert isinstance(weight, nn.Parameter), "weight must be a parameter"
+        super().__init__(weight)
 
-        self.maxiter = maxiter
-
-        assert len(weight.shape) == 2
+        assert weight.ndim == 2, "weight must be a matrix"
         m, n = weight.shape
-
-        options: Any = {
+        options = {
             "dtype": weight.dtype,
             "device": weight.device,
             "layout": weight.layout,
         }
 
-        # parametrized and cached
-        self.register_parametrized_tensor("weight", weight)
+        # constants
+        self.atol = atol
+        self.rtol = rtol
+        self.maxiter = maxiter
+
+        # register auxiliary cached tensors
+        self.register_cached_tensor("sigma", torch.ones((), **options))
         self.register_cached_tensor("u", torch.randn(m, **options))
         self.register_cached_tensor("v", torch.randn(n, **options))
-        self.register_cached_tensor("sigma", torch.ones((), **options))
 
-        # constants
+        # tensor constants
         self.register_buffer("ONE", torch.ones((), **options))
         self.register_buffer("GAMMA", torch.full_like(self.ONE, gamma, **options))
 
-    def parametrization(self) -> dict[str, Tensor]:
+    def forward(self, weight: Tensor) -> tuple[Tensor, dict[str, Tensor]]:
         """Perform spectral normalization w ↦ w/‖w‖₂."""
-        # IMPORTANT: Use the original weight, not the cached weight!
-        # For auxiliary tensors, use the cached tensors.
+        # We use the cached singular vectors as initial guess for the power method.
         sigma, u, v = singular_triplet(
-            self.original_weight,
+            weight,
             u0=self.u,
             v0=self.v,
+            atol=self.atol,
+            rtol=self.rtol,
             maxiter=self.maxiter,
         )
+        # map A' ← A ⋅ min(1, γ/‖A₂‖), which is the largest value that ensures
+        # ‖A'‖₂ ≤ min(γ, ‖A‖₂)
         gamma = torch.minimum(self.ONE, self.GAMMA / sigma)
-        weight = gamma * self.original_weight
 
-        return {
-            "weight": weight,
-            "sigma": sigma,
-            "u": u,
-            "v": v,
-        }
+        # return the parametrized weight and the cached singular triplet
+        return gamma * weight, {"sigma": sigma, "u": u, "v": v}
 
 
 class CayleyMap(ParametrizationBase):
@@ -384,12 +406,12 @@ class LowerTriangular(ParametrizationBase):
 class Masked(ParametrizationBase):
     """Parametrize a matrix to be masked."""
 
-    mask: Tensor
+    mask: BoolTensor
     """CONST: The mask to consider"""
 
     def __init__(self, tensor: Tensor, /, *, mask: BoolTensor) -> None:
         super().__init__(tensor)
-        self.mask = torch.as_tensor(mask, dtype=torch.bool)
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""

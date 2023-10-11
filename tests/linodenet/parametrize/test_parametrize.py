@@ -163,14 +163,14 @@ def test_surgery() -> None:
     del model.weight
 
     # register the parametrization's weight-buffer as a buffer
-    model.register_buffer("weight", model.spec.weight.clone().detach())
+    model.register_buffer("weight", spec.cached_parameter.clone().detach())
     assert not model.weight.requires_grad
     # copy the parametrized weight to the buffer.
-    model.weight.copy_(model.spec.parametrized_tensors["weight"])
+    model.weight.copy_(spec.original_parameter)
     assert model.weight.requires_grad
 
     # register the parametrization's weight as a parameter (optional)
-    model.parametrized_weight = model.spec.parametrized_tensors["weight"]  # type: ignore[unreachable]
+    model.parametrized_weight = spec.original_parameter  # type: ignore[unreachable]
 
     # perform forward and backward pass
     r = model(inputs)
@@ -192,8 +192,8 @@ def test_surgery_extended() -> None:
 
     spec = SpectralNormalization(model.weight)
     spec.update_parametrization()
-    assert matrix_norm(spec.weight, ord=2) <= 1.0
-    spec.weight.norm().backward()
+    assert matrix_norm(spec.cached_parameter, ord=2) <= 1.0
+    spec.original_parameter.norm().backward()
     spec.zero_grad(set_to_none=True)
 
 
@@ -253,7 +253,7 @@ def test_param() -> None:
     weight = model.weight
     param = parametrize(weight, symmetric)
     param.zero_grad(set_to_none=True)
-    model.weight = param.parametrized_tensor
+    model.weight = param.original_parameter
     model.param = param
 
     # check compatibility

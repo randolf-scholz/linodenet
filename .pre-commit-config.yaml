@@ -196,7 +196,7 @@ repos:
             |src/linodenet/lib
             |src/linodenet/logutils
             #|src/linodenet/models
-            #|src/linodenet/parametrize
+            |src/linodenet/parametrize
             |src/linodenet/projections
             |src/linodenet/regularizations
             #|src/linodenet/testing
