@@ -7,15 +7,31 @@ import torch
 from pytest import mark
 from torch import nn
 from torch.linalg import matrix_norm
+from torch.nn.functional import mse_loss
+from torch.optim import SGD
 
-from linodenet.parametrize import SpectralNormalization, parametrize
-from linodenet.projections import is_symmetric, symmetric
-from linodenet.testing import check_model
-
-# from torch.optim import SGD
-
+from linodenet.parametrize import SpectralNormalization, UpperTriangular, parametrize
+from linodenet.projections import is_symmetric, is_upper_triangular, symmetric
+from linodenet.testing import (
+    check_jit,
+    check_jit_scripting,
+    check_jit_serialization,
+    check_model,
+)
 
 logging.basicConfig(level=logging.INFO)
+
+
+# class SlowUpperTriangular(ParametrizationBase):
+#     """Parametrize a matrix to be upper triangular."""
+#
+#     def forward(self, x: Tensor) -> Tensor:
+#         # waste some time:
+#         z = torch.randn(100, 100)
+#         for k in range(100_000):
+#             z = z @ torch.randn(100, 100)
+#
+#         return upper_triangular(x)
 
 
 @mark.skip(reason="Not implemented")
@@ -24,11 +40,114 @@ def test_jit_protocol() -> None:
     raise NotImplementedError
 
 
-# def test_optimization_manual() -> None:
-#     B, N, M = 4, 3, 2
-#     inputs = torch.randn(B, N)
-#     targets = torch.randn(B, M)
-#     model = nn.Linear(in_features=N, out_features=M)
+def test_optimization_manual() -> None:
+    torch.manual_seed(42)
+
+    B, N, M = 3, 5, 4
+    inputs = torch.randn(B, N)
+    targets = torch.randn(B, M)
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    original_weight = model.weight
+
+    check_jit(model)
+
+    # create the parametrization
+    param = UpperTriangular(model.weight)
+    assert param.original_parameter is model.weight
+    assert param.cached_parameter is not model.weight
+
+    # check that the parametrization is not initialized
+    assert not is_upper_triangular(model.weight)
+    assert not is_upper_triangular(param.original_parameter)
+    assert not is_upper_triangular(param.cached_parameter)
+    assert torch.allclose(param.original_parameter, param.cached_parameter)
+
+    # register the parametrization
+    model.register_module("param", param)
+
+    # remove weight and re-register it as a buffer
+    del model.weight
+    model.register_buffer("weight", model.param.cached_parameter)
+    model.register_parameter("original_weight", model.param.original_parameter)
+
+    # check that the parametrization is registered
+    assert model.weight is not original_weight
+    assert model.weight is model.param.cached_parameter
+    assert original_weight is model.param.original_parameter
+
+    # check that the parametrization is still not initialized
+    assert not is_upper_triangular(model.weight), model.weight
+
+    # check that model can be scripted
+    check_jit(model)
+
+    # initialize the parametrization
+    model.param.update_parametrization()
+
+    # verify that the parametrization is initialized
+    assert is_upper_triangular(model.weight)
+    assert is_upper_triangular(model.param.original_parameter)
+    assert is_upper_triangular(model.param.cached_parameter)
+
+    # region test training -------------------------------------------------------------
+    with torch.no_grad():
+        optimizer = SGD(model.parameters(), lr=0.1)
+        original_loss = mse_loss(model(inputs), targets)
+
+    for _ in range(5):
+        model.zero_grad(set_to_none=True)
+        loss = mse_loss(model(inputs), targets)
+        loss.backward()
+        assert loss.isfinite()
+        print(loss)
+        optimizer.step()
+        model.param.update_parametrization()
+        assert is_upper_triangular(model.weight)
+
+    assert loss < original_loss
+    # end region test training ---------------------------------------------------------
+
+    # now, try with scripted model
+    # region test training -------------------------------------------------------------
+    with torch.no_grad():
+        scripted = check_jit_scripting(model)
+        del model
+        optimizer = SGD(scripted.parameters(), lr=0.1)
+        original_loss = mse_loss(scripted(inputs), targets)
+
+    for _ in range(5):
+        scripted.zero_grad(set_to_none=True)
+        loss = mse_loss(scripted(inputs), targets)
+        loss.backward()
+        assert loss.isfinite()
+        print(loss)
+        optimizer.step()
+        scripted.param.update_parametrization()
+        assert is_upper_triangular(scripted.weight)
+
+    assert loss < original_loss
+    # end region test training ---------------------------------------------------------
+
+    # now, try with serialized model
+    # region test training -------------------------------------------------------------
+    with torch.no_grad():
+        loaded = check_jit_serialization(scripted)
+        del scripted
+        optimizer = SGD(loaded.parameters(), lr=0.1)
+        original_loss = mse_loss(loaded(inputs), targets)
+
+    for _ in range(5):
+        loaded.zero_grad(set_to_none=True)
+        loss = mse_loss(loaded(inputs), targets)
+        loss.backward()
+        assert loss.isfinite()
+        print(loss)
+        optimizer.step()
+        loaded.param.update_parametrization()
+        assert is_upper_triangular(loaded.weight)
+
+    assert loss < original_loss
+    # end region test training ---------------------------------------------------------
 
 
 def test_surgery() -> None:

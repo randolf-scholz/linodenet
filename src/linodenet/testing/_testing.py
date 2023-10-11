@@ -1,19 +1,20 @@
 """Utility functions for testing."""
 
 __all__ = [
-    # functions
-    "check_backward",
-    "check_class",
+    # check functions
     "check_combined",
-    "check_forward",
     "check_function",
+    "check_model",
+    "check_class",
+    # helper functions
+    "check_backward",
+    "check_forward",
     "check_initialization",
     "check_jit",
-    "check_jit_saving_loading",
-    "check_model",
+    "check_jit_scripting",
+    "check_jit_serialization",
     "check_optim",
     # helper functions
-    "assert_close",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
@@ -40,14 +41,16 @@ from torch import Tensor, jit, nn
 from typing_extensions import deprecated
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.types import Nested, Scalar, T, callable_var, module_var
+from linodenet.testing._utils import assert_close
+from linodenet.types import Device, Nested, Scalar, T, callable_var, module_var
 
 __logger__ = logging.getLogger(__name__)
 Tree: TypeAlias = Nested[Tensor | Scalar]
+Func: TypeAlias = Callable[..., Nested[Tensor]]
 
 
 # region utility functions for tensors AND scalars -------------------------------------\
-def get_device(x: nn.Module | Nested[Tensor | Scalar], /) -> torch.device:
+def get_device(x: nn.Module | Tree, /) -> torch.device:
     """Return the device of the model / parameters."""
     match x:
         case nn.Module() as model:
@@ -189,43 +192,12 @@ def make_tensors_parameters(x, /):
     raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-def assert_close(
-    values: Nested[Tensor],
-    reference: Nested[Tensor],
-    /,
-    *,
-    rtol: float = 1e-5,
-    atol: float = 1e-8,
-) -> None:
-    """Assert that outputs and targets are close."""
-    match values:
-        case Tensor() as tensor:
-            assert isinstance(reference, Tensor)
-            assert torch.allclose(tensor, reference, rtol=rtol, atol=atol), (
-                tensor,
-                reference,
-            )
-        case Mapping() as mapping:
-            assert isinstance(reference, Mapping)
-            assert mapping.keys() == reference.keys()
-            for key in mapping.keys():
-                x = mapping[key]
-                y = reference[key]
-                assert_close(x, y, rtol=rtol, atol=atol)
-        case Iterable() as iterable:
-            assert isinstance(reference, Iterable)
-            for output, target in zip(iterable, reference, strict=True):
-                assert_close(output, target, rtol=rtol, atol=atol)
-        case _:
-            raise TypeError(f"Unsupported type {type(values)} for `outputs`!")
-
-
 # endregion utility functions  for outputs (always tensor) -----------------------------
 
 
 # region check helper functions --------------------------------------------------------
 def check_forward(
-    func: Callable[..., Nested[Tensor]],
+    func: Func,
     /,
     *,
     input_args: Sequence[Tree] = (),
@@ -284,12 +256,10 @@ def check_backward(
 
 
 @overload
-def check_jit(module: nn.Module, /) -> nn.Module: ...
+def check_jit_scripting(module: nn.Module, /) -> nn.Module: ...
 @overload
-def check_jit(
-    func: Callable[..., Nested[Tensor]], /
-) -> Callable[..., Nested[Tensor]]: ...
-def check_jit(module_or_func, /):
+def check_jit_scripting(func: Func, /) -> Func: ...
+def check_jit_scripting(module_or_func, /):
     """Test JIT compilation."""
     try:
         scripted = jit.script(module_or_func)
@@ -299,14 +269,12 @@ def check_jit(module_or_func, /):
 
 
 @overload
-def check_jit_saving_loading(
-    module: nn.Module, /, *, device: str | torch.device
+def check_jit_serialization(
+    module: nn.Module, /, *, device: Device = ...
 ) -> nn.Module: ...
 @overload
-def check_jit_saving_loading(
-    func: Callable[..., Nested[Tensor]], /, *, device: str | torch.device
-) -> Callable[..., Nested[Tensor]]: ...
-def check_jit_saving_loading(scripted, /, *, device):
+def check_jit_serialization(func: Func, /, *, device: Device = ...) -> Func: ...
+def check_jit_serialization(scripted, /, *, device=None):
     """Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
         try:
@@ -323,28 +291,43 @@ def check_jit_saving_loading(scripted, /, *, device):
 
 
 @overload
+def check_jit(module: nn.Module, /, *, device: Device = ...) -> nn.Module: ...
+@overload
+def check_jit(func: Func, /, *, device: Device = ...) -> Func: ...
+def check_jit(module_or_func, /, *, device=None):
+    """Test JIT compilation."""
+    # make a copy of the module or function
+    module_or_func = deepcopy(module_or_func)
+
+    # check if scripting and serialization works
+    scripted = check_jit_scripting(module_or_func)
+    loaded = check_jit_serialization(scripted, device=device)
+    return loaded
+
+
+@overload
 def check_initialization(
     obj: type[module_var],
     /,
     *,
-    init_args: Sequence[Nested[Tensor | Scalar]] = (),
-    init_kwargs: Mapping[str, Nested[Tensor | Scalar]] = EMPTY_MAP,
+    init_args: Sequence[Tree] = (),
+    init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> module_var: ...
 @overload
 def check_initialization(
     obj: module_var,
     /,
     *,
-    init_args: Sequence[Nested[Tensor | Scalar]] = (),
-    init_kwargs: Mapping[str, Nested[Tensor | Scalar]] = EMPTY_MAP,
+    init_args: Sequence[Tree] = (),
+    init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> module_var: ...
 @overload
 def check_initialization(
     obj: callable_var,
     /,
     *,
-    init_args: Sequence[Nested[Tensor | Scalar]] = (),
-    init_kwargs: Mapping[str, Nested[Tensor | Scalar]] = EMPTY_MAP,
+    init_args: Sequence[Tree] = (),
+    init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> callable_var: ...
 def check_initialization(obj, /, *, init_args=(), init_kwargs=EMPTY_MAP):
     """Test initialization of a module."""
@@ -386,7 +369,7 @@ def check_optim(
 
 
 def check_combined(
-    obj: type[nn.Module] | nn.Module | Callable[..., Nested[Tensor]],
+    obj: type[nn.Module] | nn.Module | Func,
     *,
     init_args: Sequence[Any] = (),
     init_kwargs: Mapping[str, Any] = EMPTY_MAP,
@@ -519,7 +502,7 @@ def check_combined(
         return
 
     # region check JIT compilation -----------------------------------------------------
-    scripted_model = check_jit(model)
+    scripted_model = check_jit_scripting(model)
     logger.info(">>> JIT-compilation ✔ ")
     # endregion check forward pass -----------------------------------------------------
 
@@ -536,7 +519,7 @@ def check_combined(
     # endregion check scripted forward/backward pass -----------------------------------
 
     # region check model saving/loading ------------------------------------------------
-    loaded_model = check_jit_saving_loading(scripted_model, device=device)
+    loaded_model = check_jit_serialization(scripted_model, device=device)
     logger.info(">>> JIT-loading ✔ ")
     # endregion check model saving/loading ---------------------------------------------
 
@@ -555,13 +538,13 @@ def check_combined(
 
 @deprecated("Deprecated")
 def check_function(
-    func: Callable[..., Nested[Tensor]],
+    func: Func,
     /,
     *,
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     #
-    reference_function: Optional[Callable[..., Nested[Tensor]]] = None,
+    reference_function: Optional[Func] = None,
     reference_outputs: Optional[Nested[Tensor]] = None,
     reference_gradients: Optional[Nested[Tensor]] = None,
     #

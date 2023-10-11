@@ -144,7 +144,7 @@ class Parametrization(Protocol):
 class ParametrizationBase(nn.Module, Parametrization):
     """Base class for parametrization of a single tensor using a single cached tensor."""
 
-    parametrized_tensor: Tensor
+    original_parameter: Tensor
     """PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
     """BUFFER: Holds cached version of the parametrized tensor."""
@@ -154,8 +154,8 @@ class ParametrizationBase(nn.Module, Parametrization):
 
         # get the tensor to parametrize
         assert isinstance(tensor, nn.Parameter), "tensor must be a parameter"
-        self.register_parameter("parametrized_tensor", tensor)
-        self.register_buffer("cached_parameter", torch.empty_like(tensor))
+        self.register_parameter("original_parameter", tensor)
+        self.register_buffer("cached_parameter", tensor.clone().detach())
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:
@@ -165,7 +165,7 @@ class ParametrizationBase(nn.Module, Parametrization):
     @jit.export
     def parametrization(self) -> Tensor:
         """Apply the parametrization to the weight matrix."""
-        return self.forward(self.parametrized_tensor)
+        return self.forward(self.original_parameter)
 
     @jit.export
     def update_cache(self) -> None:
@@ -175,7 +175,7 @@ class ParametrizationBase(nn.Module, Parametrization):
     @jit.export
     @torch.no_grad()
     def update_original(self) -> None:
-        self.parametrized_tensor.copy_(self.cached_parameter)
+        self.original_parameter.copy_(self.cached_parameter)
 
     @jit.export
     @torch.no_grad()
@@ -199,7 +199,7 @@ class ParametrizationBase(nn.Module, Parametrization):
 class parametrize(ParametrizationBase):
     """Parametrization of a single tensor."""
 
-    parametrized_tensor: Tensor
+    original_parameter: Tensor
     """PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
     """BUFFER: Holds cached version of the parametrized tensor."""
