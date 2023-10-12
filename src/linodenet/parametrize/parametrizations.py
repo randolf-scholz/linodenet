@@ -125,10 +125,10 @@ class SpectralNormalization(ParametrizationMulticache):
 
         assert weight.ndim == 2, "weight must be a matrix"
         m, n = weight.shape
-        options = {
+        options: dict = {  # FIXME: error with mypy without dict?
             "dtype": weight.dtype,
-            "device": weight.device,
             "layout": weight.layout,
+            "device": weight.device,
         }
 
         # constants
@@ -222,68 +222,12 @@ class GramMatrix(ParametrizationBase):
 
 # region linodenet.projections ---------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
-class Normal(ParametrizationBase):
-    """Parametrize a matrix to be normal."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.normal(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
-
-        Note:
-            Since `normal` is a self-map projection, this is simply the identity.
-        """
-        return y
-
-
 class Orthogonal(ParametrizationBase):
     """Parametrize a matrix to be orthogonal."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return projections.orthogonal(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
-
-        Note:
-            Since `orthogonal` is a self-map projection, this is simply the identity.
-        """
-        return y
-
-
-class Symplectic(ParametrizationBase):
-    """Parametrize a matrix to be symplectic."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.symplectic(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
-
-        Note:
-            Since `symplectic` is a self-map projection, this is simply the identity.
-        """
-        return y
-
-
-class Hamiltonian(ParametrizationBase):
-    """Parametrize a matrix to be Hamiltonian."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.hamiltonian(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
-
-        Note:
-            Since `hamiltonian` is a self-map projection, this is simply the identity.
-        """
-        return y
 
 
 class Symmetric(ParametrizationBase):
@@ -297,9 +241,9 @@ class Symmetric(ParametrizationBase):
         """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
         Note:
-            As opposed to the method in the documentation, we do not use the triu
-            operator, so this is simply the identity, since `skew_symmetric` is
-            already a projection.
+            As opposed to the method in the documentation, we do not use the `triu`
+            operator in the forward pass. Our `symmetric` is simply the projection
+            onto the matrix manifold and hence the right inverse is the identity.
         """
         return y
 
@@ -315,9 +259,9 @@ class SkewSymmetric(ParametrizationBase):
         """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
         Note:
-            As opposed to the method in the documentation, we do not use the triu
-            operator, so this is simply the identity, since `skew_symmetric` is
-            already a projection.
+            As opposed to the method in the documentation, we do not use the `triu`
+            operator in the forward pass. Our `skew_symmetric` is simply the projection
+            onto the matrix manifold and hence the right inverse is the identity.
         """
         return y
 
@@ -328,13 +272,29 @@ class Traceless(ParametrizationBase):
     def forward(self, X):
         return projections.traceless(X)
 
-    def right_inverse(self, Y):
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
-        Note:
-            Since `traceless` is a self-map projection, this is simply the identity.
-        """
-        return Y
+class Normal(ParametrizationBase):
+    """Parametrize a matrix to be normal."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return projections.normal(x)
+
+
+class Symplectic(ParametrizationBase):
+    """Parametrize a matrix to be symplectic."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return projections.symplectic(x)
+
+
+class Hamiltonian(ParametrizationBase):
+    """Parametrize a matrix to be Hamiltonian."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return projections.hamiltonian(x)
 
 
 # endregion matrix groups --------------------------------------------------------------
@@ -347,14 +307,6 @@ class Diagonal(ParametrizationBase):
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return projections.diagonal(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
-
-        Note:
-            Since `diagonal` is a self-map projection, this is simply the identity.
-        """
-        return y
 
 
 class UpperTriangular(ParametrizationBase):
@@ -371,14 +323,6 @@ class UpperTriangular(ParametrizationBase):
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return projections.upper_triangular(x, upper=self.upper)
 
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
-
-        Note:
-            Since `triu` is a self-map projection, this is simply the identity.
-        """
-        return y
-
 
 class LowerTriangular(ParametrizationBase):
     """Parametrize a matrix to be lower triangular."""
@@ -394,14 +338,6 @@ class LowerTriangular(ParametrizationBase):
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return projections.lower_triangular(x, lower=self.lower)
 
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
-
-        Note:
-            Since `tril` is a self-map projection, this is simply the identity.
-        """
-        return y
-
 
 class Masked(ParametrizationBase):
     """Parametrize a matrix to be masked."""
@@ -416,14 +352,6 @@ class Masked(ParametrizationBase):
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return projections.masked(x, mask=self.mask)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
-
-        Note:
-            Since `masked` is a self-map projection, this is simply the identity.
-        """
-        return y
 
 
 class Banded(ParametrizationBase):
@@ -442,14 +370,6 @@ class Banded(ParametrizationBase):
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return projections.banded(x, upper=self.upper, lower=self.lower)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        """.. Signature:: ``(..., m, n) -> (..., m, n)``.
-
-        Note:
-            Since `banded` is a self-map projection, this is simply the identity.
-        """
-        return y
 
 
 # endregion masked ---------------------------------------------------------------------

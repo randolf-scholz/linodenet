@@ -1,18 +1,28 @@
 """Parametrizations for Torch."""
 
 __all__ = [
-    # Protocol
-    "Parametrization",
     # Constants
     "PARAMETRIZATIONS",
+    # Protocol
+    "GeneralParametrization",
+    "Parametrization",
     # Classes
     "ParametrizationBase",
     "ParametrizationDict",
+    "ParametrizationMulticache",
+    # torch.nn.utils.parametrize replacements
     "parametrize",
-    # functions
     "register_parametrization",
+    "cached",
+    # additional functions
+    "deepcopy",
+    "register_optimizer_hook",
+    # Functions
     "get_parametrizations",
-    "reset_all_caches",
+    "detach_caches",
+    "update_caches",
+    "update_originals",
+    "update_parametrizations",
     # Parametrizations
     "CayleyMap",
     "GramMatrix",
@@ -37,13 +47,21 @@ __all__ = [
 ]
 
 from linodenet.parametrize.base import (
+    GeneralParametrization,
     Parametrization,
     ParametrizationBase,
     ParametrizationDict,
+    ParametrizationMulticache,
+    cached,
+    deepcopy,
+    detach_caches,
     get_parametrizations,
     parametrize,
+    register_optimizer_hook,
     register_parametrization,
-    reset_all_caches,
+    update_caches,
+    update_originals,
+    update_parametrizations,
 )
 from linodenet.parametrize.parametrizations import (
     Banded,

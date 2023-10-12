@@ -2,17 +2,27 @@
 """Test parametrization of modules."""
 
 import logging
+from copy import deepcopy
 
 import torch
-from pytest import mark
 from torch import nn
 from torch.linalg import matrix_norm
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
-from linodenet.parametrize import SpectralNormalization, UpperTriangular, parametrize
+from linodenet.parametrize import (
+    Parametrization,
+    SpectralNormalization,
+    UpperTriangular,
+    cached,
+    parametrize,
+    register_optimizer_hook,
+    register_parametrization,
+    update_parametrizations,
+)
 from linodenet.projections import is_symmetric, is_upper_triangular, symmetric
 from linodenet.testing import (
+    check_combined,
     check_jit,
     check_jit_scripting,
     check_jit_serialization,
@@ -34,10 +44,48 @@ logging.basicConfig(level=logging.INFO)
 #         return upper_triangular(x)
 
 
-@mark.skip(reason="Not implemented")
-def test_jit_protocol() -> None:
+def test_jit() -> None:
     """Test that subclasses of Protocol-class work with JIT."""
-    raise NotImplementedError
+    torch.manual_seed(42)
+
+    B, N, M = 7, 5, 4
+    inputs = torch.randn(B, N)
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    register_parametrization(model, "weight", UpperTriangular)
+
+    check_combined(model, input_args=(inputs,))
+
+
+def test_register_parametrization() -> None:
+    N, M = 3, 5
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    register_parametrization(model, "weight", UpperTriangular)
+    assert is_upper_triangular(model.weight)
+    assert isinstance(model.weight_parametrization, Parametrization)
+
+
+def test_jit_attribute() -> None:
+    N, M = 3, 5
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    deepcopy(model)
+    register_parametrization(model, "weight", UpperTriangular)
+    model.weight_parametrization.detach_cache()
+    deepcopy(model)
+
+    # check that model can be scripted
+    loaded = check_jit(model)
+    assert is_upper_triangular(loaded.weight)
+    assert isinstance(loaded.weight_parametrization, Parametrization)
+
+    # check that model can be scripted
+    scripted = check_jit_scripting(model)
+    assert is_upper_triangular(scripted.weight)
+    assert isinstance(scripted.weight_parametrization, Parametrization)
+
+    # check that model can be serialized
+    loaded = check_jit_serialization(scripted)
+    assert is_upper_triangular(loaded.weight)
+    assert isinstance(loaded.weight_parametrization, Parametrization)
 
 
 def test_optimization_manual() -> None:
@@ -150,6 +198,128 @@ def test_optimization_manual() -> None:
     # end region test training ---------------------------------------------------------
 
 
+def test_optimization_missing() -> None:
+    """Checks that if parametrization is not updated, loss does not change."""
+    torch.manual_seed(42)
+    B, N, M = 3, 5, 4
+    inputs = torch.randn(B, N)
+    targets = torch.randn(B, M)
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    register_parametrization(model, "weight", UpperTriangular)
+
+    with torch.no_grad():
+        optimizer = SGD(model.parameters(), lr=0.1)
+        original_loss = mse_loss(model(inputs), targets)
+
+    for _ in range(5):
+        model.zero_grad(set_to_none=True)
+        loss = mse_loss(model(inputs), targets)
+        loss.backward()
+        assert loss.isfinite()
+        optimizer.step()
+        assert is_upper_triangular(model.weight)
+
+    assert loss == original_loss
+
+
+def test_optimization() -> None:
+    torch.manual_seed(42)
+    B, N, M = 3, 5, 4
+    inputs = torch.randn(B, N)
+    targets = torch.randn(B, M)
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    register_parametrization(model, "weight", UpperTriangular)
+
+    with torch.no_grad():
+        optimizer = SGD(model.parameters(), lr=0.1)
+        original_loss = mse_loss(model(inputs), targets)
+
+    for _ in range(5):
+        model.zero_grad(set_to_none=True)
+        loss = mse_loss(model(inputs), targets)
+        loss.backward()
+        assert loss.isfinite()
+        optimizer.step()
+        model.weight_parametrization.update_parametrization()
+        assert is_upper_triangular(model.weight)
+
+    assert loss < original_loss
+
+
+def test_update_parametrization() -> None:
+    torch.manual_seed(42)
+    B, N, M = 3, 5, 4
+    inputs = torch.randn(B, N)
+    targets = torch.randn(B, M)
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    register_parametrization(model, "weight", UpperTriangular)
+
+    with torch.no_grad():
+        optimizer = SGD(model.parameters(), lr=0.1)
+        original_loss = mse_loss(model(inputs), targets)
+
+    for _ in range(5):
+        model.zero_grad(set_to_none=True)
+        loss = mse_loss(model(inputs), targets)
+        loss.backward()
+        assert loss.isfinite()
+        optimizer.step()
+        update_parametrizations(model)
+        assert is_upper_triangular(model.weight)
+
+    assert loss < original_loss
+
+
+def test_optimizer_hook() -> None:
+    torch.manual_seed(42)
+    B, N, M = 3, 5, 4
+    inputs = torch.randn(B, N)
+    targets = torch.randn(B, M)
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    register_parametrization(model, "weight", UpperTriangular)
+
+    with torch.no_grad():
+        optimizer = SGD(model.parameters(), lr=0.1)
+        register_optimizer_hook(optimizer, model)
+        original_loss = mse_loss(model(inputs), targets)
+
+    for _ in range(5):
+        model.zero_grad(set_to_none=True)
+        loss = mse_loss(model(inputs), targets)
+        loss.backward()
+        assert loss.isfinite()
+        optimizer.step()
+        assert is_upper_triangular(model.weight)
+
+    assert loss < original_loss
+
+
+def test_optimization_cached() -> None:
+    """Tests the `cached` context manager."""
+    torch.manual_seed(42)
+    B, N, M = 3, 5, 4
+    inputs = torch.randn(B, N)
+    targets = torch.randn(B, M)
+    model = nn.Linear(in_features=N, out_features=M, bias=False)
+    register_parametrization(model, "weight", UpperTriangular)
+
+    with torch.no_grad():
+        optimizer = SGD(model.parameters(), lr=0.1)
+        register_optimizer_hook(optimizer, model)
+        original_loss = mse_loss(model(inputs), targets)
+
+    for _ in range(5):
+        with cached(model):
+            model.zero_grad(set_to_none=True)
+            loss = mse_loss(model(inputs), targets)
+            loss.backward()
+            assert loss.isfinite()
+            optimizer.step()
+            assert is_upper_triangular(model.weight)
+
+    assert loss < original_loss
+
+
 def test_surgery() -> None:
     # create model, parametrization and inputs
     inputs = torch.randn(2, 3)
@@ -195,40 +365,6 @@ def test_surgery_extended() -> None:
     assert matrix_norm(spec.cached_parameter, ord=2) <= 1.0
     spec.original_parameter.norm().backward()
     spec.zero_grad(set_to_none=True)
-
-
-def test_parametrization() -> None:
-    model = nn.Linear(4, 4)
-
-    spec = SpectralNormalization(nn.Parameter(model.weight.clone().detach()))
-
-    model.spec = spec
-    spec.update_cache()
-
-    inputs = torch.randn(2, 4)
-
-    check_model(model, input_args=(inputs,), test_jit=True)
-
-
-def test_dummy():
-    model = nn.Linear(4, 4)
-
-    spec = SpectralNormalization(nn.Parameter(model.weight.clone().detach()))
-    del model.weight
-    model.spec = spec
-    spec.update_cache()
-
-    model.register_buffer("weight", model.spec.weight)
-    model.register_parameter(
-        "parametrized_weight", model.spec.parametrized_tensors["weight"]
-    )
-    inputs = torch.randn(2, 4)
-
-    check_model(model, input_args=(inputs,), test_jit=True)
-
-
-@mark.skip(reason="Not implemented")
-def test_parametrizations() -> None: ...
 
 
 def test_param() -> None:
