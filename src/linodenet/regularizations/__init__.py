@@ -26,6 +26,7 @@ __all__ = [
     # linodenet.projections (matrix groups)
     "hamiltonian",
     "identity",
+    "low_rank",
     "normal",
     "orthogonal",
     "skew_symmetric",
@@ -44,6 +45,7 @@ __all__ = [
     # matrix groups
     "Hamiltonian",
     "Identity",
+    "LowRank",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
@@ -66,6 +68,7 @@ from linodenet.regularizations.functional import (
     hamiltonian,
     identity,
     logdetexp,
+    low_rank,
     lower_triangular,
     masked,
     matrix_norm,
@@ -84,6 +87,7 @@ from linodenet.regularizations.modular import (
     Identity,
     LogDetExp,
     LowerTriangular,
+    LowRank,
     Masked,
     MatrixNorm,
     Normal,
@@ -102,6 +106,7 @@ FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
     # linodenet.projections (matrix groups)
     "hamiltonian": hamiltonian,
     "identity": identity,
+    "low_rank": low_rank,
     "normal": normal,
     "orthogonal": orthogonal,
     "skew_symmetric": skew_symmetric,
@@ -123,6 +128,7 @@ MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
     # matrix groups
     "Hamiltonian": Hamiltonian,
     "Identity": Identity,
+    "LowRank": LowRank,
     "Normal": Normal,
     "Orthogonal": Orthogonal,
     "SkewSymmetric": SkewSymmetric,

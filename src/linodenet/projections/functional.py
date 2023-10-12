@@ -12,6 +12,7 @@ __all__ = [
     # Projections
     "hamiltonian",
     "identity",
+    "low_rank",
     "normal",
     "orthogonal",
     "skew_symmetric",
@@ -83,6 +84,26 @@ def skew_symmetric(x: Tensor) -> Tensor:
     One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
     """
     return (x - x.swapaxes(-1, -2)) / 2
+
+
+@jit.script
+def low_rank(x: Tensor, rank: int = 1) -> Tensor:
+    r"""Return the closest low rank matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   rank(Y) ≤ k
+
+    One can show analytically that Y = UₖΣₖVₖ^𝖳 is the unique minimizer,
+    where X=UΣV^𝖳 is the SVD of X.
+    """
+    U, S, Vh = torch.linalg.svd(x, full_matrices=False)
+    return torch.einsum(
+        "...ij, ...j, ...jk -> ...ik",
+        U[..., :, :rank],
+        S[..., :rank],
+        Vh[..., :rank, :],
+    )
 
 
 @jit.script

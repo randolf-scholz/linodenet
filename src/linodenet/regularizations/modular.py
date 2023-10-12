@@ -15,6 +15,7 @@ __all__ = [
     # matrix groups
     "Hamiltonian",
     "Identity",
+    "LowRank",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
@@ -41,6 +42,7 @@ from linodenet.regularizations.functional import (
     hamiltonian,
     identity,
     logdetexp,
+    low_rank,
     lower_triangular,
     masked,
     matrix_norm,
@@ -89,7 +91,7 @@ class LogDetExp(nn.Module):
     p: Final[float]
     size_normalize: Final[bool]
 
-    def __init__(self, p: float = 1.0, size_normalize: bool = True) -> None:
+    def __init__(self, *, p: float = 1.0, size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -108,7 +110,9 @@ class MatrixNorm(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -128,7 +132,9 @@ class Identity(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -136,27 +142,6 @@ class Identity(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards zero matrix."""
         return identity(x, p=self.p, size_normalize=self.size_normalize)
-
-
-class SkewSymmetric(nn.Module):
-    r"""Bias the matrix towards being skew-symmetric.
-
-    .. Signature:: ``(..., n, n) -> ...``
-
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
-    """
-
-    p: Final[Union[str, int]]
-    size_normalize: Final[bool]
-
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
-        super().__init__()
-        self.p = p
-        self.size_normalize = size_normalize
-
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Bias x towards skew-symmetric matrix."""
-        return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Symmetric(nn.Module):
@@ -170,7 +155,9 @@ class Symmetric(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -178,6 +165,54 @@ class Symmetric(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards symmetric matrix."""
         return symmetric(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class SkewSymmetric(nn.Module):
+    r"""Bias the matrix towards being skew-symmetric.
+
+    .. Signature:: ``(..., n, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
+    """
+
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards skew-symmetric matrix."""
+        return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class LowRank(nn.Module):
+    r"""Bias the matrix towards being low-rank.
+
+    .. Signature:: ``(..., m, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. rank(X) ≤ k
+    """
+
+    rank: Final[int]
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self, *, rank: int = 1, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.rank = rank
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards low-rank matrix."""
+        return low_rank(x, rank=self.rank, p=self.p, size_normalize=self.size_normalize)
 
 
 class Orthogonal(nn.Module):
@@ -191,7 +226,9 @@ class Orthogonal(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -199,6 +236,27 @@ class Orthogonal(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards orthogonal matrix."""
         return orthogonal(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Traceless(nn.Module):
+    """Bias the matrix towards being traceless.
+
+    .. Signature:: ``(..., n, n) -> ...``
+    """
+
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return traceless(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Normal(nn.Module):
@@ -212,7 +270,9 @@ class Normal(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -234,7 +294,9 @@ class Symplectic(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -256,7 +318,9 @@ class Hamiltonian(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -264,25 +328,6 @@ class Hamiltonian(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards normal matrix."""
         return hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
-
-
-class Traceless(nn.Module):
-    """Bias the matrix towards being traceless.
-
-    .. Signature:: ``(..., n, n) -> ...``
-    """
-
-    p: Final[Union[str, int]]
-    size_normalize: Final[bool]
-
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
-        super().__init__()
-        self.p = p
-        self.size_normalize = size_normalize
-
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Bias x towards normal matrix."""
-        return traceless(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion matrix groups --------------------------------------------------------------
@@ -301,7 +346,9 @@ class Diagonal(nn.Module):
     p: Final[Union[str, int]]
     size_normalize: Final[bool]
 
-    def __init__(self, p: Union[str, int] = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -325,7 +372,7 @@ class LowerTriangular(nn.Module):
     lower: Final[int]
 
     def __init__(
-        self, lower: int = 0, p: Union[str, int] = "fro", size_normalize: bool = True
+        self, lower: int = 0, *, p: Union[str, int] = "fro", size_normalize: bool = True
     ) -> None:
         super().__init__()
         self.lower = lower
@@ -353,7 +400,7 @@ class UpperTriangular(nn.Module):
     upper: Final[int]
 
     def __init__(
-        self, upper: int = 0, p: Union[str, int] = "fro", size_normalize: bool = True
+        self, upper: int = 0, *, p: Union[str, int] = "fro", size_normalize: bool = True
     ) -> None:
         super().__init__()
         self.upper = upper
@@ -383,14 +430,15 @@ class Banded(nn.Module):
 
     def __init__(
         self,
-        upper: int = 0,
         lower: int = 0,
+        upper: int = 0,
+        *,
         p: Union[str, int] = "fro",
         size_normalize: bool = True,
     ) -> None:
         super().__init__()
-        self.upper = upper
         self.lower = lower
+        self.upper = upper
         self.p = p
         self.size_normalize = size_normalize
 
@@ -421,6 +469,7 @@ class Masked(nn.Module):
     def __init__(
         self,
         mask: BoolTensor,
+        *,
         p: Union[str, int] = "fro",
         size_normalize: bool = True,
     ) -> None:

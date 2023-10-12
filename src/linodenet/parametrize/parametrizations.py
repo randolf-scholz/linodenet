@@ -17,6 +17,7 @@ __all__ = [
     # linodenet.projections
     "Hamiltonian",
     "Identity",
+    "LowRank",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
@@ -231,14 +232,6 @@ class Identity(ParametrizationBase):
         return projections.identity(x)
 
 
-class Orthogonal(ParametrizationBase):
-    """Parametrize a matrix to be orthogonal."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.orthogonal(x)
-
-
 class Symmetric(ParametrizationBase):
     """Parametrize a matrix to be symmetric."""
 
@@ -273,6 +266,29 @@ class SkewSymmetric(ParametrizationBase):
             onto the matrix manifold and hence the right inverse is the identity.
         """
         return y
+
+
+class LowRank(ParametrizationBase):
+    """Parametrize a matrix to be low-rank."""
+
+    rank: Final[int]
+    """CONST: The rank to consider"""
+
+    def __init__(self, tensor: Tensor, /, *, rank: int = 1) -> None:
+        super().__init__(tensor)
+        self.rank = rank
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return projections.low_rank(x, rank=self.rank)
+
+
+class Orthogonal(ParametrizationBase):
+    """Parametrize a matrix to be orthogonal."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return projections.orthogonal(x)
 
 
 class Traceless(ParametrizationBase):

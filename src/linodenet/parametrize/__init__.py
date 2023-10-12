@@ -33,6 +33,7 @@ __all__ = [
     # linodenet.projections
     "Hamiltonian",
     "Identity",
+    "LowRank",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
@@ -72,6 +73,7 @@ from linodenet.parametrize.parametrizations import (
     Hamiltonian,
     Identity,
     LowerTriangular,
+    LowRank,
     Masked,
     MatrixExponential,
     Normal,
@@ -96,6 +98,7 @@ PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
     # linodenet.projections
     "Hamiltonian": Hamiltonian,
     "Identity": Identity,
+    "LowRank": LowRank,
     "Normal": Normal,
     "Orthogonal": Orthogonal,
     "SkewSymmetric": SkewSymmetric,

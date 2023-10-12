@@ -6,6 +6,7 @@ __all__ = [
     # is_* checks
     "is_hamiltonian",
     "is_normal",
+    "is_lowrank",
     "is_orthogonal",
     "is_skew_symmetric",
     "is_symmetric",
@@ -72,13 +73,27 @@ def is_skew_symmetric(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool
 
 
 @jit.script
-def is_normal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
-    r"""Check whether the given tensor is normal.
+def is_lowrank(
+    x: Tensor, rank: int = 1, rtol: float = RTOL, atol: float = ATOL
+) -> bool:
+    r"""Check whether the given tensor is low-rank.
+
+    .. Signature:: ``(..., m, n) -> bool``
+    """
+    return bool((torch.linalg.matrix_rank(x, rtol=rtol, atol=atol) <= rank).all())
+
+
+@jit.script
+def is_orthogonal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
+    r"""Check whether the given tensor is orthogonal.
 
     .. Signature:: ``(..., n, n) -> bool``
     """
     return torch.allclose(
-        x @ x.swapaxes(-1, -2), x.swapaxes(-1, -2) @ x, rtol=rtol, atol=atol
+        x @ x.swapaxes(-1, -2),
+        torch.eye(x.shape[-1], device=x.device),
+        rtol=rtol,
+        atol=atol,
     )
 
 
@@ -103,16 +118,13 @@ def is_traceless(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
 
 
 @jit.script
-def is_orthogonal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
-    r"""Check whether the given tensor is orthogonal.
+def is_normal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
+    r"""Check whether the given tensor is normal.
 
     .. Signature:: ``(..., n, n) -> bool``
     """
     return torch.allclose(
-        x @ x.swapaxes(-1, -2),
-        torch.eye(x.shape[-1], device=x.device),
-        rtol=rtol,
-        atol=atol,
+        x @ x.swapaxes(-1, -2), x.swapaxes(-1, -2) @ x, rtol=rtol, atol=atol
     )
 
 

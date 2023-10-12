@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Final, Optional
+from typing import Final
 
 import torch
 from torch import BoolTensor, Tensor, jit, nn
@@ -37,6 +37,7 @@ from linodenet.projections.functional import (
     diagonal,
     hamiltonian,
     identity,
+    low_rank,
     lower_triangular,
     masked,
     normal,
@@ -114,6 +115,29 @@ class SkewSymmetric(nn.Module):
         return skew_symmetric(x)
 
 
+class LowRank(nn.Module):
+    r"""Return the closest low rank matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   rank(Y) ≤ k
+
+    One can show analytically that Y = UₖΣₖVₖ^𝖳 is the unique minimizer,
+    where X=UΣV^𝖳 is the SVD of X.
+    """
+
+    rank: Final[int]
+
+    def __init__(self, *, rank: int = 1) -> None:
+        super().__init__()
+        self.rank = rank
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of low rank matrices."""
+        return low_rank(x, rank=self.rank)
+
+
 class Orthogonal(nn.Module):
     r"""Return the closest orthogonal matrix to X.
 
@@ -133,6 +157,22 @@ class Orthogonal(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of orthogonal matrices."""
         return orthogonal(x)
+
+
+class Traceless(nn.Module):
+    r"""Return the closest traceless matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
+
+    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
+    """
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of traceless matrices."""
+        return traceless(x)
 
 
 class Normal(nn.Module):
@@ -164,22 +204,6 @@ class Normal(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of normal matrices."""
         return normal(x)
-
-
-class Traceless(nn.Module):
-    r"""Return the closest traceless matrix to X.
-
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
-
-    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
-    """
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of traceless matrices."""
-        return traceless(x)
 
 
 class Hamiltonian(nn.Module):
@@ -265,7 +289,7 @@ class Banded(nn.Module):
     upper: Final[int]
     lower: Final[int]
 
-    def __init__(self, upper: int = 0, lower: Optional[int] = None) -> None:
+    def __init__(self, upper: int = 0, lower: int = 0) -> None:
         super().__init__()
         self.upper = upper
         self.lower = upper if lower is None else lower

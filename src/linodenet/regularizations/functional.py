@@ -16,6 +16,7 @@ __all__ = [
     # linodenet.projections (matrix groups)
     "hamiltonian",
     "identity",
+    "low_rank",
     "normal",
     "orthogonal",
     "skew_symmetric",
@@ -110,21 +111,6 @@ def identity(
 
 
 @jit.script
-def skew_symmetric(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
-    r"""Bias the matrix towards being skew-symmetric.
-
-    .. Signature:: ``(..., n, n) -> ...``
-
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
-    """
-    r = x - projections.skew_symmetric(x)
-    return matrix_norm(r, p=p, size_normalize=size_normalize)
-
-
-@jit.script
 def symmetric(
     x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
@@ -140,6 +126,36 @@ def symmetric(
 
 
 @jit.script
+def skew_symmetric(
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being skew-symmetric.
+
+    .. Signature:: ``(..., n, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
+    """
+    r = x - projections.skew_symmetric(x)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
+def low_rank(
+    x: Tensor, rank: int = 1, p: Union[str, int] = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being low rank.
+
+    .. Signature:: ``(..., m, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) is the closest rank-k matrix to A.
+    """
+    r = x - projections.low_rank(x, rank=rank)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
 def orthogonal(
     x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
 ) -> Tensor:
@@ -151,6 +167,26 @@ def orthogonal(
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
     """
     r = x - projections.orthogonal(x)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@jit.script
+def traceless(
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being normal.
+
+    .. Signature:: ``(..., n, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. tr(X) = 0
+
+    Note:
+        Traceless matrices are also called *trace-free* or *trace-zero* matrices.
+        They have the important property that $\det(\exp(X)) = 1$,
+        which follows from the fact that $\det(\exp(X)) = \exp(\r(X))$.
+    """
+    r = x - projections.traceless(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
@@ -196,26 +232,6 @@ def symplectic(
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. J^TXJ = X
     """
     r = x - projections.symplectic(x)
-    return matrix_norm(r, p=p, size_normalize=size_normalize)
-
-
-@jit.script
-def traceless(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
-    r"""Bias the matrix towards being normal.
-
-    .. Signature:: ``(..., n, n) -> ...``
-
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. tr(X) = 0
-
-    Note:
-        Traceless matrices are also called *trace-free* or *trace-zero* matrices.
-        They have the important property that $\det(\exp(X)) = 1$,
-        which follows from the fact that $\det(\exp(X)) = \exp(\r(X))$.
-    """
-    r = x - projections.traceless(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

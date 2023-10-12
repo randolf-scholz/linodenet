@@ -24,6 +24,7 @@ __all__ = [
     "modular",
     # is_*-checks
     "is_hamiltonian",
+    "is_lowrank",
     "is_normal",
     "is_orthogonal",
     "is_skew_symmetric",
@@ -39,6 +40,7 @@ __all__ = [
     # Functions
     "hamiltonian",
     "identity",
+    "low_rank",
     "normal",
     "orthogonal",
     "skew_symmetric",
@@ -54,6 +56,7 @@ __all__ = [
     # Classes
     "Hamiltonian",
     "Identity",
+    "LowRank",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
@@ -76,6 +79,7 @@ from linodenet.projections.functional import (
     diagonal,
     hamiltonian,
     identity,
+    low_rank,
     lower_triangular,
     masked,
     normal,
@@ -92,6 +96,7 @@ from linodenet.projections.modular import (
     Hamiltonian,
     Identity,
     LowerTriangular,
+    LowRank,
     Masked,
     Normal,
     Orthogonal,
@@ -108,6 +113,7 @@ from linodenet.projections.testing import (
     is_diagonal,
     is_hamiltonian,
     is_lower_triangular,
+    is_lowrank,
     is_masked,
     is_normal,
     is_orthogonal,
@@ -120,6 +126,7 @@ from linodenet.projections.testing import (
 
 MATRIX_TESTS: dict[str, MatrixTest] = {
     "is_hamiltonian": is_hamiltonian,
+    "is_lowrank": is_lowrank,
     "is_normal": is_normal,
     "is_orthogonal": is_orthogonal,
     "is_skew_symmetric": is_skew_symmetric,
@@ -138,6 +145,7 @@ FUNCTIONAL_PROJECTIONS: dict[str, Projection] = {
     # Projections
     "hamiltonian": hamiltonian,
     "identity": identity,
+    "low_rank": low_rank,
     "normal": normal,
     "orthogonal": orthogonal,
     "skew_symmetric": skew_symmetric,
@@ -156,6 +164,7 @@ r"""Dictionary of all available modular metrics."""
 MODULAR_PROJECTIONS: dict[str, type[Projection]] = {
     "Hamiltonian": Hamiltonian,
     "Identity": Identity,
+    "LowRank": LowRank,
     "Normal": Normal,
     "Orthogonal": Orthogonal,
     "SkewSymmetric": SkewSymmetric,
