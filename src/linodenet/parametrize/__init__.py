@@ -32,6 +32,7 @@ __all__ = [
     "ReZero",
     # linodenet.projections
     "Hamiltonian",
+    "Identity",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
@@ -69,6 +70,7 @@ from linodenet.parametrize.parametrizations import (
     Diagonal,
     GramMatrix,
     Hamiltonian,
+    Identity,
     LowerTriangular,
     Masked,
     MatrixExponential,
@@ -93,6 +95,7 @@ PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
     "ReZero": ReZero,
     # linodenet.projections
     "Hamiltonian": Hamiltonian,
+    "Identity": Identity,
     "Normal": Normal,
     "Orthogonal": Orthogonal,
     "SkewSymmetric": SkewSymmetric,

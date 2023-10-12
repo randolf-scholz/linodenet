@@ -22,8 +22,16 @@ Content:
     - register_optimizer_hook: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
 
 Differences:
-    - By default, parametrizations
-
+    - Instead of inserting properties, we use buffers, because JIT does not support properties.
+      This means that the parametrization is not recomputed automatically when the original tensor changes.
+      Instead, the parametrization needs to be recomputed manually by calling `update_parametrization()`.
+    - register_parametrization is intended as a drop-in replacement for
+      `torch.nn.utils.parametrize.register_parametrization`.
+      However, it is not equivalent. In particular, it does not support replacing a tensor with
+      other tensors. For example, a rank-one parametrization is realized by projecting onto the
+      low rank manifold in the forward pass and projecting back to the full rank manifold when
+      updating the parameters. This is important to ensure parametrizations are chainable and to maintain
+      type-safety.
 
 Usage:
     - Create new parametrizations by subclassing Parametrization
@@ -38,6 +46,7 @@ Issues:
     - context decorator could maybe mutate the nn.Module state...
     - In principle the parametrization only needs to recomputed if the tensor values change,
       so after an optimizer.step() or a reset_parameters() call.
+   - Currently unsupported to use multiple parametrizations on the same tensor.
 
 Classes:
     - `ParametrizationProto`: Protocol for all parametrizations.
@@ -517,6 +526,8 @@ def register_parametrization(
         raise NameError(f"{tensor_name}_parametrization already exists!")
 
     tensor = getattr(model, tensor_name)
+    if not isinstance(tensor, nn.Parameter):
+        raise TypeError(f"{tensor_name} is not a parameter!")
 
     if isinstance(parametrization, type):  # FIXME: can't use issubclass on Protocol
         wrapper = parametrization(tensor)
@@ -528,9 +539,7 @@ def register_parametrization(
     # add parametrization to model and rewire the tensors
     delattr(model, tensor_name)
     model.register_buffer(tensor_name, wrapper.cached_parameter)
-
     model.register_module(f"{tensor_name}_parametrization", wrapper)
-
     model.register_parameter(f"{tensor_name}_original", wrapper.original_parameter)
 
     # initialize the parametrization

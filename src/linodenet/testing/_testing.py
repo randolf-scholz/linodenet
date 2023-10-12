@@ -295,10 +295,7 @@ def check_jit(module: nn.Module, /, *, device: Device = ...) -> nn.Module: ...
 @overload
 def check_jit(func: Func, /, *, device: Device = ...) -> Func: ...
 def check_jit(module_or_func, /, *, device=None):
-    """Test JIT compilation."""
-    # make a copy of the module or function
-    module_or_func = deepcopy(module_or_func)
-
+    """Test JIT compilation+serialization."""
     # check if scripting and serialization works
     scripted = check_jit_scripting(module_or_func)
     loaded = check_jit_serialization(scripted, device=device)
@@ -350,19 +347,25 @@ def check_optim(
     *,
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    niter: int = 3,
+    niter: int = 4,
 ) -> None:
     """Check if model can be optimized."""
-    # create optimizer
-    optim = torch.optim.SGD(params=model.parameters(), lr=0.1)
+    with torch.no_grad():
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        original_outputs = model(*input_args, **input_kwargs)
+        original_loss = get_norm(original_outputs)
+        # original_params = [w.clone().detach() for w in model.parameters()]
 
     # perform iterations
     for _ in range(niter):
         model.zero_grad(set_to_none=True)
         outputs = model(*input_args, **input_kwargs)
-        r = get_norm(outputs)
-        r.backward()
-        optim.step()
+        loss = get_norm(outputs)
+        assert loss.isfinite()
+        loss.backward()
+        optimizer.step()
+
+    assert loss < original_loss
 
 
 # endregion check helper functions -----------------------------------------------------

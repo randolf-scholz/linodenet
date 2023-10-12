@@ -16,6 +16,7 @@ __all__ = [
     "ReZero",
     # linodenet.projections
     "Hamiltonian",
+    "Identity",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
@@ -222,6 +223,14 @@ class GramMatrix(ParametrizationBase):
 
 # region linodenet.projections ---------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
+class Identity(ParametrizationBase):
+    """Parametrize a matriz as itself."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        """.. Signature:: ``... -> ...``."""
+        return projections.identity(x)
+
+
 class Orthogonal(ParametrizationBase):
     """Parametrize a matrix to be orthogonal."""
 

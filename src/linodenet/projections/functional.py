@@ -52,7 +52,7 @@ class Projection(Protocol):
 def identity(x: Tensor) -> Tensor:
     r"""Return x as-is.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. Signature:: ``... -> ...``
 
     .. math:: \min_Y ½∥X-Y∥_F^2
     """
@@ -86,6 +86,25 @@ def skew_symmetric(x: Tensor) -> Tensor:
 
 
 @jit.script
+def orthogonal(x: Tensor) -> Tensor:
+    r"""Return the closest orthogonal matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 Y = 𝕀 = YY^𝖳
+
+    One can show analytically that $Y = UV^𝖳$ is the unique minimizer,
+    where $X=UΣV^𝖳$ is the SVD of $X$.
+
+    References
+    ----------
+    - `<https://math.stackexchange.com/q/2215359>`_
+    """
+    U, _, Vh = torch.linalg.svd(x)
+    return torch.einsum("...ij, ...jk -> ...ik", U, Vh)
+
+
+@jit.script
 def traceless(x: Tensor) -> Tensor:
     r"""Return the closest traceless matrix to X.
 
@@ -104,25 +123,6 @@ def traceless(x: Tensor) -> Tensor:
     trace = x.diagonal(dim1=-1, dim2=-2).sum(dim=-1)
     eye = torch.eye(n, dtype=x.dtype, device=x.device)
     return x - torch.einsum("..., mn -> ...mn", trace / n, eye)
-
-
-@jit.script
-def orthogonal(x: Tensor) -> Tensor:
-    r"""Return the closest orthogonal matrix to X.
-
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 Y = 𝕀 = YY^𝖳
-
-    One can show analytically that $Y = UV^𝖳$ is the unique minimizer,
-    where $X=UΣV^𝖳$ is the SVD of $X$.
-
-    References
-    ----------
-    - `<https://math.stackexchange.com/q/2215359>`_
-    """
-    U, _, Vh = torch.linalg.svd(x)
-    return torch.einsum("...ij, ...jk -> ...ik", U, Vh)
 
 
 @jit.script
