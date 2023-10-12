@@ -12,6 +12,7 @@ __all__ = [
     "ParametrizationMulticache",
     # torch.nn.utils.parametrize replacements
     "parametrize",
+    "is_parametrized",
     "register_parametrization",
     "cached",
     # additional functions
@@ -58,6 +59,7 @@ from linodenet.parametrize.base import (
     deepcopy,
     detach_caches,
     get_parametrizations,
+    is_parametrized,
     parametrize,
     register_optimizer_hook,
     register_parametrization,

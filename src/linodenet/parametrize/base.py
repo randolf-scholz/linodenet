@@ -66,6 +66,7 @@ __all__ = [
     "ParametrizationMulticache",
     # torch.nn.utils.parametrize replacements
     "parametrize",
+    "is_parametrized",
     "register_parametrization",
     "cached",
     # additional functions
@@ -90,6 +91,13 @@ from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
 Module = TypeVar("Module", bound=nn.Module)
+
+# TODO: add support for multiple parametrizations on the same tensor.
+# TODO: add ParametrizationList.
+#   When parametrizing a module, this should be added to the module. (__parametrizations__?)
+#   Individual parametrizations should be added to the list.
+#   It allows to keep parametrization updates in the correct order.
+#   It also allows to use multiple parametrizations on the same tensor.
 
 
 @runtime_checkable
@@ -512,6 +520,14 @@ class parametrize(ParametrizationBase):
     def forward(self, x: Tensor) -> Tensor:
         """Apply the parametrization."""
         return self._parametrization(x)
+
+
+def is_parametrized(module: nn.Module, /) -> bool:
+    """Return True if the module has any parametrizations."""
+    for m in module.modules():
+        if isinstance(m, Parametrization):
+            return True
+    return False
 
 
 def register_parametrization(
