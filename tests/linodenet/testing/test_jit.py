@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, jit, nn
 from torch.nn.utils import parametrize as torch_parametrize
 
-from linodenet.testing import check_combined
+from linodenet.testing import check_object
 
 
 class ModuleWithSlots(nn.Module):
@@ -89,7 +89,7 @@ class SubclassWithMetaclass(ModuleWithMetaclass, metaclass=AddPostInit):
 def test_post_init_jit() -> None:
     """Checks that models with meta classes can be scripted."""
     model = ModuleWithMetaclass(3, 3)
-    check_combined(model, input_args=(torch.randn(2, 3),), test_jit=True)
+    check_object(model, input_args=(torch.randn(2, 3),), test_jit=True)
 
 
 def test_post_init() -> None:

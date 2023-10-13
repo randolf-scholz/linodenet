@@ -2,7 +2,7 @@
 
 __all__ = [
     # check functions
-    "check_combined",
+    "check_object",
     "check_function",
     "check_model",
     "check_class",
@@ -34,7 +34,6 @@ __all__ = [
 from linodenet.testing._testing import (
     check_backward,
     check_class,
-    check_combined,
     check_forward,
     check_function,
     check_initialization,
@@ -42,6 +41,7 @@ from linodenet.testing._testing import (
     check_jit_scripting,
     check_jit_serialization,
     check_model,
+    check_object,
     check_optim,
     flatten_nested_tensor,
     get_device,

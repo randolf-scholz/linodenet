@@ -24,11 +24,11 @@ from linodenet.parametrize import (
 )
 from linodenet.projections import is_symmetric, is_upper_triangular, symmetric
 from linodenet.testing import (
-    check_combined,
     check_jit,
     check_jit_scripting,
     check_jit_serialization,
     check_model,
+    check_object,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -118,11 +118,11 @@ def test_jit() -> None:
     inputs = torch.randn(B, N)
     model = nn.Linear(in_features=N, out_features=M, bias=False)
 
-    # check_combined(model, input_args=(inputs,))
+    # check_object(model, input_args=(inputs,))
 
     register_parametrization(model, "weight", UpperTriangular)
 
-    check_combined(model, input_args=(inputs,))
+    check_object(model, input_args=(inputs,))
 
 
 def test_register_parametrization() -> None:

@@ -12,7 +12,7 @@ import linodenet
 from linodenet.config import PROJECT
 from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
 from linodenet.models.system import LinODECell
-from linodenet.testing import check_combined
+from linodenet.testing import check_object
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.basicConfig(level=logging.INFO)
@@ -113,7 +113,7 @@ def test_all_models(model: type[nn.Module], params: dict) -> None:
         reference_shapes = _make_reference_shapes(
             output_shapes, batch_sizes=batch_sizes
         )
-        check_combined(
+        check_object(
             model,
             init_args=initialization,
             input_args=inputs,

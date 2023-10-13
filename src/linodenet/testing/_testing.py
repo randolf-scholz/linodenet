@@ -2,7 +2,7 @@
 
 __all__ = [
     # check functions
-    "check_combined",
+    "check_object",
     "check_function",
     "check_model",
     "check_class",
@@ -30,7 +30,6 @@ __all__ = [
 
 import logging
 import tempfile
-import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from itertools import chain
@@ -38,7 +37,6 @@ from typing import Any, Optional, TypeAlias, overload
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import deprecated
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.testing._utils import assert_close
@@ -371,7 +369,7 @@ def check_optim(
 # endregion check helper functions -----------------------------------------------------
 
 
-def check_combined(
+def check_object(
     obj: type[nn.Module] | nn.Module | Func,
     *,
     init_args: Sequence[Any] = (),
@@ -392,10 +390,6 @@ def check_combined(
     test_optim: bool = False,
 ) -> None:
     """Check a module, function or model class."""
-    # region get configuration -------------------------------------------------
-    pass
-    # endregion get configuration ----------------------------------------------
-
     # region get name and logger -------------------------------------------------------
     match obj:
         case type() if issubclass(obj, nn.Module):
@@ -442,11 +436,12 @@ def check_combined(
         try:
             reference_model.to(device=device)
             reference_outputs = reference_model(*input_args, **input_kwargs)
+            reference_parameters = get_parameters(reference_model) + input_parameters
             assert reference_outputs is not None
             r = get_norm(reference_outputs)
             r.backward()
-            reference_gradients = get_grads(reference_model)
-            reference_model.zero_grad(set_to_none=True)
+            reference_gradients = get_grads(reference_parameters)
+            zero_grad(reference_parameters)
         except Exception as exc:
             raise RuntimeError("Reference model failed forward/backward pass!") from exc
         logger.info(">>> Reference model forward/backward ✔ ")
@@ -510,7 +505,7 @@ def check_combined(
     # endregion check forward pass -----------------------------------------------------
 
     # region check scripted forward/backward pass --------------------------------------
-    check_combined(
+    check_object(
         scripted_model,
         input_args=input_args,
         reference_outputs=reference_outputs,
@@ -527,7 +522,7 @@ def check_combined(
     # endregion check model saving/loading ---------------------------------------------
 
     # region check loaded forward/backward pass ----------------------------------------
-    check_combined(
+    check_object(
         loaded_model,
         input_args=input_args,
         reference_outputs=reference_outputs,
@@ -539,367 +534,146 @@ def check_combined(
     # endregion check loaded forward/backward pass -------------------------------------
 
 
-@deprecated("Deprecated")
-def check_function(
-    func: Func,
-    /,
-    *,
-    input_args: Sequence[Tree] = (),
-    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    #
-    reference_function: Optional[Func] = None,
-    reference_outputs: Optional[Nested[Tensor]] = None,
-    reference_gradients: Optional[Nested[Tensor]] = None,
-    #
-    logger: Optional[logging.Logger] = None,
-    device: Optional[torch.device] = None,
-    make_inputs_parameters: bool = True,
-    test_jit: bool = False,
-    test_optim: bool = False,
-) -> None:
-    """Test a function."""
-    function_name = func.__name__
-
-    # initialize logger
-    if logger is None:
-        logger = __logger__.getChild(function_name)
-
-    # region prepare inputs ------------------------------------------------------------
-    if isinstance(input_args, Tensor):  # type: ignore[unreachable]
-        warnings.warn(  # type: ignore[unreachable]
-            "Got single input tensor, wrapping in tuple!",
-            UserWarning,
-            stacklevel=2,
-        )
-        input_args = (input_args,)
-
-    if make_inputs_parameters:
-        input_args = make_tensors_parameters(input_args)
-        input_kwargs = make_tensors_parameters(input_kwargs)
-    # endregion prepare inputs ---------------------------------------------------------
-
-    # region get parameters model ------------------------------------------------------
-    parameters = (input_args, input_kwargs)
-    # endregion get parameters model ---------------------------------------------------
-
-    # region get reference function ----------------------------------------------------
-    if reference_function is not None:
-        assert (
-            reference_outputs is None and reference_gradients is None
-        ), "Cannot specify both reference model and reference outputs/gradients!"
-
-        try:
-            reference_outputs = reference_function(*input_args, **input_kwargs)
-            r = get_norm(reference_outputs)
-            r.backward()
-            reference_gradients = get_grads(parameters)
-            zero_grad(parameters)
-        except Exception as exc:
-            raise RuntimeError("Reference model failed forward/backward pass!") from exc
-        logger.info(">>> Reference model forward/backward ✔ ")
-    # endregion get reference model ----------------------------------------------------
-
-    # region change device -------------------------------------------------------------
-    if device is None:
-        device = get_device(input_args)
-
-    try:
-        input_args = to_device(input_args, device=device)
-        if reference_outputs is not None:
-            reference_outputs = to_device(reference_outputs, device=device)
-        if reference_gradients is not None:
-            reference_gradients = to_device(reference_gradients, device=device)
-    except Exception as exc:
-        raise RuntimeError("Couldn't move model/tensors to device!") from exc
-
-    logger.info(">>> Moved model/tensors to Device ✔ ")
-    # endregion change device ----------------------------------------------------------
-
-    # region check forward pass --------------------------------------------------------
-    try:
-        outputs = func(*input_args, **input_kwargs)
-    except Exception as exc:
-        raise RuntimeError("Model failed forward pass!") from exc
-
-    if reference_outputs is None:
-        reference_outputs = outputs
-    else:
-        assert_close(outputs, reference_outputs)
-
-    logger.info(">>> Forward ✔ ")
-    # endregion check forward pass -----------------------------------------------------
-
-    # region check backward pass -------------------------------------------------------
-    try:
-        r = get_norm(outputs)
-        r.backward()
-        gradients = get_grads(parameters)
-        zero_grad(parameters)
-    except Exception as exc:
-        raise RuntimeError("Model failed backward pass!") from exc
-
-    if reference_gradients is None:
-        reference_gradients = gradients
-    else:
-        assert_close(gradients, reference_gradients)
-
-    logger.info(">>> Backward ✔ ")
-    # endregion check backward pass ----------------------------------------------------
-
-    # region check optimization ------------------------------------------------
-    if test_optim:
-        # perform a gradient update and a second forward pass.
-        raise NotImplementedError
-    # endregion check optimization ---------------------------------------------
-
-    # terminate if not testing JIT
-    if not test_jit:
-        return
-
-    # region check JIT compilation -----------------------------------------------------
-    try:
-        scripted_function = jit.script(func)
-    except Exception as exc:
-        raise RuntimeError("Model JIT compilation Failed!") from exc
-
-    logger.info(">>> JIT-compilation ✔ ")
-    # endregion check forward pass -----------------------------------------------------
-
-    # region check scripted forward/backward pass --------------------------------------
-    check_function(
-        scripted_function,
-        input_args=input_args,
-        reference_outputs=reference_outputs,
-        reference_gradients=reference_gradients,
-        logger=__logger__.getChild(f"{function_name}@JIT"),
-    )
-    # endregion check scripted forward/backward pass -----------------------------------
-
-    # region check model saving/loading ------------------------------------------------
-    with tempfile.TemporaryFile() as file:
-        try:
-            jit.save(scripted_function, file)
-            file.seek(0)
-        except Exception as exc:
-            raise RuntimeError("Model saving failed!") from exc
-        logger.info(">>> JIT-saving ✔ ")
-
-        try:
-            loaded_function = jit.load(file, map_location=device)
-        except Exception as exc:
-            raise RuntimeError("Model loading failed!") from exc
-        logger.info(">>> JIT-loading ✔ ")
-    # endregion check model saving/loading ---------------------------------------------
-
-    # region check loaded forward/backward pass ----------------------------------------
-    check_function(
-        loaded_function,
-        input_args=input_args,
-        reference_outputs=reference_outputs,
-        reference_gradients=reference_gradients,
-        logger=__logger__.getChild(f"{function_name}@JIT"),
-    )
-    # endregion check loaded forward/backward pass -------------------------------------
-
-
-@deprecated("Deprecated")
 def check_model(
     model: nn.Module,
     /,
     *,
-    input_args: Sequence[Nested[Tensor]] = (),
-    input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
-    reference_model: Optional[nn.Module] = None,
-    reference_outputs: Optional[Nested[Tensor]] = None,
+    #
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    #
     reference_gradients: Optional[Nested[Tensor]] = None,
-    logger: Optional[logging.Logger] = None,
+    reference_model: Optional[nn.Module] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_outputs: Optional[Nested[Tensor]] = None,
+    # extra arguments
     device: Optional[torch.device] = None,
-    test_jit: bool = False,
+    logger: Optional[logging.Logger] = None,
+    make_inputs_parameters: bool = True,
+    test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
-    """Test a model."""
+    """Check a module, function or model class."""
+    # region get name and logger -------------------------------------------------------
+    if not isinstance(model, nn.Module):
+        raise TypeError("Expected nn.Module!")
+
     model_name = model.__class__.__name__
+    logger = __logger__.getChild(model_name) if logger is None else logger
+    # endregion get name and logger ----------------------------------------------------
 
-    # initialize logger
-    if logger is None:
-        logger = __logger__.getChild(model_name)
-
-    # region prepare inputs ------------------------------------------------------------
-    if isinstance(input_args, Tensor):  # type: ignore[unreachable]
-        warnings.warn(  # type: ignore[unreachable]
-            "Got single input tensor, wrapping in tuple!", UserWarning, stacklevel=2
-        )
-        input_args = (input_args,)
-    # endregion prepare inputs ---------------------------------------------------------
-
-    # region get parameters model ------------------------------------------------------
-    parameters = tuple(model.parameters())
-    # endregion get parameters model ---------------------------------------------------
-
-    # region get reference model -------------------------------------------------------
-    if reference_model is not None:
-        assert (
-            reference_outputs is None and reference_gradients is None
-        ), "Cannot specify both reference model and reference outputs/gradients!"
-
-        try:
-            reference_model.to(device=device)
-            reference_outputs = reference_model(*input_args, **input_kwargs)
-            r = get_norm(reference_outputs)
-            r.backward()
-            reference_gradients = get_grads(reference_model)
-            reference_model.zero_grad(set_to_none=True)
-        except Exception as exc:
-            raise RuntimeError("Reference model failed forward/backward pass!") from exc
-        logger.info(">>> Reference model forward/backward ✔ ")
-    # endregion get reference model ----------------------------------------------------
-
-    # region change device -------------------------------------------------------------
-    if device is None:
-        device = get_device(model)
-
-    try:
-        model = model.to(device=device)
-        input_args = to_device(input_args, device=device)
-        if reference_outputs is not None:
-            reference_outputs = to_device(reference_outputs, device=device)
-        if reference_gradients is not None:
-            reference_gradients = to_device(reference_gradients, device=device)
-    except Exception as exc:
-        raise RuntimeError("Couldn't move model/tensors to device!") from exc
-
-    logger.info(">>> Moved model/tensors to Device ✔ ")
-    # endregion change device ----------------------------------------------------------
-
-    # region check forward pass --------------------------------------------------------
-    try:
-        outputs = model(*input_args, **input_kwargs)
-    except Exception as exc:
-        raise RuntimeError("Model failed forward pass!") from exc
-
-    if reference_outputs is None:
-        reference_outputs = outputs
-    else:
-        assert_close(outputs, reference_outputs)
-
-    logger.info(">>> Forward ✔ ")
-    # endregion check forward pass -----------------------------------------------------
-
-    # region check backward pass -------------------------------------------------------
-    try:
-        r = get_norm(outputs)
-        r.backward()
-        gradients = get_grads(parameters)
-        zero_grad(parameters)
-    except Exception as exc:
-        raise RuntimeError("Model failed backward pass!") from exc
-
-    if reference_gradients is None:
-        reference_gradients = gradients
-    else:
-        assert_close(gradients, reference_gradients)
-
-    logger.info(">>> Backward ✔ ")
-    # endregion check backward pass ----------------------------------------------------
-
-    # region check optimization ------------------------------------------------
-    if test_optim:
-        # perform a gradient update and a second forward pass.
-        optim = torch.optim.SGD(params=parameters, lr=0.1)
-        optim.step()
-        raise NotImplementedError
-    # endregion check optimization ---------------------------------------------
-
-    # terminate if not testing JIT
-    if not test_jit:
-        return
-
-    # region check JIT compilation -----------------------------------------------------
-    try:
-        scripted_model = jit.script(model)
-    except Exception as exc:
-        raise RuntimeError("Model JIT compilation Failed!") from exc
-
-    logger.info(">>> JIT-compilation ✔ ")
-    # endregion check forward pass -----------------------------------------------------
-
-    # region check scripted forward/backward pass --------------------------------------
-    check_model(
-        scripted_model,
+    check_object(
+        model,
         input_args=input_args,
-        reference_outputs=reference_outputs,
+        input_kwargs=input_kwargs,
         reference_gradients=reference_gradients,
-        logger=__logger__.getChild(f"{model_name}@JIT"),
-    )
-    # endregion check scripted forward/backward pass -----------------------------------
-
-    # region check model saving/loading ------------------------------------------------
-    with tempfile.TemporaryFile() as file:
-        try:
-            jit.save(scripted_model, file)
-            file.seek(0)
-        except Exception as exc:
-            raise RuntimeError("Model saving failed!") from exc
-        logger.info(">>> JIT-saving ✔ ")
-
-        try:
-            loaded_model = jit.load(file, map_location=device)
-        except Exception as exc:
-            raise RuntimeError("Model loading failed!") from exc
-        logger.info(">>> JIT-loading ✔ ")
-    # endregion check model saving/loading ---------------------------------------------
-
-    # region check loaded forward/backward pass ----------------------------------------
-    check_model(
-        loaded_model,
-        input_args=input_args,
+        reference_model=reference_model,
+        reference_shapes=reference_shapes,
         reference_outputs=reference_outputs,
-        reference_gradients=reference_gradients,
-        logger=__logger__.getChild(f"{model_name}@JIT"),
+        device=device,
+        logger=logger,
+        make_inputs_parameters=make_inputs_parameters,
+        test_jit=test_jit,
+        test_optim=test_optim,
     )
-    # endregion check loaded forward/backward pass -------------------------------------
 
 
-@deprecated("Deprecated")
 def check_class(
     model_class: type[nn.Module],
+    /,
     *,
     init_args: Sequence[Any] = (),
     init_kwargs: Mapping[str, Any] = EMPTY_MAP,
     #
-    input_args: Sequence[Nested[Tensor]] = (),
-    input_kwargs: Mapping[str, Nested[Tensor]] = EMPTY_MAP,
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    #
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
     reference_outputs: Optional[Nested[Tensor]] = None,
-    logger: Optional[logging.Logger] = None,
+    # extra arguments
     device: Optional[torch.device] = None,
-    test_jit: bool = False,
+    logger: Optional[logging.Logger] = None,
+    make_inputs_parameters: bool = True,
+    test_jit: bool = True,
+    test_optim: bool = False,
 ) -> None:
     """Test a model class."""
+    # region get name and logger -------------------------------------------------------
+    if not issubclass(model_class, nn.Module):
+        raise TypeError("Expected nn.Module subclass!")
+
     class_name = model_class.__name__
+    logger = logger if logger is not None else __logger__.getChild(class_name)
+    # endregion get name and logger ----------------------------------------------------
 
-    # initialize logger
-    if logger is None:
-        logger = __logger__.getChild(class_name)
-
-    # region initialize model ----------------------------------------------------------
-    try:
-        model = model_class(*init_args, **init_kwargs)
-    except Exception as exc:
-        raise RuntimeError("Model initialization failed!") from exc
+    # region get initialized model if class --------------------------------------------
+    model = check_initialization(
+        model_class, init_args=init_args, init_kwargs=init_kwargs
+    )
     logger.info(">>> Initialization ✔ ")
-    # endregion initialize model -------------------------------------------------------
+    # endregion get initialized model if class --------------------------------------------
 
-    # test with initialized model
     check_model(
         model,
         input_args=input_args,
         input_kwargs=input_kwargs,
-        reference_model=reference_model,
-        reference_outputs=reference_outputs,
         reference_gradients=reference_gradients,
-        logger=logger,
+        reference_model=reference_model,
+        reference_shapes=reference_shapes,
+        reference_outputs=reference_outputs,
         device=device,
+        logger=logger,
+        make_inputs_parameters=make_inputs_parameters,
         test_jit=test_jit,
+        test_optim=test_optim,
+    )
+
+
+def check_function(
+    func: Func,
+    /,
+    *,
+    #
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    #
+    reference_gradients: Optional[Nested[Tensor]] = None,
+    reference_model: Optional[nn.Module] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_outputs: Optional[Nested[Tensor]] = None,
+    # extra arguments
+    device: Optional[torch.device] = None,
+    logger: Optional[logging.Logger] = None,
+    make_inputs_parameters: bool = True,
+    test_jit: bool = True,
+    test_optim: bool = False,
+) -> None:
+    """Test a model class."""
+    # region get name and logger -------------------------------------------------------
+    if isinstance(func, nn.Module):
+        raise TypeError("For nn.Modules, Use `check_model` instead!")
+
+    if not callable(func):
+        raise TypeError("Expected callable!")
+
+    func_name = func.__name__
+    logger = __logger__.getChild(func_name) if logger is None else logger
+    # endregion get name and logger ----------------------------------------------------
+
+    # test with initialized model
+    check_object(
+        func,
+        input_args=input_args,
+        input_kwargs=input_kwargs,
+        reference_gradients=reference_gradients,
+        reference_model=reference_model,
+        reference_shapes=reference_shapes,
+        reference_outputs=reference_outputs,
+        device=device,
+        logger=logger,
+        make_inputs_parameters=make_inputs_parameters,
+        test_jit=test_jit,
+        test_optim=test_optim,
     )
