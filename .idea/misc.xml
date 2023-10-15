@@ -3,7 +3,7 @@
   <component name="Black">
     <option name="executionMode" value="BINARY" />
     <option name="pathToExecutable" value="$USER_HOME$/.pyenv/shims/black" />
-    <option name="sdkUUID" value="f3169440-494d-47f5-a8c6-8aac57a39498" />
+    <option name="sdkName" value="Poetry (linodenet)" />
   </component>
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/src/linodenet/lib">
     <contentRoot DIR="$PROJECT_DIR$" />

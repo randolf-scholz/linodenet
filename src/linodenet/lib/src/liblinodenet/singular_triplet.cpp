@@ -467,8 +467,8 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
             "Tensor? u0=None,"
             "Tensor? v0=None,"
             "int? maxiter=None,"
-            "float atol=1e-8,"
-            "float rtol=1e-5"
+            "float atol=1e-6,"
+            "float rtol=1e-6"
         ") -> (Tensor, Tensor, Tensor)",
         singular_triplet
     );

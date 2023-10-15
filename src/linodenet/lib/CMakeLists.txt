@@ -42,8 +42,10 @@ add_library(
         SHARED
         src/liblinodenet/singular_triplet.cpp
         src/liblinodenet/singular_triplet_debug.cpp
+        src/liblinodenet/singular_triplet_riemann.cpp
         src/liblinodenet/spectral_norm.cpp
         src/liblinodenet/spectral_norm_debug.cpp
+        src/liblinodenet/spectral_norm_riemann.cpp
         src/liblinodenet/utils.cpp
 )
 

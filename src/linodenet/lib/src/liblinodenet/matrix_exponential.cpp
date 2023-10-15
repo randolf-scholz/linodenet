@@ -29,8 +29,8 @@ struct MatrixExponential : public Function<MatrixExponential> {
         AutogradContext *ctx,
         const Tensor &A,
         const Tensor &dt,
-        double atol = 1e-8,
-        double rtol = 1e-5
+        double atol = 1e-6,
+        double rtol = 1e-6
     ) {
     /** @brief Compute the matrix exponential exp(A∆t) for multiple time steps.
      *
@@ -46,8 +46,8 @@ struct MatrixExponential : public Function<MatrixExponential> {
      * @param ctx: context object
      * @param A: system matrix (shape: (M, M))
      * @param dt: time steps ∆t (shape: (..., N))
-     * @param atol: absolute tolerance (default: 1e-8)
-     * @param rtol: relative tolerance (default: 1e-5)
+     * @param atol: absolute tolerance (default: 1e-6)
+     * @param rtol: relative tolerance (default: 1e-6)
      * @returns exp(A∆t)  (shape: (..., N, M, M))
      *
      * @note We allow multiple time steps to be computed in parallel.
@@ -89,8 +89,8 @@ struct MatrixExponentialAction : public Function<MatrixExponential> {
         const Tensor &A,
         const Tensor &dt,
         const Tensor &x,
-        double atol = 1e-8,
-        double rtol = 1e-5
+        double atol = 1e-6,
+        double rtol = 1e-6
     ) {
     /** @brief Compute action of the matrix exponential exp(A∆t).
      *
@@ -106,8 +106,8 @@ struct MatrixExponentialAction : public Function<MatrixExponential> {
      * @param A: system matrix (shape: (M, M))
      * @param dt: time steps ∆t (shape: (..., N))
      * @param x: input vector (shape: (..., M))
-     * @param atol: absolute tolerance (default: 1e-8)
-     * @param rtol: relative tolerance (default: 1e-5)
+     * @param atol: absolute tolerance (default: 1e-6)
+     * @param rtol: relative tolerance (default: 1e-6)
      * @returns exp(A∆t)  (shape: (..., N, M))
      *
      * @note We allow multiple time steps to be computed in parallel.
@@ -150,8 +150,8 @@ struct MatrixExponentialAction : public Function<MatrixExponential> {
 std::tuple<Tensor, Tensor, Tensor> matrix_exp(
         const Tensor &A,
         const Tensor &dt,
-        double atol = 1e-8,
-        double rtol = 1e-5
+        double atol = 1e-6,
+        double rtol = 1e-6
 ) {
     /**
      * Wrap the struct into function.
@@ -164,8 +164,8 @@ std::tuple<Tensor, Tensor, Tensor> matrix_exp(
 std::tuple<Tensor, Tensor, Tensor> matrix_exp_action(
         const Tensor &A,
         const Tensor &dt,
-        double atol = 1e-8,
-        double rtol = 1e-5
+        double atol = 1e-6,
+        double rtol = 1e-6
 ) {
     /**
      * Wrap the struct into function.
@@ -180,8 +180,8 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
         "matrix_exp("
             "Tensor A,"
             "Tensor dt,"
-            "float atol=1e-8,"
-            "float rtol=1e-5"
+            "float atol=1e-6,"
+            "float rtol=1e-6"
         ") -> (Tensor, Tensor, Tensor)",
         matrix_exp
     );
@@ -189,8 +189,8 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
         "matrix_exp("
             "Tensor A,"
             "Tensor dt,"
-            "float atol=1e-8,"
-            "float rtol=1e-5"
+            "float atol=1e-6,"
+            "float rtol=1e-6"
         ") -> (Tensor, Tensor, Tensor)",
         matrix_exp
     );

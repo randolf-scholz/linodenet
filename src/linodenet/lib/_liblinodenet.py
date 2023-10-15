@@ -10,9 +10,11 @@ __all__ = [
     "singular_triplet",
     "singular_triplet_debug",
     "singular_triplet_native",
+    "singular_triplet_riemann",
     "spectral_norm",
     "spectral_norm_debug",
     "spectral_norm_native",
+    "spectral_norm_riemann",
 ]
 
 import warnings
@@ -23,8 +25,10 @@ import torch
 import torch.utils.cpp_extension
 from torch import Tensor
 
-ATOL = 1e-6
-RTOL = 1e-6
+# constants
+# we use FP32 machine epsilon as default tolerance
+ATOL = 1e-6  # 2**-23  # ~1.19e-7
+RTOL = 1e-6  # 2**-23  # ~1.19e-7
 
 
 @runtime_checkable
@@ -153,6 +157,8 @@ if build_dir.exists():
     _singular_triplet_debug = cast(SingularTriplet, LIB.singular_triplet_debug)
     _spectral_norm = cast(SpectralNorm, LIB.spectral_norm)
     _spectral_norm_debug = cast(SpectralNorm, LIB.spectral_norm_debug)
+    _singular_triplet_riemann = cast(SingularTriplet, LIB.singular_triplet_riemann)
+    _spectral_norm_riemann = cast(SpectralNorm, LIB.spectral_norm_riemann)
 else:
     warnings.warn(
         "Custom binaries not found! Trying to compile them on the fly!."
@@ -171,8 +177,10 @@ else:
     }
     _singular_triplet_debug = compiled_fns["singular_triplet_debug"]
     _singular_triplet = compiled_fns["singular_triplet"]
+    _singular_triplet_riemann = compiled_fns["singular_triplet_riemann"]
     _spectral_norm = compiled_fns["spectral_norm"]
     _spectral_norm_debug = compiled_fns["spectral_norm_debug"]
+    _spectral_norm_riemann = compiled_fns["spectral_norm_riemann"]
 
     # _singular_triplet = singular_triplet_native
     # _singular_triplet_debug = singular_triplet_native
@@ -181,8 +189,10 @@ else:
 
 assert isinstance(_singular_triplet, SingularTriplet)
 assert isinstance(_singular_triplet_debug, SingularTriplet)
+assert isinstance(_singular_triplet_riemann, SingularTriplet)
 assert isinstance(_spectral_norm, SpectralNorm)
 assert isinstance(_spectral_norm_debug, SpectralNorm)
+assert isinstance(_spectral_norm_riemann, SpectralNorm)
 
 
 def singular_triplet(
@@ -209,6 +219,18 @@ def singular_triplet_debug(
     return _singular_triplet_debug(A, u0, v0, maxiter, atol, rtol)
 
 
+def singular_triplet_riemann(
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
+    maxiter: Optional[int] = None,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Computes the singular triplet."""
+    return _singular_triplet_riemann(A, u0, v0, maxiter, atol, rtol)
+
+
 def spectral_norm(
     A: Tensor,
     u0: Optional[Tensor] = None,
@@ -231,3 +253,15 @@ def spectral_norm_debug(
 ) -> Tensor:
     """Computes the spectral norm."""
     return _spectral_norm_debug(A, u0, v0, maxiter, atol, rtol)
+
+
+def spectral_norm_riemann(
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
+    maxiter: Optional[int] = None,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> Tensor:
+    """Computes the spectral norm."""
+    return _spectral_norm_riemann(A, u0, v0, maxiter, atol, rtol)

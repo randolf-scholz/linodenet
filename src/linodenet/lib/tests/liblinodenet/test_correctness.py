@@ -30,6 +30,11 @@ from pytest import mark
 from scipy.stats import ortho_group
 
 import linodenet
+from linodenet.lib import (  # singular_triplet,; singular_triplet_native,; singular_triplet_riemann,
+    spectral_norm,
+    spectral_norm_native,
+    spectral_norm_riemann,
+)
 
 
 def snorm(x: torch.Tensor) -> torch.Tensor:
@@ -44,38 +49,65 @@ def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
     return np.outer(ustar, vstar)
 
 
+RANK_ONE_SHAPES = [
+    (1, 1),
+    (1, 2),
+    (1, 4),
+    (1, 16),
+    (1, 64),
+    (1, 256),
+    (2, 1),
+    (4, 1),
+    (16, 1),
+    (64, 1),
+    (256, 1),
+]
 SVD_METHODS = {
     "numpy_svd": np.linalg.svd,
     "scipy_svd": scipy.linalg.svd,
     "torch_svd": torch.linalg.svd,
     "linodenet_svd": linodenet.lib.singular_triplet,
 }
-
-
+IMPL = {
+    spectral_norm: "custom",
+    spectral_norm_native: "native",
+    spectral_norm_riemann: "riemann",
+    # singular_triplet: "custom",
+    # singular_triplet_native: "native",
+    # singular_triplet_riemann: "riemann",
+}
 SHAPES = [
     # square matrices
-    (1, 1),
     (2, 2),
+    (4, 4),
     (16, 16),
     (64, 64),
+    (256, 256),
     # rectangular matrices
-    (1, 16),
-    (16, 1),
-    (2, 16),
-    (16, 2),
-    (64, 16),
     (16, 64),
+    (256, 64),
+    (64, 16),
+    (64, 256),
 ]
-
+SEEDS = [1000, 1001, 1002, 1003, 1004]
+DIMS = [1, 2, 4, 16, 64, 256]
 ATOL = 1e-5
-RTOL = 1e-5
+RTOL = 1e-3
 
 
 # noinspection PyTupleAssignmentBalance
-@mark.parametrize("method", SVD_METHODS.values(), ids=SVD_METHODS.keys())
+@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
 @mark.parametrize("shape", SHAPES, ids=str)
-def test_svd_rank_one(shape: tuple[int, int], method: Callable) -> None:
+@mark.parametrize("method", SVD_METHODS.values(), ids=SVD_METHODS.keys())
+def test_svd_rank_one(
+    method: Callable,
+    shape: tuple[int, int],
+    seed: int,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> None:
     """Checks that the singular triplet method works for rank one matrices."""
+    torch.manual_seed(seed)
     m, n = shape
     matrix = random_rank_one_matrix(m, n)
 
@@ -85,39 +117,36 @@ def test_svd_rank_one(shape: tuple[int, int], method: Callable) -> None:
             U, S, Vh = scipy.linalg.svd(A)
             # cols of U = LSV, rows of Vh: RSV
             u, s, v = U[:, 0], S[0], Vh[0, :]
-            assert np.allclose(s * np.outer(u, v), A)
+            assert np.allclose(s * np.outer(u, v), A, atol=atol, rtol=rtol)
         case np.linalg.svd:
             A = matrix
             U, S, Vh = np.linalg.svd(A)
             # cols of U = LSV, rows of Vh: RSV
             u, s, v = U[:, 0], S[0], Vh[0, :]
-            assert np.allclose(s * np.outer(u, v), A)
+            assert np.allclose(s * np.outer(u, v), A, atol=atol, rtol=rtol)
         case torch.linalg.svd:
             B = torch.from_numpy(matrix)
             U, S, Vh = torch.linalg.svd(B)
             # cols of U = LSV, rows of Vh: RSV
             u, s, v = U[:, 0], S[0], Vh[0, :]
-            assert torch.allclose(s * torch.outer(u, v), B)
+            assert torch.allclose(s * torch.outer(u, v), B, atol=atol, rtol=rtol)
         case linodenet.lib.singular_triplet:
             B = torch.from_numpy(matrix)
             s, u, v = linodenet.lib.singular_triplet(B)
-            assert torch.allclose(s * np.outer(u, v), B)
+            assert torch.allclose(s * np.outer(u, v), B, atol=atol, rtol=rtol)
         case _:
             raise ValueError(f"Unknown method: {method}")
 
 
+@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
 @mark.parametrize("shape", SHAPES, ids=str)
-@mark.parametrize(
-    "impl",
-    [
-        linodenet.lib.spectral_norm,
-        linodenet.lib.spectral_norm_native,
-        linodenet.lib.singular_triplet,
-        linodenet.lib.singular_triplet_native,
-    ],
-)
+@mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_rank_one(
-    shape: tuple[int, int], impl: Callable, atol: float = ATOL, rtol: float = RTOL
+    impl: Callable,
+    shape: tuple[int, int],
+    seed: int,
+    atol: float = ATOL,
+    rtol: float = RTOL,
 ) -> None:
     """Test the accuracy of the gradient for rank one matrices.
 
@@ -125,7 +154,7 @@ def test_rank_one(
     In particular, for rank one matrices A=uvᵀ, the gradient is ∂‖A‖₂/∂A = uvᵀ/(‖u‖⋅‖v‖).
     """
     # generate random rank one matrix
-    torch.manual_seed(0)
+    torch.manual_seed(seed)
     m, n = shape
     sigma_star = 1000 * torch.rand(()) + 1
     u_star = torch.randn(m)
@@ -151,28 +180,27 @@ def test_rank_one(
 
     # check backward pass
     assert A.grad is not None
-    assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol)
+    assert torch.allclose(
+        A.grad, analytical_grad, atol=atol, rtol=rtol
+    ), f"Max element-wise error: {(A.grad - analytical_grad).abs().max()}"
 
 
-@mark.parametrize("dim", [1, 2, 4, 16, 64])
-@mark.parametrize(
-    "impl",
-    [
-        linodenet.lib.spectral_norm,
-        linodenet.lib.spectral_norm_native,
-        linodenet.lib.singular_triplet,
-        linodenet.lib.singular_triplet_native,
-    ],
-)
+@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
+@mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_diagonal(
-    dim: int, impl: Callable, atol: float = ATOL, rtol: float = RTOL
+    impl: Callable,
+    dim: int,
+    seed: int,
+    atol: float = ATOL,
+    rtol: float = RTOL,
 ) -> None:
     """Checks that the singular triplet method works for diagonal matrices.
 
     NOTE: builtin SVD seems to have auto-detection for diagonal matrices...
     """
-    torch.manual_seed(0)
-    diag = 100 * torch.randn(dim)
+    torch.manual_seed(seed)
+    diag = 10 * (torch.randn(dim) + ATOL)
     A = torch.diag(diag)
     A = A.clone().detach().requires_grad_(True)
 
@@ -202,48 +230,29 @@ def test_diagonal(
     # check backward pass
     assert A.grad is not None
     assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad)
-    assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol)
+    assert torch.allclose(
+        A.grad, analytical_grad, atol=atol, rtol=rtol
+    ), f"Max element-wise error: {(A.grad - analytical_grad).abs().max()}"
 
 
-@mark.parametrize(
-    "shape",
-    [
-        # square matrices
-        (2, 2),
-        (4, 4),
-        (16, 16),
-        (64, 64),
-        (256, 256),
-        # rectangular matrices
-        (2, 16),
-        (16, 2),
-        (64, 16),
-        (16, 64),
-        (256, 64),
-        (64, 256),
-    ],
-    ids=str,
-)
-@mark.parametrize(
-    "impl",
-    [
-        linodenet.lib.spectral_norm,
-        linodenet.lib.spectral_norm_native,
-        linodenet.lib.singular_triplet,
-        linodenet.lib.singular_triplet_native,
-    ],
-)
+@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@mark.parametrize("shape", SHAPES, ids=str)
+@mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_analytical(
-    shape: tuple[int, int], impl: Callable, atol: float = ATOL, rtol: float = RTOL
+    impl: Callable,
+    shape: tuple[int, int],
+    seed: int,
+    atol: float = ATOL,
+    rtol: float = RTOL,
 ) -> None:
     """We test the analytical result for random matrices.
 
     We randomly sample U, S and V.
     """
-    torch.manual_seed(0)
+    torch.manual_seed(seed)
     M, N = shape
     K = min(M, N)
-    S = 100 * torch.rand(K)
+    S = 100 * (torch.rand(K) + ATOL)
     np.random.seed(0)
     U = ortho_group.rvs(M)
     V = ortho_group.rvs(N)

@@ -50,5 +50,15 @@ echo "-------------------------------------------------------------------------"
 echo "Running tests..."
 cd ..
 pwd
+
+# ask if tests should be run
+read -r -p "Run tests? [y/N] " response
+if [[ "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
+    echo "Running tests..."
+else
+    echo "Skipping tests..."
+    exit 0
+fi
+
 pytest tests -n 4 --no-cov
 python check_grad.py

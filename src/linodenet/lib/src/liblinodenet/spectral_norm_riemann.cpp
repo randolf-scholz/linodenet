@@ -98,14 +98,15 @@ struct SpectralNorm: public Function<SpectralNorm> {
          * @param rtol: relative tolerance
          * @returns sigma: singular value
          */
-        // TODO: Test Anderson Acceleration
-
         // Initialize maxiter depending on the size of the matrix.
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
         const auto OPTIONS = A_in.options();
         // NOTE: 2*(M+N) since we do two iterations per loop
         const int64_t MAXITER = maxiter ? maxiter.value() : 4*(M+N) + 100;
+
+//        const Tensor ATOL = torch::full({}, atol, OPTIONS);
+//        const Tensor RTOL = torch::full({}, rtol, OPTIONS);
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
@@ -115,57 +116,60 @@ struct SpectralNorm: public Function<SpectralNorm> {
         // Initialize convergence flag
         bool converged = false;
 
-        // initialize convergence thingy
-        const Tensor tol = torch::tensor(rtol * rtol);
-
         // Initialize u and v with random values if not given
         Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
         Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
 
-        // Initialize old values for convergence check
-        // pre-allocate memory for residuals
-        Tensor u_old = torch::empty_like(u);
-        Tensor v_old = torch::empty_like(v);
-        Tensor r_u = torch::empty_like(u);
-        Tensor r_v = torch::empty_like(v);
+        // pre-allocate buffers
+        Tensor grad_u = torch::empty_like(u);
+        Tensor grad_v = torch::empty_like(v);
+        // scalars
+        Tensor gamma_u = torch::empty({}, OPTIONS);
+        Tensor gamma_v = torch::empty({}, OPTIONS);
+        Tensor rho_u = torch::empty({}, OPTIONS);
+        Tensor rho_v = torch::empty({}, OPTIONS);
+        Tensor sigma_u = torch::empty({}, OPTIONS);
+        Tensor sigma_v = torch::empty({}, OPTIONS);
 
         // initialize vectors for power iteration
         v /= v.norm();
         u /= u.norm();
 
         // Perform power-iteration for maxiter times or until convergence.
-        // NOTE: Perform 2 iterations per loop to increase performance.
-        //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
-        //   The compiler cannot do this optimization on it's own because it would change behavior.
-        for (auto i = 0; i<MAXITER; i+=2) {
-            // update u
-            u = A.mv(v);
-            u /= u.norm();
-
-            // update v
-            v = A_t.mv(u);
-            v /= v.norm();
-
-            // update u
-            u_old = u;
-            u = A.mv(v);
-            u /= u.norm();
-
-            // update v
-            v_old = v;
-            v = A_t.mv(u);
-            v /= v.norm();
-
-            // performance: do not test convergence after evey iteration
-            r_u = u - u_old;
-            r_v = v - v_old;
-
-            // check convergence
-            if ((converged = ((r_v.dot(r_v) < tol) & (r_u.dot(r_u) < tol)).item<bool>())) {
-                // Tensor sigma = A.mv(v).dot(u);
-                // std::cout << at::str("Converged after ", i, " iterations. σ=", sigma_u) << std::endl;
-                break;
+        // requires 2m+2n space. 2 mv prods and 4 dot products, 4 norm computations.
+        for (auto i = 0; i<MAXITER; i++) {
+            { // update u
+                // compute gradient in ℝᵐ
+                grad_u = A.mv(v);
+                sigma_u = grad_u.dot(u);
+                rho_u = grad_u.dot(grad_u) - sigma_u * sigma_u;
+                // project gradient to tangent space 𝕋𝕊ᵐ
+                grad_u -= sigma_u * u;
+                // normalize tangent vector
+                gamma_u = grad_u.norm();
+                grad_u /= gamma_u;
+                // update u = σᵤu + ρᵤg
+                u = sigma_u * u + rho_u * grad_u;
+                u /= u.norm();
             }
+            { // update v
+                // compute gradient in ℝⁿ
+                grad_v = A_t.mv(u);
+                sigma_v = grad_v.dot(v);
+                rho_v = grad_v.dot(grad_v) - sigma_v * sigma_v;
+                // project gradient to tangent space 𝕋𝕊ᵐ
+                grad_v -= sigma_v * v;
+                // normalize tangent vector
+                gamma_v = grad_v.norm();
+                grad_v /= gamma_v;
+                // update v = σᵥv + ρᵥg
+                v = sigma_v * v + rho_v * grad_v;
+                v /= v.norm();
+            }
+            if ((converged = (
+                (gamma_u < atol + rtol * sigma_u)
+                & (gamma_v < atol + rtol * sigma_v)
+            ).item<bool>())){break;}
         }
 
         // Emit warning if no convergence within maxiter iterations.
@@ -173,17 +177,14 @@ struct SpectralNorm: public Function<SpectralNorm> {
             TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
         }
 
-        // normalize u and v
-        u /= u.norm();
-        v /= v.norm();
         // compute pre-conditioned sigma
-        const Tensor sigma = A.mv(v).dot(u);
+        Tensor sigma = A.mv(v).dot(u);
 
         // store pre-conditioned tensors for backward
         ctx->save_for_backward({u, v});
 
         // reverse pre-conditioning
-        const Tensor sigma_out = sigma * SCALE;
+        Tensor sigma_out = sigma * SCALE;
 
         // check for NaNs, infinities, and negative values
         const auto sigma_val = sigma_out.item<double>();
@@ -220,7 +221,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
 };
 
 
-static inline Tensor spectral_norm(
+static inline Tensor spectral_norm_riemann(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
@@ -237,7 +238,7 @@ static inline Tensor spectral_norm(
 
 TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
     m.def(
-        "spectral_norm("
+        "spectral_norm_riemann("
             "Tensor A,"
             "Tensor? u0=None,"
             "Tensor? v0=None,"
@@ -245,7 +246,7 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
             "float atol=1e-6,"
             "float rtol=1e-6"
         ") -> Tensor",
-        spectral_norm
+        spectral_norm_riemann
     );
 }
 

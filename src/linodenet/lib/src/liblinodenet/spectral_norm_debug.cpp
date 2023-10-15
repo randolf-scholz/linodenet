@@ -19,8 +19,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const optional<Tensor> &u0,
         const optional<Tensor> &v0,
         optional<int64_t> maxiter,
-        double atol = 1e-8,
-        double rtol = 1e-5
+        double atol = 1e-6,
+        double rtol = 1e-6
     ) {
         // Initialize maxiter depending on the size of the matrix.
         const auto A_t = A.t();
@@ -119,8 +119,8 @@ static inline Tensor spectral_norm_debug(
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     optional<int64_t> maxiter,
-    double atol = 1e-8,
-    double rtol = 1e-5
+    double atol = 1e-6,
+    double rtol = 1e-6
 ) {
     /**
      * Wrap the struct into function.
@@ -136,8 +136,8 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
             "Tensor? u0=None,"
             "Tensor? v0=None,"
             "int? maxiter=None,"
-            "float atol=1e-8,"
-            "float rtol=1e-5"
+            "float atol=1e-6,"
+            "float rtol=1e-6"
         ") -> Tensor",
         spectral_norm_debug
     );
@@ -155,8 +155,8 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
 //    const optional<Tensor>& u0,
 //    const optional<Tensor>& v0,
 //    const optional<int64_t> maxiter,
-//    const double atol = 1e-8,
-//    const double rtol = 1e-5
+//    const double atol = 1e-6,
+//    const double rtol = 1e-6
 //) {
 //    // Initialize maxiter depending on the size of the matrix.
 //    const auto m = A.size(0);

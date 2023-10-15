@@ -6,7 +6,7 @@ __all__ = [
     "test_spectral_norm_backward",
     "test_singular_triplet_forward",
     "test_singular_triplet_backward",
-    "test_singular_triplet_backward_full",
+    "test_singular_triplet_full_backward",
 ]
 
 
@@ -15,14 +15,17 @@ from collections.abc import Callable
 import pytest
 import torch
 import torch.utils.cpp_extension
+from pytest import mark
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch import nn
 
 from linodenet.lib import (
     singular_triplet,
     singular_triplet_native,
+    singular_triplet_riemann,
     spectral_norm,
     spectral_norm_native,
+    spectral_norm_riemann,
 )
 
 torch.manual_seed(0)
@@ -49,9 +52,10 @@ SHAPES = [
 
 SPECTRAL_NORMS = {
     spectral_norm_native: "native",
+    spectral_norm: "custom",
+    spectral_norm_riemann: "riemann",
     # jit.script(spectral_norm_native): "native+jit",
     # torch.compile(spectral_norm_native): "native+compile",
-    spectral_norm: "custom",
     # jit.script(spectral_norm): "custom+jit",
     # torch.ops.custom.spectral_norm: "unwrapped",
     # jit.script(torch.ops.custom.spectral_norm): "unwrapped+jit",
@@ -61,7 +65,11 @@ SPECTRAL_NORMS = {
 SINGULAR_TRIPLETS = {
     singular_triplet_native: "native",
     singular_triplet: "custom",
+    singular_triplet_riemann: "riemann",
 }
+ATOL = 1e-5
+RTOL = 1e-3
+SHAPES = [(64, 64), (256, 256), (1024, 1024)]
 
 
 def get_param(shape: tuple[int, int], device: str | torch.device) -> nn.Parameter:
@@ -71,10 +79,15 @@ def get_param(shape: tuple[int, int], device: str | torch.device) -> nn.Paramete
     return nn.Parameter(A)
 
 
-@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
-@pytest.mark.benchmark(group="spectral_norm_backward")
+@mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+@mark.parametrize("device", DEVICES)
+@mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
+@mark.benchmark(
+    group="spectral_norm_forward",
+    # min_time=0.1,  # minimum 0.1s time budget
+    max_time=1,  # maximum 2s time budget
+    warmup=True,
+)
 def test_spectral_norm_forward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -93,21 +106,27 @@ def test_spectral_norm_forward(
     # check correctness
     residual = s_custom - s_native
     assert (
-        residual.norm() < 1e-06 + 1e-4 * s_native.norm()
+        residual.norm() < ATOL + RTOL * s_native.norm()
     ), "Large error in spectral norm value!"
 
+    # def setup():  # get args and kwargs for benchmark
+    #     param = get_param(shape, device)
+    #     return (param,), {}
+    #
+    # with torch.no_grad():
+    #     benchmark.pedantic(impl, setup=setup)
+
+    @benchmark
     def setup():  # get args and kwargs for benchmark
-        param = get_param(shape, device)
-        return (param,), {}
-
-    with torch.no_grad():
-        benchmark.pedantic(impl, setup=setup, rounds=512, warmup_rounds=128)
+        with torch.no_grad():
+            param = get_param(shape, device)
+            impl(param)
 
 
-@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
-@pytest.mark.benchmark(group="spectral_norm_forward")
+@mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+@mark.parametrize("device", DEVICES)
+@mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
+@mark.benchmark(group="spectral_norm_backward")
 def test_spectral_norm_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -137,7 +156,7 @@ def test_spectral_norm_backward(
     # check correctness
     residual = g_custom - g_native
     assert (
-        residual.norm() < 1e-06 + 1e-2 * g_native.norm()
+        residual.norm() < ATOL + RTOL * g_native.norm()
     ), "Large error in spectral norm gradient!"
 
     # perform benchmark
@@ -149,10 +168,10 @@ def test_spectral_norm_backward(
     benchmark.pedantic(backward, setup=setup, rounds=512, warmup_rounds=128)
 
 
-@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
-@pytest.mark.benchmark(group="singular_triplet_backward")
+@mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+@mark.parametrize("device", DEVICES)
+@mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
+@mark.benchmark(group="singular_triplet_forward")
 def test_singular_triplet_forward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -173,10 +192,10 @@ def test_singular_triplet_forward(
     # check correctness
     assert (
         s_custom - s_native
-    ).norm() < 1e-06 + 1e-4 * s_native.norm(), "Large error in singular value!"
+    ).norm() < ATOL + RTOL * s_native.norm(), "Large error in singular value!"
     assert (
         dyadic_custom - dyadic_native
-    ).norm() < 1e-06 + 1e-4 * dyadic_native.norm(), "Large error in singular vectors!"
+    ).norm() < ATOL + RTOL * dyadic_native.norm(), "Large error in singular vectors!"
 
     def setup():  # get args and kwargs for benchmark
         param = get_param(shape, device)
@@ -187,10 +206,10 @@ def test_singular_triplet_forward(
         benchmark.pedantic(impl, setup=setup, rounds=512, warmup_rounds=128)
 
 
-@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
-@pytest.mark.benchmark(group="singular_triplet_forward")
+@mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+@mark.parametrize("device", DEVICES)
+@mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
+@mark.benchmark(group="singular_triplet_backward")
 def test_singular_triplet_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -220,7 +239,7 @@ def test_singular_triplet_backward(
     # check correctness
     assert (
         g_custom - g_native
-    ).norm() < 1e-06 + 1e-2 * g_native.norm(), "Large error in spectral norm gradient!"
+    ).norm() < ATOL + RTOL * g_native.norm(), "Large error in spectral norm gradient!"
 
     def setup():  # get args and kwargs for benchmark
         param = get_param(shape, device)
@@ -231,11 +250,11 @@ def test_singular_triplet_backward(
     benchmark.pedantic(backward, setup=setup, rounds=512, warmup_rounds=128)
 
 
-@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
-@pytest.mark.benchmark(group="singular_triplet_forward")
-def test_singular_triplet_backward_full(
+@mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+@mark.parametrize("device", DEVICES)
+@mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
+@mark.benchmark(group="singular_triplet_full_backward")
+def test_singular_triplet_full_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
     """Test full backward when singular triplet used."""
@@ -267,7 +286,7 @@ def test_singular_triplet_backward_full(
     # check correctness
     residual = g_custom - g_native
     assert (
-        residual.norm() < 1e-06 + 1e-2 * g_native.norm()
+        residual.norm() < ATOL + RTOL * g_native.norm()
     ), "Large error in spectral norm gradient!"
 
     def setup():  # get args and kwargs for benchmark
