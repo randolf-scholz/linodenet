@@ -47,12 +47,17 @@ struct SingularTriplet : public Function<SingularTriplet> {
          * @param rtol: relative tolerance
          * @returns sigma, u, v: singular value, left singular vector, right singular vector
          */
+        // TODO: Test Anderson Acceleration
+
         // Initialize maxiter depending on the size of the matrix.
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        // NOTE: 2*(M+N) since we do two iterations per loop
-        const int64_t MAXITER = maxiter ? maxiter.value() : 4*(M+N) + 100;
+        const int64_t MAXITER = maxiter ? maxiter.value() : 2*(M + N + 64);
+
+        // Initialize tolerance scalars
+        const Tensor ATOL = torch::full({}, atol, OPTIONS);
+        const Tensor RTOL = torch::full({}, rtol, OPTIONS);
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
@@ -66,11 +71,14 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
         Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
 
+        // initialize vectors for power iteration
+        v /= v.norm();
+        u /= u.norm();
+
         // pre-allocate buffers
         Tensor grad_u = torch::empty_like(u);
         Tensor grad_v = torch::empty_like(v);
-        Tensor g_u = torch::empty_like(u);
-        Tensor g_v = torch::empty_like(v);
+
         // scalars
         Tensor gamma_u = torch::empty({}, OPTIONS);
         Tensor gamma_v = torch::empty({}, OPTIONS);
@@ -78,49 +86,69 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor rho_v = torch::empty({}, OPTIONS);
         Tensor sigma_u = torch::empty({}, OPTIONS);
         Tensor sigma_v = torch::empty({}, OPTIONS);
-        Tensor converged_u = torch::empty({}, OPTIONS);
-        Tensor converged_v = torch::empty({}, OPTIONS);
-
-        // initialize vectors for power iteration
-        v /= v.norm();
-        u /= u.norm();
 
         // Perform power-iteration for maxiter times or until convergence.
-        // requires 3m+3n space. Could be reduced to 2m+2n, but maybe less stable.
+        // NOTE: Perform 2 iterations per loop to increase performance.
+        //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
+        //   The compiler cannot do this optimization on it's own because it would change behavior.
         for (auto i = 0; i<MAXITER; i++) {
             { // update u
                 // compute gradient in ℝᵐ
                 grad_u = A.mv(v);
-                sigma_u = u.dot(grad_u);
+                sigma_u = grad_u.dot(u);
+                rho_u = grad_u.dot(grad_u) - sigma_u * sigma_u;
                 // project gradient to tangent space 𝕋𝕊ᵐ
-                g_u = grad_u - sigma_u * u;
-                gamma_u = g_u.norm();
-                converged_u = (gamma_u < atol + rtol * sigma_u);
+                grad_u -= sigma_u * u;
                 // normalize tangent vector
-                g_u /= gamma_u;
-                // compute inner product in tangent space
-                rho_u = g_u.dot(grad_u);
-                // update u
-                u = sigma_u * u + rho_u * g_u;
+                gamma_u = grad_u.norm();
+                // update u = σᵤu + ρᵤg
+                u = sigma_u * u + (rho_u/gamma_u) * grad_u;
+                // u /= u.norm();  // not needed every iteration
+            }
+            { // update v
+                // compute gradient in ℝⁿ
+                grad_v = A_t.mv(u);
+                sigma_v = grad_v.dot(v);
+                rho_v = grad_v.dot(grad_v) - sigma_v * sigma_v;
+                // project gradient to tangent space 𝕋𝕊ᵐ
+                grad_v -= sigma_v * v;
+                // normalize tangent vector
+                gamma_v = grad_v.norm();
+                // update v = σᵥv + ρᵥg
+                v = sigma_v * v + (rho_v/gamma_v) * grad_v;
+                // v /= v.norm();  // not needed every iteration
+            }
+            { // update u
+                // compute gradient in ℝᵐ
+                grad_u = A.mv(v);
+                sigma_u = grad_u.dot(u);
+                rho_u = grad_u.dot(grad_u) - sigma_u * sigma_u;
+                // project gradient to tangent space 𝕋𝕊ᵐ
+                grad_u -= sigma_u * u;
+                // normalize tangent vector
+                gamma_u = grad_u.norm();
+                // update u = σᵤu + ρᵤg
+                u = sigma_u * u + (rho_u/gamma_u) * grad_u;
                 u /= u.norm();
             }
             { // update v
                 // compute gradient in ℝⁿ
                 grad_v = A_t.mv(u);
-                sigma_v = v.dot(grad_v);
+                sigma_v = grad_v.dot(v);
+                rho_v = grad_v.dot(grad_v) - sigma_v * sigma_v;
                 // project gradient to tangent space 𝕋𝕊ᵐ
-                g_v = grad_v - sigma_v * v;
-                gamma_v = g_v.norm();
-                converged_v = (gamma_v < atol + rtol * sigma_v);
+                grad_v -= sigma_v * v;
                 // normalize tangent vector
-                g_v /= gamma_v;
-                // compute inner product in tangent space
-                rho_v = g_v.dot(grad_v);
-                // update v
-                v = sigma_v * v + rho_v * g_v;
+                gamma_v = grad_v.norm();
+                // update v = σᵥv + ρᵥg
+                v = sigma_v * v + (rho_v/gamma_v) * grad_v;
                 v /= v.norm();
             }
-            if ((converged = (converged_u & converged_v).item<bool>())){break;}
+            // check convergence
+            // NOTE:(1/√2)(‖u‖+‖v‖) ≤ ‖(u,v)‖ ≤ ‖u‖+‖v‖ (via Jensen-Inequality)
+            if ((converged = (  // compare against geometric mean
+                (gamma_u + gamma_v) < ATOL + RTOL*torch::min(sigma_u, sigma_v)
+            ).item<bool>())) {break;}
         }
 
         // Emit warning if no convergence within maxiter iterations.
@@ -137,11 +165,11 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // reverse pre-conditioning
         const Tensor sigma_out = sigma * SCALE;
 
-        // check for NaNs, infinities, and negative values
-        const auto sigma_val = sigma_out.item<double>();
-        if (!(std::isfinite(sigma_val) && sigma_val > 0)) {
+        // check for NaNs, infinities and non-positive values
+        if ((~torch::isfinite(sigma_out) | (sigma_out <= 0)).item<bool>()) [[unlikely]] {
             throw std::runtime_error(at::str(
-                "Computation resulted in invalid singular value σ=", sigma_val, " for input of shape ", A.sizes(), ". ",
+                "Computation resulted in invalid singular value σ=", sigma_out,
+                " for input of shape ", A.sizes(), ". ",
                 "Try increasing the number of iterations or the tolerance. ",
                 "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
             ));

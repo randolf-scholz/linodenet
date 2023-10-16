@@ -42,6 +42,7 @@ test = [
     "coverage>=7.3.2",
     "matplotlib>=3.8.0",
     "psutil>=5.9.6",
+    "pygal>=3.0.0",
     "pytest-benchmark[histogram]>=4.0.0",
     "pytest-cov>=4.1.0",
     "pytest-repeat>=0.9.3",
@@ -585,6 +586,7 @@ torchinfo = ">=1.8.0"
 coverage = ">=7.3.2"
 matplotlib = ">=3.8.0"
 psutil = ">=5.9.6"
+pygal = ">=3.0.0"
 pytest = ">=7.4.2"
 pytest-benchmark = ">=4.0.0"
 pytest-cov = ">=4.1.0"

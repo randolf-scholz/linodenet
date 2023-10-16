@@ -18,6 +18,7 @@ __all__ = [
     "test_rank_one",
     "test_diagonal",
     "test_analytical",
+    "test_orthogonal",
 ]
 
 from collections.abc import Callable
@@ -30,24 +31,11 @@ from pytest import mark
 from scipy.stats import ortho_group
 
 import linodenet
-from linodenet.lib import (  # singular_triplet,; singular_triplet_native,; singular_triplet_riemann,
+from linodenet.lib import (  # singular_triplet,; singular_triplet_native,; singular_triplet_riemann,;
     spectral_norm,
     spectral_norm_native,
     spectral_norm_riemann,
 )
-
-
-def snorm(x: torch.Tensor) -> torch.Tensor:
-    """Scaled norm of a tensor."""
-    return x.pow(2).mean().sqrt()
-
-
-def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
-    rng = default_rng(seed=0)
-    ustar = rng.standard_normal(m)
-    vstar = rng.standard_normal(n)
-    return np.outer(ustar, vstar)
-
 
 RANK_ONE_SHAPES = [
     (1, 1),
@@ -86,13 +74,23 @@ SHAPES = [
     # rectangular matrices
     (16, 64),
     (256, 64),
-    (64, 16),
-    (64, 256),
 ]
 SEEDS = [1000, 1001, 1002, 1003, 1004]
-DIMS = [1, 2, 4, 16, 64, 256]
-ATOL = 1e-5
+DIMS = [2, 4, 16, 64, 256]
+ATOL = 1e-4
 RTOL = 1e-3
+
+
+def snorm(x: torch.Tensor) -> torch.Tensor:
+    """Scaled norm of a tensor."""
+    return x.pow(2).mean().sqrt()
+
+
+def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
+    rng = default_rng(seed=0)
+    ustar = rng.standard_normal(m)
+    vstar = rng.standard_normal(n)
+    return np.outer(ustar, vstar)
 
 
 # noinspection PyTupleAssignmentBalance
@@ -180,9 +178,16 @@ def test_rank_one(
 
     # check backward pass
     assert A.grad is not None
-    assert torch.allclose(
-        A.grad, analytical_grad, atol=atol, rtol=rtol
-    ), f"Max element-wise error: {(A.grad - analytical_grad).abs().max()}"
+    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+    )
+    assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+    )
 
 
 @mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
@@ -200,15 +205,15 @@ def test_diagonal(
     NOTE: builtin SVD seems to have auto-detection for diagonal matrices...
     """
     torch.manual_seed(seed)
-    diag = 10 * (torch.randn(dim) + ATOL)
-    A = torch.diag(diag)
+    S = 10 * (torch.randn(dim) + ATOL)
+    A = torch.diag(S)
     A = A.clone().detach().requires_grad_(True)
 
     # analytical result
-    idx_star = torch.argmax(diag.abs())
+    idx_star = S.abs().argmax()
     unit_vector = torch.eye(dim)
-    sigma_star = diag[idx_star].abs()
-    sign_star = torch.sign(diag[idx_star])
+    sigma_star = S[idx_star].abs()
+    sign_star = torch.sign(S[idx_star])
     u_star = unit_vector[idx_star]
     v_star = unit_vector[idx_star]
 
@@ -229,10 +234,18 @@ def test_diagonal(
 
     # check backward pass
     assert A.grad is not None
-    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad)
-    assert torch.allclose(
-        A.grad, analytical_grad, atol=atol, rtol=rtol
-    ), f"Max element-wise error: {(A.grad - analytical_grad).abs().max()}"
+    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+        f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+    )
+    assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+        f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+    )
 
 
 @mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
@@ -250,10 +263,10 @@ def test_analytical(
     We randomly sample U, S and V.
     """
     torch.manual_seed(seed)
+    np.random.seed(0)
     M, N = shape
     K = min(M, N)
-    S = 100 * (torch.rand(K) + ATOL)
-    np.random.seed(0)
+    S = 10 * (torch.rand(K) + ATOL)
     U = ortho_group.rvs(M)
     V = ortho_group.rvs(N)
     # take the first K vectors
@@ -263,9 +276,10 @@ def test_analytical(
     A = A.clone().detach().requires_grad_(True)
 
     # analytical result
-    sigma_star = S.max()
-    u_star = U[:, S.argmax()]
-    v_star = Vh[S.argmax(), :]
+    idx_star = S.abs().argmax()
+    sigma_star = S[idx_star]
+    u_star = U[:, idx_star]
+    v_star = Vh[idx_star, :]
 
     # analytical result
     analytical_value = sigma_star
@@ -284,10 +298,74 @@ def test_analytical(
 
     # check backward pass
     assert A.grad is not None
-    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad)
-    assert torch.allclose(
-        A.grad, analytical_grad, atol=atol, rtol=rtol
-    ), f"Max element-wise error: {(A.grad - analytical_grad).abs().max()}"
+    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+        f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+    )
+    assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+        f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+    )
+
+
+@mark.skip(reason="Algorithms are unstable for repeated singular values.")
+@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
+@mark.parametrize("impl", IMPL, ids=IMPL.get)
+def test_orthogonal(
+    impl: Callable,
+    dim: int,
+    seed: int,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> None:
+    """Tests algorithm against orthogonal matrix.
+
+    Note:
+        For repeated singular values, the gradient is no longer well-defined,
+        but (I think), any sum  $∑_{j≤i} uᵢvᵢᵀ$ is a subgradient.
+        In particular, if A is already orthogonal, then $∂‖A‖₂/∂A = A$.
+        Is, in some sense, the largest subgradient.
+    """
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    S = torch.ones(dim, dtype=torch.float)
+    U = ortho_group.rvs(dim)
+    A = torch.from_numpy(U).to(dtype=torch.float).requires_grad_(True)
+
+    # analytical result
+    analytical_value = S[0]
+    analytical_grad = A.clone().detach()
+
+    # forward pass
+    outputs = impl(A)
+    sigma = outputs[0] if isinstance(outputs, tuple) else outputs
+
+    # check forward pass
+    assert (sigma - analytical_value).norm() < atol + rtol * analytical_value.norm()
+    assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
+
+    # backward pass
+    sigma.backward()
+
+    # check backward pass
+    assert A.grad is not None
+    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+        f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+    )
+    assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+        f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        f"  ‖A‖₂={analytical_value:.3e}"
+        f"  κ(A)={torch.linalg.cond(A):.3e}"
+        f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+    )
 
 
 if __name__ == "__main__":

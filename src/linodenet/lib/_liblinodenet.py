@@ -145,19 +145,22 @@ source_dir = lib_base_path / "src" / "liblinodenet"
 
 _singular_triplet: SingularTriplet
 _singular_triplet_debug: SingularTriplet
+_singular_triplet_riemann: SingularTriplet
 _spectral_norm: SpectralNorm
 _spectral_norm_debug: SpectralNorm
+_spectral_norm_riemann: SpectralNorm
 
 LIB = torch.ops.liblinodenet
 """The custom library."""
 
 if build_dir.exists():
     torch.ops.load_library(build_dir)
+    # load the functions
     _singular_triplet = cast(SingularTriplet, LIB.singular_triplet)
     _singular_triplet_debug = cast(SingularTriplet, LIB.singular_triplet_debug)
+    _singular_triplet_riemann = cast(SingularTriplet, LIB.singular_triplet_riemann)
     _spectral_norm = cast(SpectralNorm, LIB.spectral_norm)
     _spectral_norm_debug = cast(SpectralNorm, LIB.spectral_norm_debug)
-    _singular_triplet_riemann = cast(SingularTriplet, LIB.singular_triplet_riemann)
     _spectral_norm_riemann = cast(SpectralNorm, LIB.spectral_norm_riemann)
 else:
     warnings.warn(
@@ -169,14 +172,16 @@ else:
     compiled_fns = {
         name: load_function(name)
         for name in (
-            "spectral_norm",
             "singular_triplet",
             "singular_triplet_debug",
+            "singular_triplet_riemann",
+            "spectral_norm",
             "spectral_norm_debug",
+            "spectral_norm_riemann",
         )
     }
-    _singular_triplet_debug = compiled_fns["singular_triplet_debug"]
     _singular_triplet = compiled_fns["singular_triplet"]
+    _singular_triplet_debug = compiled_fns["singular_triplet_debug"]
     _singular_triplet_riemann = compiled_fns["singular_triplet_riemann"]
     _spectral_norm = compiled_fns["spectral_norm"]
     _spectral_norm_debug = compiled_fns["spectral_norm_debug"]
@@ -193,6 +198,45 @@ assert isinstance(_singular_triplet_riemann, SingularTriplet)
 assert isinstance(_spectral_norm, SpectralNorm)
 assert isinstance(_spectral_norm_debug, SpectralNorm)
 assert isinstance(_spectral_norm_riemann, SpectralNorm)
+
+
+spectral_norm = _spectral_norm
+
+#
+# def spectral_norm(
+#     A: Tensor,
+#     u0: Optional[Tensor] = None,
+#     v0: Optional[Tensor] = None,
+#     maxiter: Optional[int] = None,
+#     atol: float = ATOL,
+#     rtol: float = RTOL,
+# ) -> Tensor:
+#     """Computes the spectral norm."""
+#     return _spectral_norm(A, u0, v0, maxiter, atol, rtol)
+
+
+def spectral_norm_debug(
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
+    maxiter: Optional[int] = None,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> Tensor:
+    """Computes the spectral norm."""
+    return _spectral_norm_debug(A, u0, v0, maxiter, atol, rtol)
+
+
+def spectral_norm_riemann(
+    A: Tensor,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
+    maxiter: Optional[int] = None,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> Tensor:
+    """Computes the spectral norm."""
+    return _spectral_norm_riemann(A, u0, v0, maxiter, atol, rtol)
 
 
 def singular_triplet(
@@ -229,39 +273,3 @@ def singular_triplet_riemann(
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Computes the singular triplet."""
     return _singular_triplet_riemann(A, u0, v0, maxiter, atol, rtol)
-
-
-def spectral_norm(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
-) -> Tensor:
-    """Computes the spectral norm."""
-    return _spectral_norm(A, u0, v0, maxiter, atol, rtol)
-
-
-def spectral_norm_debug(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
-) -> Tensor:
-    """Computes the spectral norm."""
-    return _spectral_norm_debug(A, u0, v0, maxiter, atol, rtol)
-
-
-def spectral_norm_riemann(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
-) -> Tensor:
-    """Computes the spectral norm."""
-    return _spectral_norm_riemann(A, u0, v0, maxiter, atol, rtol)

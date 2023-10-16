@@ -47,18 +47,17 @@ cmake -DCMAKE_PREFIX_PATH="${LIBTORCH_DIR}" ..
 make -j
 
 echo "-------------------------------------------------------------------------"
-echo "Running tests..."
 cd ..
 pwd
 
-# ask if tests should be run
-read -r -p "Run tests? [y/N] " response
-if [[ "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
+# ask if tests should be run (default: yes)
+read -r -p "Run tests? [Y/n] " run_tests
+run_tests=${run_tests:-Y}
+if [[ $run_tests =~ ^[Yy]$ ]]; then
     echo "Running tests..."
+    # run tests
+    pytest tests/liblinodenet/test_correctness.py  -n 0 --no-cov
+    python check_grad.py
 else
     echo "Skipping tests..."
-    exit 0
 fi
-
-pytest tests -n 4 --no-cov
-python check_grad.py

@@ -184,12 +184,17 @@ struct SingularTriplet : public Function<SingularTriplet> {
          * @param rtol: relative tolerance
          * @returns sigma, u, v: singular value, left singular vector, right singular vector
          */
+        // TODO: Test Anderson Acceleration
+
         // Initialize maxiter depending on the size of the matrix.
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        // NOTE: 2*(M+N) since we do two iterations per loop
-        const int64_t MAXITER = maxiter ? maxiter.value() : 4*(M+N) + 100;
+        const int64_t MAXITER = maxiter ? maxiter.value() : 2*(M + N + 64);
+
+        // Initialize tolerance scalars
+        const Tensor ATOL = torch::full({}, atol, OPTIONS);
+        const Tensor RTOL = torch::full({}, rtol, OPTIONS);
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
@@ -203,90 +208,49 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
         Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
 
-        // pre-allocate buffers
-        Tensor u_old = torch::empty_like(u);
-        Tensor v_old = torch::empty_like(v);
-        Tensor sigma_u = torch::empty({}, OPTIONS);
-        Tensor sigma_v = torch::empty({}, OPTIONS);
-        Tensor rho = torch::empty({}, OPTIONS);
-        Tensor sigma = torch::empty({}, OPTIONS);
-        Tensor sigma_old = torch::empty({}, OPTIONS);
-
+        // initialize vectors for power iteration
         v /= v.norm();
         u /= u.norm();
-        sigma = A.mv(v).dot(u);
+
+        // Initialize old values for convergence check
+        // pre-allocate memory for residuals
+        Tensor grad_u = torch::empty_like(u);
+        Tensor grad_v = torch::empty_like(v);
+        Tensor gamma_u = torch::empty({}, OPTIONS);
+        Tensor gamma_v = torch::empty({}, OPTIONS);
+        Tensor sigma_u = torch::empty({}, OPTIONS);
+        Tensor sigma_v = torch::empty({}, OPTIONS);
 
         // Perform power-iteration for maxiter times or until convergence.
+        // NOTE: Perform 2 iterations per loop to increase performance.
+        //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
+        //   The compiler cannot do this optimization on it's own because it would change behavior.
         for (auto i = 0; i<MAXITER; i++) {
-            // TODO: Test Anderson Acceleration
-            // NOTE: We apply two iterations per loop. This is a case of duff's device.
-            // This means that we effectively only check the stopping criterion every 2 iterations.
-            // This improves performance on GPU since .item() requires a synchronization with CPU.
-            // The compiler cannot do this optimization on it's own because it would change behavior.
-            sigma_old = sigma;
-            u_old = u.clone();
-            v_old = v.clone();
-
             // update u
             u = A.mv(v);
             u /= u.norm();
 
             // update v
             v = A_t.mv(u);
-            v /= v.norm();
+            v /= u.norm();
 
-            sigma = A.mv(v).dot(u);
+            // update u
+            grad_u = A.mv(v);
+            sigma_u = grad_u.dot(u);
+            gamma_u = (grad_u - sigma_u * u).norm();
+            u = grad_u / grad_u.norm();
 
-            // converged = sigma + sigma_old + rho*(1 + u.dot(u_old) * v.dot(v_old)) <= atol + rtol*sigma_old;
+            // update v
+            grad_v = A_t.mv(u);
+            sigma_v = grad_v.dot(v);
+            gamma_v = (grad_v - sigma_v * v).norm();
+            v = grad_v / grad_v.norm();
 
-            // |σ̃ - σ| + (1 - ⟨ũ,u⟩⟨ṽ,v⟩)/|σ̃⁻¹-σ⁻¹| ≤ atol + rtol*σ
-            // check convergence  ‖ũₖ﹢₁ - σₖuₖ‖ ≤ α + β⋅σₖ and ‖ṽₖ﹢₁ - σₖvₖ‖ ≤ α + β⋅σₖ
-
-//            if (  // canonical convergence criterion
-//                (converged = (
-//                        torch::cat({A.mv(v) - sigma*u, A_t.mv(u) - sigma*v}).norm()
-//                        <= atol + rtol*torch::cat({sigma*u, sigma*v}).norm()
-//                ).item<bool>())
-//            ) {break;}
-
-//            if (  // canonical convergence criterion
-//                (converged = (
-//                        ((A.mv(v) - sigma*u).norm() <=  atol + rtol*sigma)
-//                        & ((A_t.mv(u) - sigma*v).norm() <=  atol + rtol*sigma)
-//                ).item<bool>())
-//            ) {break;}
-
-//            if (  // substituted
-//                (converged = (
-//                      ((sigma*u - sigma_old*u_old).norm() <=  atol + rtol*sigma)
-//                      & ((sigma*v - sigma_old*v_old).norm() <=  atol + rtol*sigma)
-//                ).item<bool>())
-//            ) {break;}
-
-            if (  // substituted
-                (converged = (
-                    linalg_matrix_norm(sigma * torch::outer(u, v) - sigma_old * torch::outer(u_old, v_old))
-                    <= atol + rtol*sigma_old
-                ).item<bool>())
-            ) {break;}
-
-//            if (  // naive  σ̃² + σ² - 2σ̃σ⟨ũ,u⟩⟨ṽ,v⟩
-//                (converged = (
-//                    torch::sqrt(sigma.pow(2) - 2*sigma*sigma_old*u.dot(u_old)*v.dot(v_old) + sigma_old.pow(2))
-//                    <= atol + rtol*sigma_old
-//                ).item<bool>())
-//            ) {break;}
-
-//            rho = 1/(1/sigma - 1/sigma_old).abs();
-//            if (  // using upper bound
-//                (converged = (
-//                    (sigma - sigma_old).abs() + rho * (1 - dot(u, u_old) * dot(v, v_old)) <= atol + rtol*sigma_old
-//                ).item<bool>())
-//            ) {break;}
-
-//                 Tensor sigma = A.mv(v).dot(u);
-//                 std::cout << at::str("Converged after ", i, " iterations. σ=", sigma_u) << std::endl;
-
+            // check convergence
+            // NOTE:(1/√2)(‖u‖+‖v‖) ≤ ‖(u,v)‖ ≤ ‖u‖+‖v‖ (via Jensen-Inequality)
+            if ((converged = (  // compare against geometric mean
+                (gamma_u + gamma_v) < ATOL + RTOL*torch::min(sigma_u, sigma_v)
+            ).item<bool>())) {break;}
         }
 
         // Emit warning if no convergence within maxiter iterations.
@@ -294,11 +258,8 @@ struct SingularTriplet : public Function<SingularTriplet> {
             TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
         }
 
-        // normalize u and v
-        u /= u.norm();
-        v /= v.norm();
         // compute pre-conditioned sigma
-        sigma = A.mv(v).dot(u);
+        const Tensor sigma = A.mv(v).dot(u);
 
         // store pre-conditioned tensors for backward
         ctx->save_for_backward({A, sigma, u, v, SCALE});
@@ -306,16 +267,15 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // reverse pre-conditioning
         const Tensor sigma_out = sigma * SCALE;
 
-        // check for NaNs, infinities, and negative values
-        const auto sigma_val = sigma_out.item<double>();
-        if (!(std::isfinite(sigma_val) && sigma_val > 0)) {
+        // check for NaNs, infinities and non-positive values
+        if ((~torch::isfinite(sigma_out) | (sigma_out <= 0)).item<bool>()) [[unlikely]] {
             throw std::runtime_error(at::str(
-                "Computation resulted in invalid singular value σ=", sigma_val, " for input of shape ", A.sizes(), ". ",
+                "Computation resulted in invalid singular value σ=", sigma_out,
+                " for input of shape ", A.sizes(), ". ",
                 "Try increasing the number of iterations or the tolerance. ",
                 "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
             ));
         }
-
         return {sigma_out, u, v};
     }
 
