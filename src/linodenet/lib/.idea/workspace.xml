@@ -21,15 +21,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../../../pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../pyproject.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/benchmark.sh" beforeDir="false" afterPath="$PROJECT_DIR$/benchmark.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/check_grad.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_grad.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_riemann.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_riemann.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/liblinodenet/test_correctness.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_correctness.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/liblinodenet/test_performance.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_performance.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -289,7 +281,7 @@
       <workItem from="1697223574516" duration="9242000" />
       <workItem from="1697310616725" duration="4077000" />
       <workItem from="1697321267997" duration="32765000" />
-      <workItem from="1697416307775" duration="20598000" />
+      <workItem from="1697416307775" duration="21556000" />
     </task>
     <servers />
   </component>

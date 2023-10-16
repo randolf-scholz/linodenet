@@ -127,7 +127,7 @@ def load_function(name: str, /) -> Any:
             is_python_module=False,
             verbose=True,
         )
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         raise RuntimeError(f"Could not compile {name}! Error: {exc}")
 
     # load the function

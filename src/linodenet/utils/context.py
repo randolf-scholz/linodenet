@@ -14,7 +14,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, overload
 
-from linodenet.types import T as T, return_co as R
+from linodenet.types import T, return_co as R
 
 P = ParamSpec("P")
 
