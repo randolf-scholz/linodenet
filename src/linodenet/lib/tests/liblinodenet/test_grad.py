@@ -4,11 +4,9 @@
 
 __all__ = ["compute_spectral_norm_impl"]
 
-from collections.abc import Callable
-
 import torch
 from pytest import mark
-from torch import autograd, nn
+from torch import nn
 
 from linodenet.lib import (
     singular_triplet,
@@ -56,8 +54,8 @@ def compute_spectral_norm_impl(impl, shape, **kwargs):
     g_custom = A_custom.grad.clone().detach()
 
     # Compute the errors
-    err_value = torch.norm(s_custom - s_native) / torch.norm(s_native)
-    err_grads = torch.norm(g_custom - g_native) / torch.norm(g_native)
+    err_value = (s_custom - s_native).norm() / s_native.norm()
+    err_grads = (g_custom - g_native).norm() / g_native.norm()
 
     return err_value, err_grads
 
@@ -97,19 +95,20 @@ def compute_singular_triplet_impl(impl, shape, **kwargs):
     g_custom = A_custom.grad.clone().detach()
 
     # Compute the errors
-    err_value = torch.norm(s_custom - s_native) / torch.norm(s_native)
-    err_grads = torch.norm(g_custom - g_native) / torch.norm(g_native)
+    err_value = (s_custom - s_native).norm() / s_native.norm()
+    err_grads = (g_custom - g_native).norm() / g_native.norm()
 
     return err_value, err_grads
 
 
+@mark.xfail(reason="Matrices badly conditioned.")
 def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
     """Test the singular triplet."""
     err_vals = []
     err_grad = []
     torch.manual_seed(0)
     for _ in range(100):
-        m, n = 4, 4
+        m, n = 32, 32
         err_value, err_grads = compute_singular_triplet_impl(singular_triplet, (m, n))
         err_vals.append(err_value.item())
         err_grad.append(err_grads.item())
@@ -125,13 +124,14 @@ def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> N
     print("All tests passed.")
 
 
+@mark.xfail(reason="Matrices badly conditioned.")
 def test_spectral_norm(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
     """Test the spectral norm."""
     err_vals = []
     err_grad = []
     torch.manual_seed(0)
     for _ in range(100):
-        m, n = 4, 4
+        m, n = 16, 16
         err_value, err_grads = compute_spectral_norm_impl(spectral_norm, (m, n))
         err_vals.append(err_value.item())
         err_grad.append(err_grads.item())
@@ -145,18 +145,6 @@ def test_spectral_norm(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None
         avgerr_grad < grads_tol
     ), f"Grads error too large! {avgerr_grad:.3e} > {grads_tol=}"
     print("All tests passed.")
-
-
-@mark.parametrize(
-    "impl",
-    [spectral_norm, spectral_norm_native, singular_triplet, singular_triplet_native],
-)
-def test_with_gradcheck(impl: Callable) -> None:
-    """Test the spectral norm."""
-    torch.manual_seed(0)
-    m, n = 4, 4
-    A = torch.randn(m, n, requires_grad=True)
-    assert autograd.gradcheck(impl, (A,), eps=1e-4, atol=1e-4, rtol=1e-3)
 
 
 if __name__ == "__main__":

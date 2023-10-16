@@ -143,17 +143,6 @@ struct SpectralNorm: public Function<SpectralNorm> {
          */
         // TODO: Test Anderson Acceleration
 
-//        // if no initial guess is given, use builtin svd.
-//        if (!u0 || !v0) {
-//            auto [U, S, Vh] = torch::linalg_svd(A_in);
-//            Tensor u = U.index({0});
-//            Tensor v = Vh.index({"...", 0});
-//            Tensor sigma = S.index({0});
-//            // store pre-conditioned tensors for backward
-//            ctx->save_for_backward({u, v});
-//            return sigma;
-//        }
-
         // Initialize maxiter depending on the size of the matrix.
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);

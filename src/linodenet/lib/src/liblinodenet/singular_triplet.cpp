@@ -190,7 +190,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        const int64_t MAXITER = maxiter ? maxiter.value() : 2*(M + N + 64);
+        const int64_t MAXITER = maxiter ? maxiter.value() : (M + N + 64);
 
         // Initialize tolerance scalars
         const Tensor ATOL = torch::full({}, atol, OPTIONS);
@@ -212,10 +212,11 @@ struct SingularTriplet : public Function<SingularTriplet> {
         v /= v.norm();
         u /= u.norm();
 
-        // Initialize old values for convergence check
-        // pre-allocate memory for residuals
+        // pre-allocate buffers
         Tensor grad_u = torch::empty_like(u);
         Tensor grad_v = torch::empty_like(v);
+
+        // scalars
         Tensor gamma_u = torch::empty({}, OPTIONS);
         Tensor gamma_v = torch::empty({}, OPTIONS);
         Tensor sigma_u = torch::empty({}, OPTIONS);
@@ -225,21 +226,23 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // NOTE: Perform 2 iterations per loop to increase performance.
         //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
         //   The compiler cannot do this optimization on it's own because it would change behavior.
+        // NOTE: performing at least 2 iterations before the first convergence check is crucial,
+        //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
         for (auto i = 0; i<MAXITER; i++) {
-            // update u
-            u = A.mv(v);
-            u /= u.norm();
-
-            // update v
-            v = A_t.mv(u);
-            v /= u.norm();
-
+            #pragma unroll  // we test convergence only every 8th iteration.
+            for (auto j = 0; j<7; j++) {
+                // update u
+                u = A.mv(v);
+                u /= u.norm();
+                // update v
+                v = A_t.mv(u);
+                v /= v.norm();
+            }
             // update u
             grad_u = A.mv(v);
             sigma_u = grad_u.dot(u);
             gamma_u = (grad_u - sigma_u * u).norm();
             u = grad_u / grad_u.norm();
-
             // update v
             grad_v = A_t.mv(u);
             sigma_v = grad_v.dot(v);
@@ -249,7 +252,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
             // check convergence
             // NOTE:(1/√2)(‖u‖+‖v‖) ≤ ‖(u,v)‖ ≤ ‖u‖+‖v‖ (via Jensen-Inequality)
             if ((converged = (  // compare against geometric mean
-                (gamma_u + gamma_v) < ATOL + RTOL*torch::min(sigma_u, sigma_v)
+                torch::max(gamma_u, gamma_v) < (ATOL + RTOL*torch::min(sigma_u, sigma_v))
             ).item<bool>())) {break;}
         }
 

@@ -71,7 +71,7 @@ devtools = [
     "devtools>=0.12.2",
     "johnnydep>=1.20.3",
     "ninja>=1.11.1",
-    "pip>=23.2.1",
+    "pip>=23.3",
     "pip-tools>=7.3.0",
     "pipdeptree>=2.13.0",
     "pipreqs>=0.4.13",
@@ -473,7 +473,7 @@ addopts = [
     #    "--reruns-delay=",    # add time (seconds) delay between reruns.
     #    "--only-rerun=",      # If passed, only rerun errors matching the regex provided.
     # xdists options
-    "--numprocesses=4",  # use 4 parallel processes
+    "--numprocesses=0",  # use 4 parallel processes
     # "--dist=loadfile", # loadscope, loadfile, load, each, no
     # coverage options
     "--cov=linodenet",  # Path or package name to measure during execution (multi-allowed).
@@ -623,7 +623,7 @@ cmake = ">=3.27.7"
 devtools = ">=0.12.2"
 johnnydep = ">=1.20.3"
 ninja = ">=1.11.1"
-pip = ">=23.2.1"
+pip = ">=23.3"
 pip-tools = ">=7.3.0"
 pipdeptree = ">=2.13.0"
 pipreqs = ">=0.4.13"

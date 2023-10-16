@@ -82,8 +82,6 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // scalars
         Tensor gamma_u = torch::empty({}, OPTIONS);
         Tensor gamma_v = torch::empty({}, OPTIONS);
-        Tensor rho_u = torch::empty({}, OPTIONS);
-        Tensor rho_v = torch::empty({}, OPTIONS);
         Tensor sigma_u = torch::empty({}, OPTIONS);
         Tensor sigma_v = torch::empty({}, OPTIONS);
 
@@ -91,63 +89,47 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // NOTE: Perform 2 iterations per loop to increase performance.
         //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
         //   The compiler cannot do this optimization on it's own because it would change behavior.
+        // NOTE: performing at least 2 iterations before the first convergence check is crucial,
+        //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
         for (auto i = 0; i<MAXITER; i++) {
-            { // update u
-                // compute gradient in ℝᵐ
-                grad_u = A.mv(v);
-                sigma_u = grad_u.dot(u);
-                rho_u = grad_u.dot(grad_u) - sigma_u * sigma_u;
-                // project gradient to tangent space 𝕋𝕊ᵐ
-                grad_u -= sigma_u * u;
-                // normalize tangent vector
-                gamma_u = grad_u.norm();
-                // update u = σᵤu + ρᵤg
-                u = sigma_u * u + (rho_u/gamma_u) * grad_u;
-                // u /= u.norm();  // not needed every iteration
-            }
-            { // update v
-                // compute gradient in ℝⁿ
-                grad_v = A_t.mv(u);
-                sigma_v = grad_v.dot(v);
-                rho_v = grad_v.dot(grad_v) - sigma_v * sigma_v;
-                // project gradient to tangent space 𝕋𝕊ᵐ
-                grad_v -= sigma_v * v;
-                // normalize tangent vector
-                gamma_v = grad_v.norm();
-                // update v = σᵥv + ρᵥg
-                v = sigma_v * v + (rho_v/gamma_v) * grad_v;
-                // v /= v.norm();  // not needed every iteration
+            #pragma unroll
+            for (auto j = 0; j<7; j++) {
+                // update u
+                u = A.mv(v);
+                u /= u.norm();
+                // update v
+                v = A_t.mv(u);
+                v /= v.norm();
             }
             { // update u
                 // compute gradient in ℝᵐ
                 grad_u = A.mv(v);
-                sigma_u = grad_u.dot(u);
-                rho_u = grad_u.dot(grad_u) - sigma_u * sigma_u;
+                sigma_u = grad_u.dot(u);  // use abs since this should be >0
                 // project gradient to tangent space 𝕋𝕊ᵐ
+                // NOTE: NEVER try to normalize the gradient, it converges to zero!
                 grad_u -= sigma_u * u;
-                // normalize tangent vector
                 gamma_u = grad_u.norm();
-                // update u = σᵤu + ρᵤg
-                u = sigma_u * u + (rho_u/gamma_u) * grad_u;
+                // update u = σᵤ/√(σᵤ²+ρᵤ²)⋅u + /√(σᵤ²+ρᵤ²)⋅eᵤ = normalize(σᵤu + gᵤ)
+                u = sigma_u * u + grad_u;
                 u /= u.norm();
             }
             { // update v
                 // compute gradient in ℝⁿ
                 grad_v = A_t.mv(u);
                 sigma_v = grad_v.dot(v);
-                rho_v = grad_v.dot(grad_v) - sigma_v * sigma_v;
                 // project gradient to tangent space 𝕋𝕊ᵐ
+                // NOTE: NEVER try to normalize the gradient, it converges to zero!
                 grad_v -= sigma_v * v;
-                // normalize tangent vector
                 gamma_v = grad_v.norm();
-                // update v = σᵥv + ρᵥg
-                v = sigma_v * v + (rho_v/gamma_v) * grad_v;
+                // update v = σᵥ/√(σᵥ²+ρᵥ²)⋅v + /√(σᵥ²+ρᵥ²)⋅eᵥ = normalize(σᵥv + gᵥ)
+                v = sigma_v * v + grad_v;
                 v /= v.norm();
             }
+
             // check convergence
             // NOTE:(1/√2)(‖u‖+‖v‖) ≤ ‖(u,v)‖ ≤ ‖u‖+‖v‖ (via Jensen-Inequality)
             if ((converged = (  // compare against geometric mean
-                (gamma_u + gamma_v) < ATOL + RTOL*torch::min(sigma_u, sigma_v)
+                torch::max(gamma_u, gamma_v) < (ATOL + RTOL*torch::min(sigma_u, sigma_v))
             ).item<bool>())) {break;}
         }
 

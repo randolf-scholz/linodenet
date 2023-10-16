@@ -21,19 +21,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/compare.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../experiments/riemann_optimization.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../experiments/riemann_optimization.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../poetry.lock" beforeDir="false" afterPath="$PROJECT_DIR$/../../../poetry.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../pyproject.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/_liblinodenet.py" beforeDir="false" afterPath="$PROJECT_DIR$/_liblinodenet.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/benchmark.sh" beforeDir="false" afterPath="$PROJECT_DIR$/benchmark.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build.sh" beforeDir="false" afterPath="$PROJECT_DIR$/build.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/check_grad.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_grad.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_riemann.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_riemann.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm_debug.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm_debug.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm_riemann.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm_riemann.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/liblinodenet/test_correctness.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_correctness.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tests/liblinodenet/test_performance.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/liblinodenet/test_performance.py" afterDir="false" />
     </list>
@@ -111,6 +105,9 @@
       <recent name="$PROJECT_DIR$/src/liblinodenet" />
       <recent name="$PROJECT_DIR$/tests/liblinodenet" />
     </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/tests/liblinodenet" />
+    </key>
   </component>
   <component name="RunManager" selected="Python tests.pytest in test_correctness.py">
     <configuration default="true" type="BIBTEX_RUN_CONFIGURATION" factoryName="LaTeX configuration factory">
@@ -172,22 +169,6 @@
       </texify-makeindex>
       <method v="2" />
     </configuration>
-    <configuration name="pytest for check_grad.test_with_gradcheck" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
-      <module name="lib" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="_new_keywords" value="&quot;&quot;" />
-      <option name="_new_parameters" value="&quot;&quot;" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;check_grad.test_with_gradcheck&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
     <configuration name="pytest for test_correctness.test_analytical" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="lib" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -201,6 +182,38 @@
       <option name="_new_parameters" value="&quot;&quot;" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
       <option name="_new_target" value="&quot;test_correctness.test_analytical&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest for test_grad.test_singular_triplet" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests/liblinodenet" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_grad.test_singular_triplet&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
+    <configuration name="pytest for tests.liblinodenet.test_grad" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;tests.liblinodenet.test_grad&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
@@ -220,17 +233,37 @@
       <option name="_new_targetType" value="&quot;PATH&quot;" />
       <method v="2" />
     </configuration>
+    <configuration name="pytest in test_grad.py" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
+      <module name="lib" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_parameters" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;$PROJECT_DIR$/tests/liblinodenet/test_grad.py&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+      <method v="2" />
+    </configuration>
     <list>
       <item itemvalue="CMake Application.linodenet" />
+      <item itemvalue="Python tests.pytest for test_grad.test_singular_triplet" />
+      <item itemvalue="Python tests.pytest for tests.liblinodenet.test_grad" />
+      <item itemvalue="Python tests.pytest in test_grad.py" />
       <item itemvalue="Python tests.pytest for test_correctness.test_analytical" />
       <item itemvalue="Python tests.pytest in test_correctness.py" />
-      <item itemvalue="Python tests.pytest for check_grad.test_with_gradcheck" />
     </list>
     <recent_temporary>
       <list>
         <item itemvalue="Python tests.pytest in test_correctness.py" />
+        <item itemvalue="Python tests.pytest in test_grad.py" />
+        <item itemvalue="Python tests.pytest for test_grad.test_singular_triplet" />
+        <item itemvalue="Python tests.pytest for tests.liblinodenet.test_grad" />
         <item itemvalue="Python tests.pytest for test_correctness.test_analytical" />
-        <item itemvalue="Python tests.pytest for check_grad.test_with_gradcheck" />
       </list>
     </recent_temporary>
   </component>
@@ -256,7 +289,7 @@
       <workItem from="1697223574516" duration="9242000" />
       <workItem from="1697310616725" duration="4077000" />
       <workItem from="1697321267997" duration="32765000" />
-      <workItem from="1697416307775" duration="14775000" />
+      <workItem from="1697416307775" duration="20598000" />
     </task>
     <servers />
   </component>

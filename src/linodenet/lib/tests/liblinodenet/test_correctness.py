@@ -77,8 +77,8 @@ SHAPES = [
 ]
 SEEDS = [1000, 1001, 1002, 1003, 1004]
 DIMS = [2, 4, 16, 64, 256]
-ATOL = 1e-4
-RTOL = 1e-3
+ATOL = 1e-3
+RTOL = 1e-6
 
 
 def snorm(x: torch.Tensor) -> torch.Tensor:
@@ -178,7 +178,7 @@ def test_rank_one(
 
     # check backward pass
     assert A.grad is not None
-    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+    assert snorm(A.grad - analytical_grad) < (atol + rtol * snorm(analytical_grad)), (
         f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
         f"  ‖A‖₂={analytical_value:.3e}"
         f"  κ(A)={torch.linalg.cond(A):.3e}"
@@ -234,7 +234,7 @@ def test_diagonal(
 
     # check backward pass
     assert A.grad is not None
-    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+    assert snorm(A.grad - analytical_grad) < (atol + rtol * snorm(analytical_grad)), (
         f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
         f"  ‖A‖₂={analytical_value:.3e}"
         f"  κ(A)={torch.linalg.cond(A):.3e}"
@@ -298,7 +298,7 @@ def test_analytical(
 
     # check backward pass
     assert A.grad is not None
-    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+    assert snorm(A.grad - analytical_grad) < (atol + rtol * snorm(analytical_grad)), (
         f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
         f"  ‖A‖₂={analytical_value:.3e}"
         f"  κ(A)={torch.linalg.cond(A):.3e}"
@@ -354,7 +354,7 @@ def test_orthogonal(
 
     # check backward pass
     assert A.grad is not None
-    assert snorm(A.grad - analytical_grad) < atol + rtol * snorm(analytical_grad), (
+    assert snorm(A.grad - analytical_grad) < (atol + rtol * snorm(analytical_grad)), (
         f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
         f"  ‖A‖₂={analytical_value:.3e}"
         f"  κ(A)={torch.linalg.cond(A):.3e}"

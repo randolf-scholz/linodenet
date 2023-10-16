@@ -2143,13 +2143,13 @@ test = ["ipykernel", "pre-commit", "pytest", "pytest-cov", "pytest-timeout"]
 
 [[package]]
 name = "jupyter-events"
-version = "0.7.0"
+version = "0.8.0"
 description = "Jupyter Event System library"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "jupyter_events-0.7.0-py3-none-any.whl", hash = "sha256:4753da434c13a37c3f3c89b500afa0c0a6241633441421f6adafe2fb2e2b924e"},
-    {file = "jupyter_events-0.7.0.tar.gz", hash = "sha256:7be27f54b8388c03eefea123a4f79247c5b9381c49fb1cd48615ee191eb12615"},
+    {file = "jupyter_events-0.8.0-py3-none-any.whl", hash = "sha256:81f07375c7673ff298bfb9302b4a981864ec64edaed75ca0fe6f850b9b045525"},
+    {file = "jupyter_events-0.8.0.tar.gz", hash = "sha256:fda08f0defce5e16930542ce60634ba48e010830d50073c3dfd235759cee77bf"},
 ]
 
 [package.dependencies]
@@ -2182,13 +2182,13 @@ jupyter-server = ">=1.1.2"
 
 [[package]]
 name = "jupyter-server"
-version = "2.7.3"
+version = "2.8.0"
 description = "The backend—i.e. core services, APIs, and REST endpoints—to Jupyter web applications."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "jupyter_server-2.7.3-py3-none-any.whl", hash = "sha256:8e4b90380b59d7a1e31086c4692231f2a2ea4cb269f5516e60aba72ce8317fc9"},
-    {file = "jupyter_server-2.7.3.tar.gz", hash = "sha256:d4916c8581c4ebbc534cebdaa8eca2478d9f3bfdd88eae29fcab0120eac57649"},
+    {file = "jupyter_server-2.8.0-py3-none-any.whl", hash = "sha256:c57270faa6530393ae69783a2d2f1874c718b9f109080581ea076b05713249fa"},
+    {file = "jupyter_server-2.8.0.tar.gz", hash = "sha256:b11e2ba80667c75f55630faf8ac3d5809f8734f9006d65cce117c46a0a516ab8"},
 ]
 
 [package.dependencies]
@@ -5805,13 +5805,13 @@ files = [
 
 [[package]]
 name = "types-psutil"
-version = "5.9.5.16"
+version = "5.9.5.17"
 description = "Typing stubs for psutil"
 optional = false
-python-versions = "*"
+python-versions = ">=3.7"
 files = [
-    {file = "types-psutil-5.9.5.16.tar.gz", hash = "sha256:4e9b219efb625d3d04f6bf106934f87cab49aa41a94b0a3b3089403f47a79228"},
-    {file = "types_psutil-5.9.5.16-py3-none-any.whl", hash = "sha256:fec713104d5d143afea7b976cfa691ca1840f5d19e8714a5d02a96ebd061363e"},
+    {file = "types-psutil-5.9.5.17.tar.gz", hash = "sha256:f7d8769812d72a4b513d7ec9eb5580fe2f6013fc270394a603cb6534811f3e4d"},
+    {file = "types_psutil-5.9.5.17-py3-none-any.whl", hash = "sha256:2161d166256084acf629d30aaf6bda8bee726ae1fea530559650281056b491fc"},
 ]
 
 [[package]]
@@ -6313,4 +6313,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "fcde98e310b625235dcf6dee90185bd474c89d1922a41391fc73f32c61c68ea3"
+content-hash = "543d7417bfd0cd749fdd311920dcf41f8c098a4a43c123951f802b74765800eb"
