@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r"""Test the iResNet components.
 
 1. is the LinearContraction layer really a linear contraction?
@@ -20,7 +19,6 @@ from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
-logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 
 
@@ -203,12 +201,3 @@ def test_iResNetBlock(
     fig.suptitle("iResNetBlock -- Inversion Property", fontsize=16)
     fig.savefig(RESULT_DIR / "iResNetBlock_inversion.pdf")
     LOGGER.info("all done")
-
-
-def _main() -> None:
-    test_LinearContraction(make_plots=True)
-    test_iResNetBlock(make_plots=True)
-
-
-if __name__ == "__main__":
-    _main()

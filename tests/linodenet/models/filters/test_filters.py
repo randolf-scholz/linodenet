@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r"""Test if filters satisfy idempotence property."""
 
 import logging
@@ -11,14 +10,13 @@ from linodenet.constants import NAN
 from linodenet.models.filters import SequentialFilterBlock
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
-logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-LOGGER = __logger__.getChild(SequentialFilterBlock.__name__)
 
 
 @pytest.mark.flaky(reruns=3)
 def test_filter_idempotency() -> None:
     r"""Check whether idempotency holds."""
+    LOGGER = __logger__.getChild(__name__)
     LOGGER.info("Testing idempotency.")
     batch_dim, m, n = (3, 4, 5), 100, 100
     x = torch.randn(*batch_dim, n)
@@ -51,11 +49,3 @@ def test_filter_idempotency() -> None:
     y[~mask] = x[~mask]
     assert torch.allclose(x, model(y, x)), "Idempotency failed! ❌ "
     LOGGER.info("Idempotency holds ✔ ")
-
-
-def _main() -> None:
-    test_filter_idempotency()
-
-
-if __name__ == "__main__":
-    _main()

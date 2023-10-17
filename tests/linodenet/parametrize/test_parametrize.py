@@ -1,7 +1,5 @@
-#!/usr/bin/env python
 """Test parametrization of modules."""
 
-import logging
 from copy import deepcopy
 
 import torch
@@ -30,9 +28,6 @@ from linodenet.testing import (
     check_model,
     check_object,
 )
-
-logging.basicConfig(level=logging.INFO)
-
 
 # class SlowUpperTriangular(ParametrizationBase):
 #     """Parametrize a matrix to be upper triangular."""
@@ -408,7 +403,3 @@ def test_param() -> None:
 
     # check compatibility
     check_model(model, input_args=(x,), reference_model=reference_model, test_jit=True)
-
-
-if __name__ == "__main__":
-    pass

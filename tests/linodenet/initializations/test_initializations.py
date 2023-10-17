@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
@@ -14,7 +13,6 @@ from linodenet.initializations import INITIALIZATIONS
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
-logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 
 
@@ -98,11 +96,3 @@ def test_all_initializations(make_plots: bool) -> None:
     for key in INITIALIZATIONS:
         test_initialization(key, make_plots=make_plots)
     __logger__.info("All initializations passed! ✔ ")
-
-
-def _main() -> None:
-    test_all_initializations(make_plots=True)
-
-
-if __name__ == "__main__":
-    _main()

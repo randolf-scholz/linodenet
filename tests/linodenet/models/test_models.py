@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r"""Test if model initializations, forward and backward passes."""
 
 import logging
@@ -14,10 +13,9 @@ from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iRes
 from linodenet.models.system import LinODECell
 from linodenet.testing import check_object
 
-RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
-logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 linodenet.CONFIG.autojit = False
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 OUTER_BATCH = 3
 INNER_BATCH = 5
@@ -122,13 +120,3 @@ def test_all_models(model: type[nn.Module], params: dict) -> None:
         )
 
     LOGGER.info("Model passed all tests!!")
-
-
-def _main() -> None:
-    r"""Run all tests."""
-    for model, params in MODELS.items():
-        test_all_models(model, params)
-
-
-if __name__ == "__main__":
-    _main()

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Tests for linodenet.testing._testing."""
 
 import torch
@@ -11,7 +10,3 @@ def test_test_model() -> None:
     model = torch.nn.Linear(4, 4)
     x = torch.randn(3, 4)
     check_model(model, input_args=(x,), test_jit=True)
-
-
-if __name__ == "__main__":
-    pass

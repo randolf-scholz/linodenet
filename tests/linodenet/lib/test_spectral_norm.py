@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Test the spectral norm implementation.""" ""
 
 import pytest
@@ -150,13 +149,3 @@ def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) 
 
     if norm_only:
         assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
-
-
-def _main() -> None:
-    """Run the main function."""
-    test_spectral_norm("cpu", (128, 128))
-    test_singular_triplet("cpu", (128, 128), False)
-
-
-if __name__ == "__main__":
-    _main()
