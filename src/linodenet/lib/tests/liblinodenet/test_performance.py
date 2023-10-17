@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Benchmark spectral norm / singular triplet implementations."""
 
 __all__ = [
@@ -13,7 +12,6 @@ __all__ = [
 
 from collections.abc import Callable
 
-import pytest
 import torch
 import torch.utils.cpp_extension
 from pytest import mark
@@ -383,7 +381,3 @@ def test_singular_triplet_full_backward(
 
     # perform benchmark
     benchmark.pedantic(backward, setup=setup, rounds=512, warmup_rounds=128)
-
-
-if __name__ == "__main__":
-    pytest.main()

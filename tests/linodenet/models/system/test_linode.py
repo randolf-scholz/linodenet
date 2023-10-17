@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r"""Test error of linear ODE against odeint."""
 
 import logging
@@ -19,7 +18,6 @@ from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
-logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
@@ -178,11 +176,3 @@ def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
         LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
     LOGGER.info("%s passes test ✔ ", LinODE)
-
-
-def _main() -> None:
-    test_linode_error(num_samples=1000, make_plots=True)
-
-
-if __name__ == "__main__":
-    _main()

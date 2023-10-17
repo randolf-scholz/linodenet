@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r"""Test whether `LinODEnet` is forward stable."""
 
 import logging
@@ -8,7 +7,6 @@ import torch
 
 from linodenet.models import LinODEnet, ResNet, embeddings, filters, system
 
-logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
 
 
@@ -35,11 +33,3 @@ def test_model_stability() -> None:
     X = torch.randn(N, D)
     model = LinODEnet(D, L)
     model(T, X)
-
-
-def _main() -> None:
-    test_model_stability()
-
-
-if __name__ == "__main__":
-    _main()

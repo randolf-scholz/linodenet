@@ -1,6 +1,4 @@
-#!/usr/bin/env python
 """Test gradients of custom operators."""
-
 
 __all__ = ["compute_spectral_norm_impl"]
 
@@ -145,9 +143,3 @@ def test_spectral_norm(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None
         avgerr_grad < grads_tol
     ), f"Grads error too large! {avgerr_grad:.3e} > {grads_tol=}"
     print("All tests passed.")
-
-
-if __name__ == "__main__":
-    # main program
-    test_spectral_norm()
-    test_singular_triplet()

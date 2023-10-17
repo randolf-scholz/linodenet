@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Some simple tests for the singular triplet method.
 
 Remark:
@@ -366,7 +365,3 @@ def test_orthogonal(
         f"  κ(A)={torch.linalg.cond(A):.3e}"
         f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
     )
-
-
-if __name__ == "__main__":
-    pass
