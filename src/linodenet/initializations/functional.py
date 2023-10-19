@@ -39,6 +39,7 @@ from linodenet.types import Device, Dtype, Shape
 @runtime_checkable
 class Initialization(Protocol):
     r"""Protocol for Initializations."""
+
     __name__: str
     r"""Name of the initialization."""
 

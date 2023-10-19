@@ -12,7 +12,7 @@ using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 
 
-struct SpectralNorm: public Function<SpectralNorm> {
+struct SpectralNormDebug: public Function<SpectralNormDebug> {
     static Tensor forward(
         AutogradContext *ctx,
         const Tensor &A,
@@ -125,7 +125,7 @@ static inline Tensor spectral_norm_debug(
     /**
      * Wrap the struct into function.
      */
-    return SpectralNorm::apply(A, u0, v0, maxiter, atol, rtol);
+    return SpectralNormDebug::apply(A, u0, v0, maxiter, atol, rtol);
 }
 
 

@@ -7,7 +7,6 @@ Contains activations in both functional and modular form.
   - See `linodenet.activations.modular` for modular implementations.
 """
 
-
 __all__ = [
     # Sub-Modules
     "functional",

@@ -11,6 +11,7 @@ from typing_extensions import Self
 
 class LinearEmbedding(nn.Module):
     r"""Maps $x ↦ Ax$ and $y ↦ A⁺y$."""
+
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
     output_size: Final[int]

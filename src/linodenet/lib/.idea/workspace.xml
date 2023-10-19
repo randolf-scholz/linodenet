@@ -21,10 +21,32 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../../../dev/models/LSSM_Lotka_Volterra-Decoder.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/models/LSSM_Lotka_Volterra-Decoder.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../dev/models/LSSM_Lotka_Volterra.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/models/LSSM_Lotka_Volterra.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.idea/linodenet.iml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.idea/linodenet.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.idea/watcherTasks.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.pre-commit-config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../.pre-commit-config.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../bugs/torch/jit_inplace.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../bugs/torch/jit_inplace.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../dev/Cache Parametrization.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/Cache Parametrization.ipynb" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../../../dev/parametrization/demo.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/parametrization/demo.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../dev/util/autojit.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/util/autojit.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../dev/util/class_decorator_2.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/util/class_decorator_2.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../poetry.lock" beforeDir="false" afterPath="$PROJECT_DIR$/../../../poetry.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/../../../pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../activations/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../activations/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../initializations/functional.py" beforeDir="false" afterPath="$PROJECT_DIR$/../initializations/functional.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/_liblinodenet.py" beforeDir="false" afterPath="$PROJECT_DIR$/_liblinodenet.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_debug.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_debug.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_riemann.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/singular_triplet_riemann.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/liblinodenet/spectral_norm_debug.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/liblinodenet/spectral_norm_debug.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../logutils/_logutils.py" beforeDir="false" afterPath="$PROJECT_DIR$/../logutils/_logutils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../models/encoders/ft_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/../models/encoders/ft_transformer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../models/filters/_filters.py" beforeDir="false" afterPath="$PROJECT_DIR$/../models/filters/_filters.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../models/lssm.py" beforeDir="false" afterPath="$PROJECT_DIR$/../models/lssm.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../projections/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../projections/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../regularizations/functional.py" beforeDir="false" afterPath="$PROJECT_DIR$/../regularizations/functional.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../tests/linodenet/parametrize/test_spectral_normalization.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../tests/linodenet/parametrize/test_spectral_normalization.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../tests/linodenet/testing/test_jit.py" beforeDir="false" afterPath="$PROJECT_DIR$/../../../tests/linodenet/testing/test_jit.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -54,9 +76,18 @@
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/CMakeLists.txt" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/__init__.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/_liblinodenet.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/benchmark.sh" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/build.sh" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/libtorch/build-version" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/liblinodenet/singular_triplet.cpp" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/liblinodenet/singular_triplet_debug.cpp" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/liblinodenet/singular_triplet_riemann.cpp" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/liblinodenet/spectral_norm_debug.cpp" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/liblinodenet/spectral_norm_riemann.cpp" root0="SKIP_INSPECTION" />
     <setting file="file://$PROJECT_DIR$/src/liblinodenet/utils.cpp" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/tests/liblinodenet/test_singular_triplet_simple.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/tests/liblinodenet/test_correctness.py" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -281,6 +312,7 @@
       <workItem from="1697321267997" duration="32765000" />
       <workItem from="1697416307775" duration="21556000" />
       <workItem from="1697537251234" duration="1046000" />
+      <workItem from="1697723041416" duration="112000" />
     </task>
     <servers />
   </component>

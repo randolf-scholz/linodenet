@@ -6,7 +6,6 @@ Contains regularizations in functional form.
   - See `~linodenet.regularizations.modular` for modular implementations.
 """
 
-
 __all__ = [
     # Protocol
     "Regularization",

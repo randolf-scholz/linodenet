@@ -66,6 +66,7 @@ class LatentStateSpaceModel(nn.Module):
     filter: nn.Module
         MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
+
     LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")  # type: ignore[name-defined]
 
     name: Final[str] = __name__

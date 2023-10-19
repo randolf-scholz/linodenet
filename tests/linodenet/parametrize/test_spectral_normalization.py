@@ -1,6 +1,5 @@
 """Check that spectral norm works as a parametrization."""
 
-
 import torch
 from torch import nn
 

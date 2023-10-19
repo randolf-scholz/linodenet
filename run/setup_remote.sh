@@ -2,33 +2,32 @@
 echo -e "\n" "Current remotes:"
 git remote -v
 
+BERLIN="https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet.git"
+HILDESHEIM="https://software.ismll.uni-hildesheim.de/ISMLL-internal/time-series/linodenet.git"
+GITHUB="https://github.com/randolf-scholz/linodenet.git"
+
 echo -e "\nDeleting all remotes..."
 for remote_name in $(git remote); do
     git remote remove "${remote_name}"
 done
 
-BERLIN="https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/linodenet.git"
-HILDESHEIM="https://software.ismll.uni-hildesheim.de/ISMLL-internal/time-series/linodenet.git"
-GITHUB="https://github.com/randolf-scholz/linodenet.git"
-
 echo -e "\nAdding remote ${BERLIN}..."
 git remote add berlin $BERLIN
 git remote set-url --add --push berlin $BERLIN
-git remote set-url --add --push berlin $HILDESHEIM
 git remote set-url --add --push berlin $GITHUB
-
-
-echo -e "\nAdding remote ${HILDESHEIM}..."
-git remote add hildesheim $HILDESHEIM
-git remote set-url --add --push hildesheim $HILDESHEIM
-git remote set-url --add --push hildesheim $GITHUB
-git remote set-url --add --push hildesheim $BERLIN
+git remote set-url --add --push berlin $HILDESHEIM
 
 echo -e "\nAdding remote ${GITHUB}..."
 git remote add github $GITHUB
 git remote set-url --add --push github $GITHUB
 git remote set-url --add --push github $BERLIN
 git remote set-url --add --push github $HILDESHEIM
+
+echo -e "\nAdding remote ${HILDESHEIM}..."
+git remote add hildesheim $HILDESHEIM
+git remote set-url --add --push hildesheim $HILDESHEIM
+git remote set-url --add --push hildesheim $BERLIN
+git remote set-url --add --push hildesheim $GITHUB
 
 echo -e "\nSetting default remote:"
 git fetch berlin

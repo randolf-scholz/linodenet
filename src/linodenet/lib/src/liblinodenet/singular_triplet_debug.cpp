@@ -24,7 +24,7 @@ using torch::autograd::Function;
 using torch::indexing::Slice;
 
 
-struct SingularTriplet : public Function<SingularTriplet> {
+struct SingularTripletDebug : public Function<SingularTripletDebug> {
     /** @brief Compute the singular triplet of a matrix.
      *
      * @note: positiveness of the result
@@ -314,7 +314,7 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet_debug(
     /**
      * Wrap the struct into function.
      */
-    auto output = SingularTriplet::apply(A, u0, v0, maxiter, atol, rtol);
+    auto output = SingularTripletDebug::apply(A, u0, v0, maxiter, atol, rtol);
     // assert(output.size() == 3);
     return std::make_tuple(output[0], output[1], output[2]);
 }

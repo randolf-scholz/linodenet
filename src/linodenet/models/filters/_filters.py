@@ -785,6 +785,7 @@ class SequentialFilterBlock(FilterABC):
 # @assert_issubclass(Filter)
 class SequentialFilter(nn.Sequential):  # FIXME: use ModuleList instead?
     r"""Multiple Filters applied sequentially."""
+
     input_size: Final[int]
     """The input size of the filter."""
     output_size: Final[int]

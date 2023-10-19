@@ -7,7 +7,6 @@ Contains projections in both modular and functional form.
   - See `~linodenet.projections.modular` for modular implementations.
 """
 
-
 __all__ = [
     # Constants
     "PROJECTIONS",

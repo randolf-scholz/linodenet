@@ -1,6 +1,5 @@
 """Some tests regarding the JIT compiler."""
 
-
 from typing import Any
 
 import pytest

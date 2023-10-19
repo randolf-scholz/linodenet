@@ -5,7 +5,6 @@ Modified variant of the implementation from https://github.com/yandex-research/r
 Original Licensed under Apache License 2.0
 """
 
-
 __all__ = [
     # Functions
     "get_activation_fn",

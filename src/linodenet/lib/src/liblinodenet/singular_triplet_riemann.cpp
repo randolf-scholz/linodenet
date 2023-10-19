@@ -24,7 +24,7 @@ using torch::autograd::Function;
 using torch::indexing::Slice;
 
 
-struct SingularTriplet : public Function<SingularTriplet> {
+struct SingularTripletRiemann : public Function<SingularTripletRiemann> {
     /** @brief Compute the singular triplet of a matrix using Riemann Coordinate Descent. **/
 
     static std::vector<Tensor> forward(
@@ -294,7 +294,7 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet_riemann(
     /**
      * Wrap the struct into function.
      */
-    auto output = SingularTriplet::apply(A, u0, v0, maxiter, atol, rtol);
+    auto output = SingularTripletRiemann::apply(A, u0, v0, maxiter, atol, rtol);
     // assert(output.size() == 3);
     return std::make_tuple(output[0], output[1], output[2]);
 }
