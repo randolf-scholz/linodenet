@@ -59,17 +59,14 @@ class LatentStateSpaceModel(nn.Module):
         PARAM: The system matrix of the linear ODE component.
     encoder: nn.Module
         MODULE: Responsible for embedding $x̂→ẑ$.
-    embedding: nn.Module
-        MODULE: Responsible for embedding $x̂→ẑ$.
     system: nn.Module
         MODULE: Responsible for propagating $ẑ_t→ẑ_{t+{∆t}}$.
     decoder: nn.Module
         MODULE: Responsible for projecting $ẑ→x̂$.
-    projection: nn.Module
-        MODULE: Responsible for projecting $ẑ→x̂$.
     filter: nn.Module
         MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
+
     LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")  # type: ignore[name-defined]
 
     name: Final[str] = __name__
@@ -191,16 +188,16 @@ class LatentStateSpaceModel(nn.Module):
         filter: nn.Module,
         padding_size: int = 0,
         **cfg: Any,
-    ):
+    ) -> None:
         super().__init__()
         self.encoder = encoder
         self.system = system
         self.decoder = decoder
         self.filter: Filter = filter
 
-        self.input_size = self.filter.input_size  # type: ignore[assignment]
-        self.output_size = self.filter.output_size  # type: ignore[assignment]
-        self.latent_size = self.system.input_size  # type: ignore[assignment]
+        self.input_size = int(self.filter.input_size)
+        self.output_size = int(self.filter.output_size)
+        self.latent_size = int(self.system.input_size)
         self.hidden_size = -1
         self.padding_size = padding_size
 

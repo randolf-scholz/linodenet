@@ -1,10 +1,8 @@
-#!/usr/bin/env python
 r"""Test error of linear ODE against odeint."""
 
 import logging
 import random
-from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,12 +17,10 @@ from linodenet.models import LinODE
 from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
-logging.basicConfig(level=logging.INFO)
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
-RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def compute_linode_error(
@@ -35,7 +31,12 @@ def compute_linode_error(
     relative_error: bool = True,
     device: Optional[torch.device] = None,
 ) -> NDArray:
-    r"""Compare `LinODE` against `scipy.odeint` on linear system."""
+    r"""Compare `LinODE` against `scipy.odeint` on linear system.
+
+    .. Signature:: `` -> (q, N)``
+    """
+    logger = __logger__.getChild(f"{LinODE.__name__}-test-{num}-{dim}")
+
     numpy_dtype: type[np.number]
     torch_dtype: torch.dtype
 
@@ -61,60 +62,43 @@ def compute_linode_error(
     def func(_, x):
         return A @ x
 
-    X = np.array(odeint(func, x0, T, tfirst=True))
+    X = torch.tensor(odeint(func, x0, T, tfirst=True), dtype=torch_dtype)
 
     # A_torch = torch.tensor(A, dtype=torch_dtype, device=device)
     T_torch = torch.tensor(T, dtype=torch_dtype, device=device)
     x0_torch = torch.tensor(x0, dtype=torch_dtype, device=device)
 
-    model = LinODE(input_size=dim, cell={"kernel_initialization": A, "scalar": 1.0})
+    model = LinODE(
+        input_size=dim,
+        cell={"kernel_initialization": A, "scalar": 1.0, "scalar_learnable": False},
+    )
     model.to(dtype=torch_dtype, device=device)
+    assert model.cell.scalar == 1.0
 
     Xhat = model(T_torch, x0_torch)
-    Xhat = Xhat.clone().detach().cpu().numpy()
+    Xhat = Xhat.clone().detach().cpu()
 
-    err = np.abs(X - Xhat)
+    err = (X - Xhat).abs()
 
     if relative_error:
-        err /= np.abs(X) + eps
+        err /= X.abs() + eps
 
-    result = np.array([scaled_norm(err, p=p) for p in (1, 2, np.inf)])
-    return result
+    # NOTE: shape:
+    logger.debug("shapes: X:%s Xhat:%s err:5%s", X.shape, Xhat.shape, err.shape)
+    return np.array([scaled_norm(err, p=p, keepdim=False) for p in (1, 2, np.inf)])
 
 
-@pytest.mark.flaky(reruns=3)
-def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
-    r"""Compare LinODE against scipy.odeint on random linear system."""
-    LOGGER = __logger__.getChild(LinODE.__name__)
-    LOGGER.info("Testing %s.", LinODE)
-    extra_stats = {"Samples": num_samples}
-
-    LOGGER.info("Generating %i samples in single precision", num_samples)
-    err_single = np.array(
-        [compute_linode_error(precision="single") for _ in trange(num_samples)],
-        dtype=np.float32,
-    ).T
-
-    LOGGER.info("Generating %i samples in double precision", num_samples)
-    err_double = np.array(
-        [compute_linode_error(precision="double") for _ in trange(num_samples)],
-        dtype=np.float64,
-    ).T
-
-    for err, tol in zip(err_single, (10.0**k for k in (0, 2, 4))):
-        q = np.nanquantile(err, 0.99)
-        LOGGER.info("99%% quantile %f", q)
-        assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
-    # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
-    # Since 10^4 ~ 2^13
-    for err, tol in zip(err_double, (10.0**k for k in (-4, -2, -0))):
-        q = np.nanquantile(err, 0.99)
-        LOGGER.info("99%% quantile %f", q)
-        assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
-    LOGGER.info("%s passes test ✔ ", LinODE)
-
-    if not make_plots:
-        return
+def make_error_plots(
+    *,
+    error_single: NDArray,
+    error_double: NDArray,
+    logger: logging.Logger = __logger__,
+    **extra_stats: Any,
+) -> None:
+    """Create histogram plot of the errors."""
+    assert error_single.shape == error_double.shape
+    print(error_single.shape)
+    num_samples = error_single.shape[1]
 
     with plt.style.context("bmh"):
         fig, ax = plt.subplots(
@@ -126,8 +110,8 @@ def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
             sharex="all",
         )
 
-    LOGGER.info("generating figure")
-    for i, err in enumerate((err_single, err_double)):
+    logger.info("generating figure")
+    for i, err in enumerate((error_single, error_double)):
         for j, p in enumerate((1, 2, np.inf)):
             visualize_distribution(
                 err[j], log=True, ax=ax[i, j], extra_stats=extra_stats
@@ -152,12 +136,43 @@ def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
     )
 
     fig.savefig(RESULT_DIR / "LinODE_odeint_comparison.pdf")
-    LOGGER.info("all done")
 
 
-def _main() -> None:
-    test_linode_error(num_samples=1000, make_plots=True)
+@pytest.mark.flaky(reruns=3)
+def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
+    r"""Compare LinODE against scipy.odeint on random linear system."""
+    LOGGER = __logger__.getChild(LinODE.__name__)
+    LOGGER.info("Testing %s.", LinODE)
+    extra_stats = {"Samples": num_samples}
 
+    LOGGER.info("Generating %i samples in single precision", num_samples)
+    err_single = np.array(
+        [compute_linode_error(precision="single") for _ in trange(num_samples)],
+        dtype=np.float32,
+    ).T
 
-if __name__ == "__main__":
-    _main()
+    LOGGER.info("Generating %i samples in double precision", num_samples)
+    err_double = np.array(
+        [compute_linode_error(precision="double") for _ in trange(num_samples)],
+        dtype=np.float64,
+    ).T
+
+    if make_plots:
+        make_error_plots(
+            error_single=err_single,
+            error_double=err_double,
+            logger=LOGGER,
+            **extra_stats,
+        )
+
+    for err, tol in zip(err_single, (10.0**k for k in (0, 2, 4))):
+        q = np.nanquantile(err, 0.99)
+        LOGGER.info("99%% quantile %f", q)
+        assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
+    # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
+    # Since 10^4 ~ 2^13
+    for err, tol in zip(err_double, (10.0**k for k in (-4, -2, -0))):
+        q = np.nanquantile(err, 0.99)
+        LOGGER.info("99%% quantile %f", q)
+        assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
+    LOGGER.info("%s passes test ✔ ", LinODE)

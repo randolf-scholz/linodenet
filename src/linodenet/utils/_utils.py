@@ -7,7 +7,6 @@ __all__ = [
     "assert_issubclass",
     "deep_dict_update",
     "deep_keyval_update",
-    "flatten_nested_tensor",
     "initialize_from_config",
     "is_dunder",
     "is_private",
@@ -22,31 +21,23 @@ import gc
 import logging
 import sys
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Mapping
 from contextlib import ContextDecorator
 from copy import deepcopy
 from functools import wraps
 from importlib import import_module
 from time import perf_counter_ns
 from types import MethodType, ModuleType, TracebackType
-from typing import Any, Callable, ClassVar, Literal, TypeVar
+from typing import Any, ClassVar, Literal
 
 import torch
 from torch import Tensor, jit, nn
 from typing_extensions import Self
 
 from linodenet.config import CONFIG
+from linodenet.types import module_var, type_var
 
 __logger__ = logging.getLogger(__name__)
-
-T = TypeVar("T", bound=type)
-r"""Type hint for classes."""
-
-R = TypeVar("R")
-r"""Type hint return value."""
-
-nnModuleType = TypeVar("nnModuleType", bound=nn.Module)
-r"""Type Variable for nn.Modules."""
 
 
 @jit.script
@@ -67,7 +58,7 @@ def pad(
     return torch.cat((x, z), dim=dim)
 
 
-def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
+def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict:
     r"""Update nested dictionary recursively in-place with new dictionary.
 
     References:
@@ -84,7 +75,7 @@ def deep_dict_update(d: dict, new: Mapping, inplace: bool = False) -> dict:
     return d
 
 
-def deep_keyval_update(d: dict, **new_kv: Any) -> dict:
+def deep_keyval_update(d: dict, /, **new_kv: Any) -> dict:
     r"""Update nested dictionary recursively in-place with key-value pairs.
 
     References:
@@ -98,7 +89,7 @@ def deep_keyval_update(d: dict, **new_kv: Any) -> dict:
     return d
 
 
-def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
+def autojit(base_class: type[module_var]) -> type[module_var]:
     r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
 
     Makes it so that
@@ -130,27 +121,18 @@ def autojit(base_class: type[nnModuleType]) -> type[nnModuleType]:
         r"""A simple Wrapper."""
 
         # noinspection PyArgumentList
-        def __new__(cls, *args: Any, **kwargs: Any) -> nnModuleType:  # type: ignore[misc]
+        def __new__(cls, *args: Any, **kwargs: Any) -> module_var:  # type: ignore[misc]
             # Note: If __new__() does not return an instance of cls,
             # then the new instance's __init__() method will not be invoked.
-            instance: nnModuleType = base_class(*args, **kwargs)
+            instance: module_var = base_class(*args, **kwargs)
 
             if CONFIG.autojit:
-                scripted: nnModuleType = jit.script(instance)
+                scripted: module_var = jit.script(instance)  # pyright: ignore
                 return scripted
             return instance
 
-    assert issubclass(WrappedClass, base_class)
+    assert issubclass(WrappedClass, base_class)  # pyright: ignore
     return WrappedClass
-
-
-def flatten_nested_tensor(inputs: Tensor | Iterable[Tensor]) -> Tensor:
-    r"""Flattens element of general Hilbert space."""
-    if isinstance(inputs, Tensor):
-        return torch.flatten(inputs)
-    if isinstance(inputs, Iterable):
-        return torch.cat([flatten_nested_tensor(x) for x in inputs])
-    raise ValueError(f"{inputs=} not understood")
 
 
 def initialize_from_config(config: dict[str, Any]) -> nn.Module:
@@ -214,7 +196,7 @@ class timer(ContextDecorator):
         return False
 
 
-def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor]) -> None:
+def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) -> None:
     """Register a cache to a module.
 
     - creates a buffer that stores the result of func().
@@ -230,7 +212,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor]) -> No
         self.cached_tensors = cached_tensors  # type: ignore[assignment]
         self.__annotations__["cached_tensors"] = dict[str, Tensor]
 
-    cached_tensors = self.cached_tensors  # type: ignore[assignment]
+    cached_tensors = self.cached_tensors
 
     # register the buffer
     self.register_buffer("name", func())
@@ -245,7 +227,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor]) -> No
 
     # register the recompute all function
     def recompute_all(obj: nn.Module) -> None:
-        for key in obj.cached_tensors:  # type: ignore[union-attr]
+        for key in obj.cached_tensors:
             f = getattr(obj, f"recompute_{key}")
             f()
 
@@ -296,14 +278,14 @@ class reset_caches(ContextDecorator):
     ) -> Literal[False]:
         if self.on_exit:
             self.LOGGER.info("Resetting caches.")
-            self.module.recompute_all()  # type: ignore[operator]
+            self.module.recompute_all()
         return False
 
 
-def assert_issubclass(proto: type) -> Callable[[T], T]:
+def assert_issubclass(proto: type) -> Callable[[type_var], type_var]:
     """Assert that an object satisfies a protocol."""
 
-    def decorator(cls: T) -> T:
+    def decorator(cls: type_var) -> type_var:
         """Assert that a class satisfies a protocol."""
         assert issubclass(cls, proto), f"{cls} is not a {proto}"
         return cls  # type: ignore[return-value]

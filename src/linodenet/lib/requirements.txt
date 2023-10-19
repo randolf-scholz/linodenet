@@ -1,0 +1,8 @@
+// https://stackoverflow.com/questions/26333823/clang-doesnt-see-basic-headers
+cuda-11-7
+g++-12  # or whatever shown by clang -v
+intel-basekit  // https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html
+intel-mkl-full
+libcudnn8-dev
+libcusparselt-dev
+libnccl-dev

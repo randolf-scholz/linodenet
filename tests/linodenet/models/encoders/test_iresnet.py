@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 r"""Test the iResNet components.
 
 1. is the LinearContraction layer really a linear contraction?
@@ -7,7 +6,6 @@ r"""Test the iResNet components.
 
 import logging
 import random
-from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -20,10 +18,8 @@ from linodenet.models import LinearContraction, iResNetBlock
 from tsdm.linalg import scaled_norm
 from tsdm.viz import visualize_distribution
 
-logging.basicConfig(level=logging.INFO)
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @pytest.mark.flaky(reruns=3)
@@ -78,7 +74,7 @@ def test_LinearContraction(
     ax.set_title(f"{LinearContraction.__name__} -- Scaling Factor Distribution")
     ax.set_xlabel(
         r"$s(x, y) = \frac{\|\phi(x)-\phi(y)\|}{\|x-y\|}$ where "
-        r"$x_i, y_j \overset{\text{i.i.d}}{\sim} \mathcal N(0, 1)$"
+        r"$x_i, y_j \overset{\text{i.i.d}}{\sim} \mathcal{N}(0, 1)$"
     )
     ax.set_ylabel(r"density $p(s \mid x, y)$")
 
@@ -138,7 +134,7 @@ def test_iResNetBlock(
         yhat = model(ify)
 
     # Test if ϕ⁻¹∘ϕ=id, i.e. the right inverse is working
-    forward_inverse_error = scaled_norm(x - xhat, axis=-1)
+    forward_inverse_error = scaled_norm(x - xhat, axis=-1, keepdim=False)
     forward_inverse_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert forward_inverse_error.shape == (num_sample,)
     assert (forward_inverse_quantiles <= TARGETS).all(), f"{forward_inverse_quantiles=}"
@@ -146,7 +142,7 @@ def test_iResNetBlock(
     LOGGER.info("Quantiles: %s", forward_inverse_quantiles)
 
     # Test if ϕ∘ϕ⁻¹=id, i.e. the right inverse is working
-    inverse_forward_error = scaled_norm(y - yhat, axis=-1)
+    inverse_forward_error = scaled_norm(y - yhat, axis=-1, keepdim=False)
     inverse_forward_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert inverse_forward_error.shape == (num_sample,)
     assert (inverse_forward_quantiles <= TARGETS).all(), f"{inverse_forward_quantiles=}"
@@ -154,7 +150,7 @@ def test_iResNetBlock(
     LOGGER.info("Quantiles: %s", inverse_forward_quantiles)
 
     # Test if ϕ≠id, i.e. the forward map is different from the identity
-    forward_difference = scaled_norm(x - fx, axis=-1)
+    forward_difference = scaled_norm(x - fx, axis=-1, keepdim=False)
     forward_quantiles = torch.quantile(forward_difference, 1 - QUANTILES)
     assert forward_difference.shape == (num_sample,)
     assert (forward_quantiles >= TARGETS).all(), f"{forward_quantiles}"
@@ -162,7 +158,7 @@ def test_iResNetBlock(
     LOGGER.info("Quantiles: %s", forward_quantiles)
 
     # Test if ϕ⁻¹≠id, i.e. the inverse map is different from an identity
-    inverse_difference = scaled_norm(y - ify, axis=-1)
+    inverse_difference = scaled_norm(y - ify, axis=-1, keepdim=False)
     inverse_quantiles = torch.quantile(inverse_difference, 1 - QUANTILES)
     assert inverse_difference.shape == (num_sample,)
     assert (inverse_quantiles >= TARGETS).all(), f"{inverse_quantiles}"
@@ -183,31 +179,25 @@ def test_iResNetBlock(
     visualize_distribution(inverse_difference, ax=ax[1, 1], extra_stats=extra_stats)
 
     ax[0, 0].set_xlabel(
-        r"$r_\text{left}(x) = \|x - \phi^{-1}(\phi(x))\|$  where $x_i \sim \mathcal N(0,1)$"
+        r"$r_\text{left}(x) = \|x - \phi^{-1}(\phi(x))\|$ "
+        r" where $x_i \sim \mathcal{N}(0,1)$"
     )
     ax[0, 0].set_ylabel(r"density $p(r_\text{left} \mid x)$")
     ax[0, 1].set_xlabel(
-        r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$ where $y_j \sim \mathcal N(0,1)$"
+        r"$r_\text{right}(y) = \|y - \phi(\phi^{-1}(y))\|$"
+        r" where $y_j \sim \mathcal{N}(0,1)$"
     )
     ax[0, 1].set_ylabel(r"density $p(r_\text{right}\mid y)$")
 
     ax[1, 0].set_xlabel(
-        r"$d_\text{left}(x) = \|x - \phi(x)\|$ where $x_i \sim \mathcal N(0,1)$"
+        r"$d_\text{left}(x) = \|x - \phi(x)\|$" r" where $x_i \sim \mathcal{N}(0,1)$"
     )
     ax[1, 0].set_ylabel(r"density $p(d_\text{left} \mid x)$")
     ax[1, 1].set_xlabel(
-        r"$d_\text{right}(y) = \|y - \phi^{-1}(y)\|$ where $y_j \sim \mathcal N(0,1)$"
+        r"$d_\text{right}(y) = \|y - \phi^{-1}(y)\|$"
+        r" where $y_j \sim \mathcal{N}(0,1)$"
     )
     ax[1, 1].set_ylabel(r"density $p(d_\text{right} \mid y)$")
     fig.suptitle("iResNetBlock -- Inversion Property", fontsize=16)
     fig.savefig(RESULT_DIR / "iResNetBlock_inversion.pdf")
     LOGGER.info("all done")
-
-
-def _main() -> None:
-    test_LinearContraction(make_plots=True)
-    test_iResNetBlock(make_plots=True)
-
-
-if __name__ == "__main__":
-    _main()

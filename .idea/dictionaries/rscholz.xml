@@ -2,6 +2,7 @@
   <dictionary name="rscholz">
     <words>
       <w>absolufy</w>
+      <w>addmm</w>
       <w>addoption</w>
       <w>allcaps</w>
       <w>allclose</w>
@@ -12,34 +13,45 @@
       <w>automethod</w>
       <w>autosectionlabel</w>
       <w>autosummary</w>
+      <w>avgerr</w>
+      <w>basekit</w>
       <w>batchnorm</w>
       <w>behrmann</w>
       <w>bmatrix</w>
       <w>bysource</w>
+      <w>bπaπ</w>
       <w>celu</w>
+      <w>checkable</w>
       <w>cipra</w>
       <w>classmethod</w>
       <w>codeauthor</w>
       <w>codeclimate</w>
       <w>contractive</w>
       <w>copybutton</w>
+      <w>cout</w>
       <w>covariate</w>
       <w>covariates</w>
       <w>cstddef</w>
+      <w>dcmake</w>
+      <w>discretizes</w>
       <w>dtype</w>
       <w>dunder</w>
       <w>duvenaud</w>
+      <w>endl</w>
       <w>fesd</w>
+      <w>finfo</w>
       <w>fixturenames</w>
       <w>forcedly</w>
       <w>frobenius</w>
       <w>geglu</w>
       <w>gelu</w>
+      <w>gradcheck</w>
       <w>grathwohl</w>
       <w>hardshrink</w>
       <w>hardsigmoid</w>
       <w>hardswish</w>
       <w>hardtanh</w>
+      <w>hashval</w>
       <w>headwise</w>
       <w>hildesheim</w>
       <w>hphᵀ</w>
@@ -48,6 +60,8 @@
       <w>includehidden</w>
       <w>intersphinx</w>
       <w>irange</w>
+      <w>isclose</w>
+      <w>isfinite</w>
       <w>ismll</w>
       <w>jacobian</w>
       <w>jian</w>
@@ -56,36 +70,50 @@
       <w>jörn</w>
       <w>kaiming</w>
       <w>kataoka</w>
+      <w>keepdim</w>
       <w>keyval</w>
       <w>koyama</w>
       <w>kwds</w>
       <w>layernorm</w>
       <w>layerwise</w>
+      <w>libcudnn</w>
+      <w>libcusparselt</w>
       <w>liblinodenet</w>
+      <w>libnccl</w>
       <w>linalg</w>
       <w>linformer</w>
       <w>linodenet</w>
       <w>lobpcg</w>
       <w>logdetexp</w>
+      <w>logsigmoid</w>
+      <w>lstsq</w>
+      <w>markdownlint</w>
       <w>mathcal</w>
       <w>maxdepth</w>
       <w>maxiter</w>
       <w>maxlen</w>
+      <w>maxsplit</w>
       <w>membername</w>
       <w>mension</w>
+      <w>mish</w>
       <w>miyato</w>
       <w>moduledir</w>
+      <w>moveaxis</w>
       <w>multihead</w>
       <w>nblocks</w>
       <w>ngth</w>
       <w>nhead</w>
       <w>nitpicky</w>
       <w>nonglu</w>
+      <w>nullopt</w>
       <w>odeint</w>
+      <w>odesolve</w>
       <w>operatorname</w>
       <w>overset</w>
       <w>pageview</w>
+      <w>parametrization's</w>
       <w>parametrizations</w>
+      <w>prelu</w>
       <w>prenormalization</w>
       <w>randn</w>
       <w>reftypes</w>
@@ -95,39 +123,52 @@
       <w>renormalizes</w>
       <w>rezero</w>
       <w>romera</w>
+      <w>rrelu</w>
       <w>rtol</w>
       <w>sectionauthor</w>
       <w>selu</w>
       <w>shaoqing</w>
       <w>shphᵀsᵀ</w>
+      <w>silu</w>
       <w>skewsymmetric</w>
       <w>smartquotes</w>
+      <w>softmin</w>
       <w>softplus</w>
       <w>softshrink</w>
       <w>softsign</w>
       <w>sphinxcontrib</w>
       <w>srsᵀ</w>
+      <w>stacklevel</w>
       <w>stdv</w>
       <w>stdvs</w>
       <w>subblock</w>
       <w>subblocks</w>
+      <w>subitem</w>
       <w>svdvals</w>
+      <w>symmetrized</w>
       <w>tanhshrink</w>
       <w>testdir</w>
       <w>tfrac</w>
       <w>timedeltas</w>
       <w>toctree</w>
       <w>torchscript</w>
+      <w>toshiki</w>
       <w>tput</w>
       <w>tridiagonal</w>
       <w>tsdm</w>
+      <w>underdetermined</w>
       <w>undoc</w>
       <w>unindent</w>
+      <w>unsqueeze</w>
       <w>unsubscriptable</w>
+      <w>ũᵀu</w>
+      <w>ũᵀũ</w>
       <w>venvname</w>
       <w>viewcode</w>
+      <w>ṽᵀv</w>
       <w>warningiserror</w>
       <w>weakref</w>
+      <w>weigth</w>
       <w>woodbury</w>
       <w>xarray</w>
       <w>xhat</w>
@@ -137,8 +178,11 @@
       <w>xxxxxxxxxx</w>
       <w>yhat</w>
       <w>yoshida</w>
+      <w>yuichi</w>
       <w>zhat</w>
       <w>σuvᵀ</w>
+      <w>σ̃ũ</w>
+      <w>ₘᵀaπₘ</w>
     </words>
   </dictionary>
 </component>

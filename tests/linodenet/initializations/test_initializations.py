@@ -1,9 +1,7 @@
-#!/usr/bin/env python
 r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
 import warnings
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import psutil
@@ -13,10 +11,9 @@ import torch
 from linodenet.config import PROJECT
 from linodenet.initializations import INITIALIZATIONS
 
-logging.basicConfig(level=logging.INFO)
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
+
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _make_fig(path, means, stdvs, key):
@@ -99,11 +96,3 @@ def test_all_initializations(make_plots: bool) -> None:
     for key in INITIALIZATIONS:
         test_initialization(key, make_plots=make_plots)
     __logger__.info("All initializations passed! ✔ ")
-
-
-def _main() -> None:
-    test_all_initializations(make_plots=True)
-
-
-if __name__ == "__main__":
-    _main()

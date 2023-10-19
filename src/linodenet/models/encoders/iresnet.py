@@ -92,20 +92,20 @@ class SpectralNorm(torch.autograd.Function):
         # initialize u and v, median should be useful guess.
         u = u_next = A.median(dim=1).values
         v = v_next = A.median(dim=0).values
-        σ: Tensor = torch.einsum("ij, i, j ->", A, u, v)
+        sigma: Tensor = torch.einsum("ij, i, j ->", A, u, v)
 
         for _ in range(maxiter):
             u = u_next / torch.norm(u_next)
             v = v_next / torch.norm(v_next)
             # choose optimal σ given u and v: σ = argmin ‖A - σuvᵀ‖²
-            σ = torch.einsum("ij, i, j ->", A, u, v)  # u.T @ A @ v
+            sigma = torch.einsum("ij, i, j ->", A, u, v)  # u.T @ A @ v
             # Residual: if Av = σu and Aᵀu = σv
             u_next = A @ v
             v_next = A.T @ u
-            σu = σ * u
-            σv = σ * v
-            ru = u_next - σ * u
-            rv = v_next - σ * v
+            σu = sigma * u
+            σv = sigma * v
+            ru = u_next - sigma * u
+            rv = v_next - sigma * v
             if (
                 vector_norm(ru) <= rtol * vector_norm(σu) + atol
                 and vector_norm(rv) <= rtol * vector_norm(σv) + atol
@@ -113,7 +113,7 @@ class SpectralNorm(torch.autograd.Function):
                 break
 
         ctx.save_for_backward(u, v)
-        return σ
+        return sigma
 
     @staticmethod
     def backward(ctx: Any, *grad_outputs: Tensor) -> Tensor:
@@ -345,6 +345,7 @@ class iResNetLayer(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
         return x + self.layer(x)
 
     @jit.export
@@ -523,8 +524,6 @@ class iResNet(nn.Module):
         The dimensionality of the output space.
     blocks:  nn.Sequential
         Sequential model consisting of the iResNetBlocks
-    reversed_blocks: nn.Sequential
-        The same blocks in reversed order
     HP: dict
         Nested dictionary containing the hyperparameters.
     """

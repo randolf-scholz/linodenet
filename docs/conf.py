@@ -29,7 +29,7 @@ YEAR = datetime.datetime.now().year
 # region Project Information ------------------------------------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "linodenet"
+project = f"{MODULE}"
 # The documented project’s name.
 
 author = "Randolf Scholz"
@@ -45,7 +45,6 @@ version = VERSION
 release = version
 # The full project version, used as the replacement for |release| and e.g. in the HTML templates.
 # For example, for the Python documentation, this may be something like 2.6.0rc1.
-
 # endregion Project Information ---------------------------------------------------------------------------------------
 
 
@@ -71,9 +70,10 @@ extensions = [
     # 1st party extensions
     "signatures",
     # 3rd party extensions
-    "autoapi.extension",
+    # "autoapi.extension",
+    "myst_parser",
     "sphinx_copybutton",
-    # "sphinx_math_dollar",
+    "sphinx_math_dollar",
     # "sphinx_autodoc_typehints",
 ]
 # Add any Sphinx extension module names here, as strings. They can be extensions coming with Sphinx
@@ -157,7 +157,6 @@ show_authors = True
 
 python_use_unqualified_type_names = True
 # If true, suppress the module name of the python reference if it can be resolved. The default is False
-
 # endregion General Configuration -------------------------------------------------------------------------------------
 
 
@@ -171,11 +170,45 @@ html_theme = "pydata_sphinx_theme"
 # The “theme” that the HTML output should use. See the section about theming. The default is 'alabaster'.
 
 html_theme_options = {
-    # # FIXME: https://github.com/pydata/pydata-sphinx-theme/issues/1094
-    "logo": {
-        "image_light": "logo-light.png",
-        "image_dark": "logo-dark.png",
-    }
+    "header_links_before_dropdown": 7,
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": f"https://github.com/randolf-scholz/{MODULE}",
+            "icon": "fa-brands fa-github",
+        },
+        # {
+        #     "name": "Twitter",
+        #     "url": "https://twitter.com/PyData",
+        #     "icon": "fa-brands fa-twitter",
+        # },
+        # {
+        #     "name": "PyPI",
+        #     "url": "https://pypi.org/project/pydata-sphinx-theme",
+        #     "icon": "fa-custom fa-pypi",
+        # },
+        # {
+        #     "name": "PyData",
+        #     "url": "https://pydata.org",
+        #     "icon": "_static/pydata-logo.png",
+        #     "type": "local",
+        #     "attributes": {"target": "_blank"},
+        # },
+    ],
+    # "external_links": [
+    #     {
+    #         "url": "https://pydata.org",
+    #         "name": "PyData",
+    #     },
+    #     {
+    #         "url": "https://numfocus.org/",
+    #         "name": "NumFocus",
+    #     },
+    #     {
+    #         "url": "https://numfocus.org/donate",
+    #         "name": "Donate to NumFocus",
+    #     },
+    # ],
 }
 #     # TOCTREE OPTIONS
 #     "collapse_navigation": False,
@@ -227,7 +260,6 @@ html_theme_options = {
 html_theme_path = []
 # A list of paths that contain custom themes, either as subdirectories or as zip files.
 # Relative paths are taken as relative to the configuration directory.
-
 # endregion Theme Configuration --------------------------------------------------------------------------------
 
 
@@ -268,6 +300,16 @@ html_favicon = None
 # Modern browsers use this as the icon for tabs, windows and bookmarks.
 # It should be a Windows-style icon file (.ico), which is 16x16 or 32x32 pixels large. Default: None.
 
+html_css_files = []
+# A list of CSS files. The entry must be a filename string or a tuple containing the filename string and the
+# attributes dictionary. The filename must be relative to the html_static_path, or a full URI with scheme like
+# https://example.org/style.css. The attributes is used for attributes of <link> tag. It defaults to an empty list.
+
+html_js_files = []
+# A list of JavaScript filename. The entry must be a filename string or a tuple containing the filename string and
+# the attributes dictionary. The filename must be relative to the html_static_path, or a full URI with scheme like
+# https://example.org/script.js. The attributes is used for attributes of <script> tag. It defaults to an empty list.
+
 html_static_path = ["_static"]
 # A list of paths that contain custom static files (such as style sheets or script files).
 # Relative paths are taken as relative to the configuration directory. They are copied to the output’s _static
@@ -291,7 +333,6 @@ html_sidebars = {}
 # Custom sidebar templates, must be a dictionary that maps document names to template names.
 
 # TODO: Add missing configuration options.
-
 # endregion HTML Configuration ---------------------------------------------------------------------------------
 
 
@@ -379,7 +420,6 @@ autoapi_keep_files = True
 # Keeping files will also allow AutoAPI to use incremental builds. Providing none of the source files have changed,
 # AutoAPI will skip parsing the source code and regenerating the API documentation.
 # Default: False
-
 # endregion sphinx-autoapi configuration ------------------------------------------------------------------------------
 
 
@@ -500,13 +540,14 @@ autodoc_type_aliases = {
 # It is used to keep type aliases not evaluated in the document. Defaults to empty ({}).
 # The type aliases are only available if your program enables Postponed Evaluation of Annotations (PEP 563)
 # feature via from __future__ import annotations.
-# autodoc_type_aliases |= tsdm.util.system.get_napoleon_type_aliases(typing)
+# autodoc_type_aliases |= tsdm.utils.system.get_napoleon_type_aliases(typing)
 # # recursively napoleon_type_aliases for tsdm classes / functions.
-# autodoc_type_aliases |= tsdm.util.system.get_napoleon_type_aliases(abc)
+# autodoc_type_aliases |= tsdm.utils.system.get_napoleon_type_aliases(abc)
 # # recursively napoleon_type_aliases for tsdm classes / functions.
-# autodoc_type_aliases |= tsdm.util.system.get_napoleon_type_aliases(torch)
-# autodoc_type_aliases |= tsdm.util.system.get_napoleon_type_aliases(torch.utils)
-# autodoc_type_aliases |= tsdm.util.system.get_napoleon_type_aliases(tsdm)
+# autodoc_type_aliases |= tsdm.utils.system.get_napoleon_type_aliases(torch)
+# autodoc_type_aliases |= tsdm.utils.system.get_napoleon_type_aliases(torch.utils)
+# autodoc_type_aliases |= tsdm.utils.system.get_napoleon_type_aliases(tsdm)
+# print(autodoc_type_aliases)
 # # recursively napoleon_type_aliases for tsdm classes / functions.
 
 autodoc_typehints_format = "short"
@@ -525,7 +566,6 @@ autodoc_warningiserror = True
 autodoc_inherit_docstrings = True
 # This value controls the docstrings inheritance. If set to True the docstring for classes or methods,
 # if not explicitly set, is inherited from parents. The default is True.
-
 # endregion sphinx.ext.autodoc configuration --------------------------------------------------------------------------
 
 
@@ -540,7 +580,6 @@ autosectionlabel_maxdepth = None
 # If set, autosectionlabel chooses the sections for labeling by its depth.
 # For example, when set 1 to autosectionlabel_maxdepth, labels are generated only for top level sections,
 # and deeper sections are not labeled. It defaults to None (disabled).
-
 # endregion sphinx.ext.autosectionlabel configuration -----------------------------------------------------------------
 
 
@@ -575,7 +614,6 @@ autosummary_ignore_module_all = False
 autosummary_filename_map = {}
 # A dict mapping object names to filenames. This is necessary to avoid filename conflicts where multiple objects
 # have names that are indistinguishable when case is ignored, on file systems where filenames are case-insensitive.
-
 # endregion sphinx.ext.autosummary configuration ----------------------------------------------------------------------
 
 
@@ -612,7 +650,6 @@ intersphinx_disabled_reftypes = ["std:doc"]
 # When a cross-reference without an explicit inventory specification is being resolved by
 # intersphinx, skip resolution if it matches one of the specifications in this list.
 # The default value is ['std:doc'].
-
 # endregion sphinx.ext.intersphinx configuration ----------------------------------------------------------------------
 
 
@@ -638,6 +675,7 @@ mathjax3_config = {
         "macros": {
             "argmax": r"\operatorname*{arg\,max}",
             "argmin": r"\operatorname*{arg\,min}",
+            "Median": r"\operatorname{Median}",
             "diag": r"\operatorname{diag}",
             "rank": r"\operatorname{rank}",
             "relu": r"\operatorname{ReLU}",
@@ -657,7 +695,6 @@ mathjax_config = {
         "displayMath": [[r"\[", r"\]"]],
     },
 }  # Former name of mathjax2_config.
-
 # endregion sphinx.ext.mathjax configuration --------------------------------------------------------------------------
 
 
@@ -781,7 +818,6 @@ napoleon_custom_sections = [
     ("Returns", "params_style"),  # https://github.com/sphinx-doc/sphinx/issues/9119
 ]
 # Add a list of custom sections to include, expanding the list of parsed sections. Defaults to None.
-
 # endregion sphinx.ext.napoleon configuration -------------------------------------------------------------------------
 
 
@@ -794,7 +830,6 @@ todo_emit_warnings = False
 # If this is True, todo emits a warning for each TODO entries. The default is False.
 todo_link_only = False
 # If this is True, todolist produce output without file path and line, The default is False.
-
 # endregion sphinx.ext.todo configuration -----------------------------------------------------------------------------
 
 
@@ -811,21 +846,18 @@ viewcode_enable_epub = False
 # Until 1.4.x, this extension is always enabled. If you want to generate epub as same as 1.4.x, you should set True,
 # but epub format checker’s score becomes worse.
 # The default is False.
-
 # endregion sphinx.ext.viewcode configuration -------------------------------------------------------------------------
 
 
 # region sphinx_math_dollar configuration ------------------------------------------------------------------------------
-
 # https://www.sympy.org/sphinx-math-dollar/#configuration
-# from sphinx_math_dollar import NODE_BLACKLIST
-# from docutils.nodes import header
-# from sphinx.addnodes import pending_xref_condition
 # math_dollar_debug = True
 # math_dollar_node_blacklist = NODE_BLACKLIST + (header, pending_xref_condition)
 
+from sphinx.addnodes import pending_xref_condition  # noqa: E402
+from sphinx.util.docutils import register_node  # noqa: E402
 
+register_node(pending_xref_condition)
 # endregion sphinx_math_dollar configuration ---------------------------------------------------------------------------
-
 
 # -- end of configuration ---------------------------------------------------------------------------------------------

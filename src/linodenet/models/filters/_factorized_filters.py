@@ -45,6 +45,7 @@ class Cell(Protocol):
 
     def __call__(self, y: Tensor, x: Tensor) -> Tensor:
         """Forward pass of the cell."""
+        ...
 
 
 CELLS: dict[str, type[Cell]] = {
@@ -95,7 +96,7 @@ class PseudoKalmanFilter(FilterABC):
       state estimate and the observation.
 
     One idea: $P = 𝕀 + εA$, where $A$ is symmetric. In this case,
-    the inverse is approximately given by $𝕀-εA$.
+    $𝕀-εA$ is approximately equal to the inverse.
 
     We define the linearized filter as
 

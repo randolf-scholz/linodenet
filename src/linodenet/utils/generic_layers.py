@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Iterable
-from typing import Any, Final, List, Optional
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -60,7 +60,8 @@ class Series(nn.Sequential):
     def __imatmul__(self, other: nn.Module) -> Series:
         r"""Chain with other module."""
         raise NotImplementedError(
-            "`@=` not possible because `nn.Sequential` does not implement an append function."
+            "`@=` not possible because `nn.Sequential` does not implement an append"
+            " function."
         )
 
     def simplify(self: Series) -> Series:
@@ -101,7 +102,7 @@ class Parallel(nn.ModuleList):
     @jit.export
     def forward(self, x: Tensor) -> list[Tensor]:
         r""".. Signature:: ``(..., n) -> [..., (..., n)]``."""
-        result: List[Any] = []
+        result: list[Tensor] = []
 
         for module in self:
             result.append(module(x))
@@ -111,17 +112,18 @@ class Parallel(nn.ModuleList):
     def __matmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""
         if isinstance(other, Parallel):
-            return Parallel(*(*self, *other))
-        return Parallel(*(*self, other))
+            return Parallel((*self, *other))
+        return Parallel((*self, other))
 
     def __rmatmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""
-        return Parallel(*(other, *self))
+        return Parallel((other, *self))
 
     def __imatmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""
         raise NotImplementedError(
-            "`@=` not possible because `nn.Sequential` does not implement an append function."
+            "`@=` not possible because `nn.Sequential` does not implement an append"
+            " function."
         )
 
 

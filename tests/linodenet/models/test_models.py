@@ -1,26 +1,21 @@
-#!/usr/bin/env python
 r"""Test if model initializations, forward and backward passes."""
 
 import logging
 from itertools import product
-from pathlib import Path
 
 import torch
-from torch import Tensor
-from torch.nn.functional import mse_loss
+from pytest import mark
+from torch import Tensor, nn
 
 import linodenet
 from linodenet.config import PROJECT
 from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
 from linodenet.models.system import LinODECell
-from linodenet.utils import flatten_nested_tensor
+from linodenet.testing import check_object
 
-logging.basicConfig(level=logging.INFO)
 __logger__ = logging.getLogger(__name__)
-RESULT_DIR = PROJECT.TESTS_PATH / "results" / Path(__file__).stem
-RESULT_DIR.mkdir(parents=True, exist_ok=True)
-
 linodenet.CONFIG.autojit = False
+RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 OUTER_BATCH = 3
 INNER_BATCH = 5
@@ -37,42 +32,42 @@ DEVICES = [torch.device("cpu")]
 
 BATCH_SIZES = [(), (INNER_BATCH,), (OUTER_BATCH, INNER_BATCH)]
 
-MODELS: dict[type, dict] = {
+MODELS: dict[type[nn.Module], dict] = {
     LinearContraction: {
         "initialization": (DIM, OUT),
-        "input_shapes": ((LEN, DIM),),  # X
-        "output_shapes": ((LEN, OUT),),
+        "input_shapes": [(LEN, DIM)],  # X
+        "output_shapes": [(LEN, OUT)],
     },
     iResNetBlock: {
         "initialization": (DIM,),
-        "input_shapes": ((LEN, DIM),),  # X
-        "output_shapes": ((LEN, DIM),),
+        "input_shapes": [(LEN, DIM)],  # X
+        "output_shapes": [(LEN, DIM)],
     },
     iResNet: {
         "initialization": (DIM,),
-        "input_shapes": ((LEN, DIM),),  # X
-        "output_shapes": ((LEN, DIM),),
+        "input_shapes": [(LEN, DIM)],  # X
+        "output_shapes": [(LEN, DIM)],
     },
     LinODECell: {
         "initialization": (DIM,),
-        "input_shapes": ((), (DIM,)),  # Δt, x0
-        "output_shapes": ((DIM,),),
+        "input_shapes": [(), (DIM,)],  # Δt, x0
+        "output_shapes": [(DIM,)],
     },
     LinODE: {
         "initialization": (DIM,),
-        "input_shapes": ((LEN,), (DIM,)),  # T, x0
-        "output_shapes": ((LEN, DIM),),
+        "input_shapes": [(LEN,), (DIM,)],  # T, x0
+        "output_shapes": [(LEN, DIM)],
     },
     LinODEnet: {
         "initialization": (DIM, LAT),
-        "input_shapes": ((LEN,), (LEN, DIM)),  # T, X
-        "output_shapes": ((LEN, DIM),),
+        "input_shapes": [(LEN,), (LEN, DIM)],  # T, X
+        "output_shapes": [(LEN, DIM)],
     },
 }
 
 
 def _make_tensors(
-    shapes: tuple[tuple[int, ...]],
+    shapes: list[tuple[int, ...]],
     *,
     batch_sizes: tuple[int, ...] = (),
     dtype: torch.dtype = torch.float32,
@@ -84,125 +79,44 @@ def _make_tensors(
         batched_shape = (*batch_sizes, *shape)
         tensor = torch.randn(batched_shape, dtype=dtype, device=device)
         tensors.append(tensor)
-
     return tuple(tensors)
 
 
-def _test_model(
-    Model: type,
+def _make_reference_shapes(
+    shapes: list[tuple[int, ...]],
     *,
-    initialization: tuple[int, ...],
-    inputs: tuple[Tensor, ...],
-    targets: tuple[Tensor, ...],
-    device: torch.device = DEVICES[0],
-) -> None:
-    LOGGER = __logger__.getChild(Model.__name__)
-    LOGGER.info("Testing...")
-
-    def err_str(s: str) -> str:
-        return (
-            f"{Model=} failed {s} with {initialization=} and "
-            f"input shapes {tuple(i.shape for i in inputs)}!"
-        )
-
-    try:  # check initialization
-        LOGGER.info(">>> INITIALIZATION TEST")
-        LOGGER.info(">>> input shapes: %s", initialization)
-        model = Model(*initialization)
-        model.to(dtype=DTYPE, device=device)
-    except Exception as E:
-        raise RuntimeError(err_str("initialization")) from E
-    LOGGER.info(">>> INITIALIZATION ✔ ")
-
-    try:  # check JIT-compatibility
-        LOGGER.info(">>> JIT-COMPILATION TEST")
-        model = torch.jit.script(model)
-    except Exception as E:
-        raise RuntimeError(err_str("JIT-compilation")) from E
-    LOGGER.info(">>> JIT-compilation ✔ ")
-
-    try:  # check forward
-        LOGGER.info(
-            ">>> FORWARD with input shapes %s", [tuple(x.shape) for x in inputs]
-        )
-        outputs = model(*inputs)
-        outputs = outputs if isinstance(outputs, tuple) else (outputs,)
-    except Exception as E:
-        raise RuntimeError(err_str("forward pass")) from E
-    assert all(output.shape == target.shape for output, target in zip(outputs, targets))
-    LOGGER.info(
-        ">>> Output shapes %s match with targets!",
-        [tuple(x.shape) for x in targets],
-    )
-    LOGGER.info(">>> FORWARD ✔ ")
-
-    try:  # check backward
-        LOGGER.info(">>> BACKWARD TEST")
-        losses = [mse_loss(output, target) for output, target in zip(outputs, targets)]
-        loss = torch.stack(losses).sum()
-        loss.backward()
-    except Exception as E:
-        raise RuntimeError(err_str("backward pass")) from E
-    LOGGER.info(">>> BACKWARD ✔ ")
-
-    try:  # check model saving
-        LOGGER.info(">>> CHECKPOINTING TEST")
-        filepath = Path.cwd().joinpath(f"model_checkpoints/{Model.__name__}.pt")
-        filepath.parent.mkdir(exist_ok=True)
-        torch.jit.save(model, filepath)
-        LOGGER.info(">>> Model saved successfully ✔ ")
-        model2 = torch.jit.load(filepath)
-        LOGGER.info(">>> Model loaded successfully ✔ ")
-
-        residual = flatten_nested_tensor(model(*inputs)) - flatten_nested_tensor(
-            model2(*inputs)
-        )
-        assert (residual == 0.0).all(), f"{torch.mean(residual**2)=}"
-        LOGGER.info(">>> Loaded Model produces equivalent outputs ✔ ")
-    except Exception as E:
-        raise RuntimeError(err_str("checkpointing")) from E
-    LOGGER.info(">>> CHECKPOINTING ✔ ")
+    batch_sizes: tuple[int, ...] = (),
+) -> list[tuple[int, ...]]:
+    return [(*batch_sizes, *shape) for shape in shapes]
 
 
-def test_all_models() -> None:
+@mark.parametrize("model, params", MODELS.items())
+def test_all_models(model: type[nn.Module], params: dict) -> None:
     r"""Check if initializations, forward and backward runs for all selected models."""
-    __logger__.info("Testing forward/backward of %s.", set(MODELS))
+    LOGGER = __logger__.getChild(model.__name__)
+    LOGGER.info("Testing...")
+    initialization = params["initialization"]
+    input_shapes = params["input_shapes"]
+    output_shapes = params["output_shapes"]
 
-    for model, params in MODELS.items():
-        LOGGER = __logger__.getChild(model.__name__)
-        LOGGER.info("Testing...")
-        initialization = params["initialization"]
-        input_shapes = params["input_shapes"]
-        output_shapes = params["output_shapes"]
+    for device, batch_sizes in product(DEVICES, BATCH_SIZES):
+        LOGGER.info(
+            "Testing %s with batch_shape %s",
+            device,
+            batch_sizes,
+        )
+        inputs = _make_tensors(
+            input_shapes, batch_sizes=batch_sizes, dtype=DTYPE, device=device
+        )
+        reference_shapes = _make_reference_shapes(
+            output_shapes, batch_sizes=batch_sizes
+        )
+        check_object(
+            model,
+            init_args=initialization,
+            input_args=inputs,
+            reference_shapes=reference_shapes,
+            device=device,
+        )
 
-        for device, batch_sizes in product(DEVICES, BATCH_SIZES):
-            LOGGER.info(
-                "Testing %s with batch_shape %s",
-                device,
-                batch_sizes,
-            )
-            inputs = _make_tensors(
-                input_shapes, batch_sizes=batch_sizes, dtype=DTYPE, device=device
-            )
-            targets = _make_tensors(
-                output_shapes, batch_sizes=batch_sizes, dtype=DTYPE, device=device
-            )
-            _test_model(
-                model,
-                initialization=initialization,
-                inputs=inputs,
-                targets=targets,
-                device=device,
-            )
-
-        LOGGER.info("Model passed all tests!!")
-
-    __logger__.info("Finished testing forward/backward of %s.", set(MODELS))
-
-
-def _main() -> None:
-    test_all_models()
-
-
-if __name__ == "__main__":
-    _main()
+    LOGGER.info("Model passed all tests!!")

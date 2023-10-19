@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from torch import Tensor, nn
 
@@ -28,6 +28,7 @@ class Encoder(Protocol):
 
         .. Signature: ``(..., d) -> (..., d)``.
         """
+        ...
 
 
 class EncoderABC(nn.Module):
@@ -43,6 +44,7 @@ class EncoderABC(nn.Module):
         Returns:
             z: The encoded tensor.
         """
+        ...
 
 
 class Identity(nn.Module):
@@ -52,10 +54,8 @@ class Identity(nn.Module):
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
     }
+    r"""Hyperparameters of the component."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__()
-
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         r""".. Signature: ``... -> ...``."""
         return x

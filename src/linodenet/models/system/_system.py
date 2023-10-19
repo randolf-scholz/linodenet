@@ -8,14 +8,16 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Any, Final, Protocol, runtime_checkable
+from collections.abc import Callable, Iterable
+from typing import Final, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import INITIALIZATIONS
+from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.initializations.functional import gaussian
-from linodenet.projections import PROJECTIONS
+from linodenet.projections import FUNCTIONAL_PROJECTIONS
+from linodenet.types import SelfMap
 from linodenet.utils import deep_dict_update
 
 
@@ -28,6 +30,7 @@ class System(Protocol):
 
         .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
         """
+        ...
 
 
 class SystemABC(nn.Module):
@@ -54,40 +57,15 @@ class LinODECell(nn.Module):
     By default, the Cell is parametrized by
 
     .. math:: e^{γ⋅A⋅∆t}x
-
-    Attributes
-    ----------
-    scalar: float
-        PARAM - The scalar $γ$ in the parametrization.
-    weight: torch.Tensor
-        PARAM - The weight matrix $A$ in the parametrization.
-    kernel: torch.Tensor
-        BUFFER - The parametrized kernel $γ⋅A$. or $ψ(γ⋅A)$ if parametrized.
-    scalar_learnable: bool
-        PARAM - Whether the scalar $γ$ is learnable or not.
-
-    Parameters
-    ----------
-    input_size: int
-    kernel_initialization: Tensor | Callable[[int], Tensor]
-    kernel_parametrization: nn.Module
-        The parametrization to apply to the kernel matrix.
-
-    Attributes
-    ----------
-    input_size:  int
-        The dimensionality of the input space.
-    output_size: int
-        The dimensionality of the output space.
-    kernel: Tensor
-        The system matrix
     """
+
+    # TODO: Use proper parametrization
 
     HP = {
         "__name__": __qualname__,  # type: ignore[name-defined]
         "__module__": __module__,  # type: ignore[name-defined]
         "input_size": None,
-        "kernel_initialization": "skew-symmetric",
+        "kernel_initialization": None,
         "kernel_parametrization": None,
         "scalar": 0.0,
         "scalar_learnable": True,
@@ -96,17 +74,16 @@ class LinODECell(nn.Module):
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of inputs."""
-
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
+    scalar_learnable: Final[bool]
+    """CONST: Whether the scalar is learnable or not."""
 
     # Parameters
     scalar: Tensor
     r"""PARAM: the scalar applied to the kernel."""
-
     weight: Tensor
     r"""PARAM: The learnable weight-matrix of the linear ODE component."""
-
     # Buffers
     kernel: Tensor
     r"""BUFFER: The system matrix of the linear ODE component."""
@@ -114,73 +91,89 @@ class LinODECell(nn.Module):
     def __init__(
         self,
         input_size: int,
-        **cfg: Any,
-    ):
+        *,
+        kernel_initialization: None | str | Tensor | Initialization = "skew-symmetric",
+        kernel_parametrization: None | str | SelfMap[Tensor] | nn.Module = None,
+        scalar: float = 0.0,
+        scalar_learnable: bool = True,
+    ) -> None:
+        """Initialize the Linear ODE Cell."""
         super().__init__()
-        config = deep_dict_update(self.HP, cfg)
+        config = deep_dict_update(
+            self.HP,
+            {
+                "input_size": input_size,
+                "kernel_initialization": kernel_initialization,
+                "kernel_parametrization": kernel_parametrization,
+                "scalar": scalar,
+                "scalar_learnable": scalar_learnable,
+            },
+        )
 
-        self.input_size = input_size
-        self.output_size = input_size
-        kernel_init = config["kernel_initialization"]
+        kernel_initialization = config["kernel_initialization"]
         kernel_parametrization = config["kernel_parametrization"]
+        scalar = config["scalar"]
+        scalar_learnable = config["scalar_learnable"]
+        del config
 
         def kernel_initialization_dispatch():
             r"""Dispatch the kernel initialization."""
-            if kernel_init is None:
-                return lambda: gaussian(input_size)
-            if isinstance(kernel_init, str):
-                assert kernel_init in INITIALIZATIONS, "Unknown initialization!"
-                _init = INITIALIZATIONS[kernel_init]
-                return lambda: _init(input_size)
-            if callable(kernel_init):
-                assert Tensor(kernel_init(input_size)).shape == (
-                    input_size,
-                    input_size,
-                )
-                return lambda: Tensor(kernel_init(input_size))
-            if isinstance(kernel_init, Tensor):
-                tensor = kernel_init
-                assert tensor.shape == (
-                    input_size,
-                    input_size,
-                ), f"Kernel has bad shape! {tensor.shape} but should be {(input_size, input_size)}"
-                return lambda: tensor
-
-            tensor = Tensor(kernel_init)
-            assert tensor.shape == (
-                input_size,
-                input_size,
-            ), f"Kernel has bad shape! {tensor.shape} but should be {(input_size, input_size)}"
-            return lambda: tensor
+            match kernel_initialization:
+                case None:
+                    return lambda: gaussian(input_size)
+                case str() as key:
+                    assert key in INITIALIZATIONS, "Unknown initialization!"
+                    _init = INITIALIZATIONS[key]
+                    return lambda: _init(input_size)
+                case Callable() as func:  # type: ignore[misc]
+                    assert Tensor(func(input_size)).shape == (input_size, input_size)  # type: ignore[unreachable]
+                    return lambda: Tensor(func(input_size))
+                case Tensor() as tensor:
+                    assert tensor.shape == (input_size, input_size), (
+                        f"Kernel has bad shape! {tensor.shape} but should be"
+                        f" {(input_size, input_size)}"
+                    )
+                    return lambda: tensor
+                case Iterable() as iterable:
+                    tensor = Tensor(iterable)
+                    assert tensor.shape == (input_size, input_size), (
+                        f"Kernel has bad shape! {tensor.shape} but should be"
+                        f" {(input_size, input_size)}"
+                    )
+                    return lambda: tensor
+                case _:
+                    raise TypeError(f"{type(kernel_initialization)=} not supported!")
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript
         def kernel_parametrization_dispatch():
             r"""Dispatch the kernel parametrization."""
-            if kernel_parametrization is None:
-                _kernel_parametrization = PROJECTIONS["identity"]
-            elif kernel_parametrization in PROJECTIONS:
-                _kernel_parametrization = PROJECTIONS[kernel_parametrization]
-            elif callable(kernel_parametrization):
-                _kernel_parametrization = kernel_parametrization
-            else:
-                raise NotImplementedError(f"{kernel_parametrization=} unknown")
-            return _kernel_parametrization
+            match kernel_parametrization:
+                case None:
+                    return FUNCTIONAL_PROJECTIONS["identity"]
+                case str() as key:
+                    assert key in FUNCTIONAL_PROJECTIONS
+                    return FUNCTIONAL_PROJECTIONS[key]
+                case Callable() as func:  # type: ignore[misc]
+                    return func  # type: ignore[unreachable]
+                case _:
+                    raise TypeError(f"{type(kernel_parametrization)=} not supported!")
 
         # initialize constants
+        self.input_size = input_size
+        self.output_size = input_size
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_parametrization = kernel_parametrization_dispatch()
-        self.scalar_learnable = config["scalar_learnable"]
+        self.scalar_learnable = scalar_learnable
 
         # initialize parameters
         self.scalar = nn.Parameter(
-            torch.tensor(config["scalar"]), requires_grad=self.scalar_learnable
+            torch.tensor(scalar), requires_grad=self.scalar_learnable
         )
         self.weight = nn.Parameter(self._kernel_initialization())
 
         # initialize buffers
-        with torch.no_grad():
-            parametrized_kernel = self.kernel_parametrization(self.weight)
-            self.register_buffer("kernel", parametrized_kernel, persistent=False)
+        # NOTE: do we need persistent=False?
+        self.register_buffer("kernel", self.kernel_parametrization(self.weight))
 
     def kernel_initialization(self) -> Tensor:
         r"""Draw an initial kernel matrix (random or static)."""

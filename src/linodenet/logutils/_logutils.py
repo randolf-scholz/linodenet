@@ -1,6 +1,5 @@
 r"""Logging utilities for linodenet."""
 
-
 # __all__ = []
 
 

@@ -1,0 +1,141 @@
+\RequirePackage{iftex}
+\RequirePDFTeX
+\NeedsTeXFormat{LaTeX2e}
+\documentclass[10pt]{article}
+\usepackage{ismll-packages}
+\usepackage{ismll-mathoperators}
+\usepackage{ismll-style}
+\usepackage{unicode-symbols}
+
+\title{Neural Filtering for State Space Models}
+\author{Randolf Scholz}
+\begin{document}
+
+\maketitle
+
+A filter is a function $F：𝓧⊕𝓨 ⟶ 𝓧$, that, given an observation $y∈𝓨$ and a state $x∈𝓧$ returns an updated state estimate $x'∈𝓧$
+%
+\begin{align*}%
+x' = F(x, y)%
+\end{align*}%
+%
+We say a filter is \emph{autoregressive}, if $𝓨=𝓧$ ($𝓨={^∙}\!𝓧$ including nan values), i.e. the observation space $𝓨$ is equal to the state space $𝓧$. In this case we usually write $x^\text{obs}$ instead of $y$.
+%
+We say an autoregressive filter is \emph{idempotent}, if and only if $x≡x^\text{obs} ⟹ x' = x$.\footnote{$u≡v$ if $uᵢ=vᵢ$ for all non-nan components.}
+More specifically, we say a filter is continuously (differentiably) idempotent, if $F(x, x^\text{obs}) = G(x-x^\text{obs})$ for some continuous (differentiable) function $G$ with $z≡0 ⟹ G(z)=0$.
+%
+We also consider the problem of dealing with multiple simultaneous measurements. In this case, we ask that the filter should be order-independent, for which there are 2 options:
+
+
+\begin{outline}%
+\1 satisfy $F(F(x, y₁), y₂) = F(F(x, y₂), y₁)$
+\1 change the filter to accept multiple y-values: $F：𝓧⊕⋃_{n∈ℕ}𝓨ⁿ ⟶ 𝓧$ such that $F(x, Y) = F(x, P⋅Y)$ for any permutation matrix $P$.
+\end{outline}%
+
+Additionally, it should satisfy a certain scale invariance:
+
+
+
+
+
+%
+\begin{example}[Linear Filter]%
+\label{ex: label}%
+We say a filter is \emph{linear}, if it is of the form $F(x,y) = Ax + By$. When is such a filter order-independent?
+%
+\begin{align*}%
+F(F(x, y₁), y₂) = F(F(x, y₁), y₂)
+&⟺ A(Ax+By₁) + By₂ = A(Ax+By₂) + By₁
+\\&⟺ ABy₁ + By₂ = ABy₂ + By₁ %
+\\&⟺ AB(y₁-y₂) = B(y₁-y₂)
+\\&⟺ (𝕀-A)B(y₁-y₂) = 0
+\end{align*}%
+%
+Since the equality must hold all combinations of $y₁$ and $y₂$, it follows that $(𝕀-A)B=0$, i.e. $B=AB$.
+%
+Alternatively, consider the multi-value linear filter $f(x, Y) = Ax + g(Y)$, where $g：𝓨^{⊕ℕ}⟶𝓧$ is linear. We can show such $g$ are of the form $g(Y) = 𝟏ₙ^⊤ Y B$.
+
+\end{example}%
+
+
+
+\begin{example}[conditional filtering]
+
+Consider a linear control system
+%
+\begin{align*}%
+\dot{x} &= Ax + Bu + ν \\%
+y &= Cx + Du + ω
+\end{align*}%
+%
+In this situation, we consider \emph{conditional filters} that have an additional input:
+%
+\begin{align*}%
+F：𝓧⊕𝓨⊕𝓤 ⟶ 𝓧, (x, y, u) ⟼ x' %
+\end{align*}%
+%
+\end{example}
+
+
+
+\section{The Classical Kalman Filter}
+
+The classical Kalman Filter is an analytical result that assumes a normal distribution evolving under linear dynamics. Since the family of normal distributions is closed under linear transformations, the distribution is normal for all times $t$.
+
+%
+\begin{lemma}[Normal distribution under linear ODE]%
+\label{lem: linear ODE normal}%
+
+Consider the stochastic linear system $̇x(t) = A(t)x(t) + f(t) + ν$, such that $x(t₀)∼𝓝(x∣μ₀，Σ₀)$. Then $xₜ∼𝓝(x∣μₜ，Σₜ)$ with
+
+Technically we  need to do Ito calculus here.
+
+
+
+%
+\begin{align*}%
+\dot{Σ}(t) &= AΣ(t) + Σ(t)A^⊤ + GQG^⊤ - ΣHR^{-1}H^⊤Σ(t)%
+\end{align*}%
+%
+
+
+\begin{proof}
+
+Without noise:
+
+Then this simply becomes a standard Linear System. We consider several cases
+
+
+\begin{enumerate}%
+	\item LTI homogeneous
+	\item LTI inhomogeneous
+	\item LTI + LTV inhomogeneity.
+	\item LTV homogeneous
+	\item LTV inhomogenous
+\end{enumerate}%
+
+
+
+\begin{align*}%
+math%
+\end{align*}%
+%
+\end{proof}
+%
+
+
+
+
+
+
+%
+\end{lemma}%
+
+
+
+
+
+
+
+
+\end{document}

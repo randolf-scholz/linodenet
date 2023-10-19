@@ -1,7 +1,7 @@
 LinODEnet - 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁work
 ===========================================================
 
-.. image:: ../diagram/linodenet-sketch.svg
+.. image:: lssm.png
    :width: 100%
    :alt: LinODEnet-sketch
 
@@ -10,11 +10,13 @@ LinODEnet - 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁
    :maxdepth: 2
    :name: mastertoc
 
-   API <autoapi/linodenet/index.rst>
-   CHANGELOG <CHANGELOG>
-   CONTRIBUTING <CONTRIBUTING>
-   LICENSE <LICENSE>
-   README <README>
+   API <apidoc/modules>
+   CHANGELOG <content/CHANGELOG>
+   CONTRIBUTING <content/CONTRIBUTING>
+   ISSUES <content/ISSUES>
+   LICENSE <content/LICENSE>
+   README <content/README>
+
 
 Installation
 ============

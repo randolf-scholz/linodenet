@@ -22,6 +22,7 @@ __all__ = [
     "functional",
     # Functions
     "canonical_skew_symmetric",
+    "canonical_symplectic",
     "diagonally_dominant",
     "gaussian",
     "low_rank",
@@ -29,6 +30,7 @@ __all__ = [
     "skew_symmetric",
     "special_orthogonal",
     "symmetric",
+    "traceless",
     # Classes
 ]
 
@@ -36,6 +38,7 @@ from linodenet.initializations import functional
 from linodenet.initializations.functional import (
     Initialization,
     canonical_skew_symmetric,
+    canonical_symplectic,
     diagonally_dominant,
     gaussian,
     low_rank,
@@ -43,10 +46,12 @@ from linodenet.initializations.functional import (
     skew_symmetric,
     special_orthogonal,
     symmetric,
+    traceless,
 )
 
 INITIALIZATIONS: dict[str, Initialization] = {
     "canonical_skew_symmetric": canonical_skew_symmetric,
+    "canonical_symplectic": canonical_symplectic,
     "diagonally_dominant": diagonally_dominant,
     "gaussian": gaussian,
     "low_rank": low_rank,
@@ -54,5 +59,6 @@ INITIALIZATIONS: dict[str, Initialization] = {
     "skew-symmetric": skew_symmetric,
     "special-orthogonal": special_orthogonal,
     "symmetric": symmetric,
+    "traceless": traceless,
 }
 r"""Dictionary containing all available initializations."""

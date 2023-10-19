@@ -7,33 +7,68 @@ Contains projections in modular form.
 """
 
 __all__ = [
+    # Base Classes
+    "ProjectionABC",
     # Classes
-    "Banded",
-    "Diagonal",
+    "Hamiltonian",
     "Identity",
-    "Masked",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
+    "Symplectic",
+    "Traceless",
+    # Masked
+    "Banded",
+    "Diagonal",
+    "LowerTriangular",
+    "Masked",
+    "UpperTriangular",
 ]
 
-from typing import Final, Optional
+from abc import abstractmethod
+from typing import Final
 
+import torch
 from torch import BoolTensor, Tensor, jit, nn
 
 from linodenet.projections.functional import (
     banded,
     diagonal,
+    hamiltonian,
     identity,
+    low_rank,
+    lower_triangular,
     masked,
     normal,
     orthogonal,
     skew_symmetric,
     symmetric,
+    symplectic,
+    traceless,
+    upper_triangular,
 )
 
 
+class ProjectionABC(nn.Module):
+    """Abstract Base Class for Projection components."""
+
+    @abstractmethod
+    def forward(self, z: Tensor, /) -> Tensor:
+        r"""Forward pass of the projection.
+
+        .. Signature: ``(..., d) -> (..., f)``.
+
+        Args:
+            z: The input tensor to be projected.
+
+        Returns:
+            x: The projected tensor.
+        """
+
+
+# region projections -------------------------------------------------------------------
+# region matrix groups -----------------------------------------------------------------
 class Identity(nn.Module):
     r"""Return x as-is.
 
@@ -80,6 +115,29 @@ class SkewSymmetric(nn.Module):
         return skew_symmetric(x)
 
 
+class LowRank(nn.Module):
+    r"""Return the closest low rank matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   rank(Y) ≤ k
+
+    One can show analytically that Y = UₖΣₖVₖ^𝖳 is the unique minimizer,
+    where X=UΣV^𝖳 is the SVD of X.
+    """
+
+    rank: Final[int]
+
+    def __init__(self, *, rank: int = 1) -> None:
+        super().__init__()
+        self.rank = rank
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of low rank matrices."""
+        return low_rank(x, rank=self.rank)
+
+
 class Orthogonal(nn.Module):
     r"""Return the closest orthogonal matrix to X.
 
@@ -99,6 +157,22 @@ class Orthogonal(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of orthogonal matrices."""
         return orthogonal(x)
+
+
+class Traceless(nn.Module):
+    r"""Return the closest traceless matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
+
+    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
+    """
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of traceless matrices."""
+        return traceless(x)
 
 
 class Normal(nn.Module):
@@ -132,6 +206,46 @@ class Normal(nn.Module):
         return normal(x)
 
 
+class Hamiltonian(nn.Module):
+    r"""Return the closest symplectic matrix to X.
+
+    .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+
+    Alternatively, the above is equivalent to
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J= 𝔻₊₁-𝔻₋₁
+
+    where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return hamiltonian(x)
+
+
+class Symplectic(nn.Module):
+    r"""Return the closest symplectic matrix to X.
+
+    .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+
+    Alternatively, the above is equivalent to
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J= 𝔻₊₁-𝔻₋₁
+
+    where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return symplectic(x)
+
+
+# endregion matrix groups --------------------------------------------------------------
+
+
+# region masked projections ------------------------------------------------------------
 class Diagonal(nn.Module):
     r"""Return the closest diagonal matrix to X.
 
@@ -140,6 +254,13 @@ class Diagonal(nn.Module):
     .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
 
     One can show analytically that the unique smallest norm minimizer is $Y = 𝕀⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
     """
 
     @jit.export
@@ -153,15 +274,22 @@ class Banded(nn.Module):
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = B⊙Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝔹⊙Y
 
-    One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝔹⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
     """
 
     upper: Final[int]
     lower: Final[int]
 
-    def __init__(self, upper: int = 0, lower: Optional[int] = None) -> None:
+    def __init__(self, upper: int = 0, lower: int = 0) -> None:
         super().__init__()
         self.upper = upper
         self.lower = upper if lower is None else lower
@@ -172,23 +300,92 @@ class Banded(nn.Module):
         return banded(x, upper=self.upper, lower=self.lower)
 
 
+class UpperTriangular(nn.Module):
+    r"""Return the closest upper triangular matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   𝕌⊙Y = Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕌⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
+    """
+
+    upper: Final[int]
+
+    def __init__(self, upper: int = 0) -> None:
+        super().__init__()
+        self.upper = upper
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of upper triangular matrices."""
+        return upper_triangular(x, upper=self.upper)
+
+
+class LowerTriangular(nn.Module):
+    r"""Return the closest lower triangular matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   𝕃⊙Y = Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕃⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
+    """
+
+    lower: Final[int]
+
+    def __init__(self, lower: int = 0) -> None:
+        super().__init__()
+        self.lower = lower
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of lower triangular matrices."""
+        return lower_triangular(x, lower=self.lower)
+
+
 class Masked(nn.Module):
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = M⊙Y
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕄⊙Y
 
-    One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕄⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
     """
 
-    m: BoolTensor
+    mask: BoolTensor
 
-    def __init__(self, m: BoolTensor) -> None:
+    def __init__(self, mask: bool | Tensor) -> None:
         super().__init__()
-        self.m = m
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of masked matrices."""
-        return masked(x, self.m)
+        return masked(x, self.mask)
+
+
+# endregion masked projections ---------------------------------------------------------
+# endregion projections ----------------------------------------------------------------

@@ -29,8 +29,8 @@ def is_dunder(s: str) -> bool:
 class ConfigMetaclass(ABCMeta):
     r"""Metaclass for `BaseConfig`."""
 
-    # fmt: off
     _FORBIDDEN_FIELDS = {
+        # fmt: off
         "clear",       # Removes all the elements from the dictionary
         "copy",        # Returns a copy of the dictionary
         "fromkeys",    # Returns a dictionary with the specified keys and value
@@ -41,9 +41,10 @@ class ConfigMetaclass(ABCMeta):
         "popitem",     # Removes the last inserted key-value pair
         "setdefault",  # Returns the value of the specified key or set default
         "update",      # Updates the dictionary with the specified key-value pairs
-        "values",      # Returns a list of all the values in the dictionary
+        "values",
+        # Returns a list of all the values in the dictionary
+        # fmt: on
     }
-    # fmt: on
 
     def __new__(
         cls,
@@ -70,16 +71,12 @@ class ConfigMetaclass(ABCMeta):
         # check for dunder fields
         DUNDER_FIELDS = {key for key in FIELDS if is_dunder(key)}
         if DUNDER_FIELDS:
-            raise ValueError(
-                f"Dunder fields are not allowed!" f"Found {DUNDER_FIELDS!r}."
-            )
+            raise ValueError(f"Dunder fields are not allowed!Found {DUNDER_FIELDS!r}.")
 
         # check all caps fields
         ALLCAPS_FIELDS = {key for key in FIELDS if is_allcaps(key)}
         if ALLCAPS_FIELDS:
-            raise ValueError(
-                f"ALLCAPS fields are reserved!" f"Found {ALLCAPS_FIELDS!r}."
-            )
+            raise ValueError(f"ALLCAPS fields are reserved!Found {ALLCAPS_FIELDS!r}.")
 
         NAME = config_type.__qualname__.rsplit(".", maxsplit=1)[0]
         patched_fields = [
