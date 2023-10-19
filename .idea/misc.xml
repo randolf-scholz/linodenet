@@ -8,7 +8,7 @@
   <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/src/linodenet/lib">
     <contentRoot DIR="$PROJECT_DIR$" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Poetry (linodenet) (2)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="linodenet" project-jdk-type="Python SDK" />
   <component name="PythonCompatibilityInspectionAdvertiser">
     <option name="version" value="3" />
   </component>
