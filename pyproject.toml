@@ -6,7 +6,7 @@
 # region project configuration ------------------------------------------------------
 [project]
 name = "linodenet"
-version = "0.3.0"
+version = "0.3.1"
 authors = [{name="Randolf Scholz", email="randolf.scholz@gmail.com"}]
 description = "Linear ODE Network for Time-Series Forecasting"
 
@@ -525,7 +525,7 @@ line-length = 120
 # region poetry configuration ----------------------------------------------------------
 [tool.poetry]
 name = "linodenet"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Randolf Scholz <rscholz@ismll.de>"]
 description = "Linear ODE Network for Time Series Forecasting"
 
