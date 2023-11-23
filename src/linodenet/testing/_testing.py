@@ -70,7 +70,7 @@ def to_device(
 @overload
 def to_device(x: Tensor, /, *, device: str | torch.device = "cpu") -> Tensor: ...
 @overload
-def to_device(x: Scalar, /, *, device: str | torch.device = "cpu") -> Scalar: ...  # type: ignore[misc]
+def to_device(x: Scalar, /, *, device: str | torch.device = "cpu") -> Scalar: ...  # type: ignore[overload-overlap]
 @overload
 def to_device(
     x: Mapping[str, T], /, *, device: str | torch.device = "cpu"
@@ -171,7 +171,7 @@ def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
 @overload
 def make_tensors_parameters(x: Tensor, /) -> nn.Parameter: ...
 @overload
-def make_tensors_parameters(x: Scalar, /) -> Scalar: ...  # type: ignore[misc]
+def make_tensors_parameters(x: Scalar, /) -> Scalar: ...  # type: ignore[overload-overlap]
 @overload
 def make_tensors_parameters(x: Mapping[str, T], /) -> dict[str, T]: ...
 @overload

@@ -54,8 +54,8 @@ class ConcatEmbedding(nn.Module):
     r"""Maps $x ⟼ [x,w]$."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": int,
         "output_size": int,
     }
@@ -130,8 +130,8 @@ class ConcatProjection(nn.Module):
     r"""Maps $z = [x,w] ⟼ x$."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": int,
         "output_size": int,
     }
@@ -197,8 +197,8 @@ class LinearEmbedding(nn.Module):
     r"""Maps $x ↦ Ax + b$ and $y ↦ A⁺(y-b)$."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": int,
         "output_size": int,
     }

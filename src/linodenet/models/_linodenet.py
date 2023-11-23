@@ -28,8 +28,8 @@ class LinODE(nn.Module):
     r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "cell": LinODECell.HP,
         "kernel_initialization": None,
         "kernel_projection": None,
@@ -96,8 +96,8 @@ class LatentLinODECell(nn.Module):
     """Latent Linear ODE Cell."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "hidden_size": None,
         "latent_size": None,
@@ -237,8 +237,8 @@ class LinODEnet(nn.Module):
     """
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "hidden_size": None,
         "latent_size": None,

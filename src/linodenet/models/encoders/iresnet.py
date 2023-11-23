@@ -427,8 +427,8 @@ class iResNetBlock(nn.Module):
     r"""BUFFER: The termination error during backward propagation."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "atol": 1e-08,
         "rtol": 1e-05,
         "maxiter": 10,
@@ -535,8 +535,8 @@ class iResNet(nn.Module):
     r"""CONST: The dimensionality of the outputs."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "maxiter": 10,
         "input_size": None,
         "dropout": None,
@@ -634,8 +634,8 @@ class iLowRankLayer(nn.Module):
     """
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
     }
     r"""The hyperparameter dictionary"""
 

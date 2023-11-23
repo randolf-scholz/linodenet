@@ -18,8 +18,8 @@ class MLP(nn.Sequential):
     r"""A standard Multi-Layer Perceptron."""
 
     HP: dict = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "inputs_size": None,
         "output_size": None,
         "hidden_size": None,

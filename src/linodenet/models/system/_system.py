@@ -62,8 +62,8 @@ class LinODECell(nn.Module):
     # TODO: Use proper parametrization
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "kernel_initialization": None,
         "kernel_parametrization": None,

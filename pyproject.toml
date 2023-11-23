@@ -29,10 +29,10 @@ classifiers = [
 # dependencies
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "numpy>=1.26.1",
+    "numpy>=1.26.2",
     "pyyaml>=6.0.1",
-    "scipy>=1.11.3",
-    "torch>=2.1.0",
+    "scipy>=1.11.4",
+    "torch>=2.1.1",
     "typing-extensions>=4.8.0",
 ]
 
@@ -40,15 +40,15 @@ dependencies = [
 dev = ["linodenet[test,docs,extras,typing,flake8,linters,formatters,devtools]"]
 test = [
     "coverage>=7.3.2",
-    "matplotlib>=3.8.0",
+    "matplotlib>=3.8.2",
     "psutil>=5.9.6",
-    "pygal>=3.0.0",
+    "pygal>=3.0.4",
     "pytest-benchmark[histogram]>=4.0.0",
     "pytest-cov>=4.1.0",
     "pytest-repeat>=0.9.3",
-    "pytest-rerunfailures>=12.0",
-    "pytest-xdist>=3.3.1",
-    "pytest>=7.4.2",
+    "pytest-rerunfailures>=13.0",
+    "pytest-xdist>=3.5.0",
+    "pytest>=7.4.3",
     "tqdm>=4.66.1",
     #"tsdm@git+https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git"
 ]
@@ -56,8 +56,8 @@ docs = [
     "docutils>=0.20.1",
     "myst_parser>=2.0.0",
     "nbsphinx>=0.9.3",
-    "piccolo-theme>=0.18.0",
-    "pydata-sphinx-theme>=0.14.1",
+    "piccolo-theme>=0.19.0",
+    "pydata-sphinx-theme>=0.14.3",
     "sphinx-autoapi>=3.0.0",
     "sphinx-automodapi>=0.16.0",
     "sphinx-copybutton>=0.5.2",
@@ -71,22 +71,22 @@ devtools = [
     "devtools>=0.12.2",
     "johnnydep>=1.20.3",
     "ninja>=1.11.1",
-    "pip>=23.3",
+    "pip>=23.3.1",
     "pip-tools>=7.3.0",
-    "pipdeptree>=2.13.0",
+    "pipdeptree>=2.13.1",
     "pipreqs>=0.4.13",
     "pre-commit>=3.5.0",
     "pybadges>=3.0.1",
     "pydeps>=1.12.17",
-    "setuptools>=68.2.2",
+    "setuptools>=69.0.2",
     "twine>=4.0.2",
-    "wheel>=0.41.2",
+    "wheel>=0.41.3",
 ]
 extras = [
     "ipympl>=0.9.3",
     "ipywidgets>=8.1.1",
-    "jupyterlab>=4.0.7",
-    "jupyterlab>=4.0.7",
+    "jupyterlab>=4.0.9",
+    "jupyterlab>=4.0.9",
     "notebook>=7.0.6",
     "openml>=0.14.1",
     "openpyxl>=3.1.2",
@@ -94,8 +94,8 @@ extras = [
     "torchinfo>=1.8.0",
 ]
 typing = [
-    "mypy>=1.6.1",
-    "pyright>=1.1.332",
+    "mypy>=1.7.0",
+    "pyright>=1.1.337",
     "types-colorama>=0.4.15",
     "types-decorator>=5.1.8",
     "types-docutils>=0.20.0",
@@ -117,7 +117,7 @@ flake8 = [
     "flake8-bugbear>=23.9.16",
     "flake8-comprehensions>=3.14.0",
     "flake8-docstrings>=1.7.0",
-    "flake8-pyi>=23.10.0",
+    "flake8-pyi>=23.11.0",
     "flake8-pyproject>=1.2.3",
     "flake8-rst>=0.8.0",
     "flake8-rst-docstrings>=0.3.0",
@@ -128,14 +128,14 @@ linters = [
     "pycodestyle>=2.11.1",
     "pydocstyle>=6.3.0",
     "pyflakes>=3.1.0",
-    "pylint>=3.0.1",
+    "pylint>=3.0.2",
     "pylint-gitlab>=2.0.0",
-    "ruff>=0.1.0",
-    "ruff-lsp>=0.0.41",
-    "slotscheck>=0.17.0",
+    "ruff>=0.1.6",
+    "ruff-lsp>=0.0.45",
+    "slotscheck>=0.17.1",
 ]
 formatters = [
-    "black[d,jupyter]>=23.10.0",
+    "black[d,jupyter]>=23.11.0",
     "blacken-docs>=1.16.0",
     "isort>=5.12.0",
     "nbstripout-fast>=1.0.2",
@@ -314,7 +314,7 @@ files = ["src/", "tests/"]
 plugins = ["numpy.typing.mypy_plugin"]
 
 # use new type inference, remove when mypy 1.7 is released
-new_type_inference = true
+new_type_inference = false
 
 # platform configuration
 python_version = "3.11"
@@ -362,7 +362,7 @@ show_error_context = true
 show_column_numbers = true
 show_error_end = true
 hide_error_codes = false
-pretty = true
+pretty = false
 no_error_summary = false
 no_color_output = false
 show_absolute_path = false
@@ -566,17 +566,17 @@ priority = "explicit"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.12"
-numpy = ">=1.26.1"
+numpy = ">=1.26.2"
 pyyaml = ">=6.0.1"
-scipy = ">=1.11.3"
-torch = ">=2.1.0"
+scipy = ">=1.11.4"
+torch = ">=2.1.1"
 typing-extensions = ">=4.8.0"
 
 
 [tool.poetry.group.extra.dependencies]
 ipympl = ">=0.9.3"
 ipywidgets = ">=8.1.1"
-jupyterlab = ">=4.0.7"
+jupyterlab = ">=4.0.9"
 notebook = ">=7.0.6"
 openml = ">=0.14.1"
 openpyxl = ">=3.1.2"
@@ -586,15 +586,15 @@ torchinfo = ">=1.8.0"
 
 [tool.poetry.group.test.dependencies]
 coverage = ">=7.3.2"
-matplotlib = ">=3.8.0"
+matplotlib = ">=3.8.2"
 psutil = ">=5.9.6"
-pygal = ">=3.0.0"
-pytest = ">=7.4.2"
+pygal = ">=3.0.4"
+pytest = ">=7.4.3"
 pytest-benchmark = ">=4.0.0"
 pytest-cov = ">=4.1.0"
 pytest-repeat = ">=0.9.3"
-pytest-rerunfailures = ">=12.0"
-pytest-xdist = ">=3.3.1"
+pytest-rerunfailures = ">=13.0"
+pytest-xdist = ">=3.5.0"
 tqdm = ">=4.66.1"
 tsdm = {version = ">=0.5.8", source="berlin"}
 
@@ -606,11 +606,11 @@ myst_parser = ">=2.0.0"
 nbsphinx = ">=0.9.3"
 # numpydoc = ">=1.5.0"
 # pandoc = ">=2.3"
-piccolo-theme = ">=0.18.0"
-pydata-sphinx-theme = ">=0.14.1"
+piccolo-theme = ">=0.19.0"
+pydata-sphinx-theme = ">=0.14.3"
 sphinx = ">=7.2.6"
 sphinx-autoapi = ">=3.0.0"
-sphinx-autodoc-typehints = ">=1.24.0"
+sphinx-autodoc-typehints = ">=1.25.2"
 sphinx-automodapi = ">=0.16.0"
 sphinx-copybutton = ">=0.5.2"
 sphinx-math-dollar = ">=1.2.1"
@@ -625,16 +625,16 @@ cmake = ">=3.27.7"
 devtools = ">=0.12.2"
 johnnydep = ">=1.20.3"
 ninja = ">=1.11.1"
-pip = ">=23.3"
+pip = ">=23.3.1"
 pip-tools = ">=7.3.0"
-pipdeptree = ">=2.13.0"
+pipdeptree = ">=2.13.1"
 pipreqs = ">=0.4.13"
 pre-commit = ">=3.5.0"
 pybadges = ">=3.0.1"
 pydeps = ">=1.12.17"
-setuptools = ">=68.2.2"
+setuptools = ">=69.0.2"
 twine = ">=4.0.2"
-wheel = ">=0.41.2"
+wheel = ">=0.41.3"
 
 
 [tool.poetry.group.flake8.dependencies]
@@ -643,14 +643,14 @@ flake8-annotations = ">=3.0.1"
 flake8-bugbear = ">=23.9.16"
 flake8-comprehensions = ">=3.14.0"
 flake8-docstrings = ">=1.7.0"
-flake8-pyi = ">=23.10.0"
+flake8-pyi = ">=23.11.0"
 flake8-pyproject = ">=1.2.3"
 flake8-rst = ">=0.8.0"
 flake8-rst-docstrings = ">=0.3.0"
 
 
 [tool.poetry.group.formatters.dependencies]
-black = { version = ">=23.10.0", extras = ["d", "jupyter"] }
+black = { version = ">=23.11.0", extras = ["d", "jupyter"] }
 blacken-docs = ">=1.16.0"
 isort = ">=5.12.0"
 nbstripout-fast = ">=1.0.2"
@@ -663,16 +663,16 @@ mccabe = ">=0.7.0"
 pycodestyle = ">=2.11.1"
 pydocstyle = ">=6.3.0"
 pyflakes = ">=3.1.0"
-pylint = ">=3.0.1"
+pylint = ">=3.0.2"
 pylint-gitlab = ">=2.0.0"
-ruff = ">=0.1.0"
-ruff-lsp = ">=0.0.41"
-slotscheck = ">=0.17.0"
+ruff = ">=0.1.6"
+ruff-lsp = ">=0.0.45"
+slotscheck = ">=0.17.1"
 
 
 [tool.poetry.group.typing.dependencies]
-mypy = ">=1.6.1"
-pyright = ">=1.1.332"
+mypy = ">=1.7.0"
+pyright = ">=1.1.337"
 types-colorama = ">=0.4.15"
 types-decorator = ">=5.1.8"
 types-docutils = ">=0.20.0"
@@ -690,5 +690,5 @@ types-urllib3 = ">=1.26.25"
 
 
 [tool.poetry.group.unsorted.dependencies]
-pygments = ">=2.16.1"
+pygments = ">=2.17.2"
 # endregion poetry configuration -------------------------------------------------------

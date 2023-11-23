@@ -67,14 +67,14 @@ class LatentStateSpaceModel(nn.Module):
         MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
 
-    LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")  # type: ignore[name-defined]
+    LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")
 
     name: Final[str] = __name__
     r"""str: The name of the model."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "hidden_size": None,
         "latent_size": None,

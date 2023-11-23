@@ -73,20 +73,16 @@ class _ResNet(nn.Module):
             print(f"{self.category_embeddings.weight.shape=}")
 
         self.first_layer = nn.Linear(d_in, d)
-        self.layers = nn.ModuleList(
-            [
-                nn.ModuleDict(
-                    {
-                        "norm": make_normalization(),
-                        "linear0": nn.Linear(
-                            d, d_hidden * (2 if activation.endswith("glu") else 1)
-                        ),
-                        "linear1": nn.Linear(d_hidden, d),
-                    }
-                )
-                for _ in range(n_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([
+            nn.ModuleDict({
+                "norm": make_normalization(),
+                "linear0": nn.Linear(
+                    d, d_hidden * (2 if activation.endswith("glu") else 1)
+                ),
+                "linear1": nn.Linear(d_hidden, d),
+            })
+            for _ in range(n_layers)
+        ])
         self.last_normalization = make_normalization()
         self.head = nn.Linear(d, d_out)
 
@@ -142,8 +138,8 @@ class ResNetBlock(nn.Sequential):
     """
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "num_layers": 2,
         "layer": ReverseDense.HP,
@@ -184,8 +180,8 @@ class ResNet(nn.ModuleList):
     r"""A ResNet model."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "num_blocks": 5,
         "block": ResNetBlock.HP,

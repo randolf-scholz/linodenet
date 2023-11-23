@@ -352,8 +352,8 @@ class iSequential(nn.Module):
     r"""CONST: Whether to use the inverse or the forward map"""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "maxiter": 10,
         "input_size": None,
         "dropout": None,

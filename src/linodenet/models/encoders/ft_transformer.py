@@ -125,12 +125,10 @@ class Tokenizer(nn.Module):
             x = torch.cat([x, categories], dim=1)
 
         if self.bias is not None:
-            bias = torch.cat(
-                [
-                    torch.zeros(1, self.bias.shape[1], device=x.device),
-                    self.bias,
-                ]
-            )
+            bias = torch.cat([
+                torch.zeros(1, self.bias.shape[1], device=x.device),
+                self.bias,
+            ])
             x += bias[None]
 
         return x
@@ -277,18 +275,16 @@ class FTTransformer(nn.Module):
         d_hidden = int(d_token * d_ffn_factor)
         self.layers = nn.ModuleList([])
         for layer_idx in range(n_layers):
-            layer = nn.ModuleDict(
-                {
-                    "attention": MultiheadAttention(
-                        d_token, n_heads, attention_dropout, initialization
-                    ),
-                    "linear0": nn.Linear(
-                        d_token, d_hidden * (2 if activation.endswith("glu") else 1)
-                    ),
-                    "linear1": nn.Linear(d_hidden, d_token),
-                    "norm1": make_normalization(),
-                }
-            )
+            layer = nn.ModuleDict({
+                "attention": MultiheadAttention(
+                    d_token, n_heads, attention_dropout, initialization
+                ),
+                "linear0": nn.Linear(
+                    d_token, d_hidden * (2 if activation.endswith("glu") else 1)
+                ),
+                "linear1": nn.Linear(d_hidden, d_token),
+                "norm1": make_normalization(),
+            })
 
             if not prenormalization or layer_idx:
                 layer["norm0"] = make_normalization()

@@ -27,8 +27,8 @@ class Series(nn.Sequential):
     r"""An augmentation of nn.Sequential."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "modules": [None],
     }
 
@@ -79,8 +79,8 @@ class Parallel(nn.ModuleList):
     r"""Modules in parallel."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "modules": [None],
     }
 
@@ -131,8 +131,8 @@ class Repeat(nn.Sequential):
     r"""An copies of a module multiple times."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "module": None,
         "copies": 1,
         "independent": True,
@@ -197,8 +197,8 @@ class Sum(nn.ModuleList):
     r"""Add Module Outputs for same inputs."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "modules": [],
     }
 

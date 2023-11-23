@@ -51,8 +51,8 @@ class Identity(nn.Module):
     r"""Identity with HP attribute."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
     }
     r"""Hyperparameters of the component."""
 

@@ -124,8 +124,8 @@ class PseudoKalmanFilter(nn.Module):
     """
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "hidden_size": None,
         "alpha": "last-value",
@@ -218,8 +218,8 @@ class LinearFilter(nn.Module):
     """
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "alpha": "last-value",
         "alpha_learnable": False,
         "autoregressive": False,
@@ -343,8 +343,8 @@ class NonLinearFilter(nn.Module):
     r"""Non-linear Layers stacked on top of linear core."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
@@ -595,8 +595,8 @@ class KalmanCell(nn.Module):
     """
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
@@ -736,8 +736,8 @@ class SequentialFilterBlock(FilterABC):
     r"""Non-linear Layers stacked on top of linear core."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "autoregressive": False,
         "filter": KalmanCell.HP,
@@ -792,8 +792,8 @@ class SequentialFilter(nn.Sequential):  # FIXME: use ModuleList instead?
     """The output size of the filter."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
@@ -848,8 +848,8 @@ class RecurrentCellFilter(FilterABC):
     r"""Any Recurrent Cell allowed."""
 
     HP = {
-        "__name__": __qualname__,  # type: ignore[name-defined]
-        "__module__": __module__,  # type: ignore[name-defined]
+        "__name__": __qualname__,
+        "__module__": __module__,
         "concat_mask": True,
         "input_size": None,
         "hidden_size": None,
