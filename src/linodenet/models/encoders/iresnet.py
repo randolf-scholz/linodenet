@@ -71,13 +71,10 @@ class SpectralNorm(torch.autograd.Function):
 
     where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
 
-    References
-    ----------
-    - | `Spectral Normalization for Generative Adversarial Networks
-        <https://openreview.net/forum?id=B1QRgziT->`_
-      | Takeru Miyato, Toshiki Kataoka, Masanori Koyama, Yuichi Yoshida
-      | `International Conference on Learning Representations 2018
-        <https://iclr.cc/Conferences/2018>`_
+    References:
+        `Spectral Normalization for Generative Adversarial Networks <https://openreview.net/forum?id=B1QRgziT->`_
+        Takeru Miyato, Toshiki Kataoka, Masanori Koyama, Yuichi Yoshida
+        `International Conference on Learning Representations 2018 <https://iclr.cc/Conferences/2018>`_
     """
 
     @staticmethod
@@ -135,20 +132,19 @@ class LinearContraction(nn.Module):
     This is achieved by normalizing the weight matrix by
     $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
 
-    Attributes
-    ----------
-    input_size:  int
-        The dimensionality of the input space.
-    output_size: int
-        The dimensionality of the output space.
-    c: Tensor
-        The regularization hyperparameter.
-    spectral_norm: Tensor
-        BUFFER: The value of `‖W‖_2`
-    weight: Tensor
-        The weight matrix.
-    bias: Tensor or None
-        The bias Tensor if present, else None.
+    Attributes:
+        input_size:  int
+            The dimensionality of the input space.
+        output_size: int
+            The dimensionality of the output space.
+        c: Tensor
+            The regularization hyperparameter.
+        spectral_norm: Tensor
+            BUFFER: The value of `‖W‖_2`
+        weight: Tensor
+            The weight matrix.
+        bias: Tensor or None
+            The bias Tensor if present, else None.
     """
 
     input_size: Final[int]
@@ -220,18 +216,17 @@ class AltLinearContraction(nn.Module):
     This is achieved by normalizing the weight matrix by
     `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
 
-    Attributes
-    ----------
-    input_size:  int
-        The dimensionality of the input space.
-    output_size: int
-        The dimensionality of the output space.
-    c: Tensor
-        The regularization hyperparameter
-    kernel: Tensor
-        The weight matrix
-    bias: Tensor or None
-        The bias Tensor if present, else None.
+    Attributes:
+        input_size:  int
+            The dimensionality of the input space.
+        output_size: int
+            The dimensionality of the output space.
+        c: Tensor
+            The regularization hyperparameter
+        kernel: Tensor
+            The weight matrix
+        bias: Tensor or None
+            The bias Tensor if present, else None.
     """
 
     # Constants
@@ -384,26 +379,25 @@ class iResNetBlock(nn.Module):
     The activation function must have Lipschitz constant $≤1$ such as `~torch.nn.ReLU`,
     `~torch.nn.ELU` or `~torch.nn.Tanh`)
 
-    Attributes
-    ----------
-    input_size:  int
-        The dimensionality of the input space.
-    hidden_size: int, default=⌊√n⌋
-        The dimensionality of the latent space.
-    output_size: int
-        The dimensionality of the output space.
-    maxiter: int
-        Maximum number of iteration in `inverse` pass
-    bottleneck:  nn.Sequential
-        The bottleneck layers
-    bias: bool, default=True
-        Whether to use bias
-    HP: dict
-        Nested dictionary containing the hyperparameters.
-    residual: Tensor
-        BUFFER: The termination error during backward propagation.
-    bottleneck: nn.Sequential
-        The bottleneck layer.
+    Attributes:
+        input_size:  int
+            The dimensionality of the input space.
+        hidden_size: int, default=⌊√n⌋
+            The dimensionality of the latent space.
+        output_size: int
+            The dimensionality of the output space.
+        maxiter: int
+            Maximum number of iteration in `inverse` pass
+        bottleneck:  nn.Sequential
+            The bottleneck layers
+        bias: bool, default=True
+            Whether to use bias
+        HP: dict
+            Nested dictionary containing the hyperparameters.
+        residual: Tensor
+            BUFFER: The termination error during backward propagation.
+        bottleneck: nn.Sequential
+            The bottleneck layer.
     """
 
     # Constants
@@ -509,23 +503,21 @@ class iResNetBlock(nn.Module):
 class iResNet(nn.Module):
     r"""Invertible ResNet consists of a stack of `iResNetBlock` modules.
 
-    References
-    ----------
-    - | Invertible Residual Networks
-      | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
-      | International Conference on Machine Learning 2019
-      | http://proceedings.mlr.press/v97/behrmann19a.html
+    Attributes:
+        input_size: int
+            The dimensionality of the input space.
+        output_size: int
+            The dimensionality of the output space.
+        blocks:  nn.Sequential
+            Sequential model consisting of the iResNetBlocks
+        HP: dict
+            Nested dictionary containing the hyperparameters.
 
-    Attributes
-    ----------
-    input_size: int
-        The dimensionality of the input space.
-    output_size: int
-        The dimensionality of the output space.
-    blocks:  nn.Sequential
-        Sequential model consisting of the iResNetBlocks
-    HP: dict
-        Nested dictionary containing the hyperparameters.
+    References:
+        Invertible Residual Networks
+        Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
+        International Conference on Machine Learning 2019
+        http://proceedings.mlr.press/v97/behrmann19a.html
     """
 
     # Constants

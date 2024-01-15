@@ -1,9 +1,8 @@
 r"""Projections for the Linear ODE Networks.
 
-Notes
------
-Contains projections in modular form.
-  - See `~linodenet.projections.functional` for functional implementations.
+Notes:
+    Contains projections in modular form.
+    See `~linodenet.projections.functional` for functional implementations.
 """
 
 __all__ = [
@@ -148,9 +147,8 @@ class Orthogonal(nn.Module):
     One can show analytically that $Y = UV^𝖳$ is the unique minimizer,
     where $X=UΣV^𝖳$ is the SVD of $X$.
 
-    References
-    ----------
-    - `<https://math.stackexchange.com/q/2215359>`_
+    References:
+        https://math.stackexchange.com/q/2215359
     """
 
     @jit.export

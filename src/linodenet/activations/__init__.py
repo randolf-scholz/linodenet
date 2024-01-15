@@ -1,10 +1,9 @@
 r"""Implementations of activation functions.
 
-Notes
------
-Contains activations in both functional and modular form.
-  - See `linodenet.activations.functional` for functional implementations.
-  - See `linodenet.activations.modular` for modular implementations.
+Notes:
+    Contains activations in both functional and modular form.
+    - See `linodenet.activations.functional` for functional implementations.
+    - See `linodenet.activations.modular` for modular implementations.
 """
 
 __all__ = [
@@ -119,10 +118,8 @@ r"""Dictionary containing all available functional activations in torch."""
 
 FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     **TORCH_FUNCTIONAL_ACTIVATIONS,
-    **{
-        "reglu": reglu,
-        "geglu": geglu,
-    },
+    "reglu": reglu,
+    "geglu": geglu,
 }
 r"""Dictionary containing all available functional activations."""
 
@@ -160,7 +157,6 @@ r"""Dictionary containing all available activations in torch."""
 
 MODULAR_ACTIVATIONS: dict[str, type[Activation]] = {
     **TORCH_MODULAR_ACTIVATIONS,
-    **{},
 }
 r"""Dictionary containing all available activations."""
 

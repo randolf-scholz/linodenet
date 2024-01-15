@@ -587,11 +587,10 @@ class KalmanCell(nn.Module):
     Note that in the autoregressive case, i.e. $H=𝕀$, the equation can be simplified
     towards $x̂' ⇝ x̂ + ψ( B ∏ₘᵀ A ∏ₘ (y - Hx̂) )$.
 
-    References
-    ----------
-    - | Kalman filter with outliers and missing observations
-      | T. Cipra, R. Romera
-      | https://link.springer.com/article/10.1007/BF02564705
+    References:
+        Kalman filter with outliers and missing observations
+        T. Cipra, R. Romera
+        https://link.springer.com/article/10.1007/BF02564705
     """
 
     HP = {

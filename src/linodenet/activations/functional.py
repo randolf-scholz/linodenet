@@ -1,9 +1,8 @@
 r"""Implementations of activation functions.
 
-Notes
------
-Contains activations in functional form.
-  - See `linodenet.activations.modular` for modular implementations.
+Notes:
+    Contains activations in functional form.
+    - See `linodenet.activations.modular` for modular implementations.
 """
 
 __all__ = [

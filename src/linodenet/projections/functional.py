@@ -1,9 +1,8 @@
 r"""Projections for the Linear ODE Networks.
 
-Notes
------
-Contains projections in functional form.
-  - See `~linodenet.projections.modular` for modular implementations.
+Notes:
+    Contains projections in functional form.
+      - See `~linodenet.projections.modular` for modular implementations.
 """
 
 __all__ = [
@@ -117,9 +116,8 @@ def orthogonal(x: Tensor) -> Tensor:
     One can show analytically that $Y = UV^𝖳$ is the unique minimizer,
     where $X=UΣV^𝖳$ is the SVD of $X$.
 
-    References
-    ----------
-    - `<https://math.stackexchange.com/q/2215359>`_
+    References:
+        https://math.stackexchange.com/q/2215359
     """
     U, _, Vh = torch.linalg.svd(x)
     return torch.einsum("...ij, ...jk -> ...ik", U, Vh)

@@ -1,9 +1,8 @@
 r"""Regularizations for the Linear ODE Networks.
 
-Notes
------
-Contains regularizations in functional form.
-  - See `~linodenet.regularizations.modular` for modular implementations.
+Notes:
+    Contains regularizations in functional form.
+    See `~linodenet.regularizations.modular` for modular implementations.
 """
 
 __all__ = [

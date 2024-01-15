@@ -37,34 +37,33 @@ class LatentStateSpaceModel(nn.Module):
     | Decoder `π` (default: :class:`~iResNet`)          | `\hat x_{i+1}  =  π(\hat z_{i+1})`   |
     +---------------------------------------------------+--------------------------------------+
 
-    Attributes
-    ----------
-    input_size:  int
-        The dimensionality of the input space.
-    hidden_size: int
-        The dimensionality of the latent space.
-    output_size: int
-        The dimensionality of the output space.
-    ZERO: Tensor
-        BUFFER: A constant tensor of value float(0.0)
-    xhat_pre: Tensor
-        BUFFER: Stores pre-jump values.
-    xhat_post: Tensor
-        BUFFER: Stores post-jump values.
-    zhat_pre: Tensor
-        BUFFER: Stores pre-jump latent values.
-    zhat_post: Tensor
-        BUFFER: Stores post-jump latent values.
-    kernel: Tensor
-        PARAM: The system matrix of the linear ODE component.
-    encoder: nn.Module
-        MODULE: Responsible for embedding $x̂→ẑ$.
-    system: nn.Module
-        MODULE: Responsible for propagating $ẑ_t→ẑ_{t+{∆t}}$.
-    decoder: nn.Module
-        MODULE: Responsible for projecting $ẑ→x̂$.
-    filter: nn.Module
-        MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
+    Attributes:
+        input_size:  int
+            The dimensionality of the input space.
+        hidden_size: int
+            The dimensionality of the latent space.
+        output_size: int
+            The dimensionality of the output space.
+        ZERO: Tensor
+            BUFFER: A constant tensor of value float(0.0)
+        xhat_pre: Tensor
+            BUFFER: Stores pre-jump values.
+        xhat_post: Tensor
+            BUFFER: Stores post-jump values.
+        zhat_pre: Tensor
+            BUFFER: Stores pre-jump latent values.
+        zhat_post: Tensor
+            BUFFER: Stores post-jump latent values.
+        kernel: Tensor
+            PARAM: The system matrix of the linear ODE component.
+        encoder: nn.Module
+            MODULE: Responsible for embedding $x̂→ẑ$.
+        system: nn.Module
+            MODULE: Responsible for propagating $ẑ_t→ẑ_{t+{∆t}}$.
+        decoder: nn.Module
+            MODULE: Responsible for projecting $ẑ→x̂$.
+        filter: nn.Module
+            MODULE: Responsible for updating $(x̂, x_{obs}) →x̂'$.
     """
 
     LOGGER = __logger__.getChild(f"{__package__}/{__qualname__}")

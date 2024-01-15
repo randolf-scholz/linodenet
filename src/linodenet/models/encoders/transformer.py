@@ -20,19 +20,16 @@ r"""TransformerEncoder: Transformer based Encoder model."""
 class Transformer(nn.Module):
     r"""TransformerEncoder is a stack of N encoder layers.
 
-    Parameters
-    ----------
-    encoder_layer: an instance of the TransformerEncoderLayer() class (required).
-    num_layers: the number of sub-encoder-layers in the encoder (required).
-    norm: the layer normalization component (optional).
+    Attributes:
+        encoder_layer: an instance of the TransformerEncoderLayer() class (required).
+        num_layers: the number of sub-encoder-layers in the encoder (required).
+        norm: the layer normalization component (optional).
 
-    Examples
-    --------
-    ..code-block:: python
-        encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8)
-        transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)
-        src = torch.rand(10, 32, 512)
-        out = transformer_encoder(src)
+    Examples:
+        >>> encoder_layer = nn.TransformerEncoderLayer(d_model=512, nhead=8)
+        >>> transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=6)
+        >>> src = torch.rand(10, 32, 512)
+        >>> out = transformer_encoder(src)
     """
 
     __constants__ = ["norm"]

@@ -7,10 +7,9 @@ Lemma
 
 In this case: $e^{A}$
 
-Notes
------
-Contains initializations in both modular and functional form.
-  - See `~linodenet.initializations.functional` for functional implementations.
+Notes:
+    Contains initializations in both modular and functional form.
+    - See `~linodenet.initializations.functional` for functional implementations.
 """
 
 __all__ = [

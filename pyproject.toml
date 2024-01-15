@@ -262,20 +262,139 @@ rst-directives = ["Signature", "literalinclude"]
 # endregion flake8 configuration -------------------------------------------------------
 
 
+# region ruff configuration ------------------------------------------------------------
+[tool.ruff]
+src = ["src/"]
+indent-width = 4
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.per-file-ignores]
+
+[tool.ruff.lint]
+select = [
+    "A",     # builtins
+    "B",     # bugbear
+    "C4",    # comprehensions
+    "D",     # pydocstyle
+    "E",     # pycodestyle
+    "EXE",   # executable
+    "F",     # pyflakes
+    "I",     # import-order
+    "PL",    # pylint
+    "PIE",   # pie
+    "PYI",   # pyi
+    "PT",    # pytest
+    "NPY",   # numpy
+    "PERF",  # performance related
+    "SIM",   # simplify
+#    "FBT",   # boolean-trap
+    "RUF",   # ruff specific
+    "ISC",   # implicit-str-concat
+    "TRY",   # tryceratops
+    # "FURB",  # refurb
+]
+ignore = [
+    # pydocstyle
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D105",  # Missing docstring in magic method
+    "D107",  # Missing docstring in __init__
+    # pycodestyle
+    "E201",  # Whitespace after '('
+    "E202",  # Whitespace before ')'
+    "E203",  # Whitespace before ':'
+    "E221",  # Multiple spaces before operator
+    "E226",  # Missing whitespace around arithmetic operator
+    "E231",  # Missing whitespace after ','
+    "E241",  # Multiple spaces after comma
+    "E271",  # Multiple spaces after keyword
+    "E272",  # Multiple spaces before keyword
+    # pylint
+    "PLC1901",  # compare-to-empty-string
+    "PLC2401",  # non-ascii-name
+    "PLR0124",  # Name compared with itself
+    "PLR2004",  # Magic value used in comparison
+    "PLW1641",  # Object does not implement __hash__ method
+    # pylint "too-many-*" rules
+    "PLR0904",  # Too many public methods
+    "PLR0911",  # Too many return statements
+    "PLR0912",  # Too many branches
+    "PLR0913",  # Too many arguments in function definition
+    "PLR0914",  # Too many local variables
+    "PLR0915",  # Too many statements
+    "PLR0916",  # Too many boolean expressions
+    "PLR0917",  # Too many positional arguments
+    # PYI
+    "PYI019",  # Methods like ... should return typing.Self instead of custom TypeVar
+    # PyTest
+    "PT013",   # Found incorrect import of pytest, use simple import pytest instead
+    "PT018",   # Assertion should be broken down into multiple parts
+    # simplify
+    "SIM118",  # Use `key in dict` instead of `key in dict.keys()`
+    "SIM300",  # Yoda conditions are discouraged
+    # RUFF
+    "RUF001",  # ambiguous-unicode-character-string
+    "RUF002",  # ambiguous-unicode-character-docstring
+    "RUF003",  # ambiguous-unicode-character-comment
+    "RUF012",  # Mutable class attributes should be annotated with typing.ClassVar # FIXME: PEP 603
+    "RUF013",  # PEP 484 prohibits implicit Optional # FIXME: https://github.com/astral-sh/ruff/issues/9334
+    # tryceratops
+    "TRY003",  # Avoid specifying long messages outside the exception class
+    # refurb
+    "FURB140", # reimplemented-starmap (less efficient than comprehension)
+]
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 120
+max-line-length = 120
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+
+[tool.ruff.lint.pylint]
+allow-dunder-method-names = ["__array__", "__dataframe__", "_repr_html_", "__pre_init__"]
+
+[tool.ruff.format]
+preview = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+# endregion ruff configuration ---------------------------------------------------------
+
+
 # region PyLint Configuration ----------------------------------------------------------
 [tool.pylint]
 [tool.pylint."MESSAGES CONTROL"]
 enable = ["useless-suppression"]
 disable = [
-    "C0103",  # invalid-name
+    "C0103",  # invalid-name  # Ridiculous...
 #    "C0144",  # non-ascii-name
     "C0204",  # bad-mcs-classmethod-argument
     "C0415",  # import-outside-toplevel
-    "E0611",  # no-name-in-module
+    # "E0611",  # no-name-in-module
     "E1101",  # no-member  # FIXME: too many false positives
-    "E1121",  # too-many-function-args  # too many false positives
-    "E1123",  # unexpected-keyword-arg  # too many false positives
+    "E1102",  # not-callable  # FIXME: too many false positives (torch)
+    "E1121",  # too-many-function-args  # FIXME: too many false positives
+    "E1123",  # unexpected-keyword-arg  # FIXME: too many false positives
     "E1130",  # invalid-unary-operand-type
+    "E1139",  # invalid-metaclass  # FIXME: too many false positives
     "R0801",  # similar lines
     "R0902",  # too-many-instance-attributes
     "R0903",  # too-few-public-methods
@@ -283,8 +402,8 @@ disable = [
     "R0913",  # too-many-arguments
     "R0914",  # too-many-locals
     "R0915",  # too-many-statements
-    #    "W0221",  # arguments-differ
-    #    "W0511",  # (fixme) (todos)
+    # "W0221",  # arguments-differ
+    # "W0511",  # (fixme) (todos)
     "W1113",  # keyword-arg-before-vararg
     "W2301",  # unnecessary-ellipsis
 ]
@@ -313,15 +432,14 @@ generated-members = ["numpy.*", "torch.*"]
 files = ["src/", "tests/"]
 plugins = ["numpy.typing.mypy_plugin"]
 
-# use new type inference, remove when mypy 1.7 is released
-new_type_inference = false
-
 # platform configuration
 python_version = "3.11"
 #platform = "linux"
 
 disable_error_code = [
     "func-returns-value",  # checks style, not type https://github.com/python/mypy/issues/6549
+    "overload-overlap",  # see https://mypy.readthedocs.io/en/stable/more_types.html#type-checking-the-variants
+    # we do not use this check
 ]
 
 # warnings
@@ -400,7 +518,7 @@ profile = "black"
 src_paths = ["src/", "tests/"]
 known_first_party = ["linodenet", "tsdm"]
 combine_as_imports = true
-# flake8-profiles: appnexus, cryptography, edited, google, pep8, pycharm, smarkets
+# flake8-profiles: appnexus, cryptography, edited, google, pep8, pycharm, smarkets.
 # black-compatible: black, appnexus
 # endregion isort Configuration --------------------------------------------------------
 
@@ -450,10 +568,15 @@ executionEnvironments = [
 useLibraryCodeForTypes = false  # otherwise hundreds of pandas false-positives.
 # Type Check Diagnostics Settings
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md#type-check-diagnostics-settings
-reportMissingImports = false
-reportMissingTypeStubs = false
-reportUnsupportedDunderAll = false
+#reportMissingImports = false
+#reportMissingTypeStubs = false
+#reportUnsupportedDunderAll = false
+reportOverlappingOverload = false
 reportPrivateImportUsage = false
+reportUnnecessaryTypeIgnoreComment = false  # highlight any unnecessary # type: ignore
+reportSelfClsParameterName = false
+reportIncompatibleMethodOverride = false  # FIXME: temporary
+reportIncompatibleVariableOverride = false  # FIXME: temporary
 # endregion Pyright Configuration ------------------------------------------------------
 
 
@@ -514,12 +637,6 @@ exclude_lines = [
 [tool.coverage.run]
 source = ["src/"]
 # endregion coverage configuration -----------------------------------------------------
-
-
-# region ruff configuration ------------------------------------------------------------
-[tool.ruff]
-line-length = 120
-# endregion ruff configuration ---------------------------------------------------------
 
 
 # region poetry configuration ----------------------------------------------------------
@@ -588,6 +705,7 @@ torchinfo = ">=1.8.0"
 coverage = ">=7.4.0"
 matplotlib = ">=3.8.2"
 psutil = ">=5.9.7"
+hypothesis = {version=">=6.93.1", extras=["numpy", "pandas", "pytest"]}
 pygal = ">=3.0.4"
 pytest = ">=7.4.4"
 pytest-benchmark = ">=4.0.0"
@@ -676,6 +794,7 @@ pyright = ">=1.1.345"
 types-colorama = ">=0.4.15"
 types-decorator = ">=5.1.8"
 types-docutils = ">=0.20.0"
+types-jsonschema = ">=4.20.0"
 types-pillow = ">=10.2.0"
 types-protobuf = ">=4.24.0"
 types-psutil = ">=5.9.5"
