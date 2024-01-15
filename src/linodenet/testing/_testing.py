@@ -40,12 +40,12 @@ from torch import Tensor, jit, nn
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.testing._utils import assert_close
-from linodenet.types import Device, Nested, Scalar, T, callable_var, module_var
+from linodenet.types import Device, Nested, Scalar, T, module_var
 
 __logger__ = logging.getLogger(__name__)
 Tree: TypeAlias = Nested[Tensor | Scalar]
 Func: TypeAlias = Callable[..., Nested[Tensor]]
-DeviceArg: TypeAlias = str | torch.device  # Literal["cpu", "cuda"]
+DeviceArg: TypeAlias = None | str | torch.device  # Literal["cpu", "cuda"]
 
 
 # region utility functions for tensors AND scalars -------------------------------------
@@ -78,9 +78,11 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
     """Move a nested tensor to a device."""
     match x:
         case Tensor() as tensor:
-            return tensor.to(device=torch.device(device))
+            target_device = None if device is None else torch.device(device)
+            return tensor.to(device=target_device)
         case nn.Module() as module:
-            return module.to(device=torch.device(device))
+            target_device = None if device is None else torch.device(device)
+            return module.to(device=target_device)
         case None | bool() | int() | float() | str() as scalar:  # Scalar
             # FIXME: https://github.com/python/cpython/issues/106246
             return scalar
@@ -296,41 +298,21 @@ def check_jit(module_or_func, /, *, device=None):
     return loaded
 
 
-@overload
 def check_initialization(
-    obj: type[module_var],
+    module_type: type[module_var],
     /,
     *,
-    init_args: Sequence[Tree] = ...,
-    init_kwargs: Mapping[str, Tree] = ...,
-) -> module_var: ...
-@overload
-def check_initialization(
-    obj: module_var,
-    /,
-    *,
-    init_args: Sequence[Tree] = ...,
-    init_kwargs: Mapping[str, Tree] = ...,
-) -> module_var: ...
-@overload
-def check_initialization(
-    obj: callable_var,
-    /,
-    *,
-    init_args: Sequence[Tree] = ...,
-    init_kwargs: Mapping[str, Tree] = ...,
-) -> callable_var: ...
-def check_initialization(obj, /, *, init_args=(), init_kwargs=EMPTY_MAP):
+    args: Sequence[Tree] = (),
+    kwargs: Mapping[str, Tree] = EMPTY_MAP,
+) -> module_var:
     """Test initialization of a module."""
-    if not isinstance(obj, type):
-        return obj
-    if issubclass(obj, nn.Module):
-        try:
-            module = obj(*init_args, **init_kwargs)
-        except Exception as exc:
-            raise RuntimeError("Model initialization failed!") from exc
-    else:
-        raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
+    if not issubclass(module_type, nn.Module):
+        raise TypeError(f"Unsupported type {type(module_type)} for `obj`!")
+
+    try:
+        module = module_type(*args, **kwargs)
+    except Exception as exc:
+        raise RuntimeError("Model initialization failed!") from exc
 
     return module
 
@@ -349,6 +331,8 @@ def check_optim(
         original_outputs = model(*input_args, **input_kwargs)
         original_loss = get_norm(original_outputs)
         # original_params = [w.clone().detach() for w in model.parameters()]
+
+    loss = original_loss
 
     # perform iterations
     for _ in range(niter):
@@ -402,9 +386,20 @@ def check_object(
     # endregion get name and logger ----------------------------------------------------
 
     # region get initialized model if class --------------------------------------------
-    model = check_initialization(obj, init_args=init_args, init_kwargs=init_kwargs)
+    model: nn.Module | Func
+
+    match obj:
+        case type() as cls:
+            model = check_initialization(cls, args=init_args, kwargs=init_kwargs)
+        case nn.Module() as model:
+            pass
+        case Callable() as func:  # type: ignore[misc]
+            model = func
+        case _:
+            raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
+
     logger.info(">>> Initialization ✔ ")
-    # endregion get initialized model if class --------------------------------------------
+    # endregion get initialized model if class -----------------------------------------
 
     # region get parameters ------------------------------------------------------------
     model_parameters = get_parameters(model) if isinstance(model, nn.Module) else []
@@ -441,18 +436,24 @@ def check_object(
     # endregion get reference model ----------------------------------------------------
 
     # region change device -------------------------------------------------------------
-    if device is None:
-        device = get_device(model)
+    if isinstance(model, nn.Module):
+        if device is None:
+            device = get_device(model)
 
-    try:
-        model = model.to(device=device)
+        try:  # cast model
+            model = model.to(device=device)
+        except Exception as exc:
+            raise RuntimeError("Couldn't move model to device!") from exc
+
+        # cast parameters
+    try:  # cast other parameters
         input_args = to_device(input_args, device=device)
         if reference_outputs is not None:
             reference_outputs = to_device(reference_outputs, device=device)
         if reference_gradients is not None:
             reference_gradients = to_device(reference_gradients, device=device)
     except Exception as exc:
-        raise RuntimeError("Couldn't move model/tensors to device!") from exc
+        raise RuntimeError("Couldn't move inputs to device!") from exc
 
     logger.info(">>> Moved model/tensors to Device ✔ ")
     # endregion change device ----------------------------------------------------------
@@ -602,9 +603,7 @@ def check_class(
     # endregion get name and logger ----------------------------------------------------
 
     # region get initialized model if class --------------------------------------------
-    model = check_initialization(
-        model_class, init_args=init_args, init_kwargs=init_kwargs
-    )
+    model = check_initialization(model_class, args=init_args, kwargs=init_kwargs)
     logger.info(">>> Initialization ✔ ")
     # endregion get initialized model if class --------------------------------------------
 

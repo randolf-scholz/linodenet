@@ -48,10 +48,10 @@ def check_optimization(model: nn.Module, inputs: Tensor, targets: Tensor) -> Non
         original_outputs = model(inputs)
         original_loss = mse_loss(original_outputs, targets)
         original_params = [w.clone().detach() for w in model.parameters()]
+        loss = original_loss
+        outputs = original_outputs
 
-    update_parametrizations(
-        model
-    )  # <-- crucial, otherwise no update in first iteration!
+    update_parametrizations(model)  # crucial, otherwise no update in first iteration!
 
     for _ in range(5):
         model.zero_grad(set_to_none=True)
@@ -201,17 +201,17 @@ def test_optimization_manual() -> None:
 
     # region test training -------------------------------------------------------------
     check_optimization(model, inputs, targets)
-    # end region test training ---------------------------------------------------------
+    # endregion test training ----------------------------------------------------------
 
     # region test training -------------------------------------------------------------
     scripted = check_jit_scripting(model)
     check_optimization(scripted, inputs, targets)
-    # end region test training ---------------------------------------------------------
+    # endregion test training ----------------------------------------------------------
 
     # region test training -------------------------------------------------------------
     loaded = check_jit_serialization(scripted)
     check_optimization(loaded, inputs, targets)
-    # end region test training ---------------------------------------------------------
+    # endregion test training ----------------------------------------------------------
 
 
 def test_optimization_missing() -> None:
@@ -226,6 +226,7 @@ def test_optimization_missing() -> None:
     with torch.no_grad():
         optimizer = SGD(model.parameters(), lr=0.1)
         original_loss = mse_loss(model(inputs), targets)
+        loss = original_loss
 
     for _ in range(5):
         model.zero_grad(set_to_none=True)
@@ -266,6 +267,7 @@ def test_update_parametrization() -> None:
     with torch.no_grad():
         optimizer = SGD(model.parameters(), lr=0.1)
         original_loss = mse_loss(model(inputs), targets)
+        loss = original_loss
 
     for _ in range(5):
         model.zero_grad(set_to_none=True)
@@ -291,6 +293,7 @@ def test_optimizer_hook() -> None:
         optimizer = SGD(model.parameters(), lr=0.1)
         register_optimizer_hook(optimizer, model)
         original_loss = mse_loss(model(inputs), targets)
+        loss = original_loss
 
     for _ in range(5):
         model.zero_grad(set_to_none=True)
@@ -316,6 +319,7 @@ def test_optimization_cached() -> None:
         optimizer = SGD(model.parameters(), lr=0.1)
         register_optimizer_hook(optimizer, model)
         original_loss = mse_loss(model(inputs), targets)
+        loss = original_loss
 
     for _ in range(5):
         with cached(model):

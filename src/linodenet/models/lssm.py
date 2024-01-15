@@ -15,7 +15,7 @@ from typing_extensions import Self
 
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
-from linodenet.models.filters import Filter, MissingValueFilter
+from linodenet.models.filters import MissingValueFilter
 from linodenet.models.system import LinODECell
 from linodenet.utils import deep_dict_update, initialize_from_dict, pad
 
@@ -192,7 +192,7 @@ class LatentStateSpaceModel(nn.Module):
         self.encoder = encoder
         self.system = system
         self.decoder = decoder
-        self.filter: Filter = filter
+        self.filter: nn.Module = filter
 
         self.input_size = int(self.filter.input_size)
         self.output_size = int(self.filter.output_size)

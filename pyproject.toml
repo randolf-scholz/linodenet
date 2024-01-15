@@ -95,7 +95,7 @@ extras = [
 ]
 typing = [
     "mypy>=1.8.0",
-    "pyright>=1.1.346",
+    "pyright>=1.1.347",
     "types-colorama>=0.4.15",
     "types-decorator>=5.1.8",
     "types-docutils>=0.20.0",
@@ -792,7 +792,7 @@ slotscheck = ">=0.17.1"
 
 [tool.poetry.group.typing.dependencies]
 mypy = ">=1.8.0"
-pyright = ">=1.1.346"
+pyright = ">=1.1.347"
 types-colorama = ">=0.4.15"
 types-decorator = ">=5.1.8"
 types-docutils = ">=0.20.0"

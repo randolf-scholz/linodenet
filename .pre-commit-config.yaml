@@ -129,7 +129,7 @@ repos:
         files: ^dev/
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.346
+    rev: v1.1.347
     hooks:
       - id: pyright
         # not everything works with pyright yet
@@ -151,20 +151,7 @@ repos:
             |tests/linodenet/utils
             |tests/linodenet/constants.py
             |tests/linodenet/types.py
-            #|src/linodenet/
-            |src/linodenet/activations
-            |src/linodenet/config
-            |src/linodenet/initializations
-            |src/linodenet/lib
-            |src/linodenet/logutils
-            #|src/linodenet/models
-            |src/linodenet/parametrize
-            |src/linodenet/projections
-            |src/linodenet/regularizations
-            #|src/linodenet/testing
-            |src/linodenet/utils
-            |src/linodenet/constants.py
-            |src/linodenet/types.py
+            |src/
           )
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
     rev: v0.1.49

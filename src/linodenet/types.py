@@ -76,10 +76,10 @@ class SelfMap(Protocol[T]):
 class HasHyperparameters(Protocol):
     """Protocol for types that have hyperparameters."""
 
-    HP: Final[str]
+    HP: Final[str]  # type: ignore[misc]
     """Default hyperparameters of the type."""
 
-    config: Final[dict]
+    config: Final[dict]  # type: ignore[misc]
     """Concrete hyperparameters of an instance."""
 
 

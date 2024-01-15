@@ -16,7 +16,7 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import Initialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
-from linodenet.models.filters import Filter, MissingValueFilter
+from linodenet.models.filters import MissingValueFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
 from linodenet.utils import deep_dict_update, initialize_from_dict, pad
@@ -179,7 +179,7 @@ class LatentLinODECell(nn.Module):
         self.system: nn.Module = initialize_from_dict(config["System"])
         self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
         self.projection: nn.Module = initialize_from_dict(config["Projection"])
-        self.filter: Filter = initialize_from_dict(config["Filter"])
+        self.filter: nn.Module = initialize_from_dict(config["Filter"])
 
         # Parameters
         self.kernel = self.system.kernel
@@ -361,7 +361,7 @@ class LinODEnet(nn.Module):
         self.system: nn.Module = initialize_from_dict(config["System"])
         self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
         self.projection: nn.Module = initialize_from_dict(config["Projection"])
-        self.filter: Filter = initialize_from_dict(config["Filter"])
+        self.filter: nn.Module = initialize_from_dict(config["Filter"])
 
         # Parameters
         assert isinstance(self.system.kernel, Tensor)

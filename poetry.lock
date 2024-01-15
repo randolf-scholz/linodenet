@@ -2996,13 +2996,13 @@ test = ["ipykernel", "nbconvert", "nbformat", "pytest"]
 
 [[package]]
 name = "nest-asyncio"
-version = "1.5.8"
+version = "1.5.9"
 description = "Patch asyncio to allow nested event loops"
 optional = false
 python-versions = ">=3.5"
 files = [
-    {file = "nest_asyncio-1.5.8-py3-none-any.whl", hash = "sha256:accda7a339a70599cb08f9dd09a67e0c2ef8d8d6f4c07f96ab203f2ae254e48d"},
-    {file = "nest_asyncio-1.5.8.tar.gz", hash = "sha256:25aa2ca0d2a5b5531956b9e273b45cf664cae2b145101d73b86b199978d48fdb"},
+    {file = "nest_asyncio-1.5.9-py3-none-any.whl", hash = "sha256:61ec07ef052e72e3de22045b81b2cc7d71fceb04c568ba0b2e4b2f9f5231bec2"},
+    {file = "nest_asyncio-1.5.9.tar.gz", hash = "sha256:d1e1144e9c6e3e6392e0fcf5211cb1c8374b5648a98f1ebe48e5336006b41907"},
 ]
 
 [[package]]
@@ -4266,13 +4266,13 @@ files = [
 
 [[package]]
 name = "pyright"
-version = "1.1.346"
+version = "1.1.347"
 description = "Command line wrapper for pyright"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pyright-1.1.346-py3-none-any.whl", hash = "sha256:70dd864a1dab488fdf7d26f84ccf7781f279647f5a808026271b3b82c9c8e3a3"},
-    {file = "pyright-1.1.346.tar.gz", hash = "sha256:0b75f5d18736282900406aa0dccf23cdf26776e5363edf57ea380a1faf6986b3"},
+    {file = "pyright-1.1.347-py3-none-any.whl", hash = "sha256:14dd31b594aa3ec464894f66b8a2d206ebef1501e52789eb88cf2a79b0907fbe"},
+    {file = "pyright-1.1.347.tar.gz", hash = "sha256:17ea09322f60080f82abc4e622e43d1a5ebaa407ba86963b15b2bc01cca256e0"},
 ]
 
 [package.dependencies]
@@ -6454,4 +6454,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.12"
-content-hash = "b0b79ad761a09d4922d89dd9067e35068de51ce926d8e52f40a89611684b2067"
+content-hash = "d192bc0fc5b5ccaffef0dd15ae40bf06d568c85d665bc6827f9edcb5352ccd1a"

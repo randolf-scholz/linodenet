@@ -6,7 +6,7 @@ __all__ = [
 ]
 
 import signal
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, ContextDecorator
 from types import FrameType, TracebackType
 
@@ -73,9 +73,9 @@ def assert_close(
                 x = mapping[key]
                 y = reference[key]
                 assert_close(x, y, rtol=rtol, atol=atol)
-        case Iterable() as iterable:
-            assert isinstance(reference, Iterable)
-            for output, target in zip(iterable, reference, strict=True):
+        case Sequence() as sequence:
+            assert isinstance(reference, Sequence)
+            for output, target in zip(sequence, reference, strict=True):
                 assert_close(output, target, rtol=rtol, atol=atol)
         case _:
             raise TypeError(f"Unsupported type {type(values)} for `outputs`!")
