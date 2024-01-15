@@ -27,7 +27,7 @@ from linodenet.utils import (
     ReverseDense,
     ReZeroCell,
     deep_dict_update,
-    initialize_from_config,
+    initialize_from_dict,
 )
 
 
@@ -164,7 +164,7 @@ class ResNetBlock(nn.Sequential):
         layers: list[nn.Module] = list(modules)
 
         for _ in range(config["num_layers"]):
-            module = initialize_from_config(config["layer"])
+            module = initialize_from_dict(config["layer"])
             # self.add_module(f"subblock{k}", module)
             layers.append(module)
 
@@ -201,7 +201,7 @@ class ResNet(nn.ModuleList):
         blocks: list[nn.Module] = [] if modules is None else list(modules)
 
         for _ in range(config["num_blocks"]):
-            module = initialize_from_config(config["block"])
+            module = initialize_from_dict(config["block"])
             # self.add_module(f"block{k}", module)
             blocks.append(module)
 

@@ -17,12 +17,12 @@ __all__ = [
 
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Final
+from typing import Any, Final, Never
 
 import torch
 from torch import BoolTensor, FloatTensor
 
-EMPTY_MAP: Final[Mapping] = MappingProxyType({})
+EMPTY_MAP: Final[Mapping[Any, Never]] = MappingProxyType({})
 """CONSTANT: Immutable Empty dictionary."""
 TRUE: Final[BoolTensor] = torch.tensor(True, dtype=torch.bool)  # type: ignore[assignment]
 """A constant tensor representing the boolean value `True`."""

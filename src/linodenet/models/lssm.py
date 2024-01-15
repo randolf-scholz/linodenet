@@ -15,9 +15,9 @@ from typing_extensions import Self
 
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
-from linodenet.models.filters import Filter, RecurrentCellFilter
+from linodenet.models.filters import Filter, MissingValueFilter
 from linodenet.models.system import LinODECell
-from linodenet.utils import deep_dict_update, initialize_from_config, pad
+from linodenet.utils import deep_dict_update, initialize_from_dict, pad
 
 __logger__ = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class LatentStateSpaceModel(nn.Module):
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
-        "Filter": RecurrentCellFilter.HP | {"autoregressive": True},
+        "Filter": MissingValueFilter.HP | {"autoregressive": True},
         "Encoder": ResNet.HP,
         "Decoder": ResNet.HP,
     }
@@ -162,13 +162,13 @@ class LatentStateSpaceModel(nn.Module):
         config["Filter"] |= {"hidden_size": hidden_size}
 
         cls.LOGGER.debug("Initializing Encoder %s", config["Encoder"])
-        encoder: nn.Module = initialize_from_config(config["Encoder"])
+        encoder: nn.Module = initialize_from_dict(config["Encoder"])
         cls.LOGGER.debug("Initializing System %s", config["Encoder"])
-        system: nn.Module = initialize_from_config(config["System"])
+        system: nn.Module = initialize_from_dict(config["System"])
         cls.LOGGER.debug("Initializing Decoder %s", config["Encoder"])
-        decoder: nn.Module = initialize_from_config(config["Decoder"])
+        decoder: nn.Module = initialize_from_dict(config["Decoder"])
         cls.LOGGER.debug("Initializing Filter %s", config["Encoder"])
-        filter: nn.Module = initialize_from_config(config["Filter"])  # noqa: A001
+        filter: nn.Module = initialize_from_dict(config["Filter"])  # noqa: A001
 
         return cls(
             encoder=encoder,

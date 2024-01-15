@@ -11,7 +11,7 @@ from typing import Optional
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder as _TransformerEncoder
 
-from linodenet.utils import autojit, deep_dict_update, initialize_from_config
+from linodenet.utils import autojit, deep_dict_update, initialize_from_dict
 
 TransformerEncoder = autojit(_TransformerEncoder)
 r"""TransformerEncoder: Transformer based Encoder model."""
@@ -71,7 +71,7 @@ class Transformer(nn.Module):
         config = deep_dict_update(self.HP, cfg)
 
         self.layers = nn.ModuleList(
-            initialize_from_config(config["EncoderLayer"])
+            initialize_from_dict(config["EncoderLayer"])
             for _ in range(config["num_layers"])
         )
         self.num_layers = config["num_layers"]

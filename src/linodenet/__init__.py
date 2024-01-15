@@ -3,9 +3,6 @@ r"""Linear Ordinary Differential Equation Recurrent Neural Network."""
 __all__ = [
     # Constants
     "__version__",
-    "CONFIG",
-    # Functions
-    "info",
     # Sub-Modules
     "config",
     "initializations",
@@ -29,7 +26,6 @@ from linodenet import (
     testing,
     utils,
 )
-from linodenet.config import CONFIG
 
 # single-source version
 try:

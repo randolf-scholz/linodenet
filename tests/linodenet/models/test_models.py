@@ -7,14 +7,13 @@ import torch
 from pytest import mark
 from torch import Tensor, nn
 
-import linodenet
-from linodenet.config import PROJECT
+from linodenet.config import CONFIG, PROJECT
 from linodenet.models import LinearContraction, LinODE, LinODEnet, iResNet, iResNetBlock
 from linodenet.models.system import LinODECell
 from linodenet.testing import check_object
 
 __logger__ = logging.getLogger(__name__)
-linodenet.CONFIG.autojit = False
+CONFIG.autojit = False
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 OUTER_BATCH = 3

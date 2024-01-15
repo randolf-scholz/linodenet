@@ -16,10 +16,10 @@ from torch import Tensor, jit, nn
 from linodenet.initializations import Initialization
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
-from linodenet.models.filters import Filter, RecurrentCellFilter
+from linodenet.models.filters import Filter, MissingValueFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
-from linodenet.utils import deep_dict_update, initialize_from_config, pad
+from linodenet.utils import deep_dict_update, initialize_from_dict, pad
 
 __logger__ = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class LinODE(nn.Module):
 
         self.input_size = input_size
         self.output_size = input_size
-        self.cell: nn.Module = initialize_from_config(config["cell"])
+        self.cell: nn.Module = initialize_from_dict(config["cell"])
 
         # Buffers
         self.register_buffer("xhat", torch.tensor(()), persistent=False)
@@ -105,7 +105,7 @@ class LatentLinODECell(nn.Module):
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
-        "Filter": RecurrentCellFilter.HP | {"autoregressive": True},
+        "Filter": MissingValueFilter.HP | {"autoregressive": True},
         "Encoder": ResNet.HP,
         "Decoder": ResNet.HP,
     }
@@ -174,12 +174,12 @@ class LatentLinODECell(nn.Module):
         self.register_buffer("dt", torch.tensor(()), persistent=False)
 
         # Submodules
-        self.embedding: nn.Module = initialize_from_config(config["Embedding"])
-        self.encoder: nn.Module = initialize_from_config(config["Encoder"])
-        self.system: nn.Module = initialize_from_config(config["System"])
-        self.decoder: nn.Module = initialize_from_config(config["Decoder"])
-        self.projection: nn.Module = initialize_from_config(config["Projection"])
-        self.filter: Filter = initialize_from_config(config["Filter"])
+        self.embedding: nn.Module = initialize_from_dict(config["Embedding"])
+        self.encoder: nn.Module = initialize_from_dict(config["Encoder"])
+        self.system: nn.Module = initialize_from_dict(config["System"])
+        self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
+        self.projection: nn.Module = initialize_from_dict(config["Projection"])
+        self.filter: Filter = initialize_from_dict(config["Filter"])
 
         # Parameters
         self.kernel = self.system.kernel
@@ -246,7 +246,7 @@ class LinODEnet(nn.Module):
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
-        "Filter": RecurrentCellFilter.HP | {"autoregressive": True},
+        "Filter": MissingValueFilter.HP | {"autoregressive": True},
         "Encoder": ResNet.HP,
         "Decoder": ResNet.HP,
     }
@@ -356,12 +356,12 @@ class LinODEnet(nn.Module):
         self.register_buffer("predictions", torch.tensor(()), persistent=False)
 
         # Submodules
-        self.embedding: nn.Module = initialize_from_config(config["Embedding"])
-        self.encoder: nn.Module = initialize_from_config(config["Encoder"])
-        self.system: nn.Module = initialize_from_config(config["System"])
-        self.decoder: nn.Module = initialize_from_config(config["Decoder"])
-        self.projection: nn.Module = initialize_from_config(config["Projection"])
-        self.filter: Filter = initialize_from_config(config["Filter"])
+        self.embedding: nn.Module = initialize_from_dict(config["Embedding"])
+        self.encoder: nn.Module = initialize_from_dict(config["Encoder"])
+        self.system: nn.Module = initialize_from_dict(config["System"])
+        self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
+        self.projection: nn.Module = initialize_from_dict(config["Projection"])
+        self.filter: Filter = initialize_from_dict(config["Filter"])
 
         # Parameters
         assert isinstance(self.system.kernel, Tensor)

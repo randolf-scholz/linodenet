@@ -15,7 +15,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.utils._utils import deep_dict_update, initialize_from_config
+from linodenet.utils._utils import deep_dict_update, initialize_from_dict
 
 
 class ReZeroCell(nn.Module):
@@ -73,7 +73,7 @@ class ReZero(nn.Sequential):
 
 
 class ReverseDense(nn.Module):
-    r"""ReverseDense module $x→A⋅ϕ(x)$."""
+    r"""ReverseDense module $x ⟼ A⋅ϕ(x) + b$."""
 
     HP = {
         "__name__": __qualname__,
@@ -107,7 +107,7 @@ class ReverseDense(nn.Module):
         self.input_size = config["input_size"] = input_size
         self.output_size = config["output_size"] = output_size
 
-        self.activation: nn.Module = initialize_from_config(config["activation"])
+        self.activation: nn.Module = initialize_from_dict(config["activation"])
 
         self.linear = nn.Linear(
             config["input_size"], config["output_size"], config["bias"]

@@ -15,7 +15,7 @@ from typing import Any, Final, Optional, Self
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.utils._utils import deep_dict_update, initialize_from_config
+from linodenet.utils._utils import deep_dict_update, initialize_from_dict
 
 
 class Series(nn.Sequential):
@@ -35,7 +35,7 @@ class Series(nn.Sequential):
         if config["modules"] != [None]:
             del config["modules"][0]
             for _, layer in enumerate(config["modules"]):
-                module = initialize_from_config(layer)
+                module = initialize_from_dict(layer)
                 layers.append(module)
 
         super().__init__(*layers)
@@ -91,7 +91,7 @@ class Parallel(nn.ModuleList):
         if config["modules"] != [None]:
             del config["modules"][0]
             for _, layer in enumerate(config["modules"]):
-                module = initialize_from_config(layer)
+                module = initialize_from_dict(layer)
                 layers.append(module)
 
         super().__init__(layers)
@@ -139,7 +139,7 @@ class Repeat(nn.Sequential):
             if isinstance(config["module"], nn.Module):
                 module = config["module"]
             else:
-                module = initialize_from_config(config["module"])
+                module = initialize_from_dict(config["module"])
 
             if config["independent"]:
                 copies.append(module)
@@ -202,7 +202,7 @@ class Sum(nn.ModuleList):
         layers: list[nn.Module] = [] if modules is None else list(modules)
 
         for layer in config["modules"]:
-            module = initialize_from_config(layer)
+            module = initialize_from_dict(layer)
             layers.append(module)
 
         super().__init__(layers)

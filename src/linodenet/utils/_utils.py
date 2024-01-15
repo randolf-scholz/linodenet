@@ -7,7 +7,9 @@ __all__ = [
     "assert_issubclass",
     "deep_dict_update",
     "deep_keyval_update",
-    "initialize_from_config",
+    "initialize_from_dict",
+    "initialize_from_type",
+    "try_initialize_from_config",
     "is_dunder",
     "is_private",
     "pad",
@@ -126,18 +128,72 @@ def autojit(base_class: type[module_var]) -> type[module_var]:
     return WrappedClass
 
 
-def initialize_from_config(config: dict[str, Any]) -> nn.Module:
+def initialize_from_dict(defaults: Mapping[str, Any], /, **kwargs: Any) -> nn.Module:
+    r"""Initialize a class from a dictionary.
+
+    Parameters:
+        defaults: A dictionary containing the default configuration of the class.
+        kwargs: Additional keyword arguments to override the configuration.
+
+    Note:
+        The configuration must provide the keys `__module__` and `__name__`.
+        The function will attempt to import the module and class and initialize it.
+    """
+    config = dict(defaults, **kwargs)
+    assert "__name__" in config, f"__name__ not found in {config=}"
+    assert "__module__" in config, f"__module__ not found in {config=}"
+    __logger__.debug("Initializing model from config %s", config)
+    library_name: str = config.pop("__module__")
+    class_name: str = config.pop("__name__")
+
+    try:  # import the module
+        library: ModuleType = import_module(library_name)
+    except ModuleNotFoundError as exc:
+        raise ModuleNotFoundError(f"Failed to import {library_name}") from exc
+
+    try:  # import the class from the module
+        module_type = getattr(library, class_name)
+    except AttributeError as exc:
+        raise AttributeError(
+            f"Failed to import {class_name} from {library_name}"
+        ) from exc
+
+    try:  # attempt to initialize the class
+        module = module_type(**config)
+    except TypeError as exc:
+        raise TypeError(f"Failed to initialize {module_type} with {config=}") from exc
+    else:
+        assert isinstance(module, nn.Module)
+
+    return module
+
+
+def initialize_from_type(module_type: type[nn.Module], /, **kwargs: Any) -> nn.Module:
     r"""Initialize a class from a dictionary."""
-    assert "__name__" in config, "__name__ not found in dict"
-    assert "__module__" in config, "__module__ not found in dict"
-    __logger__.debug("Initializing %s", config)
-    config = config.copy()
-    module: ModuleType = import_module(config.pop("__module__"))
-    cls = getattr(module, config.pop("__name__"))
-    opts = {key: val for key, val in config.items() if not is_dunder("key")}
-    obj = cls(**opts)
-    assert isinstance(obj, nn.Module)
-    return obj
+    default_config = getattr(module_type, "HP", {})
+    config = dict(default_config, **kwargs)
+    __logger__.debug("Initializing model_type %s from config %s", module_type, config)
+
+    try:  # attempt to initialize the class
+        return module_type(**config)
+    except TypeError as exc:
+        raise TypeError(f"Failed to initialize {module_type} with {config=}") from exc
+
+
+def try_initialize_from_config(
+    obj: nn.Module | type[nn.Module] | Mapping[str, Any], /, **kwargs: Any
+) -> nn.Module:
+    """Try to initialize a module from a config."""
+    match obj:
+        case nn.Module() as module:
+            assert not kwargs, f"Unexpected {kwargs=}"
+            return module
+        case type() as module_type if issubclass(module_type, nn.Module):
+            return initialize_from_type(module_type, **kwargs)
+        case Mapping() as config:
+            return initialize_from_dict(config, **kwargs)
+        case _:
+            raise TypeError(f"Unsupported type {type(obj)}")
 
 
 def is_dunder(s: str, /) -> bool:

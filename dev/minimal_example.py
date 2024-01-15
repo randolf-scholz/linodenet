@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-
-
 import torch
 from torchinfo import summary
 
+import linodenet.models.filters._generic
 from linodenet.models import LSSM, encoders, filters, system
 
 if __name__ == "__main__":
@@ -12,7 +11,7 @@ if __name__ == "__main__":
         "input_size": 16,
         "hidden_size": 16,
         "latent_size": 16,
-        "Filter": filters.SequentialFilter.HP,
+        "Filter": linodenet.models.filters._generic.SequentialFilter.HP,
         "System": system.LinODECell.HP,
         "Encoder": encoders.ResNet.HP,
         "Decoder": encoders.ResNet.HP,

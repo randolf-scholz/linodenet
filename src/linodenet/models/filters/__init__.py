@@ -6,38 +6,46 @@ __all__ = [
     # Constants
     "FILTERS",
     # Classes
-    "FilterABC",
     "KalmanCell",
     "KalmanFilter",
-    "LinearFilter",
-    "NonLinearFilter",
-    "PseudoKalmanFilter",
-    "RecurrentCellFilter",
+    "LinearCell",
+    "NonLinearCell",
+    "PseudoKalmanCell",
+    "MissingValueFilter",
+    "ResidualFilterBlock",
     "SequentialFilter",
-    "SequentialFilterBlock",
+    # imported
+    "GRUFilter",
+    "LSTMFilter",
+    "RNNFilter",
 ]
 
 from linodenet.models.filters._filters import (
     Filter,
-    FilterABC,
     KalmanCell,
     KalmanFilter,
-    LinearFilter,
-    NonLinearFilter,
-    PseudoKalmanFilter,
-    RecurrentCellFilter,
-    SequentialFilter,
-    SequentialFilterBlock,
+    LinearCell,
+    NonLinearCell,
+    PseudoKalmanCell,
 )
+from linodenet.models.filters._generic import (
+    MissingValueFilter,
+    ResidualFilterBlock,
+    SequentialFilter,
+)
+from linodenet.models.filters._imported import GRUFilter, LSTMFilter, RNNFilter
 
 FILTERS: dict[str, type[Filter]] = {
-    # "FilterABC": FilterABC,
     "KalmanCell": KalmanCell,
     "KalmanFilter": KalmanFilter,
-    "LinearFilter": PseudoKalmanFilter,
-    "NonLinearFilter": NonLinearFilter,
-    "RecurrentCellFilter": RecurrentCellFilter,
+    "LinearFilter": PseudoKalmanCell,
+    "NonLinearFilter": NonLinearCell,
+    "RecurrentCellFilter": MissingValueFilter,
     "SequentialFilter": SequentialFilter,
-    "SequentialFilterBlock": SequentialFilterBlock,
+    "SequentialFilterBlock": ResidualFilterBlock,
+    # imported
+    "GRUFilter": GRUFilter,
+    "LSTMFilter": LSTMFilter,
+    "RNNFilter": RNNFilter,
 }
 r"""Dictionary of all available filters."""

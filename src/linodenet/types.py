@@ -15,11 +15,12 @@ __all__ = [
     "type_var",
     # Protocols
     "SelfMap",
+    "HasHyperparameters",
 ]
 
 from abc import abstractmethod
 from collections.abc import Callable, Mapping, Sequence
-from typing import Protocol, TypeAlias, TypeVar
+from typing import Final, Protocol, TypeAlias, TypeVar
 
 from torch import device, dtype, nn
 
@@ -70,6 +71,16 @@ class SelfMap(Protocol[T]):
     def __call__(self, x: T, /) -> T:
         """Maps T -> T."""
         ...
+
+
+class HasHyperparameters(Protocol):
+    """Protocol for types that have hyperparameters."""
+
+    HP: Final[str]
+    """Default hyperparameters of the type."""
+
+    config: Final[dict]
+    """Concrete hyperparameters of an instance."""
 
 
 # endregion Protocol -------------------------------------------------------------------

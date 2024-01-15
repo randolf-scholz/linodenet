@@ -7,7 +7,7 @@ import torch
 
 from linodenet.config import PROJECT
 from linodenet.constants import NAN
-from linodenet.models.filters import SequentialFilterBlock
+from linodenet.models.filters import ResidualFilterBlock
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def test_filter_idempotency() -> None:
     # LOGGER.info("KalmanCell: Idempotency holds ✔ ")
 
     # Test SequentialFilterBlock
-    model = SequentialFilterBlock(
+    model = ResidualFilterBlock(
         input_size=n, hidden_size=m, autoregressive=True, activation="ReLU"
     )
     result = model(y, x)
