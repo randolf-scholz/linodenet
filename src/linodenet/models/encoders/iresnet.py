@@ -84,8 +84,7 @@ class SpectralNorm(torch.autograd.Function):
         atol: float = kwargs.get("atol", 1e-6)
         rtol: float = kwargs.get("rtol", 1e-6)
         maxiter: int = kwargs.get("maxiter", 1000)
-        m, n, *other = A.shape
-        assert not other, "Expected 2D input."
+        assert A.ndim == 2, f"Expected 2d input, got {A.shape}."
         # initialize u and v, median should be useful guess.
         u = u_next = A.median(dim=1).values
         v = v_next = A.median(dim=0).values
