@@ -2,7 +2,7 @@ exclude: '(\.git/|\.venv/|\.idea/|\docs/_build/)'
 minimum_pre_commit_version: 3.3.3
 default_language_version:
   python: python3.11
-  node: "18.12.1"
+  node: "20.10.0"
 repos:
   #  - repo: meta
   #    hooks:
@@ -13,7 +13,7 @@ repos:
         name: markdownlint
         types: [markdown]
         language: system
-        stages: [manual]
+        stages: [pre-push, manual]
         verbose: true
         entry: mdl
         args:
@@ -92,10 +92,10 @@ repos:
       - id: rst-inline-touching-normal
         description: "Detect mistake of inline code touching normal text in rst"
   # prettier
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
+  #  - repo: https://github.com/pre-commit/mirrors-prettier
+  #    rev: v4.0.0-alpha.8
+  #    hooks:
+  #      - id: prettier
   # absolufy-imports
   - repo: https://github.com/MarcoGorelli/absolufy-imports
     rev: v0.3.1
@@ -226,6 +226,7 @@ repos:
           - "jit.script"
           - "torch.no_grad"
           - "--ignore-dunder"
+          # - "--allow-one"
           - "--ignore-without-positional-only"
       - id: python-check-standard-generics
         files: (^src/|^tests/)
@@ -233,6 +234,12 @@ repos:
         files: (^src/|^tests/)
       - id: python-check-__all__-exists
         files: ^src/
+      - id: python-check-typing
+        files: (^src/|^tests/)
+        args:
+          - "--check-overload-default-ellipsis"
+          - "--check-no-future-annotations"
+      #          - "--check-no-hints-overload-implementation"
       - id: python-check-clean-interface
         files: ^src/
         args: ["--no-load-silent"]

@@ -1,6 +1,9 @@
 r"""LinODE-Net Configuration."""
 
 __all__ = [
+    # Constants
+    "CONFIG",
+    "PROJECT",
     # Classes
     "Config",
     "Project",
@@ -16,7 +19,7 @@ from importlib import import_module, resources
 from itertools import chain
 from pathlib import Path
 from types import ModuleType
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Final
 
 import torch
 import yaml
@@ -25,10 +28,11 @@ __logger__ = logging.getLogger(__name__)
 
 
 def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
-    r"""Create nested dictionary of the package structure."""
+    r"""Creates nested dictionary of the package structure."""
     d = {}
     for name in dir(root_module):
         attr = getattr(root_module, name)
+        # check if it is a subpackage
         if (
             isinstance(attr, ModuleType)
             and attr.__name__.startswith(root_module.__name__)
@@ -39,19 +43,24 @@ def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
     return d
 
 
-def generate_folders(d: dict, /, *, current_path: Path) -> None:
+def generate_folders(dirs: str | list | dict, /, *, parent: Path) -> None:
     r"""Create nested folder structure based on nested dictionary index.
 
     References:
-        - https://stackoverflow.com/a/22058144/9318372
+        https://stackoverflow.com/a/22058144/9318372
     """
-    for directory in d:
-        path = current_path.joinpath(directory)
-        if d[directory] is None:
-            __logger__.debug("creating folder %s", path)
+    match dirs:
+        case str() as string:
+            path = parent.joinpath(string)
             path.mkdir(parents=True, exist_ok=True)
-        else:
-            generate_folders(d[directory], current_path=path)
+        case list() as lst:
+            for item in lst:
+                generate_folders(item, parent=parent)
+        case dict() as d:
+            for key, value in d.items():
+                generate_folders(value, parent=parent.joinpath(key))
+        case _:
+            raise TypeError
 
 
 class ConfigMeta(type):
@@ -171,7 +180,7 @@ class Project:
 
             TEST_RESULTS_PATH = self.TEST_RESULTS_PATH
 
-            def __setitem__(self, key, value):
+            def __setitem__(self, key, value, /):
                 raise RuntimeError("ResultsDir is read-only!")
 
             def __getitem__(self, key):
@@ -183,7 +192,7 @@ class Project:
 
         return ResultsDir()
 
-    def make_test_folders(self, dry_run: bool = True) -> None:
+    def make_test_folders(self, *, dry_run: bool = True) -> None:
         r"""Make the tests folder if it does not exist."""
         package_structure = get_package_structure(self.ROOT_PACKAGE)
 
@@ -199,7 +208,7 @@ class Project:
                 if dry_run:
                     print(f"Dry-Run: Creating {test_package_path}")
                 else:
-                    print("Creating {test_package_path}")
+                    print(f"Creating {test_package_path}")
                     test_package_path.mkdir(parents=True, exist_ok=True)
             if not test_package_path.exists():
                 if dry_run:
@@ -217,9 +226,10 @@ class Project:
             print("Pass option `dry_run=False` to actually create the folders.")
 
 
-# logging.basicConfig(
-#     filename=str(LOGDIR.joinpath("example.log")),
-#     filemode="w",
-#     format="[%(asctime)s] [%(levelname)-s]\t[%(name)s]\t%(message)s, (%(filename)s:%(lineno)s)",
-#     datefmt="%Y-%m-%d %H:%M:%S",
-#     level=logging.INFO)
+# region CONSTANTS
+PROJECT: Final[Project] = Project()
+"""Project configuration."""
+
+CONFIG: Final[Config] = Config()
+"""Configuration Class."""
+# endregion CONSTANTS
