@@ -1646,6 +1646,40 @@ files = [
 protobuf = ["grpcio-tools (>=1.60.0)"]
 
 [[package]]
+name = "hypothesis"
+version = "6.93.1"
+description = "A library for property-based testing"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "hypothesis-6.93.1-py3-none-any.whl", hash = "sha256:f2c32911c5ebde7097ac8715670daed0b6fb3431501c2b80cf39ba6bbc66cd7c"},
+    {file = "hypothesis-6.93.1.tar.gz", hash = "sha256:637dc3cfb6ba7ac65b4599013f7b364dd99eeacd78e472c196e806ceada7519f"},
+]
+
+[package.dependencies]
+attrs = ">=22.2.0"
+numpy = {version = ">=1.17.3", optional = true, markers = "extra == \"numpy\""}
+pandas = {version = ">=1.1", optional = true, markers = "extra == \"pandas\""}
+pytest = {version = ">=4.6", optional = true, markers = "extra == \"pytest\""}
+sortedcontainers = ">=2.1.0,<3.0.0"
+
+[package.extras]
+all = ["backports.zoneinfo (>=0.2.1)", "black (>=19.10b0)", "click (>=7.0)", "django (>=3.2)", "dpcontracts (>=0.4)", "lark (>=0.10.1)", "libcst (>=0.3.16)", "numpy (>=1.17.3)", "pandas (>=1.1)", "pytest (>=4.6)", "python-dateutil (>=1.4)", "pytz (>=2014.1)", "redis (>=3.0.0)", "rich (>=9.0.0)", "tzdata (>=2023.4)"]
+cli = ["black (>=19.10b0)", "click (>=7.0)", "rich (>=9.0.0)"]
+codemods = ["libcst (>=0.3.16)"]
+dateutil = ["python-dateutil (>=1.4)"]
+django = ["django (>=3.2)"]
+dpcontracts = ["dpcontracts (>=0.4)"]
+ghostwriter = ["black (>=19.10b0)"]
+lark = ["lark (>=0.10.1)"]
+numpy = ["numpy (>=1.17.3)"]
+pandas = ["pandas (>=1.1)"]
+pytest = ["pytest (>=4.6)"]
+pytz = ["pytz (>=2014.1)"]
+redis = ["redis (>=3.0.0)"]
+zoneinfo = ["backports.zoneinfo (>=0.2.1)", "tzdata (>=2023.4)"]
+
+[[package]]
 name = "identify"
 version = "2.5.33"
 description = "File identification library for Python"
@@ -4232,13 +4266,13 @@ files = [
 
 [[package]]
 name = "pyright"
-version = "1.1.345"
+version = "1.1.346"
 description = "Command line wrapper for pyright"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pyright-1.1.345-py3-none-any.whl", hash = "sha256:00891361baf58698aa660d9374823d65782823ceb4a65515ff5dd159b0d4d2b1"},
-    {file = "pyright-1.1.345.tar.gz", hash = "sha256:bb8c80671cdaeb913142b49642a741959f3fcd728c99814631c2bde3a7864938"},
+    {file = "pyright-1.1.346-py3-none-any.whl", hash = "sha256:70dd864a1dab488fdf7d26f84ccf7781f279647f5a808026271b3b82c9c8e3a3"},
+    {file = "pyright-1.1.346.tar.gz", hash = "sha256:0b75f5d18736282900406aa0dccf23cdf26776e5363edf57ea380a1faf6986b3"},
 ]
 
 [package.dependencies]
@@ -5125,6 +5159,17 @@ files = [
 ]
 
 [[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+description = "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set"
+optional = false
+python-versions = "*"
+files = [
+    {file = "sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"},
+    {file = "sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88"},
+]
+
+[[package]]
 name = "soupsieve"
 version = "2.5"
 description = "A modern CSS selector implementation for Beautiful Soup."
@@ -5854,6 +5899,20 @@ files = [
 ]
 
 [[package]]
+name = "types-jsonschema"
+version = "4.20.0.20240105"
+description = "Typing stubs for jsonschema"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "types-jsonschema-4.20.0.20240105.tar.gz", hash = "sha256:4a71af7e904498e7ad055149f6dc1eee04153b59a99ad7dd17aa3769c9bc5982"},
+    {file = "types_jsonschema-4.20.0.20240105-py3-none-any.whl", hash = "sha256:26706cd70a273e59e718074c4e756608a25ba61327a7f9a4493ebd11941e5ad4"},
+]
+
+[package.dependencies]
+referencing = "*"
+
+[[package]]
 name = "types-pillow"
 version = "10.2.0.20240111"
 description = "Typing stubs for Pillow"
@@ -6395,4 +6454,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.12"
-content-hash = "9711557f976076f1d55a6254c6a0cef6c56b5d38b3ea331cb3ac56d3dc0cc8cc"
+content-hash = "b0b79ad761a09d4922d89dd9067e35068de51ce926d8e52f40a89611684b2067"

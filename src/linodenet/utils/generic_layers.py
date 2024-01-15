@@ -1,9 +1,4 @@
-r"""#TODO add module summary line.
-
-#TODO add module description.
-"""
-
-from __future__ import annotations
+r"""Generic layers."""
 
 __all__ = [
     # Classes
@@ -45,14 +40,14 @@ class Series(nn.Sequential):
 
         super().__init__(*layers)
 
-    def __matmul__(self, other: nn.Module) -> Series:
+    def __matmul__(self, other: nn.Module) -> "Series":
         r"""Chain with other module."""
         cls = type(self)
         if isinstance(other, Series):
             return cls(*(*self, *other))
         return cls(*(*self, other))
 
-    def __rmatmul__(self, other: nn.Module) -> Series:
+    def __rmatmul__(self, other: nn.Module) -> "Series":
         r"""Chain with other module."""
         cls = type(self)
         if isinstance(other, Series):
@@ -66,7 +61,7 @@ class Series(nn.Sequential):
             " function."
         )
 
-    def simplify(self: Series) -> Series:
+    def simplify(self) -> "Series":
         r"""Simplify the series by removing nesting."""
         modules: list[nn.Module] = []
         for module in self:
@@ -106,13 +101,13 @@ class Parallel(nn.ModuleList):
         r""".. Signature:: ``(..., n) -> [..., (..., n)]``."""
         return [module(x) for module in self]
 
-    def __matmul__(self, other: nn.Module) -> Parallel:
+    def __matmul__(self, other: nn.Module) -> "Parallel":
         r"""Chain with other module."""
         if isinstance(other, Parallel):
             return Parallel((*self, *other))
         return Parallel((*self, other))
 
-    def __rmatmul__(self, other: nn.Module) -> Parallel:
+    def __rmatmul__(self, other: nn.Module) -> "Parallel":
         r"""Chain with other module."""
         return Parallel((other, *self))
 
