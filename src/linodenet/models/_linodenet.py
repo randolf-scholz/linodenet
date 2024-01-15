@@ -434,7 +434,7 @@ class LinODEnet(nn.Module):
 
         z_post = z0
 
-        for dt, x_obs in zip(DT, X):
+        for dt, x_obs in zip(DT, X, strict=True):
             # Propagate the latent state forward in time.
             z_pre = self.system(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
 
@@ -514,7 +514,7 @@ class LinODEnet(nn.Module):
 
         z_post = z0
 
-        for is_query, dt, x_obs in zip(query_mask, DT, X):
+        for is_query, dt, x_obs in zip(query_mask, DT, X, strict=True):
             if is_query:
                 z_pre = self.system(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
                 x_pre = self.projection(self.decoder(z_pre))  # (..., LAT) -> (..., DIM)

@@ -69,7 +69,7 @@ def check_optimization(model: nn.Module, inputs: Tensor, targets: Tensor) -> Non
     # check that the outputs are different
     assert not torch.allclose(outputs, original_outputs)
     # check that the parameters are different
-    for x, y in zip(model.parameters(), original_params):
+    for x, y in zip(model.parameters(), original_params, strict=True):
         assert not torch.allclose(x, y)
 
 

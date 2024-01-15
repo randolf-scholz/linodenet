@@ -803,15 +803,21 @@ class SequentialFilter(nn.Sequential):  # FIXME: use ModuleList instead?
         layers: list[nn.Module] = []
 
         for layer in config["layers"]:
-            if isinstance(layer, nn.Module):
-                module = layer
-            else:
-                layer |= {
-                    "input_size": config["input_size"],
-                    "hidden_size": config["hidden_size"],
-                    "autoregressive": config["autoregressive"],
-                }
-                module = initialize_from_config(layer)
+            match layer:
+                case nn.Module() as module:
+                    pass
+                case dict() as hyperparameters:
+                    module = initialize_from_config(
+                        hyperparameters
+                        | {
+                            "input_size": config["input_size"],
+                            "hidden_size": config["hidden_size"],
+                            "autoregressive": config["autoregressive"],
+                        }
+                    )
+                case _:
+                    raise TypeError(f"Unknown layer type: {layer}")
+
             layers.append(module)
 
         return cls(*layers)

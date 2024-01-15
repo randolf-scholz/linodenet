@@ -1,4 +1,4 @@
-"""Test the spectral norm implementation.""" ""
+"""Test the spectral norm implementation."""
 
 import pytest
 import torch

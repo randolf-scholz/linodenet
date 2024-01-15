@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Iterable
-from typing import Any, Final, Optional
+from typing import Any, Final, Optional, Self
 
 import torch
 from torch import Tensor, jit, nn
@@ -47,17 +47,19 @@ class Series(nn.Sequential):
 
     def __matmul__(self, other: nn.Module) -> Series:
         r"""Chain with other module."""
+        cls = type(self)
         if isinstance(other, Series):
-            return Series(*(*self, *other))
-        return Series(*(*self, other))
+            return cls(*(*self, *other))
+        return cls(*(*self, other))
 
     def __rmatmul__(self, other: nn.Module) -> Series:
         r"""Chain with other module."""
+        cls = type(self)
         if isinstance(other, Series):
-            return Series(*(*other, *self))
-        return Series(*(other, *self))
+            return cls(*(*other, *self))
+        return cls(*(other, *self))
 
-    def __imatmul__(self, other: nn.Module) -> Series:
+    def __imatmul__(self, other: nn.Module) -> Self:
         r"""Chain with other module."""
         raise NotImplementedError(
             "`@=` not possible because `nn.Sequential` does not implement an append"
@@ -85,7 +87,7 @@ class Parallel(nn.ModuleList):
     }
 
     def __init__(
-        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
+        self, modules: Optional[Iterable[nn.Module]] = None, /, **cfg: Any
     ) -> None:
         config = deep_dict_update(self.HP, cfg)
 
@@ -102,12 +104,7 @@ class Parallel(nn.ModuleList):
     @jit.export
     def forward(self, x: Tensor) -> list[Tensor]:
         r""".. Signature:: ``(..., n) -> [..., (..., n)]``."""
-        result: list[Tensor] = []
-
-        for module in self:
-            result.append(module(x))
-
-        return result
+        return [module(x) for module in self]
 
     def __matmul__(self, other: nn.Module) -> Parallel:
         r"""Chain with other module."""
@@ -119,7 +116,7 @@ class Parallel(nn.ModuleList):
         r"""Chain with other module."""
         return Parallel((other, *self))
 
-    def __imatmul__(self, other: nn.Module) -> Parallel:
+    def __imatmul__(self, other: nn.Module) -> Self:
         r"""Chain with other module."""
         raise NotImplementedError(
             "`@=` not possible because `nn.Sequential` does not implement an append"

@@ -105,7 +105,7 @@ class ConcatEmbedding(nn.Module):
 
         .. Signature:: ``(..., d) -> (..., d+e)``.
         """
-        shape = list(x.shape[:-1]) + [self.padding_size]
+        shape = x.shape[:-1] + (self.padding_size,)
         return torch.cat([x, self.padding.expand(shape)], dim=-1)
 
     @jit.export
@@ -114,7 +114,7 @@ class ConcatEmbedding(nn.Module):
 
         .. Signature:: ``(..., d) -> (..., d+e)``.
         """
-        shape = list(x.shape[:-1]) + [self.padding_size]
+        shape = x.shape[:-1] + (self.padding_size,)
         return torch.cat([x, self.padding.expand(shape)], dim=-1)
 
     @jit.export
@@ -189,7 +189,7 @@ class ConcatProjection(nn.Module):
 
         .. Signature:: ``(..., d) -> (..., d+e)``.
         """
-        shape = list(y.shape[:-1]) + [self.padding_size]
+        shape = y.shape[:-1] + (self.padding_size,)
         return torch.cat([y, self.padding.expand(shape)], dim=-1)
 
 

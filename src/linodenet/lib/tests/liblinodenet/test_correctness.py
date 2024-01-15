@@ -262,12 +262,12 @@ def test_analytical(
     We randomly sample U, S and V.
     """
     torch.manual_seed(seed)
-    np.random.seed(0)
+    rng = default_rng(seed=seed)
     M, N = shape
     K = min(M, N)
     S = 10 * (torch.rand(K) + ATOL)
-    U = ortho_group.rvs(M)
-    V = ortho_group.rvs(N)
+    U = ortho_group.rvs(M, seed=rng)
+    V = ortho_group.rvs(N, seed=rng)
     # take the first K vectors
     U = torch.tensor(U[:, :K], dtype=torch.float)
     Vh = torch.tensor(V[:, :K], dtype=torch.float).T
@@ -331,9 +331,9 @@ def test_orthogonal(
         Is, in some sense, the largest subgradient.
     """
     torch.manual_seed(seed)
-    np.random.seed(seed)
+    rng = default_rng(seed=seed)
     S = torch.ones(dim, dtype=torch.float)
-    U = ortho_group.rvs(dim)
+    U = ortho_group.rvs(dim, seed=rng)
     A = torch.from_numpy(U).to(dtype=torch.float).requires_grad_(True)
 
     # analytical result

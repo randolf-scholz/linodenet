@@ -168,7 +168,7 @@ class LatentStateSpaceModel(nn.Module):
         cls.LOGGER.debug("Initializing Decoder %s", config["Encoder"])
         decoder: nn.Module = initialize_from_config(config["Decoder"])
         cls.LOGGER.debug("Initializing Filter %s", config["Encoder"])
-        filter: nn.Module = initialize_from_config(config["Filter"])
+        filter: nn.Module = initialize_from_config(config["Filter"])  # noqa: A001
 
         return cls(
             encoder=encoder,
@@ -184,7 +184,7 @@ class LatentStateSpaceModel(nn.Module):
         encoder: nn.Module,
         system: nn.Module,
         decoder: nn.Module,
-        filter: nn.Module,
+        filter: nn.Module,  # noqa: A002
         padding_size: int = 0,
         **cfg: Any,
     ) -> None:
@@ -294,7 +294,7 @@ class LatentStateSpaceModel(nn.Module):
 
         z_post = z0
 
-        for dt, x_obs in zip(DT, X):
+        for dt, x_obs in zip(DT, X, strict=True):
             # Propagate the latent state forward in time.
             z_pre = self.system(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
 

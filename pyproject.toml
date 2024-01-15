@@ -363,6 +363,7 @@ mark-parentheses = false
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
+known-first-party = ["src", "tsdm"]
 
 
 [tool.ruff.lint.pylint]

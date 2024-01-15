@@ -95,12 +95,12 @@ def test_post_init() -> None:
     """Checks that meta-classes work as expected."""
     ModuleWithMetaclass(4, 4)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Weight matrix must be square!"):
         ModuleWithMetaclass(4, 5)
 
     SubclassWithMetaclass(4, 4)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Weight matrix must be square!"):
         SubclassWithMetaclass(4, 5)
 
 

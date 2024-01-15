@@ -129,14 +129,12 @@ def load_function(name: str, /) -> Any:
             verbose=True,
         )
     except Exception as exc:
-        raise RuntimeError(
-            f"Could not compile {name}!\n!!! ERROR !!!:\n\t{exc}\n{'-'*80}"
-        )
+        raise RuntimeError(f"Could not compile {name}!") from exc
 
     try:  # load the function
         function = getattr(LIB, name)
     except AttributeError as exc:
-        raise RuntimeError(f"Could not load {name}!\n!!! ERROR !!!:\n\t{exc}\n{'-'*80}")
+        raise RuntimeError(f"Could not load {name}!") from exc
 
     return function
 
