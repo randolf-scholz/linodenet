@@ -69,7 +69,7 @@ def assert_close(
         case Mapping() as mapping:
             assert isinstance(reference, Mapping)
             assert mapping.keys() == reference.keys()
-            for key in mapping.keys():
+            for key in mapping:
                 x = mapping[key]
                 y = reference[key]
                 assert_close(x, y, rtol=rtol, atol=atol)

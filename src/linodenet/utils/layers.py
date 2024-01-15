@@ -44,15 +44,8 @@ class ReZeroCell(nn.Module):
         super().__init__()
         self.learnable = learnable
 
-        if scalar is None:
-            initial_value = torch.tensor(0.0)
-        else:
-            initial_value = scalar
-
-        if self.learnable:
-            self.scalar = nn.Parameter(initial_value)
-        else:
-            self.scalar = initial_value
+        initial_value = torch.as_tensor(0.0 if scalar is None else scalar)
+        self.scalar = nn.Parameter(initial_value) if self.learnable else initial_value
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:

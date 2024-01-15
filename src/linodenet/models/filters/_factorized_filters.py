@@ -602,10 +602,7 @@ class KalmanCell(FilterABC):
         self.autoregressive = config["autoregressive"]
         self.input_size = input_size = config["input_size"]
 
-        if self.autoregressive:
-            hidden_size = config["input_size"]
-        else:
-            hidden_size = config["hidden_size"]
+        hidden_size = config["input_size" if self.autoregressive else "hidden_size"]
 
         self.hidden_size = hidden_size
 
@@ -869,10 +866,7 @@ class RecurrentCellFilter(FilterABC):
         mask = torch.isnan(y)
 
         # impute missing value in observation with state estimate
-        if self.autoregressive:
-            y = torch.where(mask, x, y)
-        else:
-            y = torch.where(mask, self.h(x), y)
+        y = torch.where(mask, self.h(x), y)
 
         if self.concat_mask:
             y = torch.cat([y, mask], dim=-1)

@@ -277,13 +277,12 @@ def test_singular_triplet_forward(
 
     # perform benchmark
     with torch.no_grad():
-        with torch.no_grad():
-            benchmark.pedantic(
-                impl,
-                setup=setup,
-                rounds=ROUNDS[shape[0]],
-                warmup_rounds=ROUNDS[shape[0]] // 4,
-            )
+        benchmark.pedantic(
+            impl,
+            setup=setup,
+            rounds=ROUNDS[shape[0]],
+            warmup_rounds=ROUNDS[shape[0]] // 4,
+        )
 
 
 @mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")

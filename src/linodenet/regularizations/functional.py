@@ -65,13 +65,8 @@ def logdetexp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     .. math:: |\tr(A)|^p
     """
     diag = torch.diagonal(x, dim1=-1, dim2=-2)
-
-    if size_normalize:
-        traces = torch.mean(diag, dim=-1)
-    else:
-        traces = torch.sum(diag, dim=-1)
-
-    return torch.abs(traces) ** p
+    traces = diag.mean(dim=-1) if size_normalize else diag.sum(dim=-1)
+    return traces.abs().pow(p)
 
 
 @jit.script

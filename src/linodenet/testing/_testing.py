@@ -242,10 +242,11 @@ def check_backward(
     except Exception as exc:
         raise RuntimeError("Model failed backward pass!") from exc
 
-    if reference_gradients is None:
-        ref_grads = deepcopy(gradients)
-    else:
-        ref_grads = list(iter_tensors(reference_gradients))
+    ref_grads = (
+        deepcopy(gradients)
+        if reference_gradients is None
+        else list(iter_tensors(reference_gradients))
+    )
 
     # check gradients
     assert_close(gradients, ref_grads)
@@ -411,10 +412,7 @@ def check_object(
     # endregion get initialized model if class --------------------------------------------
 
     # region get parameters ------------------------------------------------------------
-    if isinstance(model, nn.Module):
-        model_parameters = get_parameters(model)
-    else:
-        model_parameters = []  # type: ignore[unreachable]
+    model_parameters = get_parameters(model) if isinstance(model, nn.Module) else []
 
     # get parameters of input tensors
     if make_inputs_parameters:

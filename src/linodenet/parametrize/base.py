@@ -524,10 +524,7 @@ class parametrize(ParametrizationBase):
 
 def is_parametrized(module: nn.Module, /) -> bool:
     """Return True if the module has any parametrizations."""
-    for m in module.modules():
-        if isinstance(m, Parametrization):
-            return True
-    return False
+    return any(isinstance(m, Parametrization) for m in module.modules())
 
 
 def register_parametrization(
