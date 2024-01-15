@@ -29,24 +29,26 @@ from linodenet.activations import geglu, reglu
 
 def get_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
     r"""Get activation function by name."""
-    return (
-        reglu
-        if name == "reglu"
-        else (
-            geglu
-            if name == "geglu"
-            else torch.sigmoid if name == "sigmoid" else getattr(nn.functional, name)
-        )
-    )
+    match name:
+        case "reglu":
+            return reglu
+        case "geglu":
+            return geglu
+        case "sigmoid":
+            return torch.sigmoid
+        case _:
+            return getattr(nn.functional, name)
 
 
 def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
     r"""Get activation function by name."""
-    return (
-        relu  # type: ignore[return-value]
-        if name == "reglu"
-        else gelu if name == "geglu" else get_activation_fn(name)
-    )
+    match name:
+        case "reglu":
+            return relu
+        case "geglu":
+            return gelu
+        case _:
+            return get_activation_fn(name)
 
 
 # %%
@@ -118,8 +120,7 @@ class Tokenizer(nn.Module):
             assert self.category_offsets is not None, "No category offsets defined!"
 
             categories = self.category_embeddings(
-                x_cat
-                + self.category_offsets[None]  # pylint: disable=unsubscriptable-object
+                x_cat + self.category_offsets[None]  # pylint: disable=unsubscriptable-object
             )
 
             x = torch.cat([x, categories], dim=1)

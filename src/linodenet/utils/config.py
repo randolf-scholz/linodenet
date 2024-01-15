@@ -30,7 +30,6 @@ class ConfigMetaclass(ABCMeta):
     r"""Metaclass for `BaseConfig`."""
 
     _FORBIDDEN_FIELDS = {
-        # fmt: off
         "clear",       # Removes all the elements from the dictionary
         "copy",        # Returns a copy of the dictionary
         "fromkeys",    # Returns a dictionary with the specified keys and value
@@ -41,10 +40,8 @@ class ConfigMetaclass(ABCMeta):
         "popitem",     # Removes the last inserted key-value pair
         "setdefault",  # Returns the value of the specified key or set default
         "update",      # Updates the dictionary with the specified key-value pairs
-        "values",
-        # Returns a list of all the values in the dictionary
-        # fmt: on
-    }
+        "values",      # Returns a list of all the values in the dictionary
+    }  # fmt: skip
 
     def __new__(
         cls,

@@ -62,7 +62,7 @@ def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict
     r"""Update nested dictionary recursively in-place with new dictionary.
 
     References:
-        - https://stackoverflow.com/a/30655448/9318372
+        https://stackoverflow.com/a/30655448/9318372
     """
     if not inplace:
         d = deepcopy(d)
@@ -80,7 +80,7 @@ def deep_keyval_update(d: dict, /, **new_kv: Any) -> dict:
     r"""Update nested dictionary recursively in-place with key-value pairs.
 
     References:
-        - https://stackoverflow.com/a/30655448/9318372
+        https://stackoverflow.com/a/30655448/9318372
     """
     for key, value in d.items():
         if isinstance(value, Mapping) and value:
@@ -95,25 +95,15 @@ def autojit(base_class: type[module_var]) -> type[module_var]:
 
     Makes it so that
 
-    .. code-block:: python
-
-        class MyModule:
-            ...
-
-
-        model = jit.script(MyModule())
+    >>> class MyModule: ...
+    >>> model = jit.script(MyModule())
 
     and
 
-    .. code-block:: python
+    >>> class MyModule: ...
+    >>> model = MyModule()
 
-        class MyModule:
-            ...
-
-
-        model = MyModule()
-
-    are (roughly?) equivalent
+    are (roughly?) equivalent.
     """
     assert issubclass(base_class, nn.Module)
 
@@ -283,7 +273,7 @@ class reset_caches(ContextDecorator):
         return False
 
 
-def assert_issubclass(proto: type) -> Callable[[type_var], type_var]:
+def assert_issubclass(proto: type, /) -> Callable[[type_var], type_var]:
     """Assert that an object satisfies a protocol."""
 
     def decorator(cls: type_var) -> type_var:
