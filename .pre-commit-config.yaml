@@ -93,7 +93,7 @@ repos:
         description: "Detect mistake of inline code touching normal text in rst"
   # prettier
   - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+    rev: v4.0.0-alpha.8
     hooks:
       - id: prettier
   # absolufy-imports
@@ -103,12 +103,12 @@ repos:
       - id: absolufy-imports
   # isort
   - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
+    rev: 5.13.2
     hooks:
       - id: isort
   # black
   - repo: https://github.com/psf/black
-    rev: 23.11.0
+    rev: 23.12.1
     hooks:
       - id: black
       - id: black-jupyter
@@ -121,13 +121,13 @@ repos:
         types: [python]
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.6
+    rev: v0.1.13
     hooks:
       - id: ruff
         files: (^src/|^tests/)
   # flake8
   - repo: https://github.com/pycqa/flake8
-    rev: 6.1.0
+    rev: 7.0.0
     hooks:
       - id: flake8
         files: (^src/|^tests/)
@@ -161,13 +161,13 @@ repos:
   #        files: ^src/
   # nbstripout-fast
   - repo: https://github.com/deshaw/nbstripout-fast.git
-    rev: v1.0.2
+    rev: v1.0.3
     hooks:
       - id: nbstripout-fast
         files: ^dev/
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.337
+    rev: v1.1.346
     hooks:
       - id: pyright
         # not everything works with pyright yet
@@ -205,7 +205,7 @@ repos:
             |src/linodenet/types.py
           )
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.1.41
+    rev: v0.1.49
     hooks:
       - id: pyproject-validate-version
       - id: pyproject-update-deps
