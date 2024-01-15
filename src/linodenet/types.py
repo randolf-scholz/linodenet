@@ -17,6 +17,7 @@ __all__ = [
     "SelfMap",
 ]
 
+from abc import abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol, TypeAlias, TypeVar
 
@@ -65,6 +66,7 @@ Nested: TypeAlias = T | Mapping[str, "Nested[T]"] | Sequence["Nested[T]"]
 class SelfMap(Protocol[T]):
     """Protocol for functions that map a type onto itself."""
 
+    @abstractmethod
     def __call__(self, x: T, /) -> T:
         """Maps T -> T."""
         ...

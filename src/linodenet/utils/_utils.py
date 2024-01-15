@@ -68,10 +68,11 @@ def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict
         d = deepcopy(d)
 
     for key, value in new.items():
-        if isinstance(value, Mapping) and value:
-            d[key] = deep_dict_update(d.get(key, {}), value)
-        else:
-            d[key] = new[key]
+        d[key] = (
+            deep_dict_update(d.get(key, {}), value)
+            if isinstance(value, Mapping)
+            else value
+        )
     return d
 
 

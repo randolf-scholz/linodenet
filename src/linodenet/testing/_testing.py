@@ -45,9 +45,10 @@ from linodenet.types import Device, Nested, Scalar, T, callable_var, module_var
 __logger__ = logging.getLogger(__name__)
 Tree: TypeAlias = Nested[Tensor | Scalar]
 Func: TypeAlias = Callable[..., Nested[Tensor]]
+DeviceArg: TypeAlias = str | torch.device  # Literal["cpu", "cuda"]
 
 
-# region utility functions for tensors AND scalars -------------------------------------\
+# region utility functions for tensors AND scalars -------------------------------------
 def get_device(x: nn.Module | Tree, /) -> torch.device:
     """Return the device of the model / parameters."""
     match x:
@@ -64,22 +65,16 @@ def get_device(x: nn.Module | Tree, /) -> torch.device:
 
 
 @overload
-def to_device(
-    x: module_var, /, *, device: str | torch.device = "cpu"
-) -> module_var: ...
+def to_device(x: module_var, /, *, device: DeviceArg = ...) -> module_var: ...
 @overload
-def to_device(x: Tensor, /, *, device: str | torch.device = "cpu") -> Tensor: ...
+def to_device(x: Tensor, /, *, device: DeviceArg = ...) -> Tensor: ...
 @overload
-def to_device(x: Scalar, /, *, device: str | torch.device = "cpu") -> Scalar: ...  # type: ignore[overload-overlap]
+def to_device(x: Scalar, /, *, device: DeviceArg = ...) -> Scalar: ...  # type: ignore[overload-overlap]
 @overload
-def to_device(
-    x: Mapping[str, T], /, *, device: str | torch.device = "cpu"
-) -> dict[str, T]: ...
+def to_device(x: Mapping[str, T], /, *, device: DeviceArg = ...) -> dict[str, T]: ...
 @overload
-def to_device(
-    x: Sequence[T], /, *, device: str | torch.device = "cpu"
-) -> tuple[T, ...]: ...
-def to_device(x: Any, /, *, device: str | torch.device = "cpu") -> Any:
+def to_device(x: Sequence[T], /, *, device: DeviceArg = ...) -> tuple[T, ...]: ...
+def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
     """Move a nested tensor to a device."""
     match x:
         case Tensor() as tensor:
@@ -306,24 +301,24 @@ def check_initialization(
     obj: type[module_var],
     /,
     *,
-    init_args: Sequence[Tree] = (),
-    init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    init_args: Sequence[Tree] = ...,
+    init_kwargs: Mapping[str, Tree] = ...,
 ) -> module_var: ...
 @overload
 def check_initialization(
     obj: module_var,
     /,
     *,
-    init_args: Sequence[Tree] = (),
-    init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    init_args: Sequence[Tree] = ...,
+    init_kwargs: Mapping[str, Tree] = ...,
 ) -> module_var: ...
 @overload
 def check_initialization(
     obj: callable_var,
     /,
     *,
-    init_args: Sequence[Tree] = (),
-    init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    init_args: Sequence[Tree] = ...,
+    init_kwargs: Mapping[str, Tree] = ...,
 ) -> callable_var: ...
 def check_initialization(obj, /, *, init_args=(), init_kwargs=EMPTY_MAP):
     """Test initialization of a module."""
@@ -375,10 +370,10 @@ def check_object(
     *,
     init_args: Sequence[Any] = (),
     init_kwargs: Mapping[str, Any] = EMPTY_MAP,
-    #
+    # input arguments
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    #
+    # reference arguments
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
@@ -536,10 +531,10 @@ def check_model(
     model: nn.Module,
     /,
     *,
-    #
+    # input arguments
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    #
+    # reference arguments
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
@@ -582,10 +577,10 @@ def check_class(
     *,
     init_args: Sequence[Any] = (),
     init_kwargs: Mapping[str, Any] = EMPTY_MAP,
-    #
+    # input arguments
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    #
+    # reference arguments
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
@@ -633,10 +628,10 @@ def check_function(
     func: Func,
     /,
     *,
-    #
+    # input arguments
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    #
+    # reference arguments
     reference_gradients: Optional[Nested[Tensor]] = None,
     reference_model: Optional[nn.Module] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,

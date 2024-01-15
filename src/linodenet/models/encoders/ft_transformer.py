@@ -144,7 +144,7 @@ class MultiheadAttention(nn.Module):
 
         if n_heads > 1:
             assert d % n_heads == 0
-        assert initialization in ["xavier", "kaiming"]
+        assert initialization in {"xavier", "kaiming"}
 
         self.W_q = nn.Linear(d, d)
         self.W_k = nn.Linear(d, d)
