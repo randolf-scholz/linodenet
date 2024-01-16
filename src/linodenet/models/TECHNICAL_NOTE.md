@@ -51,14 +51,17 @@ with the following contents:
       In this case, we have the entry
       `<name>: dict[str, HP_DICT] = {name: sub.hparams for <name>, sub in <modules>.items()}`
 
+Sometimes, models have attributes that are derived from other attributes. If we represent the
+hyperparameters as a pydantic model, we would use `computed` fields for this. When creating
+the hyperparameter dictionary, such fields are not included.
 
-## Serialization to JSON:
+We could consider a "extended" hyperparameter dictionary that includes computed fields.
 
-- Simply recursively query the `hparams` attribute of the model instance.
-- If a model does not have a `hparams` attribute, we need a fallback method that attempts to synthesize
-  the hyperparameters from the instance.
-- NOTE: `torch.jit.script` does not support `@property` decorators. Hence, the hparams attribute
-needs to be created at initialization time.
+## Initialization from Hyperparameters
+
+Let `model` be a model instance. Then, `model.from_hyperparameters(model.hparams)` should
+reproduce the model, up to training state, and potentially up to random initialization.
+Getting random initialization right is hard, and will be left for later.
 
 ## Synthesizing Hyperparameter Dictionary
 
@@ -88,8 +91,10 @@ def get_hparams(module: nn.Module) -> dict:
     return getter(module)
 ```
 
-## Recursive Initialization from hyperparameters
+## Serialization to JSON:
 
-Let `model` be a model instance. Then, `model.from_hyperparameters(model.hparams)` should
-reproduce the model, up to training state, and potentially up to random initialization.
-Getting random initialization right is hard, and will be left for later.
+- Simply recursively query the `hparams` attribute of the model instance.
+- If a model does not have a `hparams` attribute, we need a fallback method that attempts to synthesize
+  the hyperparameters from the instance.
+- NOTE: `torch.jit.script` does not support `@property` decorators. Hence, the hparams attribute
+needs to be created at initialization time.

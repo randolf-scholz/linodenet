@@ -17,7 +17,7 @@ from linodenet.constants import EMPTY_MAP
 from linodenet.models.filters._filters import (
     Filter,
     KalmanCell,
-    LinearCell,
+    LinearKalmanCell,
     NonLinearCell,
 )
 from linodenet.utils import (
@@ -224,7 +224,7 @@ class SequentialFilter(nn.Sequential):
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
-        "layers": [LinearCell, NonLinearCell, NonLinearCell],
+        "layers": [LinearKalmanCell, NonLinearCell, NonLinearCell],
     }
     r"""The HyperparameterDict of this class."""
 

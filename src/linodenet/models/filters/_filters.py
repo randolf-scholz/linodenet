@@ -33,7 +33,7 @@ __all__ = [
     # custom
     "KalmanCell",
     "KalmanFilter",
-    "LinearCell",
+    "LinearKalmanCell",
     "NonLinearCell",
     "PseudoKalmanCell",
 ]
@@ -65,6 +65,55 @@ class Filter(Protocol):
 
 
 class LinearCell(nn.Module):
+    """Linear RNN Cell.
+
+    .. math:: x' = Ux + Vy + b
+
+    where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
+    """
+
+
+class LinearResidualCell(nn.Module):
+    """Linear RNN Cell that performs a residual update.
+
+    .. math:: x' = x - F⋅(Hy - x)
+
+    Where $F$ is a learnable square matrix, and $H$ is either a learnable matrix or
+    a fixed matrix.
+
+    If
+    """
+
+    input_size: Final[int]
+    """The size of the observable $y$."""
+    hidden_size: Final[int]
+    """The size of the hidden state $x$."""
+    missing_values: Final[bool]
+    """Whether the filter should handle missing values."""
+    autoregressive: Final[bool]
+    r"""CONST: Whether the filter is autoregressive or not."""
+
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        hidden_size: int,
+        *,
+        fixed_observation_matrix: Optional[Tensor] = None,
+        missing_values: bool = True,
+    ) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.autoregressive = config["autoregressive"]
+        self.H = (
+            None
+            if autoregressive
+            else nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
+        )
+
+
+class LinearKalmanCell(nn.Module):
     r"""A Linear Filter.
 
     .. math::  x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)
@@ -113,7 +162,7 @@ class LinearCell(nn.Module):
     def __init__(
         self,
         input_size: int,
-        # hidden_size: Optional[int] = None,
+        hidden_size: Optional[int] = None,
         # alpha: str | float = "last-value",
         # alpha_learnable: bool = True,
         # autoregressive: bool = False,

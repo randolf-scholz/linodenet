@@ -8,7 +8,7 @@ __all__ = [
     # Classes
     "KalmanCell",
     "KalmanFilter",
-    "LinearCell",
+    "LinearKalmanCell",
     "NonLinearCell",
     "PseudoKalmanCell",
     "MissingValueFilter",
@@ -24,7 +24,7 @@ from linodenet.models.filters._filters import (
     Filter,
     KalmanCell,
     KalmanFilter,
-    LinearCell,
+    LinearKalmanCell,
     NonLinearCell,
     PseudoKalmanCell,
 )
