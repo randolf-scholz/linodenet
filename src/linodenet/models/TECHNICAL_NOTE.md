@@ -35,7 +35,7 @@ We distinguish between two types of models:
    In particular, this dictionary should contain, recursively, the hyperparameters
    of all submodules.
 
-## Hyperparameter Dictionary.
+## Hyperparameter Dictionary
 
 Let `model` be a model instance. Then, `model.hparams` should be a dictionary
 with the following contents:
@@ -91,10 +91,10 @@ def get_hparams(module: nn.Module) -> dict:
     return getter(module)
 ```
 
-## Serialization to JSON:
+## Serialization to JSON
 
 - Simply recursively query the `hparams` attribute of the model instance.
 - If a model does not have a `hparams` attribute, we need a fallback method that attempts to synthesize
   the hyperparameters from the instance.
 - NOTE: `torch.jit.script` does not support `@property` decorators. Hence, the hparams attribute
-needs to be created at initialization time.
+  needs to be created at initialization time.

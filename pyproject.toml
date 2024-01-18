@@ -18,7 +18,7 @@ readme = "README.md"
 keywords = ["time-series", "machine-learning", "neural-ode", "kalman-filter"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Environment :: GPU :: NVIDIA CUDA :: 11.7",
+    "Environment :: GPU :: NVIDIA CUDA :: 12.1",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -50,7 +50,6 @@ test = [
     "pytest-xdist>=3.5.0",
     "pytest>=7.4.4",
     "tqdm>=4.66.1",
-    #"tsdm@git+https://git.tu-berlin.de/bvt-htbd/kiwi/tf1/tsdm.git"
 ]
 docs = [
     "docutils>=0.20.1",
@@ -114,7 +113,7 @@ typing = [
 flake8 = [
     "flake8>=7.0.0",
     "flake8-annotations>=3.0.1",
-    "flake8-bugbear>=23.12.2",
+    "flake8-bugbear>=24.1.17",
     "flake8-comprehensions>=3.14.0",
     "flake8-docstrings>=1.7.0",
     "flake8-pyi>=24.1.0",
@@ -364,7 +363,7 @@ mark-parentheses = false
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-known-first-party = ["src", "tsdm"]
+known-first-party = ["src"]
 
 
 [tool.ruff.lint.pylint]
@@ -518,7 +517,7 @@ ignore_missing_imports = true
 py_version = 311
 profile = "black"
 src_paths = ["src/", "tests/"]
-known_first_party = ["linodenet", "tsdm"]
+known_first_party = ["linodenet"]
 combine_as_imports = true
 # flake8-profiles: appnexus, cryptography, edited, google, pep8, pycharm, smarkets.
 # black-compatible: black, appnexus
@@ -663,24 +662,13 @@ repository = "https://git.tu-berlin.de/api/v4/projects/9030/packages/pypi/simple
 keywords = ["time-series", "machine-learning", "neural-ode", "kalman-filter"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Environment :: GPU :: NVIDIA CUDA :: 11.7",
+    "Environment :: GPU :: NVIDIA CUDA :: 12.1",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
     "Operating System :: POSIX :: Linux",
 ]
-
-
-[[tool.poetry.source]]
-name = "berlin"
-url = "https://git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
-priority = "explicit"
-
-[[tool.poetry.source]]
-name = "hildesheim"
-url = "https://software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple"
-priority = "explicit"
 
 
 [tool.poetry.dependencies]
@@ -707,7 +695,7 @@ torchinfo = ">=1.8.0"
 coverage = ">=7.4.0"
 matplotlib = ">=3.8.2"
 psutil = ">=5.9.7"
-hypothesis = {version=">=6.93.1", extras=["numpy", "pandas", "pytest"]}
+hypothesis = {version=">=6.96.1", extras=["numpy", "pandas", "pytest"]}
 pygal = ">=3.0.4"
 pytest = ">=7.4.4"
 pytest-benchmark = ">=4.0.0"
@@ -716,7 +704,6 @@ pytest-repeat = ">=0.9.3"
 pytest-rerunfailures = ">=13.0"
 pytest-xdist = ">=3.5.0"
 tqdm = ">=4.66.1"
-tsdm = {version = ">=0.5.8", source="berlin"}
 
 
 [tool.poetry.group.docs.dependencies]
@@ -760,7 +747,7 @@ wheel = ">=0.42.0"
 [tool.poetry.group.flake8.dependencies]
 flake8 = ">=7.0.0"
 flake8-annotations = ">=3.0.1"
-flake8-bugbear = ">=23.12.2"
+flake8-bugbear = ">=24.1.17"
 flake8-comprehensions = ">=3.14.0"
 flake8-docstrings = ">=1.7.0"
 flake8-pyi = ">=24.1.0"
@@ -796,7 +783,7 @@ pyright = ">=1.1.347"
 types-colorama = ">=0.4.15"
 types-decorator = ">=5.1.8"
 types-docutils = ">=0.20.0"
-types-jsonschema = ">=4.20.0"
+types-jsonschema = ">=4.21.0"
 types-pillow = ">=10.2.0"
 types-protobuf = ">=4.24.0"
 types-psutil = ">=5.9.5"

@@ -15,8 +15,7 @@ from torch import Tensor
 
 from linodenet.config import PROJECT
 from linodenet.models import LinearContraction, iResNetBlock
-from tsdm.linalg import scaled_norm
-from tsdm.viz import visualize_distribution
+from tests.test_utils import scaled_norm, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)

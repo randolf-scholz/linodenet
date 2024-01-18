@@ -14,8 +14,7 @@ from tqdm.autonotebook import trange
 
 from linodenet.config import PROJECT
 from linodenet.models import LinODE
-from tsdm.linalg import scaled_norm
-from tsdm.viz import visualize_distribution
+from tests.test_utils import scaled_norm, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)
@@ -55,6 +54,7 @@ def compute_linode_error(
     num = num or random.choice([10 * k for k in range(1, 11)])
     dim = dim or random.choice([2**k for k in range(1, 8)])
     t0, t1 = rng.uniform(low=-10, high=10, size=(2,))
+    t0, t1 = min(t0, t1), max(t0, t1)  # make sure t0 ≤ t1
     A = (rng.normal(size=(dim, dim)) / np.sqrt(dim)).astype(numpy_dtype)
     x0 = rng.normal(size=dim).astype(numpy_dtype)
     T = rng.uniform(low=t0, high=t1, size=num - 2)
