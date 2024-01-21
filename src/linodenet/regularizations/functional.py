@@ -9,23 +9,21 @@ __all__ = [
     # ABCs & Protocols
     "Regularization",
     # Functions
-    "logdetexp",
-    "matrix_norm",
-    # linodenet.projections (matrix groups)
+    "banded",
+    "diagonal",
     "hamiltonian",
     "identity",
+    "logdetexp",
     "low_rank",
+    "lower_triangular",
+    "masked",
+    "matrix_norm",
     "normal",
     "orthogonal",
     "skew_symmetric",
     "symmetric",
     "symplectic",
     "traceless",
-    # linodenet.projections (masked)
-    "banded",
-    "diagonal",
-    "lower_triangular",
-    "masked",
     "upper_triangular",
 ]
 

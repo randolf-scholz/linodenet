@@ -2,9 +2,9 @@ r"""Utility functions."""
 
 __all__ = [
     # Sub-Modules
-    "layers",
-    "context",
     "config",
+    "context",
+    "layers",
     # Functions
     "assert_issubclass",
     "autojit",
@@ -13,8 +13,6 @@ __all__ = [
     "initialize_from_dict",
     "initialize_from_type",
     "is_dunder",
-    "register_cache",
-    "reset_caches",
     "try_initialize_from_config",
     # Classes
     "Multiply",
@@ -34,8 +32,6 @@ from linodenet.utils._utils import (
     initialize_from_dict,
     initialize_from_type,
     is_dunder,
-    register_cache,
-    reset_caches,
     try_initialize_from_config,
 )
 from linodenet.utils.generic_layers import Multiply, Parallel, Repeat, Series

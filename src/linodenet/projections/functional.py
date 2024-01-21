@@ -9,20 +9,19 @@ __all__ = [
     # ABCs & Protocols
     "Projection",
     # Projections
+    "banded",
+    "diagonal",
     "hamiltonian",
     "identity",
     "low_rank",
+    "lower_triangular",
+    "masked",
     "normal",
     "orthogonal",
     "skew_symmetric",
     "symmetric",
     "symplectic",
     "traceless",
-    # Masked Projections
-    "banded",
-    "diagonal",
-    "lower_triangular",
-    "masked",
     "upper_triangular",
 ]
 

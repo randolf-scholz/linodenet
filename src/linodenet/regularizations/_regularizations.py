@@ -9,23 +9,21 @@ __all__ = [
     # ABCs & Protocols
     "RegularizationABC",
     # Regularizations
-    "LogDetExp",
-    "MatrixNorm",
-    # matrix groups
+    "Banded",
+    "Diagonal",
     "Hamiltonian",
     "Identity",
+    "LogDetExp",
     "LowRank",
+    "LowerTriangular",
+    "Masked",
+    "MatrixNorm",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
     "Symplectic",
     "Traceless",
-    # masked
-    "Banded",
-    "Diagonal",
-    "LowerTriangular",
-    "Masked",
     "UpperTriangular",
 ]
 

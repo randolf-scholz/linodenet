@@ -1,6 +1,12 @@
 """Types and Type Aliases."""
 
 __all__ = [
+    # Type Variables
+    "CLS",
+    "F",
+    "M",
+    "R",
+    "T",
     # Protocols
     "HasHyperparameters",
     "SelfMap",
@@ -10,12 +16,6 @@ __all__ = [
     "Nested",
     "Scalar",
     "Shape",
-    # Type Variables
-    "CLS",
-    "F",
-    "M",
-    "R",
-    "T",
 ]
 
 from abc import abstractmethod

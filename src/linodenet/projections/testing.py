@@ -4,19 +4,18 @@ __all__ = [
     # ABCs & Protocols
     "MatrixTest",
     # is_* checks
+    "is_banded",
+    "is_diagonal",
     "is_hamiltonian",
+    "is_lower_triangular",
     "is_lowrank",
+    "is_masked",
     "is_normal",
     "is_orthogonal",
     "is_skew_symmetric",
     "is_symmetric",
     "is_symplectic",
     "is_traceless",
-    # masked
-    "is_banded",
-    "is_diagonal",
-    "is_lower_triangular",
-    "is_masked",
     "is_upper_triangular",
 ]
 

@@ -69,12 +69,11 @@ __all__ = [
     "is_parametrized",
     "register_parametrization",
     "cached",
-    # additional functions
-    "deepcopy_with_parametrizations",
-    "register_optimizer_hook",
     # Functions
-    "get_parametrizations",
+    "deepcopy_with_parametrizations",
     "detach_caches",
+    "get_parametrizations",
+    "register_optimizer_hook",
     "update_caches",
     "update_originals",
     "update_parametrizations",
