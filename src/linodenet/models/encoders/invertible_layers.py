@@ -17,8 +17,9 @@ Layers:
 """
 
 __all__ = [
-    "NaiveLinearContraction",
+    # Classes
     "LinearContraction",
+    "NaiveLinearContraction",
     "iResNetBlock",
     "iSequential",
 ]

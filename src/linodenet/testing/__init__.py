@@ -2,10 +2,10 @@
 
 __all__ = [
     # check functions
-    "check_object",
+    "check_class",
     "check_function",
     "check_model",
-    "check_class",
+    "check_object",
     # helper functions
     "check_backward",
     "check_forward",
@@ -15,6 +15,7 @@ __all__ = [
     "check_jit_serialization",
     "check_optim",
     # helper functions
+    "assert_close",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
@@ -26,12 +27,10 @@ __all__ = [
     "make_tensors_parameters",
     "to_device",
     "zero_grad",
-    # utils
-    "assert_close",
-    "timeout",
 ]
 
 from linodenet.testing._testing import (
+    assert_close,
     check_backward,
     check_class,
     check_forward,
@@ -55,4 +54,3 @@ from linodenet.testing._testing import (
     to_device,
     zero_grad,
 )
-from linodenet.testing._utils import assert_close, timeout

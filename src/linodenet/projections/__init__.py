@@ -7,19 +7,18 @@ Notes:
 """
 
 __all__ = [
-    # Constants
-    "PROJECTIONS",
-    "FUNCTIONAL_PROJECTIONS",
-    "MODULAR_PROJECTIONS",
-    "MATRIX_TESTS",
-    # Protocols
-    "MatrixTest",
-    "Projection",
-    # Base Classes
-    "ProjectionABC",
     # Sub-Modules
     "functional",
     "modular",
+    # Constants
+    "FUNCTIONAL_PROJECTIONS",
+    "MATRIX_TESTS",
+    "MODULAR_PROJECTIONS",
+    "PROJECTIONS",
+    # ABCs & Protocols
+    "MatrixTest",
+    "Projection",
+    "ProjectionABC",
     # is_*-checks
     "is_hamiltonian",
     "is_lowrank",
@@ -49,8 +48,8 @@ __all__ = [
     "banded",
     "diagonal",
     "lower_triangular",
-    "upper_triangular",
     "masked",
+    "upper_triangular",
     # Classes
     "Hamiltonian",
     "Identity",

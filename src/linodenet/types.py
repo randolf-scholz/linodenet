@@ -1,21 +1,21 @@
 """Types and Type Aliases."""
 
 __all__ = [
+    # Protocols
+    "HasHyperparameters",
+    "SelfMap",
     # Aliases
-    "Nested",
-    "Scalar",
     "Device",
     "Dtype",
+    "Nested",
+    "Scalar",
     "Shape",
     # Type Variables
+    "CLS",
+    "F",
+    "M",
+    "R",
     "T",
-    "callable_var",
-    "module_var",
-    "return_co",
-    "type_var",
-    # Protocols
-    "SelfMap",
-    "HasHyperparameters",
 ]
 
 from abc import abstractmethod
@@ -43,16 +43,16 @@ r"""Type hint for shape-like inputs."""
 T = TypeVar("T")
 """Type Variable for generic types."""
 
-type_var = TypeVar("type_var", bound=type)
+CLS = TypeVar("CLS", bound=type)
 r"""Type hint for classes."""
 
-return_co = TypeVar("return_co", covariant=True)
-r"""Type hint return value."""
+R = TypeVar("R", covariant=True)  # noqa: PLC0105
+r"""Type hint return value (always covariant)."""
 
-module_var = TypeVar("module_var", bound=nn.Module)
+M = TypeVar("M", bound=nn.Module)
 r"""Type Variable for nn.Modules."""
 
-callable_var = TypeVar("callable_var", bound=Callable)
+F = TypeVar("F", bound=Callable)
 r"""Type Variable for callables."""
 # endregion type variables -------------------------------------------------------------
 

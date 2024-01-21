@@ -13,12 +13,12 @@ Notes:
 """
 
 __all__ = [
-    # Constants
-    "INITIALIZATIONS",
-    # Types
-    "Initialization",
     # Sub-Modules
     "functional",
+    # Constants
+    "INITIALIZATIONS",
+    # ABCs & Protocols
+    "Initialization",
     # Functions
     "canonical_skew_symmetric",
     "canonical_symplectic",
@@ -30,7 +30,6 @@ __all__ = [
     "special_orthogonal",
     "symmetric",
     "traceless",
-    # Classes
 ]
 
 from linodenet.initializations import functional

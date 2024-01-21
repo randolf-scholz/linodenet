@@ -1,12 +1,12 @@
 """Checks for testing if tensor belongs to matrix group."""
 
 __all__ = [
-    # Protocol
+    # ABCs & Protocols
     "MatrixTest",
     # is_* checks
     "is_hamiltonian",
-    "is_normal",
     "is_lowrank",
+    "is_normal",
     "is_orthogonal",
     "is_skew_symmetric",
     "is_symmetric",

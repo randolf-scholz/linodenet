@@ -7,9 +7,9 @@ Notes:
 
 __all__ = [
     # Functions
-    "reglu",
     "geglu",
     "hard_bend",
+    "reglu",
 ]
 
 import torch

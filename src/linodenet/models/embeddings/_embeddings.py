@@ -4,9 +4,10 @@ r"""#TODO add module summary line.
 """
 
 __all__ = [
-    # Classes
+    # ABCs & Protocols
     "Embedding",
     "EmbeddingABC",
+    # Classes
     "ConcatEmbedding",
     "ConcatProjection",
     "LinearEmbedding",

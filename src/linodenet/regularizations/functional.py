@@ -6,7 +6,7 @@ Notes:
 """
 
 __all__ = [
-    # Protocol
+    # ABCs & Protocols
     "Regularization",
     # Functions
     "logdetexp",

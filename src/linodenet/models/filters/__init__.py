@@ -1,23 +1,22 @@
 r"""Different Filter models to be used in conjunction with LinodeNet."""
 
 __all__ = [
-    # Types
-    "Filter",
     # Constants
     "FILTERS",
+    # ABCs & Protocols
+    "Filter",
     # Classes
+    "GRUFilter",
     "KalmanCell",
     "KalmanFilter",
+    "LSTMFilter",
     "LinearKalmanCell",
+    "MissingValueFilter",
     "NonLinearCell",
     "PseudoKalmanCell",
-    "MissingValueFilter",
+    "RNNFilter",
     "ResidualFilterBlock",
     "SequentialFilter",
-    # imported
-    "GRUFilter",
-    "LSTMFilter",
-    "RNNFilter",
 ]
 
 from linodenet.models.filters._filters import (

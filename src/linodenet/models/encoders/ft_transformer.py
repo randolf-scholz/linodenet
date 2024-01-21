@@ -6,13 +6,13 @@ Original Licensed under Apache License 2.0
 """
 
 __all__ = [
-    # Functions
-    "get_activation_fn",
-    "get_nonglu_activation_fn",
     # Classes
     "FTTransformer",
     "MultiheadAttention",
     "Tokenizer",
+    # Functions
+    "get_activation_fn",
+    "get_nonglu_activation_fn",
 ]
 
 import math

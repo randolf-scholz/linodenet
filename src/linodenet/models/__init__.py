@@ -1,31 +1,30 @@
 r"""Models of the LinODE-Net package."""
 
 __all__ = [
-    # Sub-Packages
-    "filters",
-    "encoders",
-    "embeddings",
-    "system",
-    # Types
-    "Model",
-    "ModelABC",
+    "LSSM",
     # Constants
     "MODELS",
-    # Classes
-    "SpectralNorm",
+    "LatentStateSpaceModel",
+    "LinODE",
+    "LinODECell",
+    "LinODEnet",
     "LinearContraction",
-    "iResNetBlock",
-    "iResNet",
+    # ABCs & Protocols
+    "Model",
+    "ModelABC",
+    # Classes
     "ResNet",
     "ResNetBlock",
-    "LinODE",
-    "LinODEnet",
-    "LinODECell",
-    "LatentStateSpaceModel",
-    "LSSM",
+    "SpectralNorm",
+    "iResNet",
+    "iResNetBlock",
+    # Sub-Packages
+    "embeddings",
+    "encoders",
+    "filters",
     # Functions
     "spectral_norm",
-    # Filters
+    "system",
 ]
 
 from linodenet.models import embeddings, encoders, filters, system

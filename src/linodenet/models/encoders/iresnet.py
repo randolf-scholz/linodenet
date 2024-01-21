@@ -2,12 +2,12 @@ r"""Implementation of invertible ResNets."""
 
 __all__ = [
     # Classes
+    "LinearContraction",
+    "SpectralNorm",
     "iResNet",
     "iResNetBlock",
     "iResNetLayer",
-    "LinearContraction",
     "spectral_norm",
-    "SpectralNorm",
 ]
 
 from math import sqrt

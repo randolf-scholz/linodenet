@@ -1,16 +1,16 @@
 r"""Encoder Models."""
 
 __all__ = [
-    # Types
+    # Constants
+    "ENCODERS",
+    "MLP",
+    # ABCs & Protocols
     "Encoder",
     "EncoderABC",
-    # Meta-Objects
-    "ENCODERS",
     # Classes
     "FTTransformer",
     "Identity",
     "LinearContraction",
-    "MLP",
     "ResNet",
     "ResNetBlock",
     "SpectralNorm",

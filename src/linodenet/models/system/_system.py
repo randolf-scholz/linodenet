@@ -1,10 +1,10 @@
 r"""Models for the latent dynamical system."""
 
 __all__ = [
-    "System",
-    "SystemABC",
     # Classes
     "LinODECell",
+    "System",
+    "SystemABC",
 ]
 
 from abc import abstractmethod

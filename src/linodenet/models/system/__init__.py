@@ -1,11 +1,11 @@
 r"""Models for the latent dynamical system."""
 
 __all__ = [
-    # Types
+    # Constants
+    "SYSTEMS",
+    # ABCs & Protocols
     "System",
     "SystemABC",
-    # Meta-Objects
-    "SYSTEMS",
     # Classes
     "LinODECell",
 ]

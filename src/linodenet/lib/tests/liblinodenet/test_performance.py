@@ -1,12 +1,12 @@
 """Benchmark spectral norm / singular triplet implementations."""
 
 __all__ = [
+    "test_singular_triplet_backward",
+    "test_singular_triplet_forward",
+    "test_singular_triplet_full_backward",
     "test_spectral_norm",
     "test_spectral_norm_backward",
     "test_spectral_norm_forward",
-    "test_singular_triplet_forward",
-    "test_singular_triplet_backward",
-    "test_singular_triplet_full_backward",
 ]
 
 

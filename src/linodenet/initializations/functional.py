@@ -7,9 +7,12 @@ Notes:
 """
 
 __all__ = [
-    # Protocol
+    # ABCs & Protocols
     "Initialization",
-    # Functions
+    # Deterministic Initializations
+    "canonical_skew_symmetric",
+    "canonical_symplectic",
+    # Initializations
     "diagonally_dominant",
     "gaussian",
     "low_rank",
@@ -18,9 +21,6 @@ __all__ = [
     "special_orthogonal",
     "symmetric",
     "traceless",
-    # Non-deterministic
-    "canonical_skew_symmetric",
-    "canonical_symplectic",
 ]
 
 from collections.abc import Sequence
@@ -189,7 +189,7 @@ def traceless(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
     return A - torch.einsum("...ij, ij -> ...ij", A, eye)
 
 
-# region canonical (non-deterministic) initializations ---------------------------------
+# region canonical (deterministic) initializations -------------------------------------
 def canonical_skew_symmetric(
     n: Shape, device: Device = None, dtype: Dtype = None
 ) -> Tensor:
@@ -229,6 +229,6 @@ def canonical_symplectic(
     return canonical_skew_symmetric(n, device, dtype)
 
 
-# endregion canonical (non-deterministic) initializations ------------------------------
+# endregion canonical (deterministic) initializations ----------------------------------
 
 # endregion initializations ------------------------------------------------------------

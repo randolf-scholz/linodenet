@@ -6,7 +6,7 @@ Notes:
 """
 
 __all__ = [
-    # Base Classes
+    # ABCs & Protocols
     "ProjectionABC",
     # Classes
     "Hamiltonian",

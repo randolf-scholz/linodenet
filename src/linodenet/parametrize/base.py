@@ -70,7 +70,7 @@ __all__ = [
     "register_parametrization",
     "cached",
     # additional functions
-    "deepcopy",
+    "deepcopy_with_parametrizations",
     "register_optimizer_hook",
     # Functions
     "get_parametrizations",
@@ -634,7 +634,7 @@ def register_optimizer_hook(
     optim.register_step_post_hook(hook)
 
 
-def deepcopy(module: Module, /) -> Module:
+def deepcopy_with_parametrizations(module: Module, /) -> Module:
     """Deepcopy a module."""
     # detach all caches
     detach_caches(module)

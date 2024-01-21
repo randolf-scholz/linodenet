@@ -13,11 +13,11 @@ References:
 """
 
 __all__ = [
-    "test_svd_rank_one",
-    "test_rank_one",
-    "test_diagonal",
     "test_analytical",
+    "test_diagonal",
     "test_orthogonal",
+    "test_rank_one",
+    "test_svd_rank_one",
 ]
 
 from collections.abc import Callable

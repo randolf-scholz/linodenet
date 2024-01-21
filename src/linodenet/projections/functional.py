@@ -6,7 +6,7 @@ Notes:
 """
 
 __all__ = [
-    # Protocol
+    # ABCs & Protocols
     "Projection",
     # Projections
     "hamiltonian",
@@ -18,12 +18,12 @@ __all__ = [
     "symmetric",
     "symplectic",
     "traceless",
-    # masked
+    # Masked Projections
     "banded",
     "diagonal",
     "lower_triangular",
-    "upper_triangular",
     "masked",
+    "upper_triangular",
 ]
 
 from typing import Protocol, runtime_checkable

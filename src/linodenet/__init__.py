@@ -10,8 +10,8 @@ __all__ = [
     "models",
     "projections",
     "regularizations",
-    "utils",
     "testing",
+    "utils",
 ]
 
 from importlib import metadata

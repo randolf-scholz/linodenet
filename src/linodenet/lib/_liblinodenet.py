@@ -2,11 +2,11 @@
 
 __all__ = [
     # CONSTANTS
+    "BUILD_DIR",
+    "CUSTOM_OPS",
     "LIB",
     "LIB_NAME",
-    "BUILD_DIR",
     "SOURCE_DIR",
-    "CUSTOM_OPS",
     # Protocols
     "SingularTriplet",
     "SpectralNorm",

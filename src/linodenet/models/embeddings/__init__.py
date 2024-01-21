@@ -1,15 +1,15 @@
 r"""Embedding Models."""
 
 __all__ = [
-    # Types
+    # Constants
+    "EMBEDDINGS",
+    # ABCs & Protocols
     "Embedding",
     "EmbeddingABC",
-    # Meta-Objects
-    "EMBEDDINGS",
+    "LinearEmbedding",
     # Classes
     "ConcatEmbedding",
     "ConcatProjection",
-    "LinearEmbedding",
 ]
 
 from linodenet.models.embeddings._embeddings import (

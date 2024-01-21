@@ -2,8 +2,8 @@ r"""Transformer based Encoder models."""
 
 __all__ = [
     # Classes
-    "TransformerEncoder",
     "Transformer",
+    "TransformerEncoder",
 ]
 
 from typing import Optional

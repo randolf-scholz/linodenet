@@ -1,17 +1,17 @@
 """Constants used throughout the library."""
 
 __all__ = [
-    "EMPTY_MAP",
-    "TRUE",
-    "FALSE",
-    "ZERO",
-    "ONE",
-    "NAN",
-    "POS_INF",
-    "NEG_INF",
     "ATOL",
-    "RTOL",
+    "EMPTY_MAP",
     "EPS",
+    "FALSE",
+    "NAN",
+    "NEG_INF",
+    "ONE",
+    "POS_INF",
+    "RTOL",
+    "TRUE",
+    "ZERO",
 ]
 
 

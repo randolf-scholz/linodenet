@@ -2,80 +2,47 @@
 """Decorators and context managers for LinodeNet."""
 
 __all__ = [
-    "make_wrapper",
     "deprecated",
+    "make_default_message",
+    "make_wrapper",
+    "timeout",
+    "timer",
     "wrap_func",
     "wrap_type",
-    "make_default_message",
 ]
 
+import gc
+import logging
+import signal
+import sys
 import warnings
 from collections.abc import Callable
+from contextlib import AbstractContextManager, ContextDecorator
 from functools import wraps
-from typing import ParamSpec, overload
+from time import perf_counter_ns
+from types import FrameType, TracebackType
+from typing import ClassVar, Literal, ParamSpec, overload
 
-from linodenet.types import T, return_co as R
+from typing_extensions import Never, Self
+
+from linodenet.types import R, T
 
 P = ParamSpec("P")
 
 
-def make_default_message(obj: T, /) -> str:
+def make_default_message(obj: type | Callable, /) -> str:
     """Create a default deprecation message for an object."""
-    if isinstance(obj, type):
-        return f"Class {obj.__name__!r} is deprecated"
+    match obj:
+        case type() as cls:
+            return f"Class {cls.__name__!r} is deprecated"
+        case Callable() as func:
+            assert hasattr(func, "__name__")
+            if hasattr(func, "__self__"):
+                return f"Method {func.__name__!r} of {func.__self__!r} is deprecated"
 
-    if isinstance(obj, Callable):
-        assert hasattr(obj, "__name__")
-        if hasattr(obj, "__self__"):
-            return f"Method {obj.__name__!r} of {obj.__self__!r} is deprecated"
-
-        return f"Function {obj.__name__} is deprecated"
-
-    raise TypeError(f"Cannot create default message for {obj!r}")
-
-
-def wrap_func(
-    func: Callable[P, R],
-    msg: str,
-    *,
-    category: type[Warning] = DeprecationWarning,
-    stacklevel: int = 1,
-) -> Callable[P, R]:
-    """Wrap a function with a deprecation warning."""
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        warnings.warn(msg, category=category, stacklevel=stacklevel + 1)
-        return func(*args, **kwargs)
-
-    func.__deprecated__ = wrapper.__deprecated__ = msg
-    return wrapper
-
-
-def wrap_type(
-    klass: type[T],
-    msg: str,
-    *,
-    category: type[Warning] = DeprecationWarning,
-    stacklevel: int = 1,
-) -> type[T]:
-    """Wrap a class with a deprecation warning."""
-    original_new = klass.__new__
-    has_init = klass.__init__ is not object.__init__
-
-    @wraps(original_new)
-    def __new__(cls, *args, **kwargs):
-        warnings.warn(msg, category=category, stacklevel=stacklevel + 1)
-        if original_new is not object.__new__:
-            return original_new(cls, *args, **kwargs)
-        # Mirrors a similar check in object.__new__.
-        if not has_init and (args or kwargs):
-            raise TypeError(f"{cls.__name__}() takes no arguments")
-        return original_new(cls)
-
-    klass.__new__ = staticmethod(__new__)
-    klass.__deprecated__ = __new__.__deprecated__ = msg
-    return klass
+            return f"Function {func.__name__} is deprecated"
+        case _:
+            raise TypeError(f"Cannot create default message for {obj!r}")
 
 
 def make_wrapper(
@@ -143,3 +110,117 @@ def deprecated(
 
     msg = make_default_message(decorated)
     return make_wrapper(decorated, msg, category=category, stacklevel=stacklevel)
+
+
+class timeout(ContextDecorator, AbstractContextManager):
+    """Context manager for timing out a block of code."""
+
+    num_seconds: int
+    timeout_occurred: bool
+
+    def __init__(self, num_seconds: int) -> None:
+        self.num_seconds = num_seconds
+        self.timeout_occurred = False
+
+    def _timeout_handler(self, signum: int, frame: None | FrameType) -> Never:
+        self.timeout_occurred = True
+        raise RuntimeError("Execution timed out")
+
+    def __enter__(self) -> Self:
+        # Set the signal handler for SIGALRM (alarm signal)
+        signal.signal(signal.SIGALRM, self._timeout_handler)
+        # Schedule the alarm to go off in num_seconds seconds
+        signal.alarm(self.num_seconds)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        # Cancel the scheduled alarm
+        signal.alarm(0)
+        # Reset the signal handler to its default behavior
+        signal.signal(signal.SIGALRM, signal.SIG_DFL)
+
+
+class timer(ContextDecorator):
+    """Context manager for timing a block of code."""
+
+    LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__module__}/{__qualname__}")
+
+    start_time: int
+    """Start time of the timer."""
+    end_time: int
+    """End time of the timer."""
+    elapsed: float
+    """Elapsed time of the timer in seconds."""
+
+    def __enter__(self) -> Self:
+        self.LOGGER.info("Flushing pending writes.")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        self.LOGGER.info("Disabling garbage collection.")
+        gc.collect()
+        gc.disable()
+        self.LOGGER.info("Starting timer.")
+        self.start_time = perf_counter_ns()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
+        self.end_time = perf_counter_ns()
+        self.elapsed = (self.end_time - self.start_time) / 10**9
+        self.LOGGER.info("Stopped timer.")
+        gc.enable()
+        self.LOGGER.info("Re-Enabled garbage collection.")
+        return False
+
+
+def wrap_func(
+    func: Callable[P, R],
+    msg: str,
+    *,
+    category: type[Warning] = DeprecationWarning,
+    stacklevel: int = 1,
+) -> Callable[P, R]:
+    """Wrap a function with a deprecation warning."""
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        warnings.warn(msg, category=category, stacklevel=stacklevel + 1)
+        return func(*args, **kwargs)
+
+    func.__deprecated__ = wrapper.__deprecated__ = msg
+    return wrapper
+
+
+def wrap_type(
+    klass: type[T],
+    msg: str,
+    *,
+    category: type[Warning] = DeprecationWarning,
+    stacklevel: int = 1,
+) -> type[T]:
+    """Wrap a class with a deprecation warning."""
+    original_new = klass.__new__
+    has_init = klass.__init__ is not object.__init__
+
+    @wraps(original_new)
+    def __new__(T, *args, **kwargs):
+        warnings.warn(msg, category=category, stacklevel=stacklevel + 1)
+        if original_new is not object.__new__:
+            return original_new(T, *args, **kwargs)
+        # Mirrors a similar check in object.__new__.
+        if not has_init and (args or kwargs):
+            raise TypeError(f"{T.__name__}() takes no arguments")
+        return original_new(T)
+
+    klass.__new__ = staticmethod(__new__)
+    klass.__deprecated__ = __new__.__deprecated__ = msg
+    return klass

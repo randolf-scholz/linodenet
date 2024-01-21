@@ -7,18 +7,15 @@ Notes:
 """
 
 __all__ = [
-    # Protocols
-    "Regularization",
-    # Base Classes
-    "RegularizationABC",
+    # Sub-Modules
+    "functional",
     # Constants
     "REGULARIZATIONS",
     "FUNCTIONAL_REGULARIZATIONS",
     "MODULAR_REGULARIZATIONS",
-    # Types
-    # Sub-Modules
-    "functional",
-    "modular",
+    # ABCs & Protocols
+    "Regularization",
+    "RegularizationABC",
     # Functions
     "logdetexp",
     "matrix_norm",
@@ -54,12 +51,31 @@ __all__ = [
     # masked
     "Banded",
     "Diagonal",
-    "Masked",
     "LowerTriangular",
+    "Masked",
     "UpperTriangular",
 ]
 
-from linodenet.regularizations import functional, modular
+from linodenet.regularizations import functional
+from linodenet.regularizations._regularizations import (
+    Banded,
+    Diagonal,
+    Hamiltonian,
+    Identity,
+    LogDetExp,
+    LowerTriangular,
+    LowRank,
+    Masked,
+    MatrixNorm,
+    Normal,
+    Orthogonal,
+    RegularizationABC,
+    SkewSymmetric,
+    Symmetric,
+    Symplectic,
+    Traceless,
+    UpperTriangular,
+)
 from linodenet.regularizations.functional import (
     Regularization,
     banded,
@@ -78,25 +94,6 @@ from linodenet.regularizations.functional import (
     symplectic,
     traceless,
     upper_triangular,
-)
-from linodenet.regularizations.modular import (
-    Banded,
-    Diagonal,
-    Hamiltonian,
-    Identity,
-    LogDetExp,
-    LowerTriangular,
-    LowRank,
-    Masked,
-    MatrixNorm,
-    Normal,
-    Orthogonal,
-    RegularizationABC,
-    SkewSymmetric,
-    Symmetric,
-    Symplectic,
-    Traceless,
-    UpperTriangular,
 )
 
 FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
@@ -137,8 +134,8 @@ MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
     # masked
     "Banded": Banded,
     "Diagonal": Diagonal,
-    "Masked": Masked,
     "LowerTriangular": LowerTriangular,
+    "Masked": Masked,
     "UpperTriangular": UpperTriangular,
 }
 r"""Dictionary of all available modular metrics."""

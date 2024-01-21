@@ -2,10 +2,10 @@
 
 __all__ = [
     # check functions
-    "check_object",
+    "check_class",
     "check_function",
     "check_model",
-    "check_class",
+    "check_object",
     # helper functions
     "check_backward",
     "check_forward",
@@ -15,6 +15,7 @@ __all__ = [
     "check_jit_serialization",
     "check_optim",
     # helper functions
+    "assert_close",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
@@ -39,13 +40,43 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.testing._utils import assert_close
-from linodenet.types import Device, Nested, Scalar, T, module_var
+from linodenet.types import Device, M, Nested, Scalar, T
 
 __logger__ = logging.getLogger(__name__)
 Tree: TypeAlias = Nested[Tensor | Scalar]
 Func: TypeAlias = Callable[..., Nested[Tensor]]
 DeviceArg: TypeAlias = None | str | torch.device  # Literal["cpu", "cuda"]
+
+
+def assert_close(
+    values: Nested[Tensor],
+    reference: Nested[Tensor],
+    /,
+    *,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
+) -> None:
+    """Assert that outputs and targets are close."""
+    match values:
+        case Tensor() as tensor:
+            assert isinstance(reference, Tensor)
+            assert torch.allclose(tensor, reference, rtol=rtol, atol=atol), (
+                tensor,
+                reference,
+            )
+        case Mapping() as mapping:
+            assert isinstance(reference, Mapping)
+            assert mapping.keys() == reference.keys()
+            for key in mapping:
+                x = mapping[key]
+                y = reference[key]
+                assert_close(x, y, rtol=rtol, atol=atol)
+        case Sequence() as sequence:
+            assert isinstance(reference, Sequence)
+            for output, target in zip(sequence, reference, strict=True):
+                assert_close(output, target, rtol=rtol, atol=atol)
+        case _:
+            raise TypeError(f"Unsupported type {type(values)} for `outputs`!")
 
 
 # region utility functions for tensors AND scalars -------------------------------------
@@ -65,7 +96,7 @@ def get_device(x: nn.Module | Tree, /) -> torch.device:
 
 
 @overload
-def to_device(x: module_var, /, *, device: DeviceArg = ...) -> module_var: ...
+def to_device(x: M, /, *, device: DeviceArg = ...) -> M: ...
 @overload
 def to_device(x: Tensor, /, *, device: DeviceArg = ...) -> Tensor: ...
 @overload
@@ -299,12 +330,12 @@ def check_jit(module_or_func, /, *, device=None):
 
 
 def check_initialization(
-    module_type: type[module_var],
+    module_type: type[M],
     /,
     *,
     args: Sequence[Tree] = (),
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
-) -> module_var:
+) -> M:
     """Test initialization of a module."""
     if not issubclass(module_type, nn.Module):
         raise TypeError(f"Unsupported type {type(module_type)} for `obj`!")

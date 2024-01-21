@@ -14,12 +14,13 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.initializations import Initialization
+from linodenet.lib._utils import pad
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
 from linodenet.models.filters import MissingValueFilter
 from linodenet.models.system import LinODECell
 from linodenet.projections import Projection
-from linodenet.utils import deep_dict_update, initialize_from_dict, pad
+from linodenet.utils import deep_dict_update, initialize_from_dict
 
 __logger__ = logging.getLogger(__name__)
 

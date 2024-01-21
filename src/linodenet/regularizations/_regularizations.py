@@ -6,7 +6,7 @@ Notes:
 """
 
 __all__ = [
-    # Base Classes
+    # ABCs & Protocols
     "RegularizationABC",
     # Regularizations
     "LogDetExp",
@@ -24,8 +24,8 @@ __all__ = [
     # masked
     "Banded",
     "Diagonal",
-    "Masked",
     "LowerTriangular",
+    "Masked",
     "UpperTriangular",
 ]
 

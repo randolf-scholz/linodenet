@@ -3,7 +3,7 @@
 __all__ = [
     # Constants
     "PARAMETRIZATIONS",
-    # Protocol
+    # ABCs & Protocols
     "GeneralParametrization",
     "Parametrization",
     # Classes
@@ -15,12 +15,11 @@ __all__ = [
     "is_parametrized",
     "register_parametrization",
     "cached",
-    # additional functions
-    "deepcopy",
-    "register_optimizer_hook",
     # Functions
-    "get_parametrizations",
+    "deepcopy_with_parametrizations",
     "detach_caches",
+    "get_parametrizations",
+    "register_optimizer_hook",
     "update_caches",
     "update_originals",
     "update_parametrizations",
@@ -56,7 +55,7 @@ from linodenet.parametrize.base import (
     ParametrizationDict,
     ParametrizationMulticache,
     cached,
-    deepcopy,
+    deepcopy_with_parametrizations,
     detach_caches,
     get_parametrizations,
     is_parametrized,
