@@ -15,14 +15,13 @@ __all__ = [
 import logging
 import os
 from functools import cached_property
-from importlib import import_module, resources
+from importlib import import_module
 from itertools import chain
 from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar, Final
 
 import torch
-import yaml
 
 __logger__ = logging.getLogger(__name__)
 
@@ -103,14 +102,6 @@ class Config(metaclass=ConfigMeta):
         assert isinstance(value, bool)
         self._autojit = bool(value)
         os.environ["LINODENET_AUTOJIT"] = str(value)
-
-    @cached_property
-    def CONFIG_FILE(self) -> dict:
-        r"""Return dictionary containing basic configuration of TSDM."""
-        path = resources.files(__package__) / "config.yaml"
-        with path.open("r", encoding="utf8") as file:
-            # with open(file, "r", encoding="utf8") as f:
-            return yaml.safe_load(file)
 
 
 class Project:
