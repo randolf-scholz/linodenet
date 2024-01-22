@@ -11,7 +11,7 @@ from linodenet.lib import (
     spectral_norm,
     spectral_norm_native,
 )
-from linodenet.utils import timer
+from linodenet.utils.context import timer
 
 DEVICES = ["cpu", "cuda"] if torch.cuda.is_available() else ["cpu"]
 NORM_ONLY = {True: "norm_only", False: "triplet"}

@@ -2,7 +2,6 @@ r"""Utility functions."""
 
 __all__ = [
     # Functions
-    "assert_issubclass",
     "autojit",
     "deep_dict_update",
     "deep_keyval_update",
@@ -14,7 +13,7 @@ __all__ = [
 ]
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from copy import deepcopy
 from functools import wraps
 from importlib import import_module
@@ -24,20 +23,9 @@ from typing import Any
 from torch import jit, nn
 
 from linodenet.config import CONFIG
-from linodenet.types import M, T
+from linodenet.types import M
 
 __logger__ = logging.getLogger(__name__)
-
-
-def assert_issubclass(proto: type, /) -> Callable[[T], T]:
-    """Assert that an object satisfies a protocol."""
-
-    def decorator(cls: T) -> T:
-        """Assert that a class satisfies a protocol."""
-        assert issubclass(cls, proto), f"{cls} is not a {proto}"
-        return cls  # type: ignore[return-value]
-
-    return decorator
 
 
 def autojit(base_class: type[M]) -> type[M]:

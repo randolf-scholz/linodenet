@@ -8,27 +8,24 @@ There are 2 types of parametrizations:
 
 __all__ = [
     # Parametrizations
+    "Banded",
     "CayleyMap",
+    "Diagonal",
     "GramMatrix",
-    "MatrixExponential",
-    "SpectralNormalization",
-    # Learnable parametrizations
-    "ReZero",
-    # linodenet.projections
     "Hamiltonian",
     "Identity",
     "LowRank",
+    "LowerTriangular",
+    "Masked",
+    "MatrixExponential",
     "Normal",
     "Orthogonal",
+    "ReZero",
     "SkewSymmetric",
+    "SpectralNormalization",
     "Symmetric",
     "Symplectic",
     "Traceless",
-    # linodenet.projections masked
-    "Banded",
-    "Diagonal",
-    "LowerTriangular",
-    "Masked",
     "UpperTriangular",
 ]
 

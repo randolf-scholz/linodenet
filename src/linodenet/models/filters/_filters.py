@@ -177,8 +177,8 @@ class LinearKalmanCell(nn.Module):
         assert not autoregressive or input_size == hidden_size
 
         # CONSTANTS
-        n = input_size
-        m = hidden_size
+        n: int = input_size
+        m: int = hidden_size
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.autoregressive = config["autoregressive"]

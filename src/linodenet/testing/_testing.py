@@ -402,6 +402,7 @@ def check_object(
 ) -> None:
     """Check a module, function or model class."""
     # region get name and logger -------------------------------------------------------
+    model: nn.Module | Func
     match obj:
         case type() if issubclass(obj, nn.Module):
             model_name = obj.__name__
@@ -417,15 +418,13 @@ def check_object(
     # endregion get name and logger ----------------------------------------------------
 
     # region get initialized model if class --------------------------------------------
-    model: nn.Module | Func
-
     match obj:
         case type() as cls:
             model = check_initialization(cls, args=init_args, kwargs=init_kwargs)
         case nn.Module() as model:
             pass
         case Callable() as func:  # type: ignore[misc]
-            model = func
+            model = func  # type: ignore[unreachable]
         case _:
             raise TypeError(f"Unsupported type {type(obj)} for `obj`!")
 
