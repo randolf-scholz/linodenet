@@ -3,7 +3,7 @@
 import torch
 from torch import nn
 
-from linodenet.models.encoders.invertible_layers import LinearContraction
+from linodenet.models.encoders.spectral_normalization import LinearContraction
 from linodenet.parametrize import SpectralNormalization
 
 

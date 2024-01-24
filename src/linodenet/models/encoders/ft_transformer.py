@@ -51,9 +51,6 @@ def get_nonglu_activation_fn(name: str) -> Callable[[Tensor], Tensor]:
             return get_activation_fn(name)
 
 
-# %%
-
-
 class Tokenizer(nn.Module):
     r"""Tokenizer Model."""
 

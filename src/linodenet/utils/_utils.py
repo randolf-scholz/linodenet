@@ -56,7 +56,7 @@ def autojit(base_class: type[M]) -> type[M]:
             instance: M = base_class(*args, **kwargs)
 
             if CONFIG.autojit:
-                scripted: M = jit.script(instance)  # pyright: ignore
+                scripted: M = jit.script(instance)
                 return scripted
             return instance
 
