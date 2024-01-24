@@ -7,41 +7,6 @@ repos:
   #  - repo: meta
   #    hooks:
   #      - id: identity
-  - repo: local
-    hooks:
-      - id: markdownlint
-        name: markdownlint
-        types: [markdown]
-        language: system
-        stages: [pre-push, manual]
-        verbose: true
-        entry: mdl
-        args:
-          ["-r", "~MD007,~MD013,~MD029,~MD033"]
-          # MD007: Unordered list indentation (false positives)
-          # MD013: Line length (unused)
-        # MD029: Ordered list item prefix (false positives)
-        # MD033: Inline HTML (unused)
-      - id: axes-axis
-        name: rename 'axes=' => 'axis='
-        types: [python]
-        language: pygrep
-        entry: "axes="
-      - id: mypy
-        name: mypy
-        language: system
-        files: (^src/|^tests/)
-        types: [python]
-        entry: mypy
-        require_serial: true
-        args:
-          [
-            "--hide-error-context",
-            "--hide-error-end",
-            "--no-pretty",
-            "--no-error-summary",
-          ]
-        stages: [pre-push, manual]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     # https://pre-commit.com/hooks.html
     rev: v4.5.0
@@ -107,6 +72,7 @@ repos:
     rev: 5.13.2
     hooks:
       - id: isort
+        args: ["--check"]
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.1.14
@@ -115,45 +81,12 @@ repos:
         files: (^src/|^tests/)
       - id: ruff-format
         files: (^src/|^tests/)
-  # slotscheck
-  #  - repo: https://github.com/ariebovenberg/slotscheck
-  #    rev: v0.17.0
-  #    hooks:
-  #      - id: slotscheck
-  #        language: system
-  #        files: ^src/
   # nbstripout-fast
   - repo: https://github.com/deshaw/nbstripout-fast.git
     rev: v1.0.3
     hooks:
       - id: nbstripout-fast
         files: ^dev/
-  # pyright
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.348
-    hooks:
-      - id: pyright
-        # not everything works with pyright yet
-        # verbose regex
-        files: |
-          (?x)^(
-            (?!)  # intentionally matches nothing
-            #|tests/linodenet
-            |tests/linodenet/activations
-            |tests/linodenet/config
-            |tests/linodenet/initializations
-            |tests/linodenet/lib
-            |tests/linodenet/logutils
-            #|tests/linodenet/models
-            #|tests/linodenet/parametrize
-            |tests/linodenet/projections
-            |tests/linodenet/regularizations
-            #|tests/linodenet/testing
-            |tests/linodenet/utils
-            |tests/linodenet/constants.py
-            |tests/linodenet/types.py
-            |src/
-          )
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
     rev: v0.1.49
     hooks:
@@ -193,3 +126,63 @@ repos:
       - id: python-check-clean-interface
         files: ^src/
         args: ["--no-load-silent"]
+  - repo: local
+    hooks:
+      - id: markdownlint
+        name: markdownlint
+        types: [markdown]
+        language: system
+        stages: [pre-push, manual]
+        verbose: true
+        entry: mdl
+        args:
+          ["-r", "~MD007,~MD013,~MD029,~MD033"]
+          # MD007: Unordered list indentation (false positives)
+          # MD013: Line length (unused)
+        # MD029: Ordered list item prefix (false positives)
+        # MD033: Inline HTML (unused)
+      - id: axes-axis
+        name: rename 'axes=' => 'axis='
+        types: [python]
+        language: pygrep
+        entry: "axes="
+      - id: mypy
+        name: mypy
+        language: system
+        files: (^src/|^tests/)
+        types: [python, pyi]
+        entry: mypy
+        args:
+          [
+            "--hide-error-context",
+            "--hide-error-end",
+            "--no-pretty",
+            "--no-error-summary",
+          ]
+        stages: [pre-push, manual]
+  # pyright
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.348
+    hooks:
+      - id: pyright
+        # not everything works with pyright yet
+        # verbose regex
+        files: |
+          (?x)^(
+            (?!)  # intentionally matches nothing
+            #|tests/linodenet
+            |tests/linodenet/activations
+            |tests/linodenet/config
+            |tests/linodenet/initializations
+            |tests/linodenet/lib
+            |tests/linodenet/logutils
+            #|tests/linodenet/models
+            #|tests/linodenet/parametrize
+            |tests/linodenet/projections
+            |tests/linodenet/regularizations
+            #|tests/linodenet/testing
+            |tests/linodenet/utils
+            |tests/linodenet/constants.py
+            |tests/linodenet/types.py
+            |src/
+          )

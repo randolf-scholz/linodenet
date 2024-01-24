@@ -21,13 +21,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dda7e14c-7c93-4275-ad35-0635f4deaa84" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/../../../bugs/torch/trace_inaccurate.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/liblinodenet/matrix_root.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../dev/parametrization/demo.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/parametrization/demo.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../dev/parametrization/test_parametrization.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../dev/parametrization/test_parametrization.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../../experiments/riemann_optimization.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/../../../experiments/riemann_optimization.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../.idea/watcherTasks.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../../poetry.lock" beforeDir="false" afterPath="$PROJECT_DIR$/../../../poetry.lock" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -87,26 +82,27 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
-    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;randolf&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/rscholz/Projects/KIWI/linodenet/src/linodenet/lib/src/liblinodenet&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.toDoOptions&quot;,
-    &quot;structure.view.defaults.are.configured&quot;: &quot;true&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "WebServerToolWindowFactoryState": "false",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "git-widget-placeholder": "randolf",
+    "last_opened_file_path": "/home/rscholz/Projects/KIWI/linodenet/src/linodenet/lib/src/liblinodenet",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.toDoOptions",
+    "structure.view.defaults.are.configured": "true",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/src/liblinodenet" />
@@ -227,6 +223,7 @@
     </configuration>
     <configuration name="pytest for test_correctness.test_analytical" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="lib" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
@@ -259,6 +256,7 @@
     </configuration>
     <configuration name="pytest for test_grad.test_singular_triplet" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="lib" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
@@ -291,6 +289,7 @@
     </configuration>
     <configuration name="pytest for tests.liblinodenet.test_grad" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="lib" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
@@ -323,6 +322,7 @@
     </configuration>
     <configuration name="pytest in test_correctness.py" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="lib" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
@@ -355,6 +355,7 @@
     </configuration>
     <configuration name="pytest in test_grad.py" type="tests" factoryName="py.test" temporary="true" nameIsGenerated="true">
       <module name="lib" />
+      <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
@@ -433,6 +434,7 @@
       <workItem from="1699001891443" duration="3952000" />
       <workItem from="1700483603494" duration="759000" />
       <workItem from="1700677373151" duration="2000" />
+      <workItem from="1706088772049" duration="6000" />
     </task>
     <servers />
   </component>
