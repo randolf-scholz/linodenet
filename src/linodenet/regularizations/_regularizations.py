@@ -10,6 +10,7 @@ __all__ = [
     "RegularizationABC",
     # Regularizations
     "Banded",
+    "Contraction",
     "Diagonal",
     "Hamiltonian",
     "Identity",
@@ -35,6 +36,7 @@ from torch import BoolTensor, Tensor, nn
 
 from linodenet.regularizations.functional import (
     banded,
+    contraction,
     diagonal,
     hamiltonian,
     identity,
@@ -481,4 +483,32 @@ class Masked(nn.Module):
 
 
 # endregion masked projections ---------------------------------------------------------
+
+
+# region other regularizations ---------------------------------------------------------
+class Contraction(nn.Module):
+    r"""Bias the matrix towards being a contraction.
+
+    .. Signature:: ``(..., m, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ∥X-A∥₂ s.t. ‖X‖₂≤1
+    """
+
+    p: Final[Union[str, int]]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards contraction."""
+        return contraction(x)
+
+
+# endregion other regularizations ------------------------------------------------------
 # endregion regularizations ------------------------------------------------------------

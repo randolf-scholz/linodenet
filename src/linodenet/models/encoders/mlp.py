@@ -1,7 +1,4 @@
-r"""#TODO add module summary line.
-
-#TODO add module description.
-"""
+r"""Multi-Layer Perceptron."""
 
 __all__ = [
     # Classes

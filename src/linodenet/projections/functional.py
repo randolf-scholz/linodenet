@@ -10,6 +10,7 @@ __all__ = [
     "Projection",
     # Projections
     "banded",
+    "contraction",
     "diagonal",
     "hamiltonian",
     "identity",
@@ -321,4 +322,29 @@ def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
 
 
 # endregion masked projections ---------------------------------------------------------
+
+
+# region other projections -------------------------------------------------------------
+def contraction(x: Tensor) -> Tensor:
+    r"""Return the closest contraction matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ∥X-Y∥₂  s.t. ‖Y‖₂ ≤ 1
+
+    One can show analytically that the unique smallest norm minimizer is
+    $Y = \min(1, σ⁻¹) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
+
+    Proof:
+        Apply SVD: $X = UΣV^𝖳$, then, the problem is equivalent to minimizing
+        $∥UΣV^𝖳 - Y‖₂ = ∥Σ - U^𝖳 Y V‖₂ = ∥Σ - Z‖₂$ subject to $‖Z‖₂ ≤ 1$.
+        Since $Σ$ is diagonal, one can show the problem is equivalent to minimizing
+        $∥𝛔 - 𝐳‖₂$ subject to $‖𝐳‖_∞ ≤ 1$, where $𝐳 = \text{diag}(Z)$.
+        Which is solved by $𝐳 = \min(1, σ₁⁻¹) 𝛔$.
+    """
+    sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
+    return x / sigma.clamp_min(1.0)
+
+
+# endregion other projections ----------------------------------------------------------
 # endregion projections ----------------------------------------------------------------

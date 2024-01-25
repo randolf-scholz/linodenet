@@ -1,35 +1,30 @@
 r"""Models of the LinODE-Net package."""
 
 __all__ = [
-    "LSSM",
+    # sub-packages
+    "embeddings",
+    "encoders",
+    "filters",
+    "forecasting",
+    "system",
     # Constants
-    "MODELS",
+    "MODULES",
+    # Classes
     "LatentStateSpaceModel",
     "LinODE",
     "LinODECell",
     "LinODEnet",
     "LinearContraction",
-    # ABCs & Protocols
-    "Model",
-    "ModelABC",
-    # Classes
     "ResNet",
     "ResNetBlock",
     "SpectralNorm",
     "iResNet",
     "iResNetBlock",
-    # Sub-Packages
-    "embeddings",
-    "encoders",
-    "filters",
     # Functions
     "spectral_norm",
-    "system",
 ]
 
-from linodenet.models import embeddings, encoders, filters, system
-from linodenet.models._linodenet import LinODE, LinODEnet
-from linodenet.models._models import Model, ModelABC
+from linodenet.models import embeddings, encoders, filters, forecasting, system
 from linodenet.models.encoders import (
     LinearContraction,
     ResNet,
@@ -39,15 +34,15 @@ from linodenet.models.encoders import (
     iResNetBlock,
     spectral_norm,
 )
-from linodenet.models.lssm import LatentStateSpaceModel, LatentStateSpaceModel as LSSM
-from linodenet.models.system import LinODECell
+from linodenet.models.forecasting import LatentStateSpaceModel, LinODEnet
+from linodenet.models.system import LinODE, LinODECell
 
-MODELS: dict[str, type[Model]] = {
-    "LinearContraction": LinearContraction,
-    "iResNetBlock": iResNetBlock,
-    "iResNet": iResNet,
-    "LinODECell": LinODECell,
-    "LinODE": LinODE,
-    "LinODEnet": LinODEnet,
-}
+MODULES: dict[str, type] = {
+    "LinODE"            : LinODE,
+    "LinODECell"        : LinODECell,
+    "LinODEnet"         : LinODEnet,
+    "LinearContraction" : LinearContraction,
+    "iResNet"           : iResNet,
+    "iResNetBlock"      : iResNetBlock,
+}  # fmt: skip
 r"""Dictionary containing all available models."""

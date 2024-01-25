@@ -18,6 +18,7 @@ __all__ = [
     "RegularizationABC",
     # Classes
     "Banded",
+    "Contraction",
     "Diagonal",
     "Hamiltonian",
     "Identity",
@@ -35,6 +36,7 @@ __all__ = [
     "UpperTriangular",
     # Functions
     "banded",
+    "contraction",
     "diagonal",
     "hamiltonian",
     "identity",
@@ -55,6 +57,7 @@ __all__ = [
 from linodenet.regularizations import functional
 from linodenet.regularizations._regularizations import (
     Banded,
+    Contraction,
     Diagonal,
     Hamiltonian,
     Identity,
@@ -75,6 +78,7 @@ from linodenet.regularizations._regularizations import (
 from linodenet.regularizations.functional import (
     Regularization,
     banded,
+    contraction,
     diagonal,
     hamiltonian,
     identity,
@@ -93,47 +97,45 @@ from linodenet.regularizations.functional import (
 )
 
 FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
-    "logdetexp": logdetexp,
-    "matrix_norm": matrix_norm,
-    # linodenet.projections (matrix groups)
-    "hamiltonian": hamiltonian,
-    "identity": identity,
-    "low_rank": low_rank,
-    "normal": normal,
-    "orthogonal": orthogonal,
-    "skew_symmetric": skew_symmetric,
-    "symmetric": symmetric,
-    "symplectic": symplectic,
-    "traceless": traceless,
-    # linodenet.projections (masked)
-    "banded": banded,
-    "diagonal": diagonal,
-    "lower_triangular": lower_triangular,
-    "masked": masked,
-    "upper_triangular": upper_triangular,
-}
+    "banded"           : banded,
+    "contraction"      : contraction,
+    "diagonal"         : diagonal,
+    "hamiltonian"      : hamiltonian,
+    "identity"         : identity,
+    "logdetexp"        : logdetexp,
+    "low_rank"         : low_rank,
+    "lower_triangular" : lower_triangular,
+    "masked"           : masked,
+    "matrix_norm"      : matrix_norm,
+    "normal"           : normal,
+    "orthogonal"       : orthogonal,
+    "skew_symmetric"   : skew_symmetric,
+    "symmetric"        : symmetric,
+    "symplectic"       : symplectic,
+    "traceless"        : traceless,
+    "upper_triangular" : upper_triangular,
+}  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
 MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
-    "LogDetExp": LogDetExp,
-    "MatrixNorm": MatrixNorm,
-    # matrix groups
-    "Hamiltonian": Hamiltonian,
-    "Identity": Identity,
-    "LowRank": LowRank,
-    "Normal": Normal,
-    "Orthogonal": Orthogonal,
-    "SkewSymmetric": SkewSymmetric,
-    "Symmetric": Symmetric,
-    "Symplectic": Symplectic,
-    "Traceless": Traceless,
-    # masked
-    "Banded": Banded,
-    "Diagonal": Diagonal,
-    "LowerTriangular": LowerTriangular,
-    "Masked": Masked,
-    "UpperTriangular": UpperTriangular,
-}
+    "Banded"          : Banded,
+    "Contraction"     : Contraction,
+    "Diagonal"        : Diagonal,
+    "Hamiltonian"     : Hamiltonian,
+    "Identity"        : Identity,
+    "LogDetExp"       : LogDetExp,
+    "LowRank"         : LowRank,
+    "LowerTriangular" : LowerTriangular,
+    "Masked"          : Masked,
+    "MatrixNorm"      : MatrixNorm,
+    "Normal"          : Normal,
+    "Orthogonal"      : Orthogonal,
+    "SkewSymmetric"   : SkewSymmetric,
+    "Symmetric"       : Symmetric,
+    "Symplectic"      : Symplectic,
+    "Traceless"       : Traceless,
+    "UpperTriangular" : UpperTriangular,
+}  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
 REGULARIZATIONS: dict[str, Regularization | type[Regularization]] = {

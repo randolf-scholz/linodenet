@@ -2,7 +2,6 @@ r"""Contains implementations of ODE models."""
 
 __all__ = [
     # Classes
-    "LinODE",
     "LinODEnet",
 ]
 
@@ -13,212 +12,14 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import Initialization
-from linodenet.lib._utils import pad
+from linodenet.lib import pad
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.models.encoders import ResNet
 from linodenet.models.filters import MissingValueFilter
 from linodenet.models.system import LinODECell
-from linodenet.projections import Projection
 from linodenet.utils import deep_dict_update, initialize_from_dict
 
 __logger__ = logging.getLogger(__name__)
-
-
-class LinODE(nn.Module):
-    r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __module__,
-        "cell": LinODECell.HP,
-        "kernel_initialization": None,
-        "kernel_projection": None,
-    }
-    r"""Dictionary of hyperparameters."""
-
-    # Constants
-    input_size: Final[int]
-    r"""CONST: The dimensionality of inputs."""
-    output_size: Final[int]
-    r"""CONST: The dimensionality of the outputs."""
-
-    # Buffers
-    xhat: Tensor
-    r"""BUFFER: The forward prediction."""
-
-    # Parameters
-    kernel: Tensor
-    r"""PARAM: The system matrix of the linear ODE component."""
-
-    # Functions
-    kernel_initialization: Initialization
-    r"""FUNC: Parameter-less function that draws a initial system matrix."""
-    kernel_projection: Projection
-    r"""FUNC: Regularization function for the kernel."""
-
-    def __init__(self, input_size: int, **cfg: Any) -> None:
-        super().__init__()
-        config = deep_dict_update(self.HP, cfg)
-
-        config["cell"]["input_size"] = input_size
-
-        self.input_size = input_size
-        self.output_size = input_size
-        self.cell: nn.Module = initialize_from_dict(config["cell"])
-
-        # Buffers
-        self.register_buffer("xhat", torch.tensor(()), persistent=False)
-        assert isinstance(self.cell.kernel, Tensor)
-        self.register_buffer("kernel", self.cell.kernel, persistent=False)
-
-    @jit.export
-    def forward(self, T: Tensor, x0: Tensor) -> Tensor:
-        r""".. Signature:: ``[(..., N), (..., d)] -> (..., N, d)``.
-
-        Returns the estimated true state of the system at the times $t∈T$.
-        """
-        DT = torch.moveaxis(torch.diff(T), -1, 0)
-        X: list[Tensor] = [x0]
-
-        # iterate over LEN, this works even when no BATCH dim present.
-        for dt in DT:
-            X.append(self.cell(dt, X[-1]))
-
-        # shape: [LEN, ..., DIM]
-        Xhat = torch.stack(X, dim=0)
-        # shape: [..., LEN, DIM]
-        self.xhat = torch.moveaxis(Xhat, 0, -2)
-
-        return self.xhat
-
-
-class LatentLinODECell(nn.Module):
-    """Latent Linear ODE Cell."""
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __module__,
-        "input_size": None,
-        "hidden_size": None,
-        "latent_size": None,
-        "output_size": None,
-        "System": LinODECell.HP,
-        "Embedding": ConcatEmbedding.HP,
-        "Projection": ConcatProjection.HP,
-        "Filter": MissingValueFilter.HP | {"autoregressive": True},
-        "Encoder": ResNet.HP,
-        "Decoder": ResNet.HP,
-    }
-    r"""Dictionary of Hyperparameters."""
-
-    # CONSTANTS
-    input_size: Final[int]
-    r"""CONST: The dimensionality of the inputs."""
-    latent_size: Final[int]
-    r"""CONST: The dimensionality of the linear ODE."""
-    hidden_size: Final[int]
-    r"""CONST: The dimensionality of the padding."""
-    padding_size: Final[int]
-    r"""CONST: The dimensionality of the padded state."""
-    output_size: Final[int]
-    r"""CONST: The dimensionality of the outputs."""
-    validate_inputs: Final[bool]
-    r"""CONST: Whether to validate the inputs."""
-
-    # BUFFERS
-    x_pre: Tensor
-    r"""BUFFER: Stores pre-jump values."""
-    x_post: Tensor
-    r"""BUFFER: Stores post-jump values."""
-    z_pre: Tensor
-    r"""BUFFER: Stores pre-jump latent values."""
-    z_post: Tensor
-    r"""BUFFER: Stores post-jump latent values."""
-    dt: Tensor
-    r"""BUFFER: Stores the timedelta values."""
-
-    def __init__(
-        self,
-        input_size: int,
-        latent_size: int,
-        hidden_size: Optional[int] = None,
-        **cfg: Any,
-    ) -> None:
-        # LOGGER = __logger__.getChild(self.__class__.__name__)
-        super().__init__()
-
-        config = deep_dict_update(self.HP, cfg)
-        self.validate_inputs = config.get("validate_inputs", False)
-
-        hidden_size = hidden_size if hidden_size is not None else input_size
-        if hidden_size < input_size:
-            warnings.warn(
-                "hidden_size < input_size. Setting hidden_size=input_size.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            hidden_size = input_size
-
-        # CONSTANTS
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.latent_size = latent_size
-        self.output_size = input_size
-        self.padding_size = self.hidden_size - self.input_size
-
-        # BUFFERS
-        self.register_buffer("x_pre", torch.tensor(()), persistent=False)
-        self.register_buffer("x_post", torch.tensor(()), persistent=False)
-        self.register_buffer("z_pre", torch.tensor(()), persistent=False)
-        self.register_buffer("z_post", torch.tensor(()), persistent=False)
-        self.register_buffer("dt", torch.tensor(()), persistent=False)
-
-        # Submodules
-        self.embedding: nn.Module = initialize_from_dict(config["Embedding"])
-        self.encoder: nn.Module = initialize_from_dict(config["Encoder"])
-        self.system: nn.Module = initialize_from_dict(config["System"])
-        self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
-        self.projection: nn.Module = initialize_from_dict(config["Projection"])
-        self.filter: nn.Module = initialize_from_dict(config["Filter"])
-
-        # Parameters
-        self.kernel = self.system.kernel
-        self.z0 = nn.Parameter(torch.randn(self.latent_size))
-
-    def forward(self, x_obs: Tensor, z: Tensor, dt: Tensor) -> Tensor:
-        """Propagate the latent state forward in time.
-
-        .. Signature:: ``[(..., N), (..., d), (...,)] -> (..., N, d)``.
-
-        Args:
-            x_obs: The observation at the current time step. May contain NaNs.
-            z: The latent state at the current time step. Must not contain NaNs.
-            dt: The time delta between the time of z and the time of x_obs.
-
-        Note:
-            Contrary to a standard RNNCell, the LatentLinODECell requires an optional time step `dt` to be passed.
-        """
-        # Store the time delta.
-        self.dt = dt
-
-        # Decode the latent state at the observation time.
-        # (..., LAT) -> (..., DIM)
-        self.x_pre = self.projection(self.decoder(z))
-
-        # Update the state estimate by filtering the observation.
-        # (..., DIM), (..., DIM) → (..., DIM)
-        self.x_post = self.filter(x_obs, self.x_pre)
-
-        # Encode the latent state at the observation time.
-        # (..., DIM) → (..., LAT)
-        self.z_post = self.encoder(self.embedding(self.x_post))
-
-        # Propagate the latent state forward in time.
-        # (...,), (..., LAT) -> (..., LAT)
-        self.z_pre = self.system(self.dt, self.z_post)
-
-        return self.z_post
 
 
 class LinODEnet(nn.Module):
@@ -578,3 +379,129 @@ class LinODEnet(nn.Module):
 #     observations: tuple[Tensor, Tensor]
 #     covariates: tuple[Tensor, Tensor]
 #     metadata: Tensor
+class LatentLinODECell(nn.Module):
+    """Latent Linear ODE Cell."""
+
+    HP = {
+        "__name__": __qualname__,
+        "__module__": __module__,
+        "input_size": None,
+        "hidden_size": None,
+        "latent_size": None,
+        "output_size": None,
+        "System": LinODECell.HP,
+        "Embedding": ConcatEmbedding.HP,
+        "Projection": ConcatProjection.HP,
+        "Filter": MissingValueFilter.HP | {"autoregressive": True},
+        "Encoder": ResNet.HP,
+        "Decoder": ResNet.HP,
+    }
+    r"""Dictionary of Hyperparameters."""
+
+    # CONSTANTS
+    input_size: Final[int]
+    r"""CONST: The dimensionality of the inputs."""
+    latent_size: Final[int]
+    r"""CONST: The dimensionality of the linear ODE."""
+    hidden_size: Final[int]
+    r"""CONST: The dimensionality of the padding."""
+    padding_size: Final[int]
+    r"""CONST: The dimensionality of the padded state."""
+    output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
+    validate_inputs: Final[bool]
+    r"""CONST: Whether to validate the inputs."""
+
+    # BUFFERS
+    x_pre: Tensor
+    r"""BUFFER: Stores pre-jump values."""
+    x_post: Tensor
+    r"""BUFFER: Stores post-jump values."""
+    z_pre: Tensor
+    r"""BUFFER: Stores pre-jump latent values."""
+    z_post: Tensor
+    r"""BUFFER: Stores post-jump latent values."""
+    dt: Tensor
+    r"""BUFFER: Stores the timedelta values."""
+
+    def __init__(
+        self,
+        input_size: int,
+        latent_size: int,
+        hidden_size: Optional[int] = None,
+        **cfg: Any,
+    ) -> None:
+        # LOGGER = __logger__.getChild(self.__class__.__name__)
+        super().__init__()
+
+        config = deep_dict_update(self.HP, cfg)
+        self.validate_inputs = config.get("validate_inputs", False)
+
+        hidden_size = hidden_size if hidden_size is not None else input_size
+        if hidden_size < input_size:
+            warnings.warn(
+                "hidden_size < input_size. Setting hidden_size=input_size.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            hidden_size = input_size
+
+        # CONSTANTS
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.latent_size = latent_size
+        self.output_size = input_size
+        self.padding_size = self.hidden_size - self.input_size
+
+        # BUFFERS
+        self.register_buffer("x_pre", torch.tensor(()), persistent=False)
+        self.register_buffer("x_post", torch.tensor(()), persistent=False)
+        self.register_buffer("z_pre", torch.tensor(()), persistent=False)
+        self.register_buffer("z_post", torch.tensor(()), persistent=False)
+        self.register_buffer("dt", torch.tensor(()), persistent=False)
+
+        # Submodules
+        self.embedding: nn.Module = initialize_from_dict(config["Embedding"])
+        self.encoder: nn.Module = initialize_from_dict(config["Encoder"])
+        self.system: nn.Module = initialize_from_dict(config["System"])
+        self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
+        self.projection: nn.Module = initialize_from_dict(config["Projection"])
+        self.filter: nn.Module = initialize_from_dict(config["Filter"])
+
+        # Parameters
+        self.kernel = self.system.kernel
+        self.z0 = nn.Parameter(torch.randn(self.latent_size))
+
+    def forward(self, x_obs: Tensor, z: Tensor, dt: Tensor) -> Tensor:
+        """Propagate the latent state forward in time.
+
+        .. Signature:: ``[(..., N), (..., d), (...,)] -> (..., N, d)``.
+
+        Args:
+            x_obs: The observation at the current time step. May contain NaNs.
+            z: The latent state at the current time step. Must not contain NaNs.
+            dt: The time delta between the time of z and the time of x_obs.
+
+        Note:
+            Contrary to a standard RNNCell, the LatentLinODECell requires an optional time step `dt` to be passed.
+        """
+        # Store the time delta.
+        self.dt = dt
+
+        # Decode the latent state at the observation time.
+        # (..., LAT) -> (..., DIM)
+        self.x_pre = self.projection(self.decoder(z))
+
+        # Update the state estimate by filtering the observation.
+        # (..., DIM), (..., DIM) → (..., DIM)
+        self.x_post = self.filter(x_obs, self.x_pre)
+
+        # Encode the latent state at the observation time.
+        # (..., DIM) → (..., LAT)
+        self.z_post = self.encoder(self.embedding(self.x_post))
+
+        # Propagate the latent state forward in time.
+        # (...,), (..., LAT) -> (..., LAT)
+        self.z_pre = self.system(self.dt, self.z_post)
+
+        return self.z_post

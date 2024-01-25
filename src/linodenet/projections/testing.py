@@ -5,6 +5,7 @@ __all__ = [
     "MatrixTest",
     # is_* checks
     "is_banded",
+    "is_contraction",
     "is_diagonal",
     "is_hamiltonian",
     "is_lower_triangular",
@@ -233,4 +234,17 @@ def is_masked(
 
 # endregion masked checks --------------------------------------------------------------
 
+
+# region other projections -------------------------------------------------------------
+@jit.script
+def is_contraction(x: Tensor) -> bool:
+    r"""Check whether the given tensor is a contraction.
+
+    .. Signature:: ``(..., m, n) -> bool``
+    """
+    sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
+    return bool((sigma <= 1.0).all().item())
+
+
+# endregion other projections ----------------------------------------------------------
 # endregion is_* checks ----------------------------------------------------------------

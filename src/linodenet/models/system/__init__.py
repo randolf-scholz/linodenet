@@ -7,12 +7,15 @@ __all__ = [
     "System",
     "SystemABC",
     # Classes
+    "LinODE",
     "LinODECell",
 ]
 
-from linodenet.models.system._system import LinODECell, System, SystemABC
+from linodenet.models.system.base import System, SystemABC
+from linodenet.models.system.linode import LinODE, LinODECell
 
 SYSTEMS: dict[str, type[System]] = {
+    "LinODE": LinODE,
     "LinODECell": LinODECell,
 }
 r"""Dictionary of all available system components."""

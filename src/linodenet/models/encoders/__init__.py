@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 
-from linodenet.models.encoders._encoders import Encoder, EncoderABC, Identity
+from linodenet.models.encoders.base import Encoder, EncoderABC, Identity
 from linodenet.models.encoders.ft_transformer import FTTransformer
 from linodenet.models.encoders.iresnet import (
     LinearContraction,

@@ -12,7 +12,7 @@ from typing import cast
 from torch import Tensor, nn
 from torch.nn import GRUCell, LSTMCell, RNNCell
 
-from linodenet.models.filters._filters import Filter
+from linodenet.models.filters.base import Filter
 
 
 class FilterABC(nn.Module):

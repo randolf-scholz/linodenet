@@ -48,15 +48,15 @@ from linodenet.initializations.functional import (
 )
 
 INITIALIZATIONS: dict[str, Initialization] = {
-    "canonical_skew_symmetric": canonical_skew_symmetric,
-    "canonical_symplectic": canonical_symplectic,
-    "diagonally_dominant": diagonally_dominant,
-    "gaussian": gaussian,
-    "low_rank": low_rank,
-    "orthogonal": orthogonal,
-    "skew-symmetric": skew_symmetric,
-    "special-orthogonal": special_orthogonal,
-    "symmetric": symmetric,
-    "traceless": traceless,
-}
+    "canonical_skew_symmetric" : canonical_skew_symmetric,
+    "canonical_symplectic"     : canonical_symplectic,
+    "diagonally_dominant"      : diagonally_dominant,
+    "gaussian"                 : gaussian,
+    "low_rank"                 : low_rank,
+    "orthogonal"               : orthogonal,
+    "skew-symmetric"           : skew_symmetric,
+    "special-orthogonal"       : special_orthogonal,
+    "symmetric"                : symmetric,
+    "traceless"                : traceless,
+}  # fmt: skip
 r"""Dictionary containing all available initializations."""

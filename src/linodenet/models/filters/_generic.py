@@ -14,7 +14,7 @@ from torch import Tensor, jit, nn
 from typing_extensions import Self
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.models.filters._filters import (
+from linodenet.models.filters.base import (
     Filter,
     KalmanCell,
     LinearKalmanCell,

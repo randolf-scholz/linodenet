@@ -1,52 +1,21 @@
-r"""Models for the latent dynamical system."""
+"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
 
 __all__ = [
     # Classes
     "LinODECell",
-    "System",
-    "SystemABC",
+    "LinODE",
 ]
 
-from abc import abstractmethod
 from collections.abc import Callable, Iterable
-from typing import Final, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Any, Final
 
-from linodenet.initializations import INITIALIZATIONS, Initialization
-from linodenet.initializations.functional import gaussian
-from linodenet.projections import FUNCTIONAL_PROJECTIONS
+from linodenet.initializations import INITIALIZATIONS, Initialization, gaussian
+from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection
 from linodenet.types import SelfMap
-from linodenet.utils import deep_dict_update
-
-
-@runtime_checkable
-class System(Protocol):
-    """Protocol for System Components."""
-
-    def __call__(self, dt: Tensor, z: Tensor, /) -> Tensor:
-        """Forward pass of the system.
-
-        .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
-        """
-        ...
-
-
-class SystemABC(nn.Module):
-    """Abstract Base Class for System components."""
-
-    @abstractmethod
-    def forward(self, dt: Tensor, z: Tensor, /) -> Tensor:
-        r"""Forward pass of the system.
-
-        Args:
-            dt: The time-step to advance the system.
-            z: The state estimate at time t.
-
-        Returns:
-            z': The updated state of the system at time t + ∆t.
-        """
+from linodenet.utils import deep_dict_update, initialize_from_dict
 
 
 class LinODECell(nn.Module):
@@ -200,3 +169,71 @@ class LinODECell(nn.Module):
         expAdt = torch.linalg.matrix_exp(Adt)
         xhat = torch.einsum("...kl, ...l -> ...k", expAdt, x0)
         return xhat
+
+
+class LinODE(nn.Module):
+    r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
+
+    HP = {
+        "__name__": __qualname__,
+        "__module__": __module__,
+        "cell": LinODECell.HP,
+        "kernel_initialization": None,
+        "kernel_projection": None,
+    }
+    r"""Dictionary of hyperparameters."""
+
+    # Constants
+    input_size: Final[int]
+    r"""CONST: The dimensionality of inputs."""
+    output_size: Final[int]
+    r"""CONST: The dimensionality of the outputs."""
+
+    # Buffers
+    xhat: Tensor
+    r"""BUFFER: The forward prediction."""
+
+    # Parameters
+    kernel: Tensor
+    r"""PARAM: The system matrix of the linear ODE component."""
+
+    # Functions
+    kernel_initialization: Initialization
+    r"""FUNC: Parameter-less function that draws a initial system matrix."""
+    kernel_projection: Projection
+    r"""FUNC: Regularization function for the kernel."""
+
+    def __init__(self, input_size: int, **cfg: Any) -> None:
+        super().__init__()
+        config = deep_dict_update(self.HP, cfg)
+
+        config["cell"]["input_size"] = input_size
+
+        self.input_size = input_size
+        self.output_size = input_size
+        self.cell: nn.Module = initialize_from_dict(config["cell"])
+
+        # Buffers
+        self.register_buffer("xhat", torch.tensor(()), persistent=False)
+        assert isinstance(self.cell.kernel, Tensor)
+        self.register_buffer("kernel", self.cell.kernel, persistent=False)
+
+    @jit.export
+    def forward(self, T: Tensor, x0: Tensor) -> Tensor:
+        r""".. Signature:: ``[(..., N), (..., d)] -> (..., N, d)``.
+
+        Returns the estimated true state of the system at the times $t∈T$.
+        """
+        DT = torch.moveaxis(torch.diff(T), -1, 0)
+        X: list[Tensor] = [x0]
+
+        # iterate over LEN, this works even when no BATCH dim present.
+        for dt in DT:
+            X.append(self.cell(dt, X[-1]))
+
+        # shape: [LEN, ..., DIM]
+        Xhat = torch.stack(X, dim=0)
+        # shape: [..., LEN, DIM]
+        self.xhat = torch.moveaxis(Xhat, 0, -2)
+
+        return self.xhat

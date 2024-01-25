@@ -19,7 +19,13 @@ __all__ = [
     "SequentialFilter",
 ]
 
-from linodenet.models.filters._filters import (
+from linodenet.models.filters._generic import (
+    MissingValueFilter,
+    ResidualFilterBlock,
+    SequentialFilter,
+)
+from linodenet.models.filters._imported import GRUFilter, LSTMFilter, RNNFilter
+from linodenet.models.filters.base import (
     Filter,
     KalmanCell,
     KalmanFilter,
@@ -27,12 +33,6 @@ from linodenet.models.filters._filters import (
     NonLinearCell,
     PseudoKalmanCell,
 )
-from linodenet.models.filters._generic import (
-    MissingValueFilter,
-    ResidualFilterBlock,
-    SequentialFilter,
-)
-from linodenet.models.filters._imported import GRUFilter, LSTMFilter, RNNFilter
 
 FILTERS: dict[str, type[Filter]] = {
     "KalmanCell": KalmanCell,

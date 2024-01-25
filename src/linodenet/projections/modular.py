@@ -9,19 +9,19 @@ __all__ = [
     # ABCs & Protocols
     "ProjectionABC",
     # Classes
+    "Banded",
+    "Contraction",
+    "Diagonal",
     "Hamiltonian",
     "Identity",
+    "LowerTriangular",
+    "Masked",
     "Normal",
     "Orthogonal",
     "SkewSymmetric",
     "Symmetric",
     "Symplectic",
     "Traceless",
-    # Masked
-    "Banded",
-    "Diagonal",
-    "LowerTriangular",
-    "Masked",
     "UpperTriangular",
 ]
 
@@ -33,6 +33,7 @@ from torch import BoolTensor, Tensor, jit, nn
 
 from linodenet.projections.functional import (
     banded,
+    contraction,
     diagonal,
     hamiltonian,
     identity,
@@ -386,4 +387,28 @@ class Masked(nn.Module):
 
 
 # endregion masked projections ---------------------------------------------------------
+
+
+# region other projections -------------------------------------------------------------
+class Contraction(nn.Module):
+    r"""Return the closest contraction matrix to X.
+
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
+
+    .. math:: \min_Y ∥X-Y∥₂  s.t. ‖Y‖₂ ≤ 1
+
+    One can show analytically that the unique smallest norm minimizer is
+    $Y = \min(1, σ⁻¹) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
+
+    See Also:
+        - `projections.functional.contraction`
+    """
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of contraction matrices."""
+        return contraction(x)
+
+
+# endregion other projections ----------------------------------------------------------
 # endregion projections ----------------------------------------------------------------

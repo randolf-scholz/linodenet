@@ -23,6 +23,7 @@ References:
 """
 
 __all__ = [
+    # Classes
     "LinearContraction",
     "NaiveLinearContraction",
 ]

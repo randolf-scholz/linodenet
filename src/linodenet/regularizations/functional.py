@@ -10,6 +10,7 @@ __all__ = [
     "Regularization",
     # Functions
     "banded",
+    "contraction",
     "diagonal",
     "hamiltonian",
     "identity",
@@ -48,6 +49,8 @@ class Regularization(Protocol):
 
 
 # region regularizations ---------------------------------------------------------------
+
+
 @jit.script
 def logdetexp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     r"""Bias $\det(e^A)$ towards 1.
@@ -85,7 +88,6 @@ def matrix_norm(
     return s
 
 
-# region linodenet.projections  --------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
 @jit.script
 def identity(
@@ -319,5 +321,23 @@ def masked(
 
 
 # endregion masked projections ---------------------------------------------------------
-# endregion linodenet.projections  -----------------------------------------------------
+
+
+# region other regularizations ---------------------------------------------------------
+@jit.script
+def contraction(
+    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being a contraction.
+
+    .. Signature:: ``(..., n, n) -> ...``
+
+    .. math:: A ↦ ‖A-Π(A)‖_p
+        where Π(A) = \argmin_X ∥X-A∥₂ s.t. ‖X‖₂≤1
+    """
+    r = x - projections.contraction(x)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+# endregion other regularizations ------------------------------------------------------
 # endregion regularizations ------------------------------------------------------------
