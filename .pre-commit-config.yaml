@@ -7,8 +7,8 @@ repos:
   #  - repo: meta
   #    hooks:
   #      - id: identity
+  # https://pre-commit.com/hooks.html
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    # https://pre-commit.com/hooks.html
     rev: v4.5.0
     hooks:
       - id: check-added-large-files
@@ -38,8 +38,8 @@ repos:
       - id: end-of-file-fixer
         description: "ensures that a file is either empty, or ends with one newline."
       - id: pretty-format-json
+        exclude_types: [ jupyter ]
         args: ["--autofix"]
-        exclude: ^.*.ipynb$
         description: "sets a standard for formatting json files."
       - id: requirements-txt-fixer
         description: "sorts entries in requirements.txt"
@@ -67,18 +67,16 @@ repos:
     hooks:
       - id: absolufy-imports
         files: (^src/|^tests/)
-  # isort
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        args: ["--check"]
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.14
+    rev: v0.1.15
     hooks:
       - id: ruff
         files: (^src/|^tests/)
+      - id: ruff
+        name: ruff-isort
+        files: (^src/|^tests/)
+        args: ["--select", "I", "--fix"]
       - id: ruff-format
         files: (^src/|^tests/)
   # nbstripout-fast
@@ -88,11 +86,12 @@ repos:
       - id: nbstripout-fast
         files: ^dev/
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.1.49
+    rev: v0.1.51
     hooks:
       - id: pyproject-validate-version
       - id: pyproject-update-deps
       # - id: pyproject-check-deps
+      #  exclude: ^src/
       - id: python-no-blanket-type-ignore
         files: (^src/|^tests/)
       - id: python-no-builtin-eval
@@ -115,7 +114,7 @@ repos:
         files: (^src/|^tests/)
       - id: check-separator-length
         files: (^src/|^tests/)
-      - id: python-check-__all__-exists
+      - id: python-check-dunder-all-exists
         files: ^src/
       - id: python-check-typing
         files: (^src/|^tests/)
@@ -126,63 +125,43 @@ repos:
       - id: python-check-clean-interface
         files: ^src/
         args: ["--no-load-silent"]
-  - repo: local
+  # markdownlint
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
     hooks:
       - id: markdownlint
-        name: markdownlint
-        types: [markdown]
-        language: system
-        stages: [pre-push, manual]
-        verbose: true
-        entry: mdl
         args:
-          ["-r", "~MD007,~MD013,~MD029,~MD033"]
-          # MD007: Unordered list indentation (false positives)
-          # MD013: Line length (unused)
-        # MD029: Ordered list item prefix (false positives)
-        # MD033: Inline HTML (unused)
+          [
+            "--disable",
+            "MD013", # Line length
+            "MD033", # Inline HTML
+            "--"  # otherwise files are interpreted as args
+          ]
+  - repo: local
+    hooks:
       - id: axes-axis
         name: rename 'axes=' => 'axis='
         types: [python]
         language: pygrep
-        entry: "axes="
+        entry: "\baxes="
       - id: mypy
         name: mypy
         language: system
+        pass_filenames: false
+        types_or: [python, pyi]
         files: (^src/|^tests/)
-        types: [python, pyi]
         entry: mypy
         args:
           [
             "--hide-error-context",
             "--hide-error-end",
             "--no-pretty",
-            "--no-error-summary",
+            # "--no-error-summary",
+            "--",
           ]
-        stages: [pre-push, manual]
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.348
+    rev: v1.1.349
     hooks:
       - id: pyright
-        # not everything works with pyright yet
-        # verbose regex
-        files: |
-          (?x)^(
-            (?!)  # intentionally matches nothing
-            #|tests/linodenet
-            |tests/linodenet/activations
-            |tests/linodenet/config
-            |tests/linodenet/initializations
-            |tests/linodenet/lib
-            |tests/linodenet/logutils
-            #|tests/linodenet/models
-            #|tests/linodenet/parametrize
-            |tests/linodenet/projections
-            |tests/linodenet/regularizations
-            #|tests/linodenet/testing
-            |tests/linodenet/utils
-            |tests/linodenet/constants.py
-            |tests/linodenet/types.py
-            |src/
-          )
+        files: (^src/|^tests/)

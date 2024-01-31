@@ -35,13 +35,9 @@ $$
 
 ## Latent State Space Algorithm
 
-```
-
-
+```text
 for tᵢ, xᵢ, uᵢ in D:
     ∆tᵢ = tᵢ - tᵢ₋₁
-
-
 ```
 
 ## Variants

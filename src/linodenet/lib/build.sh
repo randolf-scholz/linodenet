@@ -15,8 +15,8 @@ export PATH=/usr/local/cuda-12.1/bin:$PATH
 # check that libtorch exists
 if [ ! -d "libtorch/" ]; then
     echo "Downloading libtorch..."
-    fname="libtorch-shared-with-deps-2.1.0+cu121.zip"
-    hashval="4e893c727367193169bc2cfc3c0c519f88411de5bf243ef237a3e23b926bfb45"
+    fname="libtorch-shared-with-deps-2.2.0+cu121.zip"
+    hashval="0a1a034b1980199543ec5cbc8d42215f55b188ac188b3dac42d83aeb449922bb"
     # replace + with %2B
     wget "https://download.pytorch.org/libtorch/cu121/${fname//+/%2B}"
     # check hash

@@ -13,7 +13,7 @@ from linodenet.testing import check_object
 class ModuleWithSlots(nn.Module):
     """Module with slots."""
 
-    __slots__ = ("foo", "bar")
+    __slots__ = ("bar", "foo")
 
     foo: Tensor
     bar: Tensor

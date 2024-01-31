@@ -46,6 +46,7 @@ class InvertibleModule(Protocol[U, V]):
     # NOTE: Theoretically, this must be a subclass of nn.Module.
     # but typing system currently does not support this.
 
+    @abstractmethod
     def inverse(self) -> "InvertibleModule[V, U]":
         """Return the inverse of the layer."""
         ...

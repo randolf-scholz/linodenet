@@ -266,8 +266,8 @@ def test_analytical(
     M, N = shape
     K = min(M, N)
     S = 10 * (torch.rand(K) + ATOL)
-    U = ortho_group.rvs(M, seed=rng)
-    V = ortho_group.rvs(N, seed=rng)
+    U = ortho_group.rvs(M, random_state=rng)
+    V = ortho_group.rvs(N, random_state=rng)
     # take the first K vectors
     U = torch.tensor(U[:, :K], dtype=torch.float)
     Vh = torch.tensor(V[:, :K], dtype=torch.float).T
@@ -333,7 +333,7 @@ def test_orthogonal(
     torch.manual_seed(seed)
     rng = default_rng(seed=seed)
     S = torch.ones(dim, dtype=torch.float)
-    U = ortho_group.rvs(dim, seed=rng)
+    U = ortho_group.rvs(dim, random_state=rng)
     A = torch.from_numpy(U).to(dtype=torch.float).requires_grad_(True)
 
     # analytical result

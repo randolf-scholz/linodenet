@@ -1,3 +1,5 @@
+# Comparison Sequence vs ModuleList
+
 <table>
 <tr style="vertical-align:top">
 <th><h1>Sequential</h1></th>

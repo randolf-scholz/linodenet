@@ -14,7 +14,7 @@ from tqdm.autonotebook import trange
 
 from linodenet.config import PROJECT
 from linodenet.models import LinODE
-from tests.test_utils import scaled_norm, visualize_distribution
+from test_utils import scaled_norm, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)
