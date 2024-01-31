@@ -54,8 +54,8 @@ INITIALIZATIONS: dict[str, Initialization] = {
     "gaussian"                 : gaussian,
     "low_rank"                 : low_rank,
     "orthogonal"               : orthogonal,
-    "skew-symmetric"           : skew_symmetric,
-    "special-orthogonal"       : special_orthogonal,
+    "skew_symmetric"           : skew_symmetric,
+    "special_orthogonal"       : special_orthogonal,
     "symmetric"                : symmetric,
     "traceless"                : traceless,
 }  # fmt: skip

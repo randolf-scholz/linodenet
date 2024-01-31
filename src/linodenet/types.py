@@ -11,8 +11,8 @@ __all__ = [
     "HasHyperparameters",
     "SelfMap",
     # Aliases
-    "Device",
-    "Dtype",
+    "DeviceArg",
+    "DtypeArg",
     "Nested",
     "Scalar",
     "Shape",
@@ -28,11 +28,11 @@ from torch import device, dtype, nn
 Scalar: TypeAlias = None | bool | int | float | str
 r"""Type hint for scalar types allowed by torchscript."""
 
-Device: TypeAlias = None | device
-r"""Type hint for device types allowed by torchscript."""
+DeviceArg: TypeAlias = None | str | device  # Literal["cpu", "cuda"]
+r"""Type hint for device arguments."""
 
-Dtype: TypeAlias = None | dtype
-r"""Type hint for dtype types allowed by torchscript."""
+DtypeArg: TypeAlias = None | str | dtype
+r"""Type hint for dtype arguments."""
 
 Shape: TypeAlias = int | tuple[int, ...]
 r"""Type hint for shape-like inputs."""

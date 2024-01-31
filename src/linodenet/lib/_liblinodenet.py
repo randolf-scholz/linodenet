@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Any, Optional, Protocol, runtime_checkable
 
 import torch
-import torch.utils.cpp_extension
 from torch import Tensor
 
 # constants

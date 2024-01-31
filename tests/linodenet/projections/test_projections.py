@@ -5,9 +5,9 @@ import torch
 
 from linodenet.projections import (
     FUNCTIONAL_PROJECTIONS,
-    MATRIX_TESTS,
     MODULAR_PROJECTIONS,
 )
+from linodenet.testing import MATRIX_TESTS
 from test_utils import camel2snake, snake2camel
 
 

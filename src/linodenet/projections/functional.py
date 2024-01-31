@@ -12,6 +12,7 @@ __all__ = [
     "banded",
     "contraction",
     "diagonal",
+    "diagonally_dominant",
     "hamiltonian",
     "identity",
     "low_rank",
@@ -330,6 +331,19 @@ def contraction(x: Tensor) -> Tensor:
     """
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
     return x / sigma.clamp_min(1.0)
+
+
+def diagonally_dominant(x: Tensor) -> Tensor:
+    r"""Return the closest diagonally dominant matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ∥X-Y∥_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
+
+    References:
+        Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
+    """
+    raise NotImplementedError
 
 
 # endregion other projections ----------------------------------------------------------

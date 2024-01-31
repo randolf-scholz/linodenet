@@ -5,9 +5,9 @@ import torch
 
 from linodenet.projections import (
     FUNCTIONAL_PROJECTIONS,
-    MATRIX_TESTS,
     MODULAR_PROJECTIONS,
 )
+from linodenet.testing import MATRIX_TESTS
 
 
 @pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)

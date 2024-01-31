@@ -21,10 +21,6 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar, Final
 
-import torch
-
-__logger__ = logging.getLogger(__name__)
-
 
 def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
     r"""Creates nested dictionary of the package structure."""
@@ -62,28 +58,12 @@ def generate_folders(dirs: str | list | dict, /, *, parent: Path) -> None:
             raise TypeError
 
 
-class ConfigMeta(type):
-    """Metaclass for Config."""
-
-    def __init__(
-        cls, name: str, bases: tuple[type, ...], namespace: dict[str, Any], **kwds: Any
-    ) -> None:
-        super().__init__(name, bases, namespace, **kwds)
-
-        if "LOGGER" not in namespace:
-            cls.LOGGER = logging.getLogger(f"{cls.__module__}.{cls.__name__}")
-
-
-class Config(metaclass=ConfigMeta):
+class Config:
     r"""Configuration Interface."""
 
-    LOGGER: ClassVar[logging.Logger]
+    LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__name__}.{__qualname__}")
     r"""Logger for the class."""
 
-    DEFAULT_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    r"""The default `torch` device to use."""
-    DEFAULT_DTYPE = torch.float32
-    r"""The default `torch` datatype to use."""
     _autojit: bool = True
 
     def __init__(self):

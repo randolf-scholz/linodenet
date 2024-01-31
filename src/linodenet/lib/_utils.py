@@ -3,10 +3,9 @@
 __all__ = ["pad"]
 
 import torch
-from torch import Tensor, jit
+from torch import Tensor
 
 
-@jit.script
 def pad(
     x: Tensor,
     value: float,

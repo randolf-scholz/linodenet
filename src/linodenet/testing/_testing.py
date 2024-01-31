@@ -40,12 +40,11 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.types import Device, M, Nested, Scalar, T
+from linodenet.types import DeviceArg, M, Nested, Scalar, T
 
 __logger__ = logging.getLogger(__name__)
 Tree: TypeAlias = Nested[Tensor | Scalar]
 Func: TypeAlias = Callable[..., Nested[Tensor]]
-DeviceArg: TypeAlias = None | str | torch.device  # Literal["cpu", "cuda"]
 
 
 def assert_close(
@@ -297,10 +296,10 @@ def check_jit_scripting(module_or_func, /):
 
 @overload
 def check_jit_serialization(
-    module: nn.Module, /, *, device: Device = ...
+    module: nn.Module, /, *, device: DeviceArg = ...
 ) -> nn.Module: ...
 @overload
-def check_jit_serialization(func: Func, /, *, device: Device = ...) -> Func: ...
+def check_jit_serialization(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
 def check_jit_serialization(scripted, /, *, device=None):
     """Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
@@ -318,9 +317,9 @@ def check_jit_serialization(scripted, /, *, device=None):
 
 
 @overload
-def check_jit(module: nn.Module, /, *, device: Device = ...) -> nn.Module: ...
+def check_jit(module: nn.Module, /, *, device: DeviceArg = ...) -> nn.Module: ...
 @overload
-def check_jit(func: Func, /, *, device: Device = ...) -> Func: ...
+def check_jit(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
 def check_jit(module_or_func, /, *, device=None):
     """Test JIT compilation+serialization."""
     # check if scripting and serialization works

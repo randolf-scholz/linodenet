@@ -25,14 +25,14 @@ __all__ = [
 
 from collections.abc import Sequence
 from math import prod, sqrt
-from typing import Optional, Protocol, runtime_checkable
 
 import torch
 from numpy.typing import NDArray
 from scipy import stats
 from torch import Tensor
+from typing_extensions import Protocol, runtime_checkable
 
-from linodenet.types import Device, Dtype, Shape
+from linodenet.types import DeviceArg, DtypeArg, Shape
 
 
 @runtime_checkable
@@ -43,7 +43,14 @@ class Initialization(Protocol):
     r"""Name of the initialization."""
 
     def __call__(
-        self, n: Shape, /, *, dtype: Dtype = None, device: Device = None
+        self,
+        n: Shape,
+        /,
+        *,
+        # TODO: Add `generator` argument to all initializations.
+        # generator: Optional[Generator] = None,
+        dtype: DtypeArg = None,
+        device: DeviceArg = None,
     ) -> Tensor:
         """Create a random matrix of shape `n`."""
         ...
@@ -51,13 +58,12 @@ class Initialization(Protocol):
 
 # region initializations ---------------------------------------------------------------
 def gaussian(
-    n: Shape,
-    /,
-    *,
+    size: Shape,
     loc: float = 0.0,
     scale: float = 1.0,
-    dtype: Dtype = None,
-    device: Device = None,
+    *,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
 ) -> Tensor:
     r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
 
@@ -65,69 +71,98 @@ def gaussian(
 
     If n is `tuple`, the last axis is interpreted as dimension and the others as batch.
     """
-    # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
-    shape = (*size, dim, dim)
+    tup = (size,) if isinstance(size, int) else tuple(size)
+    batch, dim = tup[:-1], tup[-1]
+    shape = (*batch, dim, dim)
     mean = torch.full(shape, loc, dtype=dtype, device=device)
     return torch.normal(mean=mean, std=scale / sqrt(dim))
 
 
-def diagonally_dominant(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
-    r"""Sample a random diagonally dominant matrix, i.e. $A = 𝕀_n + B$,with $B_{ij}∼𝓝(0,1/n²)$.
+def diagonally_dominant(
+    size: Shape,
+    *,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
+) -> Tensor:
+    r"""Sample a random diagonally dominant matrix.
+
+    We sample a random traceless matrix $B_{ij}∼𝓝(0,1/n)$, $B_{ii}=0$ and
+    then consider a linear combination with the identity matrix $𝕀ₙ$.
+    We choose the coefficients such that the resulting matrix is diagonally dominant.
+
+    .. math:: A = 𝕀ₙ + B  with  B_{ij}∼𝓝(0,1/n²)
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     If n is `tuple`, the last axis is interpreted as dimension and the others as batch.
     """
-    # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
-    shape = (*size, dim, dim)
+    dim = size[-1] if isinstance(size, tuple) else size
+    B = traceless(size, dtype=dtype, device=device)
+    # calculate 1-norm of B
     eye = torch.eye(dim, dtype=dtype, device=device)
-    mean = torch.zeros(shape, dtype=dtype, device=device)
-    return eye + torch.normal(mean=mean, std=1 / dim)
+    # for diagonal dominance, we need to multiply
+    return eye + B / B.abs().sum(dim=(-2, -1), keepdim=True)
 
 
-def symmetric(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
+def symmetric(
+    size: Shape,
+    *,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
+) -> Tensor:
     r"""Sample a symmetric matrix, i.e. $A^⊤ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+
+    There are two ways to generate:
+    1. Copy the upper triangular part to the lower triangular part.
+    2. Use the projection formula $(A+Aᵀ)/2$ with additional normalization.
+       The variance of off-diagonal elements is then $2σ²/4$, so we need to scale by $√2$.
+       The variance of diagonal elements is $4σ²/4$, so we don't need to scale.
     """
     # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
-    shape = (*size, dim, dim)
+    tup = (size,) if isinstance(size, int) else tuple(size)
+    batch, dim = tup[:-1], tup[-1]
+    shape = (*batch, dim, dim)
     mean = torch.zeros(shape, dtype=dtype, device=device)
     A = torch.normal(mean=mean, std=1 / sqrt(dim))
-    return (A + A.swapaxes(-1, -2)) / sqrt(2)
+    return A.triu() + A.triu(1).swapaxes(-2, -1)
 
 
-def skew_symmetric(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
+def skew_symmetric(
+    size: Shape,
+    *,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
+) -> Tensor:
     r"""Sample a random skew-symmetric matrix, i.e. $A^⊤ = -A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
     # convert to tuple
-    # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
-    shape = (*size, dim, dim)
+    tup = (size,) if isinstance(size, int) else tuple(size)
+    batch, dim = tup[:-1], tup[-1]
+    shape = (*batch, dim, dim)
     mean = torch.zeros(shape, dtype=dtype, device=device)
     A = torch.normal(mean=mean, std=1 / sqrt(dim))
-    return (A - A.swapaxes(-1, -2)) / sqrt(2)
+    return A.triu() - A.triu().swapaxes(-2, -1)
 
 
-def orthogonal(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
+def orthogonal(
+    size: Shape,
+    *,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
+) -> Tensor:
     r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
     # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
-    num = prod(size)
-    shape = (*size, dim, dim)
+    tup = (size,) if isinstance(size, int) else tuple(size)
+    batch, dim = tup[:-1], tup[-1]
+    num = prod(batch)
+    shape = (*batch, dim, dim)
 
     A: NDArray = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
     if dtype is None:
@@ -135,16 +170,21 @@ def orthogonal(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
     return torch.from_numpy(A).to(dtype=dtype, device=device)
 
 
-def special_orthogonal(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
+def special_orthogonal(
+    size: Shape,
+    *,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
+) -> Tensor:
     r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A^{-1}$ with $\det(A)=1$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
     # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
-    num = prod(size)
-    shape = (*size, dim, dim)
+    tup = (size,) if isinstance(size, int) else tuple(size)
+    batch, dim = tup[:-1], tup[-1]
+    num = prod(batch)
+    shape = (*batch, dim, dim)
 
     A: NDArray = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
     if dtype is None:
@@ -154,12 +194,15 @@ def special_orthogonal(n: Shape, dtype: Dtype = None, device: Device = None) -> 
 
 def low_rank(
     size: Shape,
+    rank: int = 1,
     *,
-    rank: Optional[int] = None,
-    dtype: Dtype = None,
-    device: Device = None,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
 ) -> Tensor:
-    r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$."""
+    r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$.
+
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    """
     if isinstance(size, int):
         shape: tuple[int, ...] = (size, size)
     elif isinstance(size, Sequence) and len(size) == 1:
@@ -169,10 +212,9 @@ def low_rank(
 
     *batch, m, n = shape
 
-    if isinstance(rank, int) and rank > min(m, n):
+    if rank > min(m, n):
         raise ValueError("Rank must be smaller than min(m,n)")
 
-    rank = max(1, min(m, n) // 2) if rank is None else rank
     mean_u = torch.zeros((*batch, m, rank), dtype=dtype, device=device)
     mean_v = torch.zeros((*batch, rank, n), dtype=dtype, device=device)
     U = torch.normal(mean=mean_u, std=1 / sqrt(rank))
@@ -180,18 +222,30 @@ def low_rank(
     return torch.einsum("...ij, ...jk -> ...ik", U, V)
 
 
-def traceless(n: Shape, dtype: Dtype = None, device: Device = None) -> Tensor:
-    r"""Sample a random traceless matrix, i.e. $\tr(A)=0$."""
+def traceless(
+    size: Shape,
+    *,
+    dtype: DtypeArg = None,
+    device: DeviceArg = None,
+) -> Tensor:
+    r"""Sample a random traceless matrix, i.e. $\tr(A)=0$.
+
+    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    """
     # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    A = gaussian(n, dtype=dtype, device=device)
+    tup = (size,) if isinstance(size, int) else tuple(size)
+    A = gaussian(size, dtype=dtype, device=device)
+    # FIXME: add normalization correction.
     eye = torch.eye(tup[-1], dtype=dtype, device=device)
     return A - torch.einsum("...ij, ij -> ...ij", A, eye)
 
 
 # region canonical (deterministic) initializations -------------------------------------
 def canonical_skew_symmetric(
-    n: Shape, device: Device = None, dtype: Dtype = None
+    size: Shape,
+    *,
+    device: DeviceArg = None,
+    dtype: DtypeArg = None,
 ) -> Tensor:
     r"""Return the canonical skew symmetric matrix of size $n=2k$.
 
@@ -200,8 +254,8 @@ def canonical_skew_symmetric(
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
     # convert to tuple
-    tup = (n,) if isinstance(n, int) else tuple(n)
-    size, dim = tup[:-1], tup[-1]
+    tup = (size,) if isinstance(size, int) else tuple(size)
+    batch, dim = tup[:-1], tup[-1]
     assert dim % 2 == 0, "The dimension must be divisible by 2!"
 
     # create J matrix
@@ -210,12 +264,15 @@ def canonical_skew_symmetric(
     J = torch.kron(J1, eye)
 
     # duplicate J for batch-size
-    ones = torch.ones(size, device=device, dtype=dtype)
+    ones = torch.ones(batch, device=device, dtype=dtype)
     return torch.einsum("..., de -> ...de", ones, J)
 
 
 def canonical_symplectic(
-    n: Shape, device: Device = None, dtype: Dtype = None
+    size: Shape,
+    *,
+    device: DeviceArg = None,
+    dtype: DtypeArg = None,
 ) -> Tensor:
     r"""Return the canonical symplectic matrix of size $n=2k$.
 
@@ -226,9 +283,8 @@ def canonical_symplectic(
     Note:
         Alias for `canonical_skew_symmetric`.
     """
-    return canonical_skew_symmetric(n, device, dtype)
+    return canonical_skew_symmetric(size, device=device, dtype=dtype)
 
 
 # endregion canonical (deterministic) initializations ----------------------------------
-
 # endregion initializations ------------------------------------------------------------

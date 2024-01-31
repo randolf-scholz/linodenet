@@ -34,6 +34,7 @@ from typing import Final, Union
 import torch
 from torch import BoolTensor, Tensor, nn
 
+from linodenet.constants import TRUE
 from linodenet.regularizations.functional import (
     banded,
     contraction,
@@ -467,7 +468,7 @@ class Masked(nn.Module):
 
     def __init__(
         self,
-        mask: BoolTensor,
+        mask: BoolTensor = TRUE,
         *,
         p: Union[str, int] = "fro",
         size_normalize: bool = True,

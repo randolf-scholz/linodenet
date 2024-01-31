@@ -4,12 +4,15 @@ __all__ = [
     # ABCs & Protocols
     "MatrixTest",
     # is_* checks
+    "is_backward_stable",
     "is_banded",
     "is_contraction",
     "is_diagonal",
+    "is_diagonally_dominant",
+    "is_forward_stable",
     "is_hamiltonian",
-    "is_lower_triangular",
     "is_low_rank",
+    "is_lower_triangular",
     "is_masked",
     "is_normal",
     "is_orthogonal",
@@ -230,6 +233,71 @@ def is_contraction(x: Tensor) -> bool:
     """
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
     return bool((sigma <= 1.0).all().item())
+
+
+def is_diagonally_dominant(x: Tensor, strict: bool = False) -> bool:
+    r"""Check whether the given matrix is diagonally dominant.
+
+    .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| for all i = 1, …, n
+
+    .. Signature:: ``(..., n, n) -> bool``
+
+    Note:
+        Strictly diagonally dominant matrices are invertible.
+    """
+    m, n = x.shape[-2:]
+    if m != n:
+        raise ValueError("Expected square matrix")
+
+    x_abs = x.abs()
+    lhs = 2 * x_abs.diagonal(dim1=-2, dim2=-1)
+    rhs = x_abs.sum(dim=-1)
+
+    if strict:
+        return bool((lhs > rhs).all())
+    return bool((lhs >= rhs).all())
+
+
+def is_forward_stable(
+    x: Tensor,
+    *,
+    dims: tuple[int, int] = (-2, -1),
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> bool:
+    """Check whether the given matrix is forward stable.
+
+    Note:
+        An m×n matrix A is forward stable if and only if $𝐄[Aᵢⱼ] = 0$ and $𝐕[Aᵢⱼ] = 1/n$
+    """
+    n = x.shape[dims[-1]]
+    mean = x.mean(dim=(-2, -1))
+    stdv = x.std(dim=(-2, -1))
+
+    return torch.allclose(mean, 0.0, atol=atol, rtol=rtol) and torch.allclose(
+        stdv, 1.0 / n, atol=atol, rtol=rtol
+    )
+
+
+def is_backward_stable(
+    x: Tensor,
+    *,
+    dims: tuple[int, int] = (-2, -1),
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> bool:
+    """Check whether the given matrix is backward stable.
+
+    Note:
+        An m×n matrix A is backward stable if and only if $𝐄[Aᵢⱼ] = 0$ and $𝐕[Aᵢⱼ] = 1/m$
+    """
+    m = x.shape[dims[-2]]
+    mean = x.mean(dim=(-2, -1))
+    stdv = x.std(dim=(-2, -1))
+
+    return torch.allclose(mean, 0.0, atol=atol, rtol=rtol) and torch.allclose(
+        stdv, 1.0 / m, atol=atol, rtol=rtol
+    )
 
 
 # endregion other projections ----------------------------------------------------------

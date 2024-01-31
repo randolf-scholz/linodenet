@@ -1,6 +1,10 @@
 """Utility functions for testing."""
 
 __all__ = [
+    # CONSTANTS
+    "MATRIX_TESTS",
+    # ABCs & Protocols
+    "MatrixTest",
     # check functions
     "check_class",
     "check_function",
@@ -14,6 +18,22 @@ __all__ = [
     "check_jit_scripting",
     "check_jit_serialization",
     "check_optim",
+    # is_*-checks
+    "is_banded",
+    "is_contraction",
+    "is_diagonal",
+    "is_diagonally_dominant",
+    "is_hamiltonian",
+    "is_lower_triangular",
+    "is_low_rank",
+    "is_masked",
+    "is_normal",
+    "is_orthogonal",
+    "is_skew_symmetric",
+    "is_symmetric",
+    "is_symplectic",
+    "is_traceless",
+    "is_upper_triangular",
     # helper functions
     "assert_close",
     "flatten_nested_tensor",
@@ -54,3 +74,40 @@ from linodenet.testing._testing import (
     to_device,
     zero_grad,
 )
+from linodenet.testing.matrix_tests import (
+    MatrixTest,
+    is_banded,
+    is_contraction,
+    is_diagonal,
+    is_diagonally_dominant,
+    is_hamiltonian,
+    is_low_rank,
+    is_lower_triangular,
+    is_masked,
+    is_normal,
+    is_orthogonal,
+    is_skew_symmetric,
+    is_symmetric,
+    is_symplectic,
+    is_traceless,
+    is_upper_triangular,
+)
+
+MATRIX_TESTS: dict[str, MatrixTest] = {
+    "is_banded"              : is_banded,
+    "is_contraction"         : is_contraction,
+    "is_diagonal"            : is_diagonal,
+    "is_diagonally_dominant" : is_diagonally_dominant,
+    "is_hamiltonian"         : is_hamiltonian,
+    "is_lower_triangular"    : is_lower_triangular,
+    "is_low_rank"            : is_low_rank,
+    "is_masked"              : is_masked,
+    "is_normal"              : is_normal,
+    "is_orthogonal"          : is_orthogonal,
+    "is_skew_symmetric"      : is_skew_symmetric,
+    "is_symmetric"           : is_symmetric,
+    "is_symplectic"          : is_symplectic,
+    "is_traceless"           : is_traceless,
+    "is_upper_triangular"    : is_upper_triangular,
+}  # fmt: skip
+r"""Dictionary of all available matrix tests."""

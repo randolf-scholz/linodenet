@@ -12,6 +12,7 @@ __all__ = [
     "Banded",
     "Contraction",
     "Diagonal",
+    "DiagonallyDominant",
     "Hamiltonian",
     "Identity",
     "LowerTriangular",
@@ -37,6 +38,7 @@ from linodenet.projections.functional import (
     banded,
     contraction,
     diagonal,
+    diagonally_dominant,
     hamiltonian,
     identity,
     low_rank,
@@ -410,6 +412,23 @@ class Contraction(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of contraction matrices."""
         return contraction(x)
+
+
+class DiagonallyDominant(nn.Module):
+    r"""Return the closest diagonally dominant matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ∥X-Y∥_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
+
+    References:
+        Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
+    """
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project x into space of diagonally dominant matrices."""
+        return diagonally_dominant(x)
 
 
 # endregion other projections ----------------------------------------------------------
