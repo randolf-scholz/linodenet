@@ -29,7 +29,7 @@ __all__ = [
 from typing import Protocol, runtime_checkable
 
 import torch
-from torch import BoolTensor, Tensor, jit
+from torch import BoolTensor, Tensor
 
 from linodenet.constants import TRUE
 
@@ -48,7 +48,6 @@ class Projection(Protocol):
 
 # region projections -------------------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
-@jit.script
 def identity(x: Tensor) -> Tensor:
     r"""Return x as-is.
 
@@ -59,7 +58,6 @@ def identity(x: Tensor) -> Tensor:
     return x
 
 
-@jit.script
 def symmetric(x: Tensor) -> Tensor:
     r"""Return the closest symmetric matrix to X.
 
@@ -72,7 +70,6 @@ def symmetric(x: Tensor) -> Tensor:
     return (x + x.swapaxes(-1, -2)) / 2
 
 
-@jit.script
 def skew_symmetric(x: Tensor) -> Tensor:
     r"""Return the closest skew-symmetric matrix to X.
 
@@ -85,7 +82,6 @@ def skew_symmetric(x: Tensor) -> Tensor:
     return (x - x.swapaxes(-1, -2)) / 2
 
 
-@jit.script
 def low_rank(x: Tensor, rank: int = 1) -> Tensor:
     r"""Return the closest low rank matrix to X.
 
@@ -105,7 +101,6 @@ def low_rank(x: Tensor, rank: int = 1) -> Tensor:
     )
 
 
-@jit.script
 def orthogonal(x: Tensor) -> Tensor:
     r"""Return the closest orthogonal matrix to X.
 
@@ -123,7 +118,6 @@ def orthogonal(x: Tensor) -> Tensor:
     return torch.einsum("...ij, ...jk -> ...ik", U, Vh)
 
 
-@jit.script
 def traceless(x: Tensor) -> Tensor:
     r"""Return the closest traceless matrix to X.
 
@@ -144,7 +138,6 @@ def traceless(x: Tensor) -> Tensor:
     return x - torch.einsum("..., mn -> ...mn", trace / n, eye)
 
 
-@jit.script
 def normal(x: Tensor) -> Tensor:
     r"""Return the closest normal matrix to X.
 
@@ -172,7 +165,6 @@ def normal(x: Tensor) -> Tensor:
     raise NotImplementedError("TODO: implement Fixpoint / Gradient based algorithm.")
 
 
-@jit.script
 def symplectic(x: Tensor) -> Tensor:
     r"""Return the closest symplectic matrix to X.
 
@@ -189,7 +181,6 @@ def symplectic(x: Tensor) -> Tensor:
     raise NotImplementedError("TODO: implement Fixpoint / Gradient based algorithm.")
 
 
-@jit.script
 def hamiltonian(x: Tensor) -> Tensor:
     r"""Return the closest hamiltonian matrix to X.
 
@@ -215,7 +206,6 @@ def hamiltonian(x: Tensor) -> Tensor:
 
 
 # region masked projections ------------------------------------------------------------
-@jit.script
 def masked(x: Tensor, mask: BoolTensor = TRUE) -> Tensor:
     r"""Return the closest banded matrix to X.
 
@@ -237,7 +227,6 @@ def masked(x: Tensor, mask: BoolTensor = TRUE) -> Tensor:
     return torch.where(mask_, x, zero)
 
 
-@jit.script
 def diagonal(x: Tensor) -> Tensor:
     r"""Return the closest diagonal matrix to X.
 
@@ -259,7 +248,6 @@ def diagonal(x: Tensor) -> Tensor:
     return torch.where(eye, x, zero)
 
 
-@jit.script
 def upper_triangular(x: Tensor, upper: int = 0) -> Tensor:
     r"""Return the closest upper triangular matrix to X.
 
@@ -279,7 +267,6 @@ def upper_triangular(x: Tensor, upper: int = 0) -> Tensor:
     return x.triu(diagonal=upper)
 
 
-@jit.script
 def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
     r"""Return the closest lower triangular matrix to X.
 
@@ -299,7 +286,6 @@ def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
     return x.tril(diagonal=lower)
 
 
-@jit.script
 def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
     r"""Return the closest banded matrix to X.
 

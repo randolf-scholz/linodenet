@@ -9,6 +9,7 @@ Notes:
 __all__ = [
     # Sub-Modules
     "functional",
+    "modular",
     # Constants
     "REGULARIZATIONS",
     "FUNCTIONAL_REGULARIZATIONS",
@@ -54,27 +55,7 @@ __all__ = [
     "upper_triangular",
 ]
 
-from linodenet.regularizations import functional
-from linodenet.regularizations._regularizations import (
-    Banded,
-    Contraction,
-    Diagonal,
-    Hamiltonian,
-    Identity,
-    LogDetExp,
-    LowerTriangular,
-    LowRank,
-    Masked,
-    MatrixNorm,
-    Normal,
-    Orthogonal,
-    RegularizationABC,
-    SkewSymmetric,
-    Symmetric,
-    Symplectic,
-    Traceless,
-    UpperTriangular,
-)
+from linodenet.regularizations import functional, modular
 from linodenet.regularizations.functional import (
     Regularization,
     banded,
@@ -94,6 +75,26 @@ from linodenet.regularizations.functional import (
     symplectic,
     traceless,
     upper_triangular,
+)
+from linodenet.regularizations.modular import (
+    Banded,
+    Contraction,
+    Diagonal,
+    Hamiltonian,
+    Identity,
+    LogDetExp,
+    LowerTriangular,
+    LowRank,
+    Masked,
+    MatrixNorm,
+    Normal,
+    Orthogonal,
+    RegularizationABC,
+    SkewSymmetric,
+    Symmetric,
+    Symplectic,
+    Traceless,
+    UpperTriangular,
 )
 
 FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {

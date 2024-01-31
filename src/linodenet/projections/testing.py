@@ -9,7 +9,7 @@ __all__ = [
     "is_diagonal",
     "is_hamiltonian",
     "is_lower_triangular",
-    "is_lowrank",
+    "is_low_rank",
     "is_masked",
     "is_normal",
     "is_orthogonal",
@@ -25,7 +25,7 @@ import warnings
 from typing import Protocol
 
 import torch
-from torch import BoolTensor, Tensor, jit
+from torch import BoolTensor, Tensor
 
 from linodenet.constants import ATOL, RTOL, TRUE
 
@@ -54,7 +54,6 @@ class MatrixTest(Protocol):
 
 # region is_* checks -------------------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
-@jit.script
 def is_symmetric(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     r"""Check whether the given tensor is symmetric.
 
@@ -63,7 +62,6 @@ def is_symmetric(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     return torch.allclose(x, x.swapaxes(-1, -2), rtol=rtol, atol=atol)
 
 
-@jit.script
 def is_skew_symmetric(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     r"""Check whether the given tensor is skew-symmetric.
 
@@ -72,8 +70,7 @@ def is_skew_symmetric(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool
     return torch.allclose(x, -x.swapaxes(-1, -2), rtol=rtol, atol=atol)
 
 
-@jit.script
-def is_lowrank(
+def is_low_rank(
     x: Tensor, rank: int = 1, rtol: float = RTOL, atol: float = ATOL
 ) -> bool:
     r"""Check whether the given tensor is low-rank.
@@ -83,7 +80,6 @@ def is_lowrank(
     return bool((torch.linalg.matrix_rank(x, rtol=rtol, atol=atol) <= rank).all())
 
 
-@jit.script
 def is_orthogonal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     r"""Check whether the given tensor is orthogonal.
 
@@ -97,7 +93,6 @@ def is_orthogonal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     )
 
 
-@jit.script
 def is_traceless(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     """Checks whether the trace of the given tensor is zero.
 
@@ -117,7 +112,6 @@ def is_traceless(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     )
 
 
-@jit.script
 def is_normal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     r"""Check whether the given tensor is normal.
 
@@ -128,7 +122,6 @@ def is_normal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     )
 
 
-@jit.script
 def is_symplectic(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     r"""Check whether the given tensor is symplectic.
 
@@ -150,7 +143,6 @@ def is_symplectic(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     return torch.allclose(x, J.T @ x @ J, rtol=rtol, atol=atol)
 
 
-@jit.script
 def is_hamiltonian(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     r"""Check whether the given tensor is Hamiltonian.
 
@@ -177,7 +169,6 @@ def is_hamiltonian(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
 
 
 # region masked ------------------------------------------------------------------------
-@jit.script
 def is_diagonal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     r"""Check whether the given tensor is diagonal.
 
@@ -187,7 +178,6 @@ def is_diagonal(x: Tensor, rtol: float = RTOL, atol: float = ATOL) -> bool:
     return torch.allclose(x, x * mask, rtol=rtol, atol=atol)
 
 
-@jit.script
 def is_lower_triangular(
     x: Tensor, lower: int = 0, rtol: float = RTOL, atol: float = ATOL
 ) -> bool:
@@ -198,7 +188,6 @@ def is_lower_triangular(
     return torch.allclose(x, x.tril(lower), rtol=rtol, atol=atol)
 
 
-@jit.script
 def is_upper_triangular(
     x: Tensor, upper: int = 0, rtol: float = RTOL, atol: float = ATOL
 ) -> bool:
@@ -209,7 +198,6 @@ def is_upper_triangular(
     return torch.allclose(x, x.triu(upper), rtol=rtol, atol=atol)
 
 
-@jit.script
 def is_banded(
     x: Tensor, upper: int = 0, lower: int = 0, rtol: float = RTOL, atol: float = ATOL
 ) -> bool:
@@ -220,7 +208,6 @@ def is_banded(
     return torch.allclose(x, x.tril(lower).triu(upper), rtol=rtol, atol=atol)
 
 
-@jit.script
 def is_masked(
     x: Tensor, mask: BoolTensor = TRUE, rtol: float = RTOL, atol: float = ATOL
 ) -> bool:
@@ -236,7 +223,6 @@ def is_masked(
 
 
 # region other projections -------------------------------------------------------------
-@jit.script
 def is_contraction(x: Tensor) -> bool:
     r"""Check whether the given tensor is a contraction.
 

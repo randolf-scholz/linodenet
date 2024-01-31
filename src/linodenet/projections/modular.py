@@ -15,6 +15,7 @@ __all__ = [
     "Hamiltonian",
     "Identity",
     "LowerTriangular",
+    "LowRank",
     "Masked",
     "Normal",
     "Orthogonal",
@@ -31,6 +32,7 @@ from typing import Final
 import torch
 from torch import BoolTensor, Tensor, jit, nn
 
+from linodenet.constants import TRUE
 from linodenet.projections.functional import (
     banded,
     contraction,
@@ -376,7 +378,7 @@ class Masked(nn.Module):
 
     mask: BoolTensor
 
-    def __init__(self, mask: bool | Tensor) -> None:
+    def __init__(self, mask: bool | Tensor = TRUE) -> None:
         super().__init__()
         self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
 
