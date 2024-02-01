@@ -7,10 +7,13 @@ __all__ = [
     "M",
     "R",
     "T",
+    "S",
     # Protocols
     "HasHyperparameters",
     "SelfMap",
+    "SupportsLenAndGetItem",
     # Aliases
+    "Range",
     "DeviceArg",
     "DtypeArg",
     "Nested",
@@ -19,10 +22,10 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from collections.abc import Callable, Mapping, Sequence
-from typing import Final, Protocol, TypeAlias, TypeVar
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from torch import device, dtype, nn
+from typing_extensions import Final, Protocol, SupportsInt, TypeAlias, TypeVar
 
 # region static type aliases -----------------------------------------------------------
 Scalar: TypeAlias = None | bool | int | float | str
@@ -40,8 +43,12 @@ r"""Type hint for shape-like inputs."""
 
 
 # region type variables ----------------------------------------------------------------
+S = TypeVar("S")
+"""Type Variable for generic types."""
 T = TypeVar("T")
 """Type Variable for generic types."""
+T_co = TypeVar("T_co", covariant=True)
+"""Type Variable for generic types (always covariant)."""
 
 CLS = TypeVar("CLS", bound=type)
 r"""Type hint for classes."""
@@ -54,15 +61,9 @@ r"""Type Variable for nn.Modules."""
 
 F = TypeVar("F", bound=Callable)
 r"""Type Variable for callables."""
+
+
 # endregion type variables -------------------------------------------------------------
-
-
-# region generic type aliases ----------------------------------------------------------
-Nested: TypeAlias = T | Mapping[str, "Nested[T]"] | Sequence["Nested[T]"]
-"""Type hint for nested types."""
-# endregion type aliases ---------------------------------------------------------------
-
-
 # region Protocols ---------------------------------------------------------------------
 class SelfMap(Protocol[T]):
     """Protocol for functions that map a type onto itself."""
@@ -71,6 +72,13 @@ class SelfMap(Protocol[T]):
     def __call__(self, x: T, /) -> T:
         """Maps T -> T."""
         ...
+
+
+class SupportsLenAndGetItem(Protocol[T_co]):
+    """Protocol for types that support `__len__` and `__getitem__`."""
+
+    def __len__(self) -> int: ...
+    def __getitem__(self, index: SupportsInt, /) -> T_co: ...
 
 
 class HasHyperparameters(Protocol):
@@ -84,3 +92,10 @@ class HasHyperparameters(Protocol):
 
 
 # endregion Protocol -------------------------------------------------------------------
+
+# region generic type aliases ----------------------------------------------------------
+Range: TypeAlias = SupportsLenAndGetItem[T] | Iterable[T]
+"""Type hint for ranges of values."""
+Nested: TypeAlias = T | Mapping[str, "Nested[T]"] | Sequence["Nested[T]"]
+"""Type hint for nested types."""
+# endregion type aliases ---------------------------------------------------------------

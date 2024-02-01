@@ -87,6 +87,7 @@
       <w>logdetexp</w>
       <w>logsigmoid</w>
       <w>lstsq</w>
+      <w>marginalizable</w>
       <w>markdownlint</w>
       <w>mathcal</w>
       <w>maxdepth</w>
@@ -124,6 +125,7 @@
       <w>rezero</w>
       <w>romera</w>
       <w>rrelu</w>
+      <w>rsample</w>
       <w>rtol</w>
       <w>sectionauthor</w>
       <w>selu</w>
