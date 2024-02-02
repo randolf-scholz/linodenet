@@ -268,8 +268,8 @@ class SequentialFilter(nn.Sequential):
 #     r"""Multiple Filters applied sequentially."""
 #
 #     HP = {
-#         "__name__": __qualname__,  # type: ignore[name-defined]
-#         "__module__": __module__,  # type: ignore[name-defined]
+#         "__name__": __qualname__,
+#         "__module__": __module__,
 #         "input_size": None,
 #         "filter": KalmanCell.HP | {"autoregressive": True},
 #         "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
