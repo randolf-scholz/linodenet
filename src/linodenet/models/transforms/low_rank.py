@@ -34,7 +34,7 @@ class iLowRankLayer(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
     }
     r"""The hyperparameter dictionary"""
 

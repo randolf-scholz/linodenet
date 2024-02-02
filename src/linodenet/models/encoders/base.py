@@ -52,7 +52,7 @@ class Identity(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
     }
     r"""Hyperparameters of the component."""
 

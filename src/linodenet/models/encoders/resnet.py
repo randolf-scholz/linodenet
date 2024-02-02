@@ -138,7 +138,7 @@ class ResNetBlock(nn.Sequential):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "num_layers": 2,
         "layer": ReverseDense.HP,
@@ -180,7 +180,7 @@ class ResNet(nn.ModuleList):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "num_blocks": 5,
         "block": ResNetBlock.HP,

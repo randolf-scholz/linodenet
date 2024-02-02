@@ -152,7 +152,7 @@ class LinearKalmanCell(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "alpha": "last-value",
         "alpha_learnable": False,
         "autoregressive": False,
@@ -274,7 +274,7 @@ class NonLinearCell(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
@@ -523,7 +523,7 @@ class KalmanCell(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
@@ -631,7 +631,7 @@ class PseudoKalmanCell(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "hidden_size": None,
         "alpha": "last-value",

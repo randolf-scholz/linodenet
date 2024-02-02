@@ -32,7 +32,7 @@ class LinODECell(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "kernel_initialization": None,
         "kernel_parametrization": None,
@@ -176,7 +176,7 @@ class LinODE(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "cell": LinODECell.HP,
         "kernel_initialization": None,
         "kernel_projection": None,

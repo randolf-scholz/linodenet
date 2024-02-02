@@ -23,7 +23,7 @@ class Series(nn.Sequential):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "modules": [None],
     }
 
@@ -77,7 +77,7 @@ class Parallel(nn.ModuleList):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "modules": [None],
     }
 
@@ -124,7 +124,7 @@ class Repeat(nn.Sequential):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "module": None,
         "copies": 1,
         "independent": True,
@@ -190,7 +190,7 @@ class Sum(nn.ModuleList):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "modules": [],
     }
 

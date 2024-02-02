@@ -16,7 +16,7 @@ class MLP(nn.Sequential):
 
     HP: dict = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "inputs_size": None,
         "output_size": None,
         "hidden_size": None,

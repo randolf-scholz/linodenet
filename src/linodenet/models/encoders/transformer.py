@@ -36,7 +36,7 @@ class Transformer(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "num_layers": 6,
         # the layer normalization component (optional).
         "norm": None,

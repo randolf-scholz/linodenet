@@ -46,7 +46,7 @@ class LatentStateSpaceModel(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "hidden_size": None,
         "latent_size": None,

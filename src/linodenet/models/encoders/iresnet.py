@@ -420,7 +420,7 @@ class iResNetBlock(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "atol": 1e-08,
         "rtol": 1e-05,
         "maxiter": 10,
@@ -526,7 +526,7 @@ class iResNet(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "maxiter": 10,
         "input_size": None,
         "dropout": None,

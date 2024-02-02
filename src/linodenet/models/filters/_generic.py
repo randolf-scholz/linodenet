@@ -55,7 +55,7 @@ class MissingValueFilter(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "concat_mask": True,
         "input_size": None,
         "hidden_size": None,
@@ -156,7 +156,7 @@ class ResidualFilterBlock(nn.Module):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
@@ -220,7 +220,7 @@ class SequentialFilter(nn.Sequential):
 
     HP = {
         "__name__": __qualname__,
-        "__module__": __module__,
+        "__module__": __name__,
         "input_size": None,
         "hidden_size": None,
         "autoregressive": False,
@@ -269,7 +269,7 @@ class SequentialFilter(nn.Sequential):
 #
 #     HP = {
 #         "__name__": __qualname__,
-#         "__module__": __module__,
+#         "__module__": __name__,
 #         "input_size": None,
 #         "filter": KalmanCell.HP | {"autoregressive": True},
 #         "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
