@@ -5,7 +5,7 @@
 groups = ["default", "linters", "typing", "tests", "experiment", "devtools", "docs"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:c534865b2ee2188572da5259a0ac161ab438c263fcc5fe560d2031a7afa03cf7"
+content_hash = "sha256:9215a52a266ba2ff83f3f5d0f46efd7ecc43acc6d2b4d92421135097b2b41fc8"
 
 [[package]]
 name = "accessible-pygments"
@@ -2426,7 +2426,7 @@ files = [
 
 [[package]]
 name = "pyright"
-version = "1.1.349"
+version = "1.1.350"
 requires_python = ">=3.7"
 summary = "Command line wrapper for pyright"
 groups = ["typing"]
@@ -2434,8 +2434,8 @@ dependencies = [
     "nodeenv>=1.6.0",
 ]
 files = [
-    {file = "pyright-1.1.349-py3-none-any.whl", hash = "sha256:8f9189ddb62222a35b3525666225f1d8f24244cbff5893c42b3f001d8ebafa1a"},
-    {file = "pyright-1.1.349.tar.gz", hash = "sha256:af4ab7f103a0b2a92e5fbf248bf734e9a98247991350ac989ead34e97148f91c"},
+    {file = "pyright-1.1.350-py3-none-any.whl", hash = "sha256:f1dde6bcefd3c90aedbe9dd1c573e4c1ddbca8c74bf4fa664dd3b1a599ac9a66"},
+    {file = "pyright-1.1.350.tar.gz", hash = "sha256:a8ba676de3a3737ea4d8590604da548d4498cc5ee9ee00b1a403c6db987916c6"},
 ]
 
 [[package]]
@@ -3403,6 +3403,17 @@ dependencies = [
 ]
 files = [
     {file = "triton-2.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:da58a152bddb62cafa9a857dd2bc1f886dbf9f9c90a2b5da82157cd2b34392b0"},
+]
+
+[[package]]
+name = "tuna"
+version = "0.5.11"
+requires_python = ">=3.6"
+summary = "Visualize Python performance profiles"
+groups = ["devtools"]
+files = [
+    {file = "tuna-0.5.11-py3-none-any.whl", hash = "sha256:ab352a6d836014ace585ecd882148f1f7c68be9ea4bf9e9298b7127594dab2ef"},
+    {file = "tuna-0.5.11.tar.gz", hash = "sha256:d47f3e39e80af961c8df016ac97d1643c3c60b5eb451299da0ab5fe411d8866c"},
 ]
 
 [[package]]
