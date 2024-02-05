@@ -186,9 +186,7 @@ class ResNet(nn.ModuleList):
         "block": ResNetBlock.HP,
     }
 
-    def __init__(
-        self, modules: Optional[Iterable[nn.Module]] = None, **cfg: Any
-    ) -> None:
+    def __init__(self, modules: Iterable[nn.Module], **cfg: Any) -> None:
         config = deep_dict_update(self.HP, cfg)
 
         assert config["input_size"] is not None, "input_size is required!"
@@ -198,12 +196,9 @@ class ResNet(nn.ModuleList):
         if "input_size" in block:
             block["input_size"] = config["input_size"]
 
-        blocks: list[nn.Module] = [] if modules is None else list(modules)
-
-        for _ in range(config["num_blocks"]):
-            module = initialize_from_dict(config["block"])
-            # self.add_module(f"block{k}", module)
-            blocks.append(module)
+        blocks = [
+            initialize_from_dict(config["block"]) for _ in range(config["num_blocks"])
+        ]
 
         super().__init__(blocks)
 

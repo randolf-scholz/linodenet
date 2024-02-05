@@ -121,7 +121,7 @@ CUSTOM_OPS = [
 def load_function(name: str, /) -> Any:
     """Load a function from the custom library."""
     try:  # compile the function
-        torch.utils.cpp_extension.load(
+        torch.utils.cpp_extension.load(  # pyright: ignore[reportAttributeAccessIssue]
             name=name,
             sources=[SOURCE_DIR / f"{name}.cpp"],  # type: ignore[list-item]
             is_python_module=False,

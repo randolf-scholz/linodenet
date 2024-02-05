@@ -204,7 +204,7 @@ class Parametrization(Protocol):
         """
         ...
 
-    def right_inverse(self, x: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor) -> Tensor:
         """Compute the right inverse of the parametrization.
 
         The right inverse is such that `parametrization(right_inverse(y)) == y`.
@@ -216,7 +216,7 @@ class Parametrization(Protocol):
         Here, we default to the identity function, which is correct for projections,
         since projections are idempotent. ($y = f(x) ⟹ f(id(y)) = f(y) = f(f(x)) = f(x) = y$)
         """
-        return x
+        return y
 
     @abstractmethod
     def parametrization(self) -> Any:
@@ -301,7 +301,7 @@ class ParametrizationBase(nn.Module, Parametrization):
         self.register_buffer("cached_parameter", tensor.clone().detach())
 
     @abstractmethod
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         """Apply the parametrization."""
         ...
 
@@ -349,7 +349,7 @@ class ParametrizationMulticache(nn.Module, Parametrization):
         self.cached_tensors = {}
 
     @abstractmethod
-    def forward(self, x: Tensor) -> tuple[Tensor, dict[str, Tensor]]:
+    def forward(self, x: Tensor, /) -> tuple[Tensor, dict[str, Tensor]]:
         """Apply the parametrization.
 
         Should return a tuple of the parametrized tensor and a dictionary of auxiliary tensors.

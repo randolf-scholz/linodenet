@@ -38,8 +38,11 @@ def test_filter_idempotency() -> None:
     # LOGGER.info("KalmanCell: Idempotency holds ✔ ")
 
     # Test SequentialFilterBlock
-    model = ResidualFilterBlock(
-        input_size=n, hidden_size=m, autoregressive=True, activation="ReLU"
+    model = ResidualFilterBlock.from_config(
+        input_size=n,
+        hidden_size=m,
+        autoregressive=True,
+        activation="ReLU",
     )
     result = model(y, x)
     assert not torch.isnan(result).any(), "Output contains NANs! ❌ "

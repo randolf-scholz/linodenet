@@ -6,7 +6,7 @@ __all__ = [
     "SequentialFilter",
 ]
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 import torch
 from torch import Tensor, jit, nn
@@ -160,14 +160,14 @@ class ResidualFilterBlock(nn.Module):
         "hidden_size": None,
         "autoregressive": False,
         "filter": KalmanCell,
-        "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell],
+        "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
     }
     r"""The HyperparameterDict of this class."""
 
     @classmethod
-    def from_config(cls, cfg: Mapping[str, Any], /, **kwargs: Any) -> Self:
+    def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
         r"""Initialize from hyperparameters."""
-        config = dict(cfg, **kwargs)
+        config = cls.HP | dict(cfg, **kwargs)
 
         # initialize cell:
         cell = try_initialize_from_config(
@@ -205,7 +205,7 @@ class ResidualFilterBlock(nn.Module):
         return x - self.layers(z)
 
 
-class SequentialFilter(nn.Sequential):
+class SequentialFilter(nn.ModuleList):
     r"""Multiple Filters applied sequentially.
 
     .. math:: x' = Fₙ(y, zₙ₋₁) = Fₙ(y，Fₙ₋₁(y，...F₂(y，F₁(y, x))...))
@@ -230,30 +230,32 @@ class SequentialFilter(nn.Sequential):
     @classmethod
     def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
         r"""Initialize from hyperparameters."""
-        config = dict(cfg, **kwargs)
+        config = cls.HP | dict(cfg, **kwargs)
 
         # build the layers
-        layers: list[nn.Module] = []
+        module_list: list[nn.Module] = []
         for layer in config["layers"]:
             module = try_initialize_from_config(layer, **config)
-            layers.append(module)
+            module_list.append(module)
 
-        return cls(*layers)
+        return cls(module_list)
 
-    def __init__(self, *modules: nn.Module) -> None:
+    def __init__(self, modules: Iterable[nn.Module]) -> None:
         r"""Initialize from modules."""
-        if not modules:
+        module_list = list(modules)
+
+        if not module_list:
             raise ValueError("At least one module must be given!")
 
         try:
-            self.input_size = int(modules[0].input_size)
-            self.hidden_size = int(modules[-1].hidden_size)
+            self.input_size = int(module_list[0].input_size)
+            self.hidden_size = int(module_list[-1].hidden_size)
         except AttributeError as exc:
             raise AttributeError(
                 "First/Last modules must have `input_size` and `hidden_size`!"
             ) from exc
 
-        super().__init__(*modules)
+        super().__init__(module_list)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -261,47 +263,3 @@ class SequentialFilter(nn.Sequential):
         for module in self:
             x = module(y, x)
         return x
-
-
-# class SequentialFilterBlock(FilterABC, nn.ModuleList):
-#     r"""Multiple Filters applied sequentially."""
-#
-#     HP = {
-#         "__name__": __qualname__,
-#         "__module__": __name__,
-#         "input_size": None,
-#         "filter": KalmanCell.HP | {"autoregressive": True},
-#         "layers": [ReverseDense.HP | {"bias": False}, ReZeroCell.HP],
-#     }
-#     r"""The HyperparameterDict of this class."""
-#
-#     input_size: Final[int]
-#
-#     def __init__(self, *args: Any, **HP: Any) -> None:
-#         super().__init__()
-#         self.CFG = HP = deep_dict_update(self.HP, HP)
-#
-#         self.input_size = input_size = HP["input_size"]
-#         HP["filter"]["input_size"] = input_size
-#
-#         layers: list[nn.Module] = []
-#
-#         for layer in HP["layers"]:
-#             if "input_size" in layer:
-#                 layer["input_size"] = input_size
-#             if "output_size" in layer:
-#                 layer["output_size"] = input_size
-#             module = initialize_from_config(layer)
-#             layers.append(module)
-#
-#         layers = list(args) + layers
-#         self.filter: nn.Module = initialize_from_config(HP["filter"])
-#         self.layers: Iterable[nn.Module] = nn.Sequential(*layers)
-#
-#     @jit.export
-#     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-#         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-#         z = self.filter(y, x)
-#         for module in self.layers:
-#             z = module(z)
-#         return x + z

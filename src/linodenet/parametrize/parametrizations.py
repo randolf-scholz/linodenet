@@ -184,7 +184,7 @@ class MatrixExponential(ParametrizationBase):
     def forward(self, X):
         return torch.matrix_exp(X)
 
-    def right_inverse(self, Y):
+    def right_inverse(self, y):
         """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
         This requires the matrix logarithm, which is not implemented in PyTorch.
@@ -199,7 +199,7 @@ class GramMatrix(ParametrizationBase):
     def forward(self, X):
         return X.T @ X
 
-    def right_inverse(self, Y):
+    def right_inverse(self, y):
         """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
         This requires the matrix square root, which is not implemented in PyTorch.

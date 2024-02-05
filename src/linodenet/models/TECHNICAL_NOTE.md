@@ -17,6 +17,19 @@ We distinguish between two types of models:
        i.e. it needs to go through the regular `__init__` method.
    - These take `hyperparameters` as arguments to the constructor `__init__`.
 
+## `nn.Sequential` vs `nn.ModuleList`
+
+Only use `nn.Sequential` if the model satisfies the following substitution principle: In the
+full model can always be replaced by a slice/single module of the sequence, without raising an immediate
+error. (I.e. if the model is a chain of Endomorphisms.)
+
+- In a ResNet, which is implemented as a `nn.Sequential(F₁, F₂, …, Fₙ)` with forward pass
+  `xₖ₊₁ = xₖ + F(xₖ)`, we could in principle substitute the whole model with a slice of the sequence.
+- In a general MLP, this may not be possible, because each layer may change the shape of the input.
+
+Even then, `nn.Sequential` has a predefined signature for `forward` which may not be suitable and type-checkers will complain
+if submodules have different signatures.
+
 ## Specifying Hyperparameters
 
 1. Every model **type** should have an associated dictionary-like structure that contains

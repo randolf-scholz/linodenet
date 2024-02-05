@@ -10,10 +10,13 @@ __all__ = [
     "ReverseDense",
 ]
 
+from collections.abc import Mapping
+
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Any, Final, Optional
+from typing_extensions import Any, Final, Optional, Self
 
+from linodenet.constants import EMPTY_MAP
 from linodenet.utils._utils import deep_dict_update, initialize_from_dict
 
 
@@ -98,6 +101,12 @@ class ReverseDense(nn.Module):
     r"""The weight matrix."""
     bias: Optional[Tensor]
     r"""The bias vector."""
+
+    @classmethod
+    def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
+        """Initialize from hyperparameters."""
+        config = cls.HP | dict(cfg, **kwargs)
+        return cls(**config)
 
     def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
         super().__init__()
