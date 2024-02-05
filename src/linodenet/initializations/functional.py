@@ -32,49 +32,6 @@ from scipy import stats
 from torch import Tensor, device as Device, dtype as Dtype
 from typing_extensions import Optional, Protocol, runtime_checkable
 
-# reveal_type(torch.zeros)
-#
-#
-# Overload(
-# def (
-#         size: typing.Sequence[Union[builtins.int, torch.SymInt]],
-#         *,
-#         out: Union[torch._tensor.Tensor, None] =,
-#         dtype: Union[torch._C.dtype, None] =,
-#         layout: Union[torch._C.layout, None] =,
-#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
-#         pin_memory: Union[builtins.bool, None] =,
-#         requires_grad: Union[builtins.bool, None] =
-# ) -> torch._tensor.Tensor,
-# def (
-#         *size: builtins.int,
-#         out: Union[torch._tensor.Tensor, None] =,
-#         dtype: Union[torch._C.dtype, None] =,
-#         layout: Union[torch._C.layout, None] =,
-#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
-#         pin_memory: Union[builtins.bool, None] =,
-#         requires_grad: Union[builtins.bool, None] =
-# ) -> torch._tensor.Tensor,
-# def (
-#         size: Union[torch._C.Size, builtins.list[builtins.int], builtins.tuple[builtins.int, ...]],
-#         *,
-#         names: Union[typing.Sequence[Union[builtins.str, builtins.ellipsis, None]], None],
-#         dtype: Union[torch._C.dtype, None] =,
-#         layout: Union[torch._C.layout, None] =,
-#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
-#         pin_memory: Union[builtins.bool, None] =,
-#         requires_grad: Union[builtins.bool, None] =
-# ) -> torch._tensor.Tensor,
-# def (
-#         *size: builtins.int,
-#         names: Union[typing.Sequence[Union[builtins.str, builtins.ellipsis, None]], None],
-#         dtype: Union[torch._C.dtype, None] =,
-#         layout: Union[torch._C.layout, None] =,
-#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
-#         pin_memory: Union[builtins.bool, None] =,
-#         requires_grad: Union[builtins.bool, None] =
-# ) -> torch._tensor.Tensor)
-
 
 @runtime_checkable
 class Initialization(Protocol):

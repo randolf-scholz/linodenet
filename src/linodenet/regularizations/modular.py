@@ -32,7 +32,7 @@ from abc import abstractmethod
 
 import torch
 from torch import BoolTensor, Tensor, nn
-from typing_extensions import Final, Union
+from typing_extensions import Final
 
 from linodenet.constants import TRUE
 from linodenet.regularizations.functional import (
@@ -107,12 +107,10 @@ class MatrixNorm(nn.Module):
     .. Signature:: ``(..., n, n) -> ...``
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -129,12 +127,10 @@ class Identity(nn.Module):
     .. Signature:: ``(..., n, n) -> ...``
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -152,12 +148,10 @@ class Symmetric(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = +X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -175,12 +169,10 @@ class SkewSymmetric(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -199,11 +191,11 @@ class LowRank(nn.Module):
     """
 
     rank: Final[int]
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
     def __init__(
-        self, *, rank: int = 1, p: Union[str, int] = "fro", size_normalize: bool = True
+        self, *, rank: int = 1, p: str | int = "fro", size_normalize: bool = True
     ) -> None:
         super().__init__()
         self.rank = rank
@@ -223,12 +215,10 @@ class Orthogonal(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -244,12 +234,10 @@ class Traceless(nn.Module):
     .. Signature:: ``(..., n, n) -> ...``
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -267,12 +255,10 @@ class Normal(nn.Module):
     .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -291,12 +277,10 @@ class Symplectic(nn.Module):
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. J^TXJ = X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -315,12 +299,10 @@ class Hamiltonian(nn.Module):
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. (JX)^T = JX
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -343,12 +325,10 @@ class Diagonal(nn.Module):
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕀⊙X = X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
@@ -367,12 +347,12 @@ class LowerTriangular(nn.Module):
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕃⊙X = X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
     lower: Final[int]
 
     def __init__(
-        self, lower: int = 0, *, p: Union[str, int] = "fro", size_normalize: bool = True
+        self, lower: int = 0, *, p: str | int = "fro", size_normalize: bool = True
     ) -> None:
         super().__init__()
         self.lower = lower
@@ -395,12 +375,12 @@ class UpperTriangular(nn.Module):
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕌⊙X = X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
     upper: Final[int]
 
     def __init__(
-        self, upper: int = 0, *, p: Union[str, int] = "fro", size_normalize: bool = True
+        self, upper: int = 0, *, p: str | int = "fro", size_normalize: bool = True
     ) -> None:
         super().__init__()
         self.upper = upper
@@ -423,7 +403,7 @@ class Banded(nn.Module):
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝔹⊙X = X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
     upper: Final[int]
     lower: Final[int]
@@ -433,7 +413,7 @@ class Banded(nn.Module):
         lower: int = 0,
         upper: int = 0,
         *,
-        p: Union[str, int] = "fro",
+        p: str | int = "fro",
         size_normalize: bool = True,
     ) -> None:
         super().__init__()
@@ -462,7 +442,7 @@ class Masked(nn.Module):
         where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕄⊙X = X
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
     mask: BoolTensor
 
@@ -470,7 +450,7 @@ class Masked(nn.Module):
         self,
         mask: BoolTensor = TRUE,
         *,
-        p: Union[str, int] = "fro",
+        p: str | int = "fro",
         size_normalize: bool = True,
     ) -> None:
         super().__init__()
@@ -496,12 +476,10 @@ class Contraction(nn.Module):
         where Π(A) = \argmin_X ∥X-A∥₂ s.t. ‖X‖₂≤1
     """
 
-    p: Final[Union[str, int]]
+    p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(
-        self, *, p: Union[str, int] = "fro", size_normalize: bool = True
-    ) -> None:
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize

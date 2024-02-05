@@ -30,7 +30,7 @@ __all__ = [
 
 import torch.linalg
 from torch import BoolTensor, Tensor
-from typing_extensions import Protocol, Union, runtime_checkable
+from typing_extensions import Protocol, runtime_checkable
 
 from linodenet.constants import TRUE
 from linodenet.projections import functional as projections
@@ -66,9 +66,7 @@ def logdetexp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     return traces.abs().pow(p)
 
 
-def matrix_norm(
-    r: Tensor, p: Union[str, int] = "fro", size_normalize: bool = True
-) -> Tensor:
+def matrix_norm(r: Tensor, p: str | int = "fro", size_normalize: bool = True) -> Tensor:
     r"""Return the matrix regularization term.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -84,9 +82,7 @@ def matrix_norm(
 
 
 # region matrix groups -----------------------------------------------------------------
-def identity(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
+def identity(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
     r"""Bias the matrix towards being zero.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -97,9 +93,7 @@ def identity(
     return matrix_norm(x, p=p, size_normalize=size_normalize)
 
 
-def symmetric(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
+def symmetric(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
     r"""Bias the matrix towards being symmetric.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -112,7 +106,7 @@ def symmetric(
 
 
 def skew_symmetric(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+    x: Tensor, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being skew-symmetric.
 
@@ -126,7 +120,7 @@ def skew_symmetric(
 
 
 def low_rank(
-    x: Tensor, rank: int = 1, p: Union[str, int] = "fro", size_normalize: bool = False
+    x: Tensor, rank: int = 1, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being low rank.
 
@@ -139,9 +133,7 @@ def low_rank(
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
-def orthogonal(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
+def orthogonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
     r"""Bias the matrix towards being orthogonal.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -153,9 +145,7 @@ def orthogonal(
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
-def traceless(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
+def traceless(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
     r"""Bias the matrix towards being normal.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -172,9 +162,7 @@ def traceless(
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
-def normal(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
+def normal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
     r"""Bias the matrix towards being normal.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -187,7 +175,7 @@ def normal(
 
 
 def hamiltonian(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+    x: Tensor, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being hamiltonian.
 
@@ -200,9 +188,7 @@ def hamiltonian(
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
-def symplectic(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
+def symplectic(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
     r"""Bias the matrix towards being symplectic.
 
     .. Signature:: ``(..., 2n, 2n) -> ...``
@@ -218,9 +204,7 @@ def symplectic(
 
 
 # region masked projections ------------------------------------------------------------
-def diagonal(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
-) -> Tensor:
+def diagonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
     r"""Bias the matrix towards being diagonal.
 
     .. Signature:: ``(..., m, n) -> ...``
@@ -236,7 +220,7 @@ def banded(
     x: Tensor,
     upper: int = 0,
     lower: int = 0,
-    p: Union[str, int] = "fro",
+    p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
     r"""Bias the matrix towards being banded.
@@ -253,7 +237,7 @@ def banded(
 def lower_triangular(
     x: Tensor,
     lower: int = 0,
-    p: Union[str, int] = "fro",
+    p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
     r"""Bias the matrix towards being lower triangular.
@@ -270,7 +254,7 @@ def lower_triangular(
 def upper_triangular(
     x: Tensor,
     upper: int = 0,
-    p: Union[str, int] = "fro",
+    p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
     r"""Bias the matrix towards being upper triangular.
@@ -287,7 +271,7 @@ def upper_triangular(
 def masked(
     x: Tensor,
     mask: BoolTensor = TRUE,
-    p: Union[str, int] = "fro",
+    p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
     r"""Bias the matrix towards being masked.
@@ -306,7 +290,7 @@ def masked(
 
 # region other regularizations ---------------------------------------------------------
 def contraction(
-    x: Tensor, p: Union[str, int] = "fro", size_normalize: bool = False
+    x: Tensor, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being a contraction.
 
