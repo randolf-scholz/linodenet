@@ -7,10 +7,10 @@ __all__ = [
 
 import logging
 import warnings
-from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Any, Final, Optional
 
 from linodenet.lib import pad
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection
@@ -372,7 +372,7 @@ class LinODEnet(nn.Module):
         assert self.decoder is not None
 
 
-# from typing import NamedTuple
+# from typing_extensions import NamedTuple
 #
 #
 # class Context(NamedTuple):

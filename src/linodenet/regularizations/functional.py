@@ -28,10 +28,9 @@ __all__ = [
     "upper_triangular",
 ]
 
-from typing import Protocol, Union, runtime_checkable
-
 import torch.linalg
 from torch import BoolTensor, Tensor
+from typing_extensions import Protocol, Union, runtime_checkable
 
 from linodenet.constants import TRUE
 from linodenet.projections import functional as projections

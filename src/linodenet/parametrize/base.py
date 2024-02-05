@@ -83,11 +83,11 @@ import copy
 from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager
-from typing import Any, Protocol, TypeVar, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
+from typing_extensions import Any, Protocol, TypeVar, runtime_checkable
 
 Module = TypeVar("Module", bound=nn.Module)
 

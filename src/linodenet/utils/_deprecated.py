@@ -14,7 +14,8 @@ __all__ = [
 import warnings
 from collections.abc import Callable
 from functools import wraps
-from typing import ParamSpec, overload
+
+from typing_extensions import ParamSpec, overload
 
 from linodenet.types import R, T
 

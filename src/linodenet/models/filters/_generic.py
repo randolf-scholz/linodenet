@@ -7,11 +7,10 @@ __all__ = [
 ]
 
 from collections.abc import Mapping
-from typing import Any, Final
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Self
+from typing_extensions import Any, Final, Self
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.models.filters.base import (

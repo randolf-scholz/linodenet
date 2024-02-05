@@ -7,10 +7,10 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import cast
 
 from torch import Tensor, nn
 from torch.nn import GRUCell, LSTMCell, RNNCell
+from typing_extensions import cast
 
 from linodenet.models.filters.base import Filter
 

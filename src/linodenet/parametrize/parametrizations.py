@@ -29,10 +29,9 @@ __all__ = [
     "UpperTriangular",
 ]
 
-from typing import Final, Optional
-
 import torch
 from torch import BoolTensor, Tensor, jit, nn
+from typing_extensions import Final, Optional
 
 from linodenet import projections
 from linodenet.constants import ATOL, RTOL

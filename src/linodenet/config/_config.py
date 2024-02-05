@@ -19,7 +19,8 @@ from importlib import import_module
 from itertools import chain
 from pathlib import Path
 from types import ModuleType
-from typing import Any, ClassVar, Final
+
+from typing_extensions import Any, ClassVar, Final
 
 
 def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:

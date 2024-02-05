@@ -39,10 +39,10 @@ __all__ = [
 ]
 
 from math import sqrt
-from typing import Any, Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Any, Final, Optional, Protocol, runtime_checkable
 
 from linodenet.utils import ReverseDense, deep_dict_update, initialize_from_dict
 

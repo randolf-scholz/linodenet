@@ -25,10 +25,10 @@ __all__ = [
 
 
 import warnings
-from typing import Protocol
 
 import torch
 from torch import BoolTensor, Tensor
+from typing_extensions import Protocol
 
 from linodenet.constants import ATOL, ONE, RTOL, TRUE, ZERO
 

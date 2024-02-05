@@ -6,10 +6,9 @@ __all__ = [
     "TransformerEncoder",
 ]
 
-from typing import Optional
-
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder as _TransformerEncoder
+from typing_extensions import Optional
 
 from linodenet.utils import autojit, deep_dict_update, initialize_from_dict
 

@@ -18,9 +18,9 @@ from copy import deepcopy
 from functools import wraps
 from importlib import import_module
 from types import ModuleType
-from typing import Any
 
 from torch import jit, nn
+from typing_extensions import Any
 
 from linodenet.config import CONFIG
 from linodenet.types import M

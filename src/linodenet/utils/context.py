@@ -13,9 +13,8 @@ import sys
 from contextlib import AbstractContextManager, ContextDecorator
 from time import perf_counter_ns
 from types import FrameType, TracebackType
-from typing import ClassVar, Literal
 
-from typing_extensions import Never, Self
+from typing_extensions import ClassVar, Literal, Never, Self
 
 
 class timeout(ContextDecorator, AbstractContextManager):

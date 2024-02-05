@@ -6,9 +6,8 @@ __all__ = [
 ]
 
 
-from typing import Optional
-
 from torch import nn
+from typing_extensions import Optional
 
 
 class MLP(nn.Sequential):

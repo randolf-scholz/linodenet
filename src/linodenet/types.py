@@ -34,7 +34,7 @@ r"""Type hint for scalar types allowed by torchscript."""
 DeviceArg: TypeAlias = None | str | device  # Literal["cpu", "cuda"]
 r"""Type hint for device arguments."""
 
-DtypeArg: TypeAlias = None | str | dtype
+DtypeArg: TypeAlias = None | dtype  # NOTE: no support for string dtypes!
 r"""Type hint for dtype arguments."""
 
 Shape: TypeAlias = int | tuple[int, ...]

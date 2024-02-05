@@ -10,10 +10,10 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import Concatenate, ParamSpec, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, nn
+from typing_extensions import Concatenate, ParamSpec, Protocol, runtime_checkable
 
 P = ParamSpec("P")
 

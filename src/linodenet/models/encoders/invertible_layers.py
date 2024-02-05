@@ -27,11 +27,18 @@ __all__ = [
 
 import warnings
 from abc import abstractmethod
-from typing import Any, Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Self, TypeVar
+from typing_extensions import (
+    Any,
+    Final,
+    Optional,
+    Protocol,
+    Self,
+    TypeVar,
+    runtime_checkable,
+)
 
 U = TypeVar("U")
 U_contra = TypeVar("U_contra", contravariant=True)

@@ -13,11 +13,11 @@ __all__ = [
 
 from collections.abc import Iterable
 from math import sqrt
-from typing import Any, Optional, cast
 
 import torch
 from torch import Tensor, jit, nn
 from torch.nn.functional import dropout
+from typing_extensions import Any, Optional, cast
 
 from linodenet.models.encoders.ft_transformer import (
     get_activation_fn,

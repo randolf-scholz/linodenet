@@ -13,7 +13,8 @@ __all__ = [
 from abc import ABCMeta
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Any
+
+from typing_extensions import Any
 
 
 def is_allcaps(s: str) -> bool:

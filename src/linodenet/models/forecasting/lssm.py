@@ -7,11 +7,10 @@ __all__ = [
 
 import logging
 import warnings
-from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Self
+from typing_extensions import Any, Final, Optional, Self
 
 from linodenet.lib._utils import pad
 from linodenet.models.embeddings import ConcatEmbedding, ConcatProjection

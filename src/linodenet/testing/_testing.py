@@ -34,10 +34,10 @@ import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from itertools import chain
-from typing import Any, Optional, TypeAlias, overload
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Any, Optional, TypeAlias, overload
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.types import DeviceArg, M, Nested, Scalar, T

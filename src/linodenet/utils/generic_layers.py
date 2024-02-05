@@ -10,10 +10,10 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Iterable
-from typing import Any, Final, Optional, Self
 
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Any, Final, Optional, Self
 
 from linodenet.utils._utils import deep_dict_update, initialize_from_dict
 

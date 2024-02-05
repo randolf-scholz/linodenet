@@ -29,10 +29,51 @@ from math import prod, sqrt
 import torch
 from numpy.typing import NDArray
 from scipy import stats
-from torch import Tensor
-from typing_extensions import Protocol, runtime_checkable
+from torch import Tensor, device as Device, dtype as Dtype
+from typing_extensions import Optional, Protocol, runtime_checkable
 
-from linodenet.types import DeviceArg, DtypeArg, Shape
+# reveal_type(torch.zeros)
+#
+#
+# Overload(
+# def (
+#         size: typing.Sequence[Union[builtins.int, torch.SymInt]],
+#         *,
+#         out: Union[torch._tensor.Tensor, None] =,
+#         dtype: Union[torch._C.dtype, None] =,
+#         layout: Union[torch._C.layout, None] =,
+#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
+#         pin_memory: Union[builtins.bool, None] =,
+#         requires_grad: Union[builtins.bool, None] =
+# ) -> torch._tensor.Tensor,
+# def (
+#         *size: builtins.int,
+#         out: Union[torch._tensor.Tensor, None] =,
+#         dtype: Union[torch._C.dtype, None] =,
+#         layout: Union[torch._C.layout, None] =,
+#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
+#         pin_memory: Union[builtins.bool, None] =,
+#         requires_grad: Union[builtins.bool, None] =
+# ) -> torch._tensor.Tensor,
+# def (
+#         size: Union[torch._C.Size, builtins.list[builtins.int], builtins.tuple[builtins.int, ...]],
+#         *,
+#         names: Union[typing.Sequence[Union[builtins.str, builtins.ellipsis, None]], None],
+#         dtype: Union[torch._C.dtype, None] =,
+#         layout: Union[torch._C.layout, None] =,
+#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
+#         pin_memory: Union[builtins.bool, None] =,
+#         requires_grad: Union[builtins.bool, None] =
+# ) -> torch._tensor.Tensor,
+# def (
+#         *size: builtins.int,
+#         names: Union[typing.Sequence[Union[builtins.str, builtins.ellipsis, None]], None],
+#         dtype: Union[torch._C.dtype, None] =,
+#         layout: Union[torch._C.layout, None] =,
+#         device: Union[builtins.str, torch._C.device, builtins.int, None] =,
+#         pin_memory: Union[builtins.bool, None] =,
+#         requires_grad: Union[builtins.bool, None] =
+# ) -> torch._tensor.Tensor)
 
 
 @runtime_checkable
@@ -44,13 +85,13 @@ class Initialization(Protocol):
 
     def __call__(
         self,
-        n: Shape,
+        size: int | tuple[int, ...],
         /,
         *,
         # TODO: Add `generator` argument to all initializations.
         # generator: Optional[Generator] = None,
-        dtype: DtypeArg = None,
-        device: DeviceArg = None,
+        dtype: Optional[Dtype] = None,
+        device: Optional[str | Device] = None,
     ) -> Tensor:
         """Create a random matrix of shape `n`."""
         ...
@@ -58,12 +99,12 @@ class Initialization(Protocol):
 
 # region initializations ---------------------------------------------------------------
 def gaussian(
-    size: Shape,
+    size: int | tuple[int, ...],
     loc: float = 0.0,
     scale: float = 1.0,
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
 
@@ -79,10 +120,10 @@ def gaussian(
 
 
 def diagonally_dominant(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a random diagonally dominant matrix.
 
@@ -105,10 +146,10 @@ def diagonally_dominant(
 
 
 def symmetric(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a symmetric matrix, i.e. $A^⊤ = A$.
 
@@ -130,10 +171,10 @@ def symmetric(
 
 
 def skew_symmetric(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a random skew-symmetric matrix, i.e. $A^⊤ = -A$.
 
@@ -149,10 +190,10 @@ def skew_symmetric(
 
 
 def orthogonal(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
 
@@ -171,10 +212,10 @@ def orthogonal(
 
 
 def special_orthogonal(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A^{-1}$ with $\det(A)=1$.
 
@@ -193,11 +234,11 @@ def special_orthogonal(
 
 
 def low_rank(
-    size: Shape,
+    size: int | tuple[int, ...],
     rank: int = 1,
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$.
 
@@ -223,10 +264,10 @@ def low_rank(
 
 
 def traceless(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    dtype: DtypeArg = None,
-    device: DeviceArg = None,
+    dtype: Optional[Dtype] = None,
+    device: Optional[str | Device] = None,
 ) -> Tensor:
     r"""Sample a random traceless matrix, i.e. $\tr(A)=0$.
 
@@ -242,10 +283,10 @@ def traceless(
 
 # region canonical (deterministic) initializations -------------------------------------
 def canonical_skew_symmetric(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    device: DeviceArg = None,
-    dtype: DtypeArg = None,
+    device: Optional[str | Device] = None,
+    dtype: Optional[Dtype] = None,
 ) -> Tensor:
     r"""Return the canonical skew symmetric matrix of size $n=2k$.
 
@@ -269,10 +310,10 @@ def canonical_skew_symmetric(
 
 
 def canonical_symplectic(
-    size: Shape,
+    size: int | tuple[int, ...],
     *,
-    device: DeviceArg = None,
-    dtype: DtypeArg = None,
+    device: Optional[str | Device] = None,
+    dtype: Optional[Dtype] = None,
 ) -> Tensor:
     r"""Return the canonical symplectic matrix of size $n=2k$.
 

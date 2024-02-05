@@ -10,10 +10,9 @@ __all__ = [
     "ReverseDense",
 ]
 
-from typing import Any, Final, Optional
-
 import torch
 from torch import Tensor, jit, nn
+from typing_extensions import Any, Final, Optional
 
 from linodenet.utils._utils import deep_dict_update, initialize_from_dict
 

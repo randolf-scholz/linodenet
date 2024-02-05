@@ -14,12 +14,11 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
 from torch.nn import functional
-from typing_extensions import Self
+from typing_extensions import Final, Optional, Protocol, Self, runtime_checkable
 
 
 @runtime_checkable

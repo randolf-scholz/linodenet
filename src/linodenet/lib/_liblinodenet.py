@@ -23,10 +23,10 @@ __all__ = [
 
 import warnings
 from pathlib import Path
-from typing import Any, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor
+from typing_extensions import Any, Optional, Protocol, runtime_checkable
 
 # constants
 # we use FP32 machine epsilon as default tolerance
