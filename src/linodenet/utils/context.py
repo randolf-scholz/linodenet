@@ -148,7 +148,7 @@ class timeout(ContextDecorator, AbstractContextManager):
 class timer(ContextDecorator):
     """Context manager for timing a block of code."""
 
-    LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__module__}/{__qualname__}")
+    LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__name__}/{__qualname__}")
 
     start_time: int
     """Start time of the timer."""

@@ -56,7 +56,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) ->
 class reset_caches(ContextDecorator):
     """Context manager for resetting caches."""
 
-    LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__module__}/{__qualname__}")
+    LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__name__}/{__qualname__}")
 
     def __init__(
         self,

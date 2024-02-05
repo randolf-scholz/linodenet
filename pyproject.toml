@@ -40,7 +40,7 @@ dev = ["linodenet[test,docs,extras,typing,linters,devtools]"]
 test = [
     "coverage>=7.4.1",
     "matplotlib>=3.8.2",
-    "hypothesis[numpy,pandas,pytest]>=6.97.3",
+    "hypothesis[numpy,pandas,pytest]>=6.98.1",
     "psutil>=5.9.8",
     "pygal>=3.0.4",
     "pytest-benchmark[histogram]>=4.0.0",
@@ -68,29 +68,14 @@ docs = [
 devtools = [
     "cmake>=3.28.1",
     "devtools>=0.12.2",
-    "johnnydep>=1.20.4",
     "ninja>=1.11.1",
-    "pip>=23.3.2",
-    "pip-tools>=7.3.0",
-    "pipdeptree>=2.13.2",
-    "pipreqs>=0.4.13",
+    "pip>=24.0",
     "pre-commit>=3.6.0",
     "pybadges>=3.0.1",
-    "pydeps>=1.12.18",
+    "pygments>=2.17.2",
     "setuptools>=69.0.3",
     "twine>=4.0.2",
     "wheel>=0.42.0",
-]
-extras = [
-    "ipympl>=0.9.3",
-    "ipywidgets>=8.1.1",
-    "jupyterlab>=4.0.12",
-    "jupyterlab>=4.0.12",
-    "notebook>=7.0.7",
-    "openml>=0.14.2",
-    "openpyxl>=3.1.2",
-    "psutil>=5.9.8",
-    "torchinfo>=1.8.0",
 ]
 typing = [
     "mypy>=1.8.0",
@@ -98,6 +83,7 @@ typing = [
     "types-colorama>=0.4.15",
     "types-decorator>=5.1.8",
     "types-docutils>=0.20.0",
+    "types-jsonschema>=4.21.0",
     "types-pillow>=10.2.0",
     "types-protobuf>=4.24.0",
     "types-psutil>=5.9.5",
@@ -118,9 +104,20 @@ linters = [
     "pyflakes>=3.2.0",
     "pylint>=3.0.3",
     "pylint-gitlab>=2.0.0",
-    "ruff>=0.1.15",
-    "ruff-lsp>=0.0.50",
-    "slotscheck>=0.17.1",
+    "ruff>=0.2.0",
+    "ruff-lsp>=0.0.51",
+]
+extras = [
+    "ipympl>=0.9.3",
+    "ipywidgets>=8.1.1",
+    "jupyterlab>=4.0.12",
+    "jupyterlab>=4.0.12",
+    "notebook>=7.0.7",
+    "openml>=0.14.2",
+    "openpyxl>=3.1.2",
+    "psutil>=5.9.8",
+    "pygments>=2.17.2",
+    "torchinfo>=1.8.0",
 ]
 
 
@@ -235,8 +232,7 @@ src = ["src/", "tests/"]
 indent-width = 4
 line-length = 88
 target-version = "py311"
-
-[tool.ruff.per-file-ignores]
+output-format = "concise"
 
 [tool.ruff.lint]
 select = [
@@ -324,6 +320,8 @@ ignore = [
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -653,7 +651,7 @@ typing-extensions = ">=4.9.0"
 
 [tool.poetry.group.test.dependencies]
 coverage = ">=7.4.1"
-hypothesis = {version=">=6.97.3", extras=["numpy", "pandas", "pytest"]}
+hypothesis = {version=">=6.98.1", extras=["numpy", "pandas", "pytest"]}
 matplotlib = ">=3.8.2"
 psutil = ">=5.9.8"
 pygal = ">=3.0.4"
@@ -690,7 +688,7 @@ cmake = ">=3.28.1"
 devtools = ">=0.12.2"
 johnnydep = ">=1.20.4"
 ninja = ">=1.11.1"
-pip = ">=23.3.2"
+pip = ">=24.0"
 pip-tools = ">=7.3.0"
 pipdeptree = ">=2.13.2"
 pipreqs = ">=0.4.13"
@@ -709,9 +707,8 @@ pydocstyle = ">=6.3.0"
 pyflakes = ">=3.2.0"
 pylint = ">=3.0.3"
 pylint-gitlab = ">=2.0.0"
-ruff = ">=0.1.15"
-ruff-lsp = ">=0.0.50"
-slotscheck = ">=0.17.1"
+ruff = ">=0.2.0"
+ruff-lsp = ">=0.0.51"
 
 [tool.poetry.group.typing.dependencies]
 mypy = ">=1.8.0"
