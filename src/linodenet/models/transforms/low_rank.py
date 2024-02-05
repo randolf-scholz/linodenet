@@ -14,24 +14,24 @@ from linodenet.utils import deep_dict_update
 class iLowRankLayer(nn.Module):
     r"""An invertible, efficient low rank perturbation layer.
 
-    With the help of the Matrix Inversion Lemma [1] (also known as Woodbury matrix identity),
-    we have
+        With the help of the Matrix Inversion Lemma [1] (also known as Woodbury matrix identity),
+        we have
 
-    .. math:: (𝕀ₙ + UVᵀ)^{-1} = 𝕀ₙ - U(𝕀ₖ + VᵀU)^{-1}Vᵀ
+        .. math:: (𝕀ₙ + UVᵀ)^{-1} = 𝕀ₙ - U(𝕀ₖ + VᵀU)^{-1}Vᵀ
 
-    I.e. to compute the inverse of the perturbed matrix, it is sufficient to compute the
-    inverse of the lower dimensional low rank matrix `𝕀ₖ + VᵀU`.
-    In particular, when `k=1` the formula reduces to
+        I.e. to compute the inverse of the perturbed matrix, it is sufficient to compute the
+        inverse of the lower dimensional low rank matrix `𝕀ₖ + VᵀU`.
+        In particular, when `k=1` the formula reduces to
 
-    .. math:: (𝕀ₙ + uvᵀ)^{-1} = 𝕀ₙ - \frac{1}{1+uᵀv} uvᵀ
+        .. math:: (𝕀ₙ + uvᵀ)^{-1} = 𝕀ₙ - \frac{1}{1+uᵀv} uvᵀ
 
-    To calculate the log determinant of the Jacobian, we use the the Matrix Determinant Lemma [2]:
+        To calculate the log determinant of the Jacobian, we use the the Matrix Determinant Lemma [2]:
 
-    .. math:: \log|\det(𝕀ₙ + UVᵀ)| = \log|\det(𝕀ₖ + VᵀU)| + \log|\det(𝕀ₙ + VᵀU)|
-
-    References:
-        .. [1] https://en.wikipedia.org/wiki/Woodbury_matrix_identity
-        .. [2] https://en.wikipedia.org/wiki/Matrix_determinant_lemma
+        .. math:: \log|\det(𝕀ₙ + UVᵀ)| = \log|\det(𝕀ₖ + VᵀU)| + \log|\det(𝕀ₙ + VᵀU)|
+    pdm
+        References:
+            .. [1] https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+            .. [2] https://en.wikipedia.org/wiki/Matrix_determinant_lemma
     """
 
     HP = {
