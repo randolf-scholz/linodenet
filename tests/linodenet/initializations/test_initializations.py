@@ -54,7 +54,7 @@ def test_normalization_property(
         warnings.warn("Requires up to 16GiB of RAM", UserWarning, stacklevel=2)
 
     # initialize matrices
-    kwargs = {}
+    kwargs: dict = {}
     if init_name == "low_rank":
         kwargs["rank"] = max(1, dim // 2)  # with rank-1, too unstable
 
@@ -85,7 +85,7 @@ def test_normalization_property(
 
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize("init_name", INITIALIZATIONS)
-def test_validity_initializations(init_name: str):
+def test_validity_initializations(init_name: str) -> None:
     """Validate that the initializations give correct matrix properties."""
     test_name = f"is_{init_name}"
     if test_name not in MATRIX_TESTS:

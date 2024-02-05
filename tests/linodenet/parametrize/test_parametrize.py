@@ -20,13 +20,15 @@ from linodenet.parametrize import (
     register_parametrization,
     update_parametrizations,
 )
-from linodenet.projections import is_symmetric, is_upper_triangular, symmetric
+from linodenet.projections import symmetric
 from linodenet.testing import (
     check_jit,
     check_jit_scripting,
     check_jit_serialization,
     check_model,
     check_object,
+    is_symmetric,
+    is_upper_triangular,
 )
 
 # class SlowUpperTriangular(ParametrizationBase):

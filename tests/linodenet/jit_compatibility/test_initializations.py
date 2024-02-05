@@ -8,7 +8,7 @@ from linodenet.initializations import INITIALIZATIONS
 
 @pytest.mark.xfail(reason="Uses scipy functions.")
 @pytest.mark.parametrize("initialization_name", INITIALIZATIONS)
-def test_jit_compatibility_functional(initialization_name: str):
+def test_jit_compatibility_functional(initialization_name: str) -> None:
     r"""Test JIT-compatibility of functional projections."""
     shape = (4, 4)
 

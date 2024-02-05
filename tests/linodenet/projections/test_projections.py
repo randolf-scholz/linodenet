@@ -12,42 +12,48 @@ from test_utils import camel2snake, snake2camel
 
 
 @pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_names_functional(projection_name: str):
+def test_names_functional(projection_name: str) -> None:
     r"""Test that all projections have the correct name."""
-    assert projection_name == FUNCTIONAL_PROJECTIONS[projection_name].__name__
+    projection = FUNCTIONAL_PROJECTIONS[projection_name]
+    actual_name = getattr(projection, "__name__", None)
+    assert projection_name == actual_name
 
 
 @pytest.mark.parametrize("projection_name", MODULAR_PROJECTIONS)
-def test_names_modular(projection_name: str):
+def test_names_modular(projection_name: str) -> None:
     r"""Test that all modular projections have the correct name."""
-    assert projection_name == MODULAR_PROJECTIONS[projection_name].__name__
+    projection = MODULAR_PROJECTIONS[projection_name]
+    actual_name = getattr(projection, "__name__", None)
+    assert projection_name == actual_name
 
 
 @pytest.mark.parametrize("test_name", MATRIX_TESTS)
-def test_names_matrix_tests(test_name: str):
+def test_names_matrix_tests(test_name: str) -> None:
     r"""Test that all matrix tests have the correct name."""
-    assert test_name == MATRIX_TESTS[test_name].__name__
+    matrix_test = MATRIX_TESTS[test_name]
+    actual_name = getattr(matrix_test, "__name__", None)
+    assert test_name == actual_name
 
 
 @pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_inclusion_functional_has_test(projection_name: str):
+def test_inclusion_functional_has_test(projection_name: str) -> None:
     r"""Test that all projections have tests."""
     if projection_name != "identity":
         assert f"is_{projection_name}" in MATRIX_TESTS
 
 
 @pytest.mark.parametrize("projection_name", MODULAR_PROJECTIONS)
-def test_inclusion_modular_has_functional(projection_name: str):
+def test_inclusion_modular_has_functional(projection_name: str) -> None:
     assert camel2snake(projection_name) in FUNCTIONAL_PROJECTIONS
 
 
 @pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_inclusion_functional_has_modular(projection_name: str):
+def test_inclusion_functional_has_modular(projection_name: str) -> None:
     assert snake2camel(projection_name) in MODULAR_PROJECTIONS
 
 
 @pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_projections_work(projection_name: str):
+def test_projections_work(projection_name: str) -> None:
     r"""Test that all projections work."""
     if projection_name == "identity":
         return

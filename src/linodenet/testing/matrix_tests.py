@@ -30,7 +30,7 @@ from typing import Protocol
 import torch
 from torch import BoolTensor, Tensor
 
-from linodenet.constants import ATOL, RTOL, TRUE
+from linodenet.constants import ATOL, ONE, RTOL, TRUE, ZERO
 
 
 class MatrixTest(Protocol):
@@ -274,9 +274,10 @@ def is_forward_stable(
     mean = x.mean(dim=(-2, -1))
     stdv = x.std(dim=(-2, -1))
 
-    return torch.allclose(mean, 0.0, atol=atol, rtol=rtol) and torch.allclose(
-        stdv, 1.0 / n, atol=atol, rtol=rtol
-    )
+    return (
+        torch.allclose(mean, ZERO, atol=atol, rtol=rtol)
+        and torch.allclose(stdv, ONE / n, atol=atol, rtol=rtol)
+    )  # fmt: skip
 
 
 def is_backward_stable(
@@ -295,9 +296,10 @@ def is_backward_stable(
     mean = x.mean(dim=(-2, -1))
     stdv = x.std(dim=(-2, -1))
 
-    return torch.allclose(mean, 0.0, atol=atol, rtol=rtol) and torch.allclose(
-        stdv, 1.0 / m, atol=atol, rtol=rtol
-    )
+    return (
+        torch.allclose(mean, ZERO, atol=atol, rtol=rtol)
+        and torch.allclose(stdv, ONE / m, atol=atol, rtol=rtol)
+    )  # fmt: skip
 
 
 # endregion other projections ----------------------------------------------------------
