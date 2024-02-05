@@ -226,21 +226,47 @@ def is_masked(
 
 
 # region other projections -------------------------------------------------------------
-def is_contraction(x: Tensor) -> bool:
+def is_contraction(
+    x: Tensor,
+    strict: bool = False,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> bool:
     r"""Check whether the given tensor is a contraction.
 
     .. Signature:: ``(..., m, n) -> bool``
+
+    This is done by checking whether the spectral norm is less than or equal to 1.
+    If strict, we require that the spectral norm is strictly less than 1, more specifically
+    we include tolerance:
+
+    .. math:: σ(A) ≤ (1-rtol)⋅r - atol
     """
+    # TODO: compute spectral norm with given tolerance
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
+    if strict:
+        return bool((sigma <= ((1 - rtol) * 1.0 - atol)).all().item())
     return bool((sigma <= 1.0).all().item())
 
 
-def is_diagonally_dominant(x: Tensor, strict: bool = False) -> bool:
+def is_diagonally_dominant(
+    x: Tensor,
+    strict: bool = False,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> bool:
     r"""Check whether the given matrix is diagonally dominant.
+
+    .. Signature:: ``(..., n, n) -> bool``
+
+    The test is based on the definition of diagonally dominant matrices:
 
     .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| for all i = 1, …, n
 
-    .. Signature:: ``(..., n, n) -> bool``
+    If strict, we require that the inequality is strict for all i, more specifically
+    we include tolerance:
+
+    .. math:: Aᵢᵢ ≥ (1+rtol)⋅(∑_{j≠i} |Aᵢⱼ|) + atol for all i = 1, …, n
 
     Note:
         Strictly diagonally dominant matrices are invertible.
@@ -254,7 +280,7 @@ def is_diagonally_dominant(x: Tensor, strict: bool = False) -> bool:
     rhs = x_abs.sum(dim=-1)
 
     if strict:
-        return bool((lhs > rhs).all())
+        return bool((lhs >= (1 + rtol) * rhs + atol).all())
     return bool((lhs >= rhs).all())
 
 
