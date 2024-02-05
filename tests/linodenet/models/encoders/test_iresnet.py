@@ -40,21 +40,21 @@ def test_LinearContraction(
     LOGGER = __logger__.getChild(LinearContraction.__name__)
     LOGGER.info("Testing...")
 
-    num_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
-    dim_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
-    dim_output = dim_output or random.choice([2**k for k in range(2, 8)])
+    n_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
+    d_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
+    d_output = dim_output or random.choice([2**k for k in range(2, 8)])
     extra_stats = {
-        "Samples": f"{num_sample}",
-        "Dim-in": f"{dim_inputs}",
-        "Dim-out": f"{dim_output}",
+        "Samples": f"{n_sample}",
+        "Dim-in": f"{d_inputs}",
+        "Dim-out": f"{d_output}",
     }
     LOGGER.info("Configuration: %s", extra_stats)
 
-    x = torch.randn(num_sample, dim_inputs)
-    y = torch.randn(num_sample, dim_inputs)
+    x = torch.randn(n_sample, d_inputs)
+    y = torch.randn(n_sample, d_inputs)
     distances: Tensor = torch.cdist(x, y)
 
-    model = LinearContraction(dim_inputs, dim_output)
+    model = LinearContraction(d_inputs, d_output)
     xhat = model(x)
     yhat = model(y)
     latent_distances: Tensor = torch.cdist(xhat, yhat)
@@ -107,13 +107,13 @@ def test_iResNetBlock(
     """
     LOGGER = __logger__.getChild(iResNetBlock.__name__)
     LOGGER.info("Testing...")
-    num_sample = num_sample or random.choice([1000 * k for k in range(1, 11)])
-    dim_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
-    dim_output = dim_output or random.choice([2**k for k in range(2, 8)])
+    n_samples = num_sample or random.choice([1000 * k for k in range(1, 11)])
+    d_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
+    d_output = dim_output or random.choice([2**k for k in range(2, 8)])
     extra_stats = {
-        "Samples": f"{num_sample}",
-        "Dim-in": f"{dim_inputs}",
-        "Dim-out": f"{dim_output}",
+        "Samples": f"{n_samples}",
+        "Dim-in": f"{d_inputs}",
+        "Dim-out": f"{d_output}",
         "maxiter": f"{maxiter}",
     }
     QUANTILES = torch.tensor(quantiles)
@@ -124,9 +124,9 @@ def test_iResNetBlock(
     LOGGER.info("TARGETS  : %s", TARGETS)
 
     with torch.no_grad():
-        model = iResNetBlock(dim_inputs, hidden_size=dim_output, maxiter=maxiter)
-        x = torch.randn(num_sample, dim_inputs)
-        y = torch.randn(num_sample, dim_inputs)
+        model = iResNetBlock(d_inputs, hidden_size=d_output, maxiter=maxiter)
+        x = torch.randn(n_samples, d_inputs)
+        y = torch.randn(n_samples, d_inputs)
         fx = model(x)
         xhat = model.inverse(fx)
         ify = model.inverse(y)
@@ -135,7 +135,7 @@ def test_iResNetBlock(
     # Test if ϕ⁻¹∘ϕ=id, i.e. the right inverse is working
     forward_inverse_error = scaled_norm(x - xhat, axis=-1, keepdim=False)
     forward_inverse_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
-    assert forward_inverse_error.shape == (num_sample,)
+    assert forward_inverse_error.shape == (n_samples,)
     assert (forward_inverse_quantiles <= TARGETS).all(), f"{forward_inverse_quantiles=}"
     LOGGER.info("satisfies ϕ⁻¹∘ϕ≈id ✔ ")
     LOGGER.info("Quantiles: %s", forward_inverse_quantiles)
@@ -143,7 +143,7 @@ def test_iResNetBlock(
     # Test if ϕ∘ϕ⁻¹=id, i.e. the right inverse is working
     inverse_forward_error = scaled_norm(y - yhat, axis=-1, keepdim=False)
     inverse_forward_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
-    assert inverse_forward_error.shape == (num_sample,)
+    assert inverse_forward_error.shape == (n_samples,)
     assert (inverse_forward_quantiles <= TARGETS).all(), f"{inverse_forward_quantiles=}"
     LOGGER.info("satisfies ϕ∘ϕ⁻¹≈id ✔ ")
     LOGGER.info("Quantiles: %s", inverse_forward_quantiles)
@@ -151,7 +151,7 @@ def test_iResNetBlock(
     # Test if ϕ≠id, i.e. the forward map is different from the identity
     forward_difference = scaled_norm(x - fx, axis=-1, keepdim=False)
     forward_quantiles = torch.quantile(forward_difference, 1 - QUANTILES)
-    assert forward_difference.shape == (num_sample,)
+    assert forward_difference.shape == (n_samples,)
     assert (forward_quantiles >= TARGETS).all(), f"{forward_quantiles}"
     LOGGER.info("satisfies ϕ≉id ✔ ")
     LOGGER.info("Quantiles: %s", forward_quantiles)
@@ -159,7 +159,7 @@ def test_iResNetBlock(
     # Test if ϕ⁻¹≠id, i.e. the inverse map is different from an identity
     inverse_difference = scaled_norm(y - ify, axis=-1, keepdim=False)
     inverse_quantiles = torch.quantile(inverse_difference, 1 - QUANTILES)
-    assert inverse_difference.shape == (num_sample,)
+    assert inverse_difference.shape == (n_samples,)
     assert (inverse_quantiles >= TARGETS).all(), f"{inverse_quantiles}"
     LOGGER.info("satisfies ϕ⁻¹≉id ✔ ")
     LOGGER.info("Quantiles: %s", inverse_quantiles)

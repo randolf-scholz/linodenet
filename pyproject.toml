@@ -392,6 +392,7 @@ exclude = [
     "**/node_modules",
     "**/__pycache__",
     "**/.ipynb_checkpoints",
+    "tests/linodenet/jit_compatibility/",  # FIXME: temporary
 ]
 executionEnvironments = [
     {root = "src/", pythonVersion = "3.11", pythonPlatform = "Linux", extraPaths = [""]}

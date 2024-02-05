@@ -18,4 +18,4 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 @pytest.fixture
 def make_plots(request: pytest.FixtureRequest) -> bool:
     """Whether to make plots."""
-    return request.config.getoption("--make-plots")
+    return bool(request.config.getoption("--make-plots"))

@@ -134,4 +134,4 @@ def test_jit_errors_parametrize() -> None:
     inputs = torch.randn(7, 5)
 
     with pytest.raises(jit.Error):  # type: ignore[type-var]
-        scripted(inputs)
+        scripted(inputs)  # pyright: ignore[reportCallIssue]

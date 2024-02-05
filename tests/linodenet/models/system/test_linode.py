@@ -34,7 +34,9 @@ def compute_linode_error(
 
     .. Signature:: `` -> (q, N)``
     """
-    logger = __logger__.getChild(f"{LinODE.__name__}-test-{num}-{dim}")
+    N = num or random.choice([10 * k for k in range(1, 11)])
+    D = dim or random.choice([2**k for k in range(1, 8)])
+    logger = __logger__.getChild(f"{LinODE.__name__}-test-{N}-{D}")
 
     numpy_dtype: type[np.number]
     torch_dtype: torch.dtype
@@ -51,13 +53,11 @@ def compute_linode_error(
     else:
         raise ValueError
 
-    num = num or random.choice([10 * k for k in range(1, 11)])
-    dim = dim or random.choice([2**k for k in range(1, 8)])
     t0, t1 = rng.uniform(low=-10, high=10, size=(2,))
     t0, t1 = min(t0, t1), max(t0, t1)  # make sure t0 ≤ t1
-    A = (rng.normal(size=(dim, dim)) / np.sqrt(dim)).astype(numpy_dtype)
-    x0 = rng.normal(size=dim).astype(numpy_dtype)
-    T = rng.uniform(low=t0, high=t1, size=num - 2)
+    A = (rng.normal(size=(D, D)) / np.sqrt(D)).astype(numpy_dtype)
+    x0 = rng.normal(size=D).astype(numpy_dtype)
+    T = rng.uniform(low=t0, high=t1, size=N - 2)
     T = np.sort([t0, *T, t1]).astype(numpy_dtype)
 
     def func(_, x):
@@ -70,8 +70,12 @@ def compute_linode_error(
     x0_torch = torch.tensor(x0, dtype=torch_dtype, device=device)
 
     model = LinODE(
-        input_size=dim,
-        cell={"kernel_initialization": A, "scalar": 1.0, "scalar_learnable": False},
+        input_size=D,
+        cell={
+            "kernel_initialization": A,
+            "scalar": 1.0,
+            "scalar_learnable": False,
+        },
     )
     model.to(dtype=torch_dtype, device=device)
     assert model.cell.scalar == 1.0
