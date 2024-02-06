@@ -29,7 +29,7 @@ classifiers = [
 # dependencies
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "numpy>=1.26.3",
+    "numpy>=1.26.4",
     "scipy>=1.12.0",
     "torch>=2.2.0",
     "typing-extensions>=4.9.0",
@@ -61,7 +61,7 @@ docs = [
 tests = [
     "coverage>=7.4.1",
     "matplotlib>=3.8.2",
-    "hypothesis[numpy,pandas,pytest]>=6.98.1",
+    "hypothesis[numpy,pandas,pytest]>=6.98.2",
     "psutil>=5.9.8",
     "pygal>=3.0.4",
     "pytest-benchmark[histogram]>=4.0.0",
@@ -75,8 +75,8 @@ tests = [
 linters = [
     "pylint>=3.0.3",
     "pylint-gitlab>=2.0.0",
-    "ruff>=0.2.0",
-    "ruff-lsp>=0.0.51",
+    "ruff>=0.2.1",
+    "ruff-lsp>=0.0.52",
 ]
 typing = [
     "mypy>=1.8.0",
