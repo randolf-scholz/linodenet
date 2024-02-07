@@ -8,7 +8,9 @@ Notes:
 
 __all__ = [
     # Sub-Modules
+    "base",
     "functional",
+    "modular",
     # Constants
     "ACTIVATIONS",
     "FUNCTIONAL_ACTIVATIONS",
@@ -23,18 +25,21 @@ __all__ = [
     "HardBend",
     # Functions
     "geglu",
-    "reglu",
     "hard_bend",
+    "reglu",
+    # utils
+    "get_activation",
 ]
 
-from linodenet.activations import functional
-from linodenet.activations._activations import Activation, ActivationABC, HardBend
+from linodenet.activations import base, functional, modular
 from linodenet.activations._torch_imports import (
     TORCH_ACTIVATIONS,
     TORCH_FUNCTIONAL_ACTIVATIONS,
     TORCH_MODULAR_ACTIVATIONS,
 )
+from linodenet.activations.base import Activation, ActivationABC
 from linodenet.activations.functional import geglu, hard_bend, reglu
+from linodenet.activations.modular import HardBend
 
 FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     **TORCH_FUNCTIONAL_ACTIVATIONS,
@@ -57,3 +62,16 @@ ACTIVATIONS: dict[str, Activation | type[Activation]] = {
     **FUNCTIONAL_ACTIVATIONS,
 }
 r"""Dictionary containing all available activations."""
+
+
+def get_activation(activation: object, /) -> Activation:
+    r"""Get an activation function by name."""
+    match activation:
+        case type() as cls:
+            return cls()
+        case str(name):
+            return get_activation(ACTIVATIONS[name])
+        case func if callable(func):
+            return func
+        case _:
+            raise TypeError(f"Invalid activation: {activation!r}")

@@ -8,13 +8,9 @@ __all__ = [
 
 from torch import nn
 
-from linodenet.activations._activations import Activation
+from linodenet.activations.base import Activation, GenericActivation
 
 TORCH_FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
-    "threshold": nn.functional.threshold,
-    # Thresholds each element of the input Tensor.
-    "threshold_": nn.functional.threshold_,  # type: ignore[attr-defined]
-    # In-place version of threshold().
     "relu": nn.functional.relu,
     # Applies the rectified linear unit function element-wise.
     "relu_": nn.functional.relu_,
@@ -39,8 +35,6 @@ TORCH_FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     # Applies element-wise, `LeakyReLU(x)=\max(0,x)+negative_slope⋅\min(0,x)`.
     "leaky_relu_": nn.functional.leaky_relu_,
     # In-place version of leaky_relu().
-    "prelu": nn.functional.prelu,
-    # `PReLU(x)=\max(0,x)+ω⋅\min(0,x)` where ω is a learnable parameter.
     "rrelu": nn.functional.rrelu,
     # Randomized leaky ReLU.
     "rrelu_": nn.functional.rrelu_,
@@ -79,20 +73,31 @@ TORCH_FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     # Applies the Sigmoid Linear Unit (SiLU) function, element-wise.
     "mish": nn.functional.mish,
     # Applies the Mish function, element-wise.
-    "batch_norm": nn.functional.batch_norm,
-    # Applies Batch Normalization for each channel across a batch of data.
-    "group_norm": nn.functional.group_norm,
-    # Applies Group Normalization for last certain number of dimensions.
     "instance_norm": nn.functional.instance_norm,
     # Applies Instance Normalization for each channel in each data sample in a batch.
-    "layer_norm": nn.functional.layer_norm,
-    # Applies Layer Normalization for last certain number of dimensions.
-    "local_response_norm": nn.functional.local_response_norm,
-    # Applies local response normalization over an input signal composed of several input planes.
     "normalize": nn.functional.normalize,
     # Performs Lp normalization of inputs over specified dimension.
 }
 r"""Dictionary containing all available functional activations in torch."""
+
+
+TORCH_SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
+    "threshold": nn.functional.threshold,
+    # Thresholds each element of the input Tensor.
+    "threshold_": nn.functional.threshold_,  # type: ignore[attr-defined]
+    # In-place version of threshold().
+    "prelu": nn.functional.prelu,
+    # `PReLU(x)=\max(0,x)+ω⋅\min(0,x)` where ω is a learnable parameter.
+    "batch_norm": nn.functional.batch_norm,
+    # Applies Batch Normalization for each channel across a batch of data.
+    "group_norm": nn.functional.group_norm,
+    # Applies Group Normalization for last certain number of dimensions.
+    "layer_norm": nn.functional.layer_norm,
+    # Applies Layer Normalization for last certain number of dimensions.
+    "local_response_norm": nn.functional.local_response_norm,
+    # Applies local response normalization over an input signal composed of several input planes.
+}
+r"""Special activations that do not represent usual activation functions."""
 
 TORCH_MODULAR_ACTIVATIONS: dict[str, type[Activation]] = {
     "AdaptiveLogSoftmaxWithLoss": nn.AdaptiveLogSoftmaxWithLoss,

@@ -1,46 +1,13 @@
-r"""Activations of the LinODE-Net package."""
+r"""Implementations of activation functions as `nn.Module`."""
 
 __all__ = [
-    # ABCs & Protocols
-    "Activation",
-    "ActivationABC",
     # Classes
     "HardBend",
 ]
 
-from abc import abstractmethod
-from collections.abc import Callable
 
 import torch
 from torch import Tensor, nn
-from typing_extensions import Concatenate, ParamSpec, Protocol, runtime_checkable
-
-P = ParamSpec("P")
-
-
-@runtime_checkable
-class Activation(Protocol[P]):
-    """Protocol for Activation Components."""
-
-    __call__: Callable[Concatenate[Tensor, P], Tensor]
-    """Forward pass of the activation."""
-
-
-class ActivationABC(nn.Module):
-    """Abstract Base Class for Activation components."""
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the activation.
-
-        .. Signature: ``... -> ...``.
-
-        Args:
-            x: The input tensor to be activated.
-
-        Returns:
-            y: The activated tensor.
-        """
 
 
 class HardBend(nn.Module):
