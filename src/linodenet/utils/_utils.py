@@ -106,6 +106,10 @@ def is_private(s: str, /) -> bool:
     return s.isidentifier() and s.startswith("_") and not s.endswith("__")
 
 
+def get_module(obj_ref: object, /) -> str:
+    return obj_ref.__module__.rsplit(".", maxsplit=1)[-1]
+
+
 def initialize_from_dict(defaults: Mapping[str, Any], /, **kwargs: Any) -> nn.Module:
     r"""Initialize a class from a dictionary.
 

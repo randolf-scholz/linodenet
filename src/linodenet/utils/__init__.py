@@ -4,14 +4,6 @@ __all__ = [
     # Sub-Modules
     "config",
     "context",
-    "layers",
-    # Classes
-    "Multiply",
-    "Parallel",
-    "ReZeroCell",
-    "Repeat",
-    "ReverseDense",
-    "Series",
     # Functions
     "autojit",
     "deep_dict_update",
@@ -22,7 +14,7 @@ __all__ = [
     "try_initialize_from_config",
 ]
 
-from linodenet.utils import config, context, layers
+from linodenet.utils import config, context
 from linodenet.utils._utils import (
     autojit,
     deep_dict_update,
@@ -32,5 +24,3 @@ from linodenet.utils._utils import (
     is_dunder,
     try_initialize_from_config,
 )
-from linodenet.utils.generic_layers import Multiply, Parallel, Repeat, Series
-from linodenet.utils.layers import ReverseDense, ReZeroCell
