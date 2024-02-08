@@ -3,11 +3,15 @@ r"""Implementations of activation functions as `nn.Module`."""
 __all__ = [
     # Classes
     "HardBend",
+    "ReGLU",
+    "GeGLU",
 ]
 
 
 import torch
 from torch import Tensor, nn
+
+from linodenet.activations.functional import geglu, reglu
 
 
 class HardBend(nn.Module):
@@ -40,3 +44,37 @@ class HardBend(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         mask = x.abs() <= self.threshold
         return torch.where(mask, self.slope * x, x + torch.sign(x) * self.t)
+
+
+class ReGLU(nn.Module):
+    r"""Regularized gelu activation function.
+
+    .. math:: ϕ(x) = x₁ * relu(x₂)
+
+    >>> activation = ReGLU()
+    >>> result = activation(torch.randn(4, 4))
+    >>> assert result.shape == (2, 4)
+
+    References:
+        Noam Shazeer, "GLU Variants Improve Transformer", 2020
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return reglu(x)
+
+
+class GeGLU(nn.Module):
+    r"""Gelu activation function.
+
+    .. math:: ϕ(x) = x₁ * gelu(x₂)
+
+    >>> activation = GeGLU()
+    >>> result = activation(torch.randn(4, 4))
+    >>> assert result.shape == (4, 2)
+
+    References:
+        Noam Shazeer, "GLU Variants Improve Transformer", 2020
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return geglu(x)

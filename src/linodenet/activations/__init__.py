@@ -23,6 +23,8 @@ __all__ = [
     "ActivationABC",
     # Classes
     "HardBend",
+    "GeGLU",
+    "ReGLU",
     # Functions
     "geglu",
     "hard_bend",
@@ -39,7 +41,7 @@ from linodenet.activations._torch_imports import (
 )
 from linodenet.activations.base import Activation, ActivationABC
 from linodenet.activations.functional import geglu, hard_bend, reglu
-from linodenet.activations.modular import HardBend
+from linodenet.activations.modular import GeGLU, HardBend, ReGLU
 
 FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     **TORCH_FUNCTIONAL_ACTIVATIONS,
@@ -52,6 +54,8 @@ r"""Dictionary containing all available functional activations."""
 MODULAR_ACTIVATIONS: dict[str, type[Activation]] = {
     **TORCH_MODULAR_ACTIVATIONS,
     "HardBend": HardBend,
+    "GeGLU": GeGLU,
+    "ReGLU": ReGLU,
 }
 r"""Dictionary containing all available activations."""
 
