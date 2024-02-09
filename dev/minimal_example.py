@@ -4,6 +4,7 @@ from torchinfo import summary
 
 import linodenet.modules.filters._generic
 import linodenet.modules.filters.base
+import linodenet.modules.filters.filters
 import linodenet.modules.system.linode
 from linodenet.modules import LSSM, encoders, filters, system
 
@@ -13,7 +14,7 @@ if __name__ == "__main__":
         "input_size": 16,
         "hidden_size": 16,
         "latent_size": 16,
-        "Filter": linodenet.models.filters.base.SequentialFilter.HP,
+        "Filter": linodenet.modules.filters.filters.SequentialFilter.HP,
         "System": linodenet.models.system.linode.LinODECell.HP,
         "Encoder": encoders.ResNet.HP,
         "Decoder": encoders.ResNet.HP,

@@ -22,7 +22,7 @@ def test_model_stability() -> None:
         "input_size": D,
         "hidden_size": L,
         "embedding_type": "concat",
-        "Filter": filters.base.SequentialFilter.HP,
+        "Filter": filters.filters.SequentialFilter.HP,
         "System": system.LinODECell.HP | {"kernel_initialization": "skew-symmetric"},
         "Encoder": ResNet.HP,
         "Decoder": ResNet.HP,

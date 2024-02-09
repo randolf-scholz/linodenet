@@ -2,11 +2,14 @@
 
 We distinguish between two types of models:
 
-1. **Basic Components** - these are building blocks used to construct larger models.
-   - Generally do not have any submodules. (attributes that are `nn.Module`s)
+1. **Base Components: `__init__` has no `nn.Module` inputs.**
    - Examples: `nn.Linear`, `nn.Conv2d`, `nn.BatchNorm2d`, `nn.ReLU`, etc.
+   - These are building blocks used to construct larger models.
+   - Generally do not have any submodules. (attributes that are `nn.Module`s)
    - Convention: `__init__` takes `hyperparameters` as arguments.
-2. Complex Models - these are the models that are built from the basic components
+2. **Complex Models: `__init__` requires some `nn.Module` inputs.**
+   - Examples: `n.Sequential`, `nn.ModuleList`, `nn.ModuleDict`, etc.
+   - these are the models that are built from the basic components
    - Generally have several submodules. (attributes that are `nn.Module`s)
    - Examples: `nn.Sequential`, `ResNet`
    - Conventions:
@@ -15,7 +18,7 @@ We distinguish between two types of models:
        Here, submodules can be initialized using the dictionaries that provide the hyperparameters.
        NOTE: `from_hyperparameters` should be a `@classmethod`, and **always** return `cls(*args, **kwargs)`,
        i.e. it needs to go through the regular `__init__` method.
-   - These take `hyperparameters` as arguments to the constructor `__init__`.
+     - These take `hyperparameters` as arguments to the constructor `__init__`.
 
 ## `nn.Sequential` vs `nn.ModuleList`
 

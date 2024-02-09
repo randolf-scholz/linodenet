@@ -382,6 +382,7 @@ ignore_missing_imports = true
 
 # region Pyright Configuration ---------------------------------------------------------
 [tool.pyright]
+typeCheckingMode = "standard"
 root = ""
 venv = ".venv"
 venvPath = "."

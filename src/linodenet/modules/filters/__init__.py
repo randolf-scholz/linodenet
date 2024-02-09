@@ -24,9 +24,6 @@ __all__ = [
     "FilterABC",
     # Classes
     "MissingValueFilter",
-    "ResidualFilter",
-    "ResidualFilterBlock",
-    "SequentialFilter",
     "GRUCell",
     "KalmanCell",
     "LSTMCell",
@@ -38,18 +35,18 @@ __all__ = [
     "PseudoKalmanCell",
     "RNNCell",
     "ResidualCell",
+    "KalmanFilter",
+    "ResidualFilter",
+    "ResidualFilterBlock",
+    "SequentialFilter",
 ]
 
 from linodenet.modules.filters.base import (
     Cell,
     Filter,
     FilterABC,
-    KalmanFilter,
     MissingValueFilter,
     ProbabilisticFilter,
-    ResidualFilter,
-    ResidualFilterBlock,
-    SequentialFilter,
 )
 from linodenet.modules.filters.cells import (
     GRUCell,
@@ -64,28 +61,34 @@ from linodenet.modules.filters.cells import (
     ResidualCell,
     RNNCell,
 )
+from linodenet.modules.filters.filters import (
+    KalmanFilter,
+    ResidualFilter,
+    ResidualFilterBlock,
+    SequentialFilter,
+)
 
 CELLS: dict[str, type[Cell]] = {
-    GRUCell:            "GRUCell",
-    KalmanCell:         "KalmanCell",
-    LinearCell:         "LinearCell",
-    LinearKalmanCell:   "LinearKalmanCell",
-    LinearResidualCell: "LinearResidualCell",
-    LSTMCell:           "LSTMCell",
-    MissingValueCell:   "MissingValueCell",
-    NonLinearCell:      "NonLinearCell",
-    PseudoKalmanCell:   "PseudoKalmanCell",
-    ResidualCell:       "ResidualCell",
-    RNNCell:            "RNNCell",
+    "GRUCell"            : GRUCell,
+    "KalmanCell"         : KalmanCell,
+    "LinearCell"         : LinearCell,
+    "LinearKalmanCell"   : LinearKalmanCell,
+    "LinearResidualCell" : LinearResidualCell,
+    "LSTMCell"           : LSTMCell,
+    "MissingValueCell"   : MissingValueCell,
+    "NonLinearCell"      : NonLinearCell,
+    "PseudoKalmanCell"   : PseudoKalmanCell,
+    "ResidualCell"       : ResidualCell,
+    "RNNCell"            : RNNCell,
 }  # fmt: skip
 """Dictionary of all available cells (basic building blocks for filters)."""
 
 FILTERS: dict[str, type[Filter]] = {
-    KalmanFilter:        "KalmanFilter",
-    MissingValueFilter:  "MissingValueFilter",
-    ProbabilisticFilter: "ProbabilisticFilter",
-    ResidualFilter:      "ResidualFilter",
-    ResidualFilterBlock: "ResidualFilterBlock",
-    SequentialFilter:    "SequentialFilter",
+    "KalmanFilter"        : KalmanFilter,
+    "MissingValueFilter"  : MissingValueFilter,
+    "ProbabilisticFilter" : ProbabilisticFilter,
+    "ResidualFilter"      : ResidualFilter,
+    "ResidualFilterBlock" : ResidualFilterBlock,
+    "SequentialFilter"    : SequentialFilter,
 }  # fmt: skip
 r"""Dictionary of all available filters."""
