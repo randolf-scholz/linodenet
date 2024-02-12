@@ -37,12 +37,12 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 from torch.distributions import Distribution
-from typing_extensions import Any, Final, Optional, Protocol, runtime_checkable
+from typing_extensions import Any, Final, Optional, Protocol, Self, runtime_checkable
 
 from linodenet.constants import EMPTY_MAP
 
@@ -56,12 +56,14 @@ class Cell(Protocol):
     hidden_size: Final[int]  # type: ignore[misc]
     """The size of the hidden state $x$."""
 
+    @abstractmethod
     def __init__(self, /, input_size: int, hidden_size: int) -> None:
         """Initialize the cell."""
         ...
 
+    @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
-        """Forward pass of the filter $x' = F(x, y)$.
+        """Forward pass of the filter $x' = F(y，x)$.
 
         .. Signature: ``[(..., n), (..., m)] -> (..., n)``.
         """
@@ -74,6 +76,8 @@ class Filter(Protocol):
 
     Additionally to the `Cell` protocol, a filter has knowledge of the observation model.
     This is a decoder that maps the hidden state to the observation space.
+
+    .. math:: y = h(x)
     """
 
     # CONSTANTS
@@ -81,13 +85,12 @@ class Filter(Protocol):
     """The size of the observable $y$."""
     hidden_size: Final[int]  # type: ignore[misc]
     """The size of the hidden state $x$."""
-    direct_observation: Final[bool]  # type: ignore[misc]
-    """Whether the observation model is the identity or not."""
 
     # SUBMODULES
     decoder: nn.Module
     """The observation model."""
 
+    @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
         """Forward pass of the filter $x' = F(x, y)$.
 
@@ -111,6 +114,7 @@ class ProbabilisticFilter(Protocol):
     decoder: Distribution
     """The model for the conditional distribution $p(y|x)$."""
 
+    @abstractmethod
     def __call__(self, y: Distribution, x: Distribution, /) -> Distribution:
         """Forward pass of the filter $p' = F(q, p)$."""
         ...
@@ -151,21 +155,106 @@ class FilterABC(nn.Module):
         ...
 
 
-class MissingValueFilter(nn.Module):
-    r"""Wraps an existing Filter to impute missing values via the observation model.
+class MissingValueCell(nn.Module):
+    """Wraps an existing Cell to impute missing value.
 
-    Given a filter $F$ and an observation model $h$, this returns the filter defined by
+    .. math:: x' = F([m ? s : y]，x)
 
-    .. math:: x' = F( [m ? h(x) : y]，x)
+    where $s$ is the substitute value.
+
+    There are the following strategies for imputation:
+
+    - "zero": Replace missing values with zeros.
+    - "last": Replace missing values with the last observed value. (initialized with zero)
     """
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    """CONST: The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
-    direct_observation: Final[bool]
-    r"""CONST: Whether the filter is autoregressive or not."""
+    """CONST: The size of the hidden state $x$."""
+    concat_mask: Final[bool]
+    r"""CONST: Whether to concatenate the mask to the input or not."""
+    imputation_strategy: Final[str]
+    r"""CONST: The strategy to use for imputation."""
+
+    # BUFFERS
+    S: Tensor
+    r"""BUFFER: The substitute."""
+
+    @classmethod
+    def from_cell(cls, cell: Cell, *, imputation_strategy: str = "zero") -> Self:
+        r"""Initialize from a cell."""
+        return cls(
+            input_size=cell.input_size,
+            hidden_size=cell.hidden_size,
+            cell_type=cell,
+            concat_mask=False,
+            imputation_strategy=imputation_strategy,
+        )
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        imputation_strategy: str = "zero",
+        concat_mask: bool = True,
+        cell_type: str | type[Cell] | Cell = "GRUCell",
+        cell_kwargs: Mapping[str, Any] = EMPTY_MAP,
+    ) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.imputation_strategy = bool(imputation_strategy)
+        self.concat_mask = bool(concat_mask)
+        self.register_buffer("S", torch.tensor(0.0))
+
+        # initialize cell
+        options = dict(cell_kwargs)
+        cell_input_size = self.input_size * (1 + self.concat_mask)
+        options.update(input_size=cell_input_size, hidden_size=self.hidden_size)
+        match cell_type:
+            case Cell() as cell if isinstance(cell_type, nn.Module):
+                self.cell = cell
+            case type() as cls if issubclass(cls, nn.Module):
+                self.cell = cls(**options)
+            case str() as cell_name:
+                cls = getattr(nn, cell_name)
+                self.cell = cls(**options)
+            case _:
+                raise TypeError(f"Invalid cell type: {cell_type}")
+
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        # impute missing value in observation with state estimate
+        mask = torch.isnan(y)
+
+        if self.imputation_strategy == "last":
+            # update entries in S with observed values
+            self.S = torch.where(mask, self.S, y)
+
+        y = torch.where(mask, self.S, y)
+
+        if self.concat_mask:
+            y = torch.cat([y, mask], dim=-1)
+
+        return self.cell(y, x)
+
+
+class MissingValueFilter(nn.Module):
+    r"""Wraps an existing Filter to impute missing values via the observation model.
+
+    Given a filter $F$ with observation model $h$, this returns the filter defined by
+
+    .. math:: x' = F([m ? h(x) : y]，x)
+    """
+
+    # CONSTANTS
+    input_size: Final[int]
+    """CONST: The size of the observable $y$."""
+    hidden_size: Final[int]
+    """CONST: The size of the hidden state $x$."""
     concat_mask: Final[bool]
     r"""CONST: Whether to concatenate the mask to the input or not."""
 
@@ -192,73 +281,59 @@ class MissingValueFilter(nn.Module):
     }
     r"""The HyperparameterDict of this class."""
 
+    @classmethod
+    def from_filter(cls, filter: Filter) -> Self:
+        r"""Initialize from a filter."""
+        return cls(
+            input_size=filter.input_size,
+            hidden_size=filter.hidden_size,
+            concat_mask=False,
+            filter_type=filter,
+        )
+
     def __init__(
         self,
-        cell: Cell = NotImplemented,
-        /,
         input_size: Optional[int] = None,
         hidden_size: Optional[int] = None,
         *,
-        decoder: str | Callable[[Tensor], Tensor] = "zero",
         concat_mask: bool = True,
-        cell_type: type[Cell] = nn.GRUCell,
-        cell_kwargs: Mapping[str, Any] = EMPTY_MAP,
+        filter_type: str | type[Filter] | Filter = NotImplemented,
+        filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
     ) -> None:
         super().__init__()
-        self.concat_mask = concat_mask
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.concat_mask = bool(concat_mask)
         self.register_buffer("ZERO", torch.tensor(0.0))
-        self._decoder = self.zero if decoder is None else decoder
 
-        if cell is NotImplemented:
-            # create configuration
-            options = dict(cell_kwargs)
-            if input_size is not None:
-                assert "input_size" not in options
-                options["input_size"] = (1 + concat_mask) * input_size
-            if hidden_size is not None:
-                assert "hidden_size" not in options
-                options["hidden_size"] = hidden_size
-
-            # attempt to initialize cell from hyperparameters
-            try:
-                self.cell = cell_type(**options)
-            except TypeError as exc:
-                raise RuntimeError(
-                    f"Failed to initialize cell of type {cell_type} with inputs {options}"
-                ) from exc
-        else:
-            self.cell = cell
-            self.input_size = input_size if input_size is not None else cell.input_size
-            self.hidden_size = (
-                hidden_size if hidden_size is not None else cell.hidden_size
-            )
-
-        match decoder:
-            case "zero":
-                self.decoder = Constant(self.zero)
-            case "linear":
-                self.decoder = nn.Linear(self.hidden_size, self.input_size)
-            case Callable() as decoder_func:
-                self.decoder = decoder_func
+        # initialize cell
+        options = dict(filter_kwargs)
+        filter_input_size = self.input_size * (1 + self.concat_mask)
+        options.update(input_size=filter_input_size, hidden_size=self.hidden_size)
+        match filter_type:
+            case Cell() as cell if isinstance(filter_type, nn.Module):
+                self.filter = cell
+            case type() as cls if issubclass(cls, nn.Module):
+                self.filter = cls(**options)
+            case str() as filter_name:
+                cls = getattr(nn, filter_name)
+                self.filter = cls(**options)
             case _:
-                raise TypeError(f"Invalid decoder type: {decoder}")
+                raise TypeError(f"Invalid filter type: {filter_type}")
 
-    @jit.export
+        self.decoder = self.filter.decoder
+
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        # impute missing value in observation with state estimate
         mask = torch.isnan(y)
         y = torch.where(mask, self.decoder(x), y)
 
         if self.concat_mask:
             y = torch.cat([y, mask], dim=-1)
 
-        # Flatten for RNN-Cell
-        y = y.view(-1, y.shape[-1])
-        x = x.view(-1, x.shape[-1])
-
-        # Apply filter
-        result = self.cell(y, x)
-
         # Unflatten return value
-        return result.view(mask.shape)
+        return self.filter(y, x)
+
+
+class ResidualCell(nn.Module):
+    """Wraps an existing Cell with a residual connection."""

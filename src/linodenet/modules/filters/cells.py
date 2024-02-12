@@ -72,7 +72,7 @@ from linodenet.utils import deep_dict_update, initialize_from_dict
 class LinearCell(nn.Module):
     """Linear RNN Cell.
 
-    .. math:: x' = Ux + Vy + b
+    .. math:: F(y，x) =  Ux + Vy + b
 
     where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
     """
@@ -82,8 +82,6 @@ class LinearCell(nn.Module):
     """CONST: The size of the observable $y$."""
     hidden_size: Final[int]
     """CONST: The size of the hidden state $x$."""
-    use_bias: Final[bool]
-    """CONST: Whether to use a bias vector or not."""
 
     # PARAMETERS
     U: Tensor
@@ -99,57 +97,28 @@ class LinearCell(nn.Module):
         input_size: int,
         hidden_size: int,
         *,
-        use_bias: bool = True,
+        bias: bool = True,
     ) -> None:
         super().__init__()
-        self.input_size = int(input_size)
-        self.hidden_size = int(hidden_size)
-        self.use_bias = bool(use_bias)
-        m, n = self.hidden_size, self.input_size
+        self.input_size = n = int(input_size)
+        self.hidden_size = m = int(hidden_size)
         self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
         self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
-        self.bias = nn.Parameter(torch.zeros(m)) if use_bias else None
+        self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Forward pass of the cell.
 
-        Args:
-            y: The current measurement of the system.
-            x: The current estimation of the state of the system.
+        .. math:: F(y，x) =  Ux + Vy + b
 
-        Returns:
-            The new estimation of the state of the system.
+        .. Signature:: ``[(..., n), (..., m)] -> (..., m)``.
         """
-        z = torch.einsum("...i,ij->...j", x, self.U) + torch.einsum(
-            "...i,ij->...j", y, self.V
-        )
+        z = torch.einsum("...i,ij->...j", x, self.U)
+        z = z + torch.einsum("...i,ij->...j", y, self.V)
 
-        if self.use_bias:
+        if self.bias is not None:
             z = z + self.bias
         return z
-
-
-class MissingValueCell(nn.Module):
-    concat_mask: Final[bool]
-
-    def forward(self: Tensor, x: Tensor) -> Tensor:
-        mask = torch.isnan(y)
-
-        # impute missing value in observation with state estimate
-        y = torch.where(mask, self.decoder(x), y)
-
-        if self.concat_mask:
-            y = torch.cat([y, mask], dim=-1)
-
-        # Flatten for RNN-Cell
-        y = y.view(-1, y.shape[-1])
-        x = x.view(-1, x.shape[-1])
-
-        # Apply filter
-        result = self.cell(y, x)
-
-        # De-Flatten return value
-        return result.view(mask.shape)
 
 
 class LinearResidualCell(nn.Module):
@@ -198,10 +167,11 @@ class LinearResidualCell(nn.Module):
         )
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        if self.autoregressive:
-            r = y - x
-        else:
-            r = torch.einsum("...i,ij->...j", y, self.H) - x
+        r = (
+            y - x
+            if self.autoregressive
+            else torch.einsum("...i,ij->...j", y, self.H) - x
+        )
 
         return x - torch.einsum("...i,ij->...j", r, self.F)
 
@@ -239,10 +209,11 @@ class ResidualCell(nn.Module):
         )
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        if self.autoregressive:
-            r = y - x
-        else:
-            r = torch.einsum("...i,ij->...j", y, self.H) - x
+        r = (
+            y - x
+            if self.autoregressive
+            else torch.einsum("...i,ij->...j", y, self.H) - x
+        )
 
         return x - torch.einsum("...i,ij->...j", r, self.F)
 
