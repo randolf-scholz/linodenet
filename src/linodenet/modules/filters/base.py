@@ -27,24 +27,35 @@ Example:
 """
 
 __all__ = [
+    # Constants
+    "FILTERS",
     # ABCs & Protocols
-    "Cell",
     "Filter",
-    "ProbabilisticFilter",
     "FilterABC",
     # Classes
     "MissingValueFilter",
+    "ResidualFilter",
+    # Functions
+    "filter_from_config",
 ]
 
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 import torch
-from torch import Tensor, nn
-from torch.distributions import Distribution
-from typing_extensions import Any, Final, Optional, Protocol, Self, runtime_checkable
+from torch import Tensor, jit, nn
+from typing_extensions import (
+    Any,
+    Final,
+    Optional,
+    Protocol,
+    TypeVar,
+    overload,
+    runtime_checkable,
+)
 
 from linodenet.constants import EMPTY_MAP
+from linodenet.utils import try_initialize_from_config
 
 
 @runtime_checkable
@@ -87,7 +98,7 @@ class Filter(Protocol):
     """The size of the hidden state $x$."""
 
     # SUBMODULES
-    decoder: nn.Module
+    decoder: Optional[nn.Module] = None
     """The observation model."""
 
     @abstractmethod
@@ -99,25 +110,49 @@ class Filter(Protocol):
         ...
 
 
-@runtime_checkable
-class ProbabilisticFilter(Protocol):
-    """Protocol for probabilistic filters.
+# NOTE: pre-defined here to avoid circular imports, contents are filled in `__init__.py`
+FILTERS: dict[str, type[Filter]] = {}
+"""A dictionary of all available filters."""
+F = TypeVar("F", bound=Filter)
+"""TypeVar for filters."""
 
-    The goal of a probabilistic filter is to update the distribution of the hidden state,
-    given the current observation. This is done by updating the parameters of the distribution
-    that represents the state.
 
-    In practice, this is done by acting on the parameters that define the distribution model,
-    rather than in function space itself.
-    """
+def _make_filter(filter_type: type[F], **config: Any) -> F:
+    r"""Initialize a filter from a type."""
+    try:
+        return filter_type(**config)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to initialize filter {filter_type} with arguments {config}!"
+        ) from exc
 
-    decoder: Distribution
-    """The model for the conditional distribution $p(y|x)$."""
 
-    @abstractmethod
-    def __call__(self, y: Distribution, x: Distribution, /) -> Distribution:
-        """Forward pass of the filter $p' = F(q, p)$."""
-        ...
+@overload
+def filter_from_config(filter: F, /) -> F: ...
+@overload
+def filter_from_config(filter_kind: type[F], /, **config: Any) -> F: ...
+@overload
+def filter_from_config(filter_kind: str, /, **config: Any) -> Filter: ...
+@overload
+def filter_from_config(**config: Any) -> Filter: ...
+def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
+    """Initialize from a configuration."""
+    match filter_kind:
+        case str() as name:
+            filter_class = FILTERS[name]
+            filter = _make_filter(filter_class, **config)
+        case type() as filter_class if issubclass(filter_class, nn.Module):
+            filter_class = filter_class
+            filter = _make_filter(filter_class, **config)
+        case Filter() as filter if isinstance(filter, nn.Module):
+            if config:
+                raise ValueError("Cannot initialize instance with additional arguments")
+        case None:
+            filter = try_initialize_from_config(config)
+        case _:
+            raise TypeError(f"Invalid filter type: {filter_kind!r}")
+
+    return filter
 
 
 class FilterABC(nn.Module):
@@ -136,13 +171,20 @@ class FilterABC(nn.Module):
     satisfying the idempotence property: if $y=h(x)$, then $x'=x$.
     """
 
-    input_size: int
+    input_size: Final[int]
     """The size of the observable $y$."""
-    hidden_size: int
+    hidden_size: Final[int]
     """The size of the hidden state $x$."""
+    decoder: Optional[nn.Module] = None
+    """The observation model."""
+
+    def __init__(self, /, input_size: int, hidden_size: int) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
 
     @abstractmethod
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
         r"""Forward pass of the filter.
 
         Args:
@@ -155,17 +197,22 @@ class FilterABC(nn.Module):
         ...
 
 
-class MissingValueCell(nn.Module):
-    """Wraps an existing Cell to impute missing value.
+class MissingValueFilter(nn.Module):
+    """Wraps an existing Filter so that it can handle missing values.
 
     .. math:: x' = F([m ? s : y]，x)
 
-    where $s$ is the substitute value.
+    where $s$ is the substitute value, for which there are several strategies:
 
-    There are the following strategies for imputation:
+    0. "default": uses "decoder", if available, and "zero" otherwise.
+    1. "zero": Replace missing values with zeros.
+    2. "last": Replace missing values with the last observed value. (initialized with zero)
+    3. "decoder": Replace missing values with the output of the decoder: $s = h(x)$.
+    4. Tensor: replaces missing values with a fixed tensor. (for example, the mean of the data)
 
-    - "zero": Replace missing values with zeros.
-    - "last": Replace missing values with the last observed value. (initialized with zero)
+    Optionally, the mask can be concatenated to the input.
+
+    .. math:: x' = F([ỹ，m]，x)  \qq{where}  ỹ = [m ? s : y]
     """
 
     # CONSTANTS
@@ -180,116 +227,7 @@ class MissingValueCell(nn.Module):
 
     # BUFFERS
     S: Tensor
-    r"""BUFFER: The substitute."""
-
-    @classmethod
-    def from_cell(cls, cell: Cell, *, imputation_strategy: str = "zero") -> Self:
-        r"""Initialize from a cell."""
-        return cls(
-            input_size=cell.input_size,
-            hidden_size=cell.hidden_size,
-            cell_type=cell,
-            concat_mask=False,
-            imputation_strategy=imputation_strategy,
-        )
-
-    def __init__(
-        self,
-        input_size: int,
-        hidden_size: int,
-        *,
-        imputation_strategy: str = "zero",
-        concat_mask: bool = True,
-        cell_type: str | type[Cell] | Cell = "GRUCell",
-        cell_kwargs: Mapping[str, Any] = EMPTY_MAP,
-    ) -> None:
-        super().__init__()
-        self.input_size = int(input_size)
-        self.hidden_size = int(hidden_size)
-        self.imputation_strategy = bool(imputation_strategy)
-        self.concat_mask = bool(concat_mask)
-        self.register_buffer("S", torch.tensor(0.0))
-
-        # initialize cell
-        options = dict(cell_kwargs)
-        cell_input_size = self.input_size * (1 + self.concat_mask)
-        options.update(input_size=cell_input_size, hidden_size=self.hidden_size)
-        match cell_type:
-            case Cell() as cell if isinstance(cell_type, nn.Module):
-                self.cell = cell
-            case type() as cls if issubclass(cls, nn.Module):
-                self.cell = cls(**options)
-            case str() as cell_name:
-                cls = getattr(nn, cell_name)
-                self.cell = cls(**options)
-            case _:
-                raise TypeError(f"Invalid cell type: {cell_type}")
-
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        # impute missing value in observation with state estimate
-        mask = torch.isnan(y)
-
-        if self.imputation_strategy == "last":
-            # update entries in S with observed values
-            self.S = torch.where(mask, self.S, y)
-
-        y = torch.where(mask, self.S, y)
-
-        if self.concat_mask:
-            y = torch.cat([y, mask], dim=-1)
-
-        return self.cell(y, x)
-
-
-class MissingValueFilter(nn.Module):
-    r"""Wraps an existing Filter to impute missing values via the observation model.
-
-    Given a filter $F$ with observation model $h$, this returns the filter defined by
-
-    .. math:: x' = F([m ? h(x) : y]，x)
-    """
-
-    # CONSTANTS
-    input_size: Final[int]
-    """CONST: The size of the observable $y$."""
-    hidden_size: Final[int]
-    """CONST: The size of the hidden state $x$."""
-    concat_mask: Final[bool]
-    r"""CONST: Whether to concatenate the mask to the input or not."""
-
-    # BUFFERS
-    ZERO: Tensor
-    """A buffer for the zero tensor."""
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "concat_mask": True,
-        "input_size": None,
-        "hidden_size": None,
-        "autoregressive": True,
-        "Cell": {
-            "__name__": "GRUCell",
-            "__module__": "torch.nn",
-            "input_size": None,
-            "hidden_size": None,
-            "bias": True,
-            "device": None,
-            "dtype": None,
-        },
-    }
-    r"""The HyperparameterDict of this class."""
-
-    @classmethod
-    def from_filter(cls, filter: Filter) -> Self:
-        r"""Initialize from a filter."""
-        return cls(
-            input_size=filter.input_size,
-            hidden_size=filter.hidden_size,
-            concat_mask=False,
-            filter_type=filter,
-        )
+    """A buffer for the substitute tensor."""
 
     def __init__(
         self,
@@ -297,6 +235,7 @@ class MissingValueFilter(nn.Module):
         hidden_size: Optional[int] = None,
         *,
         concat_mask: bool = True,
+        imputation_strategy: str | Tensor = "default",
         filter_type: str | type[Filter] | Filter = NotImplemented,
         filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
     ) -> None:
@@ -304,36 +243,217 @@ class MissingValueFilter(nn.Module):
         self.input_size = int(input_size)
         self.hidden_size = int(hidden_size)
         self.concat_mask = bool(concat_mask)
-        self.register_buffer("ZERO", torch.tensor(0.0))
 
-        # initialize cell
+        # initialize filter
         options = dict(filter_kwargs)
         filter_input_size = self.input_size * (1 + self.concat_mask)
         options.update(input_size=filter_input_size, hidden_size=self.hidden_size)
-        match filter_type:
-            case Cell() as cell if isinstance(filter_type, nn.Module):
-                self.filter = cell
-            case type() as cls if issubclass(cls, nn.Module):
-                self.filter = cls(**options)
-            case str() as filter_name:
-                cls = getattr(nn, filter_name)
-                self.filter = cls(**options)
-            case _:
-                raise TypeError(f"Invalid filter type: {filter_type}")
-
+        self.filter = filter_from_config(filter_type, **options)
         self.decoder = self.filter.decoder
+
+        # initialize imputation strategy
+        self.register_buffer("S", torch.zeros(self.input_size))
+        match imputation_strategy:
+            case "default" if self.decoder is not None:
+                self.imputation_strategy = "decoder"
+            case "default" if self.decoder is None:
+                self.imputation_strategy = "zero"
+            case "zero":
+                self.imputation_strategy = "zero"
+            case "last":
+                self.imputation_strategy = "last"
+            case Tensor() as tensor:
+                self.imputation_strategy = "constant"
+                self.S = tensor
+            case _:
+                raise ValueError(f"Invalid imputation strategy: {imputation_strategy}")
+
+    @jit.export
+    def impute(self, m: Tensor, y: Tensor, x: Tensor) -> Tensor:
+        r"""Update the substitute value."""
+        if self.imputation_strategy == "decoder":
+            self.S = self.decoder(x)
+        elif self.imputation_strategy == "last":
+            self.S = torch.where(m, self.S, y)
+        elif self.imputation_strategy in {"zero", "constant"}:
+            pass
+        else:
+            raise RuntimeError(
+                f"Invalid imputation strategy: {self.imputation_strategy}"
+            )
+
+        return self.S
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        # impute missing values
         mask = torch.isnan(y)
-        y = torch.where(mask, self.decoder(x), y)
+        substitute = self.impute(mask, y, x)
+        y = torch.where(mask, substitute, y)
 
         if self.concat_mask:
             y = torch.cat([y, mask], dim=-1)
 
-        # Unflatten return value
         return self.filter(y, x)
 
 
-class ResidualCell(nn.Module):
-    """Wraps an existing Cell with a residual connection."""
+class ResidualFilter(FilterABC):
+    """Wraps an existing Filter to return the residual $x' = x - F(y，x)$."""
+
+    # CONSTANTS
+    input_size: Final[int]
+    """The size of the observable $y$."""
+    hidden_size: Final[int]
+    """The size of the hidden state $x$."""
+
+    # SUBMODULES
+    filter: Filter
+    """The wrapped Filter."""
+    decoder: Optional[nn.Module] = None
+    """The observation model."""
+
+    def __init__(
+        self,
+        input_size: Optional[int] = None,
+        hidden_size: Optional[int] = None,
+        *,
+        filter_type: str | type[Filter] | Filter = NotImplemented,
+        filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
+    ) -> None:
+        super().__init__(input_size=input_size, hidden_size=hidden_size)
+        options = dict(filter_kwargs)
+        options.update(input_size=self.input_size, hidden_size=self.hidden_size)
+        self.filter = filter_from_config(filter_type, **options)
+        self.decoder = self.filter.decoder
+
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        return x - self.filter(y, x)
+
+
+class SequentialFilter(nn.ModuleList):
+    r"""Multiple Filters passes applied sequentially.
+
+    .. math:: xₖ₊₁ = Fₖ(y, xₖ)
+    """
+
+    # CONSTANTS
+    input_size: Final[int]
+    """The size of the observable $y$."""
+    hidden_size: Final[int]
+    """The size of the hidden state $x$."""
+
+    HP = {
+        "__name__": __qualname__,
+        "__module__": __name__,
+        "input_size": None,
+        "hidden_size": None,
+        "layers": [],
+    }
+    r"""The HyperparameterDict of this class."""
+
+    def __init__(self, layers: Iterable[Filter], /) -> None:
+        r"""Initialize from modules."""
+        module_list = list(layers)
+
+        if not module_list:
+            raise ValueError("At least one module must be given!")
+
+        self.input_size = int(module_list[0].input_size)
+        self.hidden_size = int(module_list[-1].hidden_size)
+
+        for module in module_list:
+            assert module.input_size == self.input_size
+            assert module.hidden_size == self.hidden_size
+
+        super().__init__(module_list)
+
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        for layers in self:
+            x = layers(y, x)
+        return x
+
+
+class ResNetFilter(nn.ModuleList):
+    """Sequential Filter with residual connections.
+
+    .. math:: xₖ₊₁ = xₖ + Fₖ(y, xₖ)
+    """
+
+    # CONSTANTS
+    input_size: Final[int]
+    """The size of the observable $y$."""
+    hidden_size: Final[int]
+    """The size of the hidden state $x$."""
+
+    HP = {
+        "__name__": __qualname__,
+        "__module__": __name__,
+        "input_size": None,
+        "hidden_size": None,
+        "layers": [],
+    }
+    r"""The HyperparameterDict of this class."""
+
+    def __init__(self, layers: Iterable[Filter], /) -> None:
+        r"""Initialize from modules."""
+        module_list = list(layers)
+
+        if not module_list:
+            raise ValueError("At least one module must be given!")
+
+        self.input_size = int(module_list[0].input_size)
+        self.hidden_size = int(module_list[-1].hidden_size)
+
+        for module in module_list:
+            assert module.input_size == self.input_size
+            assert module.hidden_size == self.hidden_size
+
+        super().__init__(module_list)
+
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        for layer in self:
+            x = x + layer(y, x)
+        return x
+
+
+class ReZeroFilter(nn.ModuleList):
+    """Sequential Filter with ReZero connections.
+
+    .. math:: xₖ₊₁ = xₖ + εₖ⋅Fₖ(y, xₖ)
+    """
+
+    # CONSTANTS
+    input_size: Final[int]
+    """The size of the observable $y$."""
+    hidden_size: Final[int]
+    """The size of the hidden state $x$."""
+
+    # Parameters
+    weight: Tensor
+
+    def __init__(self, layers: Iterable[Filter], /) -> None:
+        r"""Initialize from modules."""
+        module_list = list(layers)
+
+        if not module_list:
+            raise ValueError("At least one module must be given!")
+
+        self.input_size = int(module_list[0].input_size)
+        self.hidden_size = int(module_list[-1].hidden_size)
+
+        for module in module_list:
+            assert module.input_size == self.input_size
+            assert module.hidden_size == self.hidden_size
+
+        super().__init__(module_list)
+        weight = torch.zeros(len(self))
+        self.register_parameter("weight", weight)
+
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        for w, layer in zip(self.weight, self):
+            x = x + w * layer(y, x)
+        return x

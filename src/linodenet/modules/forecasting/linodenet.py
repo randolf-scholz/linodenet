@@ -15,7 +15,7 @@ from typing_extensions import Any, Final, Optional
 from linodenet.lib import pad
 from linodenet.modules.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.modules.encoders import ResNet
-from linodenet.modules.filters import MissingValueFilter
+from linodenet.modules.filters import OldMissingValueFilter
 from linodenet.modules.system import LinODECell
 from linodenet.utils import deep_dict_update, initialize_from_dict
 
@@ -48,7 +48,7 @@ class LinODEnet(nn.Module):
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
-        "Filter": MissingValueFilter.HP | {"autoregressive": True},
+        "Filter": OldMissingValueFilter.HP | {"autoregressive": True},
         "Encoder": ResNet.HP,
         "Decoder": ResNet.HP,
     }
@@ -392,7 +392,7 @@ class LatentLinODECell(nn.Module):
         "System": LinODECell.HP,
         "Embedding": ConcatEmbedding.HP,
         "Projection": ConcatProjection.HP,
-        "Filter": MissingValueFilter.HP | {"autoregressive": True},
+        "Filter": OldMissingValueFilter.HP | {"autoregressive": True},
         "Encoder": ResNet.HP,
         "Decoder": ResNet.HP,
     }

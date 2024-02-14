@@ -15,62 +15,48 @@ state $\{x_{q₁}, x_{q₂}, …, x_{qₙ}\}$ at the query times $\{q₁, q₂, 
 
 __all__ = [
     # Constants
-    "CELLS",
     "FILTERS",
     # ABCs & Protocols
-    "Cell",
     "Filter",
-    "ProbabilisticFilter",
     "FilterABC",
     # Classes
-    "MissingValueFilter",
     "GRUCell",
-    "KalmanCell",
     "LSTMCell",
-    "LinearCell",
-    "LinearKalmanCell",
-    "LinearResidualCell",
-    "MissingValueCell",
-    "NonLinearCell",
-    "PseudoKalmanCell",
     "RNNCell",
-    "ResidualCell",
     "KalmanFilter",
     "ResidualFilter",
     "ResidualFilterBlock",
     "SequentialFilter",
+    # functions
+    "filter_from_config",
 ]
 
 from linodenet.modules.filters.base import (
-    Cell,
+    FILTERS,
     Filter,
     FilterABC,
     MissingValueFilter,
-    ProbabilisticFilter,
-)
-from linodenet.modules.filters.cells import (
-    GRUCell,
-    KalmanCell,
-    LinearCell,
-    LinearKalmanCell,
-    LinearResidualCell,
-    LSTMCell,
-    MissingValueCell,
-    NonLinearCell,
-    PseudoKalmanCell,
-    ResidualCell,
-    RNNCell,
+    ResidualFilter,
+    filter_from_config,
 )
 from linodenet.modules.filters.filters import (
     KalmanFilter,
+    LinearCell,
+    LinearKalmanCell,
+    LinearResidualCell,
+    NonLinearCell,
+    NonLinearKalmanCell,
+    PseudoKalmanCell,
+    ResidualCell,
     ResidualFilter,
     ResidualFilterBlock,
     SequentialFilter,
 )
+from linodenet.modules.filters.probabilistic import ProbabilisticFilter
 
-CELLS: dict[str, type[Cell]] = {
+CELLS |= {
     "GRUCell"            : GRUCell,
-    "KalmanCell"         : KalmanCell,
+    "KalmanCell"         : NonLinearKalmanCell,
     "LinearCell"         : LinearCell,
     "LinearKalmanCell"   : LinearKalmanCell,
     "LinearResidualCell" : LinearResidualCell,
@@ -83,9 +69,9 @@ CELLS: dict[str, type[Cell]] = {
 }  # fmt: skip
 """Dictionary of all available cells (basic building blocks for filters)."""
 
-FILTERS: dict[str, type[Filter]] = {
+FILTERS |= {
     "KalmanFilter"        : KalmanFilter,
-    "MissingValueFilter"  : MissingValueFilter,
+    "MissingValueFilter"  : OldMissingValueFilter,
     "ProbabilisticFilter" : ProbabilisticFilter,
     "ResidualFilter"      : ResidualFilter,
     "ResidualFilterBlock" : ResidualFilterBlock,
