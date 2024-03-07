@@ -31,23 +31,19 @@ __all__ = [
 ]
 
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable
 from math import sqrt
-from typing import Any, Callable, Optional
 
 import torch
 from torch import Tensor, jit, nn
 from torch.nn import GRUCell, LSTMCell, RNNCell
-from typing_extensions import Any, Final, Optional, Self
+from typing_extensions import Any, Final, Optional
 
 from linodenet.activations import get_activation
-from linodenet.constants import EMPTY_MAP
-from linodenet.modules.filters.base import Filter
-from linodenet.modules.layers import ReverseDense, ReZeroCell
+from linodenet.modules.layers import ReverseDense
 from linodenet.utils import (
     deep_dict_update,
     initialize_from_dict,
-    try_initialize_from_config,
 )
 
 

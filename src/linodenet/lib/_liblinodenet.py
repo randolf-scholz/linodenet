@@ -146,7 +146,7 @@ except Exception as exc:
     warnings.warn(
         "Custom binaries not found! Trying to compile them on the fly!."
         " Please compile the extension in the linodenet/lib folder."
-        f"\nFull error: {exc}\n{'-'*80}",
+        f"\nFull error: {exc}\n{'-' * 80}",
         UserWarning,
         stacklevel=2,
     )
