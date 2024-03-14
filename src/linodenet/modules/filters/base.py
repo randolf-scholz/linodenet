@@ -145,7 +145,6 @@ def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
             filter_class = FILTERS[name]
             filter = _make_filter(filter_class, **config)
         case type() as filter_class if issubclass(filter_class, nn.Module):
-            filter_class = filter_class
             filter = _make_filter(filter_class, **config)
         case Filter() as filter if isinstance(filter, nn.Module):
             if config:

@@ -1,4 +1,4 @@
-"""Implementations of various filters.
+r"""Implementations of various filters.
 
 KalmanCell
 ----------
