@@ -9,6 +9,7 @@ __all__ = [
     "initialize_from_type",
     "is_dunder",
     "is_private",
+    "pad",
     "try_initialize_from_config",
 ]
 
@@ -19,7 +20,8 @@ from functools import wraps
 from importlib import import_module
 from types import ModuleType
 
-from torch import jit, nn
+import torch
+from torch import Tensor, jit, nn
 from typing_extensions import Any
 
 from linodenet.config import CONFIG
@@ -176,3 +178,20 @@ def try_initialize_from_config(
             return initialize_from_dict(config, **kwargs)
         case _:
             raise TypeError(f"Unsupported type {type(obj)}")
+
+
+def pad(
+    x: Tensor,
+    value: float,
+    pad_width: int,
+    dim: int = -1,
+    prepend: bool = False,
+) -> Tensor:
+    r"""Pad a tensor with a constant value along a given dimension."""
+    shape = list(x.shape)
+    shape[dim] = pad_width
+    z = torch.full(shape, value, dtype=x.dtype, device=x.device)
+
+    if prepend:
+        return torch.cat((z, x), dim=dim)
+    return torch.cat((x, z), dim=dim)

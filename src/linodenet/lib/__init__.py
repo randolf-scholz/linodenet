@@ -2,7 +2,6 @@
 
 __all__ = [
     # Functions
-    "pad",
     "singular_triplet",
     "singular_triplet_debug",
     "singular_triplet_native",
@@ -23,4 +22,3 @@ from linodenet.lib._liblinodenet import (
     spectral_norm_native,
     spectral_norm_riemann,
 )
-from linodenet.lib._utils import pad

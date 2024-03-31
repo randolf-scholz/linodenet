@@ -59,7 +59,7 @@ from linodenet.modules.filters.filters import (
     SequentialFilter,
 )
 
-CELLS |= {
+CELLS = {
     "GRUCell"            : GRUCell,
     "KalmanCell"         : NonLinearKalmanCell,
     "LinearCell"         : LinearCell,

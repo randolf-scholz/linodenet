@@ -3,6 +3,7 @@
 __all__ = [
     "ATOL",
     "EMPTY_MAP",
+    "EMPTY_SHAPE",
     "EPS",
     "FALSE",
     "NAN",
@@ -24,6 +25,8 @@ from typing_extensions import Any, Final, Never
 
 EMPTY_MAP: Final[Mapping[Any, Never]] = MappingProxyType({})
 """CONSTANT: Immutable Empty dictionary."""
+EMPTY_SHAPE: Final[torch.Size] = torch.Size([])
+"""CONSTANT: Empty shape."""
 TRUE: Final[BoolTensor] = torch.tensor(True, dtype=torch.bool)  # type: ignore[assignment]
 """A constant tensor representing the boolean value `True`."""
 FALSE: Final[BoolTensor] = torch.tensor(False, dtype=torch.bool)  # type: ignore[assignment]

@@ -12,12 +12,11 @@ import torch
 from torch import Tensor, jit, nn
 from typing_extensions import Any, Final, Optional, Self
 
-from linodenet.lib._utils import pad
 from linodenet.modules.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.modules.encoders import ResNet
 from linodenet.modules.filters import OldMissingValueFilter
 from linodenet.modules.system import LinODECell
-from linodenet.utils import deep_dict_update, initialize_from_dict
+from linodenet.utils import deep_dict_update, initialize_from_dict, pad
 
 __logger__ = logging.getLogger(__name__)
 

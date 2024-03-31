@@ -11,6 +11,7 @@ __all__ = [
     "initialize_from_dict",
     "initialize_from_type",
     "is_dunder",
+    "pad",
     "try_initialize_from_config",
 ]
 
@@ -22,5 +23,6 @@ from linodenet.utils._utils import (
     initialize_from_dict,
     initialize_from_type,
     is_dunder,
+    pad,
     try_initialize_from_config,
 )

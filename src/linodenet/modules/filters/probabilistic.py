@@ -33,6 +33,8 @@ from torch import Tensor, nn
 from torch.distributions import Distribution, MultivariateNormal
 from typing_extensions import Optional, Protocol, runtime_checkable
 
+from linodenet.constants import EMPTY_SHAPE
+
 
 @runtime_checkable
 class ProbabilisticFilter(Protocol):
@@ -71,7 +73,7 @@ class Empirical(Distribution):
         self.n = data.shape[0]
         self.shape = data.shape[1:]
 
-    def sample(self, sample_shape: torch.Size = torch.Size()) -> Tensor:
+    def sample(self, sample_shape: torch.Size = EMPTY_SHAPE) -> Tensor:
         """Sample from the empirical distribution."""
         idx = torch.randint(self.n, sample_shape)
         return self.data[idx]
