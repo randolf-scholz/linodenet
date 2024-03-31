@@ -14,29 +14,35 @@ state $\{x_{q₁}, x_{q₂}, …, x_{qₙ}\}$ at the query times $\{q₁, q₂, 
 """
 
 __all__ = [
+    # submodules
+    "probabilistic",
     # Constants
     "FILTERS",
     # ABCs & Protocols
     "Filter",
     "FilterABC",
     # Classes
-    "GRUCell",
-    "LSTMCell",
-    "RNNCell",
-    "KalmanFilter",
+    "MissingValueFilter",
+    "ReZeroFilter",
+    "ResNetFilter",
     "ResidualFilter",
-    "ResidualFilterBlock",
     "SequentialFilter",
-    # functions
+    # Functions
     "filter_from_config",
 ]
 
+from torch.nn import GRUCell, LSTMCell, RNNCell
+
+from linodenet.modules.filters import probabilistic
 from linodenet.modules.filters.base import (
     FILTERS,
     Filter,
     FilterABC,
     MissingValueFilter,
     ResidualFilter,
+    ResNetFilter,
+    ReZeroFilter,
+    SequentialFilter,
     filter_from_config,
 )
 from linodenet.modules.filters.filters import (
@@ -52,7 +58,6 @@ from linodenet.modules.filters.filters import (
     ResidualFilterBlock,
     SequentialFilter,
 )
-from linodenet.modules.filters.probabilistic import ProbabilisticFilter
 
 CELLS |= {
     "GRUCell"            : GRUCell,

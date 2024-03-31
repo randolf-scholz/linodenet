@@ -13,7 +13,6 @@ __all__ = [
     "Tokenizer",
 ]
 
-import math
 from collections.abc import Callable
 from math import sqrt
 
@@ -65,7 +64,7 @@ class Tokenizer(nn.Module):
             category_offsets = torch.tensor([0] + categories[:-1]).cumsum(0)
             self.register_buffer("category_offsets", category_offsets)
             self.category_embeddings = nn.Embedding(sum(categories), d_token)
-            nn_init.kaiming_uniform_(self.category_embeddings.weight, a=math.sqrt(5))
+            nn_init.kaiming_uniform_(self.category_embeddings.weight, a=sqrt(5))
             print(f"{self.category_embeddings.weight.shape=}")
 
         # take [CLS] token into account
@@ -73,9 +72,9 @@ class Tokenizer(nn.Module):
         self.bias = nn.Parameter(Tensor(d_bias, d_token)) if bias else None
 
         # The initialization is inspired by nn.Linear
-        nn_init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        nn_init.kaiming_uniform_(self.weight, a=sqrt(5))
         if self.bias is not None:
-            nn_init.kaiming_uniform_(self.bias, a=math.sqrt(5))
+            nn_init.kaiming_uniform_(self.bias, a=sqrt(5))
 
     @property
     def n_tokens(self) -> int:
@@ -140,7 +139,7 @@ class MultiheadAttention(nn.Module):
         for m in [self.W_q, self.W_k, self.W_v]:
             if initialization == "xavier" and (n_heads > 1 or m is not self.W_v):
                 # gain is needed since W_qkv is represented with 3 separate layers
-                nn_init.xavier_uniform_(m.weight, gain=1 / math.sqrt(2))
+                nn_init.xavier_uniform_(m.weight, gain=1 / sqrt(2))
             nn_init.zeros_(m.bias)
         if self.W_out is not None:
             nn_init.zeros_(self.W_out.bias)
@@ -180,7 +179,7 @@ class MultiheadAttention(nn.Module):
         q = self._reshape(q)
         k = self._reshape(k)
 
-        attention = softmax(q @ k.transpose(1, 2) / math.sqrt(d_head_key), dim=-1)
+        attention = softmax(q @ k.transpose(1, 2) / sqrt(d_head_key), dim=-1)
 
         if self.dropout is not None:
             attention = self.dropout(attention)

@@ -20,6 +20,12 @@ Experiment with parametrized KalmanCell.
 R is observed or a hyperparameter.
 """
 
+__all__ = [
+    "ProbabilisticFilter",
+    "Empirical",
+    "KalmanCell",
+]
+
 from abc import abstractmethod
 
 import torch
@@ -45,12 +51,12 @@ class ProbabilisticFilter(Protocol):
 
     @abstractmethod
     def __call__(self, y: Distribution, x: Distribution, /) -> Distribution:
-        """Forward pass of the filter $p' = F(q, p)$."""
+        r"""Forward pass of the filter $p' = F(q, p)$."""
         ...
 
 
 class Empirical(Distribution):
-    """The empirical distribution.
+    r"""The empirical distribution.
 
     .. math:: p(x) = \frac{1}{n} ∑_{i=1}^n δ(x - xᵢ)
     """
@@ -85,7 +91,7 @@ class Empirical(Distribution):
 
 
 class KalmanCell(nn.Module):
-    """The classical Kalman Filter.
+    r"""The classical Kalman Filter.
 
     .. math::
         μ' = μ - ΣH'(HΣH' + R)^{-1}(Hμ - y)
@@ -102,7 +108,7 @@ class KalmanCell(nn.Module):
 
     plugging in $μ₁ = μ, μ₂ = Hμ, Σ₁₁ = Σ, Σ₁₂ = ΣHᵀ, Σ₂₂ = HΣHᵀ + R$ grants the result.
 
-
+    The classical Kalman Filter can natively deal both with missing values, and duplicate observations.
 
     The filter can be modified so that it natively deals with missing values.
     This is possible since the normal distribution can be analytically marginalized.
@@ -127,8 +133,9 @@ class KalmanCell(nn.Module):
 
     def forward(self, y: Tensor, x: MultivariateNormal) -> MultivariateNormal:
         """Forward pass of the Kalman Cell."""
-        mask = torch.isnan(y)
         mu, sigma = x.mean, x.covariance_matrix
+        mask = torch.isnan(y)
+
         yhat = self.H @ mu
         residual = yhat - y
 

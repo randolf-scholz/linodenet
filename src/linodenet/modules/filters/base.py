@@ -34,7 +34,10 @@ __all__ = [
     "FilterABC",
     # Classes
     "MissingValueFilter",
+    "ReZeroFilter",
+    "ResNetFilter",
     "ResidualFilter",
+    "SequentialFilter",
     # Functions
     "filter_from_config",
 ]
@@ -142,7 +145,6 @@ def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
             filter_class = FILTERS[name]
             filter = _make_filter(filter_class, **config)
         case type() as filter_class if issubclass(filter_class, nn.Module):
-            filter_class = filter_class
             filter = _make_filter(filter_class, **config)
         case Filter() as filter if isinstance(filter, nn.Module):
             if config:
@@ -198,7 +200,7 @@ class FilterABC(nn.Module):
 
 
 class MissingValueFilter(nn.Module):
-    """Wraps an existing Filter so that it can handle missing values.
+    r"""Wraps an existing Filter so that it can handle missing values.
 
     .. math:: x' = F([m ? s : y]，x)
 
@@ -249,7 +251,8 @@ class MissingValueFilter(nn.Module):
         filter_input_size = self.input_size * (1 + self.concat_mask)
         options.update(input_size=filter_input_size, hidden_size=self.hidden_size)
         self.filter = filter_from_config(filter_type, **options)
-        self.decoder = self.filter.decoder
+        self.decoder = getattr(self.filter, "decoder", None)
+        assert isinstance(self.decoder, nn.Module) or self.decoder is None
 
         # initialize imputation strategy
         self.register_buffer("S", torch.zeros(self.input_size))
@@ -298,7 +301,7 @@ class MissingValueFilter(nn.Module):
 
 
 class ResidualFilter(FilterABC):
-    """Wraps an existing Filter to return the residual $x' = x - F(y，x)$."""
+    r"""Wraps an existing Filter to return the residual $x' = x - F(y，x)$."""
 
     # CONSTANTS
     input_size: Final[int]
@@ -454,6 +457,6 @@ class ReZeroFilter(nn.ModuleList):
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        for w, layer in zip(self.weight, self):
+        for w, layer in zip(self.weight, self, strict=True):
             x = x + w * layer(y, x)
         return x
