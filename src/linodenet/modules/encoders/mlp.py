@@ -48,18 +48,22 @@ class MLP(nn.Sequential):
 
         # hidden layers
         for _ in range(num_layers - 1):
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(self.dropout))
-            layer = nn.Linear(self.hidden_size, self.hidden_size)
-            nn.init.kaiming_normal_(layer.weight, nonlinearity="relu")
-            nn.init.kaiming_normal_(layer.bias[None], nonlinearity="relu")
-            layers.append(layer)
+            # initialize the layers
+            act = nn.ReLU()
+            drop = nn.Dropout(self.dropout)
+            linear = nn.Linear(self.hidden_size, self.hidden_size)
+            nn.init.kaiming_normal_(linear.weight, nonlinearity="relu")
+            nn.init.kaiming_normal_(linear.bias[None], nonlinearity="relu")
+            # Add the block
+            layers.extend([act, drop, linear])
 
         # output_layer
-        layers.append(nn.ReLU())
-        layers.append(nn.Dropout(self.dropout))
-        layer = nn.Linear(self.hidden_size, self.output_size)
+        act = nn.ReLU()
+        drop = nn.Dropout(self.dropout)
+        linear = nn.Linear(self.hidden_size, self.output_size)
         nn.init.kaiming_normal_(layer.weight, nonlinearity="relu")
         nn.init.kaiming_normal_(layer.bias[None], nonlinearity="relu")
-        layers.append(layer)
+        # Add the output block
+        layers.extend([act, drop, linear])
+
         super().__init__(*layers)
