@@ -395,7 +395,9 @@ include = ["src/", "tests/"]
 exclude = [
     "tests/linodenet/jit_compatibility/",  # FIXME: temporary
 ]
-
+executionEnvironments = [
+  { root = "src" }
+]
 # Type Check Diagnostics Settings
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md#type-check-diagnostics-settings
 typeCheckingMode = "standard"
