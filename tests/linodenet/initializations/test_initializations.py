@@ -86,7 +86,7 @@ def test_normalization_property(
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize("init_name", INITIALIZATIONS)
 def test_validity_initializations(init_name: str) -> None:
-    """Validate that the initializations give correct matrix properties."""
+    r"""Validate that the initializations give correct matrix properties."""
     test_name = f"is_{init_name}"
     if test_name not in MATRIX_TESTS:
         pytest.skip(f"Test {test_name} not implemented.")

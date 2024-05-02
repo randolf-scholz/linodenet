@@ -1,4 +1,4 @@
-"""Custom operators for the linodenet package."""
+r"""Custom operators for the linodenet package."""
 
 __all__ = [
     # CONSTANTS
@@ -37,7 +37,7 @@ RTOL = 1e-6  # 2**-23  # ~1.19e-7
 # region Protocols ---------------------------------------------------------------------
 @runtime_checkable
 class SpectralNorm(Protocol):
-    """Protocol for spectral norm implementations."""
+    r"""Protocol for spectral norm implementations."""
 
     def __call__(
         self,
@@ -48,7 +48,7 @@ class SpectralNorm(Protocol):
         atol: float = ATOL,
         rtol: float = RTOL,
     ) -> Tensor:
-        """Computes the spectral norm.
+        r"""Computes the spectral norm.
 
         Args:
             A: The input matrix (shape: M×N).
@@ -66,7 +66,7 @@ class SpectralNorm(Protocol):
 
 @runtime_checkable
 class SingularTriplet(Protocol):
-    """Protocol for singular triplet implementations."""
+    r"""Protocol for singular triplet implementations."""
 
     def __call__(
         self,
@@ -77,7 +77,7 @@ class SingularTriplet(Protocol):
         atol: float = ATOL,
         rtol: float = RTOL,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        """Computes the singular triplet.
+        r"""Computes the singular triplet.
 
         Args:
             A: The input matrix (shape: M×N).
@@ -100,13 +100,13 @@ class SingularTriplet(Protocol):
 
 # region get compiled functions --------------------------------------------------------
 LIB_NAME = "liblinodenet"
-"""The name of the custom library."""
+r"""The name of the custom library."""
 LIB = torch.ops.liblinodenet
-"""The custom library."""
+r"""The custom library."""
 BUILD_DIR = Path(__file__).parent / "build"
-"""The build directory."""
+r"""The build directory."""
 SOURCE_DIR = Path(__file__).parent / "src" / f"{LIB_NAME}"
-"""The source directory."""
+r"""The source directory."""
 CUSTOM_OPS = [
     "singular_triplet",
     "singular_triplet_debug",
@@ -115,11 +115,11 @@ CUSTOM_OPS = [
     "spectral_norm_debug",
     "spectral_norm_riemann",
 ]
-"""List of custom operators."""
+r"""List of custom operators."""
 
 
 def load_function(name: str, /) -> Any:
-    """Load a function from the custom library."""
+    r"""Load a function from the custom library."""
     try:  # compile the function
         torch.utils.cpp_extension.load(  # pyright: ignore[reportAttributeAccessIssue]
             name=name,
@@ -179,7 +179,7 @@ def spectral_norm(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> Tensor:
-    """Computes the spectral norm."""
+    r"""Computes the spectral norm."""
     return _spectral_norm(A, u0, v0, maxiter, atol, rtol)
 
 
@@ -191,7 +191,7 @@ def spectral_norm_debug(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> Tensor:
-    """Computes the spectral norm."""
+    r"""Computes the spectral norm."""
     return _spectral_norm_debug(A, u0, v0, maxiter, atol, rtol)
 
 
@@ -203,7 +203,7 @@ def spectral_norm_riemann(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> Tensor:
-    """Computes the spectral norm."""
+    r"""Computes the spectral norm."""
     return _spectral_norm_riemann(A, u0, v0, maxiter, atol, rtol)
 
 
@@ -215,7 +215,7 @@ def spectral_norm_native(
     atol: float = 1e-8,
     rtol: float = 1e-5,
 ) -> Tensor:
-    """Computes the spectral norm."""
+    r"""Computes the spectral norm."""
     return torch.linalg.matrix_norm(A, ord=2)
 
 
@@ -231,7 +231,7 @@ def singular_triplet(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """Computes the singular triplet."""
+    r"""Computes the singular triplet."""
     return _singular_triplet(A, u0, v0, maxiter, atol, rtol)
 
 
@@ -243,7 +243,7 @@ def singular_triplet_debug(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """Computes the singular triplet."""
+    r"""Computes the singular triplet."""
     return _singular_triplet_debug(A, u0, v0, maxiter, atol, rtol)
 
 
@@ -255,7 +255,7 @@ def singular_triplet_riemann(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """Computes the singular triplet."""
+    r"""Computes the singular triplet."""
     return _singular_triplet_riemann(A, u0, v0, maxiter, atol, rtol)
 
 
@@ -267,7 +267,7 @@ def singular_triplet_native(
     atol: float = 1e-8,
     rtol: float = 1e-5,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """Computes the singular triplet."""
+    r"""Computes the singular triplet."""
     U, S, Vh = torch.linalg.svd(A)
     # cols of U = LSV, rows of Vh: RSV
     return S[0], U[:, 0], Vh[0, :]

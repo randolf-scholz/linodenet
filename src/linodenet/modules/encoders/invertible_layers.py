@@ -1,4 +1,4 @@
-"""Implementation of invertible layers.
+r"""Implementation of invertible layers.
 
 Layers:
 
@@ -48,51 +48,51 @@ V_co = TypeVar("V_co", covariant=True)
 
 @runtime_checkable
 class InvertibleModule(Protocol[U, V]):
-    """Protocol for invertible layers."""
+    r"""Protocol for invertible layers."""
 
     # NOTE: Theoretically, this must be a subclass of nn.Module.
     # but typing system currently does not support this.
 
     @abstractmethod
     def inverse(self) -> "InvertibleModule[V, U]":
-        """Return the inverse of the layer."""
+        r"""Return the inverse of the layer."""
         ...
 
     @abstractmethod
     def encode(self, u: U, /) -> V:
-        """Encode the data."""
+        r"""Encode the data."""
         ...
 
     @abstractmethod
     def decode(self, v: V, /) -> U:
-        """Decode the data."""
+        r"""Decode the data."""
         ...
 
     def transform(self, u: U, /) -> V:
-        """Alias for encode."""
+        r"""Alias for encode."""
         return self.encode(u)
 
     def inverse_transform(self, v: V, /) -> U:
-        """Alias for decode."""
+        r"""Alias for decode."""
         return self.decode(v)
 
 
 class InvertibleModuleABC(nn.Module, InvertibleModule[U, V]):
-    """Abstract base class for invertible layers."""
+    r"""Abstract base class for invertible layers."""
 
     @abstractmethod
     def encode(self, u: U, /) -> V:
-        """Encode the data."""
+        r"""Encode the data."""
         ...
 
     @abstractmethod
     def decode(self, v: V, /) -> U:
-        """Decode the data."""
+        r"""Decode the data."""
         ...
 
 
 class iResNetBlock(nn.Module):
-    """A single block of an iResNet.
+    r"""A single block of an iResNet.
 
     References:
         - | Invertible Residual Networks
@@ -265,12 +265,12 @@ class iSequential(nn.Module):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        """Compute the encoding."""
+        r"""Compute the encoding."""
         return self.blocks(x)
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:
-        """Compute the encoding."""
+        r"""Compute the encoding."""
         return self.blocks(x)
 
     @jit.export

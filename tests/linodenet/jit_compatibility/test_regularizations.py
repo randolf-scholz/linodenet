@@ -1,4 +1,4 @@
-"""Test JIT-compatibility of `linodenet.projections.testing`."""
+r"""Test JIT-compatibility of `linodenet.projections.testing`."""
 
 import pytest
 import torch

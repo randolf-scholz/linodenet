@@ -55,7 +55,7 @@ from linodenet.projections.functional import (
 
 
 class ProjectionABC(nn.Module):
-    """Abstract Base Class for Projection components."""
+    r"""Abstract Base Class for Projection components."""
 
     @abstractmethod
     def forward(self, z: Tensor, /) -> Tensor:

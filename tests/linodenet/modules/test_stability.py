@@ -12,7 +12,7 @@ __logger__ = logging.getLogger(__name__)
 
 @pytest.mark.skip(reason="Not implemented yet.")
 def test_model_stability() -> None:
-    """TODO: Implement this test."""
+    r"""TODO: Implement this test."""
     LOGGER = __logger__.getChild(LinODEnet.__name__)
     LOGGER.info("Testing stability.")
 

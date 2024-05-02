@@ -311,7 +311,7 @@ class AltLinearContraction(nn.Module):
 
 
 class iResNetLayer(nn.Module):
-    """A single layer of an iResNet."""
+    r"""A single layer of an iResNet."""
 
     maxiter: Final[int]
     r"""CONST: Maximum number of steps in power-iteration"""

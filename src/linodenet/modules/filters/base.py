@@ -63,21 +63,21 @@ from linodenet.utils import try_initialize_from_config
 
 @runtime_checkable
 class Cell(Protocol):
-    """Protocol for cells."""
+    r"""Protocol for cells."""
 
     input_size: Final[int]  # type: ignore[misc]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]  # type: ignore[misc]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     @abstractmethod
     def __init__(self, /, input_size: int, hidden_size: int) -> None:
-        """Initialize the cell."""
+        r"""Initialize the cell."""
         ...
 
     @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
-        """Forward pass of the filter $x' = F(y，x)$.
+        r"""Forward pass of the filter $x' = F(y，x)$.
 
         .. Signature: ``[(..., n), (..., m)] -> (..., n)``.
         """
@@ -86,7 +86,7 @@ class Cell(Protocol):
 
 @runtime_checkable
 class Filter(Protocol):
-    """Protocol for filter.
+    r"""Protocol for filter.
 
     Additionally to the `Cell` protocol, a filter has knowledge of the observation model.
     This is a decoder that maps the hidden state to the observation space.
@@ -96,17 +96,17 @@ class Filter(Protocol):
 
     # CONSTANTS
     input_size: Final[int]  # type: ignore[misc]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]  # type: ignore[misc]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     # SUBMODULES
     decoder: Optional[nn.Module] = None
-    """The observation model."""
+    r"""The observation model."""
 
     @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
-        """Forward pass of the filter $x' = F(x, y)$.
+        r"""Forward pass of the filter $x' = F(x, y)$.
 
         .. Signature: ``[(..., n), (..., m)] -> (..., n)``.
         """
@@ -115,9 +115,9 @@ class Filter(Protocol):
 
 # NOTE: pre-defined here to avoid circular imports, contents are filled in `__init__.py`
 FILTERS: dict[str, type[Filter]] = {}
-"""A dictionary of all available filters."""
+r"""A dictionary of all available filters."""
 F = TypeVar("F", bound=Filter)
-"""TypeVar for filters."""
+r"""TypeVar for filters."""
 
 
 def _make_filter(filter_type: type[F], **config: Any) -> F:
@@ -139,7 +139,7 @@ def filter_from_config(filter_kind: str, /, **config: Any) -> Filter: ...
 @overload
 def filter_from_config(**config: Any) -> Filter: ...
 def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
-    """Initialize from a configuration."""
+    r"""Initialize from a configuration."""
     match filter_kind:
         case str() as name:
             filter_class = FILTERS[name]
@@ -174,11 +174,11 @@ class FilterABC(nn.Module):
     """
 
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
     decoder: Optional[nn.Module] = None
-    """The observation model."""
+    r"""The observation model."""
 
     def __init__(self, /, input_size: int, hidden_size: int) -> None:
         super().__init__()
@@ -219,9 +219,9 @@ class MissingValueFilter(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """CONST: The size of the observable $y$."""
+    r"""CONST: The size of the observable $y$."""
     hidden_size: Final[int]
-    """CONST: The size of the hidden state $x$."""
+    r"""CONST: The size of the hidden state $x$."""
     concat_mask: Final[bool]
     r"""CONST: Whether to concatenate the mask to the input or not."""
     imputation_strategy: Final[str]
@@ -229,7 +229,7 @@ class MissingValueFilter(nn.Module):
 
     # BUFFERS
     S: Tensor
-    """A buffer for the substitute tensor."""
+    r"""A buffer for the substitute tensor."""
 
     def __init__(
         self,
@@ -305,15 +305,15 @@ class ResidualFilter(FilterABC):
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     # SUBMODULES
     filter: Filter
-    """The wrapped Filter."""
+    r"""The wrapped Filter."""
     decoder: Optional[nn.Module] = None
-    """The observation model."""
+    r"""The observation model."""
 
     def __init__(
         self,
@@ -342,9 +342,9 @@ class SequentialFilter(nn.ModuleList):
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     HP = {
         "__name__": __qualname__,
@@ -379,16 +379,16 @@ class SequentialFilter(nn.ModuleList):
 
 
 class ResNetFilter(nn.ModuleList):
-    """Sequential Filter with residual connections.
+    r"""Sequential Filter with residual connections.
 
     .. math:: xₖ₊₁ = xₖ + Fₖ(y, xₖ)
     """
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     HP = {
         "__name__": __qualname__,
@@ -423,16 +423,16 @@ class ResNetFilter(nn.ModuleList):
 
 
 class ReZeroFilter(nn.ModuleList):
-    """Sequential Filter with ReZero connections.
+    r"""Sequential Filter with ReZero connections.
 
     .. math:: xₖ₊₁ = xₖ + εₖ⋅Fₖ(y, xₖ)
     """
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     # Parameters
     weight: Tensor

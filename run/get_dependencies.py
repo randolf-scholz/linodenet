@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Prints the direct dependencies of a module line by line.."""
+r"""Prints the direct dependencies of a module line by line.."""
 
 import ast
 import importlib
@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def extract_imports(node: ast.Import) -> set[str]:
-    """Extract third-party dependencies from an `import` statement node."""
+    r"""Extract third-party dependencies from an `import` statement node."""
     dependencies = set()
     for alias in node.names:
         module = alias.name.split(".")[0]
@@ -20,7 +20,7 @@ def extract_imports(node: ast.Import) -> set[str]:
 
 
 def extract_import_from(node: ast.ImportFrom) -> set[str]:
-    """Extract third-party dependencies from an `import from` statement node."""
+    r"""Extract third-party dependencies from an `import from` statement node."""
     dependencies = set()
     module = node.module.split(".")[0]
     if not module.startswith("_"):
@@ -29,12 +29,12 @@ def extract_import_from(node: ast.ImportFrom) -> set[str]:
 
 
 def is_submodule(submodule_name: str, module_name: str) -> bool:
-    """True if submodule_name is a submodule of module_name."""
+    r"""True if submodule_name is a submodule of module_name."""
     return submodule_name.startswith(module_name + ".")
 
 
 def get_file_dependencies(file_path: Path) -> set[str]:
-    """Retrieve the list of third-party dependencies imported by a file."""
+    r"""Retrieve the list of third-party dependencies imported by a file."""
     dependencies = set()
     path = Path(file_path)
 
@@ -52,7 +52,7 @@ def get_file_dependencies(file_path: Path) -> set[str]:
 
 
 def get_module_dependencies(module_name: str, recursive: bool = True) -> set[str]:
-    """Retrieve the list of third-party dependencies imported by a module."""
+    r"""Retrieve the list of third-party dependencies imported by a module."""
     module = importlib.import_module(module_name)
     dependencies = set()
 
@@ -84,7 +84,7 @@ def get_module_dependencies(module_name: str, recursive: bool = True) -> set[str
 
 
 def group_dependencies(dependencies: set[str]) -> tuple[list[str], list[str]]:
-    """Splits the dependencies into first-party and third-party."""
+    r"""Splits the dependencies into first-party and third-party."""
     stdlib_dependencies = set()
     third_party_dependencies = set()
 
@@ -98,7 +98,7 @@ def group_dependencies(dependencies: set[str]) -> tuple[list[str], list[str]]:
 
 
 def collect_dependencies(name: str | Path) -> set[str]:
-    """Collect the third-party dependencies from files in the given path."""
+    r"""Collect the third-party dependencies from files in the given path."""
     dependencies = set()
     path = Path(name)
 
@@ -117,10 +117,10 @@ def collect_dependencies(name: str | Path) -> set[str]:
 
 
 def main() -> None:
-    """Print the third-party dependencies of a module."""
+    r"""Print the third-party dependencies of a module."""
     if len(sys.argv) != 2:
         print("Usage: python get_dependencies.py [module_name]")
-        sys.exit(1)
+        SystemExit(1)
 
     name = sys.argv[1]
 

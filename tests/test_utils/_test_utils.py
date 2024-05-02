@@ -1,4 +1,4 @@
-"""Test utils."""
+r"""Test utils."""
 
 __all__ = [
     # Functions
@@ -12,12 +12,12 @@ __all__ = [
 
 import numpy as np
 import torch
+from matplotlib.axes import Axes
 from matplotlib.offsetbox import AnchoredText
-from matplotlib.pyplot import Axes
 from numpy.typing import ArrayLike, NDArray
 from scipy.stats import mode
 from torch import Tensor, jit
-from typing_extensions import Literal, Optional, TypeAlias, Union
+from typing_extensions import Literal, Optional, TypeAlias
 
 Location: TypeAlias = Literal[
     "upper right",
@@ -112,7 +112,7 @@ def visualize_distribution(
 @jit.script
 def geometric_mean(
     x: Tensor,
-    axis: Union[None, int, list[int]] = None,
+    axis: None | int | list[int] = None,
     keepdim: bool = False,
 ) -> Tensor:
     r"""Geometric mean of a tensor.
@@ -133,7 +133,7 @@ def geometric_mean(
 def scaled_norm(
     x: Tensor,
     p: float = 2.0,
-    axis: Union[None, int, list[int]] = None,
+    axis: None | int | list[int] = None,
     keepdim: bool = False,
 ) -> Tensor:
     r"""Shortcut for scaled norm.

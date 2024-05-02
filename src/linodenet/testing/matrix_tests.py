@@ -1,4 +1,4 @@
-"""Checks for testing certain matrix properties (type (1,1)-tensors)."""
+r"""Checks for testing certain matrix properties (type (1,1)-tensors)."""
 
 __all__ = [
     # ABCs & Protocols
@@ -133,7 +133,7 @@ def is_traceless(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    """Checks whether the trace of the given tensor is zero.
+    r"""Checks whether the trace of the given tensor is zero.
 
     .. Signature:: ``(..., n, n) -> bool[...]``
 
@@ -407,7 +407,7 @@ def is_forward_stable(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    """Check whether the given matrix is forward stable.
+    r"""Check whether the given matrix is forward stable.
 
     Note:
         An m×n matrix A is forward stable if and only if $𝐄[Aᵢⱼ] = 0$ and $𝐕[Aᵢⱼ] = 1/n$
@@ -426,7 +426,7 @@ def is_backward_stable(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    """Check whether the given matrix is backward stable.
+    r"""Check whether the given matrix is backward stable.
 
     Note:
         An m×n matrix A is backward stable if and only if $𝐄[Aᵢⱼ] = 0$ and $𝐕[Aᵢⱼ] = 1/m$

@@ -1,4 +1,4 @@
-"""Test gradients of custom operators."""
+r"""Test gradients of custom operators."""
 
 __all__ = ["compute_spectral_norm_impl"]
 
@@ -15,12 +15,12 @@ from linodenet.lib import (
 
 
 def inner(x, y):
-    """Compute the inner product."""
+    r"""Compute the inner product."""
     return torch.einsum("..., ... ->", x, y)
 
 
 def compute_spectral_norm_impl(impl, shape, **kwargs):
-    """Test the spectral norm implementation."""
+    r"""Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)
 
@@ -59,7 +59,7 @@ def compute_spectral_norm_impl(impl, shape, **kwargs):
 
 
 def compute_singular_triplet_impl(impl, shape, **kwargs):
-    """Test the spectral norm implementation."""
+    r"""Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)
 
@@ -101,7 +101,7 @@ def compute_singular_triplet_impl(impl, shape, **kwargs):
 
 @mark.xfail(reason="Matrices badly conditioned.")
 def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
-    """Test the singular triplet."""
+    r"""Test the singular triplet."""
     err_vals = []
     err_grad = []
     torch.manual_seed(0)
@@ -124,7 +124,7 @@ def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> N
 
 @mark.xfail(reason="Matrices badly conditioned.")
 def test_spectral_norm(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
-    """Test the spectral norm."""
+    r"""Test the spectral norm."""
     err_vals = []
     err_grad = []
     torch.manual_seed(0)

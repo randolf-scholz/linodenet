@@ -111,6 +111,7 @@ class LinODEnet(nn.Module):
         self,
         input_size: int,
         latent_size: int,
+        *,
         hidden_size: Optional[int] = None,
         **cfg: Any,
     ) -> None:
@@ -272,7 +273,7 @@ class LinODEnet(nn.Module):
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
-        """Predict the future of the system.
+        r"""Predict the future of the system.
 
         .. Signature:: ``[(..., m), (..., n), (..., n, d)] -> (..., m, d)``.
         """
@@ -350,10 +351,11 @@ class LinODEnet(nn.Module):
 
         return self.predictions
 
+    @jit.export
     def _validate_inputs(
         self, q: Tensor, t: Tensor, x: Tensor, t0: Tensor, z0: Tensor
     ) -> None:
-        """Validate the inputs to the model."""
+        r"""Validate the inputs to the model."""
         assert t.shape == x.shape[:-1]
         assert q.shape[:-1] == t.shape[:-1]
         assert t0.shape == t.shape[:-1]
@@ -361,8 +363,9 @@ class LinODEnet(nn.Module):
         assert all(t0 < t)
         assert all(t < q)
 
+    @jit.export
     def _validate_model(self) -> None:
-        """Validate the model."""
+        r"""Validate the model."""
         assert self.system is not None
         assert self.encoder is not None
         assert self.projection is not None
@@ -379,7 +382,7 @@ class LinODEnet(nn.Module):
 #     covariates: tuple[Tensor, Tensor]
 #     metadata: Tensor
 class LatentLinODECell(nn.Module):
-    """Latent Linear ODE Cell."""
+    r"""Latent Linear ODE Cell."""
 
     HP = {
         "__name__": __qualname__,
@@ -427,6 +430,7 @@ class LatentLinODECell(nn.Module):
         self,
         input_size: int,
         latent_size: int,
+        *,
         hidden_size: Optional[int] = None,
         **cfg: Any,
     ) -> None:
@@ -472,7 +476,7 @@ class LatentLinODECell(nn.Module):
         self.z0 = nn.Parameter(torch.randn(self.latent_size))
 
     def forward(self, x_obs: Tensor, z: Tensor, dt: Tensor) -> Tensor:
-        """Propagate the latent state forward in time.
+        r"""Propagate the latent state forward in time.
 
         .. Signature:: ``[(..., N), (..., d), (...,)] -> (..., N, d)``.
 

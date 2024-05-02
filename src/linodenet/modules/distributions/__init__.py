@@ -1,4 +1,4 @@
-"""Distributions for probabilistic modeling.
+r"""Distributions for probabilistic modeling.
 
 There are two interesting classes of models:
 

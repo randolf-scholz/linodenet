@@ -1,4 +1,4 @@
-"""Types and Type Aliases."""
+r"""Types and Type Aliases."""
 
 __all__ = [
     # Type Variables
@@ -44,11 +44,11 @@ r"""Type hint for shape-like inputs."""
 
 # region type variables ----------------------------------------------------------------
 S = TypeVar("S")
-"""Type Variable for generic types."""
+r"""Type Variable for generic types."""
 T = TypeVar("T")
-"""Type Variable for generic types."""
+r"""Type Variable for generic types."""
 T_co = TypeVar("T_co", covariant=True)
-"""Type Variable for generic types (always covariant)."""
+r"""Type Variable for generic types (always covariant)."""
 
 CLS = TypeVar("CLS", bound=type)
 r"""Type hint for classes."""
@@ -66,36 +66,36 @@ r"""Type Variable for callables."""
 # endregion type variables -------------------------------------------------------------
 # region Protocols ---------------------------------------------------------------------
 class SelfMap(Protocol[T]):
-    """Protocol for functions that map a type onto itself."""
+    r"""Protocol for functions that map a type onto itself."""
 
     @abstractmethod
     def __call__(self, x: T, /) -> T:
-        """Maps T -> T."""
+        r"""Maps T -> T."""
         ...
 
 
 class SupportsLenAndGetItem(Protocol[T_co]):
-    """Protocol for types that support `__len__` and `__getitem__`."""
+    r"""Protocol for types that support `__len__` and `__getitem__`."""
 
     def __len__(self) -> int: ...
     def __getitem__(self, index: SupportsInt, /) -> T_co: ...
 
 
 class HasHyperparameters(Protocol):
-    """Protocol for types that have hyperparameters."""
+    r"""Protocol for types that have hyperparameters."""
 
     HP: Final[str]  # type: ignore[misc]
-    """Default hyperparameters of the type."""
+    r"""Default hyperparameters of the type."""
 
     config: Final[dict]  # type: ignore[misc]
-    """Concrete hyperparameters of an instance."""
+    r"""Concrete hyperparameters of an instance."""
 
 
 # endregion Protocol -------------------------------------------------------------------
 
 # region generic type aliases ----------------------------------------------------------
 Range: TypeAlias = SupportsLenAndGetItem[T] | Iterable[T]
-"""Type hint for ranges of values."""
+r"""Type hint for ranges of values."""
 Nested: TypeAlias = T | Mapping[str, "Nested[T]"] | Sequence["Nested[T]"]
-"""Type hint for nested types."""
+r"""Type hint for nested types."""
 # endregion type aliases ---------------------------------------------------------------

@@ -57,7 +57,7 @@ from linodenet.regularizations.functional import (
 
 
 class RegularizationABC(nn.Module):
-    """Abstract Base Class for Regularization components."""
+    r"""Abstract Base Class for Regularization components."""
 
     @abstractmethod
     def forward(self, x: Tensor, /) -> Tensor:
@@ -229,7 +229,7 @@ class Orthogonal(nn.Module):
 
 
 class Traceless(nn.Module):
-    """Bias the matrix towards being traceless.
+    r"""Bias the matrix towards being traceless.
 
     .. Signature:: ``(..., n, n) -> ...``
     """

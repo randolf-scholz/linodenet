@@ -1,4 +1,4 @@
-"""Distributions base class."""
+r"""Distributions base class."""
 
 __all__ = [
     # ABCs & Protocols
@@ -28,28 +28,28 @@ from linodenet.types import Range
 
 
 class DistributionProto(Protocol):
-    """A protocol for distributions."""
+    r"""A protocol for distributions."""
 
 
 class ConditionalDistributionProto(Protocol):
-    """A protocol for conditional distributions."""
+    r"""A protocol for conditional distributions."""
 
 
 class JointDistributionProto(Protocol):
-    """A protocol for joint distributions."""
+    r"""A protocol for joint distributions."""
 
 
 class Marginalizable(DistributionProto, Protocol):
-    """A protocol for marginalizable distributions."""
+    r"""A protocol for marginalizable distributions."""
 
     @abstractmethod
     def marginalize(self, x, /, *, dims: tuple[int, ...]) -> "DistributionProto":
-        """Marginalize over the given dimensions."""
+        r"""Marginalize over the given dimensions."""
         ...
 
 
 class BaseDistribution(Distribution):
-    """Base class for distributions."""
+    r"""Base class for distributions."""
 
 
 class Product(Distribution):
@@ -78,7 +78,7 @@ class Product(Distribution):
         self.marginals = [m.expand(batch_shape) for m in marginals]
 
     def __len__(self) -> int:
-        """Get the number of marginal distributions."""
+        r"""Get the number of marginal distributions."""
         return len(self.marginals)
 
     @overload
@@ -86,7 +86,7 @@ class Product(Distribution):
     @overload
     def __getitem__(self, index: Range[int], /) -> "Product": ...
     def __getitem__(self, index, /):
-        """Get the marginal distribution at the given index."""
+        r"""Get the marginal distribution at the given index."""
         if isinstance(index, SupportsInt):
             return self.marginals[int(index)]
         return Product(*self.marginals[index])
@@ -116,13 +116,13 @@ class Mixture(Distribution):
     @overload
     def __getitem__(self, index: Range[int], /) -> "Mixture": ...
     def __getitem__(self, index, /):
-        """Returns the sub-mixture at the given index."""
+        r"""Returns the sub-mixture at the given index."""
         if isinstance(index, SupportsInt):
             return self.distributions[int(index)]
         return Mixture(self.distributions[index], self.weights[index])
 
     def marginalize(self):
-        """Return the marginal distribution.
+        r"""Return the marginal distribution.
 
         For a mixture, we have:
 
@@ -134,12 +134,12 @@ class Mixture(Distribution):
 
 
 class Flow(Distribution):
-    """A distribution that is parameterized by a flow transformation."""
+    r"""A distribution that is parameterized by a flow transformation."""
 
 
 class ElementwiseFlow(Distribution):
-    """A distribution that is parameterized by an element-wise flow transformation."""
+    r"""A distribution that is parameterized by an element-wise flow transformation."""
 
 
 class ConditionalFlow(Distribution):
-    """A distribution that is parameterized by a conditional flow transformation."""
+    r"""A distribution that is parameterized by a conditional flow transformation."""

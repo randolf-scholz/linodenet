@@ -1,1 +1,1 @@
-"""Test JIT-compatibility of linodenet components."""
+r"""Test JIT-compatibility of linodenet components."""

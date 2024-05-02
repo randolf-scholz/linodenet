@@ -36,10 +36,10 @@ from linodenet.constants import TRUE
 
 @runtime_checkable
 class Projection(Protocol):
-    """Protocol for Projection Components."""
+    r"""Protocol for Projection Components."""
 
     def __call__(self, x: Tensor, /) -> Tensor:
-        """Forward pass of the projection.
+        r"""Forward pass of the projection.
 
         .. Signature: ``(..., d) -> (..., f)``.
         """

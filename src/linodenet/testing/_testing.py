@@ -1,4 +1,4 @@
-"""Utility functions for testing."""
+r"""Utility functions for testing."""
 
 __all__ = [
     # check functions
@@ -16,6 +16,7 @@ __all__ = [
     "check_optim",
     # helper functions
     "assert_close",
+    "assert_compatible_signature",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
@@ -29,6 +30,7 @@ __all__ = [
     "zero_grad",
 ]
 
+import inspect
 import logging
 import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -55,7 +57,7 @@ def assert_close(
     rtol: float = 1e-5,
     atol: float = 1e-8,
 ) -> None:
-    """Assert that outputs and targets are close."""
+    r"""Assert that outputs and targets are close."""
     match values:
         case Tensor() as tensor:
             assert isinstance(reference, Tensor)
@@ -80,7 +82,7 @@ def assert_close(
 
 # region utility functions for tensors AND scalars -------------------------------------
 def get_device(x: nn.Module | Tree, /) -> torch.device:
-    """Return the device of the model / parameters."""
+    r"""Return the device of the model / parameters."""
     match x:
         case nn.Module() as model:
             return next(t.device for t in model.parameters())
@@ -105,7 +107,7 @@ def to_device(x: Mapping[str, T], /, *, device: DeviceArg = ...) -> dict[str, T]
 @overload
 def to_device(x: Sequence[T], /, *, device: DeviceArg = ...) -> tuple[T, ...]: ...
 def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
-    """Move a nested tensor to a device."""
+    r"""Move a nested tensor to a device."""
     match x:
         case Tensor() as tensor:
             target_device = None if device is None else torch.device(device)
@@ -124,7 +126,7 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
 
 
 def iter_tensors(x: nn.Module | Tree, /) -> Iterator[Tensor]:
-    """Iterate over the parameters of the model / parameters."""
+    r"""Iterate over the parameters of the model / parameters."""
     match x:
         case Tensor() as tensor:
             yield tensor
@@ -142,19 +144,19 @@ def iter_tensors(x: nn.Module | Tree, /) -> Iterator[Tensor]:
 
 
 def iter_parameters(x: nn.Module | Tree, /) -> Iterator[nn.Parameter]:
-    """Iterate over the parameters of the model / parameters."""
+    r"""Iterate over the parameters of the model / parameters."""
     for w in iter_tensors(x):
         if isinstance(w, nn.Parameter):
             yield w
 
 
 def get_parameters(x: nn.Module | Tree, /) -> list[Tensor]:
-    """Return the parameters of the model / parameters."""
+    r"""Return the parameters of the model / parameters."""
     return [w for w in iter_tensors(x) if w.requires_grad]
 
 
 def zero_grad(x: nn.Module | Tree, /) -> None:
-    """Sets gradients of the model / parameters to None."""
+    r"""Sets gradients of the model / parameters to None."""
     if isinstance(x, nn.Module):
         x.zero_grad(set_to_none=True)
         return
@@ -174,12 +176,12 @@ def flatten_nested_tensor(x: nn.Module | Tree, /) -> Tensor:
 
 
 def get_shapes(x: nn.Module | Tree, /) -> list[tuple[int, ...]]:
-    """Return the shapes of the tensors."""
+    r"""Return the shapes of the tensors."""
     return [item.shape for item in iter_tensors(x)]
 
 
 def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
-    """Return a cloned detached copy of the gradients."""
+    r"""Return a cloned detached copy of the gradients."""
     return [
         w.grad.clone().detach()
         for w in iter_tensors(x)
@@ -188,7 +190,7 @@ def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
 
 
 def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
-    """Compute the (normalized) 2-norm of a tensor."""
+    r"""Compute the (normalized) 2-norm of a tensor."""
     flattened = flatten_nested_tensor(x)
     if normalize:
         return torch.sqrt(torch.mean(flattened**2))
@@ -204,7 +206,7 @@ def make_tensors_parameters(x: Mapping[str, T], /) -> dict[str, T]: ...
 @overload
 def make_tensors_parameters(x: Sequence[T], /) -> tuple[T, ...]: ...
 def make_tensors_parameters(x, /):
-    """Make tensors parameters."""
+    r"""Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
     if isinstance(x, Tensor):
         return nn.Parameter(x) if not isinstance(x, nn.Parameter) else x
@@ -230,7 +232,7 @@ def check_forward(
     reference_outputs: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[Sequence[tuple[int, ...]]] = None,
 ) -> tuple[Nested[Tensor], Nested[Tensor], list[tuple[int, ...]]]:
-    """Test a forward pass."""
+    r"""Test a forward pass."""
     try:
         outputs = func(*input_args, **input_kwargs)
         output_shapes = get_shapes(outputs)
@@ -260,7 +262,7 @@ def check_backward(
     parameters: Sequence[Tensor],
     reference_gradients: Optional[Nested[Tensor]] = None,
 ) -> tuple[list[Tensor], list[Tensor]]:
-    """Test a backward pass."""
+    r"""Test a backward pass."""
     try:
         r = get_norm(outputs)
         r.backward()
@@ -286,7 +288,7 @@ def check_jit_scripting(module: nn.Module, /) -> nn.Module: ...
 @overload
 def check_jit_scripting(func: Func, /) -> Func: ...
 def check_jit_scripting(module_or_func, /):
-    """Test JIT compilation."""
+    r"""Test JIT compilation."""
     try:
         scripted = jit.script(module_or_func)
     except Exception as exc:
@@ -301,7 +303,7 @@ def check_jit_serialization(
 @overload
 def check_jit_serialization(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
 def check_jit_serialization(scripted, /, *, device=None):
-    """Test saving and loading of JIT compiled model."""
+    r"""Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
         try:
             jit.save(scripted, file)
@@ -321,7 +323,7 @@ def check_jit(module: nn.Module, /, *, device: DeviceArg = ...) -> nn.Module: ..
 @overload
 def check_jit(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
 def check_jit(module_or_func, /, *, device=None):
-    """Test JIT compilation+serialization."""
+    r"""Test JIT compilation+serialization."""
     # check if scripting and serialization works
     scripted = check_jit_scripting(module_or_func)
     loaded = check_jit_serialization(scripted, device=device)
@@ -335,7 +337,7 @@ def check_initialization(
     args: Sequence[Tree] = (),
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> M:
-    """Test initialization of a module."""
+    r"""Test initialization of a module."""
     if not issubclass(module_type, nn.Module):
         raise TypeError(f"Unsupported type {type(module_type)} for `obj`!")
 
@@ -355,7 +357,7 @@ def check_optim(
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     niter: int = 4,
 ) -> None:
-    """Check if model can be optimized."""
+    r"""Check if model can be optimized."""
     with torch.no_grad():
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
         original_outputs = model(*input_args, **input_kwargs)
@@ -399,7 +401,7 @@ def check_object(
     test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
-    """Check a module, function or model class."""
+    r"""Check a module, function or model class."""
     # region get name and logger -------------------------------------------------------
     model: nn.Module | Func
     match obj:
@@ -576,7 +578,7 @@ def check_model(
     test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
-    """Check a module, function or model class."""
+    r"""Check a module, function or model class."""
     # region get name and logger -------------------------------------------------------
     if not isinstance(model, nn.Module):
         raise TypeError("Expected nn.Module!")
@@ -622,7 +624,7 @@ def check_class(
     test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
-    """Test a model class."""
+    r"""Test a model class."""
     # region get name and logger -------------------------------------------------------
     if not issubclass(model_class, nn.Module):
         raise TypeError("Expected nn.Module subclass!")
@@ -671,7 +673,7 @@ def check_function(
     test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
-    """Test a model class."""
+    r"""Test a model class."""
     # region get name and logger -------------------------------------------------------
     if isinstance(func, nn.Module):
         raise TypeError("For nn.Modules, Use `check_model` instead!")
@@ -698,3 +700,13 @@ def check_function(
         test_jit=test_jit,
         test_optim=test_optim,
     )
+
+
+def assert_compatible_signature(func: Callable, reference: Callable) -> None:
+    r"""Assert that func's signature is wider than reference."""
+    fun_sig = inspect.signature(func)
+    ref_sig = inspect.signature(reference)
+
+    for param in ref_sig.parameters:
+        assert param in fun_sig.parameters
+        assert fun_sig.parameters[param].kind == ref_sig.parameters[param].kind

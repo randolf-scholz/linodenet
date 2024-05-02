@@ -50,7 +50,7 @@ class Initialization(Protocol):
         dtype: Optional[Dtype] = None,
         device: Optional[str | Device] = None,
     ) -> Tensor:
-        """Create a random matrix of shape `n`."""
+        r"""Create a random matrix of shape `n`."""
         ...
 
 

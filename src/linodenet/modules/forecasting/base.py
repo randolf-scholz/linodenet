@@ -9,11 +9,11 @@ from abc import abstractmethod
 
 from torch import Tensor
 from torch.distributions import Distribution
-from typing_extensions import Protocol
+from typing_extensions import Optional, Protocol
 
 
 class ForecastingModel(Protocol):
-    """Protocol for (point)-forecasting models.
+    r"""Protocol for (point)-forecasting models.
 
     A point-forecasting model is a model that predicts a single value for a future
     time step, given the past observations.
@@ -31,13 +31,13 @@ class ForecastingModel(Protocol):
     """
 
     @abstractmethod
-    def __call__(self, t: Tensor, S: Tensor, M: Tensor | None = None) -> Tensor:
-        """Forward pass of the model."""
+    def __call__(self, t: Tensor, S: Tensor, /, M: Optional[Tensor] = None) -> Tensor:
+        r"""Forward pass of the model."""
         ...
 
 
 class ProbabilisticForecastingModel(Protocol):
-    """Protocol for probabilistic forecasting models.
+    r"""Protocol for probabilistic forecasting models.
 
     A probabilistic forecasting model is a model that predicts the conditional
     distribution of the future time series, given the past observations.
@@ -53,6 +53,8 @@ class ProbabilisticForecastingModel(Protocol):
     """
 
     @abstractmethod
-    def __call__(self, t: Tensor, S: Tensor, M: Tensor | None = None) -> Distribution:
-        """Forward pass of the model."""
+    def __call__(
+        self, t: Tensor, S: Tensor, /, M: Optional[Tensor] = None
+    ) -> Distribution:
+        r"""Forward pass of the model."""
         ...

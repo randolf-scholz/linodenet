@@ -1,4 +1,4 @@
-"""C++ Extensions used by LinODEnet."""
+r"""C++ Extensions used by LinODEnet."""
 
 __all__ = [
     # Functions

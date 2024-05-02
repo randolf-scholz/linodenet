@@ -1,4 +1,4 @@
-"""Some simple tests for the singular triplet method.
+r"""Some simple tests for the singular triplet method.
 
 Remark:
     - 64-bit floats have a mantissa of 52 bits, and are precise for ≈ 15 decimal digits.
@@ -81,7 +81,7 @@ RTOL = 1e-6
 
 
 def snorm(x: torch.Tensor) -> torch.Tensor:
-    """Scaled norm of a tensor."""
+    r"""Scaled norm of a tensor."""
     return x.pow(2).mean().sqrt()
 
 
@@ -103,7 +103,7 @@ def test_svd_rank_one(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> None:
-    """Checks that the singular triplet method works for rank one matrices."""
+    r"""Checks that the singular triplet method works for rank one matrices."""
     torch.manual_seed(seed)
     m, n = shape
     matrix = random_rank_one_matrix(m, n)
@@ -145,7 +145,7 @@ def test_rank_one(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> None:
-    """Test the accuracy of the gradient for rank one matrices.
+    r"""Test the accuracy of the gradient for rank one matrices.
 
     The analytical gradient is ∂‖A‖₂/∂A = uvᵀ, where u and v are the singular vectors.
     In particular, for rank one matrices A=uvᵀ, the gradient is ∂‖A‖₂/∂A = uvᵀ/(‖u‖⋅‖v‖).
@@ -199,7 +199,7 @@ def test_diagonal(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> None:
-    """Checks that the singular triplet method works for diagonal matrices.
+    r"""Checks that the singular triplet method works for diagonal matrices.
 
     NOTE: builtin SVD seems to have auto-detection for diagonal matrices...
     """
@@ -257,7 +257,7 @@ def test_analytical(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> None:
-    """We test the analytical result for random matrices.
+    r"""We test the analytical result for random matrices.
 
     We randomly sample U, S and V.
     """
@@ -322,7 +322,7 @@ def test_orthogonal(
     atol: float = ATOL,
     rtol: float = RTOL,
 ) -> None:
-    """Tests algorithm against orthogonal matrix.
+    r"""Tests algorithm against orthogonal matrix.
 
     Note:
         For repeated singular values, the gradient is no longer well-defined,

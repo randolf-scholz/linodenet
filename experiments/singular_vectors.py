@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Plotting singular vectors of random matrices."""
+r"""Plotting singular vectors of random matrices."""
 
 import numpy as np
 from matplotlib import pyplot as plt

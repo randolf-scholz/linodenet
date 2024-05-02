@@ -167,6 +167,7 @@ class Multiply(nn.Module):
     def __init__(
         self,
         shape: tuple[int, ...] = (),
+        *,
         signature: str = "..., -> ...",
         learnable: bool = True,
         initialization: Optional[Callable[[tuple[int, ...]], Tensor]] = None,

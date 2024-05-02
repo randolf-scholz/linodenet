@@ -72,7 +72,7 @@ CELLS = {
     "ResidualCell"       : ResidualCell,
     "RNNCell"            : RNNCell,
 }  # fmt: skip
-"""Dictionary of all available cells (basic building blocks for filters)."""
+r"""Dictionary of all available cells (basic building blocks for filters)."""
 
 FILTERS |= {
     "KalmanFilter"        : KalmanFilter,

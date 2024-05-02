@@ -1,1 +1,1 @@
-"""Tests for linodenet.regularizations."""
+r"""Tests for linodenet.regularizations."""

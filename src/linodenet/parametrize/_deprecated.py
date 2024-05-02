@@ -1,4 +1,4 @@
-"""Deprecated parametrization utilities."""
+r"""Deprecated parametrization utilities."""
 
 __all__ = [
     "register_cache",
@@ -16,7 +16,7 @@ from typing_extensions import ClassVar, Literal, Self
 
 
 def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) -> None:
-    """Register a cache to a module.
+    r"""Register a cache to a module.
 
     - creates a buffer that stores the result of func().
     - creates a "recompute_{name}" that updates the buffer.
@@ -54,7 +54,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) ->
 
 
 class reset_caches(ContextDecorator):
-    """Context manager for resetting caches."""
+    r"""Context manager for resetting caches."""
 
     LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__name__}/{__qualname__}")
 
@@ -78,7 +78,7 @@ class reset_caches(ContextDecorator):
             warnings.warn("No caches found.", RuntimeWarning, stacklevel=2)
 
     def recompute_all(self) -> None:
-        """Recompute all cached tensors."""
+        r"""Recompute all cached tensors."""
         for layer in self.module.modules():
             f = getattr(layer, "recompute_all", lambda: None)
             f()
@@ -94,6 +94,7 @@ class reset_caches(ContextDecorator):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
+        /,
     ) -> Literal[False]:
         if self.on_exit:
             self.LOGGER.info("Resetting caches.")

@@ -1,4 +1,4 @@
-"""Tests for linodenet.regularizations."""
+r"""Tests for linodenet.regularizations."""
 
 from linodenet.regularizations import (
     FUNCTIONAL_REGULARIZATIONS,

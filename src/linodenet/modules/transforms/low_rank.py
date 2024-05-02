@@ -1,4 +1,4 @@
-"""Low-rank perturbation layer."""
+r"""Low-rank perturbation layer."""
 
 __all__ = ["iLowRankLayer"]
 

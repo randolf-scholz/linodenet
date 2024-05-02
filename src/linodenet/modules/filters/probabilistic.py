@@ -1,4 +1,4 @@
-"""Probabilistic filter protocol.
+r"""Probabilistic filter protocol.
 
 NOTE: WIP, not yet implemented.
 
@@ -38,7 +38,7 @@ from linodenet.constants import EMPTY_SHAPE
 
 @runtime_checkable
 class ProbabilisticFilter(Protocol):
-    """Protocol for probabilistic filters.
+    r"""Protocol for probabilistic filters.
 
     The goal of a probabilistic filter is to update the distribution of the hidden state,
     given the current observation. This is done by updating the parameters of the distribution
@@ -49,7 +49,7 @@ class ProbabilisticFilter(Protocol):
     """
 
     decoder: Distribution
-    """The model for the conditional distribution $p(y|x)$."""
+    r"""The model for the conditional distribution $p(y|x)$."""
 
     @abstractmethod
     def __call__(self, y: Distribution, x: Distribution, /) -> Distribution:
@@ -64,22 +64,22 @@ class Empirical(Distribution):
     """
 
     data: Tensor
-    """CONST: The dataset that defines the empirical distribution."""
+    r"""CONST: The dataset that defines the empirical distribution."""
 
     def __init__(self, data: Tensor, /) -> None:
-        """Initialize the empirical distribution."""
+        r"""Initialize the empirical distribution."""
         super().__init__()
         self.data = data  # shape: (n, ...)
         self.n = data.shape[0]
         self.shape = data.shape[1:]
 
     def sample(self, sample_shape: torch.Size = EMPTY_SHAPE) -> Tensor:
-        """Sample from the empirical distribution."""
+        r"""Sample from the empirical distribution."""
         idx = torch.randint(self.n, sample_shape)
         return self.data[idx]
 
     def log_prob(self, value: Tensor) -> Tensor:
-        """Log probability of the empirical distribution.
+        r"""Log probability of the empirical distribution.
 
         Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
 
@@ -129,12 +129,12 @@ class KalmanCell(nn.Module):
 
     # PARAMETERS
     H: Optional[Tensor]
-    """PARAM: the observation matrix."""
+    r"""PARAM: the observation matrix."""
     R: Tensor
-    """PARAM: The observation noise covariance matrix."""
+    r"""PARAM: The observation noise covariance matrix."""
 
     def forward(self, y: Tensor, x: MultivariateNormal) -> MultivariateNormal:
-        """Forward pass of the Kalman Cell."""
+        r"""Forward pass of the Kalman Cell."""
         mu, sigma = x.mean, x.covariance_matrix
         mask = torch.isnan(y)
 

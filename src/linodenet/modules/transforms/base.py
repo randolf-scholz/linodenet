@@ -39,11 +39,11 @@ from linodenet.types import S, T
 
 
 class Transform(Protocol[T, S]):
-    """A protocol for transforms."""
+    r"""A protocol for transforms."""
 
     @abstractmethod
     def forward(self, x: T, /) -> S:
-        """Forward pass of the transform."""
+        r"""Forward pass of the transform."""
         ...
 
     @abstractmethod
@@ -53,16 +53,16 @@ class Transform(Protocol[T, S]):
 
 
 class InvertibleTransform(Protocol[T, S]):
-    """A protocol for invertible transforms."""
+    r"""A protocol for invertible transforms."""
 
     @abstractmethod
     def forward(self, x: T, /) -> S:
-        """Forward pass of the transform."""
+        r"""Forward pass of the transform."""
         ...
 
     @abstractmethod
     def inverse(self, y: S, /) -> T:
-        """Inverse pass of the transform."""
+        r"""Inverse pass of the transform."""
         ...
 
     @abstractmethod

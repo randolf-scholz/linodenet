@@ -1,4 +1,4 @@
-"""Forecasting Models."""
+r"""Forecasting Models."""
 
 __all__ = [
     # Constants
@@ -19,4 +19,4 @@ from linodenet.modules.forecasting.linodenet import LinODEnet
 from linodenet.modules.forecasting.lssm import LatentStateSpaceModel
 
 FORECASTING_MODELS: dict[str, type[ForecastingModel]] = {}
-"""Dictionary containing all available forecasting models."""
+r"""Dictionary containing all available forecasting models."""

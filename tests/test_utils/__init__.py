@@ -1,4 +1,4 @@
-"""Test utilities."""
+r"""Test utilities."""
 
 __all__ = [
     # Functions

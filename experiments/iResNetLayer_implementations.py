@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Test how best to implement the iResNet layer.
+r"""Test how best to implement the iResNet layer.
 
 TAKEAWAYS:
 - We can save HUGE amounts of time by caching the normalized weight matrix.
@@ -113,7 +113,7 @@ class LinearContraction(nn.Module):
 
     @jit.export
     def renormalize_weight(self, inputs: tuple[Tensor] = (torch.tensor([]),)) -> None:
-        """Renormalizes weight so that ‖W‖₂ ≤ 1-δ."""
+        r"""Renormalizes weight so that ‖W‖₂ ≤ 1-δ."""
         if self.refresh_cache:
             self.refresh_cache = torch.tensor(False)
             self.cached_sigma = matrix_norm(self.weight, ord=2)
@@ -270,7 +270,7 @@ def test_implementation(
 ) -> Tensor:
     if script:
         print("Compiling model")
-        model = torch.jit.script(model)
+        model = jit.script(model)
 
     with timer() as t:
         model.zero_grad(set_to_none=True)

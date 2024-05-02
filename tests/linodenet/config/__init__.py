@@ -1,1 +1,1 @@
-"""Tests for linodenet.config."""
+r"""Tests for linodenet.config."""

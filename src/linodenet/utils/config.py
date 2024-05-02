@@ -1,4 +1,4 @@
-"""Implements the BaseConfig class."""
+r"""Implements the BaseConfig class."""
 
 __all__ = [
     # Classes
@@ -91,6 +91,7 @@ class ConfigMetaclass(ABCMeta):
         name: str,
         bases: tuple[type, ...],
         attrs: dict[str, Any],
+        /,
         **kwds: Any,
     ) -> type:
         r"""Create a new class, patch in dataclass fields, and return it."""

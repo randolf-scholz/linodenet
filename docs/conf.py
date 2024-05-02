@@ -4,7 +4,7 @@ This file only contains a selection of the most common options. For a full list 
 https://www.sphinx-doc.org/en/master/usage/configuration.html
 """
 
-# -- Path setup -------------------------------------------------------------------------------------------------------
+# -- Path setup ------------------------------------------------------------------------
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -26,7 +26,7 @@ VERSION = metadata.version(MODULE)
 YEAR = datetime.datetime.now().year
 
 
-# region Project Information ------------------------------------------------------------------------------------------
+# region Project Information -----------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = f"{MODULE}"
@@ -45,10 +45,10 @@ version = VERSION
 release = version
 # The full project version, used as the replacement for |release| and e.g. in the HTML templates.
 # For example, for the Python documentation, this may be something like 2.6.0rc1.
-# endregion Project Information ---------------------------------------------------------------------------------------
+# endregion Project Information --------------------------------------------------------
 
 
-# region General Configuration ----------------------------------------------------------------------------------------
+# region General Configuration ---------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
@@ -69,11 +69,13 @@ extensions = [
     "sphinx.ext.viewcode",
     # 1st party extensions
     "signatures",
+    "details",
     # 3rd party extensions
     # "autoapi.extension",
     "myst_parser",
     "sphinx_copybutton",
     "sphinx_math_dollar",
+    "sphinx_togglebutton",
     # "sphinx_autodoc_typehints",
 ]
 # Add any Sphinx extension module names here, as strings. They can be extensions coming with Sphinx
@@ -157,10 +159,10 @@ show_authors = True
 
 python_use_unqualified_type_names = True
 # If true, suppress the module name of the python reference if it can be resolved. The default is False
-# endregion General Configuration -------------------------------------------------------------------------------------
+# endregion General Configuration ------------------------------------------------------
 
 
-# region HTML Theme Configuration -----------------------------------------------------------------------------------
+# region HTML Theme Configuration ------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/theming.html
 
 # extensions.append("sphinx_typo3_theme")
@@ -170,6 +172,10 @@ html_theme = "pydata_sphinx_theme"
 # The “theme” that the HTML output should use. See the section about theming. The default is 'alabaster'.
 
 html_theme_options = {
+    # faster builds?  https://stackoverflow.com/a/52175461/9318372
+    "collapse_navigation": False,
+    "navigation_depth": 4,
+    #
     "header_links_before_dropdown": 7,
     "icon_links": [
         {
@@ -260,10 +266,10 @@ html_theme_options = {
 html_theme_path = []
 # A list of paths that contain custom themes, either as subdirectories or as zip files.
 # Relative paths are taken as relative to the configuration directory.
-# endregion Theme Configuration --------------------------------------------------------------------------------
+# endregion Theme Configuration --------------------------------------------------------
 
 
-# region HTML Configuration ------------------------------------------------------------------------------------
+# region HTML Configuration ------------------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 # html_style=???
@@ -333,10 +339,22 @@ html_sidebars = {}
 # Custom sidebar templates, must be a dictionary that maps document names to template names.
 
 # TODO: Add missing configuration options.
-# endregion HTML Configuration ---------------------------------------------------------------------------------
+# endregion HTML Configuration ---------------------------------------------------------
 
 
-# region sphinx-autoapi configuration ---------------------------------------------------------------------------------
+# region MyST Configuration ------------------------------------------------------------
+
+myst_enable_extensions = [
+    "colon_fence",
+    "dollarmath",
+    "html_admonition",
+    "html_image",
+]
+
+# endregion MyST Configuration ---------------------------------------------------------
+
+
+# region sphinx-autoapi configuration --------------------------------------------------
 # https://github.com/readthedocs/sphinx-autoapi
 
 autoapi_dirs = [f"../{MODULE_DIR}"]
@@ -420,13 +438,13 @@ autoapi_keep_files = True
 # Keeping files will also allow AutoAPI to use incremental builds. Providing none of the source files have changed,
 # AutoAPI will skip parsing the source code and regenerating the API documentation.
 # Default: False
-# endregion sphinx-autoapi configuration ------------------------------------------------------------------------------
+# endregion sphinx-autoapi configuration -----------------------------------------------
 
 
-# region sphinx.ext.autodoc configuration -----------------------------------------------------------------------------
+# region sphinx.ext.autodoc configuration ----------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#directive-autoclass
 
-autoclass_content = "both"
+autoclass_content = "class"
 # This value selects what content will be inserted into the main body of an autoclass directive.
 # The possible values are: (default="class")
 # "class"
@@ -439,7 +457,7 @@ autoclass_content = "both"
 # If the class has no __init__ method or if the __init__ method’s docstring is empty,
 # but the class has a __new__ method’s docstring, it is used instead.
 
-autodoc_class_signature = "mixed"
+autodoc_class_signature = "separated"
 # This value selects how the signature will be displayed for the class defined by autoclass directive.
 # The possible values are: (default="mixed")
 # "mixed"
@@ -460,14 +478,15 @@ autodoc_default_flags = []
 # The default options for autodoc directives. They are applied to all autodoc directives automatically.
 # It must be a dictionary which maps option names to the values. For example:
 #
-# autodoc_default_options = {
-#     # 'members': 'var1, var2',
-#     # 'member-order': 'groupwise',
-#     # 'special-members': '__init__',
-#     "undoc-members": False,
-#     "imported-members": False,
-#     # 'exclude-members': '__weakref__'
-# }
+autodoc_default_options = {
+    # "ignore-module-all": True,
+    # 'members': 'var1, var2',
+    # 'member-order': 'groupwise',
+    # 'special-members': '__init__',
+    "undoc-members": False,
+    # "imported-members": False,
+    # 'exclude-members': '__weakref__'
+}
 # Setting None or True to the value is equivalent to giving only the option name to the directives.
 # The supported options are 'members', 'member-order', 'undoc-members', 'private-members', 'special-members',
 # 'inherited-members', 'show-inheritance', 'ignore-module-all', 'imported-members', 'exclude-members' and
@@ -566,10 +585,10 @@ autodoc_warningiserror = True
 autodoc_inherit_docstrings = True
 # This value controls the docstrings inheritance. If set to True the docstring for classes or methods,
 # if not explicitly set, is inherited from parents. The default is True.
-# endregion sphinx.ext.autodoc configuration --------------------------------------------------------------------------
+# endregion sphinx.ext.autodoc configuration -------------------------------------------
 
 
-# region sphinx.ext.autosectionlabel configuration --------------------------------------------------------------------
+# region sphinx.ext.autosectionlabel configuration -------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/autosectionlabel.html
 
 autosectionlabel_prefix_document = True
@@ -580,10 +599,10 @@ autosectionlabel_maxdepth = None
 # If set, autosectionlabel chooses the sections for labeling by its depth.
 # For example, when set 1 to autosectionlabel_maxdepth, labels are generated only for top level sections,
 # and deeper sections are not labeled. It defaults to None (disabled).
-# endregion sphinx.ext.autosectionlabel configuration -----------------------------------------------------------------
+# endregion sphinx.ext.autosectionlabel configuration ----------------------------------
 
 
-# region sphinx.ext.autosummary configuration -------------------------------------------------------------------------
+# region sphinx.ext.autosummary configuration ------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/autosummary.html
 
 autosummary_context = {}
@@ -614,10 +633,10 @@ autosummary_ignore_module_all = False
 autosummary_filename_map = {}
 # A dict mapping object names to filenames. This is necessary to avoid filename conflicts where multiple objects
 # have names that are indistinguishable when case is ignored, on file systems where filenames are case-insensitive.
-# endregion sphinx.ext.autosummary configuration ----------------------------------------------------------------------
+# endregion sphinx.ext.autosummary configuration ---------------------------------------
 
 
-# region sphinx.ext.intersphinx configuration -------------------------------------------------------------------------
+# region sphinx.ext.intersphinx configuration ------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
 
 intersphinx_mapping = {
@@ -650,10 +669,10 @@ intersphinx_disabled_reftypes = ["std:doc"]
 # When a cross-reference without an explicit inventory specification is being resolved by
 # intersphinx, skip resolution if it matches one of the specifications in this list.
 # The default value is ['std:doc'].
-# endregion sphinx.ext.intersphinx configuration ----------------------------------------------------------------------
+# endregion sphinx.ext.intersphinx configuration ---------------------------------------
 
 
-# region sphinx.ext.mathjax configuration -----------------------------------------------------------------------------
+# region sphinx.ext.mathjax configuration ----------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/math.html#module-sphinx.ext.mathjax
 
 # mathjax_path = "https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js?config=TeX-AMS-MML_HTMLorMML"
@@ -667,11 +686,11 @@ mathjax_options = {}
 # The default is empty {}.
 
 mathjax3_config = {
-    "loader": {"load": [r"[tex]/physics"]},
+    "loader": {"load": [r"[tex]/ams", r"[tex]/physics"]},
     "tex": {
         "inlineMath": [[r"\(", r"\)"]],
         "displayMath": [[r"\[", r"\]"]],
-        "packages": {"[+]": ["physics"]},
+        "packages": {"[+]": ["ams", "physics"]},
         "macros": {
             "argmax": r"\operatorname*{arg\,max}",
             "argmin": r"\operatorname*{arg\,min}",
@@ -680,6 +699,7 @@ mathjax3_config = {
             "rank": r"\operatorname{rank}",
             "relu": r"\operatorname{ReLU}",
             "tr": r"\operatorname{tr}",
+            "bmat": [r"\begin{bmatrix} #1 \end{bmatrix}", 1],
         },
     },
 }
@@ -695,10 +715,10 @@ mathjax_config = {
         "displayMath": [[r"\[", r"\]"]],
     },
 }  # Former name of mathjax2_config.
-# endregion sphinx.ext.mathjax configuration --------------------------------------------------------------------------
+# endregion sphinx.ext.mathjax configuration -------------------------------------------
 
 
-# region sphinx.ext.napoleon configuration ----------------------------------------------------------------------------
+# region sphinx.ext.napoleon configuration ---------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/napoleon.html
 
 napoleon_google_docstring = True
@@ -818,10 +838,10 @@ napoleon_custom_sections = [
     ("Returns", "params_style"),  # https://github.com/sphinx-doc/sphinx/issues/9119
 ]
 # Add a list of custom sections to include, expanding the list of parsed sections. Defaults to None.
-# endregion sphinx.ext.napoleon configuration -------------------------------------------------------------------------
+# endregion sphinx.ext.napoleon configuration ------------------------------------------
 
 
-# region sphinx.ext.todo configuration --------------------------------------------------------------------------------
+# region sphinx.ext.todo configuration -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/todo.html
 
 todo_include_todos = False
@@ -830,10 +850,10 @@ todo_emit_warnings = False
 # If this is True, todo emits a warning for each TODO entries. The default is False.
 todo_link_only = False
 # If this is True, todolist produce output without file path and line, The default is False.
-# endregion sphinx.ext.todo configuration -----------------------------------------------------------------------------
+# endregion sphinx.ext.todo configuration ----------------------------------------------
 
 
-# region sphinx.ext.viewcode configuration ----------------------------------------------------------------------------
+# region sphinx.ext.viewcode configuration ---------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/extensions/viewcode.html
 
 viewcode_follow_imported_members = True
@@ -846,10 +866,10 @@ viewcode_enable_epub = False
 # Until 1.4.x, this extension is always enabled. If you want to generate epub as same as 1.4.x, you should set True,
 # but epub format checker’s score becomes worse.
 # The default is False.
-# endregion sphinx.ext.viewcode configuration -------------------------------------------------------------------------
+# endregion sphinx.ext.viewcode configuration ------------------------------------------
 
 
-# region sphinx_math_dollar configuration ------------------------------------------------------------------------------
+# region sphinx_math_dollar configuration ----------------------------------------------
 # https://www.sympy.org/sphinx-math-dollar/#configuration
 # math_dollar_debug = True
 # math_dollar_node_blacklist = NODE_BLACKLIST + (header, pending_xref_condition)
@@ -858,6 +878,6 @@ from sphinx.addnodes import pending_xref_condition  # noqa: E402
 from sphinx.util.docutils import register_node  # noqa: E402
 
 register_node(pending_xref_condition)
-# endregion sphinx_math_dollar configuration ---------------------------------------------------------------------------
+# endregion sphinx_math_dollar configuration -------------------------------------------
 
-# -- end of configuration ---------------------------------------------------------------------------------------------
+# -- end of configuration --------------------------------------------------------------

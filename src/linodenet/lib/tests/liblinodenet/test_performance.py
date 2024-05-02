@@ -1,4 +1,4 @@
-"""Benchmark spectral norm / singular triplet implementations."""
+r"""Benchmark spectral norm / singular triplet implementations."""
 
 __all__ = [
     "test_singular_triplet_backward",
@@ -91,7 +91,7 @@ def get_param(
     device: str | torch.device,
     generator: torch.Generator,
 ) -> nn.Parameter:
-    """Get a random parameter of shape (m, n)."""
+    r"""Get a random parameter of shape (m, n)."""
     n = shape[-1]
     A = torch.randn(shape, device=device, generator=generator) / torch.sqrt(
         torch.tensor(n)
@@ -106,7 +106,7 @@ def get_param(
 def test_spectral_norm_forward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
-    """Test the spectral norm forward pass."""
+    r"""Test the spectral norm forward pass."""
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -145,7 +145,7 @@ def test_spectral_norm_forward(
 def test_spectral_norm_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
-    """Test the spectral norm backward pass."""
+    r"""Test the spectral norm backward pass."""
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -196,7 +196,7 @@ def test_spectral_norm_backward(
 def test_spectral_norm(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
-    """Test the spectral norm forward+backward."""
+    r"""Test the spectral norm forward+backward."""
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -248,7 +248,7 @@ def test_spectral_norm(
 def test_singular_triplet_forward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
-    """Test the spectral norm implementation."""
+    r"""Test the spectral norm implementation."""
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -292,7 +292,7 @@ def test_singular_triplet_forward(
 def test_singular_triplet_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
-    """Test simplified backward when only singular value used."""
+    r"""Test simplified backward when only singular value used."""
     torch.manual_seed(0)
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
@@ -339,7 +339,7 @@ def test_singular_triplet_backward(
 def test_singular_triplet_full_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
-    """Test full backward when singular triplet used."""
+    r"""Test full backward when singular triplet used."""
     torch.manual_seed(0)
     m, n = shape
     generator = torch.Generator(device=device)

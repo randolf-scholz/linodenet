@@ -1,4 +1,4 @@
-"""Some tests regarding the JIT compiler."""
+r"""Some tests regarding the JIT compiler."""
 
 import pytest
 import torch
@@ -10,7 +10,7 @@ from linodenet.testing import check_object
 
 
 class ModuleWithSlots(nn.Module):
-    """Module with slots."""
+    r"""Module with slots."""
 
     __slots__ = ("bar", "foo")
 
@@ -27,7 +27,7 @@ class ModuleWithSlots(nn.Module):
 
 
 class ModuleWithoutSlots(nn.Module):
-    """Module without slots."""
+    r"""Module without slots."""
 
     foo: Tensor
     bar: Tensor
@@ -42,7 +42,7 @@ class ModuleWithoutSlots(nn.Module):
 
 
 class AddPostInit(type):
-    """Adds a post-init hook to the class."""
+    r"""Adds a post-init hook to the class."""
 
     def __init__(
         cls,
@@ -63,7 +63,7 @@ class AddPostInit(type):
 
 
 class ModuleWithMetaclass(nn.Module, metaclass=AddPostInit):
-    """A module with a metaclass."""
+    r"""A module with a metaclass."""
 
     weight: Tensor
 
@@ -81,17 +81,17 @@ class ModuleWithMetaclass(nn.Module, metaclass=AddPostInit):
 
 
 class SubclassWithMetaclass(ModuleWithMetaclass, metaclass=AddPostInit):
-    """A subclass."""
+    r"""A subclass."""
 
 
 def test_post_init_jit() -> None:
-    """Checks that models with meta classes can be scripted."""
+    r"""Checks that models with meta classes can be scripted."""
     model = ModuleWithMetaclass(3, 3)
     check_object(model, input_args=(torch.randn(2, 3),), test_jit=True)
 
 
 def test_post_init() -> None:
-    """Checks that meta-classes work as expected."""
+    r"""Checks that meta-classes work as expected."""
     ModuleWithMetaclass(4, 4)
 
     with pytest.raises(ValueError, match="Weight matrix must be square!"):
@@ -104,7 +104,7 @@ def test_post_init() -> None:
 
 
 def test_jit_error_slots() -> None:
-    """Tests that a module with slots cannot be scripted."""
+    r"""Tests that a module with slots cannot be scripted."""
     foo = torch.randn(())
     bar = torch.randn(())
 
@@ -119,7 +119,7 @@ def test_jit_error_slots() -> None:
 
 
 def test_jit_errors_parametrize() -> None:
-    """Tests that scripting fails for torch builtin parametrization."""
+    r"""Tests that scripting fails for torch builtin parametrization."""
 
     class Symmetric(nn.Module):
         def forward(self, x: Tensor) -> Tensor:

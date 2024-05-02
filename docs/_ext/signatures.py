@@ -55,7 +55,7 @@ class OldSignature(Directive):
 
 
 class Signature(BaseAdmonition):
-    """Essentially just an admonition box with no body, only a title."""
+    r"""Essentially just an admonition box with no body, only a title."""
 
     # required_arguments = 0
     node_class = nodes.admonition

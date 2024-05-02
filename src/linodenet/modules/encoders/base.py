@@ -21,10 +21,10 @@ from typing_extensions import Protocol, runtime_checkable
 
 @runtime_checkable
 class Encoder(Protocol):
-    """Protocol for Encoder Components."""
+    r"""Protocol for Encoder Components."""
 
     def __call__(self, x: Tensor, /) -> Tensor:
-        """Forward pass of the encoder.
+        r"""Forward pass of the encoder.
 
         .. Signature: ``(..., d) -> (..., d)``.
         """
@@ -32,7 +32,7 @@ class Encoder(Protocol):
 
 
 class EncoderABC(nn.Module):
-    """Abstract Base Class for Encoder components."""
+    r"""Abstract Base Class for Encoder components."""
 
     @abstractmethod
     def forward(self, x: Tensor, /) -> Tensor:

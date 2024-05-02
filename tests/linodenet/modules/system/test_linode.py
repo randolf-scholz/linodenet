@@ -100,7 +100,7 @@ def make_error_plots(
     logger: logging.Logger = __logger__,
     **extra_stats: Any,
 ) -> None:
-    """Create histogram plot of the errors."""
+    r"""Create histogram plot of the errors."""
     assert error_single.shape == error_double.shape
     print(error_single.shape)
     num_samples = error_single.shape[1]

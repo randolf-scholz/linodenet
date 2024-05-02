@@ -48,7 +48,7 @@ from linodenet.utils import (
 
 
 class LinearCell(nn.Module):
-    """Linear RNN Cell.
+    r"""Linear RNN Cell.
 
     .. math:: F(y，x) =  Ux + Vy + b
 
@@ -57,9 +57,9 @@ class LinearCell(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """CONST: The size of the observable $y$."""
+    r"""CONST: The size of the observable $y$."""
     hidden_size: Final[int]
-    """CONST: The size of the hidden state $x$."""
+    r"""CONST: The size of the hidden state $x$."""
 
     # PARAMETERS
     U: Tensor
@@ -151,9 +151,9 @@ class NonLinearKalmanCell(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
     autoregressive: Final[bool]
     r"""CONST: Whether the filter is autoregressive or not."""
 
@@ -244,9 +244,9 @@ class NonLinearCell(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
     autoregressive: Final[bool]
     r"""CONST: Whether the filter is autoregressive or not."""
 
@@ -396,9 +396,9 @@ class KalmanFilter(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     # PARAMETERS
     H: Tensor
@@ -444,7 +444,7 @@ class KalmanFilter(nn.Module):
 
 
 class LinearResidualCell(nn.Module):
-    """Linear RNN Cell that performs a residual update.
+    r"""Linear RNN Cell that performs a residual update.
 
     .. math:: x' = x - F⋅(Hy - x)
 
@@ -454,11 +454,11 @@ class LinearResidualCell(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """CONST: The size of the observable $y$."""
+    r"""CONST: The size of the observable $y$."""
     hidden_size: Final[int]
-    """CONST: The size of the hidden state $x$."""
+    r"""CONST: The size of the hidden state $x$."""
     missing_values: Final[bool]
-    """CONST: Whether the filter should handle missing values."""
+    r"""CONST: Whether the filter should handle missing values."""
     autoregressive: Final[bool]
     r"""CONST: Whether the filter is autoregressive or not."""
 
@@ -499,7 +499,7 @@ class LinearResidualCell(nn.Module):
 
 
 class ResidualCell(nn.Module):
-    """Non-Linear RNN Cell that performs a residual update.
+    r"""Non-Linear RNN Cell that performs a residual update.
 
     .. math:: x' = x - F⋅φ(Hy - x)
 
@@ -555,9 +555,9 @@ class LinearKalmanCell(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
     autoregressive: Final[bool]
     r"""CONST: Whether the filter is autoregressive or not."""
     alpha_learnable: Final[bool]
@@ -698,9 +698,9 @@ class PseudoKalmanCell(nn.Module):
 
     # CONSTANTS
     input_size: Final[int]
-    """The size of the observable $y$."""
+    r"""The size of the observable $y$."""
     hidden_size: Final[int]
-    """The size of the hidden state $x$."""
+    r"""The size of the hidden state $x$."""
 
     # PARAMETERS
     H: Optional[Tensor]
@@ -726,10 +726,11 @@ class PseudoKalmanCell(nn.Module):
     def __init__(
         self,
         input_size: int,
+        *,
         alpha: str | float = "last-value",
         alpha_learnable: bool = True,
         **cfg: Any,
-    ):
+    ) -> None:
         super().__init__()
         config = deep_dict_update(self.HP, cfg)
 
@@ -775,17 +776,17 @@ class PseudoKalmanCell(nn.Module):
 
 
 # class ResidualFilter(nn.Module):
-#     """Wraps an existing Filter to return the residual $x' = x - F(y，x)$."""
+#     r"""Wraps an existing Filter to return the residual $x' = x - F(y，x)$."""
 #
 #     # CONSTANTS
 #     input_size: Final[int]
-#     """The size of the observable $y$."""
+#     r"""The size of the observable $y$."""
 #     hidden_size: Final[int]
-#     """The size of the hidden state $x$."""
+#     r"""The size of the hidden state $x$."""
 #
 #     # SUBMODULES
 #     cell: Filter
-#     """The wrapped Filter."""
+#     r"""The wrapped Filter."""
 #
 #     def __init__(self, cell: Filter, /):
 #         super().__init__()
@@ -806,9 +807,9 @@ class PseudoKalmanCell(nn.Module):
 #
 #     # CONSTANTS
 #     input_size: Final[int]
-#     """The size of the observable $y$."""
+#     r"""The size of the observable $y$."""
 #     hidden_size: Final[int]
-#     """The size of the hidden state $x$."""
+#     r"""The size of the hidden state $x$."""
 #
 #     HP = {
 #         "__name__": __qualname__,
@@ -870,9 +871,9 @@ class PseudoKalmanCell(nn.Module):
 #
 #     # CONSTANTS
 #     input_size: Final[int]
-#     """The size of the observable $y$."""
+#     r"""The size of the observable $y$."""
 #     hidden_size: Final[int]
-#     """The size of the hidden state $x$."""
+#     r"""The size of the hidden state $x$."""
 #
 #     HP = {
 #         "__name__": __qualname__,

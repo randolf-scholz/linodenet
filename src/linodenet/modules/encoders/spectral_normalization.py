@@ -1,4 +1,4 @@
-"""Re-Implementation of Spectral Normalization Layer.
+r"""Re-Implementation of Spectral Normalization Layer.
 
 Notes:
     The default implementation provided by torch is problematic [1]_:
@@ -37,7 +37,7 @@ from linodenet.lib import singular_triplet
 
 
 class NaiveLinearContraction(nn.Module):
-    """Linear layer with a Lipschitz constant.
+    r"""Linear layer with a Lipschitz constant.
 
     Note:
         Naive implementation using the builtin matrix_norm function.
@@ -72,40 +72,45 @@ class NaiveLinearContraction(nn.Module):
 
 
 class LinearContraction(nn.Module):
-    """Linear layer with a Lipschitz constant."""
+    r"""Linear layer with a Lipschitz constant."""
 
     input_size: Final[int]
-    """CONST: The input size."""
+    r"""CONST: The input size."""
     output_size: Final[int]
-    """CONST: The output size."""
-    L: Final[float]
-    """CONST: The Lipschitz constant."""
+    r"""CONST: The output size."""
+    lipschitz_constant: Final[float]
+    r"""CONST: The Lipschitz constant."""
     c: Tensor
     r"""CONST: The regularization hyperparameter."""
     one: Tensor
     r"""CONST: A tensor with value 1.0"""
 
     weight: Tensor
-    """PARAM: The weight matrix."""
+    r"""PARAM: The weight matrix."""
     bias: Tensor
-    """PARAM: The bias vector."""
+    r"""PARAM: The bias vector."""
 
     cached_weight: Tensor
-    """BUFFER: The cached weight matrix."""
+    r"""BUFFER: The cached weight matrix."""
     sigma: Tensor
-    """BUFFER: The singular values of the weight matrix."""
+    r"""BUFFER: The singular values of the weight matrix."""
     u: Tensor
-    """BUFFER: The left singular vectors of the weight matrix."""
+    r"""BUFFER: The left singular vectors of the weight matrix."""
     v: Tensor
-    """BUFFER: The right singular vectors of the weight matrix."""
+    r"""BUFFER: The right singular vectors of the weight matrix."""
 
     def __init__(
-        self, input_size: int, output_size: int, L: float = 1.0, *, bias: bool = True
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        lipschitz_constant: float = 1.0,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.L = L
+        self.lipschitz_constant = lipschitz_constant
 
         self.weight = nn.Parameter(torch.empty((output_size, input_size)))
         if bias:
@@ -119,7 +124,7 @@ class LinearContraction(nn.Module):
         self.register_buffer("v", torch.randn(input_size))
         self.register_buffer("cached_weight", torch.empty_like(self.weight))
         self.register_buffer("one", torch.ones(1))
-        self.register_buffer("c", torch.tensor(self.L))
+        self.register_buffer("c", torch.tensor(self.lipschitz_constant))
         self.reset_cache()
 
     @jit.export
@@ -133,7 +138,7 @@ class LinearContraction(nn.Module):
 
     @jit.export
     def reset_cache(self) -> None:
-        """Reset the cached weight matrix.
+        r"""Reset the cached weight matrix.
 
         Needs to be called after every .backward!
         """

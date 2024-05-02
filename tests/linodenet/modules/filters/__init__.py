@@ -1,1 +1,1 @@
-"""Plotting singular vectors of random matrices."""
+r"""Plotting singular vectors of random matrices."""

@@ -1,4 +1,4 @@
-"""Decorators and context managers for LinodeNet."""
+r"""Decorators and context managers for LinodeNet."""
 
 __all__ = [
     # Classes (Context Managers)
@@ -18,7 +18,7 @@ from typing_extensions import ClassVar, Literal, Never, Self
 
 
 class timeout(ContextDecorator, AbstractContextManager):
-    """Context manager for timing out a block of code."""
+    r"""Context manager for timing out a block of code."""
 
     num_seconds: int
     timeout_occurred: bool
@@ -42,7 +42,8 @@ class timeout(ContextDecorator, AbstractContextManager):
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
-        traceback: TracebackType | None,
+        exc_tb: TracebackType | None,
+        /,
     ) -> None:
         # Cancel the scheduled alarm
         signal.alarm(0)
@@ -51,16 +52,16 @@ class timeout(ContextDecorator, AbstractContextManager):
 
 
 class timer(ContextDecorator):
-    """Context manager for timing a block of code."""
+    r"""Context manager for timing a block of code."""
 
     LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__name__}/{__qualname__}")
 
     start_time: int
-    """Start time of the timer."""
+    r"""Start time of the timer."""
     end_time: int
-    """End time of the timer."""
+    r"""End time of the timer."""
     elapsed: float
-    """Elapsed time of the timer in seconds."""
+    r"""Elapsed time of the timer in seconds."""
 
     def __enter__(self) -> Self:
         self.LOGGER.info("Flushing pending writes.")
@@ -78,6 +79,7 @@ class timer(ContextDecorator):
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
+        /,
     ) -> Literal[False]:
         self.end_time = perf_counter_ns()
         self.elapsed = (self.end_time - self.start_time) / 10**9

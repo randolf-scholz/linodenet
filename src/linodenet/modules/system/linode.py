@@ -1,4 +1,4 @@
-"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
+r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
 
 __all__ = [
     # Classes
@@ -46,7 +46,7 @@ class LinODECell(nn.Module):
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
     scalar_learnable: Final[bool]
-    """CONST: Whether the scalar is learnable or not."""
+    r"""CONST: Whether the scalar is learnable or not."""
 
     # Parameters
     scalar: Tensor
@@ -66,7 +66,7 @@ class LinODECell(nn.Module):
         scalar: float = 0.0,
         scalar_learnable: bool = True,
     ) -> None:
-        """Initialize the Linear ODE Cell."""
+        r"""Initialize the Linear ODE Cell."""
         super().__init__()
         config = deep_dict_update(
             self.HP,

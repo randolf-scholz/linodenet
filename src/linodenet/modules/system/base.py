@@ -14,10 +14,10 @@ from typing_extensions import Protocol, runtime_checkable
 
 @runtime_checkable
 class System(Protocol):
-    """Protocol for System Components."""
+    r"""Protocol for System Components."""
 
     def __call__(self, dt: Tensor, z: Tensor, /) -> Tensor:
-        """Forward pass of the system.
+        r"""Forward pass of the system.
 
         .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
         """
@@ -25,7 +25,7 @@ class System(Protocol):
 
 
 class SystemABC(nn.Module):
-    """Abstract Base Class for System components."""
+    r"""Abstract Base Class for System components."""
 
     @abstractmethod
     def forward(self, dt: Tensor, z: Tensor, /) -> Tensor:

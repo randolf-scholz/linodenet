@@ -1,4 +1,4 @@
-"""Compare speed of different aggregation algorithms."""
+r"""Compare speed of different aggregation algorithms."""
 
 import torch
 from pytest import mark
@@ -6,7 +6,7 @@ from torch import Tensor, jit
 
 
 def square_norm(x: Tensor) -> Tensor:
-    """Manual Square norm."""
+    r"""Manual Square norm."""
     return (x**2).sum()
 
 
@@ -21,7 +21,7 @@ aggregations = {
 @mark.parametrize("name", aggregations)
 @mark.benchmark
 class TestAggregation:
-    """Compare speed of different aggregation algorithms."""
+    r"""Compare speed of different aggregation algorithms."""
 
     small = torch.randn(100)
     medium = torch.randn(1000)
@@ -60,7 +60,7 @@ class TestAggregation:
 # @mark.parametrize("name", aggregations)
 # @mark.benchmark(group_by="name")
 # def test_speed(benchmark, name: str, size: int) -> None:
-#     """Compare speed of different aggregation algorithms."""
+#     r"""Compare speed of different aggregation algorithms."""
 #     func = aggregations[name]
 #     x = torch.randn(size)
 #     benchmark(func, x)

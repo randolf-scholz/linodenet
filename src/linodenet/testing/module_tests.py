@@ -30,7 +30,7 @@ class ModuleTest(Protocol):
         rtol: float = RTOL,
         atol: float = ATOL,
     ) -> bool:
-        """Test the module."""
+        r"""Test the module."""
         ...
 
 
@@ -160,7 +160,7 @@ def is_backward_stable(
     check_params: bool = False,
     num_runs: int = 100,
 ) -> bool:
-    """Check if a function is backward stable.
+    r"""Check if a function is backward stable.
 
     In this context, a function is called backward stable, if its vector jacobian product,
     i.e. the function $v↦vᵀ(∂f/∂x)$ is forward stable (at a given point $x$).
@@ -232,7 +232,7 @@ def assert_backward_stable(
     check_params: bool = False,
     num_runs: int = 100,
 ) -> None:
-    """Check if a function is backward stable.
+    r"""Check if a function is backward stable.
 
     Raises:
         AssertionError: If the function is not backward stable.

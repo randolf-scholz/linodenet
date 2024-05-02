@@ -1,4 +1,4 @@
-"""Parametrizations.
+r"""Parametrizations.
 
 There are 2 types of parametrizations:
 
@@ -41,7 +41,7 @@ from linodenet.parametrize.base import ParametrizationBase, ParametrizationMulti
 
 # region learnable parametrizations ----------------------------------------------------
 class ReZero(ParametrizationBase):
-    """ReZero."""
+    r"""ReZero."""
 
     scalar: Tensor
 
@@ -70,7 +70,7 @@ class ReZero(ParametrizationBase):
 
 # region static parametrizations -------------------------------------------------------
 class SpectralNormalization(ParametrizationMulticache):
-    """Spectral normalization $‖A‖₂≤γ$.
+    r"""Spectral normalization $‖A‖₂≤γ$.
 
     Ensures that the spectral norm of the weight matrix is at most γ (default=1.0).
 
@@ -81,26 +81,26 @@ class SpectralNormalization(ParametrizationMulticache):
     """
 
     original_parameter: nn.Parameter
-    """PARAM: The original parameter, before parametrization."""
+    r"""PARAM: The original parameter, before parametrization."""
     cached_parameter: Tensor
-    """BUFFER: The cached parameter, after parametrization."""
+    r"""BUFFER: The cached parameter, after parametrization."""
     sigma: Tensor
-    """BUFFER: The cached singular value."""
+    r"""BUFFER: The cached singular value."""
     u: Tensor
-    """BUFFER: The cached left singular vector."""
+    r"""BUFFER: The cached left singular vector."""
     v: Tensor
-    """BUFFER: The cached right singular vector."""
+    r"""BUFFER: The cached right singular vector."""
 
     GAMMA: Tensor
-    """CONST: The constant γ, the transformation ensures $‖A‖₂≤γ$."""
+    r"""CONST: The constant γ, the transformation ensures $‖A‖₂≤γ$."""
     ONE: Tensor
-    """CONST: The constant 1."""
+    r"""CONST: The constant 1."""
     maxiter: Final[Optional[int]]
-    """CONST: The maximum number of iterations for the power method."""
+    r"""CONST: The maximum number of iterations for the power method."""
     atol: Final[float]
-    """CONST: The absolute tolerance for the power method."""
+    r"""CONST: The absolute tolerance for the power method."""
     rtol: Final[float]
-    """CONST: The relative tolerance for the power method."""
+    r"""CONST: The relative tolerance for the power method."""
 
     def __init__(
         self,
@@ -137,7 +137,7 @@ class SpectralNormalization(ParametrizationMulticache):
         self.register_buffer("GAMMA", torch.full_like(self.ONE, gamma, **options))
 
     def forward(self, weight: Tensor) -> tuple[Tensor, dict[str, Tensor]]:
-        """Perform spectral normalization w ↦ w/‖w‖₂."""
+        r"""Perform spectral normalization w ↦ w/‖w‖₂."""
         # We use the cached singular vectors as initial guess for the power method.
         sigma, u, v = singular_triplet(
             weight,
@@ -156,7 +156,7 @@ class SpectralNormalization(ParametrizationMulticache):
 
 
 class CayleyMap(ParametrizationBase):
-    """Parametrize a matrix to be orthogonal via Cayley-Map.
+    r"""Parametrize a matrix to be orthogonal via Cayley-Map.
 
     References:
         - https://pytorch.org/tutorials/intermediate/parametrizations.html
@@ -179,7 +179,7 @@ class CayleyMap(ParametrizationBase):
 
 
 class MatrixExponential(ParametrizationBase):
-    """Parametrize a matrix via matrix exponential."""
+    r"""Parametrize a matrix via matrix exponential."""
 
     def forward(self, X):
         return torch.matrix_exp(X)
@@ -194,7 +194,7 @@ class MatrixExponential(ParametrizationBase):
 
 
 class GramMatrix(ParametrizationBase):
-    """Parametrize a matrix via gram matrix ($XᵀX$)."""
+    r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
     def forward(self, X):
         return X.T @ X
@@ -214,7 +214,7 @@ class GramMatrix(ParametrizationBase):
 # region linodenet.projections ---------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
 class Identity(ParametrizationBase):
-    """Parametrize a matriz as itself."""
+    r"""Parametrize a matriz as itself."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``... -> ...``."""
@@ -222,7 +222,7 @@ class Identity(ParametrizationBase):
 
 
 class Symmetric(ParametrizationBase):
-    """Parametrize a matrix to be symmetric."""
+    r"""Parametrize a matrix to be symmetric."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
@@ -240,7 +240,7 @@ class Symmetric(ParametrizationBase):
 
 
 class SkewSymmetric(ParametrizationBase):
-    """Parametrize a matrix to be skew-symmetric."""
+    r"""Parametrize a matrix to be skew-symmetric."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
@@ -258,10 +258,10 @@ class SkewSymmetric(ParametrizationBase):
 
 
 class LowRank(ParametrizationBase):
-    """Parametrize a matrix to be low-rank."""
+    r"""Parametrize a matrix to be low-rank."""
 
     rank: Final[int]
-    """CONST: The rank to consider"""
+    r"""CONST: The rank to consider"""
 
     def __init__(self, tensor: Tensor, /, *, rank: int = 1) -> None:
         super().__init__(tensor)
@@ -273,7 +273,7 @@ class LowRank(ParametrizationBase):
 
 
 class Orthogonal(ParametrizationBase):
-    """Parametrize a matrix to be orthogonal."""
+    r"""Parametrize a matrix to be orthogonal."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
@@ -281,14 +281,14 @@ class Orthogonal(ParametrizationBase):
 
 
 class Traceless(ParametrizationBase):
-    """Parametrize a matrix to be traceless."""
+    r"""Parametrize a matrix to be traceless."""
 
     def forward(self, X):
         return projections.traceless(X)
 
 
 class Normal(ParametrizationBase):
-    """Parametrize a matrix to be normal."""
+    r"""Parametrize a matrix to be normal."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
@@ -296,7 +296,7 @@ class Normal(ParametrizationBase):
 
 
 class Symplectic(ParametrizationBase):
-    """Parametrize a matrix to be symplectic."""
+    r"""Parametrize a matrix to be symplectic."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
@@ -304,7 +304,7 @@ class Symplectic(ParametrizationBase):
 
 
 class Hamiltonian(ParametrizationBase):
-    """Parametrize a matrix to be Hamiltonian."""
+    r"""Parametrize a matrix to be Hamiltonian."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``."""
@@ -316,7 +316,7 @@ class Hamiltonian(ParametrizationBase):
 
 # region masked ------------------------------------------------------------------------
 class Diagonal(ParametrizationBase):
-    """Parametrize a matrix to be diagonal."""
+    r"""Parametrize a matrix to be diagonal."""
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""
@@ -324,10 +324,10 @@ class Diagonal(ParametrizationBase):
 
 
 class UpperTriangular(ParametrizationBase):
-    """Parametrize a matrix to be upper triangular."""
+    r"""Parametrize a matrix to be upper triangular."""
 
     upper: Final[int]
-    """CONST: The diagonal to consider"""
+    r"""CONST: The diagonal to consider"""
 
     def __init__(self, tensor: Tensor, /, *, upper: int = 0) -> None:
         super().__init__(tensor)
@@ -339,10 +339,10 @@ class UpperTriangular(ParametrizationBase):
 
 
 class LowerTriangular(ParametrizationBase):
-    """Parametrize a matrix to be lower triangular."""
+    r"""Parametrize a matrix to be lower triangular."""
 
     lower: Final[int]
-    """CONST: The diagonal to consider"""
+    r"""CONST: The diagonal to consider"""
 
     def __init__(self, tensor: Tensor, /, *, lower: int = 0) -> None:
         super().__init__(tensor)
@@ -354,10 +354,10 @@ class LowerTriangular(ParametrizationBase):
 
 
 class Masked(ParametrizationBase):
-    """Parametrize a matrix to be masked."""
+    r"""Parametrize a matrix to be masked."""
 
     mask: BoolTensor
-    """CONST: The mask to consider"""
+    r"""CONST: The mask to consider"""
 
     def __init__(self, tensor: Tensor, /, *, mask: BoolTensor) -> None:
         super().__init__(tensor)
@@ -369,12 +369,12 @@ class Masked(ParametrizationBase):
 
 
 class Banded(ParametrizationBase):
-    """Parametrize a matrix to be banded."""
+    r"""Parametrize a matrix to be banded."""
 
     upper: Final[int]
-    """CONST: The upper diagonal to consider"""
+    r"""CONST: The upper diagonal to consider"""
     lower: Final[int]
-    """CONST: The lower diagonal to consider"""
+    r"""CONST: The lower diagonal to consider"""
 
     def __init__(self, tensor: Tensor, /, *, upper: int = 0, lower: int = 0) -> None:
         super().__init__(tensor)

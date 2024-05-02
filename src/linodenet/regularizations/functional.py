@@ -38,12 +38,12 @@ from linodenet.projections import functional as projections
 
 @runtime_checkable
 class Regularization(Protocol):
-    """Protocol for Regularization Components."""
+    r"""Protocol for Regularization Components."""
 
     def __call__(
         self, x: Tensor, /, *, p: int = ..., size_normalize: bool = ...
     ) -> Tensor:
-        """Forward pass of the regularization."""
+        r"""Forward pass of the regularization."""
         ...
 
 

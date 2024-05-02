@@ -1,5 +1,5 @@
 # type: ignore
-"""Deprecated classes and functions."""
+r"""Deprecated classes and functions."""
 
 __all__ = [
     # Functions (Decorators)
@@ -23,7 +23,7 @@ P = ParamSpec("P")
 
 
 def make_default_message(obj: type | Callable, /) -> str:
-    """Create a default deprecation message for an object."""
+    r"""Create a default deprecation message for an object."""
     match obj:
         case type() as cls:
             return f"Class {cls.__name__!r} is deprecated"
@@ -44,7 +44,7 @@ def make_wrapper(
     category: type[Warning] = DeprecationWarning,
     stacklevel: int = 1,
 ) -> T:
-    """Create a wrapper for a deprecated object."""
+    r"""Create a wrapper for a deprecated object."""
     msg = make_default_message(obj) if msg is NotImplemented else msg
     match obj, category:
         case _, None:
@@ -82,7 +82,7 @@ def deprecated(
     category=DeprecationWarning,
     stacklevel=1,
 ):
-    """Indicate that a class, function or overload is deprecated.
+    r"""Indicate that a class, function or overload is deprecated.
 
     See PEP 702 for details.
     """
@@ -95,7 +95,7 @@ def deprecated(
     if decorated is NotImplemented:
         # used with brackets -> decorator factory
         def decorator(obj: T, /) -> T:
-            """Decorate a function, method or class."""
+            r"""Decorate a function, method or class."""
             return make_wrapper(obj, msg, category=category, stacklevel=stacklevel)
 
         return decorator
@@ -111,7 +111,7 @@ def wrap_func(
     category: type[Warning] = DeprecationWarning,
     stacklevel: int = 1,
 ) -> Callable[P, R]:
-    """Wrap a function with a deprecation warning."""
+    r"""Wrap a function with a deprecation warning."""
 
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -129,7 +129,7 @@ def wrap_type(
     category: type[Warning] = DeprecationWarning,
     stacklevel: int = 1,
 ) -> type[T]:
-    """Wrap a class with a deprecation warning."""
+    r"""Wrap a class with a deprecation warning."""
     original_new = klass.__new__
     has_init = klass.__init__ is not object.__init__
 

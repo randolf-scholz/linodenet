@@ -1,4 +1,4 @@
-"""Tests for `linodenet.testing.module_tests`."""
+r"""Tests for `linodenet.testing.module_tests`."""
 
 from linodenet.testing.module_tests import assert_forward_stable
 

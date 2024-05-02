@@ -1,4 +1,4 @@
-"""Configuration for pytest."""
+r"""Configuration for pytest."""
 
 import argparse
 
@@ -6,7 +6,7 @@ import pytest
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add options to pytest."""
+    r"""Add options to pytest."""
     parser.addoption(
         "--make-plots",
         action=argparse.BooleanOptionalAction,
@@ -17,5 +17,5 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 @pytest.fixture
 def make_plots(request: pytest.FixtureRequest) -> bool:
-    """Whether to make plots."""
+    r"""Whether to make plots."""
     return bool(request.config.getoption("--make-plots"))

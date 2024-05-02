@@ -1,1 +1,1 @@
-"""Benchmarking tests."""
+r"""Benchmarking tests."""

@@ -1,6 +1,4 @@
-"""Test JIT compatibility with subclassing."""
-
-from tempfile import TemporaryDirectory
+r"""Test JIT compatibility with subclassing."""
 
 import pytest
 import torch
@@ -9,12 +7,12 @@ from typing_extensions import Final, Optional
 
 
 class Foo(nn.Module):
-    """Dummy module."""
+    r"""Dummy module."""
 
     input_size: Final[int]
-    """The input size of the module."""
+    r"""The input size of the module."""
     hidden_size: Final[int]
-    """The hidden size of the module."""
+    r"""The hidden size of the module."""
 
     def __init__(self, input_size: int, hidden_size: int) -> None:
         super().__init__()
@@ -27,7 +25,7 @@ class Foo(nn.Module):
 
 
 class WithDecoder(Foo):
-    """Direct subclass of Foo."""
+    r"""Direct subclass of Foo."""
 
     decoder: Optional[nn.Module]
 
@@ -46,7 +44,7 @@ class WithDecoder(Foo):
 
 
 class InheritedDecoder(WithDecoder):
-    """Direct subclass of WithDecoder."""
+    r"""Direct subclass of WithDecoder."""
 
 
 def test_with_decoder():

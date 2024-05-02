@@ -1,4 +1,4 @@
-"""Utility functions for testing."""
+r"""Utility functions for testing."""
 
 __all__ = [
     # CONSTANTS
@@ -36,6 +36,7 @@ __all__ = [
     "is_upper_triangular",
     # helper functions
     "assert_close",
+    "assert_compatible_signature",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
@@ -51,6 +52,7 @@ __all__ = [
 
 from linodenet.testing._testing import (
     assert_close,
+    assert_compatible_signature,
     check_backward,
     check_class,
     check_forward,

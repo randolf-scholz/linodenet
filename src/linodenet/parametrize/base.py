@@ -1,4 +1,4 @@
-"""Alternative to builtin parametrizations of torch.
+r"""Alternative to builtin parametrizations of torch.
 
 Goals:
     - Support for JIT. In particular, we do not use `@property`.
@@ -82,12 +82,13 @@ __all__ = [
 import copy
 from abc import abstractmethod
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, ContextDecorator
+from types import TracebackType
 
 import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
-from typing_extensions import Any, Protocol, TypeVar, runtime_checkable
+from typing_extensions import Any, Literal, Protocol, Self, TypeVar, runtime_checkable
 
 Module = TypeVar("Module", bound=nn.Module)
 
@@ -101,7 +102,7 @@ Module = TypeVar("Module", bound=nn.Module)
 
 @runtime_checkable
 class GeneralParametrization(Protocol):
-    """Protocol for parametrizations.
+    r"""Protocol for parametrizations.
 
     In most cases, use `Parametrization` instead of this protocol.
     This protocol is only useful if you want to parametrize multiple tensors simultaneously.
@@ -121,12 +122,12 @@ class GeneralParametrization(Protocol):
 
     @abstractmethod
     def parametrization(self) -> Any:
-        """Compute the parametrization, takes NO parameters."""
+        r"""Compute the parametrization, takes NO parameters."""
         ...
 
     @abstractmethod
     def update_cache(self) -> None:
-        """Update the cached tensors by recomputing the parametrization using the original tensors.
+        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
 
         Note:
             This method should use inplace `copy_` operations to update the cached tensors.
@@ -135,7 +136,7 @@ class GeneralParametrization(Protocol):
 
     @abstractmethod
     def update_original(self) -> None:
-        """Update the original tensors based on the cached tensors.
+        r"""Update the original tensors based on the cached tensors.
 
         Note:
             This method should use inplace `copy_` operations to update the original tensors.
@@ -145,7 +146,7 @@ class GeneralParametrization(Protocol):
 
     @abstractmethod
     def detach_cache(self) -> None:
-        """Detach the cached tensors from the autograd engine.
+        r"""Detach the cached tensors from the autograd engine.
 
         This method should be called after `update_original()` to avoid
         "Trying to backward through the graph a second time" error.
@@ -154,7 +155,7 @@ class GeneralParametrization(Protocol):
 
     @jit.export
     def update_parametrization(self) -> None:
-        """Update both the cached and the original tensors.
+        r"""Update both the cached and the original tensors.
 
         This function needs to be called after each `optimizer.step()` call.
         Internally, it should perform the following steps:
@@ -182,7 +183,7 @@ class GeneralParametrization(Protocol):
 
 @runtime_checkable
 class Parametrization(Protocol):
-    """Protocol for parametrizations that wrap a single tensor.
+    r"""Protocol for parametrizations that wrap a single tensor.
 
     Note:
         To work with JIT, the listed methods must be annotated with @jit.export.
@@ -191,13 +192,13 @@ class Parametrization(Protocol):
     """
 
     original_parameter: nn.Parameter
-    """PARAM: Holds parametrized tensors."""
+    r"""PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
-    """BUFFER: Holds cached version of the parametrized tensor."""
+    r"""BUFFER: Holds cached version of the parametrized tensor."""
 
     @abstractmethod
     def __init__(self, tensor: Tensor, /) -> None:
-        """Initialize the parametrization.
+        r"""Initialize the parametrization.
 
         Args:
             tensor: The tensor to parametrize.
@@ -205,7 +206,7 @@ class Parametrization(Protocol):
         ...
 
     def right_inverse(self, y: Tensor) -> Tensor:
-        """Compute the right inverse of the parametrization.
+        r"""Compute the right inverse of the parametrization.
 
         The right inverse is such that `parametrization(right_inverse(y)) == y`.
         I.e. starting from an already parametrized tensor, the right inverse
@@ -220,12 +221,12 @@ class Parametrization(Protocol):
 
     @abstractmethod
     def parametrization(self) -> Any:
-        """Compute the parametrization, takes NO parameters."""
+        r"""Compute the parametrization, takes NO parameters."""
         ...
 
     @abstractmethod
     def detach_cache(self) -> None:
-        """Detach the cached tensors from the autograd engine.
+        r"""Detach the cached tensors from the autograd engine.
 
         This method should be called after `update_original()` to avoid
         "Trying to backward through the graph a second time" error.
@@ -234,7 +235,7 @@ class Parametrization(Protocol):
 
     @jit.export
     def update_cache(self) -> None:
-        """Update the cached tensors by recomputing the parametrization using the original tensors.
+        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
 
         Note:
             This method should use inplace `copy_` operations to update the cached tensors.
@@ -245,7 +246,7 @@ class Parametrization(Protocol):
     @jit.export
     @torch.no_grad()
     def update_original(self) -> None:
-        """Update the original tensors based on the cached tensors.
+        r"""Update the original tensors based on the cached tensors.
 
         Note:
             - Call `right_inverse` to ensure that the original tensor is in the constraint set.
@@ -257,7 +258,7 @@ class Parametrization(Protocol):
 
     @jit.export
     def update_parametrization(self) -> None:
-        """Update both the cached and the original tensors.
+        r"""Update both the cached and the original tensors.
 
         This function needs to be called after each `optimizer.step()` call.
         Internally, it should perform the following steps:
@@ -285,12 +286,12 @@ class Parametrization(Protocol):
 
 # region base classes ------------------------------------------------------------------
 class ParametrizationBase(nn.Module, Parametrization):
-    """Base class for parametrization of a single tensor using a single cached tensor."""
+    r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
     original_parameter: nn.Parameter
-    """PARAM: Holds parametrized tensors."""
+    r"""PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
-    """BUFFER: Holds cached version of the parametrized tensor."""
+    r"""BUFFER: Holds cached version of the parametrized tensor."""
 
     def __init__(self, tensor: Tensor) -> None:
         super().__init__()
@@ -302,12 +303,12 @@ class ParametrizationBase(nn.Module, Parametrization):
 
     @abstractmethod
     def forward(self, x: Tensor, /) -> Tensor:
-        """Apply the parametrization."""
+        r"""Apply the parametrization."""
         ...
 
     @jit.export
     def parametrization(self) -> Tensor:
-        """Apply the parametrization to the weight matrix."""
+        r"""Apply the parametrization to the weight matrix."""
         return self.forward(self.original_parameter)
 
     @jit.export
@@ -328,14 +329,14 @@ class ParametrizationBase(nn.Module, Parametrization):
 
 
 class ParametrizationMulticache(nn.Module, Parametrization):
-    """Base class for parametrizations that maintain additional cached tensors."""
+    r"""Base class for parametrizations that maintain additional cached tensors."""
 
     original_parameter: nn.Parameter
-    """PARAM: Holds parametrized tensors."""
+    r"""PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
-    """BUFFER: Holds cached version of the parametrized tensor."""
+    r"""BUFFER: Holds cached version of the parametrized tensor."""
     cached_tensors: dict[str, Tensor]  # NOTE: cannot use nn.ParameterDict due to JIT
-    """BUFFER-DICT: Holds auxiliary cached tensors."""
+    r"""BUFFER-DICT: Holds auxiliary cached tensors."""
 
     def __init__(self, tensor: Tensor, /) -> None:
         super().__init__()
@@ -350,7 +351,7 @@ class ParametrizationMulticache(nn.Module, Parametrization):
 
     @abstractmethod
     def forward(self, x: Tensor, /) -> tuple[Tensor, dict[str, Tensor]]:
-        """Apply the parametrization.
+        r"""Apply the parametrization.
 
         Should return a tuple of the parametrized tensor and a dictionary of auxiliary tensors.
         """
@@ -358,7 +359,7 @@ class ParametrizationMulticache(nn.Module, Parametrization):
 
     @jit.export
     def parametrization(self) -> tuple[Tensor, dict[str, Tensor]]:
-        """Apply the parametrization to the weight matrix."""
+        r"""Apply the parametrization to the weight matrix."""
         return self.forward(self.original_parameter)
 
     @jit.export
@@ -383,7 +384,7 @@ class ParametrizationMulticache(nn.Module, Parametrization):
             tensor.detach_()
 
     def register_cached_tensor(self, name: str, tensor: Tensor, /) -> None:
-        """Register a cached tensor."""
+        r"""Register a cached tensor."""
         if isinstance(tensor, nn.Parameter):
             raise TypeError("Given tensor is a nn.Parameter!")
         if name in self.cached_tensors:
@@ -397,7 +398,7 @@ class ParametrizationMulticache(nn.Module, Parametrization):
 
 # FIXME: use MutableMapping https://github.com/pytorch/pytorch/issues/110959
 class ParametrizationDict(nn.Module, GeneralParametrization):
-    """Base class for parametrizations that maintain a dictionary of parametrized tensors.
+    r"""Base class for parametrizations that maintain a dictionary of parametrized tensors.
 
     Example:
         # create a model
@@ -411,9 +412,9 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
     """
 
     cached_tensors: dict[str, Tensor]
-    """DICT: Holds all cached tensors."""
+    r"""DICT: Holds all cached tensors."""
     parametrized_tensors: dict[str, nn.Parameter]
-    """DICT: Holds parametrized tensors."""
+    r"""DICT: Holds parametrized tensors."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -441,7 +442,7 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
 
     @abstractmethod
     def parametrization(self) -> dict[str, Tensor]:
-        """Update all tensors based on the current parameters."""
+        r"""Update all tensors based on the current parameters."""
         ...
 
     @jit.export
@@ -463,7 +464,7 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
             tensor.detach_()
 
     def register_cached_tensor(self, name: str, tensor: Tensor, /) -> None:
-        """Register a cached tensor."""
+        r"""Register a cached tensor."""
         if isinstance(tensor, nn.Parameter):
             raise TypeError("Given tensor is a nn.Parameter!")
         if name in self.cached_tensors:
@@ -477,7 +478,7 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
     def register_parametrized_tensor(
         self, name: str, param: nn.Parameter, /, *, add_to_namespace: bool = True
     ) -> None:
-        """Register a parametrization."""
+        r"""Register a parametrization."""
         if not isinstance(param, nn.Parameter):
             raise TypeError("Given tensor is not a nn.Parameter!")
         if name in self.parametrized_tensors:
@@ -502,12 +503,12 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
 
 # region torch parametrize replacements  -----------------------------------------------
 class parametrize(ParametrizationBase):
-    """Parametrization of a single tensor."""
+    r"""Parametrization of a single tensor."""
 
     original_parameter: nn.Parameter
-    """PARAM: Holds parametrized tensors."""
+    r"""PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
-    """BUFFER: Holds cached version of the parametrized tensor."""
+    r"""BUFFER: Holds cached version of the parametrized tensor."""
 
     def __init__(
         self, tensor: Tensor, parametrization: Callable[[Tensor], Tensor] | nn.Module
@@ -517,12 +518,12 @@ class parametrize(ParametrizationBase):
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        """Apply the parametrization."""
+        r"""Apply the parametrization."""
         return self._parametrization(x)
 
 
 def is_parametrized(module: nn.Module, /) -> bool:
-    """Return True if the module has any parametrizations."""
+    r"""Return True if the module has any parametrizations."""
     return any(isinstance(m, Parametrization) for m in module.modules())
 
 
@@ -533,7 +534,7 @@ def register_parametrization(
     *,
     unsafe: bool = False,
 ) -> None:
-    """Drop-in replacement for nn.utils.parametrize.register_parametrization."""
+    r"""Drop-in replacement for nn.utils.parametrize.register_parametrization."""
     if hasattr(model, f"{tensor_name}_parametrization"):
         raise NameError(f"{tensor_name}_parametrization already exists!")
 
@@ -558,16 +559,22 @@ def register_parametrization(
     wrapper.update_parametrization()
 
 
-class cached(AbstractContextManager):
-    """Context Manager to update the caches of all the given modules."""
+class cached(ContextDecorator, AbstractContextManager):
+    r"""Context Manager to update the caches of all the given modules."""
 
     def __init__(self, *modules: nn.Module) -> None:
         self.modules = modules
 
-    def __enter__(self):
-        pass
+    def __enter__(self) -> Self:
+        return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+        /,
+    ) -> Literal[False]:
         for module in self.modules:
             update_parametrizations(module)
 
@@ -579,32 +586,32 @@ class cached(AbstractContextManager):
 
 # region functions for parametrization -------------------------------------------------
 def get_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
-    """Return all parametrizations in a module."""
+    r"""Return all parametrizations in a module."""
     for m in module.modules():
         if isinstance(m, Parametrization):
             yield m
 
 
 def detach_caches(module: nn.Module, /) -> None:
-    """Detach all caches in a module."""
+    r"""Detach all caches in a module."""
     for parametrization in get_parametrizations(module):
         parametrization.detach_cache()
 
 
 def update_originals(module: nn.Module, /) -> None:
-    """Update all original tensors in a module."""
+    r"""Update all original tensors in a module."""
     for parametrization in get_parametrizations(module):
         parametrization.update_original()
 
 
 def update_caches(module: nn.Module, /) -> None:
-    """Update all cached tensors in a module."""
+    r"""Update all cached tensors in a module."""
     for parametrization in get_parametrizations(module):
         parametrization.update_cache()
 
 
 def update_parametrizations(module: nn.Module, /) -> None:
-    """Update all parametrizations in a module."""
+    r"""Update all parametrizations in a module."""
     for parametrization in get_parametrizations(module):
         parametrization.update_parametrization()
 
@@ -616,7 +623,7 @@ def update_parametrizations(module: nn.Module, /) -> None:
 def register_optimizer_hook(
     optim: Optimizer, *module_or_param: nn.Module | Parametrization
 ) -> None:
-    """Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
+    r"""Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
     # collect all parametrizations
     parametrizations = []
     for module in module_or_param:
@@ -626,7 +633,7 @@ def register_optimizer_hook(
             parametrizations.extend(get_parametrizations(module))
 
     def hook(opt, *args, **kwargs):
-        """Hook to update the parametrization after each optimizer step."""
+        r"""Hook to update the parametrization after each optimizer step."""
         for parametrization in parametrizations:
             parametrization.update_parametrization()
 
@@ -634,7 +641,7 @@ def register_optimizer_hook(
 
 
 def deepcopy_with_parametrizations(module: Module, /) -> Module:
-    """Deepcopy a module."""
+    r"""Deepcopy a module."""
     # detach all caches
     detach_caches(module)
     # deepcopy the module

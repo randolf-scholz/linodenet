@@ -1,4 +1,4 @@
-"""Constants used throughout the library."""
+r"""Constants used throughout the library."""
 
 __all__ = [
     "ATOL",
@@ -24,27 +24,27 @@ from torch import BoolTensor, FloatTensor
 from typing_extensions import Any, Final, Never
 
 EMPTY_MAP: Final[Mapping[Any, Never]] = MappingProxyType({})
-"""CONSTANT: Immutable Empty dictionary."""
+r"""CONSTANT: Immutable Empty dictionary."""
 EMPTY_SHAPE: Final[torch.Size] = torch.Size([])
-"""CONSTANT: Empty shape."""
+r"""CONSTANT: Empty shape."""
 TRUE: Final[BoolTensor] = torch.tensor(True, dtype=torch.bool)  # type: ignore[assignment]
-"""A constant tensor representing the boolean value `True`."""
+r"""A constant tensor representing the boolean value `True`."""
 FALSE: Final[BoolTensor] = torch.tensor(False, dtype=torch.bool)  # type: ignore[assignment]
-"""A constant tensor representing the boolean value `False`."""
+r"""A constant tensor representing the boolean value `False`."""
 ZERO: Final[FloatTensor] = torch.tensor(0.0, dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number `0`."""
+r"""A constant tensor representing the number `0`."""
 ONE: Final[FloatTensor] = torch.tensor(1.0, dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number `1`."""
+r"""A constant tensor representing the number `1`."""
 NAN: Final[FloatTensor] = torch.tensor(float("nan"), dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number `NaN`."""
+r"""A constant tensor representing the number `NaN`."""
 POS_INF: Final[FloatTensor] = torch.tensor(float("inf"), dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number `+∞`."""
+r"""A constant tensor representing the number `+∞`."""
 NEG_INF: Final[FloatTensor] = torch.tensor(float("-inf"), dtype=torch.float32)  # type: ignore[assignment]
-"""A constant tensor representing the number `-∞`."""
+r"""A constant tensor representing the number `-∞`."""
 ATOL: Final[float] = 1e-6
-"""CONST: Default absolute precision."""
+r"""CONST: Default absolute precision."""
 RTOL: Final[float] = 1e-6
-"""CONST: Default relative precision."""
+r"""CONST: Default relative precision."""
 EPS: Final[dict[torch.dtype, float]] = {
     # other floats
     torch.bfloat16: 2**-7,  # ~7.81e-3
@@ -57,4 +57,4 @@ EPS: Final[dict[torch.dtype, float]] = {
     torch.complex64: 2**-23,  # ~1.19e-7
     torch.complex128: 2**-52,  # ~2.22e-16
 }
-"""CONST: Default epsilon for each dtype."""
+r"""CONST: Default epsilon for each dtype."""

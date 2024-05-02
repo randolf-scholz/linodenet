@@ -1,4 +1,4 @@
-"""Test parametrization of modules."""
+r"""Test parametrization of modules."""
 
 from copy import deepcopy
 
@@ -32,7 +32,7 @@ from linodenet.testing import (
 )
 
 # class SlowUpperTriangular(ParametrizationBase):
-#     """Parametrize a matrix to be upper triangular."""
+#     r"""Parametrize a matrix to be upper triangular."""
 #
 #     def forward(self, x: Tensor) -> Tensor:
 #         # waste some time:
@@ -108,7 +108,7 @@ def test_jit_preserves_parameters() -> None:
 
 @mark.xfail(reason="After deserialization update_parametrization must be called.")
 def test_jit() -> None:
-    """Test that subclasses of Protocol-class work with JIT."""
+    r"""Test that subclasses of Protocol-class work with JIT."""
     torch.manual_seed(42)
 
     B, N, M = 7, 5, 4
@@ -217,7 +217,7 @@ def test_optimization_manual() -> None:
 
 
 def test_optimization_missing() -> None:
-    """Checks that if parametrization is not updated, loss does not change."""
+    r"""Checks that if parametrization is not updated, loss does not change."""
     torch.manual_seed(42)
     B, N, M = 3, 5, 4
     inputs = torch.randn(B, N)
@@ -309,7 +309,7 @@ def test_optimizer_hook() -> None:
 
 
 def test_optimization_cached() -> None:
-    """Tests the `cached` context manager."""
+    r"""Tests the `cached` context manager."""
     torch.manual_seed(42)
     B, N, M = 3, 5, 4
     inputs = torch.randn(B, N)

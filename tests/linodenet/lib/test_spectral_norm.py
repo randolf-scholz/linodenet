@@ -1,4 +1,4 @@
-"""Test the spectral norm implementation."""
+r"""Test the spectral norm implementation."""
 
 import pytest
 import torch
@@ -38,7 +38,7 @@ SHAPES = [
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
-    """Test the spectral norm implementation."""
+    r"""Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n, device=device)
     cond = torch.linalg.cond(A0)
@@ -87,7 +87,7 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
 @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("norm_only", NORM_ONLY, ids=NORM_ONLY.get)
 def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) -> None:
-    """Test the singular triplet implementation."""
+    r"""Test the singular triplet implementation."""
     m, n = shape
     A0 = torch.randn(m, n, device=device)
     xi = torch.randn(1, device=device)

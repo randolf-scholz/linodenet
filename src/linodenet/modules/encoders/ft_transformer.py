@@ -49,8 +49,9 @@ class Tokenizer(nn.Module):
     def __init__(
         self,
         d_numerical: int,
-        categories: Optional[list[int]],
         d_token: int,
+        *,
+        categories: Optional[list[int]],
         bias: bool,
     ) -> None:
         super().__init__()
@@ -121,7 +122,7 @@ class MultiheadAttention(nn.Module):
     r"""Multihead attention."""
 
     def __init__(
-        self, d: int, n_heads: int, dropout_rate: float, initialization: str
+        self, d: int, *, n_heads: int, dropout_rate: float, initialization: str
     ) -> None:
         super().__init__()
 
@@ -233,7 +234,12 @@ class FTTransformer(nn.Module):
 
         assert (kv_compression is None) ^ (kv_compression_sharing is not None)
 
-        self.tokenizer = Tokenizer(d_numerical, categories, d_token, token_bias)
+        self.tokenizer = Tokenizer(
+            d_numerical,
+            d_token,
+            categories=categories,
+            bias=token_bias,
+        )
         n_tokens = self.tokenizer.n_tokens
 
         def make_kv_compression():
@@ -259,7 +265,10 @@ class FTTransformer(nn.Module):
         for layer_idx in range(n_layers):
             layer = nn.ModuleDict({
                 "attention": MultiheadAttention(
-                    d_token, n_heads, attention_dropout, initialization
+                    d_token,
+                    n_heads=n_heads,
+                    dropout_rate=attention_dropout,
+                    initialization=initialization,
                 ),
                 "linear0": nn.Linear(
                     d_token, d_hidden * (2 if activation.endswith("glu") else 1)

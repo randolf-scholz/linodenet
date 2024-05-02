@@ -1,4 +1,4 @@
-"""Test if typing_extensions is compatible with torch.jit.script."""
+r"""Test if typing_extensions is compatible with torch.jit.script."""
 
 from tempfile import TemporaryDirectory
 from typing import Optional
@@ -10,21 +10,21 @@ from typing_extensions import Optional as OptionalExt
 
 
 def foo(x: Tensor, y: Optional[Tensor] = None) -> Tensor:
-    """Dummy function."""
+    r"""Dummy function."""
     if y is None:
         return x
     return x + y
 
 
 def bar(x: Tensor, y: OptionalExt[Tensor] = None) -> Tensor:
-    """Dummy function."""
+    r"""Dummy function."""
     if y is None:
         return x
     return x + y
 
 
 class Foo(nn.Module):
-    """Dummy module."""
+    r"""Dummy module."""
 
     def forward(self, x: Tensor, y: Optional[Tensor] = None) -> Tensor:
         if y is None:
@@ -33,7 +33,7 @@ class Foo(nn.Module):
 
 
 class Bar(nn.Module):
-    """Dummy module."""
+    r"""Dummy module."""
 
     def forward(self, x: Tensor, y: OptionalExt[Tensor] = None) -> Tensor:
         if y is None:

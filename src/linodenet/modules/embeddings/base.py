@@ -23,10 +23,10 @@ from typing_extensions import Final, Optional, Protocol, Self, runtime_checkable
 
 @runtime_checkable
 class Embedding(Protocol):
-    """Protocol for Embedding Components."""
+    r"""Protocol for Embedding Components."""
 
     def __call__(self, x: Tensor, /) -> Tensor:
-        """Forward pass of the embedding.
+        r"""Forward pass of the embedding.
 
         .. Signature: ``... -> ...``.
         """
@@ -34,7 +34,7 @@ class Embedding(Protocol):
 
 
 class EmbeddingABC(nn.Module):
-    """Abstract Base Class for Embedding components."""
+    r"""Abstract Base Class for Embedding components."""
 
     @abstractmethod
     def forward(self, x: Tensor, /) -> Tensor:

@@ -1,7 +1,7 @@
 # GitLab CI/CD Pipeline Configuration Reference: https://docs.gitlab.com/ee/ci/yaml/
 # Template: https://gitlab.com/gitlab-org/gitlab/-/tree/master/lib/gitlab/ci/templates/Python.gitlab-ci.yml
 
-# region global --------------------------------------------------------------------------------------------------------
+# region global ------------------------------------------------------------------------
 image: python:3.11
 
 stages:
@@ -36,9 +36,9 @@ variables:
 before_script:
   - mkdir -p $MAIN_CACHE $PUBLIC_DIR $REPORT_DIR $BADGE_DIR
   - source ${VENVNAME}/bin/activate
-# endregion global -----------------------------------------------------------------------------------------------------
+# endregion global ---------------------------------------------------------------------
 
-# region setup ---------------------------------------------------------------------------------------------------------
+# region setup -------------------------------------------------------------------------
 setup:
   stage: build
   cache:
@@ -92,25 +92,8 @@ setup:
     # build the package.
     - poetry build
     # install package
-    - pip install --upgrade $(ls dist/*.whl)
-    # setup remote for in-house dependencies
-    - |
-      if [[ $CI_PROJECT_URL == *"git.tu-berlin.de"* ]]; then
-        echo "Installing TSDM from Berlin Mirror."
-        mirror="https://gitlab-ci-token:${CI_JOB_TOKEN}@git.tu-berlin.de/api/v4/projects/6694/packages/pypi/simple"
-      elif [[ $CI_PROJECT_URL == *"software.ismll.uni-hildesheim.de"* ]]; then
-        echo "Installing TSDM from Hildesheim Mirror."
-        mirror="https://gitlab-ci-token:${CI_JOB_TOKEN}@software.ismll.uni-hildesheim.de/api/v4/projects/342/packages/pypi/simple"
-      else
-        echo "Package TSDM mirror not found."
-        exit 1
-      fi
-    - export PIP_EXTRA_INDEX_URL=$mirror
-    - poetry config repositories.tsdm $mirror
-    - poetry config http-basic.tsdm gitlab-ci-token "${CI_JOB_TOKEN}"
-    # install dev dependencies
-    - pip install tsdm --upgrade --index-url $mirror
-    # install other dependencies
+    # - pip install --upgrade --prefer-binary $(ls dist/*.whl)
+    # install dev dependencies.
     - pip install --upgrade -e .[dev]
     - pip list
     - python -c "import torch as module; print(module.__version__)"
@@ -143,9 +126,9 @@ setup:
     paths:
       - dist/
       - $BADGE_DIR/
-# endregion setup ------------------------------------------------------------------------------------------------------
+# endregion setup ----------------------------------------------------------------------
 
-# region analysis ------------------------------------------------------------------------------------------------------
+# region analysis ----------------------------------------------------------------------
 pylint:
   # see .pylintrc for configuration
   stage: analysis
@@ -185,32 +168,31 @@ pylint:
     paths:
       - $BADGE_DIR/
 
-flake8:
-  # see .flake8 for configuration
+ruff:
   stage: analysis
   cache:
     - key: venv
       paths:
-        - "$VENV_DIR"
+          - "$VENV_DIR"
       policy: pull
   needs:
     - setup
   script:
-    - flake8 --version
-    - flake8 $MODULEDIR
-    - flake8 $TESTDIR
-    - isort $MODULEDIR --check-only --diff
+    - ruff --version
+    - ruff $MODULEDIR
+    - ruff $TESTDIR
+    - black --check src tests
   after_script:
     - source ${VENVNAME}/bin/activate
     - COLOR=$([ "$CI_JOB_STATUS" == "success" ] && echo "green" || echo "red")
     - TEXT=$([ "$CI_JOB_STATUS" == "success" ] && echo "passing" || echo "failed")
     # generate flake8 badge
     - python -m pybadges
-      --left-text="flake8"
+      --left-text="ruff"
       --right-text="$TEXT"
       --right-color="$COLOR"
-      --whole-link="https://flake8.pycqa.org/en/latest/"
-      > $BADGE_DIR/flake8.svg
+      --whole-link="https://github.com/astral-sh/ruff"
+      > $BADGE_DIR/ruff.svg
     # generate black code style badge
     - python -m pybadges
       --left-text="code style"
@@ -259,9 +241,9 @@ mypy:
       junit: $REPORT_DIR/mypy*.xml
     paths:
       - $BADGE_DIR/
-# endregion analysis ---------------------------------------------------------------------------------------------------
+# endregion analysis -------------------------------------------------------------------
 
-# region tests ---------------------------------------------------------------------------------------------------------
+# region tests -------------------------------------------------------------------------
 pytest:
   stage: test
   cache:
@@ -303,9 +285,9 @@ pytest:
       junit: $REPORT_DIR/pytest.xml
     paths:
       - $BADGE_DIR/
-# endregion tests ------------------------------------------------------------------------------------------------------
+# endregion tests ----------------------------------------------------------------------
 
-# region deploy --------------------------------------------------------------------------------------------------------
+# region deploy ------------------------------------------------------------------------
 pypi:
   # https://docs.gitlab.com/ee/user/packages/pypi_repository/
   stage: deploy
@@ -373,4 +355,4 @@ pages:
     paths:
       - $PUBLIC_DIR/
       - $BADGE_DIR/
-# endregion deploy -----------------------------------------------------------------------------------------------------
+# endregion deploy ---------------------------------------------------------------------

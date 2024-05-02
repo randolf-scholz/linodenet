@@ -121,7 +121,7 @@ class ReverseDense(nn.Module):
 
     @classmethod
     def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
-        """Initialize from hyperparameters."""
+        r"""Initialize from hyperparameters."""
         config = cls.HP | dict(cfg, **kwargs)
         return cls(**config)
 

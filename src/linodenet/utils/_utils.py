@@ -62,7 +62,7 @@ def autojit(base_class: type[M]) -> type[M]:
                 return scripted
             return instance
 
-    assert issubclass(WrappedClass, base_class)  # pyright: ignore
+    assert issubclass(WrappedClass, base_class)
     return WrappedClass
 
 
@@ -167,7 +167,7 @@ def initialize_from_type(module_type: type[nn.Module], /, **kwargs: Any) -> nn.M
 def try_initialize_from_config(
     obj: nn.Module | type[nn.Module] | Mapping[str, Any], /, **kwargs: Any
 ) -> nn.Module:
-    """Try to initialize a module from a config."""
+    r"""Try to initialize a module from a config."""
     match obj:
         case nn.Module() as module:
             assert not kwargs, f"Unexpected {kwargs=}"
@@ -180,6 +180,7 @@ def try_initialize_from_config(
             raise TypeError(f"Unsupported type {type(obj)}")
 
 
+@jit.script
 def pad(
     x: Tensor,
     value: float,
