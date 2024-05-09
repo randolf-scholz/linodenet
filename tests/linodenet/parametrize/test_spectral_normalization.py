@@ -24,9 +24,7 @@ def test_spectral_normalization() -> None:
     #
     # assert spec.parametrized_tensors["weight"] is param
     # assert spec.weight is spec.cached_tensors["weight"]
-
-    # sys.exit(0)
-
+    #
     # print("Param ----------------------")
     # print(param, torch.linalg.cond(param), torch.linalg.matrix_norm(param, ord=2))
     #
