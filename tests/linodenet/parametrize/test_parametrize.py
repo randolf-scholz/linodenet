@@ -2,8 +2,8 @@ r"""Test parametrization of modules."""
 
 from copy import deepcopy
 
+import pytest
 import torch
-from pytest import mark
 from torch import Tensor, nn
 from torch.linalg import matrix_norm
 from torch.nn.functional import mse_loss
@@ -106,7 +106,9 @@ def test_jit_preserves_parameters() -> None:
         assert torch.equal(x, y)
 
 
-@mark.xfail(reason="After deserialization update_parametrization must be called.")
+@pytest.mark.xfail(
+    reason="After deserialization update_parametrization must be called."
+)
 def test_jit() -> None:
     r"""Test that subclasses of Protocol-class work with JIT."""
     torch.manual_seed(42)

@@ -2,8 +2,8 @@ r"""Test gradients of custom operators."""
 
 __all__ = ["compute_spectral_norm_impl"]
 
+import pytest
 import torch
-from pytest import mark
 from torch import nn
 
 from linodenet.lib import (
@@ -99,7 +99,7 @@ def compute_singular_triplet_impl(impl, shape, **kwargs):
     return err_value, err_grads
 
 
-@mark.xfail(reason="Matrices badly conditioned.")
+@pytest.mark.xfail(reason="Matrices badly conditioned.")
 def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
     r"""Test the singular triplet."""
     err_vals = []
@@ -122,7 +122,7 @@ def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> N
     print("All tests passed.")
 
 
-@mark.xfail(reason="Matrices badly conditioned.")
+@pytest.mark.xfail(reason="Matrices badly conditioned.")
 def test_spectral_norm(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
     r"""Test the spectral norm."""
     err_vals = []

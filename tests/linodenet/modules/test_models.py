@@ -3,8 +3,8 @@ r"""Test if model initializations, forward and backward passes."""
 import logging
 from itertools import product
 
+import pytest
 import torch
-from pytest import mark
 from torch import Tensor, nn
 
 from linodenet.config import CONFIG, PROJECT
@@ -95,7 +95,7 @@ def _make_reference_shapes(
     return [(*batch_sizes, *shape) for shape in shapes]
 
 
-@mark.parametrize(("model", "params"), MODELS.items())
+@pytest.mark.parametrize(("model", "params"), MODELS.items())
 def test_all_models(model: type[nn.Module], params: dict) -> None:
     r"""Check if initializations, forward and backward runs for all selected models."""
     LOGGER = __logger__.getChild(model.__name__)

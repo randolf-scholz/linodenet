@@ -12,9 +12,9 @@ __all__ = [
 
 from collections.abc import Callable
 
+import pytest
 import torch
 import torch.utils.cpp_extension
-from pytest import mark
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch import nn
 
@@ -99,10 +99,10 @@ def get_param(
     return nn.Parameter(A)
 
 
-@mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-@mark.parametrize("device", DEVICES)
-@mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
-@mark.benchmark(group="spectral_norm_forward")
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
+@pytest.mark.benchmark(group="spectral_norm_forward")
 def test_spectral_norm_forward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -138,10 +138,10 @@ def test_spectral_norm_forward(
         )
 
 
-@mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-@mark.parametrize("device", DEVICES)
-@mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
-@mark.benchmark(group="spectral_norm_backward")
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
+@pytest.mark.benchmark(group="spectral_norm_backward")
 def test_spectral_norm_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -189,10 +189,10 @@ def test_spectral_norm_backward(
     )
 
 
-@mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-@mark.parametrize("device", DEVICES)
-@mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
-@mark.benchmark(group="spectral_norm")
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
+@pytest.mark.benchmark(group="spectral_norm")
 def test_spectral_norm(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -239,10 +239,10 @@ def test_spectral_norm(
     )
 
 
-@mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@mark.parametrize("device", DEVICES)
-@mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
-@mark.benchmark(
+@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
+@pytest.mark.benchmark(
     group="singular_triplet_forward",
 )
 def test_singular_triplet_forward(
@@ -285,10 +285,10 @@ def test_singular_triplet_forward(
         )
 
 
-@mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@mark.parametrize("device", DEVICES)
-@mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
-@mark.benchmark(group="singular_triplet_backward")
+@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
+@pytest.mark.benchmark(group="singular_triplet_backward")
 def test_singular_triplet_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:
@@ -331,11 +331,11 @@ def test_singular_triplet_backward(
     benchmark.pedantic(backward, setup=setup, rounds=512, warmup_rounds=128)
 
 
-@mark.skip(reason="Errors too large for custom impl.")
-@mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
-@mark.parametrize("device", DEVICES)
-@mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
-@mark.benchmark(group="singular_triplet_full_backward")
+@pytest.mark.skip(reason="Errors too large for custom impl.")
+@pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
+@pytest.mark.benchmark(group="singular_triplet_full_backward")
 def test_singular_triplet_full_backward(
     benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
 ) -> None:

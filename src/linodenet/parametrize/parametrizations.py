@@ -164,7 +164,8 @@ class CayleyMap(ParametrizationBase):
     """
 
     def __init__(self, tensor: Tensor) -> None:
-        assert len(tensor.shape) == 2 and tensor.shape[0] == tensor.shape[1]
+        assert len(tensor.shape) == 2
+        assert tensor.shape[0] == tensor.shape[1]
         n = tensor.shape[0]
         super().__init__(tensor)
         self.register_buffer("Id", torch.eye(n))

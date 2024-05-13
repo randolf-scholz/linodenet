@@ -23,10 +23,10 @@ __all__ = [
 from collections.abc import Callable
 
 import numpy as np
+import pytest
 import scipy
 import torch
 from numpy.random import default_rng
-from pytest import mark
 from scipy.stats import ortho_group
 
 import linodenet
@@ -93,9 +93,9 @@ def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
 
 
 # noinspection PyTupleAssignmentBalance
-@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@mark.parametrize("shape", SHAPES, ids=str)
-@mark.parametrize("method", SVD_METHODS.values(), ids=SVD_METHODS.keys())
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@pytest.mark.parametrize("shape", SHAPES, ids=str)
+@pytest.mark.parametrize("method", SVD_METHODS.values(), ids=SVD_METHODS.keys())
 def test_svd_rank_one(
     method: Callable,
     shape: tuple[int, int],
@@ -135,9 +135,9 @@ def test_svd_rank_one(
             raise ValueError(f"Unknown method: {method}")
 
 
-@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@mark.parametrize("shape", SHAPES, ids=str)
-@mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@pytest.mark.parametrize("shape", SHAPES, ids=str)
+@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_rank_one(
     impl: Callable,
     shape: tuple[int, int],
@@ -189,9 +189,9 @@ def test_rank_one(
     )
 
 
-@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
-@mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@pytest.mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
+@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_diagonal(
     impl: Callable,
     dim: int,
@@ -247,9 +247,9 @@ def test_diagonal(
     )
 
 
-@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@mark.parametrize("shape", SHAPES, ids=str)
-@mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@pytest.mark.parametrize("shape", SHAPES, ids=str)
+@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_analytical(
     impl: Callable,
     shape: tuple[int, int],
@@ -311,10 +311,10 @@ def test_analytical(
     )
 
 
-@mark.skip(reason="Algorithms are unstable for repeated singular values.")
-@mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
-@mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.skip(reason="Algorithms are unstable for repeated singular values.")
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
+@pytest.mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
+@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_orthogonal(
     impl: Callable,
     dim: int,

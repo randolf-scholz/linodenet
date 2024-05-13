@@ -90,12 +90,12 @@ def test_subclass_with_decoder():
         AssertionError,
         match="Unsupported annotation typing.Optional[torch.nn.modules.module.Module]*.",
     ):
-        scripted_model = jit.script(model)
+        jit.script(model)
 
     # assert isinstance(scripted_model, jit.ScriptModule)
     # y = scripted_model(x)
     # assert y.shape == (3, 4)
-    #
+
     # # serialize and deserialize
     # with TemporaryDirectory() as folder:
     #     path = f"{folder}/model.pt"

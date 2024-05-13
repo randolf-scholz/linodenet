@@ -1,7 +1,7 @@
 r"""Compare speed of different aggregation algorithms."""
 
+import pytest
 import torch
-from pytest import mark
 from torch import Tensor, jit
 
 
@@ -18,8 +18,8 @@ aggregations = {
 }
 
 
-@mark.parametrize("name", aggregations)
-@mark.benchmark
+@pytest.mark.benchmark
+@pytest.mark.parametrize("name", aggregations)
 class TestAggregation:
     r"""Compare speed of different aggregation algorithms."""
 
@@ -56,9 +56,9 @@ class TestAggregation:
 
 
 #
-# @mark.parametrize("size", [10, 100, 1000, 10000])
-# @mark.parametrize("name", aggregations)
-# @mark.benchmark(group_by="name")
+# @pytest.mark.parametrize("size", [10, 100, 1000, 10000])
+# @pytest.mark.parametrize("name", aggregations)
+# @pytest.mark.benchmark(group_by="name")
 # def test_speed(benchmark, name: str, size: int) -> None:
 #     r"""Compare speed of different aggregation algorithms."""
 #     func = aggregations[name]

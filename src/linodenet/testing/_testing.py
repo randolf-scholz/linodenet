@@ -448,9 +448,8 @@ def check_object(
 
     # region get reference model -------------------------------------------------------
     if reference_model is not None:
-        assert (
-            reference_outputs is None and reference_gradients is None
-        ), "Cannot specify both reference model and reference outputs/gradients!"
+        assert reference_outputs is None, "Both reference model & outputs given!"
+        assert reference_gradients is None, "Both reference model & gradients given!"
 
         try:
             reference_model.to(device=device)

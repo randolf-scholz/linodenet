@@ -173,20 +173,17 @@ ignore = [
     "E202",  # Whitespace before ')'
     "E203",  # Whitespace before ':'
     "E221",  # Multiple spaces before operator
-    "E226",  # Missing whitespace around arithmetic operator
-    "E231",  # Missing whitespace after ','
+    # "E226",  # Missing whitespace around arithmetic operator
+    # "E231",  # Missing whitespace after ','
     "E241",  # Multiple spaces after comma
     "E271",  # Multiple spaces after keyword
     "E272",  # Multiple spaces before keyword
-    "E301",  # Expected 1 blank line, found 0
-    "E302",  # Expected 2 blank lines, found 1
     # pyupgrade
     "UP007",  # Use `X | Y` for type annotations
-    "UP015",  # Unnecessary open mode parameters
     "UP035",  # deprecated-import
     # pylint
-    "PLC1901",  # compare-to-empty-string
     "PLC2401",  # non-ascii-name
+    "PLC2801",  # unnecessary-dunder-call
     "PLR0124",  # Name compared with itself
     "PLR2004",  # Magic value used in comparison
     "PLR6104",  # non-augmented-assignment
@@ -202,12 +199,6 @@ ignore = [
     "PLR0917",  # Too many positional arguments
     # PYI
     "PYI019",  # Methods like ... should return typing.Self instead of custom TypeVar
-    # PyTest
-    "PT013",   # Found incorrect import of pytest, use simple import pytest instead
-    "PT018",   # Assertion should be broken down into multiple parts
-    # simplify
-    "SIM118",  # Use `key in dict` instead of `key in dict.keys()`
-    "SIM300",  # Yoda conditions are discouraged
     # RUFF
     "RUF001",  # ambiguous-unicode-character-string
     "RUF002",  # ambiguous-unicode-character-docstring
@@ -215,8 +206,6 @@ ignore = [
     "RUF012",  # Mutable class attributes should be annotated with typing.ClassVar # FIXME: PEP 603
     "RUF013",  # PEP 484 prohibits implicit Optional # FIXME: https://github.com/astral-sh/ruff/issues/9334
     "RUF022",  # __all__ not sorted
-    "RUF023",  # __slots__ not sorted
-    "RUF025",  # use dict.fromkeys instead of dict comprehension
     # tryceratops
     "TRY003",  # Avoid specifying long messages outside the exception class
     # refurb
