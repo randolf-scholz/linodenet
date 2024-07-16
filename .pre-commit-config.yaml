@@ -68,7 +68,7 @@ repos:
         files: (^src/|^tests/)
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+    rev: v0.5.2
     hooks:
       - id: ruff
         files: (^src/|^tests/)
@@ -86,7 +86,7 @@ repos:
         files: ^dev/
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.2.18
+    rev: v0.2.38
     hooks:
       # pygrep hooks
       - id: check-separator-length
@@ -119,13 +119,11 @@ repos:
       # script-based hooks
       - id: pyproject-validate-version
       - id: pyproject-update-deps
-      - id: pyproject-check-deps
-        args: ["--known-unused-deps", "tensorboard", "pydantic"]
       - id: python-check-clean-interface
         files: 'src/'
   # markdownlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.40.0
+    rev: v0.41.0
     hooks:
       - id: markdownlint
         args:
@@ -157,7 +155,7 @@ repos:
         - "--"
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.362
+    rev: v1.1.371
     hooks:
       - id: pyright
         # REF: https://stackoverflow.com/a/20401674

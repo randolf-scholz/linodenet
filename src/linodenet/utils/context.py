@@ -64,13 +64,13 @@ class timer(ContextDecorator):
     r"""Elapsed time of the timer in seconds."""
 
     def __enter__(self) -> Self:
-        self.LOGGER.info("Flushing pending writes.")
+        # flush pending writes
         sys.stdout.flush()
         sys.stderr.flush()
-        self.LOGGER.info("Disabling garbage collection.")
+        # disable garbage collection
         gc.collect()
         gc.disable()
-        self.LOGGER.info("Starting timer.")
+        # start timer
         self.start_time = perf_counter_ns()
         return self
 
@@ -81,9 +81,10 @@ class timer(ContextDecorator):
         exc_tb: TracebackType | None,
         /,
     ) -> Literal[False]:
+        # stop timer
         self.end_time = perf_counter_ns()
         self.elapsed = (self.end_time - self.start_time) / 10**9
-        self.LOGGER.info("Stopped timer.")
+        # re-enable garbage collection
         gc.enable()
-        self.LOGGER.info("Re-Enabled garbage collection.")
+        gc.collect()
         return False
