@@ -4,7 +4,7 @@ from linodenet.regularizations import (
     FUNCTIONAL_REGULARIZATIONS,
     MODULAR_REGULARIZATIONS,
 )
-from test_utils import camel2snake, snake2camel
+from tests.test_utils import camel2snake, snake2camel
 
 
 def test_modular_and_functional():

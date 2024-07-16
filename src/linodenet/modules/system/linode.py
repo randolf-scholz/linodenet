@@ -90,7 +90,7 @@ class LinODECell(nn.Module):
             match kernel_initialization:
                 case None:
                     return lambda: gaussian(input_size)
-                case str() as key:
+                case str(key):
                     assert key in INITIALIZATIONS, "Unknown initialization!"
                     _init = INITIALIZATIONS[key]
                     return lambda: _init(input_size)
@@ -119,7 +119,7 @@ class LinODECell(nn.Module):
             match kernel_parametrization:
                 case None:
                     return FUNCTIONAL_PROJECTIONS["identity"]
-                case str() as key:
+                case str(key):
                     assert key in FUNCTIONAL_PROJECTIONS
                     return FUNCTIONAL_PROJECTIONS[key]
                 case Callable() as func:  # type: ignore[misc]

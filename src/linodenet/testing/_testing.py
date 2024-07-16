@@ -115,7 +115,7 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
         case nn.Module() as module:
             target_device = None if device is None else torch.device(device)
             return module.to(device=target_device)
-        case None | bool() | int() | float() | str() as scalar:  # Scalar
+        case (None | bool() | int() | float() | str()) as scalar:  # Scalar
             # FIXME: https://github.com/python/cpython/issues/106246
             return scalar
         case Mapping() as mapping:

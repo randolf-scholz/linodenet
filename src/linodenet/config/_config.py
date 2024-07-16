@@ -1,4 +1,5 @@
 r"""LinODE-Net Configuration."""
+# ruff: noqa: N802
 
 __all__ = [
     # Constants
@@ -46,14 +47,14 @@ def generate_folders(dirs: str | list | dict, /, *, parent: Path) -> None:
         https://stackoverflow.com/a/22058144/9318372
     """
     match dirs:
-        case str() as string:
-            path = parent.joinpath(string)
+        case str(name):
+            path = parent.joinpath(name)
             path.mkdir(parents=True, exist_ok=True)
-        case list() as lst:
-            for item in lst:
+        case list(items):
+            for item in items:
                 generate_folders(item, parent=parent)
-        case dict() as d:
-            for key, value in d.items():
+        case dict(mapping):
+            for key, value in mapping.items():
                 generate_folders(value, parent=parent.joinpath(key))
         case _:
             raise TypeError
@@ -98,6 +99,8 @@ class Project:
     @cached_property
     def ROOT_PACKAGE(self) -> ModuleType:
         r"""Get project root package."""
+        if __package__ is None:
+            raise ValueError(f"Unexpected package: {__package__=}")
         hierarchy = __package__.split(".")
         return import_module(hierarchy[0])
 

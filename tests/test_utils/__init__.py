@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 
-from test_utils._test_utils import (
+from tests.test_utils._test_utils import (
     camel2snake,
     geometric_mean,
     scaled_norm,

@@ -14,7 +14,7 @@ from typing_extensions import Any, Literal, Optional
 
 from linodenet.config import PROJECT
 from linodenet.modules import LinODE
-from test_utils import scaled_norm, visualize_distribution
+from tests.test_utils import scaled_norm, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)

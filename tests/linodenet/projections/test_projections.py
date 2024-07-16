@@ -8,7 +8,7 @@ from linodenet.projections import (
     MODULAR_PROJECTIONS,
 )
 from linodenet.testing import MATRIX_TESTS
-from test_utils import camel2snake, snake2camel
+from tests.test_utils import camel2snake, snake2camel
 
 
 @pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)

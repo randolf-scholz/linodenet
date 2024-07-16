@@ -96,6 +96,7 @@ repos:
       - id: python-no-builtin-eval
       - id: python-rename-axes-axis
       - id: python-system-exit
+      - id: python-match-case-builtins
       # ast-based hooks
       - id: python-check-dunder-all
         files: '^src/'
@@ -119,8 +120,12 @@ repos:
       # script-based hooks
       - id: pyproject-validate-version
       - id: pyproject-update-deps
+      - id: pyproject-check-unmaintained
       - id: python-check-clean-interface
         files: 'src/'
+      # other hooks
+      - id: check-resolved-github-issues
+        files: '^src/|^tests/'
   # markdownlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.41.0

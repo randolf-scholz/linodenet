@@ -141,7 +141,7 @@ def filter_from_config(**config: Any) -> Filter: ...
 def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
     r"""Initialize from a configuration."""
     match filter_kind:
-        case str() as name:
+        case str(name):
             filter_class = FILTERS[name]
             filter = _make_filter(filter_class, **config)
         case type() as filter_class if issubclass(filter_class, nn.Module):
