@@ -27,7 +27,6 @@ from collections.abc import Sequence
 from math import prod, sqrt
 
 import torch
-from numpy.typing import NDArray
 from scipy import stats
 from torch import Tensor, device as Device, dtype as Dtype
 from typing_extensions import Optional, Protocol, runtime_checkable
@@ -162,7 +161,7 @@ def orthogonal(
     num = prod(batch)
     shape = (*batch, dim, dim)
 
-    A: NDArray = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
+    A = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
     if dtype is None:
         dtype = torch.float32
     return torch.from_numpy(A).to(dtype=dtype, device=device)
@@ -184,7 +183,7 @@ def special_orthogonal(
     num = prod(batch)
     shape = (*batch, dim, dim)
 
-    A: NDArray = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
+    A = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
     if dtype is None:
         dtype = torch.float32
     return torch.from_numpy(A).to(dtype=dtype, device=device)

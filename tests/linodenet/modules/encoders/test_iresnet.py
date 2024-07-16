@@ -22,7 +22,7 @@ __logger__ = logging.getLogger(__name__)
 
 
 @pytest.mark.flaky(reruns=3)
-def test_LinearContraction(
+def test_linear_contraction(
     make_plots: bool,
     *,
     num_sample: Optional[int] = None,
@@ -84,7 +84,7 @@ def test_LinearContraction(
 
 
 @pytest.mark.flaky(reruns=3)
-def test_iResNetBlock(
+def test_invertible_resnet_block(
     make_plots: bool,
     *,
     num_sample: Optional[int] = None,
@@ -169,7 +169,13 @@ def test_iResNetBlock(
 
     LOGGER.info("generating figure")
     fig, ax = plt.subplots(
-        ncols=2, nrows=2, figsize=(8, 5), tight_layout=True, sharex="row", sharey="row"
+        ncols=2,
+        nrows=2,
+        figsize=(8, 5),
+        tight_layout=True,
+        sharex="row",
+        sharey="row",
+        squeeze=False,
     )
 
     visualize_distribution(forward_inverse_error, ax=ax[0, 0], extra_stats=extra_stats)

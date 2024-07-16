@@ -18,11 +18,10 @@ from collections.abc import Mapping
 from copy import deepcopy
 from functools import wraps
 from importlib import import_module
-from types import ModuleType
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Any
+from typing_extensions import Any, Self
 
 from linodenet.config import CONFIG
 from linodenet.types import M
@@ -30,7 +29,7 @@ from linodenet.types import M
 __logger__ = logging.getLogger(__name__)
 
 
-def autojit(base_class: type[M]) -> type[M]:
+def autojit(base_class: type[M], /) -> type[M]:
     r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
 
     Makes it so that
@@ -45,24 +44,30 @@ def autojit(base_class: type[M]) -> type[M]:
 
     are (roughly?) equivalent.
     """
-    assert issubclass(base_class, nn.Module)
+    if not isinstance(base_class, type):
+        raise TypeError("Expected a class.")
+    if not issubclass(base_class, nn.Module):
+        raise TypeError("Expected a subclass of nn.Module.")
 
     @wraps(base_class, updated=())
-    class WrappedClass(base_class):  # type: ignore[misc, valid-type]
+    class WrappedClass(base_class):  # type: ignore[valid-type,misc]
         r"""A simple Wrapper."""
 
-        # noinspection PyArgumentList
-        def __new__(cls, *args: Any, **kwargs: Any) -> M:  # type: ignore[misc]
+        def __new__(cls, *args: Any, **kwargs: Any) -> Self:
             # Note: If __new__() does not return an instance of cls,
-            # then the new instance's __init__() method will not be invoked.
-            instance: M = base_class(*args, **kwargs)
+            #   then the new instance's __init__() method will not be invoked.
+            instance = base_class(*args, **kwargs)
 
             if CONFIG.autojit:
-                scripted: M = jit.script(instance)
-                return scripted
-            return instance
+                scripted = jit.script(instance)
+                return scripted  # type: ignore[return-value]
+            return instance  # type: ignore[return-value]
 
-    assert issubclass(WrappedClass, base_class)
+    if not isinstance(WrappedClass, type):
+        raise TypeError(f"Expected a class, got {WrappedClass}.")
+    if not issubclass(WrappedClass, base_class):
+        raise TypeError(f"Expected {WrappedClass} to be a subclass of {base_class}.")
+
     return WrappedClass
 
 
@@ -131,7 +136,7 @@ def initialize_from_dict(defaults: Mapping[str, Any], /, **kwargs: Any) -> nn.Mo
     class_name: str = config.pop("__name__")
 
     try:  # import the module
-        library: ModuleType = import_module(library_name)
+        library = import_module(library_name)
     except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(f"Failed to import {library_name}") from exc
 
