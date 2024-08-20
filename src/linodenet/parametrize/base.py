@@ -84,11 +84,12 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
+from typing import Any, Literal, Protocol, Self
 
 import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
-from typing_extensions import Any, Literal, Protocol, Self, TypeVar, runtime_checkable
+from typing_extensions import TypeVar, runtime_checkable
 
 Module = TypeVar("Module", bound=nn.Module)
 

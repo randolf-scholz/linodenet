@@ -1,7 +1,7 @@
 exclude: '(\.git/|\.venv/|\.idea/|\docs/_build/|bugs/)'
 minimum_pre_commit_version: 3.6.0
 default_language_version:
-  python: python3.11
+  python: python3.12
   node: "20.10.0"
 repos:
   # https://pre-commit.com/hooks.html
@@ -65,28 +65,28 @@ repos:
     rev: v0.3.1
     hooks:
       - id: absolufy-imports
-        files: (^src/|^tests/)
+        files: '^src/|^tests/'
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.2
+    rev: v0.6.1
     hooks:
       - id: ruff
-        files: (^src/|^tests/)
+        files: '^src/|^tests/'
       - id: ruff
         name: ruff-isort
-        files: (^src/|^tests/)
+        files: '^src/|^tests/'
         args: ["--select", "I", "--fix"]
       - id: ruff-format
-        files: (^src/|^tests/)
+        files: '^src/|^tests/'
   # nbstripout-fast
   - repo: https://github.com/deshaw/nbstripout-fast.git
     rev: v1.0.4
     hooks:
       - id: nbstripout-fast
-        files: ^dev/
+        files: '^dev/'
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.2.38
+    rev: v0.3.5.9
     hooks:
       # pygrep hooks
       - id: check-separator-length
@@ -101,6 +101,8 @@ repos:
       - id: python-check-dunder-all
         files: '^src/'
       - id: python-check-typing
+        args: ["--check-no-return-union", "--check-concrete"]
+        files: '^src/|tests/'
       - id: python-direct-imports
       - id: python-no-mixed-args
         files: '^src/'
@@ -142,6 +144,11 @@ repos:
     hooks:
     - id: shellcheck
       args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
+  # tach
+  - repo: https://github.com/gauge-sh/tach-pre-commit
+    rev: v0.10.0 # change this to the latest tag!
+    hooks:
+      - id: tach
   # mypy
   - repo: local
     hooks:
@@ -150,7 +157,7 @@ repos:
       language: system
       require_serial: true
       types_or: [python, pyi]
-      files: (^src/|^tests/)
+      files: '^src/|^tests/'
       entry: mypy
       args:
         - "--scripts-are-modules"
@@ -160,9 +167,19 @@ repos:
         - "--"
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.371
+    rev: v1.1.376
     hooks:
       - id: pyright
         # REF: https://stackoverflow.com/a/20401674
-        entry: sh -c '! script -c "pyright $*" /dev/null | grep --color=never -Po "(?<=$PWD/)(.*:.*)"' --
-        files: (^src/|^tests/)
+#        entry: sh -c '! script -c "pyright $*" /dev/null | grep --color=never -Po "(?<=$PWD/)(.*:.*)"' --
+        entry: |
+          sh -c '
+              result=$(script -c "pyright $*" /dev/null | grep --color=never -Po "(?<=$PWD/)(.*:.*)");
+              count=$(echo -n "$result" | grep -c "^");
+              if [ "$count" -ne 0 ]; then
+                  echo "$result";
+                  echo "\033[1;31mFound ${count} errors\033[0m";
+                  exit 1;
+              fi
+          ' --
+        files: '^src/|^tests/'

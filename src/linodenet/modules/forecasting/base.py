@@ -6,10 +6,10 @@ __all__ = [
 ]
 
 from abc import abstractmethod
+from typing import Optional, Protocol
 
 from torch import Tensor
 from torch.distributions import Distribution
-from typing_extensions import Optional, Protocol
 
 
 class ForecastingModel(Protocol):

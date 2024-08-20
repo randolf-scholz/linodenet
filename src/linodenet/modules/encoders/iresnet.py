@@ -11,12 +11,12 @@ __all__ = [
 ]
 
 from math import sqrt
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
-from typing_extensions import Any, Final, Optional
 
 from linodenet.activations import MODULAR_ACTIVATIONS, Activation
 from linodenet.modules.layers import ReZeroCell

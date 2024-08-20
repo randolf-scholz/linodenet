@@ -33,11 +33,11 @@ __all__ = [
 
 from collections.abc import Callable
 from math import sqrt
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 from torch.nn import GRUCell, LSTMCell, RNNCell
-from typing_extensions import Any, Final, Optional
 
 from linodenet.activations import get_activation
 from linodenet.modules.layers import ReverseDense

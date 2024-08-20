@@ -44,16 +44,12 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
+from typing import Any, Final, Optional, Protocol, overload
 
 import torch
 from torch import Tensor, jit, nn
 from typing_extensions import (
-    Any,
-    Final,
-    Optional,
-    Protocol,
     TypeVar,
-    overload,
     runtime_checkable,
 )
 

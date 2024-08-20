@@ -23,9 +23,10 @@ __all__ = [
     "is_upper_triangular",
 ]
 
+from typing import Protocol
+
 import torch
 from torch import Tensor
-from typing_extensions import Protocol
 
 from linodenet.constants import ATOL, ONE, RTOL, TRUE, ZERO
 

@@ -9,10 +9,10 @@ __all__ = [
 ]
 
 from collections.abc import Iterable, Mapping
+from typing import Any, Final, Optional, Self
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Any, Final, Optional, Self
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.utils import deep_dict_update, initialize_from_dict

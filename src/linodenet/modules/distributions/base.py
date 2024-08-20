@@ -16,13 +16,13 @@ __all__ = [
 ]
 
 from abc import abstractmethod
+from typing import Protocol, SupportsInt, overload
 
 import torch
 from torch import Tensor
 from torch.distributions import (
     Distribution,
 )
-from typing_extensions import Protocol, SupportsInt, overload
 
 from linodenet.types import Range
 

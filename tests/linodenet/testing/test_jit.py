@@ -1,10 +1,11 @@
 r"""Some tests regarding the JIT compiler."""
 
+from typing import Any
+
 import pytest
 import torch
 from torch import Tensor, jit, nn
 from torch.nn.utils import parametrize as torch_parametrize
-from typing_extensions import Any
 
 from linodenet.testing import check_object
 

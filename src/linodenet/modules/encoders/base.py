@@ -14,9 +14,10 @@ __all__ = [
 ]
 
 from abc import abstractmethod
+from typing import Protocol
 
 from torch import Tensor, nn
-from typing_extensions import Protocol, runtime_checkable
+from typing_extensions import runtime_checkable
 
 
 @runtime_checkable

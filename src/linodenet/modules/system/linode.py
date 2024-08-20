@@ -7,10 +7,10 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Iterable
+from typing import Any, Final
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Any, Final
 
 from linodenet.initializations import INITIALIZATIONS, Initialization, gaussian
 from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection

@@ -29,10 +29,10 @@ __all__ = [
 ]
 
 from abc import abstractmethod
+from typing import Final
 
 import torch
 from torch import BoolTensor, Tensor, nn
-from typing_extensions import Final
 
 from linodenet.constants import TRUE
 from linodenet.regularizations.functional import (

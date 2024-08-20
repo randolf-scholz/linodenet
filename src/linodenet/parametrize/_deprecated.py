@@ -10,9 +10,9 @@ import warnings
 from collections.abc import Callable
 from contextlib import ContextDecorator
 from types import MethodType, TracebackType
+from typing import ClassVar, Literal, Self
 
 from torch import Tensor, nn
-from typing_extensions import ClassVar, Literal, Self
 
 
 def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) -> None:

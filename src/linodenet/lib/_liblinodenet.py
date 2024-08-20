@@ -23,10 +23,12 @@ __all__ = [
 
 import warnings
 from pathlib import Path
+from typing import Any, Optional, Protocol
 
 import torch
 from torch import Tensor
-from typing_extensions import Any, Optional, Protocol, runtime_checkable
+from torch.utils import cpp_extension
+from typing_extensions import runtime_checkable
 
 # constants
 # we use FP32 machine epsilon as default tolerance
@@ -121,7 +123,7 @@ r"""List of custom operators."""
 def load_function(name: str, /) -> Any:
     r"""Load a function from the custom library."""
     try:  # compile the function
-        torch.utils.cpp_extension.load(  # pyright: ignore[reportAttributeAccessIssue]
+        cpp_extension.load(  # pyright: ignore[reportAttributeAccessIssue]
             name=name,
             sources=[SOURCE_DIR / f"{name}.cpp"],  # type: ignore[list-item]
             is_python_module=False,
@@ -146,7 +148,7 @@ except Exception as exc:
     warnings.warn(
         "Custom binaries not found! Trying to compile them on the fly!."
         " Please compile the extension in the linodenet/lib folder."
-        f"\nFull error: {exc}\n{'-' * 80}",
+        f"\nFull error: {exc}\n{"-" * 80}",
         UserWarning,
         stacklevel=2,
     )

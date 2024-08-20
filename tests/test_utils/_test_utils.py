@@ -10,6 +10,8 @@ __all__ = [
 ]
 
 
+from typing import Literal, Optional, TypeAlias
+
 import numpy as np
 import torch
 from matplotlib.axes import Axes
@@ -17,7 +19,6 @@ from matplotlib.offsetbox import AnchoredText
 from numpy.typing import ArrayLike, NDArray
 from scipy.stats import mode
 from torch import Tensor, jit
-from typing_extensions import Literal, Optional, TypeAlias
 
 Location: TypeAlias = Literal[
     "upper right",

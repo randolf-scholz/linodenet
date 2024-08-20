@@ -12,9 +12,9 @@ __all__ = [
 ]
 
 from collections.abc import Iterable
+from typing import Any
 
 from torch import Tensor, jit, nn
-from typing_extensions import Any
 
 from linodenet.modules.layers import (
     ReverseDense,

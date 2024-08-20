@@ -31,9 +31,9 @@ __all__ = [
 
 
 from abc import abstractmethod
+from typing import Protocol
 
 from torch import Tensor
-from typing_extensions import Protocol
 
 from linodenet.types import S, T
 

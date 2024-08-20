@@ -14,8 +14,7 @@ from contextlib import AbstractContextManager, ContextDecorator
 from dataclasses import KW_ONLY, dataclass
 from time import perf_counter_ns
 from types import FrameType, TracebackType
-
-from typing_extensions import ClassVar, Literal, Never, Self
+from typing import ClassVar, Literal, Never, Self
 
 
 class timer(ContextDecorator):

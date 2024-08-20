@@ -2,6 +2,7 @@ r"""Test error of linear ODE against odeint."""
 
 import logging
 import random
+from typing import Any, Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +11,6 @@ import torch
 from numpy.typing import NDArray
 from scipy.integrate import odeint
 from tqdm.autonotebook import trange
-from typing_extensions import Any, Literal, Optional
 
 from linodenet.config import PROJECT
 from linodenet.modules import LinODE

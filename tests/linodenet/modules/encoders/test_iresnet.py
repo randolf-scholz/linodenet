@@ -6,12 +6,12 @@ r"""Test the iResNet components.
 
 import logging
 import random
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import pytest
 import torch
 from torch import Tensor
-from typing_extensions import Optional
 
 from linodenet.config import PROJECT
 from linodenet.modules import LinearContraction, iResNetBlock

@@ -23,9 +23,10 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from typing import Final, Protocol, SupportsInt, TypeAlias
 
 from torch import device, dtype, nn
-from typing_extensions import Final, Protocol, SupportsInt, TypeAlias, TypeVar
+from typing_extensions import TypeVar
 
 # region static type aliases -----------------------------------------------------------
 Scalar: TypeAlias = None | bool | int | float | str

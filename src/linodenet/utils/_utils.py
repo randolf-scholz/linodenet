@@ -18,10 +18,10 @@ from collections.abc import Mapping
 from copy import deepcopy
 from functools import wraps
 from importlib import import_module
+from typing import Any, Self
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Any, Self
 
 from linodenet.config import CONFIG
 from linodenet.types import M

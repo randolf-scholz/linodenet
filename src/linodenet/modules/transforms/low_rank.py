@@ -2,9 +2,10 @@ r"""Low-rank perturbation layer."""
 
 __all__ = ["iLowRankLayer"]
 
+from typing import Any, Final
+
 import torch
 from torch import Tensor, nn
-from typing_extensions import Any, Final
 
 from linodenet.initializations import low_rank
 from linodenet.utils import deep_dict_update

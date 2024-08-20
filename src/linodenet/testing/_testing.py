@@ -36,10 +36,10 @@ import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from itertools import chain
+from typing import Any, Optional, TypeAlias, overload
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Any, Optional, TypeAlias, overload
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.types import DeviceArg, M, Nested, Scalar, T
@@ -210,7 +210,7 @@ def make_tensors_parameters(x, /):
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
     if isinstance(x, Tensor):
         return nn.Parameter(x) if not isinstance(x, nn.Parameter) else x
-    if isinstance(x, Scalar):  # type: ignore[misc, arg-type]
+    if isinstance(x, Scalar):
         return x
     if isinstance(x, Mapping):
         return {key: make_tensors_parameters(val) for key, val in x.items()}

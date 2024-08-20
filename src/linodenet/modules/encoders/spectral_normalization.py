@@ -28,10 +28,11 @@ __all__ = [
     "NaiveLinearContraction",
 ]
 
+from typing import Final, Optional
+
 import torch
 from torch import Tensor, jit, nn
 from torch.nn import functional
-from typing_extensions import Final, Optional
 
 from linodenet.lib import singular_triplet
 

@@ -11,10 +11,10 @@ __all__ = [
 ]
 
 from collections.abc import Callable
+from typing import Protocol
 
 import torch
 from torch import Tensor, nn
-from typing_extensions import Protocol
 
 from linodenet.constants import ATOL, ONE, RTOL, ZERO
 
@@ -193,7 +193,7 @@ def is_backward_stable(
     if check_params:
         if not isinstance(func, nn.Module):
             raise TypeError(f"Expected a module, got {type(func)}")
-        param_grads = (p.grad for p in func.parameters() if p.grad is not None)  # type: ignore[unreachable]
+        param_grads = (p.grad for p in func.parameters() if p.grad is not None)
         passed &= all(
             check_zero_mean_unit_variance(grad, rtol=rtol, atol=atol)
             for grad in param_grads
@@ -258,6 +258,6 @@ def assert_backward_stable(
     if check_params:
         if not isinstance(func, nn.Module):
             raise TypeError(f"Expected a module, got {type(func)}")
-        param_grads = (p.grad for p in func.parameters() if p.grad is not None)  # type: ignore[unreachable]
+        param_grads = (p.grad for p in func.parameters() if p.grad is not None)
         for grad in param_grads:
             assert check_zero_mean_unit_variance(grad, rtol=rtol, atol=atol)

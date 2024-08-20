@@ -15,12 +15,12 @@ __all__ = [
 
 from collections.abc import Callable
 from math import sqrt
+from typing import Optional, cast
 
 import torch
 from torch import Tensor, nn
 from torch.nn import init as nn_init
 from torch.nn.functional import dropout, gelu, relu, softmax
-from typing_extensions import Optional, cast
 
 from linodenet.activations import get_activation
 

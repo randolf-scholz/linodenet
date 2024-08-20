@@ -27,11 +27,12 @@ __all__ = [
 ]
 
 from abc import abstractmethod
+from typing import Optional, Protocol
 
 import torch
 from torch import Tensor, nn
 from torch.distributions import Distribution, MultivariateNormal
-from typing_extensions import Optional, Protocol, runtime_checkable
+from typing_extensions import runtime_checkable
 
 from linodenet.constants import EMPTY_SHAPE
 

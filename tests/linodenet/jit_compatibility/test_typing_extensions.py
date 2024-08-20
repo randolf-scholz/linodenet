@@ -1,12 +1,11 @@
 r"""Test if typing_extensions is compatible with torch.jit.script."""
 
 from tempfile import TemporaryDirectory
-from typing import Optional
+from typing import Optional, Optional as OptionalExt
 
 import pytest
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Optional as OptionalExt
 
 
 def foo(x: Tensor, y: Optional[Tensor] = None) -> Tensor:

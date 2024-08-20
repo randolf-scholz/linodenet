@@ -27,15 +27,11 @@ __all__ = [
 
 import warnings
 from abc import abstractmethod
+from typing import Any, Final, Optional, Protocol, Self
 
 import torch
 from torch import Tensor, jit, nn
 from typing_extensions import (
-    Any,
-    Final,
-    Optional,
-    Protocol,
-    Self,
     TypeVar,
     runtime_checkable,
 )

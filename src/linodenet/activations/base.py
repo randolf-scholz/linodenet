@@ -9,12 +9,10 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Callable
+from typing import Concatenate, Protocol, TypeAlias
 
 from torch import Tensor, nn
 from typing_extensions import (
-    Concatenate,
-    Protocol,
-    TypeAlias,
     runtime_checkable,
 )
 

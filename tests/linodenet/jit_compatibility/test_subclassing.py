@@ -1,9 +1,10 @@
 r"""Test JIT compatibility with subclassing."""
 
+from typing import Final, Optional
+
 import pytest
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import Final, Optional
 
 
 class Foo(nn.Module):

@@ -18,10 +18,10 @@ __all__ = [
 
 from collections.abc import Mapping
 from types import MappingProxyType
+from typing import Any, Final, Never
 
 import torch
 from torch import BoolTensor, FloatTensor
-from typing_extensions import Any, Final, Never
 
 EMPTY_MAP: Final[Mapping[Any, Never]] = MappingProxyType({})
 r"""CONSTANT: Immutable Empty dictionary."""
