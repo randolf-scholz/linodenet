@@ -44,14 +44,10 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Any, Final, Optional, Protocol, overload
+from typing import Any, Final, Optional, Protocol, overload, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import (
-    TypeVar,
-    runtime_checkable,
-)
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.utils import try_initialize_from_config
@@ -112,11 +108,9 @@ class Filter(Protocol):
 # NOTE: pre-defined here to avoid circular imports, contents are filled in `__init__.py`
 FILTERS: dict[str, type[Filter]] = {}
 r"""A dictionary of all available filters."""
-F = TypeVar("F", bound=Filter)
-r"""TypeVar for filters."""
 
 
-def _make_filter(filter_type: type[F], **config: Any) -> F:
+def _make_filter[F: Filter](filter_type: type[F], **config: Any) -> F:
     r"""Initialize a filter from a type."""
     try:
         return filter_type(**config)
@@ -127,9 +121,9 @@ def _make_filter(filter_type: type[F], **config: Any) -> F:
 
 
 @overload
-def filter_from_config(filter: F, /) -> F: ...
+def filter_from_config[F: Filter](filter: F, /) -> F: ...
 @overload
-def filter_from_config(filter_kind: type[F], /, **config: Any) -> F: ...
+def filter_from_config[F: Filter](filter_kind: type[F], /, **config: Any) -> F: ...
 @overload
 def filter_from_config(filter_kind: str, /, **config: Any) -> Filter: ...
 @overload

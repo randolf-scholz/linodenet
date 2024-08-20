@@ -16,7 +16,7 @@ import pytest
 import torch
 import torch.utils.cpp_extension
 from pytest_benchmark.fixture import BenchmarkFixture
-from torch import nn
+from torch import Tensor, nn
 
 from linodenet.lib import (
     singular_triplet,
@@ -125,7 +125,7 @@ def test_spectral_norm_forward(
         residual.norm() < ATOL + RTOL * s_native.norm()
     ), "Large error in spectral norm value!"
 
-    def setup():  # get args and kwargs for benchmark
+    def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)
         return (param,), {}
 
@@ -151,7 +151,7 @@ def test_spectral_norm_backward(
     A_original = get_param(shape, device=device, generator=generator)
     g_s = torch.randn((), device=device, generator=generator)
 
-    def backward(s):
+    def backward(s: Tensor, /) -> None:
         loss = g_s * s
         loss.backward()
 
@@ -176,7 +176,7 @@ def test_spectral_norm_backward(
     ), "Large error in spectral norm gradient!"
 
     # perform benchmark
-    def setup():  # get args and kwargs for benchmark
+    def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)
         output = impl(param)
         return (output,), {}
@@ -202,7 +202,7 @@ def test_spectral_norm(
     A_original = get_param(shape, device=device, generator=generator)
     g_s = torch.randn((), device=device, generator=generator)
 
-    def backward(sigma, /):
+    def backward(sigma: Tensor, /) -> None:
         loss = g_s * sigma
         loss.backward()
 
@@ -226,7 +226,7 @@ def test_spectral_norm(
         residual.norm() < ATOL + RTOL * g_native.norm()
     ), "Large error in spectral norm gradient!"
 
-    def func():
+    def func() -> None:
         param = get_param(shape, device=device, generator=generator)
         sigma = impl(param)
         loss = g_s * sigma
@@ -271,7 +271,7 @@ def test_singular_triplet_forward(
         dyadic_custom - dyadic_native
     ).norm() < ATOL + RTOL * dyadic_native.norm(), "Large error in singular vectors!"
 
-    def setup():  # get args and kwargs for benchmark
+    def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)
         return (param,), {}
 
@@ -299,7 +299,7 @@ def test_singular_triplet_backward(
     A_original = get_param(shape, device=device, generator=generator)
     g_s = torch.randn((), device=device, generator=generator)
 
-    def backward(s):
+    def backward(s: Tensor, /) -> None:
         loss = g_s * s
         loss.backward()
 
@@ -322,7 +322,7 @@ def test_singular_triplet_backward(
         g_custom - g_native
     ).norm() < ATOL + RTOL * g_native.norm(), "Large error in spectral norm gradient!"
 
-    def setup():  # get args and kwargs for benchmark
+    def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)
         s, _, _ = impl(param)
         return (s,), {}
@@ -349,7 +349,7 @@ def test_singular_triplet_full_backward(
     g_u = torch.randn(m, device=device)
     g_v = torch.randn(n, device=device)
 
-    def backward(s, u, v):
+    def backward(s: Tensor, u: Tensor, v: Tensor, /) -> None:
         loss = g_s * s + g_u.dot(u) + g_v.dot(v)
         loss.backward()
 
@@ -373,7 +373,7 @@ def test_singular_triplet_full_backward(
         residual.norm() < ATOL + RTOL * g_native.norm()
     ), "Large error in spectral norm gradient!"
 
-    def setup():  # get args and kwargs for benchmark
+    def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)
         s, u, v = impl(param)
         return (s, u, v), {}

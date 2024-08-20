@@ -4,7 +4,7 @@ import torch
 from torch import Tensor, jit
 
 
-def test_ternary():
+def test_ternary() -> None:
     r"""Test JIT compatibility of ternary operations."""
 
     def all_pos(x: Tensor) -> bool:
@@ -17,7 +17,7 @@ def test_ternary():
     assert scripted(arg)
 
 
-def test_zip_strict():
+def test_zip_strict() -> None:
     r"""Test JIT compatibility of `zip(strict=True)`."""
 
     def sum_inner(x_vals: list[Tensor], y_vals: list[Tensor]) -> Tensor:

@@ -60,7 +60,7 @@ def compute_linode_error(
     T = rng.uniform(low=t0, high=t1, size=N - 2)
     T = np.sort([t0, *T, t1]).astype(numpy_dtype)
 
-    def func(_, x):
+    def func(_: NDArray, x: NDArray) -> NDArray:
         return A @ x
 
     X = torch.tensor(odeint(func, x0, T, tfirst=True), dtype=torch_dtype)

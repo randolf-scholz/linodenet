@@ -2,6 +2,7 @@ r"""Compare speed of different aggregation algorithms."""
 
 import pytest
 import torch
+from pytest_benchmark.fixture import BenchmarkFixture
 from torch import Tensor, jit
 
 
@@ -30,27 +31,27 @@ class TestAggregation:
     xxlarge = torch.randn(1_000_000)
     xxxlarge = torch.randn(10_000_000)
 
-    def test_small(self, benchmark, name):
+    def test_small(self, benchmark: BenchmarkFixture, name: str) -> None:
         func = aggregations[name]
         benchmark(func, self.small)
 
-    def test_medium(self, benchmark, name):
+    def test_medium(self, benchmark: BenchmarkFixture, name: str) -> None:
         func = aggregations[name]
         benchmark(func, self.medium)
 
-    def test_large(self, benchmark, name):
+    def test_large(self, benchmark: BenchmarkFixture, name: str) -> None:
         func = aggregations[name]
         benchmark(func, self.large)
 
-    def test_xlarge(self, benchmark, name):
+    def test_xlarge(self, benchmark: BenchmarkFixture, name: str) -> None:
         func = aggregations[name]
         benchmark(func, self.xlarge)
 
-    def test_xxlarge(self, benchmark, name):
+    def test_xxlarge(self, benchmark: BenchmarkFixture, name: str) -> None:
         func = aggregations[name]
         benchmark(func, self.xxlarge)
 
-    def test_xxxlarge(self, benchmark, name):
+    def test_xxxlarge(self, benchmark: BenchmarkFixture, name: str) -> None:
         func = aggregations[name]
         benchmark(func, self.xxxlarge)
 

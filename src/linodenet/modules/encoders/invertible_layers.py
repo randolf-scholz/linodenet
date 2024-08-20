@@ -27,23 +27,14 @@ __all__ = [
 
 import warnings
 from abc import abstractmethod
-from typing import Any, Final, Optional, Protocol, Self
+from typing import Any, Final, Optional, Protocol, Self, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
-from typing_extensions import (
-    TypeVar,
-    runtime_checkable,
-)
-
-U = TypeVar("U")
-U_contra = TypeVar("U_contra", contravariant=True)
-V = TypeVar("V")
-V_co = TypeVar("V_co", covariant=True)
 
 
 @runtime_checkable
-class InvertibleModule(Protocol[U, V]):
+class InvertibleModule[U, V](Protocol):
     r"""Protocol for invertible layers."""
 
     # NOTE: Theoretically, this must be a subclass of nn.Module.
@@ -73,7 +64,7 @@ class InvertibleModule(Protocol[U, V]):
         return self.decode(v)
 
 
-class InvertibleModuleABC(nn.Module, InvertibleModule[U, V]):
+class InvertibleModuleABC[U, V](nn.Module, InvertibleModule[U, V]):
     r"""Abstract base class for invertible layers."""
 
     @abstractmethod

@@ -48,7 +48,7 @@ class InheritedDecoder(WithDecoder):
     r"""Direct subclass of WithDecoder."""
 
 
-def test_with_decoder():
+def test_with_decoder() -> None:
     decoder = nn.Linear(4, 4)
     model = WithDecoder(3, 4, decoder=decoder)
     assert isinstance(model.decoder, nn.Linear)
@@ -77,7 +77,7 @@ def test_with_decoder():
     #     assert deserialized_model.input_size == 3
 
 
-def test_subclass_with_decoder():
+def test_subclass_with_decoder() -> None:
     decoder = nn.Linear(4, 4)
     model = InheritedDecoder(3, 4, decoder=decoder)
     print(model.decoder)

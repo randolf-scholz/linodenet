@@ -36,17 +36,18 @@ import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from copy import deepcopy
 from itertools import chain
-from typing import Any, Optional, TypeAlias, overload
+from typing import Any, Optional, overload
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.types import DeviceArg, M, Nested, Scalar, T
+from linodenet.types import DeviceArg, Nested, Scalar
 
 __logger__ = logging.getLogger(__name__)
-Tree: TypeAlias = Nested[Tensor | Scalar]
-Func: TypeAlias = Callable[..., Nested[Tensor]]
+
+type Tree = Nested[Tensor | Scalar]
+type Func = Callable[..., Nested[Tensor]]
 
 
 def assert_close(
@@ -97,15 +98,15 @@ def get_device(x: nn.Module | Tree, /) -> torch.device:
 
 
 @overload
-def to_device(x: M, /, *, device: DeviceArg = ...) -> M: ...
+def to_device[M: nn.Module](x: M, /, *, device: DeviceArg = ...) -> M: ...
 @overload
 def to_device(x: Tensor, /, *, device: DeviceArg = ...) -> Tensor: ...
 @overload
 def to_device(x: Scalar, /, *, device: DeviceArg = ...) -> Scalar: ...
 @overload
-def to_device(x: Mapping[str, T], /, *, device: DeviceArg = ...) -> dict[str, T]: ...
+def to_device[T](x: Mapping[str, T], /, *, device: DeviceArg = ...) -> dict[str, T]: ...
 @overload
-def to_device(x: Sequence[T], /, *, device: DeviceArg = ...) -> tuple[T, ...]: ...
+def to_device[T](x: Sequence[T], /, *, device: DeviceArg = ...) -> tuple[T, ...]: ...
 def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
     r"""Move a nested tensor to a device."""
     match x:
@@ -202,15 +203,15 @@ def make_tensors_parameters(x: Tensor, /) -> nn.Parameter: ...
 @overload
 def make_tensors_parameters(x: Scalar, /) -> Scalar: ...
 @overload
-def make_tensors_parameters(x: Mapping[str, T], /) -> dict[str, T]: ...
+def make_tensors_parameters[T](x: Mapping[str, T], /) -> dict[str, T]: ...
 @overload
-def make_tensors_parameters(x: Sequence[T], /) -> tuple[T, ...]: ...
+def make_tensors_parameters[T](x: Sequence[T], /) -> tuple[T, ...]: ...
 def make_tensors_parameters(x, /):
     r"""Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
     if isinstance(x, Tensor):
         return nn.Parameter(x) if not isinstance(x, nn.Parameter) else x
-    if isinstance(x, Scalar):
+    if isinstance(x, Scalar.__value__):
         return x
     if isinstance(x, Mapping):
         return {key: make_tensors_parameters(val) for key, val in x.items()}
@@ -287,26 +288,28 @@ def check_backward(
 def check_jit_scripting(module: nn.Module, /) -> nn.Module: ...
 @overload
 def check_jit_scripting(func: Func, /) -> Func: ...
-def check_jit_scripting(module_or_func, /):
+def check_jit_scripting(arg: Func | nn.Module, /) -> Func | nn.Module:
     r"""Test JIT compilation."""
     try:
-        scripted = jit.script(module_or_func)
+        scripted = jit.script(arg)
     except Exception as exc:
         raise RuntimeError("Model JIT compilation Failed!") from exc
     return scripted
 
 
 @overload
-def check_jit_serialization(
-    module: nn.Module, /, *, device: DeviceArg = ...
-) -> nn.Module: ...
+def check_jit_serialization[M: nn.Module](
+    module: M, /, *, device: DeviceArg = ...
+) -> M: ...
 @overload
 def check_jit_serialization(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
-def check_jit_serialization(scripted, /, *, device=None):
+def check_jit_serialization(
+    arg: Func | nn.Module, /, *, device: DeviceArg = None
+) -> Func | nn.Module:
     r"""Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
         try:
-            jit.save(scripted, file)
+            jit.save(arg, file)
             file.seek(0)
         except Exception as exc:
             raise RuntimeError("Model saving failed!") from exc
@@ -322,15 +325,17 @@ def check_jit_serialization(scripted, /, *, device=None):
 def check_jit(module: nn.Module, /, *, device: DeviceArg = ...) -> nn.Module: ...
 @overload
 def check_jit(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
-def check_jit(module_or_func, /, *, device=None):
+def check_jit(
+    arg: Func | nn.Module, /, *, device: DeviceArg = None
+) -> Func | nn.Module:
     r"""Test JIT compilation+serialization."""
     # check if scripting and serialization works
-    scripted = check_jit_scripting(module_or_func)
+    scripted = check_jit_scripting(arg)
     loaded = check_jit_serialization(scripted, device=device)
     return loaded
 
 
-def check_initialization(
+def check_initialization[M: nn.Module](
     module_type: type[M],
     /,
     *,

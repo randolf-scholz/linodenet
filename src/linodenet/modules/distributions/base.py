@@ -43,7 +43,9 @@ class Marginalizable(DistributionProto, Protocol):
     r"""A protocol for marginalizable distributions."""
 
     @abstractmethod
-    def marginalize(self, x, /, *, dims: tuple[int, ...]) -> "DistributionProto":
+    def marginalize(
+        self, x: Tensor, /, *, dims: tuple[int, ...]
+    ) -> "DistributionProto":
         r"""Marginalize over the given dimensions."""
         ...
 
@@ -85,7 +87,7 @@ class Product(Distribution):
     def __getitem__(self, index: int, /) -> Distribution: ...
     @overload
     def __getitem__(self, index: Range[int], /) -> "Product": ...
-    def __getitem__(self, index, /):
+    def __getitem__(self, index: int | Range[int], /) -> "Distribution | Product":
         r"""Get the marginal distribution at the given index."""
         if isinstance(index, SupportsInt):
             return self.marginals[int(index)]
@@ -106,7 +108,7 @@ class Mixture(Distribution):
     distributions: list[Distribution]
     weights: Tensor
 
-    def __init__(self, distributions, weights):
+    def __init__(self, distributions: list[Distribution], weights: Tensor) -> None:
         super().__init__()
         self.distributions = distributions
         self.weights = weights
@@ -115,13 +117,13 @@ class Mixture(Distribution):
     def __getitem__(self, index: int, /) -> Distribution: ...
     @overload
     def __getitem__(self, index: Range[int], /) -> "Mixture": ...
-    def __getitem__(self, index, /):
+    def __getitem__(self, index: int | Range[int], /) -> "Distribution | Mixture":
         r"""Returns the sub-mixture at the given index."""
         if isinstance(index, SupportsInt):
             return self.distributions[int(index)]
         return Mixture(self.distributions[index], self.weights[index])
 
-    def marginalize(self):
+    def marginalize(self) -> "Mixture":
         r"""Return the marginal distribution.
 
         For a mixture, we have:

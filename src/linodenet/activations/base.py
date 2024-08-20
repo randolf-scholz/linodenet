@@ -9,14 +9,11 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import Concatenate, Protocol, TypeAlias
+from typing import Concatenate, Protocol, runtime_checkable
 
 from torch import Tensor, nn
-from typing_extensions import (
-    runtime_checkable,
-)
 
-GenericActivation: TypeAlias = Callable[Concatenate[Tensor, ...], Tensor]
+type GenericActivation = Callable[Concatenate[Tensor, ...], Tensor]
 r"""Type alias for generic activation functions (may require additional args!)."""
 
 

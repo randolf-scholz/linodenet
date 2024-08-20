@@ -176,7 +176,6 @@ select = [
 ]
 ignore = [
     # FIXME: temporary
-    "S101",     # use of `assert`
     "FBT001",      # JIT does not support KW-only with defaults
     "FBT002",      # JIT does not support KW-only with defaults
     "FBT003",      # JIT does not support KW-only with defaults
@@ -211,6 +210,7 @@ ignore = [
     "FURB140",  # reimplemented-starmap (less efficient than comprehension)
     # naming
     "N801",     # class names should use CapWords convention
+    "N803",     # argument name should be lowercase
     "N806",     # variable in function should be lowercase
     "N812",     # lowercase imported as non-lowercase
     # pandas
@@ -249,7 +249,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "N803"]
+"**/tests/*" = ["S101", "N803"]
 "src/linodenet/testing/*" = ["S101"]
 
 [tool.ruff.lint.pylint]

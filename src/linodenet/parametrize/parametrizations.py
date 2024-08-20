@@ -183,10 +183,10 @@ class CayleyMap(ParametrizationBase):
 class MatrixExponential(ParametrizationBase):
     r"""Parametrize a matrix via matrix exponential."""
 
-    def forward(self, X):
+    def forward(self, X: Tensor) -> Tensor:
         return torch.matrix_exp(X)
 
-    def right_inverse(self, y):
+    def right_inverse(self, y: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
         This requires the matrix logarithm, which is not implemented in PyTorch.
@@ -198,10 +198,10 @@ class MatrixExponential(ParametrizationBase):
 class GramMatrix(ParametrizationBase):
     r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
-    def forward(self, X):
+    def forward(self, X: Tensor) -> Tensor:
         return X.T @ X
 
-    def right_inverse(self, y):
+    def right_inverse(self, y: Tensor) -> Tensor:
         """.. Signature:: ``(..., n, n) -> (..., n, n)``.
 
         This requires the matrix square root, which is not implemented in PyTorch.
@@ -285,7 +285,7 @@ class Orthogonal(ParametrizationBase):
 class Traceless(ParametrizationBase):
     r"""Parametrize a matrix to be traceless."""
 
-    def forward(self, X):
+    def forward(self, X: Tensor) -> Tensor:
         return projections.traceless(X)
 
 

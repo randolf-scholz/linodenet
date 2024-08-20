@@ -85,7 +85,7 @@ class LinODECell(nn.Module):
         scalar_learnable = config["scalar_learnable"]
         del config
 
-        def kernel_initialization_dispatch():
+        def kernel_initialization_dispatch() -> Callable[[], Tensor]:
             r"""Dispatch the kernel initialization."""
             match kernel_initialization:
                 case None:
@@ -114,7 +114,7 @@ class LinODECell(nn.Module):
                     raise TypeError(f"{type(kernel_initialization)=} not supported!")
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript
-        def kernel_parametrization_dispatch():
+        def kernel_parametrization_dispatch() -> SelfMap[Tensor]:
             r"""Dispatch the kernel parametrization."""
             match kernel_parametrization:
                 case None:

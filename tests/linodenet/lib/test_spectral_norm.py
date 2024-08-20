@@ -47,27 +47,27 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     A_native = nn.Parameter(A0.clone())
     with timer() as time:
         s_native = spectral_norm_native(A_native)
-    time_val_native = time.elapsed
+    time_val_native = time.elapsed_time
 
     # Native Backward
     with timer() as time:
         s_native.backward()
         assert A_native.grad is not None
         g_native = A_native.grad.clone().detach()
-    time_grad_native = time.elapsed
+    time_grad_native = time.elapsed_time
 
     # Custom Forward
     A_custom = nn.Parameter(A0.clone())
     with timer() as time:
         s_custom = spectral_norm(A_custom)
-    time_val_custom = time.elapsed
+    time_val_custom = time.elapsed_time
 
     # Custom Backward
     with timer() as time:
         s_custom.backward()
         assert A_custom.grad is not None
         g_custom = A_custom.grad.clone().detach()
-    time_grad_custom = time.elapsed
+    time_grad_custom = time.elapsed_time
 
     err_value = torch.norm(s_custom - s_native) / torch.norm(s_native)
     err_grads = torch.norm(g_custom - g_native) / torch.norm(g_native)
@@ -99,7 +99,7 @@ def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) 
     A_native = nn.Parameter(A0.clone())
     with timer() as time:
         s_native, u_native, v_native = singular_triplet_native(A_native)
-    time_val_native = time.elapsed
+    time_val_native = time.elapsed_time
 
     # Native Backward
     with timer() as time:
@@ -107,13 +107,13 @@ def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) 
         r_native.backward()
         assert A_native.grad is not None
         g_native = A_native.grad.clone().detach()
-    time_grad_native = time.elapsed
+    time_grad_native = time.elapsed_time
 
     # Custom Forward
     A_custom = nn.Parameter(A0.clone())
     with timer() as time:
         s_custom, u_custom, v_custom = singular_triplet(A_custom)
-    time_val_custom = time.elapsed
+    time_val_custom = time.elapsed_time
 
     # Adjust signs so they match
     if (u_custom - u_native).norm() > (u_custom + u_native).norm():
@@ -127,7 +127,7 @@ def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) 
         r_custom.backward()
         assert A_custom.grad is not None
         g_custom = A_custom.grad.clone().detach()
-    time_grad_custom = time.elapsed
+    time_grad_custom = time.elapsed_time
 
     err_s = (s_custom - s_native).norm() / s_native.norm()
     err_u = (u_custom - u_native).norm() / u_native.norm()

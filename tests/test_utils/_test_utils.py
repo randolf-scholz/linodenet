@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 
-from typing import Literal, Optional, TypeAlias
+from typing import Literal, Optional
 
 import numpy as np
 import torch
@@ -20,7 +20,7 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.stats import mode
 from torch import Tensor, jit
 
-Location: TypeAlias = Literal[
+type Location = Literal[
     "upper right",
     "upper left",
     "lower left",

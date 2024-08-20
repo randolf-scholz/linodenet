@@ -10,7 +10,7 @@ from linodenet.regularizations import (
 
 
 @pytest.mark.parametrize("regularization_name", FUNCTIONAL_REGULARIZATIONS)
-def test_jit_compatibility_functional(regularization_name):
+def test_jit_compatibility_functional(regularization_name: str) -> None:
     r"""Test JIT-compatibility of functional projections."""
     x = torch.randn(4, 4)
     projection = FUNCTIONAL_REGULARIZATIONS[regularization_name]
@@ -26,7 +26,7 @@ def test_jit_compatibility_functional(regularization_name):
 
 
 @pytest.mark.parametrize("regularization_name", MODULAR_REGULARIZATIONS)
-def test_jit_compatibility_modular(regularization_name):
+def test_jit_compatibility_modular(regularization_name: str) -> None:
     r"""Test JIT-compatibility of modular projections."""
     x = torch.randn(4, 4)
     projection_type = MODULAR_REGULARIZATIONS[regularization_name]
@@ -44,7 +44,7 @@ def test_jit_compatibility_modular(regularization_name):
 
 @pytest.mark.skip(reason="Slow.")
 @pytest.mark.parametrize("regularization_name", FUNCTIONAL_REGULARIZATIONS)
-def test_compile_compatibility_functional(regularization_name):
+def test_compile_compatibility_functional(regularization_name: str) -> None:
     r"""Test JIT-compatibility of functional projections."""
     x = torch.randn(4, 4)
     projection = FUNCTIONAL_REGULARIZATIONS[regularization_name]
@@ -61,7 +61,7 @@ def test_compile_compatibility_functional(regularization_name):
 
 @pytest.mark.skip(reason="Slow.")
 @pytest.mark.parametrize("regularization_name", MODULAR_REGULARIZATIONS)
-def test_compile_compatibility_modular(regularization_name):
+def test_compile_compatibility_modular(regularization_name: str) -> None:
     r"""Test JIT-compatibility of modular projections."""
     x = torch.randn(4, 4)
     projection_type = MODULAR_REGULARIZATIONS[regularization_name]

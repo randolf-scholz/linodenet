@@ -374,9 +374,6 @@ class LinODEnet(nn.Module):
         assert self.decoder is not None
 
 
-# from typing_extensions import NamedTuple
-#
-#
 # class Context(NamedTuple):
 #     observations: tuple[Tensor, Tensor]
 #     covariates: tuple[Tensor, Tensor]

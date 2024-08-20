@@ -4,6 +4,7 @@ Modified variant of the implementation from https://github.com/yandex-research/r
 
 Original Licensed under Apache License 2.0
 """
+# mypy: disable-error-code=no-untyped-def
 
 __all__ = [
     # Classes

@@ -25,12 +25,11 @@ __all__ = [
 
 from collections.abc import Sequence
 from math import prod, sqrt
-from typing import Optional, Protocol
+from typing import Optional, Protocol, runtime_checkable
 
 import torch
 from scipy import stats
 from torch import Tensor, device as Device, dtype as Dtype
-from typing_extensions import runtime_checkable
 
 
 @runtime_checkable

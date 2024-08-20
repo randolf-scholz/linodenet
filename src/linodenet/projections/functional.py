@@ -27,11 +27,10 @@ __all__ = [
     "upper_triangular",
 ]
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import torch
 from torch import BoolTensor, Tensor
-from typing_extensions import runtime_checkable
 
 from linodenet.constants import TRUE
 

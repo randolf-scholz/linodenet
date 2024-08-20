@@ -24,12 +24,11 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.config import CONFIG
-from linodenet.types import M
 
 __logger__ = logging.getLogger(__name__)
 
 
-def autojit(base_class: type[M], /) -> type[M]:
+def autojit[M: nn.Module](base_class: type[M], /) -> type[M]:
     r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
 
     Makes it so that

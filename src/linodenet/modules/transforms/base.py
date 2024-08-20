@@ -35,10 +35,8 @@ from typing import Protocol
 
 from torch import Tensor
 
-from linodenet.types import S, T
 
-
-class Transform(Protocol[T, S]):
+class Transform[T, S](Protocol):
     r"""A protocol for transforms."""
 
     @abstractmethod
@@ -52,7 +50,7 @@ class Transform(Protocol[T, S]):
         ...
 
 
-class InvertibleTransform(Protocol[T, S]):
+class InvertibleTransform[T, S](Protocol):
     r"""A protocol for invertible transforms."""
 
     @abstractmethod

@@ -84,14 +84,11 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
-from typing import Any, Literal, Protocol, Self
+from typing import Any, Literal, Protocol, Self, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
-from typing_extensions import TypeVar, runtime_checkable
-
-Module = TypeVar("Module", bound=nn.Module)
 
 # TODO: add support for multiple parametrizations on the same tensor.
 # TODO: add ParametrizationList.
@@ -633,7 +630,7 @@ def register_optimizer_hook(
         else:
             parametrizations.extend(get_parametrizations(module))
 
-    def hook(opt, *args, **kwargs):
+    def hook(opt: Optimizer, *args: Any, **kwargs: Any) -> None:
         r"""Hook to update the parametrization after each optimizer step."""
         for parametrization in parametrizations:
             parametrization.update_parametrization()
@@ -641,7 +638,7 @@ def register_optimizer_hook(
     optim.register_step_post_hook(hook)
 
 
-def deepcopy_with_parametrizations(module: Module, /) -> Module:
+def deepcopy_with_parametrizations[M: nn.Module](module: M, /) -> M:
     r"""Deepcopy a module."""
     # detach all caches
     detach_caches(module)

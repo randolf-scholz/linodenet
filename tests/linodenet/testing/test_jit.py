@@ -18,7 +18,7 @@ class ModuleWithSlots(nn.Module):
     foo: Tensor
     bar: Tensor
 
-    def __init__(self, foo, bar):
+    def __init__(self, foo: Tensor, bar: Tensor) -> None:
         super().__init__()
         self.foo = foo
         self.bar = bar
@@ -33,7 +33,7 @@ class ModuleWithoutSlots(nn.Module):
     foo: Tensor
     bar: Tensor
 
-    def __init__(self, foo, bar):
+    def __init__(self, foo: Tensor, bar: Tensor) -> None:
         super().__init__()
         self.foo = foo
         self.bar = bar
@@ -57,7 +57,7 @@ class AddPostInit(type):
         if not hasattr(cls, "__post_init__") and "__post_init__" not in namespace:
             raise AttributeError(f"Class {cls} does not have a __post_init__ method")
 
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         obj = super().__call__(*args, **kwargs)
         obj.__post_init__()
         return obj
@@ -68,12 +68,12 @@ class ModuleWithMetaclass(nn.Module, metaclass=AddPostInit):
 
     weight: Tensor
 
-    def __init__(self, input_size: int, output_size: int):
+    def __init__(self, input_size: int, output_size: int) -> None:
         super().__init__()
         self.layer = nn.Linear(input_size, output_size)
         self.weight = self.layer.weight
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.weight.shape[-1] != self.weight.shape[-2]:
             raise ValueError("Weight matrix must be square!")
 

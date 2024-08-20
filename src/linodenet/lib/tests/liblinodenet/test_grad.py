@@ -4,7 +4,7 @@ __all__ = ["compute_spectral_norm_impl"]
 
 import pytest
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 from linodenet.lib import (
     singular_triplet,
@@ -14,12 +14,12 @@ from linodenet.lib import (
 )
 
 
-def inner(x, y):
+def inner(x: Tensor, y: Tensor) -> Tensor:
     r"""Compute the inner product."""
     return torch.einsum("..., ... ->", x, y)
 
 
-def compute_spectral_norm_impl(impl, shape, **kwargs):
+def compute_spectral_norm_impl(impl, shape, **kwargs) -> tuple[Tensor, Tensor]:
     r"""Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)
@@ -58,7 +58,7 @@ def compute_spectral_norm_impl(impl, shape, **kwargs):
     return err_value, err_grads
 
 
-def compute_singular_triplet_impl(impl, shape, **kwargs):
+def compute_singular_triplet_impl(impl, shape, **kwargs) -> tuple[Tensor, Tensor]:
     r"""Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)

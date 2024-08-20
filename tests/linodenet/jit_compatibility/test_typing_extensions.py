@@ -41,7 +41,7 @@ class Bar(nn.Module):
 
 
 @pytest.mark.xfail(reason="https://github.com/pytorch/pytorch/issues/119192.")
-def test_function_typing():
+def test_function_typing() -> None:
     x = torch.randn(3, 4)
     y = torch.randn(3, 4)
     z = x + y
@@ -66,7 +66,7 @@ def test_function_typing():
     assert torch.equal(foo_loaded(x, y), z)
 
 
-def test_module_typing():
+def test_module_typing() -> None:
     x = torch.randn(3, 4)
     y = torch.randn(3, 4)
     z = x + y
@@ -94,7 +94,7 @@ def test_module_typing():
 
 
 @pytest.mark.xfail(reason="https://github.com/pytorch/pytorch/issues/119192.")
-def test_function_typing_extensions():
+def test_function_typing_extensions() -> None:
     x = torch.randn(3, 4)
     y = torch.randn(3, 4)
     z = x + y
@@ -117,7 +117,7 @@ def test_function_typing_extensions():
     assert torch.equal(bar_loaded(x, y), x + y)
 
 
-def test_module_typing_extensions():
+def test_module_typing_extensions() -> None:
     x = torch.randn(3, 4)
     y = torch.randn(3, 4)
     z = x + y

@@ -2,11 +2,13 @@ r"""Test whether the initializations satisfy the advertised properties."""
 
 import logging
 import warnings
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import psutil
 import pytest
 import torch
+from torch import Tensor
 
 from linodenet.config import PROJECT
 from linodenet.constants import ONE, ZERO
@@ -18,7 +20,7 @@ RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 __logger__ = logging.getLogger(__name__)
 
 
-def _make_fig(path, means, stdvs, key):
+def _make_fig(path: Path, means: Tensor, stdvs: Tensor, key: str) -> None:
     with plt.style.context("bmh"):
         fig, ax = plt.subplots(
             ncols=2, figsize=(8, 4), constrained_layout=True, sharey=True

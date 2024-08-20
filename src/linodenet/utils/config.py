@@ -13,7 +13,7 @@ __all__ = [
 from abc import ABCMeta
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass, field
-from typing import Any
+from typing import Any, Self
 
 
 def is_allcaps(s: str) -> bool:
@@ -133,10 +133,10 @@ class ConfigMetaclass(ABCMeta):
         return dataclass(config_type, eq=False, frozen=True)  # type: ignore[call-overload]
 
 
-class Config(Mapping, metaclass=ConfigMetaclass):
+class Config(Mapping[str, Any], metaclass=ConfigMetaclass):
     r"""Base Config."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         r"""Initialize the dictionary."""
         self.__dict__.update(*args, **kwargs)
 
@@ -144,7 +144,7 @@ class Config(Mapping, metaclass=ConfigMetaclass):
         r"""Return an iterator over the keys of the dictionary."""
         return iter(self.__dict__)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         r"""Return the value of the specified key."""
         return self.__dict__[key]
 
@@ -159,7 +159,7 @@ class Config(Mapping, metaclass=ConfigMetaclass):
         # return hash((frozenset(self), frozenset(self.itervalues())))
         return hash(frozenset(self.items()))
 
-    def __or__(self, other):
+    def __or__(self, other: Mapping[str, Any]) -> Self:
         r"""Return a new dictionary with the keys from both dictionaries."""
         res: dict = {}
         res.update(self)

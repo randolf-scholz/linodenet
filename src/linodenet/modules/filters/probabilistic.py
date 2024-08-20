@@ -27,12 +27,11 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Optional, Protocol
+from typing import Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, nn
 from torch.distributions import Distribution, MultivariateNormal
-from typing_extensions import runtime_checkable
 
 from linodenet.constants import EMPTY_SHAPE
 
@@ -149,12 +148,12 @@ class KalmanCell(nn.Module):
         z = torch.where(mask, z, self.ZERO)  # (..., m)
         z = self.ht(z)  # (..., n)
         z = torch.einsum("ij, ...j -> ...i", self.B, z)
-        return x - self.epsilon * self.layers(z)
+        return x + self.epsilon * self.layers(z)
 
         # Update the state
-        ΣH = Σ @ self.H.T
-        HΣ = self.H @ Σ
-        K = ΣH @ torch.inverse(HΣ + self.R)
-        x = x + K @ (y - self.H @ x)
-        Σ = Σ - K @ HΣ
-        return x, Σ
+        # ΣH = Σ @ self.H.T
+        # HΣ = self.H @ Σ
+        # K = ΣH @ torch.inverse(HΣ + self.R)
+        # x = x + K @ (y - self.H @ x)
+        # Σ = Σ - K @ HΣ
+        # return x, Σ

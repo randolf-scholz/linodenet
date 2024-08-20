@@ -6,7 +6,7 @@ __all__ = [
     "TransformerEncoder",
 ]
 
-from typing import Optional
+from typing import Any, Optional
 
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder
@@ -63,7 +63,7 @@ class Transformer(nn.Module):
         },
     }
 
-    def __init__(self, **cfg):
+    def __init__(self, **cfg: Any) -> None:
         super().__init__()
         config = deep_dict_update(self.HP, cfg)
 
