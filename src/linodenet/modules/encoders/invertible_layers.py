@@ -220,7 +220,9 @@ class iSequential(nn.Module):
     ) -> Self:
         r"""Initialize from hyperparameters."""
         blocks: list[nn.Module] = [] if modules is None else list(modules)
-        assert len(blocks) ^ len(cfg), "Provide either blocks, or hyperparameters!"
+
+        if not (bool(blocks) ^ bool(cfg)):
+            raise ValueError("Provide either blocks, or hyperparameters!")
 
         if cfg:
             return cls.from_config(**cfg)

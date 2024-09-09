@@ -17,6 +17,7 @@ __all__ = [
     "is_normal",
     "is_orthogonal",
     "is_skew_symmetric",
+    "is_square",
     "is_symmetric",
     "is_symplectic",
     "is_traceless",
@@ -58,6 +59,15 @@ class MatrixTest(Protocol):
 
 # region is_* checks -------------------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
+def is_square(
+    x: Tensor,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    return x.shape[dim[0]] == x.shape[dim[1]]
+
+
 def is_symmetric(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),

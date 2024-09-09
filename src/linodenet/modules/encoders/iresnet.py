@@ -81,10 +81,12 @@ class SpectralNorm(torch.autograd.Function):
     def forward(ctx: Any, *tensors: Tensor, **kwargs: Any) -> Tensor:
         r""".. Signature:: ``(m, n) -> 1``."""
         A = tensors[0]
+        if A.ndim != 2:
+            raise ValueError(f"Expected 2d input, got {A.shape}.")
+
         atol: float = kwargs.get("atol", 1e-6)
         rtol: float = kwargs.get("rtol", 1e-6)
         maxiter: int = kwargs.get("maxiter", 1000)
-        assert A.ndim == 2, f"Expected 2d input, got {A.shape}."
         # initialize u and v, median should be useful guess.
         u = u_next = A.median(dim=1).values
         v = v_next = A.median(dim=0).values

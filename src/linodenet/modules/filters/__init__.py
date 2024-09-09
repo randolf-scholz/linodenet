@@ -20,7 +20,7 @@ __all__ = [
     "FILTERS",
     # ABCs & Protocols
     "Filter",
-    "FilterABC",
+    "FilterBase",
     # Classes
     "MissingValueFilter",
     "ReZeroFilter",
@@ -37,7 +37,7 @@ from linodenet.modules.filters import probabilistic
 from linodenet.modules.filters.base import (
     FILTERS,
     Filter,
-    FilterABC,
+    FilterBase,
     MissingValueFilter,
     ResidualFilter,
     ResNetFilter,

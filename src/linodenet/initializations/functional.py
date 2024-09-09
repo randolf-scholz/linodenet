@@ -253,7 +253,8 @@ def canonical_skew_symmetric(
     # convert to tuple
     tup = (size,) if isinstance(size, int) else tuple(size)
     batch, dim = tup[:-1], tup[-1]
-    assert dim % 2 == 0, "The dimension must be divisible by 2!"
+    if dim % 2 != 0:
+        raise ValueError("The dimension must be divisible by 2!")
 
     # create J matrix
     J1 = torch.tensor([[0, 1], [-1, 0]], device=device, dtype=dtype)

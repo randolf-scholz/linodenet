@@ -48,8 +48,8 @@ class ResNetBlock(nn.Sequential):
 
     def __init__(self, *modules: nn.Module, **cfg: Any) -> None:
         config = deep_dict_update(self.HP, cfg)
-
-        assert config["input_size"] is not None, "input_size is required!"
+        if config.get("input_size") is None:
+            raise ValueError("input_size is required!")
 
         layer = config["layer"]
         if layer["__name__"] == "Linear":
@@ -88,8 +88,8 @@ class ResNet(nn.ModuleList):
 
     def __init__(self, modules: Iterable[nn.Module], **cfg: Any) -> None:
         config = deep_dict_update(self.HP, cfg)
-
-        assert config["input_size"] is not None, "input_size is required!"
+        if config.get("input_size") is None:
+            raise ValueError("input_size is required!")
 
         # pass the input_size to the subblocks
         block = config["block"]

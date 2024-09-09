@@ -166,8 +166,10 @@ class LinODEnet(nn.Module):
         self.filter: nn.Module = initialize_from_dict(config["Filter"])
 
         # Parameters
-        assert isinstance(self.system.kernel, Tensor)
-        self.kernel = self.system.kernel
+        kernel = getattr(self.system, "kernel", None)
+        if not isinstance(kernel, Tensor):
+            raise TypeError("The system must have a kernel attribute!")
+        self.kernel = kernel
         self.z0 = nn.Parameter(torch.randn(self.latent_size))
 
     @jit.export
@@ -356,22 +358,32 @@ class LinODEnet(nn.Module):
         self, q: Tensor, t: Tensor, x: Tensor, t0: Tensor, z0: Tensor
     ) -> None:
         r"""Validate the inputs to the model."""
-        assert t.shape == x.shape[:-1]
-        assert q.shape[:-1] == t.shape[:-1]
-        assert t0.shape == t.shape[:-1]
-        assert z0.shape[:-1] == x.shape[-1:]
-        assert all(t0 < t)
-        assert all(t < q)
+        if t.shape != x.shape[:-1]:
+            raise ValueError(f"Expected shape {x.shape[:-1]}, got {t.shape}")
+        if q.shape[:-1] != t.shape[:-1]:
+            raise ValueError(f"Expected shape {t.shape[:-1]}, got {q.shape[:-1]}")
+        if t0.shape != t.shape[:-1]:
+            raise ValueError(f"Expected shape {t.shape[:-1]}, got {t0.shape}")
+        if z0.shape[:-1] != x.shape[-1:]:
+            raise ValueError(f"Expected shape {x.shape[-1:]}, got {z0.shape[:-1]}")
+        if not all(t0 < t):
+            raise ValueError(f"Expected {t0} < {t}")
+        if not all(t < q):
+            raise ValueError(f"Expected {t} < {q}")
 
     @jit.export
     def _validate_model(self) -> None:
         r"""Validate the model."""
-        assert self.system is not None
-        assert self.encoder is not None
-        assert self.projection is not None
-        assert self.filter is not None
-        assert self.embedding is not None
-        assert self.decoder is not None
+        for key in [
+            "embedding",
+            "encoder",
+            "system",
+            "decoder",
+            "projection",
+            "filter",
+        ]:
+            if getattr(self, key, None) is None:
+                raise ValueError(f"{key} is not set!")
 
 
 # class Context(NamedTuple):

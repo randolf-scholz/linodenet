@@ -21,8 +21,10 @@ R is observed or a hyperparameter.
 """
 
 __all__ = [
+    # Protocols & ABCs
     "ProbabilisticFilter",
     "Empirical",
+    # Classes
     "KalmanCell",
 ]
 
@@ -86,7 +88,8 @@ class Empirical(Distribution):
         .. Signature: ``[...] -> [...]``.
         """
         # value.shape: (B, ...),
-        assert value.shape[1:] == self.shape
+        if value.shape[1:] != self.shape:
+            raise ValueError(f"Expected shape {self.shape}, got {value.shape[1:]}")
         mask = value.unsqueeze(1) == self.data  # shape: (B, n, ...)
         mask = mask.any(dim=1)
         return torch.where(mask, torch.inf, -torch.inf)

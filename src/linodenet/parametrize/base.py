@@ -293,9 +293,10 @@ class ParametrizationBase(nn.Module, Parametrization):
 
     def __init__(self, tensor: Tensor) -> None:
         super().__init__()
+        if not isinstance(tensor, nn.Parameter):
+            raise TypeError("tensor must be a nn.Parameter")
 
         # get the tensor to parametrize
-        assert isinstance(tensor, nn.Parameter), "tensor must be a parameter"
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
 
@@ -338,9 +339,10 @@ class ParametrizationMulticache(nn.Module, Parametrization):
 
     def __init__(self, tensor: Tensor, /) -> None:
         super().__init__()
-
         # get the tensor to parametrize
-        assert isinstance(tensor, nn.Parameter), "tensor must be a parameter"
+        if not isinstance(tensor, nn.Parameter):
+            raise TypeError("tensor must be a nn.Parameter")
+
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
 
@@ -489,7 +491,9 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
         # register the parametrized tensor.
         self.register_parameter(f"original_{name}", param)
         self.parametrized_tensors[name] = param
-        assert getattr(self, f"original_{name}") is self.parametrized_tensors[name]
+
+        if getattr(self, f"original_{name}") is not self.parametrized_tensors[name]:
+            raise ValueError(f"original_{name} is not the same as {name}!")
 
         # engage the autograd engine
         # self.cached_tensors[name].detach_()
@@ -542,8 +546,10 @@ def register_parametrization(
 
     if isinstance(parametrization, type):  # FIXME: can't use issubclass on Protocol
         wrapper = parametrization(tensor)
-        assert isinstance(wrapper, Parametrization)
-        assert isinstance(wrapper, nn.Module)
+        if not isinstance(wrapper, Parametrization):
+            raise TypeError(f"{parametrization} is not a parametrization!")
+        if not isinstance(wrapper, nn.Module):
+            raise TypeError(f"{parametrization} is not a nn.Module!")
     else:
         wrapper = parametrize(tensor, parametrization)
 

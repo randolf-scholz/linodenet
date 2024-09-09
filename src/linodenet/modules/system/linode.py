@@ -91,24 +91,30 @@ class LinODECell(nn.Module):
                 case None:
                     return lambda: gaussian(input_size)
                 case str(key):
-                    assert key in INITIALIZATIONS, "Unknown initialization!"
                     _init = INITIALIZATIONS[key]
                     return lambda: _init(input_size)
                 case Callable() as func:  # type: ignore[misc]
-                    assert Tensor(func(input_size)).shape == (input_size, input_size)  # type: ignore[unreachable]
+                    tensor = Tensor(func(input_size))
+                    if tensor.shape != (input_size, input_size):
+                        raise ValueError(
+                            f"Kernel has bad shape! {tensor.shape} but should be"
+                            f" {(input_size, input_size)}"
+                        )
                     return lambda: Tensor(func(input_size))
                 case Tensor() as tensor:
-                    assert tensor.shape == (input_size, input_size), (
-                        f"Kernel has bad shape! {tensor.shape} but should be"
-                        f" {(input_size, input_size)}"
-                    )
+                    if tensor.shape != (input_size, input_size):
+                        raise ValueError(
+                            f"Kernel has bad shape! {tensor.shape} but should be"
+                            f" {(input_size, input_size)}"
+                        )
                     return lambda: tensor
                 case Iterable() as iterable:
                     tensor = Tensor(iterable)
-                    assert tensor.shape == (input_size, input_size), (
-                        f"Kernel has bad shape! {tensor.shape} but should be"
-                        f" {(input_size, input_size)}"
-                    )
+                    if tensor.shape != (input_size, input_size):
+                        raise ValueError(
+                            f"Kernel has bad shape! {tensor.shape} but should be"
+                            f" {(input_size, input_size)}"
+                        )
                     return lambda: tensor
                 case _:
                     raise TypeError(f"{type(kernel_initialization)=} not supported!")
@@ -120,7 +126,6 @@ class LinODECell(nn.Module):
                 case None:
                     return FUNCTIONAL_PROJECTIONS["identity"]
                 case str(key):
-                    assert key in FUNCTIONAL_PROJECTIONS
                     return FUNCTIONAL_PROJECTIONS[key]
                 case Callable() as func:  # type: ignore[misc]
                     return func  # type: ignore[unreachable]
@@ -214,9 +219,11 @@ class LinODE(nn.Module):
         self.cell: nn.Module = initialize_from_dict(config["cell"])
 
         # Buffers
-        self.register_buffer("xhat", torch.tensor(()), persistent=False)
-        assert isinstance(self.cell.kernel, Tensor)
+        kernel = getattr(self.cell, "kernel", None)
+        if not isinstance(kernel, Tensor):
+            raise ValueError("The cell must have a kernel attribute!")
         self.register_buffer("kernel", self.cell.kernel, persistent=False)
+        self.register_buffer("xhat", torch.tensor(()), persistent=False)
 
     @jit.export
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:

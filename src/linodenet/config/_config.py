@@ -80,7 +80,6 @@ class Config:
 
     @autojit.setter
     def autojit(self, value: bool) -> None:
-        assert isinstance(value, bool)
         self._autojit = bool(value)
         os.environ["LINODENET_AUTOJIT"] = str(value)
 
@@ -106,7 +105,9 @@ class Project:
     @cached_property
     def ROOT_PATH(self) -> Path:
         r"""Return the root directory."""
-        assert len(self.ROOT_PACKAGE.__path__) == 1
+        if len(self.ROOT_PACKAGE.__path__) != 1:
+            raise ValueError(f"Unexpected path: {self.ROOT_PACKAGE.__path__=}")
+
         path = Path(self.ROOT_PACKAGE.__path__[0])
 
         if path.parent.stem != "src":

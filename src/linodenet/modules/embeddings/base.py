@@ -85,9 +85,10 @@ class ConcatEmbedding(nn.Module):
         inverse: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
-        assert (
-            input_size <= output_size
-        ), f"ConcatEmbedding requires {input_size=} ≤ {output_size=}!"
+        if not (input_size <= output_size):
+            raise ValueError(
+                f"{input_size=} must be smaller or equal to {output_size=}!"
+            )
         self.input_size = input_size
         self.output_size = output_size
         self.padding_size = output_size - input_size
@@ -153,9 +154,10 @@ class ConcatProjection(nn.Module):
         inverse: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
-        assert (
-            input_size >= output_size
-        ), f"ConcatEmbedding requires {input_size=} ≥ {output_size=}!"
+        if not (input_size >= output_size):
+            raise ValueError(
+                f"{input_size=} must be greater or equal to {output_size=}!"
+            )
         self.input_size = input_size
         self.output_size = output_size
         self.padding_size = input_size - output_size
@@ -229,9 +231,10 @@ class LinearEmbedding(nn.Module):
         inverse: Optional[Self] = None,
     ) -> None:
         super().__init__()
-        assert (
-            input_size <= output_size
-        ), f"ConcatEmbedding requires {input_size=} ≤ {output_size=}!"
+        if not (input_size <= output_size):
+            raise ValueError(
+                f"{input_size=} must be smaller or equal to {output_size=}!"
+            )
         self.input_size = input_size
         self.output_size = output_size
         self.with_bias = bias

@@ -30,8 +30,10 @@ __all__ = [
     # Constants
     "FILTERS",
     # ABCs & Protocols
+    "Cell",
+    "CellBase",
     "Filter",
-    "FilterABC",
+    "FilterBase",
     # Classes
     "MissingValueFilter",
     "ReZeroFilter",
@@ -147,7 +149,34 @@ def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
     return filter
 
 
-class FilterABC(nn.Module):
+class CellBase(nn.Module):
+    r"""Base class for filter-cells."""
+
+    input_size: Final[int]
+    r"""The size of the observable $y$."""
+    hidden_size: Final[int]
+    r"""The size of the hidden state $x$."""
+
+    def __init__(self, /, input_size: int, hidden_size: int) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+
+    @abstractmethod
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        r"""Forward pass of the filter.
+
+        Args:
+            y: The current measurement of the system.
+            x: The current estimation of the state of the system.
+
+        Returns:
+            x̂: The updated state of the system.
+        """
+        ...
+
+
+class FilterBase(nn.Module):
     r"""Base class for all filters.
 
     All filters should have a signature of the form:
@@ -242,7 +271,9 @@ class MissingValueFilter(nn.Module):
         options.update(input_size=filter_input_size, hidden_size=self.hidden_size)
         self.filter = filter_from_config(filter_type, **options)
         self.decoder = getattr(self.filter, "decoder", None)
-        assert isinstance(self.decoder, nn.Module) or self.decoder is None
+
+        if self.decoder is not None and not isinstance(self.decoder, nn.Module):
+            raise TypeError("Decoder must be a nn.Module!")
 
         # initialize imputation strategy
         self.register_buffer("S", torch.zeros(self.input_size))
@@ -290,7 +321,7 @@ class MissingValueFilter(nn.Module):
         return self.filter(y, x)
 
 
-class ResidualFilter(FilterABC):
+class ResidualFilter(FilterBase):
     r"""Wraps an existing Filter to return the residual $x' = x - F(y，x)$."""
 
     # CONSTANTS
@@ -347,7 +378,7 @@ class SequentialFilter(nn.ModuleList):
 
     def __init__(self, layers: Iterable[Filter], /) -> None:
         r"""Initialize from modules."""
-        module_list = list(layers)
+        module_list: list[Filter] = list(layers)
 
         if not module_list:
             raise ValueError("At least one module must be given!")
@@ -356,8 +387,16 @@ class SequentialFilter(nn.ModuleList):
         self.hidden_size = int(module_list[-1].hidden_size)
 
         for module in module_list:
-            assert module.input_size == self.input_size
-            assert module.hidden_size == self.hidden_size
+            if module_list.input_size != self.input_size:
+                raise ValueError(
+                    "All modules must have the same input_size!"
+                    f"Expected {self.input_size}, but {module=} has {module.input_size}"
+                )
+            if module_list.hidden_size != self.hidden_size:
+                raise ValueError(
+                    "All modules must have the same hidden_size!"
+                    f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
+                )
 
         super().__init__(module_list)
 
@@ -391,7 +430,7 @@ class ResNetFilter(nn.ModuleList):
 
     def __init__(self, layers: Iterable[Filter], /) -> None:
         r"""Initialize from modules."""
-        module_list = list(layers)
+        module_list: list[Filter] = list(layers)
 
         if not module_list:
             raise ValueError("At least one module must be given!")
@@ -400,8 +439,16 @@ class ResNetFilter(nn.ModuleList):
         self.hidden_size = int(module_list[-1].hidden_size)
 
         for module in module_list:
-            assert module.input_size == self.input_size
-            assert module.hidden_size == self.hidden_size
+            if module_list.input_size != self.input_size:
+                raise ValueError(
+                    "All modules must have the same input_size!"
+                    f"Expected {self.input_size}, but {module=} has {module.input_size}"
+                )
+            if module_list.hidden_size != self.hidden_size:
+                raise ValueError(
+                    "All modules must have the same hidden_size!"
+                    f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
+                )
 
         super().__init__(module_list)
 
@@ -429,7 +476,7 @@ class ReZeroFilter(nn.ModuleList):
 
     def __init__(self, layers: Iterable[Filter], /) -> None:
         r"""Initialize from modules."""
-        module_list = list(layers)
+        module_list: list[Filter] = list(layers)
 
         if not module_list:
             raise ValueError("At least one module must be given!")
@@ -438,9 +485,16 @@ class ReZeroFilter(nn.ModuleList):
         self.hidden_size = int(module_list[-1].hidden_size)
 
         for module in module_list:
-            assert module.input_size == self.input_size
-            assert module.hidden_size == self.hidden_size
-
+            if module_list.input_size != self.input_size:
+                raise ValueError(
+                    "All modules must have the same input_size!"
+                    f"Expected {self.input_size}, but {module=} has {module.input_size}"
+                )
+            if module_list.hidden_size != self.hidden_size:
+                raise ValueError(
+                    "All modules must have the same hidden_size!"
+                    f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
+                )
         super().__init__(module_list)
         weight = torch.zeros(len(self))
         self.register_parameter("weight", weight)

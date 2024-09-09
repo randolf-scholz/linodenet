@@ -3,69 +3,15 @@ r"""Implements the BaseConfig class."""
 __all__ = [
     # Classes
     "Config",
-    # Functions
-    "flatten_dict",
-    "is_allcaps",
-    "is_dunder",
-    "unflatten_dict",
+    "ConfigMetaclass",
 ]
 
 from abc import ABCMeta
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from dataclasses import KW_ONLY, dataclass, field
 from typing import Any, Self
 
-
-def is_allcaps(s: str) -> bool:
-    r"""Check if a string is all caps."""
-    return s.isidentifier() and s.isupper() and s.isalpha()
-
-
-def is_dunder(s: str) -> bool:
-    r"""Check if a string is a dunder."""
-    return s.isidentifier() and s.startswith("__") and s.endswith("__")
-
-
-def flatten_dict(
-    d: dict[str, Any],
-    /,
-    *,
-    recursive: bool = True,
-    join_fn: Callable[[Sequence[str]], str] = ".".join,
-) -> dict[str, Any]:
-    r"""Flatten dictionaries recursively."""
-    result = {}
-    for key, item in d.items():
-        if isinstance(item, dict) and recursive:
-            subdict = flatten_dict(item, recursive=True, join_fn=join_fn)
-            for subkey, subitem in subdict.items():
-                result[join_fn((key, subkey))] = subitem
-        else:
-            result[key] = item
-    return result
-
-
-def unflatten_dict(
-    d: dict[str, Any],
-    /,
-    *,
-    recursive: bool = True,
-    split_fn: Callable[[str], Sequence[str]] = lambda s: s.split(".", maxsplit=1),
-) -> dict[str, Any]:
-    r"""Unflatten dictionaries recursively."""
-    result: dict[str, Any] = {}
-    for key, item in d.items():
-        split = split_fn(key)
-        result.setdefault(split[0], {})
-        if len(split) > 1 and recursive:
-            assert len(split) == 2
-            subdict = unflatten_dict(
-                {split[1]: item}, recursive=recursive, split_fn=split_fn
-            )
-            result[split[0]] |= subdict
-        else:
-            result[split[0]] = item
-    return result
+from linodenet.utils._utils import is_allcaps, is_dunder
 
 
 class ConfigMetaclass(ABCMeta):

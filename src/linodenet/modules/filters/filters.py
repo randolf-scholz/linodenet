@@ -27,7 +27,15 @@ __all__ = [
     "GRUCell",
     "LSTMCell",
     "RNNCell",
+    # Custom
     "KalmanFilter",
+    "LinearCell",
+    "LinearKalmanCell",
+    "LinearResidualCell",
+    "NonLinearCell",
+    "NonLinearKalmanCell",
+    "PseudoKalmanCell",
+    "ResidualCell",
 ]
 
 
@@ -41,10 +49,7 @@ from torch.nn import GRUCell, LSTMCell, RNNCell
 
 from linodenet.activations import get_activation
 from linodenet.modules.layers import ReverseDense
-from linodenet.utils import (
-    deep_dict_update,
-    initialize_from_dict,
-)
+from linodenet.utils import deep_dict_update, initialize_from_dict
 
 
 class LinearCell(nn.Module):
@@ -196,10 +201,10 @@ class NonLinearKalmanCell(nn.Module):
         nn.init.kaiming_normal_(self.A, nonlinearity="linear")
         nn.init.kaiming_normal_(self.B, nonlinearity="linear")
 
+        if self.autoregressive and input_size != hidden_size:
+            raise ValueError("Autoregressive filter requires input_size == hidden_size")
+
         if self.autoregressive:
-            assert (
-                hidden_size == input_size
-            ), "Autoregressive filter requires x_dim == y_dim"
             self.H = None
         else:
             self.H = nn.Parameter(torch.empty(hidden_size, input_size))
@@ -213,7 +218,7 @@ class NonLinearKalmanCell(nn.Module):
 
         # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
         H = self.H  # need to assign to local for torchscript....
-        assert H is not None, "H must be given in non-autoregressive mode!"
+        assert H is not None, "H must be given in non-autoregressive mode!"  # noqa: S101
         return torch.einsum("ij, ...j -> ...i", H, x)
 
     @jit.export
@@ -224,7 +229,7 @@ class NonLinearKalmanCell(nn.Module):
 
         # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
         H = self.H  # need to assign to local for torchscript....
-        assert H is not None, "H must be given in non-autoregressive mode!"
+        assert H is not None, "H must be given in non-autoregressive mode!"  # noqa: S101
         return torch.einsum("ji, ...j -> ...i", H, x)
 
     @jit.export
@@ -288,7 +293,8 @@ class NonLinearCell(nn.Module):
         autoregressive = config["autoregressive"]
         config["block"]["input_size"] = input_size
         config["block"]["output_size"] = input_size
-        assert not autoregressive or input_size == hidden_size
+        if autoregressive and input_size != hidden_size:
+            raise ValueError("Autoregressive filter requires input_size == hidden_size")
 
         # CONSTANTS
         self.input_size = n = input_size
@@ -299,8 +305,8 @@ class NonLinearCell(nn.Module):
         blocks: list[nn.Module] = []
         for _ in range(config["num_blocks"]):
             module = initialize_from_dict(config["block"])
-            if hasattr(module, "bias"):
-                assert module.bias is None, "Avoid bias term!"
+            if getattr(module, "bias", None) is not None:
+                raise ValueError("Avoid bias term!")
             blocks.append(module)
 
         self.layers = nn.Sequential(*blocks)
@@ -329,7 +335,7 @@ class NonLinearCell(nn.Module):
 
         # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
         H = self.H  # need to assign to local for torchscript....
-        assert H is not None, "H must be given in non-autoregressive mode!"
+        assert H is not None, "H must be given in non-autoregressive mode!"  # noqa: S101
         return torch.einsum("ij, ...j -> ...i", H, x)
 
     @jit.export
@@ -340,7 +346,7 @@ class NonLinearCell(nn.Module):
 
         # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
         H = self.H  # need to assign to local for torchscript....
-        assert H is not None, "H must be given in non-autoregressive mode!"
+        assert H is not None, "H must be given in non-autoregressive mode!"  # noqa: S101
         return torch.einsum("ji, ...j -> ...i", H, x)
 
     @jit.export
@@ -599,7 +605,8 @@ class LinearKalmanCell(nn.Module):
         alpha = config["alpha"]
         self.alpha_learnable = config["alpha_learnable"]
         autoregressive = config["autoregressive"]
-        assert not autoregressive or input_size == hidden_size
+        if autoregressive and input_size != hidden_size:
+            raise ValueError("Autoregressive filter requires input_size == hidden_size")
 
         # CONSTANTS
         n: int = input_size
@@ -646,7 +653,7 @@ class LinearKalmanCell(nn.Module):
 
         # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
         H = self.H  # need to assign to local for torchscript....
-        assert H is not None, "H must be given in non-autoregressive mode!"
+        assert H is not None, "H must be given in non-autoregressive mode!"  # noqa: S101
         return torch.einsum("ij, ...j -> ...i", H, x)
 
     @jit.export
@@ -657,7 +664,7 @@ class LinearKalmanCell(nn.Module):
 
         # https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
         H = self.H  # need to assign to local for torchscript....
-        assert H is not None, "H must be given in non-autoregressive mode!"
+        assert H is not None, "H must be given in non-autoregressive mode!"  # noqa: S101
         return torch.einsum("ji, ...j -> ...i", H, x)
 
     @jit.export

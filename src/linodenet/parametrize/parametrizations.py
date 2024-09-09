@@ -38,6 +38,7 @@ from linodenet import projections
 from linodenet.constants import ATOL, RTOL
 from linodenet.lib import singular_triplet
 from linodenet.parametrize.base import ParametrizationBase, ParametrizationMulticache
+from linodenet.testing import is_square
 
 
 # region learnable parametrizations ----------------------------------------------------
@@ -114,8 +115,9 @@ class SpectralNormalization(ParametrizationMulticache):
         maxiter: Optional[int] = None,
     ) -> None:
         super().__init__(weight)
+        if weight.ndim != 2:
+            raise ValueError("weight must be a matrix")
 
-        assert weight.ndim == 2, "weight must be a matrix"
         m, n = weight.shape
         options: dict = {  # FIXME: error with mypy without dict?
             "dtype": weight.dtype,
@@ -165,8 +167,8 @@ class CayleyMap(ParametrizationBase):
     """
 
     def __init__(self, tensor: Tensor) -> None:
-        assert len(tensor.shape) == 2
-        assert tensor.shape[0] == tensor.shape[1]
+        if not (tensor.ndim == 2 and is_square(tensor)):
+            raise ValueError(f"Expected square matrix, got {tensor.shape=}")
         n = tensor.shape[0]
         super().__init__(tensor)
         self.register_buffer("Id", torch.eye(n))

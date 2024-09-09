@@ -124,7 +124,10 @@ class LatentStateSpaceModel(nn.Module):
             )
 
             hidden_size = input_size
-        assert hidden_size >= input_size
+        if not (hidden_size >= input_size):
+            raise ValueError(
+                f"{hidden_size=} must be greater than or equal to {input_size=}"
+            )
 
         config["Encoder"] |= {"input_size": latent_size}
         config["Decoder"] |= {"input_size": latent_size}
@@ -176,9 +179,10 @@ class LatentStateSpaceModel(nn.Module):
         # self.latent_size = system.input_size  # type: ignore[assignment]
         # self.hidden_size = filter.hidden_size  # type: ignore[assignment]
         # self.padding_size = padding_size
-
-        assert isinstance(self.system.kernel, Tensor)
-        self.kernel = self.system.kernel
+        kernel = getattr(self.system, "kernel", None)
+        if not isinstance(kernel, Tensor):
+            raise TypeError("The system must have a kernel attribute")
+        self.kernel = kernel
         self.z0 = nn.Parameter(torch.randn(self.latent_size))
 
         # Buffers

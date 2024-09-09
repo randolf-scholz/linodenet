@@ -1,7 +1,10 @@
 r"""Custom operators for the linodenet package."""
+# ruff: noqa: ARG001
 
 __all__ = [
     # CONSTANTS
+    "ATOL",
+    "RTOL",
     "BUILD_DIR",
     "CUSTOM_OPS",
     "LIB",
@@ -23,7 +26,7 @@ __all__ = [
 
 import warnings
 from pathlib import Path
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Final, Optional, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor
@@ -31,11 +34,11 @@ from torch.utils import cpp_extension
 
 # constants
 # we use FP32 machine epsilon as default tolerance
-ATOL = 1e-6  # 2**-23  # ~1.19e-7
-RTOL = 1e-6  # 2**-23  # ~1.19e-7
+ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
+RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 
 
-# region Protocols ---------------------------------------------------------------------
+# region protocols ---------------------------------------------------------------------
 @runtime_checkable
 class SpectralNorm(Protocol):
     r"""Protocol for spectral norm implementations."""
@@ -96,10 +99,10 @@ class SingularTriplet(Protocol):
         ...
 
 
-# endregion ----------------------------------------------------------------------------
+# endregion protocols ------------------------------------------------------------------
 
 
-# region get compiled functions --------------------------------------------------------
+# region compile functions -------------------------------------------------------------
 LIB_NAME = "liblinodenet"
 r"""The name of the custom library."""
 LIB = torch.ops.liblinodenet
@@ -153,22 +156,13 @@ except Exception as exc:
     )
     compiled_fns = {name: load_function(name) for name in CUSTOM_OPS}
 
-# fmt: off
 _singular_triplet: SingularTriplet = compiled_fns["singular_triplet"]
 _singular_triplet_debug: SingularTriplet = compiled_fns["singular_triplet_debug"]
 _singular_triplet_riemann: SingularTriplet = compiled_fns["singular_triplet_riemann"]
 _spectral_norm: SpectralNorm = compiled_fns["spectral_norm"]
 _spectral_norm_debug: SpectralNorm = compiled_fns["spectral_norm_debug"]
 _spectral_norm_riemann: SpectralNorm = compiled_fns["spectral_norm_riemann"]
-# fmt: on
-
-assert isinstance(_singular_triplet, SingularTriplet)
-assert isinstance(_singular_triplet_debug, SingularTriplet)
-assert isinstance(_singular_triplet_riemann, SingularTriplet)
-assert isinstance(_spectral_norm, SpectralNorm)
-assert isinstance(_spectral_norm_debug, SpectralNorm)
-assert isinstance(_spectral_norm_riemann, SpectralNorm)
-# endregion ----------------------------------------------------------------------------
+# endregion compile functions ----------------------------------------------------------
 
 
 # region spectral norm -----------------------------------------------------------------
@@ -220,7 +214,7 @@ def spectral_norm_native(
     return torch.linalg.matrix_norm(A, ord=2)
 
 
-# endregion ----------------------------------------------------------------------------
+# endregion spectral norm --------------------------------------------------------------
 
 
 # region singular triplet --------------------------------------------------------------
@@ -274,4 +268,4 @@ def singular_triplet_native(
     return S[0], U[:, 0], Vh[0, :]
 
 
-# endregion ----------------------------------------------------------------------------
+# endregion singular triplet -----------------------------------------------------------
