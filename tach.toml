@@ -43,6 +43,7 @@ depends_on = [
     { path = "linodenet.constants" },
     { path = "linodenet.lib" },
     { path = "linodenet.projections" },
+    { path = "linodenet.testing" },
 ]
 
 [[modules]]
@@ -73,7 +74,6 @@ depends_on = []
 path = "linodenet.utils"
 depends_on = [
     { path = "linodenet.config" },
-    { path = "linodenet.types" },
 ]
 
 [[modules]]

@@ -88,7 +88,6 @@ def is_symmetric(
 
 def is_skew_symmetric(
     x: Tensor,
-    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
