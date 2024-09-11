@@ -72,7 +72,7 @@ tests = [
     "pytest-repeat>=0.9.3",
     "pytest-rerunfailures>=14.0",
     "pytest-xdist>=3.6.1",
-    "pytest>=8.3.2",
+    "pytest>=8.3.3",
     "tqdm>=4.66.5",
 ]
 linters = [
@@ -82,7 +82,7 @@ linters = [
 ]
 typing = [
     "mypy>=1.11.2",
-    "pyright>=1.1.379",
+    "pyright>=1.1.380",
     "types-colorama>=0.4.15.20240311",
     "types-decorator>=5.1.8.20240310",
     "types-docutils>=0.21.0.20240907",
