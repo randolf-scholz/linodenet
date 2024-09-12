@@ -1,6 +1,6 @@
 r"""Cell protocol test."""
 
-from torch.nn import GRUCell, LSTMCell, Module, RNNCell, RNNCellBase
+from torch.nn import GRUCell, LSTMCell, Module, RNNCell
 
 CELLS = {
     "RNNCell": RNNCell,

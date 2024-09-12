@@ -12,7 +12,6 @@ There are two types of covariates:
   measurements / predictions of the other system (example: weather forecast).
   In this case we can treat these variables as part of the state.
 
-
 These are external variables that influence the system,
 but are not part of the state.
 
@@ -27,8 +26,6 @@ Example:
 """
 
 __all__ = [
-    # Constants
-    "FILTERS",
     # ABCs & Protocols
     "Cell",
     "CellBase",
@@ -63,11 +60,18 @@ class Cell(Protocol):
     r"""The size of the observable $y$."""
     hidden_size: Final[int]  # type: ignore[misc]
     r"""The size of the hidden state $x$."""
+    bias: Final[bool]
+    r"""Whether to include a bias term or not."""
 
     @abstractmethod
-    def __init__(self, /, input_size: int, hidden_size: int) -> None:
-        r"""Initialize the cell."""
-        ...
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bias: bool = True,
+    ) -> None: ...
 
     @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
@@ -78,8 +82,45 @@ class Cell(Protocol):
         ...
 
 
+class CellBase(nn.Module):
+    r"""Base class for filter-cells."""
+
+    input_size: Final[int]
+    r"""The size of the observable $y$."""
+    hidden_size: Final[int]
+    r"""The size of the hidden state $x$."""
+    bias: Final[bool]
+    r"""Whether to include a bias term or not."""
+
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bias: bool = True,
+    ) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.bias = bool(bias)
+
+    @abstractmethod
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        r"""Forward pass of the filter.
+
+        Args:
+            y: The current measurement of the system.
+            x: The current estimation of the state of the system.
+
+        Returns:
+            x̂: The updated state of the system.
+        """
+        ...
+
+
 @runtime_checkable
-class Filter(Protocol):
+class Filter(Cell, Protocol):
     r"""Protocol for filter.
 
     Additionally to the `Cell` protocol, a filter has knowledge of the observation model.
@@ -93,10 +134,23 @@ class Filter(Protocol):
     r"""The size of the observable $y$."""
     hidden_size: Final[int]  # type: ignore[misc]
     r"""The size of the hidden state $x$."""
+    bias: Final[bool]
+    r"""Whether to include a bias term or not."""
 
     # SUBMODULES
     decoder: Optional[nn.Module] = None
     r"""The observation model."""
+
+    @abstractmethod
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bias: bool = True,
+        decoder: Optional[nn.Module] = None,
+    ) -> None: ...
 
     @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
@@ -107,9 +161,58 @@ class Filter(Protocol):
         ...
 
 
-# NOTE: pre-defined here to avoid circular imports, contents are filled in `__init__.py`
-FILTERS: dict[str, type[Filter]] = {}
-r"""A dictionary of all available filters."""
+class FilterBase(nn.Module):
+    r"""Base class for all filters.
+
+    All filters should have a signature of the form:
+
+    .. math::  x' = x + ϕ(y-h(x))
+
+    Where $x$ is the current state of the system, $y$ is the current measurement, and
+    $x'$ is the new state of the system. $ϕ$ is a function that maps the measurement
+    to the state of the system. $h$ is a function that maps the current state of the
+    system to the measurement.
+
+    Or multiple blocks of said form. In particular, we are interested in Filters
+    satisfying the idempotence property: if $y=h(x)$, then $x'=x$.
+    """
+
+    input_size: Final[int]
+    r"""The size of the observable $y$."""
+    hidden_size: Final[int]
+    r"""The size of the hidden state $x$."""
+    bias: Final[bool]
+    r"""Whether to include a bias term or not."""
+    decoder: Optional[nn.Module] = None
+    r"""The observation model."""
+
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bias: bool = True,
+        decoder: Optional[nn.Module] = None,
+    ) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+        self.bias = bool(bias)
+        self.decoder = decoder
+
+    @abstractmethod
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        r"""Forward pass of the filter.
+
+        Args:
+            y: The current measurement of the system.
+            x: The current estimation of the state of the system.
+
+        Returns:
+            x̂: The updated state of the system.
+        """
+        ...
 
 
 def _make_filter[F: Filter](filter_type: type[F], **config: Any) -> F:
@@ -149,75 +252,6 @@ def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
     return filter
 
 
-class CellBase(nn.Module):
-    r"""Base class for filter-cells."""
-
-    input_size: Final[int]
-    r"""The size of the observable $y$."""
-    hidden_size: Final[int]
-    r"""The size of the hidden state $x$."""
-
-    def __init__(self, /, input_size: int, hidden_size: int) -> None:
-        super().__init__()
-        self.input_size = int(input_size)
-        self.hidden_size = int(hidden_size)
-
-    @abstractmethod
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the filter.
-
-        Args:
-            y: The current measurement of the system.
-            x: The current estimation of the state of the system.
-
-        Returns:
-            x̂: The updated state of the system.
-        """
-        ...
-
-
-class FilterBase(nn.Module):
-    r"""Base class for all filters.
-
-    All filters should have a signature of the form:
-
-    .. math::  x' = x + ϕ(y-h(x))
-
-    Where $x$ is the current state of the system, $y$ is the current measurement, and
-    $x'$ is the new state of the system. $ϕ$ is a function that maps the measurement
-    to the state of the system. $h$ is a function that maps the current state of the
-    system to the measurement.
-
-    Or multiple blocks of said form. In particular, we are interested in Filters
-    satisfying the idempotence property: if $y=h(x)$, then $x'=x$.
-    """
-
-    input_size: Final[int]
-    r"""The size of the observable $y$."""
-    hidden_size: Final[int]
-    r"""The size of the hidden state $x$."""
-    decoder: Optional[nn.Module] = None
-    r"""The observation model."""
-
-    def __init__(self, /, input_size: int, hidden_size: int) -> None:
-        super().__init__()
-        self.input_size = int(input_size)
-        self.hidden_size = int(hidden_size)
-
-    @abstractmethod
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the filter.
-
-        Args:
-            y: The current measurement of the system.
-            x: The current estimation of the state of the system.
-
-        Returns:
-            x̂: The updated state of the system.
-        """
-        ...
-
-
 class MissingValueFilter(nn.Module):
     r"""Wraps an existing Filter so that it can handle missing values.
 
@@ -249,6 +283,13 @@ class MissingValueFilter(nn.Module):
     # BUFFERS
     S: Tensor
     r"""A buffer for the substitute tensor."""
+    HP = {}
+
+    # SUBMODULES
+    # filter: Filter
+    # r"""The wrapped Filter."""
+    # decoder: Optional[nn.Module]
+    # r"""The observation model."""
 
     def __init__(
         self,
@@ -387,12 +428,12 @@ class SequentialFilter(nn.ModuleList):
         self.hidden_size = int(module_list[-1].hidden_size)
 
         for module in module_list:
-            if module_list.input_size != self.input_size:
+            if module.input_size != self.input_size:
                 raise ValueError(
                     "All modules must have the same input_size!"
                     f"Expected {self.input_size}, but {module=} has {module.input_size}"
                 )
-            if module_list.hidden_size != self.hidden_size:
+            if module.hidden_size != self.hidden_size:
                 raise ValueError(
                     "All modules must have the same hidden_size!"
                     f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
@@ -439,12 +480,12 @@ class ResNetFilter(nn.ModuleList):
         self.hidden_size = int(module_list[-1].hidden_size)
 
         for module in module_list:
-            if module_list.input_size != self.input_size:
+            if module.input_size != self.input_size:
                 raise ValueError(
                     "All modules must have the same input_size!"
                     f"Expected {self.input_size}, but {module=} has {module.input_size}"
                 )
-            if module_list.hidden_size != self.hidden_size:
+            if module.hidden_size != self.hidden_size:
                 raise ValueError(
                     "All modules must have the same hidden_size!"
                     f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
@@ -485,12 +526,12 @@ class ReZeroFilter(nn.ModuleList):
         self.hidden_size = int(module_list[-1].hidden_size)
 
         for module in module_list:
-            if module_list.input_size != self.input_size:
+            if module.input_size != self.input_size:
                 raise ValueError(
                     "All modules must have the same input_size!"
                     f"Expected {self.input_size}, but {module=} has {module.input_size}"
                 )
-            if module_list.hidden_size != self.hidden_size:
+            if module.hidden_size != self.hidden_size:
                 raise ValueError(
                     "All modules must have the same hidden_size!"
                     f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"

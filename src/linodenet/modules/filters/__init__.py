@@ -18,7 +18,10 @@ __all__ = [
     "probabilistic",
     # Constants
     "FILTERS",
+    "CELLS",
     # ABCs & Protocols
+    "Cell",
+    "CellBase",
     "Filter",
     "FilterBase",
     # Classes
@@ -35,7 +38,8 @@ from torch.nn import GRUCell, LSTMCell, RNNCell
 
 from linodenet.modules.filters import probabilistic
 from linodenet.modules.filters.base import (
-    FILTERS,
+    Cell,
+    CellBase,
     Filter,
     FilterBase,
     MissingValueFilter,
@@ -54,19 +58,16 @@ from linodenet.modules.filters.filters import (
     NonLinearKalmanCell,
     PseudoKalmanCell,
     ResidualCell,
-    ResidualFilter,
-    ResidualFilterBlock,
-    SequentialFilter,
 )
 
-CELLS = {
+CELLS: dict[str, type[Cell]]  = {
     "GRUCell"            : GRUCell,
     "KalmanCell"         : NonLinearKalmanCell,
     "LinearCell"         : LinearCell,
     "LinearKalmanCell"   : LinearKalmanCell,
     "LinearResidualCell" : LinearResidualCell,
     "LSTMCell"           : LSTMCell,
-    "MissingValueCell"   : MissingValueCell,
+    # "MissingValueCell"   : MissingValueCell,
     "NonLinearCell"      : NonLinearCell,
     "PseudoKalmanCell"   : PseudoKalmanCell,
     "ResidualCell"       : ResidualCell,
@@ -74,12 +75,12 @@ CELLS = {
 }  # fmt: skip
 r"""Dictionary of all available cells (basic building blocks for filters)."""
 
-FILTERS |= {
+FILTERS: dict[str, type[Filter]] = {
     "KalmanFilter"        : KalmanFilter,
-    "MissingValueFilter"  : OldMissingValueFilter,
-    "ProbabilisticFilter" : ProbabilisticFilter,
+    "MissingValueFilter"  : MissingValueFilter,
+    # "ProbabilisticFilter" : ProbabilisticFilter,
     "ResidualFilter"      : ResidualFilter,
-    "ResidualFilterBlock" : ResidualFilterBlock,
+    # "ResidualFilterBlock" : ResidualFilterBlock,
     "SequentialFilter"    : SequentialFilter,
 }  # fmt: skip
 r"""Dictionary of all available filters."""

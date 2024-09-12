@@ -40,6 +40,7 @@ from typing import Any, Optional, overload
 
 import torch
 from torch import Tensor, jit, nn
+from torch.nn import Module
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.types import DeviceArg, Nested, Scalar
@@ -48,6 +49,16 @@ __logger__ = logging.getLogger(__name__)
 
 type Tree = Nested[Tensor | Scalar]
 type Func = Callable[..., Nested[Tensor]]
+
+
+def assert_compatible_signature(func: Callable, reference: Callable) -> None:
+    r"""Assert that functions signature is wider than reference."""
+    fun_sig = inspect.signature(func)
+    ref_sig = inspect.signature(reference)
+
+    for param in ref_sig.parameters:
+        assert param in fun_sig.parameters
+        assert fun_sig.parameters[param].kind == ref_sig.parameters[param].kind
 
 
 def assert_close(
@@ -82,10 +93,10 @@ def assert_close(
 
 
 # region utility functions for tensors AND scalars -------------------------------------
-def get_device(x: nn.Module | Tree, /) -> torch.device:
+def get_device(x: Module | Tree, /) -> torch.device:
     r"""Return the device of the model / parameters."""
     match x:
-        case nn.Module() as model:
+        case Module() as model:
             return next(t.device for t in model.parameters())
         case Tensor() as tensor:
             return tensor.device
@@ -98,7 +109,7 @@ def get_device(x: nn.Module | Tree, /) -> torch.device:
 
 
 @overload
-def to_device[M: nn.Module](x: M, /, *, device: DeviceArg = ...) -> M: ...
+def to_device[M: Module](x: M, /, *, device: DeviceArg = ...) -> M: ...
 @overload
 def to_device(x: Tensor, /, *, device: DeviceArg = ...) -> Tensor: ...
 @overload
@@ -113,7 +124,7 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
         case Tensor() as tensor:
             target_device = None if device is None else torch.device(device)
             return tensor.to(device=target_device)
-        case nn.Module() as module:
+        case Module() as module:
             target_device = None if device is None else torch.device(device)
             return module.to(device=target_device)
         case (None | bool() | int() | float() | str()) as scalar:  # Scalar
@@ -126,12 +137,12 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
     raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-def iter_tensors(x: nn.Module | Tree, /) -> Iterator[Tensor]:
+def iter_tensors(x: Module | Tree, /) -> Iterator[Tensor]:
     r"""Iterate over the parameters of the model / parameters."""
     match x:
         case Tensor() as tensor:
             yield tensor
-        case nn.Module() as module:
+        case Module() as module:
             yield from module.parameters()
         case None | bool() | int() | float() | str():  # Scalar
             # FIXME: https://github.com/python/cpython/issues/106246
@@ -144,21 +155,21 @@ def iter_tensors(x: nn.Module | Tree, /) -> Iterator[Tensor]:
             raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
-def iter_parameters(x: nn.Module | Tree, /) -> Iterator[nn.Parameter]:
+def iter_parameters(x: Module | Tree, /) -> Iterator[nn.Parameter]:
     r"""Iterate over the parameters of the model / parameters."""
     for w in iter_tensors(x):
         if isinstance(w, nn.Parameter):
             yield w
 
 
-def get_parameters(x: nn.Module | Tree, /) -> list[Tensor]:
+def get_parameters(x: Module | Tree, /) -> list[Tensor]:
     r"""Return the parameters of the model / parameters."""
     return [w for w in iter_tensors(x) if w.requires_grad]
 
 
-def zero_grad(x: nn.Module | Tree, /) -> None:
+def zero_grad(x: Module | Tree, /) -> None:
     r"""Sets gradients of the model / parameters to None."""
-    if isinstance(x, nn.Module):
+    if isinstance(x, Module):
         x.zero_grad(set_to_none=True)
         return
 
@@ -171,17 +182,17 @@ def zero_grad(x: nn.Module | Tree, /) -> None:
 
 
 # region utility functions  for outputs (always tensor) --------------------------------
-def flatten_nested_tensor(x: nn.Module | Tree, /) -> Tensor:
+def flatten_nested_tensor(x: Module | Tree, /) -> Tensor:
     r"""Flattens element of general Hilbert space, skips over scalars."""
     return torch.cat([x.flatten() for x in iter_tensors(x)])
 
 
-def get_shapes(x: nn.Module | Tree, /) -> list[tuple[int, ...]]:
+def get_shapes(x: Module | Tree, /) -> list[tuple[int, ...]]:
     r"""Return the shapes of the tensors."""
     return [item.shape for item in iter_tensors(x)]
 
 
-def get_grads(x: nn.Module | Tree, /) -> list[Tensor]:
+def get_grads(x: Module | Tree, /) -> list[Tensor]:
     r"""Return a cloned detached copy of the gradients."""
     return [
         w.grad.clone().detach()
@@ -285,10 +296,10 @@ def check_backward(
 
 
 @overload
-def check_jit_scripting(module: nn.Module, /) -> nn.Module: ...
+def check_jit_scripting(module: Module, /) -> Module: ...
 @overload
 def check_jit_scripting(func: Func, /) -> Func: ...
-def check_jit_scripting(arg: Func | nn.Module, /) -> Func | nn.Module:
+def check_jit_scripting(arg: Func | Module, /) -> Func | Module:
     r"""Test JIT compilation."""
     try:
         scripted = jit.script(arg)
@@ -298,14 +309,14 @@ def check_jit_scripting(arg: Func | nn.Module, /) -> Func | nn.Module:
 
 
 @overload
-def check_jit_serialization[M: nn.Module](
+def check_jit_serialization[M: Module](
     module: M, /, *, device: DeviceArg = ...
 ) -> M: ...
 @overload
 def check_jit_serialization(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
 def check_jit_serialization(
-    arg: Func | nn.Module, /, *, device: DeviceArg = None
-) -> Func | nn.Module:
+    arg: Func | Module, /, *, device: DeviceArg = None
+) -> Func | Module:
     r"""Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
         try:
@@ -322,12 +333,10 @@ def check_jit_serialization(
 
 
 @overload
-def check_jit(module: nn.Module, /, *, device: DeviceArg = ...) -> nn.Module: ...
+def check_jit(module: Module, /, *, device: DeviceArg = ...) -> Module: ...
 @overload
 def check_jit(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
-def check_jit(
-    arg: Func | nn.Module, /, *, device: DeviceArg = None
-) -> Func | nn.Module:
+def check_jit(arg: Func | Module, /, *, device: DeviceArg = None) -> Func | Module:
     r"""Test JIT compilation+serialization."""
     # check if scripting and serialization works
     scripted = check_jit_scripting(arg)
@@ -335,7 +344,7 @@ def check_jit(
     return loaded
 
 
-def check_initialization[M: nn.Module](
+def check_initialization[M: Module](
     module_type: type[M],
     /,
     *,
@@ -343,7 +352,7 @@ def check_initialization[M: nn.Module](
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> M:
     r"""Test initialization of a module."""
-    if not issubclass(module_type, nn.Module):
+    if not issubclass(module_type, Module):
         raise TypeError(f"Unsupported type {type(module_type)} for `obj`!")
 
     try:
@@ -355,7 +364,7 @@ def check_initialization[M: nn.Module](
 
 
 def check_optim(
-    model: nn.Module,
+    model: Module,
     /,
     *,
     input_args: Sequence[Tree] = (),
@@ -386,17 +395,16 @@ def check_optim(
 # endregion check helper functions -----------------------------------------------------
 
 
-def check_object(
-    obj: type[nn.Module] | nn.Module | Func,
+def check_model(
+    model: Module,
+    /,
     *,
-    init_args: Sequence[Any] = (),
-    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
     # input arguments
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # reference arguments
     reference_gradients: Optional[Nested[Tensor]] = None,
-    reference_model: Optional[nn.Module] = None,
+    reference_model: Optional[Module] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
     reference_outputs: Optional[Nested[Tensor]] = None,
     # extra arguments
@@ -408,11 +416,155 @@ def check_object(
 ) -> None:
     r"""Check a module, function or model class."""
     # region get name and logger -------------------------------------------------------
-    model: nn.Module | Func
+    if not isinstance(model, Module):
+        raise TypeError("Expected Module!")
+
+    model_name = model.__class__.__name__
+    logger = __logger__.getChild(model_name) if logger is None else logger
+    # endregion get name and logger ----------------------------------------------------
+
+    check_object(
+        model,
+        input_args=input_args,
+        input_kwargs=input_kwargs,
+        reference_gradients=reference_gradients,
+        reference_model=reference_model,
+        reference_shapes=reference_shapes,
+        reference_outputs=reference_outputs,
+        device=device,
+        logger=logger,
+        make_inputs_parameters=make_inputs_parameters,
+        test_jit=test_jit,
+        test_optim=test_optim,
+    )
+
+
+def check_class(
+    model_class: type[Module],
+    /,
+    *,
+    init_args: Sequence[Any] = (),
+    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
+    # input arguments
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    # reference arguments
+    reference_gradients: Optional[Nested[Tensor]] = None,
+    reference_model: Optional[Module] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_outputs: Optional[Nested[Tensor]] = None,
+    # extra arguments
+    device: Optional[torch.device] = None,
+    logger: Optional[logging.Logger] = None,
+    make_inputs_parameters: bool = True,
+    test_jit: bool = True,
+    test_optim: bool = False,
+) -> None:
+    r"""Test a model class."""
+    # region get name and logger -------------------------------------------------------
+    if not issubclass(model_class, Module):
+        raise TypeError("Expected Module subclass!")
+
+    class_name = model_class.__name__
+    logger = logger if logger is not None else __logger__.getChild(class_name)
+    # endregion get name and logger ----------------------------------------------------
+
+    # region get initialized model if class --------------------------------------------
+    model = check_initialization(model_class, args=init_args, kwargs=init_kwargs)
+    logger.info(">>> Initialization ✔ ")
+    # endregion get initialized model if class --------------------------------------------
+
+    check_model(
+        model,
+        input_args=input_args,
+        input_kwargs=input_kwargs,
+        reference_gradients=reference_gradients,
+        reference_model=reference_model,
+        reference_shapes=reference_shapes,
+        reference_outputs=reference_outputs,
+        device=device,
+        logger=logger,
+        make_inputs_parameters=make_inputs_parameters,
+        test_jit=test_jit,
+        test_optim=test_optim,
+    )
+
+
+def check_function(
+    func: Func,
+    /,
+    *,
+    # input arguments
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    # reference arguments
+    reference_gradients: Optional[Nested[Tensor]] = None,
+    reference_model: Optional[Module] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_outputs: Optional[Nested[Tensor]] = None,
+    # extra arguments
+    device: Optional[torch.device] = None,
+    logger: Optional[logging.Logger] = None,
+    make_inputs_parameters: bool = True,
+    test_jit: bool = True,
+    test_optim: bool = False,
+) -> None:
+    r"""Test a model class."""
+    # region get name and logger -------------------------------------------------------
+    if isinstance(func, Module):
+        raise TypeError("For Modules, Use `check_model` instead!")
+
+    if not callable(func):
+        raise TypeError("Expected callable!")
+
+    func_name = func.__name__
+    logger = __logger__.getChild(func_name) if logger is None else logger
+    # endregion get name and logger ----------------------------------------------------
+
+    # test with initialized model
+    check_object(
+        func,
+        input_args=input_args,
+        input_kwargs=input_kwargs,
+        reference_gradients=reference_gradients,
+        reference_model=reference_model,
+        reference_shapes=reference_shapes,
+        reference_outputs=reference_outputs,
+        device=device,
+        logger=logger,
+        make_inputs_parameters=make_inputs_parameters,
+        test_jit=test_jit,
+        test_optim=test_optim,
+    )
+
+
+def check_object(
+    obj: type[Module] | Module | Func,
+    *,
+    init_args: Sequence[Any] = (),
+    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
+    # input arguments
+    input_args: Sequence[Tree] = (),
+    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    # reference arguments
+    reference_gradients: Optional[Nested[Tensor]] = None,
+    reference_model: Optional[Module] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_outputs: Optional[Nested[Tensor]] = None,
+    # extra arguments
+    device: Optional[torch.device] = None,
+    logger: Optional[logging.Logger] = None,
+    make_inputs_parameters: bool = True,
+    test_jit: bool = True,
+    test_optim: bool = False,
+) -> None:
+    r"""Check a module, function or model class."""
+    # region get name and logger -------------------------------------------------------
+    model: Module | Func
     match obj:
-        case type() if issubclass(obj, nn.Module):
+        case type() if issubclass(obj, Module):
             model_name = obj.__name__
-        case nn.Module() as model:
+        case Module() as model:
             model_name = model.__class__.__name__
         case Callable() as func:  # type: ignore[misc]
             model_name = func.__name__  # type: ignore[unreachable]
@@ -427,7 +579,7 @@ def check_object(
     match obj:
         case type() as cls:
             model = check_initialization(cls, args=init_args, kwargs=init_kwargs)
-        case nn.Module() as model:
+        case Module() as model:
             pass
         case Callable() as func:  # type: ignore[misc]
             model = func  # type: ignore[unreachable]
@@ -438,7 +590,7 @@ def check_object(
     # endregion get initialized model if class -----------------------------------------
 
     # region get parameters ------------------------------------------------------------
-    model_parameters = get_parameters(model) if isinstance(model, nn.Module) else []
+    model_parameters = get_parameters(model) if isinstance(model, Module) else []
 
     # get parameters of input tensors
     if make_inputs_parameters:
@@ -471,7 +623,7 @@ def check_object(
     # endregion get reference model ----------------------------------------------------
 
     # region change device -------------------------------------------------------------
-    if isinstance(model, nn.Module):
+    if isinstance(model, Module):
         if device is None:
             device = get_device(model)
 
@@ -515,7 +667,7 @@ def check_object(
 
     # region check optimization ------------------------------------------------
     if test_optim:
-        assert isinstance(model, nn.Module), "Cannot test optimization of function!"
+        assert isinstance(model, Module), "Cannot test optimization of function!"
         # create a clone of the model, inputs and outputs.
         check_optim(
             deepcopy(model),
@@ -561,156 +713,3 @@ def check_object(
         test_jit=False,
     )
     # endregion check loaded forward/backward pass -------------------------------------
-
-
-def check_model(
-    model: nn.Module,
-    /,
-    *,
-    # input arguments
-    input_args: Sequence[Tree] = (),
-    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    # reference arguments
-    reference_gradients: Optional[Nested[Tensor]] = None,
-    reference_model: Optional[nn.Module] = None,
-    reference_shapes: Optional[list[tuple[int, ...]]] = None,
-    reference_outputs: Optional[Nested[Tensor]] = None,
-    # extra arguments
-    device: Optional[torch.device] = None,
-    logger: Optional[logging.Logger] = None,
-    make_inputs_parameters: bool = True,
-    test_jit: bool = True,
-    test_optim: bool = False,
-) -> None:
-    r"""Check a module, function or model class."""
-    # region get name and logger -------------------------------------------------------
-    if not isinstance(model, nn.Module):
-        raise TypeError("Expected nn.Module!")
-
-    model_name = model.__class__.__name__
-    logger = __logger__.getChild(model_name) if logger is None else logger
-    # endregion get name and logger ----------------------------------------------------
-
-    check_object(
-        model,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
-        reference_gradients=reference_gradients,
-        reference_model=reference_model,
-        reference_shapes=reference_shapes,
-        reference_outputs=reference_outputs,
-        device=device,
-        logger=logger,
-        make_inputs_parameters=make_inputs_parameters,
-        test_jit=test_jit,
-        test_optim=test_optim,
-    )
-
-
-def check_class(
-    model_class: type[nn.Module],
-    /,
-    *,
-    init_args: Sequence[Any] = (),
-    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
-    # input arguments
-    input_args: Sequence[Tree] = (),
-    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    # reference arguments
-    reference_gradients: Optional[Nested[Tensor]] = None,
-    reference_model: Optional[nn.Module] = None,
-    reference_shapes: Optional[list[tuple[int, ...]]] = None,
-    reference_outputs: Optional[Nested[Tensor]] = None,
-    # extra arguments
-    device: Optional[torch.device] = None,
-    logger: Optional[logging.Logger] = None,
-    make_inputs_parameters: bool = True,
-    test_jit: bool = True,
-    test_optim: bool = False,
-) -> None:
-    r"""Test a model class."""
-    # region get name and logger -------------------------------------------------------
-    if not issubclass(model_class, nn.Module):
-        raise TypeError("Expected nn.Module subclass!")
-
-    class_name = model_class.__name__
-    logger = logger if logger is not None else __logger__.getChild(class_name)
-    # endregion get name and logger ----------------------------------------------------
-
-    # region get initialized model if class --------------------------------------------
-    model = check_initialization(model_class, args=init_args, kwargs=init_kwargs)
-    logger.info(">>> Initialization ✔ ")
-    # endregion get initialized model if class --------------------------------------------
-
-    check_model(
-        model,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
-        reference_gradients=reference_gradients,
-        reference_model=reference_model,
-        reference_shapes=reference_shapes,
-        reference_outputs=reference_outputs,
-        device=device,
-        logger=logger,
-        make_inputs_parameters=make_inputs_parameters,
-        test_jit=test_jit,
-        test_optim=test_optim,
-    )
-
-
-def check_function(
-    func: Func,
-    /,
-    *,
-    # input arguments
-    input_args: Sequence[Tree] = (),
-    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    # reference arguments
-    reference_gradients: Optional[Nested[Tensor]] = None,
-    reference_model: Optional[nn.Module] = None,
-    reference_shapes: Optional[list[tuple[int, ...]]] = None,
-    reference_outputs: Optional[Nested[Tensor]] = None,
-    # extra arguments
-    device: Optional[torch.device] = None,
-    logger: Optional[logging.Logger] = None,
-    make_inputs_parameters: bool = True,
-    test_jit: bool = True,
-    test_optim: bool = False,
-) -> None:
-    r"""Test a model class."""
-    # region get name and logger -------------------------------------------------------
-    if isinstance(func, nn.Module):
-        raise TypeError("For nn.Modules, Use `check_model` instead!")
-
-    if not callable(func):
-        raise TypeError("Expected callable!")
-
-    func_name = func.__name__
-    logger = __logger__.getChild(func_name) if logger is None else logger
-    # endregion get name and logger ----------------------------------------------------
-
-    # test with initialized model
-    check_object(
-        func,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
-        reference_gradients=reference_gradients,
-        reference_model=reference_model,
-        reference_shapes=reference_shapes,
-        reference_outputs=reference_outputs,
-        device=device,
-        logger=logger,
-        make_inputs_parameters=make_inputs_parameters,
-        test_jit=test_jit,
-        test_optim=test_optim,
-    )
-
-
-def assert_compatible_signature(func: Callable, reference: Callable) -> None:
-    r"""Assert that func's signature is wider than reference."""
-    fun_sig = inspect.signature(func)
-    ref_sig = inspect.signature(reference)
-
-    for param in ref_sig.parameters:
-        assert param in fun_sig.parameters
-        assert fun_sig.parameters[param].kind == ref_sig.parameters[param].kind

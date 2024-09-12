@@ -24,7 +24,7 @@ from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from functools import wraps
 from importlib import import_module
-from typing import Any, Self, cast
+from typing import Any, Self, cast, overload
 
 import torch
 from torch import Tensor, jit, nn
@@ -318,9 +318,15 @@ def initialize_from_type(module_type: type[nn.Module], /, **kwargs: Any) -> nn.M
         raise TypeError(f"Failed to initialize {module_type} with {config=}") from exc
 
 
-def try_initialize_from_config(
-    obj: nn.Module | type[nn.Module] | Mapping[str, Any], /, **kwargs: Any
-) -> nn.Module:
+@overload
+def try_initialize_from_config[M: nn.Module](module: M, /) -> M: ...
+@overload
+def try_initialize_from_config[M: nn.Module](cls: type[M], /, **kwargs: Any) -> M: ...
+@overload
+def try_initialize_from_config(config: Mapping[str, Any], /) -> nn.Module: ...
+def try_initialize_from_config[M: nn.Module](
+    obj: M | type[M] | Mapping[str, Any], /, **kwargs: Any
+) -> M:
     r"""Try to initialize a module from a config."""
     match obj:
         case nn.Module() as module:
