@@ -59,12 +59,12 @@ docs = [
     "sphinx-math-dollar>=1.2.1",
     "sphinx-togglebutton>=0.3.2",
     "sphinx-typo3-theme>=4.9.0",
-    "sphinx>=8.0.2",
+    "sphinx>=8.1.0",
 ]
 tests = [
-    "coverage>=7.6.1",
+    "coverage>=7.6.2",
     "matplotlib>=3.9.2",
-    "hypothesis[numpy,pandas,pytest]>=6.112.5",
+    "hypothesis[numpy,pandas,pytest]>=6.114.1",
     "psutil>=6.0.0",
     "pygal>=3.0.5",
     "pytest-benchmark[histogram]>=4.0.0",
@@ -78,24 +78,24 @@ tests = [
 linters = [
     "pylint>=3.3.1",
     "ruff>=0.6.9",
-    "tach>=0.13.0",
+    "tach>=0.13.1",
 ]
 typing = [
     "mypy>=1.11.2",
-    "pyright>=1.1.383",
+    "pyright>=1.1.384",
     "types-colorama>=0.4.15.20240311",
     "types-decorator>=5.1.8.20240310",
     "types-docutils>=0.21.0.20241005",
     "types-jsonschema>=4.23.0.20240813",
     "types-pillow>=10.2.0.20240822",
     "types-protobuf>=5.28.0.20240924",
-    "types-psutil>=6.0.0.20240901",
+    "types-psutil>=6.0.0.20241011",
     "types-pygments>=2.18.0.20240506",
     "types-pytz>=2024.2.0.20241003",
     "types-pyyaml>=6.0.12.20240917",
     "types-requests>=2.32.0.20240914",
     "types-setuptools>=75.1.0.20240917",
-    "types-six>=1.16.21.20240513",
+    "types-six>=1.16.21.20241009",
     "types-tabulate>=0.9.0.20240106",
     "types-tqdm>=4.66.0.20240417",
     "types-urllib3>=1.26.25.14",
@@ -106,7 +106,7 @@ devtools = [
     "devtools>=0.12.2",
     "ninja>=1.11.1.1",
     "pip>=24.2",
-    "pre-commit>=4.0.0",
+    "pre-commit>=4.0.1",
     "pybadges>=3.0.1",
     "pygments>=2.18.0",
     "setuptools>=75.1.0",
@@ -280,7 +280,7 @@ docstring-code-line-length = "dynamic"
 # endregion ruff configuration ---------------------------------------------------------
 
 
-# region pylint Configuration ----------------------------------------------------------
+# region pylint configuration ----------------------------------------------------------
 [tool.pylint]
 [tool.pylint."MESSAGES CONTROL"]
 enable = ["useless-suppression"]
@@ -325,7 +325,7 @@ max-line-length = 120
 # List of members which are set dynamically and missed by pylint inference system, and so shouldn't
 # trigger E1101 when accessed. Python regular expressions are accepted.
 generated-members = ["numpy.*", "torch.*"]
-# endregion pylint Configuration -------------------------------------------------------
+# endregion pylint configuration -------------------------------------------------------
 
 
 # region mypy configuration ------------------------------------------------------------
@@ -400,6 +400,7 @@ no_incremental = false
 module = [
     "pandas.*",
     "pyarrow.*",
+    "pytest_benchmark.*",
     "scipy.*",
     "sklearn.*",
 ]
@@ -407,19 +408,14 @@ ignore_missing_imports = true
 # endregion mypy configuration ---------------------------------------------------------
 
 
-# region pyright Configuration ---------------------------------------------------------
+# region pyright configuration ---------------------------------------------------------
 [tool.pyright]
 venv = ".venv"
 venvPath = "."
 pythonVersion = "3.12"
 pythonPlatform = "Linux"
 include = ["src/", "tests/"]
-exclude = [
-    "tests/linodenet/jit_compatibility/",  # FIXME: temporary
-]
-executionEnvironments = [
-  { root = "src" }
-]
+
 # Type Check Diagnostics Settings
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md#type-check-diagnostics-settings
 typeCheckingMode = "standard"
@@ -436,7 +432,7 @@ reportUntypedClassDecorator = true
 #reportSelfClsParameterName = false
 reportUnnecessaryTypeIgnoreComment = false  # highlight any unnecessary "# type: ignore" comments
 #reportUnsupportedDunderAll = false
-# endregion pyright Configuration ------------------------------------------------------
+# endregion pyright configuration ------------------------------------------------------
 
 
 # region pytest configuration ----------------------------------------------------------

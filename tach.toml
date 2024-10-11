@@ -4,6 +4,20 @@ source_roots = [
 ]
 
 [[modules]]
+path = "<root>"
+depends_on = [
+    { path = "linodenet.config" },
+    { path = "linodenet.initializations" },
+    { path = "linodenet.lib" },
+    { path = "linodenet.modules" },
+    { path = "linodenet.parametrize" },
+    { path = "linodenet.projections" },
+    { path = "linodenet.regularizations" },
+    { path = "linodenet.testing" },
+    { path = "linodenet.utils" },
+]
+
+[[modules]]
 path = "linodenet.activations"
 depends_on = []
 
@@ -74,18 +88,4 @@ depends_on = []
 path = "linodenet.utils"
 depends_on = [
     { path = "linodenet.config" },
-]
-
-[[modules]]
-path = "<root>"
-depends_on = [
-    { path = "linodenet.config" },
-    { path = "linodenet.initializations" },
-    { path = "linodenet.lib" },
-    { path = "linodenet.modules" },
-    { path = "linodenet.parametrize" },
-    { path = "linodenet.projections" },
-    { path = "linodenet.regularizations" },
-    { path = "linodenet.testing" },
-    { path = "linodenet.utils" },
 ]
