@@ -85,7 +85,7 @@ repos:
     rev: v1.0.4
     hooks:
       - id: nbstripout-fast
-        files: '^dev/'
+        exclude: '^experiments/'
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
     rev: v0.3.7
@@ -104,7 +104,7 @@ repos:
         files: '^src/'
       - id: python-check-typing
         args: ["--check-no-return-union", "--check-concrete"]
-        files: '^src/|tests/'
+        files: '^src/|^tests/'
       - id: python-direct-imports
       - id: python-no-mixed-args
         files: '^src/'
@@ -126,7 +126,8 @@ repos:
       - id: pyproject-update-deps
       - id: pyproject-check-unmaintained
       - id: python-check-clean-interface
-        files: 'src/'
+        files: '^src/'
+        exclude: '/tests/'
       # other hooks
       - id: check-resolved-github-issues
         files: '^src/|^tests/'
@@ -172,8 +173,8 @@ repos:
     rev: v1.1.384
     hooks:
       - id: pyright
-        # REF: https://stackoverflow.com/a/20401674
-#        entry: sh -c '! script -c "pyright $*" /dev/null | grep --color=never -Po "(?<=$PWD/)(.*:.*)"' --
+        # SEE: https://stackoverflow.com/a/20401674
+        # entry: sh -c '! script -c "pyright $*" /dev/null | grep --color=never -Po "(?<=$PWD/)(.*:.*)"' --
         entry: |
           sh -c '
               result=$(script -c "pyright $*" /dev/null | grep --color=never -Po "(?<=$PWD/)(.*:.*)");

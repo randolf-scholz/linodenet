@@ -4,10 +4,12 @@ __all__ = [
     # ABCs & Protocols
     "ModuleTest",
     # Functions
-    "is_forward_stable",
-    "is_backward_stable",
+    "assert_backward_stable",
+    "assert_forward_stable",
     "check_zero_mean_unit_variance",
     "get_output",
+    "is_backward_stable",
+    "is_forward_stable",
 ]
 
 from collections.abc import Callable

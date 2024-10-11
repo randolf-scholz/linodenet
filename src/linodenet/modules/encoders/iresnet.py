@@ -8,6 +8,7 @@ __all__ = [
     "iResNetBlock",
     "iResNetLayer",
     "spectral_norm",
+    "AltLinearContraction",
 ]
 
 from math import sqrt

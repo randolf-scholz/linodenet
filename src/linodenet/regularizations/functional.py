@@ -30,7 +30,7 @@ __all__ = [
 
 from typing import Protocol, runtime_checkable
 
-import torch.linalg
+import torch
 from torch import BoolTensor, Tensor
 
 from linodenet.constants import TRUE

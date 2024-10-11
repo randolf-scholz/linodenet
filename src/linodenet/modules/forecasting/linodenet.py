@@ -3,6 +3,7 @@ r"""Contains implementations of ODE models."""
 __all__ = [
     # Classes
     "LinODEnet",
+    "LatentLinODECell",
 ]
 
 import logging
