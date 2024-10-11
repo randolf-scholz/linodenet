@@ -16,7 +16,7 @@ __all__ = [
     "PROJECTIONS",
     # ABCs & Protocols
     "Projection",
-    "ProjectionABC",
+    "ProjectionBase",
     # Functions
     "banded",
     "contraction",
@@ -86,7 +86,7 @@ from linodenet.projections.modular import (
     Masked,
     Normal,
     Orthogonal,
-    ProjectionABC,
+    ProjectionBase,
     SkewSymmetric,
     Symmetric,
     Symplectic,

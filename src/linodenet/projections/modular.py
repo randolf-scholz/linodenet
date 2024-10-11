@@ -7,7 +7,7 @@ Notes:
 
 __all__ = [
     # ABCs & Protocols
-    "ProjectionABC",
+    "ProjectionBase",
     # Classes
     "Banded",
     "Contraction",
@@ -54,7 +54,7 @@ from linodenet.projections.functional import (
 )
 
 
-class ProjectionABC(nn.Module):
+class ProjectionBase(nn.Module):
     r"""Abstract Base Class for Projection components."""
 
     @abstractmethod
@@ -73,7 +73,7 @@ class ProjectionABC(nn.Module):
 
 # region projections -------------------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
-class Identity(nn.Module):
+class Identity(ProjectionBase):
     r"""Return x as-is.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -87,7 +87,7 @@ class Identity(nn.Module):
         return identity(x)
 
 
-class Symmetric(nn.Module):
+class Symmetric(ProjectionBase):
     r"""Return the closest symmetric matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -103,7 +103,7 @@ class Symmetric(nn.Module):
         return symmetric(x)
 
 
-class SkewSymmetric(nn.Module):
+class SkewSymmetric(ProjectionBase):
     r"""Return the closest skew-symmetric matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -119,7 +119,7 @@ class SkewSymmetric(nn.Module):
         return skew_symmetric(x)
 
 
-class LowRank(nn.Module):
+class LowRank(ProjectionBase):
     r"""Return the closest low rank matrix to X.
 
     .. Signature:: ``(..., m, n) -> (..., m, n)``
@@ -142,7 +142,7 @@ class LowRank(nn.Module):
         return low_rank(x, rank=self.rank)
 
 
-class Orthogonal(nn.Module):
+class Orthogonal(ProjectionBase):
     r"""Return the closest orthogonal matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -162,7 +162,7 @@ class Orthogonal(nn.Module):
         return orthogonal(x)
 
 
-class Traceless(nn.Module):
+class Traceless(ProjectionBase):
     r"""Return the closest traceless matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -178,7 +178,7 @@ class Traceless(nn.Module):
         return traceless(x)
 
 
-class Normal(nn.Module):
+class Normal(ProjectionBase):
     r"""Return the closest normal matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -209,7 +209,7 @@ class Normal(nn.Module):
         return normal(x)
 
 
-class Hamiltonian(nn.Module):
+class Hamiltonian(ProjectionBase):
     r"""Return the closest symplectic matrix to X.
 
     .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
@@ -227,7 +227,7 @@ class Hamiltonian(nn.Module):
         return hamiltonian(x)
 
 
-class Symplectic(nn.Module):
+class Symplectic(ProjectionBase):
     r"""Return the closest symplectic matrix to X.
 
     .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
@@ -249,7 +249,7 @@ class Symplectic(nn.Module):
 
 
 # region masked projections ------------------------------------------------------------
-class Diagonal(nn.Module):
+class Diagonal(ProjectionBase):
     r"""Return the closest diagonal matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -272,7 +272,7 @@ class Diagonal(nn.Module):
         return diagonal(x)
 
 
-class Banded(nn.Module):
+class Banded(ProjectionBase):
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -303,7 +303,7 @@ class Banded(nn.Module):
         return banded(x, upper=self.upper, lower=self.lower)
 
 
-class UpperTriangular(nn.Module):
+class UpperTriangular(ProjectionBase):
     r"""Return the closest upper triangular matrix to X.
 
     .. Signature:: ``(..., m, n) -> (..., m, n)``
@@ -332,7 +332,7 @@ class UpperTriangular(nn.Module):
         return upper_triangular(x, upper=self.upper)
 
 
-class LowerTriangular(nn.Module):
+class LowerTriangular(ProjectionBase):
     r"""Return the closest lower triangular matrix to X.
 
     .. Signature:: ``(..., m, n) -> (..., m, n)``
@@ -361,7 +361,7 @@ class LowerTriangular(nn.Module):
         return lower_triangular(x, lower=self.lower)
 
 
-class Masked(nn.Module):
+class Masked(ProjectionBase):
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``
@@ -394,7 +394,7 @@ class Masked(nn.Module):
 
 
 # region other projections -------------------------------------------------------------
-class Contraction(nn.Module):
+class Contraction(ProjectionBase):
     r"""Return the closest contraction matrix to X.
 
     .. Signature:: ``(..., m, n) -> (..., m, n)``
@@ -414,7 +414,7 @@ class Contraction(nn.Module):
         return contraction(x)
 
 
-class DiagonallyDominant(nn.Module):
+class DiagonallyDominant(ProjectionBase):
     r"""Return the closest diagonally dominant matrix to X.
 
     .. Signature:: ``(..., n, n) -> (..., n, n)``

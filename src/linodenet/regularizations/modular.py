@@ -7,7 +7,7 @@ Notes:
 
 __all__ = [
     # ABCs & Protocols
-    "RegularizationABC",
+    "RegularizationBase",
     # Regularizations
     "Banded",
     "Contraction",
@@ -56,7 +56,7 @@ from linodenet.regularizations.functional import (
 )
 
 
-class RegularizationABC(nn.Module):
+class RegularizationBase(nn.Module):
     r"""Abstract Base Class for Regularization components."""
 
     @abstractmethod
@@ -74,7 +74,7 @@ class RegularizationABC(nn.Module):
 
 
 # region regularizations ---------------------------------------------------------------
-class LogDetExp(nn.Module):
+class LogDetExp(RegularizationBase):
     r"""Bias $\det(e^A)$ towards 1.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -101,7 +101,7 @@ class LogDetExp(nn.Module):
         return logdetexp(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class MatrixNorm(nn.Module):
+class MatrixNorm(RegularizationBase):
     r"""Return the matrix regularization term.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -121,7 +121,7 @@ class MatrixNorm(nn.Module):
 
 
 # region matrix groups -----------------------------------------------------------------
-class Identity(nn.Module):
+class Identity(RegularizationBase):
     r"""Identity regularization.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -140,7 +140,7 @@ class Identity(nn.Module):
         return identity(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Symmetric(nn.Module):
+class Symmetric(RegularizationBase):
     r"""Bias the matrix towards being symmetric.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -161,7 +161,7 @@ class Symmetric(nn.Module):
         return symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class SkewSymmetric(nn.Module):
+class SkewSymmetric(RegularizationBase):
     r"""Bias the matrix towards being skew-symmetric.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -182,7 +182,7 @@ class SkewSymmetric(nn.Module):
         return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class LowRank(nn.Module):
+class LowRank(RegularizationBase):
     r"""Bias the matrix towards being low-rank.
 
     .. Signature:: ``(..., m, n) -> ...``
@@ -207,7 +207,7 @@ class LowRank(nn.Module):
         return low_rank(x, rank=self.rank, p=self.p, size_normalize=self.size_normalize)
 
 
-class Orthogonal(nn.Module):
+class Orthogonal(RegularizationBase):
     r"""Bias the matrix towards being orthogonal.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -228,7 +228,7 @@ class Orthogonal(nn.Module):
         return orthogonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Traceless(nn.Module):
+class Traceless(RegularizationBase):
     r"""Bias the matrix towards being traceless.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -247,7 +247,7 @@ class Traceless(nn.Module):
         return traceless(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Normal(nn.Module):
+class Normal(RegularizationBase):
     r"""Bias the matrix towards being orthogonal.
 
     .. Signature:: ``(..., n, n) -> ...``
@@ -268,7 +268,7 @@ class Normal(nn.Module):
         return normal(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Symplectic(nn.Module):
+class Symplectic(RegularizationBase):
     r"""Bias the matrix towards being symplectic.
 
     .. Signature:: ``(..., 2n, 2n) -> ...``
@@ -290,7 +290,7 @@ class Symplectic(nn.Module):
         return symplectic(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Hamiltonian(nn.Module):
+class Hamiltonian(RegularizationBase):
     r"""Bias the matrix towards being hamiltonian.
 
     .. Signature:: ``(..., 2n, 2n) -> ...``
@@ -316,7 +316,7 @@ class Hamiltonian(nn.Module):
 
 
 # region masked projections ------------------------------------------------------------
-class Diagonal(nn.Module):
+class Diagonal(RegularizationBase):
     r"""Bias the matrix towards being diagonal.
 
     .. Signature:: ``(..., m, n) -> ...``
@@ -338,7 +338,7 @@ class Diagonal(nn.Module):
         return diagonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class LowerTriangular(nn.Module):
+class LowerTriangular(RegularizationBase):
     r"""Bias the matrix towards being lower triangular.
 
     .. Signature:: ``(..., m, n) -> ...``
@@ -366,7 +366,7 @@ class LowerTriangular(nn.Module):
         )
 
 
-class UpperTriangular(nn.Module):
+class UpperTriangular(RegularizationBase):
     r"""Bias the matrix towards being upper triangular.
 
     .. Signature:: ``(..., m, n) -> ...``
@@ -394,7 +394,7 @@ class UpperTriangular(nn.Module):
         )
 
 
-class Banded(nn.Module):
+class Banded(RegularizationBase):
     r"""Bias the matrix towards being banded.
 
     .. Signature:: ``(..., m, n) -> ...``
@@ -433,7 +433,7 @@ class Banded(nn.Module):
         )
 
 
-class Masked(nn.Module):
+class Masked(RegularizationBase):
     r"""Bias the matrix towards being masked.
 
     .. Signature:: ``(..., m, n) -> ...``
@@ -467,7 +467,7 @@ class Masked(nn.Module):
 
 
 # region other regularizations ---------------------------------------------------------
-class Contraction(nn.Module):
+class Contraction(RegularizationBase):
     r"""Bias the matrix towards being a contraction.
 
     .. Signature:: ``(..., m, n) -> ...``

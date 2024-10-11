@@ -87,26 +87,27 @@ from linodenet.parametrize.parametrizations import (
 
 PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
     # Parametrizations
-    "CayleyMap": CayleyMap,
-    "GramMatrix": GramMatrix,
-    "MatrixExponential": MatrixExponential,
-    "SpectralNormalization": SpectralNormalization,
+    "CayleyMap"             : CayleyMap,
+    "GramMatrix"            : GramMatrix,
+    "MatrixExponential"     : MatrixExponential,
+    "SpectralNormalization" : SpectralNormalization,
     # Learnable parametrizations
-    "ReZero": ReZero,
+    "ReZero"                : ReZero,
     # linodenet.projections
-    "Hamiltonian": Hamiltonian,
-    "Identity": Identity,
-    "LowRank": LowRank,
-    "Normal": Normal,
-    "Orthogonal": Orthogonal,
-    "SkewSymmetric": SkewSymmetric,
-    "Symmetric": Symmetric,
-    "Symplectic": Symplectic,
-    "Traceless": Traceless,
+    "Hamiltonian"           : Hamiltonian,
+    "Identity"              : Identity,
+    "LowRank"               : LowRank,
+    "Normal"                : Normal,
+    "Orthogonal"            : Orthogonal,
+    "SkewSymmetric"         : SkewSymmetric,
+    "Symmetric"             : Symmetric,
+    "Symplectic"            : Symplectic,
+    "Traceless"             : Traceless,
     # linodenet.projections masked
-    "Banded": Banded,
-    "Diagonal": Diagonal,
-    "LowerTriangular": LowerTriangular,
-    "Masked": Masked,
-    "UpperTriangular": UpperTriangular,
-}
+    "Banded"                : Banded,
+    "Diagonal"              : Diagonal,
+    "LowerTriangular"       : LowerTriangular,
+    "Masked"                : Masked,
+    "UpperTriangular"       : UpperTriangular,
+}  # fmt: skip
+r"""Dictionary of all available parametrizations."""

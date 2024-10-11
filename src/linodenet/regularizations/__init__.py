@@ -16,7 +16,7 @@ __all__ = [
     "MODULAR_REGULARIZATIONS",
     # ABCs & Protocols
     "Regularization",
-    "RegularizationABC",
+    "RegularizationBase",
     # Classes
     "Banded",
     "Contraction",
@@ -89,7 +89,7 @@ from linodenet.regularizations.modular import (
     MatrixNorm,
     Normal,
     Orthogonal,
-    RegularizationABC,
+    RegularizationBase,
     SkewSymmetric,
     Symmetric,
     Symplectic,

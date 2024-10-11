@@ -109,7 +109,7 @@ MATRIX_TESTS: dict[str, MatrixTest] = {
     "is_normal"              : is_normal,
     "is_orthogonal"          : is_orthogonal,
     "is_skew_symmetric"      : is_skew_symmetric,
-    "is_square:"             : is_square,
+    "is_square"              : is_square,
     "is_symmetric"           : is_symmetric,
     "is_symplectic"          : is_symplectic,
     "is_traceless"           : is_traceless,

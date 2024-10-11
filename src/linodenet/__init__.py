@@ -4,6 +4,7 @@ __all__ = [
     # Constants
     "__version__",
     # Sub-Modules
+    "activations",
     "config",
     "initializations",
     "lib",
@@ -18,6 +19,7 @@ __all__ = [
 from importlib import metadata
 
 from linodenet import (
+    activations,
     config,
     initializations,
     lib,

@@ -6,6 +6,7 @@ source_roots = [
 [[modules]]
 path = "<root>"
 depends_on = [
+    { path = "linodenet.activations" },
     { path = "linodenet.config" },
     { path = "linodenet.initializations" },
     { path = "linodenet.lib" },
