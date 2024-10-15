@@ -22,6 +22,7 @@
       <w>bπaπ</w>
       <w>celu</w>
       <w>checkable</w>
+      <w>cholesky</w>
       <w>cipra</w>
       <w>classmethod</w>
       <w>codeauthor</w>
@@ -37,6 +38,7 @@
       <w>dtype</w>
       <w>dunder</w>
       <w>duvenaud</w>
+      <w>dyads</w>
       <w>endl</w>
       <w>fesd</w>
       <w>finfo</w>
@@ -123,6 +125,7 @@
       <w>renormalize</w>
       <w>renormalizes</w>
       <w>rezero</w>
+      <w>rmse</w>
       <w>romera</w>
       <w>rrelu</w>
       <w>rsample</w>

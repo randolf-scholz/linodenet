@@ -98,7 +98,7 @@ def get_hparams(module: nn.Module) -> dict:
     known_types: dict[type[nn.Module], Callable[[nn.Module], dict]] = {
         nn.Linear: __get_hparams_linear,
         nn.Conv2d: __get_hparams_conv2d,
-        ...
+        ...: ...,
     }
     try:
         getter = known_types[cls]
