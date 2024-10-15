@@ -41,7 +41,10 @@ class WithDecoder(Foo):
         self.register_module("decoder", decoder)
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.decoder(super().forward(x))
+        z = super().forward(x)
+        if self.decoder is not None:
+            return self.decoder(z)
+        return z
 
 
 class InheritedDecoder(WithDecoder):
@@ -61,12 +64,11 @@ def test_with_decoder() -> None:
         AssertionError,
         match="Unsupported annotation typing.Optional[torch.nn.modules.module.Module]*.",
     ):
-        scripted_model = jit.script(model)
+        _ = jit.script(model)
 
-    assert isinstance(scripted_model, jit.ScriptModule)
-    y = scripted_model(x)
-    assert y.shape == (3, 4)
-
+    # assert isinstance(scripted_model, jit.ScriptModule)
+    # y = scripted_model(x)
+    # assert y.shape == (3, 4)
     # # serialize and deserialize
     # with TemporaryDirectory() as folder:
     #     path = f"{folder}/model.pt"

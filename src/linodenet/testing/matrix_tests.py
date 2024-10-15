@@ -62,10 +62,18 @@ class MatrixTest(Protocol):
 def is_square(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = RTOL,
-    atol: float = ATOL,
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
 ) -> Tensor:
-    return x.shape[dim[0]] == x.shape[dim[1]]
+    r"""Check whether the given tensor is square along the given dimensions.
+
+    .. Signature:: ``(..., m, n) -> bool[...]``
+    """
+    return torch.tensor(
+        x.shape[dim[0]] == x.shape[dim[1]],
+        dtype=torch.bool,
+        device=x.device,
+    )
 
 
 def is_symmetric(

@@ -463,8 +463,6 @@ class LinearResidualCell(nn.Module):
     r"""CONST: The size of the observable $y$."""
     hidden_size: Final[int]
     r"""CONST: The size of the hidden state $x$."""
-    missing_values: Final[bool]
-    r"""CONST: Whether the filter should handle missing values."""
     autoregressive: Final[bool]
     r"""CONST: Whether the filter is autoregressive or not."""
 
@@ -594,26 +592,20 @@ class LinearKalmanCell(nn.Module):
         self,
         input_size: int,
         hidden_size: Optional[int] = None,
-        # alpha: str | float = "last-value",
-        # alpha_learnable: bool = True,
-        # autoregressive: bool = False,
-        **cfg: Any,
+        *,
+        alpha: str | float = "last-value",
+        alpha_learnable: bool = True,
+        autoregressive: bool = False,
     ) -> None:
         super().__init__()
-        config = deep_dict_update(self.HP, cfg)
-        hidden_size = config.get("hidden_size", input_size)
-        alpha = config["alpha"]
-        self.alpha_learnable = config["alpha_learnable"]
-        autoregressive = config["autoregressive"]
-        if autoregressive and input_size != hidden_size:
-            raise ValueError("Autoregressive filter requires input_size == hidden_size")
+        n: int = int(input_size)
+        m: int = n if hidden_size is None else int(hidden_size)
 
         # CONSTANTS
-        n: int = input_size
-        m: int = hidden_size
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.autoregressive = config["autoregressive"]
+        self.input_size = n
+        self.hidden_size = m
+        self.autoregressive = autoregressive
+        self.alpha_learnable = alpha_learnable
 
         # PARAMETERS
         match alpha:
@@ -644,6 +636,10 @@ class LinearKalmanCell(nn.Module):
 
         # BUFFERS
         self.register_buffer("ZERO", torch.zeros(1))
+
+        # validation
+        if autoregressive and n != m:
+            raise ValueError("Autoregressive filter requires input_size == hidden_size")
 
     @jit.export
     def h(self, x: Tensor) -> Tensor:
