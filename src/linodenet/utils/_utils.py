@@ -7,7 +7,6 @@ __all__ = [
     # Functions
     "autojit",
     "deep_dict_update",
-    "deep_keyval_update",
     "initialize_from_dict",
     "initialize_from_type",
     "is_allcaps",
@@ -77,7 +76,7 @@ def autojit[M: nn.Module](base_class: type[M], /) -> type[M]:
     if not issubclass(WrappedClass, base_class):
         raise TypeError(f"Expected {WrappedClass} to be a subclass of {base_class}.")
 
-    return WrappedClass
+    return WrappedClass  # pyright: ignore[reportReturnType]
 
 
 def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict:
@@ -90,25 +89,14 @@ def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict
         d = deepcopy(d)
 
     for key, value in new.items():
-        d[key] = (
-            deep_dict_update(d.get(key, {}), value)
-            if isinstance(value, Mapping)
-            else value
-        )
-    return d
-
-
-def deep_keyval_update(d: dict, /, **new_kv: Any) -> dict:
-    r"""Update nested dictionary recursively in-place with key-value pairs.
-
-    References:
-        https://stackoverflow.com/a/30655448/9318372
-    """
-    for key, value in d.items():
-        if isinstance(value, Mapping) and value:
-            d[key] = deep_keyval_update(d.get(key, {}), **new_kv)
-        elif key in new_kv:
-            d[key] = new_kv[key]
+        match value:
+            # recurse on non-empty mapping
+            case Mapping() as mapping if mapping:  # non-empty mapping
+                subdict = d.get(key, {})
+                d[key] = deep_dict_update(subdict, mapping, inplace=True)
+            # update value for the given key
+            case _:
+                d[key] = value
     return d
 
 
@@ -328,9 +316,7 @@ def try_initialize_from_config[M: nn.Module](module: M, /) -> M: ...
 def try_initialize_from_config[M: nn.Module](cls: type[M], /, **kwargs: Any) -> M: ...
 @overload
 def try_initialize_from_config(config: Mapping[str, Any], /) -> nn.Module: ...
-def try_initialize_from_config[M: nn.Module](
-    obj: M | type[M] | Mapping[str, Any], /, **kwargs: Any
-) -> M:
+def try_initialize_from_config(obj: object, /, **kwargs: Any) -> nn.Module:
     r"""Try to initialize a module from a config."""
     match obj:
         case nn.Module() as module:

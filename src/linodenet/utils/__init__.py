@@ -7,7 +7,6 @@ __all__ = [
     # Functions
     "autojit",
     "deep_dict_update",
-    "deep_keyval_update",
     "initialize_from_dict",
     "initialize_from_type",
     "is_dunder",
@@ -19,7 +18,6 @@ from linodenet.utils import config, context
 from linodenet.utils._utils import (
     autojit,
     deep_dict_update,
-    deep_keyval_update,
     initialize_from_dict,
     initialize_from_type,
     is_dunder,
