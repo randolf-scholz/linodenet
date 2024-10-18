@@ -1,5 +1,5 @@
 # https://stackoverflow.com/questions/26333823/clang-doesnt-see-basic-headers
-cuda-12-1
+cuda-12-4
 g++-12  # or whatever shown by clang -v
 intel-basekit  # https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html
 intel-mkl-full

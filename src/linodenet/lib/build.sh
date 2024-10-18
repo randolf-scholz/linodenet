@@ -5,11 +5,16 @@ set -e
 PROJECT_DIR=$(git rev-parse --show-toplevel | xargs echo -n)
 echo "PROJECT_DIR: ${PROJECT_DIR}"
 
+CUDA_VERSION="12.4"
+TORCH_VERSION="2.5.0"
+LIBTORCH_CUDA="cu${CUDA_VERSION//./}"
 LIBTORCH_DIR="libtorch"
-LIBTORCH_VERSION="2.2.0+cu121"
+LIBTORCH_VERSION="$TORCH_VERSION+$LIBTORCH_CUDA"
 LIBTORCH_ARCHIVE="libtorch-shared-with-deps-$LIBTORCH_VERSION.zip"
-LIBTORCH_URL="https://download.pytorch.org/libtorch/cu121/$LIBTORCH_ARCHIVE"
-LIBTORCH_HASH="0a1a034b1980199543ec5cbc8d42215f55b188ac188b3dac42d83aeb449922bb"
+LIBTORCH_URL="https://download.pytorch.org/libtorch/$LIBTORCH_CUDA/$LIBTORCH_ARCHIVE"
+
+# 2.2.0+cu121: 0a1a034b1980199543ec5cbc8d42215f55b188ac188b3dac42d83aeb449922bb
+LIBTORCH_HASH="1e93450e8d2ef7d00b08e92318d4017897b4ba00c5c714a077579aca77f41424"
 
 # check if libtorch folder exists
 if [ -d $LIBTORCH_DIR ]; then
@@ -66,7 +71,7 @@ source "${PROJECT_DIR}/.venv/bin/activate"
 echo "Python env: $(which python)"
 
 # prepend correct CUDA version
-export PATH=/usr/local/cuda-12.1/bin:$PATH
+export PATH="/usr/local/cuda-$CUDA_VERSION/bin:$PATH"
 # FIXME: https://github.com/pytorch/pytorch/issues/113948
 export TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0"
 

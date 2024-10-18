@@ -8,9 +8,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 
 # select cuda version
-set(CUDA_VERSION 12.1)
-set(CMAKE_CUDA_COMPILER "/usr/local/cuda-12.1/bin/nvcc")
-set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.1")
+set(CUDA_VERSION 12.4)
+set(CMAKE_CUDA_COMPILER "/usr/local/cuda-12.4/bin/nvcc")
+set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.4")
 
 # set compiler flags
 set(USE_CUDA true)
@@ -18,7 +18,7 @@ set(USE_CUDNN true)
 set(CAFFE2_USE_CUDNN true)
 option(USE_CUDA "Use CUDA" ON)
 option(USE_CUDNN "Use CUDNN" ON)
-option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
+# option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
 
 # Info
 execute_process (
