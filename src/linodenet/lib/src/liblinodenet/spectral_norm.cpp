@@ -16,7 +16,7 @@ using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 
 /*
- * NOTE: discontinuity of singular values.
+ * NOTE: discontinuity of singular vectors.
  *
  * A = [[1, 0], [0, 1+ε]]
  * Then σ₁ = 1, σ₂ = 1+ε;
@@ -33,10 +33,17 @@ using torch::autograd::Function;
  * Therefore, the singular dyads are discontinuous in the matrix entries.
  * This happens when singular values are repeated.
  * Since every path from A to B requires a singular value to be repeated, this is a general problem.
- * However, there should be "good" paths, that continuously deform the singular dyads.
+ * However, there should be "good" paths, that, in a path connected sense deform the singular dyads.
  * Case in point: when A is the identity matrix, then **every** vector is a singular vector.
  *
  * */
+
+ /*
+  * IDEA: regularized rank-1 approximation
+  * argmin_{u,v} ‖A - uvᵀ‖² + λ‖u‖²‖v‖²
+  *   in this case, R_λ(u,v) = ‖u‖²‖v‖² is the resulting singular value
+  *   the larger λ, the smaller the discovered σ. However, we want σ ≥ σₘₐₓ.
+  */
 
 
 struct SpectralNorm: public Function<SpectralNorm> {
