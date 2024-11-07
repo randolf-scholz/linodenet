@@ -134,7 +134,8 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
             return {key: to_device(val, device=device) for key, val in mapping.items()}
         case Iterable() as iterable:
             return tuple(to_device(item, device=device) for item in iterable)
-    raise TypeError(f"Unsupported input type {type(x)!r}")
+        case _:
+            raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
 def iter_tensors(x: Module | Tree, /) -> Iterator[Tensor]:
@@ -255,9 +256,9 @@ def check_forward(
     if reference_shapes is None:
         reference_shapes = output_shapes
     else:
-        assert isinstance(
-            reference_shapes, list
-        ), "reference_shapes must be a list of integer tuples!"
+        assert isinstance(reference_shapes, list), (
+            "reference_shapes must be a list of integer tuples!"
+        )
     assert reference_shapes == output_shapes, f"{reference_shapes=} {output_shapes=}"
 
     # validate values

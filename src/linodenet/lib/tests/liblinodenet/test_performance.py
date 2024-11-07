@@ -121,9 +121,9 @@ def test_spectral_norm_forward(
 
     # check correctness
     residual = s_custom - s_native
-    assert (
-        residual.norm() < ATOL + RTOL * s_native.norm()
-    ), "Large error in spectral norm value!"
+    assert residual.norm() < ATOL + RTOL * s_native.norm(), (
+        "Large error in spectral norm value!"
+    )
 
     def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)
@@ -171,9 +171,9 @@ def test_spectral_norm_backward(
 
     # check correctness
     residual = g_custom - g_native
-    assert (
-        residual.norm() < ATOL + RTOL * g_native.norm()
-    ), "Large error in spectral norm gradient!"
+    assert residual.norm() < ATOL + RTOL * g_native.norm(), (
+        "Large error in spectral norm gradient!"
+    )
 
     # perform benchmark
     def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
@@ -222,9 +222,9 @@ def test_spectral_norm(
 
     # check correctness
     residual = g_custom - g_native
-    assert (
-        residual.norm() < ATOL + RTOL * g_native.norm()
-    ), "Large error in spectral norm gradient!"
+    assert residual.norm() < ATOL + RTOL * g_native.norm(), (
+        "Large error in spectral norm gradient!"
+    )
 
     def func() -> None:
         param = get_param(shape, device=device, generator=generator)
@@ -264,9 +264,9 @@ def test_singular_triplet_forward(
     dyadic_custom = torch.outer(u_custom, v_custom)
 
     # check correctness
-    assert (
-        s_custom - s_native
-    ).norm() < ATOL + RTOL * s_native.norm(), "Large error in singular value!"
+    assert (s_custom - s_native).norm() < ATOL + RTOL * s_native.norm(), (
+        "Large error in singular value!"
+    )
     assert (
         dyadic_custom - dyadic_native
     ).norm() < ATOL + RTOL * dyadic_native.norm(), "Large error in singular vectors!"
@@ -318,9 +318,9 @@ def test_singular_triplet_backward(
     g_custom = A_custom.grad.clone().detach()
 
     # check correctness
-    assert (
-        g_custom - g_native
-    ).norm() < ATOL + RTOL * g_native.norm(), "Large error in spectral norm gradient!"
+    assert (g_custom - g_native).norm() < ATOL + RTOL * g_native.norm(), (
+        "Large error in spectral norm gradient!"
+    )
 
     def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)
@@ -369,9 +369,9 @@ def test_singular_triplet_full_backward(
 
     # check correctness
     residual = g_custom - g_native
-    assert (
-        residual.norm() < ATOL + RTOL * g_native.norm()
-    ), "Large error in spectral norm gradient!"
+    assert residual.norm() < ATOL + RTOL * g_native.norm(), (
+        "Large error in spectral norm gradient!"
+    )
 
     def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
         param = get_param(shape, device=device, generator=generator)

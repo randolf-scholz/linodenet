@@ -2,6 +2,9 @@ r"""Test gradients of custom operators."""
 
 __all__ = ["compute_spectral_norm_impl"]
 
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 import torch
 from torch import Tensor, nn
@@ -19,7 +22,9 @@ def inner(x: Tensor, y: Tensor) -> Tensor:
     return torch.einsum("..., ... ->", x, y)
 
 
-def compute_spectral_norm_impl(impl, shape, **kwargs) -> tuple[Tensor, Tensor]:
+def compute_spectral_norm_impl(
+    impl: Callable[..., Tensor], shape: tuple[int, int], **kwargs: Any
+) -> tuple[Tensor, Tensor]:
     r"""Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)
@@ -58,7 +63,11 @@ def compute_spectral_norm_impl(impl, shape, **kwargs) -> tuple[Tensor, Tensor]:
     return err_value, err_grads
 
 
-def compute_singular_triplet_impl(impl, shape, **kwargs) -> tuple[Tensor, Tensor]:
+def compute_singular_triplet_impl(
+    impl: Callable[..., tuple[Tensor, Tensor, Tensor]],
+    shape: tuple[int, int],
+    **kwargs: Any,
+) -> tuple[Tensor, Tensor]:
     r"""Test the spectral norm implementation."""
     m, n = shape
     A0 = torch.randn(m, n)
@@ -113,12 +122,12 @@ def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> N
     avgerr_vals = sum(err_vals) / len(err_vals)
     avgerr_grad = sum(err_grad) / len(err_grad)
     print(f"Average Error:: {avgerr_vals:.3e}, grad: {avgerr_grad:.3e}")
-    assert (
-        avgerr_vals < value_tol
-    ), f"Value error too large! {avgerr_vals:.3e} > {value_tol=}"
-    assert (
-        avgerr_grad < grads_tol
-    ), f"Grads error too large! {avgerr_grad:.3e} > {grads_tol=}"
+    assert avgerr_vals < value_tol, (
+        f"Value error too large! {avgerr_vals:.3e} > {value_tol=}"
+    )
+    assert avgerr_grad < grads_tol, (
+        f"Grads error too large! {avgerr_grad:.3e} > {grads_tol=}"
+    )
     print("All tests passed.")
 
 
@@ -136,10 +145,10 @@ def test_spectral_norm(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None
     avgerr_vals = sum(err_vals) / len(err_vals)
     avgerr_grad = sum(err_grad) / len(err_grad)
     print(f"Average Error:: {avgerr_vals:.3e}, grad: {avgerr_grad:.3e}")
-    assert (
-        avgerr_vals < value_tol
-    ), f"Value error too large! {avgerr_vals:.3e} > {value_tol=}"
-    assert (
-        avgerr_grad < grads_tol
-    ), f"Grads error too large! {avgerr_grad:.3e} > {grads_tol=}"
+    assert avgerr_vals < value_tol, (
+        f"Value error too large! {avgerr_vals:.3e} > {value_tol=}"
+    )
+    assert avgerr_grad < grads_tol, (
+        f"Grads error too large! {avgerr_grad:.3e} > {grads_tol=}"
+    )
     print("All tests passed.")

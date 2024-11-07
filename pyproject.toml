@@ -142,38 +142,40 @@ output-format = "concise"
 fixable = ["ALL"]
 unfixable = []
 
-select = [
-    "A",     # builtins
-    "ARG",   # unused-arguments
-    "B",     # bugbear
-    "C4",    # comprehensions
-    "D",     # pydocstyle
-    "E",     # pycodestyle
-    "EXE",   # executable
-    "F",     # pyflakes
-    "FBT",   # boolean-trap
-    "FURB",  # refurb
-    "I",     # import-order
-    "ICN",   # import-conventions
-    "ISC",   # implicit-str-concat
-    "NPY",   # numpy
-    "N",     # naming
-    "PERF",  # performance related
-    "PIE",   # pie
-    "PL",    # pylint
-    "PT",    # pytest
-    # "PTH",   # path
-    "PYI",   # pyi
-    # "RET",   # return
-    "RUF",   # ruff specific
-    "S101",  # use of `assert`
-    "SIM",   # simplify
-    "SLOT",  # slots
-    "TCH",   # type-checking
-    "TRY",   # tryceratops
-    "UP",    # pyupgrade
-    "W",     # warnings
-]
+#select = [
+#    "A",     # builtins
+#    "ARG",   # unused-arguments
+#    "B",     # bugbear
+#    "C4",    # comprehensions
+#    "D",     # pydocstyle
+#    "E",     # pycodestyle
+#    "EXE",   # executable
+#    "F",     # pyflakes
+#    "FBT",   # boolean-trap
+#    "FURB",  # refurb
+#    "I",     # import-order
+#    "ICN",   # import-conventions
+#    "ISC",   # implicit-str-concat
+#    "NPY",   # numpy
+#    "N",     # naming
+#    "PERF",  # performance related
+#    "PIE",   # pie
+#    "PL",    # pylint
+#    "PT",    # pytest
+#    # "PTH",   # path
+#    "PYI",   # pyi
+#    # "RET",   # return
+#    "RUF",   # ruff specific
+#    "S101",  # use of `assert`
+#    "SIM",   # simplify
+#    "SLOT",  # slots
+#    "TCH",   # type-checking
+#    "TRY",   # tryceratops
+#    "UP",    # pyupgrade
+#    "W",     # warnings
+#]
+select=["ALL"]
+
 ignore = [
     # FIXME: temporary
     "FBT001",      # JIT does not support KW-only with defaults
@@ -183,6 +185,10 @@ ignore = [
     "ANN",      # missing-annotations
     # unused-arguments
     "ARG003",   # Unused class method argument
+    # blind-except
+    "BLE001",
+    # mccabe
+    "C90",      # too-complex
     # commas
     "COM",      # comma
     # copyright
@@ -192,6 +198,8 @@ ignore = [
     "D103",     # Missing docstring in public function
     "D105",     # Missing docstring in magic method
     "D107",     # Missing docstring in __init__
+    # datetime
+    "DTZ",      # timezone-naive-datetime
     # pycodestyle
     "E201",     # Whitespace after '('
     "E202",     # Whitespace before ')'
@@ -204,6 +212,8 @@ ignore = [
     "E272",     # Multiple spaces before keyword
     # error-messages
     "EM",       # error-messages
+    # eradicate
+    "ERA001",   # commented-out-code
     # fixme
     "FIX",      # fixme
     # refurb
@@ -214,7 +224,12 @@ ignore = [
     "N806",     # variable in function should be lowercase
     "N812",     # lowercase imported as non-lowercase
     # pandas
-    "PD011",    # Use .to_numpy() instead of .values
+    "PD002",    # pandas-use-of-inplace-argument
+    "PD010",    # pandas-use-of-dot-pivot-or-unstack
+    "PD011",    # pandas-use-of-dot-values
+    "PD013",    # pandas-use-of-dot-stack
+    "PD101",    # pandas-nunique-constant-series-check
+    "PD901",    # Avoid using the generic variable name `df` for DataFrames
     # pylint
     "PLC2401",  # non-ascii-name
     "PLC2801",  # unnecessary-dunder-call
@@ -231,8 +246,12 @@ ignore = [
     "PLR0915",  # Too many statements
     "PLR0916",  # Too many boolean expressions
     "PLR0917",  # Too many positional arguments
+    # flake8-use-pathlib
+    "PTH123",   # builtin-open
     # PYI
-    "PYI019",   # Methods like ... should return typing.Self instead of custom TypeVar
+    "PYI051",   # redundant-literal-union
+    # RET
+    "RET504",   # unnecessary-assign
     # RUFF
     "RUF001",   # ambiguous-unicode-character-string
     "RUF002",   # ambiguous-unicode-character-docstring
@@ -240,8 +259,14 @@ ignore = [
     "RUF012",   # Mutable class attributes should be annotated with typing.ClassVar # FIXME: PEP 603
     "RUF013",   # PEP 484 prohibits implicit Optional
     "RUF022",   # __all__ not sorted
+    # flake8-bandit
+    "S301",     # suspicious-pickle-usage
+    "S311",     # standard-random-usage
+    "S603",     # subprocess-without-shell-equals-true
     # todo
     "TD",       # todo
+    #
+    "T201",     # `print` found
     # tryceratops
     "TRY003",   # Avoid specifying long messages outside the exception class
     # pyupgrade
@@ -332,16 +357,14 @@ generated-members = ["numpy.*", "torch.*"]
 [tool.mypy]
 # platform = "linux"
 # platform configuration
-enable_incomplete_feature = "NewGenericSyntax"
 files = ["src/", "tests/"]
-plugins = ["numpy.typing.mypy_plugin"]
 python_version = "3.12"
 
 disable_error_code = [
-    "func-returns-value",  # REF: https://github.com/python/mypy/issues/6549
-    # "overload-overlap",  # REF: https://mypy.readthedocs.io/en/stable/more_types.html#type-checking-the-variants
-    "method-assign",  # REF: https://github.com/python/mypy/issues/2427#issuecomment-1419206807
-    "no-overload-impl", # REF: https://github.com/python/mypy/issues/17618
+    "func-returns-value",  # SEE: https://github.com/python/mypy/issues/6549
+    # "overload-overlap",  # SEE: https://mypy.readthedocs.io/en/stable/more_types.html#type-checking-the-variants
+    "method-assign",  # SEE: https://github.com/python/mypy/issues/2427#issuecomment-1419206807
+    "no-overload-impl", # SEE: https://github.com/python/mypy/issues/17618
 ]
 
 # warnings
@@ -420,18 +443,35 @@ include = ["src/", "tests/"]
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md#type-check-diagnostics-settings
 typeCheckingMode = "standard"
 useLibraryCodeForTypes = false  # `pandas` has way too many false positives
-#reportIncompatibleMethodOverride = false  # FIXME: temporary
-#reportIncompatibleVariableOverride = false  # FIXME: temporary
-#reportMissingImports = false
-#reportMissingTypeStubs = false
-reportPrivateImportUsage = false  # FIXME: temporary
-reportOverlappingOverload = true
-reportNoOverloadImplementation = false  # REF: https://github.com/microsoft/pyright/issues/8619
+
+# highlight any unnecessary "# type: ignore" comments
+reportUnnecessaryTypeIgnoreComment = false
+
+# standard flags we disable
+reportPrivateImportUsage = false  # FIXME: https://github.com/microsoft/pyright/issues/9217
+reportNoOverloadImplementation = false  # SEE: https://github.com/microsoft/pyright/issues/8619
+
+# strict mode flags we enable by default
 reportUntypedClassDecorator = true
-#reportPrivateImportUsage = false
-#reportSelfClsParameterName = false
-reportUnnecessaryTypeIgnoreComment = false  # highlight any unnecessary "# type: ignore" comments
-#reportUnsupportedDunderAll = false
+reportUnusedVariable = true
+reportMatchNotExhaustive = true
+reportUnnecessaryCast = true
+#reportUnnecessaryComparison = true
+reportUnnecessaryContains = true
+#reportUnnecessaryIsInstance = true
+#reportUnusedClass = true
+#reportUnusedImport = true
+#reportUnusedFunction = true
+#reportUnusedVariable = true
+
+# Disable these when running in strict mode
+reportUnknownVariableType = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportMissingTypeArgument = false
+reportUnknownParameterType = false
+reportMissingTypeStubs = false
+reportConstantRedefinition = false  # we use uppercase for matrices/tensors.
 # endregion pyright configuration ------------------------------------------------------
 
 

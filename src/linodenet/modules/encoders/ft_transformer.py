@@ -99,9 +99,9 @@ class Tokenizer(nn.Module):
         x = self.weight[None] * x_num[:, :, None]
 
         if x_cat is not None:
-            assert (
-                self.category_embeddings is not None
-            ), "No category embeddings defined!"
+            assert self.category_embeddings is not None, (
+                "No category embeddings defined!"
+            )
             assert self.category_offsets is not None, "No category offsets defined!"
 
             categories = self.category_embeddings(
