@@ -98,7 +98,6 @@ repos:
           - "torch.no_grad"
           - "--allow-two"
           - "--"
-      - id: python-standard-generics
       # script-based hooks
       - id: pyproject-validate-version
       - id: pyproject-update-deps
@@ -131,22 +130,21 @@ repos:
     rev: v0.14.3 # change this to the latest tag!
     hooks:
       - id: tach
-  # mypy
   - repo: local
     hooks:
-    - id: mypy
-      name: mypy
-      language: system
-      require_serial: true
-      types_or: [python, pyi]
-      files: '^src/|^tests/'
-      entry: mypy
-      args:
-        - "--scripts-are-modules"
-        - "--hide-error-context"
-        - "--hide-error-end"
-        - "--no-pretty"
-        - "--"
+      - id: unknown-inline-pragma
+        name: unknown-inline-pragma
+        description: "Check for unknown inline pragmas."
+        language: pygrep
+        entry: '^([^#]*[^\#\s][^#]*)\#\s+(?!(type|pyright|noqa|fmt|shape|FIXME|SEE|NOTE|TODO):)([\w\s]+:)'
+        types: [python]
+      - id: double-comment
+        name: double-comment
+        description: "Check for double comments."
+        language: pygrep
+        entry: '\#\s*\#'
+        types: [python]
+        files: '^src/|^tests/'
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.388
@@ -165,3 +163,18 @@ repos:
               fi
           ' --
         files: '^src/|^tests/'
+  # mypy
+  - repo: local
+    hooks:
+    - id: mypy
+      name: mypy
+      language: system
+      require_serial: true
+      types_or: [python, pyi]
+      files: '^src/|^tests/'
+      entry: mypy
+      args:
+        - "--hide-error-context"
+        - "--hide-error-end"
+        - "--no-pretty"
+        - "--"

@@ -2,6 +2,7 @@ r"""Types and Type Aliases."""
 
 __all__ = [
     # Protocols
+    "Identity",
     "HasHyperparameters",
     "SelfMap",
     "SupportsLenAndGetItem",
@@ -33,13 +34,17 @@ r"""Type hint for shape-like inputs."""
 
 
 # region Protocols ---------------------------------------------------------------------
+class Identity(Protocol):
+    r"""Protocol for the identity function."""
+
+    def __call__[T](self, x: T, /) -> T: ...
+
+
 class SelfMap[T](Protocol):
-    r"""Protocol for functions that map a type onto itself."""
+    r"""Protocol for generic function that map a type onto itself."""
 
     @abstractmethod
-    def __call__(self, x: T, /) -> T:
-        r"""Maps T -> T."""
-        ...
+    def __call__(self, x: T, /) -> T: ...
 
 
 class SupportsLenAndGetItem[T](Protocol):

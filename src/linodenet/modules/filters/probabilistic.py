@@ -35,7 +35,7 @@ import torch
 from torch import Tensor, nn
 from torch.distributions import Distribution, MultivariateNormal
 
-from linodenet.constants import EMPTY_SHAPE
+from linodenet.constants import EMPTY_SIZE
 
 
 @runtime_checkable
@@ -75,7 +75,7 @@ class Empirical(Distribution):
         self.n = data.shape[0]
         self.shape = data.shape[1:]
 
-    def sample(self, sample_shape: torch.Size = EMPTY_SHAPE) -> Tensor:
+    def sample(self, sample_shape: torch.Size = EMPTY_SIZE) -> Tensor:
         r"""Sample from the empirical distribution."""
         idx = torch.randint(self.n, sample_shape)
         return self.data[idx]

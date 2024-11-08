@@ -28,7 +28,9 @@ depends_on = []
 
 [[modules]]
 path = "linodenet.constants"
-depends_on = []
+depends_on = [
+    { path = "linodenet.types" },
+]
 
 [[modules]]
 path = "linodenet.initializations"
