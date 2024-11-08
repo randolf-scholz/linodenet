@@ -70,9 +70,10 @@ __all__ = [
     "register_parametrization",
     "cached",
     # Functions
+    "assert_is_safe_parametrization",
     "deepcopy_with_parametrizations",
     "detach_caches",
-    "get_parametrizations",
+    "iter_parametrizations",
     "register_optimizer_hook",
     "update_caches",
     "update_originals",
@@ -81,7 +82,7 @@ __all__ = [
 
 import copy
 from abc import abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable as Fn, Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import Any, Literal, Protocol, Self, runtime_checkable
@@ -420,7 +421,7 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
         super().__init__()
 
         # initialize the cache
-        self.cached_tensors = {}  # Q: Use nn.BufferDict?
+        self.cached_tensors = {}  # TODO: Use nn.BufferDict?
         self.parametrized_tensors = {}  # NOTE: JIT error with nn.ParameterDict.
 
     def __iter__(self) -> Iterator[str]:
@@ -504,6 +505,52 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
 
 
 # region torch parametrize replacements  -----------------------------------------------
+def assert_is_safe_parametrization(
+    parametrization: Fn[[Tensor], Tensor], tensor: Tensor
+) -> None:
+    r"""Check if the parametrization is safe to apply to the tensor."""
+    Y = tensor
+    X = parametrization(Y)
+    if not isinstance(X, Tensor):
+        raise TypeError(
+            f"A parametrization must return a tensor. Got {type(X).__name__}."
+        )
+    if X.dtype != Y.dtype:
+        raise ValueError(
+            "A parametrization may not change the dtype of the tensor,"
+            " unless the `unsafe` flag is enabled."
+            f"\noriginal dtype:     {Y.dtype}"
+            f"\nparametrized dtype: {X.dtype}"
+        )
+    if X.shape != Y.shape:
+        raise ValueError(
+            "A parametrization may not change the shape of the tensor,"
+            " unless the `unsafe` flag is enabled."
+            f"\n original shape:     {Y.shape}"
+            f"\n parametrized shape: {X.shape}"
+        )
+    inverse: Fn[[Tensor], Tensor] = getattr(
+        parametrization, "right_inverse", lambda x: x
+    )
+    Z = inverse(X)
+    if not isinstance(Z, Tensor):
+        raise TypeError(f"right_inverse must return a tensor. Got: {type(Z).__name__}")
+    if Z.dtype != Y.dtype:
+        raise ValueError(
+            "The tensor returned by right_inverse must have the same dtype,"
+            " unless the `unsafe` flag is enabled."
+            f"\noriginal dtype: {Y.dtype}"
+            f"\nreturned dtype: {Z.dtype}"
+        )
+    if Z.shape != Y.shape:
+        raise ValueError(
+            "The tensor returned by right_inverse must have the same shape,"
+            " unless the `unsafe` flag is enabled."
+            f"\noriginal shape: {Y.shape}"
+            f"\nreturned shape: {Z.shape}"
+        )
+
+
 class parametrize(ParametrizationBase):
     r"""Parametrization of a single tensor."""
 
@@ -513,15 +560,37 @@ class parametrize(ParametrizationBase):
     r"""BUFFER: Holds cached version of the parametrized tensor."""
 
     def __init__(
-        self, tensor: Tensor, parametrization: Callable[[Tensor], Tensor] | nn.Module
+        self,
+        tensor: Tensor,
+        parametrization: Fn[[Tensor], Tensor] | nn.Module,
+        *,
+        unsafe: bool = False,
     ) -> None:
         super().__init__(tensor)
         self._parametrization = parametrization
+
+        if not unsafe:
+            assert_is_safe_parametrization(self._parametrization, tensor)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Apply the parametrization."""
         return self._parametrization(x)
+
+    def is_safe(self) -> bool:
+        r"""Check if the parametrization is safe to apply to the tensor."""
+        Y = self.original_parameter
+        X = self(Y)
+        inverse = getattr(self._parametrization, "right_inverse", lambda x: x)
+        Z = inverse(X)
+
+        forward_safe = (
+            isinstance(X, Tensor) and X.dtype == Y.dtype and X.shape == Y.shape
+        )
+        inverse_safe = (
+            isinstance(Z, Tensor) and Z.dtype == Y.dtype and Z.shape == Y.shape
+        )
+        return forward_safe and inverse_safe
 
 
 def is_parametrized(module: nn.Module, /) -> bool:
@@ -532,7 +601,7 @@ def is_parametrized(module: nn.Module, /) -> bool:
 def register_parametrization(
     model: nn.Module,
     tensor_name: str,
-    parametrization: type[Parametrization] | nn.Module | Callable[[Tensor], Tensor],
+    parametrization: type[Parametrization] | nn.Module | Fn[[Tensor], Tensor],
     *,
     unsafe: bool = False,
 ) -> None:
@@ -552,6 +621,9 @@ def register_parametrization(
             raise TypeError(f"{parametrization} is not a nn.Module!")
     else:
         wrapper = parametrize(tensor, parametrization)
+
+    if not unsafe:
+        assert_is_safe_parametrization(wrapper, tensor)
 
     # add parametrization to model and rewire the tensors
     delattr(model, tensor_name)
@@ -589,8 +661,8 @@ class cached(ContextDecorator, AbstractContextManager):
 
 
 # region functions for parametrization -------------------------------------------------
-def get_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
-    r"""Return all parametrizations in a module."""
+def iter_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
+    r"""Iterate over all parametrizations in a module."""
     for m in module.modules():
         if isinstance(m, Parametrization):
             yield m
@@ -598,25 +670,25 @@ def get_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
 
 def detach_caches(module: nn.Module, /) -> None:
     r"""Detach all caches in a module."""
-    for parametrization in get_parametrizations(module):
+    for parametrization in iter_parametrizations(module):
         parametrization.detach_cache()
 
 
 def update_originals(module: nn.Module, /) -> None:
     r"""Update all original tensors in a module."""
-    for parametrization in get_parametrizations(module):
+    for parametrization in iter_parametrizations(module):
         parametrization.update_original()
 
 
 def update_caches(module: nn.Module, /) -> None:
     r"""Update all cached tensors in a module."""
-    for parametrization in get_parametrizations(module):
+    for parametrization in iter_parametrizations(module):
         parametrization.update_cache()
 
 
 def update_parametrizations(module: nn.Module, /) -> None:
     r"""Update all parametrizations in a module."""
-    for parametrization in get_parametrizations(module):
+    for parametrization in iter_parametrizations(module):
         parametrization.update_parametrization()
 
 
@@ -634,9 +706,9 @@ def register_optimizer_hook(
         if isinstance(module, Parametrization):
             parametrizations.append(module)
         else:
-            parametrizations.extend(get_parametrizations(module))
+            parametrizations.extend(iter_parametrizations(module))
 
-    def hook(opt: Optimizer, *args: Any, **kwargs: Any) -> None:
+    def hook(opt: Optimizer, *args: Any, **kwargs: Any) -> None:  # noqa: ARG001
         r"""Hook to update the parametrization after each optimizer step."""
         for parametrization in parametrizations:
             parametrization.update_parametrization()

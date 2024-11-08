@@ -18,6 +18,22 @@ CLS = [
 ]
 
 
+TORCH_INTERFACE = [
+    "ParametrizationList",
+    "cached",
+    "is_parametrized",
+    "register_parametrization",
+    "remove_parametrizations",
+    "transfer_parametrizations_and_params",
+    "type_before_parametrizations",
+]
+r"""List of all functions and classes in torch.nn.utils.parametrize."""
+
+
+def test_interface_complete() -> None:
+    assert set(torch_parametrize.__all__) == set(TORCH_INTERFACE)
+
+
 @pytest.mark.parametrize("name", FNS)
 def test_compatibility_torch(name: str) -> None:
     impl = getattr(linodenet.parametrize, name, None)
