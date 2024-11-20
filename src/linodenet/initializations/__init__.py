@@ -2,14 +2,10 @@ r"""Initializations for the Linear ODE Networks.
 
 All initializations are normalized such that if $x∼𝓝(0,1)$, then $Ax∼𝓝(0,1)$ as well.
 
-Lemma
-~~~~~
-
-In this case: $e^{A}$
-
-Notes:
-    Contains initializations in both modular and functional form.
-    - See `~linodenet.initializations.functional` for functional implementations.
+Note
+----
+Contains initializations in both modular and functional form.
+See `~linodenet.initializations.functional` for functional implementations.
 """
 
 __all__ = [

@@ -124,10 +124,11 @@ class KalmanCell(nn.Module):
     a normal distribution $N(y, R)$.
 
     On the other hand, given prior assumption $y∼N(0,R)$ and empirical observations
-    y₁, ..., yₙ, we get the following posterior distribution for $y$, via Bayes' rule:
+    $y₁, …, yₙ$, we get the following posterior distribution for $y$, via Bayes' rule:
 
-    p(y) = N(μ, Σ)  ⟹  p(y|y₁, ..., yₙ) = N(μ', Σ')
-    where μ' = (Σ⁻¹ + R⁻¹)⁻¹ (Σ⁻¹μ + R⁻¹ȳ) and Σ' = (Σ⁻¹ + R⁻¹)⁻¹
+    .. math:: p(y) = N(μ, Σ)  ⟹  p(y|y₁, ..., yₙ) = N(μ', Σ')
+
+    where $μ' = (Σ⁻¹ + R⁻¹)⁻¹ (Σ⁻¹μ + R⁻¹ȳ)$ and $Σ' = (Σ⁻¹ + R⁻¹)⁻¹$.
     """
 
     # PARAMETERS

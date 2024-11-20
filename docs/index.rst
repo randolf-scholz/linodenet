@@ -10,7 +10,8 @@ LinODEnet - 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁
    :maxdepth: 2
    :name: mastertoc
 
-   API <apidoc/modules>
+   AUTOAPI <autoapi/linodenet/index>
+   APIDOC <apidoc/modules>
    CHANGELOG <content/CHANGELOG>
    CONTRIBUTING <content/CONTRIBUTING>
    ISSUES <content/ISSUES>

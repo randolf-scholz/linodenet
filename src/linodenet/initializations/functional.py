@@ -111,7 +111,8 @@ def symmetric(
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
-    There are two ways to generate:
+    There are two common ways to sample a symmetric matrix:
+
     1. Copy the upper triangular part to the lower triangular part.
     2. Use the projection formula $(A+Aᵀ)/2$ with additional normalization.
        The variance of off-diagonal elements is then $2σ²/4$, so we need to scale by $√2$.

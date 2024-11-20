@@ -1,3 +1,0 @@
-[submodule "kineto"]
-	path = kineto
-	url = https://github.com/pytorch/kineto.git

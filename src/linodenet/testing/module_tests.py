@@ -102,14 +102,15 @@ def is_forward_stable(
     r"""Check if the forward pass is stable.
 
     Assumptions:
-      - The module supports batching.
-      - The module takes a fixed size nu
-      - The module returns a single tensor.
+
+    - The module supports batching.
+    - The module takes a fixed size nu
+    - The module returns a single tensor.
 
     The test works as follows:
 
     1. Compute the means μ and standard deviations σ of the output for a large number of random inputs.
-    2. For each output, consider the distance between the input distribution 𝓝(0, 1) and output distribution 𝓝(μ, σ²).
+    2. For each output, consider the distance between the input distribution $𝓝(0, 1)$ and output distribution $𝓝(μ, σ²)$.
        We measure this distance in terms of some divergence measure (e.g. KL-divergence, Wasserstein distance, etc.).
     3. We test relative closeness via the formula:
 
@@ -121,26 +122,24 @@ def is_forward_stable(
 
      .. math:: H(p,q) - H(p) = d(p, q) ≤ rtol⋅H(q) + atol
 
-    In the special case when p=N(μ, σ²) and q=N(0, 1) are univariate gaussian, we have:
+    In the special case when $p=N(μ, σ²)$ and $q=N(0, 1)$ are univariate gaussian, we have:
 
     .. math:: d(N(μ, σ²), N(0, 1)) ≤ rtol⋅H(N(0, 1)) + atol \\
         ⟺ ½(μ² + σ² - 1 - \log(σ²)) ≤ rtol⋅½(1 + \log(2π)) + atol
 
-
-
     Recall the following facts about the information content of normal distributions:
 
-    1. (univariate entropy) H(N(μ, σ²)) = ½\log(2πeσ²)
-    2. (univariate KL) KL(p₁, p₂) = ½(σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² + \log(σ₂²/σ₁²) - 1)
-       - if σ₁² = σ₂², then KL(p₁, p₂) = ½(μ₁ - μ₂)²
-            -> Test A: d(p,q)<ε is satisfied if and only if |μ₁ - μ₂| < ε
-            -> Test B: d(p,q)<β H(q) + α is satisfied if and only if |μ₁ - μ₂| < β̃\log(σ) + α
-               If σ → 0, then the test becomes more difficult, and even potentially impossible.
-               If σ → ∞, then the test becomes easier.
-       - if σ₂>>1, then KL(p₁, p₂) ≈ O(\log(σ₂))
-    3. univariate Wasserstein distance: W₂(p₁, p₂)² = |μ₁ - μ₂|² + |σ₁ - σ₂|²
+    1. (univariate entropy) $H(N(μ, σ²)) = ½\log(2πeσ²)$
+    2. (univariate KL) $KL(p₁, p₂) = ½(σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² + \log(σ₂²/σ₁²) - 1)$
+        - if $σ₁² = σ₂²$, then $KL(p₁, p₂) = ½(μ₁ - μ₂)²$
+            - > Test A: $d(p,q)<ε$ is satisfied if and only if $\abs{μ₁ - μ₂} < ε$
+            - > Test B: $d(p,q) < β⋅H(q)+α$ is satisfied if and only if $\abs{μ₁ - μ₂} < β̃\log(σ) + α$
+                If $σ → 0$, then the test becomes more difficult, and even potentially impossible.
+                If $σ → ∞$, then the test becomes easier.
+        - if $σ₂ ≫ 1$, then $\KL(p₁, p₂) ≈ O(\log(σ₂))$
+    3. univariate Wasserstein distance: $W₂(p₁, p₂)² = \abs{μ₁ - μ₂}² + \abs{σ₁ - σ₂}²$
 
-    In particular, consider the case when we have two zero-centered normal distributions N(0, σ₁²) and N(0, σ₂²).
+    In particular, consider the case when we have two zero-centered normal distributions $𝓝(0, σ₁²)$ and $𝓝(0, σ₂²)$.
     If we increase the standard deviation of the reference distribution,
     then the KL-divergence increases as $O(\log(σ₂))$, but also the entropy increases as $O(\log(σ₂))$.
 

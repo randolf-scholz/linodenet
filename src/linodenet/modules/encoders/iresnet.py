@@ -350,7 +350,7 @@ class iResNetLayer(nn.Module):
         r"""Compute the inverse through fixed point iteration.
 
         Terminates once ``maxiter`` or tolerance threshold
-        $|x'-x|≤\text{atol} + \text{rtol}⋅|x|$ is reached.
+        $‖x'-x‖≤\text{rtol}⋅‖x‖+\text{atol}$ is reached.
         """
         x = y.clone()
         residual = torch.zeros_like(y)

@@ -1,59 +1,64 @@
 r"""Alternative to builtin parametrizations of torch.
 
 Goals:
-    - Support for JIT. In particular, we do not use `@property`.
-    - Class-based parametrizations that allow more complex parametrizations.
-        - Example: SpectralNormalization uses an iterative algorithm to compute the spectral norm,
-            which is accelerated by caching the singular vectors and reusing them in the next iteration.
-    - More fine grained control over what is cached and what is not.
-        - In particular, we do not use any global variables
+
+- Support for JIT. In particular, we do not use `@property`.
+- Class-based parametrizations that allow more complex parametrizations.
+    - Example: SpectralNormalization uses an iterative algorithm to compute the spectral norm,
+        which is accelerated by caching the singular vectors and reusing them in the next iteration.
+- More fine grained control over what is cached and what is not.
+    - In particular, we do not use any global variables
 
 Content:
-    - `Parametrization`: Protocol class for parametrizations.
-    - `ParametrizationBase`: Parametrization of a single tensor
-    - `ParametrizationDict`: Parametrization of multiple tensors
-    - `parametrize`: plug-in replacement for `torch.nn.utils.parametrize`
-        wraps a function Tensor -> Tensor into a parametrization.
-    - `cached`: (quasi) plug-in replacement for `torch.nn.utils.parametrize.cached`
-        context manager which refreshes parametrization cache on exit.
 
-    - get_parametrizations: recursively returns all parametrizations in a module
-    - register_parametrization: adds a parametrization to a specific tensor
-    - register_optimizer_hook: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
+- `Parametrization`: Protocol class for parametrizations.
+- `ParametrizationBase`: Parametrization of a single tensor
+- `ParametrizationDict`: Parametrization of multiple tensors
+- `parametrize`: plug-in replacement for `torch.nn.utils.parametrize`
+    wraps a function Tensor -> Tensor into a parametrization.
+- `cached`: (quasi) plug-in replacement for `torch.nn.utils.parametrize.cached`
+    context manager which refreshes parametrization cache on exit.
+- `get_parametrizations`: recursively returns all parametrizations in a module
+- `register_parametrization`: adds a parametrization to a specific tensor
+- `register_optimizer_hook`: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
 
 Differences:
-    - Instead of inserting properties, we use buffers, because JIT does not support properties.
-      This means that the parametrization is not recomputed automatically when the original tensor changes.
-      Instead, the parametrization needs to be recomputed manually by calling `update_parametrization()`.
-    - register_parametrization is intended as a drop-in replacement for
-      `torch.nn.utils.parametrize.register_parametrization`.
-      However, it is not equivalent. In particular, it does not support replacing a tensor with
-      other tensors. For example, a rank-one parametrization is realized by projecting onto the
-      low rank manifold in the forward pass and projecting back to the full rank manifold when
-      updating the parameters. This is important to ensure parametrizations are chainable and to maintain
-      type-safety.
+
+- Instead of inserting properties, we use buffers, because JIT does not support properties.
+  This means that the parametrization is not recomputed automatically when the original tensor changes.
+  Instead, the parametrization needs to be recomputed manually by calling `update_parametrization()`.
+- register_parametrization is intended as a drop-in replacement for
+  `torch.nn.utils.parametrize.register_parametrization`.
+  However, it is not equivalent. In particular, it does not support replacing a tensor with
+  other tensors. For example, a rank-one parametrization is realized by projecting onto the
+  low rank manifold in the forward pass and projecting back to the full rank manifold when
+  updating the parameters. This is important to ensure parametrizations are chainable and to maintain
+  type-safety.
 
 Usage:
-    - Create new parametrizations by subclassing Parametrization
-    - Autogenerate parametrizations from a callable by SimpleParametrization
-    - add parametrizations to an existing nn.Module by register_parametrization
+
+- Create new parametrizations by subclassing Parametrization
+- Autogenerate parametrizations from a callable by SimpleParametrization
+- add parametrizations to an existing nn.Module by register_parametrization
 
 Issues:
-    - It would be useful if without caching, the parametrizations would work like simple properties.
-    - properties are not supported by JIT...
-    - One could disable an if branch
-        - but if-branches are slow...
-    - context decorator could maybe mutate the nn.Module state...
-    - In principle the parametrization only needs to recomputed if the tensor values change,
-      so after an optimizer.step() or a reset_parameters() call.
-   - Currently unsupported to use multiple parametrizations on the same tensor.
+
+- It would be useful if without caching, the parametrizations would work like simple properties.
+- properties are not supported by JIT...
+- One could disable an if branch
+    - but if-branches are slow...
+- context decorator could maybe mutate the nn.Module state...
+- In principle the parametrization only needs to recomputed if the tensor values change,
+  so after an optimizer.step() or a reset_parameters() call.
+- Currently unsupported to use multiple parametrizations on the same tensor.
 
 Classes:
-    - `ParametrizationProto`: Protocol for all parametrizations.
-    - `Parametrization`: Base class for parametrizations that maintain a single cached tensor.
-        - `parametrize`: wraps a function Tensor -> Tensor into a parametrization.
-        - `ParametrizationCache`: Base class for parametrization with multiple cached tensors.
-    - `ParametrizationDict`: Base class for complex parametrization with multiple parametrized and cached tensors.
+
+- `ParametrizationProto`: Protocol for all parametrizations.
+- `Parametrization`: Base class for parametrizations that maintain a single cached tensor.
+    - `parametrize`: wraps a function Tensor -> Tensor into a parametrization.
+    - `ParametrizationCache`: Base class for parametrization with multiple cached tensors.
+- `ParametrizationDict`: Base class for complex parametrization with multiple parametrized and cached tensors.
 """
 
 __all__ = [
@@ -112,7 +117,7 @@ class GeneralParametrization(Protocol):
         - "cached tensor" refers to the tensor that is used to cache the parametrization.
 
     Warnings:
-        # https://github.com/pytorch/pytorch/pull/103001
+        # SEE: https://github.com/pytorch/pytorch/pull/103001
         Parametrization can cause `deepcopy` to fail. To use deepcopy:
         1. Call `detach_cache()` to detach the cached tensors from the autograd engine.
         2. Call `deepcopy` on the model.

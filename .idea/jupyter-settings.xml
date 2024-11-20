@@ -8,6 +8,7 @@
             <JupyterConnectionParameters>
               <option name="managed" value="true" />
               <option name="sdkHomePath" value="$PROJECT_DIR$/../tsdm/.venv/bin/python" />
+              <option name="sdkName" value="Python 3.11 (tsdm)" />
             </JupyterConnectionParameters>
           </value>
         </entry>

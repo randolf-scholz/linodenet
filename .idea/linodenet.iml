@@ -234,9 +234,11 @@
       <excludeFolder url="file://$MODULE_DIR$/src/reports" />
       <excludeFolder url="file://$MODULE_DIR$/tests/liblinodenet/.benchmarks" />
       <excludeFolder url="file://$MODULE_DIR$/tests/liblinodenet/reports" />
+      <excludeFolder url="file://$MODULE_DIR$/.pdm-build" />
+      <excludeFolder url="file://$MODULE_DIR$/.tach" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
-    <orderEntry type="inheritedJdk" />
+    <orderEntry type="jdk" jdkName="Python 3.13 (linodenet)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

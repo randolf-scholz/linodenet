@@ -60,7 +60,7 @@ class Product(Distribution):
     .. math:: p(x₁，x₂，…，xₙ) = ∏ₖ pₖ(xₖ)
 
     Arguments:
-        marginals: A list of distributions :math:`p(Z_i)`.
+        marginals: A list of distributions $p(Zᵢ)$.
 
     Example:
         >>> d = Product(Uniform(0.0, 1.0), Normal(0.0, 1.0))
@@ -95,7 +95,7 @@ class Product(Distribution):
 
 
 class Mixture(Distribution):
-    r"""Creates a mixture of distributions for a random variable :math:`X`.
+    r"""Creates a mixture of distributions for a random variable $X$.
 
     .. math:: p(x) = ∑ᵢ wᵢ⋅pᵢ(x)  \qq{with} wᵢ≥0 and ∑ᵢ wᵢ = 1
 
