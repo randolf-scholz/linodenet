@@ -56,7 +56,7 @@ extensions = [
     "signatures",
     "details",
     # 3rd party extensions
-    "autoapi.extension",
+    # "autoapi.extension",
     "myst_parser",
     "sphinx_copybutton",
     "sphinx_math_dollar",
@@ -194,7 +194,20 @@ myst_enable_extensions = [
 autoclass_content = "class"  # docstring to insert in classes: "class", "both", "init"
 autodoc_class_signature = "separated"  # display class signatures: "separated", "mixed"
 autodoc_member_order = "groupwise"  # order "alphabetical", "groupwise", "bysource"
-autodoc_default_options = {}  # default options for autodoc directives
+autodoc_default_options = {  # default options for autodoc directives
+    # 'members'           : True,
+    # 'undoc-members'     : True,
+    # 'private-members'   : True,
+    # 'special-members'   : True,
+    # 'inherited-members' : True,
+    # 'imported-members'  : True,
+    # 'exclude-members'   : True,
+    # 'ignore-module-all' : True,
+    # 'member-order'      : True,
+    # 'show-inheritance'  : True,
+    # 'class-doc-from'    : True,
+    # 'no-value'          : True,
+}  # fmt: skip
 autodoc_docstring_signature = True  # handling function signatures of C-extensions
 autodoc_mock_imports = []  # list of modules to mock
 autodoc_typehints = "both"  # show typehints: "signature", "description", "none", "both"
@@ -220,7 +233,15 @@ autoapi_file_patterns = ["*.py", "*.pyi"]  # glob patterns for finding files
 autoapi_generate_api_docs = True  # Whether to generate API docs.
 
 # customization options
-# autoapi_options = []  # which members to include in the docs
+autoapi_options = [  # SEE: autodoc_default_options
+    "members",
+    # "undoc-members",
+    # "private-members",
+    "show-inheritance",
+    "show-module-summary",
+    "special-members",
+    # "imported-members",
+]
 autoapi_ignore = []  # patterns to ignore when finding files
 autoapi_root = "autoapi"  # Path to output the generated AutoAPI files into
 autoapi_add_toctree_entry = False  # insert the generated docs into the TOC tree
@@ -270,28 +291,39 @@ intersphinx_disabled_reftypes = ["std:doc"]  # list of disabled cross-reference 
 
 # region sphinx.ext.mathjax configuration ----------------------------------------------
 # SEE: https://www.sphinx-doc.org/en/master/usage/extensions/math.html#module-sphinx.ext.mathjax
+# SEE: https://docs.mathjax.org/en/latest/web/configuration.html
 # mathjax_path = ...  # path/url to the MathJax.js file
 mathjax_options = {}  # options to script tag for mathjax
 mathjax3_config = {  # configuration options for MathJax v3
-    "loader": {"load": [r"[tex]/ams", r"[tex]/physics"]},
+    "loader": {"load": [r"[tex]/ams", r"[tex]/mathtools", r"[tex]/physics"]},
     "tex": {
         "inlineMath": [[r"\(", r"\)"]],
         "displayMath": [[r"\[", r"\]"]],
-        "packages": {"[+]": ["ams", "physics"]},
+        "packages": {"[+]": ["ams", "mathtools", "physics"]},
         "macros": {
+            # operators
             "argmax": r"\operatorname*{arg\,max}",
             "argmin": r"\operatorname*{arg\,min}",
             "Median": r"\operatorname{Median}",
-            "KL": r"\operatorname{KL}",
             "diag": r"\operatorname{diag}",
+            "dist": r"\operatorname{dist}",
             "rank": r"\operatorname{rank}",
             "relu": r"\operatorname{ReLU}",
+            "KL": r"\operatorname{KL}",
             "tr": r"\operatorname{tr}",
+            # macros
             "bmat": [r"\begin{bmatrix} #1 \end{bmatrix}", 1],
-            "abs": r"\left\lvert #1\right\rvert",
+            "norm": [r"\left\lVert #1\right\rVert", 1],
+            "abs": [r"\left\lvert #1\right\rvert", 1],
+            "set": [r"\left\{ #1 \right\}", 1],
+            "seq": [r"\left( #1 \right)", 1],
+            "tuple": [r"\left( #1 \right)", 1],
+            "floor": [r"\left\lfloor #1 \right\rfloor", 1],
+            "ceil": [r"\left\lceil #1 \right\rceil", 1],
         },
     },
 }
+
 # endregion sphinx.ext.mathjax configuration -------------------------------------------
 
 

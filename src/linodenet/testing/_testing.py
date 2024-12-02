@@ -89,7 +89,7 @@ def assert_close(
             for output, target in zip(sequence, reference, strict=True):
                 assert_close(output, target, rtol=rtol, atol=atol)
         case _:
-            raise TypeError(f"Unsupported type {type(values)} for `outputs`!")
+            raise TypeError(f"Unsupported type {type(values)}!")
 
 
 # region utility functions for tensors AND scalars -------------------------------------

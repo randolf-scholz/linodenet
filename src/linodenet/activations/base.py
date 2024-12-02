@@ -4,7 +4,7 @@ __all__ = [
     # ABCs & Protocols
     "Activation",
     "GenericActivation",
-    "ActivationABC",
+    "ActivationBase",
 ]
 
 from abc import abstractmethod
@@ -30,7 +30,7 @@ class Activation(Protocol):
         ...
 
 
-class ActivationABC(nn.Module):
+class ActivationBase(nn.Module):
     r"""Abstract Base Class for Activation components."""
 
     @abstractmethod

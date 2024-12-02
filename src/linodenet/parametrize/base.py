@@ -1,6 +1,7 @@
 r"""Alternative to builtin parametrizations of torch.
 
-Goals:
+Goals
+-----
 
 - Support for JIT. In particular, we do not use `@property`.
 - Class-based parametrizations that allow more complex parametrizations.
@@ -9,7 +10,8 @@ Goals:
 - More fine grained control over what is cached and what is not.
     - In particular, we do not use any global variables
 
-Content:
+Content
+-------
 
 - `Parametrization`: Protocol class for parametrizations.
 - `ParametrizationBase`: Parametrization of a single tensor
@@ -22,7 +24,8 @@ Content:
 - `register_parametrization`: adds a parametrization to a specific tensor
 - `register_optimizer_hook`: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
 
-Differences:
+Differences
+-----------
 
 - Instead of inserting properties, we use buffers, because JIT does not support properties.
   This means that the parametrization is not recomputed automatically when the original tensor changes.
@@ -35,13 +38,15 @@ Differences:
   updating the parameters. This is important to ensure parametrizations are chainable and to maintain
   type-safety.
 
-Usage:
+Usage
+-----
 
 - Create new parametrizations by subclassing Parametrization
 - Autogenerate parametrizations from a callable by SimpleParametrization
 - add parametrizations to an existing nn.Module by register_parametrization
 
-Issues:
+Issues
+------
 
 - It would be useful if without caching, the parametrizations would work like simple properties.
 - properties are not supported by JIT...
@@ -52,7 +57,8 @@ Issues:
   so after an optimizer.step() or a reset_parameters() call.
 - Currently unsupported to use multiple parametrizations on the same tensor.
 
-Classes:
+Classes
+-------
 
 - `ParametrizationProto`: Protocol for all parametrizations.
 - `Parametrization`: Base class for parametrizations that maintain a single cached tensor.

@@ -43,7 +43,15 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Any, Final, Optional, Protocol, overload, runtime_checkable
+from typing import (
+    Any,
+    Final,
+    Optional,
+    Protocol,
+    cast,
+    overload,
+    runtime_checkable,
+)
 
 import torch
 from torch import Tensor, jit, nn
@@ -56,22 +64,12 @@ from linodenet.utils import try_initialize_from_config
 class Cell(Protocol):
     r"""Protocol for cells."""
 
-    input_size: Final[int]  # type: ignore[misc]
+    input_size: int  # type: ignore[misc]
     r"""The size of the observable $y$."""
-    hidden_size: Final[int]  # type: ignore[misc]
+    hidden_size: int  # type: ignore[misc]
     r"""The size of the hidden state $x$."""
-    bias: Final[bool]
+    bias: bool
     r"""Whether to include a bias term or not."""
-
-    @abstractmethod
-    def __init__(
-        self,
-        /,
-        input_size: int,
-        hidden_size: int,
-        *,
-        bias: bool = True,
-    ) -> None: ...
 
     @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
@@ -127,15 +125,20 @@ class Filter(Cell, Protocol):
     This is a decoder that maps the hidden state to the observation space.
 
     .. math:: y = h(x)
+
+    Attributes:
+        input_size: The size of the observable $y$.
+        hidden_size: The size of the hidden state $x$.
+        bias: Whether to include a bias term or not.
     """
 
     # CONSTANTS
-    input_size: Final[int]  # type: ignore[misc]
-    r"""The size of the observable $y$."""
-    hidden_size: Final[int]  # type: ignore[misc]
-    r"""The size of the hidden state $x$."""
-    bias: Final[bool]
-    r"""Whether to include a bias term or not."""
+    # input_size: Final[int]  # type: ignore[misc]
+    # r"""The size of the observable $y$."""
+    # hidden_size: Final[int]  # type: ignore[misc]
+    # r"""The size of the hidden state $x$."""
+    # bias: Final[bool]
+    # r"""Whether to include a bias term or not."""
 
     # SUBMODULES
     decoder: Optional[nn.Module] = None
@@ -215,41 +218,34 @@ class FilterBase(nn.Module):
         ...
 
 
-def _make_filter[F: Filter](filter_type: type[F], **config: Any) -> F:
-    r"""Initialize a filter from a type."""
-    try:
-        return filter_type(**config)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to initialize filter {filter_type} with arguments {config}!"
-        ) from exc
+class FilterList(FilterBase, nn.ModuleList):
+    r"""Container for multiple filters."""
 
+    def __init__(self, filters: Iterable[Filter], /) -> None:
+        r"""Initialize from modules."""
+        filter_list: list[Filter] = list(filters)
 
-@overload
-def filter_from_config[F: Filter](filter: F, /) -> F: ...
-@overload
-def filter_from_config[F: Filter](filter_kind: type[F], /, **config: Any) -> F: ...
-@overload
-def filter_from_config(filter_kind: str, /, **config: Any) -> Filter: ...
-@overload
-def filter_from_config(**config: Any) -> Filter: ...
-def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
-    r"""Initialize from a configuration."""
-    match filter_kind:
-        case str(name):
-            filter_class = FILTERS[name]
-            filter = _make_filter(filter_class, **config)
-        case type() as filter_class if issubclass(filter_class, nn.Module):
-            filter = _make_filter(filter_class, **config)
-        case Filter() as filter if isinstance(filter, nn.Module):
-            if config:
-                raise ValueError("Cannot initialize instance with additional arguments")
-        case None:
-            filter = try_initialize_from_config(config)
-        case _:
-            raise TypeError(f"Invalid filter type: {filter_kind!r}")
+        if not filter_list:
+            raise ValueError("At least one module must be given!")
 
-    return filter
+        for module in filter_list:
+            if not isinstance(module, Filter):
+                raise TypeError("All modules must be Filters!")
+            if not isinstance(module, nn.Module):
+                raise TypeError("All filters must be nn.Modules!")
+
+        FilterBase.__init__(
+            self,
+            filter_list[0].input_size,
+            filter_list[-1].hidden_size,
+            bias=any(module.bias for module in filter_list),
+        )
+        nn.ModuleList.__init__(self, cast(list[nn.Module], filter_list))
+
+    @abstractmethod
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
+        ...
 
 
 class MissingValueFilter(nn.Module):
@@ -293,8 +289,8 @@ class MissingValueFilter(nn.Module):
 
     def __init__(
         self,
-        input_size: Optional[int] = None,
-        hidden_size: Optional[int] = None,
+        input_size: int,
+        hidden_size: int,
         *,
         concat_mask: bool = True,
         imputation_strategy: str | Tensor = "default",
@@ -336,7 +332,7 @@ class MissingValueFilter(nn.Module):
     @jit.export
     def impute(self, m: Tensor, y: Tensor, x: Tensor) -> Tensor:
         r"""Update the substitute value."""
-        if self.imputation_strategy == "decoder":
+        if self.imputation_strategy == "decoder" and self.decoder is not None:
             self.S = self.decoder(x)
         elif self.imputation_strategy == "last":
             self.S = torch.where(m, self.S, y)
@@ -363,24 +359,25 @@ class MissingValueFilter(nn.Module):
 
 
 class ResidualFilter(FilterBase):
-    r"""Wraps an existing Filter to return the residual $x' = x - F(y，x)$."""
+    r"""Wraps an existing Filter to return the residual $x' = x - η⋅F(y，x)$.
 
-    # CONSTANTS
-    input_size: Final[int]
-    r"""The size of the observable $y$."""
-    hidden_size: Final[int]
-    r"""The size of the hidden state $x$."""
+    Attributes:
+        input_size: The size of the observable $y$.
+        hidden_size: The size of the hidden state $x$.
+        filter (Filter): The wrapped Filter.
+        decoder (Optional[nn.Module]): The observation model.
+    """
 
     # SUBMODULES
-    filter: Filter
-    r"""The wrapped Filter."""
-    decoder: Optional[nn.Module] = None
-    r"""The observation model."""
+    # filter: Filter
+    # r"""The wrapped Filter."""
+    # decoder: Optional[nn.Module]
+    # r"""The observation model."""
 
     def __init__(
         self,
-        input_size: Optional[int] = None,
-        hidden_size: Optional[int] = None,
+        input_size: int,
+        hidden_size: int,
         *,
         filter_type: str | type[Filter] | Filter = NotImplemented,
         filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
@@ -388,7 +385,7 @@ class ResidualFilter(FilterBase):
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         options = dict(filter_kwargs)
         options.update(input_size=self.input_size, hidden_size=self.hidden_size)
-        self.filter = filter_from_config(filter_type, **options)
+        self.filter: FilterBase = filter_from_config(filter_type, **options)
         self.decoder = self.filter.decoder
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -424,9 +421,6 @@ class SequentialFilter(nn.ModuleList):
         if not module_list:
             raise ValueError("At least one module must be given!")
 
-        self.input_size = int(module_list[0].input_size)
-        self.hidden_size = int(module_list[-1].hidden_size)
-
         for module in module_list:
             if module.input_size != self.input_size:
                 raise ValueError(
@@ -438,6 +432,9 @@ class SequentialFilter(nn.ModuleList):
                     "All modules must have the same hidden_size!"
                     f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
                 )
+
+        self.input_size = int(module_list[0].input_size)
+        self.hidden_size = int(module_list[-1].hidden_size)
 
         super().__init__(module_list)
 
@@ -472,14 +469,12 @@ class ResNetFilter(nn.ModuleList):
     def __init__(self, layers: Iterable[Filter], /) -> None:
         r"""Initialize from modules."""
         module_list: list[Filter] = list(layers)
-
         if not module_list:
             raise ValueError("At least one module must be given!")
 
-        self.input_size = int(module_list[0].input_size)
-        self.hidden_size = int(module_list[-1].hidden_size)
-
         for module in module_list:
+            if not isinstance(module, Filter) or not isinstance(module, nn.Module):
+                raise ValueError("All modules must be Filters!")
             if module.input_size != self.input_size:
                 raise ValueError(
                     "All modules must have the same input_size!"
@@ -491,7 +486,10 @@ class ResNetFilter(nn.ModuleList):
                     f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
                 )
 
-        super().__init__(module_list)
+        self.input_size = int(module_list[0].input_size)
+        self.hidden_size = int(module_list[-1].hidden_size)
+
+        super().__init__(cast(list[nn.Module], module_list))
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
@@ -545,3 +543,40 @@ class ReZeroFilter(nn.ModuleList):
         for w, layer in zip(self.weight, self, strict=True):
             x = x + w * layer(y, x)
         return x
+
+
+def _make_filter[F: Filter](filter_type: type[F], **config: Any) -> F:
+    r"""Initialize a filter from a type."""
+    try:
+        return filter_type(**config)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to initialize filter {filter_type} with arguments {config}!"
+        ) from exc
+
+
+@overload
+def filter_from_config[F: Filter](filter: F, /) -> F: ...
+@overload
+def filter_from_config[F: Filter](filter_kind: type[F], /, **config: Any) -> F: ...
+@overload
+def filter_from_config(filter_kind: str, /, **config: Any) -> Filter: ...
+@overload
+def filter_from_config(**config: Any) -> Filter: ...
+def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
+    r"""Initialize from a configuration."""
+    match filter_kind:
+        case str(name):
+            filter_class = FILTERS[name]
+            filter_model = _make_filter(filter_class, **config)
+        case type() as filter_class if issubclass(filter_class, nn.Module):
+            filter_model = _make_filter(filter_class, **config)
+        case Filter() as filter_model if isinstance(filter, nn.Module):
+            if config:
+                raise ValueError("Cannot initialize instance with additional arguments")
+        case None:
+            filter_model = try_initialize_from_config(config)
+        case _:
+            raise TypeError(f"Invalid filter type: {filter_kind!r}")
+
+    return filter_model

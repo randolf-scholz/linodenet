@@ -3,7 +3,8 @@ r"""Initializations for the Linear ODE Networks.
 All initializations are normalized such that if $x∼𝓝(0,1)$, then $Ax∼𝓝(0,1)$ as well.
 
 Notes:
-    Contains initializations in functional form.
+    - See `linodenet.initializations.functional` for functional implementations.
+    - See `linodenet.initializations.modules` for all module-based initializations.
 """
 
 __all__ = [
@@ -87,7 +88,7 @@ def diagonally_dominant(
     then consider a linear combination with the identity matrix $𝕀ₙ$.
     We choose the coefficients such that the resulting matrix is diagonally dominant.
 
-    .. math:: A = 𝕀ₙ + B  with  B_{ij}∼𝓝(0,1/n²)
+    .. math:: A = 𝕀ₙ + B  \qq{with}  B_{ij}∼𝓝(0,1/n²)
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 

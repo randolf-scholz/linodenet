@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+    rev: v0.8.1
     hooks:
       - id: ruff-format
         files: '^src/|^tests/'
@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.5.2
+    rev: 0.5.5
     hooks:
       - id: uv-lock
       - id: pip-compile
@@ -93,7 +93,7 @@ repos:
         files: '^src/|^tests/'
   # markdownlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.42.0
+    rev: v0.43.0
     hooks:
       - id: markdownlint
         args:
@@ -109,7 +109,7 @@ repos:
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
   # tach
   - repo: https://github.com/gauge-sh/tach-pre-commit
-    rev: v0.14.3 # change this to the latest tag!
+    rev: v0.16.2 # change this to the latest tag!
     hooks:
       - id: tach
   - repo: local

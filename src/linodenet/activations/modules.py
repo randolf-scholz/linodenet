@@ -1,4 +1,9 @@
-r"""Implementations of activation functions as `nn.Module`."""
+r"""Implementations of activation functions.
+
+Notes:
+    - See `linodenet.activations.functional` for functional implementations.
+    - See `linodenet.activations.modules` for module-based implementations.
+"""
 
 __all__ = [
     # Classes

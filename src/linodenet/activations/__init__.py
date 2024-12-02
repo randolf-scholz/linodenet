@@ -1,16 +1,15 @@
 r"""Implementations of activation functions.
 
 Notes:
-    Contains activations in both functional and modular form.
     - See `linodenet.activations.functional` for functional implementations.
-    - See `linodenet.activations.modular` for modular implementations.
+    - See `linodenet.activations.modular` for module-based  implementations.
 """
 
 __all__ = [
     # Sub-Modules
     "base",
     "functional",
-    "modular",
+    "modules",
     # Constants
     "ACTIVATIONS",
     "FUNCTIONAL_ACTIVATIONS",
@@ -20,7 +19,7 @@ __all__ = [
     "TORCH_MODULAR_ACTIVATIONS",
     # ABCs & Protocols
     "Activation",
-    "ActivationABC",
+    "ActivationBase",
     # Classes
     "HardBend",
     "GeGLU",
@@ -33,15 +32,15 @@ __all__ = [
     "get_activation",
 ]
 
-from linodenet.activations import base, functional, modular
+from linodenet.activations import base, functional, modules
 from linodenet.activations._torch_imports import (
     TORCH_ACTIVATIONS,
     TORCH_FUNCTIONAL_ACTIVATIONS,
     TORCH_MODULAR_ACTIVATIONS,
 )
-from linodenet.activations.base import Activation, ActivationABC
+from linodenet.activations.base import Activation, ActivationBase
 from linodenet.activations.functional import geglu, hard_bend, reglu
-from linodenet.activations.modular import GeGLU, HardBend, ReGLU
+from linodenet.activations.modules import GeGLU, HardBend, ReGLU
 
 FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     **TORCH_FUNCTIONAL_ACTIVATIONS,

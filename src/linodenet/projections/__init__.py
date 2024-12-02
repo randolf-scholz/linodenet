@@ -1,15 +1,14 @@
 r"""Projections for the Linear ODE Networks.
 
 Notes:
-    Contains projections in both modular and functional form.
-      - See `~linodenet.projections.functional` for functional implementations.
-      - See `~linodenet.projections.modular` for modular implementations.
+    - See `linodenet.projections.functional` for functional implementations.
+    - See `linodenet.projections.modules` for module-based implementations.
 """
 
 __all__ = [
     # Sub-Modules
     "functional",
-    "modular",
+    "modules",
     # Constants
     "FUNCTIONAL_PROJECTIONS",
     "MODULAR_PROJECTIONS",
@@ -54,7 +53,7 @@ __all__ = [
 ]
 
 
-from linodenet.projections import functional, modular
+from linodenet.projections import functional, modules
 from linodenet.projections.functional import (
     Projection,
     banded,
@@ -74,7 +73,7 @@ from linodenet.projections.functional import (
     traceless,
     upper_triangular,
 )
-from linodenet.projections.modular import (
+from linodenet.projections.modules import (
     Banded,
     Contraction,
     Diagonal,

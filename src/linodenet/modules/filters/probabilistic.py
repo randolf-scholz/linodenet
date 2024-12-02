@@ -75,9 +75,9 @@ class Empirical(Distribution):
         self.n = data.shape[0]
         self.shape = data.shape[1:]
 
-    def sample(self, sample_shape: torch.Size = EMPTY_SIZE) -> Tensor:
+    def sample(self, size: tuple[int, ...] = EMPTY_SIZE, /) -> Tensor:
         r"""Sample from the empirical distribution."""
-        idx = torch.randint(self.n, sample_shape)
+        idx = torch.randint(self.n, size=size)
         return self.data[idx]
 
     def log_prob(self, value: Tensor) -> Tensor:
@@ -106,8 +106,8 @@ class KalmanCell(nn.Module):
     normal distribution:
 
     .. math::
-        p(x, y) &= N([μ₁, μ₂], [[Σ₁₁, Σ₁₂], [Σ₂₁, Σ₂₂]]) \\
-        ⟹ p(x∣y) &= N(μ', Σ') \\
+        p(x, y) &= 𝓝([μ₁, μ₂], [[Σ₁₁, Σ₁₂], [Σ₂₁, Σ₂₂]]) \\
+        ⟹ p(x∣y) &= 𝓝(μ', Σ') \\
             μ' &= μ₁ - Σ₁₂Σ₂₂⁻¹(μ₂ - y) \
             Σ' &= Σ₁₁ - Σ₁₂Σ₂⁻¹Σ₂₁) \\
 
@@ -121,12 +121,12 @@ class KalmanCell(nn.Module):
     The Kalman Filter assumes that all variables are normally distributed.
 
     In particular, the classical filter assumes that the observation $y$ comes from
-    a normal distribution $N(y, R)$.
+    a normal distribution $𝓝(y, R)$.
 
-    On the other hand, given prior assumption $y∼N(0,R)$ and empirical observations
+    On the other hand, given prior assumption $y∼𝓝(0,R)$ and empirical observations
     $y₁, …, yₙ$, we get the following posterior distribution for $y$, via Bayes' rule:
 
-    .. math:: p(y) = N(μ, Σ)  ⟹  p(y|y₁, ..., yₙ) = N(μ', Σ')
+    .. math:: p(y) = 𝓝(μ, Σ)  ⟹  p(y|y₁, ..., yₙ) = 𝓝(μ', Σ')
 
     where $μ' = (Σ⁻¹ + R⁻¹)⁻¹ (Σ⁻¹μ + R⁻¹ȳ)$ and $Σ' = (Σ⁻¹ + R⁻¹)⁻¹$.
     """

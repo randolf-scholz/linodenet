@@ -3,6 +3,15 @@
   <component name="JupyterPersistentConnectionParameters">
     <option name="moduleParameters">
       <map>
+        <entry key="$PROJECT_DIR$/.idea/linodenet.iml">
+          <value>
+            <JupyterConnectionParameters>
+              <option name="argv" value="notebook" />
+              <option name="managed" value="true" />
+              <option name="sdkName" value="" />
+            </JupyterConnectionParameters>
+          </value>
+        </entry>
         <entry key="$PROJECT_DIR$/../tsdm/.idea/tsdm.iml">
           <value>
             <JupyterConnectionParameters>

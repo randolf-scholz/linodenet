@@ -2,15 +2,15 @@ r"""Initializations for the Linear ODE Networks.
 
 All initializations are normalized such that if $x∼𝓝(0,1)$, then $Ax∼𝓝(0,1)$ as well.
 
-Note
-----
-Contains initializations in both modular and functional form.
-See `~linodenet.initializations.functional` for functional implementations.
+Notes:
+    - See `linodenet.initializations.functional` for functional implementations.
+    - See `linodenet.initializations.modules` for all module-based initializations.
 """
 
 __all__ = [
     # Sub-Modules
     "functional",
+    "modules",
     # Constants
     "INITIALIZATIONS",
     # ABCs & Protocols
@@ -28,7 +28,7 @@ __all__ = [
     "traceless",
 ]
 
-from linodenet.initializations import functional
+from linodenet.initializations import functional, modules
 from linodenet.initializations.functional import (
     Initialization,
     canonical_skew_symmetric,

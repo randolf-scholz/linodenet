@@ -1,4 +1,4 @@
-r"""Parametrizations for Torch."""
+r"""Parametrizations for torch."""
 
 __all__ = [
     # Constants

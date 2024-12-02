@@ -1,8 +1,6 @@
 r"""Transforms.
 
-Note
-----
-`torch.distributions.Transform` has some differences:
+Note that `torch.distributions.Transform` has some differences:
 
 - It is not a protocol.
 - `log_abs_det_jacobian` always requires 2 arguments, $x$ and $y$.

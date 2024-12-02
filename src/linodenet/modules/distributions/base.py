@@ -2,9 +2,10 @@ r"""Distributions base class."""
 
 __all__ = [
     # ABCs & Protocols
-    "BaseDistribution",
-    "DistributionProto",
     "ConditionalDistributionProto",
+    "DistributionBase",
+    "DistributionList",
+    "DistributionProto",
     "JointDistributionProto",
     "Marginalizable",
     # Classes
@@ -16,15 +17,12 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Protocol, SupportsInt, overload
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from typing import Protocol, Self, SupportsIndex, overload
 
 import torch
 from torch import Tensor
-from torch.distributions import (
-    Distribution,
-)
-
-from linodenet.types import Range
+from torch.distributions import Distribution
 
 
 class DistributionProto(Protocol):
@@ -50,11 +48,58 @@ class Marginalizable(DistributionProto, Protocol):
         ...
 
 
-class BaseDistribution(Distribution):
+class DistributionBase(Distribution):
     r"""Base class for distributions."""
 
 
-class Product(Distribution):
+class DistributionList(Distribution, Sequence[Distribution]):
+    r"""A list of distributions, similar to `nn.ModuleList`."""
+
+    bases: list[Distribution]
+
+    def __init__(self, bases: Iterable[Distribution], /) -> None:
+        super().__init__()
+        self.bases = list(bases)
+        if not self.bases:
+            raise ValueError("At least one distribution must be provided.")
+
+    def __len__(self) -> int:
+        return len(self.bases)
+
+    @overload
+    def __getitem__(self, index: int) -> Distribution: ...
+    @overload
+    def __getitem__(self, index: slice) -> Self: ...
+    def __getitem__(self, index: int | slice) -> Distribution | Self:
+        r"""Get the marginal distribution at the given index."""
+        if isinstance(index, SupportsIndex):
+            return self.bases[index.__index__()]
+        return self.__class__(self.bases[index])
+
+
+class DistributionDict(Distribution, Mapping[str, Distribution]):
+    r"""A dictionary of distributions, similar to `nn.ModuleDict`."""
+
+    bases: dict[str, Distribution]
+
+    def __init__(self, bases: Mapping[str, Distribution], /) -> None:
+        super().__init__()
+        self.bases = dict(bases)
+        if not self.bases:
+            raise ValueError("At least one distribution must be provided.")
+
+    def __len__(self) -> int:
+        return len(self.bases)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.bases)
+
+    def __getitem__(self, key: str, /) -> Distribution:
+        r"""Get the marginal distribution at the given key."""
+        return self.bases[key]
+
+
+class Product(DistributionList):
     r"""Represents the outer product of random distributions.
 
     .. math:: p(x₁，x₂，…，xₙ) = ∏ₖ pₖ(xₖ)
@@ -74,27 +119,14 @@ class Product(Distribution):
 
     has_rsample = True
 
-    def __init__(self, *marginals: Distribution):
-        super().__init__()
+    def __init__(self, marginals: Iterable[Distribution], /) -> None:
+        super().__init__(marginals)
+        self.marginals = self.bases
         batch_shape = torch.broadcast_shapes(*(m.batch_shape for m in marginals))
         self.marginals = [m.expand(batch_shape) for m in marginals]
 
-    def __len__(self) -> int:
-        r"""Get the number of marginal distributions."""
-        return len(self.marginals)
 
-    @overload
-    def __getitem__(self, index: int, /) -> Distribution: ...
-    @overload
-    def __getitem__(self, index: Range[int], /) -> "Product": ...
-    def __getitem__(self, index: int | Range[int], /) -> "Distribution | Product":
-        r"""Get the marginal distribution at the given index."""
-        if isinstance(index, SupportsInt):
-            return self.marginals[int(index)]
-        return Product(*self.marginals[index])
-
-
-class Mixture(Distribution):
+class Mixture(DistributionList):
     r"""Creates a mixture of distributions for a random variable $X$.
 
     .. math:: p(x) = ∑ᵢ wᵢ⋅pᵢ(x)  \qq{with} wᵢ≥0 and ∑ᵢ wᵢ = 1
@@ -103,25 +135,29 @@ class Mixture(Distribution):
         https://wikipedia.org/wiki/Mixture_model
     """
 
+    components: list[Distribution]
+    weights: Tensor
     has_rsample = False
 
-    distributions: list[Distribution]
-    weights: Tensor
+    def __init__(
+        self,
+        components: Iterable[Distribution],
+        /,
+        *,
+        weights: Tensor,
+    ) -> None:
+        super().__init__(components)
+        self.components = self.bases
 
-    def __init__(self, distributions: list[Distribution], weights: Tensor) -> None:
-        super().__init__()
-        self.distributions = distributions
-        self.weights = weights
-
-    @overload
-    def __getitem__(self, index: int, /) -> Distribution: ...
-    @overload
-    def __getitem__(self, index: Range[int], /) -> "Mixture": ...
-    def __getitem__(self, index: int | Range[int], /) -> "Distribution | Mixture":
-        r"""Returns the sub-mixture at the given index."""
-        if isinstance(index, SupportsInt):
-            return self.distributions[int(index)]
-        return Mixture(self.distributions[index], self.weights[index])
+        w = torch.as_tensor(weights)
+        # normalize the weights
+        if w.shape != (len(self),):
+            raise ValueError(
+                "The number of weights must match the number of components."
+            )
+        if not torch.all(w >= 0):
+            raise ValueError("The weights must be non-negative.")
+        self.weights = w / w.sum()
 
     def marginalize(self) -> "Mixture":
         r"""Return the marginal distribution.
@@ -133,6 +169,16 @@ class Mixture(Distribution):
         """
         # return Mixture((d.marginalize() for d in self.distributions), self.weights)
         raise NotImplementedError
+
+    @overload
+    def __getitem__(self, index: int) -> Distribution: ...
+    @overload
+    def __getitem__(self, index: slice) -> Self: ...
+    def __getitem__(self, index: int | slice) -> Distribution | Self:
+        r"""Returns the sub-mixture at the given index."""
+        if isinstance(index, SupportsIndex):
+            return self.components[index.__index__()]
+        return self.__class__(self.components[index], weights=self.weights[index])
 
 
 class Flow(Distribution):

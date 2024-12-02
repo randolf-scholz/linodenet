@@ -6,8 +6,10 @@ export PYTORCH_JIT=0
 # from the environment for the first two.
 SPHINXOPTS    ?= -w .sphinx/warnings.txt
 SPHINXBUILD   ?= sphinx-build
-SOURCEDIR     = .
-BUILDDIR      = _build
+DOCDIR        = .
+BUILDDIR      = ./_build
+SOURCEDUR     = ../src
+TESTDIR       = ../tests
 VENVDIR       = ../.venv
 VENV          = $(VENVDIR)/bin/activate
 
@@ -17,23 +19,23 @@ VENV          = $(VENVDIR)/bin/activate
 
 # Put it first so that "make" without argument is like "make help".
 help: $(VENVDIR)
-	@. $(VENV) && $(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@. $(VENV) && $(SPHINXBUILD) -M help "$(DOCDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 clean:
 	# backup previous build
-	mkdir -p _build
+	mkdir -p "$(BUILDDIR)"
 	rm -rf _previous_build
-	mv _build _previous_build
+	mv "$(BUILDDIR)" _previous_build
 
 	# remove previous build
-	rm -rf _build
+	rm -rf "$(BUILDDIR)"
 	rm -rf _autosummary
 	rm -rf autoapi
 	rm -rf apidoc
 	rm -rf api
 
 build-html:
-	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@$(SPHINXBUILD) -M html "$(DOCDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
 apidoc:
 	@$(MAKE) clean
@@ -44,4 +46,4 @@ apidoc:
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
 %: Makefile
 	@$(MAKE) clean
-	@. $(VENV) && $(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@. $(VENV) && $(SPHINXBUILD) -M $@ "$(DOCDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)

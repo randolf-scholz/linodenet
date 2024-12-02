@@ -1,15 +1,14 @@
 r"""Regularizations for the Linear ODE Networks.
 
 Notes:
-    Contains regularizations in both modular and functional form.
-    - See `~linodenet.regularizations.functional` for functional implementations.
-    - See `~linodenet.regularizations..modular` for modular implementations.
+    - See `linodenet.regularizations.functional` for functional implementations.
+    - See `linodenet.regularizations.modules` for module-based implementations.
 """
 
 __all__ = [
     # Sub-Modules
     "functional",
-    "modular",
+    "modules",
     # Constants
     "REGULARIZATIONS",
     "FUNCTIONAL_REGULARIZATIONS",
@@ -55,7 +54,7 @@ __all__ = [
     "upper_triangular",
 ]
 
-from linodenet.regularizations import functional, modular
+from linodenet.regularizations import functional, modules
 from linodenet.regularizations.functional import (
     Regularization,
     banded,
@@ -76,7 +75,7 @@ from linodenet.regularizations.functional import (
     traceless,
     upper_triangular,
 )
-from linodenet.regularizations.modular import (
+from linodenet.regularizations.modules import (
     Banded,
     Contraction,
     Diagonal,

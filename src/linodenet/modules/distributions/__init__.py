@@ -7,19 +7,19 @@ There are two interesting classes of models:
 
 There are several available libraries for normalizing flows [0]_, we considered the following:
 
-+---------------------------+-------------------+--------------+---------------------------+
-| library                   | no extra deps     | last release | subclasses `Distribution` |
-+===========================+===================+==============+===========================+
-| `zuko`_ [1]_              | ✅                | 2024-01      | ✅                        |
-+---------------------------+-------------------+--------------+---------------------------+
-| `flowtorch`_ [2]_         | ✅                | 2022-04      | ✅                        |
-+---------------------------+-------------------+--------------+---------------------------+
-| `nflows`_ [3]_            | tensorboard, umnn | 2020-12      | ✅                        |
-+---------------------------+-------------------+--------------+---------------------------+
-| `normalizing-flows`_ [4]_ | ✅                | 2023-11      | ❌                        |
-+---------------------------+-------------------+--------------+---------------------------+
-| `freia`_ [5]_             | ✅                | 2022-04      | ❌                        |
-+---------------------------+-------------------+--------------+---------------------------+
++-----------------------+-------------------+--------------+---------------------------+
+| library               | no extra deps     | last release | subclasses `Distribution` |
++=======================+===================+==============+===========================+
+| `zuko`_               | ✅                | 2024-01      | ✅                        |
++-----------------------+-------------------+--------------+---------------------------+
+| `flowtorch`_          | ✅                | 2022-04      | ✅                        |
++-----------------------+-------------------+--------------+---------------------------+
+| `nflows`_             | tensorboard, umnn | 2020-12      | ✅                        |
++-----------------------+-------------------+--------------+---------------------------+
+| `normalizing-flows`_  | ✅                | 2023-11      | ❌                        |
++-----------------------+-------------------+--------------+---------------------------+
+| `freia`_              | ✅                | 2022-04      | ❌                        |
++-----------------------+-------------------+--------------+---------------------------+
 
 From which we already decide only to consider `zuko`_ and `flowtorch`_.
 We want/need to be able to calculate the following:
@@ -42,17 +42,12 @@ We would like to have:
 4. log-determinant of the Jacobian
 5. logarithm of the density
 
-References
-----------
-.. [0] https://github.com/janosh/awesome-normalizing-flows
-.. [1] https://github.com/probabilists/zuko
-.. [2] https://github.com/bayesiains/nflows
-.. [3] https://github.com/facebookincubator/flowtorch
-.. [4] https://github.com/VincentStimper/normalizing-flows
-.. [5] https://github.com/vislearn/FrEIA
-.. _target zuko: https://github.com/probabilists/zuko
-.. _target flowtorch: https://github.com/bayesiains/nflows
-.. _target nflows: https://github.com/facebookincubator/flowtorch
-.. _target normalizing-flows: https://github.com/VincentStimper/normalizing-flows
-.. _target freia: https://github.com/vislearn/FrEIA
+References:
+    .. [0] https://github.com/janosh/awesome-normalizing-flows
+    .. _zuko: https://github.com/probabilists/zuko
+    .. _flowtorch: https://github.com/bayesiains/nflows
+    .. _nflows: https://github.com/facebookincubator/flowtorch
+    .. _normalizing-flows: https://github.com/VincentStimper/normalizing-flows
+    .. _freia: https://github.com/vislearn/FrEIA
+    .. target-notes::
 """
