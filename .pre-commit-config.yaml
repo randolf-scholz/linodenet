@@ -1,4 +1,4 @@
-exclude: '(\.git/|\.venv/|\.idea/|\docs/_build/|bugs/)'
+exclude: bugs/
 minimum_pre_commit_version: 3.6.0
 default_language_version:
   python: python3.12
@@ -34,13 +34,10 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.5.5
+    rev: 0.5.6
     hooks:
       - id: uv-lock
-      - id: pip-compile
-        files: 'pyproject\.toml'
-        pass_filenames: true
-        args: ["--quiet", "--all-extras", "-o", "requirements.txt"]
+      - id: uv-export
   # nbstripout-fast
   - repo: https://github.com/deshaw/nbstripout-fast.git
     rev: v1.0.4
@@ -67,7 +64,7 @@ repos:
         files: '^src/|^tests/'
       - id: check-no-mixed-args
         files: '^src/'
-        exclude: '(tests/|functional.py|matrix_tests.py|_liblinodenet.py)'
+        exclude: 'tests/|functional.py|matrix_tests.py|_liblinodenet.py'
         args:
           - "--ignore-names"
           - "forward"
@@ -81,9 +78,9 @@ repos:
           - "--"
       # script-based hooks
       - id: update-requirements
+      - id: check-requirements-valid
       - id: check-requirements-maintained
       - id: check-requirements-used
-      - id: check-requirements-valid
       - id: check-clean-interface
         files: '^src/'
         exclude: '/tests/'
@@ -109,7 +106,7 @@ repos:
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
   # tach
   - repo: https://github.com/gauge-sh/tach-pre-commit
-    rev: v0.16.2 # change this to the latest tag!
+    rev: v0.16.3 # change this to the latest tag!
     hooks:
       - id: tach
   - repo: local
@@ -118,7 +115,7 @@ repos:
         name: unknown-inline-pragma
         description: "Check for unknown inline pragmas."
         language: pygrep
-        entry: '^(|\s.*[^\s].*)\#\s+(?!(type|pyright|noqa|mypy|ruff|fmt|shape|FIXME|SEE|NOTE|TODO))\w+:'
+        entry: '^([^#]*[^\#\s][^#]*)\#\s+(?!(type|pyright|noqa|fmt|shape|mypy|ruff|FIXME|SEE|NOTE|TODO):)([\w\s]+:)'
         types: [python]
       - id: double-comment
         name: double-comment
@@ -129,7 +126,7 @@ repos:
         files: '^src/|^tests/'
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.389
+    rev: v1.1.390
     hooks:
       - id: pyright
         # SEE: https://stackoverflow.com/a/20401674
