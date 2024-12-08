@@ -20,8 +20,6 @@ __all__ = [
     "SpectralNorm",
     "iResNet",
     "iResNetBlock",
-    # Functions
-    "spectral_norm",
 ]
 
 from linodenet.modules import embeddings, encoders, filters, forecasting, system
@@ -32,7 +30,6 @@ from linodenet.modules.encoders import (
     SpectralNorm,
     iResNet,
     iResNetBlock,
-    spectral_norm,
 )
 from linodenet.modules.forecasting import LatentStateSpaceModel, LinODEnet
 from linodenet.modules.system import LinODE, LinODECell

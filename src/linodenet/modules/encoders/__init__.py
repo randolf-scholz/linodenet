@@ -17,8 +17,6 @@ __all__ = [
     "Transformer",
     "iResNet",
     "iResNetBlock",
-    # Functions
-    "spectral_norm",
 ]
 
 
@@ -29,7 +27,6 @@ from linodenet.modules.encoders.iresnet import (
     SpectralNorm,
     iResNet,
     iResNetBlock,
-    spectral_norm,
 )
 from linodenet.modules.encoders.mlp import MLP
 from linodenet.modules.encoders.resnet import ResNet, ResNetBlock

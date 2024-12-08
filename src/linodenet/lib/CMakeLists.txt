@@ -11,6 +11,7 @@ set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 set(CUDA_VERSION 12.4)
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda-12.4/bin/nvcc")
 set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.4")
+set(CMAKE_INCLUDE_PATH  /usr/local/cuda-12.4/include)
 
 # set compiler flags
 set(USE_CUDA true)

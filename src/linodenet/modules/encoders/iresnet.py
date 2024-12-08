@@ -7,7 +7,6 @@ __all__ = [
     "iResNet",
     "iResNetBlock",
     "iResNetLayer",
-    "spectral_norm",
     "AltLinearContraction",
 ]
 
@@ -22,40 +21,6 @@ from torch.nn import functional
 from linodenet.activations import MODULAR_ACTIVATIONS, Activation
 from linodenet.modules.layers import ReZeroCell
 from linodenet.utils import deep_dict_update
-
-
-@jit.script
-def spectral_norm(
-    A: Tensor, atol: float = 1e-4, rtol: float = 1e-3, maxiter: int = 1
-) -> Tensor:
-    r"""Compute the spectral norm $‖A‖_2$ by power iteration.
-
-    Stopping criterion:
-    - maxiter reached
-    - $‖(A^⊤A -λ𝕀)x‖_2 ≤ \text{𝗋𝗍𝗈𝗅}⋅‖λx‖_2 + \text{𝖺𝗍𝗈𝗅}$
-    """
-    _, n = A.shape
-
-    with torch.no_grad():
-        x = torch.randn(n, device=A.device, dtype=A.dtype)
-        x = x / vector_norm(x)
-
-        z = A.T @ (A @ x)
-        c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
-        λ = c / d
-        r = z - λ * x
-
-        for _ in range(maxiter):
-            if vector_norm(r) <= rtol * vector_norm(λ * x) + atol:
-                break
-            x = z / c
-            z = A.T @ (A @ x)
-            c, d = vector_norm(z, dim=0), vector_norm(x, dim=0)
-            λ = c / d
-            r = z - λ * x
-
-        σ_max = torch.sqrt(λ)
-        return σ_max
 
 
 class SpectralNorm(torch.autograd.Function):
@@ -101,13 +66,13 @@ class SpectralNorm(torch.autograd.Function):
             # Residual: if Av = σu and Aᵀu = σv
             u_next = A @ v
             v_next = A.T @ u
-            σu = sigma * u
-            σv = sigma * v
+            sigma_u = sigma * u
+            sigma_v = sigma * v
             ru = u_next - sigma * u
             rv = v_next - sigma * v
             if (
-                vector_norm(ru) <= rtol * vector_norm(σu) + atol
-                and vector_norm(rv) <= rtol * vector_norm(σv) + atol
+                vector_norm(ru) <= rtol * vector_norm(sigma_u) + atol
+                and vector_norm(rv) <= rtol * vector_norm(sigma_v) + atol
             ):
                 break
 
@@ -168,7 +133,7 @@ class LinearContraction(nn.Module):
 
     def __init__(
         self, input_size: int, output_size: int, *, c: float = 0.97, bias: bool = True
-    ):
+    ) -> None:
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size

@@ -29,26 +29,8 @@ from linodenet.lib import (
 
 torch.manual_seed(0)
 
-DEVICES = ["cpu", "cuda"] if torch.cuda.is_available() else ["cpu"]
+DEVICES = ["cuda"] if torch.cuda.is_available() else ["cpu"]
 NORM_ONLY = {True: "norm_only", False: "triplet"}
-# SHAPES = [
-#     # m > n
-#     (8, 4),
-#     (32, 16),
-#     (128, 64),
-#     (512, 256),
-#     # m < n
-#     (4, 8),
-#     (16, 32),
-#     (64, 128),
-#     (256, 512),
-#     # m == n
-#     (8, 8),
-#     (32, 32),
-#     (128, 128),
-#     (512, 512),
-# ]
-
 SPECTRAL_NORMS = {
     spectral_norm: "custom",
     spectral_norm_native: "native",

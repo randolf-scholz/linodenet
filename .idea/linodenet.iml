@@ -238,12 +238,16 @@
       <excludeFolder url="file://$MODULE_DIR$/.tach" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.11 (linodenet)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.13 (linodenet)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
+  <component name="PackageRequirementsSettings">
+    <option name="versionSpecifier" value="Greater or equal (&gt;=x.y.z)" />
+  </component>
   <component name="PyDocumentationSettings">
-    <option name="format" value="NUMPY" />
-    <option name="myDocStringFormat" value="NumPy" />
+    <option name="format" value="GOOGLE" />
+    <option name="myDocStringFormat" value="Google" />
+    <option name="renderExternalDocumentation" value="true" />
   </component>
   <component name="ReSTService">
     <option name="DOC_DIR" value="$MODULE_DIR$/docs" />
