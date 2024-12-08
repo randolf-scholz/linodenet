@@ -4,11 +4,11 @@ Note that `torch.distributions.Transform` has some differences:
 
 - It is not a protocol.
 - `log_abs_det_jacobian` always requires 2 arguments, $x$ and $y$.
-  The rationale is that for certain transforms, the Jacobian is
+  The rationale is that for certain bijections, the Jacobian is
   much faster to compute if the output is known.
   For example: if $f(x) = xᵃ$, then $\log\abs{\det 𝐃f[x]} = \log\abs{a⋅y/x}$.
   is more efficient than $\log\abs{a⋅xᵃ⁻¹}$.
-  However, for many transforms, this is not true and knowing $y$ is not that helpful.
+  However, for many bijections, this is not true and knowing $y$ is not that helpful.
 - Instead, it makes more sense to have 2 methods: `log_abs_det_jacobian(x)`
   and `value_and_log_abs_det_jacobian(x) -> tuple[Tensor, Tensor]`,
   similar to jax's `value_and_grad`.
@@ -37,7 +37,7 @@ from torch import Tensor
 
 
 class Transform[T, S](Protocol):
-    r"""A protocol for transforms."""
+    r"""A protocol for bijections."""
 
     @abstractmethod
     def forward(self, x: T, /) -> S:
@@ -51,7 +51,7 @@ class Transform[T, S](Protocol):
 
 
 class InvertibleTransform[T, S](Protocol):
-    r"""A protocol for invertible transforms."""
+    r"""A protocol for invertible bijections."""
 
     @abstractmethod
     def forward(self, x: T, /) -> S:

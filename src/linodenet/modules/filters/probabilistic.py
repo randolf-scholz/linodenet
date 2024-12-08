@@ -23,19 +23,21 @@ R is observed or a hyperparameter.
 __all__ = [
     # Protocols & ABCs
     "ProbabilisticFilter",
-    "Empirical",
+    "DiscreteProbabilisticFilter",
+    "SingleValueProbabilisticFilter",
     # Classes
-    "KalmanCell",
+    "probabilistic_kalman_filter",
+    "discrete_probabilistic_kalman_filter",
 ]
 
 from abc import abstractmethod
 from typing import Optional, Protocol, runtime_checkable
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 from torch.distributions import Distribution, MultivariateNormal
 
-from linodenet.constants import EMPTY_SIZE
+from linodenet.random.distributions.empirical import Dirac, Empirical
 
 
 @runtime_checkable
@@ -50,114 +52,100 @@ class ProbabilisticFilter(Protocol):
     rather than in function space itself.
     """
 
-    decoder: Distribution
-    r"""The model for the conditional distribution $p(y|x)$."""
+    @abstractmethod
+    def __call__(self, y: Distribution, x: Distribution, /) -> Distribution: ...
+
+
+class DiscreteProbabilisticFilter(Protocol):
+    r"""Protocol for probabilistic filter with discrete observations."""
 
     @abstractmethod
-    def __call__(self, y: Distribution, x: Distribution, /) -> Distribution:
-        r"""Forward pass of the filter $p' = F(q, p)$."""
-        ...
+    def __call__(self, y: Empirical, x: Distribution, /) -> Distribution: ...
 
 
-class Empirical(Distribution):
-    r"""The empirical distribution.
+class SingleValueProbabilisticFilter(Protocol):
+    r"""Protocol for probabilistic filter with single value observations."""
 
-    .. math:: p(x) = \frac{1}{n} ∑_{i=1}^n δ(x - xᵢ)
-    """
-
-    data: Tensor
-    r"""CONST: The dataset that defines the empirical distribution."""
-
-    def __init__(self, data: Tensor, /) -> None:
-        r"""Initialize the empirical distribution."""
-        super().__init__()
-        self.data = data  # shape: (n, ...)
-        self.n = data.shape[0]
-        self.shape = data.shape[1:]
-
-    def sample(self, size: tuple[int, ...] = EMPTY_SIZE, /) -> Tensor:
-        r"""Sample from the empirical distribution."""
-        idx = torch.randint(self.n, size=size)
-        return self.data[idx]
-
-    def log_prob(self, value: Tensor) -> Tensor:
-        r"""Log probability of the empirical distribution.
-
-        Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
-
-        .. Signature: ``[...] -> [...]``.
-        """
-        # value.shape: (B, ...),
-        if value.shape[1:] != self.shape:
-            raise ValueError(f"Expected shape {self.shape}, got {value.shape[1:]}")
-        mask = value.unsqueeze(1) == self.data  # shape: (B, n, ...)
-        mask = mask.any(dim=1)
-        return torch.where(mask, torch.inf, -torch.inf)
+    @abstractmethod
+    def __call__(self, y: Dirac, x: Distribution, /) -> Distribution: ...
 
 
-class KalmanCell(nn.Module):
-    r"""The classical Kalman Filter.
+def probabilistic_kalman_filter(
+    y: MultivariateNormal,
+    x: MultivariateNormal,
+    /,
+    H: Optional[Tensor] = None,
+) -> MultivariateNormal:
+    r"""The classical Kalman Filter, rephrased in probabilistic terms.
 
     .. math::
         μ' = μ - ΣH'(HΣH' + R)^{-1}(Hμ - y)
         Σ' = Σ - ΣH'(HΣH' + R)^{-1}HΣ
 
-    The formula for the update derives from the conditional distribution of a joint
-    normal distribution:
+    Note that the formula for the update derives from the conditional distribution of a joint
+    normal distribution: If $p(x, y) = 𝓝([μ₁, μ₂], [[Σ₁₁, Σ₁₂], [Σ₂₁, Σ₂₂]])$, then
+    $p(x∣y) = 𝓝(μ', Σ')$ where $μ' = μ₁ - Σ₁₂Σ₂₂⁻¹(μ₂ - y)$ and $Σ' = Σ₁₁ - Σ₁₂Σ₂⁻¹Σ₂₁$.
+
+    Args:
+        y: The observation distribution.
+        x: The state distribution.
+        H: The observation matrix.
+
+    Returns:
+        The updated state distribution.
+    """
+    μ, Σ = x.mean, x.covariance_matrix
+    y, R = y.mean, y.covariance_matrix
+
+    if H is None:
+        yhat = μ
+        S = Σ
+        Q = S + R
+    else:
+        yhat = torch.einsum("ij, ...j -> ...i", H, μ)
+        S = torch.einsum("mj, jn -> mn", H, Σ)  # S=HΣ
+        Q = torch.einsum("mj, nj -> mn", S, H) + R  # Q=HΣH' + R
+
+    # perform cholesky decomposition (stability + ensure psd cov update)
+    L = torch.linalg.cholesky(Q)
+    # NOTE: compute ΣH'Q⁻¹r = ΣH'(LLᵀ)⁻¹r = ΣH'L⁻ᵀ(L⁻¹r)
+    #   so we solve: Lz = r and L⋅P = HΣ
+    #   then the update are ∆μ = Pᵀz and ∆Σ = PᵀP
+    z = torch.linalg.solve_triangular(L, yhat - y, upper=False)
+    P = torch.linalg.solve_triangular(L, S, upper=False)
+
+    # perform the update
+    μ = μ - torch.einsum("ji, ...j -> ...i", P, z)
+    Σ = Σ - torch.einsum("mj, jn -> mn", P, P)
+
+    return MultivariateNormal(μ, Σ)
+
+
+def discrete_probabilistic_kalman_filter(
+    observation: Dirac,
+    state: MultivariateNormal,
+    /,
+    R: Tensor,
+    H: Optional[Tensor] = None,
+) -> MultivariateNormal:
+    """The classical Kalman Filter, rephrased in probabilistic terms.
+
+    Note that the observation is allowed to be sparse, i.e. contain missing values.
+    In this case, the update formula is obtained by marginalizing the observation distribution:
 
     .. math::
-        p(x, y) &= 𝓝([μ₁, μ₂], [[Σ₁₁, Σ₁₂], [Σ₂₁, Σ₂₂]]) \\
-        ⟹ p(x∣y) &= 𝓝(μ', Σ') \\
-            μ' &= μ₁ - Σ₁₂Σ₂₂⁻¹(μ₂ - y) \
-            Σ' &= Σ₁₁ - Σ₁₂Σ₂⁻¹Σ₂₁) \\
+        μ' = μ - ΣH'(HΣH' + R)^{-1}(Hμ - y)
+        Σ' = Σ - ΣH'(HΣH' + R)^{-1}HΣ
 
-    plugging in $μ₁ = μ, μ₂ = Hμ, Σ₁₁ = Σ, Σ₁₂ = ΣHᵀ, Σ₂₂ = HΣHᵀ + R$ grants the result.
-
-    The classical Kalman Filter can natively deal both with missing values, and duplicate observations.
-
-    The filter can be modified so that it natively deals with missing values.
-    This is possible since the normal distribution can be analytically marginalized.
-
-    The Kalman Filter assumes that all variables are normally distributed.
-
-    In particular, the classical filter assumes that the observation $y$ comes from
-    a normal distribution $𝓝(y, R)$.
-
-    On the other hand, given prior assumption $y∼𝓝(0,R)$ and empirical observations
-    $y₁, …, yₙ$, we get the following posterior distribution for $y$, via Bayes' rule:
-
-    .. math:: p(y) = 𝓝(μ, Σ)  ⟹  p(y|y₁, ..., yₙ) = 𝓝(μ', Σ')
-
-    where $μ' = (Σ⁻¹ + R⁻¹)⁻¹ (Σ⁻¹μ + R⁻¹ȳ)$ and $Σ' = (Σ⁻¹ + R⁻¹)⁻¹$.
+    References:
+        Kalman filter with outliers and missing observations,
+        T. Cipra & R. Romera, 1997
+        https://link.springer.com/article/10.1007/BF02564705
     """
+    y = observation.data  # (..., m)
+    mask = torch.isnan(y)  # (..., m)
+    H = H[..., mask]
+    R = R[..., mask][..., mask, :]
 
-    # PARAMETERS
-    H: Optional[Tensor]
-    r"""PARAM: the observation matrix."""
-    R: Tensor
-    r"""PARAM: The observation noise covariance matrix."""
-
-    def forward(self, y: Tensor, x: MultivariateNormal) -> MultivariateNormal:
-        r"""Forward pass of the Kalman Cell."""
-        mu, sigma = x.mean, x.covariance_matrix
-        mask = torch.isnan(y)
-
-        yhat = self.H @ mu
-        residual = yhat - y
-
-        mask = ~torch.isnan(y)  # (..., m)
-        z = self.h(x)  # (..., m)
-        z = torch.where(mask, z - y, self.ZERO)  # (..., m)
-        z = torch.einsum("ij, ...j -> ...i", self.A, z)
-        z = torch.where(mask, z, self.ZERO)  # (..., m)
-        z = self.ht(z)  # (..., n)
-        z = torch.einsum("ij, ...j -> ...i", self.B, z)
-        return x + self.epsilon * self.layers(z)
-
-        # Update the state
-        # ΣH = Σ @ self.H.T
-        # HΣ = self.H @ Σ
-        # K = ΣH @ torch.inverse(HΣ + self.R)
-        # x = x + K @ (y - self.H @ x)
-        # Σ = Σ - K @ HΣ
-        # return x, Σ
+    obs_dist = MultivariateNormal(y, R)
+    return probabilistic_kalman_filter(obs_dist, state, H=H)

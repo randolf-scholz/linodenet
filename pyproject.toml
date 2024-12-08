@@ -256,6 +256,7 @@ ignore = [
     "RUF013",   # PEP 484 prohibits implicit Optional
     "RUF022",   # __all__ not sorted
     # flake8-bandit
+    "S101",     # use of `assert`
     "S301",     # suspicious-pickle-usage
     "S311",     # standard-random-usage
     "S403",     # suspicious-pickle-import

@@ -30,6 +30,8 @@ type DtypeArg = None | dtype  # NOTE: no support for string dtypes!
 r"""Type hint for dtype arguments."""
 type Shape = int | tuple[int, ...]
 r"""Type hint for shape-like inputs."""
+type Size = int | tuple[int, ...] | list[int]
+r"""Type hint for size-like inputs."""
 # endregion static type aliases --------------------------------------------------------
 
 

@@ -62,7 +62,7 @@ def autojit[M: nn.Module](base_class: type[M], /) -> type[M]:
         r"""A simple Wrapper."""
 
         def __new__(cls, *args: Any, **kwargs: Any) -> Self:
-            # Note: If __new__() does not return an instance of cls,
+            # NOTE: If __new__() does not return an instance of cls,
             #   then the new instance's __init__() method will not be invoked.
             instance = base_class(*args, **kwargs)
 

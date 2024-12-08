@@ -27,18 +27,15 @@ Example:
 
 __all__ = [
     # ABCs & Protocols
-    "Cell",
-    "CellBase",
     "Filter",
     "FilterBase",
+    "FilterList",
     # Classes
     "MissingValueFilter",
     "ReZeroFilter",
     "ResNetFilter",
     "ResidualFilter",
     "SequentialFilter",
-    # Functions
-    "filter_from_config",
 ]
 
 from abc import abstractmethod
@@ -49,7 +46,6 @@ from typing import (
     Optional,
     Protocol,
     cast,
-    overload,
     runtime_checkable,
 )
 
@@ -57,64 +53,7 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.utils import try_initialize_from_config
-
-
-@runtime_checkable
-class Cell(Protocol):
-    r"""Protocol for cells."""
-
-    input_size: int  # type: ignore[misc]
-    r"""The size of the observable $y$."""
-    hidden_size: int  # type: ignore[misc]
-    r"""The size of the hidden state $x$."""
-    bias: bool
-    r"""Whether to include a bias term or not."""
-
-    @abstractmethod
-    def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the filter $x' = F(y，x)$.
-
-        .. Signature: ``[(..., n), (..., m)] -> (..., n)``.
-        """
-        ...
-
-
-class CellBase(nn.Module):
-    r"""Base class for filter-cells."""
-
-    input_size: Final[int]
-    r"""The size of the observable $y$."""
-    hidden_size: Final[int]
-    r"""The size of the hidden state $x$."""
-    bias: Final[bool]
-    r"""Whether to include a bias term or not."""
-
-    def __init__(
-        self,
-        /,
-        input_size: int,
-        hidden_size: int,
-        *,
-        bias: bool = True,
-    ) -> None:
-        super().__init__()
-        self.input_size = int(input_size)
-        self.hidden_size = int(hidden_size)
-        self.bias = bool(bias)
-
-    @abstractmethod
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the filter.
-
-        Args:
-            y: The current measurement of the system.
-            x: The current estimation of the state of the system.
-
-        Returns:
-            x̂: The updated state of the system.
-        """
-        ...
+from linodenet.modules.filters.cells import Cell
 
 
 @runtime_checkable
@@ -131,14 +70,6 @@ class Filter(Cell, Protocol):
         hidden_size: The size of the hidden state $x$.
         bias: Whether to include a bias term or not.
     """
-
-    # CONSTANTS
-    # input_size: Final[int]  # type: ignore[misc]
-    # r"""The size of the observable $y$."""
-    # hidden_size: Final[int]  # type: ignore[misc]
-    # r"""The size of the hidden state $x$."""
-    # bias: Final[bool]
-    # r"""Whether to include a bias term or not."""
 
     # SUBMODULES
     decoder: Optional[nn.Module] = None
@@ -474,7 +405,7 @@ class ResNetFilter(nn.ModuleList):
 
         for module in module_list:
             if not isinstance(module, Filter) or not isinstance(module, nn.Module):
-                raise ValueError("All modules must be Filters!")
+                raise TypeError("All modules must be Filters!")
             if module.input_size != self.input_size:
                 raise ValueError(
                     "All modules must have the same input_size!"
@@ -543,40 +474,3 @@ class ReZeroFilter(nn.ModuleList):
         for w, layer in zip(self.weight, self, strict=True):
             x = x + w * layer(y, x)
         return x
-
-
-def _make_filter[F: Filter](filter_type: type[F], **config: Any) -> F:
-    r"""Initialize a filter from a type."""
-    try:
-        return filter_type(**config)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to initialize filter {filter_type} with arguments {config}!"
-        ) from exc
-
-
-@overload
-def filter_from_config[F: Filter](filter: F, /) -> F: ...
-@overload
-def filter_from_config[F: Filter](filter_kind: type[F], /, **config: Any) -> F: ...
-@overload
-def filter_from_config(filter_kind: str, /, **config: Any) -> Filter: ...
-@overload
-def filter_from_config(**config: Any) -> Filter: ...
-def filter_from_config(filter_kind: object = None, /, **config: Any) -> Filter:
-    r"""Initialize from a configuration."""
-    match filter_kind:
-        case str(name):
-            filter_class = FILTERS[name]
-            filter_model = _make_filter(filter_class, **config)
-        case type() as filter_class if issubclass(filter_class, nn.Module):
-            filter_model = _make_filter(filter_class, **config)
-        case Filter() as filter_model if isinstance(filter, nn.Module):
-            if config:
-                raise ValueError("Cannot initialize instance with additional arguments")
-        case None:
-            filter_model = try_initialize_from_config(config)
-        case _:
-            raise TypeError(f"Invalid filter type: {filter_kind!r}")
-
-    return filter_model

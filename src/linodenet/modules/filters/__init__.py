@@ -31,15 +31,13 @@ __all__ = [
     "ResidualFilter",
     "SequentialFilter",
     # Functions
-    "filter_from_config",
+    "get_filter",
 ]
 
 from torch.nn import GRUCell, LSTMCell, RNNCell
 
 from linodenet.modules.filters import probabilistic
 from linodenet.modules.filters.base import (
-    Cell,
-    CellBase,
     Filter,
     FilterBase,
     MissingValueFilter,
@@ -47,31 +45,36 @@ from linodenet.modules.filters.base import (
     ResNetFilter,
     ReZeroFilter,
     SequentialFilter,
-    filter_from_config,
+)
+from linodenet.modules.filters.cells import (
+    Cell,
+    CellBase,
+    LinearCell,
+    NonLinearCell,
+    NonLinearKalmanCell,
 )
 from linodenet.modules.filters.filters import (
     KalmanFilter,
-    LinearCell,
     LinearKalmanCell,
     LinearResidualCell,
-    NonLinearCell,
-    NonLinearKalmanCell,
     PseudoKalmanCell,
     ResidualCell,
 )
 
 CELLS: dict[str, type[Cell]]  = {
+    # torch cells
     "GRUCell"            : GRUCell,
+    "LSTMCell"           : LSTMCell,
+    "RNNCell"            : RNNCell,
+    # custom cells
     "KalmanCell"         : NonLinearKalmanCell,
     "LinearCell"         : LinearCell,
     "LinearKalmanCell"   : LinearKalmanCell,
     "LinearResidualCell" : LinearResidualCell,
-    "LSTMCell"           : LSTMCell,
     # "MissingValueCell"   : MissingValueCell,
     "NonLinearCell"      : NonLinearCell,
     "PseudoKalmanCell"   : PseudoKalmanCell,
     "ResidualCell"       : ResidualCell,
-    "RNNCell"            : RNNCell,
 }  # fmt: skip
 r"""Dictionary of all available cells (basic building blocks for filters)."""
 
@@ -84,3 +87,21 @@ FILTERS: dict[str, type[Filter]] = {
     "SequentialFilter"    : SequentialFilter,
 }  # fmt: skip
 r"""Dictionary of all available filters."""
+
+
+def get_filter(filter_kind: None | str | type = None, /, **cfg: object) -> Filter:
+    r"""Initialize from a configuration."""
+    match filter_kind:
+        case type() as cls:
+            try:
+                return cls(**cfg)
+            except Exception as exc:
+                raise RuntimeError(f"Failed to create filter of type {cls}!") from exc
+        case str(name):
+            cls: type = FILTERS[name]
+            return get_filter(cls, **cfg)
+        case None:
+            filter_name = cfg.pop("name")
+            return get_filter(filter_name, **cfg)
+        case _:
+            raise TypeError(f"Invalid argument type: {filter_kind!r}")

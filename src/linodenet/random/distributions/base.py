@@ -2,11 +2,9 @@ r"""Distributions base class."""
 
 __all__ = [
     # ABCs & Protocols
-    "ConditionalDistributionProto",
     "DistributionBase",
     "DistributionList",
-    "DistributionProto",
-    "JointDistributionProto",
+    "DistributionDict",
     "Marginalizable",
     # Classes
     "Product",
@@ -24,17 +22,7 @@ import torch
 from torch import Tensor
 from torch.distributions import Distribution
 
-
-class DistributionProto(Protocol):
-    r"""A protocol for distributions."""
-
-
-class ConditionalDistributionProto(Protocol):
-    r"""A protocol for conditional distributions."""
-
-
-class JointDistributionProto(Protocol):
-    r"""A protocol for joint distributions."""
+from linodenet.random.distributions.abstract import DistributionProto
 
 
 class Marginalizable(DistributionProto, Protocol):

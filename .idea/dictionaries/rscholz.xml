@@ -104,6 +104,7 @@
       <w>moveaxis</w>
       <w>multihead</w>
       <w>nblocks</w>
+      <w>ndims</w>
       <w>ngth</w>
       <w>nhead</w>
       <w>nitpicky</w>

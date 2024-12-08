@@ -18,7 +18,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.modules.layers import (
     ReverseDense,
-    ReZeroCell,
+    ReZero,
 )
 from linodenet.utils import (
     deep_dict_update,
@@ -69,7 +69,7 @@ class ResNetBlock(nn.Sequential):
             layers.append(module)
 
         if config["rezero"]:
-            layers.append(ReZeroCell())
+            layers.append(ReZero())
 
         # self.subblocks = nn.Sequential(subblocks)
         super().__init__(*layers)

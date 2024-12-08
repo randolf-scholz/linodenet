@@ -1,11 +1,11 @@
 r"""Embedding components.
 
-We call layers embedding if they satisfy 3 properties:
+We call a layer an embedding if they satisfy 3 properties:
 
-1. They provide both a encode and decode method.
-2. They are left-invertible, i.e. `decode(encode(x)) = x`, but not necessarily
-   `encode(decode(x)) = x`.
-3. The output dimensionality is larger than the input dimensionality.
+1. It has both an `encode` and a `decode` method.
+2. It is left-invertible, i.e. `decode(encode(x)) = x`, but not necessarily
+   `encode(decode(y)) = y`.
+3. The output dimensionality is (generally) larger than the input dimensionality.
 """
 
 __all__ = [
@@ -29,8 +29,8 @@ from linodenet.modules.embeddings.base import (
 )
 
 EMBEDDINGS: dict[str, type[Embedding]] = {
-    "ConcatEmbedding": ConcatEmbedding,
-    "ConcatProjection": ConcatProjection,
-    "LinearEmbedding": LinearEmbedding,
-}
+    "ConcatEmbedding"  : ConcatEmbedding,
+    "ConcatProjection" : ConcatProjection,
+    "LinearEmbedding"  : LinearEmbedding,
+}  # fmt: skip
 r"""Dictionary of available embeddings."""

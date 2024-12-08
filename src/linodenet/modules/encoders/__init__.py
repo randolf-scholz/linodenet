@@ -20,14 +20,14 @@ __all__ = [
 ]
 
 
-from linodenet.modules.encoders.base import Encoder, EncoderABC, Identity
-from linodenet.modules.encoders.ft_transformer import FTTransformer
-from linodenet.modules.encoders.iresnet import (
+from linodenet.modules.bijections.iresnet import (
     LinearContraction,
     SpectralNorm,
     iResNet,
     iResNetBlock,
 )
+from linodenet.modules.encoders.base import Encoder, EncoderABC, Identity
+from linodenet.modules.encoders.ft_transformer import FTTransformer
 from linodenet.modules.encoders.mlp import MLP
 from linodenet.modules.encoders.resnet import ResNet, ResNetBlock
 from linodenet.modules.encoders.transformer import Transformer

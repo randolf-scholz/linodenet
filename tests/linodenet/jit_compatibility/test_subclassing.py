@@ -66,18 +66,6 @@ def test_with_decoder() -> None:
     ):
         _ = jit.script(model)
 
-    # assert isinstance(scripted_model, jit.ScriptModule)
-    # y = scripted_model(x)
-    # assert y.shape == (3, 4)
-    # # serialize and deserialize
-    # with TemporaryDirectory() as folder:
-    #     path = f"{folder}/model.pt"
-    #     jit.save(scripted_model, path)
-    #     deserialized_model = jit.load(path)
-    #     y = deserialized_model(x)
-    #     assert y.shape == (3, 4)
-    #     assert deserialized_model.input_size == 3
-
 
 def test_subclass_with_decoder() -> None:
     decoder = nn.Linear(4, 4)
@@ -94,16 +82,3 @@ def test_subclass_with_decoder() -> None:
         match="Unsupported annotation typing.Optional[torch.nn.modules.module.Module]*.",
     ):
         jit.script(model)
-
-    # assert isinstance(scripted_model, jit.ScriptModule)
-    # y = scripted_model(x)
-    # assert y.shape == (3, 4)
-
-    # # serialize and deserialize
-    # with TemporaryDirectory() as folder:
-    #     path = f"{folder}/model.pt"
-    #     jit.save(scripted_model, path)
-    #     deserialized_model = jit.load(path)
-    #     y = deserialized_model(x)
-    #     assert y.shape == (3, 4)
-    #     assert deserialized_model.input_size == 3

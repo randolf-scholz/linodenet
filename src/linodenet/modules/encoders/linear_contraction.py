@@ -153,7 +153,7 @@ class LinearContraction(nn.Module):
         self.cached_weight.detach_()
 
         # recompute the cache
-        # Note: we need the second run to set up the gradients
+        # NOTE: we need the second run to set up the gradients
         self.recompute_cache()
 
     @jit.export
@@ -164,9 +164,9 @@ class LinearContraction(nn.Module):
         gamma = torch.minimum(self.one, self.c / sigma)
         cached_weight = gamma * self.weight
 
-        # NOTE: We **MUST** use inplace operations here! Otherwise, we run into the issue that another module
-        # that uses weight sharing (e.g. a Linear layer with the same weight matrix) doesn't have the correct *version*
-        # of the cached weight matrix when computing backward.
+        # NOTE: We MUST use inplace operations here! Otherwise, we run into the issue that
+        #  when another module uses weight sharing (e.g. a Linear layer with the same weight matrix)
+        #  doesn't have the correct version of the cached weight matrix when computing backward.
         self.sigma.copy_(sigma)
         self.u.copy_(u)
         self.v.copy_(v)

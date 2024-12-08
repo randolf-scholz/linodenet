@@ -14,7 +14,7 @@ __logger__ = logging.getLogger(__name__)
 
 
 @pytest.mark.flaky(reruns=3)
-def test_filter_idempotency() -> None:
+def test_filter_consistency() -> None:
     r"""Check whether idempotency holds."""
     LOGGER = __logger__.getChild(__name__)
     LOGGER.info("Testing idempotency.")
@@ -24,7 +24,7 @@ def test_filter_idempotency() -> None:
     mask = y > 0
     y[mask] = NAN
 
-    # # Test KalmanCel
+    # # Test KalmanCell
     # model = KalmanCell(
     #     input_size=n, hidden_size=m, autoregressive=True, activation="ReLU"
     # )

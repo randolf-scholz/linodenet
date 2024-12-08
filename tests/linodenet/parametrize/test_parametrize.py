@@ -31,17 +31,6 @@ from linodenet.testing import (
     is_upper_triangular,
 )
 
-# class SlowUpperTriangular(ParametrizationBase):
-#     r"""Parametrize a matrix to be upper triangular."""
-#
-#     def forward(self, x: Tensor) -> Tensor:
-#         # waste some time:
-#         z = torch.randn(100, 100)
-#         for k in range(100_000):
-#             z = z @ torch.randn(100, 100)
-#
-#         return upper_triangular(x)
-
 
 def check_optimization(model: nn.Module, inputs: Tensor, targets: Tensor) -> None:
     optimizer = SGD(model.parameters(), lr=0.1)

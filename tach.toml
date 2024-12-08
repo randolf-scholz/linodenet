@@ -1,3 +1,4 @@
+interfaces = []
 exclude = []
 source_roots = [
     "src",
@@ -8,6 +9,7 @@ path = "<root>"
 depends_on = [
     { path = "linodenet.activations" },
     { path = "linodenet.config" },
+    { path = "linodenet.constants" },
     { path = "linodenet.initializations" },
     { path = "linodenet.lib" },
     { path = "linodenet.modules" },
@@ -45,6 +47,7 @@ depends_on = [
 [[modules]]
 path = "linodenet.modules"
 depends_on = [
+    { path = "<root>" },
     { path = "linodenet.activations" },
     { path = "linodenet.constants" },
     { path = "linodenet.initializations" },

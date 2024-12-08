@@ -3,7 +3,7 @@ r"""Check that spectral norm works as a parametrization."""
 import torch
 from torch import nn
 
-from linodenet.modules.encoders.spectral_normalization import LinearContraction
+from linodenet.modules.encoders.linear_contraction import LinearContraction
 from linodenet.parametrize import SpectralNormalization
 
 

@@ -25,6 +25,7 @@ __all__ = [
 ]
 
 import warnings
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final, Optional, Protocol, runtime_checkable
 
@@ -36,6 +37,75 @@ from torch.utils import cpp_extension
 # we use FP32 machine epsilon as default tolerance
 ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
+LIB_NAME = "liblinodenet"
+r"""The name of the custom library."""
+LIB = torch.ops.liblinodenet
+r"""The custom library."""
+BUILD_DIR = Path(__file__).parent / "build"
+r"""The build directory."""
+SOURCE_DIR = Path(__file__).parent / "src" / f"{LIB_NAME}"
+r"""The source directory."""
+CUSTOM_OPS = [
+    "singular_triplet",
+    "singular_triplet_debug",
+    "singular_triplet_riemann",
+    "spectral_norm",
+    "spectral_norm_debug",
+    "spectral_norm_riemann",
+]
+r"""List of custom operators."""
+
+
+# region compile functions -------------------------------------------------------------
+def load_function(name: str, /) -> Any:
+    r"""Load a function from the custom library."""
+    try:  # compile the function
+        cpp_extension.load(
+            name=name,
+            sources=[SOURCE_DIR / f"{name}.cpp"],  # type: ignore[list-item]
+            is_python_module=False,
+            verbose=True,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Could not compile {name}!") from exc
+
+    try:  # load the function
+        function = getattr(LIB, name)
+    except AttributeError as exc:
+        raise RuntimeError(f"Could not load {name}!") from exc
+
+    return function
+
+
+def _load_linodenet() -> dict[str, Callable]:
+    try:  # load pre-compiled binaries
+        torch.ops.load_library(BUILD_DIR / f"{LIB_NAME}.so")
+        # load the functions
+        compiled_fns = {name: getattr(LIB, name) for name in CUSTOM_OPS}
+    except Exception as exc:
+        warnings.warn(
+            "Custom binaries not found! Trying to compile them on the fly!."
+            " Consider compiling the extension in the linodenet/lib folder."
+            f"\nFull error: {exc}\n{'-' * 80}",
+            UserWarning,
+            stacklevel=2,
+        )
+        compiled_fns = {}
+        exceptions = []
+        for name in CUSTOM_OPS:
+            try:
+                compiled_fns[name] = load_function(name)
+            except Exception as exc:
+                exceptions.append(exc)
+        if exceptions:
+            raise ExceptionGroup("Failed to compile", exceptions) from None
+
+    return compiled_fns
+
+
+COMPILED_FNS = _load_linodenet()
+r"""The compiled functions."""
+# endregion compile functions ----------------------------------------------------------
 
 
 # region protocols ---------------------------------------------------------------------
@@ -99,70 +169,13 @@ class SingularTriplet(Protocol):
         ...
 
 
+_singular_triplet: SingularTriplet = COMPILED_FNS["singular_triplet"]
+_singular_triplet_debug: SingularTriplet = COMPILED_FNS["singular_triplet_debug"]
+_singular_triplet_riemann: SingularTriplet = COMPILED_FNS["singular_triplet_riemann"]
+_spectral_norm: SpectralNorm = COMPILED_FNS["spectral_norm"]
+_spectral_norm_debug: SpectralNorm = COMPILED_FNS["spectral_norm_debug"]
+_spectral_norm_riemann: SpectralNorm = COMPILED_FNS["spectral_norm_riemann"]
 # endregion protocols ------------------------------------------------------------------
-
-
-# region compile functions -------------------------------------------------------------
-LIB_NAME = "liblinodenet"
-r"""The name of the custom library."""
-LIB = torch.ops.liblinodenet
-r"""The custom library."""
-BUILD_DIR = Path(__file__).parent / "build"
-r"""The build directory."""
-SOURCE_DIR = Path(__file__).parent / "src" / f"{LIB_NAME}"
-r"""The source directory."""
-CUSTOM_OPS = [
-    "singular_triplet",
-    "singular_triplet_debug",
-    "singular_triplet_riemann",
-    "spectral_norm",
-    "spectral_norm_debug",
-    "spectral_norm_riemann",
-]
-r"""List of custom operators."""
-
-
-def load_function(name: str, /) -> Any:
-    r"""Load a function from the custom library."""
-    try:  # compile the function
-        cpp_extension.load(
-            name=name,
-            sources=[SOURCE_DIR / f"{name}.cpp"],  # type: ignore[list-item]
-            is_python_module=False,
-            verbose=True,
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Could not compile {name}!") from exc
-
-    try:  # load the function
-        function = getattr(LIB, name)
-    except AttributeError as exc:
-        raise RuntimeError(f"Could not load {name}!") from exc
-
-    return function
-
-
-try:  # load pre-compiled binaries
-    torch.ops.load_library(BUILD_DIR / f"{LIB_NAME}.so")
-    # load the functions
-    compiled_fns = {name: getattr(LIB, name) for name in CUSTOM_OPS}
-except Exception as exc:
-    warnings.warn(
-        "Custom binaries not found! Trying to compile them on the fly!."
-        " Please compile the extension in the linodenet/lib folder."
-        f"\nFull error: {exc}\n{'-' * 80}",
-        UserWarning,
-        stacklevel=2,
-    )
-    compiled_fns = {name: load_function(name) for name in CUSTOM_OPS}
-
-_singular_triplet: SingularTriplet = compiled_fns["singular_triplet"]
-_singular_triplet_debug: SingularTriplet = compiled_fns["singular_triplet_debug"]
-_singular_triplet_riemann: SingularTriplet = compiled_fns["singular_triplet_riemann"]
-_spectral_norm: SpectralNorm = compiled_fns["spectral_norm"]
-_spectral_norm_debug: SpectralNorm = compiled_fns["spectral_norm_debug"]
-_spectral_norm_riemann: SpectralNorm = compiled_fns["spectral_norm_riemann"]
-# endregion compile functions ----------------------------------------------------------
 
 
 # region spectral norm -----------------------------------------------------------------

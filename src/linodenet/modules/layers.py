@@ -3,7 +3,7 @@ r"""Some layers and modules for neural networks."""
 __all__ = [
     # Classes
     "Constant",
-    "ReZeroCell",
+    "ReZero",
     "ReZeroResNet",
     "ReverseDense",
 ]
@@ -29,7 +29,7 @@ class Constant(nn.Module):
         return self.value
 
 
-class ReZeroCell(nn.Module):
+class ReZero(nn.Module):
     r"""ReZero module.
 
     Simply multiplies the inputs by a scalar initialized to zero.
@@ -78,9 +78,9 @@ class ReZeroResNet(nn.ModuleList):
 
         for i, module in enumerate(module_list):
             # pass if already a ReZeroCell
-            if isinstance(module, ReZeroCell):
+            if isinstance(module, ReZero):
                 continue
-            module_list[i] = ReZeroCell(module)
+            module_list[i] = ReZero(module)
 
         super().__init__(module_list)
 

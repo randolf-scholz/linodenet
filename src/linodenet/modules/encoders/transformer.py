@@ -55,10 +55,9 @@ class Transformer(nn.Module):
             # the eps value in layer normalization components (default=1e-5).
             "layer_norm_eps": 1e-5,
             # If True, then the input and output tensors are provided as (batch, seq, feature).
-            # Default: False.
             "batch_first": False,
             # if True, layer norm is done prior to attention and feedforward operations.
-            # Otherwise it’s done after. Default: False (after).
+            # Otherwise, it’s done after. Default: False (after).
             "norm_first": False,
         },
     }

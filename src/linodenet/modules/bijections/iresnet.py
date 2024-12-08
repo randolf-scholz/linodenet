@@ -19,7 +19,7 @@ from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
 from linodenet.activations import MODULAR_ACTIVATIONS, Activation
-from linodenet.modules.layers import ReZeroCell
+from linodenet.modules.layers import ReZero
 from linodenet.utils import deep_dict_update
 
 
@@ -427,7 +427,7 @@ class iResNetBlock(nn.Module):
         ]
 
         self.use_rezero = HP["rezero"]
-        self.rezero = ReZeroCell() if self.use_rezero else None
+        self.rezero = ReZero() if self.use_rezero else None
         if self.use_rezero:
             layers.append(self.rezero)  # type: ignore[arg-type]
 
@@ -544,32 +544,3 @@ class iResNet(nn.Module):
         for block in self.blocks[::-1]:  # traverse in reverse
             y = block.inverse(y)
         return y
-
-    # TODO: delete this?
-    # @jit.export
-    # def alt_inverse(self, y: Tensor,
-    #                 maxiter: int = 1000, rtol: float = 1e-05, atol: float = 1e-08) -> Tensor:
-    #     r"""
-    #     Parameters
-    #     ----------
-    #     y: Tensor
-    #     maxiter: int
-    #     rtol: float
-    #     atol: float
-    #     Returns
-    #     -------
-    #     yhat: Tensor
-    #     """
-    #     xhat = y.clone()
-    #     xhat_dash = y.clone()
-    #     residual = torch.zeros_like(y)
-    #     for k in range(self.maxiter):
-    #         xhat_dash = y - self(xhat)
-    #         residual = torch.abs(xhat_dash - xhat) - rtol * torch.absolute(xhat)
-    #         if torch.all(residual <= atol):
-    #             return xhat_dash
-    #         else:
-    #             xhat = xhat_dash
-    # warnings.warn(F"No convergence in {maxiter} iterations. "
-    #               F"Max residual:{torch.max(residual)} > {atol}.")
-    #     return xhat_dash
