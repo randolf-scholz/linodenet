@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.2
+    rev: v0.8.3
     hooks:
       - id: ruff
         name: ruff-isort
@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.5.7
+    rev: 0.5.9
     hooks:
       - id: uv-lock
   # nbstripout-fast
@@ -105,7 +105,7 @@ repos:
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
   # tach
   - repo: https://github.com/gauge-sh/tach-pre-commit
-    rev: v0.16.4 # change this to the latest tag!
+    rev: v0.17.0 # change this to the latest tag!
     hooks:
       - id: tach
   - repo: local
