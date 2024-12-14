@@ -12,6 +12,8 @@ import torch
 from torch import Tensor
 from torch.distributions import Distribution
 
+from linodenet.types import Size
+
 
 class Empirical(Distribution):
     r"""The empirical distribution.
@@ -37,12 +39,14 @@ class Empirical(Distribution):
         self.ndims = len(self.event_shape)
         self.dims = tuple(range(-self.ndims, 0))
 
-    def sample(self, size: tuple[int, ...] = (), /) -> Tensor:
+    def sample(self, sample_shape: Size = ()) -> Tensor:
         r"""Sample from the empirical distribution."""
-        idx = torch.randint(self.num_samples, size=size, device=self.data.device)
+        idx = torch.randint(
+            self.num_samples, size=sample_shape, device=self.data.device
+        )
         return self.data[idx]
 
-    def log_prob(self, value: Tensor, /) -> Tensor:
+    def log_prob(self, value: Tensor) -> Tensor:
         r"""Log probability of the empirical distribution.
 
         Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
@@ -74,9 +78,9 @@ class Dirac(Empirical):
         super().__init__(value.unsqueeze(0))
         self.data = value
 
-    def sample(self, size: tuple[int, ...] = (), /) -> Tensor:
+    def sample(self, sample_shape: Size = ()) -> Tensor:
         r"""Sample from the Dirac distribution."""
-        return self.data.expand(size)
+        return self.data.expand(sample_shape)
 
     def log_prob(self, value: Tensor) -> Tensor:
         r"""Log probability of the Dirac distribution.

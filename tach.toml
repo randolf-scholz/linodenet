@@ -9,7 +9,6 @@ path = "<root>"
 depends_on = [
     { path = "linodenet.activations" },
     { path = "linodenet.config" },
-    { path = "linodenet.constants" },
     { path = "linodenet.initializations" },
     { path = "linodenet.lib" },
     { path = "linodenet.modules" },
@@ -17,6 +16,7 @@ depends_on = [
     { path = "linodenet.projections" },
     { path = "linodenet.regularizations" },
     { path = "linodenet.testing" },
+    { path = "linodenet.types" },
     { path = "linodenet.utils" },
 ]
 

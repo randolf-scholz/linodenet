@@ -7,12 +7,13 @@ __all__ = [
     "SelfMap",
     "SupportsLenAndGetItem",
     # Aliases
-    "Range",
     "DeviceArg",
     "DtypeArg",
     "Nested",
+    "Range",
     "Scalar",
     "Shape",
+    "Size",
 ]
 
 from abc import abstractmethod
@@ -28,9 +29,9 @@ type DeviceArg = None | str | device  # Literal["cpu", "cuda"]
 r"""Type hint for device arguments."""
 type DtypeArg = None | dtype  # NOTE: no support for string dtypes!
 r"""Type hint for dtype arguments."""
-type Shape = int | tuple[int, ...]
+type Shape = tuple[int, ...]
 r"""Type hint for shape-like inputs."""
-type Size = int | tuple[int, ...] | list[int]
+type Size = tuple[int, ...] | list[int]
 r"""Type hint for size-like inputs."""
 # endregion static type aliases --------------------------------------------------------
 
