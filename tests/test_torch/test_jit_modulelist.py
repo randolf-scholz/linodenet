@@ -67,6 +67,8 @@ def test_jit_modulelist(cls: type, stage: str, interface: str) -> None:
             target = scripted
         case "reloaded":
             target = reloaded
+        case _:
+            raise ValueError(f"Invalid stage: {stage}")
 
     match interface:
         case "getitem":
@@ -102,6 +104,8 @@ def test_jit_iter_modulelist_in_scripted_forward(
             target = scripted
         case "reloaded":
             target = reloaded
+        case _:
+            raise ValueError(f"Invalid stage: {stage}")
 
     match interface:
         case "getitem":
