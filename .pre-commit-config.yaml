@@ -45,7 +45,7 @@ repos:
         exclude: '^experiments/'
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.5.5
+    rev: v0.5.52
     hooks:
       # pygrep hooks
       - id: check-separator-length-88
