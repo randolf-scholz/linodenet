@@ -1,3 +1,5 @@
+r"""Test the `torch.jit` module with `nn.ModuleList`."""
+
 from tempfile import TemporaryFile
 from typing import Final
 
