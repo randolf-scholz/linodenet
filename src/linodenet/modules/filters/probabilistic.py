@@ -71,8 +71,8 @@ class SingleValueProbabilisticFilter(Protocol):
 
 
 def probabilistic_kalman_filter(
-    y: MultivariateNormal,
-    x: MultivariateNormal,
+    obs: MultivariateNormal,
+    val: MultivariateNormal,
     /,
     H: Optional[Tensor] = None,
 ) -> MultivariateNormal:
@@ -87,15 +87,17 @@ def probabilistic_kalman_filter(
     $p(x∣y) = 𝓝(μ', Σ')$ where $μ' = μ₁ - Σ₁₂Σ₂₂⁻¹(μ₂ - y)$ and $Σ' = Σ₁₁ - Σ₁₂Σ₂⁻¹Σ₂₁$.
 
     Args:
-        y: The observation distribution.
-        x: The state distribution.
+        obs: The observation distribution.
+        val: The state distribution.
         H: The observation matrix.
 
     Returns:
         The updated state distribution.
     """
-    μ, Σ = x.mean, x.covariance_matrix
-    y, R = y.mean, y.covariance_matrix
+    μ: Tensor = val.mean
+    Σ: Tensor = val.covariance_matrix  # pyright: ignore[reportAssignmentType]
+    y: Tensor = obs.mean
+    R: Tensor = obs.covariance_matrix  # pyright: ignore[reportAssignmentType]
 
     if H is None:
         yhat = μ
@@ -144,8 +146,12 @@ def discrete_probabilistic_kalman_filter(
     """
     y = observation.data  # (..., m)
     mask = torch.isnan(y)  # (..., m)
-    H = H[..., mask]
-    R = R[..., mask][..., mask, :]
+
+    if H is None:
+        H = torch.eye(state.event_shape[-1], device=state.mean.device)
+
+    H = H[..., mask]  # (..., n, m_obs)
+    R = R[..., mask][..., mask, :]  # (..., m_obs, m_obs)
 
     obs_dist = MultivariateNormal(y, R)
     return probabilistic_kalman_filter(obs_dist, state, H=H)

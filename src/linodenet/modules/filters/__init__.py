@@ -89,9 +89,12 @@ FILTERS: dict[str, type[Filter]] = {
 r"""Dictionary of all available filters."""
 
 
-def get_filter(filter_kind: None | str | type = None, /, **cfg: object) -> Filter:
+def get_filter(filter_kind: str | type | None = None, /, **cfg: object) -> Filter:
     r"""Initialize from a configuration."""
     match filter_kind:
+        case None:
+            filter_name = cfg.pop("name")
+            return get_filter(filter_name, **cfg)
         case type() as cls:
             try:
                 return cls(**cfg)
@@ -100,8 +103,5 @@ def get_filter(filter_kind: None | str | type = None, /, **cfg: object) -> Filte
         case str(name):
             cls: type = FILTERS[name]
             return get_filter(cls, **cfg)
-        case None:
-            filter_name = cfg.pop("name")
-            return get_filter(filter_name, **cfg)
         case _:
             raise TypeError(f"Invalid argument type: {filter_kind!r}")

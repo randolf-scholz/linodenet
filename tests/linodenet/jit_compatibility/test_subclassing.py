@@ -62,7 +62,7 @@ def test_with_decoder() -> None:
     # test with scripted
     with pytest.raises(
         AssertionError,
-        match="Unsupported annotation typing.Optional[torch.nn.modules.module.Module]*.",
+        match=r"Unsupported annotation typing.Optional[torch.nn.modules.module.Module]*",
     ):
         _ = jit.script(model)
 
@@ -79,6 +79,6 @@ def test_subclass_with_decoder() -> None:
     # test with scripted
     with pytest.raises(
         AssertionError,
-        match="Unsupported annotation typing.Optional[torch.nn.modules.module.Module]*.",
+        match=r"Unsupported annotation typing.Optional[torch.nn.modules.module.Module]*",
     ):
         jit.script(model)

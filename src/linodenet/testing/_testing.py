@@ -111,9 +111,9 @@ def get_device(x: Module | Tree, /) -> torch.device:
 @overload
 def to_device[M: Module](x: M, /, *, device: DeviceArg = ...) -> M: ...
 @overload
-def to_device(x: Tensor, /, *, device: DeviceArg = ...) -> Tensor: ...
+def to_device[T: Tensor](x: T, /, *, device: DeviceArg = ...) -> T: ...
 @overload
-def to_device(x: Scalar, /, *, device: DeviceArg = ...) -> Scalar: ...
+def to_device[S: Scalar](x: S, /, *, device: DeviceArg = ...) -> S: ...
 @overload
 def to_device[T](x: Mapping[str, T], /, *, device: DeviceArg = ...) -> dict[str, T]: ...
 @overload
@@ -139,7 +139,7 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
 
 
 def iter_tensors(x: Module | Tree, /) -> Iterator[Tensor]:
-    r"""Iterate over the parameters of the model / parameters."""
+    r"""Yields the tensors of a model."""
     match x:
         case Tensor() as tensor:
             yield tensor
@@ -157,7 +157,7 @@ def iter_tensors(x: Module | Tree, /) -> Iterator[Tensor]:
 
 
 def iter_parameters(x: Module | Tree, /) -> Iterator[nn.Parameter]:
-    r"""Iterate over the parameters of the model / parameters."""
+    r"""Yields the parameters of the model."""
     for w in iter_tensors(x):
         if isinstance(w, nn.Parameter):
             yield w
@@ -213,12 +213,12 @@ def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
 @overload
 def make_tensors_parameters(x: Tensor, /) -> nn.Parameter: ...
 @overload
-def make_tensors_parameters(x: Scalar, /) -> Scalar: ...
+def make_tensors_parameters[S: Scalar](x: S, /) -> S: ...
 @overload
 def make_tensors_parameters[T](x: Mapping[str, T], /) -> dict[str, T]: ...
 @overload
 def make_tensors_parameters[T](x: Sequence[T], /) -> tuple[T, ...]: ...
-def make_tensors_parameters(x, /):
+def make_tensors_parameters(x: object, /) -> object:
     r"""Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
     if isinstance(x, Tensor):

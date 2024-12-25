@@ -1,5 +1,7 @@
+r"""Test the `torch.jit` module with a protocol subclass."""
+
 from tempfile import TemporaryFile
-from typing import Final, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
@@ -12,16 +14,16 @@ class Cell(Protocol):
 
 
 class MyCell(nn.Module, Cell):
-    input_size: Final[int]
-    hidden_size: Final[int]
+    input_size: int
+    hidden_size: int
 
-    def __init__(self, input_size: int, hidden_size: int):
+    def __init__(self, input_size: int, hidden_size: int) -> None:
         nn.Module.__init__(self)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.cell = nn.RNNCell(input_size, hidden_size)
 
-    def forward(self, y: Tensor, x: Tensor):
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
         return self.cell(y, x)
 
 

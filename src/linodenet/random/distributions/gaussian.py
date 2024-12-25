@@ -13,18 +13,18 @@ class MultiVariateNormal(dist.MultivariateNormal):
     We add some utilities to the base class.
     """
 
-    def __add__(self, bias: Tensor, /) -> Self:
+    def __add__(self, bias: float | Tensor, /) -> Self:
         r"""Add a tensor to the mean."""
         return self.__class__(
             self.mean + bias,
             self.covariance_matrix,
         )
 
-    def __mul__(self, scale: float, /) -> Self:
+    def __mul__(self, scale: float | Tensor, /) -> Self:
         r"""Multiply by a tensor."""
         return self.__class__(
             scale * self.mean,
-            scale**2 * self.covariance_matrix,
+            scale**2 * self.covariance_matrix,  # pyright: ignore[reportOperatorIssue]
         )
 
     def __matmul__(self, scale: Tensor, /) -> Self:

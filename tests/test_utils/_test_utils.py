@@ -113,7 +113,7 @@ def visualize_distribution(
 @jit.script
 def geometric_mean(
     x: Tensor,
-    axis: None | int | list[int] = None,
+    axis: Optional[int | list[int]] = None,
     keepdim: bool = False,
 ) -> Tensor:
     r"""Geometric mean of a tensor.
@@ -134,7 +134,7 @@ def geometric_mean(
 def scaled_norm(
     x: Tensor,
     p: float = 2.0,
-    axis: None | int | list[int] = None,
+    axis: Optional[int | list[int]] = None,
     keepdim: bool = False,
 ) -> Tensor:
     r"""Shortcut for scaled norm.

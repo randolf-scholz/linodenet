@@ -7,12 +7,12 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Iterable
-from typing import Any, Final
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.initializations import INITIALIZATIONS, Initialization, gaussian
+from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection
 from linodenet.types import SelfMap
 from linodenet.utils import deep_dict_update, initialize_from_dict
@@ -61,8 +61,8 @@ class LinODECell(nn.Module):
         self,
         input_size: int,
         *,
-        kernel_initialization: None | str | Tensor | Initialization = "skew-symmetric",
-        kernel_parametrization: None | str | SelfMap[Tensor] | nn.Module = None,
+        kernel_initialization: str | Tensor | Initialization = "skew-symmetric",
+        kernel_parametrization: Optional[str | SelfMap[Tensor] | nn.Module] = None,
         scalar: float = 0.0,
         scalar_learnable: bool = True,
     ) -> None:
@@ -88,11 +88,9 @@ class LinODECell(nn.Module):
         def kernel_initialization_dispatch() -> Callable[[], Tensor]:
             r"""Dispatch the kernel initialization."""
             match kernel_initialization:
-                case None:
-                    return lambda: gaussian(input_size)
                 case str(key):
-                    _init = INITIALIZATIONS[key]
-                    return lambda: _init(input_size)
+                    init = INITIALIZATIONS[key]
+                    return lambda: init(input_size)
                 case Callable() as func:  # type: ignore[misc]
                     tensor = Tensor(func(input_size))
                     if tensor.shape != (input_size, input_size):

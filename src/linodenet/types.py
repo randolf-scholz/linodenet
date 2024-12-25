@@ -23,7 +23,7 @@ from typing import Final, Protocol, SupportsIndex
 from torch import device, dtype
 
 # region static type aliases -----------------------------------------------------------
-type Scalar = None | bool | int | float | str
+type Scalar = None | bool | int | float
 r"""Type hint for scalar types allowed by torchscript."""
 type DeviceArg = None | str | device  # Literal["cpu", "cuda"]
 r"""Type hint for device arguments."""
@@ -72,6 +72,6 @@ class HasHyperparameters(Protocol):
 # region generic type aliases ----------------------------------------------------------
 type Range[T] = SupportsLenAndGetItem[T] | Iterable[T]
 r"""Type hint for ranges of values."""
-type Nested[T] = T | Mapping[str, "Nested[T]"] | Sequence["Nested[T]"]
+type Nested[T] = T | Mapping[str, Nested[T]] | Sequence[Nested[T]]
 r"""Type hint for nested types."""
 # endregion type aliases ---------------------------------------------------------------

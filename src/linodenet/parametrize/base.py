@@ -73,6 +73,7 @@ __all__ = [
     "Parametrization",
     # Classes
     "ParametrizationBase",
+    "ParametrizationList",
     "ParametrizationDict",
     "ParametrizationMulticache",
     # torch.nn.utils.parametrize replacements
@@ -378,6 +379,7 @@ class ParametrizationMulticache(nn.Module, Parametrization):
     def update_cache(self) -> None:
         new_param, new_tensors = self.parametrization()
         self.cached_parameter.copy_(new_param)
+        # TODO: use self.named_buffers instead?
         for key, tensor in new_tensors.items():
             self.cached_tensors[key].copy_(tensor)
 
@@ -406,6 +408,13 @@ class ParametrizationMulticache(nn.Module, Parametrization):
 
         self.register_buffer(name, tensor)
         self.cached_tensors[name] = getattr(self, name)
+
+
+class ParametrizationList(nn.ModuleList):
+    r"""Apply multiple parametrizations sequentially."""
+
+    def __init__(self, *parametrizations: Parametrization) -> None:
+        super().__init__(parametrizations)
 
 
 # FIXME: use MutableMapping https://github.com/pytorch/pytorch/issues/110959
@@ -487,9 +496,7 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
         self.register_buffer(name, tensor)
         self.cached_tensors[name] = getattr(self, name)
 
-    def register_parametrized_tensor(
-        self, name: str, param: nn.Parameter, /, *, add_to_namespace: bool = True
-    ) -> None:
+    def register_parametrized_tensor(self, name: str, param: nn.Parameter, /) -> None:
         r"""Register a parametrization."""
         if not isinstance(param, nn.Parameter):
             raise TypeError("Given tensor is not a nn.Parameter!")
@@ -673,7 +680,7 @@ class cached(ContextDecorator, AbstractContextManager):
 
 # region functions for parametrization -------------------------------------------------
 def iter_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
-    r"""Iterate over all parametrizations in a module."""
+    r"""Yields all parametrizations in a module."""
     for m in module.modules():
         if isinstance(m, Parametrization):
             yield m
