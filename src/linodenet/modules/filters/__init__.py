@@ -101,7 +101,7 @@ def get_filter(filter_kind: str | type | None = None, /, **cfg: object) -> Filte
             except Exception as exc:
                 raise RuntimeError(f"Failed to create filter of type {cls}!") from exc
         case str(name):
-            cls: type = FILTERS[name]
-            return get_filter(cls, **cfg)
+            typ: type = FILTERS[name]
+            return get_filter(typ, **cfg)
         case _:
             raise TypeError(f"Invalid argument type: {filter_kind!r}")

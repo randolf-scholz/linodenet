@@ -27,9 +27,9 @@ from linodenet.utils import deep_dict_update, initialize_from_dict
 class Cell(Protocol):
     r"""Protocol for cells."""
 
-    input_size: int  # type: ignore[misc]
+    input_size: int
     r"""The size of the observable $y$."""
-    hidden_size: int  # type: ignore[misc]
+    hidden_size: int
     r"""The size of the hidden state $x$."""
     bias: bool
     r"""Whether to include a bias term or not."""

@@ -91,14 +91,6 @@ class LinODECell(nn.Module):
                 case str(key):
                     init = INITIALIZATIONS[key]
                     return lambda: init(input_size)
-                case Callable() as func:  # type: ignore[misc]
-                    tensor = Tensor(func(input_size))
-                    if tensor.shape != (input_size, input_size):
-                        raise ValueError(
-                            f"Kernel has bad shape! {tensor.shape} but should be"
-                            f" {(input_size, input_size)}"
-                        )
-                    return lambda: Tensor(func(input_size))
                 case Tensor() as tensor:
                     if tensor.shape != (input_size, input_size):
                         raise ValueError(
@@ -106,6 +98,14 @@ class LinODECell(nn.Module):
                             f" {(input_size, input_size)}"
                         )
                     return lambda: tensor
+                case Callable() as func:  # type: ignore[misc]
+                    tensor = Tensor(func(input_size))  # type: ignore[unreachable]
+                    if tensor.shape != (input_size, input_size):
+                        raise ValueError(
+                            f"Kernel has bad shape! {tensor.shape} but should be"
+                            f" {(input_size, input_size)}"
+                        )
+                    return lambda: Tensor(func(input_size))
                 case Iterable() as iterable:
                     tensor = Tensor(iterable)
                     if tensor.shape != (input_size, input_size):
