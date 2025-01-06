@@ -115,8 +115,7 @@ class FilterBase(nn.Module):
     r"""The size of the observable $y$."""
     hidden_size: Final[int]
     r"""The size of the hidden state $x$."""
-    bias: Final[bool]
-    r"""Whether to include a bias term or not."""
+
     decoder: Optional[nn.Module] = None
     r"""The observation model."""
 
@@ -126,13 +125,11 @@ class FilterBase(nn.Module):
         input_size: int,
         hidden_size: int,
         *,
-        bias: bool = True,
         decoder: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
         self.input_size = int(input_size)
         self.hidden_size = int(hidden_size)
-        self.bias = bool(bias)
         self.decoder = decoder
 
     @abstractmethod
@@ -166,10 +163,7 @@ class FilterList(FilterBase, nn.ModuleList):
                 raise TypeError("All filters must be nn.Modules!")
 
         FilterBase.__init__(
-            self,
-            filter_list[0].input_size,
-            filter_list[-1].hidden_size,
-            bias=any(module.bias for module in filter_list),
+            self, filter_list[0].input_size, filter_list[-1].hidden_size
         )
         nn.ModuleList.__init__(self, cast(list[nn.Module], filter_list))
 
@@ -465,9 +459,10 @@ class ReZeroFilter(nn.ModuleList):
                     "All modules must have the same hidden_size!"
                     f"Expected {self.hidden_size}, but {module=} has {module.hidden_size}"
                 )
+
         super().__init__(module_list)
-        weight = torch.zeros(len(self))
-        self.register_parameter("weight", weight)
+        # add the weight last.
+        self.weight = nn.Parameter(torch.zeros(len(self)))
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""

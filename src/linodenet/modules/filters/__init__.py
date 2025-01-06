@@ -61,6 +61,8 @@ from linodenet.modules.filters.filters import (
     ResidualCell,
 )
 
+x: type[Cell] = LinearCell
+
 CELLS: dict[str, type[Cell]]  = {
     # torch cells
     "GRUCell"            : GRUCell,
@@ -94,7 +96,7 @@ def get_filter(filter_kind: str | type | None = None, /, **cfg: object) -> Filte
     match filter_kind:
         case None:
             filter_name = cfg.pop("name")
-            return get_filter(filter_name, **cfg)
+            return get_filter(filter_name, **cfg)  # type: ignore[arg-type]
         case type() as cls:
             try:
                 return cls(**cfg)

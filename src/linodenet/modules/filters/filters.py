@@ -222,6 +222,22 @@ class ResidualCell(nn.Module):
         return x - torch.einsum("...i,ij->...j", r, self.F)
 
 
+def _set_alpha(alpha: str | float) -> float:
+    match alpha:
+        case float(value):
+            return value
+        case "first-value":
+            return 0.0
+        case "last-value":
+            return 1.0
+        case "kalman":
+            return 0.5
+        case str(name):
+            raise ValueError(f"Unknown alpha: {name}")
+        case _:
+            raise TypeError(f"Unknown alpha: {type(alpha)}")
+
+
 class LinearKalmanCell(nn.Module):
     r"""A Linear Filter.
 
@@ -242,8 +258,6 @@ class LinearKalmanCell(nn.Module):
     r"""The size of the hidden state $x$."""
     autoregressive: Final[bool]
     r"""CONST: Whether the filter is autoregressive or not."""
-    alpha_learnable: Final[bool]
-    r"""CONST: Whether alpha is a learnable parameter."""
 
     # PARAMETERS
     H: Optional[Tensor]
@@ -283,24 +297,10 @@ class LinearKalmanCell(nn.Module):
         self.input_size = n
         self.hidden_size = m
         self.autoregressive = autoregressive
-        self.alpha_learnable = alpha_learnable
 
         # PARAMETERS
-        match alpha:
-            case "first-value":
-                alpha = 0.0
-            case "last-value":
-                alpha = 1.0
-            case "kalman":
-                alpha = 0.5
-            case str():
-                raise ValueError(f"Unknown alpha: {alpha}")
-
-        # PARAMETERS
-        if self.alpha_learnable:
-            self.alpha = nn.Parameter(torch.tensor(alpha))
-        else:
-            self.register_buffer("alpha", torch.tensor(alpha))
+        alpha_ = torch.tensor(_set_alpha(alpha))
+        self.alpha = nn.Parameter(alpha_, requires_grad=alpha_learnable)
         self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.A = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
@@ -420,17 +420,8 @@ class PseudoKalmanCell(nn.Module):
         self.hidden_size = config["hidden_size"]
 
         # PARAMETERS
-        match alpha:
-            case "first-value":
-                alpha = 0.0
-            case "last-value":
-                alpha = 1.0
-            case "kalman":
-                alpha = 0.5
-            case str():
-                raise ValueError(f"Unknown alpha: {alpha}")
-
-        self.alpha = nn.Parameter(torch.tensor(alpha), requires_grad=alpha_learnable)
+        alpha_ = torch.tensor(_set_alpha(alpha))
+        self.alpha = nn.Parameter(alpha_, requires_grad=alpha_learnable)
         self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.weight = nn.Parameter(torch.empty(self.input_size, self.input_size))
         nn.init.kaiming_normal_(self.weight, nonlinearity="linear")

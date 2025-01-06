@@ -27,12 +27,10 @@ from linodenet.utils import deep_dict_update, initialize_from_dict
 class Cell(Protocol):
     r"""Protocol for cells."""
 
-    input_size: int
+    input_size: Final[int]
     r"""The size of the observable $y$."""
-    hidden_size: int
+    hidden_size: Final[int]
     r"""The size of the hidden state $x$."""
-    bias: bool
-    r"""Whether to include a bias term or not."""
 
     @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
@@ -50,21 +48,16 @@ class CellBase(nn.Module):
     r"""The size of the observable $y$."""
     hidden_size: Final[int]
     r"""The size of the hidden state $x$."""
-    bias: Final[bool]
-    r"""Whether to include a bias term or not."""
 
     def __init__(
         self,
         /,
         input_size: int,
         hidden_size: int,
-        *,
-        bias: bool = True,
     ) -> None:
         super().__init__()
         self.input_size = int(input_size)
         self.hidden_size = int(hidden_size)
-        self.bias = bool(bias)
 
     @abstractmethod
     def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
@@ -80,7 +73,7 @@ class CellBase(nn.Module):
         ...
 
 
-class LinearCell(nn.Module):
+class LinearCell(CellBase):
     r"""Linear RNN Cell.
 
     .. math:: F(y，x) =  Ux + Vy + b
@@ -110,9 +103,9 @@ class LinearCell(nn.Module):
         *,
         bias: bool = True,
     ) -> None:
-        super().__init__()
-        self.input_size = n = int(input_size)
-        self.hidden_size = m = int(hidden_size)
+        super().__init__(input_size, hidden_size)
+        n = self.input_size
+        m = self.hidden_size
         self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
         self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
         self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
