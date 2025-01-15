@@ -59,7 +59,7 @@ extensions = [
     # "autoapi.extension",
     "myst_parser",
     "sphinx_copybutton",
-    "sphinx_math_dollar",
+    # "sphinx_math_dollar",
     "sphinx_togglebutton",
     # "sphinx_autodoc_typehints",
     # "sphinx_toolbox.more_autodoc.typehints",
@@ -294,43 +294,54 @@ intersphinx_disabled_reftypes = ["std:doc"]  # list of disabled cross-reference 
 # SEE: https://www.sphinx-doc.org/en/master/usage/extensions/math.html#module-sphinx.ext.mathjax
 # SEE: https://docs.mathjax.org/en/latest/web/configuration.html
 # # mathjax_path = ...  # path/url to the MathJax.js file
-mathjax_options = {}  # options to script tag for mathjax
-mathjax3_config = {  # configuration options for MathJax v3
-    "loader": {"load": [r"[tex]/ams", r"[tex]/mathtools", r"[tex]/physics"]},
-    "tex": {
-        "inlineMath": [[r"\(", r"\)"]],
-        "displayMath": [[r"\[", r"\]"]],
-        "packages": {"[+]": ["ams", "mathtools", "physics"]},
-        "macros": {
-            # operators
-            "argmax": r"\operatorname*{arg\,max}",
-            "argmin": r"\operatorname*{arg\,min}",
-            "Median": r"\operatorname{Median}",
-            "diag": r"\operatorname{diag}",
-            "dist": r"\operatorname{dist}",
-            "rank": r"\operatorname{rank}",
-            "relu": r"\operatorname{ReLU}",
-            "KL": r"\operatorname{KL}",
-            "tr": r"\operatorname{tr}",
-            # macros
-            "bmat": [r"\begin{bmatrix} #1 \end{bmatrix}", 1],
-            "norm": [r"\left\lVert #1\right\rVert", 1],
-            "abs": [r"\left\lvert #1\right\rvert", 1],
-            "set": [r"\left\{ #1 \right\}", 1],
-            "seq": [r"\left( #1 \right)", 1],
-            "tuple": [r"\left( #1 \right)", 1],
-            "floor": [r"\left\lfloor #1 \right\rfloor", 1],
-            "ceil": [r"\left\lceil #1 \right\rceil", 1],
-        },
-    },
-}
+# mathjax_options = {}  # options to script tag for mathjax
+# mathjax3_config = {  # configuration options for MathJax v3
+#     "loader": {"load": [r"[tex]/ams", r"[tex]/mathtools", r"[tex]/physics"]},
+#     "tex": {
+#         "inlineMath": [[r"\(", r"\)"]],
+#         "displayMath": [[r"\[", r"\]"]],
+#         "packages": {"[+]": ["ams", "mathtools", "physics"]},
+#         "macros": {
+#             # operators
+#             "argmax": r"\operatorname*{arg\,max}",
+#             "argmin": r"\operatorname*{arg\,min}",
+#             "Median": r"\operatorname{Median}",
+#             "diag": r"\operatorname{diag}",
+#             "dist": r"\operatorname{dist}",
+#             "rank": r"\operatorname{rank}",
+#             "relu": r"\operatorname{ReLU}",
+#             "KL": r"\operatorname{KL}",
+#             "tr": r"\operatorname{tr}",
+#             # macros
+#             "bmat": [r"\begin{bmatrix} #1 \end{bmatrix}", 1],
+#             "norm": [r"\left\lVert #1\right\rVert", 1],
+#             "abs": [r"\left\lvert #1\right\rvert", 1],
+#             "set": [r"\left\{ #1 \right\}", 1],
+#             "seq": [r"\left( #1 \right)", 1],
+#             "tuple": [r"\left( #1 \right)", 1],
+#             "floor": [r"\left\lfloor #1 \right\rfloor", 1],
+#             "ceil": [r"\left\lceil #1 \right\rceil", 1],
+#         },
+#     },
+# }
 
+
+# region mathjax_startup_patch ---------------------------------------------------------
 # SEE: https://github.com/orgs/sphinx-doc/discussions/13147#discussioncomment-11837201
-# def setup(app):
-#     with open("_static/mathjax_startup.js") as file:
-#         mj_conf = file.read()
-#         print(mj_conf)
-#         app.add_js_file("", body=mj_conf)
+
+mathjax_options = ""
+mathjax3_config = ""
+
+
+def setup(app):
+    with open("_static/mathjax_startup.js") as file:
+        mj_conf = file.read()
+        print(mj_conf)
+        app.add_js_file("", body=mj_conf)
+
+
+# endregion mathjax_startup_patch ------------------------------------------------------
+
 
 # endregion sphinx.ext.mathjax configuration -------------------------------------------
 
@@ -385,8 +396,8 @@ viewcode_line_numbers = True  # print inline line numbers
 # math_dollar_debug = True
 # math_dollar_node_blacklist = NODE_BLACKLIST + (header, pending_xref_condition)
 
-from sphinx.addnodes import highlightlang, pending_xref_condition  # noqa: E402
-from sphinx.util.docutils import register_node  # noqa: E402
-
-register_node(pending_xref_condition)
+# from sphinx.addnodes import pending_xref_condition  # noqa: E402
+# from sphinx.util.docutils import register_node  # noqa: E402
+#
+# register_node(pending_xref_condition)
 # endregion sphinx_math_dollar configuration -------------------------------------------
