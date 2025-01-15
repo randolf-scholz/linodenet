@@ -395,12 +395,12 @@ def is_diagonally_dominant(
 
     The test is based on the definition of diagonally dominant matrices:
 
-    .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| for all i = 1, …, n
+    .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| \quad\text{for all \(i = 1, …, n\)}
 
     If strict, we require that the inequality is strict for all i, more specifically
     we include tolerance:
 
-    .. math:: Aᵢᵢ ≥ (1+rtol)⋅(∑_{j≠i} |Aᵢⱼ|) + atol for all i = 1, …, n
+    .. math:: Aᵢᵢ ≥ (1+rtol)⋅(∑_{j≠i} |Aᵢⱼ|) + atol \quad\text{for all \(i = 1, …, n\)}
 
     Note:
         Strictly diagonally dominant matrices are invertible.

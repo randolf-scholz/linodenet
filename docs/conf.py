@@ -109,6 +109,7 @@ python_use_unqualified_type_names = True  # If true, suppress the module name
 trim_doctest_flags = True  # remove common whitespace from doctest blocks
 # endregion General Configuration ------------------------------------------------------
 
+
 # region HTML Configuration ------------------------------------------------------------
 # SEE: https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 html_theme_path = ["theme"]  # paths that contain custom themes
@@ -292,7 +293,7 @@ intersphinx_disabled_reftypes = ["std:doc"]  # list of disabled cross-reference 
 # region sphinx.ext.mathjax configuration ----------------------------------------------
 # SEE: https://www.sphinx-doc.org/en/master/usage/extensions/math.html#module-sphinx.ext.mathjax
 # SEE: https://docs.mathjax.org/en/latest/web/configuration.html
-# mathjax_path = ...  # path/url to the MathJax.js file
+# # mathjax_path = ...  # path/url to the MathJax.js file
 mathjax_options = {}  # options to script tag for mathjax
 mathjax3_config = {  # configuration options for MathJax v3
     "loader": {"load": [r"[tex]/ams", r"[tex]/mathtools", r"[tex]/physics"]},
@@ -323,6 +324,13 @@ mathjax3_config = {  # configuration options for MathJax v3
         },
     },
 }
+
+# SEE: https://github.com/orgs/sphinx-doc/discussions/13147#discussioncomment-11837201
+# def setup(app):
+#     with open("_static/mathjax_startup.js") as file:
+#         mj_conf = file.read()
+#         print(mj_conf)
+#         app.add_js_file("", body=mj_conf)
 
 # endregion sphinx.ext.mathjax configuration -------------------------------------------
 

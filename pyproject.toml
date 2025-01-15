@@ -98,7 +98,7 @@ tests = [
 ]
 typing = [
     "mypy>=1.14.1",
-    "pyright>=1.1.391",
+    "pyright>=1.1.392",
     "types-colorama>=0.4.15.20240311",
     "types-decorator>=5.1.8.20240310",
     "types-docutils>=0.21.0.20241128",

@@ -1,7 +1,35 @@
 // SEE: https://github.com/mathjax/MathJax/issues/2708#issuecomment-861779454
-const MathJax = {
+window.MathJax = {
+  loader: {load: ["[tex]/ams", "[tex]/mathtools", "[tex]/physics"]},
+  tex: {
+    inlineMath: [["\\(", "\\)"]],
+    displayMath: [["\\[", "\\]"]],
+    packages: {"[+]": ["ams", "mathtools", "physics"]},
+    macros: {
+      // operators
+      argmax: "\\operatorname*{arg\\,max}",
+      argmin: "\\operatorname*{arg\\,min}",
+      Median: "\\operatorname{Median}",
+      diag: "\\operatorname{diag}",
+      dist: "\\operatorname{dist}",
+      rank: "\\operatorname{rank}",
+      relu: "\\operatorname{ReLU}",
+      KL: "\\operatorname{KL}",
+      tr: "\\operatorname{tr}",
+      // macros
+      bmat: ["\\begin{bmatrix} #1 \\end{bmatrix}}", 1],
+      norm: ["\\left\\lVert #1\\right\\rVert", 1],
+      abs: ["\\left\\lvert #1\\right\\rvert", 1],
+      set: ["\\left\\{ #1 \\right\\}", 1],
+      seq: ["\\left( #1 \\right)", 1],
+      tuple: ["\\left( #1 \\right)", 1],
+      floor: ["\\left\\lfloor #1 \\right\\rfloor", 1],
+      ceil: ["\\left\\lceil #1 \\right\\rceil", 1],
+    },
+  },
+  // seems to do nothing
   startup: {
-    ready() {
+    ready: () =>{
       //
       // Do usual setup
       //
