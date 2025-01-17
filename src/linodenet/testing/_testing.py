@@ -15,6 +15,7 @@ __all__ = [
     "check_jit_serialization",
     "check_optim",
     # helper functions
+    "all_finite",
     "assert_close",
     "assert_compatible_signature",
     "flatten_nested_tensor",
@@ -90,6 +91,19 @@ def assert_close(
                 assert_close(output, target, rtol=rtol, atol=atol)
         case _:
             raise TypeError(f"Unsupported type {type(values)}!")
+
+
+def all_finite(x: Nested[Tensor], /) -> bool:
+    r"""Check if all elements are finite."""
+    match x:
+        case Tensor() as tensor:
+            return bool(torch.all(torch.isfinite(tensor)))
+        case Mapping() as mapping:
+            return all(all_finite(val) for val in mapping.values())
+        case Sequence() as sequence:
+            return all(all_finite(item) for item in sequence)
+        case _:
+            raise TypeError(f"Unsupported type {type(x)}!")
 
 
 # region utility functions for tensors AND scalars -------------------------------------
@@ -663,6 +677,7 @@ def check_object(
         parameters=parameters,
         reference_gradients=reference_gradients,
     )
+    assert all_finite(gradients), "Gradients are not finite!"
     logger.info(">>> Backward ✔ ")
     # endregion check backward pass ----------------------------------------------------
 

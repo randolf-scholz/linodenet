@@ -241,12 +241,10 @@ class LatentStateSpaceModel(nn.Module):
             # X = torch.cat([X, z], dim=dim)
             X = pad(X, float("nan"), self.padding_size)
 
-        # # prepend a single zero for the first iteration.
-        # # T = pad(T, 0.0, 1, prepend=True)
-        # # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
+        ## prepend a single zero for the first iteration.
         # DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
-        #
-        # # Move sequence to the front
+
+        ## Move sequence to the front
         # DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
         # X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 

@@ -1,4 +1,7 @@
-r"""Generic layers."""
+r"""Generic layers.
+
+Not compatible with JIT.
+"""
 
 __all__ = [
     # Classes
@@ -13,8 +16,9 @@ from collections.abc import Callable, Mapping
 from typing import Any, Final, Optional, Self
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
+from linodenet.types import SupportsSelfAdd
 from linodenet.utils import initialize_from_dict
 
 
@@ -68,6 +72,32 @@ class Series(nn.Sequential):
         return Series(*modules)
 
 
+class Repeat(nn.Sequential):
+    r"""Repeat a module multiple times."""
+
+    HP = {
+        "__name__": __qualname__,
+        "__module__": __name__,
+        "module": None,
+        "copies": 1,
+        "independent": True,
+    }
+
+    @classmethod
+    def from_config(cls, config: Mapping[str, Any], /, **kwargs: Any) -> Self:
+        r"""Create a new instance from a configuration dictionary."""
+        cfg = dict(config, **kwargs)
+        num = cfg["copies"]
+
+        if cfg["independent"]:
+            modules = [initialize_from_dict(cfg["module"]) for _ in range(num)]
+        else:
+            module = initialize_from_dict(cfg["module"])
+            modules = [module] * num
+
+        return cls(*modules)
+
+
 class Parallel(nn.ModuleList):
     r"""Modules in parallel."""
 
@@ -84,7 +114,6 @@ class Parallel(nn.ModuleList):
         modules = [initialize_from_dict(module_cfg) for module_cfg in cfg["modules"]]
         return cls(modules)
 
-    @jit.export
     def forward(self, x: Tensor) -> list[Tensor]:
         r""".. Signature:: ``(..., n) -> [..., (..., n)]``."""
         return [module(x) for module in self]
@@ -111,32 +140,6 @@ class Parallel(nn.ModuleList):
             "`@=` not possible because `nn.Sequential` does not implement an append"
             " function."
         )
-
-
-class Repeat(nn.Sequential):
-    r"""An copies of a module multiple times."""
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "module": None,
-        "copies": 1,
-        "independent": True,
-    }
-
-    @classmethod
-    def from_config(cls, config: Mapping[str, Any], /, **kwargs: Any) -> Self:
-        r"""Create a new instance from a configuration dictionary."""
-        cfg = dict(config, **kwargs)
-        num = cfg["copies"]
-
-        if cfg["independent"]:
-            modules = [initialize_from_dict(cfg["module"]) for _ in range(num)]
-        else:
-            module = initialize_from_dict(cfg["module"])
-            modules = [module] * num
-
-        return cls(*modules)
 
 
 class Multiply(nn.Module):
@@ -185,7 +188,7 @@ class Multiply(nn.Module):
         return torch.einsum(self.signature, x, self.kernel)
 
 
-class Sum(nn.ModuleList):
+class Sum[X, Y: SupportsSelfAdd](nn.ModuleList):
     r"""Add Module Outputs for same inputs."""
 
     HP = {
@@ -199,8 +202,10 @@ class Sum(nn.ModuleList):
         r"""Create a new instance from a configuration dictionary."""
         cfg = dict(config, **kwargs)
         modules = [initialize_from_dict(module_cfg) for module_cfg in cfg["modules"]]
+        if not modules:
+            raise ValueError("No modules provided.")
         return cls(modules)
 
-    def forward(self, *args, **kwargs):
+    def forward(self, arg: X, /) -> Y:
         r""".. Signature:: ``... -> ...``."""
-        return sum(module(*args, **kwargs) for module in self)
+        return sum(module(arg) for module in self)

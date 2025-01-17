@@ -171,15 +171,15 @@ def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
         )
 
     levels = (10.0**k for k in (0, 2, 4))
-    for err, tol in zip(err_single, levels, strict=True):
-        q = np.nanquantile(err, 0.99)
+    for e32, tol in zip(err_single, levels, strict=True):
+        q = np.nanquantile(e32, 0.99)
         LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
     # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
     # Since 10^4 ~ 2^13
     levels = (10.0**k for k in (-4, -2, -0))
-    for err, tol in zip(err_double, levels, strict=True):
-        q = np.nanquantile(err, 0.99)
+    for e64, tol in zip(err_double, levels, strict=True):
+        q = np.nanquantile(e64, 0.99)
         LOGGER.info("99%% quantile %f", q)
         assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
     LOGGER.info("%s passes test ✔ ", LinODE)

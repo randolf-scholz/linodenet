@@ -78,12 +78,12 @@ docs = [
 linters = [
     "pre-commit>=4.0.1",
     "pylint>=3.3.3",
-    "ruff>=0.9.1",
-    "tach>=0.20.0",
+    "ruff>=0.9.2",
+    "tach>=0.21.0",
 ]
 tests = [
     "coverage>=7.6.10",
-    "hypothesis[numpy,pandas,pytest]>=6.123.17",
+    "hypothesis[numpy,pandas,pytest]>=6.124.0",
     "matplotlib>=3.10.0",
     "psutil>=6.1.1",
     "pygal>=3.0.5",

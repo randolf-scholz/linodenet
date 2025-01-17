@@ -61,8 +61,6 @@ from linodenet.modules.filters.filters import (
     ResidualCell,
 )
 
-x: type[Cell] = LinearCell
-
 CELLS: dict[str, type[Cell]]  = {
     # torch cells
     "GRUCell"            : GRUCell,

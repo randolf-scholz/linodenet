@@ -2,10 +2,11 @@ r"""Types and Type Aliases."""
 
 __all__ = [
     # Protocols
-    "Identity",
     "HasHyperparameters",
+    "Identity",
     "SelfMap",
     "SupportsLenAndGetItem",
+    "SupportsSelfAdd",
     # Aliases
     "DeviceArg",
     "DtypeArg",
@@ -18,7 +19,7 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Final, Protocol, SupportsIndex
+from typing import Final, Protocol, Self, SupportsIndex, runtime_checkable
 
 from torch import device, dtype
 
@@ -65,6 +66,11 @@ class HasHyperparameters(Protocol):
 
     config: Final[dict]  # type: ignore[misc]
     r"""Concrete hyperparameters of an instance."""
+
+
+@runtime_checkable
+class SupportsSelfAdd(Protocol):
+    def __add__(self, other: Self, /) -> Self: ...
 
 
 # endregion Protocol -------------------------------------------------------------------

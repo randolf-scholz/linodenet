@@ -79,6 +79,8 @@ def test_jit_modulelist(cls: type, stage: str, interface: str) -> None:
             check_iter(target)
         case "forward":
             assert torch.equal(target(x), module(x))
+        case _:
+            raise ValueError(f"Invalid interface: {interface}")
 
 
 @pytest.mark.parametrize("interface", ["forward"])
@@ -116,6 +118,8 @@ def test_jit_iter_modulelist_in_scripted_forward(
             check_iter(target)
         case "forward":
             assert torch.equal(target(x), module(x))
+        case _:
+            raise ValueError(f"Invalid interface: {interface}")
 
 
 class Mixin(nn.Module):

@@ -24,7 +24,7 @@ def test_filter_consistency() -> None:
     mask = y > 0
     y[mask] = NAN
 
-    # # Test KalmanCell
+    # ## Test KalmanCell
     # model = KalmanCell(
     #     input_size=n, hidden_size=m, autoregressive=True, activation="ReLU"
     # )
@@ -32,7 +32,7 @@ def test_filter_consistency() -> None:
     # assert not torch.isnan(result).any(), "Output contains NANs! ❌ "
     # LOGGER.info("KalmanCell: No NaN outputs ✔ ")
     #
-    # # verify IDP condition
+    # ## verify IDP condition
     # y[~mask] = x[~mask]
     # assert torch.allclose(x, model(y, x)), "Idempotency failed! ❌ "
     # LOGGER.info("KalmanCell: Idempotency holds ✔ ")

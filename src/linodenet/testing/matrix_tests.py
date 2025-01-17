@@ -402,6 +402,18 @@ def is_diagonally_dominant(
 
     .. math:: Aᵢᵢ ≥ (1+rtol)⋅(∑_{j≠i} |Aᵢⱼ|) + atol \quad\text{for all \(i = 1, …, n\)}
 
+    .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| for all i = 1, …, n
+
+    .. math:: A² + A³ + A⁺ + A⁻¹ + A¹² + A²ᵢⱼ
+
+    .. math:: A^2 + A^3 + A^+ + A^{-1} + A^{12} + A^{2}_{ij}
+
+    .. math:: \bmat{1 & 2 \\ 3 & 4}
+
+    .. math:: \abs{\sum_{n=1}^{10} f_n(x)}
+
+    .. math:: \argmax_{x \in \mathbb{R}^n} f(x)
+
     Note:
         Strictly diagonally dominant matrices are invertible.
     """

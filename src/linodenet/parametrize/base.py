@@ -340,6 +340,22 @@ class ParametrizationBase(nn.Module, Parametrization):
         self.original_parameter.copy_(pullback)
 
 
+class ParametrizationList(nn.ModuleList, Parametrization):
+    r"""Apply multiple parametrizations sequentially."""
+
+    def __init__(self, *parametrizations: Parametrization) -> None:
+        # validation
+        mods: list[nn.Module] = []
+        for param in parametrizations:
+            if not isinstance(param, Parametrization):
+                raise TypeError("All elements must be a Parametrization!")
+            if not isinstance(param, nn.Module):
+                raise TypeError("All elements must be a nn.Module!")
+            mods.append(param)
+
+        super().__init__(mods)
+
+
 class ParametrizationMulticache(nn.Module, Parametrization):
     r"""Base class for parametrizations that maintain additional cached tensors."""
 
@@ -408,13 +424,6 @@ class ParametrizationMulticache(nn.Module, Parametrization):
 
         self.register_buffer(name, tensor)
         self.cached_tensors[name] = getattr(self, name)
-
-
-class ParametrizationList(nn.ModuleList):
-    r"""Apply multiple parametrizations sequentially."""
-
-    def __init__(self, *parametrizations: Parametrization) -> None:
-        super().__init__(parametrizations)
 
 
 # FIXME: use MutableMapping https://github.com/pytorch/pytorch/issues/110959
