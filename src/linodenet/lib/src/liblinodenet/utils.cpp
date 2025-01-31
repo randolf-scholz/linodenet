@@ -1,4 +1,4 @@
-#include <torch/script.h>
+#include <torch/torch.h>
 
 namespace linodenet {
 namespace utils {

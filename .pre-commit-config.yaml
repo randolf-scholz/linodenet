@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.2
+    rev: v0.9.4
     hooks:
       - id: ruff
         name: ruff-isort
@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.5.20
+    rev: 0.5.26
     hooks:
       - id: uv-lock
       - id: uv-export
@@ -93,7 +93,7 @@ repos:
         files: '^src/|^tests/'
   # markdownlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.43.0
+    rev: v0.44.0
     hooks:
       - id: markdownlint
         args:
@@ -109,7 +109,7 @@ repos:
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
   # tach
   - repo: https://github.com/gauge-sh/tach-pre-commit
-    rev: v0.21.0 # change this to the latest tag!
+    rev: v0.24.0 # change this to the latest tag!
     hooks:
       - id: tach
   - repo: local
@@ -129,7 +129,7 @@ repos:
         files: '^src/|^tests/'
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.392.post0
+    rev: v1.1.393
     hooks:
       - id: pyright
         # SEE: https://stackoverflow.com/a/20401674
@@ -140,23 +140,23 @@ repos:
         # FIXME: some weird issues with ripgrep + script.
         # NOTE: The issue is likely control characters that are not being handled correctly.
         #   In fact, it turns out the problem is precisely carriage return. We need to check [\n\r] instead of just \n
-        entry: |
-          bash -c '
-              path="${PWD//\//\\/}";
-              grey="\x1b\[90m"
-              end="\x1b\[0m"
-              code_group="(${grey}).*?\(report(\w+)\)";
-              git_root=$(git rev-parse --show-toplevel);
-              regex="\x20+(?:${git_root})/([^\r\n]*?)(?:[\r\n].*?)?${code_group}";
-              output="\$1 \$2(\$3)";
-              result=$(script -fqc "pyright $*" /dev/null | rg --multiline --multiline-dotall "$regex" -or "$output");
-              count=$(echo -n "$result" | grep -c "^");
-              if [ "$count" -ne 0 ]; then
-                  echo "$result";
-                  echo -e "\033[1;31mFound ${count} error(s)\033[0m";
-                  exit 1;
-              fi
-          ' --
+#        entry: |
+#          bash -c '
+#              path="${PWD//\//\\/}";
+#              grey="\x1b\[90m"
+#              end="\x1b\[0m"
+#              code_group="(${grey}).*?\(report(\w+)\)";
+#              git_root=$(git rev-parse --show-toplevel);
+#              regex="\x20+(?:${git_root})/([^\r\n]*?)(?:[\r\n].*?)?${code_group}";
+#              output="\$1 \$2(\$3)";
+#              result=$(script -fqc "pyright $*" /dev/null | rg --multiline --multiline-dotall "$regex" -or "$output");
+#              count=$(echo -n "$result" | grep -c "^");
+#              if [ "$count" -ne 0 ]; then
+#                  echo "$result";
+#                  echo -e "\033[1;31mFound ${count} error(s)\033[0m";
+#                  exit 1;
+#              fi
+#          ' --
         files: '^src/|^tests/'
   # mypy
   - repo: local

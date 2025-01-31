@@ -84,21 +84,32 @@ def _load_linodenet() -> dict[str, Callable]:
         compiled_fns = {name: getattr(LIB, name) for name in CUSTOM_OPS}
     except Exception as exc:
         warnings.warn(
-            "Custom binaries not found! Trying to compile them on the fly!."
-            " Consider compiling the extension in the linodenet/lib folder."
-            f"\nFull error: {exc}\n{'-' * 80}",
+            "Custom binaries not found!"
+            "\n\t-> Trying to compile them on the fly!."
+            "\n\t-> Consider compiling the extension in the linodenet/lib folder."
+            f"\n\t-> Full error: {exc}"
+            f"\n{'-' * 80}",
             UserWarning,
             stacklevel=2,
         )
         compiled_fns = {}
-        exceptions = []
+        exceptions = {}
         for name in CUSTOM_OPS:
             try:
                 compiled_fns[name] = load_function(name)
             except Exception as exc:
-                exceptions.append(exc)
+                exceptions[name] = exc
         if exceptions:
-            raise ExceptionGroup("Failed to compile", exceptions) from None
+            exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
+            exc = RuntimeError(
+                f"Failed to compile {len(exceptions)}/{len(CUSTOM_OPS)} custom operators!"
+            )
+            max_len = max(map(len, CUSTOM_OPS))
+            FAIL = "\033[91m✘ FAILED\033[0m"
+            PASS = "\033[92m✔ SUCCESS\033[0m"
+            for name in CUSTOM_OPS:
+                exc.add_note(f"{name:<{max_len}}: {[PASS, FAIL][name in exceptions]}")
+            raise exc from exc_group
 
     return compiled_fns
 

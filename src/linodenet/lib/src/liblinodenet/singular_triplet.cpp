@@ -1,6 +1,5 @@
 // #include <ATen/ATen.h>
-#include <torch/script.h>
-#include <torch/linalg.h>
+#include <torch/torch.h>
 #include <vector>
 // #include <string>
 
@@ -16,8 +15,7 @@ using torch::outer;
 using torch::dot;
 using torch::eye;
 using torch::addmm;
-using torch::linalg::solve;
-using torch::linalg::lstsq;
+using torch::linalg_lstsq;
 using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
@@ -360,7 +358,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor c = torch::cat({phi, psi}, 0);
 
         // solve the underdetermined system
-        Tensor x = std::get<0>(lstsq(K, c, nullopt, nullopt));
+        Tensor x = std::get<0>(linalg_lstsq(K, c, nullopt, nullopt));
 
         // extract the solution, reverse pre-conditioning
         Tensor p = x.slice(0, 0, M) / SCALE;
@@ -381,24 +379,24 @@ struct SingularTriplet : public Function<SingularTriplet> {
  * Tensor P = addmm(eye(m, A.options()), A, A.t(), sigma2, -1.0);  // σ²𝕀ₘ - AAᵀ
  * Tensor Q = addmm(eye(n, A.options()), A.t(), A, sigma2, -1.0);  // σ²𝕀ₙ - AᵀA
  *
- * Tensor x = std::get<0>(lstsq(P, sigma*phi, nullopt, nullopt));
- * Tensor w = std::get<0>(lstsq(Q, A.t().mv(phi), nullopt, nullopt));
- * Tensor y = std::get<0>(lstsq(P, A.mv(psi), nullopt, nullopt));
- * Tensor z = std::get<0>(lstsq(Q, sigma*psi, nullopt, nullopt));
+ * Tensor x = std::get<0>(linalg_lstsq(P, sigma*phi, nullopt, nullopt));
+ * Tensor w = std::get<0>(linalg_lstsq(Q, A.t().mv(phi), nullopt, nullopt));
+ * Tensor y = std::get<0>(linalg_lstsq(P, A.mv(psi), nullopt, nullopt));
+ * Tensor z = std::get<0>(linalg_lstsq(Q, sigma*psi, nullopt, nullopt));
  * Tensor p = x + y;
  * Tensor q = w + z;
 
  * Tensor x, y, z, w;
  * if (phi_nonzero) {
- *     x = std::get<0>(lstsq(P, sigma*phi, nullopt, nullopt));
- *     w = std::get<0>(lstsq(Q, A.t().mv(phi), nullopt, nullopt));
+ *     x = std::get<0>(linalg_lstsq(P, sigma*phi, nullopt, nullopt));
+ *     w = std::get<0>(linalg_lstsq(Q, A.t().mv(phi), nullopt, nullopt));
  * } else {
  *     x = torch::zeros_like(phi);
  *     w = torch::zeros_like(psi);
  * }
  * if (psi_nonzero) {
- *     y = std::get<0>(lstsq(P, A.mv(psi), nullopt, nullopt));
- *     z = std::get<0>(lstsq(Q, sigma*psi, nullopt, nullopt));
+ *     y = std::get<0>(linalg_lstsq(P, A.mv(psi), nullopt, nullopt));
+ *     z = std::get<0>(linalg_lstsq(Q, sigma*psi, nullopt, nullopt));
  * } else {
  *     y = torch::zeros_like(phi);
  *     z = torch::zeros_like(psi);

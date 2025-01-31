@@ -1,5 +1,5 @@
 // #include <ATen/ATen.h>
-#include <torch/script.h>
+#include <torch/torch.h>
 // #include <torch/linalg.h>
 // #include <vector>
 // #include <string>

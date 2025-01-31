@@ -1,6 +1,5 @@
 // #include <ATen/ATen.h>
-#include <torch/script.h>
-#include <torch/linalg.h>
+#include <torch/torch.h>
 #include <vector>
 // #include <string>
 
@@ -16,8 +15,6 @@ using torch::outer;
 using torch::dot;
 using torch::eye;
 using torch::addmm;
-using torch::linalg::solve;
-using torch::linalg::lstsq;
 using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;

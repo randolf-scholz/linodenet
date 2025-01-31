@@ -1,4 +1,4 @@
-#include <torch/script.h>
+#include <torch/torch.h>
 
 // import someLib as sl      ⟶  namespace sl = someLib;
 // from someLib import func  ⟶  using someLib::func;
