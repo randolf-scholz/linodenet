@@ -17,7 +17,7 @@ __all__ = [
     "check_jit",
     "check_jit_scripting",
     "check_jit_serialization",
-    "check_optim",
+    "check_trainable",
     # is_*-checks
     "is_banded",
     "is_contraction",
@@ -64,7 +64,7 @@ from linodenet.testing._testing import (
     check_jit_serialization,
     check_model,
     check_object,
-    check_optim,
+    check_trainable,
     flatten_nested_tensor,
     get_device,
     get_grads,

@@ -11,9 +11,10 @@ __all__ = [
     "check_forward",
     "check_initialization",
     "check_jit",
+    "check_jit_compat",
     "check_jit_scripting",
     "check_jit_serialization",
-    "check_optim",
+    "check_trainable",
     # helper functions
     "all_finite",
     "assert_close",
@@ -254,60 +255,63 @@ def check_forward(
     func: Func,
     /,
     *,
-    input_args: Sequence[Tree] = (),
-    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
-    reference_outputs: Optional[Nested[Tensor]] = None,
-    reference_shapes: Optional[Sequence[tuple[int, ...]]] = None,
-) -> tuple[Nested[Tensor], Nested[Tensor], list[tuple[int, ...]]]:
+    input_args: Sequence[Tree],
+    input_kwargs: Mapping[str, Tree],
+    # optional: reference outputs and shapes
+    reference_values: Optional[Nested[Tensor]] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+) -> Nested[Tensor]:
     r"""Test a forward pass."""
     try:
         outputs = func(*input_args, **input_kwargs)
-        output_shapes = get_shapes(outputs)
     except Exception as exc:
         raise RuntimeError("Forward pass failed!!") from exc
 
     # validate shapes
-    if reference_shapes is None:
-        reference_shapes = output_shapes
-    else:
-        assert isinstance(reference_shapes, list), (
-            "reference_shapes must be a list of integer tuples!"
-        )
-    assert reference_shapes == output_shapes, f"{reference_shapes=} {output_shapes=}"
+    if reference_shapes is not None:
+        shapes = get_shapes(outputs)
+        assert shapes == reference_shapes, f"{reference_shapes=} {shapes=}"
 
     # validate values
-    if reference_outputs is None:
-        reference_outputs = outputs
-    assert_close(outputs, reference_outputs)
+    if reference_values is not None:
+        assert_close(outputs, reference_values)
 
-    return outputs, reference_outputs, reference_shapes
+    return outputs
 
 
 def check_backward(
+    module_or_params: Module | Sequence[Tensor],
+    /,
     *,
     outputs: Nested[Tensor],
-    parameters: Sequence[Tensor],
-    reference_gradients: Optional[Nested[Tensor]] = None,
-) -> tuple[list[Tensor], list[Tensor]]:
+    # Optional: reference gradients
+    reference_values: Optional[Nested[Tensor]] = None,
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+) -> list[Tensor]:
     r"""Test a backward pass."""
+    params = (
+        get_parameters(module_or_params)
+        if isinstance(module_or_params, Module)
+        else module_or_params
+    )
+
     try:
         r = get_norm(outputs)
         r.backward()
-        gradients = get_grads(parameters)
-        zero_grad(parameters)
+        gradients = get_grads(params)
     except Exception as exc:
         raise RuntimeError("Model failed backward pass!") from exc
 
-    ref_grads = (
-        deepcopy(gradients)
-        if reference_gradients is None
-        else list(iter_tensors(reference_gradients))
-    )
+    # validate shapes
+    if reference_shapes is not None:
+        shapes = get_shapes(gradients)
+        assert shapes == reference_shapes, f"{reference_shapes=} {shapes=}"
 
-    # check gradients
-    assert_close(gradients, ref_grads)
+    # validate values
+    if reference_values is not None:
+        assert_close(gradients, reference_values)
 
-    return gradients, ref_grads
+    return gradients
 
 
 @overload
@@ -330,7 +334,7 @@ def check_jit_serialization[M: Module](
 @overload
 def check_jit_serialization(func: Func, /, *, device: DeviceArg = ...) -> Func: ...
 def check_jit_serialization(
-    arg: Func | Module, /, *, device: DeviceArg = None
+    arg: Func | Module, /, *, device: DeviceArg = "cpu"
 ) -> Func | Module:
     r"""Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
@@ -359,6 +363,65 @@ def check_jit(arg: Func | Module, /, *, device: DeviceArg = None) -> Func | Modu
     return loaded
 
 
+def check_jit_compat(
+    module: Module,
+    /,
+    *,
+    input_args: Sequence[Tree],
+    input_kwargs: Mapping[str, Tree],
+    # optional arguments
+    check_is_trainable: bool = True,
+    device: DeviceArg = "cpu",
+) -> None:
+    r"""Test if a model is compatible with JIT."""
+    # get reference values from forward/backward pass
+    module = module.to(device=device)
+    ref_outs = check_forward(module, input_args=input_args, input_kwargs=input_kwargs)
+    ref_grads = check_backward(module, outputs=ref_outs)
+    zero_grad(module)
+
+    # script the module
+    scripted_module = check_jit_scripting(module)
+    # perform forward pass
+    scripted_outs = check_forward(
+        scripted_module,
+        input_args=input_args,
+        input_kwargs=input_kwargs,
+        reference_values=ref_outs,
+    )
+    # perform backward pass
+    check_backward(
+        scripted_module,
+        outputs=scripted_outs,
+        reference_values=ref_grads,
+    )
+    if check_is_trainable:
+        check_trainable(
+            scripted_module, input_args=input_args, input_kwargs=input_kwargs
+        )
+
+    # check serialization
+    deserialized_module = check_jit_serialization(scripted_module, device=device)
+    # perform forward pass
+    deserialized_outs = check_forward(
+        deserialized_module,
+        input_args=input_args,
+        input_kwargs=input_kwargs,
+        reference_values=ref_outs,
+    )
+    # perform backward pass
+    check_backward(
+        deserialized_module,
+        outputs=deserialized_outs,
+        reference_values=ref_grads,
+    )
+
+    if check_is_trainable:
+        check_trainable(
+            deserialized_module, input_args=input_args, input_kwargs=input_kwargs
+        )
+
+
 def check_initialization[M: Module](
     module_type: type[M],
     /,
@@ -378,15 +441,31 @@ def check_initialization[M: Module](
     return module
 
 
-def check_optim(
-    model: Module,
+def check_trainable(
+    module: Module,
     /,
     *,
     input_args: Sequence[Tree] = (),
     input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     niter: int = 4,
+    use_copy: bool = True,
 ) -> None:
     r"""Check if model can be optimized."""
+    assert any(p.requires_grad for p in module.parameters()), "No trainable parameters!"
+
+    if use_copy:
+        with torch.no_grad():
+            model = deepcopy(module)
+            input_args = deepcopy(input_args)
+            input_kwargs = deepcopy(input_kwargs)
+        # fix the gradient state
+        for w, p in zip(model.parameters(), module.parameters(), strict=True):
+            w.requires_grad_(p.requires_grad)
+    else:
+        model = module
+
+    assert any(p.requires_grad for p in model.parameters()), "No trainable parameters!"
+
     with torch.no_grad():
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
         original_outputs = model(*input_args, **input_kwargs)
@@ -394,6 +473,7 @@ def check_optim(
         # original_params = [w.clone().detach() for w in model.parameters()]
 
     loss = original_loss
+    history: list[float] = [float(original_loss.item())]
 
     # perform iterations
     for _ in range(niter):
@@ -403,8 +483,9 @@ def check_optim(
         assert loss.isfinite()
         loss.backward()
         optimizer.step()
+        history.append(float(loss.item()))
 
-    assert loss < original_loss
+    assert loss < original_loss, f"Loss did not decrease! \n{history=}"
 
 
 # endregion check helper functions -----------------------------------------------------
@@ -571,7 +652,7 @@ def check_object(
     logger: Optional[logging.Logger] = None,
     make_inputs_parameters: bool = True,
     test_jit: bool = True,
-    test_optim: bool = False,
+    test_optim: bool = True,
 ) -> None:
     r"""Check a module, function or model class."""
     # region get name and logger -------------------------------------------------------
@@ -661,21 +742,21 @@ def check_object(
     # endregion change device ----------------------------------------------------------
 
     # region check forward pass --------------------------------------------------------
-    outputs, reference_outputs, reference_shapes = check_forward(
+    outputs = check_forward(
         model,
         input_args=input_args,
         input_kwargs=input_kwargs,
-        reference_outputs=reference_outputs,
+        reference_values=reference_outputs,
         reference_shapes=reference_shapes,
     )
     logger.info(">>> Forward ✔ ")
     # endregion check forward pass -----------------------------------------------------
 
     # region check backward pass -------------------------------------------------------
-    gradients, reference_gradients = check_backward(
+    gradients = check_backward(
+        model,
         outputs=outputs,
-        parameters=parameters,
-        reference_gradients=reference_gradients,
+        reference_values=reference_gradients,
     )
     assert all_finite(gradients), "Gradients are not finite!"
     logger.info(">>> Backward ✔ ")
@@ -683,49 +764,8 @@ def check_object(
 
     # region check optimization ------------------------------------------------
     if test_optim:
-        assert isinstance(model, Module), "Cannot test optimization of function!"
-        # create a clone of the model, inputs and outputs.
-        check_optim(
-            deepcopy(model),
-            input_args=deepcopy(input_args),
-            input_kwargs=deepcopy(input_kwargs),
-        )
+        check_trainable(model, input_args=input_args, input_kwargs=input_kwargs)
     # endregion check optimization ---------------------------------------------
 
-    # terminate if not testing JIT
-    if not test_jit:
-        return
-
-    # region check JIT compilation -----------------------------------------------------
-    scripted_model = check_jit_scripting(model)
-    logger.info(">>> JIT-compilation ✔ ")
-    # endregion check forward pass -----------------------------------------------------
-
-    # region check scripted forward/backward pass --------------------------------------
-    check_object(
-        scripted_model,
-        input_args=input_args,
-        reference_outputs=reference_outputs,
-        reference_shapes=reference_shapes,
-        reference_gradients=reference_gradients,
-        logger=__logger__.getChild(f"{model_name}@JIT"),
-        test_jit=False,
-    )
-    # endregion check scripted forward/backward pass -----------------------------------
-
-    # region check model saving/loading ------------------------------------------------
-    loaded_model = check_jit_serialization(scripted_model, device=device)
-    logger.info(">>> JIT-loading ✔ ")
-    # endregion check model saving/loading ---------------------------------------------
-
-    # region check loaded forward/backward pass ----------------------------------------
-    check_object(
-        loaded_model,
-        input_args=input_args,
-        reference_outputs=reference_outputs,
-        reference_shapes=reference_shapes,
-        reference_gradients=reference_gradients,
-        logger=__logger__.getChild(f"{model_name}@DESERIALIZED"),
-        test_jit=False,
-    )
-    # endregion check loaded forward/backward pass -------------------------------------
+    if test_jit:
+        check_jit_compat(model, input_args=input_args, input_kwargs=input_kwargs)

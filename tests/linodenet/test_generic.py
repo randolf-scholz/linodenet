@@ -3,9 +3,11 @@ r"""Tests for the generic types."""
 from collections.abc import ItemsView, Iterator, KeysView, ValuesView
 from typing import TYPE_CHECKING, assert_type
 
-from torch import nn
+import torch
+from torch import Tensor, nn
 
 from linodenet.generic import ModuleMapping, ModuleSequence
+from linodenet.testing._testing import check_jit_compat
 
 BATCH_SIZE = 5
 
@@ -87,3 +89,35 @@ def test_module_mapping_types() -> None:
         for key, module in m.items():
             assert type(key) is str
             assert type(module) is nn.Linear
+
+
+def test_sequence_jit() -> None:
+    class Foo(ModuleSequence):
+        def forward(self, x: Tensor) -> Tensor:
+            for module in self:
+                x = module(x)
+            return x
+
+    DIM_IN = 5
+    DIM_OUT = 2
+    model = Foo([nn.Linear(DIM_IN, DIM_OUT), nn.Linear(DIM_OUT, DIM_OUT)])
+    x = torch.randn(BATCH_SIZE, DIM_IN)
+
+    check_jit_compat(model, input_args=(x,), input_kwargs={})
+
+
+def test_mapping_jit() -> None:
+    class Bar(ModuleMapping):
+        def forward(self, x: Tensor) -> Tensor:
+            outputs: list[Tensor] = []
+            for module in self.values():
+                outputs.append(module(x))  # noqa: PERF401
+            # average the outputs
+            return torch.stack(outputs, dim=-1).mean(dim=-1)
+
+    DIM_IN = 5
+    DIM_OUT = 2
+    model = Bar({"m1": nn.Linear(DIM_IN, DIM_OUT), "m2": nn.Linear(DIM_IN, DIM_OUT)})
+    x = torch.randn(BATCH_SIZE, DIM_IN)
+
+    check_jit_compat(model, input_args=(x,), input_kwargs={})

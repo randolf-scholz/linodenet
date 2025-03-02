@@ -40,6 +40,9 @@ class ModuleMapping[M: nn.Module](nn.ModuleDict, Mapping[str, M]):
     def __init__(self, modules: Mapping[str, M] = EMPTY_MAP, /) -> None:
         super().__init__(modules)
 
+    def __hash__(self) -> int:  # fixes https://github.com/pytorch/pytorch/issues/110959
+        return hash(tuple(self.items()))
+
     if TYPE_CHECKING:
 
         def __iter__(self) -> Iterator[str]: ...
