@@ -12,7 +12,7 @@ from collections.abc import (
     Sequence,
     ValuesView,
 )
-from typing import TYPE_CHECKING, overload, reveal_type
+from typing import TYPE_CHECKING, Self, overload
 
 from torch import nn
 
@@ -31,7 +31,7 @@ class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
         @overload  # type: ignore[override]
         def __getitem__(self, index: int) -> M: ...
         @overload
-        def __getitem__(self, index: slice) -> Sequence[M]: ...
+        def __getitem__(self, index: slice) -> Self: ...  # pyright: ignore[reportIncompatibleMethodOverride]
 
 
 class ModuleMapping[M: nn.Module](nn.ModuleDict, Mapping[str, M]):
@@ -47,10 +47,3 @@ class ModuleMapping[M: nn.Module](nn.ModuleDict, Mapping[str, M]):
         def keys(self) -> KeysView[str]: ...
         def values(self) -> ValuesView[M]: ...
         def items(self) -> ItemsView[str, M]: ...
-
-
-seq: Sequence[nn.Linear] = ModuleSequence([nn.Linear(3, 3)])
-mapping: Mapping[str, nn.Linear] = ModuleMapping({"linear": nn.Linear(3, 3)})
-
-
-reveal_type(ModuleSequence[nn.Linear].__iter__)
