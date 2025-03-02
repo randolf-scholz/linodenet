@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.4
+    rev: v0.9.9
     hooks:
       - id: ruff
         name: ruff-isort
@@ -34,13 +34,18 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.5.26
+    rev: 0.6.3
     hooks:
       - id: uv-lock
       - id: uv-export
       - id: uv-sync
         args: ["--upgrade"]
         stages: [ "pre-commit" ]
+  # tach
+  - repo: https://github.com/gauge-sh/tach-pre-commit
+    rev: v0.27.2 # change this to the latest tag!
+    hooks:
+      - id: tach
   # nbstripout-fast
   - repo: https://github.com/deshaw/nbstripout-fast.git
     rev: v1.0.4
@@ -107,11 +112,6 @@ repos:
     hooks:
       - id: shellcheck
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
-  # tach
-  - repo: https://github.com/gauge-sh/tach-pre-commit
-    rev: v0.24.0 # change this to the latest tag!
-    hooks:
-      - id: tach
   - repo: local
     hooks:
       - id: unknown-inline-pragma
@@ -129,7 +129,7 @@ repos:
         files: '^src/|^tests/'
   # pyright
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.393
+    rev: v1.1.396
     hooks:
       - id: pyright
         # SEE: https://stackoverflow.com/a/20401674

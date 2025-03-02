@@ -101,15 +101,17 @@ def _load_linodenet() -> dict[str, Callable]:
                 exceptions[name] = exc
         if exceptions:
             exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
-            exc = RuntimeError(
+            error = RuntimeError(
                 f"Failed to compile {len(exceptions)}/{len(CUSTOM_OPS)} custom operators!"
             )
             max_len = max(map(len, CUSTOM_OPS))
-            FAIL = "\033[91m✘ FAILED\033[0m"
-            PASS = "\033[92m✔ SUCCESS\033[0m"
+            FAILURE = "\033[91m✘ FAILED\033[0m"
+            SUCCESS = "\033[92m✔ SUCCESS\033[0m"
             for name in CUSTOM_OPS:
-                exc.add_note(f"{name:<{max_len}}: {[PASS, FAIL][name in exceptions]}")
-            raise exc from exc_group
+                error.add_note(
+                    f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
+                )
+            raise error from exc_group
 
     return compiled_fns
 
