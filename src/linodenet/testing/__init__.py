@@ -5,12 +5,19 @@ __all__ = [
     "MATRIX_TESTS",
     # ABCs & Protocols
     "MatrixTest",
-    # check functions
-    "check_class",
-    "check_model",
-    # helper functions
-    "assert_jit_compatible",
+    # assert_* functions
+    "assert_close",
     "assert_is_trainable",
+    "assert_jit_compatible",
+    "assert_signatures_compatible",
+    "assert_class_ok",
+    "assert_model_ok",
+    # check_* functions
+    "check_backward",
+    "check_forward",
+    "check_jit_serializable",
+    "check_initializable",
+    "check_jit_scriptable",
     # is_*-checks
     "is_banded",
     "is_contraction",
@@ -29,8 +36,7 @@ __all__ = [
     "is_traceless",
     "is_upper_triangular",
     # helper functions
-    "assert_close",
-    "assert_signatures_compatible",
+    "all_finite",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
@@ -45,18 +51,18 @@ __all__ = [
 ]
 
 from linodenet.testing._testing import (
-    _check_backward,
-    _check_forward,
-    _check_initialization,
-    _check_jit_serializable,
+    all_finite,
+    assert_class_ok,
     assert_close,
     assert_is_trainable,
     assert_jit_compatible,
+    assert_model_ok,
     assert_signatures_compatible,
-    check_class,
-    check_function,
-    check_model,
-    check_object,
+    check_backward,
+    check_forward,
+    check_initializable,
+    check_jit_scriptable,
+    check_jit_serializable,
     flatten_nested_tensor,
     get_device,
     get_grads,

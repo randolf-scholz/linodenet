@@ -49,6 +49,7 @@ dev = [
 devtools = [
     "cmake>=3.31.6",
     "ninja>=1.11.1.3",
+    "pdm-backend>=2.4.3",
     "pybadges>=3.0.1",
 ]
 debug = [
@@ -344,8 +345,8 @@ fail-on = [
 fail-under = 9.0
 
 [tool.pylint.REPORTS]
-# Set the output format. Available formats are text, parseable, colorized, json and
-# msvs (visual studio). You can also give a reporter class, e.g. mypackage.mymodule.MyReporterClass
+# Set the output format. Available formats are text, parseable, colorized, JSON and
+# msvs (Visual Studio). You can also give a reporter class, e.g. mypackage.mymodule.MyReporterClass
 output-format = "colorized"
 
 [tool.pylint.FORMAT]

@@ -8,17 +8,21 @@ Naming convention:
 """
 
 __all__ = [
-    # check functions
-    "check_class",
-    "check_function",
-    "check_model",
-    "check_object",
-    # helper functions
-    "all_finite",
+    # assert functions
     "assert_close",
     "assert_is_trainable",
     "assert_jit_compatible",
     "assert_signatures_compatible",
+    "assert_class_ok",
+    "assert_model_ok",
+    # check functions
+    "check_backward",
+    "check_forward",
+    "check_jit_serializable",
+    "check_initializable",
+    "check_jit_scriptable",
+    # helper functions
+    "all_finite",
     "flatten_nested_tensor",
     "get_device",
     "get_grads",
@@ -35,7 +39,14 @@ __all__ = [
 import inspect
 import logging
 import tempfile
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+    Set as AbstractSet,
+)
 from copy import deepcopy
 from itertools import chain
 from typing import Any, Optional, overload
@@ -112,7 +123,7 @@ def all_finite(x: Nested[Tensor], /) -> bool:
 
 
 # region utility functions for tensors AND scalars -------------------------------------
-def get_device(x: Module | Tree, /) -> torch.device:
+def get_device(x: object, /) -> DeviceArg:
     r"""Return the device of the model / parameters."""
     match x:
         case Module() as model:
@@ -124,7 +135,7 @@ def get_device(x: Module | Tree, /) -> torch.device:
         case Iterable() as iterable:
             return get_device(next(iter(iterable)))
         case _:
-            raise TypeError(f"Unsupported input type {type(x)!r}")
+            return None
 
 
 @overload
@@ -134,7 +145,9 @@ def to_device[T: Tensor](x: T, /, *, device: DeviceArg = ...) -> T: ...
 @overload
 def to_device[S: Scalar](x: S, /, *, device: DeviceArg = ...) -> S: ...
 @overload
-def to_device[*Ts](tup: tuple[*Ts], /, *, device: DeviceArg = ...) -> tuple[*Ts]: ...
+def to_device[*Ts](tup: tuple[*Ts], /, *, device: DeviceArg = ...) -> tuple[*Ts]: ...  # type: ignore[overload-overlap]
+@overload
+def to_device[T](x: AbstractSet[T], /, *, device: DeviceArg = ...) -> set[T]: ...
 @overload
 def to_device[T](x: Sequence[T], /, *, device: DeviceArg = ...) -> list[T]: ...
 @overload
@@ -155,6 +168,8 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
             return scalar
         case tuple(tup):
             return tuple(to_device(item, device=device) for item in tup)
+        case AbstractSet() as set_like:
+            return {to_device(item, device=device) for item in set_like}
         case Sequence() as seq:
             return [to_device(item, device=device) for item in seq]
         case Mapping() as mapping:
@@ -242,14 +257,16 @@ def make_tensors_parameters[S: Scalar](x: S, /) -> S: ...
 @overload
 def make_tensors_parameters[T](x: Mapping[str, T], /) -> dict[str, T]: ...
 @overload
-def make_tensors_parameters[*Ts](x: tuple[*Ts], /) -> tuple[*Ts]: ...
+def make_tensors_parameters[*Ts](x: tuple[*Ts], /) -> tuple[*Ts]: ...  # type: ignore[overload-overlap]
+@overload
+def make_tensors_parameters[T](x: AbstractSet[T], /) -> set[T]: ...
 @overload
 def make_tensors_parameters[T](x: Sequence[T], /) -> list[T]: ...
-def make_tensors_parameters(x: Any, /) -> Any:
+def make_tensors_parameters(arg: Any, /) -> Any:
     r"""Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
-    match x:
-        case Tensor() as tensor:
+    match arg:
+        case Tensor() as x:
             return nn.Parameter(x) if not isinstance(x, nn.Parameter) else x
         case scalar if isinstance(scalar, Scalar.__value__):
             return scalar
@@ -257,10 +274,12 @@ def make_tensors_parameters(x: Any, /) -> Any:
             return {key: make_tensors_parameters(val) for key, val in mapping.items()}
         case tuple(tup):
             return tuple(make_tensors_parameters(item) for item in tup)
+        case AbstractSet() as set_like:
+            return {make_tensors_parameters(item) for item in set_like}
         case Sequence() as seq:
             return [make_tensors_parameters(item) for item in seq]
-        case _:
-            raise TypeError(f"Unsupported input type {type(x)!r}")
+        case other:
+            raise TypeError(f"Unsupported input type {type(other)!r}")
 
 
 # endregion utility functions  for outputs (always tensor) -----------------------------
@@ -269,14 +288,14 @@ def make_tensors_parameters(x: Any, /) -> Any:
 # region check helper functions --------------------------------------------------------
 
 
-def _check_initialization[M: Module](
+def check_initializable[M: Module](
     module_type: type[M],
     /,
     *,
     init_args: Sequence[Tree] = (),
     init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> M:
-    r"""Test initialization of a module."""
+    r"""Test if the module is initializable."""
     if not isinstance(module_type, type):
         raise TypeError(f"Expected type, got {type(module_type)}!")
 
@@ -291,8 +310,8 @@ def _check_initialization[M: Module](
     return module
 
 
-def _check_forward(
-    func: Func,
+def check_forward(
+    func: Module | Func,
     /,
     *,
     input_args: Sequence[Tree],
@@ -319,7 +338,7 @@ def _check_forward(
     return outputs
 
 
-def _check_backward(
+def check_backward(
     module_or_func: Module | Func,
     /,
     *,
@@ -342,7 +361,7 @@ def _check_backward(
         params.extend(get_parameters(input_kwargs))
 
     with torch.enable_grad():
-        outputs = _check_forward(
+        outputs = check_forward(
             module_or_func,
             input_args=input_args,
             input_kwargs=input_kwargs,
@@ -360,6 +379,10 @@ def _check_backward(
         gradients = get_grads(params)
         shapes = get_shapes(gradients)
 
+    # check grads are finite
+    if not all_finite(gradients):
+        raise AssertionError("Gradients are not finite!")
+
     # validate shapes
     if reference_shapes is not None and shapes != reference_shapes:
         raise AssertionError(f"Shapes mismatch! {reference_shapes=} {shapes=}")
@@ -371,18 +394,16 @@ def _check_backward(
     return gradients
 
 
-def _checked_jit_scriptable[M: Module | Func](arg: M, /) -> M:
+def check_jit_scriptable[M: Module | Func](arg: M, /) -> M:
     r"""Test JIT compilation."""
     try:
         scripted = jit.script(arg)
     except Exception as exc:
         raise AssertionError("Model JIT compilation Failed!") from exc
-    return scripted
+    return scripted  # type: ignore[return-value]
 
 
-def _check_jit_serializable[M: Module | Func](
-    arg: M, /, *, device: DeviceArg = "cpu"
-) -> M:
+def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
     r"""Test saving and loading of JIT compiled model."""
     with tempfile.TemporaryFile() as file:
         try:
@@ -392,9 +413,13 @@ def _check_jit_serializable[M: Module | Func](
             raise AssertionError("Model saving failed!") from exc
 
         try:
-            loaded = jit.load(file, map_location=device)
+            loaded = jit.load(file)
         except Exception as exc:
             raise AssertionError("Model loading failed!") from exc
+
+        # move parameters/buffers to the same device
+        device = get_device(arg)
+        loaded = to_device(loaded, device=device)
     return loaded
 
 
@@ -405,12 +430,13 @@ def assert_is_trainable(
     module: Module,
     /,
     *,
-    input_args: Sequence[Tree] = (),
-    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    input_args: Sequence[Tree],
+    input_kwargs: Mapping[str, Tree],
+    # optional
     niter: int = 4,
     use_copy: bool = True,
 ) -> None:
-    r"""Check if model can be optimized."""
+    r"""Check if the model can be optimized."""
     if not any(p.requires_grad for p in module.parameters()):
         raise AssertionError("No trainable parameters!")
 
@@ -452,34 +478,35 @@ def assert_is_trainable(
         raise AssertionError(f"Loss did not decrease! \n{history=}")
 
 
-def assert_jit_compatible[M: Module | Func](
-    module_or_function: M,
+def assert_jit_compatible(
+    module_or_function: Module | Func,
     /,
     *,
     input_args: Sequence[Tree],
     input_kwargs: Mapping[str, Tree],
     # optional arguments
+    reference_model: Optional[Module | Func] = None,
     check_is_trainable: bool = True,
-    device: DeviceArg = "cpu",
 ) -> None:
     r"""Test if a model is compatible with JIT."""
     # get reference values from forward/backward pass
-    ref_outs = _check_forward(
-        module_or_function,
+    ref_obj = module_or_function if reference_model is None else reference_model
+    ref_outs = check_forward(
+        ref_obj,
         input_args=input_args,
         input_kwargs=input_kwargs,
     )
 
-    ref_grads = _check_backward(
-        module_or_function,
+    ref_grads = check_backward(
+        ref_obj,
         input_args=input_args,
         input_kwargs=input_kwargs,
     )
 
     # script the module
-    scripted_obj = _checked_jit_scriptable(module_or_function)
+    scripted_obj = check_jit_scriptable(module_or_function)
     # perform forward pass
-    scripted_outs = _check_forward(
+    check_forward(
         scripted_obj,
         input_args=input_args,
         input_kwargs=input_kwargs,
@@ -487,7 +514,7 @@ def assert_jit_compatible[M: Module | Func](
         reference_shapes=get_shapes(ref_outs),
     )
     # perform backward pass
-    _check_backward(
+    check_backward(
         scripted_obj,
         input_args=input_args,
         input_kwargs=input_kwargs,
@@ -502,10 +529,10 @@ def assert_jit_compatible[M: Module | Func](
         )
 
     # check serialization
-    deserialized_obj = _check_jit_serializable(scripted_obj, device=device)
+    deserialized_obj = check_jit_serializable(scripted_obj)
 
     # perform forward pass
-    deserialized_outs = _check_forward(
+    check_forward(
         deserialized_obj,
         input_args=input_args,
         input_kwargs=input_kwargs,
@@ -513,7 +540,7 @@ def assert_jit_compatible[M: Module | Func](
         reference_shapes=get_shapes(ref_outs),
     )
     # perform backward pass
-    _check_backward(
+    check_backward(
         deserialized_obj,
         input_args=input_args,
         input_kwargs=input_kwargs,
@@ -529,33 +556,54 @@ def assert_jit_compatible[M: Module | Func](
         )
 
 
-def check_model(
-    model_or_func: Module | Func,
+def assert_model_ok(
+    module_or_func: Module | Func,
     /,
     *,
     # input arguments
-    input_args: Sequence[Tree] = (),
-    input_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    input_args: Sequence[Tree],
+    input_kwargs: Mapping[str, Tree],
     # reference arguments
+    reference_model: Optional[Module | Func] = None,
     reference_gradients: Optional[Nested[Tensor]] = None,
-    reference_model: Optional[Module] = None,
-    reference_shapes: Optional[list[tuple[int, ...]]] = None,
     reference_outputs: Optional[Nested[Tensor]] = None,
-    # extra arguments
+    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    # extra
     device: Optional[torch.device] = None,
-    logger: Optional[logging.Logger] = None,
-    make_inputs_parameters: bool = True,
+    treat_inputs_as_parameters: bool = True,
     test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
-    r"""Check a module, function or model class."""
+    r"""Checks that a model (nn.Module or function) can perform forward/backward."""
     # region get name and logger -------------------------------------------------------
-    if not isinstance(model, Module):
-        raise TypeError("Expected Module!")
+    match module_or_func:
+        case Module() as model:
+            name = model.__class__.__name__
+            test_obj = model
+        case Callable() as func if not isinstance(func, type):  # type: ignore[misc, has-type]
+            name = func.__name__  # type: ignore[unreachable]
+            test_obj = func
+        case type() as cls:
+            raise TypeError(
+                f"Expected callable, got type {cls!r} instead."
+                f" Consider using `check_class`!"
+            )
+        case other:
+            raise TypeError(f"Got unexpected input type {type(other)!r}")
 
-    model_name = model.__class__.__name__
-    logger = __logger__.getChild(model_name) if logger is None else logger
+    logger = __logger__.getChild(name)
     # endregion get name and logger ----------------------------------------------------
+
+    # region reference model -----------------------------------------------------------
+    ref_model = module_or_func if reference_model is None else reference_model
+    # endregion reference model --------------------------------------------------------
+
+    # region change device -------------------------------------------------------------
+    test_obj, input_args, input_kwargs = to_device(
+        (test_obj, input_args, input_kwargs), device=device
+    )
+    ref_model = to_device(ref_model, device=device)
+    # endregion change device ----------------------------------------------------------
 
     # # region get parameters ------------------------------------------------------------
     # model_parameters = get_parameters(model) if isinstance(model, Module) else []
@@ -570,7 +618,7 @@ def check_model(
     #
     # parameters = model_parameters + input_parameters
     # # endregion get parameters model ---------------------------------------------------
-    #
+
     # # region get reference model -------------------------------------------------------
     # if reference_model is not None:
     #     assert reference_outputs is None, "Both reference model & outputs given!"
@@ -588,17 +636,11 @@ def check_model(
     #     except Exception as exc:
     #         raise RuntimeError("Reference model failed forward/backward pass!") from exc
     #     logger.info(">>> Reference model forward/backward ✔ ")
-    #     # endregion get reference model ----------------------------------------------------
-
-    # region change device -------------------------------------------------------------
-    model, input_args, input_kwargs = to_device(
-        (model, input_args, input_kwargs), device=device
-    )
-    # endregion change device ----------------------------------------------------------
+    # # endregion get reference model ----------------------------------------------------
 
     # region check forward pass --------------------------------------------------------
-    outputs = _check_forward(
-        model,
+    check_forward(
+        test_obj,
         input_args=input_args,
         input_kwargs=input_kwargs,
         reference_values=reference_outputs,
@@ -608,33 +650,37 @@ def check_model(
     # endregion check forward pass -----------------------------------------------------
 
     # region check backward pass -------------------------------------------------------
-    gradients = _check_backward(
-        model,
-        outputs=outputs,
+    check_backward(
+        test_obj,
+        input_args=input_args,
+        input_kwargs=input_kwargs,
         reference_values=reference_gradients,
+        reference_shapes=reference_shapes,
+        treat_inputs_as_parameters=treat_inputs_as_parameters,
     )
-    assert all_finite(gradients), "Gradients are not finite!"
     logger.info(">>> Backward ✔ ")
     # endregion check backward pass ----------------------------------------------------
 
-    if test_optim:
-        assert_is_trainable(model, input_args=input_args, input_kwargs=input_kwargs)
+    if test_optim and isinstance(test_obj, Module):
+        assert_is_trainable(test_obj, input_args=input_args, input_kwargs=input_kwargs)
 
     if test_jit:
-        assert_jit_compatible(model, input_args=input_args, input_kwargs=input_kwargs)
+        assert_jit_compatible(
+            test_obj, input_args=input_args, input_kwargs=input_kwargs
+        )
 
 
-def check_class(
+def assert_class_ok(
     model_class: type[Module],
     /,
     *,
-    init_args: Sequence[Any] = (),
-    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
+    init_args: Sequence[Any],
+    init_kwargs: Mapping[str, Any],
     # input arguments
     **check_model_kwargs: Any,
 ) -> None:
     r"""Test a model class."""
-    model = _check_initialization(
+    model = check_initializable(
         model_class, init_args=init_args, init_kwargs=init_kwargs
     )
-    check_model(model, **check_model_kwargs)
+    assert_model_ok(model, **check_model_kwargs)

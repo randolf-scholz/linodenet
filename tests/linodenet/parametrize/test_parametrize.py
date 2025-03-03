@@ -22,9 +22,9 @@ from linodenet.parametrize import (
 )
 from linodenet.projections import symmetric
 from linodenet.testing import (
-    _check_jit_serializable,
     assert_jit_compatible,
-    check_model,
+    assert_model_ok,
+    check_jit_serializable,
     check_object,
     checked_jit_serialization,
     is_symmetric,
@@ -140,7 +140,7 @@ def test_jit_attribute() -> None:
     assert isinstance(scripted.weight_parametrization, Parametrization)
 
     # check that model can be serialized
-    loaded = _check_jit_serializable(scripted)
+    loaded = check_jit_serializable(scripted)
     assert is_upper_triangular(loaded.weight)
     assert isinstance(loaded.weight_parametrization, Parametrization)
 
@@ -202,7 +202,7 @@ def test_optimization_manual() -> None:
     # endregion test training ----------------------------------------------------------
 
     # region test training -------------------------------------------------------------
-    loaded = _check_jit_serializable(scripted)
+    loaded = check_jit_serializable(scripted)
     check_optimization(loaded, inputs, targets)
     # endregion test training ----------------------------------------------------------
 
@@ -389,7 +389,9 @@ def test_param() -> None:
         model.weight.copy_(reference_model.weight)
 
     # check compatibility
-    check_model(model, input_args=(x,), reference_model=reference_model, test_jit=True)
+    assert_model_ok(
+        model, input_args=(x,), reference_model=reference_model, test_jit=True
+    )
 
     # now, parametrize
     weight = model.weight
@@ -399,4 +401,6 @@ def test_param() -> None:
     model.param = param
 
     # check compatibility
-    check_model(model, input_args=(x,), reference_model=reference_model, test_jit=True)
+    assert_model_ok(
+        model, input_args=(x,), reference_model=reference_model, test_jit=True
+    )
