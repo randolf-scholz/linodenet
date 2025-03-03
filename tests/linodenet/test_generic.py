@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.generic import ModuleMapping, ModuleSequence
-from linodenet.testing._testing import check_jit_compat
+from linodenet.testing._testing import assert_jit_compatible
 
 BATCH_SIZE = 5
 
@@ -103,7 +103,7 @@ def test_sequence_jit() -> None:
     model = Foo([nn.Linear(DIM_IN, DIM_OUT), nn.Linear(DIM_OUT, DIM_OUT)])
     x = torch.randn(BATCH_SIZE, DIM_IN)
 
-    check_jit_compat(model, input_args=(x,), input_kwargs={})
+    assert_jit_compatible(model, input_args=(x,), input_kwargs={})
 
 
 def test_mapping_jit() -> None:
@@ -120,4 +120,4 @@ def test_mapping_jit() -> None:
     model = Bar({"m1": nn.Linear(DIM_IN, DIM_OUT), "m2": nn.Linear(DIM_IN, DIM_OUT)})
     x = torch.randn(BATCH_SIZE, DIM_IN)
 
-    check_jit_compat(model, input_args=(x,), input_kwargs={})
+    assert_jit_compatible(model, input_args=(x,), input_kwargs={})

@@ -73,7 +73,7 @@ docs = [
     "sphinx-math-dollar>=1.2.1",
     "sphinx-togglebutton>=0.3.2",
     "sphinx-typo3-theme>=4.9.0",
-    "sphinx>=8.2.1",
+    "sphinx>=8.2.3",
 ]
 linters = [
     "pre-commit>=4.1.0",
@@ -83,7 +83,7 @@ linters = [
 ]
 tests = [
     "coverage>=7.6.12",
-    "hypothesis[numpy,pandas,pytest]>=6.127.4",
+    "hypothesis[numpy,pandas,pytest]>=6.127.5",
     "matplotlib>=3.10.1",
     "psutil>=7.0.0",
     "pygal>=3.0.5",

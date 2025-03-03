@@ -4,7 +4,7 @@ import pytest
 from torch.nn.utils import parametrize as torch_parametrize
 
 import linodenet
-from linodenet.testing import assert_compatible_signature
+from linodenet.testing import assert_signatures_compatible
 
 FNS = [
     "register_parametrization",
@@ -44,4 +44,4 @@ def test_compatibility_torch(name: str) -> None:
     if impl is None:
         pytest.xfail(f"linodenet.parametrize.{name} not implemented")
 
-    assert_compatible_signature(impl, ref)
+    assert_signatures_compatible(impl, ref)

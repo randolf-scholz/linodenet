@@ -22,11 +22,11 @@ from linodenet.parametrize import (
 )
 from linodenet.projections import symmetric
 from linodenet.testing import (
-    check_jit,
-    check_jit_scripting,
-    check_jit_serialization,
+    _check_jit_serializable,
+    assert_jit_compatible,
     check_model,
     check_object,
+    checked_jit_serialization,
     is_symmetric,
     is_upper_triangular,
 )
@@ -70,14 +70,14 @@ def test_jit_preserves_parameters() -> None:
 
     original_parameters = deepcopy(tuple(model.parameters()))
 
-    deserialized_model = check_jit(model)
+    deserialized_model = assert_jit_compatible(model)
     deserialized_param = deepcopy(tuple(deserialized_model.parameters()))
 
     # apply only a dummy parametrization for this test.
     register_parametrization(model, "weight", Identity)
     parametrized_parameters = deepcopy(tuple(model.parameters()))
 
-    deserialized_parametrized_model = check_jit(deserialized_model)
+    deserialized_parametrized_model = assert_jit_compatible(deserialized_model)
     deserialized_parametrized_param = deepcopy(
         tuple(deserialized_parametrized_model.parameters())
     )
@@ -130,17 +130,17 @@ def test_jit_attribute() -> None:
     deepcopy(model)
 
     # check that model can be scripted
-    loaded = check_jit(model)
+    loaded = assert_jit_compatible(model)
     assert is_upper_triangular(loaded.weight)
     assert isinstance(loaded.weight_parametrization, Parametrization)
 
     # check that model can be scripted
-    scripted = check_jit_scripting(model)
+    scripted = checked_jit_serialization(model)
     assert is_upper_triangular(scripted.weight)
     assert isinstance(scripted.weight_parametrization, Parametrization)
 
     # check that model can be serialized
-    loaded = check_jit_serialization(scripted)
+    loaded = _check_jit_serializable(scripted)
     assert is_upper_triangular(loaded.weight)
     assert isinstance(loaded.weight_parametrization, Parametrization)
 
@@ -154,7 +154,7 @@ def test_optimization_manual() -> None:
     model = nn.Linear(in_features=N, out_features=M, bias=False)
     original_weight = model.weight
 
-    check_jit(model)
+    assert_jit_compatible(model)
 
     # create the parametrization
     param = UpperTriangular(model.weight)
@@ -182,7 +182,7 @@ def test_optimization_manual() -> None:
     assert not is_upper_triangular(model.weight), model.weight
 
     # check that model can be scripted
-    check_jit(model)
+    assert_jit_compatible(model)
 
     # initialize the parametrization
     model.param.update_parametrization()
@@ -197,12 +197,12 @@ def test_optimization_manual() -> None:
     # endregion test training ----------------------------------------------------------
 
     # region test training -------------------------------------------------------------
-    scripted = check_jit_scripting(model)
+    scripted = checked_jit_serialization(model)
     check_optimization(scripted, inputs, targets)
     # endregion test training ----------------------------------------------------------
 
     # region test training -------------------------------------------------------------
-    loaded = check_jit_serialization(scripted)
+    loaded = _check_jit_serializable(scripted)
     check_optimization(loaded, inputs, targets)
     # endregion test training ----------------------------------------------------------
 
@@ -245,7 +245,7 @@ def test_optimization() -> None:
     # scripted = check_jit_scripting(model)
     # check_optimization(scripted, inputs, targets)
 
-    loaded = check_jit(model)
+    loaded = assert_jit_compatible(model)
     check_optimization(loaded, inputs, targets)
 
 

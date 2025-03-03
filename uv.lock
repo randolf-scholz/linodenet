@@ -593,15 +593,15 @@ wheels = [
 
 [[package]]
 name = "hypothesis"
-version = "6.127.4"
+version = "6.127.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "sortedcontainers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6e/22/647ff39a5809376ca2b48e088de251e20bb4d4071087af814077f18f779b/hypothesis-6.127.4.tar.gz", hash = "sha256:3ab8dd0e2d985ea90169b0b0e5b77ef3a7bcaf3fc6bb038927a4e977e3477908", size = 419816 }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/1b/b6778ec605b5a080a019273abaa85d5d51597a40815506752511092e74f3/hypothesis-6.127.5.tar.gz", hash = "sha256:1c5ce71b6166dda3834791f36b28b78c9d009c46cf4d6fdc4740e95481835724", size = 419824 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/86/62/4a666ec262dfe338c2ced4244ceb3545087aa8bedeca0533f0cc305634a2/hypothesis-6.127.4-py3-none-any.whl", hash = "sha256:11c02b78c2639c285bdf242e821d0844affe421b07c030bee34547dcb8e22f09", size = 483411 },
+    { url = "https://files.pythonhosted.org/packages/3e/15/234573ed76ab2b065c562c72b25ade28ed9d46d0efd347a8599a384521a1/hypothesis-6.127.5-py3-none-any.whl", hash = "sha256:060064677c0b10cb659954646b9dd8c446f86d357f63e8ac3998b71170c8dd46", size = 483437 },
 ]
 
 [package.optional-dependencies]
@@ -1231,7 +1231,7 @@ dev = [
     { name = "cmake", specifier = ">=3.31.6" },
     { name = "coverage", specifier = ">=7.6.12" },
     { name = "docutils", specifier = ">=0.21.2" },
-    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.4" },
+    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.5" },
     { name = "ipympl", specifier = ">=0.9.6" },
     { name = "ipywidgets", specifier = ">=8.1.5" },
     { name = "jupyterlab", specifier = ">=4.3.5" },
@@ -1257,7 +1257,7 @@ dev = [
     { name = "pytest-rerunfailures", specifier = ">=15.0" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
     { name = "ruff", specifier = ">=0.9.9" },
-    { name = "sphinx", specifier = ">=8.2.1" },
+    { name = "sphinx", specifier = ">=8.2.3" },
     { name = "sphinx-autoapi", specifier = ">=3.6.0" },
     { name = "sphinx-autodoc2", specifier = ">=0.5.0" },
     { name = "sphinx-automodapi", specifier = ">=0.18.0" },
@@ -1298,7 +1298,7 @@ docs = [
     { name = "piccolo-theme", specifier = ">=0.24.0" },
     { name = "pydata-sphinx-theme", specifier = ">=0.16.1" },
     { name = "pygments", specifier = ">=2.19.1" },
-    { name = "sphinx", specifier = ">=8.2.1" },
+    { name = "sphinx", specifier = ">=8.2.3" },
     { name = "sphinx-autoapi", specifier = ">=3.6.0" },
     { name = "sphinx-autodoc2", specifier = ">=0.5.0" },
     { name = "sphinx-automodapi", specifier = ">=0.18.0" },
@@ -1315,7 +1315,7 @@ linters = [
 ]
 tests = [
     { name = "coverage", specifier = ">=7.6.12" },
-    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.4" },
+    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.5" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pygal", specifier = ">=3.0.5" },
@@ -2656,7 +2656,7 @@ wheels = [
 
 [[package]]
 name = "sphinx"
-version = "8.2.1"
+version = "8.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "alabaster" },
@@ -2677,9 +2677,9 @@ dependencies = [
     { name = "sphinxcontrib-qthelp" },
     { name = "sphinxcontrib-serializinghtml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/99/4b/95bdb36eaee30698f2d244d52e1b9e58642af56525d4b02fcd0f7312c27c/sphinx-8.2.1.tar.gz", hash = "sha256:e4b932951b9c18b039f73b72e4e63afe967d90408700ec222b981ac24647c01e", size = 8321376 }
+sdist = { url = "https://files.pythonhosted.org/packages/38/ad/4360e50ed56cb483667b8e6dadf2d3fda62359593faabbe749a27c4eaca6/sphinx-8.2.3.tar.gz", hash = "sha256:398ad29dee7f63a75888314e9424d40f52ce5a6a87ae88e7071e80af296ec348", size = 8321876 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/aa/282768cff0039b227a923cb65686539bb606e448c594d4fdee4d2c7765a1/sphinx-8.2.1-py3-none-any.whl", hash = "sha256:b5d2bb3cdf6207fcacde9f92085d2b97667b05b9c346eaec426ca4be8af505e9", size = 3589415 },
+    { url = "https://files.pythonhosted.org/packages/31/53/136e9eca6e0b9dc0e1962e2c908fbea2e5ac000c2a2fbd9a35797958c48b/sphinx-8.2.3-py3-none-any.whl", hash = "sha256:4405915165f13521d875a8c29c8970800a0141c14cc5416a38feca4ea5d9b9c3", size = 3589741 },
 ]
 
 [[package]]
