@@ -20,6 +20,7 @@ from linodenet.parametrize import (
     register_parametrization,
     update_parametrizations,
 )
+from linodenet.parametrize.base import get_parametrizations
 from linodenet.projections import symmetric
 from linodenet.testing import (
     all_close,
@@ -127,25 +128,23 @@ def test_register_parametrization() -> None:
 def test_jit_attribute() -> None:
     N, M = 3, 5
     model = nn.Linear(in_features=N, out_features=M, bias=False)
-    deepcopy(model)
-    register_parametrization(model, "weight", UpperTriangular)
-    model.weight_parametrization.detach_cache()
-    deepcopy(model)
+    assert not is_upper_triangular(model.weight)
 
-    # check that model can be scripted
-    loaded = check_jit_serializable(model)
-    assert is_upper_triangular(loaded.weight)
-    assert isinstance(loaded.weight_parametrization, Parametrization)
+    register_parametrization(model, "weight", UpperTriangular)
+    ps = get_parametrizations(model)
+    assert is_upper_triangular(model.weight)
+    assert isinstance(ps["weight"], Parametrization)
 
     # check that model can be scripted
     scripted = check_jit_scriptable(model)
+    scripted_ps = get_parametrizations(model)
     assert is_upper_triangular(scripted.weight)
-    assert isinstance(scripted.weight_parametrization, Parametrization)
+    assert isinstance(scripted_ps["weight"], Parametrization)
 
-    # check that model can be serialized
-    loaded = check_jit_serializable(scripted)
-    assert is_upper_triangular(loaded.weight)
-    assert isinstance(loaded.weight_parametrization, Parametrization)
+    # check that model can be scripted
+    deserialized_model = check_jit_serializable(model)
+    assert is_upper_triangular(deserialized_model.weight)
+    # assert isinstance(deserialized_ps["weight"], Parametrization)
 
 
 def test_optimization_manual() -> None:

@@ -7,6 +7,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.generic import ModuleMapping, ModuleSequence
+from linodenet.testing import check_jit_serializable
 from linodenet.testing._testing import assert_jit_compatible
 
 BATCH_SIZE = 5

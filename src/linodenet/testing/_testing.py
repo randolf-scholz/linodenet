@@ -88,24 +88,39 @@ def assert_all_close(
     *,
     rtol: float = 1e-5,
     atol: float = 1e-8,
+    ctx: Mapping[str, Any] = EMPTY_MAP,
 ) -> None:
     r"""Assert that outputs and targets are close."""
     match values:
         case Tensor() as tensor:
             assert isinstance(reference, Tensor)
             if not torch.allclose(tensor, reference, rtol=rtol, atol=atol):
-                raise AssertionError
+                raise AssertionError(
+                    f"Tensors at key {ctx.get('key')!r} are not close!"
+                )
         case Mapping() as mapping:
             assert isinstance(reference, Mapping)
             assert mapping.keys() == reference.keys()
             for key in mapping:
                 x = mapping[key]
                 y = reference[key]
-                assert_all_close(x, y, rtol=rtol, atol=atol)
+                assert_all_close(
+                    x,
+                    y,
+                    rtol=rtol,
+                    atol=atol,
+                    ctx={"key": ctx.get("key", []).append(key)},
+                )
         case Sequence() as sequence:
             assert isinstance(reference, Sequence)
-            for output, target in zip(sequence, reference, strict=True):
-                assert_all_close(output, target, rtol=rtol, atol=atol)
+            for i, (output, target) in enumerate(zip(sequence, reference, strict=True)):
+                assert_all_close(
+                    output,
+                    target,
+                    rtol=rtol,
+                    atol=atol,
+                    ctx={"key": ctx.get("key", []).append(i)},
+                )
         case _:
             raise TypeError(f"Unsupported type {type(values)}!")
 
@@ -129,8 +144,8 @@ def all_close(
                 all_close(mapping[key], reference[key], rtol=rtol, atol=atol)
                 for key in mapping
             )
-        case Sequence() as sequence:
-            assert isinstance(reference, Sequence)
+        case Iterable() as sequence:
+            assert isinstance(reference, Iterable)
             return all(
                 all_close(output, target, rtol=rtol, atol=atol)
                 for output, target in zip(sequence, reference, strict=True)
@@ -391,6 +406,7 @@ def check_backward(
         params.extend(get_parameters(kwargs))
 
     with torch.enable_grad():
+        zero_grad(module_or_func)
         outputs = check_forward(
             module_or_func,
             args=args,
@@ -480,7 +496,7 @@ def assert_is_trainable(
             kwargs = deepcopy(kwargs)
         # fix the gradient state
         for w, p in zip(model.parameters(), module.parameters(), strict=True):
-            w.requires_grad_(p.requires_grad)
+            w.requires_grad_(bool(p.requires_grad))
     else:
         model = module
 

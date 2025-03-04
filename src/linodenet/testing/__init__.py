@@ -36,6 +36,7 @@ __all__ = [
     "is_traceless",
     "is_upper_triangular",
     # helper functions
+    "all_close",
     "all_finite",
     "flatten_nested_tensor",
     "get_device",
@@ -51,6 +52,7 @@ __all__ = [
 ]
 
 from linodenet.testing._testing import (
+    all_close,
     all_finite,
     assert_all_close,
     assert_class_ok,

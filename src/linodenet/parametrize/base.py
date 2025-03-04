@@ -93,6 +93,7 @@ __all__ = [
 ]
 
 import copy
+import warnings
 from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from contextlib import AbstractContextManager, ContextDecorator
@@ -625,6 +626,20 @@ def is_parametrized(module: nn.Module, /) -> bool:
     return any(isinstance(m, Parametrization) for m in module.modules())
 
 
+def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
+    r"""Return all parametrizations in a module."""
+    match ps := getattr(module, "parametrizations", None):
+        case None:
+            return nn.ModuleDict()
+        case nn.ModuleDict() as parametrizations:
+            return parametrizations
+        case jit.RecursiveScriptModule() as parametrizations:
+            warnings.warn("Scripted module! Not all functionality may be available.")
+            return parametrizations
+        case _:
+            raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
+
+
 def register_parametrization(
     model: nn.Module,
     tensor_name: str,
@@ -633,8 +648,8 @@ def register_parametrization(
     unsafe: bool = False,
 ) -> None:
     r"""Drop-in replacement for nn.utils.parametrize.register_parametrization."""
-    if hasattr(model, f"{tensor_name}_parametrization"):
-        raise NameError(f"{tensor_name}_parametrization already exists!")
+    if tensor_name in getattr(model, "parametrizations", {}):
+        raise NameError(f"{tensor_name} already parametrized!")
 
     tensor = getattr(model, tensor_name)
     if not isinstance(tensor, nn.Parameter):
@@ -652,11 +667,29 @@ def register_parametrization(
     if not unsafe:
         assert_is_safe_parametrization(wrapper, tensor)
 
-    # add parametrization to model and rewire the tensors
+    # add the parametrization to model.parametrizations ModuleDict
+    if not hasattr(model, "parametrizations"):
+        model.parametrizations = nn.ModuleDict({tensor_name: wrapper})
+    else:
+        parametrizations = getattr(model, "parametrizations")
+        if not isinstance(parametrizations, nn.ModuleDict):
+            raise TypeError("model.parametrizations must be a nn.ModuleDict!")
+        parametrizations[tensor_name] = wrapper
+
+    # add the original tensor to model.parametrized_tensors ParameterDict
+    if not hasattr(model, "parametrized_tensors"):
+        model.parametrized_tensors = nn.ParameterDict({
+            tensor_name: wrapper.original_parameter
+        })
+    else:
+        parametrized_tensors = getattr(model, "parametrized_tensors")
+        if not isinstance(parametrized_tensors, nn.ParameterDict):
+            raise TypeError("model.parametrized_tensors must be a nn.ParameterDict!")
+        parametrized_tensors[tensor_name] = wrapper.original_parameter
+
+    # add a buffer in place of the original tensor
     delattr(model, tensor_name)
     model.register_buffer(tensor_name, wrapper.cached_parameter)
-    model.register_module(f"{tensor_name}_parametrization", wrapper)
-    model.register_parameter(f"{tensor_name}_original", wrapper.original_parameter)
 
     # initialize the parametrization
     wrapper.update_parametrization()
