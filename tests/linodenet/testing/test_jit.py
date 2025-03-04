@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, jit, nn
 from torch.nn.utils import parametrize as torch_parametrize
 
-from linodenet.testing import check_object
+from linodenet.testing import assert_model_ok
 
 
 class ModuleWithSlots(nn.Module):
@@ -86,13 +86,13 @@ class SubclassWithMetaclass(ModuleWithMetaclass, metaclass=AddPostInit):
 
 
 def test_post_init_jit() -> None:
-    r"""Checks that models with meta classes can be scripted."""
+    r"""Checks that models with metaclasses can be scripted."""
     model = ModuleWithMetaclass(3, 3)
-    check_object(model, input_args=(torch.randn(2, 3),), test_jit=True)
+    assert_model_ok(model, args=(torch.randn(2, 3),), test_jit=True)
 
 
 def test_post_init() -> None:
-    r"""Checks that meta-classes work as expected."""
+    r"""Checks that metaclasses work as expected."""
     ModuleWithMetaclass(4, 4)
 
     with pytest.raises(ValueError, match="Weight matrix must be square!"):

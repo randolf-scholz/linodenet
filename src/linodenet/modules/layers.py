@@ -21,6 +21,9 @@ from linodenet.utils import deep_dict_update, initialize_from_dict
 class Constant(nn.Module):
     r"""Constant function."""
 
+    value: Tensor
+    r"""BUFFER: The constant value."""
+
     def __init__(self, value: float | Tensor) -> None:
         super().__init__()
         self.register_buffer("value", torch.as_tensor(value))

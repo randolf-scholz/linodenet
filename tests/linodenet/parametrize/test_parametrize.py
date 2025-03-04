@@ -22,11 +22,11 @@ from linodenet.parametrize import (
 )
 from linodenet.projections import symmetric
 from linodenet.testing import (
+    all_close,
     assert_jit_compatible,
     assert_model_ok,
+    check_jit_scriptable,
     check_jit_serializable,
-    check_object,
-    checked_jit_serialization,
     is_symmetric,
     is_upper_triangular,
 )
@@ -36,13 +36,15 @@ def check_optimization(model: nn.Module, inputs: Tensor, targets: Tensor) -> Non
     optimizer = SGD(model.parameters(), lr=0.1)
 
     with torch.no_grad():
+        original_weights = [w.clone().detach() for w in model.parameters()]
         original_outputs = model(inputs)
         original_loss = mse_loss(original_outputs, targets)
         original_params = [w.clone().detach() for w in model.parameters()]
         loss = original_loss
         outputs = original_outputs
 
-    update_parametrizations(model)  # crucial, otherwise no update in first iteration!
+    # crucial, otherwise no update in the first iteration!
+    update_parametrizations(model)
 
     for _ in range(5):
         model.zero_grad(set_to_none=True)
@@ -54,6 +56,7 @@ def check_optimization(model: nn.Module, inputs: Tensor, targets: Tensor) -> Non
         optimizer.step()
         update_parametrizations(model)
         assert is_upper_triangular(model.weight)
+        assert not all_close(original_weights, model.parameters())
 
     # check that the loss has decreased
     assert loss < original_loss
@@ -70,14 +73,14 @@ def test_jit_preserves_parameters() -> None:
 
     original_parameters = deepcopy(tuple(model.parameters()))
 
-    deserialized_model = assert_jit_compatible(model)
+    deserialized_model = check_jit_serializable(model)
     deserialized_param = deepcopy(tuple(deserialized_model.parameters()))
 
     # apply only a dummy parametrization for this test.
     register_parametrization(model, "weight", Identity)
     parametrized_parameters = deepcopy(tuple(model.parameters()))
 
-    deserialized_parametrized_model = assert_jit_compatible(deserialized_model)
+    deserialized_parametrized_model = check_jit_serializable(deserialized_model)
     deserialized_parametrized_param = deepcopy(
         tuple(deserialized_parametrized_model.parameters())
     )
@@ -110,7 +113,7 @@ def test_jit() -> None:
 
     register_parametrization(model, "weight", UpperTriangular)
 
-    check_object(model, input_args=(inputs,))
+    assert_model_ok(model, args=(inputs,))
 
 
 def test_register_parametrization() -> None:
@@ -130,12 +133,12 @@ def test_jit_attribute() -> None:
     deepcopy(model)
 
     # check that model can be scripted
-    loaded = assert_jit_compatible(model)
+    loaded = check_jit_serializable(model)
     assert is_upper_triangular(loaded.weight)
     assert isinstance(loaded.weight_parametrization, Parametrization)
 
     # check that model can be scripted
-    scripted = checked_jit_serialization(model)
+    scripted = check_jit_scriptable(model)
     assert is_upper_triangular(scripted.weight)
     assert isinstance(scripted.weight_parametrization, Parametrization)
 
@@ -154,7 +157,7 @@ def test_optimization_manual() -> None:
     model = nn.Linear(in_features=N, out_features=M, bias=False)
     original_weight = model.weight
 
-    assert_jit_compatible(model)
+    check_jit_scriptable(model)
 
     # create the parametrization
     param = UpperTriangular(model.weight)
@@ -182,7 +185,7 @@ def test_optimization_manual() -> None:
     assert not is_upper_triangular(model.weight), model.weight
 
     # check that model can be scripted
-    assert_jit_compatible(model)
+    check_jit_scriptable(model)
 
     # initialize the parametrization
     model.param.update_parametrization()
@@ -197,7 +200,7 @@ def test_optimization_manual() -> None:
     # endregion test training ----------------------------------------------------------
 
     # region test training -------------------------------------------------------------
-    scripted = checked_jit_serialization(model)
+    scripted = check_jit_scriptable(model)
     check_optimization(scripted, inputs, targets)
     # endregion test training ----------------------------------------------------------
 
@@ -245,7 +248,7 @@ def test_optimization() -> None:
     # scripted = check_jit_scripting(model)
     # check_optimization(scripted, inputs, targets)
 
-    loaded = assert_jit_compatible(model)
+    loaded = check_jit_serializable(model)
     check_optimization(loaded, inputs, targets)
 
 
@@ -390,7 +393,11 @@ def test_param() -> None:
 
     # check compatibility
     assert_model_ok(
-        model, input_args=(x,), reference_model=reference_model, test_jit=True
+        model,
+        args=(x,),
+        kwargs={},
+        reference_model=reference_model,
+        test_jit=True,
     )
 
     # now, parametrize
@@ -401,6 +408,4 @@ def test_param() -> None:
     model.param = param
 
     # check compatibility
-    assert_model_ok(
-        model, input_args=(x,), reference_model=reference_model, test_jit=True
-    )
+    assert_model_ok(model, args=(x,), reference_model=reference_model, test_jit=True)

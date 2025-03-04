@@ -9,7 +9,7 @@ Naming convention:
 
 __all__ = [
     # assert functions
-    "assert_close",
+    "assert_all_close",
     "assert_is_trainable",
     "assert_jit_compatible",
     "assert_signatures_compatible",
@@ -22,6 +22,7 @@ __all__ = [
     "check_initializable",
     "check_jit_scriptable",
     # helper functions
+    "all_close",
     "all_finite",
     "flatten_nested_tensor",
     "get_device",
@@ -80,7 +81,7 @@ def assert_signatures_compatible(func: Callable, reference: Callable) -> None:
             )
 
 
-def assert_close(
+def assert_all_close(
     values: Nested[Tensor],
     reference: Nested[Tensor],
     /,
@@ -100,11 +101,40 @@ def assert_close(
             for key in mapping:
                 x = mapping[key]
                 y = reference[key]
-                assert_close(x, y, rtol=rtol, atol=atol)
+                assert_all_close(x, y, rtol=rtol, atol=atol)
         case Sequence() as sequence:
             assert isinstance(reference, Sequence)
             for output, target in zip(sequence, reference, strict=True):
-                assert_close(output, target, rtol=rtol, atol=atol)
+                assert_all_close(output, target, rtol=rtol, atol=atol)
+        case _:
+            raise TypeError(f"Unsupported type {type(values)}!")
+
+
+def all_close(
+    values: Nested[Tensor],
+    reference: Nested[Tensor],
+    /,
+    *,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
+) -> bool:
+    match values:
+        case Tensor() as tensor:
+            assert isinstance(reference, Tensor)
+            return torch.allclose(tensor, reference, rtol=rtol, atol=atol)
+        case Mapping() as mapping:
+            assert isinstance(reference, Mapping)
+            assert mapping.keys() == reference.keys()
+            return all(
+                all_close(mapping[key], reference[key], rtol=rtol, atol=atol)
+                for key in mapping
+            )
+        case Sequence() as sequence:
+            assert isinstance(reference, Sequence)
+            return all(
+                all_close(output, target, rtol=rtol, atol=atol)
+                for output, target in zip(sequence, reference, strict=True)
+            )
         case _:
             raise TypeError(f"Unsupported type {type(values)}!")
 
@@ -292,7 +322,7 @@ def check_initializable[M: Module](
     module_type: type[M],
     /,
     *,
-    init_args: Sequence[Tree] = (),
+    init_args: Sequence[Tree],
     init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> M:
     r"""Test if the module is initializable."""
@@ -314,15 +344,15 @@ def check_forward(
     func: Module | Func,
     /,
     *,
-    input_args: Sequence[Tree],
-    input_kwargs: Mapping[str, Tree],
+    args: Sequence[Tree],
+    kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional: reference outputs and shapes
     reference_values: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
 ) -> Nested[Tensor]:
     r"""Test a forward pass."""
     try:
-        outputs = func(*input_args, **input_kwargs)
+        outputs = func(*args, **kwargs)
     except Exception as exc:
         raise RuntimeError("Forward pass failed!!") from exc
 
@@ -333,7 +363,7 @@ def check_forward(
 
     # validate values
     if reference_values is not None:
-        assert_close(outputs, reference_values)
+        assert_all_close(outputs, reference_values)
 
     return outputs
 
@@ -342,8 +372,8 @@ def check_backward(
     module_or_func: Module | Func,
     /,
     *,
-    input_args: Sequence[Tree],
-    input_kwargs: Mapping[str, Tree],
+    args: Sequence[Tree],
+    kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # Optional: reference gradients
     reference_values: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
@@ -355,16 +385,16 @@ def check_backward(
     )
 
     if treat_inputs_as_parameters:
-        input_args = make_tensors_parameters(input_args)
-        input_kwargs = make_tensors_parameters(input_kwargs)
-        params.extend(get_parameters(input_args))
-        params.extend(get_parameters(input_kwargs))
+        args = make_tensors_parameters(args)
+        kwargs = make_tensors_parameters(kwargs)
+        params.extend(get_parameters(args))
+        params.extend(get_parameters(kwargs))
 
     with torch.enable_grad():
         outputs = check_forward(
             module_or_func,
-            input_args=input_args,
-            input_kwargs=input_kwargs,
+            args=args,
+            kwargs=kwargs,
         )
 
         # compute a simple scalar value.
@@ -389,7 +419,7 @@ def check_backward(
 
     # validate values
     if reference_values is not None:
-        assert_close(gradients, reference_values)
+        assert_all_close(gradients, reference_values)
 
     return gradients
 
@@ -405,6 +435,9 @@ def check_jit_scriptable[M: Module | Func](arg: M, /) -> M:
 
 def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
     r"""Test saving and loading of JIT compiled model."""
+    if not isinstance(arg, jit.ScriptModule | jit.ScriptFunction):
+        arg = check_jit_scriptable(arg)
+
     with tempfile.TemporaryFile() as file:
         try:
             jit.save(arg, file)
@@ -430,8 +463,8 @@ def assert_is_trainable(
     module: Module,
     /,
     *,
-    input_args: Sequence[Tree],
-    input_kwargs: Mapping[str, Tree],
+    args: Sequence[Tree],
+    kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional
     niter: int = 4,
     use_copy: bool = True,
@@ -443,8 +476,8 @@ def assert_is_trainable(
     if use_copy:
         with torch.no_grad():
             model = deepcopy(module)
-            input_args = deepcopy(input_args)
-            input_kwargs = deepcopy(input_kwargs)
+            args = deepcopy(args)
+            kwargs = deepcopy(kwargs)
         # fix the gradient state
         for w, p in zip(model.parameters(), module.parameters(), strict=True):
             w.requires_grad_(p.requires_grad)
@@ -456,7 +489,7 @@ def assert_is_trainable(
 
     with torch.no_grad():
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-        original_outputs = model(*input_args, **input_kwargs)
+        original_outputs = model(*args, **kwargs)
         original_loss = get_norm(original_outputs)
         # original_params = [w.clone().detach() for w in model.parameters()]
 
@@ -466,7 +499,7 @@ def assert_is_trainable(
     # perform iterations
     for _ in range(niter):
         model.zero_grad(set_to_none=True)
-        outputs = model(*input_args, **input_kwargs)
+        outputs = model(*args, **kwargs)
         loss = get_norm(outputs)
         assert loss.isfinite()
         loss.backward()
@@ -482,8 +515,8 @@ def assert_jit_compatible(
     module_or_function: Module | Func,
     /,
     *,
-    input_args: Sequence[Tree],
-    input_kwargs: Mapping[str, Tree],
+    args: Sequence[Tree],
+    kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional arguments
     reference_model: Optional[Module | Func] = None,
     check_is_trainable: bool = True,
@@ -493,14 +526,14 @@ def assert_jit_compatible(
     ref_obj = module_or_function if reference_model is None else reference_model
     ref_outs = check_forward(
         ref_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     ref_grads = check_backward(
         ref_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
     )
 
     # script the module
@@ -508,24 +541,24 @@ def assert_jit_compatible(
     # perform forward pass
     check_forward(
         scripted_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
         reference_values=ref_outs,
         reference_shapes=get_shapes(ref_outs),
     )
     # perform backward pass
     check_backward(
         scripted_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
         reference_values=ref_grads,
         reference_shapes=get_shapes(ref_grads),
     )
     if check_is_trainable and isinstance(scripted_obj, Module):
         assert_is_trainable(
             scripted_obj,
-            input_args=input_args,
-            input_kwargs=input_kwargs,
+            args=args,
+            kwargs=kwargs,
         )
 
     # check serialization
@@ -534,16 +567,16 @@ def assert_jit_compatible(
     # perform forward pass
     check_forward(
         deserialized_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
         reference_values=ref_outs,
         reference_shapes=get_shapes(ref_outs),
     )
     # perform backward pass
     check_backward(
         deserialized_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
         reference_values=ref_grads,
         reference_shapes=get_shapes(ref_grads),
     )
@@ -551,8 +584,8 @@ def assert_jit_compatible(
     if check_is_trainable and isinstance(deserialized_obj, Module):
         assert_is_trainable(
             deserialized_obj,
-            input_args=input_args,
-            input_kwargs=input_kwargs,
+            args=args,
+            kwargs=kwargs,
         )
 
 
@@ -561,8 +594,8 @@ def assert_model_ok(
     /,
     *,
     # input arguments
-    input_args: Sequence[Tree],
-    input_kwargs: Mapping[str, Tree],
+    args: Sequence[Tree],
+    kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # reference arguments
     reference_model: Optional[Module | Func] = None,
     reference_gradients: Optional[Nested[Tensor]] = None,
@@ -599,9 +632,7 @@ def assert_model_ok(
     # endregion reference model --------------------------------------------------------
 
     # region change device -------------------------------------------------------------
-    test_obj, input_args, input_kwargs = to_device(
-        (test_obj, input_args, input_kwargs), device=device
-    )
+    test_obj, args, kwargs = to_device((test_obj, args, kwargs), device=device)
     ref_model = to_device(ref_model, device=device)
     # endregion change device ----------------------------------------------------------
 
@@ -641,8 +672,8 @@ def assert_model_ok(
     # region check forward pass --------------------------------------------------------
     check_forward(
         test_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
         reference_values=reference_outputs,
         reference_shapes=reference_shapes,
     )
@@ -652,8 +683,8 @@ def assert_model_ok(
     # region check backward pass -------------------------------------------------------
     check_backward(
         test_obj,
-        input_args=input_args,
-        input_kwargs=input_kwargs,
+        args=args,
+        kwargs=kwargs,
         reference_values=reference_gradients,
         reference_shapes=reference_shapes,
         treat_inputs_as_parameters=treat_inputs_as_parameters,
@@ -662,12 +693,10 @@ def assert_model_ok(
     # endregion check backward pass ----------------------------------------------------
 
     if test_optim and isinstance(test_obj, Module):
-        assert_is_trainable(test_obj, input_args=input_args, input_kwargs=input_kwargs)
+        assert_is_trainable(test_obj, args=args, kwargs=kwargs)
 
     if test_jit:
-        assert_jit_compatible(
-            test_obj, input_args=input_args, input_kwargs=input_kwargs
-        )
+        assert_jit_compatible(test_obj, args=args, kwargs=kwargs)
 
 
 def assert_class_ok(
@@ -675,7 +704,7 @@ def assert_class_ok(
     /,
     *,
     init_args: Sequence[Any],
-    init_kwargs: Mapping[str, Any],
+    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
     # input arguments
     **check_model_kwargs: Any,
 ) -> None:

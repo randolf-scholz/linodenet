@@ -593,15 +593,15 @@ wheels = [
 
 [[package]]
 name = "hypothesis"
-version = "6.127.5"
+version = "6.127.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "sortedcontainers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/1b/b6778ec605b5a080a019273abaa85d5d51597a40815506752511092e74f3/hypothesis-6.127.5.tar.gz", hash = "sha256:1c5ce71b6166dda3834791f36b28b78c9d009c46cf4d6fdc4740e95481835724", size = 419824 }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/73/109fbf6f9a76db10ebdbff69b3aba59e3b9ade6fd0702811a9be796702f3/hypothesis-6.127.6.tar.gz", hash = "sha256:9b5292f3f2d505bf0f3e060b1c12f3643fa9b7cd036f41f3456c5f7cc7f73164", size = 419736 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/15/234573ed76ab2b065c562c72b25ade28ed9d46d0efd347a8599a384521a1/hypothesis-6.127.5-py3-none-any.whl", hash = "sha256:060064677c0b10cb659954646b9dd8c446f86d357f63e8ac3998b71170c8dd46", size = 483437 },
+    { url = "https://files.pythonhosted.org/packages/d7/3f/c9d2506f026137bba258c736c9383d1ce198b2e57894411393a111943601/hypothesis-6.127.6-py3-none-any.whl", hash = "sha256:4967702ee2f8c8d7d0d50f14940c3496bd32ac8b8a2b362ace34c722e842d00b", size = 483286 },
 ]
 
 [package.optional-dependencies]
@@ -1233,7 +1233,7 @@ dev = [
     { name = "cmake", specifier = ">=3.31.6" },
     { name = "coverage", specifier = ">=7.6.12" },
     { name = "docutils", specifier = ">=0.21.2" },
-    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.5" },
+    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.6" },
     { name = "ipympl", specifier = ">=0.9.6" },
     { name = "ipywidgets", specifier = ">=8.1.5" },
     { name = "jupyterlab", specifier = ">=4.3.5" },
@@ -1283,7 +1283,7 @@ dev = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20241230" },
     { name = "types-requests", specifier = ">=2.32.0.20250301" },
     { name = "types-setuptools", specifier = ">=75.8.2.20250301" },
-    { name = "types-six", specifier = ">=1.17.0.20241205" },
+    { name = "types-six", specifier = ">=1.17.0.20250304" },
     { name = "types-tabulate", specifier = ">=0.9.0.20241207" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250301" },
     { name = "types-urllib3", specifier = ">=1.26.25.14" },
@@ -1319,7 +1319,7 @@ linters = [
 ]
 tests = [
     { name = "coverage", specifier = ">=7.6.12" },
-    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.5" },
+    { name = "hypothesis", extras = ["numpy", "pandas", "pytest"], specifier = ">=6.127.6" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pygal", specifier = ">=3.0.5" },
@@ -1347,7 +1347,7 @@ typing = [
     { name = "types-pyyaml", specifier = ">=6.0.12.20241230" },
     { name = "types-requests", specifier = ">=2.32.0.20250301" },
     { name = "types-setuptools", specifier = ">=75.8.2.20250301" },
-    { name = "types-six", specifier = ">=1.17.0.20241205" },
+    { name = "types-six", specifier = ">=1.17.0.20250304" },
     { name = "types-tabulate", specifier = ">=0.9.0.20241207" },
     { name = "types-tqdm", specifier = ">=4.67.0.20250301" },
     { name = "types-urllib3", specifier = ">=1.26.25.14" },
@@ -3187,11 +3187,11 @@ wheels = [
 
 [[package]]
 name = "types-six"
-version = "1.17.0.20241205"
+version = "1.17.0.20250304"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ca/01/1e1088033a79faa46d1b0761b5b00f2d50e5f89c567a140d55b79d1f2658/types_six-1.17.0.20241205.tar.gz", hash = "sha256:1f662347a8f3b2bf30517d629d82f591420df29811794b0bf3804e14d716f6e0", size = 15460 }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/41/7cefd7170bad86c30d955d58c3b8fae74ff1a0770a8ababc66d5bcf2f840/types_six-1.17.0.20250304.tar.gz", hash = "sha256:eeb240f9faec63ddd0498d6c0b6abd0496b154a66f960c004d4d733cf31bb4bd", size = 15567 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/c6/67812fcc6c4d6cb469a7f38a293ad6d6effcfb4b599eb0f1ba287878ec0f/types_six-1.17.0.20241205-py3-none-any.whl", hash = "sha256:a4947c2bdcd9ab69d44466a533a15839ff48ddc27223615cb8145d73ab805bc2", size = 20068 },
+    { url = "https://files.pythonhosted.org/packages/aa/a6/25ece9902968d99416c7e001969ca71ee092871e4a0fd3a1c13fb0b3d93c/types_six-1.17.0.20250304-py3-none-any.whl", hash = "sha256:e482df1d439375f4b7c1f2540b1b8584aea82850164a296203ead4a7024fe14f", size = 20071 },
 ]
 
 [[package]]

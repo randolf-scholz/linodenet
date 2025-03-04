@@ -6,7 +6,7 @@ __all__ = [
     # ABCs & Protocols
     "MatrixTest",
     # assert_* functions
-    "assert_close",
+    "assert_all_close",
     "assert_is_trainable",
     "assert_jit_compatible",
     "assert_signatures_compatible",
@@ -52,8 +52,8 @@ __all__ = [
 
 from linodenet.testing._testing import (
     all_finite,
+    assert_all_close,
     assert_class_ok,
-    assert_close,
     assert_is_trainable,
     assert_jit_compatible,
     assert_model_ok,

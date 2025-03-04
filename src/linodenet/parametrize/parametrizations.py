@@ -166,6 +166,9 @@ class CayleyMap(ParametrizationBase):
         - https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map
     """
 
+    Id: Tensor
+    r"""BUFFER: The identity matrix."""
+
     def __init__(self, tensor: Tensor) -> None:
         if not (tensor.ndim == 2 and is_square(tensor)):
             raise ValueError(f"Expected square matrix, got {tensor.shape=}")

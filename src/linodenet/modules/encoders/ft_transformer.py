@@ -368,6 +368,9 @@ class FTTransformer(nn.Module):
 class ResNet(nn.Module):
     r"""Residual Network."""
 
+    category_offsets: Optional[Tensor]
+    r"""BUFFER: Category offsets."""
+
     def __init__(
         self,
         *,
