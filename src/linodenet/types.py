@@ -18,7 +18,7 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from typing import Final, Protocol, Self, SupportsIndex, runtime_checkable
 
 from torch import device, dtype

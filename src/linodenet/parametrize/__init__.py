@@ -38,6 +38,7 @@ __all__ = [
     # Functions
     "deepcopy_with_parametrizations",
     "detach_caches",
+    "get_parametrizations",
     "iter_parametrizations",
     "register_optimizer_hook",
     "update_caches",
@@ -54,6 +55,7 @@ from linodenet.parametrize.base import (
     cached,
     deepcopy_with_parametrizations,
     detach_caches,
+    get_parametrizations,
     is_parametrized,
     iter_parametrizations,
     parametrize,

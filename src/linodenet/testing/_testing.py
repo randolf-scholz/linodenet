@@ -337,7 +337,7 @@ def check_initializable[M: Module](
     module_type: type[M],
     /,
     *,
-    init_args: Sequence[Tree],
+    init_args: tuple[Any, ...],
     init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> M:
     r"""Test if the module is initializable."""
@@ -359,7 +359,7 @@ def check_forward(
     func: Module | Func,
     /,
     *,
-    args: Sequence[Tree],
+    args: tuple[Any, ...],
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional: reference outputs and shapes
     reference_values: Optional[Nested[Tensor]] = None,
@@ -387,7 +387,7 @@ def check_backward(
     module_or_func: Module | Func,
     /,
     *,
-    args: Sequence[Tree],
+    args: tuple[Any, ...],
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # Optional: reference gradients
     reference_values: Optional[Nested[Tensor]] = None,
@@ -479,7 +479,7 @@ def assert_is_trainable(
     module: Module,
     /,
     *,
-    args: Sequence[Tree],
+    args: tuple[Any, ...],
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional
     niter: int = 4,
@@ -531,7 +531,7 @@ def assert_jit_compatible(
     module_or_function: Module | Func,
     /,
     *,
-    args: Sequence[Tree],
+    args: tuple[Any, ...],
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional arguments
     reference_model: Optional[Module | Func] = None,
@@ -610,7 +610,7 @@ def assert_model_ok(
     /,
     *,
     # input arguments
-    args: Sequence[Tree],
+    args: tuple[Any, ...],
     kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # reference arguments
     reference_model: Optional[Module | Func] = None,
@@ -719,7 +719,7 @@ def assert_class_ok(
     model_class: type[Module],
     /,
     *,
-    init_args: Sequence[Any],
+    init_args: tuple[Any, ...],
     init_kwargs: Mapping[str, Any] = EMPTY_MAP,
     # input arguments
     **check_model_kwargs: Any,

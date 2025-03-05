@@ -16,7 +16,7 @@ from linodenet.modules import (
     iResNetBlock,
 )
 from linodenet.modules.system import LinODECell
-from linodenet.testing import check_object
+from linodenet.testing import assert_class_ok
 
 __logger__ = logging.getLogger(__name__)
 CONFIG.autojit = False
@@ -95,10 +95,10 @@ def _make_reference_shapes(
     return [(*batch_sizes, *shape) for shape in shapes]
 
 
-@pytest.mark.parametrize(("model", "params"), MODELS.items())
-def test_all_models(model: type[nn.Module], params: dict) -> None:
+@pytest.mark.parametrize(("cls", "params"), MODELS.items())
+def test_all_models(cls: type[nn.Module], params: dict) -> None:
     r"""Check if initializations, forward and backward runs for all selected models."""
-    LOGGER = __logger__.getChild(model.__name__)
+    LOGGER = __logger__.getChild(cls.__name__)
     LOGGER.info("Testing...")
     initialization = params["initialization"]
     input_shapes = params["input_shapes"]
@@ -116,10 +116,10 @@ def test_all_models(model: type[nn.Module], params: dict) -> None:
         reference_shapes = _make_reference_shapes(
             output_shapes, batch_sizes=batch_sizes
         )
-        check_object(
-            model,
-            init_args=initialization,
-            input_args=inputs,
+        assert_class_ok(
+            cls,
+            init_args=(initialization,),
+            args=(inputs,),
             reference_shapes=reference_shapes,
             device=device,
         )

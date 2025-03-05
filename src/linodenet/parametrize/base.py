@@ -297,7 +297,7 @@ class Parametrization(Protocol):
 
 
 # region base classes ------------------------------------------------------------------
-class ParametrizationBase(nn.Module, Parametrization):
+class ParametrizationBase(nn.Module):
     r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
     original_parameter: nn.Parameter
@@ -313,6 +313,20 @@ class ParametrizationBase(nn.Module, Parametrization):
         # get the tensor to parametrize
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r"""Compute the right inverse of the parametrization.
+
+        The right inverse is such that `parametrization(right_inverse(y)) == y`.
+        I.e. starting from an already parametrized tensor, the right inverse
+        will return the original tensor. This is needed when the original tensor
+        already has a parametrization applied to it and hence belongs to some
+        constraint set.
+
+        Here, we default to the identity function, which is correct for projections,
+        since projections are idempotent. ($y = f(x) ⟹ f(id(y)) = f(y) = f(f(x)) = f(x) = y$)
+        """
+        return y
 
     @abstractmethod
     def forward(self, x: Tensor, /) -> Tensor:
@@ -339,6 +353,33 @@ class ParametrizationBase(nn.Module, Parametrization):
     def update_original(self) -> None:
         pullback = self.right_inverse(self.cached_parameter)
         self.original_parameter.copy_(pullback)
+
+    @jit.export
+    def update_parametrization(self) -> None:
+        r"""Update both the cached and the original tensors.
+
+        This function needs to be called after each `optimizer.step()` call.
+        Internally, it should perform the following steps:
+
+        1. Call `update_cache()` **without gradients**
+            to get the new parametrization given the modified parameters.
+        2. Call `update_original()` **without gradients**
+            to update the original parameters based on the new parametrization.
+        3. Call `detach_cache()` to detach the cached tensors from the autograd engine.
+        4. Call `update_cache()` a second time **with gradients** to re-enable the autograd engine.
+        """
+        with torch.no_grad():
+            # recompute the parametrization given the modified parameters
+            self.update_cache()
+
+            # update the original parameters based on the new parametrization
+            self.update_original()
+
+            # detach the cached tensors from the autograd engine
+            self.detach_cache()
+
+        # re-enable the autograd engine
+        self.update_cache()
 
 
 class ParametrizationList(nn.ModuleList, Parametrization):
@@ -634,7 +675,9 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
         case nn.ModuleDict() as parametrizations:
             return parametrizations
         case jit.RecursiveScriptModule() as parametrizations:
-            warnings.warn("Scripted module! Not all functionality may be available.")
+            warnings.warn(
+                "Scripted module! Not all functionality may be available.", stacklevel=2
+            )
             return parametrizations
         case _:
             raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
@@ -648,44 +691,48 @@ def register_parametrization(
     unsafe: bool = False,
 ) -> None:
     r"""Drop-in replacement for nn.utils.parametrize.register_parametrization."""
-    if tensor_name in getattr(model, "parametrizations", {}):
-        raise NameError(f"{tensor_name} already parametrized!")
-
     tensor = getattr(model, tensor_name)
     if not isinstance(tensor, nn.Parameter):
         raise TypeError(f"{tensor_name} is not a parameter!")
 
-    if isinstance(parametrization, type):  # FIXME: can't use issubclass on Protocol
-        wrapper = parametrization(tensor)
-        if not isinstance(wrapper, Parametrization):
-            raise TypeError(f"{parametrization} is not a parametrization!")
-        if not isinstance(wrapper, nn.Module):
-            raise TypeError(f"{parametrization} is not a nn.Module!")
-    else:
-        wrapper = parametrize(tensor, parametrization)
+    if tensor_name in getattr(model, "parametrizations", {}):
+        raise NameError(f"{tensor_name} already parametrized!")
+
+    match parametrization:
+        case type() as cls:
+            wrapper = cls(tensor)
+        case other:
+            wrapper = parametrize(tensor, parametrization)
+
+    if not isinstance(wrapper, nn.Module) or not isinstance(wrapper, Parametrization):
+        raise TypeError(f"{parametrization} does not produce a valid parametrization!")
 
     if not unsafe:
         assert_is_safe_parametrization(wrapper, tensor)
 
     # add the parametrization to model.parametrizations ModuleDict
-    if not hasattr(model, "parametrizations"):
-        model.parametrizations = nn.ModuleDict({tensor_name: wrapper})
-    else:
-        parametrizations = getattr(model, "parametrizations")
-        if not isinstance(parametrizations, nn.ModuleDict):
-            raise TypeError("model.parametrizations must be a nn.ModuleDict!")
-        parametrizations[tensor_name] = wrapper
+    match ps := getattr(model, "parametrizations", None):
+        case None:
+            model.register_module(
+                "parametrizations",
+                nn.ModuleDict({tensor_name: wrapper}),
+            )
+        case nn.ModuleDict() as parametrizations:
+            parametrizations[tensor_name] = wrapper
+        case _:
+            raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
 
     # add the original tensor to model.parametrized_tensors ParameterDict
-    if not hasattr(model, "parametrized_tensors"):
-        model.parametrized_tensors = nn.ParameterDict({
-            tensor_name: wrapper.original_parameter
-        })
-    else:
-        parametrized_tensors = getattr(model, "parametrized_tensors")
-        if not isinstance(parametrized_tensors, nn.ParameterDict):
+    match ts := getattr(model, "parametrized_tensors", None):
+        case None:
+            model.register_module(
+                "parametrized_tensors",
+                nn.ParameterDict({tensor_name: wrapper.original_parameter}),
+            )
+        case nn.ParameterDict() as parametrized_tensors:
+            parametrized_tensors[tensor_name] = wrapper.original_parameter
+        case _:
             raise TypeError("model.parametrized_tensors must be a nn.ParameterDict!")
-        parametrized_tensors[tensor_name] = wrapper.original_parameter
 
     # add a buffer in place of the original tensor
     delattr(model, tensor_name)
