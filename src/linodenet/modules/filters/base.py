@@ -40,6 +40,7 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
+from enum import StrEnum
 from typing import (
     Any,
     Final,
@@ -212,6 +213,20 @@ class MissingValueFilter(nn.Module):
     # decoder: Optional[nn.Module]
     # r"""The observation model."""
 
+    class ImputationStrategy(StrEnum):
+        r"""The strategy to use for imputation."""
+
+        LAST = "last"
+        r"""Impute with last observed value."""
+        ZERO = "zero"
+        r"""Impute with zeros."""
+        CONSTANT = "constant"
+        r"""Impute with a (possibly non-zero) constant value."""
+        LEARNABLE = "learnable"
+        r"""Impute with a (possibly non-zero) learnable value."""
+        DECODER = "decoder"
+        r"""Impute with decoder."""
+
     def __init__(
         self,
         input_size: int,
@@ -238,21 +253,24 @@ class MissingValueFilter(nn.Module):
             raise TypeError("Decoder must be a nn.Module!")
 
         # initialize imputation strategy
-        self.register_buffer("S", torch.zeros(self.input_size))
         match imputation_strategy:
-            case "default" if self.decoder is not None:
-                self.imputation_strategy = "decoder"
-            case "default" if self.decoder is None:
-                self.imputation_strategy = "zero"
-            case "zero":
-                self.imputation_strategy = "zero"
-            case "last":
-                self.imputation_strategy = "last"
+            case nn.Parameter() as param:
+                strategy = (
+                    self.ImputationStrategy.LEARNABLE
+                    if param.requires_grad
+                    else self.ImputationStrategy.CONSTANT
+                )
+                self.register_parameter("S", param)
             case Tensor() as tensor:
-                self.imputation_strategy = "constant"
-                self.S = tensor
-            case _:
-                raise ValueError(f"Invalid imputation strategy: {imputation_strategy}")
+                strategy = self.ImputationStrategy.CONSTANT
+                param = nn.Parameter(tensor, requires_grad=False)
+                self.register_parameter("S", param)
+            case str(name):
+                strategy = self.ImputationStrategy(name)
+                self.register_buffer("S", torch.zeros(self.input_size))
+            case other:
+                raise TypeError(f"Expected string or tensor, got {type(other)}")
+        self.imputation_strategy = strategy
 
     @jit.export
     def impute(self, m: Tensor, y: Tensor, x: Tensor) -> Tensor:
