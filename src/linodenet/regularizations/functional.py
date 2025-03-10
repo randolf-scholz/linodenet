@@ -14,7 +14,7 @@ __all__ = [
     "diagonal",
     "hamiltonian",
     "identity",
-    "logdetexp",
+    "log_det_exp",
     "low_rank",
     "lower_triangular",
     "masked",
@@ -49,7 +49,7 @@ class Regularization(Protocol):
 
 
 # region regularizations ---------------------------------------------------------------
-def logdetexp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
+def log_det_exp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     r"""Bias $\det(e^A)$ towards 1.
 
     .. Signature:: ``(..., n, n) -> ...``

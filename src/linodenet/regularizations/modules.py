@@ -41,7 +41,7 @@ from linodenet.regularizations.functional import (
     diagonal,
     hamiltonian,
     identity,
-    logdetexp,
+    log_det_exp,
     low_rank,
     lower_triangular,
     masked,
@@ -98,7 +98,7 @@ class LogDetExp(RegularizationBase):
 
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias $\det(e^A)$ towards 1."""
-        return logdetexp(x, p=self.p, size_normalize=self.size_normalize)
+        return log_det_exp(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class MatrixNorm(RegularizationBase):
