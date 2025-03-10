@@ -37,9 +37,6 @@ from torch import Tensor, device as Device, dtype as Dtype
 class Initialization(Protocol):
     r"""Protocol for Initializations."""
 
-    __name__: str
-    r"""Name of the initialization."""
-
     def __call__(
         self,
         size: int | tuple[int, ...],

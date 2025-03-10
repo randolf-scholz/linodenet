@@ -593,15 +593,15 @@ wheels = [
 
 [[package]]
 name = "hypothesis"
-version = "6.128.1"
+version = "6.128.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "sortedcontainers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/8c/67b9517d1210eaa15b3026e8dbdee5356bc1c59298cdbe3feef7ad105da9/hypothesis-6.128.1.tar.gz", hash = "sha256:f949f36f2c98f9b859f07fd5404d3ece0f4e0104b8e438c3c27ed6d6c31e2ced", size = 422415 }
+sdist = { url = "https://files.pythonhosted.org/packages/56/21/aacb20704bc69f519526150e97cae8adc54148a2de3c6b4b7ed8d0c92fe4/hypothesis-6.128.2.tar.gz", hash = "sha256:a6e0e61bdb9ee6d1459687e4169e76a7bce830bb88f7e9948c2c1c4c39dd74b3", size = 422443 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/75/bc/ca81fa5931eb16bd75a00f537b8b81e2cd9fb0e417eae5834d2cfa8a76d8/hypothesis-6.128.1-py3-none-any.whl", hash = "sha256:ceef043c5cc56e627a57c8b1976e8f9fd784c1a154c49198b4fb409c55fdcd22", size = 486227 },
+    { url = "https://files.pythonhosted.org/packages/ce/36/58ea6d196dc45a2a3e3bb2dc90368be85b39a84da587ca9bc06ea55bec18/hypothesis-6.128.2-py3-none-any.whl", hash = "sha256:a4815dfb8bccfe26ccffa26e4c50d2f07adb45b1b4c66f4dd23ffbfb8cbf8ed3", size = 486232 },
 ]
 
 [package.optional-dependencies]
@@ -1245,7 +1245,7 @@ dev = [
     { name = "cmake", specifier = ">=3.31.6" },
     { name = "coverage", specifier = ">=7.6.12" },
     { name = "docutils", specifier = ">=0.21.2" },
-    { name = "hypothesis", extras = ["numpy", "pytest"], specifier = ">=6.128.1" },
+    { name = "hypothesis", extras = ["numpy", "pytest"], specifier = ">=6.128.2" },
     { name = "ipympl", specifier = ">=0.9.7" },
     { name = "ipywidgets", specifier = ">=8.1.5" },
     { name = "jupyterlab", specifier = ">=4.3.5" },
@@ -1333,7 +1333,7 @@ linters = [
 ]
 tests = [
     { name = "coverage", specifier = ">=7.6.12" },
-    { name = "hypothesis", extras = ["numpy", "pytest"], specifier = ">=6.128.1" },
+    { name = "hypothesis", extras = ["numpy", "pytest"], specifier = ">=6.128.2" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "pygal", specifier = ">=3.0.5" },

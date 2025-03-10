@@ -27,9 +27,10 @@ from linodenet.utils import deep_dict_update, initialize_from_dict
 class Cell(Protocol):
     r"""Protocol for cells."""
 
-    input_size: Final[int]
+    # TODO: Use
+    input_size: int
     r"""The size of the observable $y$."""
-    hidden_size: Final[int]
+    hidden_size: int
     r"""The size of the hidden state $x$."""
 
     @abstractmethod
@@ -80,12 +81,6 @@ class LinearCell(CellBase):
 
     where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
     """
-
-    # CONSTANTS
-    input_size: Final[int]
-    r"""CONST: The size of the observable $y$."""
-    hidden_size: Final[int]
-    r"""CONST: The size of the hidden state $x$."""
 
     # PARAMETERS
     U: Tensor

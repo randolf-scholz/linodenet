@@ -11,6 +11,8 @@ __all__ = [
     "DeviceArg",
     "DtypeArg",
     "Nested",
+    "NestedDict",
+    "NestedMapping",
     "Range",
     "Scalar",
     "Shape",
@@ -19,7 +21,7 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Final, Protocol, Self, SupportsIndex, runtime_checkable
+from typing import Final, Mapping, Protocol, Self, SupportsIndex, runtime_checkable
 
 from torch import device, dtype
 
@@ -34,6 +36,10 @@ type Shape = tuple[int, ...]
 r"""Type hint for shape-like inputs."""
 type Size = tuple[int, ...] | list[int]
 r"""Type hint for size-like inputs."""
+type NestedMapping[K, V] = Mapping[K, V | "NestedMapping[K, V]"]
+r"""Generic Type Alias for nested `Mapping`."""
+type NestedDict[K, V] = dict[K, V | "NestedDict[K, V]"]
+r"""Generic Type Alias for nested `dict`."""
 # endregion static type aliases --------------------------------------------------------
 
 

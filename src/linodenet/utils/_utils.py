@@ -2,8 +2,6 @@ r"""Utility functions."""
 
 __all__ = [
     # Types
-    "NestedMapping",
-    "NestedDict",
     # Functions
     "autojit",
     "deep_dict_update",
@@ -29,12 +27,9 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.config import CONFIG
+from linodenet.types import NestedDict, NestedMapping
 
 __logger__ = logging.getLogger(__name__)
-type NestedMapping[K, V] = Mapping[K, V | "NestedMapping[K, V]"]
-r"""Generic Type Alias for nested `Mapping`."""
-type NestedDict[K, V] = dict[K, V | "NestedDict[K, V]"]
-r"""Generic Type Alias for nested `dict`."""
 
 
 def autojit[M: nn.Module](base_class: type[M], /) -> type[M]:

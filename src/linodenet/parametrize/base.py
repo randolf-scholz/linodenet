@@ -85,6 +85,7 @@ __all__ = [
     "assert_is_safe_parametrization",
     "deepcopy_with_parametrizations",
     "detach_caches",
+    "get_parametrizations",
     "iter_parametrizations",
     "register_optimizer_hook",
     "update_caches",
@@ -203,10 +204,11 @@ class Parametrization(Protocol):
         - "cached tensor" refers to the tensor that is used to cache the parametrization.
     """
 
-    original_parameter: nn.Parameter
-    r"""PARAM: Holds parametrized tensors."""
-    cached_parameter: Tensor
-    r"""BUFFER: Holds cached version of the parametrized tensor."""
+    # NOTE: We do not add attributes to the parametrization to avoid making a Data Protocol.
+    # original_parameter: nn.Parameter
+    # r"""PARAM: Holds parametrized tensors."""
+    # cached_parameter: Tensor
+    # r"""BUFFER: Holds cached version of the parametrized tensor."""
 
     @abstractmethod
     def __init__(self, tensor: Tensor, /) -> None:
@@ -221,6 +223,11 @@ class Parametrization(Protocol):
     def apply_parametrization(self) -> Any:
         r"""Compute the parametrization, takes NO parameters."""
         ...
+
+    @abstractmethod
+    def get_original_tensor(self) -> Tensor: ...
+    @abstractmethod
+    def get_cached_tensor(self) -> Tensor: ...
 
     # mixin  methods
 
@@ -238,14 +245,13 @@ class Parametrization(Protocol):
         """
         return y
 
-    @abstractmethod
     def detach_cache(self) -> None:
         r"""Detach the cached tensors from the autograd engine.
 
         This method should be called after `update_original()` to avoid
         "Trying to backward through the graph a second time" error.
         """
-        self.cached_parameter.detach_()
+        self.get_cached_tensor().detach_()
 
     @jit.export
     def update_cache(self) -> None:
@@ -255,7 +261,7 @@ class Parametrization(Protocol):
             This method should use inplace `copy_` operations to update the cached tensors.
         """
         new_tensor = self.apply_parametrization()
-        self.cached_parameter.copy_(new_tensor)
+        self.get_cached_tensor().copy_(new_tensor)
 
     @jit.export
     @torch.no_grad()
@@ -267,8 +273,8 @@ class Parametrization(Protocol):
             - Use inplace `copy_` operations to update the original tensors.
             - Always decorate with `torch.no_grad()`.
         """
-        pullback = self.right_inverse(self.cached_parameter)
-        self.original_parameter.copy_(pullback)
+        pullback = self.right_inverse(self.get_cached_tensor())
+        self.get_original_tensor().copy_(pullback)
 
     @jit.export
     def update_parametrization(self) -> None:
@@ -294,7 +300,7 @@ class Parametrization(Protocol):
             # detach the cached tensors from the autograd engine
             # This method should be called after `update_original()` to avoid
             #         "Trying to backward through the graph a second time" error.
-            self.cached_parameter.detach_()
+            self.detach_cache()
 
         # re-enable the autograd engine
         self.update_cache()
@@ -318,6 +324,27 @@ class ParametrizationBase(nn.Module):
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
 
+    @abstractmethod
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Apply the parametrization."""
+        ...
+
+    # implement protocol methods:
+    @jit.export
+    def get_original_tensor(self) -> Tensor:
+        r"""Get the original tensor from the cached tensor."""
+        return self.original_parameter
+
+    @jit.export
+    def get_cached_tensor(self) -> Tensor:
+        r"""Get the cached tensor from the original tensor."""
+        return self.cached_parameter
+
+    @jit.export
+    def apply_parametrization(self) -> Tensor:
+        r"""Apply the parametrization to the weight matrix."""
+        return self.forward(self.original_parameter)
+
     def right_inverse(self, y: Tensor) -> Tensor:
         r"""Compute the right inverse of the parametrization.
 
@@ -331,16 +358,6 @@ class ParametrizationBase(nn.Module):
         since projections are idempotent. ($y = f(x) ⟹ f(id(y)) = f(y) = f(f(x)) = f(x) = y$)
         """
         return y
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Apply the parametrization."""
-        ...
-
-    @jit.export
-    def apply_parametrization(self) -> Tensor:
-        r"""Apply the parametrization to the weight matrix."""
-        return self.forward(self.original_parameter)
 
     @jit.export
     @torch.no_grad()
@@ -690,7 +707,11 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
 def register_parametrization(
     model: nn.Module,
     tensor_name: str,
-    parametrization: type[Parametrization] | nn.Module | Fn[[Tensor], Tensor],
+    parametrization: Fn[[Tensor], Tensor]
+    | type[Parametrization]
+    | type[nn.Module]
+    | Parametrization
+    | nn.Module,
     *,
     unsafe: bool = False,
 ) -> None:
@@ -702,6 +723,8 @@ def register_parametrization(
     if tensor_name in getattr(model, "parametrizations", {}):
         raise NameError(f"{tensor_name} already parametrized!")
 
+    # assign the wrapper
+    wrapper: Parametrization
     match parametrization:
         case type() as cls:
             wrapper = cls(tensor)
@@ -740,7 +763,7 @@ def register_parametrization(
 
     # add a buffer in place of the original tensor
     delattr(model, tensor_name)
-    model.register_buffer(tensor_name, wrapper.cached_parameter)
+    model.register_buffer(tensor_name, wrapper.get_cached_tensor())
 
     # initialize the parametrization
     wrapper.update_parametrization()

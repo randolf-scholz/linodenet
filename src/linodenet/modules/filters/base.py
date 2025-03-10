@@ -55,6 +55,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.modules.filters.cells import Cell
+from linodenet.utils import try_initialize_from_config
 
 
 @runtime_checkable
@@ -69,23 +70,7 @@ class Filter(Cell, Protocol):
     Attributes:
         input_size: The size of the observable $y$.
         hidden_size: The size of the hidden state $x$.
-        bias: Whether to include a bias term or not.
     """
-
-    # SUBMODULES
-    decoder: Optional[nn.Module] = None
-    r"""The observation model."""
-
-    @abstractmethod
-    def __init__(
-        self,
-        /,
-        input_size: int,
-        hidden_size: int,
-        *,
-        bias: bool = True,
-        decoder: Optional[nn.Module] = None,
-    ) -> None: ...
 
     @abstractmethod
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
@@ -205,7 +190,7 @@ class MissingValueFilter(nn.Module):
     # BUFFERS
     S: Tensor
     r"""A buffer for the substitute tensor."""
-    HP = {}
+    HP: dict = {}
 
     # SUBMODULES
     # filter: Filter
@@ -246,7 +231,7 @@ class MissingValueFilter(nn.Module):
         options = dict(filter_kwargs)
         filter_input_size = self.input_size * (1 + self.concat_mask)
         options.update(input_size=filter_input_size, hidden_size=self.hidden_size)
-        self.filter = filter_from_config(filter_type, **options)
+        self.filter = try_initialize_from_config(filter_type, **options)
         self.decoder = getattr(self.filter, "decoder", None)
 
         if self.decoder is not None and not isinstance(self.decoder, nn.Module):
@@ -328,7 +313,7 @@ class ResidualFilter(FilterBase):
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         options = dict(filter_kwargs)
         options.update(input_size=self.input_size, hidden_size=self.hidden_size)
-        self.filter: FilterBase = filter_from_config(filter_type, **options)
+        self.filter: FilterBase = try_initialize_from_config(filter_type, **options)
         self.decoder = self.filter.decoder
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:

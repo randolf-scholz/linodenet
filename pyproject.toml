@@ -85,7 +85,7 @@ linters = [
 ]
 tests = [
     "coverage>=7.6.12",
-    "hypothesis[numpy,pytest]>=6.128.1",
+    "hypothesis[numpy,pytest]>=6.128.2",
     "matplotlib>=3.10.1",
     "psutil>=7.0.0",
     "pygal>=3.0.5",

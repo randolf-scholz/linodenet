@@ -2,6 +2,10 @@
 
 These are the 10 steps to contributing to the project.
 
+1. Fork the project
+2. Create a branch
+
+
 ## 1. Fork the GitLab project from <https://github.com/randolf-scholz/linodenet>
 
 Use your personal namespace, e.g. <https://github.com/$USER/linodenet>.
@@ -15,29 +19,11 @@ cd linodenet
 
 ### 3. Set up the virtual environment
 
-Via `poetry` (recommended).
+Via `uv` (recommended)
 
 ```bash
-pip install --upgrade poetry
-poetry shell
-poetry install
-```
-
-Via `conda` (You may have to rename `tables` ⟶ `pytables` and `torch` ⟶ `pytorch`).
-
-```bash
-conda create --name linodenet --file requirements.txt
-conda activate linodenet
-conda install --file requirements-dev.txt
-```
-
-Via `pip`.
-
-```bash
-sudo apt install python3.10
-python3.10 -m virtualenv .venv
-source .venv/bin/activate
-pip install -e .
+uv venv --seed
+uv sync
 ```
 
 ### 4. Verify that the installation was successful

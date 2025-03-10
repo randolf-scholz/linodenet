@@ -1,24 +1,20 @@
 interfaces = []
-exclude = []
-source_roots = [
-    "src",
+exclude = [
+    "**/*__pycache__",
+    "**/*egg-info",
+    "**/docs",
+    "**/tests",
+    "**/venv",
 ]
+source_roots = [ "src"]
 
 [[modules]]
-path = "<root>"
-depends_on = [
-    { path = "linodenet.activations" },
-    { path = "linodenet.config" },
-    { path = "linodenet.initializations" },
-    { path = "linodenet.lib" },
-    { path = "linodenet.modules" },
-    { path = "linodenet.parametrize" },
-    { path = "linodenet.projections" },
-    { path = "linodenet.regularizations" },
-    { path = "linodenet.testing" },
-    { path = "linodenet.types" },
-    { path = "linodenet.utils" },
-]
+path = "linodenet.initializations"
+depends_on = []
+
+[[modules]]
+path = "linodenet.types"
+depends_on = []
 
 [[modules]]
 path = "linodenet.activations"
@@ -29,69 +25,45 @@ path = "linodenet.config"
 depends_on = []
 
 [[modules]]
-path = "linodenet.constants"
-depends_on = [
-    { path = "linodenet.types" },
-]
-
-[[modules]]
-path = "linodenet.initializations"
-depends_on = []
-
-[[modules]]
-path = "linodenet.lib"
-depends_on = [
-    { path = "<root>" },
-]
-
-[[modules]]
-path = "linodenet.modules"
-depends_on = [
-    { path = "<root>" },
-    { path = "linodenet.activations" },
-    { path = "linodenet.constants" },
-    { path = "linodenet.initializations" },
-    { path = "linodenet.lib" },
-    { path = "linodenet.projections" },
-    { path = "linodenet.types" },
-    { path = "linodenet.utils" },
-]
-
-[[modules]]
-path = "linodenet.parametrize"
-depends_on = [
-    { path = "linodenet.constants" },
-    { path = "linodenet.lib" },
-    { path = "linodenet.projections" },
-    { path = "linodenet.testing" },
-]
+path = "linodenet"
+depends_on = ["linodenet.testing", "linodenet.activations", "linodenet.config", "linodenet.modules", "linodenet.parametrize", "linodenet.initializations", "linodenet.utils", "linodenet.lib", "linodenet.projections", "linodenet.regularizations"]
 
 [[modules]]
 path = "linodenet.projections"
-depends_on = [
-    { path = "linodenet.constants" },
-]
+depends_on = ["linodenet.constants"]
+
+[[modules]]
+path = "linodenet.modules"
+depends_on = ["linodenet.utils", "linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.types", "linodenet.initializations", "linodenet.random", "linodenet.activations"]
+
+[[modules]]
+path = "linodenet.constants"
+depends_on = ["linodenet.types"]
 
 [[modules]]
 path = "linodenet.regularizations"
-depends_on = [
-    { path = "linodenet.constants" },
-    { path = "linodenet.projections" },
-]
+depends_on = ["linodenet.projections", "linodenet.constants"]
 
 [[modules]]
-path = "linodenet.testing"
-depends_on = [
-    { path = "linodenet.constants" },
-    { path = "linodenet.types" },
-]
-
-[[modules]]
-path = "linodenet.types"
+path = "linodenet.lib"
 depends_on = []
 
 [[modules]]
+path = "linodenet.testing"
+depends_on = ["linodenet.constants", "linodenet.types"]
+
+[[modules]]
+path = "linodenet.parametrize"
+depends_on = ["linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.testing"]
+
+[[modules]]
 path = "linodenet.utils"
-depends_on = [
-    { path = "linodenet.config" },
-]
+depends_on = ["linodenet.config", "linodenet.types"]
+
+[[modules]]
+path = "linodenet.generic"
+depends_on = ["linodenet.constants"]
+
+[[modules]]
+path = "linodenet.random"
+depends_on = ["linodenet.types"]
