@@ -76,7 +76,7 @@ class Dirac(Empirical):
     def __init__(self, value: Tensor, /) -> None:
         r"""Initialize the Dirac distribution."""
         super().__init__(value.unsqueeze(0))
-        self.data = value
+        assert self.num_samples == 1, "Dirac distribution must have exactly one sample."
 
     def sample(self, sample_shape: Size = ()) -> Tensor:
         r"""Sample from the Dirac distribution."""

@@ -5,7 +5,6 @@ These are the 10 steps to contributing to the project.
 1. Fork the project
 2. Create a branch
 
-
 ## 1. Fork the GitLab project from <https://github.com/randolf-scholz/linodenet>
 
 Use your personal namespace, e.g. <https://github.com/$USER/linodenet>.

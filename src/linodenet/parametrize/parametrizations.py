@@ -103,6 +103,10 @@ class SpectralNormalization(ParametrizationMulticache):
     r"""CONST: The absolute tolerance for the power method."""
     rtol: Final[float]
     r"""CONST: The relative tolerance for the power method."""
+    cached_tensors: Final[
+        dict[str, Tensor]
+    ]  # NOTE: cannot use nn.ParameterDict due to JIT
+    r"""BUFFER-DICT: Holds auxiliary cached tensors."""
 
     def __init__(
         self,
@@ -155,7 +159,7 @@ class SpectralNormalization(ParametrizationMulticache):
         gamma = torch.minimum(self.ONE, self.GAMMA / sigma)
 
         # return the parametrized weight and the cached singular triplet
-        return gamma * weight, {"sigma": sigma, "u": u, "v": v}
+        return gamma * weight
 
 
 class CayleyMap(ParametrizationBase):

@@ -4,7 +4,8 @@ import torch
 from torch import nn
 
 from linodenet.modules.encoders.linear_contraction import LinearContraction
-from linodenet.parametrize import SpectralNormalization
+from linodenet.parametrize import SpectralNormalization, parametrize
+from linodenet.testing import is_contraction
 
 
 def test_spectral_normalization() -> None:
@@ -50,3 +51,12 @@ def test_spectral_normalization() -> None:
     # weight = spec()["weight"]
     # print(spec())
     # print(weight, torch.linalg.cond(weight), torch.linalg.matrix_norm(weight, ord=2))
+
+
+def test_trainable() -> None:
+    model = nn.Linear(4, 4)
+    with torch.no_grad():
+        model.weight.copy_(4 * torch.eye(4) + torch.randn(4, 4))
+    assert not is_contraction(model.weight)
+    parametrize(model.weight, SpectralNormalization)
+    assert is_contraction(model.weight)

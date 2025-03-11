@@ -23,8 +23,8 @@ R is observed or a hyperparameter.
 __all__ = [
     # Protocols & ABCs
     "ProbabilisticFilter",
-    "DiscreteProbabilisticFilter",
-    "SingleValueProbabilisticFilter",
+    "EmpiricalFilter",
+    "DiracFilter",
     # Classes
     "probabilistic_kalman_filter",
     "discrete_probabilistic_kalman_filter",
@@ -41,7 +41,7 @@ from linodenet.random.distributions.empirical import Dirac, Empirical
 
 
 @runtime_checkable
-class ProbabilisticFilter(Protocol):
+class ProbabilisticFilter[P: Distribution, Q: Distribution](Protocol):
     r"""Protocol for probabilistic filters.
 
     The goal of a probabilistic filter is to update the distribution of the hidden state,
@@ -53,21 +53,21 @@ class ProbabilisticFilter(Protocol):
     """
 
     @abstractmethod
-    def __call__(self, y: Distribution, x: Distribution, /) -> Distribution: ...
+    def __call__(self, y: Q, x: P, /) -> P: ...
 
 
-class DiscreteProbabilisticFilter(Protocol):
-    r"""Protocol for probabilistic filter with discrete observations."""
-
-    @abstractmethod
-    def __call__(self, y: Empirical, x: Distribution, /) -> Distribution: ...
-
-
-class SingleValueProbabilisticFilter(Protocol):
+class DiracFilter[D: Distribution](ProbabilisticFilter[D, Dirac]):
     r"""Protocol for probabilistic filter with single value observations."""
 
     @abstractmethod
-    def __call__(self, y: Dirac, x: Distribution, /) -> Distribution: ...
+    def __call__(self, y: Tensor | Dirac, x: D, /) -> D: ...
+
+
+class EmpiricalFilter[D: Distribution](ProbabilisticFilter[D, Empirical]):
+    r"""Protocol for probabilistic filter with discrete observations."""
+
+    @abstractmethod
+    def __call__(self, y: Tensor | Empirical, x: D, /) -> D: ...
 
 
 def probabilistic_kalman_filter(

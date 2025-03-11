@@ -25,11 +25,24 @@ __all__ = [
     "Filter",
     "FilterBase",
     # Classes
+    "KalmanFilter",
     "MissingValueFilter",
-    "ReZeroFilter",
-    "ResNetFilter",
     "ResidualFilter",
+    "ResNetFilter",
+    "ReZeroFilter",
     "SequentialFilter",
+    # Cells
+    "LinearCell",
+    "LinearKalmanCell",
+    "LinearResidualCell",
+    "NonLinearCell",
+    "NonLinearKalmanCell",
+    "PseudoKalmanCell",
+    "ResidualCell",
+    # Imported
+    "RNNCell",
+    "GRUCell",
+    "LSTMCell",
     # Functions
     "get_filter",
 ]
@@ -40,6 +53,7 @@ from linodenet.modules.filters import probabilistic
 from linodenet.modules.filters.base import (
     Filter,
     FilterBase,
+    KalmanFilter,
     MissingValueFilter,
     ResidualFilter,
     ResNetFilter,
@@ -50,13 +64,10 @@ from linodenet.modules.filters.cells import (
     Cell,
     CellBase,
     LinearCell,
-    NonLinearCell,
-    NonLinearKalmanCell,
-)
-from linodenet.modules.filters.filters import (
-    KalmanFilter,
     LinearKalmanCell,
     LinearResidualCell,
+    NonLinearCell,
+    NonLinearKalmanCell,
     PseudoKalmanCell,
     ResidualCell,
 )
