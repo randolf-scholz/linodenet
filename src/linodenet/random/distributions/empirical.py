@@ -75,12 +75,14 @@ class Dirac(Empirical):
 
     def __init__(self, value: Tensor, /) -> None:
         r"""Initialize the Dirac distribution."""
-        super().__init__(value.unsqueeze(0))
+        super().__init__(value.unsqueeze(dim=0))
         assert self.num_samples == 1, "Dirac distribution must have exactly one sample."
+        # overwrite data with correct squeezed shape.
+        self.data = self.data.squeeze(dim=0)
 
     def sample(self, sample_shape: Size = ()) -> Tensor:
         r"""Sample from the Dirac distribution."""
-        return self.data.expand(sample_shape)
+        return self.data.expand(*sample_shape, *self.event_shape)
 
     def log_prob(self, value: Tensor) -> Tensor:
         r"""Log probability of the Dirac distribution.
