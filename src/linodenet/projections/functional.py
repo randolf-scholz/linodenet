@@ -312,25 +312,27 @@ def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
 
 
 # region other projections -------------------------------------------------------------
-def contraction(x: Tensor) -> Tensor:
+def contraction(x: Tensor, threshold: float | Tensor = 1.0) -> Tensor:
     r"""Return the closest contraction matrix to X.
 
     .. Signature:: ``(..., m, n) -> (..., m, n)``
 
-    .. math:: \min_Y ∥X-Y∥₂  s.t. ‖Y‖₂ ≤ 1
+    .. math:: \min_Y ∥X-Y∥₂  s.t. ‖Y‖₂ ≤ θ
 
     One can show analytically that the unique smallest norm minimizer is
-    $Y = \min(1, σ⁻¹) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
+    $Y = \min(1, θ/σ) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
 
     Proof:
         Apply SVD: $X = UΣV^𝖳$, then, the problem is equivalent to minimizing
-        $∥UΣV^𝖳 - Y‖₂ = ∥Σ - U^𝖳 Y V‖₂ = ∥Σ - Z‖₂$ subject to $‖Z‖₂ ≤ 1$.
+        $∥UΣV^𝖳 - Y‖₂ = ∥Σ - U^𝖳 Y V‖₂ = ∥Σ - Z‖₂$ subject to $‖Z‖₂ ≤ θ$.
         Since $Σ$ is diagonal, one can show the problem is equivalent to minimizing
-        $∥𝛔 - 𝐳‖₂$ subject to $‖𝐳‖_∞ ≤ 1$, where $𝐳 = \text{diag}(Z)$.
-        Which is solved by $𝐳 = \min(1, σ₁⁻¹) 𝛔$.
+        $∥𝛔 - 𝐳‖₂$ subject to $‖𝐳‖_∞ ≤ θ$, where $𝐳 = \text{diag}(Z)$.
+        Which is solved by $𝐳 = \min(1, θ/σ₁)⋅𝛔$.
     """
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
-    return x / sigma.clamp_min(1.0)
+    lipschitz_const = torch.as_tensor(threshold, dtype=x.dtype, device=x.device)
+    factor = torch.minimum(lipschitz_const / sigma, torch.ones_like(sigma))
+    return x * factor
 
 
 def diagonally_dominant(x: Tensor) -> Tensor:

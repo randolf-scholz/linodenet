@@ -64,12 +64,12 @@ def test_projections_work(projection_name: str) -> None:
 
     try:
         y = projection(x)
-    except NotImplementedError:
-        pytest.skip(f"{projection_name} is not implemented.")
+    except NotImplementedError as exc:
+        raise pytest.skip(f"{projection_name} is not implemented.") from exc
 
     try:
         result = matrix_test(y)
-    except NotImplementedError:
-        pytest.skip(f"test for {projection_name} is not implemented.")
+    except NotImplementedError as exc:
+        raise pytest.skip(f"test for {projection_name} is not implemented.") from exc
 
-    assert result is True
+    assert result.item() is True

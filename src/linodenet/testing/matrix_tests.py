@@ -114,7 +114,7 @@ def is_skew_symmetric(
 
 def is_low_rank(
     x: Tensor,
-    rank: int = 1,
+    rank: Tensor | int = 1,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -123,8 +123,11 @@ def is_low_rank(
 
     .. Signature:: ``(..., m, n) -> bool[...]``
     """
+    # move target dims to -1 and -2
+    x = x.movedim(dim, (-2, -1))
     ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
-    return (ranks <= rank).all(dim=dim)
+    target = torch.as_tensor(rank, dtype=ranks.dtype, device=ranks.device)
+    return ranks <= target
 
 
 def is_orthogonal(
