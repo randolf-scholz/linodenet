@@ -96,10 +96,12 @@ def test_validity_initializations(init_name: str) -> None:
     initialization = INITIALIZATIONS[init_name]
     matrix_test = MATRIX_TESTS[test_name]
 
-    shape = 4
+    size = 4
 
-    matrix = initialization(shape)
-    assert matrix_test(matrix), f"{init_name} failed test {test_name}\n{matrix=}."
+    matrix = initialization(size)
+    result = matrix_test(matrix)
+
+    assert result.item(), f"{init_name} failed test {test_name}\n{matrix=}."
 
 
 @pytest.mark.skip

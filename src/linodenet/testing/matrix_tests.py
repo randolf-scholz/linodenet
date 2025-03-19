@@ -426,12 +426,12 @@ def is_diagonally_dominant(
         raise ValueError("Expected square matrix")
 
     x_abs = x.abs()
-    lhs = 2 * x_abs.diagonal(dim1=m, dim2=n)
-    rhs = x_abs.sum(dim=-1)
+    lhs = 2 * x_abs.diagonal(dim1=m, dim2=n)  # (*BS, n)
+    rhs = x_abs.movedim(dim, (-2, -1)).sum(dim=-1)  # (*BS, n)
 
     if strict:
-        return lhs >= ((1 + rtol) * rhs + atol)
-    return lhs >= rhs
+        return (lhs >= ((1 + rtol) * rhs + atol)).all(dim=-1)
+    return (lhs >= rhs).all(dim=-1)
 
 
 def is_forward_stable(

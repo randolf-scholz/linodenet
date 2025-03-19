@@ -14,7 +14,7 @@ from contextlib import AbstractContextManager, ContextDecorator
 from dataclasses import KW_ONLY, dataclass
 from time import perf_counter_ns
 from types import FrameType, TracebackType
-from typing import ClassVar, Literal, Never, Self
+from typing import ClassVar, Literal, Never, Optional, Self
 
 
 class timer(ContextDecorator):
@@ -22,9 +22,9 @@ class timer(ContextDecorator):
 
     LOGGER: ClassVar[logging.Logger] = logging.getLogger(f"{__name__}/{__qualname__}")
 
-    start_time: int
+    start_time: Optional[int] = None
     r"""Start time of the timer."""
-    end_time: int
+    end_time: Optional[int] = None
     r"""End time of the timer."""
 
     def __enter__(self) -> Self:
@@ -55,11 +55,11 @@ class timer(ContextDecorator):
     @property
     def elapsed_time(self) -> int:
         r"""Elapsed time in nanoseconds."""
-        if start_time := getattr(self, "start_time", None) is None:
+        if self.start_time is None:
             raise RuntimeError("Timer has not been started!")
-        if end_time := getattr(self, "end_time", None) is None:
+        if self.end_time is None:
             raise RuntimeError("Timer is still running!")
-        return end_time - start_time
+        return self.end_time - self.start_time
 
     @property
     def elapsed_seconds(self) -> float:
