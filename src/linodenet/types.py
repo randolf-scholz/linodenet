@@ -21,11 +21,11 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import Final, Mapping, Protocol, Self, SupportsIndex, runtime_checkable
+from typing import Final, Protocol, Self, SupportsIndex, runtime_checkable
 
 from torch import device, dtype
 
-# region static type aliases -----------------------------------------------------------
+# region type aliases ------------------------------------------------------------------
 type Scalar = None | bool | int | float
 r"""Type hint for scalar types allowed by torchscript."""
 type DeviceArg = None | str | device  # Literal["cpu", "cuda"]
@@ -36,11 +36,13 @@ type Shape = tuple[int, ...]
 r"""Type hint for shape-like inputs."""
 type Size = tuple[int, ...] | list[int]
 r"""Type hint for size-like inputs."""
+type SizeArg = None | int | list[int] | tuple[int, ...]
+r"""Type hint for size arguments."""
 type NestedMapping[K, V] = Mapping[K, V | "NestedMapping[K, V]"]
 r"""Generic Type Alias for nested `Mapping`."""
 type NestedDict[K, V] = dict[K, V | "NestedDict[K, V]"]
 r"""Generic Type Alias for nested `dict`."""
-# endregion static type aliases --------------------------------------------------------
+# endregion type aliases ---------------------------------------------------------------
 
 
 # region Protocols ---------------------------------------------------------------------
@@ -76,10 +78,13 @@ class HasHyperparameters(Protocol):
 
 @runtime_checkable
 class SupportsSelfAdd(Protocol):
+    r"""Protocol for types that support `__add__` with itself."""
+
     def __add__(self, other: Self, /) -> Self: ...
 
 
 # endregion Protocol -------------------------------------------------------------------
+
 
 # region generic type aliases ----------------------------------------------------------
 type Range[T] = SupportsLenAndGetItem[T] | Iterable[T]

@@ -29,7 +29,7 @@ from typing import Protocol
 import torch
 from torch import Tensor
 
-from linodenet.constants import ATOL, ONE, RTOL, TRUE, ZERO
+from linodenet.constants import ATOL, RTOL, TRUE
 
 
 class MatrixTest(Protocol):
@@ -444,11 +444,13 @@ def is_forward_stable(
     Note:
         An m×n matrix A is forward stable if and only if $𝐄[Aᵢⱼ] = 0$ and $𝐕[Aᵢⱼ] = 1/n$
     """
-    N = x.shape[dim[-1]]
+    num = x.shape[dim[-1]]
     mean = x.mean(dim=dim)
     stdv = x.std(dim=dim)
-    mean_stable = torch.isclose(mean, ZERO, atol=atol, rtol=rtol).all(dim=dim)
-    stdv_stable = torch.isclose(stdv, ONE / N, atol=atol, rtol=rtol).all(dim=dim)
+    zeros = torch.zeros_like(mean)
+    ones = torch.ones_like(stdv)
+    mean_stable = torch.isclose(mean, zeros, atol=atol, rtol=rtol).all(dim=dim)
+    stdv_stable = torch.isclose(stdv, ones / num, atol=atol, rtol=rtol).all(dim=dim)
     return mean_stable & stdv_stable
 
 

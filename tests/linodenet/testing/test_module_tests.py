@@ -9,4 +9,8 @@ def test_forward_stability() -> None:
     def identity(x: Tensor) -> Tensor:
         return x
 
-    assert_forward_stable(identity, [(10, 10)], num_runs=100, rtol=1e-3, atol=1e-3)
+    assert_forward_stable(
+        identity,
+        input_shapes=[(10, 10)],
+        num_runs=100,
+    )

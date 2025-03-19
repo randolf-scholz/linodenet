@@ -11,7 +11,6 @@ import torch
 from torch import Tensor
 
 from linodenet.config import PROJECT
-from linodenet.constants import ONE, ZERO
 from linodenet.initializations import INITIALIZATIONS
 from linodenet.testing import MATRIX_TESTS
 
@@ -75,12 +74,14 @@ def test_normalization_property(
         _make_fig(RESULT_DIR, means, stdvs, init_name)
 
     # check if 𝐄[A⋅x] ≈ 0
-    valid_mean = torch.isclose(means, ZERO, rtol=1e-2, atol=1e-2).float().mean()
+    zeros = torch.zeros_like(means)
+    valid_mean = torch.isclose(means, zeros, rtol=1e-2, atol=1e-2).float().mean()
     assert valid_mean > 0.9, f"Only {valid_mean=:.2%} of means were close to 0!"
     LOGGER.info("%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}")
 
     # check if 𝐕[A⋅x] ≈ 1
-    valid_stdv = torch.isclose(stdvs, ONE, rtol=1e-2, atol=1e-2).float().mean()
+    ones = torch.ones_like(stdvs)
+    valid_stdv = torch.isclose(stdvs, ones, rtol=1e-2, atol=1e-2).float().mean()
     assert valid_stdv > 0.9, f"Only {valid_stdv=:.2%} of stdvs were close to 1!"
     LOGGER.info("%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}")
 

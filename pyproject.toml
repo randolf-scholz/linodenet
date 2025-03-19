@@ -477,6 +477,7 @@ reportConstantRedefinition = false  # we use uppercase for matrices/tensors.
 # NOTE: currently unused https://docs.pytest.org/en/stable/reference/customize.html
 
 [tool.pytest.ini_options]
+xfail_strict = true
 minversion = "8.0"
 testpaths = ["src/", "tests/"]
 addopts = [

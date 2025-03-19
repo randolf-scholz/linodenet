@@ -6,19 +6,19 @@ __all__ = [
     # Functions
     "assert_backward_stable",
     "assert_forward_stable",
-    "check_zero_mean_unit_variance",
     "get_output",
     "is_backward_stable",
     "is_forward_stable",
 ]
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Optional, Protocol
 
 import torch
 from torch import Tensor, nn
 
-from linodenet.constants import ATOL, ONE, RTOL, ZERO
+from linodenet.constants import ATOL, RTOL
+from linodenet.testing.statistics import is_standardized
 
 
 class ModuleTest(Protocol):
@@ -64,40 +64,12 @@ def get_output(func: Callable[..., Tensor], /, *inputs: Tensor) -> Tensor:
 
 
 @torch.no_grad()
-def check_zero_mean_unit_variance(
-    values: Tensor,
-    /,
-    *,
-    batch_dim: int = 0,
-    rtol: float = RTOL,
-    atol: float = ATOL,
-) -> bool:
-    r"""Check if a tensor has zero mean and unit variance."""
-    # compute mean an stdv
-    output_dims = tuple(k for k in range(values.ndim) if k != batch_dim)
-    mean_values = values.mean(dim=output_dims)
-    stdv_values = values.std(dim=output_dims)
-
-    # check if mean is close to 0 and stdv is close to 1 **across all runs** using RMSE
-    # we use RMSE instead of just regular norm since we want to test if the value is close **on average**
-    # since the convergence rate via the law of large numbers is slow (often only O(1/√n)),
-    # It seems fine to use a test where sample size is discounted.
-    mean_rmse = (mean_values - ZERO).abs().pow(2).mean().sqrt()
-    stdv_rmse = (stdv_values - ONE).abs().pow(2).mean().sqrt()
-    mean_valid = mean_rmse <= (rtol * ZERO + atol)
-    stdv_valid = stdv_rmse <= (rtol * ONE + atol)
-
-    return bool(mean_valid) and bool(stdv_valid)
-
-
-@torch.no_grad()
 def is_forward_stable(
     func: Callable[..., Tensor],
     input_shapes: list[tuple[int, ...]],
     *,
     num_runs: int = 100,
-    rtol: float = 1e-3,
-    atol: float = 1e-3,
+    tol: Optional[float] = None,
 ) -> bool:
     r"""Check if the forward pass is stable.
 
@@ -149,7 +121,8 @@ def is_forward_stable(
     # generate random N(0,1) inputs
     inputs = [torch.randn(num_runs, *shape) for shape in input_shapes]
     output = get_output(func, *inputs)
-    return check_zero_mean_unit_variance(output, rtol=rtol, atol=atol)
+    result = is_standardized(output, dim=output.shape[1:], tol=tol)
+    return bool(result.all().item())
 
 
 @torch.no_grad()
@@ -157,10 +130,9 @@ def is_backward_stable(
     func: Callable[..., Tensor],
     input_shapes: list[tuple[int, ...]],
     *,
-    rtol: float = 1e-3,
-    atol: float = 1e-3,
     check_params: bool = False,
     num_runs: int = 100,
+    tol: Optional[float] = None,
 ) -> bool:
     r"""Check if a function is backward stable.
 
@@ -186,19 +158,19 @@ def is_backward_stable(
 
     # check input gradients
     assert all(x.grad is not None for x in inputs)
-    input_grads = (x.grad for x in inputs if x.grad is not None)
+    input_grads = [x.grad for x in inputs if x.grad is not None]
+
     passed &= all(
-        check_zero_mean_unit_variance(grad, rtol=rtol, atol=atol)
-        for grad in input_grads
+        is_standardized(g, dim=g.shape[1:], tol=tol).all().item() for g in input_grads
     )
 
+    # check parameter gradients
     if check_params:
         if not isinstance(func, nn.Module):
             raise TypeError(f"Expected a module, got {type(func)}")
         param_grads = (p.grad for p in func.parameters() if p.grad is not None)
         passed &= all(
-            check_zero_mean_unit_variance(grad, rtol=rtol, atol=atol)
-            for grad in param_grads
+            is_standardized(g, dim=g.shape, tol=tol).item() for g in param_grads
         )
 
     return passed
@@ -210,8 +182,7 @@ def assert_forward_stable(
     input_shapes: list[tuple[int, ...]],
     *,
     num_runs: int = 100,
-    rtol: float = 1e-3,
-    atol: float = 1e-3,
+    tol: Optional[float] = None,
 ) -> None:
     r"""Check if the forward pass is stable.
 
@@ -221,7 +192,8 @@ def assert_forward_stable(
     # generate random N(0,1) inputs
     inputs = [torch.randn(num_runs, *shape) for shape in input_shapes]
     output = get_output(func, *inputs)
-    assert check_zero_mean_unit_variance(output, rtol=rtol, atol=atol)
+    result = is_standardized(output, dim=output.shape[1:], tol=tol)
+    assert result.all().item()
 
 
 @torch.no_grad()
@@ -229,10 +201,9 @@ def assert_backward_stable(
     func: Callable[..., Tensor],
     input_shapes: list[tuple[int, ...]],
     *,
-    rtol: float = 1e-3,
-    atol: float = 1e-3,
-    check_params: bool = False,
     num_runs: int = 100,
+    check_params: bool = False,
+    tol: Optional[float] = None,
 ) -> None:
     r"""Check if a function is backward stable.
 
@@ -240,7 +211,7 @@ def assert_backward_stable(
         AssertionError: If the function is not backward stable.
     """
     # generate random N(0,1) inputs
-    inputs = [
+    inputs: list[Tensor] = [
         torch.randn(num_runs, *shape, requires_grad=True) for shape in input_shapes
     ]
 
@@ -255,11 +226,11 @@ def assert_backward_stable(
     input_grads = (x.grad for x in inputs if x.grad is not None)
 
     for grad in input_grads:
-        assert check_zero_mean_unit_variance(grad, rtol=rtol, atol=atol)
+        assert is_standardized(grad, dim=grad.shape[1:], tol=tol).all().item()
 
     if check_params:
         if not isinstance(func, nn.Module):
             raise TypeError(f"Expected a module, got {type(func)}")
         param_grads = (p.grad for p in func.parameters() if p.grad is not None)
         for grad in param_grads:
-            assert check_zero_mean_unit_variance(grad, rtol=rtol, atol=atol)
+            assert is_standardized(grad, dim=grad.shape, tol=tol).item()
