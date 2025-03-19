@@ -312,7 +312,7 @@ def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
 
 
 # region other projections -------------------------------------------------------------
-def contraction(x: Tensor, threshold: float | Tensor = 1.0) -> Tensor:
+def contraction(x: Tensor, lipschitz_const: float = 1.0) -> Tensor:
     r"""Return the closest contraction matrix to X.
 
     .. Signature:: ``(..., m, n) -> (..., m, n)``
@@ -330,7 +330,6 @@ def contraction(x: Tensor, threshold: float | Tensor = 1.0) -> Tensor:
         Which is solved by $𝐳 = \min(1, θ/σ₁)⋅𝛔$.
     """
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
-    lipschitz_const = torch.as_tensor(threshold, dtype=x.dtype, device=x.device)
     factor = torch.minimum(lipschitz_const / sigma, torch.ones_like(sigma))
     return x * factor
 
