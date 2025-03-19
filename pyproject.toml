@@ -30,7 +30,7 @@ classifiers = [
 # dependencies
 requires-python = ">=3.12"
 dependencies = [
-    "numpy>=2.2.3",
+    "numpy>=2.2.4",
     "scipy>=1.15.2",
     "torch>=2.6.0",
 ]
@@ -57,7 +57,7 @@ debug = [
     "ipympl>=0.9.7",
     "ipywidgets>=8.1.5",
     "jupyterlab-execute-time>=3.2.0",
-    "jupyterlab>=4.3.5",
+    "jupyterlab>=4.3.6",
     "psutil>=7.0.0",
     "torchinfo>=1.8.0",
 ]
@@ -78,14 +78,14 @@ docs = [
     "sphinx>=8.2.3",
 ]
 linters = [
-    "pre-commit>=4.1.0",
+    "pre-commit>=4.2.0",
     "pylint>=3.3.5",
-    "ruff>=0.10.0",
+    "ruff>=0.11.0",
     "tach>=0.28.1",
 ]
 tests = [
-    "coverage>=7.6.12",
-    "hypothesis[numpy,pytest]>=6.129.1",
+    "coverage>=7.7.0",
+    "hypothesis[numpy,pytest]>=6.129.4",
     "matplotlib>=3.10.1",
     "psutil>=7.0.0",
     "pygal>=3.0.5",
@@ -100,22 +100,22 @@ tests = [
 ]
 typing = [
     "mypy>=1.15.0",
-    "pyright>=1.1.396",
+    "pyright>=1.1.397",
     "types-colorama>=0.4.15.20240311",
     "types-decorator>=5.2.0.20250224",
     "types-docutils>=0.21.0.20241128",
     "types-jsonschema>=4.23.0.20241208",
     "types-pillow>=10.2.0.20240822",
-    "types-protobuf>=5.29.1.20250208",
+    "types-protobuf>=5.29.1.20250315",
     "types-psutil>=7.0.0.20250218",
     "types-pygments>=2.19.0.20250305",
-    "types-pytz>=2025.1.0.20250204",
+    "types-pytz>=2025.1.0.20250318",
     "types-pyyaml>=6.0.12.20241230",
     "types-requests>=2.32.0.20250306",
     "types-setuptools>=76.0.0.20250313",
     "types-six>=1.17.0.20250304",
     "types-tabulate>=0.9.0.20241207",
-    "types-tqdm>=4.67.0.20250301",
+    "types-tqdm>=4.67.0.20250319",
     "types-urllib3>=1.26.25.14",
     "typing-extensions>=4.12.2",
 ]
