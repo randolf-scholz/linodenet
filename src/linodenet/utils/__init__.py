@@ -5,7 +5,6 @@ __all__ = [
     "config",
     "context",
     # Functions
-    "autojit",
     "deep_dict_update",
     "initialize_from_dict",
     "initialize_from_type",
@@ -16,7 +15,6 @@ __all__ = [
 
 from linodenet.utils import config, context
 from linodenet.utils._utils import (
-    autojit,
     deep_dict_update,
     initialize_from_dict,
     initialize_from_type,

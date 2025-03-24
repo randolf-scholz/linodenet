@@ -8,6 +8,15 @@ exclude = [
 ]
 source_roots = [ "src"]
 
+
+[[modules]]
+path = "linodenet.lib"
+depends_on = []
+
+[[modules]]
+path = "linodenet.torch_generic"
+depends_on = []
+
 [[modules]]
 path = "linodenet.initializations"
 depends_on = []
@@ -25,27 +34,7 @@ path = "linodenet.config"
 depends_on = []
 
 [[modules]]
-path = "linodenet"
-depends_on = ["linodenet.testing", "linodenet.activations", "linodenet.config", "linodenet.modules", "linodenet.parametrize", "linodenet.initializations", "linodenet.utils", "linodenet.lib", "linodenet.projections", "linodenet.regularizations"]
-
-[[modules]]
-path = "linodenet.projections"
-depends_on = ["linodenet.constants"]
-
-[[modules]]
-path = "linodenet.modules"
-depends_on = ["linodenet.utils", "linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.types", "linodenet.initializations", "linodenet.random", "linodenet.activations"]
-
-[[modules]]
 path = "linodenet.constants"
-depends_on = ["linodenet.types"]
-
-[[modules]]
-path = "linodenet.regularizations"
-depends_on = ["linodenet.projections", "linodenet.constants"]
-
-[[modules]]
-path = "linodenet.lib"
 depends_on = []
 
 [[modules]]
@@ -53,17 +42,29 @@ path = "linodenet.testing"
 depends_on = ["linodenet.constants", "linodenet.types"]
 
 [[modules]]
+path = "linodenet.random"
+depends_on = ["linodenet.types"]
+
+[[modules]]
+path = "linodenet.projections"
+depends_on = ["linodenet.constants"]
+
+[[modules]]
+path = "linodenet.utils"
+depends_on = [ "linodenet.types"]
+
+[[modules]]
+path = "linodenet.regularizations"
+depends_on = ["linodenet.projections", "linodenet.constants"]
+
+[[modules]]
 path = "linodenet.parametrize"
 depends_on = ["linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.testing"]
 
 [[modules]]
-path = "linodenet.utils"
-depends_on = ["linodenet.config", "linodenet.types"]
+path = "linodenet.modules"
+depends_on = ["linodenet.utils", "linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.types", "linodenet.initializations", "linodenet.random", "linodenet.activations"]
 
 [[modules]]
-path = "linodenet.generic"
-depends_on = ["linodenet.constants"]
-
-[[modules]]
-path = "linodenet.random"
-depends_on = ["linodenet.types"]
+path = "linodenet"
+depends_on = ["linodenet.testing", "linodenet.activations", "linodenet.config", "linodenet.modules", "linodenet.parametrize", "linodenet.initializations", "linodenet.utils", "linodenet.lib", "linodenet.projections", "linodenet.regularizations"]

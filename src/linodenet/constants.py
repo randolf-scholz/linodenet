@@ -11,7 +11,6 @@ __all__ = [
     "EMPTY_SIZE",
     "EPS",
     "FALSE",
-    "IDENTITY",
     "NAN",
     "NEG_INF",
     "ONE",
@@ -34,8 +33,6 @@ import torch
 from numpy.random import Generator
 from torch import BoolTensor, FloatTensor
 
-from linodenet.types import Identity
-
 
 class FLOAT(float, Enum):
     r"""Enum: Common floating point values."""
@@ -52,14 +49,6 @@ class FLOAT(float, Enum):
     ROOT_3 = math.sqrt(3)
 
 
-# region function constants ------------------------------------------------------------
-IDENTITY: Final[Identity] = lambda x: x  # noqa: E731
-r"""Constant: Identity function."""
-EMPTY_FN: Final[Callable[..., None]] = lambda *_, **__: None  # noqa: E731
-r"""Constant: Empty function, use as default in function signatures."""
-# endregion function constants ---------------------------------------------------------
-
-
 # region collection constants ----------------------------------------------------------
 EMPTY_MAP: Final[Mapping[Any, Never]] = MappingProxyType({})  # FIXME: PEP 603
 r"""Constant: Immutable empty `Mapping`, use as default in function signatures."""
@@ -67,6 +56,8 @@ EMPTY_SET: Final[frozenset[Any]] = frozenset()
 r"""Constant: Immutable empty `Set`, use as default in function signatures."""
 EMPTY_SIZE: Final[torch.Size] = torch.Size([])
 r"""Constant: Empty shape."""
+EMPTY_FN: Final[Callable[..., None]] = lambda *_, **__: None  # noqa: E731
+r"""Constant: Empty function, use as default in function signatures."""
 # endregion collection constants -------------------------------------------------------
 
 

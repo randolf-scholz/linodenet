@@ -3,7 +3,6 @@ r"""Utility functions."""
 __all__ = [
     # Types
     # Functions
-    "autojit",
     "deep_dict_update",
     "initialize_from_dict",
     "initialize_from_type",
@@ -19,59 +18,15 @@ __all__ = [
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
-from functools import wraps
 from importlib import import_module
-from typing import Any, Self, cast, overload
+from typing import Any, cast, overload
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.config import CONFIG
 from linodenet.types import NestedDict, NestedMapping
 
 __logger__ = logging.getLogger(__name__)
-
-
-def autojit[M: nn.Module](base_class: type[M], /) -> type[M]:
-    r"""Class decorator that enables automatic jitting of nn.Modules upon instantiation.
-
-    Makes it so that
-
-    >>> class MyModule: ...
-    >>> model = jit.script(MyModule())
-
-    and
-
-    >>> class MyModule: ...
-    >>> model = MyModule()
-
-    are (roughly?) equivalent.
-    """
-    if not isinstance(base_class, type):
-        raise TypeError("Expected a class.")
-    if not issubclass(base_class, nn.Module):
-        raise TypeError("Expected a subclass of nn.Module.")
-
-    @wraps(base_class, updated=())
-    class WrappedClass(base_class):  # type: ignore[valid-type,misc]
-        r"""A simple Wrapper."""
-
-        def __new__(cls, *args: Any, **kwargs: Any) -> Self:
-            # NOTE: If __new__() does not return an instance of cls,
-            #   then the new instance's __init__() method will not be invoked.
-            instance = base_class(*args, **kwargs)
-
-            if CONFIG.autojit:
-                scripted = jit.script(instance)
-                return scripted  # type: ignore[return-value]
-            return instance  # type: ignore[return-value]
-
-    if not isinstance(WrappedClass, type):
-        raise TypeError(f"Expected a class, got {WrappedClass}.")
-    if not issubclass(WrappedClass, base_class):
-        raise TypeError(f"Expected {WrappedClass} to be a subclass of {base_class}.")
-
-    return WrappedClass  # pyright: ignore[reportReturnType]
 
 
 def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict:

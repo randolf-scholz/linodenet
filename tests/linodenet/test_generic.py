@@ -6,9 +6,8 @@ from typing import TYPE_CHECKING, assert_type
 import torch
 from torch import Tensor, nn
 
-from linodenet.generic import ModuleMapping, ModuleSequence
-from linodenet.testing import check_jit_serializable
-from linodenet.testing._testing import assert_jit_compatible
+from linodenet.testing import assert_jit_compatible
+from linodenet.torch_generics import ModuleMapping, ModuleSequence
 
 BATCH_SIZE = 5
 
