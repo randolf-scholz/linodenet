@@ -52,8 +52,8 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     # Native Backward
     with timer() as time:
         s_native.backward()
-        assert A_native.grad is not None
-        g_native = A_native.grad.clone().detach()
+    assert A_native.grad is not None
+    g_native = A_native.grad.clone().detach()
     time_grad_native = time.elapsed_time
 
     # Custom Forward
@@ -65,8 +65,8 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     # Custom Backward
     with timer() as time:
         s_custom.backward()
-        assert A_custom.grad is not None
-        g_custom = A_custom.grad.clone().detach()
+    assert A_custom.grad is not None
+    g_custom = A_custom.grad.clone().detach()
     time_grad_custom = time.elapsed_time
 
     err_value = torch.norm(s_custom - s_native) / torch.norm(s_native)

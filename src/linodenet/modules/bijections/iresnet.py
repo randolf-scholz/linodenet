@@ -20,6 +20,7 @@ from torch.nn import functional
 
 from linodenet.activations import MODULAR_ACTIVATIONS, Activation
 from linodenet.modules.layers import ReZero
+from linodenet.torch_generics import ModuleSequence
 from linodenet.utils import deep_dict_update
 
 
@@ -304,12 +305,12 @@ class iResNetLayer(nn.Module):
         self.register_buffer("converged", torch.tensor(False))
 
     @jit.export
-    def forward(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n) -> (..., n)``."""
         return x + self.layer(x)
 
     @jit.export
-    def inverse(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
         Terminates once ``maxiter`` or tolerance threshold
@@ -437,12 +438,12 @@ class iResNetBlock(nn.Module):
         # print(json.dumps(self.HP, indent=2))
 
     @jit.export
-    def forward(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n) -> (..., n)``."""
         return x + self.bottleneck(x)
 
     @jit.export
-    def inverse(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
         Terminates once ``maxiter`` or tolerance threshold
@@ -531,16 +532,16 @@ class iResNet(nn.Module):
         for _ in range(self.nblocks):
             blocks += [iResNetBlock(**HP["iResNetBlock"])]
 
-        self.blocks: nn.Sequential = nn.Sequential(*blocks)
+        self.blocks = ModuleSequence(blocks)
 
     @jit.export
-    def forward(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n) -> (..., n)``."""
         return self.blocks(x)
 
     @jit.export
-    def inverse(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fix point iteration in each block in reversed order."""
         for block in self.blocks[::-1]:  # traverse in reverse
-            y = block.inverse(y)
+            y = block.decode(y)
         return y

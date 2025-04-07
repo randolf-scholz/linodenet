@@ -144,8 +144,8 @@ def all_close(
                 all_close(mapping[key], reference[key], rtol=rtol, atol=atol)
                 for key in mapping
             )
-        case Iterable() as sequence:
-            assert isinstance(reference, Iterable)
+        case Sequence() as sequence:
+            assert isinstance(reference, Sequence)
             return all(
                 all_close(output, target, rtol=rtol, atol=atol)
                 for output, target in zip(sequence, reference, strict=True)
@@ -253,10 +253,13 @@ def get_parameters(x: Module | Tree, /) -> list[Tensor]:
     return [w for w in iter_tensors(x) if w.requires_grad]
 
 
-def zero_grad(x: Module | Tree, /) -> None:
+def zero_grad(x: Module | Tree | Func, /) -> None:
     r"""Sets gradients of the model / parameters to None."""
     if isinstance(x, Module):
         x.zero_grad(set_to_none=True)
+        return
+
+    if callable(x):  # stateless function
         return
 
     for w in iter_tensors(x):
@@ -651,39 +654,6 @@ def assert_model_ok(
     test_obj, args, kwargs = to_device((test_obj, args, kwargs), device=device)
     ref_model = to_device(ref_model, device=device)
     # endregion change device ----------------------------------------------------------
-
-    # # region get parameters ------------------------------------------------------------
-    # model_parameters = get_parameters(model) if isinstance(model, Module) else []
-    #
-    # # get parameters of input tensors
-    # if make_inputs_parameters:
-    #     input_args = make_tensors_parameters(input_args)
-    #     input_kwargs = make_tensors_parameters(input_kwargs)
-    #     input_parameters = get_parameters((input_args, input_kwargs))
-    # else:
-    #     input_parameters = []
-    #
-    # parameters = model_parameters + input_parameters
-    # # endregion get parameters model ---------------------------------------------------
-
-    # # region get reference model -------------------------------------------------------
-    # if reference_model is not None:
-    #     assert reference_outputs is None, "Both reference model & outputs given!"
-    #     assert reference_gradients is None, "Both reference model & gradients given!"
-    #
-    #     try:
-    #         reference_model.to(device=device)
-    #         reference_outputs = reference_model(*input_args, **input_kwargs)
-    #         reference_parameters = get_parameters(reference_model) + input_parameters
-    #         assert reference_outputs is not None
-    #         r = get_norm(reference_outputs)
-    #         r.backward()
-    #         reference_gradients = get_grads(reference_parameters)
-    #         zero_grad(reference_parameters)
-    #     except Exception as exc:
-    #         raise RuntimeError("Reference model failed forward/backward pass!") from exc
-    #     logger.info(">>> Reference model forward/backward ✔ ")
-    # # endregion get reference model ----------------------------------------------------
 
     # region check forward pass --------------------------------------------------------
     check_forward(

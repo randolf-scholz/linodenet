@@ -31,5 +31,5 @@ class MultiVariateNormal(dist.MultivariateNormal):
         r"""Multiply by a tensor."""
         return self.__class__(
             scale @ self.mean,
-            scale @ self.covariance_matrix @ scale.T,
+            scale @ self.covariance_matrix @ scale.T,  # pyright: ignore[reportOperatorIssue]
         )

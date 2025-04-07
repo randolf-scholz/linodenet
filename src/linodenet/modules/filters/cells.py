@@ -56,10 +56,10 @@ from linodenet.utils import deep_dict_update, initialize_from_dict
 class Cell(Protocol):
     r"""Protocol for cells."""
 
-    # TODO: Use
-    input_size: int
+    # FIXME: python 3.14 use ReadOnly instead (https://peps.python.org/pep-0767)
+    input_size: Final[int]  # type: ignore[misc]
     r"""The size of the observable $y$."""
-    hidden_size: int
+    hidden_size: Final[int]  # type: ignore[misc]
     r"""The size of the hidden state $x$."""
 
     @abstractmethod

@@ -65,7 +65,7 @@ class ConfigMetaclass(ABCMeta):
             raise ValueError(f"ALLCAPS fields are reserved!Found {ALLCAPS_FIELDS!r}.")
 
         NAME = config_type.__qualname__.rsplit(".", maxsplit=1)[0]
-        patched_fields = [
+        patched_fields: list[tuple] = [
             ("_", KW_ONLY),
             ("NAME", str, field(default=NAME)),
             ("MODULE", str, field(default=attrs["__module__"])),

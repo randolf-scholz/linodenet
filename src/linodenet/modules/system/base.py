@@ -7,7 +7,7 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Protocol, runtime_checkable
+from typing import Final, Protocol, runtime_checkable
 
 from torch import Tensor, nn
 
@@ -15,6 +15,9 @@ from torch import Tensor, nn
 @runtime_checkable
 class System(Protocol):
     r"""Protocol for System Components."""
+
+    input_size: Final[int]  # type: ignore[misc]
+    r"""CONST: The dimensionality of inputs."""
 
     def __call__(self, dt: Tensor, z: Tensor, /) -> Tensor:
         r"""Forward pass of the system.

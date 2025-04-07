@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Final, Protocol, Self, SupportsIndex, runtime_checkable
 
 from torch import device, dtype
@@ -89,6 +89,6 @@ class SupportsSelfAdd(Protocol):
 # region generic type aliases ----------------------------------------------------------
 type Range[T] = SupportsLenAndGetItem[T] | Iterable[T]
 r"""Type hint for ranges of values."""
-type Nested[T] = T | Mapping[str, Nested[T]] | Iterable[Nested[T]]
+type Nested[T] = T | Mapping[str, Nested[T]] | Sequence[Nested[T]]
 r"""Type hint for nested types."""
 # endregion type aliases ---------------------------------------------------------------

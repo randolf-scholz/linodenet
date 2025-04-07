@@ -208,4 +208,4 @@ class Sum[X, Y: SupportsSelfAdd](nn.ModuleList):
 
     def forward(self, arg: X, /) -> Y:
         r""".. Signature:: ``... -> ...``."""
-        return sum(module(arg) for module in self)
+        return sum(module(arg) for module in self)  # pyright: ignore[reportReturnType]

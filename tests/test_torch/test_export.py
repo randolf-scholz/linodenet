@@ -97,7 +97,7 @@ def test_export_with_property() -> None:
 
         def forward(self, x1: Tensor, x2: Tensor) -> tuple[Tensor, Tensor]:
             out1 = self.branch1(x1)
-            out2 = self.branch2(x2)
+            _ = self.branch2(x2)
             return out1 @ self.symmetric + self.buffer, self.symmetric
 
     B = 32

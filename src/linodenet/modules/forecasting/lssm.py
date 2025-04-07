@@ -14,8 +14,8 @@ from torch import Tensor, jit, nn
 
 from linodenet.modules.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.modules.encoders import ResNet
-from linodenet.modules.filters import MissingValueFilter
-from linodenet.modules.system import LinODECell
+from linodenet.modules.filters import Filter, MissingValueFilter
+from linodenet.modules.system import LinODECell, System
 from linodenet.utils import deep_dict_update, initialize_from_dict, pad
 
 __logger__ = logging.getLogger(__name__)
@@ -160,16 +160,19 @@ class LatentStateSpaceModel(nn.Module):
         decoder: nn.Module,
         filter: nn.Module,  # noqa: A002
         padding_size: int = 0,
-        **cfg: Any,
     ) -> None:
         super().__init__()
         self.encoder = encoder
         self.system = system
         self.decoder = decoder
-        self.filter: nn.Module = filter
+        self.filter = filter
+
+        # ensure filter and system satisfy the protocols
+        assert isinstance(self.filter, Filter)
+        assert isinstance(self.system, System)
 
         self.input_size = int(self.filter.input_size)
-        self.output_size = int(self.filter.output_size)
+        self.output_size = int(self.filter.hidden_size)
         self.latent_size = int(self.system.input_size)
         self.hidden_size = -1
         self.padding_size = padding_size

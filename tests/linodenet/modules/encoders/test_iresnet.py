@@ -127,10 +127,10 @@ def test_invertible_resnet_block(
         model = iResNetBlock(d_inputs, hidden_size=d_output, maxiter=maxiter)
         x = torch.randn(n_samples, d_inputs)
         y = torch.randn(n_samples, d_inputs)
-        fx = model(x)
-        xhat = model.inverse(fx)
-        ify = model.inverse(y)
-        yhat = model(ify)
+        fx = model.encode(x)
+        xhat = model.decode(fx)
+        ify = model.decode(y)
+        yhat = model.encode(ify)
 
     # Test if ϕ⁻¹∘ϕ=id, i.e. the right inverse is working
     forward_inverse_error = scaled_norm(x - xhat, axis=-1, keepdim=False)

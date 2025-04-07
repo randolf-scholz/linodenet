@@ -12,14 +12,13 @@ __all__ = [
     "flatten_dict",
     "unflatten_dict",
     "pad",
-    "try_initialize_from_config",
 ]
 
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from importlib import import_module
-from typing import Any, cast, overload
+from typing import Any, cast
 
 import torch
 from torch import Tensor, jit, nn
@@ -258,27 +257,6 @@ def initialize_from_type(module_type: type[nn.Module], /, **kwargs: Any) -> nn.M
         return module_type(**config)
     except TypeError as exc:
         raise TypeError(f"Failed to initialize {module_type} with {config=}") from exc
-
-
-@overload
-def try_initialize_from_config[M: nn.Module](module: M, /) -> M: ...
-@overload
-def try_initialize_from_config[M: nn.Module](cls: type[M], /, **kwargs: Any) -> M: ...
-@overload
-def try_initialize_from_config(config: Mapping[str, Any], /) -> nn.Module: ...
-def try_initialize_from_config(obj: object, /, **kwargs: Any) -> nn.Module:
-    r"""Try to initialize a module from a config."""
-    match obj:
-        case nn.Module() as module:
-            if kwargs:
-                raise ValueError(f"Unexpected {kwargs=}")
-            return module
-        case type() as module_type if issubclass(module_type, nn.Module):
-            return initialize_from_type(module_type, **kwargs)
-        case Mapping() as config:
-            return initialize_from_dict(config, **kwargs)
-        case _:
-            raise TypeError(f"Unsupported type {type(obj)}")
 
 
 @jit.script

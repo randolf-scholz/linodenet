@@ -18,56 +18,90 @@ Layers:
 
 __all__ = [
     # Protocols & ABCs
-    "Bijection",
     "BijectionABC",
+    "TransformABC",
     # Classes
-    "iSequential",
+    "BijectionSequence",
+    "TransformSequence",
 ]
 
 from abc import abstractmethod
-from typing import Protocol, runtime_checkable
 
+import torch
 from torch import Tensor, jit, nn
 
-
-@runtime_checkable
-class Bijection[U, V](Protocol):
-    r"""Protocol for invertible layers."""
-
-    @abstractmethod
-    def inverse(self) -> "Bijection[V, U]": ...
-    @abstractmethod
-    def encode(self, u: U, /) -> V: ...
-    @abstractmethod
-    def decode(self, v: V, /) -> U: ...
-
-    def transform(self, u: U, /) -> V:
-        r"""Alias for encode."""
-        return self.encode(u)
-
-    def inverse_transform(self, v: V, /) -> U:
-        r"""Alias for decode."""
-        return self.decode(v)
+from linodenet.modules.bijections.abstract import Bijection, Transform
+from linodenet.torch_generics import ModuleSequence
 
 
-class BijectionABC[U, V](nn.Module, Bijection[U, V]):
+class BijectionABC[X, Y](nn.Module, Bijection[X, Y]):
     r"""Abstract base class for invertible layers."""
 
     @abstractmethod
-    def encode(self, u: U, /) -> V: ...
+    def __invert__(self) -> "Bijection[Y, X]": ...
+
     @abstractmethod
-    def decode(self, v: V, /) -> U: ...
+    def encode(self, x: X, /) -> Y: ...
+    @abstractmethod
+    def decode(self, y: Y, /) -> X: ...
+
+    def transform(self, x: X, /) -> Y:
+        r"""Alias for encode."""
+        return self.encode(x)
+
+    def inverse_transform(self, y: Y, /) -> X:
+        r"""Alias for decode."""
+        return self.decode(y)
 
 
-class iSequential(nn.Sequential):
+class TransformABC[X, Y](nn.Module, Transform[X, Y]):
+    r"""Abstract base class for diffeomorphism."""
+
+    @abstractmethod
+    def encode_and_logabsdet(self, x: X, /) -> tuple[Y, Tensor]: ...
+    @abstractmethod
+    def decode_and_logabsdet(self, y: Y, /) -> tuple[X, Tensor]: ...
+
+    # def log_abs_det_jacobian(self, x: X, y: Y, /) -> Tensor: ...
+    # NOTE: By inverse function theorem, `log|det Df⁻¹(y)| = log|det Df(x)⁻¹| = log|1/det Df(x)| = -log|det Df(x)|`
+
+
+class BijectionSequence(ModuleSequence[BijectionABC]):
     r"""Invertible Sequential model."""
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:
-        return self(x)
+        for layer in self:
+            x = layer.encode(x)
+        return x
 
     @jit.export
     def decode(self, y: Tensor) -> Tensor:
         for layer in self[::-1]:  # traverse in reverse
             y = layer.decode(y)
         return y
+
+
+class TransformSequence[T](ModuleSequence[TransformABC[T, T]]):
+    r"""Sequence of transformations."""
+
+    @jit.export
+    def encode_and_logabsdet(self, x: T) -> tuple[T, Tensor]:
+        logabsdets: list[Tensor] = []
+        for layer in self:
+            x, logabsdet = layer.encode_and_logabsdet(x)
+            logabsdets.append(logabsdet)
+
+        logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
+        return x, logabsdet
+
+    @jit.export
+    def decode_and_logabsdet(self, y: T) -> tuple[T, Tensor]:
+        logabsdets: list[Tensor] = []
+
+        for layer in self[::-1]:  # traverse in reverse
+            y, logabsdet = layer.decode_and_logabsdet(y)
+            logabsdets.append(logabsdet)
+
+        logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
+        return y, logabsdet

@@ -34,6 +34,7 @@
       <w>covariates</w>
       <w>cstddef</w>
       <w>dcmake</w>
+      <w>diffeomorphism</w>
       <w>discretizes</w>
       <w>dtype</w>
       <w>dunder</w>
@@ -87,6 +88,7 @@
       <w>linformer</w>
       <w>linodenet</w>
       <w>lobpcg</w>
+      <w>logabsdet</w>
       <w>logdetexp</w>
       <w>logsigmoid</w>
       <w>lstsq</w>

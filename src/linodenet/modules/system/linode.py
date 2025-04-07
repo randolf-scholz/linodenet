@@ -220,7 +220,8 @@ class LinODE(nn.Module):
         kernel = getattr(self.cell, "kernel", None)
         if not isinstance(kernel, Tensor):
             raise TypeError("The cell must have a kernel attribute!")
-        self.register_buffer("kernel", self.cell.kernel, persistent=False)
+
+        self.register_buffer("kernel", kernel, persistent=False)
         self.register_buffer("xhat", torch.tensor(()), persistent=False)
 
     @jit.export
