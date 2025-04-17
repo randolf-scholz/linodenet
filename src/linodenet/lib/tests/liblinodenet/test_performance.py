@@ -14,7 +14,6 @@ from collections.abc import Callable
 
 import pytest
 import torch
-import torch.utils.cpp_extension
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch import Tensor, nn
 

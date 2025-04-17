@@ -19,18 +19,18 @@ __all__ = [
     # Constants
     "FILTERS",
     "CELLS",
-    # ABCs & Protocols
+    # Types
     "Cell",
     "CellBase",
     "Filter",
     "FilterBase",
     # Classes
-    "KalmanFilter",
-    "MissingValueFilter",
     "ResidualFilter",
     "ResNetFilter",
     "ReZeroFilter",
     "SequentialFilter",
+    "MissingValueFilter",
+    "KalmanFilter",
     # Cells
     "LinearCell",
     "LinearKalmanCell",
@@ -53,8 +53,6 @@ from linodenet.modules.filters import probabilistic
 from linodenet.modules.filters.base import (
     Filter,
     FilterBase,
-    KalmanFilter,
-    MissingValueFilter,
     ResidualFilter,
     ResNetFilter,
     ReZeroFilter,
@@ -71,6 +69,8 @@ from linodenet.modules.filters.cells import (
     PseudoKalmanCell,
     ResidualCell,
 )
+from linodenet.modules.filters.kalman_filter import KalmanFilter
+from linodenet.modules.filters.missing_value_filter import MissingValueFilter
 
 CELLS: dict[str, type[Cell]]  = {
     # torch cells

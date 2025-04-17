@@ -13,6 +13,7 @@ __all__ = [
     "Nested",
     "NestedDict",
     "NestedMapping",
+    "PathLike",
     "Range",
     "Scalar",
     "Shape",
@@ -21,11 +22,14 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Final, Protocol, Self, SupportsIndex, runtime_checkable
 
 from torch import device, dtype
 
 # region type aliases ------------------------------------------------------------------
+type PathLike = str | Path
+r"""Type hint for path-like objects."""
 type Scalar = None | bool | int | float
 r"""Type hint for scalar types allowed by torchscript."""
 type DeviceArg = None | str | device  # Literal["cpu", "cuda"]

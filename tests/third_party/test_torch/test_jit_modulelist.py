@@ -73,12 +73,12 @@ def test_jit_modulelist(cls: type, stage: str, interface: str) -> None:
             raise ValueError(f"Invalid stage: {stage}")
 
     match interface:
+        case "forward":
+            assert torch.equal(target(x), module(x))
         case "getitem":
             check_getitem(target)
         case "iter":
             check_iter(target)
-        case "forward":
-            assert torch.equal(target(x), module(x))
         case _:
             raise ValueError(f"Invalid interface: {interface}")
 

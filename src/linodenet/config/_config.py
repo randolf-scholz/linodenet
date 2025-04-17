@@ -22,6 +22,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, ClassVar, Final
 
+type PathLike = str | Path | os.PathLike[str]
+
 
 def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
     r"""Creates nested dictionary of the package structure."""
@@ -57,6 +59,24 @@ def generate_folders(dirs: str | list | dict, /, *, parent: Path) -> None:
                 generate_folders(value, parent=parent.joinpath(key))
         case _:
             raise TypeError
+
+
+class _DirGetter:
+    r"""Results directory."""
+
+    def __init__(self, base_dir: PathLike, /) -> None:
+        self.base_dir = Path(base_dir)
+        self.paths: dict[PathLike, Path] = {}
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(paths={self.paths})"
+
+    def __getitem__(self, key: PathLike, /) -> Path:
+        if key not in self.paths:
+            path = self.base_dir / Path(key).stem
+            path.mkdir(parents=True, exist_ok=True)
+            self.paths[key] = path
+        return self.paths[key]
 
 
 class Config:
@@ -147,25 +167,9 @@ class Project:
         return self.TESTS_PATH / "results"
 
     @cached_property
-    def RESULTS_DIR(self) -> dict[str | Path, Path]:
+    def RESULTS_DIR(self) -> _DirGetter:
         r"""Return the `results` directory."""
-
-        class ResultsDir(dict):
-            r"""Results directory."""
-
-            TEST_RESULTS_PATH = self.TEST_RESULTS_PATH
-
-            def __setitem__(self, key: str | Path, value: Path, /) -> None:
-                raise RuntimeError("ResultsDir is read-only!")
-
-            def __getitem__(self, key: str | Path, /) -> Path:
-                if key not in self:
-                    path = self.TEST_RESULTS_PATH / Path(key).stem
-                    path.mkdir(parents=True, exist_ok=True)
-                    super().__setitem__(key, path)
-                return super().__getitem__(key)
-
-        return ResultsDir()
+        return _DirGetter(self.TEST_RESULTS_PATH)
 
     def make_test_folders(self, *, dry_run: bool = True) -> None:
         r"""Make the tests folder if it does not exist."""

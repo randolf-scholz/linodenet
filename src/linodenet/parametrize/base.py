@@ -712,7 +712,7 @@ def register_parametrization(
         case type() as cls:
             wrapper = cls(tensor)
         case other:
-            wrapper = parametrize(tensor, parametrization)
+            wrapper = parametrize(tensor, other)
 
     if not isinstance(wrapper, nn.Module) or not isinstance(wrapper, Parametrization):
         raise TypeError(f"{parametrization} does not produce a valid parametrization!")

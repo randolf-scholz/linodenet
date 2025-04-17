@@ -184,16 +184,11 @@ def assert_forward_stable(
     num_runs: int = 100,
     tol: Optional[float] = None,
 ) -> None:
-    r"""Check if the forward pass is stable.
-
-    Raises:
-        AssertionError: If the forward pass is not stable.
-    """
-    # generate random N(0,1) inputs
-    inputs = [torch.randn(num_runs, *shape) for shape in input_shapes]
-    output = get_output(func, *inputs)
-    result = is_standardized(output, dim=output.shape[1:], tol=tol)
-    assert result.all().item()
+    r"""Raises AssertionError if the forward pass is not stable."""
+    if not is_forward_stable(func, input_shapes, num_runs=num_runs, tol=tol):
+        raise AssertionError(
+            f"Function is not forward stable (tolerance: {tol}, runs: {num_runs})"
+        )
 
 
 @torch.no_grad()
@@ -205,32 +200,14 @@ def assert_backward_stable(
     check_params: bool = False,
     tol: Optional[float] = None,
 ) -> None:
-    r"""Check if a function is backward stable.
-
-    Raises:
-        AssertionError: If the function is not backward stable.
-    """
-    # generate random N(0,1) inputs
-    inputs: list[Tensor] = [
-        torch.randn(num_runs, *shape, requires_grad=True) for shape in input_shapes
-    ]
-
-    with torch.enable_grad():
-        output = get_output(func, *inputs)
-        v = torch.randn_like(output)
-        loss = (v * output).sum()
-        loss.backward()
-
-    # check input gradients
-    assert all(x.grad is not None for x in inputs)
-    input_grads = (x.grad for x in inputs if x.grad is not None)
-
-    for grad in input_grads:
-        assert is_standardized(grad, dim=grad.shape[1:], tol=tol).all().item()
-
-    if check_params:
-        if not isinstance(func, nn.Module):
-            raise TypeError(f"Expected a module, got {type(func)}")
-        param_grads = (p.grad for p in func.parameters() if p.grad is not None)
-        for grad in param_grads:
-            assert is_standardized(grad, dim=grad.shape, tol=tol).item()
+    r"""Raises AssertionError if the function is not backward stable."""
+    if not is_backward_stable(
+        func,
+        input_shapes,
+        num_runs=num_runs,
+        check_params=check_params,
+        tol=tol,
+    ):
+        raise AssertionError(
+            f"Function is not backward stable (tolerance: {tol}, runs: {num_runs})"
+        )
