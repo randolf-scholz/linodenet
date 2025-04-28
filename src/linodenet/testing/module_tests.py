@@ -121,7 +121,8 @@ def is_forward_stable(
     # generate random N(0,1) inputs
     inputs = [torch.randn(num_runs, *shape) for shape in input_shapes]
     output = get_output(func, *inputs)
-    result = is_standardized(output, dim=output.shape[1:], tol=tol)
+    dims = list(range(1, output.ndim))
+    result = is_standardized(output, dim=dims, tol=tol)
     return bool(result.all().item())
 
 

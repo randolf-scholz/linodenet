@@ -4,10 +4,31 @@ __all__ = [
     "is_standardized",
 ]
 
-from typing import Optional
+from typing import Optional, SupportsFloat
 
 import torch
 from torch import Tensor
+
+
+def _get_dims(dim: None | int | list[int], values: Tensor) -> list[int]:
+    return (
+        [dim]
+        if isinstance(dim, int)
+        else list(range(values.ndim))
+        if dim is None
+        else list(dim)
+    )
+
+
+def _get_tol(tol: float | None, values: Tensor, *, dims: list[int]) -> float:
+    if isinstance(tol, SupportsFloat):
+        return float(tol)
+
+    # default: 3-sigma rule
+    output_lengths = torch.tensor([values.shape[k] for k in dims])
+    count = output_lengths.prod()
+    tol = 3.0 / count.sqrt().item()
+    return tol
 
 
 def is_standardized(
@@ -27,20 +48,10 @@ def is_standardized(
     #   That is with standard deviation 1/√n.
     #   Therefore, to get k-sigma confidence, we should check whether the mean is outside the interval
     #   [-k/√n, k/√n]
-    dims: list[int] = (
-        [dim]
-        if isinstance(dim, int)
-        else list(range(values.dim()))
-        if dim is None
-        else list(dim)
-    )
+    dims = _get_dims(dim, values)
 
     # compute mean an stdv
-    if tol is None:
-        output_lengths = torch.tensor([values.shape[k] for k in dims])
-        count = output_lengths.prod()
-        # default: 3-sigma rule
-        tol = 3.0 / count.sqrt().item()
+    tol = _get_tol(tol, values, dims=dims)
 
     mean_values = values.mean(dim=dims)
     stdv_values = values.std(dim=dims)

@@ -88,6 +88,7 @@ from linodenet.parametrize.parametrizations import (
 )
 
 PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
+    "parametrize"           : parametrize,
     # Parametrizations
     "CayleyMap"             : CayleyMap,
     "GramMatrix"            : GramMatrix,

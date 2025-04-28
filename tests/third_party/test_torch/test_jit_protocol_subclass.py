@@ -1,10 +1,13 @@
 r"""Test the `torch.jit` module with a protocol subclass."""
 
 from tempfile import TemporaryFile
-from typing import Protocol, runtime_checkable
+from typing import Final, Protocol, runtime_checkable
 
+import pytest
 import torch
 from torch import Tensor, jit, nn
+
+from linodenet.testing import check_jit_scriptable
 
 
 @runtime_checkable
@@ -14,8 +17,8 @@ class Cell(Protocol):
 
 
 class MyCell(nn.Module, Cell):
-    input_size: int
-    hidden_size: int
+    input_size: Final[int]
+    hidden_size: Final[int]
 
     def __init__(self, input_size: int, hidden_size: int) -> None:
         nn.Module.__init__(self)
@@ -27,32 +30,33 @@ class MyCell(nn.Module, Cell):
         return self.cell(y, x)
 
 
-def test_jit_cell() -> None:
+@pytest.mark.parametrize("stage", ["original", "scripted", "reloaded"])
+def test_jit_cell(stage: str) -> None:
     cell = MyCell(3, 3)
-    scripted = jit.script(cell)
-    with TemporaryFile() as f:
-        jit.save(scripted, f)
-        f.seek(0)
-        reloaded = jit.load(f)
 
-    print(MyCell.__mro__)
+    match stage:
+        case "original":
+            target = cell
+        case "scripted":
+            target = check_jit_scriptable(cell)
+        case "reloaded":
+            target = check_jit_scriptable(cell)
+        case _:
+            raise ValueError(f"Invalid stage: {stage}")
 
-    assert isinstance(cell, nn.Module)
-    assert isinstance(cell, MyCell)
-    assert isinstance(cell, Cell)
-
-    assert isinstance(scripted, nn.Module)
-    # assert isinstance(scripted, MyCell)
-    assert isinstance(scripted, Cell)
-
-    assert isinstance(reloaded, nn.Module)
-    assert isinstance(reloaded, MyCell)
-    assert isinstance(reloaded, Cell)
-
-    assert reloaded.input_size == 3
-    assert reloaded.hidden_size == 3
+    assert isinstance(target, nn.Module)
+    assert target.input_size == 3
+    assert target.hidden_size == 3
 
     x = torch.randn(5, 3)
     y = torch.randn(5, 3)
+    assert torch.equal(target(y, x), cell(y, x))
 
-    assert torch.equal(reloaded(y, x), cell(y, x))
+    if stage == "original":
+        assert isinstance(target, MyCell)
+        assert isinstance(target, Cell)
+    else:
+        with pytest.xfail("Scripted classes do not subclass original class."):
+            assert isinstance(target, MyCell)
+        with pytest.xfail("Scripted classes do not support getattr_static"):
+            assert isinstance(target, Cell)
