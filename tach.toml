@@ -8,6 +8,13 @@ exclude = [
 ]
 source_roots = [ "src"]
 
+[[modules]]
+path = "linodenet.torch_generics"
+depends_on = ["linodenet.types"]
+
+[[modules]]
+path = "linodenet.layers"
+depends_on = ["linodenet.constants", "linodenet.utils", "linodenet.torch_generics"]
 
 [[modules]]
 path = "linodenet.lib"
@@ -34,12 +41,14 @@ path = "linodenet.constants"
 depends_on = []
 
 [[modules]]
+path = "linodenet.random"
+depends_on = []
+
+
+[[modules]]
 path = "linodenet.testing"
 depends_on = ["linodenet.constants", "linodenet.types"]
 
-[[modules]]
-path = "linodenet.random"
-depends_on = ["linodenet.types"]
 
 [[modules]]
 path = "linodenet.projections"
@@ -59,12 +68,12 @@ depends_on = ["linodenet.lib", "linodenet.constants", "linodenet.projections", "
 
 [[modules]]
 path = "linodenet.modules"
-depends_on = ["linodenet.utils", "linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.types", "linodenet.initializations", "linodenet.random", "linodenet.activations", "linodenet.torch_generics"]
+depends_on = ["linodenet.utils", "linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.types", "linodenet.initializations", "linodenet.random", "linodenet.activations", "linodenet.torch_generics", "linodenet.layers"]
 
 [[modules]]
 path = "linodenet"
 depends_on = ["linodenet.testing", "linodenet.activations", "linodenet.config", "linodenet.modules", "linodenet.parametrize", "linodenet.initializations", "linodenet.utils", "linodenet.lib", "linodenet.projections", "linodenet.regularizations"]
 
 [[modules]]
-path = "linodenet.torch_generics"
-depends_on = []
+path = "linodenet.algebra"
+depends_on = ["linodenet.types", "linodenet.torch_generics"]

@@ -48,8 +48,9 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.activations import get_activation
-from linodenet.modules.layers import ReverseDense
-from linodenet.utils import deep_dict_update, initialize_from_dict
+from linodenet.layers import ReverseDense
+from linodenet.torch_generics import initialize_from_dict
+from linodenet.utils import deep_dict_update
 
 
 @runtime_checkable

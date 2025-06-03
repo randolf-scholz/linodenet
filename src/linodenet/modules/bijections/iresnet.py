@@ -10,6 +10,7 @@ __all__ = [
     "AltLinearContraction",
 ]
 
+import warnings
 from math import sqrt
 from typing import Any, Final, Optional
 
@@ -19,7 +20,7 @@ from torch.linalg import matrix_norm, vector_norm
 from torch.nn import functional
 
 from linodenet.activations import MODULAR_ACTIVATIONS, Activation
-from linodenet.modules.layers import ReZero
+from linodenet.layers import ReZero
 from linodenet.torch_generics import ModuleSequence
 from linodenet.utils import deep_dict_update
 
@@ -81,12 +82,12 @@ class SpectralNorm(torch.autograd.Function):
         return sigma
 
     @staticmethod
-    def backward(ctx: Any, *grad_outputs: Tensor) -> Tensor:
+    def backward(ctx: Any, /, *grad_outputs: Tensor) -> Tensor:
         u, v = ctx.saved_tensors
         return torch.einsum("..., i, j -> ...ij", grad_outputs[0], u, v)
 
     @staticmethod
-    def jvp(ctx: Any, *grad_inputs: Any) -> Any:
+    def jvp(ctx: Any, /, *grad_inputs: Any) -> Any:
         r"""Jacobian-vector product forward mode."""
         u, v = ctx.saved_tensors
         return torch.einsum("...ij, i, j -> ...", grad_inputs[0], u, v)
@@ -327,9 +328,10 @@ class iResNetLayer(nn.Module):
             if self.converged:
                 break
         if not self.converged:
-            print(
+            warnings.warn(
                 f"No convergence in {self.maxiter} iterations. "
-                f"Max residual:{residual} > {self.atol}."
+                f"Max residual:{residual} > {self.atol}.",
+                stacklevel=2,
             )
         return x
 
@@ -459,9 +461,10 @@ class iResNetBlock(nn.Module):
             if torch.all(self.residual <= self.atol):
                 return x
 
-        print(
+        warnings.warn(
             f"No convergence in {self.maxiter} iterations. "
-            f"Max residual:{torch.max(residual)} > {self.atol}."
+            f"Max residual:{torch.max(residual)} > {self.atol}.",
+            stacklevel=2,
         )
         return x
 

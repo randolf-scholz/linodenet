@@ -78,27 +78,15 @@ def load_function(name: str, /) -> Any:
 
 
 def _load_linodenet() -> dict[str, Callable]:
-    try:  # load pre-compiled binaries
-        torch.ops.load_library(BUILD_DIR / f"{LIB_NAME}.so")
-        # load the functions
-        compiled_fns = {name: getattr(LIB, name) for name in CUSTOM_OPS}
-    except Exception as exc:
-        warnings.warn(
-            "Custom binaries not found!"
-            "\n\t-> Trying to compile them on the fly!."
-            "\n\t-> Consider compiling the extension in the linodenet/lib folder."
-            f"\n\t-> Full error: {exc}"
-            f"\n{'-' * 80}",
-            UserWarning,
-            stacklevel=2,
-        )
+    def _compile_fns() -> dict[str, Callable]:
+        r"""Fallback to compiling the functions."""
         compiled_fns = {}
         exceptions = {}
         for name in CUSTOM_OPS:
             try:
                 compiled_fns[name] = load_function(name)
-            except Exception as exc:
-                exceptions[name] = exc
+            except Exception as _exc:  # noqa: BLE001
+                exceptions[name] = _exc
         if exceptions:
             exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
             error = RuntimeError(
@@ -112,8 +100,23 @@ def _load_linodenet() -> dict[str, Callable]:
                     f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
                 )
             raise error from exc_group
+        return compiled_fns
 
-    return compiled_fns
+    try:  # load pre-compiled binaries
+        torch.ops.load_library(BUILD_DIR / f"{LIB_NAME}.so")
+        # load the functions
+        return {name: getattr(LIB, name) for name in CUSTOM_OPS}
+    except Exception as exc:  # noqa: BLE001
+        warnings.warn(
+            "Custom binaries not found!"
+            "\n\t-> Trying to compile them on the fly!."
+            "\n\t-> Consider compiling the extension in the linodenet/lib folder."
+            f"\n\t-> Full error: {exc}"
+            f"\n{'-' * 80}",
+            UserWarning,
+            stacklevel=2,
+        )
+        return _compile_fns()
 
 
 COMPILED_FNS = _load_linodenet()

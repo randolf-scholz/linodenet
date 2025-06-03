@@ -90,7 +90,7 @@ class Config(Mapping[str, Any], metaclass=ConfigMetaclass):
         r"""Return an iterator over the keys of the dictionary."""
         return iter(self.__dict__)
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str, /) -> Any:
         r"""Return the value of the specified key."""
         return self.__dict__[key]
 
@@ -105,7 +105,7 @@ class Config(Mapping[str, Any], metaclass=ConfigMetaclass):
         # return hash((frozenset(self), frozenset(self.itervalues())))
         return hash(frozenset(self.items()))
 
-    def __or__(self, other: Mapping[str, Any]) -> Self:
+    def __or__(self, other: Mapping[str, Any], /) -> Self:
         r"""Return a new dictionary with the keys from both dictionaries."""
         res: dict = {}
         res.update(self)

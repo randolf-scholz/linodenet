@@ -97,6 +97,7 @@ def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
 @pytest.mark.parametrize("shape", SHAPES, ids=str)
 @pytest.mark.parametrize("method", SVD_METHODS.values(), ids=SVD_METHODS.keys())
 def test_svd_rank_one(
+    *,
     method: Callable,
     shape: tuple[int, int],
     seed: int,
@@ -139,6 +140,7 @@ def test_svd_rank_one(
 @pytest.mark.parametrize("shape", SHAPES, ids=str)
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_rank_one(
+    *,
     impl: Callable,
     shape: tuple[int, int],
     seed: int,
@@ -194,6 +196,7 @@ def test_rank_one(
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_diagonal(
     impl: Callable,
+    *,
     dim: int,
     seed: int,
     atol: float = ATOL,
@@ -252,6 +255,7 @@ def test_diagonal(
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_analytical(
     impl: Callable,
+    *,
     shape: tuple[int, int],
     seed: int,
     atol: float = ATOL,
@@ -317,6 +321,7 @@ def test_analytical(
 @pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
 def test_orthogonal(
     impl: Callable,
+    *,
     dim: int,
     seed: int,
     atol: float = ATOL,

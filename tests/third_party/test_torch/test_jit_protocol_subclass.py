@@ -7,8 +7,6 @@ import pytest
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.testing import check_jit_scriptable
-
 
 @runtime_checkable
 class Cell(Protocol):
@@ -38,9 +36,13 @@ def test_jit_cell(stage: str) -> None:
         case "original":
             target = cell
         case "scripted":
-            target = check_jit_scriptable(cell)
+            target = jit.script(cell)
         case "reloaded":
-            target = check_jit_scriptable(cell)
+            target = jit.script(cell)
+            with TemporaryFile() as f:
+                jit.save(target, f)
+                f.seek(0)
+                target = jit.load(f)
         case _:
             raise ValueError(f"Invalid stage: {stage}")
 

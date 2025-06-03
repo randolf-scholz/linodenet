@@ -103,9 +103,8 @@ class SpectralNormalization(ParametrizationMulticache):
     r"""CONST: The absolute tolerance for the power method."""
     rtol: Final[float]
     r"""CONST: The relative tolerance for the power method."""
-    cached_tensors: Final[
-        dict[str, Tensor]
-    ]  # NOTE: cannot use nn.ParameterDict due to JIT
+    # NOTE: cannot use nn.ParameterDict due to JIT
+    cached_tensors: Final[dict[str, Tensor]]  # type: ignore[misc]
     r"""BUFFER-DICT: Holds auxiliary cached tensors."""
 
     def __init__(

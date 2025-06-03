@@ -11,7 +11,8 @@ from typing import Any, Optional
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder
 
-from linodenet.utils import deep_dict_update, initialize_from_dict
+from linodenet.torch_generics import initialize_from_dict
+from linodenet.utils import deep_dict_update
 
 
 class Transformer(nn.Module):

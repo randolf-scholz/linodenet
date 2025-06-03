@@ -4,13 +4,14 @@ __all__ = [
     "is_standardized",
 ]
 
+from collections.abc import Sequence
 from typing import Optional, SupportsFloat
 
 import torch
 from torch import Tensor
 
 
-def _get_dims(dim: None | int | list[int], values: Tensor) -> list[int]:
+def _get_dims(dim: None | int | Sequence[int], values: Tensor) -> list[int]:
     return (
         [dim]
         if isinstance(dim, int)

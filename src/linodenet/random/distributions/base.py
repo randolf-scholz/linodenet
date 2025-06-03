@@ -55,10 +55,10 @@ class DistributionList(Distribution, Sequence[Distribution]):
         return len(self.bases)
 
     @overload
-    def __getitem__(self, index: int) -> Distribution: ...
+    def __getitem__(self, index: int, /) -> Distribution: ...
     @overload
-    def __getitem__(self, index: slice) -> Self: ...
-    def __getitem__(self, index: int | slice) -> Distribution | Self:
+    def __getitem__(self, index: slice, /) -> Self: ...
+    def __getitem__(self, index: int | slice, /) -> Distribution | Self:
         r"""Get the marginal distribution at the given index."""
         if isinstance(index, SupportsIndex):
             return self.bases[index.__index__()]
@@ -159,10 +159,10 @@ class Mixture(DistributionList):
         raise NotImplementedError
 
     @overload
-    def __getitem__(self, index: int) -> Distribution: ...
+    def __getitem__(self, index: int, /) -> Distribution: ...
     @overload
-    def __getitem__(self, index: slice) -> Self: ...
-    def __getitem__(self, index: int | slice) -> Distribution | Self:
+    def __getitem__(self, index: slice, /) -> Self: ...
+    def __getitem__(self, index: int | slice, /) -> Distribution | Self:
         r"""Returns the sub-mixture at the given index."""
         if isinstance(index, SupportsIndex):
             return self.components[index.__index__()]

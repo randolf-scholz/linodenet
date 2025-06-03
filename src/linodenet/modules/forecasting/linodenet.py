@@ -17,7 +17,8 @@ from linodenet.modules.embeddings import ConcatEmbedding, ConcatProjection
 from linodenet.modules.encoders import ResNet
 from linodenet.modules.filters import MissingValueFilter
 from linodenet.modules.system import LinODECell
-from linodenet.utils import deep_dict_update, initialize_from_dict, pad
+from linodenet.torch_generics import initialize_from_dict
+from linodenet.utils import deep_dict_update, pad
 
 __logger__ = logging.getLogger(__name__)
 

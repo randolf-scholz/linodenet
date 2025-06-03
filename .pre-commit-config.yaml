@@ -1,8 +1,8 @@
 exclude: bugs/
 minimum_pre_commit_version: 3.6.0
 default_language_version:
-  python: '3.12'
-  node: '22.14.0'
+  python: '3.13'
+  node: '22.16.0'
 repos:
   # https://pre-commit.com/hooks.html
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -22,19 +22,19 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.7
+    rev: v0.11.12
     hooks:
-      - id: ruff
-        name: ruff-isort
+      - id: ruff-check
+        name: ruff isort
         files: '^src/|^tests/'
         args: [ "--select", "I", "--fix" ]
       - id: ruff-format
         files: '^src/|^tests/'
-      - id: ruff
+      - id: ruff-check
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.6.17
+    rev: 0.7.9
     hooks:
       - id: uv-lock
       # - id: uv-export
@@ -54,7 +54,7 @@ repos:
         exclude: '^experiments/'
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.6.16
+    rev: v0.6.28
     hooks:
       # pygrep hooks
       - id: check-separator-length-88
@@ -70,9 +70,9 @@ repos:
       - id: check-typing
         args: ["--check-no-return-union", "--check-concrete"]
         files: '^src/|^tests/'
-      - id: check-no-mixed-args
-        files: '^src/'
-        exclude: 'tests/|functional.py|matrix_tests.py|_liblinodenet.py'
+      - id: check-signatures
+        files: '^src/|^tests/'
+        exclude: 'functional.py|matrix_tests.py|_liblinodenet.py'
         args:
           - "--ignore-names"
           - "forward"
@@ -82,7 +82,6 @@ repos:
           - "jit.script"
           - "jit.export"
           - "torch.no_grad"
-          - "--allow-two"
           - "--"
       # script-based hooks
       - id: check-clean-interface
@@ -98,7 +97,7 @@ repos:
         files: '^src/|^tests/'
   # markdownlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.44.0
+    rev: v0.45.0
     hooks:
       - id: markdownlint
         args:
@@ -144,7 +143,7 @@ repos:
           - "--"
   # pyright-wrapper
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.6.16
+    rev: v0.6.28
     hooks:
         - id: pyright-concise
           files: '^src/|^tests/'

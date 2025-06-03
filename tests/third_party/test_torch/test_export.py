@@ -13,7 +13,7 @@ def test_minimal() -> None:
         model = torch.nn.Linear(3, 3)
         exported_model = export(model, args=(torch.randn(3),))
         # "BufferedRandom" cannot be assigned to type "str | PathLike[Unknown] | BytesIO"
-        torch.export.save(exported_model, file)  # type: ignore[arg-type]
+        export.save(exported_model, file)
 
 
 def test_export() -> None:

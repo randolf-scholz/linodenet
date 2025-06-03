@@ -15,7 +15,8 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.utils import deep_dict_update, initialize_from_dict
+from linodenet.torch_generics import initialize_from_dict
+from linodenet.utils import deep_dict_update
 
 
 class Constant(nn.Module):
@@ -97,20 +98,6 @@ class ReZeroResNet(nn.ModuleList):
 class ReverseDense(nn.Module):
     r"""ReverseDense module $x ⟼ A⋅ϕ(x) + b$."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "output_size": None,
-        "bias": True,
-        "activation": {
-            "__name__": "ReLU",
-            "__module__": "torch.nn",
-            "inplace": False,
-        },
-    }
-    r"""The hyperparameter dictionary"""
-
     input_size: Final[int]
     r"""The size of the input"""
     output_size: Final[int]
@@ -121,6 +108,20 @@ class ReverseDense(nn.Module):
     r"""The weight matrix."""
     bias: Optional[Tensor]
     r"""The bias vector."""
+
+    HP = {
+        "__name__": __qualname__,
+        "__module__": __name__,
+        "input_size": int,
+        "output_size": int,
+        "bias": True,
+        "activation": {
+            "__name__": "ReLU",
+            "__module__": "torch.nn",
+            "inplace": False,
+        },
+    }
+    r"""The hyperparameter dictionary"""
 
     @classmethod
     def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
@@ -135,14 +136,12 @@ class ReverseDense(nn.Module):
         self.input_size = config["input_size"] = input_size
         self.output_size = config["output_size"] = output_size
 
-        self.activation: nn.Module = initialize_from_dict(config["activation"])
-
-        self.linear = nn.Linear(
-            config["input_size"], config["output_size"], config["bias"]
-        )
+        self.linear = nn.Linear(self.input_size, self.output_size, bias=config["bias"])
         self.weight = self.linear.weight
         self.bias = self.linear.bias
 
+        # initialize activation
+        self.activation: nn.Module = initialize_from_dict(config["activation"])
         activation_name = config["activation"]["__name__"].lower()
         nn.init.kaiming_uniform_(self.weight, nonlinearity=activation_name)
 

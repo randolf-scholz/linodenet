@@ -16,13 +16,13 @@ from typing import Any
 
 from torch import Tensor, jit, nn
 
-from linodenet.modules.layers import (
+from linodenet.layers import (
     ReverseDense,
     ReZero,
 )
+from linodenet.torch_generics import initialize_from_dict
 from linodenet.utils import (
     deep_dict_update,
-    initialize_from_dict,
 )
 
 

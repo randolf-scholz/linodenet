@@ -498,13 +498,13 @@ class ParametrizationDict(nn.Module, GeneralParametrization):
     def __len__(self) -> int:
         return len(self.parametrized_tensors)
 
-    def __getitem__(self, item: str) -> nn.Parameter:
+    def __getitem__(self, item: str, /) -> nn.Parameter:
         return self.parametrized_tensors[item]
 
-    def __setitem__(self, key: str, value: nn.Parameter) -> None:
+    def __setitem__(self, key: str, value: nn.Parameter, /) -> None:
         self.register_parametrized_tensor(key, value)
 
-    def __delitem__(self, key: str) -> None:
+    def __delitem__(self, key: str, /) -> None:
         del self.parametrized_tensors[key]
         del self.cached_tensors[key]
         delattr(self, key)
@@ -814,7 +814,7 @@ def update_parametrizations(module: nn.Module, /) -> None:
 
 # region additional functions ----------------------------------------------------------
 def register_optimizer_hook(
-    optim: Optimizer, *module_or_param: nn.Module | Parametrization
+    optim: Optimizer, /, *module_or_param: nn.Module | Parametrization
 ) -> None:
     r"""Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
     # collect all parametrizations
@@ -825,7 +825,7 @@ def register_optimizer_hook(
         else:
             parametrizations.extend(iter_parametrizations(module))
 
-    def hook(opt: Optimizer, *args: Any, **kwargs: Any) -> None:  # noqa: ARG001
+    def hook(opt: Optimizer, /, *args: Any, **kwargs: Any) -> None:  # noqa: ARG001
         r"""Hook to update the parametrization after each optimizer step."""
         for parametrization in parametrizations:
             parametrization.update_parametrization()

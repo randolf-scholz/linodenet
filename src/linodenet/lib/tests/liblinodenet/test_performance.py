@@ -85,7 +85,11 @@ def get_param(
 @pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
 @pytest.mark.benchmark(group="spectral_norm_forward")
 def test_spectral_norm_forward(
-    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture,
+    impl: Callable,
+    *,
+    device: str,
+    shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm forward pass."""
     generator = torch.Generator(device=device)
@@ -124,7 +128,11 @@ def test_spectral_norm_forward(
 @pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
 @pytest.mark.benchmark(group="spectral_norm_backward")
 def test_spectral_norm_backward(
-    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture,
+    impl: Callable,
+    *,
+    device: str,
+    shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm backward pass."""
     generator = torch.Generator(device=device)
@@ -175,7 +183,11 @@ def test_spectral_norm_backward(
 @pytest.mark.parametrize("impl", SPECTRAL_NORMS, ids=SPECTRAL_NORMS.get)
 @pytest.mark.benchmark(group="spectral_norm")
 def test_spectral_norm(
-    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture,
+    impl: Callable,
+    *,
+    device: str,
+    shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm forward+backward."""
     generator = torch.Generator(device=device)
@@ -227,7 +239,11 @@ def test_spectral_norm(
     group="singular_triplet_forward",
 )
 def test_singular_triplet_forward(
-    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture,
+    impl: Callable,
+    *,
+    device: str,
+    shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm implementation."""
     generator = torch.Generator(device=device)
@@ -271,7 +287,11 @@ def test_singular_triplet_forward(
 @pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
 @pytest.mark.benchmark(group="singular_triplet_backward")
 def test_singular_triplet_backward(
-    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture,
+    impl: Callable,
+    *,
+    device: str,
+    shape: tuple[int, int],
 ) -> None:
     r"""Test simplified backward when only singular value used."""
     torch.manual_seed(0)
@@ -318,7 +338,11 @@ def test_singular_triplet_backward(
 @pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)
 @pytest.mark.benchmark(group="singular_triplet_full_backward")
 def test_singular_triplet_full_backward(
-    benchmark: BenchmarkFixture, impl: Callable, device: str, shape: tuple[int, int]
+    benchmark: BenchmarkFixture,
+    impl: Callable,
+    *,
+    device: str,
+    shape: tuple[int, int],
 ) -> None:
     r"""Test full backward when singular triplet used."""
     torch.manual_seed(0)

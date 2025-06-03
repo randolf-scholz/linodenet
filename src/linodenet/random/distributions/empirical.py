@@ -6,13 +6,12 @@ __all__ = [
 ]
 
 
+from collections.abc import Sequence
 from typing import Final
 
 import torch
 from torch import Tensor
 from torch.distributions import Distribution
-
-from linodenet.types import Size
 
 
 class Empirical(Distribution):
@@ -39,7 +38,7 @@ class Empirical(Distribution):
         self.ndims = len(self.event_shape)
         self.dims = tuple(range(-self.ndims, 0))
 
-    def sample(self, sample_shape: Size = ()) -> Tensor:
+    def sample(self, sample_shape: Sequence[int] = ()) -> Tensor:
         r"""Sample from the empirical distribution."""
         idx = torch.randint(
             self.num_samples, size=sample_shape, device=self.data.device
@@ -80,7 +79,7 @@ class Dirac(Empirical):
         # overwrite data with correct squeezed shape.
         self.data = self.data.squeeze(dim=0)
 
-    def sample(self, sample_shape: Size = ()) -> Tensor:
+    def sample(self, sample_shape: Sequence[int] = ()) -> Tensor:
         r"""Sample from the Dirac distribution."""
         return self.data.expand(*sample_shape, *self.event_shape)
 

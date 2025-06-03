@@ -1,11 +1,8 @@
 r"""Utility functions."""
 
 __all__ = [
-    # Types
     # Functions
     "deep_dict_update",
-    "initialize_from_dict",
-    "initialize_from_type",
     "is_allcaps",
     "is_dunder",
     "is_private",
@@ -17,15 +14,33 @@ __all__ = [
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
-from importlib import import_module
-from typing import Any, cast
+from typing import Any
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, jit
 
 from linodenet.types import NestedDict, NestedMapping
 
 __logger__ = logging.getLogger(__name__)
+
+
+def is_allcaps(s: str, /) -> bool:
+    r"""Check if a string is all caps."""
+    return s.isidentifier() and s.isupper() and s.isalpha()
+
+
+def is_dunder(s: str, /) -> bool:
+    r"""Check if name is a dunder method."""
+    return s.isidentifier() and s.startswith("__") and s.endswith("__")
+
+
+def is_private(s: str, /) -> bool:
+    r"""Check if name is a private method."""
+    return s.isidentifier() and s.startswith("_") and not s.endswith("__")
+
+
+def get_module(obj_ref: object, /) -> str:
+    return obj_ref.__module__.rsplit(".", maxsplit=1)[-1]
 
 
 def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict:
@@ -47,25 +62,6 @@ def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict
             case _:
                 d[key] = value
     return d
-
-
-def is_allcaps(s: str, /) -> bool:
-    r"""Check if a string is all caps."""
-    return s.isidentifier() and s.isupper() and s.isalpha()
-
-
-def is_dunder(s: str, /) -> bool:
-    r"""Check if name is a dunder method."""
-    return s.isidentifier() and s.startswith("__") and s.endswith("__")
-
-
-def is_private(s: str, /) -> bool:
-    r"""Check if name is a private method."""
-    return s.isidentifier() and s.startswith("_") and not s.endswith("__")
-
-
-def get_module(obj_ref: object, /) -> str:
-    return obj_ref.__module__.rsplit(".", maxsplit=1)[-1]
 
 
 def flatten_dict[K, K2](
@@ -132,7 +128,7 @@ def flatten_dict[K, K2](
         {('a', 1, True): 'foo', ('a', 2, False): 'bar'}
     """
     if not recursive:
-        return cast(dict[K2, Any], dict(d))
+        return dict[Any, Any](d)
 
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K2, Any] = {}
@@ -183,7 +179,7 @@ def unflatten_dict[K, K2](
         {'a': {17: 'foo', 18: 'bar'}}
     """
     if not recursive:
-        return cast(dict[K, Any], dict(d))
+        return dict[Any, Any](d)
 
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K, Any] = {}
@@ -200,63 +196,6 @@ def unflatten_dict[K, K2](
         else:
             result[outer_key] = item
     return result
-
-
-def initialize_from_dict(defaults: Mapping[str, Any], /, **kwargs: Any) -> nn.Module:
-    r"""Initialize a class from a dictionary.
-
-    Parameters:
-        defaults: A dictionary containing the default configuration of the class.
-        kwargs: Additional keyword arguments to override the configuration.
-
-    Note:
-        The configuration must provide the keys `__module__` and `__name__`.
-        The function will attempt to import the module and class and initialize it.
-    """
-    config = dict(defaults, **kwargs)
-
-    if "__name__" not in config:
-        raise ValueError(f"Expected {config=} to contain '__name__'")
-    if "__module__" not in config:
-        raise ValueError(f"Expected {config=} to contain '__module__'")
-
-    __logger__.debug("Initializing model from config %s", config)
-    library_name: str = config.pop("__module__")
-    class_name: str = config.pop("__name__")
-
-    try:  # import the module
-        library = import_module(library_name)
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(f"Failed to import {library_name}") from exc
-
-    try:  # import the class from the module
-        module_type = getattr(library, class_name)
-    except AttributeError as exc:
-        raise AttributeError(
-            f"Failed to import {class_name} from {library_name}"
-        ) from exc
-
-    try:  # attempt to initialize the class
-        module = module_type(**config)
-    except TypeError as exc:
-        raise TypeError(f"Failed to initialize {module_type} with {config=}") from exc
-    else:
-        if not isinstance(module, nn.Module):
-            raise TypeError(f"Expected {module_type} to be a subclass of nn.Module")
-
-    return module
-
-
-def initialize_from_type(module_type: type[nn.Module], /, **kwargs: Any) -> nn.Module:
-    r"""Initialize a class from a dictionary."""
-    default_config = getattr(module_type, "HP", {})
-    config = dict(default_config, **kwargs)
-    __logger__.debug("Initializing model_type %s from config %s", module_type, config)
-
-    try:  # attempt to initialize the class
-        return module_type(**config)
-    except TypeError as exc:
-        raise TypeError(f"Failed to initialize {module_type} with {config=}") from exc
 
 
 @jit.script

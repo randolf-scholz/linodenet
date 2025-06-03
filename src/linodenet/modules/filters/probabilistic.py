@@ -126,7 +126,7 @@ def probabilistic_kalman_filter(
 def discrete_probabilistic_kalman_filter(
     observation: Dirac,
     state: MultivariateNormal,
-    /,
+    *,
     R: Tensor,
     H: Optional[Tensor] = None,
 ) -> MultivariateNormal:

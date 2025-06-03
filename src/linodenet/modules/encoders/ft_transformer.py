@@ -15,7 +15,7 @@ __all__ = [
     "Tokenizer",
 ]
 
-from collections.abc import Callable
+from collections.abc import Callable, MutableSequence
 from math import sqrt
 from typing import Optional, cast
 
@@ -261,7 +261,7 @@ class FTTransformer(nn.Module):
             return nn.LayerNorm(d_token)
 
         d_hidden = int(d_token * d_ffn_factor)
-        self.layers = nn.ModuleList([])
+        self.layers: MutableSequence[nn.ModuleDict] = nn.ModuleList([])
         for layer_idx in range(n_layers):
             layer = nn.ModuleDict({
                 "attention": MultiheadAttention(
@@ -334,7 +334,7 @@ class FTTransformer(nn.Module):
 
         for layer_idx, layer in enumerate(self.layers):
             is_last_layer = layer_idx + 1 == len(self.layers)
-            layer = cast(dict[str, nn.Module], layer)
+            # layer = cast(dict[str, nn.Module], layer)
 
             x_residual = self._start_residual(x, layer, 0)
             x_residual = layer["attention"](
@@ -441,7 +441,7 @@ class ResNet(nn.Module):
 
         x = self.first_layer(x)
         for layer in self.layers:
-            layer = cast(dict[str, nn.Module], layer)
+            layer = cast("dict[str, nn.Module]", layer)
             z = x
             z = layer["norm"](z)
             z = layer["linear0"](z)
