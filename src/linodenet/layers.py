@@ -14,9 +14,8 @@ from typing import Any, Final, Optional, Self
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.activations import Activation, get_activation
 from linodenet.constants import EMPTY_MAP
-from linodenet.torch_generics import initialize_from_dict
-from linodenet.utils import deep_dict_update
 
 
 class Constant(nn.Module):
@@ -104,6 +103,8 @@ class ReverseDense(nn.Module):
     r"""The size of the output"""
 
     # PARAMETERS
+    activation: Activation
+    r"""The activation function to apply after the linear transformation."""
     weight: Tensor
     r"""The weight matrix."""
     bias: Optional[Tensor]
@@ -127,22 +128,28 @@ class ReverseDense(nn.Module):
     def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
         r"""Initialize from hyperparameters."""
         config = cls.HP | dict(cfg, **kwargs)
-        return cls(**config)
+        return cls(**config)  # type: ignore[arg-type]
 
-    def __init__(self, input_size: int, output_size: int, **cfg: Any) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        bias: bool = True,
+        activation: str | Activation | type[Activation],
+    ) -> None:
         super().__init__()
-        config = deep_dict_update(self.HP, cfg)
 
-        self.input_size = config["input_size"] = input_size
-        self.output_size = config["output_size"] = output_size
+        self.input_size = input_size
+        self.output_size = output_size
 
-        self.linear = nn.Linear(self.input_size, self.output_size, bias=config["bias"])
+        self.linear = nn.Linear(self.input_size, self.output_size, bias=bias)
         self.weight = self.linear.weight
         self.bias = self.linear.bias
 
         # initialize activation
-        self.activation: nn.Module = initialize_from_dict(config["activation"])
-        activation_name = config["activation"]["__name__"].lower()
+        self.activation = get_activation(activation)
+        activation_name = self.activation.__class__.__name__.lower()
         nn.init.kaiming_uniform_(self.weight, nonlinearity=activation_name)
 
         if self.bias is not None:

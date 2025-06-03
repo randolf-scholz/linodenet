@@ -82,12 +82,12 @@ class SpectralNorm(torch.autograd.Function):
         return sigma
 
     @staticmethod
-    def backward(ctx: Any, /, *grad_outputs: Tensor) -> Tensor:
+    def backward(ctx: Any, *grad_outputs: Tensor) -> Tensor:
         u, v = ctx.saved_tensors
         return torch.einsum("..., i, j -> ...ij", grad_outputs[0], u, v)
 
     @staticmethod
-    def jvp(ctx: Any, /, *grad_inputs: Any) -> Any:
+    def jvp(ctx: Any, *grad_inputs: Any) -> Any:
         r"""Jacobian-vector product forward mode."""
         u, v = ctx.saved_tensors
         return torch.einsum("...ij, i, j -> ...", grad_inputs[0], u, v)

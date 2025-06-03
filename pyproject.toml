@@ -261,6 +261,8 @@ ignore = [
     "S403",     # suspicious-pickle-import
     "S404",     # suspicious-subprocess-import
     "S603",     # subprocess-without-shell-equals-true
+    # type-checking
+    "TC006",    #  Add quotes to type expression in `typing.cast()`
     # todo
     "TD",       # todo
     # tryceratops

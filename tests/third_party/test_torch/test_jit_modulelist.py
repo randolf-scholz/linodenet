@@ -122,38 +122,33 @@ def test_jit_iter_modulelist_in_scripted_forward(
             raise ValueError(f"Invalid interface: {interface}")
 
 
-class Mixin(nn.Module):
-    input_size: Final[int]
-    hidden_size: Final[int]
-
-    def __init__(self, input_size: int, hidden_size: int) -> None:
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.layer = nn.Linear(input_size, hidden_size)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.layer(x)
-
-
-# NOTE: Always put nn.ModuleList last, otherwise __init__ won't work, as
-#   nn.ModuleList.__init__ tries to call Mixin.__init__ with the wrong arguments.
-#   This is because
-
-
-class MySequential(nn.ModuleList, Mixin):
-    def __init__(self, modules: list[nn.Module], *, shape: tuple[int, int]) -> None:
-        nn.ModuleList.__init__(self, modules)
-        Mixin.__init__(self, input_size=shape[0], hidden_size=shape[1])
-        # Mixin.__init__(self, input_size=shape[0], hidden_size=shape[1])
-
-    def forward(self, x: Tensor) -> Tensor:
-        for m in self:
-            x = m(x)
-        return self.layer(x)
-
-
 def test_jit_mixin() -> None:
+    class Mixin(nn.Module):
+        input_size: Final[int]
+        hidden_size: Final[int]
+
+        def __init__(self, input_size: int, hidden_size: int) -> None:
+            super().__init__()
+            self.input_size = input_size
+            self.hidden_size = hidden_size
+            self.layer = nn.Linear(input_size, hidden_size)
+
+        def forward(self, x: Tensor) -> Tensor:
+            return self.layer(x)
+
+    # NOTE: Always put Mixin before nn.ModuleList in __mro__, otherwise __init__ won't work,
+    #   as nn.ModuleList.__init__ tries to call Mixin.__init__ with the wrong arguments.
+    #   This is because nn.ModuleList.__init__ calls super().__init__() -> Mixin.__init__ without arguments.
+    class MySequential(Mixin, nn.ModuleList):
+        def __init__(self, modules: list[nn.Module], *, shape: tuple[int, int]) -> None:
+            nn.ModuleList.__init__(self, modules)
+            Mixin.__init__(self, input_size=shape[0], hidden_size=shape[1])
+
+        def forward(self, x: Tensor) -> Tensor:
+            for m in self:
+                x = m(x)
+            return self.layer(x)
+
     # simple MLP
     modules = [nn.Linear(3, 3), nn.ReLU(), nn.Linear(3, 3), nn.ReLU()]
     print(f"{[t.__name__ for t in MySequential.__mro__]}")

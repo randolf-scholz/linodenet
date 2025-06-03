@@ -13,7 +13,7 @@ def test_minimal() -> None:
         model = torch.nn.Linear(3, 3)
         exported_model = export(model, args=(torch.randn(3),))
         # "BufferedRandom" cannot be assigned to type "str | PathLike[Unknown] | BytesIO"
-        export.save(exported_model, file)
+        torch.export.save(exported_model, file)
 
 
 def test_export() -> None:
@@ -63,9 +63,8 @@ def test_export() -> None:
 
     # test serialize and deserialize
     with tempfile.NamedTemporaryFile() as file:
-        torch.export.save(exported_program, file)  # pyright: ignore[reportArgumentType]
-        deserialized = torch.export.load(file)  # pyright: ignore[reportArgumentType]
-
+        torch.export.save(exported_program, file)
+        deserialized = torch.export.load(file)
     # test deserialized program
     args = (torch.randn(B, N1), torch.randn(B, N2))
     m_deserialized = deserialized.module()
@@ -124,8 +123,8 @@ def test_export_with_property() -> None:
 
     # test serialize and deserialize
     with tempfile.NamedTemporaryFile() as file:
-        torch.export.save(exported_program, file)  # pyright: ignore[reportArgumentType]
-        deserialized = torch.export.load(file)  # pyright: ignore[reportArgumentType]
+        torch.export.save(exported_program, file)
+        deserialized = torch.export.load(file)
 
     # test deserialized program
     args = (torch.randn(B, N1), torch.randn(B, N2))

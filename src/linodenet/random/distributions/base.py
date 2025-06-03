@@ -58,7 +58,7 @@ class DistributionList(Distribution, Sequence[Distribution]):
     def __getitem__(self, index: int, /) -> Distribution: ...
     @overload
     def __getitem__(self, index: slice, /) -> Self: ...
-    def __getitem__(self, index: int | slice, /) -> Distribution | Self:
+    def __getitem__(self, index: int | slice, /) -> Distribution | Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         r"""Get the marginal distribution at the given index."""
         if isinstance(index, SupportsIndex):
             return self.bases[index.__index__()]

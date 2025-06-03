@@ -24,12 +24,12 @@ class MultiVariateNormal(dist.MultivariateNormal):
         r"""Multiply by a tensor."""
         return self.__class__(
             scale * self.mean,
-            scale**2 * self.covariance_matrix,  # pyright: ignore[reportOperatorIssue]
+            scale**2 * self.covariance_matrix,
         )
 
     def __matmul__(self, scale: Tensor, /) -> Self:
         r"""Multiply by a tensor."""
         return self.__class__(
             scale @ self.mean,
-            scale @ self.covariance_matrix @ scale.T,  # pyright: ignore[reportOperatorIssue]
+            scale @ self.covariance_matrix @ scale.T,
         )

@@ -34,7 +34,7 @@ class MissingValueFilter(FilterBase):
     .. math:: u = concat([impute(m, y, x)，m])
     """
 
-    HP = {}  # FIXME: Remove
+    HP: dict[str, Any] = {}  # FIXME: Remove
 
     # CONSTANTS
     concat_mask: Final[bool]

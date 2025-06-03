@@ -95,9 +95,9 @@ def probabilistic_kalman_filter(
         The updated state distribution.
     """
     μ: Tensor = val.mean
-    Σ: Tensor = val.covariance_matrix  # pyright: ignore[reportAssignmentType]
+    Σ: Tensor = val.covariance_matrix
     y: Tensor = obs.mean
-    R: Tensor = obs.covariance_matrix  # pyright: ignore[reportAssignmentType]
+    R: Tensor = obs.covariance_matrix
 
     if H is None:
         yhat = μ

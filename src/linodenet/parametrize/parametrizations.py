@@ -32,7 +32,7 @@ __all__ = [
 from typing import Final, Optional
 
 import torch
-from torch import BoolTensor, Tensor, jit, nn
+from torch import Tensor, jit, nn
 
 from linodenet import projections
 from linodenet.constants import ATOL, RTOL
@@ -366,12 +366,12 @@ class LowerTriangular(ParametrizationBase):
 class Masked(ParametrizationBase):
     r"""Parametrize a matrix to be masked."""
 
-    mask: BoolTensor
-    r"""CONST: The mask to consider"""
+    mask: Tensor
+    r"""CONST: Boolean mask to consider"""
 
-    def __init__(self, tensor: Tensor, /, *, mask: BoolTensor) -> None:
+    def __init__(self, tensor: Tensor, /, *, mask: Tensor) -> None:
         super().__init__(tensor)
-        self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)
 
     def forward(self, x: Tensor) -> Tensor:
         """.. Signature:: ``(..., m, n) -> (..., m, n)``."""

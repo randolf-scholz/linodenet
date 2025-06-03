@@ -71,7 +71,11 @@ def get_activation(activation: object, /) -> Activation:
     r"""Get an activation function by name."""
     match activation:
         case type() as cls:
-            return cls()
+            try:
+                return cls()
+            except TypeError as exc:
+                exc.add_note("failed to instantiate activation")
+                raise
         case str(name):
             return get_activation(ACTIVATIONS[name])
         case Activation() as fn:

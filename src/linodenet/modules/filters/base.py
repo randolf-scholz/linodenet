@@ -43,6 +43,7 @@ from typing import (
     Final,
     Optional,
     Protocol,
+    Self,
     cast,
     runtime_checkable,
 )
@@ -275,6 +276,10 @@ class ResNetFilter(nn.ModuleList):
         "layers": [],
     }
     r"""The HyperparameterDict of this class."""
+
+    @classmethod
+    def from_config(cls, **kwargs: Any) -> Self:
+        raise NotImplementedError
 
     def __init__(self, layers: Iterable[Filter], /) -> None:
         r"""Initialize from modules."""

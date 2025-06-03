@@ -10,11 +10,11 @@ source_roots = [ "src"]
 
 [[modules]]
 path = "linodenet.torch_generics"
-depends_on = ["linodenet.types"]
+depends_on = []
 
 [[modules]]
 path = "linodenet.layers"
-depends_on = ["linodenet.constants", "linodenet.utils", "linodenet.torch_generics"]
+depends_on = ["linodenet.constants", "linodenet.utils", "linodenet.torch_generics", "linodenet.activations"]
 
 [[modules]]
 path = "linodenet.lib"
@@ -76,4 +76,4 @@ depends_on = ["linodenet.testing", "linodenet.activations", "linodenet.config", 
 
 [[modules]]
 path = "linodenet.algebra"
-depends_on = ["linodenet.types", "linodenet.torch_generics"]
+depends_on = []

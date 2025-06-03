@@ -68,7 +68,6 @@ class Tokenizer(nn.Module):
             self.register_buffer("category_offsets", category_offsets)
             self.category_embeddings = nn.Embedding(sum(categories), d_token)
             nn_init.kaiming_uniform_(self.category_embeddings.weight, a=sqrt(5))
-            print(f"{self.category_embeddings.weight.shape=}")
 
         # take [CLS] token into account
         self.weight = nn.Parameter(Tensor(d_numerical + 1, d_token))
@@ -261,7 +260,10 @@ class FTTransformer(nn.Module):
             return nn.LayerNorm(d_token)
 
         d_hidden = int(d_token * d_ffn_factor)
-        self.layers: MutableSequence[nn.ModuleDict] = nn.ModuleList([])
+
+        self.layers: MutableSequence[nn.ModuleDict]
+        self.register_module("layers", nn.ModuleList([]))
+
         for layer_idx in range(n_layers):
             layer = nn.ModuleDict({
                 "attention": MultiheadAttention(
@@ -407,7 +409,6 @@ class ResNet(nn.Module):
             self.register_buffer("category_offsets", category_offsets)
             self.category_embeddings = nn.Embedding(sum(categories), d_embedding)
             nn.init.kaiming_uniform_(self.category_embeddings.weight, a=sqrt(5))
-            print(f"{self.category_embeddings.weight.shape=}")
 
         self.first_layer = nn.Linear(d_in, d)
         self.layers = nn.ModuleList([

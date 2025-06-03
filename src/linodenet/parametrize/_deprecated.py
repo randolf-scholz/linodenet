@@ -10,9 +10,22 @@ import warnings
 from collections.abc import Callable
 from contextlib import ContextDecorator
 from types import MethodType, TracebackType
-from typing import ClassVar, Literal, Self
+from typing import ClassVar, Literal, Self, TypeIs, cast
 
 from torch import Tensor, nn
+
+
+class ParameterizedModule(nn.Module):
+    r"""A module that can be parameterized with caches."""
+
+    cached_tensors: dict[str, Tensor]
+
+    def recompute_all(self) -> None: ...
+
+
+def is_parameterized(obj: object, /) -> TypeIs[ParameterizedModule]:
+    r"""Check if the object is a parameterized module."""
+    return isinstance(obj, nn.Module) and hasattr(obj, "cached_tensors")
 
 
 def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) -> None:
@@ -26,11 +39,12 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) ->
     if hasattr(self, name):
         raise AttributeError(f"{self} already has attribute {name}")
 
-    if not hasattr(self, "cached_tensors"):
+    if not is_parameterized(self):
         cached_tensors: dict[str, Tensor] = {}
         self.cached_tensors = cached_tensors  # type: ignore[assignment]
         self.__annotations__["cached_tensors"] = dict[str, Tensor]
 
+    self = cast(ParameterizedModule, self)
     cached_tensors = self.cached_tensors
 
     # register the buffer
@@ -45,12 +59,12 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) ->
     setattr(self, f"recompute_{name}", MethodType(recompute, self))
 
     # register the recompute all function
-    def recompute_all(obj: nn.Module) -> None:
-        for key in obj.cached_tensors:
-            f = getattr(obj, f"recompute_{key}")
+    def recompute_all(_self: ParameterizedModule) -> None:
+        for key in _self.cached_tensors:
+            f = getattr(_self, f"recompute_{key}")
             f()
 
-    self.recompute_all = MethodType(recompute_all, self)  # type: ignore[assignment]
+    self.recompute_all = MethodType(recompute_all, self)
 
 
 class reset_caches(ContextDecorator):
@@ -65,7 +79,7 @@ class reset_caches(ContextDecorator):
         on_enter: bool = True,
         on_exit: bool = True,
     ) -> None:
-        self.module = module
+        self.module: ParameterizedModule = cast(ParameterizedModule, module)
         self.on_enter = on_enter
         self.on_exit = on_exit
 

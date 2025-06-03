@@ -12,6 +12,7 @@ from linodenet.parametrize import PARAMETRIZATIONS, Parametrization
 def test_parametrization(name: str) -> None:
     r"""Test parametrization."""
     cls = PARAMETRIZATIONS[name]
+    parametrization: Parametrization
     tensor = nn.Parameter(torch.randn(3, 3))
 
     match cls:

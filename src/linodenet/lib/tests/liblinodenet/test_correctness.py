@@ -131,7 +131,7 @@ def test_svd_rank_one(
         case linodenet.lib.singular_triplet:
             B = torch.from_numpy(matrix)
             s, u, v = linodenet.lib.singular_triplet(B)
-            assert torch.allclose(s * np.outer(u, v), B, atol=atol, rtol=rtol)
+            assert torch.allclose(s * torch.outer(u, v), B, atol=atol, rtol=rtol)
         case _:
             raise ValueError(f"Unknown method: {method}")
 

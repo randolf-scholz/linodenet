@@ -10,14 +10,11 @@ from torch import Tensor, jit, nn
 
 @runtime_checkable
 class Cell(Protocol):
-    input_size: int
-    hidden_size: int
+    input_size: Final[int]  # type: ignore[misc]
+    hidden_size: Final[int]  # type: ignore[misc]
 
 
-class MyCell(nn.Module, Cell):
-    input_size: Final[int]
-    hidden_size: Final[int]
-
+class MyCell(nn.Module):
     def __init__(self, input_size: int, hidden_size: int) -> None:
         nn.Module.__init__(self)
         self.input_size = input_size
@@ -34,7 +31,7 @@ def test_jit_cell(stage: str) -> None:
 
     match stage:
         case "original":
-            target = cell
+            target: nn.Module = cell
         case "scripted":
             target = jit.script(cell)
         case "reloaded":
@@ -58,7 +55,9 @@ def test_jit_cell(stage: str) -> None:
         assert isinstance(target, MyCell)
         assert isinstance(target, Cell)
     else:
-        with pytest.xfail("Scripted classes do not subclass original class."):
+        with pytest.raises(AssertionError):
+            # Scripted classes do not subclass original class.
             assert isinstance(target, MyCell)
-        with pytest.xfail("Scripted classes do not support getattr_static"):
+        with pytest.raises(AssertionError):
+            # Scripted classes do not support getattr_static")
             assert isinstance(target, Cell)
