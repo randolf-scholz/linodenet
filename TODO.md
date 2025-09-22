@@ -28,14 +28,3 @@ better idea: we probably should go back and forth.
 other idea: use a set-based model and put h = g(T,X), including the whole TS.
 This set model can use triplet notation.
 bias weighting towards close time points
-
-### TODO: replace with add_module once supported
-
-```python
-self.add_module("embedding", _embedding)
-self.add_module("encoder", HP["Encoder"](**HP["Encoder_cfg"]))
-self.add_module("system", HP["System"](**HP["System_cfg"]))
-self.add_module("decoder", HP["Decoder"](**HP["Decoder_cfg"]))
-self.add_module("projection", _projection)
-self.add_module("filter", HP["Filter"](**HP["Filter_cfg"]))
-```

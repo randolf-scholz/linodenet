@@ -7,7 +7,7 @@ __all__ = [
 
 import logging
 import warnings
-from typing import Any, Final, Optional, Self
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -50,12 +50,12 @@ class LatentStateSpaceModel(nn.Module):
         "hidden_size": None,
         "latent_size": None,
         "output_size": None,
-        "System": LinODECell.HP,
-        "Embedding": ConcatEmbedding.HP,
-        "Projection": ConcatProjection.HP,
-        "Filter": MissingValueFilter.HP | {"autoregressive": True},
-        "Encoder": ResNet.HP,
-        "Decoder": ResNet.HP,
+        "System": LinODECell,
+        "Embedding": ConcatEmbedding,
+        "Projection": ConcatProjection,
+        "Filter": MissingValueFilter,
+        "Encoder": ResNet,
+        "Decoder": ResNet,
     }
     r"""Dictionary of Hyperparameters."""
 
@@ -108,7 +108,7 @@ class LatentStateSpaceModel(nn.Module):
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> Self:
+    def from_config(cls, cfg: dict[str, Any]) -> "LatentStateSpaceModel":
         r"""Constructs a new model from a configuration dictionary."""
         config = deep_dict_update(cls.HP, cfg)
         input_size = config["input_size"]
@@ -145,7 +145,7 @@ class LatentStateSpaceModel(nn.Module):
         cls.LOGGER.debug("Initializing Filter %s", config["Encoder"])
         filter: nn.Module = initialize_from_dict(config["Filter"])  # noqa: A001
 
-        return cls(
+        return LatentStateSpaceModel(
             encoder=encoder,
             system=system,
             decoder=decoder,

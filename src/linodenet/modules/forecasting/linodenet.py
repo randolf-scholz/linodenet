@@ -46,12 +46,12 @@ class LinODEnet(nn.Module):
         "hidden_size": None,
         "latent_size": None,
         "output_size": None,
-        "System": LinODECell.HP,
-        "Embedding": ConcatEmbedding.HP,
-        "Projection": ConcatProjection.HP,
-        "Filter": MissingValueFilter.HP | {"autoregressive": True},
-        "Encoder": ResNet.HP,
-        "Decoder": ResNet.HP,
+        "System": LinODECell,
+        "Embedding": ConcatEmbedding,
+        "Projection": ConcatProjection,
+        "Filter": MissingValueFilter,
+        "Encoder": ResNet,
+        "Decoder": ResNet,
     }
     r"""Dictionary of Hyperparameters."""
 
@@ -402,12 +402,12 @@ class LatentLinODECell(nn.Module):
         "hidden_size": None,
         "latent_size": None,
         "output_size": None,
-        "System": LinODECell.HP,
-        "Embedding": ConcatEmbedding.HP,
-        "Projection": ConcatProjection.HP,
-        "Filter": MissingValueFilter.HP | {"autoregressive": True},
-        "Encoder": ResNet.HP,
-        "Decoder": ResNet.HP,
+        "System": LinODECell,
+        "Embedding": ConcatEmbedding,
+        "Projection": ConcatProjection,
+        "Filter": MissingValueFilter,
+        "Encoder": ResNet,
+        "Decoder": ResNet,
     }
     r"""Dictionary of Hyperparameters."""
 

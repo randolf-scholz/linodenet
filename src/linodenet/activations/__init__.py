@@ -67,18 +67,37 @@ ACTIVATIONS: dict[str, Activation | type[Activation]] = {
 r"""Dictionary containing all available activations."""
 
 
-def get_activation(activation: object, /) -> Activation:
+def get_activation(kind: object = None, /, **cfg: object) -> Activation:
     r"""Get an activation function by name."""
-    match activation:
+    match kind:
+        # if instance, return as-is
+        case Activation() as instance:
+            if cfg:
+                raise ValueError(f"Cannot pass arguments to an instance: {instance!r}")
+            return instance
+        # if class, try to instantiate it with the given configuration
         case type() as cls:
             try:
-                return cls()
+                return cls(**cfg)
             except TypeError as exc:
-                exc.add_note("failed to instantiate activation")
+                exc.add_note(f"Failed to instantiate {cls} with arguments {cfg!r}")
                 raise
+        # if name, look up in the dictionary
         case str(name):
-            return get_activation(ACTIVATIONS[name])
-        case Activation() as fn:
-            return fn
+            _kind = ACTIVATIONS[name]
+            return get_activation(_kind, **cfg)
+        # if config, extract the name and instantiate
+        case None:
+            if "__module__" in cfg:
+                from linodenet.torch_generics import initialize_from_dict
+
+                result = initialize_from_dict(cfg)
+                assert isinstance(result, Activation)
+                return result
+            try:
+                return get_activation(cfg.pop("__name__"), **cfg)
+            except KeyError as exc:
+                exc.add_note(f"Expected {cfg=} to contain '__name__'")
+                raise
         case _:
-            raise TypeError(f"Invalid activation: {activation!r}")
+            raise TypeError(f"Invalid argument: {kind!r}")

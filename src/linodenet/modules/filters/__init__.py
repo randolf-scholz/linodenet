@@ -100,19 +100,37 @@ FILTERS: dict[str, type[Filter]] = {
 r"""Dictionary of all available filters."""
 
 
-def get_filter(filter_kind: str | type | None = None, /, **cfg: object) -> Filter:
+def get_filter(kind: object = None, /, **cfg: object) -> Filter:
     r"""Initialize from a configuration."""
-    match filter_kind:
-        case None:
-            filter_name = cfg.pop("name")
-            return get_filter(filter_name, **cfg)  # type: ignore[arg-type]
+    match kind:
+        # if instance, return as-is
+        case Filter() as instance:
+            if cfg:
+                raise ValueError(f"Cannot pass arguments to an instance: {instance!r}")
+            return instance
+        # if class, try to instantiate it with the given configuration
         case type() as cls:
             try:
                 return cls(**cfg)
-            except Exception as exc:
-                raise RuntimeError(f"Failed to create filter of type {cls}!") from exc
+            except TypeError as exc:
+                exc.add_note(f"Failed to instantiate {cls} with arguments {cfg!r}")
+                raise
+        # if name, look up in the dictionary
         case str(name):
-            typ: type = FILTERS[name]
-            return get_filter(typ, **cfg)
+            _kind = FILTERS[name]
+            return get_filter(_kind, **cfg)
+        # if config, extract the name and instantiate
+        case None:
+            if "__module__" in cfg:
+                from linodenet.torch_generics import initialize_from_dict
+
+                result = initialize_from_dict(cfg)
+                assert isinstance(result, Filter)
+                return result
+            try:
+                return get_filter(cfg.pop("__name__"), **cfg)
+            except KeyError as exc:
+                exc.add_note(f"Expected {cfg=} to contain '__name__'")
+                raise
         case _:
-            raise TypeError(f"Invalid argument type: {filter_kind!r}")
+            raise TypeError(f"Invalid argument: {kind!r}")

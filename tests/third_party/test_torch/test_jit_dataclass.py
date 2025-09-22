@@ -1,3 +1,5 @@
+r"""Test JIT scriptability and serialization of a dataclass module in PyTorch."""
+
 from dataclasses import dataclass
 
 import torch

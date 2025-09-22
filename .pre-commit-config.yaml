@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.7.9
+    rev: 0.7.11
     hooks:
       - id: uv-lock
       # - id: uv-export
@@ -137,6 +137,7 @@ repos:
         require_serial: true
         types_or: [python, pyi]
         files: '^src/|^tests/'
+        exclude: '/parametrize/'
         entry: mypy
         args:
           - "--hide-error-context"
@@ -149,3 +150,4 @@ repos:
     hooks:
         - id: pyright-concise
           files: '^src/|^tests/'
+          exclude: '/parametrize/'

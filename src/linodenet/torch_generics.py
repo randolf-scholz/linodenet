@@ -80,6 +80,12 @@ class SupportsFromConfig(Protocol):
     @classmethod
     def from_config(cls, config: Mapping[str, Any], /) -> Self: ...
 
+    # @classmethod
+    # def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
+    #     r"""Initialize from hyperparameters."""
+    #     config = cls.HP | dict(cfg, **kwargs)
+    #     return cls(**config)  # type: ignore[arg-type]
+
 
 def initialize_from_dict(config: Mapping[str, Any], /) -> Module:
     r"""Initialize a class from a dictionary.
@@ -128,6 +134,21 @@ def initialize_from_dict(config: Mapping[str, Any], /) -> Module:
 
 class ModuleSequence[M: Module](ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
+
+    @classmethod
+    def from_config(cls, config: Mapping[str, Any], /) -> "ModuleSequence":
+        r"""Initialize from hyperparameters."""
+        layers: list[Module] = []
+        for layer_cfg in config["layers"]:
+            layer = initialize_from_dict(layer_cfg)
+            layers.append(layer)
+
+        return ModuleSequence(layers)
+
+    @classmethod
+    def from_modules(cls, modules: Iterable[M], /) -> "ModuleSequence[M]":
+        r"""Initialize from an iterable of modules."""
+        return ModuleSequence(modules)
 
     if TYPE_CHECKING:
 

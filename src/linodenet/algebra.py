@@ -9,9 +9,12 @@ r"""Functional Algebra.
 
 # @: tensor product?
 # +: sum-reduce
-# *: ? convolution?
 # -: ?
-# /: ? reduce?
+# / num: ? reduce?
+# % num: ? reduce?
+# // num: ? concurrent/duplicate?
+# ** num: repeat (>>)
+# * num: duplicate? (⇝ similar to (x,) * n)
 """
 
 __all__ = [
@@ -133,24 +136,27 @@ class Reduction[T](Protocol):
 class FnSequence[M: Fn](Sequence[M], Fn):
     r"""Base class for sequences of functional modules."""
 
+    @classmethod
+    def from_iterable(cls, seq: Iterable[M], /) -> Self:
+        raise NotImplementedError(
+            "Subclasses must override from_iterable to enable slicing"
+        )
+
     def __init__(self, seq: Iterable[M] = (), /) -> None:
-        r"""Initialize the module sequence."""
         super().__init__()
-        self.data: Final[tuple[M, ...]] = tuple(seq)
+        self._data: Final[tuple[M, ...]] = tuple(seq)
 
     def __len__(self) -> int:
-        r"""Get the length of the sequence."""
-        return len(self.data)
+        return len(self._data)
 
     @overload
     def __getitem__(self, index: SupportsIndex, /) -> M: ...
     @overload
     def __getitem__(self, index: slice, /) -> Self: ...
     def __getitem__(self, index: SupportsIndex | slice, /) -> M | Self:  # pyright: ignore[reportIncompatibleMethodOverride]
-        r"""Get an item from the sequence."""
         if isinstance(index, slice):
-            return self.__class__(self.data[index])
-        return self.data[index]
+            return self.from_iterable(self._data[index])
+        return self._data[index]
 
 
 class FunctionalMixin(Fn, Protocol):
@@ -228,20 +234,36 @@ class FunctionalMixin(Fn, Protocol):
     def __and__[N: Fn](self, other: N | Sequence[N], /) -> "Meet[Self | N]":
         r"""Execute multiple modules with the same input (`&`).
 
-             ┌───▶ f₁(x)
-        x ───┼───▶ f₂(x)
-             │       ⋮
-             └───▶ fₙ(x)
+            ┌────▶ f₁(x)
+        x ──┼────▶ f₂(x)
+            │       ⋮
+            └────▶ fₙ(x)
+
+        meet:
+            Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)
+            (f₁，…，fₙ) ⟼ meet(f₁，…，fₙ)
+
+        meet(f₁，…，fₙ):
+            X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ
+            x ⟼ (f₁(x), ..., fₙ(x))
         """
         return meet(self, other)
 
     def __rand__[N: Fn](self, other: N | Sequence[N], /) -> "Meet[Self | N]":
         r"""Execute multiple modules with the same input (`&`).
 
-             ┌───▶ f₁(x)
-        x ───┼───▶ f₂(x)
-             │       ⋮
-             └───▶ fₙ(x)
+            ┌────▶ f₁(x)
+        x ──┼────▶ f₂(x)
+            │       ⋮
+            └────▶ fₙ(x)
+
+        meet:
+            Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)
+            (f₁，…，fₙ) ⟼ meet(f₁，…，fₙ)
+
+        meet(f₁，…，fₙ):
+            X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ
+            x ⟼ (f₁(x), ..., fₙ(x))
         """
         return meet(other, self)
 
@@ -380,13 +402,13 @@ class Repeat[M: Fn](Series[M]):
     x ───▶ f ───▶ f(x) ───▶ f(f(x)) ───▶ ... ───▶ fⁿ(x)
     """
 
+    def __invert__(self) -> "Repeat":
+        return Repeat(self.module, -self.num)
+
     def __init__(self, module: M, num: int, /) -> None:
         self.num: Final[int] = num
         self.module: Final[M] = module
-
-        s = Series([self.module] * abs(self.num))
-        s = s if num >= 0 else ~s
-        super().__init__(s)
+        super().__init__([module if num >= 0 else ~module] * abs(num))
 
 
 def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
@@ -553,17 +575,20 @@ class Meet[M: Fn](FnSequence[M]):
 
     meet:
         Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)
-        (f₁，…，fₙ) ⟼ split(f₁，…，fₙ)
+        (f₁，…，fₙ) ⟼ meet(f₁，…，fₙ)
 
     meet(f₁，…，fₙ):
-        X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ
+        X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ,
         x ⟼ (f₁(x), ..., fₙ(x))
-
 
         ┌────▶ f₁(x)
     x ──┼────▶ f₂(x)
         │       ⋮
         └────▶ fₙ(x)
+
+    Note:
+        This is a "weak" meet, rather than the actual meet with respect to subtyping relationship.
+        It crashes if the input is not compatible with all components.
     """
 
     def __call__(self, x: Any, /) -> tuple:
@@ -581,10 +606,10 @@ def meet[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Meet[M | N]: ...
 def meet[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Meet[M | N]:
     r"""Execute multiple modules with the same input (`&`).
 
-         ┌───▶ f₁(x)
-    x ───┼───▶ f₂(x)
-         │       ⋮
-         └───▶ fₙ(x)
+             ┌───▶ f₁(x)
+        x ───┼───▶ f₂(x)
+             │       ⋮
+             └───▶ fₙ(x)
 
     Note: equivalent to diagonal(num) >> parallel(m1, m2, ..., mn)
     """
@@ -685,7 +710,7 @@ class Reduce[X = Any](Fn):
     - `any`, `all` for boolean data
     - `sum`, `mean`, `prod`, `std`, `var`, `logsumexp` for numerical data
     - `stack`, `concat` for tensor data
-    - `choice` for generic data
+    - `random.choice` for generic data
     """
 
     def __init__(self, reduction: Reduction[X], /) -> None:

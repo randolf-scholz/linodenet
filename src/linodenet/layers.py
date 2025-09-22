@@ -8,14 +8,13 @@ __all__ = [
     "ReverseDense",
 ]
 
-from collections.abc import Iterable, Mapping
-from typing import Any, Final, Optional, Self
+from collections.abc import Iterable
+from typing import Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.activations import Activation, get_activation
-from linodenet.constants import EMPTY_MAP
 
 
 class Constant(nn.Module):
@@ -123,12 +122,6 @@ class ReverseDense(nn.Module):
         },
     }
     r"""The hyperparameter dictionary"""
-
-    @classmethod
-    def from_config(cls, cfg: Mapping[str, Any] = EMPTY_MAP, /, **kwargs: Any) -> Self:
-        r"""Initialize from hyperparameters."""
-        config = cls.HP | dict(cfg, **kwargs)
-        return cls(**config)  # type: ignore[arg-type]
 
     def __init__(
         self,

@@ -66,12 +66,29 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
             metafunc.parametrize("case_name", CASES)
 
 
+def test_name_casing(case_name: str, item_name: str) -> None:
+    r"""Check that the case name is in snake_case."""
+    case = CASES[case_name]
+    item = case.elements[item_name]
+    assert item_name.isidentifier()
+
+    if isinstance(item, type):
+        # check if the name is in CamelCase
+        assert item_name[0].isupper()
+        assert "_" not in item_name
+    else:
+        # check if the name is in snake_case
+        assert item_name.islower()
+
+
 def test_protocol(case_name: str) -> None:
+    r"""Check that the protocol associated with the classes is indeed a protocol."""
     case = CASES[case_name]
     assert is_protocol(case.protocol)
 
 
 def test_base_class(case_name: str) -> None:
+    r"""Check that the base class is a class and not a protocol."""
     case = CASES[case_name]
     cls = case.base_class
 
@@ -81,6 +98,7 @@ def test_base_class(case_name: str) -> None:
 
 
 def test_name(case_name: str, item_name: str) -> None:
+    r"""Check if the name of the class matches the item name."""
     case = CASES[case_name]
     obj = case.elements[item_name]
     # fallback for jit.ScriptFunction
