@@ -14,7 +14,7 @@ depends_on = []
 
 [[modules]]
 path = "linodenet.layers"
-depends_on = ["linodenet.constants", "linodenet.utils", "linodenet.torch_generics", "linodenet.activations"]
+depends_on = [ "linodenet.activations"]
 
 [[modules]]
 path = "linodenet.lib"
@@ -30,7 +30,7 @@ depends_on = []
 
 [[modules]]
 path = "linodenet.activations"
-depends_on = []
+depends_on = ["linodenet.torch_generics"]
 
 [[modules]]
 path = "linodenet.config"
