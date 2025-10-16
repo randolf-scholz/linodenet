@@ -66,6 +66,7 @@ def visualize_distribution(
     ax.grid(axis="x")
     ax.set_axisbelow(True)
 
+    bins: np.ndarray
     if log:
         base = 10 if log is True else log
         tol = 2**-24 if np.issubdtype(x.dtype, np.float32) else 2**-53
@@ -81,7 +82,7 @@ def visualize_distribution(
         high = np.quantile(x, 1 - 0.01)
         bins = np.linspace(low, high, num=num_bins)
 
-    ax.hist(x, bins=bins, density=True)  # type: ignore[arg-type]
+    ax.hist(x, bins=bins, density=True)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
 
     if print_stats:
         stats = {
@@ -92,6 +93,8 @@ def visualize_distribution(
             "Max": f"{np.max(x): .2g}",
             "Mean": f"{np.mean(x): .2g}",
             "Stdev": f"{np.std(x): .2g}",
+            "0.05-Quantile": f"{np.quantile(x, 0.05): .2g}",
+            "0.95-Quantile": f"{np.quantile(x, 0.95): .2g}",
         }
         if extra_stats is not None:
             stats |= {str(key): str(val) for key, val in extra_stats.items()}

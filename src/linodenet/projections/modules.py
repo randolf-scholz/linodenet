@@ -31,7 +31,7 @@ from abc import abstractmethod
 from typing import Final
 
 import torch
-from torch import BoolTensor, Tensor, jit, nn
+from torch import Tensor, jit, nn
 
 from linodenet.constants import TRUE
 from linodenet.projections.functional import (
@@ -52,6 +52,7 @@ from linodenet.projections.functional import (
     traceless,
     upper_triangular,
 )
+from linodenet.types import BoolTensor
 
 
 class ProjectionBase(nn.Module):
@@ -382,7 +383,7 @@ class Masked(ProjectionBase):
 
     def __init__(self, mask: bool | Tensor = TRUE) -> None:
         super().__init__()
-        self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:

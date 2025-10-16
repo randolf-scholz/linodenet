@@ -62,7 +62,7 @@ def load_function(name: str, /) -> Any:
     try:  # compile the function
         cpp_extension.load(
             name=name,
-            sources=[SOURCE_DIR / f"{name}.cpp"],  # type: ignore[list-item]
+            sources=[SOURCE_DIR / f"{name}.cpp"],  # type: ignore[list-item]  # pyright: ignore[reportArgumentType]
             is_python_module=False,
             verbose=True,
         )

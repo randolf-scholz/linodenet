@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 # region project configuration ---------------------------------------------------------
 [project]
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14"
 name = "linodenet"
 version = "0.3.2"
 authors = [{name="Randolf Scholz", email="randolf.scholz@gmail.com"}]
@@ -18,19 +18,19 @@ readme = "README.md"
 keywords = ["time-series", "machine-learning", "neural-ode", "kalman-filter"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Environment :: GPU :: NVIDIA CUDA :: 12.6",
+    "Environment :: GPU :: NVIDIA CUDA :: 12.8",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
 
 dependencies = [
-    "numpy>=2.3.3",
+    "numpy>=2.3.4",
     "scipy>=1.16.2",
-    "torch>=2.8.0",
+    "torch>=2.9.0",
 ]
 
 [project.urls]
@@ -82,8 +82,8 @@ linters = [
     "tach>=0.29.0",
 ]
 tests = [
-    "coverage>=7.10.7",
-    "hypothesis[numpy,pytest]>=6.140.4",
+    "coverage>=7.11.0",
+    "hypothesis[numpy,pytest]>=6.142.0",
     "matplotlib>=3.10.7",
     "psutil>=7.1.0",
     "pygal>=3.0.5",
@@ -99,6 +99,7 @@ tests = [
 typing = [
     "mypy>=1.18.2",
     "pyright>=1.1.406",
+    "scipy-stubs>=1.16.2.3",
     "types-colorama>=0.4.15.20250801",
     "types-decorator>=5.2.0.20250324",
     "types-docutils>=0.22.2.20251006",
@@ -125,7 +126,7 @@ typing = [
 src = ["src/", "tests/"]
 indent-width = 4
 line-length = 88
-target-version = "py313"
+target-version = "py314"
 output-format = "concise"
 
 [tool.ruff.lint]
@@ -193,6 +194,7 @@ ignore = [
     "D107",     # Missing docstring in __init__
     # pydoclint
     "DOC201",   # docstring-missing-returns
+    "DOC402",   # docstring-missing-yields
     "DOC501",   # docstring-missing-exception
     # datetime
     "DTZ",      # timezone-naive-datetime
@@ -223,7 +225,6 @@ ignore = [
     "PD011",    # pandas-use-of-dot-values
     "PD013",    # pandas-use-of-dot-stack
     "PD101",    # pandas-nunique-constant-series-check
-    "PD901",    # Avoid using the generic variable name `df` for DataFrames
     # pylint
     "PLC2401",  # non-ascii-name
     "PLC2801",  # unnecessary-dunder-call
@@ -253,6 +254,7 @@ ignore = [
     "RUF012",   # Mutable class attributes should be annotated with typing.ClassVar # FIXME: PEP 603
     "RUF013",   # PEP 484 prohibits implicit Optional
     "RUF022",   # __all__ not sorted
+    "RUF036",   # `None` not at the end of the type annotation.
     # flake8-bandit
     "S101",     # assert statement
     "S301",     # suspicious-pickle-usage
@@ -261,13 +263,15 @@ ignore = [
     "S404",     # suspicious-subprocess-import
     "S603",     # subprocess-without-shell-equals-true
     # type-checking
-    "TC006",    #  Add quotes to type expression in `typing.cast()`
+    "TC001",    # Move application library import into a type-checking block
+    "TC002",    # Move third-party library import into a type-checking block
+    "TC003",    # Move standard library import into a type-checking block
     # todo
     "TD",       # todo
     # tryceratops
     "TRY003",   # Avoid specifying long messages outside the exception class
     # pyupgrade
-    "UP007",    # Use `X | Y` for type annotations
+    "UP045",    # Use `X | Y` for type annotations
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -351,16 +355,17 @@ generated-members = ["numpy.*", "torch.*"]
 
 # region mypy configuration ------------------------------------------------------------
 [tool.mypy]
+# SEE: https://mypy.readthedocs.io/en/stable/config_file.html
 files = ["src/", "tests/"]
 platform = "linux"
 plugins = []
-python_version = "3.13"
+python_version = "3.14"
 
 disable_error_code = [
-    "func-returns-value",  # SEE: https://github.com/python/mypy/issues/6549
-    # "overload-overlap",  # SEE: https://mypy.readthedocs.io/en/stable/more_types.html#type-checking-the-variants
-    "method-assign",  # SEE: https://github.com/python/mypy/issues/2427#issuecomment-1419206807
-    "no-overload-impl", # SEE: https://github.com/python/mypy/issues/17618
+    "func-returns-value", # SEE: https://github.com/python/mypy/issues/6549
+    "method-assign",      # SEE: https://github.com/python/mypy/issues/2427#issuecomment-1419206807
+    "no-overload-impl",   # SEE: https://github.com/python/mypy/issues/17618
+    # "overload-overlap",   # SEE: https://mypy.readthedocs.io/en/stable/more_types.html#type-checking-the-variants
 ]
 
 # warnings
@@ -419,45 +424,122 @@ ignore_missing_imports = true
 
 # region pyright configuration ---------------------------------------------------------
 [tool.pyright]
-venv = ".venv"
-venvPath = "."
-pythonVersion = "3.13"
-pythonPlatform = "Linux"
-include = ["src/", "tests/"]
+# SEE: https://microsoft.github.io/pyright/#/configuration
 
-# Type Check Diagnostics Settings
-# https://github.com/microsoft/pyright/blob/main/docs/configuration.md#type-check-diagnostics-settings
-typeCheckingMode = "standard"
+# Environment Options
+include = ["src/", "tests/"]
+exclude = []
+strict = []
+#extends = ""
+defineConstant = {"__debug__" = true}
+#typeshedPath = ""
+#stubPath = ""
+venvPath = ".venv"
+#venv = ".venv"
+pythonVersion = "3.14"
+pythonPlatform = "Linux"
+#executionEnvironments = []
 useLibraryCodeForTypes = false  # `pandas` has way too many false positives
 
-# highlight any unnecessary "# type: ignore" comments
-reportUnnecessaryTypeIgnoreComment = false
+# Type Check Diagnostics Settings
+typeCheckingMode = "standard"  # "off", "basic", "strict", "standard"
+ignore = []
 
-# standard flags we disable
-reportPrivateImportUsage = false  # FIXME: https://github.com/microsoft/pyright/issues/9217
-reportNoOverloadImplementation = false  # SEE: https://github.com/microsoft/pyright/issues/8619
+# Type Evaluation Settings
+strictLIstInference = false
+strictDictionaryInference = false
+strictSetInference = false
+analyzeUnannotatedFunctions = true
+strictParameterNoneValue = true
+enableTypeIgnoreComments = false  # disable `# type: ignore` comments (use `# pyright: ignore` instead)
+deprecateTypingAliases = true  # deprecate `typing` aliases like `List`, `Dict`, etc.
+enableReachabilityAnalysis = true
+enableExperimentalFeatures = false
+disableBytesTypePromotions = true
 
-# strict mode flags we enable by default
-reportUntypedClassDecorator = true
-reportUnusedVariable = true
-reportMatchNotExhaustive = true
-reportUnnecessaryCast = true
-#reportUnnecessaryComparison = true
-reportUnnecessaryContains = true
-#reportUnnecessaryIsInstance = true
-#reportUnusedClass = true
-#reportUnusedImport = true
-#reportUnusedFunction = true
-#reportUnusedVariable = true
-
-# Disable these when running in strict mode
-reportUnknownVariableType = false
-reportUnknownMemberType = false
-reportUnknownArgumentType = false
-reportMissingTypeArgument = false
-reportUnknownParameterType = false
-reportMissingTypeStubs = false
-reportConstantRedefinition = false  # we use uppercase for matrices/tensors.
+# Type Check Rule Overrides
+#reportAbstractUsage = "error"  # default: "error"
+#reportArgumentType = "error"  # default: "error"
+#reportAssertAlwaysTrue = "warning"  # default: "warning"
+#reportAssertTypeFailure = "error"  # default: "error"
+#reportAssignmentType = "error"  # default: "error"
+#reportAttributeAccessIssue = "error"  # default: "error"
+#reportCallInDefaultInitializer = "none"  # default: "none"
+#reportCallIssue = "error"  # default: "error"
+#reportConstantRedefinition = "none"  # default: "none"
+#reportDeprecated = "none"  # default: "none"
+reportDuplicateImport = "error"  # default: "none"
+#reportFunctionMemberAccess = "error"  # default: "error"
+#reportGeneralTypeIssues = "error"  # default: "error"
+#reportImplicitOverride = "none"  # default: "none"
+#reportImplicitStringConcatenation = "none"  # default: "none"
+reportImportCycles = "error"  # default: "none"
+#reportIncompatibleMethodOverride = "error"  # default: "error"
+#reportIncompatibleVariableOverride = "error"  # default: "error"
+#reportIncompleteStub = "none"  # default: "none"
+#reportInconsistentConstructor = "none"  # default: "none"
+#reportInconsistentOverload = "error"  # default: "error"
+#reportIndexIssue = "error"  # default: "error"
+#reportInvalidStringEscapeSequence = "warning"  # default: "warning"
+#reportInvalidStubStatement = "none"  # default: "none"
+#reportInvalidTypeArguments = "error"  # default: "error"
+#reportInvalidTypeForm = "error"  # default: "error"
+#reportInvalidTypeVarUse = "warning"  # default: "warning"
+reportMatchNotExhaustive = "error"  # default: "none"
+#reportMissingImports = "error"  # default: "error"
+#reportMissingModuleSource = "warning"  # default: "warning"
+#reportMissingParameterType = "none"  # default: "none"
+#reportMissingSuperCall = "none"  # default: "none"
+#reportMissingTypeArgument = "none"  # default: "none"
+#reportMissingTypeStubs = "none"  # default: "none"
+reportNoOverloadImplementation = "none"  # default: "error"
+#reportOperatorIssue = "error"  # default: "error"
+#reportOptionalCall = "error"  # default: "error"
+#reportOptionalContextManager = "error"  # default: "error"
+#reportOptionalIterable = "error"  # default: "error"
+#reportOptionalMemberAccess = "error"  # default: "error"
+#reportOptionalOperand = "error"  # default: "error"
+#reportOptionalSubscript = "error"  # default: "error"
+#reportOverlappingOverload = "error"  # default: "error"
+#reportPossiblyUnboundVariable = "error"  # default: "error"
+#reportPrivateImportUsage = "error"  # default: "error"
+#reportPrivateUsage = "none"  # default: "none"
+#reportPropertyTypeMismatch = "none"  # default: "none"
+#reportRedeclaration = "error"  # default: "error"
+#reportReturnType = "error"  # default: "error"
+#reportSelfClsParameterName = "warning"  # default: "warning"
+#reportShadowedImports = "none"  # default: "none"
+#reportTypeCommentUsage = "none"  # default: "none"
+#reportTypedDictNotRequiredAccess = "error"  # default: "error"
+#reportUnboundVariable = "error"  # default: "error"
+#reportUndefinedVariable = "error"  # default: "error"
+#reportUnhashable = "error"  # default: "error"
+#reportUninitializedInstanceVariable = "none"  # default: "none"
+#reportUnknownArgumentType = "none"  # default: "none"
+#reportUnknownLambdaType = "none"  # default: "none"
+#reportUnknownMemberType = "none"  # default: "none"
+#reportUnknownParameterType = "none"  # default: "none"
+#reportUnknownVariableType = "none"  # default: "none"
+reportUnnecessaryCast = "error"  # default: "none"
+#reportUnnecessaryComparison = "none"  # default: "none"
+#reportUnnecessaryContains = "none"  # default: "none"
+#reportUnnecessaryIsInstance = "none"  # default: "none"
+reportUnnecessaryTypeIgnoreComment = "error"  # default: "none"
+#reportUnreachable = "none"  # default: "none"
+#reportUnsupportedDunderAll = "warning"  # default: "warning"
+reportUntypedBaseClass = "error"  # default: "none"
+reportUntypedClassDecorator = "error"  # default: "none"
+#reportUntypedFunctionDecorator = "none"  # default: "none"
+reportUntypedNamedTuple = "error"  # default: "none"
+#reportUnusedCallResult = "none"  # default: "none"
+reportUnusedClass = "error"  # default: "none"
+#reportUnusedCoroutine = "error"  # default: "error"
+#reportUnusedExcept = "error"  # default: "error"
+#reportUnusedExpression = "none"  # default: "none"
+reportUnusedFunction = "error"  # default: "none"
+reportUnusedImport = "error"  # default: "none"
+reportUnusedVariable = "error"  # default: "none"
+reportWildcardImportFromLibrary = "error"  # default: "warning"
 # endregion pyright configuration ------------------------------------------------------
 
 

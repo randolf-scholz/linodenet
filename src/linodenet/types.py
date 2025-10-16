@@ -18,6 +18,11 @@ __all__ = [
     "PathLike",
     "Range",
     "Scalar",
+    # Tensor Aliases
+    "BoolTensor",
+    "IntTensor",
+    "FloatTensor",
+    "ComplexTensor",
 ]
 
 import os
@@ -26,9 +31,14 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol, Self, SupportsIndex, runtime_checkable
 
-from torch import device, dtype
+from torch import Tensor, device, dtype
 
 # region type aliases ------------------------------------------------------------------
+type BoolTensor = Tensor
+type IntTensor = Tensor
+type FloatTensor = Tensor
+type ComplexTensor = Tensor
+
 type PathLike = str | Path | os.PathLike[str]
 r"""Type hint for path-like objects."""
 type Scalar = None | bool | int | float

@@ -1,15 +1,18 @@
 r"""Test error of linear ODE against odeint."""
 
+import datetime
 import logging
 import random
-from typing import Any, Literal, Optional
+import subprocess
+import warnings
+from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import torch
 from numpy.typing import NDArray
-from scipy.integrate import odeint
+from scipy.integrate import solve_ivp
 from tqdm.autonotebook import trange
 
 from linodenet.config import PROJECT
@@ -28,13 +31,13 @@ def compute_linode_error(
     dim: Optional[int] = None,
     precision: Literal["single", "double"] = "single",
     relative_error: bool = True,
-    device: Optional[torch.device] = None,
-) -> NDArray:
+    device: Optional[str | torch.device] = None,
+) -> tuple[float, float, float]:
     r"""Compare `LinODE` against `scipy.odeint` on linear system.
 
     .. Signature:: `` -> (q, N)``
     """
-    N = num or random.choice([10 * k for k in range(1, 11)])
+    N = num or random.choice([10 * k for k in range(2, 11)])
     D = dim or random.choice([2**k for k in range(1, 8)])
     logger = __logger__.getChild(f"{LinODE.__name__}-test-{N}-{D}")
 
@@ -53,20 +56,29 @@ def compute_linode_error(
     else:
         raise ValueError
 
-    t0, t1 = rng.uniform(low=-10, high=10, size=(2,))
+    t0, t1 = rng.uniform(low=-10, high=10, size=(2,)).astype(numpy_dtype)
     t0, t1 = min(t0, t1), max(t0, t1)  # make sure t0 ≤ t1
     A = (rng.normal(size=(D, D)) / np.sqrt(D)).astype(numpy_dtype)
-    x0 = rng.normal(size=D).astype(numpy_dtype)
-    T = rng.uniform(low=t0, high=t1, size=N - 2)
-    T = np.sort([t0, *T, t1]).astype(numpy_dtype)
+    x0: NDArray = rng.normal(size=(D,)).astype(numpy_dtype)
+    t_span = rng.uniform(low=t0, high=t1, size=N - 2)
+    t_span = np.sort([t0, *t_span, t1]).astype(numpy_dtype)
 
     def func(_: NDArray, x: NDArray) -> NDArray:
         return A @ x
 
-    X = torch.tensor(odeint(func, x0, T, tfirst=True), dtype=torch_dtype)
+    sol = solve_ivp(
+        func,
+        [t0, t1],
+        y0=x0,
+        t_eval=t_span,
+        vectorized=True,
+    )
+    assert sol.y.shape == (D, len(t_span)), "Shape mismatch"
+
+    X = torch.tensor(sol.y.T, dtype=torch_dtype)
 
     # A_torch = torch.tensor(A, dtype=torch_dtype, device=device)
-    T_torch = torch.tensor(T, dtype=torch_dtype, device=device)
+    T_torch = torch.tensor(t_span, dtype=torch_dtype, device=device)
     x0_torch = torch.tensor(x0, dtype=torch_dtype, device=device)
 
     model = LinODE(
@@ -83,14 +95,18 @@ def compute_linode_error(
     Xhat = model(T_torch, x0_torch)
     Xhat = Xhat.clone().detach().cpu()
 
-    err = (X - Xhat).abs()
+    residual = (X - Xhat).abs()
 
     if relative_error:
-        err /= X.abs() + eps
+        residual /= X.abs() + eps
 
     # NOTE: shape:
-    logger.debug("shapes: X:%s Xhat:%s err:5%s", X.shape, Xhat.shape, err.shape)
-    return np.array([scaled_norm(err, p=p, keepdim=False) for p in (1, 2, np.inf)])
+    logger.debug("shapes: X:%s Xhat:%s err:5%s", X.shape, Xhat.shape, residual.shape)
+    return (
+        float(scaled_norm(residual, p=1, keepdim=False)),
+        float(scaled_norm(residual, p=2, keepdim=False)),
+        float(scaled_norm(residual, p=np.inf, keepdim=False)),
+    )
 
 
 def make_error_plots(
@@ -98,11 +114,9 @@ def make_error_plots(
     error_single: NDArray,
     error_double: NDArray,
     logger: logging.Logger = __logger__,
-    **extra_stats: Any,
 ) -> None:
     r"""Create histogram plot of the errors."""
-    assert error_single.shape == error_double.shape
-    print(error_single.shape)
+    assert error_single.shape == error_double.shape, "Single and double shape mismatch"
     num_samples = error_single.shape[1]
 
     with plt.style.context("bmh"):
@@ -118,9 +132,7 @@ def make_error_plots(
     logger.info("generating figure")
     for i, err in enumerate((error_single, error_double)):
         for j, p in enumerate((1, 2, np.inf)):
-            visualize_distribution(
-                err[j], log=True, ax=ax[i, j], extra_stats=extra_stats
-            )
+            visualize_distribution(err[j], log=True, ax=ax[i, j])
             if j == 0:
                 ax[i, 0].annotate(
                     f"FP{32 * (i + 1)}",
@@ -135,6 +147,29 @@ def make_error_plots(
             if i == 1:
                 ax[i, j].set_xlabel(f"scaled, relative L{p} distance")
 
+    # add current date and time to the figure
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    fig.text(0.99, 0.01, now, ha="right", va="bottom", fontsize=8, color="gray")
+
+    # add current git commit hash to the figure
+    try:
+        git_hash = (
+            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+        fig.text(
+            0.01,
+            0.01,
+            f"git:{git_hash}",
+            ha="left",
+            va="bottom",
+            fontsize=8,
+            color="gray",
+        )
+    except Exception as e:
+        logger.warning("Could not get git hash: %s", e)
+
     fig.suptitle(
         r"Difference $x^{\text{(LinODE)}}$ and $x^{\text{(odeint)}}$"
         f" -- {num_samples} random systems"
@@ -143,14 +178,58 @@ def make_error_plots(
     fig.savefig(RESULT_DIR / "LinODE_odeint_comparison.pdf")
 
 
+@pytest.mark.parametrize(
+    ("precision", "tolerances"),
+    [
+        ("single", (10**-2, 10**-1, 10**1)),
+        ("double", (10**-2, 10**-1, 10**1)),
+    ],
+)
+@pytest.mark.parametrize(
+    "device", ["cpu", "cuda"] if torch.cuda.is_available() else ["cpu"]
+)
 @pytest.mark.flaky(reruns=3)
-def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
+def test_linode_error(
+    *,
+    precision: Literal["single", "double"],
+    tolerances: tuple[float, float, float],
+    device: str,
+    quantile: float = 0.95,
+    num_samples: int = 100,
+) -> None:
     r"""Compare LinODE against scipy.odeint on random linear system."""
     LOGGER = __logger__.getChild(LinODE.__name__)
     LOGGER.info("Testing %s.", LinODE)
-    extra_stats = {"Samples": num_samples}
 
-    LOGGER.info("Generating %i samples in single precision", num_samples)
+    LOGGER.info(
+        f"Generating {num_samples} samples in {precision} precision", num_samples
+    )
+    errors = np.array(
+        [
+            compute_linode_error(precision=precision, device=device)
+            for _ in trange(num_samples)
+        ],
+        dtype=np.float32,
+    ).T
+
+    for err, tol in zip(errors, tolerances, strict=True):
+        # we want that the error is smaller than the tolerance in 95% of the cases
+        q = np.nanquantile(err, quantile)
+        LOGGER.info(f"{quantile}% quantile {q}")
+        assert q <= tol, f"{quantile} quantile {q=} larger than allowed {tol=}"
+        if 100 * q < tol:
+            warnings.warn(
+                f"The tolerance seems too loose: {quantile} quantile {q} << {tol}"
+            )
+    LOGGER.info("%s passes test ✔ ", LinODE)
+
+
+@pytest.mark.slow
+def test_make_error_plot(num_samples: int = 100) -> None:
+    LOGGER = __logger__.getChild(LinODE.__name__)
+    LOGGER.info("Testing %s.", LinODE)
+
+    LOGGER.info(f"Generating {num_samples} samples in single precision", num_samples)
     err_single = np.array(
         [compute_linode_error(precision="single") for _ in trange(num_samples)],
         dtype=np.float32,
@@ -162,24 +241,12 @@ def test_linode_error(make_plots: bool, *, num_samples: int = 100) -> None:
         dtype=np.float64,
     ).T
 
-    if make_plots:
-        make_error_plots(
-            error_single=err_single,
-            error_double=err_double,
-            logger=LOGGER,
-            **extra_stats,
-        )
+    make_error_plots(
+        error_single=err_single,
+        error_double=err_double,
+        logger=LOGGER,
+    )
 
-    levels = (10.0**k for k in (0, 2, 4))
-    for e32, tol in zip(err_single, levels, strict=True):
-        q = np.nanquantile(e32, 0.99)
-        LOGGER.info("99%% quantile %f", q)
-        assert q <= tol, f"99% quantile {q=} larger than allowed {tol=}"
-    # Note that the matching of the predictions is is 4 order of magnitude better in FP64.
-    # Since 10^4 ~ 2^13
-    levels = (10.0**k for k in (-4, -2, -0))
-    for e64, tol in zip(err_double, levels, strict=True):
-        q = np.nanquantile(e64, 0.99)
-        LOGGER.info("99%% quantile %f", q)
-        assert q <= tol, f"99% quantile {q=} larger than allowed  {tol=}"
-    LOGGER.info("%s passes test ✔ ", LinODE)
+
+if __name__ == "__main__":
+    test_make_error_plot()

@@ -31,7 +31,7 @@ from typing import Any, Final, Never
 import numpy as np
 import torch
 from numpy.random import Generator
-from torch import BoolTensor, FloatTensor
+from torch import Tensor
 
 
 class FLOAT(float, Enum):
@@ -82,18 +82,18 @@ r"""CONST: Default epsilon for each dtype."""
 
 
 # region tensor constants --------------------------------------------------------------
-TRUE: Final[BoolTensor] = torch.tensor(True, dtype=torch.bool)  # type: ignore[assignment]
+TRUE: Final[Tensor] = torch.tensor(True, dtype=torch.bool)
 r"""A constant tensor representing the boolean value `True`."""
-FALSE: Final[BoolTensor] = torch.tensor(False, dtype=torch.bool)  # type: ignore[assignment]
+FALSE: Final[Tensor] = torch.tensor(False, dtype=torch.bool)
 r"""A constant tensor representing the boolean value `False`."""
-ZERO: Final[FloatTensor] = torch.tensor(0.0, dtype=torch.float32)  # type: ignore[assignment]
+ZERO: Final[Tensor] = torch.tensor(0.0, dtype=torch.float32)
 r"""A constant tensor representing the number `0`."""
-ONE: Final[FloatTensor] = torch.tensor(1.0, dtype=torch.float32)  # type: ignore[assignment]
+ONE: Final[Tensor] = torch.tensor(1.0, dtype=torch.float32)
 r"""A constant tensor representing the number `1`."""
-NAN: Final[FloatTensor] = torch.tensor(float("nan"), dtype=torch.float32)  # type: ignore[assignment]
+NAN: Final[Tensor] = torch.tensor(float("nan"), dtype=torch.float32)
 r"""A constant tensor representing the number `NaN`."""
-POS_INF: Final[FloatTensor] = torch.tensor(float("inf"), dtype=torch.float32)  # type: ignore[assignment]
+POS_INF: Final[Tensor] = torch.tensor(float("inf"), dtype=torch.float32)
 r"""A constant tensor representing the number `+∞`."""
-NEG_INF: Final[FloatTensor] = torch.tensor(float("-inf"), dtype=torch.float32)  # type: ignore[assignment]
+NEG_INF: Final[Tensor] = torch.tensor(float("-inf"), dtype=torch.float32)
 r"""A constant tensor representing the number `-∞`."""
 # endregion tensor constants -----------------------------------------------------------

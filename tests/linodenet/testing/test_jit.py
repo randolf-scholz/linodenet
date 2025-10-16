@@ -133,5 +133,5 @@ def test_jit_errors_parametrize() -> None:
     scripted = jit.script(model)
     inputs = torch.randn(7, 5)
 
-    with pytest.raises(jit.Error):  # type: ignore[type-var]
+    with pytest.raises(jit.Error):
         scripted(inputs)

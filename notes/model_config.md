@@ -7,19 +7,18 @@
 3. Support for static typing.
 4. There should be a simple way to **export** a configuration from a module instance.
 
-```python
-def export_config(model_instance: "Module") -> "JSON_DICT": ...
-```
+    ```python
+    def export_config(model_instance: "Module") -> "JSON_DICT": ...
+    ```
 
 5. There should be a simple way to **import** a configuration into a module instance.
     We do not require this to be a serialization of the full model, but rather to allow instantiation
     of a model with the same hyperparameters, which we can then use `load_state_dict` on.
 
-## Questions.
+## Questions
 
 1. How do we handle nested configurations?
    Example: Model with several subcomponents/layers.
-
 
 2. How to handle dependent values?
    Example: Model with subcomponents, whose hyperparameters depend on each other.

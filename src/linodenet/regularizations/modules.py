@@ -32,7 +32,7 @@ from abc import abstractmethod
 from typing import Final
 
 import torch
-from torch import BoolTensor, Tensor, nn
+from torch import Tensor, nn
 
 from linodenet.constants import TRUE
 from linodenet.regularizations.functional import (
@@ -54,6 +54,7 @@ from linodenet.regularizations.functional import (
     traceless,
     upper_triangular,
 )
+from linodenet.types import BoolTensor
 
 
 class RegularizationBase(nn.Module):
@@ -454,7 +455,7 @@ class Masked(RegularizationBase):
         size_normalize: bool = True,
     ) -> None:
         super().__init__()
-        self.mask = torch.as_tensor(mask, dtype=torch.bool)  # type: ignore[assignment]
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)
         self.p = p
         self.size_normalize = size_normalize
 

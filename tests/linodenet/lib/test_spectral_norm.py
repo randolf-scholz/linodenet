@@ -2,7 +2,6 @@ r"""Test the spectral norm implementation."""
 
 import pytest
 import torch
-import torch.utils.cpp_extension
 from torch import nn
 
 from linodenet.lib import (

@@ -31,10 +31,11 @@ __all__ = [
 from typing import Protocol, runtime_checkable
 
 import torch
-from torch import BoolTensor, Tensor
+from torch import Tensor
 
 from linodenet.constants import TRUE
 from linodenet.projections import functional as projections
+from linodenet.types import BoolTensor
 
 
 @runtime_checkable

@@ -87,21 +87,22 @@ class SupportsFromConfig(Protocol):
     #     return cls(**config)  # type: ignore[arg-type]
 
 
-def initialize_from_dict(config: Mapping[str, Any], /) -> Module:
+def initialize_from_dict(cfg: Mapping[str, Any], /) -> Module:
     r"""Initialize a class from a dictionary.
 
     Args:
-        config: A dictionary containing the default configuration of the class.
+        cfg: A dictionary containing the default configuration of the class.
 
     Note:
         The configuration must provide the keys `__module__` and `__name__`.
         The function will attempt to import the module and class and initialize it.
     """
+    config = dict(cfg)
     __logger__.debug("Initializing model from config %s", config)
 
-    if (lib_name := config.get("__module__")) is None:
+    if (lib_name := config.pop("__module__", None)) is None:
         raise ValueError(f"Expected {config=} to contain '__module__'")
-    if (cls_name := config.get("__name__")) is None:
+    if (cls_name := config.pop("__name__", None)) is None:
         raise ValueError(f"Expected {config=} to contain '__name__'")
 
     try:  # import the module
@@ -136,7 +137,7 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
 
     @classmethod
-    def from_config(cls, config: Mapping[str, Any], /) -> "ModuleSequence":
+    def from_config(cls, config: Mapping[str, Any], /) -> ModuleSequence:
         r"""Initialize from hyperparameters."""
         layers: list[Module] = []
         for layer_cfg in config["layers"]:
@@ -146,14 +147,14 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
         return ModuleSequence(layers)
 
     @classmethod
-    def from_modules(cls, modules: Iterable[M], /) -> "ModuleSequence[M]":
+    def from_modules(cls, modules: Iterable[M], /) -> ModuleSequence[M]:
         r"""Initialize from an iterable of modules."""
         return ModuleSequence(modules)
 
     if TYPE_CHECKING:
 
         @overload
-        def __init__(self: "ModuleSequence[Never]", /) -> None: ...
+        def __init__(self: ModuleSequence[Never], /) -> None: ...
         @overload
         def __init__(self, modules: Iterable[M], /) -> None: ...
 
@@ -174,7 +175,7 @@ class ModuleMapping[M: Module](ModuleDict, Mapping[str, M]):
     if TYPE_CHECKING:
 
         @overload
-        def __init__(self: "ModuleMapping[Never]", /) -> None: ...
+        def __init__(self: ModuleMapping[Never], /) -> None: ...
         @overload
         def __init__(self, modules: Mapping[str, M], /) -> None: ...
 

@@ -690,11 +690,12 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
 def register_parametrization(
     model: nn.Module,
     tensor_name: str,
-    parametrization: Fn[[Tensor], Tensor]
-    | type[Parametrization]
-    | type[nn.Module]
-    | Parametrization
-    | nn.Module,
+    parametrization: (
+        Fn[[Tensor], Tensor]
+        | type[Parametrization | nn.Module]
+        | Parametrization
+        | nn.Module
+    ),
     *,
     unsafe: bool = False,
 ) -> None:

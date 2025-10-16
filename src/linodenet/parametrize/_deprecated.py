@@ -44,7 +44,7 @@ def register_cache(self: nn.Module, name: str, func: Callable[[], Tensor], /) ->
         self.cached_tensors = cached_tensors  # type: ignore[assignment]
         self.__annotations__["cached_tensors"] = dict[str, Tensor]
 
-    self = cast(ParameterizedModule, self)
+    self = cast("ParameterizedModule", self)
     cached_tensors = self.cached_tensors
 
     # register the buffer
@@ -79,7 +79,7 @@ class reset_caches(ContextDecorator):
         on_enter: bool = True,
         on_exit: bool = True,
     ) -> None:
-        self.module: ParameterizedModule = cast(ParameterizedModule, module)
+        self.module: ParameterizedModule = cast("ParameterizedModule", module)
         self.on_enter = on_enter
         self.on_exit = on_exit
 

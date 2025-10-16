@@ -92,7 +92,7 @@ class MissingValueFilter(FilterBase):
                 _imputer = imputers.ConstantValueImputer(value)
             case nn.Module as imputer:
                 imputation_strategy = ImputationStrategy.OTHER
-                _imputer = cast(ImputerProtocol, imputer)
+                _imputer = cast("ImputerProtocol", imputer)
             case _:
                 raise ValueError(f"Unknown imputation strategy: {imputation}")
 

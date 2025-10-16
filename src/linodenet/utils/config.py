@@ -76,7 +76,7 @@ class ConfigMetaclass(ABCMeta):
             if value:
                 setattr(config_type, key, value[0])
 
-        return dataclass(config_type, eq=False, frozen=True)  # type: ignore[call-overload]
+        return dataclass(config_type, eq=False, frozen=True)  # type: ignore[arg-type]
 
 
 class Config(Mapping[str, Any], metaclass=ConfigMetaclass):

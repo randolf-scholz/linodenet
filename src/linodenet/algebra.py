@@ -27,12 +27,13 @@ __all__ = [
     "WrappedFn",
     # Classes
     "Choice",
-    "Concurrent",
+    "Replicate",
     "Diagonal",
-    "Fork",
+    "Duplicate",
     "Identity",
+    "Map",
     "Join",
-    "Meet",
+    "Fork",
     "Parallel",
     "Reduce",
     "Repeat",
@@ -40,12 +41,12 @@ __all__ = [
     "Sum",
     # Functions
     "choice",
-    "concurrent",
+    "replicate",
     "diagonal",
-    "fork",
+    "duplicate",
     "identity",
     "join",
-    "meet",
+    "fork",
     "parallel",
     "reduce",
     "repeat",
@@ -55,15 +56,14 @@ __all__ = [
 import random
 from abc import abstractmethod
 from collections.abc import Callable, Collection, Iterable, Reversible, Sequence
+from copy import deepcopy
 from typing import (
     Any,
     Final,
-    Literal,
     Optional,
     Protocol,
     Self,
     SupportsIndex,
-    assert_type,
     overload,
     runtime_checkable,
 )
@@ -72,8 +72,8 @@ from typing import (
 @overload
 def _try_call[X, Y](fn: Callable[[X], Y], arg: X, /) -> Y: ...  # pyright: ignore[reportOverlappingOverload]
 @overload
-def _try_call(fn: Callable, arg: object, /) -> Literal[None]: ...
-def _try_call(fn: Callable, arg: object, /) -> object | Literal[None]:
+def _try_call(fn: Callable, arg: object, /) -> None: ...
+def _try_call(fn: Callable, arg: object, /) -> object | None:
     r"""Try to call a function with the given argument.
 
     If the function raises an exception, return `None`.
@@ -116,7 +116,7 @@ class Seq[T](Collection[T], Reversible[T], Protocol):  # +T
 class Fn(Protocol):
     r"""Base protocol for functional modules."""
 
-    def __invert__(self) -> "Fn":
+    def __invert__(self) -> Fn:
         return NotImplemented
 
     @abstractmethod
@@ -165,26 +165,26 @@ class FunctionalMixin(Fn, Protocol):
     This allows a nice way to chain modules together.
     """
 
-    def __invert__(self) -> "FunctionalMixin":
+    def __invert__(self) -> FunctionalMixin:
         r"""Invert the module."""
         raise NotImplementedError
 
     # region series --------------------------------------------------------------------
-    def __rshift__[N: Fn](self, other: N | Sequence[N], /) -> "Series[Self | N]":
+    def __rshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
         r"""Execute modules in series (`>>`).
 
         x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
         """
         return series(self, other)
 
-    def __rrshift__[N: Fn](self, other: N | Sequence[N], /) -> "Series[Self | N]":
+    def __rrshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
         r"""Execute modules in series (`>>`).
 
         x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
         """
         return series(other, self)
 
-    def __pow__(self, n: int, /) -> "Series[Self]":
+    def __pow__(self, n: int, /) -> Series[Self]:
         r"""Repeat a module `n` times (`**`).
 
         x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
@@ -196,7 +196,7 @@ class FunctionalMixin(Fn, Protocol):
     # endregion series -----------------------------------------------------------------
 
     # region parallel ------------------------------------------------------------------
-    def __xor__[N: Fn](self: Self, other: N | Sequence[N], /) -> "Parallel[Self | N]":
+    def __xor__[N: Fn](self: Self, other: N | Sequence[N], /) -> Parallel[Self | N]:
         r"""Execute modules in parallel (`|`).
 
         x₁ ───▶ f₁(x₁)
@@ -206,7 +206,7 @@ class FunctionalMixin(Fn, Protocol):
         """
         return parallel(self, other)
 
-    def __rxor__[N: Fn](self, other: N | Sequence[N], /) -> "Parallel[Self | N]":
+    def __rxor__[N: Fn](self, other: N | Sequence[N], /) -> Parallel[Self | N]:
         r"""Execute modules in parallel (`|`).
 
         x₁ ───▶ f₁(x₁)
@@ -216,7 +216,11 @@ class FunctionalMixin(Fn, Protocol):
         """
         return parallel(other, self)
 
-    def __floordiv__(self, num: int | None = None, /) -> "Concurrent[Self]":
+    @overload
+    def __floordiv__(self, num: int, /) -> Replicate[Self]: ...
+    @overload
+    def __floordiv__(self, num: None = ..., /) -> Map[Self]: ...
+    def __floordiv__(self, num: int | None = None, /) -> Replicate[Self] | Map[Self]:
         r"""Repeat a single module in parallel (`//`).
 
         x₁ ───▶ f(x₁)
@@ -226,12 +230,14 @@ class FunctionalMixin(Fn, Protocol):
 
         Note: If `num` is `None`, the module will be executed for each input.
         """
-        return concurrent(self, num)
+        if num is None:
+            return Map(self)
+        return replicate(self, num)
 
     # endregion parallel ---------------------------------------------------------------
 
     # region meet ----------------------------------------------------------------------
-    def __and__[N: Fn](self, other: N | Sequence[N], /) -> "Meet[Self | N]":
+    def __and__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
         r"""Execute multiple modules with the same input (`&`).
 
             ┌────▶ f₁(x)
@@ -247,9 +253,9 @@ class FunctionalMixin(Fn, Protocol):
             X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ
             x ⟼ (f₁(x), ..., fₙ(x))
         """
-        return meet(self, other)
+        return fork(self, other)
 
-    def __rand__[N: Fn](self, other: N | Sequence[N], /) -> "Meet[Self | N]":
+    def __rand__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
         r"""Execute multiple modules with the same input (`&`).
 
             ┌────▶ f₁(x)
@@ -265,9 +271,9 @@ class FunctionalMixin(Fn, Protocol):
             X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ
             x ⟼ (f₁(x), ..., fₙ(x))
         """
-        return meet(other, self)
+        return fork(other, self)
 
-    def __mod__(self, n: int, /) -> "Fork[Self]":
+    def __mod__(self, n: int, /) -> Duplicate[Self]:
         r"""Execute multiple copies of the same module with the same input (`%`).
 
              ┌────▶ f(x)
@@ -275,12 +281,12 @@ class FunctionalMixin(Fn, Protocol):
              │       ⋮
              └────▶ f(x)
         """
-        return fork(self, n)
+        return duplicate(self, n)
 
     # endregion meet -------------------------------------------------------------------
 
     # region join ----------------------------------------------------------------------
-    def __or__[N: Fn](self, other: N | Sequence[N], /) -> "Join[Self | N]":
+    def __or__[N: Fn](self, other: N | Sequence[N], /) -> Join[Self | N]:
         r"""Join multiple outputs into a single output (`|`).
 
         join:
@@ -299,7 +305,7 @@ class FunctionalMixin(Fn, Protocol):
         """
         return join(self, other)
 
-    def __ror__[N: Fn](self, other: N | Sequence[N], /) -> "Join[Self | N]":
+    def __ror__[N: Fn](self, other: N | Sequence[N], /) -> Join[Self | N]:
         r"""Join multiple outputs into a single output (`|`).
 
         join:
@@ -342,7 +348,7 @@ class WrappedFn[T: Fn](Fn):
         super().__init__()
         self.fn: Final[T] = fn
 
-    def __invert__(self) -> "WrappedFn":
+    def __invert__(self) -> WrappedFn:
         r"""Invert the wrapped function."""
         return WrappedFn(~self.fn)
 
@@ -361,7 +367,7 @@ class Series[M: Fn](FnSequence[M]):
     x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
     """
 
-    def __invert__(self) -> "Series":
+    def __invert__(self) -> Series:
         return Series(~module for module in reversed(self))
 
     def __call__(self, x: Any, /) -> Any:
@@ -399,22 +405,24 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
 class Repeat[M: Fn](Series[M]):
     r"""Repeat a module `n` times (`**`).
 
-    x ───▶ f ───▶ f(x) ───▶ f(f(x)) ───▶ ... ───▶ fⁿ(x)
+    x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
     """
 
-    def __invert__(self) -> "Repeat":
+    def __invert__(self) -> Repeat:
         return Repeat(self.module, -self.num)
 
     def __init__(self, module: M, num: int, /) -> None:
+        if num < 0:
+            raise ValueError("num must be >= 0")
+        super().__init__([deepcopy(module) for _ in range(num)])
         self.num: Final[int] = num
         self.module: Final[M] = module
-        super().__init__([module if num >= 0 else ~module] * abs(num))
 
 
 def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
     r"""Repeat a module `n` times in series (`**`).
 
-    x ───▶ f ───▶ f(x) ───▶ f(f(x)) ───▶ ... ───▶ fⁿ(x)
+    x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
     """
     return Repeat(module, num)
 
@@ -422,17 +430,17 @@ def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
 class Parallel[M: Fn](FnSequence[M]):
     r"""Execute modules in parallel (`|`).
 
+        x₁ ────▶ f₁(x₁)
+        x₂ ────▶ f₂(x₂)
+             ⋮
+        xₙ ────▶ fₙ(xₙ)
+
     .. math:: parallel(f₁, ..., fₙ):
         X₁×…×Xₙ ⟶ Y₁×…×Yₙ
         (x₁, ..., xₙ) ⟼ (f₁(x₁), ..., fₙ(xₙ))
-
-    x₁ ───▶ f₁(x₁)
-    x₂ ───▶ f₂(x₂)
-        ⋮
-    xₙ ───▶ fₙ(xₙ)
     """
 
-    def __invert__(self) -> "Parallel":
+    def __invert__(self) -> Parallel:
         return Parallel(~module for module in self)
 
     # actual: tuple[*Xs] -> tuple[*Ys]
@@ -453,10 +461,10 @@ def parallel[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Parallel[M | N]
 def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Parallel[M | N]:  # fmt: skip
     r"""Execute modules in parallel (`^`).
 
-    x₁ ───▶ f₁(x₁)
-    x₂ ───▶ f₂(x₂)
-        ⋮
-    xₙ ───▶ fₙ(xₙ)
+    x₁ ────▶ f₁(x₁)
+    x₂ ────▶ f₂(x₂)
+         ⋮
+    xₙ ────▶ fₙ(xₙ)
     """
     match x, y:
         case Fn(), Fn():
@@ -471,43 +479,51 @@ def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Paralle
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
 
 
-class Concurrent[M: Fn](Fn):
-    r"""Repeat a single module in parallel.
+class Replicate[M: Fn](Fn):
+    r"""Apply copies of single module in parallel to multiple inputs (MIMO).
+
+        x₁ ────▶ f(x₁)
+        x₂ ────▶ f(x₂)
+             ⋮
+        xₙ ────▶ f(xₙ)
 
     .. math:: concurrent(f, n):
         X×…×X ⟶ Y×…×Y
         (x, ..., x) ⟼ (f(x), ..., f(x))
-
-    x ───▶ f(x)
-    x ───▶ f(x)
-        ⋮
-    x ───▶ f(x)
     """
 
-    def __init__(self, module: M, num: int | None = None, /) -> None:
+    def __init__(self, module: M, num: int, /) -> None:
+        if num < 0:
+            raise ValueError(f"n must be non-negative, got {num}")
         super().__init__()
-        if num is not None and num < 1:
-            raise ValueError(f"Expected {num=} to be greater than 0")
-        self.num: Final[int | None] = num
+        self.num: Final[int] = num
         self.module: Final[M] = module
 
     def __call__(self, xs: tuple, /) -> tuple:
-        if self.num is None:
-            return tuple(self.module(x) for x in xs)
         return tuple(self.module(x) for x, _ in zip(xs, range(self.num), strict=True))
 
 
-def concurrent[M: Fn](module: M, num: int | None = None, /) -> Concurrent[M]:
-    r"""Repeat a single module in parallel (`//`).
+def replicate[M: Fn](module: M, num: int, /) -> Replicate[M]:
+    r"""Apply copies of a single module in parallel (`//`).
 
-    x₁ ───▶ f(x₁)
-    x₂ ───▶ f(x₂)
-        ⋮
-    xₙ ───▶ f(xₙ)
+        x₁ ────▶ f(x₁)
+        x₂ ────▶ f(x₂)
+             ⋮
+        xₙ ────▶ f(xₙ)
 
     Note: If `num` is `None`, the module will be executed for each input.
     """
-    return Concurrent(module, num)
+    return Replicate(module, num)
+
+
+class Map[M: Fn]:
+    r"""Map a module over variable length inputs."""
+
+    def __init__(self, module: M, /) -> None:
+        self.module: Final[M] = module
+
+    def __call__(self, xs: list, /) -> list:
+        return [self.module(x) for x in xs]
 
 
 class Join[M: Fn](FnSequence[M]):
@@ -570,80 +586,82 @@ def join[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Join[M | N]
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
 
 
-class Meet[M: Fn](FnSequence[M]):
+class Fork[M: Fn](FnSequence[M]):
     r"""Execute multiple modules with the same input (`&`).
 
-    meet:
-        Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)
-        (f₁，…，fₙ) ⟼ meet(f₁，…，fₙ)
+              ┌────▶ f₁(x)
+        x ────┼────▶ f₂(x)
+              │        ⋮
+              └────▶ fₙ(x)
 
-    meet(f₁，…，fₙ):
-        X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ,
-        x ⟼ (f₁(x), ..., fₙ(x))
+    .. math::
+        Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)  \\
+        (f₁，…，fₙ) ⟼ fork(f₁，…，fₙ)
 
-        ┌────▶ f₁(x)
-    x ──┼────▶ f₂(x)
-        │       ⋮
-        └────▶ fₙ(x)
+        fork(f₁，…，fₙ):
+            X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ   \\
+            x ⟼ (f₁(x), ..., fₙ(x))
 
     Note:
         This is a "weak" meet, rather than the actual meet with respect to subtyping relationship.
         It crashes if the input is not compatible with all components.
     """
 
+    def __init__(self, seq: Iterable[M] = (), /) -> None:
+        super().__init__(seq)
+
     def __call__(self, x: Any, /) -> tuple:
         return tuple(module(x) for module in self)
 
 
 @overload
-def meet[M: Fn, N: Fn](x: M, y: N, /) -> Meet[M | N]: ...
+def fork[M: Fn, N: Fn](x: M, y: N, /) -> Fork[M | N]: ...
 @overload
-def meet[M: Fn, N: Fn](x: M, y: Sequence[N], /) -> Meet[M | N]: ...
+def fork[M: Fn, N: Fn](x: M, y: Sequence[N], /) -> Fork[M | N]: ...
 @overload
-def meet[M: Fn, N: Fn](x: Sequence[M], y: N, /) -> Meet[M | N]: ...
+def fork[M: Fn, N: Fn](x: Sequence[M], y: N, /) -> Fork[M | N]: ...
 @overload
-def meet[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Meet[M | N]: ...
-def meet[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Meet[M | N]:
+def fork[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Fork[M | N]: ...
+def fork[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Fork[M | N]:
     r"""Execute multiple modules with the same input (`&`).
 
-             ┌───▶ f₁(x)
-        x ───┼───▶ f₂(x)
-             │       ⋮
-             └───▶ fₙ(x)
+              ┌────▶ f₁(x)
+        x ────┼────▶ f₂(x)
+              │        ⋮
+              └────▶ fₙ(x)
 
     Note: equivalent to diagonal(num) >> parallel(m1, m2, ..., mn)
     """
     match x, y:
         case Fn(), Fn():
-            return Meet((x, y))
+            return Fork((x, y))
         case Fn(), [*modules]:
-            return Meet((x, *modules))
+            return Fork((x, *modules))
         case [[*modules], Fn()]:
-            return Meet((*modules, y))
+            return Fork((*modules, y))
         case [[*left_modules], [*right_modules]]:
-            return Meet((*left_modules, *right_modules))
+            return Fork((*left_modules, *right_modules))
         case _:
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
 
 
-class Fork[M: Fn](Fn):
+class Duplicate[M: Fn](Fn):
     r"""Duplicate a single input into multiple outputs.
+
+              ┌────▶ f(x)
+        x ────┼────▶ f(x)
+              │        ⋮
+              └────▶ f(x)
 
     .. math:: fork(f, n):
         X ⟶ Y×…×Y
         x ⟼ (f(x), ..., f(x))
-
-         ┌────▶ f(x)
-    x ───┼────▶ f(x)
-         │       ⋮
-         └────▶ f(x)
     """
 
     def __init__(self, module: M, num: int, /) -> None:
-        super().__init__()
-        if num < 1:
+        if num < 0:
             raise ValueError(f"Expected {num=} to be greater than 0")
-
+        super().__init__()
         self.num: Final[int] = int(num)
         self.module: Final[M] = module
 
@@ -651,20 +669,20 @@ class Fork[M: Fn](Fn):
         return (self.module(x),) * self.num
 
 
-def fork[M: Fn](module: M, num: int, /) -> Fork[M]:
+def duplicate[M: Fn](module: M, num: int, /) -> Duplicate[M]:
     r"""Execute multiple copies of the same module with the same input (`%`).
 
-         ┌────▶ f(x)
-    x ───┼────▶ f(x)
-         │       ⋮
-         └────▶ f(x)
+              ┌────▶ f(x)
+        x ────┼────▶ f(x)
+              │        ⋮
+              └────▶ f(x)
 
-    Note: equivalent to diagonal(num) >> concurrent(module, num)
+    Note: equivalent to diagonal(num) >> replicate(module, num)
     """
-    return Fork(module, num)
+    return Duplicate(module, num)
 
 
-class Diagonal(Fork[Identity]):
+class Diagonal(Duplicate[Identity]):
     r"""Duplicate a single input into multiple outputs.
 
          ┌────▶ x
@@ -673,7 +691,7 @@ class Diagonal(Fork[Identity]):
          └────▶ x
     """
 
-    def __invert__(self) -> "Choice":
+    def __invert__(self) -> Choice:
         return Choice(self.num)
 
     def __init__(self, num: int, /) -> None:
@@ -775,33 +793,3 @@ class Sum(Reduce):
 
     def __init__(self) -> None:
         super().__init__(sum)
-
-
-# static type checking tests -----------------------------------------------------------
-
-
-def _test_seq_upcast[T](seq: Sequence[T], /) -> Seq[T]:
-    return seq
-
-
-def _test_parallel[X: Fn, Y: Fn](
-    f1: X, l1: list[X], s1: Parallel[X], f2: Y, l2: list[Y], s2: Parallel[Y], /
-) -> None:
-    # foo + foo
-    assert_type(parallel(f1, f1), Parallel[X])
-    assert_type(parallel(f1, f2), Parallel[X | Y])
-    # foo + list
-    assert_type(parallel(f1, l1), Parallel[X])
-    assert_type(parallel(f1, l2), Parallel[X | Y])
-    # list + list
-    assert_type(parallel(l1, l1), Parallel[X])
-    assert_type(parallel(l1, l2), Parallel[X | Y])
-    # foo + seq
-    assert_type(parallel(f1, s1), Parallel[X | Parallel[X]])
-    assert_type(parallel(f1, s2), Parallel[X | Parallel[Y]])
-    # list + seq
-    assert_type(parallel(l1, s1), Parallel[X | Parallel[X]])
-    assert_type(parallel(l1, s2), Parallel[X | Parallel[Y]])
-    # seq + seq
-    assert_type(parallel(s1, s1), Parallel[Parallel[X]])
-    assert_type(parallel(s1, s2), Parallel[Parallel[X] | Parallel[Y]])

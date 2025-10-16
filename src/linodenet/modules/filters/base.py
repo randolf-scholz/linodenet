@@ -245,7 +245,7 @@ class ReZeroFilter(nn.ModuleList):
                 )
             assert isinstance(module, nn.Module)
 
-        super().__init__(cast(list[nn.Module], module_list))
+        super().__init__(cast("list[nn.Module]", module_list))
         # add the weight last.
         self.weight = nn.Parameter(torch.zeros(len(self)))
 
@@ -304,7 +304,7 @@ class ResNetFilter(nn.ModuleList):
                     f"Expected {hidden_size}, but {module=} has {module.hidden_size}"
                 )
 
-        super().__init__(cast(list[nn.Module], module_list))
+        super().__init__(cast("list[nn.Module]", module_list))
         self.input_size = input_size
         self.hidden_size = hidden_size
 
