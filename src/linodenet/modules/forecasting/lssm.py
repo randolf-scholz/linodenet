@@ -108,7 +108,7 @@ class LatentStateSpaceModel(nn.Module):
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> LatentStateSpaceModel:
+    def from_config(cls, cfg: dict[str, Any]) -> "LatentStateSpaceModel":
         r"""Constructs a new model from a configuration dictionary."""
         config = deep_dict_update(cls.HP, cfg)
         input_size = config["input_size"]

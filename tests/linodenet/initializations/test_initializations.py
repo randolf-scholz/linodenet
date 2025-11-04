@@ -38,17 +38,20 @@ def _make_fig(path: Path, means: Tensor, stdvs: Tensor, key: str) -> None:
 
 
 @pytest.mark.flaky(reruns=3)
-@pytest.mark.parametrize("init_name", INITIALIZATIONS)
+@pytest.mark.parametrize("num_runs", [64], ids=lambda n_runs: f"{n_runs=}")
+@pytest.mark.parametrize("num_samples", [1024], ids=lambda n_samples: f"{n_samples=}")
+@pytest.mark.parametrize("dim", [128], ids=lambda dim: f"{dim=}")
+@pytest.mark.parametrize("name", INITIALIZATIONS)
 def test_normalization_property(
-    init_name: str,
-    make_plots: bool,
     *,
-    num_runs: int = 64,
-    num_samples: int = 1024,
-    dim: int = 128,
+    name: str,
+    dim: int,
+    num_runs: int,
+    num_samples: int,
+    make_plots: bool,
 ) -> None:
     r"""Test normalization property empirically for all initializations."""
-    LOGGER = logging.getLogger(init_name)
+    LOGGER = logging.getLogger(name)
     LOGGER.info("Testing...")
 
     if psutil.virtual_memory().available < 16 * 1024**3:
@@ -56,10 +59,10 @@ def test_normalization_property(
 
     # initialize matrices
     kwargs: dict = {}
-    if init_name == "low_rank":
+    if name == "low_rank":
         kwargs["rank"] = max(1, dim // 2)  # with rank-1, too unstable
 
-    initialization = INITIALIZATIONS[init_name]
+    initialization = INITIALIZATIONS[name]
     matrices = initialization((num_runs, dim), **kwargs)  # (n_runs, dim, dim)
 
     # Batch compute A⋅x for num_samples of x and num_runs many samples of A
@@ -71,7 +74,7 @@ def test_normalization_property(
 
     # save results
     if make_plots:
-        _make_fig(RESULT_DIR, means, stdvs, init_name)
+        _make_fig(RESULT_DIR, means, stdvs, name)
 
     # check if 𝐄[A⋅x] ≈ 0
     zeros = torch.zeros_like(means)
@@ -87,14 +90,14 @@ def test_normalization_property(
 
 
 @pytest.mark.repeat(10)
-@pytest.mark.parametrize("init_name", INITIALIZATIONS)
-def test_validity_initializations(init_name: str) -> None:
+@pytest.mark.parametrize("name", INITIALIZATIONS)
+def test_validity_initializations(name: str) -> None:
     r"""Validate that the initializations give correct matrix properties."""
-    test_name = f"is_{init_name}"
+    test_name = f"is_{name}"
     if test_name not in MATRIX_TESTS:
         pytest.skip(f"Test {test_name} not implemented.")
 
-    initialization = INITIALIZATIONS[init_name]
+    initialization = INITIALIZATIONS[name]
     matrix_test = MATRIX_TESTS[test_name]
 
     size = 4
@@ -102,13 +105,4 @@ def test_validity_initializations(init_name: str) -> None:
     matrix = initialization(size)
     result = matrix_test(matrix)
 
-    assert result.item(), f"{init_name} failed test {test_name}\n{matrix=}."
-
-
-@pytest.mark.skip
-def test_all_initializations(make_plots: bool) -> None:
-    r"""Test all initializations."""
-    __logger__.info("Testing initializations %s", set(INITIALIZATIONS))
-    for key in INITIALIZATIONS:
-        test_normalization_property(key, make_plots=make_plots)
-    __logger__.info("All initializations passed! ✔ ")
+    assert result.item(), f"{name} failed test {test_name}\n{matrix=}."

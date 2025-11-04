@@ -170,8 +170,8 @@ class LinearContraction(nn.Module):
         self.sigma.copy_(sigma)
         self.u.copy_(u)
         self.v.copy_(v)
-        self.cached_weight.copy_(cached_weight)  # ✔
-        # self.cached_weight = cached_weight  # ✘ (leads to RuntimeError [modified by an inplace operation])
+        self.cached_weight.copy_(cached_weight)  # ✅️
+        # self.cached_weight = cached_weight  # ❌️ (leads to RuntimeError [modified by an inplace operation])
 
     @jit.export
     def projection(self) -> None:

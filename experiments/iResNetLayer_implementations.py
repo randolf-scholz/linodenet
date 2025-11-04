@@ -131,24 +131,6 @@ class LinearContraction(nn.Module):
         # print("here!")
         self.refresh_cache = torch.tensor(True)
 
-    # with torch.no_grad():
-    #      self.refresh_cache = torch.tensor(True)
-
-    #     @staticmethod
-    #     def __raise_refresh_cache_flag(self, grad_output: list[Tensor] = ()) -> None:
-    #         self.raise_refresh_cache_flag()
-
-    #     # @jit.export
-    #     def raise_refresh_cache_flag(self) -> None:
-    #         # print(grad_output)
-    #         # self.refresh_cache = torch.tensor(True)
-    #         # self.cached_weight = torch.tensor([])
-    #         # self.cached_sigma = torch.tensor([])
-    #         pass
-
-    # fac = 1.0 / (self.c + self.sigma_cached)
-    # return functional.linear(x, fac * self.weight, self.bias)
-
 
 class iResNetLayer(nn.Module):
     maxiter: Final[int]

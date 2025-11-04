@@ -4,14 +4,14 @@ build-backend = "uv_build"
 
 # region project configuration ---------------------------------------------------------
 [project]
-requires-python = ">=3.14"
+requires-python = ">=3.13,<3.15"
 name = "linodenet"
 version = "0.3.2"
-authors = [{name="Randolf Scholz", email="randolf.scholz@gmail.com"}]
+authors = [{ name = "Randolf Scholz", email = "randolf.scholz@gmail.com" }]
 description = "Linear ODE Network for Time-Series Forecasting"
 
 # package content
-license = {file="LICENSE"}
+license = { file = "LICENSE" }
 readme = "README.md"
 
 # meta-information
@@ -22,6 +22,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
@@ -29,7 +30,7 @@ classifiers = [
 
 dependencies = [
     "numpy>=2.3.4",
-    "scipy>=1.16.2",
+    "scipy>=1.16.3",
     "torch>=2.9.0",
 ]
 
@@ -45,18 +46,16 @@ dev = [
     {include-group="linters"}, {include-group="tests"}, {include-group="typing"},
 ]
 devtools = [
-    "cmake>=4.1.0",
+    "cmake>=4.1.2",
     "ninja>=1.13.0",
-    "pdm-backend>=2.4.5",
     "pybadges>=3.0.1",
-    "pydevd>=3.4.1",
 ]
 debug = [
     "ipympl>=0.9.8",
-    "ipywidgets>=8.1.7",
+    "ipywidgets>=8.1.8",
     "jupyterlab-execute-time>=3.2.0",
-    "jupyterlab>=4.4.9",
-    "psutil>=7.1.0",
+    "jupyterlab>=4.4.10",
+    "psutil>=7.1.3",
     "torchinfo>=1.8.0",
 ]
 docs = [
@@ -78,16 +77,16 @@ docs = [
 linters = [
     "pre-commit>=4.3.0",
     "pylint>=3.3.9",
-    "ruff>=0.14.0",
+    "ruff>=0.14.3",
     "tach>=0.29.0",
 ]
 tests = [
     "coverage>=7.11.0",
-    "hypothesis[numpy,pytest]>=6.142.0",
+    "hypothesis[numpy,pytest]>=6.145.0",
     "matplotlib>=3.10.7",
-    "psutil>=7.1.0",
+    "psutil>=7.1.3",
     "pygal>=3.0.5",
-    "pytest-benchmark[histogram]>=5.1.0",
+    "pytest-benchmark[histogram]>=5.2.0",
     "pytest-cov>=7.0.0",
     "pytest-repeat>=0.9.4",
     "pytest-rerunfailures>=16.1",
@@ -98,10 +97,11 @@ tests = [
 ]
 typing = [
     "mypy>=1.18.2",
-    "pyright>=1.1.406",
-    "scipy-stubs>=1.16.2.3",
+    "pyright>=1.1.407",
+    "pyrefly>=0.39.4",
+    "scipy-stubs>=1.16.3.0",
     "types-colorama>=0.4.15.20250801",
-    "types-decorator>=5.2.0.20250324",
+    "types-decorator>=5.2.0.20251101",
     "types-docutils>=0.22.2.20251006",
     "types-jsonschema>=4.25.1.20251009",
     "types-pillow>=10.2.0.20240822",
@@ -126,67 +126,41 @@ typing = [
 src = ["src/", "tests/"]
 indent-width = 4
 line-length = 88
-target-version = "py314"
+target-version = "py313"
 output-format = "concise"
+
+[tool.ruff.format]
+preview = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint]
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []
 
-#select = [
-#    "A",     # flake8-builtins
-#    "ANN",   # flake8-annotations
-#    "ARG",   # flake8-unused-arguments
-#    "B",     # bugbear
-#    "C4",    # comprehensions
-#    "C90",   # mccabe
-#    "D",     # pydocstyle
-#    "DOC",   # pydoclint
-#    "E",     # pycodestyle
-#    "EXE",   # executable
-#    "F",     # pyflakes
-#    "FBT",   # boolean-trap
-#    "FURB",  # refurb
-#    "I",     # isort
-#    "ICN",   # import-conventions
-#    "ISC",   # implicit-str-concat
-#    "N",     # pep8-naming
-#    "NPY",   # numpy
-#    "N",     # naming
-#    "PERF",  # performance related
-#    "PGH",   # pygrep-hooks
-#    "PIE",   # pie
-#    "PL",    # pylint
-#    "PT",    # pytest
-#    # "PTH",   # path
-#    "PYI",   # pyi
-#    # "RET",   # return
-#    "RUF",   # ruff specific
-#    "S",     # flake8-bandit
-#    "S101",  # use of `assert`
-#    "SIM",   # simplify
-#    "SLOT",  # slots
-#    "TCH",   # type-checking
-#    "TRY",   # tryceratops
-#    "UP",    # pyupgrade
-#    "W",     # warnings
-#]
 select=["ALL"]
 ignore = [
     # FIXME: temporary
     "FBT001",      # JIT does not support KW-only with defaults
     "FBT002",      # JIT does not support KW-only with defaults
     "FBT003",      # JIT does not support KW-only with defaults
-    # annotations
+    # fully ignored:
     "ANN",      # missing-annotations
-    # unused-arguments
-    # mccabe
     "C90",      # too-complex
-    # commas
     "COM",      # comma
-    # copyright
     "CPY",      # missing-copyright
+    "DTZ",      # timezone-naive-datetime
+    "EM",       # error-messages
+    "ERA",      # commented-out-code
+    "FIX",      # fixme
+    "T20",      # flake8-print
+    "TD",       # todo
+    # partially ignored:
     # pydocstyle
     "D102",     # Missing docstring in public method
     "D103",     # Missing docstring in public function
@@ -196,24 +170,19 @@ ignore = [
     "DOC201",   # docstring-missing-returns
     "DOC402",   # docstring-missing-yields
     "DOC501",   # docstring-missing-exception
-    # datetime
-    "DTZ",      # timezone-naive-datetime
     # pycodestyle
     "E201",     # Whitespace after '('
     "E202",     # Whitespace before ')'
     "E203",     # Whitespace before ':'
     "E221",     # Multiple spaces before operator
+    "E741",     # Ambiguous variable name (like l, O, or I)
     # "E226",   # Missing whitespace around arithmetic operator
     # "E231",   # Missing whitespace after ','
     "E241",     # Multiple spaces after comma
     "E271",     # Multiple spaces after keyword
     "E272",     # Multiple spaces before keyword
-    # error-messages
-    "EM",       # error-messages
-    # eradicate
-    "ERA001",   # commented-out-code
-    # fixme
-    "FIX",      # fixme
+    # flake8-logging
+    "G004",     # Logging statement uses f-string
     # naming
     "N801",     # class names should use CapWords convention
     "N803",     # argument name should be lowercase
@@ -243,18 +212,17 @@ ignore = [
     "PLR0917",  # Too many positional arguments
     # flake8-use-pathlib
     "PTH123",   # builtin-open
-    # PYI
-    "PYI051",   # redundant-literal-union
     # RET
     "RET504",   # unnecessary-assign
     # RUFF
     "RUF001",   # ambiguous-unicode-character-string
     "RUF002",   # ambiguous-unicode-character-docstring
     "RUF003",   # ambiguous-unicode-character-comment
+    "RUF005",   # collection-literal-concatenation (not supported by JIT)
     "RUF012",   # Mutable class attributes should be annotated with typing.ClassVar # FIXME: PEP 603
     "RUF013",   # PEP 484 prohibits implicit Optional
     "RUF022",   # __all__ not sorted
-    "RUF036",   # `None` not at the end of the type annotation.
+    "RUF036",   # None not at the end of type annotation
     # flake8-bandit
     "S101",     # assert statement
     "S301",     # suspicious-pickle-usage
@@ -266,8 +234,6 @@ ignore = [
     "TC001",    # Move application library import into a type-checking block
     "TC002",    # Move third-party library import into a type-checking block
     "TC003",    # Move standard library import into a type-checking block
-    # todo
-    "TD",       # todo
     # tryceratops
     "TRY003",   # Avoid specifying long messages outside the exception class
     # pyupgrade
@@ -275,7 +241,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/test*" = ["S101", "T20", "D101"]
+"**/test*" = ["S101", "SIM300", "D101", "T20", "UP018", "RUF046"]
 
 [tool.ruff.lint.pylint]
 allow-dunder-method-names = ["__array__", "__array_ufunc__", "__dataframe__", "_repr_html_"]
@@ -293,16 +259,18 @@ mark-parentheses = false
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-
-[tool.ruff.format]
-preview = true
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-docstring-code-format = true
-docstring-code-line-length = "dynamic"
 # endregion ruff configuration ---------------------------------------------------------
+
+
+[tool.ty.environment]
+python-version = "3.13"
+
+
+[tool.ty.terminal]
+output-format = "concise"
+
+[tool.pyrefly]
+python_version = "3.13"
 
 
 # region pylint configuration ----------------------------------------------------------
@@ -359,7 +327,7 @@ generated-members = ["numpy.*", "torch.*"]
 files = ["src/", "tests/"]
 platform = "linux"
 plugins = []
-python_version = "3.14"
+python_version = "3.13"
 
 disable_error_code = [
     "func-returns-value", # SEE: https://github.com/python/mypy/issues/6549
@@ -436,7 +404,7 @@ defineConstant = {"__debug__" = true}
 #stubPath = ""
 venvPath = ".venv"
 #venv = ".venv"
-pythonVersion = "3.14"
+pythonVersion = "3.13"
 pythonPlatform = "Linux"
 #executionEnvironments = []
 useLibraryCodeForTypes = false  # `pandas` has way too many false positives
@@ -560,15 +528,15 @@ addopts = [
     #    "--only-rerun=",      # If passed, only rerun errors matching the regex provided.
     # xdists options
     "--numprocesses=0",  # number of parallel processes
-    # "--dist=loadfile", # loadscope, loadfile, load, each, no
+    "--dist=loadfile",   # distribute tests by scope (module or class)
     # coverage options
-#    "--cov=linodenet",  # Path or package name to measure during execution (multi-allowed).
-#    "--cov-report=term:skip-covered",
-#    "--cov-report=xml:reports/coverage.xml",
-    #    "--cov-report=annotate:reports/coverage",
+    # "--cov=linodenet",
+    # "--cov-report=term:skip-covered",
+    # "--cov-report=xml:reports/coverage.xml",
+    # "--cov-report=annotate:reports/coverage",
     # benchmark options
-#    "--benchmark-group-by=func",
-#    "--benchmark-sort=mean",
+    "--benchmark-group-by=func",
+    "--benchmark-sort=mean",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",

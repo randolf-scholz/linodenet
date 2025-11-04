@@ -87,7 +87,7 @@ class reset_caches(ContextDecorator):
         for layer in self.module.modules():
             if hasattr(layer, "cached_tensors"):
                 num_caches += 1
-        self.LOGGER.info("Found %d caches.", num_caches)
+        self.LOGGER.info(f"Found {num_caches} caches.")
         if num_caches == 0:
             warnings.warn("No caches found.", RuntimeWarning, stacklevel=2)
 

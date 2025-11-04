@@ -8,7 +8,12 @@ from torch import Tensor, jit, nn
 
 @dataclass
 class MyModule(nn.Module):
+    # NOTE: still need to manually do __init__
     weight: Tensor
+
+    def __init__(self, weight: Tensor) -> None:
+        super().__init__()
+        self.weight = weight
 
     def forward(self, x: Tensor) -> Tensor:
         return x * self.weight

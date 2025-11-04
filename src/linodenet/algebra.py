@@ -116,7 +116,7 @@ class Seq[T](Collection[T], Reversible[T], Protocol):  # +T
 class Fn(Protocol):
     r"""Base protocol for functional modules."""
 
-    def __invert__(self) -> Fn:
+    def __invert__(self) -> "Fn":
         return NotImplemented
 
     @abstractmethod
@@ -165,26 +165,26 @@ class FunctionalMixin(Fn, Protocol):
     This allows a nice way to chain modules together.
     """
 
-    def __invert__(self) -> FunctionalMixin:
+    def __invert__(self) -> "FunctionalMixin":
         r"""Invert the module."""
         raise NotImplementedError
 
     # region series --------------------------------------------------------------------
-    def __rshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
+    def __rshift__[N: Fn](self, other: N | Sequence[N], /) -> "Series[Self | N]":
         r"""Execute modules in series (`>>`).
 
         x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
         """
         return series(self, other)
 
-    def __rrshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
+    def __rrshift__[N: Fn](self, other: N | Sequence[N], /) -> "Series[Self | N]":
         r"""Execute modules in series (`>>`).
 
         x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
         """
         return series(other, self)
 
-    def __pow__(self, n: int, /) -> Series[Self]:
+    def __pow__(self, n: int, /) -> "Series[Self]":
         r"""Repeat a module `n` times (`**`).
 
         x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
@@ -196,7 +196,7 @@ class FunctionalMixin(Fn, Protocol):
     # endregion series -----------------------------------------------------------------
 
     # region parallel ------------------------------------------------------------------
-    def __xor__[N: Fn](self: Self, other: N | Sequence[N], /) -> Parallel[Self | N]:
+    def __xor__[N: Fn](self: Self, other: N | Sequence[N], /) -> "Parallel[Self | N]":
         r"""Execute modules in parallel (`|`).
 
         x₁ ───▶ f₁(x₁)
@@ -206,7 +206,7 @@ class FunctionalMixin(Fn, Protocol):
         """
         return parallel(self, other)
 
-    def __rxor__[N: Fn](self, other: N | Sequence[N], /) -> Parallel[Self | N]:
+    def __rxor__[N: Fn](self, other: N | Sequence[N], /) -> "Parallel[Self | N]":
         r"""Execute modules in parallel (`|`).
 
         x₁ ───▶ f₁(x₁)
@@ -217,10 +217,10 @@ class FunctionalMixin(Fn, Protocol):
         return parallel(other, self)
 
     @overload
-    def __floordiv__(self, num: int, /) -> Replicate[Self]: ...
+    def __floordiv__(self, num: int, /) -> "Replicate[Self]": ...
     @overload
-    def __floordiv__(self, num: None = ..., /) -> Map[Self]: ...
-    def __floordiv__(self, num: int | None = None, /) -> Replicate[Self] | Map[Self]:
+    def __floordiv__(self, num: None = ..., /) -> "Map[Self]": ...
+    def __floordiv__(self, num: int | None = None, /) -> "Replicate[Self] | Map[Self]":
         r"""Repeat a single module in parallel (`//`).
 
         x₁ ───▶ f(x₁)
@@ -237,7 +237,7 @@ class FunctionalMixin(Fn, Protocol):
     # endregion parallel ---------------------------------------------------------------
 
     # region meet ----------------------------------------------------------------------
-    def __and__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
+    def __and__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Execute multiple modules with the same input (`&`).
 
             ┌────▶ f₁(x)
@@ -255,7 +255,7 @@ class FunctionalMixin(Fn, Protocol):
         """
         return fork(self, other)
 
-    def __rand__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
+    def __rand__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Execute multiple modules with the same input (`&`).
 
             ┌────▶ f₁(x)
@@ -273,7 +273,7 @@ class FunctionalMixin(Fn, Protocol):
         """
         return fork(other, self)
 
-    def __mod__(self, n: int, /) -> Duplicate[Self]:
+    def __mod__(self, n: int, /) -> "Duplicate[Self]":
         r"""Execute multiple copies of the same module with the same input (`%`).
 
              ┌────▶ f(x)
@@ -286,7 +286,7 @@ class FunctionalMixin(Fn, Protocol):
     # endregion meet -------------------------------------------------------------------
 
     # region join ----------------------------------------------------------------------
-    def __or__[N: Fn](self, other: N | Sequence[N], /) -> Join[Self | N]:
+    def __or__[N: Fn](self, other: N | Sequence[N], /) -> "Join[Self | N]":
         r"""Join multiple outputs into a single output (`|`).
 
         join:
@@ -305,7 +305,7 @@ class FunctionalMixin(Fn, Protocol):
         """
         return join(self, other)
 
-    def __ror__[N: Fn](self, other: N | Sequence[N], /) -> Join[Self | N]:
+    def __ror__[N: Fn](self, other: N | Sequence[N], /) -> "Join[Self | N]":
         r"""Join multiple outputs into a single output (`|`).
 
         join:
@@ -348,7 +348,7 @@ class WrappedFn[T: Fn](Fn):
         super().__init__()
         self.fn: Final[T] = fn
 
-    def __invert__(self) -> WrappedFn:
+    def __invert__(self) -> "WrappedFn":
         r"""Invert the wrapped function."""
         return WrappedFn(~self.fn)
 
@@ -367,7 +367,7 @@ class Series[M: Fn](FnSequence[M]):
     x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
     """
 
-    def __invert__(self) -> Series:
+    def __invert__(self) -> "Series":
         return Series(~module for module in reversed(self))
 
     def __call__(self, x: Any, /) -> Any:
@@ -408,7 +408,7 @@ class Repeat[M: Fn](Series[M]):
     x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
     """
 
-    def __invert__(self) -> Repeat:
+    def __invert__(self) -> "Repeat":
         return Repeat(self.module, -self.num)
 
     def __init__(self, module: M, num: int, /) -> None:
@@ -440,7 +440,7 @@ class Parallel[M: Fn](FnSequence[M]):
         (x₁, ..., xₙ) ⟼ (f₁(x₁), ..., fₙ(xₙ))
     """
 
-    def __invert__(self) -> Parallel:
+    def __invert__(self) -> "Parallel":
         return Parallel(~module for module in self)
 
     # actual: tuple[*Xs] -> tuple[*Ys]
@@ -691,7 +691,7 @@ class Diagonal(Duplicate[Identity]):
          └────▶ x
     """
 
-    def __invert__(self) -> Choice:
+    def __invert__(self) -> "Choice":
         return Choice(self.num)
 
     def __init__(self, num: int, /) -> None:

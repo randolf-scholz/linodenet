@@ -1,6 +1,5 @@
 r"""Test whether export is compatible with parametrize."""
 
-import tempfile
 from tempfile import TemporaryFile
 
 import torch
@@ -17,7 +16,7 @@ def test_minimal() -> None:
 
 
 def test_export() -> None:
-    # REF: https://pytorch.org/docs/stable/export.html#limitations-of-torch-export
+    # SEE: https://pytorch.org/docs/stable/export.html#limitations-of-torch-export
     class M(nn.Module):
         input_size_a: int = 8
         input_size_b: int = 16
@@ -62,7 +61,7 @@ def test_export() -> None:
     output[0].mean().backward()
 
     # test serialize and deserialize
-    with tempfile.NamedTemporaryFile() as file:
+    with TemporaryFile() as file:
         torch.export.save(exported_program, file)
         deserialized = torch.export.load(file)
     # test deserialized program
@@ -73,7 +72,7 @@ def test_export() -> None:
 
 
 def test_export_with_property() -> None:
-    # REF: https://pytorch.org/docs/stable/export.html#limitations-of-torch-export
+    # SEE: https://pytorch.org/docs/stable/export.html#limitations-of-torch-export
     class M(nn.Module):
         input_size_a: int = 8
         input_size_b: int = 16
@@ -122,7 +121,7 @@ def test_export_with_property() -> None:
     output[0].mean().backward()
 
     # test serialize and deserialize
-    with tempfile.NamedTemporaryFile() as file:
+    with TemporaryFile() as file:
         torch.export.save(exported_program, file)
         deserialized = torch.export.load(file)
 

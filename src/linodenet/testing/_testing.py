@@ -663,7 +663,7 @@ def assert_model_ok(
         reference_values=reference_outputs,
         reference_shapes=reference_shapes,
     )
-    logger.info(">>> Forward ✔ ")
+    logger.info(">>> Forward ✅️ ")
     # endregion check forward pass -----------------------------------------------------
 
     # region check backward pass -------------------------------------------------------
@@ -675,7 +675,7 @@ def assert_model_ok(
         reference_shapes=reference_shapes,
         treat_inputs_as_parameters=treat_inputs_as_parameters,
     )
-    logger.info(">>> Backward ✔ ")
+    logger.info(">>> Backward ✅️ ")
     # endregion check backward pass ----------------------------------------------------
 
     if test_optim and isinstance(test_obj, Module):

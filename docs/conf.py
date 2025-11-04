@@ -55,6 +55,7 @@ extensions = [
     # 1st party extensions
     "signatures",
     "details",
+    "custom_mathjax",
     # 3rd party extensions
     # "autoapi.extension",
     "myst_parser",
@@ -280,7 +281,7 @@ intersphinx_mapping = {  # targets for cross-referencing
     "numpy": ("https://numpy.org/doc/stable/", None),
     "python": ("https://docs.python.org/3/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
+    "torch": ("https://docs.pytorch.org/docs/stable/", None),
     "pytest": ("https://docs.pytest.org/en/stable/", None),
     "typing": ("https://typing-extensions.readthedocs.io/en/latest/", None),
 }
@@ -329,17 +330,9 @@ intersphinx_disabled_reftypes = ["std:doc"]  # list of disabled cross-reference 
 # region mathjax_startup_patch ---------------------------------------------------------
 # SEE: https://github.com/orgs/sphinx-doc/discussions/13147#discussioncomment-11837201
 
-mathjax_options = ""
-mathjax3_config = ""
-
-
-def setup(app):
-    with open("_static/mathjax_startup.js") as file:
-        mj_conf = file.read()
-        print(mj_conf)
-        app.add_js_file("", body=mj_conf)
-
-
+# mathjax_options = {}
+# mathjax3_config = "_static/mathjax_startup.js"
+custom_mathjax = "_static/mathjax_startup.js"
 # endregion mathjax_startup_patch ------------------------------------------------------
 
 

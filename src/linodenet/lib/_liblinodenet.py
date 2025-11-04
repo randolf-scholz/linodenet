@@ -93,8 +93,8 @@ def _load_linodenet() -> dict[str, Callable]:
                 f"Failed to compile {len(exceptions)}/{len(CUSTOM_OPS)} custom operators!"
             )
             max_len = max(map(len, CUSTOM_OPS))
-            FAILURE = "\033[91m✘ FAILED\033[0m"
-            SUCCESS = "\033[92m✔ SUCCESS\033[0m"
+            FAILURE = "\033[91m❌️ FAILED\033[0m"
+            SUCCESS = "\033[92m✅️ SUCCESS\033[0m"
             for name in CUSTOM_OPS:
                 error.add_note(
                     f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"

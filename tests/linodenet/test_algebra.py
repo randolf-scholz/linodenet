@@ -6,11 +6,11 @@ from typing import assert_type
 from linodenet.algebra import Fn, Parallel, Seq, parallel
 
 
-def test_seq_upcast[T](seq: Sequence[T], /) -> Seq[T]:
-    return seq
+def check_upcast_sequence[T](s: Sequence[T]) -> Seq[T]:
+    return s
 
 
-def test_parallel[X: Fn, Y: Fn](
+def check_typing_parallel[X: Fn, Y: Fn](
     *,
     f1: X,
     l1: list[X],

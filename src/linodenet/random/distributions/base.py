@@ -145,7 +145,7 @@ class Mixture(DistributionList):
             raise ValueError("The weights must be non-negative.")
         self.weights = w / w.sum()
 
-    def marginalize(self) -> Mixture:
+    def marginalize(self) -> "Mixture":
         r"""Return the marginal distribution.
 
         For a mixture, we have:

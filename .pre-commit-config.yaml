@@ -1,4 +1,4 @@
-exclude: bugs/
+exclude: 'bugs/'
 minimum_pre_commit_version: 3.6.0
 default_language_version:
   python: '3.13'
@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0
+    rev: v0.14.3
     hooks:
       - id: ruff-check
         name: ruff isort
@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.3
+    rev: 0.9.7
     hooks:
       - id: uv-lock
       - id: uv-export
@@ -43,7 +43,7 @@ repos:
         args: [ "--no-dev", "--frozen", "--output-file=pylock.toml" ]
   # tach
   - repo: https://github.com/gauge-sh/tach-pre-commit
-    rev: v0.29.0 # change this to the latest tag!
+    rev: v0.29.0
     hooks:
       - id: tach
   # nbstripout-fast
@@ -63,6 +63,7 @@ repos:
       - id: python-consider-using-raw-string
       - id: python-system-exit
       - id: python-match-case-builtins
+      - id: python-double-comment
       # ast-based hooks
       - id: check-direct-imports
       - id: check-dunder-all
@@ -71,7 +72,7 @@ repos:
         args: ["--check-no-return-union", "--check-concrete"]
         files: '^src/|^tests/'
       - id: check-signatures
-        files: '^src/|^tests/'
+        files: '^src/'
         exclude: 'functional.py|matrix_tests.py|_liblinodenet.py'
         args:
           - "--ignore-names"
@@ -97,6 +98,15 @@ repos:
       - id: check-archived-hooks
       - id: check-resolved-github-issues
         files: '^src/|^tests/'
+  - repo: local
+    hooks:
+      - id: unknown-inline-pragma
+        name: unknown-inline-pragma
+        description: "Check for unknown inline pragmas."
+        language: pygrep
+        entry: '^[^\n]*\S[^\n]*\#\x20+(?!type|pyright|noqa|fmt|shape|mypy|ruff|FIXME|SEE|NOTE|TODO)\w+:[^\n]+$'
+        types: [ python ]
+        files: '^src/|^tests/'
   # markdownlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.45.0
@@ -113,21 +123,13 @@ repos:
     hooks:
       - id: shellcheck
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
-  - repo: local
+  # pyright
+  - repo: https://github.com/randolf-scholz/assorted-hooks.git
+    rev: v0.7.0
     hooks:
-      - id: unknown-inline-pragma
-        name: unknown-inline-pragma
-        description: "Check for unknown inline pragmas."
-        language: pygrep
-        entry: '^[^\n]*\S[^\n]*\#\x20+(?!type|pyright|noqa|fmt|shape|mypy|ruff|FIXME|SEE|NOTE|TODO)\w+:[^\n]+$'
-        types: [python]
-      - id: double-comment
-        name: double-comment
-        description: "Check for double comments."
-        language: pygrep
-        entry: '\#\s+\#\s+'
-        types: [python]
+      - id: pyright-concise
         files: '^src/|^tests/'
+        exclude: 'src/linodenet/parametrize/'
   # mypy
   - repo: local
     hooks:
@@ -143,11 +145,5 @@ repos:
           - "--hide-error-context"
           - "--hide-error-end"
           - "--no-pretty"
+          - "--show-traceback"
           - "--"
-  # pyright-wrapper
-  - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.7.0
-    hooks:
-        - id: pyright-concise
-          files: '^src/|^tests/'
-          exclude: '/parametrize/'

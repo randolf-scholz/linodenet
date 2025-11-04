@@ -1,5 +1,5 @@
 r"""LinODE-Net Configuration."""
-# ruff: noqa: N802, T201
+# ruff: noqa: N802
 
 __all__ = [
     # Constants

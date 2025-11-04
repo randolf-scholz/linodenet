@@ -3,6 +3,7 @@ r"""Test the iResNet components.
 1. is the LinearContraction layer really a linear contraction?
 2. is the iResNet really invertible via fixed-point iteration?
 """
+# ruff: noqa: PT028
 
 import logging
 import random
@@ -33,8 +34,8 @@ def test_linear_contraction(
 
     Args:
         num_sample: by default, sample randomly from [1000, 2000, ..., 5000]
-        dim_inputs: by default, sample randomly from [2, 4, 8, , .., 128]
-        dim_output: by default, sample randomly from [2, 4, 8, , .., 128]
+        dim_inputs: by default, sample randomly from [2, 4, 8, ..., 128]
+        dim_output: by default, sample randomly from [2, 4, 8, ..., 128]
         make_plots: bool
     """
     LOGGER = __logger__.getChild(LinearContraction.__name__)
@@ -125,12 +126,18 @@ def test_invertible_resnet_block(
 
     with torch.no_grad():
         model = iResNetBlock(d_inputs, hidden_size=d_output, maxiter=maxiter)
+        # first encode then decode
         x = torch.randn(n_samples, d_inputs)
-        y = torch.randn(n_samples, d_inputs)
         fx = model.encode(x)
+        assert not torch.isnan(fx).any()
         xhat = model.decode(fx)
+        assert not torch.isnan(xhat).any()
+        # first decode then encode
+        y = torch.randn(n_samples, d_inputs)
         ify = model.decode(y)
+        assert not torch.isnan(ify).any()
         yhat = model.encode(ify)
+        assert not torch.isnan(yhat).any()
 
     # Test if ϕ⁻¹∘ϕ=id, i.e. the right inverse is working
     forward_inverse_error = scaled_norm(x - xhat, axis=-1, keepdim=False)

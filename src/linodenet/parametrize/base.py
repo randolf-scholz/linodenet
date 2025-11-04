@@ -743,7 +743,8 @@ def register_parametrization(
         case nn.ParameterDict() as parametrized_tensors:
             parametrized_tensors[tensor_name] = wrapper.original_parameter
         case _:
-            raise TypeError("model.parametrized_tensors must be a nn.ParameterDict!")
+            msg = f"Expected a nn.ParameterDict, but got {type(ts)}!"
+            raise TypeError(msg)
 
     # add a buffer in place of the original tensor
     delattr(model, tensor_name)

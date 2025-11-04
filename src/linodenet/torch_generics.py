@@ -137,7 +137,7 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
 
     @classmethod
-    def from_config(cls, config: Mapping[str, Any], /) -> ModuleSequence:
+    def from_config(cls, config: Mapping[str, Any], /) -> "ModuleSequence":
         r"""Initialize from hyperparameters."""
         layers: list[Module] = []
         for layer_cfg in config["layers"]:
@@ -147,14 +147,16 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
         return ModuleSequence(layers)
 
     @classmethod
-    def from_modules(cls, modules: Iterable[M], /) -> ModuleSequence[M]:
+    def from_modules(cls, modules: Iterable[M], /) -> "ModuleSequence[M]":
         r"""Initialize from an iterable of modules."""
         return ModuleSequence(modules)
 
     if TYPE_CHECKING:
+        # We add these at type-checking time to help mypy and pyright
+        # Since they are skipped at runtime, they won't interfere with JIT compilation
 
         @overload
-        def __init__(self: ModuleSequence[Never], /) -> None: ...
+        def __init__(self: "ModuleSequence[Never]", /) -> None: ...
         @overload
         def __init__(self, modules: Iterable[M], /) -> None: ...
 
@@ -173,14 +175,17 @@ class ModuleMapping[M: Module](ModuleDict, Mapping[str, M]):
         return hash(tuple(self.items()))
 
     if TYPE_CHECKING:
+        # We add these at type-checking time to help mypy and pyright
+        # Since they are skipped at runtime, they won't interfere with JIT compilation
 
         @overload
-        def __init__(self: ModuleMapping[Never], /) -> None: ...
+        def __init__(self: "ModuleMapping[Never]", /) -> None: ...
         @overload
         def __init__(self, modules: Mapping[str, M], /) -> None: ...
 
         def __iter__(self) -> Iterator[str]: ...
         def __getitem__(self, key: str, /) -> M: ...  # pyright: ignore[reportIncompatibleMethodOverride]
+        def __contains__(self, key: object, /) -> bool: ...
         def keys(self) -> KeysView[str]: ...
         def values(self) -> ValuesView[M]: ...
         def items(self) -> ItemsView[str, M]: ...

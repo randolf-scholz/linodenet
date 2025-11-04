@@ -109,7 +109,9 @@ def compute_singular_triplet_impl(
 
 
 @pytest.mark.xfail(reason="Matrices badly conditioned.")
-def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
+@pytest.mark.parametrize("value_tol", [1e-5])
+@pytest.mark.parametrize("grads_tol", [1e-3])
+def test_singular_triplet(value_tol: float, grads_tol: float) -> None:
     r"""Test the singular triplet."""
     err_vals = []
     err_grad = []
@@ -132,7 +134,9 @@ def test_singular_triplet(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> N
 
 
 @pytest.mark.xfail(reason="Matrices badly conditioned.")
-def test_spectral_norm(value_tol: float = 1e-5, grads_tol: float = 1e-3) -> None:
+@pytest.mark.parametrize("value_tol", [1e-5])
+@pytest.mark.parametrize("grads_tol", [1e-3])
+def test_spectral_norm(value_tol: float, grads_tol: float) -> None:
     r"""Test the spectral norm."""
     err_vals = []
     err_grad = []

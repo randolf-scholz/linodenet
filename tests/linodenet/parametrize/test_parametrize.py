@@ -61,8 +61,9 @@ def check_optimization(
         assert loss.isfinite()
         optimizer.step()
         update_parametrizations(model)
+        assert isinstance(model.weight, Tensor)
         assert is_upper_triangular(model.weight)
-        assert not all_close(original_weights, model.parameters())
+        assert not all_close(original_weights, list(model.parameters()))
 
     # check that the loss has decreased
     assert loss < original_loss
@@ -122,6 +123,7 @@ def test_optimization_manual() -> None:
     model.register_buffer("weight", param.cached_parameter)
     model.register_module("param", param)
     model.register_parameter("original_weight", param.original_parameter)
+    assert isinstance(model.param, UpperTriangular)
 
     # check that the parametrization is registered
     assert model.weight is not original_weight
@@ -139,7 +141,9 @@ def test_optimization_manual() -> None:
 
     # verify that the parametrization is initialized
     assert is_upper_triangular(model.weight)
+    assert isinstance(model.param.original_parameter, Tensor)
     assert is_upper_triangular(model.param.original_parameter)
+    assert isinstance(model.param.cached_parameter, Tensor)
     assert is_upper_triangular(model.param.cached_parameter)
 
     # test training plain model

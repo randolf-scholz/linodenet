@@ -4,7 +4,6 @@ import datetime
 import logging
 import random
 import subprocess
-import warnings
 from typing import Literal, Optional
 
 import matplotlib.pyplot as plt
@@ -154,7 +153,7 @@ def make_error_plots(
     # add current git commit hash to the figure
     try:
         git_hash = (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            subprocess.check_output(["/usr/bin/git", "rev-parse", "--short", "HEAD"])
             .strip()
             .decode("utf-8")
         )
@@ -167,8 +166,8 @@ def make_error_plots(
             fontsize=8,
             color="gray",
         )
-    except Exception as e:
-        logger.warning("Could not get git hash: %s", e)
+    except Exception:
+        logger.exception("Could not get git hash")
 
     fig.suptitle(
         r"Difference $x^{\text{(LinODE)}}$ and $x^{\text{(odeint)}}$"
@@ -178,32 +177,34 @@ def make_error_plots(
     fig.savefig(RESULT_DIR / "LinODE_odeint_comparison.pdf")
 
 
-@pytest.mark.parametrize(
-    ("precision", "tolerances"),
-    [
-        ("single", (10**-2, 10**-1, 10**1)),
-        ("double", (10**-2, 10**-1, 10**1)),
-    ],
-)
-@pytest.mark.parametrize(
-    "device", ["cpu", "cuda"] if torch.cuda.is_available() else ["cpu"]
-)
 @pytest.mark.flaky(reruns=3)
+@pytest.mark.parametrize("num_samples", [100], ids=lambda n_samples: f"{n_samples=}")
+@pytest.mark.parametrize("quantile", [0.95], ids=lambda q: f"{q=}")
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("precision", ["single", "double"])
 def test_linode_error(
     *,
     precision: Literal["single", "double"],
-    tolerances: tuple[float, float, float],
     device: str,
-    quantile: float = 0.95,
-    num_samples: int = 100,
+    quantile: float,
+    num_samples: int,
 ) -> None:
     r"""Compare LinODE against scipy.odeint on random linear system."""
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+
+    match precision:
+        case "single":
+            tolerances = (10**-2, 10**-1, 10**1)
+        case "double":
+            tolerances = (10**-2, 10**-1, 10**1)
+        case _:
+            raise AssertionError(f"Unknown precision {precision}")
+
     LOGGER = __logger__.getChild(LinODE.__name__)
     LOGGER.info("Testing %s.", LinODE)
 
-    LOGGER.info(
-        f"Generating {num_samples} samples in {precision} precision", num_samples
-    )
+    LOGGER.info(f"Generating {num_samples} samples in {precision} precision")
     errors = np.array(
         [
             compute_linode_error(precision=precision, device=device)
@@ -218,24 +219,24 @@ def test_linode_error(
         LOGGER.info(f"{quantile}% quantile {q}")
         assert q <= tol, f"{quantile} quantile {q=} larger than allowed {tol=}"
         if 100 * q < tol:
-            warnings.warn(
+            raise AssertionError(
                 f"The tolerance seems too loose: {quantile} quantile {q} << {tol}"
             )
     LOGGER.info("%s passes test ✔ ", LinODE)
 
 
 @pytest.mark.slow
-def test_make_error_plot(num_samples: int = 100) -> None:
+def test_make_error_plot(num_samples: int = 100) -> None:  # noqa: PT028
     LOGGER = __logger__.getChild(LinODE.__name__)
     LOGGER.info("Testing %s.", LinODE)
 
-    LOGGER.info(f"Generating {num_samples} samples in single precision", num_samples)
+    LOGGER.info(f"Generating {num_samples} samples in single precision")
     err_single = np.array(
         [compute_linode_error(precision="single") for _ in trange(num_samples)],
         dtype=np.float32,
     ).T
 
-    LOGGER.info("Generating %i samples in double precision", num_samples)
+    LOGGER.info(f"Generating {num_samples} samples in double precision")
     err_double = np.array(
         [compute_linode_error(precision="double") for _ in trange(num_samples)],
         dtype=np.float64,

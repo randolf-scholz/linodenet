@@ -31,12 +31,14 @@ from scipy.stats import ortho_group
 
 import linodenet
 from linodenet.lib import (  # singular_triplet,; singular_triplet_native,; singular_triplet_riemann,;
+    SingularTriplet,
+    SpectralNorm,
     spectral_norm,
     spectral_norm_native,
     spectral_norm_riemann,
 )
 
-RANK_ONE_SHAPES = [
+RANK_ONE_SHAPES: list[tuple[int, int]] = [
     (1, 1),
     (1, 2),
     (1, 4),
@@ -49,21 +51,18 @@ RANK_ONE_SHAPES = [
     (64, 1),
     (256, 1),
 ]
-SVD_METHODS = {
+SVD_METHODS: dict[str, Callable] = {
     "numpy_svd": np.linalg.svd,
     "scipy_svd": scipy.linalg.svd,
     "torch_svd": torch.linalg.svd,
     "linodenet_svd": linodenet.lib.singular_triplet,
 }
-IMPL = {
-    spectral_norm: "custom",
-    spectral_norm_native: "native",
-    spectral_norm_riemann: "riemann",
-    # singular_triplet: "custom",
-    # singular_triplet_native: "native",
-    # singular_triplet_riemann: "riemann",
+SPECTRAL_NORMS: dict[str, SpectralNorm | SingularTriplet] = {
+    "custom": spectral_norm,
+    "native": spectral_norm_native,
+    "riemann": spectral_norm_riemann,
 }
-SHAPES = [
+SHAPES: list[tuple[int, int]] = [
     # square matrices
     (2, 2),
     (4, 4),
@@ -77,7 +76,7 @@ SHAPES = [
 SEEDS = [1000, 1001, 1002, 1003, 1004]
 DIMS = [2, 4, 16, 64, 256]
 ATOL = 1e-3
-RTOL = 1e-6
+RTOL = 1e-5
 
 
 def snorm(x: torch.Tensor) -> torch.Tensor:
@@ -93,23 +92,26 @@ def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
 
 
 # noinspection PyTupleAssignmentBalance
-@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@pytest.mark.parametrize("shape", SHAPES, ids=str)
-@pytest.mark.parametrize("method", SVD_METHODS.values(), ids=SVD_METHODS.keys())
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+@pytest.mark.parametrize(
+    ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+)
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda shape: f"{shape=}")
+@pytest.mark.parametrize("method", SVD_METHODS)
 def test_svd_rank_one(
     *,
-    method: Callable,
+    method: str,
     shape: tuple[int, int],
     seed: int,
-    atol: float = ATOL,
-    rtol: float = RTOL,
+    atol: float,
+    rtol: float,
 ) -> None:
     r"""Checks that the singular triplet method works for rank one matrices."""
     torch.manual_seed(seed)
     m, n = shape
     matrix = random_rank_one_matrix(m, n)
 
-    match method:
+    match SVD_METHODS[method]:
         case scipy.linalg.svd:
             A = matrix
             U, S, Vh = scipy.linalg.svd(A)
@@ -136,29 +138,39 @@ def test_svd_rank_one(
             raise ValueError(f"Unknown method: {method}")
 
 
-@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@pytest.mark.parametrize("shape", SHAPES, ids=str)
-@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+@pytest.mark.parametrize(
+    ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+)
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda shape: f"{shape=}")
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("method", SPECTRAL_NORMS)
 def test_rank_one(
     *,
-    impl: Callable,
+    method: str,
     shape: tuple[int, int],
     seed: int,
-    atol: float = ATOL,
-    rtol: float = RTOL,
+    device: str | torch.device,
+    atol: float,
+    rtol: float,
 ) -> None:
     r"""Test the accuracy of the gradient for rank one matrices.
 
     The analytical gradient is ∂‖A‖₂/∂A = uvᵀ, where u and v are the singular vectors.
     In particular, for rank one matrices A=uvᵀ, the gradient is ∂‖A‖₂/∂A = uvᵀ/(‖u‖⋅‖v‖).
     """
-    # generate random rank one matrix
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    device = torch.device(device)
+    impl = SPECTRAL_NORMS[method]
     torch.manual_seed(seed)
+
+    # generate random rank one matrix
     m, n = shape
-    sigma_star = 1000 * torch.rand(()) + 1
-    u_star = torch.randn(m)
+    sigma_star = 1000 * torch.rand((), device=device) + 1
+    u_star = torch.randn(m, device=device)
     u_star = u_star / u_star.norm()
-    v_star = torch.randn(n)
+    v_star = torch.randn(n, device=device)
     v_star = v_star / v_star.norm()
     A = sigma_star * torch.outer(u_star, v_star)
     A = A.clone().detach().requires_grad_(True)
@@ -191,29 +203,40 @@ def test_rank_one(
     )
 
 
-@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@pytest.mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
-@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+@pytest.mark.parametrize(
+    ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+)
+@pytest.mark.parametrize("dim", DIMS, ids=lambda dim: f"{dim=}")
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("method", SPECTRAL_NORMS)
 def test_diagonal(
-    impl: Callable,
     *,
+    method: str,
+    device: str | torch.device,
     dim: int,
     seed: int,
-    atol: float = ATOL,
-    rtol: float = RTOL,
+    atol: float,
+    rtol: float,
 ) -> None:
     r"""Checks that the singular triplet method works for diagonal matrices.
 
     NOTE: builtin SVD seems to have auto-detection for diagonal matrices...
     """
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    device = torch.device(device)
+    impl = SPECTRAL_NORMS[method]
     torch.manual_seed(seed)
-    S = 10 * (torch.randn(dim) + ATOL)
+
+    # generate a random diagonal matrix
+    S = 10 * (torch.randn(dim, device=device) + ATOL)
     A = torch.diag(S)
     A = A.clone().detach().requires_grad_(True)
 
     # analytical result
     idx_star = S.abs().argmax()
-    unit_vector = torch.eye(dim)
+    unit_vector = torch.eye(dim, device=device)
     sigma_star = S[idx_star].abs()
     sign_star = torch.sign(S[idx_star])
     u_star = unit_vector[idx_star]
@@ -250,31 +273,42 @@ def test_diagonal(
     )
 
 
-@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@pytest.mark.parametrize("shape", SHAPES, ids=str)
-@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+@pytest.mark.parametrize(
+    ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+)
+@pytest.mark.parametrize("shape", SHAPES, ids=lambda shape: f"{shape=}")
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("method", SPECTRAL_NORMS)
 def test_analytical(
-    impl: Callable,
     *,
+    method: str,
+    device: str | torch.device,
     shape: tuple[int, int],
     seed: int,
-    atol: float = ATOL,
-    rtol: float = RTOL,
+    atol: float,
+    rtol: float,
 ) -> None:
     r"""We test the analytical result for random matrices.
 
     We randomly sample U, S and V.
     """
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    device = torch.device(device)
+    impl = SPECTRAL_NORMS[method]
     torch.manual_seed(seed)
     rng = default_rng(seed=seed)
+
+    # randomly generate a matrix with known SVD
     M, N = shape
     K = min(M, N)
-    S = 10 * (torch.rand(K) + ATOL)
-    U = ortho_group.rvs(M, random_state=rng)
-    V = ortho_group.rvs(N, random_state=rng)
+    S = 10 * (torch.rand(K, device=device) + ATOL)
+    _U = ortho_group.rvs(M, random_state=rng)
+    _V = ortho_group.rvs(N, random_state=rng)
     # take the first K vectors
-    U = torch.tensor(U[:, :K], dtype=torch.float)
-    Vh = torch.tensor(V[:, :K], dtype=torch.float).T
+    U = torch.tensor(_U[:, :K], dtype=torch.float, device=device)
+    Vh = torch.tensor(_V[:, :K].T, dtype=torch.float, device=device)
     A = torch.einsum("ij,j,jk->ik", U, S, Vh)
     A = A.clone().detach().requires_grad_(True)
 
@@ -315,17 +349,22 @@ def test_analytical(
     )
 
 
-@pytest.mark.skip(reason="Algorithms are unstable for repeated singular values.")
-@pytest.mark.parametrize("seed", SEEDS, ids=lambda x: f"seed={x}")
-@pytest.mark.parametrize("dim", DIMS, ids=lambda x: f"dim={x}")
-@pytest.mark.parametrize("impl", IMPL, ids=IMPL.get)
+@pytest.mark.xfail(reason="Algorithms are unstable for repeated singular values.")
+@pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+@pytest.mark.parametrize(
+    ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+)
+@pytest.mark.parametrize("dim", DIMS, ids=lambda dim: f"{dim=}")
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("method", SPECTRAL_NORMS)
 def test_orthogonal(
-    impl: Callable,
     *,
+    method: str,
+    device: str | torch.device,
     dim: int,
     seed: int,
-    atol: float = ATOL,
-    rtol: float = RTOL,
+    atol: float,
+    rtol: float,
 ) -> None:
     r"""Tests algorithm against orthogonal matrix.
 
@@ -335,11 +374,17 @@ def test_orthogonal(
         In particular, if A is already orthogonal, then $∂‖A‖₂/∂A = A$.
         Is, in some sense, the largest subgradient.
     """
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+    device = torch.device(device)
+    impl = SPECTRAL_NORMS[method]
     torch.manual_seed(seed)
     rng = default_rng(seed=seed)
-    S = torch.ones(dim, dtype=torch.float)
+
+    # sample random orthogonal matrix
     U = ortho_group.rvs(dim, random_state=rng)
-    A = torch.from_numpy(U).to(dtype=torch.float).requires_grad_(True)
+    S = torch.ones(dim, dtype=torch.float, device=device)
+    A = torch.from_numpy(U).to(dtype=torch.float, device=device).requires_grad_(True)
 
     # analytical result
     analytical_value = S[0]

@@ -89,7 +89,9 @@ def get_activation(kind: object = None, /, **cfg: object) -> Activation:
         # if config, extract the name and instantiate
         case None:
             if "__module__" in cfg:
-                from linodenet.torch_generics import initialize_from_dict
+                from linodenet.torch_generics import (  # noqa: PLC0415
+                    initialize_from_dict,
+                )
 
                 result = initialize_from_dict(cfg)
                 assert isinstance(result, Activation)

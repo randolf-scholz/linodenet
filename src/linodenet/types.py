@@ -34,10 +34,11 @@ from typing import Protocol, Self, SupportsIndex, runtime_checkable
 from torch import Tensor, device, dtype
 
 # region type aliases ------------------------------------------------------------------
-type BoolTensor = Tensor
-type IntTensor = Tensor
-type FloatTensor = Tensor
-type ComplexTensor = Tensor
+# NOTE: Tensor aliases intentionally do not use the type keyword.
+BoolTensor = Tensor
+IntTensor = Tensor
+FloatTensor = Tensor
+ComplexTensor = Tensor
 
 type PathLike = str | Path | os.PathLike[str]
 r"""Type hint for path-like objects."""

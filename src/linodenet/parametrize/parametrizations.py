@@ -145,7 +145,7 @@ class SpectralNormalization(ParametrizationMulticache):
     def forward(self, weight: Tensor) -> tuple[Tensor, dict[str, Tensor]]:
         r"""Perform spectral normalization w ↦ w/‖w‖₂."""
         # We use the cached singular vectors as initial guess for the power method.
-        sigma, u, v = singular_triplet(
+        sigma, u, v = singular_triplet(  # noqa: RUF059
             weight,
             u0=self.u,
             v0=self.v,

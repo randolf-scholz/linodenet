@@ -1,6 +1,9 @@
 r"""C++ Extensions used by LinODEnet."""
 
 __all__ = [
+    # Protocols
+    "SpectralNorm",
+    "SingularTriplet",
     # Functions
     "singular_triplet",
     "singular_triplet_debug",
@@ -13,6 +16,8 @@ __all__ = [
 ]
 
 from linodenet.lib._liblinodenet import (
+    SingularTriplet,
+    SpectralNorm,
     singular_triplet,
     singular_triplet_debug,
     singular_triplet_native,

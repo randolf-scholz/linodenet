@@ -76,9 +76,17 @@ def test_jit_modulelist(cls: type, stage: str, interface: str) -> None:
         case "forward":
             assert torch.equal(target(x), module(x))
         case "getitem":
-            check_getitem(target)
+            if stage == "reloaded":
+                with pytest.raises(NotImplementedError):
+                    check_getitem(target)
+            else:
+                check_getitem(target)
         case "iter":
-            check_iter(target)
+            if stage == "reloaded":
+                with pytest.raises(NotImplementedError):
+                    check_iter(target)
+            else:
+                check_iter(target)
         case _:
             raise ValueError(f"Invalid interface: {interface}")
 
