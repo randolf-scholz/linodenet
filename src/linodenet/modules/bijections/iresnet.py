@@ -422,7 +422,6 @@ class iResNetBlock(nn.Module):
         self.bias = HP["bias"]
         self._Activation: type[Activation] = MODULAR_ACTIVATIONS[HP["activation"]]
         self.activation = self._Activation(**HP["activation_config"])
-        # gain = nn.init.calculate_gain(self._Activation)
 
         layers: list[nn.Module] = [
             LinearContraction(self.input_size, self.hidden_size, bias=self.bias),
@@ -432,12 +431,11 @@ class iResNetBlock(nn.Module):
         self.use_rezero = HP["rezero"]
         self.rezero = ReZero() if self.use_rezero else None
         if self.use_rezero:
-            layers.append(self.rezero)  # type: ignore[arg-type]
+            assert self.rezero is not None
+            layers.append(self.rezero)
 
         self.bottleneck = nn.Sequential(*layers)
-
         self.register_buffer("residual", torch.tensor(()), persistent=False)
-        # print(json.dumps(self.HP, indent=2))
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:

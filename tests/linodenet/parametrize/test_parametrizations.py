@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 from linodenet import parametrize
-from linodenet.parametrize import PARAMETRIZATIONS, Parametrization
+from linodenet.parametrize import PARAMETRIZATIONS, Parametrization, is_parametrization
 
 
 @pytest.mark.parametrize("name", PARAMETRIZATIONS)
@@ -23,4 +23,4 @@ def test_parametrization(name: str) -> None:
         case _:
             parametrization = cls(tensor)
 
-    assert isinstance(parametrization, Parametrization)
+    assert is_parametrization(parametrization)

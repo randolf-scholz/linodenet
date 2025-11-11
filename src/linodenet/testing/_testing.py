@@ -190,13 +190,15 @@ def to_device[T: Tensor](x: T, /, *, device: DeviceArg = ...) -> T: ...
 @overload
 def to_device[S: Scalar](x: S, /, *, device: DeviceArg = ...) -> S: ...
 @overload
-def to_device[*Ts](tup: tuple[*Ts], /, *, device: DeviceArg = ...) -> tuple[*Ts]: ...  # type: ignore[overload-overlap]
+def to_device[T](
+    map: Mapping[str, T], /, *, device: DeviceArg = ...
+) -> dict[str, T]: ...
 @overload
-def to_device[T](x: AbstractSet[T], /, *, device: DeviceArg = ...) -> set[T]: ...
+def to_device[T](set: AbstractSet[T], /, *, device: DeviceArg = ...) -> set[T]: ...
 @overload
-def to_device[T](x: Sequence[T], /, *, device: DeviceArg = ...) -> list[T]: ...
+def to_device[*Ts](tup: tuple[*Ts], /, *, device: DeviceArg = ...) -> tuple[*Ts]: ...
 @overload
-def to_device[T](x: Mapping[str, T], /, *, device: DeviceArg = ...) -> dict[str, T]: ...
+def to_device[T](seq: list[T], /, *, device: DeviceArg = ...) -> list[T]: ...
 @overload
 def to_device[T](x: T, /, *, device: DeviceArg = ...) -> T: ...
 def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
@@ -305,11 +307,11 @@ def make_tensors_parameters[S: Scalar](x: S, /) -> S: ...
 @overload
 def make_tensors_parameters[T](x: Mapping[str, T], /) -> dict[str, T]: ...
 @overload
-def make_tensors_parameters[*Ts](x: tuple[*Ts], /) -> tuple[*Ts]: ...  # type: ignore[overload-overlap]
-@overload
 def make_tensors_parameters[T](x: AbstractSet[T], /) -> set[T]: ...
 @overload
-def make_tensors_parameters[T](x: Sequence[T], /) -> list[T]: ...
+def make_tensors_parameters[*Ts](x: tuple[*Ts], /) -> tuple[*Ts]: ...
+@overload
+def make_tensors_parameters[T](x: list[T], /) -> list[T]: ...
 def make_tensors_parameters(arg: Any, /) -> Any:
     r"""Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
@@ -443,23 +445,32 @@ def check_backward(
     return gradients
 
 
-def check_jit_scriptable[M: Module | Func](arg: M, /) -> M:
+@overload
+def check_jit_scriptable(arg: Module, /) -> jit.ScriptModule: ...
+@overload
+def check_jit_scriptable(arg: Func, /) -> jit.ScriptFunction: ...
+def check_jit_scriptable(
+    arg: Module | Func, /
+) -> jit.ScriptModule | jit.ScriptFunction:
     r"""Test JIT compilation."""
     try:
         scripted = jit.script(arg)
     except Exception as exc:
         raise AssertionError("Model JIT compilation Failed!") from exc
-    return scripted  # type: ignore[return-value]
+    return scripted
 
 
 def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
     r"""Test saving and loading of JIT compiled model."""
-    if not isinstance(arg, jit.ScriptModule | jit.ScriptFunction):
-        arg = check_jit_scriptable(arg)
+    scripted = (
+        arg
+        if isinstance(arg, jit.ScriptModule | jit.ScriptFunction)
+        else check_jit_scriptable(arg)
+    )
 
     with tempfile.TemporaryFile() as file:
         try:
-            jit.save(arg, file)
+            jit.save(scripted, file)
             file.seek(0)
         except Exception as exc:
             raise AssertionError("Model saving failed!") from exc
@@ -470,7 +481,7 @@ def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
             raise AssertionError("Model loading failed!") from exc
 
         # move parameters/buffers to the same device
-        device = get_device(arg)
+        device = get_device(scripted)
         loaded = to_device(loaded, device=device)
     return loaded
 

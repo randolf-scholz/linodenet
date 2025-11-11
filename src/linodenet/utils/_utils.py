@@ -70,7 +70,7 @@ def flatten_dict[K, K2](
     *,
     recursive: bool | int = True,
     join_fn: Callable[[Iterable[K]], K2] = ".".join,  # type: ignore[assignment]
-    split_fn: Callable[[K2], Iterable[K]] = lambda s: s.split("."),  # type: ignore[attr-defined]
+    split_fn: Callable[[K2], Iterable[K]] = lambda s: s.split("."),  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
 ) -> dict[K2, Any]:
     r"""Flatten dictionaries recursively.
 
@@ -127,13 +127,10 @@ def flatten_dict[K, K2](
         ... )
         {('a', 1, True): 'foo', ('a', 2, False): 'bar'}
     """
-    if not recursive:
-        return dict[Any, Any](d)
-
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K2, Any] = {}
     for key, item in d.items():
-        if isinstance(item, Mapping):
+        if recursive and isinstance(item, Mapping):
             for subkey, subitem in flatten_dict(
                 item,
                 recursive=recursive,
@@ -154,7 +151,7 @@ def unflatten_dict[K, K2](
     *,
     recursive: bool | int = True,
     join_fn: Callable[[Iterable[K]], K2] = ".".join,  # type: ignore[assignment]
-    split_fn: Callable[[K2], Iterable[K]] = lambda s: s.split("."),  # type: ignore[attr-defined]
+    split_fn: Callable[[K2], Iterable[K]] = lambda s: s.split("."),  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
 ) -> NestedDict[K, Any]:
     r"""Unflatten dictionaries recursively.
 
@@ -178,14 +175,11 @@ def unflatten_dict[K, K2](
         ... )
         {'a': {17: 'foo', 18: 'bar'}}
     """
-    if not recursive:
-        return dict[Any, Any](d)
-
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K, Any] = {}
     for key, item in d.items():
         outer_key, *inner_keys = split_fn(key)
-        if inner_keys:
+        if recursive and inner_keys:
             result.setdefault(outer_key, {})
             result[outer_key] |= unflatten_dict(
                 {join_fn(inner_keys): item},

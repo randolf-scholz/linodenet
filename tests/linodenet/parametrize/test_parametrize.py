@@ -1,22 +1,22 @@
 r"""Test parametrization of modules."""
 
-import sys
 from copy import deepcopy
 
 import pytest
 import torch
 from torch import Tensor, nn
+from torch._dynamo import OptimizedModule
 from torch.linalg import matrix_norm
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
 from linodenet.parametrize import (
     Identity,
-    Parametrization,
     SpectralNormalization,
     UpperTriangular,
     cached,
     get_parametrizations,
+    is_parametrization,
     parametrize,
     register_optimizer_hook,
     register_parametrization,
@@ -32,8 +32,6 @@ from linodenet.testing import (
     is_symmetric,
     is_upper_triangular,
 )
-
-sys.settrace(None)
 
 
 def check_optimization(
@@ -81,7 +79,7 @@ def test_register_parametrization() -> None:
     assert is_upper_triangular(model.weight)
 
     ps = get_parametrizations(model)
-    assert isinstance(ps["weight"], Parametrization)
+    assert is_parametrization(ps["weight"])
 
 
 def test_optimization() -> None:
@@ -169,9 +167,11 @@ def test_optimization_jit() -> None:
     register_parametrization(model, "weight", UpperTriangular)
 
     scripted_model = check_jit_scriptable(model)
+    assert is_upper_triangular(scripted_model.weight)
     check_optimization(scripted_model, args=(x,), target=y)
 
     deserialized_model = check_jit_serializable(model)
+    assert is_upper_triangular(deserialized_model.weight)
     check_optimization(deserialized_model, args=(x,), target=y)
 
 
@@ -185,9 +185,8 @@ def test_optimization_compile() -> None:
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
     register_parametrization(model, "weight", UpperTriangular)
 
-    pp: type[Parametrization] = UpperTriangular
-
     compiled_model = torch.compile(model)
+    assert isinstance(compiled_model, OptimizedModule)
     check_optimization(compiled_model, args=(x,), target=y)
     assert is_upper_triangular(compiled_model.weight)
 
@@ -202,8 +201,9 @@ def test_optimization_export() -> None:
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
     register_parametrization(model, "weight", UpperTriangular)
 
-    exported_model = torch.export.export(model, args=(x,))
+    exported_model = torch.export.export(model, args=(x,)).module()
     check_optimization(exported_model, args=(x,), target=y)
+    assert isinstance(exported_model.weight, Tensor)
     assert is_upper_triangular(exported_model.weight)
 
 
@@ -457,15 +457,15 @@ def test_jit_attribute() -> None:
     register_parametrization(model, "weight", UpperTriangular)
     ps = get_parametrizations(model)
     assert is_upper_triangular(model.weight)
-    assert isinstance(ps["weight"], Parametrization)
+    assert is_parametrization(ps["weight"])
 
     # check that model can be scripted
     scripted = check_jit_scriptable(model)
     scripted_ps = get_parametrizations(model)
     assert is_upper_triangular(scripted.weight)
-    assert isinstance(scripted_ps["weight"], Parametrization)
+    assert is_parametrization(scripted_ps["weight"])
 
     # check that model can be scripted
     deserialized_model = check_jit_serializable(model)
     assert is_upper_triangular(deserialized_model.weight)
-    # assert isinstance(deserialized_ps["weight"], Parametrization)
+    # assert is_parametrization(deserialized_model["weight"])

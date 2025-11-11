@@ -2,7 +2,6 @@ r"""Utility functions."""
 
 __all__ = [
     # Sub-Modules
-    "config",
     "context",
     # Functions
     "deep_dict_update",
@@ -10,7 +9,7 @@ __all__ = [
     "pad",
 ]
 
-from linodenet.utils import config, context
+from linodenet.utils import context
 from linodenet.utils._utils import (
     deep_dict_update,
     is_dunder,

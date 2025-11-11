@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, assert_type
 import torch
 from torch import Tensor, nn
 
-from linodenet.testing import assert_jit_compatible
+from linodenet.testing import assert_jit_compatible, check_jit_serializable
 from linodenet.torch_generics import ModuleMapping, ModuleSequence
 
 BATCH_SIZE = 5
@@ -121,3 +121,6 @@ def test_mapping_jit() -> None:
     x = torch.randn(BATCH_SIZE, DIM_IN)
 
     assert_jit_compatible(model, args=(x,), kwargs={})
+
+    reloaded = check_jit_serializable(model)
+    list(reloaded.named_buffers())

@@ -160,7 +160,7 @@ class SequentialFilter(ModuleSequence[FilterBase], FilterBase):  # pyright: igno
                 )
 
         FilterBase.__init__(self, input_size=input_size, hidden_size=hidden_size)
-        ModuleSequence.__init__(self, filters)
+        ModuleSequence.__init__(self, filters)  # type: ignore[arg-type]
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""

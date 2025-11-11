@@ -32,7 +32,6 @@ __all__ = [
     "Duplicate",
     "Identity",
     "Map",
-    "Join",
     "Fork",
     "Parallel",
     "Reduce",
@@ -45,7 +44,6 @@ __all__ = [
     "diagonal",
     "duplicate",
     "identity",
-    "join",
     "fork",
     "parallel",
     "reduce",
@@ -67,21 +65,6 @@ from typing import (
     overload,
     runtime_checkable,
 )
-
-
-@overload
-def _try_call[X, Y](fn: Callable[[X], Y], arg: X, /) -> Y: ...  # pyright: ignore[reportOverlappingOverload]
-@overload
-def _try_call(fn: Callable, arg: object, /) -> None: ...
-def _try_call(fn: Callable, arg: object, /) -> object | None:
-    r"""Try to call a function with the given argument.
-
-    If the function raises an exception, return `None`.
-    """
-    try:
-        return fn(arg)
-    except Exception:  # noqa: BLE001
-        return None
 
 
 class SupportsLenAndGetItem[T](Protocol):
@@ -286,7 +269,7 @@ class FunctionalMixin(Fn, Protocol):
     # endregion meet -------------------------------------------------------------------
 
     # region join ----------------------------------------------------------------------
-    def __or__[N: Fn](self, other: N | Sequence[N], /) -> "Join[Self | N]":
+    def __or__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Join multiple outputs into a single output (`|`).
 
         join:
@@ -303,9 +286,9 @@ class FunctionalMixin(Fn, Protocol):
             │       ⋮
             └────▶ fₙ(x) or None
         """
-        return join(self, other)
+        return fork(self, other)
 
-    def __ror__[N: Fn](self, other: N | Sequence[N], /) -> "Join[Self | N]":
+    def __ror__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Join multiple outputs into a single output (`|`).
 
         join:
@@ -322,7 +305,7 @@ class FunctionalMixin(Fn, Protocol):
             │       ⋮
             └────▶ fₙ(x) or None
         """
-        return join(other, self)
+        return fork(other, self)
 
     # endregion join -------------------------------------------------------------------
 
@@ -360,11 +343,11 @@ class WrappedFn[T: Fn](Fn):
 class Series[M: Fn](FnSequence[M]):
     r"""Execute modules in series (`>>`).
 
+        x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
+
     .. math:: series(f₁, ..., fₙ):
         X₁ ⟶ X₂ ⟶ ... ⟶ Xₙ ⟶ Y
-       x ⟼ f₁(x) ⟼ f₂(f₁(x)) ⟼ ... ⟼ fₙ(fₙ₋₁(...f₁(x)...)) ⟼ y
-
-    x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
+        x ⟼ f₁(x) ⟼ f₂(f₁(x)) ⟼ ... ⟼ fₙ(fₙ₋₁(...f₁(x)...)) ⟼ y
     """
 
     def __invert__(self) -> "Series":
@@ -387,7 +370,11 @@ def series[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Series[M | N]: ..
 def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M | N]:
     r"""Execute modules in series (`>>`).
 
-    x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
+        x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
+
+    .. math:: series(f₁, ..., fₙ):
+        X₁ ⟶ X₂ ⟶ ... ⟶ Xₙ ⟶ Y
+        x ⟼ f₁(x) ⟼ f₂(f₁(x)) ⟼ ... ⟼ fₙ(fₙ₋₁(...f₁(x)...)) ⟼ y
     """
     match x, y:
         case Fn(), Fn():
@@ -405,7 +392,9 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
 class Repeat[M: Fn](Series[M]):
     r"""Repeat a module `n` times (`**`).
 
-    x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
+        x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
+
+    NOTE: Equivalent to `f >> f >> ... >> f` (n times).
     """
 
     def __invert__(self) -> "Repeat":
@@ -422,7 +411,9 @@ class Repeat[M: Fn](Series[M]):
 def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
     r"""Repeat a module `n` times in series (`**`).
 
-    x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
+        x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
+
+    NOTE: Equivalent to `f >> f >> ... >> f` (n times).
     """
     return Repeat(module, num)
 
@@ -461,10 +452,14 @@ def parallel[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Parallel[M | N]
 def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Parallel[M | N]:  # fmt: skip
     r"""Execute modules in parallel (`^`).
 
-    x₁ ────▶ f₁(x₁)
-    x₂ ────▶ f₂(x₂)
-         ⋮
-    xₙ ────▶ fₙ(xₙ)
+        x₁ ────▶ f₁(x₁)
+        x₂ ────▶ f₂(x₂)
+             ⋮
+        xₙ ────▶ fₙ(xₙ)
+
+    .. math:: parallel(f₁, ..., fₙ):
+        X₁×…×Xₙ ⟶ Y₁×…×Yₙ
+        (x₁, ..., xₙ) ⟼ (f₁(x₁), ..., fₙ(xₙ))
     """
     match x, y:
         case Fn(), Fn():
@@ -524,66 +519,6 @@ class Map[M: Fn]:
 
     def __call__(self, xs: list, /) -> list:
         return [self.module(x) for x in xs]
-
-
-class Join[M: Fn](FnSequence[M]):
-    r"""Join multiple outputs into a single output.
-
-    join:
-        Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∪…∪Xₙ，Y₁'×…×Yₙ')
-        (f₁，…，fₙ) ⟼ union(f₁，…，fₙ)
-
-    join(f₁，…，fₙ):
-        X₁∪…∪Xₙ ⟶ Y₁'×…×Yₙ'
-        x ⟼ (f₁(x) or None , ..., fₙ(x) or None)
-
-
-        ┌────▶ f₁(x) or None
-    x ──┼────▶ f₂(x) or None
-        │       ⋮
-        └────▶ fₙ(x) or None
-    """
-
-    def __call__(self, xs: tuple, /) -> tuple:
-        return tuple(_try_call(module, x) for x, module in zip(xs, self, strict=True))
-
-
-@overload
-def join[M: Fn, N: Fn](x: M, y: N, /) -> Join[M | N]: ...
-@overload
-def join[M: Fn, N: Fn](x: M, y: Sequence[N], /) -> Join[M | N]: ...
-@overload
-def join[M: Fn, N: Fn](x: Sequence[M], y: N, /) -> Join[M | N]: ...
-@overload
-def join[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Join[M | N]: ...
-def join[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Join[M | N]:
-    r"""Join multiple outputs into a single output (`|`).
-
-    join:
-        Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∪…∪Xₙ，Y₁'×…×Yₙ')
-        (f₁，…，fₙ) ⟼ union(f₁，…，fₙ)
-
-    join(f₁，…，fₙ):
-        X₁∪…∪Xₙ ⟶ Y₁'×…×Yₙ'
-        x ⟼ (f₁(x) or None , ..., fₙ(x) or None)
-
-
-        ┌────▶ f₁(x) or None
-    x ──┼────▶ f₂(x) or None
-        │       ⋮
-        └────▶ fₙ(x) or None
-    """
-    match x, y:
-        case Fn(), Fn():
-            return Join((x, y))
-        case Fn(), [*modules]:
-            return Join((x, *modules))
-        case [[*modules], Fn()]:
-            return Join((*modules, y))
-        case [[*left_modules], [*right_modules]]:
-            return Join((*left_modules, *right_modules))
-        case _:
-            raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
 
 
 class Fork[M: Fn](FnSequence[M]):
@@ -685,10 +620,12 @@ def duplicate[M: Fn](module: M, num: int, /) -> Duplicate[M]:
 class Diagonal(Duplicate[Identity]):
     r"""Duplicate a single input into multiple outputs.
 
-         ┌────▶ x
-    x ───┼────▶ x
-         │       ⋮
-         └────▶ x
+              ┌────▶ x
+        x ────┼────▶ x
+              │      ⋮
+              └────▶ x
+
+    Note: equivalent to fork(Identity, num)
     """
 
     def __invert__(self) -> "Choice":
@@ -704,10 +641,10 @@ class Diagonal(Duplicate[Identity]):
 def diagonal(num: int, /) -> Diagonal:
     r"""Duplicate a single input into multiple outputs.
 
-         ┌────▶ x
-    x ───┼────▶ x
-         │       ⋮
-         └────▶ x
+              ┌────▶ x
+        x ────┼────▶ x
+              │      ⋮
+              └────▶ x
 
     Note: equivalent to fork(Identity, num)
     """
@@ -717,10 +654,10 @@ def diagonal(num: int, /) -> Diagonal:
 class Reduce[X = Any](Fn):
     r"""Reduce the inputs from multiple arguments.
 
-    x₁ ───┐
-    x₂ ───┼───▶ aggregate(x₁, x₂, ..., xₙ)
-    ⋮    │
-    xₙ ───┘
+        x₁ ────┐
+        x₂ ────┼────▶ aggregate(x₁, x₂, ..., xₙ)
+        ⋮      │
+        xₙ ────┘
 
     Typical reductions are:
 
@@ -742,10 +679,10 @@ class Reduce[X = Any](Fn):
 def reduce(reducer: Callable, /) -> Reduce:
     r"""Reduce the inputs from multiple arguments.
 
-    x₁ ───┐
-    x₂ ───┼───▶ aggregate(x₁, x₂, ..., xₙ)
-    ⋮    │
-    xₙ ───┘
+    x₁ ────┐
+    x₂ ────┼────▶ aggregate(x₁, x₂, ..., xₙ)
+    ⋮      │
+    xₙ ────┘
     """
     return Reduce(reducer)
 
@@ -753,10 +690,10 @@ def reduce(reducer: Callable, /) -> Reduce:
 class Choice[X = Any](Reduce[X]):
     r"""Randomly choose one of the inputs.
 
-    x₁ ───┐
-    x₂ ───┼───▶ choice(x₁, x₂, ..., xₙ)
-    ⋮    │
-    xₙ ───┘
+    x₁ ────┐
+    x₂ ────┼────▶ choice(x₁, x₂, ..., xₙ)
+    ⋮      │
+    xₙ ────┘
     """
 
     def __init__(self, num: Optional[int] = None) -> None:
@@ -772,10 +709,10 @@ class Choice[X = Any](Reduce[X]):
 def choice(num: Optional[int] = None) -> Choice:
     r"""Randomly choose one of the inputs.
 
-    x₁ ───┐
-    x₂ ───┼───▶ choice(x₁, x₂, ..., xₙ)
-    ⋮    │
-    xₙ ───┘
+    x₁ ────┐
+    x₂ ────┼────▶ choice(x₁, x₂, ..., xₙ)
+    ⋮      │
+    xₙ ────┘
 
     Note: If `num` is `None`, the number of inputs is dynamic.
     """
@@ -785,10 +722,10 @@ def choice(num: Optional[int] = None) -> Choice:
 class Sum(Reduce):
     r"""Sum the outputs of multiple modules (`+`).
 
-    x₁ ───┐
-    x₂ ───┼──▶x₁ + x₂ + ... + xₙ
-    ⋮    │
-    xₙ ───┘
+    x₁ ────┐
+    x₂ ────┼───▶ x₁ + x₂ + ... + xₙ
+    ⋮      │
+    xₙ ────┘
     """
 
     def __init__(self) -> None:

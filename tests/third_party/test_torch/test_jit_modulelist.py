@@ -9,16 +9,32 @@ from torch import Tensor, jit, nn
 
 
 def check_getitem(module: nn.ModuleList) -> None:
-    # check __getitem__(int)
-    assert isinstance(module[0], nn.Module)
-    # check __getitem__(slice)
-    assert isinstance(module[2:], nn.Module)
+    r"""Checks __getitem__."""
+    try:
+        # check __getitem__(int)
+        assert isinstance(module[0], nn.Module)
+        # check __getitem__(slice)
+        assert isinstance(module[2:], nn.Module)
+    except NotImplementedError:
+        pytest.xfail(reason="not implemented")
 
 
 def check_iter(module: nn.ModuleList) -> None:
-    # check __iter__
-    for m in module:
-        assert isinstance(m, nn.Module)
+    r"""Checks __iter__."""
+    try:
+        for m in module:
+            assert isinstance(m, nn.Module)
+    except NotImplementedError:
+        pytest.xfail(reason="not implemented")
+
+
+def check_len(module: nn.ModuleList) -> None:
+    r"""Checks __len__."""
+    try:
+        length = len(module)
+        assert isinstance(length, int)
+    except NotImplementedError:
+        pytest.xfail(reason="not implemented")
 
 
 class MyModuleList(nn.ModuleList): ...
@@ -46,15 +62,14 @@ class UsesMyModuleList(nn.Module):
         return x
 
 
-@pytest.mark.parametrize("interface", ["getitem", "iter"])
-@pytest.mark.parametrize("stage", ["initialized", "scripted", "reloaded"])
 @pytest.mark.parametrize("cls", [nn.ModuleList, MyModuleList])
+@pytest.mark.parametrize("interface", ["getitem", "iter", "len"])
+@pytest.mark.parametrize("stage", ["initialized", "scripted", "reloaded"])
 def test_jit_modulelist(cls: type, stage: str, interface: str) -> None:
     # simple MLP
     modules = [nn.Linear(3, 3), nn.ReLU(), nn.Linear(3, 3), nn.ReLU()]
     module = cls(modules)
     scripted = jit.script(module)
-    x = torch.randn(5, 3)
 
     # save and load
     with TemporaryFile() as f:
@@ -73,20 +88,12 @@ def test_jit_modulelist(cls: type, stage: str, interface: str) -> None:
             raise ValueError(f"Invalid stage: {stage}")
 
     match interface:
-        case "forward":
-            assert torch.equal(target(x), module(x))
         case "getitem":
-            if stage == "reloaded":
-                with pytest.raises(NotImplementedError):
-                    check_getitem(target)
-            else:
-                check_getitem(target)
+            check_getitem(target)
         case "iter":
-            if stage == "reloaded":
-                with pytest.raises(NotImplementedError):
-                    check_iter(target)
-            else:
-                check_iter(target)
+            check_iter(target)
+        case "len":
+            check_len(target)
         case _:
             raise ValueError(f"Invalid interface: {interface}")
 

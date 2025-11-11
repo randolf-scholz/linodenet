@@ -1,0 +1,5 @@
+# `linodenet.parametrize` Module
+
+This module is an alternative to `torch.nn.utils.parametrizations` that provides JIT-compatible parametrizations for PyTorch models.
+
+## Usage

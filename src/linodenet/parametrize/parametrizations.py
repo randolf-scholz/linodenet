@@ -291,10 +291,16 @@ class Orthogonal(ParametrizationBase):
 
 
 class Traceless(ParametrizationBase):
-    r"""Parametrize a matrix to be traceless."""
+    r"""Parametrize a matrix to be traceless.
 
-    def forward(self, X: Tensor) -> Tensor:
-        return projections.traceless(X)
+    Note:
+        Traceless matrices are also called *trace-free* or *trace-zero* matrices.
+        They have the important property that $\det(\exp(X)) = 1$,
+        which follows from the fact that $\det(\exp(X)) = \exp(\tr(X))$.
+    """
+
+    def forward(self, x: Tensor) -> Tensor:
+        return projections.traceless(x)
 
 
 class Normal(ParametrizationBase):

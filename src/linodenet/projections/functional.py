@@ -131,7 +131,7 @@ def traceless(x: Tensor) -> Tensor:
     Note:
         Traceless matrices are also called *trace-free* or *trace-zero* matrices.
         They have the important property that $\det(\exp(X)) = 1$,
-        which follows from the fact that $\det(\exp(X)) = \exp(\r(X))$.
+        which follows from the fact that $\det(\exp(X)) = \exp(\tr(X))$.
     """
     n = x.shape[-1]
     trace = x.diagonal(dim1=-1, dim2=-2).sum(dim=-1)

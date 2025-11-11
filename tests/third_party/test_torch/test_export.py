@@ -77,6 +77,7 @@ def test_export_with_property() -> None:
         input_size_a: int = 8
         input_size_b: int = 16
         hidden_size: int = 16
+        parametrized_weight: Tensor
 
         def __init__(self) -> None:
             super().__init__()
@@ -88,9 +89,15 @@ def test_export_with_property() -> None:
             self.branch2 = nn.Sequential(nn.Linear(n2, m), nn.ReLU())
             self.buffer = torch.ones(m)
             self.param = nn.Parameter(torch.randn(m, m))
+            self.register_buffer("parametrized_weight", torch.empty(m, m))
+            # initialize buffer
+            assert torch.allclose(self.symmetric, self.symmetric.T)
+            assert self.parametrized_weight.shape == (m, m)
 
         @property
         def symmetric(self) -> Tensor:
+            new = self.param + self.param.T
+            self.parametrized_weight.copy_(new.detach())
             return self.param + self.param.T
 
         def forward(self, x1: Tensor, x2: Tensor) -> tuple[Tensor, Tensor]:
@@ -123,11 +130,10 @@ def test_export_with_property() -> None:
     # test serialize and deserialize
     with TemporaryFile() as file:
         torch.export.save(exported_program, file)
-        deserialized = torch.export.load(file)
+        deserialized = torch.export.load(file).module()
 
     # test deserialized program
     args = (torch.randn(B, N1), torch.randn(B, N2))
-    m_deserialized = deserialized.module()
-    output = m_deserialized(*args)
+    output = deserialized(*args)
     output[0].mean().backward()
     assert torch.allclose(output[1], output[1].T)

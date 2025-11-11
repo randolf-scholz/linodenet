@@ -87,6 +87,7 @@ __all__ = [
     "detach_caches",
     "get_parametrizations",
     "iter_parametrizations",
+    "is_parametrization",
     "register_optimizer_hook",
     "update_caches",
     "update_originals",
@@ -99,7 +100,15 @@ from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
-from typing import Any, Literal, Protocol, Self, runtime_checkable
+from typing import (
+    Any,
+    Literal,
+    Protocol,
+    Self,
+    TypeIs,
+    get_protocol_members,
+    runtime_checkable,
+)
 
 import torch
 from torch import Tensor, jit, nn
@@ -194,7 +203,6 @@ class GeneralParametrization(Protocol):
         self.update_cache()
 
 
-@runtime_checkable
 class Parametrization(Protocol):
     r"""Protocol for parametrizations that wrap a single tensor.
 
@@ -290,6 +298,14 @@ class Parametrization(Protocol):
             self.update_cache()
 
 
+def is_parametrization(obj: Any) -> TypeIs[Parametrization]:
+    r"""Check if the object is a Parametrization.
+
+    This method is needed because standard isinstance checks do not work with jit.ScriptModule.
+    """
+    return all(hasattr(obj, member) for member in get_protocol_members(Parametrization))
+
+
 # region base classes ------------------------------------------------------------------
 class ParametrizationBase(nn.Module, Parametrization):
     r"""Base class for parametrization of a single tensor using a single cached tensor."""
@@ -329,6 +345,7 @@ class ParametrizationBase(nn.Module, Parametrization):
         r"""Apply the parametrization to the weight matrix."""
         return self.forward(self.original_parameter)
 
+    @jit.export
     def right_inverse(self, y: Tensor) -> Tensor:
         r"""Compute the right inverse of the parametrization.
 
@@ -393,7 +410,7 @@ class ParametrizationList(nn.ModuleList, Parametrization):
         # validation
         mods: list[nn.Module] = []
         for param in parametrizations:
-            if not isinstance(param, Parametrization):
+            if not is_parametrization(param):
                 raise TypeError("All elements must be a Parametrization!")
             if not isinstance(param, nn.Module):
                 raise TypeError("All elements must be a nn.Module!")
@@ -668,7 +685,7 @@ class parametrize(ParametrizationBase):
 
 def is_parametrized(module: nn.Module, /) -> bool:
     r"""Return True if the module has any parametrizations."""
-    return any(isinstance(m, Parametrization) for m in module.modules())
+    return any(is_parametrization(m) for m in module.modules())
 
 
 def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
@@ -715,7 +732,7 @@ def register_parametrization(
         case other:
             wrapper = parametrize(tensor, other)
 
-    if not isinstance(wrapper, nn.Module) or not isinstance(wrapper, Parametrization):
+    if not isinstance(wrapper, nn.Module) or not is_parametrization(wrapper):
         raise TypeError(f"{parametrization} does not produce a valid parametrization!")
 
     if not unsafe:
@@ -783,7 +800,7 @@ class cached(ContextDecorator, AbstractContextManager):
 def iter_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
     r"""Yields all parametrizations in a module."""
     for m in module.modules():
-        if isinstance(m, Parametrization):
+        if is_parametrization(m):
             yield m
 
 
@@ -822,7 +839,7 @@ def register_optimizer_hook(
     # collect all parametrizations
     parametrizations = []
     for module in module_or_param:
-        if isinstance(module, Parametrization):
+        if is_parametrization(module):
             parametrizations.append(module)
         else:
             parametrizations.extend(iter_parametrizations(module))
