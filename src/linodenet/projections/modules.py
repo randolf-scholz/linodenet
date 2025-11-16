@@ -8,6 +8,7 @@ Notes:
 __all__ = [
     # ABCs & Protocols
     "ProjectionBase",
+    "MatrixSpace",
     # Classes
     "Banded",
     "Contraction",
@@ -28,47 +29,84 @@ __all__ = [
 ]
 
 from abc import abstractmethod
+from enum import StrEnum
 from typing import Final
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.constants import TRUE
-from linodenet.projections.functional import (
-    banded,
-    contraction,
-    diagonal,
-    diagonally_dominant,
-    hamiltonian,
-    identity,
-    low_rank,
-    lower_triangular,
-    masked,
-    normal,
-    orthogonal,
-    skew_symmetric,
-    symmetric,
-    symplectic,
-    traceless,
-    upper_triangular,
-)
-from linodenet.types import BoolTensor
+import linodenet.projections.functional as F
+from linodenet.constants import FALSE
+
+
+class MatrixSpace(StrEnum):
+    r"""Enumeration of matrix spaces for parametrizations."""
+
+    GENERAL = "general"
+    LOW_RANK = "low_rank"
+
+    SQUARE = "square"  # n x n matrices
+    EVEN_SQUARE = "even_square"  # 2n x 2n matrices
+
+    SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
+    SKEW_SYMMETRIC = "skew_symmetric"
+    POSITIVE_DEFINITE = "positive_definite"  # 𝕊ₙ⁺(ℝ)
+    NEGATIVE_DEFINITE = "negative_definite"  # 𝕊ₙ⁻(ℝ)
+    POSITIVE_SEMIDEFINITE = "positive_semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
+    NEGATIVE_SEMIDEFINITE = "negative_semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
+
+    # determinant-based
+    SINGULAR = "singular"  # det=0
+    INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
+    POSITIVE_DETERMINANT = "positive_determinant"  # GLₙ⁺(R) (det>0)
+    NEGATIVE_DETERMINANT = "negative_determinant"  # GLₙ⁻(R) (det<0)
+
+    NORMAL = "normal"
+    ORTHOGONAL = "orthogonal"  # Oₙ(R)
+    SPECIAL_ORTHOGONAL = "special_orthogonal"  # SOₙ(R)
+    PERMUTATION = "permutation"
+
+    TRACELESS = "traceless"
+    SYMPLECTIC = "symplectic"
+    HAMILTONIAN = "hamiltonian"
+
+    MASKED = "masked"
+    DIAGONAL = "diagonal"
+    UPPER_TRIANGULAR = "upper_triangular"
+    LOWER_TRIANGULAR = "lower_triangular"
+    BANDED = "banded"
+
+    STOCHASTIC = "stochastic"
+    DOUBLY_STOCHASTIC = "doubly_stochastic"
 
 
 class ProjectionBase(nn.Module):
     r"""Abstract Base Class for Projection components."""
 
     @abstractmethod
-    def forward(self, z: Tensor, /) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Forward pass of the projection.
 
-        .. Signature: ``(..., d) -> (..., f)``.
+        .. Signature: ``(..., *xs) -> (..., *ys)``.
 
         Args:
-            z: The input tensor to be projected.
+            x: The input tensor to be projected.
 
         Returns:
-            x: The projected tensor.
+            y: The projected tensor.
+        """
+
+    @abstractmethod
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r"""Right inverse of the projection.
+
+        .. Signature: ``(..., *ys) -> (..., *xs)``.
+
+        Args:
+            y: The projected tensor.
+
+        Returns:
+            x: The right inverse of the projection.
         """
 
 
@@ -85,7 +123,12 @@ class Identity(ProjectionBase):
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of matrices."""
-        return identity(x)
+        return F.identity(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r"""Right inverse of the projection."""
+        return y
 
 
 class Symmetric(ProjectionBase):
@@ -98,10 +141,18 @@ class Symmetric(ProjectionBase):
     One can show analytically that Y = ½(X + X^⊤) is the unique minimizer.
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMMETRIC
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of symmetric matrices."""
-        return symmetric(x)
+        return F.symmetric(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return y
 
 
 class SkewSymmetric(ProjectionBase):
@@ -114,33 +165,18 @@ class SkewSymmetric(ProjectionBase):
     One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SKEW_SYMMETRIC
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of skew-symmetric matrices."""
-        return skew_symmetric(x)
-
-
-class LowRank(ProjectionBase):
-    r"""Return the closest low rank matrix to X.
-
-    .. Signature:: ``(..., m, n) -> (..., m, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   rank(Y) ≤ k
-
-    One can show analytically that Y = UₖΣₖVₖ^𝖳 is the unique minimizer,
-    where X=UΣV^𝖳 is the SVD of X.
-    """
-
-    rank: Final[int]
-
-    def __init__(self, *, rank: int = 1) -> None:
-        super().__init__()
-        self.rank = rank
+        return F.skew_symmetric(x)
 
     @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of low rank matrices."""
-        return low_rank(x, rank=self.rank)
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return y
 
 
 class Orthogonal(ProjectionBase):
@@ -157,10 +193,18 @@ class Orthogonal(ProjectionBase):
         https://math.stackexchange.com/q/2215359
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.ORTHOGONAL
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of orthogonal matrices."""
-        return orthogonal(x)
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return F.orthogonal(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return y
 
 
 class Traceless(ProjectionBase):
@@ -173,10 +217,18 @@ class Traceless(ProjectionBase):
     One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.TRACELESS
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of traceless matrices."""
-        return traceless(x)
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return F.traceless(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return y
 
 
 class Normal(ProjectionBase):
@@ -204,10 +256,18 @@ class Normal(ProjectionBase):
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.NORMAL
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of normal matrices."""
-        return normal(x)
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return F.normal(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return y
 
 
 class Hamiltonian(ProjectionBase):
@@ -224,8 +284,18 @@ class Hamiltonian(ProjectionBase):
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.EVEN_SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.HAMILTONIAN
+
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        return hamiltonian(x)
+        """.. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
+        return F.hamiltonian(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
+        return y
 
 
 class Symplectic(ProjectionBase):
@@ -242,8 +312,18 @@ class Symplectic(ProjectionBase):
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.EVEN_SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMPLECTIC
+
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        return symplectic(x)
+        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
+        return F.symplectic(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
+        return y
 
 
 # endregion matrix groups --------------------------------------------------------------
@@ -267,41 +347,18 @@ class Diagonal(ProjectionBase):
         - `projections.Banded`
     """
 
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of diagonal matrices."""
-        return diagonal(x)
-
-
-class Banded(ProjectionBase):
-    r"""Return the closest banded matrix to X.
-
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝔹⊙Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = 𝔹⊙X$.
-
-    See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
-    """
-
-    upper: Final[int]
-    lower: Final[int]
-
-    def __init__(self, upper: int = 0, lower: int = 0) -> None:
-        super().__init__()
-        self.upper = upper
-        self.lower = upper if lower is None else lower
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.DIAGONAL
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of banded matrices."""
-        return banded(x, upper=self.upper, lower=self.lower)
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return F.diagonal(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return y
 
 
 class UpperTriangular(ProjectionBase):
@@ -321,16 +378,25 @@ class UpperTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    upper: Final[int]
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.UPPER_TRIANGULAR
 
-    def __init__(self, upper: int = 0) -> None:
+    upper: Final[int]
+    r"""CONST: The diagonal to consider"""
+
+    def __init__(self, *, upper: int = 0) -> None:
         super().__init__()
         self.upper = upper
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of upper triangular matrices."""
-        return upper_triangular(x, upper=self.upper)
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return F.upper_triangular(x, upper=self.upper)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return y
 
 
 class LowerTriangular(ProjectionBase):
@@ -350,16 +416,66 @@ class LowerTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    lower: Final[int]
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.LOWER_TRIANGULAR
 
-    def __init__(self, lower: int = 0) -> None:
+    lower: Final[int]
+    r"""CONST: The diagonal to consider"""
+
+    def __init__(self, *, lower: int = 0) -> None:
         super().__init__()
         self.lower = lower
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of lower triangular matrices."""
-        return lower_triangular(x, lower=self.lower)
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return F.lower_triangular(x, lower=self.lower)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return y
+
+
+class Banded(ProjectionBase):
+    r"""Return the closest banded matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝔹⊙Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝔹⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
+    """
+
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.BANDED
+
+    upper: Final[int]
+    r"""CONST: The upper diagonal to consider"""
+    lower: Final[int]
+    r"""CONST: The lower diagonal to consider"""
+
+    def __init__(self, *, upper: int = 0, lower: int = 0) -> None:
+        super().__init__()
+        self.upper = upper
+        self.lower = lower
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return F.banded(x, upper=self.upper, lower=self.lower)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return y
 
 
 class Masked(ProjectionBase):
@@ -379,22 +495,56 @@ class Masked(ProjectionBase):
         - `projections.Banded`
     """
 
-    mask: BoolTensor
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.MASKED
 
-    def __init__(self, mask: bool | Tensor = TRUE) -> None:
+    mask: Tensor
+    r"""CONST: Boolean mask to consider"""
+
+    def __init__(self, mask: bool | Tensor = FALSE) -> None:
         super().__init__()
         self.mask = torch.as_tensor(mask, dtype=torch.bool)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of masked matrices."""
-        return masked(x, self.mask)
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return F.masked(x, mask=self.mask)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return y
 
 
 # endregion masked projections ---------------------------------------------------------
 
 
 # region other projections -------------------------------------------------------------
+class DiagonallyDominant(ProjectionBase):
+    r"""Return the closest diagonally dominant matrix to X.
+
+    .. Signature:: ``(..., n, n) -> (..., n, n)``
+
+    .. math:: \min_Y ∥X-Y∥_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
+
+    References:
+        Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
+    """
+
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMMETRIC
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return F.diagonally_dominant(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        return y
+
+
 class Contraction(ProjectionBase):
     r"""Return the closest contraction matrix to X.
 
@@ -409,27 +559,48 @@ class Contraction(ProjectionBase):
         - `projections.functional.contraction`
     """
 
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of contraction matrices."""
-        return contraction(x)
+        return F.contraction(x)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return y
 
 
-class DiagonallyDominant(ProjectionBase):
-    r"""Return the closest diagonally dominant matrix to X.
+class LowRank(ProjectionBase):
+    r"""Return the closest low rank matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. Signature:: ``(..., m, n) -> (..., m, n)``
 
-    .. math:: \min_Y ∥X-Y∥_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
+    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   rank(Y) ≤ k
 
-    References:
-        Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
+    One can show analytically that Y = UₖΣₖVₖ^𝖳 is the unique minimizer,
+    where X=UΣV^𝖳 is the SVD of X.
     """
+
+    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    CODOMAIN: Final[MatrixSpace] = MatrixSpace.LOW_RANK
+    rank: Final[int]
+
+    def __init__(self, *, rank: int = 1) -> None:
+        super().__init__()
+        self.rank = rank
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of diagonally dominant matrices."""
-        return diagonally_dominant(x)
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return F.low_rank(x, rank=self.rank)
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        return y
 
 
 # endregion other projections ----------------------------------------------------------

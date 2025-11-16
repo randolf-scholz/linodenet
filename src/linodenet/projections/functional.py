@@ -32,7 +32,7 @@ from typing import Protocol, runtime_checkable
 import torch
 from torch import Tensor
 
-from linodenet.constants import TRUE
+from linodenet.constants import FALSE
 
 
 @runtime_checkable
@@ -207,7 +207,7 @@ def hamiltonian(x: Tensor) -> Tensor:
 
 
 # region masked projections ------------------------------------------------------------
-def masked(x: Tensor, mask: Tensor = TRUE) -> Tensor:
+def masked(x: Tensor, mask: Tensor = FALSE) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. Signature:: ``(..., m, n) -> (..., m, n)``

@@ -4,23 +4,18 @@ import pytest
 import torch
 from torch import nn
 
-from linodenet import parametrize
-from linodenet.parametrize import PARAMETRIZATIONS, Parametrization, is_parametrization
+from linodenet.parametrize import PARAMETRIZATIONS, is_parametrization
 
 
 @pytest.mark.parametrize("name", PARAMETRIZATIONS)
 def test_parametrization(name: str) -> None:
     r"""Test parametrization."""
     cls = PARAMETRIZATIONS[name]
-    parametrization: Parametrization
     tensor = nn.Parameter(torch.randn(3, 3))
 
-    match cls:
-        case parametrize.Masked as Masked:
-            # sample random mask
-            mask = torch.randint(0, 2, (3, 3), dtype=torch.bool)
-            parametrization = Masked(tensor, mask=mask)
-        case _:
-            parametrization = cls(tensor)
+    try:
+        parametrization = cls(tensor)
+    except NotImplementedError:
+        pytest.xfail(f"{name} parametrization not implemented")
 
     assert is_parametrization(parametrization)

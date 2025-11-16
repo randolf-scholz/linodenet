@@ -10,7 +10,11 @@ import pytest
 import linodenet as lib
 from linodenet.activations import ACTIVATIONS, Activation
 from linodenet.initializations import INITIALIZATIONS, Initialization
-from linodenet.parametrize import PARAMETRIZATIONS, Parametrization, ParametrizationBase
+from linodenet.parametrize import (
+    PARAMETRIZATIONS,
+    BoundParametrization,
+    Parametrized,
+)
 from linodenet.projections import (
     FUNCTIONAL_PROJECTIONS,
     MODULAR_PROJECTIONS,
@@ -39,7 +43,7 @@ CASES: dict[str, Case] = {
     "activations"         : Case(lib.activations    , Activation     , None               , ACTIVATIONS               ),
     "initializations"     : Case(lib.initializations, Initialization , None               , INITIALIZATIONS           ),
     "matrix_tests"        : Case(lib.testing        , MatrixTest     , None               , MATRIX_TESTS              ),
-    "parametrizations"    : Case(lib.parametrize    , Parametrization, ParametrizationBase, PARAMETRIZATIONS          ),
+    "parametrizations"    : Case(lib.parametrize, BoundParametrization, Parametrized, PARAMETRIZATIONS),
     "projections_cls"     : Case(lib.projections    , Projection     , ProjectionBase     , MODULAR_PROJECTIONS       ),
     "projections_fun"     : Case(lib.projections    , Projection     , None               , FUNCTIONAL_PROJECTIONS    ),
     "regularizations_cls" : Case(lib.regularizations, Regularization , RegularizationBase , MODULAR_REGULARIZATIONS   ),

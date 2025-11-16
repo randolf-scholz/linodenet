@@ -4,12 +4,12 @@ __all__ = [
     # Constants
     "PARAMETRIZATIONS",
     # ABCs & Protocols
-    "GeneralParametrization",
-    "Parametrization",
+    "BoundParametrization",
+    "ParametrizationProto",
     # Classes
-    "ParametrizationBase",
-    "ParametrizationDict",
-    "ParametrizationMulticache",
+    "Parametrized",
+    "Parametrization",
+    "ParametrizationList",
     # Parametrizations
     "Banded",
     "CayleyMap",
@@ -47,14 +47,12 @@ __all__ = [
     "update_parametrizations",
 ]
 
-from linodenet.parametrize._deprecated import (
-    GeneralParametrization,
-    ParametrizationDict,
-    ParametrizationMulticache,
-)
 from linodenet.parametrize.base import (
+    BoundParametrization,
     Parametrization,
-    ParametrizationBase,
+    ParametrizationList,
+    ParametrizationProto,
+    Parametrized,
     cached,
     deepcopy_with_parametrizations,
     detach_caches,
@@ -69,13 +67,13 @@ from linodenet.parametrize.base import (
     update_originals,
     update_parametrizations,
 )
-from linodenet.parametrize.generic import Identity, ReZero
 from linodenet.parametrize.matrix_parametrizations import (
     Banded,
     CayleyMap,
     Diagonal,
     GramMatrix,
     Hamiltonian,
+    Identity,
     LowerTriangular,
     LowRank,
     Masked,
@@ -89,6 +87,7 @@ from linodenet.parametrize.matrix_parametrizations import (
     Traceless,
     UpperTriangular,
 )
+from linodenet.parametrize.tensor_parametrizations import ReZero
 
 PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
     # Parametrizations

@@ -12,6 +12,7 @@ from torch.optim import SGD
 
 from linodenet.parametrize import (
     Identity,
+    Parametrized,
     SpectralNormalization,
     UpperTriangular,
     cached,
@@ -22,7 +23,7 @@ from linodenet.parametrize import (
     register_parametrization,
     update_parametrizations,
 )
-from linodenet.projections import symmetric
+from linodenet.projections import Symmetric
 from linodenet.testing import (
     all_close,
     assert_model_ok,
@@ -105,30 +106,26 @@ def test_optimization_manual() -> None:
     check_jit_scriptable(model)
 
     # create the parametrization
-    param = UpperTriangular(model.weight)
+    param = parametrize(model.weight, UpperTriangular)
     assert param.original_parameter is model.weight
     assert param.cached_parameter is not model.weight
 
-    # check that the parametrization is not initialized
+    # check that the parametrization is initialized
     assert not is_upper_triangular(model.weight)
     assert not is_upper_triangular(param.original_parameter)
-    assert not is_upper_triangular(param.cached_parameter)
-    assert torch.allclose(param.original_parameter, param.cached_parameter)
+    assert is_upper_triangular(param.cached_parameter)
 
     # remove weight and re-register it as a buffer
     delattr(model, "weight")
     model.register_buffer("weight", param.cached_parameter)
     model.register_module("param", param)
     model.register_parameter("original_weight", param.original_parameter)
-    assert isinstance(model.param, UpperTriangular)
+    assert isinstance(model.param, Parametrized)
 
     # check that the parametrization is registered
     assert model.weight is not original_weight
     assert model.weight is model.param.cached_parameter
     assert original_weight is model.param.original_parameter
-
-    # check that the parametrization is still not initialized
-    assert not is_upper_triangular(model.weight), model.weight
 
     # check that model can be scripted
     check_jit_scriptable(model)
@@ -315,8 +312,9 @@ def test_optimization_cached() -> None:
 
 def test_surgery() -> None:
     # create model, parametrization and inputs
+    m, n = 3, 3
     inputs = torch.randn(2, 3)
-    model = nn.Linear(3, 3)
+    model = nn.Linear(m, n)
     spec = SpectralNormalization(model.weight)
     # cloned_model = deepcopy(model)
 
@@ -356,7 +354,7 @@ def test_surgery_extended() -> None:
         model.weight.copy_(weight)
         assert matrix_norm(model.weight, ord=2) > 1
 
-    spec = SpectralNormalization(model.weight)
+    spec = parametrize(model.weight, SpectralNormalization)
     spec.update_parametrization()
     assert matrix_norm(spec.cached_parameter, ord=2) <= 1.0
     spec.original_parameter.norm().backward()
@@ -371,6 +369,7 @@ def test_parametrize() -> None:
 
     # setup reference model
     reference_model = nn.Linear(dim_in, dim_out, bias=False)
+    symmetric = Symmetric()
     symmetrized_weight = symmetric(reference_model.weight)
     reference_model.weight = nn.Parameter(symmetrized_weight)
     assert is_symmetric(reference_model.weight)

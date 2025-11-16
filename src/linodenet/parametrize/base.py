@@ -69,11 +69,13 @@ Classes
 
 __all__ = [
     # Protocol
-    "Parametrization",
+    "ParametrizationProto",
+    "BoundParametrization",
     # Classes
-    "ParametrizationBase",
+    "WithoutRightInverse",
+    "Parametrization",
+    "Parametrized",
     "ParametrizationList",
-    "ParametrizationWrapper",
     # torch.nn.utils.parametrize replacements
     "parametrize",
     "is_parametrized",
@@ -101,6 +103,7 @@ from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
     Any,
+    Final,
     Literal,
     Optional,
     Protocol,
@@ -108,16 +111,54 @@ from typing import (
     TypeIs,
     cast,
     get_protocol_members,
+    runtime_checkable,
 )
 
 import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
-type ParametrizationLike = Fn[[Tensor], Tensor] | nn.Module | Parametrization
+from linodenet.torch_generics import ModuleSequence
+
+type ParametrizationLike = Fn[[Tensor], Tensor] | nn.Module | BoundParametrization
 
 
-class Parametrization(Protocol):
+@runtime_checkable
+class ParametrizationProto(Protocol):
+    r"""Protocol for parametrizations."""
+
+    @abstractmethod
+    def forward(self, arg: Tensor, /) -> Tensor:
+        r"""Apply the parametrization to the given tensor."""
+        ...
+
+    @abstractmethod
+    def right_inverse(self, arg: Tensor, /) -> Tensor | None:
+        r"""Compute the right inverse of the parametrization."""
+        ...
+
+
+class WithoutRightInverse(nn.Module):
+    r"""Wrapper for parametrizations without right inverse."""
+
+    def __init__(self, parametrization: nn.Module) -> None:
+        super().__init__()
+        self.parametrization = parametrization
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        return self.parametrization(x)
+
+    @jit.export
+    def right_inverse(self, _: Tensor) -> Tensor | None:
+        return None
+
+
+class ParametrizationList(ModuleSequence):
+    r"""TODO: implement ParametrizationList."""
+
+
+class BoundParametrization(Protocol):
     r"""Protocol for parametrizations that wrap a single tensor.
 
     Note:
@@ -137,7 +178,7 @@ class Parametrization(Protocol):
         ...
 
     @abstractmethod
-    def __call__(self, arg: Tensor, /) -> Tensor:
+    def forward(self, arg: Tensor, /) -> Tensor:
         r"""Apply the parametrization to the given tensor."""
         ...
 
@@ -237,24 +278,55 @@ class Parametrization(Protocol):
             self.update_cache()
 
 
-def is_parametrization(obj: Any) -> TypeIs[Parametrization]:
+def is_parametrization(obj: Any) -> TypeIs[BoundParametrization]:
     r"""Check if the object is a Parametrization.
 
     This method is needed because standard isinstance checks do not work with jit.ScriptModule.
     """
-    return all(hasattr(obj, member) for member in get_protocol_members(Parametrization))
+    return all(
+        hasattr(obj, member) for member in get_protocol_members(BoundParametrization)
+    )
 
 
 # region base classes ------------------------------------------------------------------
-class ParametrizationBase(nn.Module, Parametrization):
+class _WithPostInitMeta(type):
+    def __new__(
+        cls,
+        name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, Any],
+        /,
+        **kwargs: Any,
+    ) -> type:
+        new: type[Any] = super().__new__(cls, name, bases, namespace, **kwargs)
+        if getattr(new, "__post_init__", None) is None:
+            new.__post_init__ = _WithPostInitMeta.__post_init__  # pyright: ignore[reportAttributeAccessIssue]
+        return new
+
+    def __post_init__(cls, /) -> None:
+        pass
+
+    def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
+        instance = super().__call__(*args, **kwargs)  # type: ignore[misc]
+        instance.__post_init__()
+        return instance
+
+
+class Parametrization(nn.Module, metaclass=_WithPostInitMeta):
     r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
     original_parameter: nn.Parameter
     r"""PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
     r"""BUFFER: Holds cached version of the parametrized tensor."""
+    unsafe: Final[bool]
 
-    def __init__(self, tensor: Tensor, /) -> None:
+    def __init__(
+        self,
+        tensor: Tensor,
+        *,
+        unsafe: bool = False,
+    ) -> None:
         super().__init__()
         if not isinstance(tensor, nn.Parameter):
             raise TypeError("tensor must be a nn.Parameter")
@@ -262,23 +334,18 @@ class ParametrizationBase(nn.Module, Parametrization):
         # get the tensor to parametrize
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
+        self.unsafe = unsafe
+
+    def __post_init__(self) -> None:
+        if not self.unsafe:
+            assert_is_safe_parametrization(self, self.original_parameter)
+
+        self.update_cache()
 
     @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Apply the parametrization."""
-        ...
-
+    def forward(self, x: Tensor, /) -> Tensor: ...
     @abstractmethod
-    def right_inverse(self, y: Tensor, /) -> Tensor | None:
-        r"""Compute the right inverse of the parametrization.
-
-        The right inverse is such that `parametrization(right_inverse(y)) == y`.
-        I.e. starting from an already parametrized tensor, the right inverse
-        will return the original tensor. This is needed when the original tensor
-        already has a parametrization applied to it and hence belongs to some
-        constraint set.
-        """
-        ...
+    def right_inverse(self, y: Tensor, /) -> Tensor | None: ...
 
     # implement protocol methods:
     @jit.export
@@ -345,24 +412,8 @@ class ParametrizationBase(nn.Module, Parametrization):
         self.update_cache()
 
 
-class ParametrizationList(nn.ModuleList, Parametrization):
-    r"""Apply multiple parametrizations sequentially."""
-
-    def __init__(self, *parametrizations: Parametrization) -> None:
-        # validation
-        mods: list[nn.Module] = []
-        for param in parametrizations:
-            if not is_parametrization(param):
-                raise TypeError("All elements must be a Parametrization!")
-            if not isinstance(param, nn.Module):
-                raise TypeError("All elements must be a nn.Module!")
-            mods.append(param)
-
-        super().__init__(mods)
-
-
-class ParametrizationWrapper(ParametrizationBase):
-    r"""Wraps a callable Tensor -> Tensor into a parametrization."""
+class Parametrized(Parametrization):
+    r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
     original_parameter: nn.Parameter
     r"""PARAM: Holds parametrized tensors."""
@@ -372,74 +423,108 @@ class ParametrizationWrapper(ParametrizationBase):
     def __init__(
         self,
         tensor: Tensor,
-        parametrization: Fn[[Tensor], Tensor] | nn.Module | Parametrization,
+        parametrization: nn.Module,
         *,
         unsafe: bool = False,
     ) -> None:
-        super().__init__(tensor)
-        if (
-            is_parametrization(parametrization)
-            and parametrization.original_parameter is not tensor
-        ):
-            raise ValueError(
-                "The parametrization's original_parameter must be the same as the given tensor!"
-            )
+        super().__init__(tensor, unsafe=unsafe)
+        if not callable(getattr(parametrization, "right_inverse", None)):
+            parametrization = WithoutRightInverse(parametrization)
 
-        if (
-            right_inverse_impl := getattr(parametrization, "right_inverse", None)
-        ) is not None:
-            assert callable(right_inverse_impl)
-        else:
-            right_inverse_impl = self._fallback_right_inverse
+        assert (  # noqa: PT018
+            isinstance(parametrization, ParametrizationProto)
+            and isinstance(parametrization, nn.Module)
+        )
 
-        self._forward_impl: Fn[[Tensor], Tensor] = parametrization
-        self._right_inverse_impl: Fn[[Tensor], Tensor | None] = right_inverse_impl  # pyright: ignore[reportAttributeAccessIssue]
-
-        self.update_parametrization()
-
-        if not unsafe:
-            assert_is_safe_parametrization(self, tensor)
+        self.parametrization = parametrization.to(
+            device=tensor.device, dtype=tensor.dtype
+        )
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Apply the parametrization."""
-        return self._forward_impl(x)
+        return self.parametrization.forward(x)
 
     @jit.export
-    def right_inverse(self, y: Tensor, /) -> Tensor | None:
-        return self._right_inverse_impl(y)
-
-    def _fallback_right_inverse(self, _: Tensor) -> Tensor | None:
-        return None
-
-    def is_safe(self) -> bool:
-        r"""Check if the parametrization is safe to apply to the tensor."""
-        Y = self.original_parameter
-        X = self(Y)
-        inverse = getattr(self._parametrization, "right_inverse", lambda x: x)
-        Z = inverse(X)
-
-        forward_safe = (
-            isinstance(X, Tensor) and X.dtype == Y.dtype and X.shape == Y.shape
-        )
-        inverse_safe = (
-            isinstance(Z, Tensor) and Z.dtype == Y.dtype and Z.shape == Y.shape
-        )
-        return forward_safe and inverse_safe
+    def right_inverse(self, y: Tensor) -> Tensor | None:
+        return self.parametrization.right_inverse(y)
 
 
 def parametrize(
     tensor: Tensor,
-    parametrization: Fn[[Tensor], Tensor] | nn.Module | Parametrization,
-    /,
-) -> ParametrizationWrapper:
-    return ParametrizationWrapper(tensor, parametrization)
+    parametrization: nn.Module | type[Parametrization],
+    *,
+    unsafe: bool = False,
+) -> Parametrization:
+    if isinstance(parametrization, nn.Module):
+        return Parametrized(tensor, parametrization, unsafe=unsafe)
+    if isinstance(parametrization, type):
+        return parametrization(tensor)
+    raise TypeError(
+        "parametrization must be either a nn.Module or a Parametrization class"
+    )
 
 
 # endregion base classes ---------------------------------------------------------------
 
 
 # region torch parametrize replacements  -----------------------------------------------
+def register_parametrization(
+    module: nn.Module,
+    tensor_name: str,
+    parametrization: nn.Module | type[Parametrization],
+    *,
+    unsafe: bool = False,
+) -> None:
+    r"""Drop-in replacement for nn.utils.parametrize.register_parametrization."""
+    tensor = getattr(module, tensor_name)
+    if not isinstance(tensor, nn.Parameter):
+        raise TypeError(f"{tensor_name} is not a parameter!")
+
+    if tensor_name in getattr(module, "parametrizations", {}):
+        raise NameError(f"{tensor_name} already parametrized!")
+
+    wrapper = parametrize(tensor, parametrization, unsafe=unsafe)
+
+    if not isinstance(wrapper, nn.Module) or not is_parametrization(wrapper):
+        raise TypeError(f"{parametrization} does not produce a valid parametrization!")
+
+    if not unsafe:
+        assert_is_safe_parametrization(wrapper, tensor)
+
+    # add the parametrization to model.parametrizations ModuleDict
+    match ps := getattr(module, "parametrizations", None):
+        case None:
+            module.register_module(
+                "parametrizations",
+                nn.ModuleDict({tensor_name: wrapper}),
+            )
+        case nn.ModuleDict() as parametrizations:
+            parametrizations[tensor_name] = wrapper
+        case _:
+            raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
+
+    # add the original tensor to model.parametrized_tensors ParameterDict
+    match ts := getattr(module, "parametrized_tensors", None):
+        case None:
+            module.register_module(
+                "parametrized_tensors",
+                nn.ParameterDict({tensor_name: wrapper.original_parameter}),
+            )
+        case nn.ParameterDict() as parametrized_tensors:
+            parametrized_tensors[tensor_name] = wrapper.original_parameter
+        case _:
+            msg = f"Expected a nn.ParameterDict, but got {type(ts)}!"
+            raise TypeError(msg)
+
+    # add a buffer in place of the original tensor
+    delattr(module, tensor_name)
+    module.register_buffer(tensor_name, wrapper.get_cached_tensor())
+
+    # initialize the parametrization
+    wrapper.update_parametrization()
+
+
 def is_parametrized(module: nn.Module, tensor_name: Optional[str] = None) -> bool:
     r"""Return True if the module has any parametrizations."""
     if tensor_name is None:
@@ -450,11 +535,11 @@ def is_parametrized(module: nn.Module, tensor_name: Optional[str] = None) -> boo
 
 
 def assert_is_safe_parametrization(
-    parametrization: Parametrization, tensor: Tensor
+    parametrization: BoundParametrization, tensor: Tensor
 ) -> None:
     r"""Check if the parametrization is safe to apply to the tensor."""
     Y = tensor
-    X = parametrization(Y)
+    X = parametrization.forward(Y)
     if not isinstance(X, Tensor):
         raise TypeError(
             f"A parametrization must return a tensor. Got {type(X).__name__}."
@@ -474,23 +559,31 @@ def assert_is_safe_parametrization(
             f"\n parametrized shape: {X.shape}"
         )
     # check right inverse
-    Z = parametrization.right_inverse(X)
-    if not isinstance(Z, Tensor):
-        raise TypeError(f"right_inverse must return a tensor. Got: {type(Z).__name__}")
-    if Z.dtype != Y.dtype:
-        raise ValueError(
-            "The tensor returned by right_inverse must have the same dtype,"
-            " unless the `unsafe` flag is enabled."
-            f"\noriginal dtype: {Y.dtype}"
-            f"\nreturned dtype: {Z.dtype}"
-        )
-    if Z.shape != Y.shape:
-        raise ValueError(
-            "The tensor returned by right_inverse must have the same shape,"
-            " unless the `unsafe` flag is enabled."
-            f"\noriginal shape: {Y.shape}"
-            f"\nreturned shape: {Z.shape}"
-        )
+    try:
+        Z = parametrization.right_inverse(X)
+    except NotImplementedError:
+        pass
+    else:
+        if Z is None:
+            return
+        if not isinstance(Z, Tensor):
+            raise TypeError(
+                f"right_inverse must return a tensor. Got: {type(Z).__name__}"
+            )
+        if Z.dtype != Y.dtype:
+            raise ValueError(
+                "The tensor returned by right_inverse must have the same dtype,"
+                " unless the `unsafe` flag is enabled."
+                f"\noriginal dtype: {Y.dtype}"
+                f"\nreturned dtype: {Z.dtype}"
+            )
+        if Z.shape != Y.shape:
+            raise ValueError(
+                "The tensor returned by right_inverse must have the same shape,"
+                " unless the `unsafe` flag is enabled."
+                f"\noriginal shape: {Y.shape}"
+                f"\nreturned shape: {Z.shape}"
+            )
 
 
 def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
@@ -507,70 +600,6 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
             return cast("nn.ModuleDict", parametrizations)
         case _:
             raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
-
-
-def register_parametrization(
-    model: nn.Module,
-    tensor_name: str,
-    parametrization: (
-        Fn[[Tensor], Tensor] | nn.Module | Parametrization | type[Parametrization]
-    ),
-    *,
-    unsafe: bool = False,
-) -> None:
-    r"""Drop-in replacement for nn.utils.parametrize.register_parametrization."""
-    tensor = getattr(model, tensor_name)
-    if not isinstance(tensor, nn.Parameter):
-        raise TypeError(f"{tensor_name} is not a parameter!")
-
-    if tensor_name in getattr(model, "parametrizations", {}):
-        raise NameError(f"{tensor_name} already parametrized!")
-
-    # assign the wrapper
-    wrapper: Parametrization
-    match parametrization:
-        case type() as cls:
-            wrapper = cls(tensor)
-        case other:
-            wrapper = parametrize(tensor, other)
-
-    if not isinstance(wrapper, nn.Module) or not is_parametrization(wrapper):
-        raise TypeError(f"{parametrization} does not produce a valid parametrization!")
-
-    if not unsafe:
-        assert_is_safe_parametrization(wrapper, tensor)
-
-    # add the parametrization to model.parametrizations ModuleDict
-    match ps := getattr(model, "parametrizations", None):
-        case None:
-            model.register_module(
-                "parametrizations",
-                nn.ModuleDict({tensor_name: wrapper}),
-            )
-        case nn.ModuleDict() as parametrizations:
-            parametrizations[tensor_name] = wrapper
-        case _:
-            raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
-
-    # add the original tensor to model.parametrized_tensors ParameterDict
-    match ts := getattr(model, "parametrized_tensors", None):
-        case None:
-            model.register_module(
-                "parametrized_tensors",
-                nn.ParameterDict({tensor_name: wrapper.original_parameter}),
-            )
-        case nn.ParameterDict() as parametrized_tensors:
-            parametrized_tensors[tensor_name] = wrapper.original_parameter
-        case _:
-            msg = f"Expected a nn.ParameterDict, but got {type(ts)}!"
-            raise TypeError(msg)
-
-    # add a buffer in place of the original tensor
-    delattr(model, tensor_name)
-    model.register_buffer(tensor_name, wrapper.get_cached_tensor())
-
-    # initialize the parametrization
-    wrapper.update_parametrization()
 
 
 def remove_parametrizations(
@@ -611,7 +640,7 @@ class cached(ContextDecorator, AbstractContextManager):
 
 
 # region functions for parametrization -------------------------------------------------
-def iter_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
+def iter_parametrizations(module: nn.Module, /) -> Iterator[BoundParametrization]:
     r"""Yields all parametrizations in a module."""
     for m in module.modules():
         if is_parametrization(m):
@@ -647,7 +676,7 @@ def update_parametrizations(module: nn.Module, /) -> None:
 
 # region additional functions ----------------------------------------------------------
 def register_optimizer_hook(
-    optim: Optimizer, /, *module_or_param: nn.Module | Parametrization
+    optim: Optimizer, /, *module_or_param: nn.Module | BoundParametrization
 ) -> None:
     r"""Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
     # collect all parametrizations

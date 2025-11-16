@@ -1,95 +1,42 @@
-r"""Parametrizations.
-
-There are 2 types of parametrizations:
-
-1. ad-hoc parametrizations
-2. other parametrizations
-"""
+r"""Parametrizations for matrices (rank-2 tensors)."""
 
 __all__ = [
-    "MatrixSpace",
     # Parametrizations
-    "Banded",
     "CayleyMap",
-    "Diagonal",
     "GramMatrix",
+    "MatrixExponential",
+    "SpectralNormalization",
+    # inherited from linodenet.projections
+    "Banded",
+    "Diagonal",
     "Hamiltonian",
+    "Identity",
     "LowRank",
     "LowerTriangular",
     "Masked",
-    "MatrixExponential",
     "Normal",
     "OrthogonalProjection",
     "SkewSymmetric",
-    "SpectralNormalization",
     "Symmetric",
     "Symplectic",
     "Traceless",
     "UpperTriangular",
 ]
 
-from enum import StrEnum
-from typing import Final, Optional
+from typing import Any, Final, Optional
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor, jit, nn
 
 from linodenet import projections
 from linodenet.constants import ATOL, RTOL
 from linodenet.lib import singular_triplet
-from linodenet.parametrize.base import ParametrizationBase
+from linodenet.parametrize.base import Parametrization, Parametrized
+from linodenet.projections import MatrixSpace
 from linodenet.testing import is_square
 
 
-class MatrixSpace(StrEnum):
-    r"""Enumeration of matrix spaces for parametrizations."""
-
-    GENERAL = "general"
-    LOW_RANK = "low_rank"
-
-    SQUARE = "square"  # n x n matrices
-    EVEN_SQUARE = "even_square"  # 2n x 2n matrices
-
-    SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
-    SKEW_SYMMETRIC = "skew_symmetric"
-    POSITIVE_DEFINITE = "positive_definite"  # 𝕊ₙ⁺(ℝ)
-    NEGATIVE_DEFINITE = "negative_definite"  # 𝕊ₙ⁻(ℝ)
-    POSITIVE_SEMIDEFINITE = "positive_semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
-    NEGATIVE_SEMIDEFINITE = "negative_semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
-
-    # determinant-based
-    SINGULAR = "singular"  # det=0
-    INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
-    POSITIVE_DETERMINANT = "positive_determinant"  # GLₙ⁺(R) (det>0)
-    NEGATIVE_DETERMINANT = "negative_determinant"  # GLₙ⁻(R) (det<0)
-
-    NORMAL = "normal"
-    ORTHOGONAL = "orthogonal"  # Oₙ(R)
-    SPECIAL_ORTHOGONAL = "special_orthogonal"  # SOₙ(R)
-    PERMUTATION = "permutation"
-
-    TRACELESS = "traceless"
-    SYMPLECTIC = "symplectic"
-    HAMILTONIAN = "hamiltonian"
-
-    MASKED = "masked"
-    DIAGONAL = "diagonal"
-    UPPER_TRIANGULAR = "upper_triangular"
-    LOWER_TRIANGULAR = "lower_triangular"
-    BANDED = "banded"
-
-    STOCHASTIC = "stochastic"
-    DOUBLY_STOCHASTIC = "doubly_stochastic"
-
-
-# region learnable parametrizations ----------------------------------------------------
-
-
-# endregion learnable parametrizations -------------------------------------------------
-
-
-# region static parametrizations -------------------------------------------------------
-class CayleyMap(ParametrizationBase):
+class CayleyMap(Parametrization):
     r"""Parametrize a matrix to be orthogonal via Cayley-Map.
 
     References:
@@ -107,19 +54,21 @@ class CayleyMap(ParametrizationBase):
         if not (tensor.ndim == 2 and is_square(tensor)):
             raise ValueError(f"Expected square matrix, got {tensor.shape=}")
         n = tensor.shape[0]
-        super().__init__(tensor)
+        super().__init__(tensor, unsafe=False)
         self.register_buffer("Id", torch.eye(n))
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return torch.linalg.lstsq(self.Id + x, self.Id - x).solution
 
+    @jit.export
     def right_inverse(self, y: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return torch.linalg.lstsq(self.Id - y, self.Id + y).solution
 
 
-class MatrixExponential(ParametrizationBase):
+class MatrixExponential(Parametrization):
     r"""Parametrize a matrix via matrix exponential.
 
     Note: The following restrictions hold:
@@ -131,10 +80,12 @@ class MatrixExponential(ParametrizationBase):
     DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
     CODOMAIN: Final[MatrixSpace] = MatrixSpace.INVERTIBLE
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return torch.matrix_exp(x)
 
+    @jit.export
     def right_inverse(self, y: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``.
 
@@ -144,16 +95,18 @@ class MatrixExponential(ParametrizationBase):
         raise NotImplementedError
 
 
-class GramMatrix(ParametrizationBase):
+class GramMatrix(Parametrization):
     r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
     DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
     CODOMAIN: Final[MatrixSpace] = MatrixSpace.POSITIVE_SEMIDEFINITE
 
+    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return x.transpose(-2, -1) @ x
 
+    @jit.export
     def right_inverse(self, y: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``.
 
@@ -163,259 +116,7 @@ class GramMatrix(ParametrizationBase):
         raise NotImplementedError
 
 
-# endregion static parametrizations ----------------------------------------------------
-
-
-# region linodenet.projections ---------------------------------------------------------
-# region matrix groups -----------------------------------------------------------------
-
-
-class Symmetric(ParametrizationBase):
-    r"""Parametrize a matrix to be symmetric."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMMETRIC
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.symmetric(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
-
-
-class SkewSymmetric(ParametrizationBase):
-    r"""Parametrize a matrix to be skew-symmetric."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SKEW_SYMMETRIC
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.skew_symmetric(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
-
-
-class OrthogonalProjection(ParametrizationBase):
-    r"""Parametrize a matrix to be orthogonal."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.ORTHOGONAL
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.orthogonal(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
-
-
-class Traceless(ParametrizationBase):
-    r"""Parametrize a matrix to be traceless.
-
-    Note:
-        Traceless matrices are also called *trace-free* or *trace-zero* matrices.
-        They have the important property that $\det(\exp(X)) = 1$,
-        which follows from the fact that $\det(\exp(X)) = \exp(\tr(X))$.
-    """
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.TRACELESS
-
-    def forward(self, x: Tensor) -> Tensor:
-        return projections.traceless(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
-
-
-class Normal(ParametrizationBase):
-    r"""Parametrize a matrix to be normal."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.NORMAL
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return projections.normal(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
-
-
-class Symplectic(ParametrizationBase):
-    r"""Parametrize a matrix to be symplectic."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.EVEN_SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMPLECTIC
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
-        return projections.symplectic(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
-        return y
-
-
-class Hamiltonian(ParametrizationBase):
-    r"""Parametrize a matrix to be Hamiltonian."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.EVEN_SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.HAMILTONIAN
-
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
-        return projections.hamiltonian(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
-        return y
-
-
-# endregion matrix groups --------------------------------------------------------------
-
-
-# region masked ------------------------------------------------------------------------
-class Diagonal(ParametrizationBase):
-    r"""Parametrize a matrix to be diagonal."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.DIAGONAL
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return projections.diagonal(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
-
-
-class UpperTriangular(ParametrizationBase):
-    r"""Parametrize a matrix to be upper triangular."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.UPPER_TRIANGULAR
-
-    upper: Final[int]
-    r"""CONST: The diagonal to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, upper: int = 0) -> None:
-        super().__init__(tensor)
-        self.upper = upper
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return projections.upper_triangular(x, upper=self.upper)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
-
-
-class LowerTriangular(ParametrizationBase):
-    r"""Parametrize a matrix to be lower triangular."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.LOWER_TRIANGULAR
-
-    lower: Final[int]
-    r"""CONST: The diagonal to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, lower: int = 0) -> None:
-        super().__init__(tensor)
-        self.lower = lower
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return projections.lower_triangular(x, lower=self.lower)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
-
-
-class Masked(ParametrizationBase):
-    r"""Parametrize a matrix to be masked."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.MASKED
-
-    mask: Tensor
-    r"""CONST: Boolean mask to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, mask: Tensor) -> None:
-        super().__init__(tensor)
-        self.mask = torch.as_tensor(mask, dtype=torch.bool)
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return projections.masked(x, mask=self.mask)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
-
-
-class Banded(ParametrizationBase):
-    r"""Parametrize a matrix to be banded."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.BANDED
-
-    upper: Final[int]
-    r"""CONST: The upper diagonal to consider"""
-    lower: Final[int]
-    r"""CONST: The lower diagonal to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, upper: int = 0, lower: int = 0) -> None:
-        super().__init__(tensor)
-        self.upper = upper
-        self.lower = lower
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return projections.banded(x, upper=self.upper, lower=self.lower)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
-
-
-# endregion masked ---------------------------------------------------------------------
-
-
-class LowRank(ParametrizationBase):
-    r"""Parametrize a matrix to be low-rank."""
-
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.LOW_RANK
-
-    rank: Final[int]
-    r"""CONST: The rank to consider"""
-
-    def __init__(self, tensor: Tensor, /, *, rank: int = 1) -> None:
-        super().__init__(tensor)
-        self.rank = rank
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return projections.low_rank(x, rank=self.rank)
-
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
-
-
-class SpectralNormalization(ParametrizationBase):
+class SpectralNormalization(Parametrization):
     r"""Spectral normalization $‖A‖₂≤γ$.
 
     Ensures that the spectral norm of the weight matrix is at most γ (default=1.0).
@@ -461,7 +162,7 @@ class SpectralNormalization(ParametrizationBase):
         rtol: float = RTOL,
         maxiter: Optional[int] = None,
     ) -> None:
-        super().__init__(weight)
+        super().__init__(weight, unsafe=False)
         if weight.ndim != 2:
             raise ValueError("weight must be a matrix")
 
@@ -486,10 +187,11 @@ class SpectralNormalization(ParametrizationBase):
         self.register_buffer("ONE", torch.ones((), **options))
         self.register_buffer("GAMMA", gamma * torch.ones((), **options))
 
+    @jit.export
     def forward(self, weight: Tensor) -> Tensor:
         r"""Perform spectral normalization w ↦ w/‖w‖₂.
 
-        .. Signature:: ``(..., n, n) -> (..., n, n)``.
+        .. Signature:: ``(..., m, n) -> (..., m, n)``.
         """
         # We use the cached singular vectors as initial guess for the power method.
         sigma, u, v = singular_triplet(
@@ -513,9 +215,105 @@ class SpectralNormalization(ParametrizationBase):
         # return the parametrized weight and the cached singular triplet
         return gamma * weight
 
+    @jit.export
     def right_inverse(self, y: Tensor) -> Tensor:
         r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return y
 
 
-# endregion linodenet.projections ------------------------------------------------------
+class Banded(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Banded``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Banded(*args, **kwargs))
+
+
+class Diagonal(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Diagonal``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Diagonal(*args, **kwargs))
+
+
+class Hamiltonian(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Hamiltonian``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Hamiltonian(*args, **kwargs))
+
+
+class Identity(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Identity``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Identity(*args, **kwargs))
+
+
+class LowRank(Parametrized):
+    r"""Wrapper for ``linodenet.projections.LowRank``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.LowRank(*args, **kwargs))
+
+
+class LowerTriangular(Parametrized):
+    r"""Wrapper for ``linodenet.projections.LowerTriangular``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.LowerTriangular(*args, **kwargs))
+
+
+class Masked(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Masked``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Masked(*args, **kwargs))
+
+
+class Normal(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Normal``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Normal(*args, **kwargs))
+
+
+class OrthogonalProjection(Parametrized):
+    r"""Wrapper for ``linodenet.projections.OrthogonalProjection``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Orthogonal(*args, **kwargs))
+
+
+class SkewSymmetric(Parametrized):
+    r"""Wrapper for ``linodenet.projections.SkewSymmetric``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.SkewSymmetric(*args, **kwargs))
+
+
+class Symmetric(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Symmetric``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Symmetric(*args, **kwargs))
+
+
+class Symplectic(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Symplectic``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Symplectic(*args, **kwargs))
+
+
+class Traceless(Parametrized):
+    r"""Wrapper for ``linodenet.projections.Traceless``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Traceless(*args, **kwargs))
+
+
+class UpperTriangular(Parametrized):
+    r"""Wrapper for ``linodenet.projections.UpperTriangular``."""
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.UpperTriangular(*args, **kwargs))

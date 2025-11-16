@@ -52,7 +52,7 @@ depends_on = ["linodenet.constants", "linodenet.types"]
 
 [[modules]]
 path = "linodenet.projections"
-depends_on = ["linodenet.constants", "linodenet.types"]
+depends_on = ["linodenet.constants"]
 
 [[modules]]
 path = "linodenet.utils"
@@ -64,7 +64,7 @@ depends_on = ["linodenet.projections", "linodenet.constants", "linodenet.types"]
 
 [[modules]]
 path = "linodenet.parametrize"
-depends_on = ["linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.testing"]
+depends_on = ["linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.testing", "linodenet.torch_generics"]
 
 [[modules]]
 path = "linodenet.modules"

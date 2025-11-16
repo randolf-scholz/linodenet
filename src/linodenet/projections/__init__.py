@@ -14,6 +14,7 @@ __all__ = [
     "MODULAR_PROJECTIONS",
     "PROJECTIONS",
     # ABCs & Protocols
+    "MatrixSpace",
     "Projection",
     "ProjectionBase",
     # Functions
@@ -83,6 +84,7 @@ from linodenet.projections.modules import (
     LowerTriangular,
     LowRank,
     Masked,
+    MatrixSpace,
     Normal,
     Orthogonal,
     ProjectionBase,

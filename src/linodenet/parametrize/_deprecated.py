@@ -13,7 +13,7 @@ from typing import Any, Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.parametrize.base import ParametrizationBase
+from linodenet.parametrize.base import Parametrization
 
 
 @runtime_checkable
@@ -97,7 +97,7 @@ class GeneralParametrization(Protocol):
         self.update_cache()
 
 
-class ParametrizationMulticache(ParametrizationBase):
+class ParametrizationMulticache(Parametrization):
     r"""Base class for parametrizations that maintain additional cached tensors."""
 
     original_parameter: nn.Parameter
@@ -120,7 +120,7 @@ class ParametrizationMulticache(ParametrizationBase):
         self.cached_tensors = {}
 
     @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         r"""Apply the parametrization.
 
         Should return a tuple of the parametrized tensor and a dictionary of auxiliary tensors.
