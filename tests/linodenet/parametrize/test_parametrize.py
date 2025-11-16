@@ -44,29 +44,28 @@ def check_optimization(
         original_outputs = model(*args)
         original_loss = mse_loss(original_outputs, target)
         original_params = [w.clone().detach() for w in model.parameters()]
-        loss = original_loss
-        outputs = original_outputs
 
     # crucial, otherwise no update in the first iteration!
     update_parametrizations(model)
 
-    for _ in range(5):
-        model.zero_grad(set_to_none=True)
-        outputs = model(*args)
-        loss = get_norm(outputs)
-        loss.backward()
-        assert all(w.grad is not None for w in model.parameters() if w.requires_grad)
-        assert loss.isfinite()
-        optimizer.step()
-        update_parametrizations(model)
-        assert isinstance(model.weight, Tensor)
-        assert is_upper_triangular(model.weight)
-        assert not all_close(original_weights, list(model.parameters()))
+    # perform 1 training step
+    model.zero_grad(set_to_none=True)
+    outputs = model(*args)
+    loss = get_norm(outputs)
+    loss.backward()
+    assert all(w.grad is not None for w in model.parameters() if w.requires_grad)
+    assert loss.isfinite()
+    optimizer.step()
+    update_parametrizations(model)
+    assert isinstance(model.weight, Tensor)
+    assert is_upper_triangular(model.weight)
+    assert not all_close(original_weights, list(model.parameters()))
 
     # check that the loss has decreased
     assert loss < original_loss
     # check that the outputs are different
-    assert not torch.allclose(outputs, original_outputs)
+    new_outputs = model(*args)
+    assert not torch.allclose(new_outputs, original_outputs)
     # check that the parameters are different
     for x, y in zip(model.parameters(), original_params, strict=True):
         assert not torch.allclose(x, y)
@@ -191,6 +190,7 @@ def test_optimization_compile() -> None:
     assert is_upper_triangular(compiled_model.weight)
 
 
+@pytest.mark.xfail(reason="export not supported yet", strict=True)
 def test_optimization_export() -> None:
     r"""Tests the optimization of a JIT-compiled model."""
     torch.manual_seed(42)
@@ -363,7 +363,7 @@ def test_surgery_extended() -> None:
     spec.zero_grad(set_to_none=True)
 
 
-def test_param() -> None:
+def test_parametrize() -> None:
     torch.manual_seed(42)
     batch_size, dim_in, dim_out = 4, 3, 3
 

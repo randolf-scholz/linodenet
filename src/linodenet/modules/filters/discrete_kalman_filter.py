@@ -207,7 +207,7 @@ class DiscreteKalmanFilter(nn.Module):
         n_steps: int,
         hx: Optional[tuple[Tensor, Tensor]] = None,
     ) -> tuple[Tensor, Tensor]:
-        """Forward pass for n_steps
+        r"""Predict ``n_steps`` into the future given observations.
 
         Args:
             y_obs: Input sequence of shape (*B, T, input_size)
@@ -233,8 +233,8 @@ class DiscreteKalmanFilter(nn.Module):
         else:
             x, P = hx
 
-        assert x.shape == (*bs, n) or x.shape == (n,)
-        assert P.shape == (*bs, n, n) or P.shape == (n, n)
+        assert x.shape in [(*bs, n), (n,)]
+        assert P.shape in [(*bs, n, n), (n, n)]
 
         if x.shape == (n,):
             x = x.expand(*bs, n)
@@ -349,7 +349,7 @@ class DiscreteKalmanFilter(nn.Module):
             # so, solve Gᵀ = solve_triangular(L, HP, lower=True)
             # then K = solve_triangular(L.T, G, lower=False).T
             raise NotImplementedError
-        else:
+        else:  # noqa: RET506
             # KS = PHᵀ ⟹ SᵀKᵀ = HP
             # NOTE: we can't use tensor.T for batched tensors.
             Kt = torch.linalg.solve(S.transpose(-2, -1), H @ P)  # (*B, m, n)

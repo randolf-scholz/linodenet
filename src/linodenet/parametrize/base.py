@@ -7,7 +7,7 @@ Goals
 - Class-based parametrizations that allow more complex parametrizations.
     - Example: SpectralNormalization uses an iterative algorithm to compute the spectral norm,
         which is accelerated by caching the singular vectors and reusing them in the next iteration.
-- More fine grained control over what is cached and what is not.
+- More fine-grained control over what is cached and what is not.
     - In particular, we do not use any global variables
 
 Content
@@ -69,17 +69,16 @@ Classes
 
 __all__ = [
     # Protocol
-    "GeneralParametrization",
     "Parametrization",
     # Classes
     "ParametrizationBase",
     "ParametrizationList",
-    "ParametrizationDict",
-    "ParametrizationMulticache",
+    "ParametrizationWrapper",
     # torch.nn.utils.parametrize replacements
     "parametrize",
     "is_parametrized",
     "register_parametrization",
+    "remove_parametrizations",
     "cached",
     # Functions
     "assert_is_safe_parametrization",
@@ -103,104 +102,19 @@ from types import TracebackType
 from typing import (
     Any,
     Literal,
+    Optional,
     Protocol,
     Self,
     TypeIs,
+    cast,
     get_protocol_members,
-    runtime_checkable,
 )
 
 import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
-# TODO: add support for multiple parametrizations on the same tensor.
-# TODO: add ParametrizationList.
-#   When parametrizing a module, this should be added to the module. (__parametrizations__?)
-#   Individual parametrizations should be added to the list.
-#   It allows to keep parametrization updates in the correct order.
-#   It also allows to use multiple parametrizations on the same tensor.
-
-
-@runtime_checkable
-class GeneralParametrization(Protocol):
-    r"""Protocol for parametrizations.
-
-    In most cases, use `Parametrization` instead of this protocol.
-    This protocol is only useful if you want to parametrize multiple tensors simultaneously.
-
-    Note:
-        To work with JIT, the listed methods must be annotated with @jit.export.
-        - "wrapped tensor" refers to the tensor that is wrapped by the parametrization.
-        - "cached tensor" refers to the tensor that is used to cache the parametrization.
-
-    Warnings:
-        # SEE: https://github.com/pytorch/pytorch/pull/103001
-        Parametrization can cause `deepcopy` to fail. To use deepcopy:
-        1. Call `detach_cache()` to detach the cached tensors from the autograd engine.
-        2. Call `deepcopy` on the model.
-        3. Call `update_cache()` to re-enable the autograd engine.
-    """
-
-    @abstractmethod
-    def apply_parametrization(self) -> Any:
-        r"""Compute the parametrization, takes NO parameters."""
-        ...
-
-    @abstractmethod
-    def update_cache(self) -> None:
-        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
-
-        Note:
-            This method should use inplace `copy_` operations to update the cached tensors.
-        """
-        ...
-
-    @abstractmethod
-    def update_original(self) -> None:
-        r"""Update the original tensors based on the cached tensors.
-
-        Note:
-            This method should use inplace `copy_` operations to update the original tensors.
-            This method should always be called with `torch.no_grad()`.
-        """
-        ...
-
-    @abstractmethod
-    def detach_cache(self) -> None:
-        r"""Detach the cached tensors from the autograd engine.
-
-        This method should be called after `update_original()` to avoid
-        "Trying to backward through the graph a second time" error.
-        """
-        ...
-
-    @jit.export
-    def update_parametrization(self) -> None:
-        r"""Update both the cached and the original tensors.
-
-        This function needs to be called after each `optimizer.step()` call.
-        Internally, it should perform the following steps:
-
-        1. Call `update_cache()` **without gradients**
-            to get the new parametrization given the modified parameters.
-        2. Call `update_original()` **without gradients**
-            to update the original parameters based on the new parametrization.
-        3. Call `detach_cache()` to detach the cached tensors from the autograd engine.
-        4. Call `update_cache()` a second time **with gradients** to re-enable the autograd engine.
-        """
-        with torch.no_grad():
-            # recompute the parametrization given the modified parameters
-            self.update_cache()
-
-            # update the original parameters based on the new parametrization
-            self.update_original()
-
-            # detach the cached tensors from the autograd engine
-            self.detach_cache()
-
-        # re-enable the autograd engine
-        self.update_cache()
+type ParametrizationLike = Fn[[Tensor], Tensor] | nn.Module | Parametrization
 
 
 class Parametrization(Protocol):
@@ -223,6 +137,16 @@ class Parametrization(Protocol):
         ...
 
     @abstractmethod
+    def __call__(self, arg: Tensor, /) -> Tensor:
+        r"""Apply the parametrization to the given tensor."""
+        ...
+
+    cached_parameter: Tensor
+    r"""BUFFER: Holds cached version of the parametrized tensor."""
+    original_parameter: nn.Parameter
+    r"""PARAM: Holds parametrized tensors."""
+
+    @abstractmethod
     def apply_parametrization(self) -> Any: ...
     @abstractmethod
     def get_original_tensor(self) -> Tensor: ...
@@ -230,9 +154,12 @@ class Parametrization(Protocol):
     def get_cached_tensor(self) -> Tensor: ...
 
     # mixin  methods
-
-    def right_inverse(self, y: Tensor) -> Tensor:
+    @jit.export
+    def right_inverse(self, y: Tensor, /) -> Tensor | None:
         r"""Compute the right inverse of the parametrization.
+
+        Returns:
+            Tensor | None: The pullback of the original tensor, or None if not implemented.
 
         The right inverse is such that `parametrization(right_inverse(y)) == y`.
         I.e. starting from an already parametrized tensor, the right inverse
@@ -266,6 +193,21 @@ class Parametrization(Protocol):
 
     @jit.export
     @torch.no_grad()
+    def update_original(self) -> None:
+        r"""Update the original tensors based on the cached tensors.
+
+        Note:
+            This method should use inplace `copy_` operations to update the original tensors.
+            This method should always be called with `torch.no_grad()`.
+        """
+        # Call `right_inverse` to get the pullback of the original tensor.
+        pullback = self.right_inverse(self.get_cached_tensor())
+        if pullback is not None:
+            # Use inplace `copy_` operations to update the original tensors.
+            self.get_original_tensor().copy_(pullback)
+
+    @jit.export
+    @torch.no_grad()
     def update_parametrization(self) -> None:
         r"""Update both the cached and the original tensors.
 
@@ -283,10 +225,7 @@ class Parametrization(Protocol):
         self.update_cache()
 
         # ②. update the original parameters based on the new parametrization
-        # Call `right_inverse` to ensure that the original tensor is in the constraint set.
-        pullback = self.right_inverse(self.get_cached_tensor())
-        # Use inplace `copy_` operations to update the original tensors.
-        self.get_original_tensor().copy_(pullback)
+        self.update_original()
 
         # ③. detach the cached tensors from the autograd engine
         # This method should be called after `update_original()` to avoid
@@ -315,7 +254,7 @@ class ParametrizationBase(nn.Module, Parametrization):
     cached_parameter: Tensor
     r"""BUFFER: Holds cached version of the parametrized tensor."""
 
-    def __init__(self, tensor: Tensor) -> None:
+    def __init__(self, tensor: Tensor, /) -> None:
         super().__init__()
         if not isinstance(tensor, nn.Parameter):
             raise TypeError("tensor must be a nn.Parameter")
@@ -329,7 +268,34 @@ class ParametrizationBase(nn.Module, Parametrization):
         r"""Apply the parametrization."""
         ...
 
+    @abstractmethod
+    def right_inverse(self, y: Tensor, /) -> Tensor | None:
+        r"""Compute the right inverse of the parametrization.
+
+        The right inverse is such that `parametrization(right_inverse(y)) == y`.
+        I.e. starting from an already parametrized tensor, the right inverse
+        will return the original tensor. This is needed when the original tensor
+        already has a parametrization applied to it and hence belongs to some
+        constraint set.
+        """
+        ...
+
     # implement protocol methods:
+    @jit.export
+    def apply_parametrization(self) -> Tensor:
+        r"""Apply the parametrization to the weight matrix."""
+        return self.forward(self.original_parameter)
+
+    @jit.export
+    def update_cache(self) -> None:
+        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
+
+        Note:
+            This method should use inplace `copy_` operations to update the cached tensors.
+        """
+        new_tensor = self.apply_parametrization()
+        self.cached_parameter.copy_(new_tensor)
+
     @jit.export
     def get_original_tensor(self) -> Tensor:
         r"""Get the original tensor from the cached tensor."""
@@ -341,39 +307,15 @@ class ParametrizationBase(nn.Module, Parametrization):
         return self.cached_parameter
 
     @jit.export
-    def apply_parametrization(self) -> Tensor:
-        r"""Apply the parametrization to the weight matrix."""
-        return self.forward(self.original_parameter)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r"""Compute the right inverse of the parametrization.
-
-        The right inverse is such that `parametrization(right_inverse(y)) == y`.
-        I.e. starting from an already parametrized tensor, the right inverse
-        will return the original tensor. This is needed when the original tensor
-        already has a parametrization applied to it and hence belongs to some
-        constraint set.
-
-        Here, we default to the identity function, which is correct for projections,
-        since projections are idempotent. ($y = f(x) ⟹ f(id(y)) = f(y) = f(f(x)) = f(x) = y$)
-        """
-        return y
-
-    @jit.export
     def detach_cache(self) -> None:
         self.cached_parameter.detach_()
-
-    @jit.export
-    def update_cache(self) -> None:
-        new_tensor = self.apply_parametrization()
-        self.cached_parameter.copy_(new_tensor)
 
     @jit.export
     @torch.no_grad()
     def update_original(self) -> None:
         pullback = self.right_inverse(self.cached_parameter)
-        self.original_parameter.copy_(pullback)
+        if pullback is not None:
+            self.original_parameter.copy_(pullback)
 
     @jit.export
     def update_parametrization(self) -> None:
@@ -419,177 +361,96 @@ class ParametrizationList(nn.ModuleList, Parametrization):
         super().__init__(mods)
 
 
-class ParametrizationMulticache(ParametrizationBase):
-    r"""Base class for parametrizations that maintain additional cached tensors."""
+class ParametrizationWrapper(ParametrizationBase):
+    r"""Wraps a callable Tensor -> Tensor into a parametrization."""
 
     original_parameter: nn.Parameter
     r"""PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
     r"""BUFFER: Holds cached version of the parametrized tensor."""
-    cached_tensors: dict[str, Tensor]  # NOTE: cannot use nn.ParameterDict due to JIT
-    r"""BUFFER-DICT: Holds auxiliary cached tensors."""
 
-    def __init__(self, tensor: Tensor, /) -> None:
+    def __init__(
+        self,
+        tensor: Tensor,
+        parametrization: Fn[[Tensor], Tensor] | nn.Module | Parametrization,
+        *,
+        unsafe: bool = False,
+    ) -> None:
         super().__init__(tensor)
-        # get the tensor to parametrize
-        # if not isinstance(tensor, nn.Parameter):
-        #     raise TypeError("tensor must be a nn.Parameter")
+        if (
+            is_parametrization(parametrization)
+            and parametrization.original_parameter is not tensor
+        ):
+            raise ValueError(
+                "The parametrization's original_parameter must be the same as the given tensor!"
+            )
 
-        # self.register_parameter("original_parameter", tensor)
-        # self.register_buffer("cached_parameter", tensor.clone().detach())
+        if (
+            right_inverse_impl := getattr(parametrization, "right_inverse", None)
+        ) is not None:
+            assert callable(right_inverse_impl)
+        else:
+            right_inverse_impl = self._fallback_right_inverse
 
-        # Q: Use nn.BufferDict? https://github.com/pytorch/pytorch/issues/37386
-        self.cached_tensors = {}
+        self._forward_impl: Fn[[Tensor], Tensor] = parametrization
+        self._right_inverse_impl: Fn[[Tensor], Tensor | None] = right_inverse_impl  # pyright: ignore[reportAttributeAccessIssue]
 
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Apply the parametrization.
+        self.update_parametrization()
 
-        Should return a tuple of the parametrized tensor and a dictionary of auxiliary tensors.
-        """
-        ...
-
-    @jit.export
-    def apply_parametrization(self) -> Tensor:
-        r"""Apply the parametrization to the weight matrix."""
-        return self.forward(self.original_parameter)
-
-    @jit.export
-    def update_cache(self) -> None:
-        new_param = self.apply_parametrization()
-        self.cached_parameter.copy_(new_param)
-        # TODO: use self.named_buffers instead?
-        # for key, tensor in self.cached_tensors.items():
-        #     self.cached_tensors[key].copy_(tensor)
+        if not unsafe:
+            assert_is_safe_parametrization(self, tensor)
 
     @jit.export
-    def detach_cache(self) -> None:
-        self.cached_parameter.detach_()
-        # detach all auxiliary cached tensors
-        for tensor in self.cached_tensors.values():
-            tensor.detach_()
-
-    def register_cached_tensor(self, name: str, tensor: Tensor, /) -> None:
-        r"""Register a cached tensor."""
-        if isinstance(tensor, nn.Parameter):
-            raise TypeError("Given tensor is a nn.Parameter!")
-        if name in self.cached_tensors:
-            raise ValueError(f"Cache with {name=!r} already registered!")
-        if name in dict(self.named_buffers()):
-            raise ValueError(f"Buffer with {name=!r} already taken!")
-
-        self.register_buffer(name, tensor)
-        self.cached_tensors[name] = getattr(self, name)
-
-
-# FIXME: use MutableMapping https://github.com/pytorch/pytorch/issues/110959
-class ParametrizationDict(nn.Module, GeneralParametrization):
-    r"""Base class for parametrizations that maintain a dictionary of parametrized tensors.
-
-    Example:
-        # create a model
-        model = nn.Linear(4, 4)
-        # create a parametrization
-        param = Parametrization(model.weight, parametrization)
-        # add the parametrization to the model
-        model.param = param
-        # replace the weight with the parametrized weight
-        model.weight = param.parametrized_tensor
-    """
-
-    cached_tensors: dict[str, Tensor]
-    r"""DICT: Holds all cached tensors."""
-    parametrized_tensors: dict[str, nn.Parameter]
-    r"""DICT: Holds parametrized tensors."""
-
-    def __init__(self) -> None:
-        super().__init__()
-
-        # initialize the cache
-        self.cached_tensors = {}  # TODO: Use nn.BufferDict?
-        self.parametrized_tensors = {}  # NOTE: JIT error with nn.ParameterDict.
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.parametrized_tensors)
-
-    def __len__(self) -> int:
-        return len(self.parametrized_tensors)
-
-    def __getitem__(self, item: str, /) -> nn.Parameter:
-        return self.parametrized_tensors[item]
-
-    def __setitem__(self, key: str, value: nn.Parameter, /) -> None:
-        self.register_parametrized_tensor(key, value)
-
-    def __delitem__(self, key: str, /) -> None:
-        del self.parametrized_tensors[key]
-        del self.cached_tensors[key]
-        delattr(self, key)
-
-    @abstractmethod
-    def apply_parametrization(self) -> dict[str, Tensor]:
-        r"""Update all tensors based on the current parameters."""
-        ...
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Apply the parametrization."""
+        return self._forward_impl(x)
 
     @jit.export
-    def update_cache(self) -> None:
-        new_tensors = self.apply_parametrization()
-        for key, tensor in new_tensors.items():
-            self.cached_tensors[key].copy_(tensor)
+    def right_inverse(self, y: Tensor, /) -> Tensor | None:
+        return self._right_inverse_impl(y)
 
-    @jit.export
-    @torch.no_grad()
-    def update_original(self) -> None:
-        for key, param in self.parametrized_tensors.items():
-            param.copy_(self.cached_tensors[key])
+    def _fallback_right_inverse(self, _: Tensor) -> Tensor | None:
+        return None
 
-    @jit.export
-    @torch.no_grad()
-    def detach_cache(self) -> None:
-        for tensor in self.cached_tensors.values():
-            tensor.detach_()
+    def is_safe(self) -> bool:
+        r"""Check if the parametrization is safe to apply to the tensor."""
+        Y = self.original_parameter
+        X = self(Y)
+        inverse = getattr(self._parametrization, "right_inverse", lambda x: x)
+        Z = inverse(X)
 
-    def register_cached_tensor(self, name: str, tensor: Tensor, /) -> None:
-        r"""Register a cached tensor."""
-        if isinstance(tensor, nn.Parameter):
-            raise TypeError("Given tensor is a nn.Parameter!")
-        if name in self.cached_tensors:
-            raise ValueError(f"Cache with {name=!r} already registered!")
-        if name in dict(self.named_buffers()):
-            raise ValueError(f"Buffer with {name=!r} already taken!")
+        forward_safe = (
+            isinstance(X, Tensor) and X.dtype == Y.dtype and X.shape == Y.shape
+        )
+        inverse_safe = (
+            isinstance(Z, Tensor) and Z.dtype == Y.dtype and Z.shape == Y.shape
+        )
+        return forward_safe and inverse_safe
 
-        self.register_buffer(name, tensor)
-        self.cached_tensors[name] = getattr(self, name)
 
-    def register_parametrized_tensor(self, name: str, param: nn.Parameter, /) -> None:
-        r"""Register a parametrization."""
-        if not isinstance(param, nn.Parameter):
-            raise TypeError("Given tensor is not a nn.Parameter!")
-        if name in self.parametrized_tensors:
-            raise ValueError(f"Parametrization with {name=!r} already registered!")
-
-        # register the cached tensor.
-        self.register_cached_tensor(name, param.clone())
-        # self.cached_tensors[name].copy_(param)
-
-        # register the parametrized tensor.
-        self.register_parameter(f"original_{name}", param)
-        self.parametrized_tensors[name] = param
-
-        if getattr(self, f"original_{name}") is not self.parametrized_tensors[name]:
-            raise ValueError(f"original_{name} is not the same as {name}!")
-
-        # engage the autograd engine
-        # self.cached_tensors[name].detach_()
-        # self.cached_tensors[name].copy_(self.parametrized_tensor[name])
+def parametrize(
+    tensor: Tensor,
+    parametrization: Fn[[Tensor], Tensor] | nn.Module | Parametrization,
+    /,
+) -> ParametrizationWrapper:
+    return ParametrizationWrapper(tensor, parametrization)
 
 
 # endregion base classes ---------------------------------------------------------------
 
 
 # region torch parametrize replacements  -----------------------------------------------
+def is_parametrized(module: nn.Module, tensor_name: Optional[str] = None) -> bool:
+    r"""Return True if the module has any parametrizations."""
+    if tensor_name is None:
+        return any(is_parametrization(m) for m in module.modules())
+
+    parametrizations = get_parametrizations(module)
+    return tensor_name in parametrizations
+
+
 def assert_is_safe_parametrization(
-    parametrization: Fn[[Tensor], Tensor], tensor: Tensor
+    parametrization: Parametrization, tensor: Tensor
 ) -> None:
     r"""Check if the parametrization is safe to apply to the tensor."""
     Y = tensor
@@ -612,10 +473,8 @@ def assert_is_safe_parametrization(
             f"\n original shape:     {Y.shape}"
             f"\n parametrized shape: {X.shape}"
         )
-    inverse: Fn[[Tensor], Tensor] = getattr(
-        parametrization, "right_inverse", lambda x: x
-    )
-    Z = inverse(X)
+    # check right inverse
+    Z = parametrization.right_inverse(X)
     if not isinstance(Z, Tensor):
         raise TypeError(f"right_inverse must return a tensor. Got: {type(Z).__name__}")
     if Z.dtype != Y.dtype:
@@ -634,60 +493,6 @@ def assert_is_safe_parametrization(
         )
 
 
-class parametrize(ParametrizationBase):
-    r"""Parametrization of a single tensor."""
-
-    original_parameter: nn.Parameter
-    r"""PARAM: Holds parametrized tensors."""
-    cached_parameter: Tensor
-    r"""BUFFER: Holds cached version of the parametrized tensor."""
-
-    def __init__(
-        self,
-        tensor: Tensor,
-        parametrization: Fn[[Tensor], Tensor] | nn.Module | type[Parametrization],
-        *,
-        unsafe: bool = False,
-    ) -> None:
-        super().__init__(tensor)
-        match parametrization:
-            case type() as cls:
-                _parametrization = cls(tensor)
-            case other:
-                _parametrization = other
-        self._parametrization = _parametrization
-
-        if not unsafe:
-            assert_is_safe_parametrization(self._parametrization, tensor)
-
-        self.update_parametrization()
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Apply the parametrization."""
-        return self._parametrization(x)
-
-    def is_safe(self) -> bool:
-        r"""Check if the parametrization is safe to apply to the tensor."""
-        Y = self.original_parameter
-        X = self(Y)
-        inverse = getattr(self._parametrization, "right_inverse", lambda x: x)
-        Z = inverse(X)
-
-        forward_safe = (
-            isinstance(X, Tensor) and X.dtype == Y.dtype and X.shape == Y.shape
-        )
-        inverse_safe = (
-            isinstance(Z, Tensor) and Z.dtype == Y.dtype and Z.shape == Y.shape
-        )
-        return forward_safe and inverse_safe
-
-
-def is_parametrized(module: nn.Module, /) -> bool:
-    r"""Return True if the module has any parametrizations."""
-    return any(is_parametrization(m) for m in module.modules())
-
-
 def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
     r"""Return all parametrizations in a module."""
     match ps := getattr(module, "parametrizations", None):
@@ -695,11 +500,11 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
             return nn.ModuleDict()
         case nn.ModuleDict() as parametrizations:
             return parametrizations
-        case jit.RecursiveScriptModule() as parametrizations:
+        case jit.RecursiveScriptModule() as parametrizations:  # pyright: ignore[reportPrivateImportUsage]
             warnings.warn(
                 "Scripted module! Not all functionality may be available.", stacklevel=2
             )
-            return parametrizations
+            return cast("nn.ModuleDict", parametrizations)
         case _:
             raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
 
@@ -708,10 +513,7 @@ def register_parametrization(
     model: nn.Module,
     tensor_name: str,
     parametrization: (
-        Fn[[Tensor], Tensor]
-        | type[Parametrization | nn.Module]
-        | Parametrization
-        | nn.Module
+        Fn[[Tensor], Tensor] | nn.Module | Parametrization | type[Parametrization]
     ),
     *,
     unsafe: bool = False,
@@ -771,11 +573,23 @@ def register_parametrization(
     wrapper.update_parametrization()
 
 
+def remove_parametrizations(
+    module: nn.Module,
+    tensor_name: str,
+    *,
+    leave_parametrized: bool = True,
+) -> nn.Module:
+    r"""Remove the parametrizations on a tensor in a module."""
+    raise NotImplementedError
+
+
 class cached(ContextDecorator, AbstractContextManager):
     r"""Context Manager to update the caches of all the given modules."""
 
-    def __init__(self, *modules: nn.Module) -> None:
+    def __init__(self, *modules: *tuple[nn.Module, *tuple[nn.Module, ...]]) -> None:
         self.modules = modules
+        if not self.modules:
+            raise ValueError("At least one module must be provided!")
 
     def __enter__(self) -> Self:
         return self

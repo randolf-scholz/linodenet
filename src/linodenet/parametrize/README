@@ -2,4 +2,31 @@
 
 This module is an alternative to `torch.nn.utils.parametrizations` that provides JIT-compatible parametrizations for PyTorch models.
 
+
+
+## Goal
+
+In the most general sense, a parametrization refers to a transformation
+
+$$ ϕ:Ω → V $$
+
+that maps parameters from one space to another. Typically, this refers to a single Tensor
+mapping to a single Tensor.
+
+There are two things we want to achieve with parametrizations:
+
+1. constrain some parameter to some subset of its ambient space. (for example, symmetric matrix rather than any square matrix)
+2. cache this transformation for efficiency.
+   - In particular, a submodule (for instance encoder in RNN) may get called many times, but usually this parameterization is only required once.
+3. compatibility with compilation (`torch.jit` / `torch.compile`).
+4. compatibility with serialization (`torch.jit.save` / `torch.export.save`)
+
 ## Usage
+
+There are different approaches to parametrization.
+
+1. Monkey Patching:
+   - allows to parametrize already instantiated `nn.Module`.
+   - either replace the parameter inplace with a `@property` (eager),
+   - or with a `buffer` (JIT-compatible), but requires manual updating if the underlying parameter changes.
+2. Parametrization

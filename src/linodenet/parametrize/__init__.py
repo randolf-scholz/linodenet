@@ -22,7 +22,7 @@ __all__ = [
     "Masked",
     "MatrixExponential",
     "Normal",
-    "Orthogonal",
+    "OrthogonalProjection",
     "ReZero",
     "SkewSymmetric",
     "SpectralNormalization",
@@ -47,12 +47,14 @@ __all__ = [
     "update_parametrizations",
 ]
 
-from linodenet.parametrize.base import (
+from linodenet.parametrize._deprecated import (
     GeneralParametrization,
-    Parametrization,
-    ParametrizationBase,
     ParametrizationDict,
     ParametrizationMulticache,
+)
+from linodenet.parametrize.base import (
+    Parametrization,
+    ParametrizationBase,
     cached,
     deepcopy_with_parametrizations,
     detach_caches,
@@ -67,20 +69,19 @@ from linodenet.parametrize.base import (
     update_originals,
     update_parametrizations,
 )
-from linodenet.parametrize.parametrizations import (
+from linodenet.parametrize.generic import Identity, ReZero
+from linodenet.parametrize.matrix_parametrizations import (
     Banded,
     CayleyMap,
     Diagonal,
     GramMatrix,
     Hamiltonian,
-    Identity,
     LowerTriangular,
     LowRank,
     Masked,
     MatrixExponential,
     Normal,
-    Orthogonal,
-    ReZero,
+    OrthogonalProjection,
     SkewSymmetric,
     SpectralNormalization,
     Symmetric,
@@ -90,7 +91,6 @@ from linodenet.parametrize.parametrizations import (
 )
 
 PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
-    "parametrize"           : parametrize,
     # Parametrizations
     "CayleyMap"             : CayleyMap,
     "GramMatrix"            : GramMatrix,
@@ -103,7 +103,7 @@ PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
     "Identity"              : Identity,
     "LowRank"               : LowRank,
     "Normal"                : Normal,
-    "Orthogonal"            : Orthogonal,
+    "OrthogonalProjection"  : OrthogonalProjection,
     "SkewSymmetric"         : SkewSymmetric,
     "Symmetric"             : Symmetric,
     "Symplectic"            : Symplectic,

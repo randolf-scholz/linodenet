@@ -31,7 +31,7 @@ classifiers = [
 dependencies = [
     "numpy>=2.3.4",
     "scipy>=1.16.3",
-    "torch>=2.9.0",
+    "torch>=2.9.1",
 ]
 
 [project.urls]
@@ -91,14 +91,14 @@ tests = [
     "pytest-repeat>=0.9.4",
     "pytest-rerunfailures>=16.1",
     "pytest-xdist>=3.8.0",
-    "pytest>=9.0.0",
+    "pytest>=9.0.1",
     "tqdm>=4.67.1",
     "typing-extensions>=4.15.0",
 ]
 typing = [
     "mypy>=1.18.2",
     "pyright>=1.1.407",
-    "pyrefly>=0.41.0",
+    "pyrefly>=0.41.2",
     "scipy-stubs>=1.16.3.0",
     "types-colorama>=0.4.15.20250801",
     "types-decorator>=5.2.0.20251101",

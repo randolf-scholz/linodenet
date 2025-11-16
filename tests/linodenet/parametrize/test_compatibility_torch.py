@@ -17,7 +17,6 @@ CLS = [
     "ParametrizationList",
 ]
 
-
 TORCH_INTERFACE = [
     "ParametrizationList",
     "cached",
@@ -35,7 +34,7 @@ def test_interface_complete() -> None:
 
 
 @pytest.mark.parametrize("name", FNS)
-def test_compatibility_torch(name: str) -> None:
+def test_signatures_compatibility_torch(name: str) -> None:
     impl = getattr(linodenet.parametrize, name, None)
     ref = getattr(torch_parametrize, name, None)
 

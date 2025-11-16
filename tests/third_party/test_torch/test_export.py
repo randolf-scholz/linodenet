@@ -71,6 +71,26 @@ def test_export() -> None:
     output[0].mean().backward()
 
 
+def test_exported_trainable() -> None:
+    module = torch.nn.Linear(3, 3)
+    exported = export(module, args=(torch.randn(2, 3),))
+
+    with TemporaryFile() as file:
+        torch.export.save(exported, file)
+        deserialized = torch.export.load(file).module()
+
+    optim = torch.optim.SGD(deserialized.parameters(), lr=0.01)
+    arg = torch.randn(2, 3)
+    output = deserialized(arg)
+    loss = output.norm()
+    loss.backward()
+    optim.step()
+    new_output = deserialized(arg)
+    new_loss = new_output.norm()
+    assert torch.any(new_output != output)
+    assert new_loss < loss
+
+
 def test_export_with_property() -> None:
     # SEE: https://pytorch.org/docs/stable/export.html#limitations-of-torch-export
     class M(nn.Module):

@@ -7,13 +7,12 @@ This requires the MathJax JavaScript library on your webserver/computer.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import NoneType
 from typing import TYPE_CHECKING, Any
 
-
 import sphinx
 from sphinx.errors import ExtensionError
-from pathlib import Path
 
 if TYPE_CHECKING:
     from sphinx.application import Sphinx
