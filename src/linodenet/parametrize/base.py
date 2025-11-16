@@ -105,6 +105,7 @@ from typing import (
     Any,
     Final,
     Literal,
+    Never,
     Optional,
     Protocol,
     Self,
@@ -290,6 +291,15 @@ def is_parametrization(obj: Any) -> TypeIs[BoundParametrization]:
 
 # region base classes ------------------------------------------------------------------
 class _WithPostInitMeta(type):
+    @staticmethod
+    def __post_init__(_: Never, /) -> None:
+        pass
+
+    def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
+        instance = super().__call__(*args, **kwargs)  # type: ignore[misc]
+        instance.__post_init__()
+        return instance
+
     def __new__(
         cls,
         name: str,
@@ -300,16 +310,9 @@ class _WithPostInitMeta(type):
     ) -> type:
         new: type[Any] = super().__new__(cls, name, bases, namespace, **kwargs)
         if getattr(new, "__post_init__", None) is None:
-            new.__post_init__ = _WithPostInitMeta.__post_init__  # pyright: ignore[reportAttributeAccessIssue]
+            namespace["__post_init__"] = _WithPostInitMeta.__post_init__
+            new = super().__new__(cls, name, bases, namespace, **kwargs)
         return new
-
-    def __post_init__(cls, /) -> None:
-        pass
-
-    def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
-        instance = super().__call__(*args, **kwargs)  # type: ignore[misc]
-        instance.__post_init__()
-        return instance
 
 
 class Parametrization(nn.Module, metaclass=_WithPostInitMeta):

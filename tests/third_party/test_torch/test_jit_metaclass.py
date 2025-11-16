@@ -1,6 +1,6 @@
 r"""test whether module with custom metaclass works with ``torch.jit.script``."""
 
-from typing import Any
+from typing import Any, Never
 
 import torch
 from torch import Tensor, jit, nn
@@ -8,6 +8,15 @@ from torch import Tensor, jit, nn
 
 class AddPostInitMeta(type):
     r"""A metaclass that adds a __post_init__ method if not present."""
+
+    @staticmethod
+    def __post_init__(_: Never, /) -> None:
+        pass
+
+    def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
+        instance = super().__call__(*args, **kwargs)  # type: ignore[misc]
+        instance.__post_init__()
+        return instance
 
     def __new__(
         cls,
@@ -19,16 +28,10 @@ class AddPostInitMeta(type):
     ) -> type:
         new: type[Any] = super().__new__(cls, name, bases, namespace, **kwargs)
         if getattr(new, "__post_init__", None) is None:
-            new.__post_init__ = AddPostInitMeta.__post_init__  # pyright: ignore[reportAttributeAccessIssue]
+            namespace["__post_init__"] = AddPostInitMeta.__post_init__
+            new = super().__new__(cls, name, bases, namespace, **kwargs)
+
         return new
-
-    def __post_init__(cls, /) -> None:
-        pass
-
-    def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
-        instance = super().__call__(*args, **kwargs)  # type: ignore[misc]
-        instance.__post_init__()
-        return instance
 
 
 class WithoutPostInit(nn.Module, metaclass=AddPostInitMeta):
@@ -42,6 +45,9 @@ class WithoutPostInit(nn.Module, metaclass=AddPostInitMeta):
 
     def forward(self, x: Tensor) -> Tensor:
         return x + self.value
+
+    def __post_init__(self) -> None:
+        pass
 
 
 class WithPostInit(WithoutPostInit):
