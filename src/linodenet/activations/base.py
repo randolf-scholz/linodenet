@@ -25,7 +25,7 @@ class Activation(Protocol):
     def __call__(self, x: Tensor, /) -> Tensor:
         r"""Forward pass of the activation.
 
-        .. Signature: ``[..., n] -> [..., n]``.
+        .. Signature: ``[..., *xs] -> [..., *xs]``.
         """
         ...
 

@@ -97,6 +97,8 @@ TORCH_SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
 }
 r"""Special activations that do not represent usual activation functions."""
 
+cls: type[Activation] = nn.ReLU
+
 TORCH_MODULAR_ACTIVATIONS: dict[str, type[Activation]] = {
     "AdaptiveLogSoftmaxWithLoss" : nn.AdaptiveLogSoftmaxWithLoss,
     "ELU"                        : nn.ELU,
