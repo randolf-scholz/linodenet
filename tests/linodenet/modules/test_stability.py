@@ -5,7 +5,9 @@ import logging
 import pytest
 import torch
 
-from linodenet.modules import LinODEnet, ResNet, embeddings, filters, system
+from linodenet import embeddings
+from linodenet.components import ResNet, filters, system
+from linodenet.forecasting import LinODEnet
 
 __logger__ = logging.getLogger(__name__)
 

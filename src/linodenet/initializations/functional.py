@@ -172,7 +172,7 @@ def special_orthogonal(
     dtype: Optional[Dtype] = None,
     device: Optional[str | Device] = None,
 ) -> Tensor:
-    r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A^{-1}$ with $\det(A)=1$.
+    r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A⁻¹$ with $\det(A)=1$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """

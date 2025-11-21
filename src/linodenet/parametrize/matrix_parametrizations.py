@@ -30,9 +30,9 @@ from torch import Tensor, jit, nn
 
 from linodenet import projections
 from linodenet.constants import ATOL, RTOL
+from linodenet.domains import MatrixDomains
 from linodenet.lib import singular_triplet
 from linodenet.parametrize.base import Parametrization, Parametrized
-from linodenet.projections import MatrixSpace
 from linodenet.testing import is_square
 
 
@@ -44,8 +44,8 @@ class CayleyMap(Parametrization):
         - https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SKEW_SYMMETRIC
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SPECIAL_ORTHOGONAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SPECIAL_ORTHOGONAL
 
     Id: Tensor
     r"""BUFFER: The identity matrix."""
@@ -77,8 +77,8 @@ class MatrixExponential(Parametrization):
         𝔸ₙ(ℝ)  --exp-->  Oₙ(ℝ)
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.INVERTIBLE
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.INVERTIBLE
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -98,8 +98,8 @@ class MatrixExponential(Parametrization):
 class GramMatrix(Parametrization):
     r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.POSITIVE_SEMIDEFINITE
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SEMIDEFINITE
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -127,8 +127,8 @@ class SpectralNormalization(Parametrization):
         can be computed via fixpoint iteration.
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
 
     original_parameter: nn.Parameter
     r"""PARAM: The original parameter, before parametrization."""

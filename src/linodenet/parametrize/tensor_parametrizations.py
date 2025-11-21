@@ -1,4 +1,4 @@
-r"""Parametrizations for arbitrary rank tensors."""
+r"""Parametrizations for rank-3 and higher order tensors."""
 
 __all__ = ["ReZero"]
 

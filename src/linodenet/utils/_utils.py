@@ -36,7 +36,7 @@ def is_dunder(s: str, /) -> bool:
 
 def is_private(s: str, /) -> bool:
     r"""Check if name is a private method."""
-    return s.isidentifier() and s.startswith("_") and not s.endswith("__")
+    return s.isidentifier() and s.startswith("_") and not s.startswith("__")
 
 
 def get_module(obj_ref: object, /) -> str:

@@ -2,7 +2,12 @@
 import torch
 from torchinfo import summary
 
-from linodenet.modules import LatentStateSpaceModel as LSSM, encoders, filters, system
+from linodenet.components import (
+    LatentStateSpaceModel as LSSM,
+    encoders,
+    filters,
+    system,
+)
 
 if __name__ == "__main__":
     # Initialize Model

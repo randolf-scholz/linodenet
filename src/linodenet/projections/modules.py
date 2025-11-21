@@ -1,5 +1,9 @@
 r"""Projections for the Linear ODE Networks.
 
+Projections are mappings ϕ:X→X such that ϕ∘ϕ=ϕ.
+Then the identity map on the image of ϕ is its right inverse,
+i.e., ϕ∘\id_{\im ϕ} = \id_{\im ϕ}.
+
 Notes:
     - See `linodenet.projections.functional` for functional implementations.
     - See `linodenet.projections.modules` for module-based implementations.
@@ -7,8 +11,8 @@ Notes:
 
 __all__ = [
     # ABCs & Protocols
+    "Projection",
     "ProjectionBase",
-    "MatrixSpace",
     # Classes
     "Banded",
     "Contraction",
@@ -29,58 +33,47 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from enum import StrEnum
-from typing import Final
+from typing import Final, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
 
 import linodenet.projections.functional as F
 from linodenet.constants import FALSE
+from linodenet.domains import MatrixDomains
 
 
-class MatrixSpace(StrEnum):
-    r"""Enumeration of matrix spaces for parametrizations."""
+@runtime_checkable
+class Projection[T](Protocol):
+    r"""Protocol for projections.
 
-    GENERAL = "general"
-    LOW_RANK = "low_rank"
+    A projection is a mapping $φ:X→X$ such that $φ∘φ=φ$.
+    In particular, $φ=i∘π$ for the embedding $i:\Im(φ)→X$ where $π:X→\Im(φ)$ is
+    $φ$ viewed as a surjection onto its image.
+    Then the identity map on the image of $φ$ is the right inverse of $π$.
 
-    SQUARE = "square"  # n x n matrices
-    EVEN_SQUARE = "even_square"  # 2n x 2n matrices
+    References:
+        - https://en.wikipedia.org/wiki/Projection_(mathematics)
+        - https://en.wikipedia.org/wiki/Projection_(linear_algebra)
+    """
 
-    SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
-    SKEW_SYMMETRIC = "skew_symmetric"
-    POSITIVE_DEFINITE = "positive_definite"  # 𝕊ₙ⁺(ℝ)
-    NEGATIVE_DEFINITE = "negative_definite"  # 𝕊ₙ⁻(ℝ)
-    POSITIVE_SEMIDEFINITE = "positive_semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
-    NEGATIVE_SEMIDEFINITE = "negative_semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
+    @abstractmethod
+    def forward(self, x: T, /) -> T:
+        r"""Forward pass of the projection.
 
-    # determinant-based
-    SINGULAR = "singular"  # det=0
-    INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
-    POSITIVE_DETERMINANT = "positive_determinant"  # GLₙ⁺(R) (det>0)
-    NEGATIVE_DETERMINANT = "negative_determinant"  # GLₙ⁻(R) (det<0)
+        .. Signature: ``(..., *xs) -> (..., *xs)``.
+        """
+        ...
 
-    NORMAL = "normal"
-    ORTHOGONAL = "orthogonal"  # Oₙ(R)
-    SPECIAL_ORTHOGONAL = "special_orthogonal"  # SOₙ(R)
-    PERMUTATION = "permutation"
+    def right_inverse(self, y: T, /) -> T:
+        r"""Right inverse of the projection, i.e. the identity on the image.
 
-    TRACELESS = "traceless"
-    SYMPLECTIC = "symplectic"
-    HAMILTONIAN = "hamiltonian"
-
-    MASKED = "masked"
-    DIAGONAL = "diagonal"
-    UPPER_TRIANGULAR = "upper_triangular"
-    LOWER_TRIANGULAR = "lower_triangular"
-    BANDED = "banded"
-
-    STOCHASTIC = "stochastic"
-    DOUBLY_STOCHASTIC = "doubly_stochastic"
+        .. Signature: ``(..., *xs) -> (..., *xs)``.
+        """
+        return y
 
 
-class ProjectionBase(nn.Module):
+class ProjectionBase(nn.Module, Projection[Tensor]):
     r"""Abstract Base Class for Projection components."""
 
     @abstractmethod
@@ -96,9 +89,9 @@ class ProjectionBase(nn.Module):
             y: The projected tensor.
         """
 
-    @abstractmethod
+    @jit.export
     def right_inverse(self, y: Tensor) -> Tensor:
-        r"""Right inverse of the projection.
+        r"""Right inverse of the projection, i.e. the identity on the image.
 
         .. Signature: ``(..., *ys) -> (..., *xs)``.
 
@@ -106,8 +99,19 @@ class ProjectionBase(nn.Module):
             y: The projected tensor.
 
         Returns:
-            x: The right inverse of the projection.
+            The input tensor as-is.
         """
+        return y
+
+    @jit.export
+    def encode(self, x: Tensor) -> Tensor:
+        r"""Alias for `forward` method."""
+        return self.forward(x)
+
+    @jit.export
+    def decode(self, y: Tensor) -> Tensor:
+        r"""Alias for `right_inverse` method."""
+        return self.right_inverse(y)
 
 
 # region projections -------------------------------------------------------------------
@@ -125,11 +129,6 @@ class Identity(ProjectionBase):
         r"""Project x into space of matrices."""
         return F.identity(x)
 
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r"""Right inverse of the projection."""
-        return y
-
 
 class Symmetric(ProjectionBase):
     r"""Return the closest symmetric matrix to X.
@@ -141,18 +140,13 @@ class Symmetric(ProjectionBase):
     One can show analytically that Y = ½(X + X^⊤) is the unique minimizer.
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMMETRIC
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMMETRIC
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of symmetric matrices."""
         return F.symmetric(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
 
 
 class SkewSymmetric(ProjectionBase):
@@ -165,18 +159,13 @@ class SkewSymmetric(ProjectionBase):
     One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SKEW_SYMMETRIC
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of skew-symmetric matrices."""
         return F.skew_symmetric(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
 
 
 class Orthogonal(ProjectionBase):
@@ -193,18 +182,13 @@ class Orthogonal(ProjectionBase):
         https://math.stackexchange.com/q/2215359
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.ORTHOGONAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.ORTHOGONAL
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return F.orthogonal(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
 
 
 class Traceless(ProjectionBase):
@@ -217,18 +201,13 @@ class Traceless(ProjectionBase):
     One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.TRACELESS
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.TRACELESS
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return F.traceless(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
 
 
 class Normal(ProjectionBase):
@@ -256,18 +235,13 @@ class Normal(ProjectionBase):
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.NORMAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.NORMAL
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return F.normal(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
 
 
 class Hamiltonian(ProjectionBase):
@@ -284,18 +258,13 @@ class Hamiltonian(ProjectionBase):
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.EVEN_SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.HAMILTONIAN
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.EVEN_SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.HAMILTONIAN
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
-        return F.hamiltonian(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
         r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
-        return y
+        return F.hamiltonian(x)
 
 
 class Symplectic(ProjectionBase):
@@ -312,18 +281,13 @@ class Symplectic(ProjectionBase):
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.EVEN_SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMPLECTIC
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.EVEN_SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMPLECTIC
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
         return F.symplectic(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
-        return y
 
 
 # endregion matrix groups --------------------------------------------------------------
@@ -347,18 +311,13 @@ class Diagonal(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.DIAGONAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.DIAGONAL
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return F.diagonal(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
 
 
 class UpperTriangular(ProjectionBase):
@@ -378,8 +337,8 @@ class UpperTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.UPPER_TRIANGULAR
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.UPPER_TRIANGULAR
 
     upper: Final[int]
     r"""CONST: The diagonal to consider"""
@@ -392,11 +351,6 @@ class UpperTriangular(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return F.upper_triangular(x, upper=self.upper)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
 
 
 class LowerTriangular(ProjectionBase):
@@ -416,8 +370,8 @@ class LowerTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.LOWER_TRIANGULAR
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
 
     lower: Final[int]
     r"""CONST: The diagonal to consider"""
@@ -430,11 +384,6 @@ class LowerTriangular(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return F.lower_triangular(x, lower=self.lower)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
 
 
 class Banded(ProjectionBase):
@@ -454,8 +403,8 @@ class Banded(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.BANDED
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.BANDED
 
     upper: Final[int]
     r"""CONST: The upper diagonal to consider"""
@@ -471,11 +420,6 @@ class Banded(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return F.banded(x, upper=self.upper, lower=self.lower)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
 
 
 class Masked(ProjectionBase):
@@ -495,8 +439,8 @@ class Masked(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.MASKED
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.MASKED
 
     mask: Tensor
     r"""CONST: Boolean mask to consider"""
@@ -509,11 +453,6 @@ class Masked(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return F.masked(x, mask=self.mask)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
 
 
 # endregion masked projections ---------------------------------------------------------
@@ -531,18 +470,13 @@ class DiagonallyDominant(ProjectionBase):
         Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.SQUARE
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.SYMMETRIC
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMMETRIC
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return F.diagonally_dominant(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
-        return y
 
 
 class Contraction(ProjectionBase):
@@ -559,18 +493,13 @@ class Contraction(ProjectionBase):
         - `projections.functional.contraction`
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of contraction matrices."""
         return F.contraction(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
 
 
 class LowRank(ProjectionBase):
@@ -584,8 +513,8 @@ class LowRank(ProjectionBase):
     where X=UΣV^𝖳 is the SVD of X.
     """
 
-    DOMAIN: Final[MatrixSpace] = MatrixSpace.GENERAL
-    CODOMAIN: Final[MatrixSpace] = MatrixSpace.LOW_RANK
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.LOW_RANK
     rank: Final[int]
 
     def __init__(self, *, rank: int = 1) -> None:
@@ -596,11 +525,6 @@ class LowRank(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return F.low_rank(x, rank=self.rank)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
-        return y
 
 
 # endregion other projections ----------------------------------------------------------

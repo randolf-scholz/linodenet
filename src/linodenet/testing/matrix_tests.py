@@ -408,7 +408,7 @@ def is_diagonally_dominant(
 
     .. math:: A² + A³ + A⁺ + A⁻¹ + A¹² + A²³ A^{23}
 
-    .. math:: A^2 + A^3 + A^+ + A^{-1} + A^{12} + A^{23}
+    .. math:: A^2 + A^3 + A^+ + A⁻¹ + A^{12} + A^{23}
 
     .. math:: \bmat{1 & 2 \\ 3 & 4}
 

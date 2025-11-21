@@ -7,15 +7,15 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from linodenet.config import CONFIG, PROJECT
-from linodenet.modules import (
+from linodenet.components import (
     LinearContraction,
     LinODE,
-    LinODEnet,
     iResNet,
     iResNetBlock,
 )
-from linodenet.modules.system import LinODECell
+from linodenet.components.system import LinODECell
+from linodenet.config import CONFIG, PROJECT
+from linodenet.forecasting import LinODEnet
 from linodenet.testing import assert_class_ok
 
 __logger__ = logging.getLogger(__name__)

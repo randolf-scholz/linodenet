@@ -9,12 +9,15 @@ __all__ = [
     # Sub-Modules
     "functional",
     "modules",
+    "surjections",
     # Constants
     "FUNCTIONAL_PROJECTIONS",
     "MODULAR_PROJECTIONS",
     "PROJECTIONS",
     # ABCs & Protocols
-    "MatrixSpace",
+    "Surjection",
+    "SurjectionBase",
+    "FunctionalProjection",
     "Projection",
     "ProjectionBase",
     # Functions
@@ -51,12 +54,14 @@ __all__ = [
     "Symplectic",
     "Traceless",
     "UpperTriangular",
+    # Surjections
+    "ConcatProjection",
 ]
 
 
-from linodenet.projections import functional, modules
+from linodenet.projections import functional, modules, surjections
 from linodenet.projections.functional import (
-    Projection,
+    FunctionalProjection,
     banded,
     contraction,
     diagonal,
@@ -84,9 +89,9 @@ from linodenet.projections.modules import (
     LowerTriangular,
     LowRank,
     Masked,
-    MatrixSpace,
     Normal,
     Orthogonal,
+    Projection,
     ProjectionBase,
     SkewSymmetric,
     Symmetric,
@@ -94,8 +99,13 @@ from linodenet.projections.modules import (
     Traceless,
     UpperTriangular,
 )
+from linodenet.projections.surjections import (
+    ConcatProjection,
+    Surjection,
+    SurjectionBase,
+)
 
-FUNCTIONAL_PROJECTIONS: dict[str, Projection] = {
+FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
     "banded"              : banded,
     "contraction"         : contraction,
     "diagonal"            : diagonal,
@@ -115,7 +125,7 @@ FUNCTIONAL_PROJECTIONS: dict[str, Projection] = {
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
-MODULAR_PROJECTIONS: dict[str, type[Projection]] = {
+MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "Banded"             : Banded,
     "Contraction"        : Contraction,
     "Diagonal"           : Diagonal,
@@ -135,7 +145,7 @@ MODULAR_PROJECTIONS: dict[str, type[Projection]] = {
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
-PROJECTIONS: dict[str, Projection | type[Projection]] = {
+PROJECTIONS: dict[str, FunctionalProjection | type[ProjectionBase]] = {
     **FUNCTIONAL_PROJECTIONS,
     **MODULAR_PROJECTIONS,
 }

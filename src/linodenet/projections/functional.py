@@ -7,7 +7,7 @@ Notes:
 
 __all__ = [
     # ABCs & Protocols
-    "Projection",
+    "FunctionalProjection",
     # Projections
     "banded",
     "contraction",
@@ -27,24 +27,14 @@ __all__ = [
     "upper_triangular",
 ]
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Callable
 
 import torch
 from torch import Tensor
 
 from linodenet.constants import FALSE
 
-
-@runtime_checkable
-class Projection(Protocol):
-    r"""Protocol for Projection Components."""
-
-    def __call__(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the projection.
-
-        .. Signature: ``(..., d) -> (..., f)``.
-        """
-        ...
+type FunctionalProjection = Callable[[Tensor], Tensor]
 
 
 # region projections -------------------------------------------------------------------
