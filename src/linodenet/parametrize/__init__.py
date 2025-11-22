@@ -4,11 +4,9 @@ __all__ = [
     # Constants
     "PARAMETRIZATIONS",
     # ABCs & Protocols
-    "BoundParametrization",
-    "ParametrizationProto",
-    # Classes
-    "Parametrized",
     "Parametrization",
+    "WrappedParametrization",
+    "ParametrizationBase",
     "ParametrizationList",
     # Parametrizations
     "Banded",
@@ -37,25 +35,24 @@ __all__ = [
     "register_parametrization",
     # Functions
     "deepcopy_with_parametrizations",
-    "detach_caches",
     "get_parametrizations",
     "iter_parametrizations",
     "register_optimizer_hook",
     "is_parametrization",
-    "update_caches",
-    "update_originals",
+    # "update_caches",
+    # "update_originals",
+    # "detach_caches",
     "update_parametrizations",
 ]
 
 from linodenet.parametrize.base import (
-    BoundParametrization,
     Parametrization,
+    ParametrizationBase,
     ParametrizationList,
-    ParametrizationProto,
-    Parametrized,
+    WrappedParametrization,
     cached,
     deepcopy_with_parametrizations,
-    detach_caches,
+    # detach_caches,
     get_parametrizations,
     is_parametrization,
     is_parametrized,
@@ -63,8 +60,8 @@ from linodenet.parametrize.base import (
     parametrize,
     register_optimizer_hook,
     register_parametrization,
-    update_caches,
-    update_originals,
+    # update_caches,
+    # update_originals,
     update_parametrizations,
 )
 from linodenet.parametrize.matrix_parametrizations import (
@@ -89,7 +86,9 @@ from linodenet.parametrize.matrix_parametrizations import (
 )
 from linodenet.parametrize.tensor_parametrizations import ReZero
 
-PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
+PARAMETRIZATIONS: dict[str, type[ParametrizationBase]] = {
+    # Wrappers
+    # "WrappedParametrization": WrappedParametrization,
     # Parametrizations
     "CayleyMap"             : CayleyMap,
     "GramMatrix"            : GramMatrix,

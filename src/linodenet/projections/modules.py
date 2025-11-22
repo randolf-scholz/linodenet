@@ -124,6 +124,9 @@ class Identity(ProjectionBase):
     .. math:: \min_Y ½∥X-Y∥_F^2
     """
 
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Project x into space of matrices."""

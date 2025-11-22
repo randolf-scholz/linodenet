@@ -133,17 +133,17 @@ def test_singular_triplet(value_tol: float, grads_tol: float) -> None:
     print("All tests passed.")
 
 
-@pytest.mark.xfail(reason="Matrices badly conditioned.")
+# @pytest.mark.xfail(reason="Matrices badly conditioned.")
 @pytest.mark.parametrize("value_tol", [1e-5])
 @pytest.mark.parametrize("grads_tol", [1e-3])
 def test_spectral_norm(value_tol: float, grads_tol: float) -> None:
     r"""Test the spectral norm."""
+    M, N, NUM_RUNS, SEED = 16, 16, 100, 0
+    torch.manual_seed(SEED)
     err_vals = []
     err_grad = []
-    torch.manual_seed(0)
-    for _ in range(100):
-        m, n = 16, 16
-        err_value, err_grads = compute_spectral_norm_impl(spectral_norm, (m, n))
+    for _ in range(NUM_RUNS):
+        err_value, err_grads = compute_spectral_norm_impl(spectral_norm, (M, N))
         err_vals.append(err_value.item())
         err_grad.append(err_grads.item())
     avgerr_vals = sum(err_vals) / len(err_vals)

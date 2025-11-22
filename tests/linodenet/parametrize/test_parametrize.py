@@ -12,9 +12,9 @@ from torch.optim import SGD
 
 from linodenet.parametrize import (
     Identity,
-    Parametrized,
     SpectralNormalization,
     UpperTriangular,
+    WrappedParametrization,
     cached,
     get_parametrizations,
     is_parametrization,
@@ -120,7 +120,7 @@ def test_optimization_manual() -> None:
     model.register_buffer("weight", param.cached_parameter)
     model.register_module("param", param)
     model.register_parameter("original_weight", param.original_parameter)
-    assert isinstance(model.param, Parametrized)
+    assert isinstance(model.param, WrappedParametrization)
 
     # check that the parametrization is registered
     assert model.weight is not original_weight

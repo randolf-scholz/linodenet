@@ -36,6 +36,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, distributions as dist, nn
 
+from linodenet.distributions.base import DistributionBase
+
 
 class MultivariateNormal(dist.MultivariateNormal):
     r"""Augmented Multivariate Normal distribution.
@@ -65,7 +67,7 @@ class MultivariateNormal(dist.MultivariateNormal):
         )
 
 
-class MultiHeadGaussian(nn.Module):
+class MultiHeadGaussian(DistributionBase):
     r"""Implements a multi-head Gaussian distribution."""
 
     normalization_constant: Tensor
@@ -103,8 +105,7 @@ class MultiHeadGaussian(nn.Module):
         means: Optional[Tensor] = None,
         covs: Optional[Tensor] = None,
     ) -> None:
-        super().__init__()
-
+        super().__init__(batch_shape=(n_heads,), event_shape=(n_feats,))
         # CONSTANTS
         self.num_heads = int(n_heads)
         self.num_features = int(n_feats)

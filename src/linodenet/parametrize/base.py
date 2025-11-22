@@ -69,12 +69,12 @@ Classes
 
 __all__ = [
     # Protocol
-    "ParametrizationProto",
+    "Parametrization",
     "BoundParametrization",
     # Classes
     "WithoutRightInverse",
-    "Parametrization",
-    "Parametrized",
+    "ParametrizationBase",
+    "WrappedParametrization",
     "ParametrizationList",
     # torch.nn.utils.parametrize replacements
     "parametrize",
@@ -85,13 +85,13 @@ __all__ = [
     # Functions
     "assert_is_safe_parametrization",
     "deepcopy_with_parametrizations",
-    "detach_caches",
+    # "detach_caches",
     "get_parametrizations",
     "iter_parametrizations",
     "is_parametrization",
     "register_optimizer_hook",
-    "update_caches",
-    "update_originals",
+    # "update_caches",
+    # "update_originals",
     "update_parametrizations",
 ]
 
@@ -102,6 +102,7 @@ from collections.abc import Callable as Fn, Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Final,
     Literal,
@@ -114,18 +115,20 @@ from typing import (
     get_protocol_members,
     runtime_checkable,
 )
+from warnings import deprecated
 
 import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
+from linodenet.projections.surjections import Surjection
 from linodenet.torch_generics import ModuleSequence
 
 type ParametrizationLike = Fn[[Tensor], Tensor] | nn.Module | BoundParametrization
 
 
 @runtime_checkable
-class ParametrizationProto(Protocol):
+class Parametrization(Protocol):
     r"""Protocol for parametrizations."""
 
     @abstractmethod
@@ -138,11 +141,19 @@ class ParametrizationProto(Protocol):
         r"""Compute the right inverse of the parametrization."""
         ...
 
+    @abstractmethod
+    def update_parametrization(self) -> None:
+        r"""Update both the cached and the original tensors."""
+        ...
+
 
 class WithoutRightInverse(nn.Module):
     r"""Wrapper for parametrizations without right inverse."""
 
-    def __init__(self, parametrization: nn.Module) -> None:
+    def __init__(
+        self,
+        parametrization: nn.Module,
+    ) -> None:
         super().__init__()
         self.parametrization = parametrization
 
@@ -159,6 +170,7 @@ class ParametrizationList(ModuleSequence):
     r"""TODO: implement ParametrizationList."""
 
 
+@deprecated("do not use")
 class BoundParametrization(Protocol):
     r"""Protocol for parametrizations that wrap a single tensor.
 
@@ -279,14 +291,12 @@ class BoundParametrization(Protocol):
             self.update_cache()
 
 
-def is_parametrization(obj: Any) -> TypeIs[BoundParametrization]:
+def is_parametrization(obj: Any) -> TypeIs[Parametrization]:
     r"""Check if the object is a Parametrization.
 
     This method is needed because standard isinstance checks do not work with jit.ScriptModule.
     """
-    return all(
-        hasattr(obj, member) for member in get_protocol_members(BoundParametrization)
-    )
+    return all(hasattr(obj, member) for member in get_protocol_members(Parametrization))
 
 
 # region base classes ------------------------------------------------------------------
@@ -315,7 +325,7 @@ class _WithPostInitMeta(type):
         return new
 
 
-class Parametrization(nn.Module, metaclass=_WithPostInitMeta):
+class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
     r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
     original_parameter: nn.Parameter
@@ -338,6 +348,23 @@ class Parametrization(nn.Module, metaclass=_WithPostInitMeta):
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
         self.unsafe = unsafe
+
+    # TODO: use this instead of metaclass?
+    r"""
+    def __init_subclass__(cls: type[Self], **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        import functools
+        original_init = cls.__init__
+
+        # add __post_init__ hook to __init__
+        @functools.wraps(original_init)
+        def __init_with_post_init(self: Self, /, *args: Any, **kwargs: Any) -> None:
+            original_init(self, *args, **kwargs)
+            self.__post_init__()
+
+        cls.__init__ = __init_with_post_init  # type: ignore[assignment]  # pyright: ignore[reportAttributeAccessIssue]
+    """
 
     def __post_init__(self) -> None:
         if not self.unsafe:
@@ -415,7 +442,7 @@ class Parametrization(nn.Module, metaclass=_WithPostInitMeta):
         self.update_cache()
 
 
-class Parametrized(Parametrization):
+class WrappedParametrization(ParametrizationBase):
     r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
     original_parameter: nn.Parameter
@@ -431,15 +458,16 @@ class Parametrized(Parametrization):
         unsafe: bool = False,
     ) -> None:
         super().__init__(tensor, unsafe=unsafe)
+
         if not callable(getattr(parametrization, "right_inverse", None)):
             parametrization = WithoutRightInverse(parametrization)
 
-        assert (  # noqa: PT018
-            isinstance(parametrization, ParametrizationProto)
-            and isinstance(parametrization, nn.Module)
-        )
-
-        self.parametrization = parametrization.to(
+        if TYPE_CHECKING:
+            assert (  # noqa: PT018
+                isinstance(parametrization, nn.Module)
+                and isinstance(parametrization, Surjection)
+            )
+        self.parametrization: Surjection = parametrization.to(
             device=tensor.device, dtype=tensor.dtype
         )
 
@@ -455,12 +483,12 @@ class Parametrized(Parametrization):
 
 def parametrize(
     tensor: Tensor,
-    parametrization: nn.Module | type[Parametrization],
+    parametrization: nn.Module | type[ParametrizationBase],
     *,
     unsafe: bool = False,
-) -> Parametrization:
+) -> ParametrizationBase:
     if isinstance(parametrization, nn.Module):
-        return Parametrized(tensor, parametrization, unsafe=unsafe)
+        return WrappedParametrization(tensor, parametrization, unsafe=unsafe)
     if isinstance(parametrization, type):
         return parametrization(tensor)
     raise TypeError(
@@ -475,7 +503,7 @@ def parametrize(
 def register_parametrization(
     module: nn.Module,
     tensor_name: str,
-    parametrization: nn.Module | type[Parametrization],
+    parametrization: nn.Module | type[ParametrizationBase],
     *,
     unsafe: bool = False,
 ) -> None:
@@ -643,29 +671,11 @@ class cached(ContextDecorator, AbstractContextManager):
 
 
 # region functions for parametrization -------------------------------------------------
-def iter_parametrizations(module: nn.Module, /) -> Iterator[BoundParametrization]:
+def iter_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
     r"""Yields all parametrizations in a module."""
     for m in module.modules():
         if is_parametrization(m):
             yield m
-
-
-def detach_caches(module: nn.Module, /) -> None:
-    r"""Detach all caches in a module."""
-    for parametrization in iter_parametrizations(module):
-        parametrization.detach_cache()
-
-
-def update_originals(module: nn.Module, /) -> None:
-    r"""Update all original tensors in a module."""
-    for parametrization in iter_parametrizations(module):
-        parametrization.update_original()
-
-
-def update_caches(module: nn.Module, /) -> None:
-    r"""Update all cached tensors in a module."""
-    for parametrization in iter_parametrizations(module):
-        parametrization.update_cache()
 
 
 def update_parametrizations(module: nn.Module, /) -> None:
@@ -674,12 +684,30 @@ def update_parametrizations(module: nn.Module, /) -> None:
         parametrization.update_parametrization()
 
 
+#
+# def detach_caches(module: nn.Module, /) -> None:
+#     r"""Detach all caches in a module."""
+#     for parametrization in iter_parametrizations(module):
+#         parametrization.detach_cache()
+#
+#
+# def update_originals(module: nn.Module, /) -> None:
+#     r"""Update all original tensors in a module."""
+#     for parametrization in iter_parametrizations(module):
+#         parametrization.update_original()
+#
+#
+# def update_caches(module: nn.Module, /) -> None:
+#     r"""Update all cached tensors in a module."""
+#     for parametrization in iter_parametrizations(module):
+#         parametrization.update_cache()
+
 # endregion functions for parametrization ----------------------------------------------
 
 
 # region additional functions ----------------------------------------------------------
 def register_optimizer_hook(
-    optim: Optimizer, /, *module_or_param: nn.Module | BoundParametrization
+    optim: Optimizer, /, *module_or_param: nn.Module | Parametrization
 ) -> None:
     r"""Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
     # collect all parametrizations
@@ -701,13 +729,16 @@ def register_optimizer_hook(
 def deepcopy_with_parametrizations[M: nn.Module](module: M, /) -> M:
     r"""Deepcopy a module."""
     # detach all caches
-    detach_caches(module)
-    # deepcopy the module
-    cloned = copy.deepcopy(module)
+    # detach_caches(module)
+    with torch.no_grad():
+        # deepcopy the module
+        cloned = copy.deepcopy(module)
+
+    # recompute all caches for the original module
+    # update_parametrizations(module)
+
     # recompute all caches for the cloned module
     update_parametrizations(cloned)
-    # recompute all caches for the original module
-    update_parametrizations(module)
     # return the cloned module
     return cloned
 

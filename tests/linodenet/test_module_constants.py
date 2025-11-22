@@ -9,11 +9,13 @@ import pytest
 
 import linodenet as lib
 from linodenet.activations import ACTIVATIONS, Activation
+from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
+from linodenet.embeddings import EMBEDDINGS, Embedding, EmbeddingBase
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.parametrize import (
     PARAMETRIZATIONS,
-    BoundParametrization,
-    Parametrized,
+    Parametrization,
+    ParametrizationBase,
 )
 from linodenet.projections import (
     FUNCTIONAL_PROJECTIONS,
@@ -34,7 +36,7 @@ class Case(NamedTuple):
     r"""NamedTuple for each case."""
 
     module: ModuleType
-    protocol: type
+    protocol: type | None
     base_class: type | None
     elements: Mapping[str, type] | Mapping[str, Callable]
 
@@ -43,11 +45,13 @@ CASES: dict[str, Case] = {
     "activations"         : Case(lib.activations    , Activation     , None               , ACTIVATIONS               ),
     "initializations"     : Case(lib.initializations, Initialization , None               , INITIALIZATIONS           ),
     "matrix_tests"        : Case(lib.testing        , MatrixTest     , None               , MATRIX_TESTS              ),
-    "parametrizations"    : Case(lib.parametrize, BoundParametrization, Parametrized, PARAMETRIZATIONS),
+    "parametrizations"    : Case(lib.parametrize    , Parametrization, ParametrizationBase, PARAMETRIZATIONS          ),
     "projections_cls"     : Case(lib.projections    , Projection     , ProjectionBase     , MODULAR_PROJECTIONS       ),
     "projections_fun"     : Case(lib.projections    , Projection     , None               , FUNCTIONAL_PROJECTIONS    ),
     "regularizations_cls" : Case(lib.regularizations, Regularization , RegularizationBase , MODULAR_REGULARIZATIONS   ),
     "regularizations_fun" : Case(lib.regularizations, Regularization , None               , FUNCTIONAL_REGULARIZATIONS),
+    "embeddings"          : Case(lib.embeddings     , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
+    "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
 }  # fmt: skip
 r"""Dictionary of all available cases."""
 
@@ -88,7 +92,7 @@ def test_name_casing(case_name: str, item_name: str) -> None:
 def test_protocol(case_name: str) -> None:
     r"""Check that the protocol associated with the classes is indeed a protocol."""
     case = CASES[case_name]
-    assert is_protocol(case.protocol)
+    assert case.protocol is None or is_protocol(case.protocol)
 
 
 def test_base_class(case_name: str) -> None:
@@ -101,15 +105,6 @@ def test_base_class(case_name: str) -> None:
         assert not is_protocol(cls)
 
 
-def test_name(case_name: str, item_name: str) -> None:
-    r"""Check if the name of the class matches the item name."""
-    case = CASES[case_name]
-    obj = case.elements[item_name]
-    # fallback for jit.ScriptFunction
-    name = getattr(obj, "__name__", getattr(obj, "name", None))
-    assert name == item_name
-
-
 def test_issubclass(case_name: str, item_name: str) -> None:
     r"""Check if the class is a subclass of the correct base class."""
     case = CASES[case_name]
@@ -118,6 +113,15 @@ def test_issubclass(case_name: str, item_name: str) -> None:
     if case.base_class is not None:
         assert isinstance(obj, type)
         assert issubclass(obj, case.base_class)
+
+
+def test_name(case_name: str, item_name: str) -> None:
+    r"""Check if the name of the class matches the item name."""
+    case = CASES[case_name]
+    obj = case.elements[item_name]
+    # fallback for jit.ScriptFunction
+    name = getattr(obj, "__name__", getattr(obj, "name", None))
+    assert name == item_name
 
 
 def test_dict_complete(case_name: str) -> None:
@@ -137,9 +141,10 @@ def test_dict_complete(case_name: str) -> None:
                     and isinstance(cls, type)
                     and issubclass(cls, base_class)
                     and cls is not base_class
+                    # and __init__ is compatible with base_class.__init__
                 )
                 and cls not in case.elements.values()
             }
 
-    if missing:
-        raise AssertionError(f"Missing {case.protocol.__name__}: {sorted(missing)}")
+            if missing:
+                raise AssertionError(f"Missing {case_name}: {sorted(missing)}")

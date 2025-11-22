@@ -6,10 +6,10 @@ __all__ = [
     "SimplexVector",
 ]
 
-from linodenet.parametrize.base import Parametrized
+from linodenet.parametrize.base import WrappedParametrization
 
 
-class UnitVector(Parametrized):
+class UnitVector(WrappedParametrization):
     r"""Parametrization that constrains a vector to have unit norm.
 
     Args:
@@ -17,7 +17,7 @@ class UnitVector(Parametrized):
     """
 
 
-class NonNegativeVector(Parametrized):
+class NonNegativeVector(WrappedParametrization):
     r"""Parametrization that constrains a vector to be non-negative.
 
     Args:
@@ -25,7 +25,7 @@ class NonNegativeVector(Parametrized):
     """
 
 
-class SimplexVector(Parametrized):
+class SimplexVector(WrappedParametrization):
     r"""Parametrization that constrains a vector to lie on the simplex.
 
     Args:

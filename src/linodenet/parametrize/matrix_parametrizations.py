@@ -32,11 +32,11 @@ from linodenet import projections
 from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
 from linodenet.lib import singular_triplet
-from linodenet.parametrize.base import Parametrization, Parametrized
+from linodenet.parametrize.base import ParametrizationBase, WrappedParametrization
 from linodenet.testing import is_square
 
 
-class CayleyMap(Parametrization):
+class CayleyMap(ParametrizationBase):
     r"""Parametrize a matrix to be orthogonal via Cayley-Map.
 
     References:
@@ -68,7 +68,7 @@ class CayleyMap(Parametrization):
         return torch.linalg.lstsq(self.Id - y, self.Id + y).solution
 
 
-class MatrixExponential(Parametrization):
+class MatrixExponential(ParametrizationBase):
     r"""Parametrize a matrix via matrix exponential.
 
     Note: The following restrictions hold:
@@ -95,7 +95,7 @@ class MatrixExponential(Parametrization):
         raise NotImplementedError
 
 
-class GramMatrix(Parametrization):
+class GramMatrix(ParametrizationBase):
     r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
@@ -116,7 +116,7 @@ class GramMatrix(Parametrization):
         raise NotImplementedError
 
 
-class SpectralNormalization(Parametrization):
+class SpectralNormalization(ParametrizationBase):
     r"""Spectral normalization $‖A‖₂≤γ$.
 
     Ensures that the spectral norm of the weight matrix is at most γ (default=1.0).
@@ -221,99 +221,141 @@ class SpectralNormalization(Parametrization):
         return y
 
 
-class Banded(Parametrized):
+class Banded(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Banded``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Banded.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Banded.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Banded(*args, **kwargs))
 
 
-class Diagonal(Parametrized):
+class Diagonal(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Diagonal``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Diagonal.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Diagonal.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Diagonal(*args, **kwargs))
 
 
-class Hamiltonian(Parametrized):
+class Hamiltonian(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Hamiltonian``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Hamiltonian.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Hamiltonian.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Hamiltonian(*args, **kwargs))
 
 
-class Identity(Parametrized):
+class Identity(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Identity``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Identity.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Identity.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Identity(*args, **kwargs))
 
 
-class LowRank(Parametrized):
+class LowRank(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.LowRank``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.LowRank.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.LowRank.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.LowRank(*args, **kwargs))
 
 
-class LowerTriangular(Parametrized):
+class LowerTriangular(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.LowerTriangular``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.LowerTriangular.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.LowerTriangular.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.LowerTriangular(*args, **kwargs))
 
 
-class Masked(Parametrized):
+class Masked(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Masked``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Masked.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Masked.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Masked(*args, **kwargs))
 
 
-class Normal(Parametrized):
+class Normal(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Normal``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Normal.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Normal.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Normal(*args, **kwargs))
 
 
-class OrthogonalProjection(Parametrized):
+class OrthogonalProjection(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.OrthogonalProjection``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Orthogonal.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Orthogonal.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Orthogonal(*args, **kwargs))
 
 
-class SkewSymmetric(Parametrized):
+class SkewSymmetric(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.SkewSymmetric``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.SkewSymmetric.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.SkewSymmetric.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.SkewSymmetric(*args, **kwargs))
 
 
-class Symmetric(Parametrized):
+class Symmetric(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Symmetric``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Symmetric.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Symmetric.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Symmetric(*args, **kwargs))
 
 
-class Symplectic(Parametrized):
+class Symplectic(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Symplectic``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Symplectic.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Symplectic.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Symplectic(*args, **kwargs))
 
 
-class Traceless(Parametrized):
+class Traceless(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Traceless``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Traceless.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Traceless.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Traceless(*args, **kwargs))
 
 
-class UpperTriangular(Parametrized):
+class UpperTriangular(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.UpperTriangular``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.UpperTriangular.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.UpperTriangular.CODOMAIN
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.UpperTriangular(*args, **kwargs))

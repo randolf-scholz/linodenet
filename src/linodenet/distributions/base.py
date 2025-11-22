@@ -12,7 +12,7 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Final, Protocol
+from typing import Final, Protocol, runtime_checkable
 
 import torch
 from torch import Size, Tensor, jit, nn
@@ -20,6 +20,7 @@ from torch import Size, Tensor, jit, nn
 from linodenet.torch_generics import ModuleMapping, ModuleSequence
 
 
+@runtime_checkable
 class Distribution[X](Protocol):
     r"""A protocol for distributions, compatible with `torch.distributions.Distribution`."""
 

@@ -19,3 +19,5 @@ def test_parametrization(name: str) -> None:
         pytest.xfail(f"{name} parametrization not implemented")
 
     assert is_parametrization(parametrization)
+    assert hasattr(parametrization, "DOMAIN")
+    assert hasattr(parametrization, "CODOMAIN")

@@ -58,6 +58,7 @@ __all__ = [
     # types
     # protocols & ABCs
     "Distribution",
+    "DistributionBase",
     # classes
     "Dirac",
     "Empirical",
@@ -68,7 +69,7 @@ __all__ = [
     "MixtureSameFamily",
 ]
 
-from linodenet.distributions.base import Distribution
+from linodenet.distributions.base import Distribution, DistributionBase
 from linodenet.distributions.categorical import Categorical
 from linodenet.distributions.empirical import Dirac, Empirical
 from linodenet.distributions.gaussian import MultiHeadGaussian, MultivariateNormal
