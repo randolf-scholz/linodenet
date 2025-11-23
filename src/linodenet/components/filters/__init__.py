@@ -30,7 +30,6 @@ __all__ = [
     "ReZeroFilter",
     "SequentialFilter",
     "MissingValueFilter",
-    "KalmanFilter",
     # Cells
     "LinearCell",
     "LinearKalmanCell",
@@ -70,7 +69,6 @@ from linodenet.components.filters.cells import (
     ResidualCell,
 )
 from linodenet.components.filters.missing_value_filter import MissingValueFilter
-from linodenet.forecasting.kalman_filter import KalmanFilter
 
 CELLS: dict[str, type[Cell]]  = {
     # torch cells
@@ -90,7 +88,6 @@ CELLS: dict[str, type[Cell]]  = {
 r"""Dictionary of all available cells (basic building blocks for filters)."""
 
 FILTERS: dict[str, type[Filter]] = {
-    "KalmanFilter"        : KalmanFilter,
     "MissingValueFilter"  : MissingValueFilter,
     # "ProbabilisticFilter" : ProbabilisticFilter,
     "ResidualFilter"      : ResidualFilter,

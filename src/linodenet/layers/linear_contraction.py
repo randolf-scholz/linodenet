@@ -255,7 +255,7 @@ class NaiveLinearContraction(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         r""".. Signature:: ``(..., n) -> (..., n)``."""
-        sigma = torch.linalg.matrix_norm(self.weight, ord=2)
+        sigma = matrix_norm(self.weight, ord=2)
         gamma = torch.minimum(self.c / sigma, self.one)
         return functional.linear(x, gamma * self.weight, self.bias)
         # return self.layer(x / sigma)

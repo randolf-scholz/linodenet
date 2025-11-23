@@ -335,8 +335,8 @@ module = [
     "pandas.*",
     "pyarrow.*",
     "pytest_benchmark.*",
-    "scipy.*",
     "sklearn.*",
+    "torchdiffeq.*",
 ]
 ignore_missing_imports = true
 # endregion mypy configuration ---------------------------------------------------------

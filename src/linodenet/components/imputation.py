@@ -1,16 +1,18 @@
 r"""Imputers for missing data handling."""
 
 __all__ = [
-    # Types
+    # constants
+    "IMPUTERS",
+    # types
     "ImputerProtocol",
     "ImputationStrategy",
-    # Classes
+    # classes
     "ZeroImputer",
     "ConstantValueImputer",
     "LearnableValueImputer",
     "LastValueImputer",
     "LinearImputer",
-    # Functions
+    # functions
     "zero_impute",
 ]
 
@@ -168,3 +170,13 @@ class LinearImputer(nn.Module):
             x (Tensor): Hidden state.
         """
         return torch.where(m, y, self.linear(x))
+
+
+IMPUTERS: dict[str, type[ImputerProtocol]] = {
+    "ZeroImputer"           : ZeroImputer,
+    "ConstantValueImputer"  : ConstantValueImputer,
+    "LearnableValueImputer" : LearnableValueImputer,
+    "LastValueImputer"      : LastValueImputer,
+    "LinearImputer"         : LinearImputer,
+}  # fmt: skip
+r"""Dictionary of available imputers."""

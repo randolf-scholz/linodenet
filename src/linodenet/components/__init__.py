@@ -8,7 +8,6 @@ __all__ = [
     "forecasting",
     "system",
     # Constants
-    "MODULES",
     # Classes
     "LinODE",
     "LinODECell",
@@ -27,13 +26,3 @@ from linodenet.components.encoders import (
     iResNetBlock,
 )
 from linodenet.components.system import LinODE, LinODECell
-from linodenet.layers.linear_contraction import LinearContraction
-
-MODULES: dict[str, type] = {
-    "LinODE"            : LinODE,
-    "LinODECell"        : LinODECell,
-    "LinearContraction" : LinearContraction,
-    "iResNet"           : iResNet,
-    "iResNetBlock"      : iResNetBlock,
-}  # fmt: skip
-r"""Dictionary containing all available models."""

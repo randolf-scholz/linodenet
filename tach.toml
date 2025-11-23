@@ -11,10 +11,11 @@ source_roots = [ "src"]
 [[modules]]
 path = "linodenet.torch_generics"
 depends_on = []
+utility = true
 
 [[modules]]
 path = "linodenet.layers"
-depends_on = [ "linodenet.activations"]
+depends_on = [ "linodenet.activations", "linodenet.lib"]
 
 [[modules]]
 path = "linodenet.lib"
@@ -27,45 +28,91 @@ depends_on = []
 [[modules]]
 path = "linodenet.types"
 depends_on = []
+utility = true
 
 [[modules]]
 path = "linodenet.activations"
-depends_on = ["linodenet.torch_generics"]
+depends_on = []
 
 [[modules]]
 path = "linodenet.config"
 depends_on = []
+utility = true
 
 [[modules]]
 path = "linodenet.constants"
 depends_on = []
+utility = true
 
 
 [[modules]]
 path = "linodenet.testing"
-depends_on = ["linodenet.constants", "linodenet.types"]
+depends_on = []
 
 
 [[modules]]
 path = "linodenet.projections"
-depends_on = ["linodenet.constants", "linodenet"]
+depends_on = []
 
 [[modules]]
 path = "linodenet.utils"
-depends_on = [ "linodenet.types"]
+depends_on = []
+utility = true
 
 [[modules]]
 path = "linodenet.regularizations"
-depends_on = ["linodenet.projections", "linodenet.constants", "linodenet.types"]
+depends_on = ["linodenet.projections"]
 
 [[modules]]
 path = "linodenet.parametrize"
-depends_on = ["linodenet.lib", "linodenet.constants", "linodenet.projections", "linodenet.testing", "linodenet.torch_generics", "linodenet"]
+depends_on = ["linodenet.lib", "linodenet.projections", "linodenet.testing"]
 
 [[modules]]
 path = "linodenet"
-depends_on = ["linodenet.testing", "linodenet.activations", "linodenet.config", "linodenet.parametrize", "linodenet.initializations", "linodenet.utils", "linodenet.lib", "linodenet.projections", "linodenet.regularizations", "linodenet.torch_generics", "linodenet.constants", "linodenet.layers", "linodenet.types"]
+depends_on = ["linodenet.testing", "linodenet.activations", "linodenet.parametrize", "linodenet.initializations", "linodenet.lib", "linodenet.projections", "linodenet.regularizations", "linodenet.bijections", "linodenet.distributions", "linodenet.embeddings", "linodenet.components"]
 
 [[modules]]
 path = "linodenet.algebra"
 depends_on = []
+utility = true
+
+[[modules]]
+path = "linodenet.components.encoders"
+depends_on = ["linodenet.bijections", "linodenet.layers"]
+
+[[modules]]
+path = "linodenet.forecasting"
+depends_on = ["linodenet.embeddings", "linodenet.components.encoders", "linodenet.projections", "linodenet.components.filters", "linodenet.components.system"]
+
+[[modules]]
+path = "linodenet.components"
+depends_on = ["linodenet.components.encoders", "linodenet.embeddings", "linodenet.forecasting", "linodenet.components.filters", "linodenet.components.system"]
+
+[[modules]]
+path = "linodenet.components.filters"
+depends_on = ["linodenet.layers", "linodenet.distributions", "linodenet.components.imputation", "linodenet.activations"]
+
+[[modules]]
+path = "linodenet.components.imputation"
+depends_on = []
+
+[[modules]]
+path = "linodenet.embeddings"
+depends_on = []
+
+[[modules]]
+path = "linodenet.distributions"
+depends_on = []
+
+[[modules]]
+path = "linodenet.bijections"
+depends_on = ["linodenet.layers", "linodenet.initializations", "linodenet.activations"]
+
+[[modules]]
+path = "linodenet.components.system"
+depends_on = ["linodenet.initializations", "linodenet.projections"]
+
+[[modules]]
+path = "linodenet.domains"
+depends_on = []
+utility = true

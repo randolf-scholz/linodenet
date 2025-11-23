@@ -3,6 +3,7 @@ r"""Models for the latent dynamical system."""
 __all__ = [
     # ABCs & Protocols
     "ContinuousSystem",
+    "DiscreteSystem",
     "SystemABC",
 ]
 
