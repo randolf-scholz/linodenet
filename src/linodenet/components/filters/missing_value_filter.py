@@ -9,8 +9,9 @@ from typing import Any, Final, cast
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.components.filters import Filter, FilterBase, imputers
-from linodenet.components.filters.imputers import ImputationStrategy, ImputerProtocol
+from linodenet.components import imputation as imp
+from linodenet.components.filters import Filter, FilterBase
+from linodenet.components.imputation import ImputationStrategy, ImputerProtocol
 from linodenet.constants import EMPTY_MAP
 
 
@@ -74,22 +75,22 @@ class MissingValueFilter(FilterBase):
         match imputation:
             case "zero":
                 imputation_strategy = ImputationStrategy.ZERO
-                _imputer = imputers.ZeroImputer()
+                _imputer = imp.ZeroImputer()
             case "last":
                 imputation_strategy = ImputationStrategy.LAST
-                _imputer = imputers.LastValueImputer()
+                _imputer = imp.LastValueImputer()
             case "learnable":
                 imputation_strategy = ImputationStrategy.LEARNABLE
-                _imputer = imputers.LearnableValueImputer((self.input_size,))
+                _imputer = imp.LearnableValueImputer((self.input_size,))
             case "linear":
                 imputation_strategy = ImputationStrategy.LINEAR
-                _imputer = imputers.LinearImputer(
+                _imputer = imp.LinearImputer(
                     input_size=self.input_size,
                     hidden_size=hidden_size,
                 )
             case (Tensor() | float()) as value:
                 imputation_strategy = ImputationStrategy.CONSTANT
-                _imputer = imputers.ConstantValueImputer(value)
+                _imputer = imp.ConstantValueImputer(value)
             case nn.Module as imputer:
                 imputation_strategy = ImputationStrategy.OTHER
                 _imputer = cast("ImputerProtocol", imputer)

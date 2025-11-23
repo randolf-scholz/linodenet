@@ -10,7 +10,6 @@ __all__ = [
     # Classes
     "Encoder",
     "EncoderABC",
-    "Identity",
 ]
 
 from abc import abstractmethod
@@ -45,17 +44,3 @@ class EncoderABC(nn.Module):
             z: The encoded tensor.
         """
         ...
-
-
-class Identity(nn.Module):
-    r"""Identity with HP attribute."""
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-    }
-    r"""Hyperparameters of the component."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature: ``... -> ...``."""
-        return x

@@ -14,7 +14,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.components.encoders import ResNet
 from linodenet.components.filters import Filter, MissingValueFilter
-from linodenet.components.system import LinODECell, System
+from linodenet.components.system import ContinuousSystem, LinODECell
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.torch_generics import initialize_from_dict
@@ -171,7 +171,7 @@ class LatentStateSpaceModel(nn.Module):
 
         # ensure filter and system satisfy the protocols
         assert isinstance(self.filter, Filter)
-        assert isinstance(self.system, System)
+        assert isinstance(self.system, ContinuousSystem)
 
         self.input_size = int(self.filter.input_size)
         self.output_size = int(self.filter.hidden_size)

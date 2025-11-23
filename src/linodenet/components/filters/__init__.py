@@ -69,8 +69,8 @@ from linodenet.components.filters.cells import (
     PseudoKalmanCell,
     ResidualCell,
 )
-from linodenet.components.filters.kalman_filter import KalmanFilter
 from linodenet.components.filters.missing_value_filter import MissingValueFilter
+from linodenet.forecasting.kalman_filter import KalmanFilter
 
 CELLS: dict[str, type[Cell]]  = {
     # torch cells

@@ -4,17 +4,17 @@ __all__ = [
     # Constants
     "SYSTEMS",
     # ABCs & Protocols
-    "System",
+    "ContinuousSystem",
     "SystemABC",
     # Classes
     "LinODE",
     "LinODECell",
 ]
 
-from linodenet.components.system.base import System, SystemABC
+from linodenet.components.system.base import ContinuousSystem, SystemABC
 from linodenet.components.system.linode import LinODE, LinODECell
 
-SYSTEMS: dict[str, type[System]] = {
+SYSTEMS: dict[str, type[ContinuousSystem]] = {
     "LinODE": LinODE,
     "LinODECell": LinODECell,
 }

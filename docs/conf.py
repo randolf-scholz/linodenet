@@ -55,10 +55,10 @@ extensions = [
     # 1st party extensions
     "signatures",
     "details",
-    "custom_mathjax",
+    # "custom_mathjax",
     # 3rd party extensions
     # "autoapi.extension",
-    "myst_parser",
+    # "myst_parser",
     "sphinx_copybutton",
     # "sphinx_math_dollar",
     "sphinx_togglebutton",
@@ -301,6 +301,15 @@ intersphinx_disabled_reftypes = ["std:doc"]  # list of disabled cross-reference 
 # mathjax_options = {}
 # mathjax3_config = "_static/mathjax_startup.js"
 custom_mathjax = "_static/mathjax_startup.js"
+
+with open("_static/mathjax_startup.js", "r", encoding="utf-8") as f:
+    mathjax_script = f.read()
+
+
+def setup(app):
+    app.add_js_file("", body=mathjax_script)
+
+
 # endregion mathjax_startup_patch ------------------------------------------------------
 
 

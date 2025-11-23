@@ -8,7 +8,6 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.components import (
-    LinearContraction,
     LinODE,
     iResNet,
     iResNetBlock,
@@ -16,6 +15,7 @@ from linodenet.components import (
 from linodenet.components.system import LinODECell
 from linodenet.config import CONFIG, PROJECT
 from linodenet.forecasting import LinODEnet
+from linodenet.layers.linear_contraction import LinearContraction
 from linodenet.testing import assert_class_ok
 
 __logger__ = logging.getLogger(__name__)
@@ -39,32 +39,38 @@ BATCH_SIZES = [(), (INNER_BATCH,), (OUTER_BATCH, INNER_BATCH)]
 
 MODELS: dict[type[nn.Module], dict] = {
     LinearContraction: {
-        "initialization": (DIM, OUT),
+        "init_args": (DIM, OUT),
+        "init_kwargs": {},
         "input_shapes": [(LEN, DIM)],  # X
         "output_shapes": [(LEN, OUT)],
     },
     iResNetBlock: {
-        "initialization": (DIM,),
+        "init_args": (DIM,),
+        "init_kwargs": {},
         "input_shapes": [(LEN, DIM)],  # X
         "output_shapes": [(LEN, DIM)],
     },
     iResNet: {
-        "initialization": (DIM,),
+        "init_args": (DIM,),
+        "init_kwargs": {},
         "input_shapes": [(LEN, DIM)],  # X
         "output_shapes": [(LEN, DIM)],
     },
     LinODECell: {
-        "initialization": (DIM,),
+        "init_args": (DIM,),
+        "init_kwargs": {},
         "input_shapes": [(), (DIM,)],  # Δt, x0
         "output_shapes": [(DIM,)],
     },
     LinODE: {
-        "initialization": (DIM,),
+        "init_args": (DIM,),
+        "init_kwargs": {},
         "input_shapes": [(LEN,), (DIM,)],  # T, x0
         "output_shapes": [(LEN, DIM)],
     },
     LinODEnet: {
-        "initialization": (DIM, LAT),
+        "init_args": (DIM, LAT),
+        "init_kwargs": {},
         "input_shapes": [(LEN,), (LEN, DIM)],  # T, X
         "output_shapes": [(LEN, DIM)],
     },
@@ -100,7 +106,6 @@ def test_all_models(cls: type[nn.Module], params: dict) -> None:
     r"""Check if initializations, forward and backward runs for all selected models."""
     LOGGER = __logger__.getChild(cls.__name__)
     LOGGER.info("Testing...")
-    initialization = params["initialization"]
     input_shapes = params["input_shapes"]
     output_shapes = params["output_shapes"]
 
@@ -118,7 +123,8 @@ def test_all_models(cls: type[nn.Module], params: dict) -> None:
         )
         assert_class_ok(
             cls,
-            init_args=(initialization,),
+            init_args=params["init_args"],
+            init_kwargs=params["init_kwargs"],
             args=(inputs,),
             reference_shapes=reference_shapes,
             device=device,

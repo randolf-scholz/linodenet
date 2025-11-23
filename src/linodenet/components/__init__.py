@@ -12,10 +12,8 @@ __all__ = [
     # Classes
     "LinODE",
     "LinODECell",
-    "LinearContraction",
     "ResNet",
     "ResNetBlock",
-    "SpectralNorm",
     "iResNet",
     "iResNetBlock",
 ]
@@ -23,14 +21,13 @@ __all__ = [
 from linodenet import embeddings, forecasting
 from linodenet.components import encoders, filters, system
 from linodenet.components.encoders import (
-    LinearContraction,
     ResNet,
     ResNetBlock,
-    SpectralNorm,
     iResNet,
     iResNetBlock,
 )
 from linodenet.components.system import LinODE, LinODECell
+from linodenet.layers.linear_contraction import LinearContraction
 
 MODULES: dict[str, type] = {
     "LinODE"            : LinODE,

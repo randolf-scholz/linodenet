@@ -14,8 +14,9 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet.components import LinearContraction, iResNetBlock
+from linodenet.components import iResNetBlock
 from linodenet.config import PROJECT
+from linodenet.layers.linear_contraction import LinearContraction
 from tests.test_utils import scaled_norm, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]

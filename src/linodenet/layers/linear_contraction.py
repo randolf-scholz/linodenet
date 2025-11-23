@@ -23,18 +23,207 @@ References:
 """
 
 __all__ = [
-    # Classes
     "LinearContraction",
+    "AltLinearContraction",
     "NaiveLinearContraction",
+    "LinearContractionManualParametrized",
 ]
 
+
+from math import sqrt
 from typing import Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
+from torch.linalg import matrix_norm
 from torch.nn import functional
 
 from linodenet.lib import singular_triplet
+
+
+class LinearContraction(nn.Module):
+    r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2$.
+
+    This is achieved by normalizing the weight matrix by
+    $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
+
+    Attributes:
+        input_size:  int
+            The dimensionality of the input space.
+        output_size: int
+            The dimensionality of the output space.
+        c: Tensor
+            The regularization hyperparameter.
+        spectral_norm: Tensor
+            BUFFER: The value of `‖W‖_2`
+        weight: Tensor
+            The weight matrix.
+        bias: Tensor or None
+            The bias Tensor if present, else None.
+    """
+
+    input_size: Final[int]
+    output_size: Final[int]
+
+    # Constants
+    c: Tensor
+    r"""CONST: The regularization hyperparameter."""
+    one: Tensor
+    r"""CONST: A tensor with value 1.0"""
+
+    # Buffers
+    spectral_norm: Tensor
+    r"""BUFFER: The value of $‖W‖_2$"""
+
+    # Parameters
+    weight: Tensor
+    r"""PARAM: The weight matrix."""
+    bias: Optional[Tensor]
+    r"""PARAM: The bias term."""
+
+    def __init__(
+        self, input_size: int, output_size: int, *, c: float = 0.97, bias: bool = True
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+
+        self.weight = nn.Parameter(Tensor(output_size, input_size))
+        if bias:
+            self.bias = nn.Parameter(Tensor(output_size))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+        self.register_buffer("one", torch.tensor(1.0), persistent=True)
+        self.register_buffer("c", torch.tensor(float(c)), persistent=True)
+        self.register_buffer(
+            "spectral_norm", matrix_norm(self.weight, ord=2), persistent=False
+        )
+
+    def reset_parameters(self) -> None:
+        r"""Reset both weight matrix and bias vector."""
+        nn.init.kaiming_uniform_(self.weight, a=sqrt(5))
+        if self.bias is not None:
+            bound = 1 / sqrt(self.input_size)
+            nn.init.uniform_(self.bias, -bound, bound)
+
+    # def extra_repr(self) -> str:
+    #     return "input_size={}, output_size={}, bias={}".format(
+    #         self.input_size, self.output_size, self.bias is not None
+    #     )
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
+        # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
+        # σ_max = torch.linalg.norm(self.weight, ord=2)
+        # self.spectral_norm = spectral_norm(self.weight)
+        # σ_max = torch.linalg.svdvals(self.weight)[0]
+        self.spectral_norm = matrix_norm(self.weight, ord=2)
+        gamma = torch.minimum(self.c / self.spectral_norm, self.one)
+        return functional.linear(x, gamma * self.weight, self.bias)
+
+
+class AltLinearContraction(nn.Module):
+    r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
+
+    This is achieved by normalizing the weight matrix by
+    `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
+
+    Attributes:
+        input_size:  int
+            The dimensionality of the input space.
+        output_size: int
+            The dimensionality of the output space.
+        c: Tensor
+            The regularization hyperparameter
+        kernel: Tensor
+            The weight matrix
+        bias: Tensor or None
+            The bias Tensor if present, else None.
+    """
+
+    # Constants
+    input_size: Final[int]
+    r"""CONST:  Number of inputs"""
+    output_size: Final[int]
+    r"""CONST: Number of outputs"""
+    maxiter: Final[int]
+    r"""CONST: Maximum number of steps in power-iteration"""
+
+    # Buffers
+    c: Tensor
+    r"""BUFFER: The regularization strength."""
+    one: Tensor
+    r"""BUFFER: Constant value of float(1.0)."""
+    spectral_norm: Tensor
+    r"""BUFFER: The largest singular value."""
+    u: Tensor
+    r"""BUFFER: The left singular vector."""
+    v: Tensor
+    r"""BUFFER: The right singular vector."""
+
+    # Parameters
+    kernel: Tensor
+    r"""PARAM: the weight matrix"""
+    bias: Optional[Tensor]
+    r"""PARAM: The bias term"""
+
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        *,
+        c: float = 0.97,
+        bias: bool = True,
+        maxiter: int = 1,
+    ):
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        self.maxiter = maxiter
+
+        self.kernel = nn.Parameter(Tensor(output_size, input_size))
+        if bias:
+            self.bias = nn.Parameter(Tensor(output_size))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+        # self.spectral_norm = matrix_norm(self.weight, ord=2)
+        self.register_buffer("one", torch.tensor(1.0))
+        self.register_buffer("c", torch.tensor(float(c)))
+        self.register_buffer("spectral_norm", matrix_norm(self.kernel, ord=2))
+        # self.register_buffer(
+        #     "u",
+        # )
+        # self.register_buffer(
+        #     "v",
+        # )
+
+    def reset_parameters(self) -> None:
+        r"""Reset both weight matrix and bias vector."""
+        nn.init.kaiming_uniform_(self.kernel, a=sqrt(5))
+        if self.bias is not None:
+            bound = 1 / sqrt(self.input_size)
+            nn.init.uniform_(self.bias, -bound, bound)
+
+    # def extra_repr(self) -> str:
+    #     return "input_size={}, output_size={}, bias={}".format(
+    #         self.input_size, self.output_size, self.bias is not None
+    #     )
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        r""".. Signature:: ``(..., n) -> (..., n)``."""
+        # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
+        # σ_max = torch.linalg.norm(self.weight, ord=2)
+        # σ_max = spectral_norm(self.weight)
+        # σ_max = torch.linalg.svdvals(self.weight)[0]
+        self.spectral_norm = matrix_norm(self.kernel, ord=2)
+        fac = torch.minimum(self.c / self.spectral_norm, self.one)
+        return functional.linear(x, fac * self.kernel, self.bias)
 
 
 class NaiveLinearContraction(nn.Module):
@@ -72,7 +261,7 @@ class NaiveLinearContraction(nn.Module):
         # return self.layer(x / sigma)
 
 
-class LinearContraction(nn.Module):
+class LinearContractionManualParametrized(nn.Module):
     r"""Linear layer with a Lipschitz constant."""
 
     input_size: Final[int]

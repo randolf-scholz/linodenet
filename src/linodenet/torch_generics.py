@@ -108,12 +108,14 @@ def initialize_from_dict(cfg: Mapping[str, Any], /) -> Module:
     try:  # import the module
         library = import_module(lib_name)
     except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(f"Failed to import {lib_name}") from exc
+        exc.add_note(f"Failed to import {lib_name=}")
+        raise
 
     try:  # import the class from the module
         cls = getattr(library, cls_name)
     except AttributeError as exc:
-        raise AttributeError(f"Failed to import {cls_name} from {lib_name}") from exc
+        exc.add_note(f"Failed to import {cls_name} from {lib_name}")
+        raise
     if not issubclass(cls, Module):
         raise TypeError(f"Expected a subclass of {Module}, but got {cls}")
 
@@ -123,13 +125,15 @@ def initialize_from_dict(cfg: Mapping[str, Any], /) -> Module:
         try:
             module = cls.from_config(config)
         except Exception as exc:
-            raise RuntimeError(f"Failed to initialize {cls} with {config=}") from exc
+            exc.add_note(f"Failed to initialize {cls} with {config=}")
+            raise
         return module
 
     try:
         module = cls(**config)
     except Exception as exc:
-        raise RuntimeError(f"Failed to initialize {cls} with {config=}") from exc
+        exc.add_note(f"Failed to initialize {cls} with {config=}")
+        raise
     return module
 
 

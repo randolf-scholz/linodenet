@@ -345,7 +345,12 @@ def check_initializable[M: Module](
     init_args: tuple[Any, ...],
     init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
 ) -> M:
-    r"""Test if the module is initializable."""
+    r"""Test if the module is initializable.
+
+    Raises:
+        TypeError: if the `module_type` is not a subclass of `Module`.
+        AssertionError: if the initialization fails.
+    """
     if not isinstance(module_type, type):
         raise TypeError(f"Expected type, got {type(module_type)}!")
 
@@ -355,7 +360,7 @@ def check_initializable[M: Module](
     try:
         module = module_type(*init_args, **init_kwargs)
     except Exception as exc:
-        raise RuntimeError("Model initialization failed!") from exc
+        raise AssertionError("Model initialization failed!") from exc
 
     return module
 
@@ -370,11 +375,16 @@ def check_forward(
     reference_values: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
 ) -> Nested[Tensor]:
-    r"""Test a forward pass."""
+    r"""Test a forward pass.
+
+    Raises:
+        `AssertionError`: if the forward pass fails, or if the outputs do not match the
+            reference values / shapes.
+    """
     try:
         outputs = func(*args, **kwargs)
     except Exception as exc:
-        raise RuntimeError("Forward pass failed!!") from exc
+        raise AssertionError("Forward pass failed!!") from exc
 
     # validate shapes
     shapes = get_shapes(outputs)
@@ -399,7 +409,12 @@ def check_backward(
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
     treat_inputs_as_parameters: bool = True,
 ) -> list[Tensor]:
-    r"""Test a backward pass."""
+    r"""Test a backward pass.
+
+    Raises:
+        `AssertionError`: if the backward pass fails, or if the gradients do not match
+            the reference values / shapes.
+    """
     params: list[Tensor] = (
         get_parameters(module_or_func) if isinstance(module_or_func, Module) else []
     )
@@ -452,7 +467,11 @@ def check_jit_scriptable(arg: Func, /) -> jit.ScriptFunction: ...
 def check_jit_scriptable(
     arg: Module | Func, /
 ) -> jit.ScriptModule | jit.ScriptFunction:
-    r"""Test JIT compilation."""
+    r"""Test JIT compilation.
+
+    Raises:
+        `AssertionError`: if JIT compilation fails.
+    """
     try:
         scripted = jit.script(arg)
     except Exception as exc:
@@ -461,7 +480,11 @@ def check_jit_scriptable(
 
 
 def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
-    r"""Test saving and loading of JIT compiled model."""
+    r"""Test saving and loading of JIT compiled model.
+
+    Raises:
+        `AssertionError`: if saving or loading fails.
+    """
     scripted = (
         arg
         if isinstance(arg, jit.ScriptModule | jit.ScriptFunction)
@@ -499,7 +522,12 @@ def assert_is_trainable(
     niter: int = 4,
     use_copy: bool = True,
 ) -> None:
-    r"""Check if the model can be optimized."""
+    r"""Check if the model can be optimized.
+
+    Raises:
+        `AssertionError`: if the model has no trainable parameters, or if the loss does
+            not decrease after optimization.
+    """
     if not any(p.requires_grad for p in module.parameters()):
         raise AssertionError("No trainable parameters!")
 

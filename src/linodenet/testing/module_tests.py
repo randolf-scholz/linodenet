@@ -44,7 +44,8 @@ def get_output(func: Callable[..., Tensor], /, *inputs: Tensor) -> Tensor:
     try:
         output = func(*inputs)
     except Exception as exc:
-        raise RuntimeError(f"Error in forward pass of {func}") from exc
+        exc.add_note(f"Error in forward pass of {func}")
+        raise
 
     # make sure the output is valid
     if not isinstance(output, Tensor):

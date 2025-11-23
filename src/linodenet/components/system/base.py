@@ -2,7 +2,7 @@ r"""Models for the latent dynamical system."""
 
 __all__ = [
     # ABCs & Protocols
-    "System",
+    "ContinuousSystem",
     "SystemABC",
 ]
 
@@ -13,7 +13,7 @@ from torch import Tensor, nn
 
 
 @runtime_checkable
-class System(Protocol):
+class ContinuousSystem(Protocol):
     r"""Protocol for System Components."""
 
     input_size: Final[int]  # type: ignore[misc]
@@ -23,6 +23,20 @@ class System(Protocol):
         r"""Forward pass of the system.
 
         .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
+        """
+        ...
+
+
+class DiscreteSystem(Protocol):
+    r"""Protocol for Discrete System Components."""
+
+    input_size: Final[int]  # type: ignore[misc]
+    r"""CONST: The dimensionality of inputs."""
+
+    def __call__(self, n_steps: int, z: Tensor, /) -> Tensor:
+        r"""Forward pass of the system.
+
+        .. Signature: ``(…, d) -> (…, d)``.
         """
         ...
 

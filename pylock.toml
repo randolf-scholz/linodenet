@@ -338,6 +338,13 @@ wheels = [
 ]
 
 [[packages]]
+name = "torchdiffeq"
+version = "0.2.5"
+index = "https://pypi.org/simple"
+sdist = { url = "https://files.pythonhosted.org/packages/87/ec/a40aa124660f0ee65e6760cb53df6a82ad91a1a3ef1da5e747f1336644dd/torchdiffeq-0.2.5.tar.gz", upload-time = 2024-11-21T20:20:11Z, size = 31197, hashes = { sha256 = "b50d3760d13fd138dcceac651f4b80396f44fefcebd037a033fecfeaa9cc12e7" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/b9/35/537f64f2d0b3cfebaae0f903b4e3a3b239abcc99d0f73cb15b9cee9b8212/torchdiffeq-0.2.5-py3-none-any.whl", upload-time = 2024-11-21T20:20:09Z, size = 32902, hashes = { sha256 = "aa1db4bed13bd04952f28a53cdf4336d1ab60417c1d9698d7a239fec1cf2bcf8" } }]
+
+[[packages]]
 name = "triton"
 version = "3.5.1"
 marker = "platform_machine == 'x86_64' and sys_platform == 'linux'"
