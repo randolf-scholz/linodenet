@@ -20,7 +20,6 @@ from linodenet.layers.linear_contraction import LinearContraction
 from tests.test_utils import scaled_norm, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
-__logger__ = logging.getLogger(__name__)
 
 
 @pytest.mark.flaky(reruns=3)
@@ -39,8 +38,8 @@ def test_linear_contraction(
         dim_output: by default, sample randomly from [2, 4, 8, ..., 128]
         make_plots: bool
     """
-    LOGGER = __logger__.getChild(LinearContraction.__name__)
-    LOGGER.info("Testing...")
+    logger = logging.getLogger(f"{__name__}/{LinearContraction.__name__}")
+    logger.info("Testing...")
 
     n_sample = num_sample or random.choice([1000 * k for k in range(1, 6)])
     d_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
@@ -50,7 +49,7 @@ def test_linear_contraction(
         "Dim-in": f"{d_inputs}",
         "Dim-out": f"{d_output}",
     }
-    LOGGER.info("Configuration: %s", extra_stats)
+    logger.info("Configuration: %s", extra_stats)
 
     x = torch.randn(n_sample, d_inputs)
     y = torch.randn(n_sample, d_inputs)
@@ -63,12 +62,12 @@ def test_linear_contraction(
 
     # Test whether contraction property holds
     assert torch.all(latent_distances <= distances)
-    LOGGER.info("Test passed ✔ ")
+    logger.info("Test passed ✔ ")
 
     if not make_plots:
         return
 
-    LOGGER.info("generating figure")
+    logger.info("generating figure")
     scaling_factor = (latent_distances / distances).flatten()
 
     fig, ax = plt.subplots(figsize=(5.5, 3.4), tight_layout=True)
@@ -82,7 +81,7 @@ def test_linear_contraction(
     visualize_distribution(scaling_factor, ax=ax, extra_stats=extra_stats)
 
     fig.savefig(RESULT_DIR / f"{LinearContraction.__name__}_ScalingFactor.pdf")
-    LOGGER.info("all done")
+    logger.info("all done")
 
 
 @pytest.mark.flaky(reruns=3)
@@ -107,8 +106,8 @@ def test_invertible_resnet_block(
         quantiles: The quantiles of the error distribution
         targets: The target values for the quantiles of the error distribution
     """
-    LOGGER = __logger__.getChild(iResNetBlock.__name__)
-    LOGGER.info("Testing...")
+    logger = logging.getLogger(f"{__name__}/{iResNetBlock.__name__}")
+    logger.info("Testing...")
     n_samples = num_sample or random.choice([1000 * k for k in range(1, 11)])
     d_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
     d_output = dim_output or random.choice([2**k for k in range(2, 8)])
@@ -121,9 +120,9 @@ def test_invertible_resnet_block(
     QUANTILES = torch.tensor(quantiles)
     TARGETS = torch.tensor(targets)
 
-    LOGGER.info("Configuration: %s", extra_stats)
-    LOGGER.info("QUANTILES: %s", QUANTILES)
-    LOGGER.info("TARGETS  : %s", TARGETS)
+    logger.info("Configuration: %s", extra_stats)
+    logger.info("QUANTILES: %s", QUANTILES)
+    logger.info("TARGETS  : %s", TARGETS)
 
     with torch.no_grad():
         model = iResNetBlock(d_inputs, hidden_size=d_output, maxiter=maxiter)
@@ -145,37 +144,37 @@ def test_invertible_resnet_block(
     forward_inverse_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert forward_inverse_error.shape == (n_samples,)
     assert (forward_inverse_quantiles <= TARGETS).all(), f"{forward_inverse_quantiles=}"
-    LOGGER.info("satisfies ϕ⁻¹∘ϕ≈id ✔ ")
-    LOGGER.info("Quantiles: %s", forward_inverse_quantiles)
+    logger.info("satisfies ϕ⁻¹∘ϕ≈id ✔ ")
+    logger.info("Quantiles: %s", forward_inverse_quantiles)
 
     # Test if ϕ∘ϕ⁻¹=id, i.e. the right inverse is working
     inverse_forward_error = scaled_norm(y - yhat, axis=-1, keepdim=False)
     inverse_forward_quantiles = torch.quantile(forward_inverse_error, QUANTILES)
     assert inverse_forward_error.shape == (n_samples,)
     assert (inverse_forward_quantiles <= TARGETS).all(), f"{inverse_forward_quantiles=}"
-    LOGGER.info("satisfies ϕ∘ϕ⁻¹≈id ✔ ")
-    LOGGER.info("Quantiles: %s", inverse_forward_quantiles)
+    logger.info("satisfies ϕ∘ϕ⁻¹≈id ✔ ")
+    logger.info("Quantiles: %s", inverse_forward_quantiles)
 
     # Test if ϕ≠id, i.e. the forward map is different from the identity
     forward_difference = scaled_norm(x - fx, axis=-1, keepdim=False)
     forward_quantiles = torch.quantile(forward_difference, 1 - QUANTILES)
     assert forward_difference.shape == (n_samples,)
     assert (forward_quantiles >= TARGETS).all(), f"{forward_quantiles}"
-    LOGGER.info("satisfies ϕ≉id ✔ ")
-    LOGGER.info("Quantiles: %s", forward_quantiles)
+    logger.info("satisfies ϕ≉id ✔ ")
+    logger.info("Quantiles: %s", forward_quantiles)
 
     # Test if ϕ⁻¹≠id, i.e. the inverse map is different from an identity
     inverse_difference = scaled_norm(y - ify, axis=-1, keepdim=False)
     inverse_quantiles = torch.quantile(inverse_difference, 1 - QUANTILES)
     assert inverse_difference.shape == (n_samples,)
     assert (inverse_quantiles >= TARGETS).all(), f"{inverse_quantiles}"
-    LOGGER.info("satisfies ϕ⁻¹≉id ✔ ")
-    LOGGER.info("Quantiles: %s", inverse_quantiles)
+    logger.info("satisfies ϕ⁻¹≉id ✔ ")
+    logger.info("Quantiles: %s", inverse_quantiles)
 
     if not make_plots:
         return
 
-    LOGGER.info("generating figure")
+    logger.info("generating figure")
     fig, ax = plt.subplots(
         ncols=2,
         nrows=2,
@@ -213,4 +212,4 @@ def test_invertible_resnet_block(
     ax[1, 1].set_ylabel(r"density $p(d_\text{right} \mid y)$")
     fig.suptitle("iResNetBlock -- Inversion Property", fontsize=16)
     fig.savefig(RESULT_DIR / "iResNetBlock_inversion.pdf")
-    LOGGER.info("all done")
+    logger.info("all done")

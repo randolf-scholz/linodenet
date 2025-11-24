@@ -19,7 +19,6 @@ from linodenet.config import PROJECT
 from tests.test_utils import scaled_norm, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
-__logger__ = logging.getLogger(__name__)
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
 
@@ -38,7 +37,7 @@ def compute_linode_error(
     """
     N = num or random.choice([10 * k for k in range(2, 11)])
     D = dim or random.choice([2**k for k in range(1, 8)])
-    logger = __logger__.getChild(f"{LinODE.__name__}-test-{N}-{D}")
+    logger = logging.getLogger(f"{__name__}/{LinODE.__name__}-test-{N}-{D}")
 
     numpy_dtype: type[np.number]
     torch_dtype: torch.dtype
@@ -112,7 +111,7 @@ def make_error_plots(
     *,
     error_single: NDArray,
     error_double: NDArray,
-    logger: logging.Logger = __logger__,
+    logger: logging.Logger,
 ) -> None:
     r"""Create histogram plot of the errors."""
     assert error_single.shape == error_double.shape, "Single and double shape mismatch"
@@ -157,6 +156,9 @@ def make_error_plots(
             .strip()
             .decode("utf-8")
         )
+    except Exception:
+        logger.exception("Could not get git hash")
+    else:
         fig.text(
             0.01,
             0.01,
@@ -166,8 +168,6 @@ def make_error_plots(
             fontsize=8,
             color="gray",
         )
-    except Exception:
-        logger.exception("Could not get git hash")
 
     fig.suptitle(
         r"Difference $x^{\text{(LinODE)}}$ and $x^{\text{(odeint)}}$"
@@ -201,10 +201,10 @@ def test_linode_error(
         case _:
             raise AssertionError(f"Unknown precision {precision}")
 
-    LOGGER = __logger__.getChild(LinODE.__name__)
-    LOGGER.info("Testing %s.", LinODE)
+    logger = logging.getLogger(f"{__name__}/{LinODE.__name__}")
+    logger.info("Testing %s.", LinODE)
 
-    LOGGER.info(f"Generating {num_samples} samples in {precision} precision")
+    logger.info(f"Generating {num_samples} samples in {precision} precision")
     errors = np.array(
         [
             compute_linode_error(precision=precision, device=device)
@@ -216,27 +216,27 @@ def test_linode_error(
     for err, tol in zip(errors, tolerances, strict=True):
         # we want that the error is smaller than the tolerance in 95% of the cases
         q = np.nanquantile(err, quantile)
-        LOGGER.info(f"{quantile}% quantile {q}")
+        logger.info(f"{quantile}% quantile {q}")
         assert q <= tol, f"{quantile} quantile {q=} larger than allowed {tol=}"
         if 100 * q < tol:
             raise AssertionError(
                 f"The tolerance seems too loose: {quantile} quantile {q} << {tol}"
             )
-    LOGGER.info("%s passes test ✔ ", LinODE)
+    logger.info("%s passes test ✔ ", LinODE)
 
 
 @pytest.mark.slow
 def test_make_error_plot(num_samples: int = 100) -> None:  # noqa: PT028
-    LOGGER = __logger__.getChild(LinODE.__name__)
-    LOGGER.info("Testing %s.", LinODE)
+    logger = logging.getLogger(f"{__name__}/{LinODE.__name__}")
+    logger.info("Testing %s.", LinODE)
 
-    LOGGER.info(f"Generating {num_samples} samples in single precision")
+    logger.info(f"Generating {num_samples} samples in single precision")
     err_single = np.array(
         [compute_linode_error(precision="single") for _ in trange(num_samples)],
         dtype=np.float32,
     ).T
 
-    LOGGER.info(f"Generating {num_samples} samples in double precision")
+    logger.info(f"Generating {num_samples} samples in double precision")
     err_double = np.array(
         [compute_linode_error(precision="double") for _ in trange(num_samples)],
         dtype=np.float64,
@@ -245,7 +245,7 @@ def test_make_error_plot(num_samples: int = 100) -> None:  # noqa: PT028
     make_error_plots(
         error_single=err_single,
         error_double=err_double,
-        logger=LOGGER,
+        logger=logger,
     )
 
 

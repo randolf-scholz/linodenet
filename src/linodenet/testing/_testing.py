@@ -59,8 +59,6 @@ from torch.nn import Module
 from linodenet.constants import EMPTY_MAP
 from linodenet.types import DeviceArg, Nested, Scalar
 
-__logger__ = logging.getLogger(__name__)
-
 type Tree = Nested[Tensor | Scalar]
 type Func = Callable[..., Nested[Tensor]]
 
@@ -682,7 +680,7 @@ def assert_model_ok(
         case other:
             raise TypeError(f"Got unexpected input type {type(other)!r}")
 
-    logger = __logger__.getChild(name)
+    logger = logging.getLogger(f"{__name__}/{name}")
     # endregion get name and logger ----------------------------------------------------
 
     # region reference model -----------------------------------------------------------

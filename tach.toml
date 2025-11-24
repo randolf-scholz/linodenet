@@ -82,7 +82,7 @@ depends_on = ["linodenet.bijections", "linodenet.layers"]
 
 [[modules]]
 path = "linodenet.forecasting"
-depends_on = ["linodenet.embeddings", "linodenet.components.encoders", "linodenet.projections", "linodenet.components.filters", "linodenet.components.system"]
+depends_on = ["linodenet.embeddings", "linodenet.components.encoders", "linodenet.projections", "linodenet.components.filters", "linodenet.components.system", "linodenet.linalg"]
 
 [[modules]]
 path = "linodenet.components"
@@ -116,3 +116,11 @@ depends_on = ["linodenet.initializations", "linodenet.projections"]
 path = "linodenet.domains"
 depends_on = []
 utility = true
+
+[[modules]]
+path = "linodenet.linalg"
+depends_on = []
+
+[[modules]]
+path = "linodenet.context"
+depends_on = []

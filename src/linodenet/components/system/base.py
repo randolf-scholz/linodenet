@@ -20,7 +20,7 @@ class ContinuousSystem(Protocol):
     input_size: Final[int]  # type: ignore[misc]
     r"""CONST: The dimensionality of inputs."""
 
-    def __call__(self, dt: Tensor, z: Tensor, /) -> Tensor:
+    def __call__(self, dt: float | Tensor, z: Tensor, /) -> Tensor:
         r"""Forward pass of the system.
 
         .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
@@ -34,7 +34,7 @@ class DiscreteSystem(Protocol):
     input_size: Final[int]  # type: ignore[misc]
     r"""CONST: The dimensionality of inputs."""
 
-    def __call__(self, n_steps: int, z: Tensor, /) -> Tensor:
+    def __call__(self, n_steps: int | Tensor, z: Tensor, /) -> Tensor:
         r"""Forward pass of the system.
 
         .. Signature: ``(…, d) -> (…, d)``.
@@ -44,6 +44,9 @@ class DiscreteSystem(Protocol):
 
 class SystemABC(nn.Module):
     r"""Abstract Base Class for System components."""
+
+    input_size: Final[int]  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
+    r"""CONST: The dimensionality of inputs."""
 
     @abstractmethod
     def forward(self, dt: Tensor, z: Tensor, /) -> Tensor:

@@ -9,14 +9,12 @@ from linodenet import embeddings
 from linodenet.components import ResNet, filters, system
 from linodenet.forecasting import LinODEnet
 
-__logger__ = logging.getLogger(__name__)
-
 
 @pytest.mark.skip(reason="Not implemented yet.")
 def test_model_stability() -> None:
     r"""TODO: Implement this test."""
-    LOGGER = __logger__.getChild(LinODEnet.__name__)
-    LOGGER.info("Testing stability.")
+    logger = logging.getLogger(f"{__name__}/{LinODEnet.__name__}")
+    logger.info("Testing stability.")
 
     N, D, L = 1000, 5, 32
     MODEL_CONFIG = {

@@ -3,25 +3,33 @@ r"""Utility functions."""
 __all__ = [
     # Functions
     "deep_dict_update",
+    "flatten_dict",
+    "get_module",
+    "implements",
     "is_allcaps",
     "is_dunder",
     "is_private",
-    "flatten_dict",
     "unflatten_dict",
-    "pad",
 ]
 
-import logging
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
-from typing import Any
-
-import torch
-from torch import Tensor, jit
+from typing import Any, TypeIs, get_protocol_members, is_protocol
 
 from linodenet.types import NestedDict, NestedMapping
 
-__logger__ = logging.getLogger(__name__)
+
+def implements[T](obj: object, protocol: type[T], /) -> TypeIs[T]:
+    r"""Check if an object implements a protocol.
+
+    Args:
+        obj: object to check
+        protocol: protocol class
+    """
+    if not isinstance(protocol, type) or not is_protocol(protocol):
+        raise TypeError(f"{protocol} is not a protocol class.")
+
+    return all(hasattr(obj, member) for member in get_protocol_members(protocol))
 
 
 def is_allcaps(s: str, /) -> bool:
@@ -190,21 +198,3 @@ def unflatten_dict[K, K2](
         else:
             result[outer_key] = item
     return result
-
-
-@jit.script
-def pad(
-    x: Tensor,
-    value: float,
-    pad_width: int,
-    dim: int = -1,
-    prepend: bool = False,
-) -> Tensor:
-    r"""Pad a tensor with a constant value along a given dimension."""
-    shape = list(x.shape)
-    shape[dim] = pad_width
-    z = torch.full(shape, value, dtype=x.dtype, device=x.device)
-
-    if prepend:
-        return torch.cat((z, x), dim=dim)
-    return torch.cat((x, z), dim=dim)

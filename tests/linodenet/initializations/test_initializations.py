@@ -16,8 +16,6 @@ from linodenet.testing import MATRIX_TESTS
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
-__logger__ = logging.getLogger(__name__)
-
 
 def _make_fig(path: Path, means: Tensor, stdvs: Tensor, key: str) -> None:
     with plt.style.context("bmh"):
@@ -51,8 +49,8 @@ def test_normalization_property(
     make_plots: bool,
 ) -> None:
     r"""Test normalization property empirically for all initializations."""
-    LOGGER = logging.getLogger(name)
-    LOGGER.info("Testing...")
+    logger = logging.getLogger(name)
+    logger.info("Testing...")
 
     if psutil.virtual_memory().available < 16 * 1024**3:
         warnings.warn("Requires up to 16GiB of RAM", UserWarning, stacklevel=2)
@@ -80,13 +78,13 @@ def test_normalization_property(
     zeros = torch.zeros_like(means)
     valid_mean = torch.isclose(means, zeros, rtol=1e-2, atol=1e-2).float().mean()
     assert valid_mean > 0.9, f"Only {valid_mean=:.2%} of means were close to 0!"
-    LOGGER.info("%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}")
+    logger.info("%s of means are close to 0 ✔ ", f"{valid_mean=:.2%}")
 
     # check if 𝐕[A⋅x] ≈ 1
     ones = torch.ones_like(stdvs)
     valid_stdv = torch.isclose(stdvs, ones, rtol=1e-2, atol=1e-2).float().mean()
     assert valid_stdv > 0.9, f"Only {valid_stdv=:.2%} of stdvs were close to 1!"
-    LOGGER.info("%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}")
+    logger.info("%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}")
 
 
 @pytest.mark.repeat(10)

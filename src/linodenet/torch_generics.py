@@ -10,7 +10,6 @@ __all__ = [
     "is_config",
 ]
 
-import logging
 from collections.abc import (
     ItemsView,
     Iterable,
@@ -34,8 +33,6 @@ from typing import (
 )
 
 from torch.nn import Module, ModuleDict, ModuleList
-
-__logger__ = logging.getLogger(__name__)
 
 Config = NewType("Config", Mapping[str, Any])
 
@@ -98,7 +95,6 @@ def initialize_from_dict(cfg: Mapping[str, Any], /) -> Module:
         The function will attempt to import the module and class and initialize it.
     """
     config = dict(cfg)
-    __logger__.debug("Initializing model from config %s", config)
 
     if (lib_name := config.pop("__module__", None)) is None:
         raise ValueError(f"Expected {config=} to contain '__module__'")

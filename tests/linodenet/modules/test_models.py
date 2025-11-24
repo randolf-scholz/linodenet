@@ -18,7 +18,6 @@ from linodenet.forecasting import LinODEnet
 from linodenet.layers.linear_contraction import LinearContraction
 from linodenet.testing import assert_class_ok
 
-__logger__ = logging.getLogger(__name__)
 CONFIG.autojit = False
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
@@ -104,13 +103,13 @@ def _make_reference_shapes(
 @pytest.mark.parametrize(("cls", "params"), MODELS.items())
 def test_all_models(cls: type[nn.Module], params: dict) -> None:
     r"""Check if initializations, forward and backward runs for all selected models."""
-    LOGGER = __logger__.getChild(cls.__name__)
-    LOGGER.info("Testing...")
+    logger = logging.getLogger(f"{__name__}/{cls.__name__}")
+    logger.info("Testing...")
     input_shapes = params["input_shapes"]
     output_shapes = params["output_shapes"]
 
     for device, batch_sizes in product(DEVICES, BATCH_SIZES):
-        LOGGER.info(
+        logger.info(
             "Testing %s with batch_shape %s",
             device,
             batch_sizes,
@@ -130,4 +129,4 @@ def test_all_models(cls: type[nn.Module], params: dict) -> None:
             device=device,
         )
 
-    LOGGER.info("Model passed all tests!!")
+    logger.info("Model passed all tests!!")

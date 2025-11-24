@@ -10,14 +10,13 @@ from linodenet.config import PROJECT
 from linodenet.constants import NAN
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
-__logger__ = logging.getLogger(__name__)
 
 
 @pytest.mark.flaky(reruns=3)
 def test_filter_consistency() -> None:
     r"""Check whether idempotency holds."""
-    LOGGER = __logger__.getChild(__name__)
-    LOGGER.info("Testing idempotency.")
+    logger = logging.getLogger(f"{__name__}/test_filter_consistency")
+    logger.info("Testing idempotency.")
     batch_dim, m, n = (3, 4, 5), 100, 100
     x = torch.randn(*batch_dim, n)
     y = torch.randn(*batch_dim, m)
@@ -30,12 +29,12 @@ def test_filter_consistency() -> None:
     # )
     # result = model(y, x)
     # assert not torch.isnan(result).any(), "Output contains NANs! ❌ "
-    # LOGGER.info("KalmanCell: No NaN outputs ✔ ")
+    # logger.info("KalmanCell: No NaN outputs ✔ ")
     #
     # ## verify IDP condition
     # y[~mask] = x[~mask]
     # assert torch.allclose(x, model(y, x)), "Idempotency failed! ❌ "
-    # LOGGER.info("KalmanCell: Idempotency holds ✔ ")
+    # logger.info("KalmanCell: Idempotency holds ✔ ")
 
     # Test SequentialFilterBlock
     model = ResNetFilter.from_config(
@@ -46,9 +45,9 @@ def test_filter_consistency() -> None:
     )
     result = model(y, x)
     assert not torch.isnan(result).any(), "Output contains NANs! ❌ "
-    LOGGER.info("No NaN outputs ✔ ")
+    logger.info("No NaN outputs ✔ ")
 
     # verify IDP condition
     y[~mask] = x[~mask]
     assert torch.allclose(x, model(y, x)), "Idempotency failed! ❌ "
-    LOGGER.info("Idempotency holds ✔ ")
+    logger.info("Idempotency holds ✔ ")

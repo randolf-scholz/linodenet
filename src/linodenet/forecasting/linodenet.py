@@ -6,7 +6,6 @@ __all__ = [
     "LatentLinODECell",
 ]
 
-import logging
 import warnings
 from typing import Any, Final, Optional
 
@@ -17,11 +16,10 @@ from linodenet.components.encoders import ResNet
 from linodenet.components.filters import MissingValueFilter
 from linodenet.components.system import LinODECell
 from linodenet.embeddings import ConcatEmbedding
+from linodenet.linalg import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.torch_generics import initialize_from_dict
-from linodenet.utils import deep_dict_update, pad
-
-__logger__ = logging.getLogger(__name__)
+from linodenet.utils import deep_dict_update
 
 
 class LinODEnet(nn.Module):
@@ -446,7 +444,6 @@ class LatentLinODECell(nn.Module):
         hidden_size: Optional[int] = None,
         **cfg: Any,
     ) -> None:
-        # LOGGER = __logger__.getChild(self.__class__.__name__)
         super().__init__()
 
         config = deep_dict_update(self.HP, cfg)

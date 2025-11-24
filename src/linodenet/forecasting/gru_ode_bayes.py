@@ -557,7 +557,7 @@ class GRU_ODE_Bayes(nn.Module):
             ## Using GRUObservationCell to update h. Also updating p and loss
             h, losses = self.gru_obs(h, p, X_obs, M_obs, i_obs)
 
-            if losses.sum() != losses.sum():
+            if not losses.sum().isfinite():
                 raise AssertionError
 
             loss_1 = loss_1 + losses.sum()
