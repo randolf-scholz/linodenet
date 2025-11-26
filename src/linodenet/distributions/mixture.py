@@ -10,7 +10,7 @@ from torch import Tensor, nn
 
 from linodenet.distributions.base import DistributionBase
 from linodenet.distributions.categorical import Categorical
-from linodenet.torch_generics import ModuleSequence
+from linodenet.layers.containers import ModuleSequence
 
 
 class Mixture[D: DistributionBase](nn.Module):

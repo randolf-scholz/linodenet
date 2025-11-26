@@ -12,13 +12,13 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.components.encoders import ResNet
-from linodenet.components.filters import MissingValueFilter
-from linodenet.components.system import LinODECell
 from linodenet.embeddings import ConcatEmbedding
+from linodenet.encoders import ResNet
+from linodenet.filters import MissingValueFilter
+from linodenet.layers.containers import initialize_from_dict
 from linodenet.linalg import pad
 from linodenet.projections.surjections import ConcatProjection
-from linodenet.torch_generics import initialize_from_dict
+from linodenet.system import LinODECell
 from linodenet.utils import deep_dict_update
 
 

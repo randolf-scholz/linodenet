@@ -3,20 +3,22 @@ r"""Linear Ordinary Differential Equation Recurrent Neural Network."""
 __all__ = [
     # Constants
     "__version__",
-    # Sub-Modules
-    "activations",
-    "bijections",
-    "components",
-    "config",
+    # Sub-Packages
     "distributions",
-    "domains",
-    "embeddings",
-    "initializations",
-    "lib",
     "parametrize",
     "projections",
     "regularizations",
     "testing",
+    "initializations",
+    "lib",
+    "nn",
+    # Sub-Modules
+    "config",
+    "constants",
+    "context",
+    "domains",
+    "linalg",
+    "types",
     "utils",
 ]
 
@@ -38,18 +40,19 @@ finally:
 
 
 from linodenet import (
-    activations,
-    bijections,
-    components,
     config,
+    constants,
+    context,
     distributions,
     domains,
-    embeddings,
     initializations,
     lib,
+    linalg,
+    nn,
     parametrize,
     projections,
     regularizations,
     testing,
+    types,
     utils,
 )

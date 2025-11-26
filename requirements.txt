@@ -73,4 +73,6 @@ torchdiffeq==0.2.5
 triton==3.5.1 ; platform_machine == 'x86_64' and sys_platform == 'linux'
     # via torch
 typing-extensions==4.15.0
-    # via torch
+    # via
+    #   linodenet
+    #   torch

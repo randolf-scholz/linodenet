@@ -1,13 +1,16 @@
-r"""Some layers and modules for neural networks."""
-
 __all__ = [
-    # Classes
     "Constant",
+    "Identity",
+    "LinearContraction",
+    "ModuleMapping",
+    "ModuleSequence",
     "ReZero",
-    "ReZeroResNet",
     "ReverseDense",
 ]
 
+
+from linodenet.layers.containers import ModuleMapping, ModuleSequence
 from linodenet.layers.dense import ReverseDense
-from linodenet.layers.misc import Constant
-from linodenet.layers.rezero import ReZero, ReZeroResNet
+from linodenet.layers.linear_contraction import LinearContraction
+from linodenet.layers.misc import Constant, Identity
+from linodenet.layers.rezero import ReZero

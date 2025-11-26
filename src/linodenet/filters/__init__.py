@@ -28,7 +28,7 @@ __all__ = [
     "ResidualFilter",
     "ResNetFilter",
     "ReZeroFilter",
-    "SequentialFilter",
+    "FilterList",
     "MissingValueFilter",
     # Cells
     "LinearCell",
@@ -48,27 +48,31 @@ __all__ = [
 
 from torch.nn import GRUCell, LSTMCell, RNNCell
 
-from linodenet.components.filters import probabilistic
-from linodenet.components.filters.base import (
-    Filter,
-    FilterBase,
-    ResidualFilter,
-    ResNetFilter,
-    ReZeroFilter,
-    SequentialFilter,
-)
-from linodenet.components.filters.cells import (
+from linodenet.filters import probabilistic
+from linodenet.filters.base import (
     Cell,
     CellBase,
-    LinearCell,
-    LinearKalmanCell,
-    LinearResidualCell,
+    Filter,
+    FilterBase,
+    FilterList,
+)
+from linodenet.filters.cells import (
     NonLinearCell,
     NonLinearKalmanCell,
     PseudoKalmanCell,
-    ResidualCell,
 )
-from linodenet.components.filters.missing_value_filter import MissingValueFilter
+from linodenet.filters.linear import (
+    LinearCell,
+    LinearKalmanCell,
+    LinearResidualCell,
+)
+from linodenet.filters.missing_value_filter import MissingValueFilter
+from linodenet.filters.residual import (
+    ResidualCell,
+    ResidualFilter,
+    ResNetFilter,
+    ReZeroFilter,
+)
 
 CELLS: dict[str, type[Cell]]  = {
     # torch cells
@@ -92,7 +96,7 @@ FILTERS: dict[str, type[Filter]] = {
     # "ProbabilisticFilter" : ProbabilisticFilter,
     "ResidualFilter"      : ResidualFilter,
     # "ResidualFilterBlock" : ResidualFilterBlock,
-    "SequentialFilter"    : SequentialFilter,
+    "SequentialFilter"    : FilterList,
 }  # fmt: skip
 r"""Dictionary of all available filters."""
 
@@ -119,7 +123,7 @@ def get_filter(kind: object = None, /, **cfg: object) -> Filter:
         # if config, extract the name and instantiate
         case None:
             if "__module__" in cfg:
-                from linodenet.torch_generics import (  # noqa: PLC0415
+                from linodenet.layers.containers import (  # noqa: PLC0415
                     initialize_from_dict,
                 )
 

@@ -40,7 +40,7 @@ from typing import Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.torch_generics import ModuleSequence
+from linodenet.layers.containers import ModuleSequence
 
 
 @runtime_checkable

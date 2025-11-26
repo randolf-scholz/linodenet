@@ -121,8 +121,8 @@ import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
+from linodenet.layers.containers import ModuleSequence
 from linodenet.projections.surjections import Surjection
-from linodenet.torch_generics import ModuleSequence
 
 type ParametrizationLike = Fn[[Tensor], Tensor] | nn.Module | BoundParametrization
 

@@ -17,7 +17,7 @@ from linodenet.layers import (
     ReverseDense,
     ReZero,
 )
-from linodenet.torch_generics import ModuleSequence
+from linodenet.layers.containers import ModuleSequence
 
 
 class ResNetBlock(ModuleSequence):

@@ -1175,6 +1175,7 @@ dependencies = [
     { name = "scipy" },
     { name = "torch" },
     { name = "torchdiffeq" },
+    { name = "typing-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -1319,6 +1320,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.16.3" },
     { name = "torch", specifier = ">=2.9.1" },
     { name = "torchdiffeq", specifier = ">=0.2.5" },
+    { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
 
 [package.metadata.requires-dev]

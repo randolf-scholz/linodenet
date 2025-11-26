@@ -9,10 +9,10 @@ from typing import Any, Final, cast
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.components import imputation as imp
-from linodenet.components.filters import Filter, FilterBase
-from linodenet.components.imputation import ImputationStrategy, ImputerProtocol
+import linodenet.imputation as imp
 from linodenet.constants import EMPTY_MAP
+from linodenet.filters.base import Filter, FilterBase
+from linodenet.imputation import ImputationStrategy, ImputerProtocol
 
 
 class MissingValueFilter(FilterBase):

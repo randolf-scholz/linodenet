@@ -7,15 +7,11 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from linodenet.components import (
-    LinODE,
-    iResNet,
-    iResNetBlock,
-)
-from linodenet.components.system import LinODECell
+from linodenet.bijections import iResNet, iResNetBlock
 from linodenet.config import CONFIG, PROJECT
 from linodenet.forecasting import LinODEnet
-from linodenet.layers.linear_contraction import LinearContraction
+from linodenet.layers import LinearContraction
+from linodenet.system import LinODE, LinODECell
 from linodenet.testing import assert_class_ok
 
 CONFIG.autojit = False

@@ -17,7 +17,7 @@ from typing import Final, Protocol, runtime_checkable
 import torch
 from torch import Size, Tensor, jit, nn
 
-from linodenet.torch_generics import ModuleMapping, ModuleSequence
+from linodenet.layers.containers import ModuleMapping, ModuleSequence
 
 
 @runtime_checkable

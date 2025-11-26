@@ -12,7 +12,7 @@ import torch
 from torch import Tensor
 
 from linodenet.distributions.base import DistributionBase
-from linodenet.torch_generics import ModuleSequence
+from linodenet.layers.containers import ModuleSequence
 
 
 class Product[D: DistributionBase](ModuleSequence[D]):

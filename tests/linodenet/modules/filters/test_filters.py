@@ -5,9 +5,9 @@ import logging
 import pytest
 import torch
 
-from linodenet.components.filters import ResNetFilter
 from linodenet.config import PROJECT
 from linodenet.constants import NAN
+from linodenet.filters import ResNetFilter
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

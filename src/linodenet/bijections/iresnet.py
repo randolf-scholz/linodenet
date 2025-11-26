@@ -15,9 +15,9 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.activations import MODULAR_ACTIVATIONS, Activation
-from linodenet.layers import ReZero
+from linodenet.layers.containers import ModuleSequence
 from linodenet.layers.linear_contraction import LinearContraction
-from linodenet.torch_generics import ModuleSequence
+from linodenet.layers.rezero import ReZero
 from linodenet.utils import deep_dict_update
 
 

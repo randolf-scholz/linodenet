@@ -14,18 +14,31 @@ __all__ = [
 
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
-from typing import Any, TypeIs, get_protocol_members, is_protocol
+from typing import Any, TypeIs, get_protocol_members, is_protocol, overload
+
+from typing_extensions import TypeForm
 
 from linodenet.types import NestedDict, NestedMapping
 
+type SelfMap[T] = Callable[[T], T]
 
-def implements[T](obj: object, protocol: type[T], /) -> TypeIs[T]:
+
+@overload
+def implements[T](protocol: TypeForm[T], /) -> SelfMap[type[T]]: ...  # type: ignore[valid-type]
+@overload
+def implements[T](obj: object, protocol: type[T], /) -> TypeIs[T]: ...
+def implements[T](
+    obj: object, protocol: None | type[T] = None
+) -> TypeIs[T] | SelfMap[T]:
     r"""Check if an object implements a protocol.
 
     Args:
         obj: object to check
         protocol: protocol class
     """
+    if protocol is None:
+        return lambda x: x
+
     if not isinstance(protocol, type) or not is_protocol(protocol):
         raise TypeError(f"{protocol} is not a protocol class.")
 

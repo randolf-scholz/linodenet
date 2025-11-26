@@ -13,32 +13,22 @@ from linodenet.activations.base import Activation, GenericActivation
 TORCH_FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     "relu": nn.functional.relu,
     # Applies the rectified linear unit function element-wise.
-    "relu_": nn.functional.relu_,
-    # In-place version of relu().
     "hardtanh": nn.functional.hardtanh,
     # Applies the HardTanh function element-wise.
-    "hardtanh_": nn.functional.hardtanh_,
-    # In-place version of hardtanh().
     "hardswish": nn.functional.hardswish,
     # Applies the hardswish function, element-wise, as described in the paper:
     "relu6": nn.functional.relu6,
     # Applies the element-wise function `ReLU6(x)=\min(\max(0,x),6)`.
     "elu": nn.functional.elu,
     # Applies element-wise, `ELU(x)=\max(0,x)+\min(0,α⋅(\exp(x)−1))`.
-    "elu_": nn.functional.elu_,
-    # In-place version of elu().
     "selu": nn.functional.selu,
     # Applies element-wise, `SELU(x)=β⋅(\max(0,x)+\min(0,α⋅(e^x−1)))` with `α≈1.677` and `β≈1.05`.
     "celu": nn.functional.celu,
     # Applies element-wise, `CELU(x)= \max(0,x)+\min(0,α⋅(\exp(x/α)−1)`.
     "leaky_relu": nn.functional.leaky_relu,
     # Applies element-wise, `LeakyReLU(x)=\max(0,x)+negative_slope⋅\min(0,x)`.
-    "leaky_relu_": nn.functional.leaky_relu_,
-    # In-place version of leaky_relu().
     "rrelu": nn.functional.rrelu,
     # Randomized leaky ReLU.
-    "rrelu_": nn.functional.rrelu_,
-    # In-place version of rrelu().
     "glu": nn.functional.glu,
     # The gated linear unit.
     "gelu": nn.functional.gelu,
@@ -73,12 +63,24 @@ TORCH_FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     # Applies the Sigmoid Linear Unit (SiLU) function, element-wise.
     "mish": nn.functional.mish,
     # Applies the Mish function, element-wise.
-    "instance_norm": nn.functional.instance_norm,
-    # Applies Instance Normalization for each channel in each data sample in a batch.
     "normalize": nn.functional.normalize,
     # Performs Lp normalization of inputs over specified dimension.
 }
 r"""Dictionary containing all available functional activations in torch."""
+
+
+TORCH_INPLACE_ACTIVATIONS: dict[str, Activation] = {
+    "relu_": nn.functional.relu_,
+    # In-place version of relu().
+    "hardtanh_": nn.functional.hardtanh_,
+    # In-place version of hardtanh().
+    "elu_": nn.functional.elu_,
+    # In-place version of elu().
+    "leaky_relu_": nn.functional.leaky_relu_,
+    # In-place version of leaky_relu().
+    "rrelu_": nn.functional.rrelu_,
+    # In-place version of rrelu().
+}
 
 
 TORCH_SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {

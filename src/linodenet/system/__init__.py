@@ -11,8 +11,8 @@ __all__ = [
     "LinODECell",
 ]
 
-from linodenet.components.system.base import ContinuousSystem, SystemABC
-from linodenet.components.system.linode import LinODE, LinODECell
+from linodenet.system.base import ContinuousSystem, SystemABC
+from linodenet.system.linode import LinODE, LinODECell
 
 SYSTEMS: dict[str, type[ContinuousSystem]] = {
     "LinODE": LinODE,

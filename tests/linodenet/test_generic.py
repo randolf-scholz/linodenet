@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, assert_type
 import torch
 from torch import Tensor, nn
 
+from linodenet.layers.containers import ModuleMapping, ModuleSequence
 from linodenet.testing import assert_jit_compatible, check_jit_serializable
-from linodenet.torch_generics import ModuleMapping, ModuleSequence
 
 BATCH_SIZE = 5
 
@@ -124,3 +124,61 @@ def test_mapping_jit() -> None:
 
     reloaded = check_jit_serializable(model)
     list(reloaded.named_buffers())
+
+
+def test_multiple_inheritance() -> None:
+    class A(nn.Module):
+        def __init__(self, *, input_size: int) -> None:
+            super().__init__()
+            self.submodule = nn.Linear(input_size, input_size)
+
+    class B(A, ModuleSequence):  # <-- ModuleSequence comes second!
+        def __init__(self, modules: list[nn.Module], /, *, input_size: int) -> None:
+            super(ModuleSequence, self).__init__(modules)
+
+            self.submodule = nn.Linear(input_size, input_size)
+
+            # A.__init__(self, needs_arg=needs_arg)
+            # ModuleSequence.__init__(self, modules)
+            # A.__init__(self, needs_arg=needs_arg)
+
+    b = B([nn.Linear(2, 2)], input_size=5)
+    assert isinstance(b.submodule, nn.Linear)
+    assert isinstance(b[0], nn.Linear)
+
+
+def test_multiple_inheritance_plain() -> None:
+    class A:
+        def __init__(self) -> None:
+            # NOTE: Does not call super().__init__() !
+            # Should only be called once
+            # must be called before setting variables!
+            assert getattr(self, "initialized", False) is False, (
+                "A already initialized!"
+            )
+            super().__setattr__("initialized", True)
+
+        def __setattr__(self, name: str, value: object) -> None:
+            if getattr(self, "initialized", False) is False:
+                raise RuntimeError("Cannot set attributes before A is initialized!")
+            super().__setattr__(name, value)
+
+    class B(A):
+        def __init__(self, *, b_value: int) -> None:
+            super().__init__()
+            self.b_value = b_value
+
+    class C(A):
+        def __init__(self, *, c_value: int) -> None:
+            super().__init__()
+            self.c_value = c_value
+
+    class D(B, C):
+        def __init__(self, *, b_value, c_value) -> None:
+            # How to implement this?
+            # => basically impossible. We need to manually implement the logic
+            pass
+
+    B(b_value=10)
+    C(c_value=20)
+    D(b_value=10, c_value=20)
