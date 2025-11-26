@@ -84,6 +84,11 @@ class Cell(AbstractCell[Tensor, Tensor], Protocol):
     input_size: Final[int]  # type: ignore[misc]
     hidden_size: Final[int]  # type: ignore[misc]
 
+    def __init__(self, /, input_size: int, hidden_size: int) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(hidden_size)
+
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor: ...
 
 
@@ -92,9 +97,17 @@ class Filter(AbstractFilter[Tensor], Protocol):
     r"""Protocol for filters.
 
     .. math::  y' = F(y_obs, y_pred)
+
+    Note: Every Filter is a Cell with hidden_size = input_size.
     """
 
     input_size: Final[int]  # type: ignore[misc]
+    hidden_size: Final[int]  # type: ignore[misc]
+
+    def __init__(self, /, input_size: int) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(input_size)
 
     def __call__(self, y_obs: Tensor, y_pred: Tensor, /) -> Tensor: ...
 
