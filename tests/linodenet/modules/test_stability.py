@@ -5,7 +5,9 @@ import logging
 import pytest
 import torch
 
-from linodenet import embeddings, filters, system
+import linodenet.filters.containers
+import linodenet.filters.deprecated
+from linodenet import embeddings, system
 from linodenet.encoders import ResNet
 from linodenet.forecasting import LinODEnet
 
@@ -22,7 +24,7 @@ def test_model_stability() -> None:
         "input_size": D,
         "hidden_size": L,
         "embedding_type": "concat",
-        "Filter": filters.FilterList.HP,
+        "Filter": linodenet.filters.deprecated.FilterList.HP,
         "System": system.LinODECell.HP | {"kernel_initialization": "skew-symmetric"},
         "Encoder": ResNet.HP,
         "Decoder": ResNet.HP,

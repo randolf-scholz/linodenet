@@ -174,7 +174,7 @@ def test_multiple_inheritance_plain() -> None:
             self.c_value = c_value
 
     class D(B, C):
-        def __init__(self, *, b_value, c_value) -> None:
+        def __init__(self, *, b_value: int, c_value: int) -> None:
             # How to implement this?
             # => basically impossible. We need to manually implement the logic
             pass

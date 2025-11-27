@@ -1,30 +1,58 @@
 r"""Containers for sequential application of Cells and Filters."""
 
 __all__ = [
+    "CellList",
     "CellSequence",
-    "FilterSequence",
-    "ResidualCell",
-    "ResidualFilter",
+    "ResidualCellSequence",
 ]
 
+from abc import abstractmethod
 from collections.abc import Iterable
 
-from torch import Tensor
+import torch
+from torch import Tensor, jit, nn
 
-from linodenet.filters.base import CellBase, CellList, FilterBase, FilterList
+from linodenet.filters.base import Cell, CellBase
+from linodenet.layers import ModuleSequence
+
+
+class CellList[C: CellBase](CellBase, ModuleSequence[C]):
+    r"""Base class for nn.ModuleList of Cells that's a Cell itself.
+
+    Note: This class takes care of tricky multiple inheritance issues with nn.Module.
+    """
+
+    def __init__(
+        self, modules: Iterable[C] = (), /, *, input_size: int, hidden_size: int
+    ) -> None:
+        # ⚠️ multiple inheritance ⚠️
+        # due to how nn.Module.__init__ works, it should only be ever called once
+        # because it will overwrite internal state otherwise.
+        # Therefore, we need to carefully manually reproduce the __init__ logic here.
+        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
+        ModuleSequence[C].__init__(self, modules)  # type: ignore[arg-type]
+        # Note: Need to call Cell.__init__, not CellBase.__init__
+        #   Otherwise nn.Module.__init__ gets called twice!
+        Cell.__init__(self, input_size, hidden_size)
+
+    @abstractmethod
+    def forward(self, y_obs: Tensor, x_hat: Tensor, /) -> Tensor: ...
 
 
 class CellSequence[C: CellBase](CellList[C]):
-    r"""Apply multiple Cells sequentially."""
+    r"""Apply multiple Cells sequentially.
 
-    def __init__(self, modules: Iterable[CellBase] = (), /) -> None:
+    .. math:: xₖ₊₁ = Fₖ(y, xₖ)
+    """
+
+    def __init__(self, modules: Iterable[C] = (), /) -> None:
         cells = list(modules)
 
         if not cells:
             raise ValueError("At least one module must be given!")
 
         input_size = cells[0].input_size
-        hidden_size = cells[-1].hidden_size
+        hidden_size = cells[0].hidden_size
         for module in cells:
             if module.input_size != input_size:
                 raise ValueError(
@@ -39,55 +67,53 @@ class CellSequence[C: CellBase](CellList[C]):
 
         super().__init__(modules, input_size=input_size, hidden_size=hidden_size)
 
+    @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        for layers in self:
-            x = layers(y, x)
+        for cell in self:
+            x = cell(y, x)
         return x
 
 
-class ResidualCell[C: CellBase](CellSequence[C]):
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        for layer in self:
-            x = x + layer(y, x)
-        return x
+class ResidualCellSequence[C: CellBase](CellSequence[C]):
+    r"""Sequential Cell with Residual connections.
 
+    .. math:: xₖ₊₁ = xₖ + αₖ⋅Fₖ(y, xₖ)
 
-class FilterSequence[F: FilterBase](FilterList[F]):
-    r"""Apply multiple Filters sequentially."""
+    Args:
+        modules: An iterable of Cell modules to be applied sequentially.
+        alpha_learnable (default=True): If True, the residual scaling factors αₖ are learnable
+        alpha_value (default=0.0): Initial value for the residual scaling factors αₖ.
 
-    def __init__(self, modules: Iterable[FilterBase] = (), /) -> None:
-        filters = list(modules)
-
-        if not filters:
-            raise ValueError("At least one module must be given!")
-
-        input_size = filters[0].input_size
-        for module in filters:
-            if module.input_size != input_size:
-                raise ValueError(
-                    "All modules must have the same input_size!"
-                    f"Expected {input_size}, but {module=} has {module.input_size}"
-                )
-
-        super().__init__(modules, input_size=input_size)
-
-    def forward(self, y_obs: Tensor, y: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        for layer in self:
-            y = layer(y_obs, y)
-        return y
-
-
-class ResidualFilter[F: FilterBase](FilterSequence[F]):
-    r"""Sequential Filter with Residual connections.
-
-    .. math:: xₖ₊₁ = xₖ + Fₖ(y, xₖ)
+    A regular ResNet is obtained by setting all αₖ=1.0 and making them non-learnable.
     """
 
-    def forward(self, y_obs: Tensor, y: Tensor) -> Tensor:
+    alphas: Tensor
+    r"""PARAM: The residual scaling factors αₖ."""
+
+    def __init__(
+        self,
+        modules: Iterable[C] = (),
+        /,
+        *,
+        alpha_learnable: bool = True,
+        alpha_value: float | list[float] | Tensor = 0.0,
+    ) -> None:
+        super().__init__(modules)
+        alphas = torch.as_tensor(alpha_value).ravel()
+        num = len(self)
+        if alphas.numel() == 1:
+            alphas = alphas.repeat(num)
+        elif alphas.numel() != num:
+            raise ValueError(
+                f"alpha_value must be a scalar or have length {num}, but got {alphas.shape}"
+            )
+        assert alphas.shape == (num,)
+        self.alphas = nn.Parameter(alphas, requires_grad=alpha_learnable)
+
+    @jit.export
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        for layer in self:
-            y = y + layer(y_obs, y)
-        return y
+        for alpha, cell in zip(self.alphas, self, strict=True):
+            x = x + alpha * cell(y, x)
+        return x

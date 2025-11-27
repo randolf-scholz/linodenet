@@ -2,6 +2,8 @@
 import torch
 from torchinfo import summary
 
+import linodenet.filters.containers
+import linodenet.filters.deprecated
 from linodenet import encoders, filters, system
 from linodenet.forecasting import LatentStateSpaceModel as LSSM
 
@@ -11,7 +13,7 @@ if __name__ == "__main__":
         "input_size": 16,
         "hidden_size": 16,
         "latent_size": 16,
-        "Filter": filters.FilterList.HP,
+        "Filter": linodenet.filters.deprecated.FilterList.HP,
         "System": system.linode.LinODECell.HP,
         "Encoder": encoders.ResNet.HP,
         "Decoder": encoders.ResNet.HP,

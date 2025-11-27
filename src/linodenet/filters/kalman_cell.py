@@ -1,4 +1,4 @@
-r"""Implementations of various filter cells.
+r"""Implementations of Kalman-inspired RNN Cells.
 
 Cells are building blocks for RNNs; as per the Cell Protocol,
 a cell essentially is a function $(y, x) -> x'$.
@@ -26,43 +26,60 @@ The KalmanCell filter is a generalization of the classical Kalman Filter.
 """
 
 __all__ = [
-    # Protocols & ABCs
-    # Classes
-    "NonLinearCell",
-    "NonLinearKalmanCell",
+    "KalmanCell",
     "PseudoKalmanCell",
+    "NonLinearKalmanCell",
+    "NonLinearCell",
 ]
 
+from enum import Enum
 from math import sqrt
-from typing import Any, Optional
+from typing import Any, Optional, SupportsFloat
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.filters.base import CellBase
+from linodenet.filters import CellBase
 from linodenet.layers import ReverseDense
-from linodenet.layers.containers import initialize_from_dict
 from linodenet.utils import deep_dict_update
 
 
-def _set_alpha(alpha: str | float) -> float:
-    match alpha:
-        case float(value):
-            return value
-        case "first-value":
-            return 0.0
-        case "last-value":
-            return 1.0
-        case "kalman":
-            return 0.5
-        case str(name):
-            raise ValueError(f"Unknown alpha: {name}")
-        case _:
-            raise TypeError(f"Unknown alpha: {type(alpha)}")
+class AlphaType(float, Enum):
+    FIRST_VALUE = 0.0
+    AVERAGE = 0.5
+    LAST_VALUE = 1.0
+
+    @classmethod
+    def new(cls, arg: str | SupportsFloat) -> float:
+        if isinstance(arg, str):
+            return cls[arg.replace("-", "_").upper()]
+        return float(arg)
 
 
-class NonLinearCell(CellBase):
-    r"""Non-linear Layers stacked on top of linear core."""
+class KalmanCell(CellBase):
+    r"""Implements a Kalman Filter Cell.
+
+    .. math:: F(y，x) =  x - ΣHᵀ(HΣHᵀ + R)⁻¹(Hx - y)
+
+    .. math::
+        Σ &= 𝕀 + ε⋅AAᵀ \\
+        R &= 𝕀 + ε⋅BBᵀ
+    """
+
+
+class PseudoKalmanCell(CellBase):
+    r"""Implements a Kalman-inspired Filter Cell.
+
+    Contrary to the KalmanCell, this cell does not learn a single covariance
+    but two separate matrices $A$ and $B$.
+
+    .. math::  x' = x - αBHᵀΠₘᵀAΠₘ(Hx - y)
+
+    - $α = 1$ is the "last-value" filter
+    - $α = 0$ is the "first-value" filter
+    - $α = ½$ is the standard Kalman filter, which takes the average between the
+      state estimate and the observation.
+    """
 
     # PARAMETERS
     H: Tensor
@@ -73,15 +90,15 @@ class NonLinearCell(CellBase):
     # BUFFERS
     ZERO: Tensor
     r"""BUFFER: A constant value of zero."""
+    alpha: Tensor
+    r"""PARAM/BUFFER: The alpha parameter."""
 
     HP = {
         "__name__": __qualname__,
         "__module__": __name__,
-        "input_size": None,
-        "hidden_size": None,
+        "alpha": "last-value",
+        "alpha_learnable": False,
         "autoregressive": False,
-        "num_blocks": 2,
-        "block": ReverseDense.HP | {"bias": False},
     }
     r"""The HyperparameterDict of this class."""
 
@@ -89,38 +106,44 @@ class NonLinearCell(CellBase):
         self,
         input_size: int,
         hidden_size: int,
-        # alpha: str | float = "last-value",
-        # alpha_learnable: bool = True,
-        **cfg: Any,
+        *,
+        alpha: str | float = "last-value",
+        alpha_learnable: bool = True,
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
-        config = deep_dict_update(self.HP, cfg)
-        config["block"]["input_size"] = input_size
-        config["block"]["output_size"] = input_size
-
-        # CONSTANTS
-        n = self.input_size
-        m = self.hidden_size
-
-        # MODULES
-        blocks: list[nn.Module] = []
-        for _ in range(config["num_blocks"]):
-            module = initialize_from_dict(config["block"])
-            if getattr(module, "bias", None) is not None:
-                raise ValueError("Avoid bias term!")
-            blocks.append(module)
-
-        self.layers = nn.Sequential(*blocks)
+        n: int = self.input_size
+        m: int = self.hidden_size
 
         # PARAMETERS
-        self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
-        # self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
-        # self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        alpha_ = torch.tensor(AlphaType(alpha))
+        self.alpha = nn.Parameter(alpha_, requires_grad=alpha_learnable)
+        self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.A = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
         self.B = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(n, n)))
         self.H = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
+
         # BUFFERS
         self.register_buffer("ZERO", torch.zeros(1))
+
+    @jit.export
+    def h(self, x: Tensor) -> Tensor:
+        r"""Apply the observation function."""
+        # SEE: https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
+        H = self.H  # need to assign to local for torchscript....
+        assert H is not None, "H must be given in non-autoregressive mode!"
+        return torch.einsum("ij, ...j -> ...i", H, x)
+
+    @jit.export
+    def ht(self, x: Tensor) -> Tensor:
+        r"""Apply the transpose observation function."""
+        if self.autoregressive:
+            return x
+
+        # SEE: https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
+        H = self.H  # need to assign to local for torchscript....
+        assert H is not None, "H must be given in non-autoregressive mode!"
+        return torch.einsum("ji, ...j -> ...i", H, x)
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -128,14 +151,14 @@ class NonLinearCell(CellBase):
 
         .. Signature:: ``[(..., m), (..., n)] -> (..., n)``.
         """
-        mask = ~torch.isnan(y)  # (..., m)
-        z = torch.einsum("ij, ...j -> ...i", self.H, x)  # (..., m)
-        z = torch.where(mask, z - y, self.ZERO)  # (..., m)
-        z = torch.einsum("ij, ...j -> ...i", self.A, z)
-        z = torch.where(mask, z, self.ZERO)  # (..., m)
-        z = torch.einsum("ji, ...j -> ...i", self.H, z)  # (..., n)
-        z = torch.einsum("ij, ...j -> ...i", self.B, z)
-        return x - self.epsilon * self.layers(z)
+        mask = ~torch.isnan(y)  # → [..., m]
+        z = self.h(x)
+        z = torch.where(mask, z - y, self.ZERO)  # → [..., m]
+        z = z + self.epsilonA * torch.einsum("ij, ...j -> ...i", self.A, z)
+        z = torch.where(mask, z, self.ZERO)
+        z = self.ht(z)
+        z = z + self.epsilonB * torch.einsum("ij, ...j -> ...i", self.B, z)
+        return x - self.alpha * z
 
 
 class NonLinearKalmanCell(CellBase):
@@ -152,7 +175,6 @@ class NonLinearKalmanCell(CellBase):
            &⇝ x̂ + ψ(B Hᵀ ∏ₘᵀA ∏ₘ (y - Hx̂))
 
     Here $yₜ$ is the observation vector. and $x̂$ is the state vector.
-
 
     .. math::
         x̂' &= x̂ - P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (Hx̂ - y)    \\
@@ -239,31 +261,16 @@ class NonLinearKalmanCell(CellBase):
         return torch.einsum("ij, ...j -> ...i", self.B, q)
 
 
-class PseudoKalmanCell(CellBase):
-    r"""A Linear, Autoregressive Filter.
-
-    .. math::  x̂' = x̂ - αP∏ₘᵀP⁻¹Πₘ(x̂ - x)
-
-    - $α = 1$ is the "last-value" filter
-    - $α = 0$ is the "first-value" filter
-    - $α = ½$ is the standard Kalman filter, which takes the average between the
-      state estimate and the observation.
-
-    One idea: $P = 𝕀 + εA$, where $A$ is symmetric. In this case,
-    $𝕀-εA$ is approximately equal to the inverse.
-
-    We define the linearized filter as
-
-    .. math::  x̂' = x̂ - α(𝕀 + εA)∏ₘᵀ(𝕀 - εA)Πₘ(x̂ - x)
-
-    Where $ε$ is initialized as zero.
-    """
+class NonLinearCell(CellBase):
+    r"""Non-linear Layers stacked on top of linear core."""
 
     # PARAMETERS
     H: Tensor
     r"""PARAM: the observation matrix."""
     kernel: Tensor
     r"""PARAM: The kernel matrix."""
+    alpha: Tensor
+    r"""PARAM: The alpha parameter."""
 
     # BUFFERS
     ZERO: Tensor
@@ -274,44 +281,51 @@ class PseudoKalmanCell(CellBase):
         "__module__": __name__,
         "input_size": None,
         "hidden_size": None,
-        "alpha": "last-value",
-        "alpha_learnable": False,
-        "projection": "Symmetric",
+        "autoregressive": False,
+        "num_blocks": 2,
+        "block": ReverseDense.HP | {"bias": False},
     }
     r"""The HyperparameterDict of this class."""
 
     def __init__(
         self,
+        /,
         input_size: int,
         hidden_size: int,
         *,
-        alpha: str | float = "last-value",
+        alpha_value: float = 0.0,
         alpha_learnable: bool = True,
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
-        # PARAMETERS
-        alpha_ = torch.tensor(_set_alpha(alpha))
-        self.alpha = nn.Parameter(alpha_, requires_grad=alpha_learnable)
-        self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
-        self.weight = nn.Parameter(torch.empty(self.input_size, self.input_size))
-        nn.init.kaiming_normal_(self.weight, nonlinearity="linear")
+        m = self.input_size
+        n = self.hidden_size
 
+        # PARAMETERS
+        self.alpha = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        # self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        # self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        self.A = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
+        self.B = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(n, n)))
+        self.H = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
         # BUFFERS
-        with torch.no_grad():
-            kernel = self.epsilon * self.weight
-            self.register_buffer("kernel", kernel)
-            self.register_buffer("ZERO", torch.zeros(1))
+        self.register_buffer("ZERO", torch.zeros(1))
 
     @jit.export
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
-        # refresh buffer
-        kernel = self.epsilon * self.weight
+        r""".. Signature:: ``[(..., m), (..., n)] -> (..., n)``.
 
-        # create the mask
-        mask = ~torch.isnan(y)  # → [..., m]
-        z = torch.where(mask, x - y, self.ZERO)  # → [..., m]
-        z = z - torch.einsum("ij, ...j -> ...i", kernel, z)  # → [..., n]
-        z = torch.where(mask, z, self.ZERO)
-        z = z + torch.einsum("ij, ...j -> ...i", kernel, z)
-        return x - self.alpha * z
+        Args:
+            y: The observation Tensor. May contain NaNs for missing values.
+            x: The state tensor
+
+        Returns:
+            The updated state tensor $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$.
+        """
+        mask = ~torch.isnan(y)  # (..., m)
+        z = torch.einsum("ij, ...j -> ...i", self.H, x)  # (..., m)
+        z = torch.where(mask, z - y, self.ZERO)  # (..., m)
+        z = torch.einsum("ij, ...j -> ...i", self.A, z)
+        z = torch.where(mask, z, self.ZERO)  # (..., m)
+        z = torch.einsum("ji, ...j -> ...i", self.H, z)  # (..., n)
+        z = torch.einsum("ij, ...j -> ...i", self.B, z)
+        return x - self.alpha * self.layers(z)

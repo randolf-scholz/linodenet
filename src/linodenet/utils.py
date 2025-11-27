@@ -1,6 +1,9 @@
 r"""Utility functions."""
 
 __all__ = [
+    # types
+    "SelfMap",
+    # Classes
     # Functions
     "deep_dict_update",
     "flatten_dict",
@@ -10,17 +13,45 @@ __all__ = [
     "is_dunder",
     "is_private",
     "unflatten_dict",
+    "signature",
 ]
 
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
-from typing import Any, TypeIs, get_protocol_members, is_protocol, overload
+from typing import (
+    Any,
+    Protocol,
+    TypeIs,
+    cast,
+    get_protocol_members,
+    is_protocol,
+    overload,
+)
 
 from typing_extensions import TypeForm
 
+from linodenet.signature import parse_signature
 from linodenet.types import NestedDict, NestedMapping
 
-type SelfMap[T] = Callable[[T], T]
+
+class SelfMap[T](Protocol):
+    r"""A callable that returns the same type as its argument."""
+
+    # TODO: make this generic and upper-bound T to the generic type.
+    # alternatively, use signature def[S](T & S) -> (T & S)
+    def __call__[S](self, arg: S, /) -> S: ...
+
+
+def signature(sig: str, /) -> SelfMap:
+    r"""To be used as a no-op decorator for annotating function signatures."""
+
+    def decorator[Fn: Callable](fn: Fn) -> Fn:
+        fn.signature = parse_signature(sig)  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
+        if isinstance(fn.__doc__, str):
+            fn.__doc__ = fn.__doc__ + f"\n\n.. signature:: ``{sig}``"
+        return fn
+
+    return cast("SelfMap", decorator)
 
 
 @overload

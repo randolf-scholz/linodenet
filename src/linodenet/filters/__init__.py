@@ -25,19 +25,17 @@ __all__ = [
     "Filter",
     "FilterBase",
     # Classes
-    "ResidualFilter",
-    "ResNetFilter",
     "ReZeroFilter",
-    "FilterList",
     "MissingValueFilter",
+    "CellList",
+    "CellSequence",
+    "ResidualCellSequence",
     # Cells
     "LinearCell",
-    "LinearKalmanCell",
     "LinearResidualCell",
     "NonLinearCell",
     "NonLinearKalmanCell",
     "PseudoKalmanCell",
-    "ResidualCell",
     # Imported
     "RNNCell",
     "GRUCell",
@@ -54,25 +52,18 @@ from linodenet.filters.base import (
     CellBase,
     Filter,
     FilterBase,
-    FilterList,
 )
-from linodenet.filters.cells import (
+from linodenet.filters.containers import CellList, CellSequence, ResidualCellSequence
+from linodenet.filters.deprecated import PseudoKalmanCell, ReZeroFilter
+from linodenet.filters.kalman_cell import (
     NonLinearCell,
     NonLinearKalmanCell,
-    PseudoKalmanCell,
 )
 from linodenet.filters.linear import (
     LinearCell,
-    LinearKalmanCell,
     LinearResidualCell,
 )
 from linodenet.filters.missing_value_filter import MissingValueFilter
-from linodenet.filters.residual import (
-    ResidualCell,
-    ResidualFilter,
-    ResNetFilter,
-    ReZeroFilter,
-)
 
 CELLS: dict[str, type[Cell]]  = {
     # torch cells
@@ -82,21 +73,17 @@ CELLS: dict[str, type[Cell]]  = {
     # custom cells
     "KalmanCell"         : NonLinearKalmanCell,
     "LinearCell"         : LinearCell,
-    "LinearKalmanCell"   : LinearKalmanCell,
     "LinearResidualCell" : LinearResidualCell,
     # "MissingValueCell"   : MissingValueCell,
     "NonLinearCell"      : NonLinearCell,
     "PseudoKalmanCell"   : PseudoKalmanCell,
-    "ResidualCell"       : ResidualCell,
 }  # fmt: skip
 r"""Dictionary of all available cells (basic building blocks for filters)."""
 
 FILTERS: dict[str, type[Filter]] = {
     "MissingValueFilter"  : MissingValueFilter,
     # "ProbabilisticFilter" : ProbabilisticFilter,
-    "ResidualFilter"      : ResidualFilter,
     # "ResidualFilterBlock" : ResidualFilterBlock,
-    "SequentialFilter"    : FilterList,
 }  # fmt: skip
 r"""Dictionary of all available filters."""
 

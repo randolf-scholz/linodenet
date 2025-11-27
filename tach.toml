@@ -120,3 +120,8 @@ depends_on = ["linodenet.bijections", "linodenet.layers"]
 [[modules]]
 path = "linodenet.system"
 depends_on = ["linodenet.projections", "linodenet.initializations", "linodenet.layers"]
+
+[[modules]]
+path = "linodenet.signature"
+depends_on = []
+utility = true
