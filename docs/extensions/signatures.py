@@ -29,15 +29,16 @@ class Signature(Directive):
         # Create a preformatted (literal) node for the signature
         signature_text = self.arguments[0]
         # preformatted_node = nodes.literal(signature_text, signature_text)
-        text_node = nodes.Text(signature_text)
+        # nodes, messages = nodes.line(signature_text)
+        text_nodes, messages = self.state.inline_text(signature_text, self.lineno)
 
         # Create a title node and add the preformatted node to it
-        title_node = nodes.title("", "Signature: ", text_node)
+        title_node = nodes.title(signature_text, "Signature: ", *text_nodes)
 
         # Create the admonition node
         admonition_node = nodes.admonition()
-        admonition_node["classes"] += ["signature"]
         admonition_node += title_node
+        admonition_node["classes"].append("signature")
 
         return [admonition_node]
 
@@ -45,6 +46,8 @@ class Signature(Directive):
 def setup(app: Sphinx) -> dict:
     r"""Install the extension."""
     app.add_directive("signature", Signature)
+    app.add_css_file("../_static/signatures.css")
+
     return {
         "version": "0.1",
         "parallel_read_safe": True,
