@@ -26,7 +26,7 @@ __all__ = [
     "BIJECTIONS",
     # protocols & base classes
     "Bijection",
-    "BijectionABC",
+    "BijectionBase",
     # classes
     "iResNet",
     "iResNetBlock",
@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 
-from linodenet.bijections.base import Bijection, BijectionABC
+from linodenet.bijections.base import Bijection, BijectionBase
 from linodenet.bijections.iresnet import iResNet, iResNetBlock, iResNetLayer
 from linodenet.bijections.low_rank_perturbation import iLowRankLayer
 

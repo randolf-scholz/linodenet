@@ -170,7 +170,7 @@ class FunctionalMixin(Fn, Protocol):
     def __pow__(self, n: int, /) -> "Series[Self]":
         r"""Repeat a module `n` times (`**`).
 
-        x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
+            x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
 
         Equivalent to `f >> f >> ... >> f` (n times).
         """
@@ -206,10 +206,10 @@ class FunctionalMixin(Fn, Protocol):
     def __floordiv__(self, num: int | None = None, /) -> "Replicate[Self] | Map[Self]":
         r"""Repeat a single module in parallel (`//`).
 
-        x₁ ───▶ f(x₁)
-        x₂ ───▶ f(x₂)
-            ⋮
-        xₙ ───▶ f(xₙ)
+            x₁ ─────▶ f(x₁)
+            x₂ ─────▶ f(x₂)
+                 ⋮
+            xₙ ─────▶ f(xₙ)
 
         Note: If `num` is `None`, the module will be executed for each input.
         """
@@ -223,10 +223,10 @@ class FunctionalMixin(Fn, Protocol):
     def __and__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Execute multiple modules with the same input (`&`).
 
-            ┌────▶ f₁(x)
-        x ──┼────▶ f₂(x)
-            │       ⋮
-            └────▶ fₙ(x)
+                  ┌────▶ f₁(x)
+            x ────┼────▶ f₂(x)
+                  │       ⋮
+                  └────▶ fₙ(x)
 
         meet:
             Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)
@@ -241,10 +241,10 @@ class FunctionalMixin(Fn, Protocol):
     def __rand__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Execute multiple modules with the same input (`&`).
 
-            ┌────▶ f₁(x)
-        x ──┼────▶ f₂(x)
-            │       ⋮
-            └────▶ fₙ(x)
+                  ┌────▶ f₁(x)
+            x ────┼────▶ f₂(x)
+                  │       ⋮
+                  └────▶ fₙ(x)
 
         meet:
             Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)
@@ -259,10 +259,10 @@ class FunctionalMixin(Fn, Protocol):
     def __mod__(self, n: int, /) -> "Duplicate[Self]":
         r"""Execute multiple copies of the same module with the same input (`%`).
 
-             ┌────▶ f(x)
-        x ───┼────▶ f(x)
-             │       ⋮
-             └────▶ f(x)
+              ┌────▶ f(x)
+        x ────┼────▶ f(x)
+              │       ⋮
+              └────▶ f(x)
         """
         return duplicate(self, n)
 
@@ -272,6 +272,11 @@ class FunctionalMixin(Fn, Protocol):
     def __or__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Join multiple outputs into a single output (`|`).
 
+                  ┌────▶ f₁(x) or None
+            x ────┼────▶ f₂(x) or None
+                  │       ⋮
+                  └────▶ fₙ(x) or None
+
         join:
             Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∪…∪Xₙ，Y₁'×…×Yₙ')
             (f₁，…，fₙ) ⟼ union(f₁，…，fₙ)
@@ -279,18 +284,17 @@ class FunctionalMixin(Fn, Protocol):
         join(f₁，…，fₙ):
             X₁∪…∪Xₙ ⟶ Y₁'×…×Yₙ'
             x ⟼ (f₁(x) or None , ..., fₙ(x) or None)
-
-
-            ┌────▶ f₁(x) or None
-        x ──┼────▶ f₂(x) or None
-            │       ⋮
-            └────▶ fₙ(x) or None
         """
         return fork(self, other)
 
     def __ror__[N: Fn](self, other: N | Sequence[N], /) -> "Fork[Self | N]":
         r"""Join multiple outputs into a single output (`|`).
 
+                ┌────▶ f₁(x) or None
+            x ──┼────▶ f₂(x) or None
+                │       ⋮
+                └────▶ fₙ(x) or None
+
         join:
             Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∪…∪Xₙ，Y₁'×…×Yₙ')
             (f₁，…，fₙ) ⟼ union(f₁，…，fₙ)
@@ -298,12 +302,6 @@ class FunctionalMixin(Fn, Protocol):
         join(f₁，…，fₙ):
             X₁∪…∪Xₙ ⟶ Y₁'×…×Yₙ'
             x ⟼ (f₁(x) or None , ..., fₙ(x) or None)
-
-
-            ┌────▶ f₁(x) or None
-        x ──┼────▶ f₂(x) or None
-            │       ⋮
-            └────▶ fₙ(x) or None
         """
         return fork(other, self)
 

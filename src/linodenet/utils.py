@@ -48,7 +48,7 @@ def signature(sig: str, /) -> SelfMap:
     def decorator[Fn: Callable](fn: Fn) -> Fn:
         fn.signature = parse_signature(sig)  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
         if isinstance(fn.__doc__, str):
-            fn.__doc__ = fn.__doc__ + f"\n\n.. signature:: ``{sig}``"
+            fn.__doc__ = fn.__doc__ + f"\n.. Signature:: ``{sig}``"
         return fn
 
     return cast("SelfMap", decorator)

@@ -9,8 +9,10 @@ import pytest
 
 import linodenet as lib
 from linodenet.activations import ACTIVATIONS, Activation
+from linodenet.bijections import BIJECTIONS, Bijection, BijectionBase
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
 from linodenet.embeddings import EMBEDDINGS, Embedding, EmbeddingBase
+from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.parametrize import (
     PARAMETRIZATIONS,
@@ -43,6 +45,10 @@ class Case(NamedTuple):
 
 CASES: dict[str, Case] = {
     "activations"         : Case(lib.activations    , Activation     , None               , ACTIVATIONS               ),
+    "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
+    "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
+    "embeddings"          : Case(lib.embeddings     , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
+    "imputation"          : Case(lib.imputation     , ImputerProtocol, None               , IMPUTERS                  ),
     "initializations"     : Case(lib.initializations, Initialization , None               , INITIALIZATIONS           ),
     "matrix_tests"        : Case(lib.testing        , MatrixTest     , None               , MATRIX_TESTS              ),
     "parametrizations"    : Case(lib.parametrize    , Parametrization, ParametrizationBase, PARAMETRIZATIONS          ),
@@ -50,8 +56,6 @@ CASES: dict[str, Case] = {
     "projections_fun"     : Case(lib.projections    , Projection     , None               , FUNCTIONAL_PROJECTIONS    ),
     "regularizations_cls" : Case(lib.regularizations, Regularization , RegularizationBase , MODULAR_REGULARIZATIONS   ),
     "regularizations_fun" : Case(lib.regularizations, Regularization , None               , FUNCTIONAL_REGULARIZATIONS),
-    "embeddings"          : Case(lib.embeddings     , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
-    "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
 }  # fmt: skip
 r"""Dictionary of all available cases."""
 

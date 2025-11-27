@@ -13,11 +13,11 @@ __all__ = [
 
 from torch import Tensor, jit, nn
 
+from linodenet.containers import ModuleSequence
 from linodenet.layers import (
     ReverseDense,
     ReZero,
 )
-from linodenet.layers.containers import ModuleSequence
 
 
 class ResNetBlock(ModuleSequence):

@@ -1,9 +1,12 @@
+r"""Neural Network subpackage of LinodeNet."""
+
 __all__ = [
     # modules
     "activations",
     "bijections",
     "embeddings",
     "encoders",
+    "containers",
     "filters",
     "forecasting",
     "imputation",
@@ -15,6 +18,7 @@ __all__ = [
 from linodenet import (
     activations,
     bijections,
+    containers,
     embeddings,
     encoders,
     filters,
@@ -35,3 +39,4 @@ __all__ += imputation.__all__
 __all__ += layers.__all__
 __all__ += projections.__all__
 __all__ += system.__all__
+__all__ += containers.__all__

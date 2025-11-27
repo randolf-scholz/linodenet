@@ -12,6 +12,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.filters.base import CellBase
+from linodenet.utils import signature
 
 
 class LinearCell(CellBase):
@@ -45,12 +46,11 @@ class LinearCell(CellBase):
         self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
         self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
 
+    @signature("[(..., n), (..., m)] -> (..., m)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Forward pass of the cell.
 
         .. math:: F(y，x) =  Ux + Vy + b
-
-        .. Signature:: ``[(..., n), (..., m)] -> (..., m)``.
         """
         z = torch.einsum("ij, ...i -> ...j", self.U, x)
         z = z + torch.einsum("ij, ...i -> ...j", self.V, y)

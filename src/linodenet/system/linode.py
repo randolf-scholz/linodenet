@@ -12,8 +12,8 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.containers import initialize_from_dict
 from linodenet.initializations import INITIALIZATIONS, Initialization
-from linodenet.layers.containers import initialize_from_dict
 from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection
 from linodenet.types import SelfMap
 from linodenet.utils import deep_dict_update

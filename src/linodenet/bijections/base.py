@@ -25,7 +25,7 @@ Note that `torch.distributions.Transform` has some differences:
 
 __all__ = [
     # Protocols & ABCs
-    "BijectionABC",
+    "BijectionBase",
     "TransformABC",
     "Bijection",
     "Transform",
@@ -40,7 +40,7 @@ from typing import Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.layers.containers import ModuleSequence
+from linodenet.containers import ModuleSequence
 
 
 @runtime_checkable
@@ -63,7 +63,7 @@ class Transform[X, Y](Bijection, Protocol):
     def decode_and_logabsdet(self, y: Y, /) -> tuple[X, Tensor]: ...
 
 
-class BijectionABC[X, Y](nn.Module, Bijection[X, Y]):
+class BijectionBase[X, Y](nn.Module, Bijection[X, Y]):
     r"""Abstract base class for invertible layers."""
 
     @abstractmethod
@@ -104,7 +104,7 @@ class TransformABC[X, Y](nn.Module, Transform[X, Y]):
         return self.decode_and_logabsdet(y)
 
 
-class BijectionSequence(ModuleSequence[BijectionABC]):
+class BijectionSequence(ModuleSequence[BijectionBase]):
     r"""Invertible Sequential model."""
 
     @jit.export

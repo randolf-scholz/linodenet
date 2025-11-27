@@ -4,15 +4,21 @@ __all__ = [
     # Constants
     "__version__",
     # Sub-Packages
+    "activations",
+    "bijections",
     "distributions",
+    "embeddings",
+    "filters",
+    "imputation",
+    "initializations",
+    "lib",
+    "nn",
     "parametrize",
     "projections",
     "regularizations",
     "testing",
-    "initializations",
-    "lib",
-    "nn",
     # Sub-Modules
+    "containers",
     "config",
     "constants",
     "context",
@@ -40,11 +46,17 @@ finally:
 
 
 from linodenet import (
+    activations,
+    bijections,
     config,
     constants,
+    containers,
     context,
     distributions,
     domains,
+    embeddings,
+    filters,
+    imputation,
     initializations,
     lib,
     linalg,

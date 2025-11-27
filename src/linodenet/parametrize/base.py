@@ -69,6 +69,7 @@ Classes
 
 __all__ = [
     # Protocol
+    "Surjection",
     "Parametrization",
     "BoundParametrization",
     # Classes
@@ -98,7 +99,7 @@ __all__ = [
 import copy
 import warnings
 from abc import abstractmethod
-from collections.abc import Callable as Fn, Iterator
+from collections.abc import Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
@@ -121,10 +122,22 @@ import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
-from linodenet.layers.containers import ModuleSequence
-from linodenet.projections.surjections import Surjection
+from linodenet.containers import ModuleSequence
 
-type ParametrizationLike = Fn[[Tensor], Tensor] | nn.Module | BoundParametrization
+
+@runtime_checkable
+class Surjection[X, Y](Protocol):
+    r"""A protocol for surjections.
+
+    Surjections are maps that are onto, i.e., for every $y$ in $Y$, there exists
+    an $x$ in $X$ such that $f(x) = y$. In particular, they admit a right inverse,
+    i.e., a map $g: Y -> X$ such that $f(g(y)) = y$ for all $y$ in $Y$.
+    """
+
+    @abstractmethod
+    def forward(self, x: X, /) -> Y: ...
+    @abstractmethod
+    def right_inverse(self, y: Y, /) -> X: ...
 
 
 @runtime_checkable

@@ -110,7 +110,7 @@ def get_filter(kind: object = None, /, **cfg: object) -> Filter:
         # if config, extract the name and instantiate
         case None:
             if "__module__" in cfg:
-                from linodenet.layers.containers import (  # noqa: PLC0415
+                from linodenet.containers import (  # noqa: PLC0415
                     initialize_from_dict,
                 )
 
