@@ -665,18 +665,19 @@ def assert_model_ok(
 ) -> None:
     r"""Checks that a model (nn.Module or function) can perform forward/backward."""
     # region get name and logger -------------------------------------------------------
+    test_obj: Module | Func
     match module_or_func:
         case Module() as model:
             name = model.__class__.__name__
             test_obj = model
-        case Callable() as func if not isinstance(func, type):  # type: ignore[misc, has-type]
-            name = func.__name__  # type: ignore[unreachable]
-            test_obj = func
         case type() as cls:
             raise TypeError(
                 f"Expected callable, got type {cls!r} instead."
                 f" Consider using `check_class`!"
             )
+        case Callable() as func:
+            name = func.__name__
+            test_obj = func
         case other:
             raise TypeError(f"Got unexpected input type {type(other)!r}")
 

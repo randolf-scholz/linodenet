@@ -637,7 +637,7 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
             return nn.ModuleDict()
         case nn.ModuleDict() as parametrizations:
             return parametrizations
-        case jit.RecursiveScriptModule() as parametrizations:  # pyright: ignore[reportPrivateImportUsage]
+        case jit.RecursiveScriptModule() as parametrizations:  # type: ignore[attr-defined]  # pyright: ignore[reportPrivateImportUsage]
             warnings.warn(
                 "Scripted module! Not all functionality may be available.", stacklevel=2
             )

@@ -55,7 +55,7 @@ def signature(sig: str, /) -> SelfMap:
 
 
 @overload
-def implements[T](protocol: TypeForm[T], /) -> SelfMap[type[T]]: ...  # type: ignore[valid-type]
+def implements[T](protocol: TypeForm[T], /) -> SelfMap[type[T]]: ...
 @overload
 def implements[T](obj: object, protocol: type[T], /) -> TypeIs[T]: ...
 def implements[T](

@@ -6,7 +6,7 @@ __all__ = [
     "LinODE",
 ]
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from typing import Any, Final, Optional
 
 import torch
@@ -99,22 +99,14 @@ class LinODECell(nn.Module):
                             f" {(input_size, input_size)}"
                         )
                     return lambda: tensor
-                case Callable() as func:  # type: ignore[misc]
-                    tensor = Tensor(func(input_size))  # type: ignore[unreachable]
+                case Callable() as func:
+                    tensor = Tensor(func(input_size))
                     if tensor.shape != (input_size, input_size):
                         raise ValueError(
                             f"Kernel has bad shape! {tensor.shape} but should be"
                             f" {(input_size, input_size)}"
                         )
                     return lambda: Tensor(func(input_size))
-                case Iterable() as iterable:
-                    tensor = Tensor(iterable)
-                    if tensor.shape != (input_size, input_size):
-                        raise ValueError(
-                            f"Kernel has bad shape! {tensor.shape} but should be"
-                            f" {(input_size, input_size)}"
-                        )
-                    return lambda: tensor
                 case _:
                     raise TypeError(f"{type(kernel_initialization)=} not supported!")
 
@@ -126,8 +118,8 @@ class LinODECell(nn.Module):
                     return FUNCTIONAL_PROJECTIONS["identity"]
                 case str(key):
                     return FUNCTIONAL_PROJECTIONS[key]
-                case Callable() as func:  # type: ignore[misc]
-                    return func  # type: ignore[unreachable]
+                case Callable() as func:
+                    return func
                 case _:
                     raise TypeError(f"{type(kernel_parametrization)=} not supported!")
 
