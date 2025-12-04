@@ -7,7 +7,6 @@ $$\begin{aligned}
 \\  Hμ' &= Hμ - H Σ Hᵀ (H Σ Hᵀ + R)⁻¹ (H μ - y)
 \end{aligned}$$
 
-
 Assuming H is surjective, then $R=HQHᵀ$ for some $Q$. In particular,
 
 $$(H Σ Hᵀ + R)⁻¹ = (H (Σ + Q) Hᵀ)⁻¹ = H⁺ (Σ + Q)⁻¹ (Hᵀ)⁺$$

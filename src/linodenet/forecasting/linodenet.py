@@ -15,7 +15,7 @@ from torch import Tensor, jit, nn
 from linodenet.containers import initialize_from_dict
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
-from linodenet.filters import MissingValueFilter
+from linodenet.filters import MissingValueCell
 from linodenet.linalg import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.system import LinODECell
@@ -48,7 +48,7 @@ class LinODEnet(nn.Module):
         "System": LinODECell,
         "Embedding": ConcatEmbedding,
         "Projection": ConcatProjection,
-        "Filter": MissingValueFilter,
+        "Filter": MissingValueCell,
         "Encoder": ResNet,
         "Decoder": ResNet,
     }
@@ -404,7 +404,7 @@ class LatentLinODECell(nn.Module):
         "System": LinODECell,
         "Embedding": ConcatEmbedding,
         "Projection": ConcatProjection,
-        "Filter": MissingValueFilter,
+        "Filter": MissingValueCell,
         "Encoder": ResNet,
         "Decoder": ResNet,
     }

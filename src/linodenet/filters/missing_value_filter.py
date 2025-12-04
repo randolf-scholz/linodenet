@@ -1,6 +1,6 @@
 r"""Wraps an existing Filter $F$ so that it can handle missing values."""
 
-__all__ = ["MissingValueFilter"]
+__all__ = ["MissingValueCell"]
 
 
 from collections.abc import Mapping
@@ -11,11 +11,11 @@ from torch import Tensor, jit, nn
 
 import linodenet.imputation as imp
 from linodenet.constants import EMPTY_MAP
-from linodenet.filters.base import Filter, FilterBase
+from linodenet.filters.base import Cell, CellBase
 from linodenet.imputation import ImputationStrategy, ImputerProtocol
 
 
-class MissingValueFilter(FilterBase):
+class MissingValueCell(CellBase):
     r"""Wraps an existing Filter $F$ so that it can handle missing values.
 
     .. math:: x' &= F(u，x)   &   u = impute(m, y, x)
@@ -53,8 +53,8 @@ class MissingValueFilter(FilterBase):
         input_size: int,
         hidden_size: int,
         *,
-        filter_type: type[Filter],
-        filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
+        cell_type: type[Cell],
+        cell_kwargs: Mapping[str, Any] = EMPTY_MAP,
         concat_mask: bool = True,
         imputation: str | float | Tensor | nn.Module = "zero",
     ) -> None:
@@ -63,11 +63,11 @@ class MissingValueFilter(FilterBase):
 
         # initialize filter
         filter_input_size = self.input_size * (1 + self.concat_mask)
-        filter_options = dict(filter_kwargs) | {
+        filter_options = dict(cell_kwargs) | {
             "input_size": filter_input_size,
             "hidden_size": hidden_size,
         }
-        self.filter = filter_type(**filter_options)
+        self.cell = cell_type(**filter_options)
 
         # initialize imputation strategy
         # imputation_strategy: ImputationStrategy
@@ -103,8 +103,8 @@ class MissingValueFilter(FilterBase):
         self._imputer = _imputer
 
     @jit.export
-    def impute(self, m: Tensor, y: Tensor, x: Tensor) -> Tensor:
-        return self._imputer(m, y, x)
+    def impute(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
+        return self._imputer(mask, y, x)
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
@@ -117,4 +117,4 @@ class MissingValueFilter(FilterBase):
         if self.concat_mask:
             u = torch.cat([u, self.mask], dim=-1)
 
-        return self.filter(u, x)
+        return self.cell(u, x)

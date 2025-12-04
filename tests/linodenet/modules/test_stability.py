@@ -5,7 +5,6 @@ import logging
 import pytest
 import torch
 
-import linodenet.filters.containers
 import linodenet.filters.deprecated
 from linodenet import embeddings, system
 from linodenet.encoders import ResNet

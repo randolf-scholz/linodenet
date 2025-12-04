@@ -16,8 +16,8 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.containers import ModuleSequence
-from linodenet.filters import CellBase, FilterBase
-from linodenet.filters.kalman_cell import AlphaType
+from linodenet.filters.base import CellBase, FilterBase
+from linodenet.filters.kalman_cell import _Alpha
 
 
 class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):
@@ -195,7 +195,7 @@ class PseudoKalmanCell(CellBase):
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         # PARAMETERS
-        alpha_ = torch.tensor(AlphaType(alpha))
+        alpha_ = torch.tensor(_Alpha(alpha))
         self.alpha = nn.Parameter(alpha_, requires_grad=alpha_learnable)
         self.epsilon = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.weight = nn.Parameter(torch.empty(self.input_size, self.input_size))

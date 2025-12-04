@@ -15,7 +15,7 @@ from torch import Tensor, jit, nn
 from linodenet.containers import initialize_from_dict
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
-from linodenet.filters import Filter, MissingValueFilter
+from linodenet.filters import Filter, MissingValueCell
 from linodenet.linalg import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.system import ContinuousSystem, LinODECell
@@ -53,7 +53,7 @@ class LatentStateSpaceModel(nn.Module):
         "System": LinODECell,
         "Embedding": ConcatEmbedding,
         "Projection": ConcatProjection,
-        "Filter": MissingValueFilter,
+        "Filter": MissingValueCell,
         "Encoder": ResNet,
         "Decoder": ResNet,
     }

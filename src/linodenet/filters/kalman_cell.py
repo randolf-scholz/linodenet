@@ -39,12 +39,12 @@ from typing import Any, Optional, SupportsFloat
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.filters import CellBase
+from linodenet.filters.base import CellBase
 from linodenet.layers import ReverseDense
 from linodenet.utils import deep_dict_update
 
 
-class AlphaType(float, Enum):
+class _Alpha(float, Enum):
     FIRST_VALUE = 0.0
     AVERAGE = 0.5
     LAST_VALUE = 1.0
@@ -115,7 +115,7 @@ class PseudoKalmanCell(CellBase):
         m: int = self.hidden_size
 
         # PARAMETERS
-        alpha_ = torch.tensor(AlphaType(alpha))
+        alpha_ = torch.tensor(_Alpha(alpha))
         self.alpha = nn.Parameter(alpha_, requires_grad=alpha_learnable)
         self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
@@ -293,15 +293,20 @@ class NonLinearCell(CellBase):
         input_size: int,
         hidden_size: int,
         *,
+        nonlinearity: nn.Module,
         alpha_value: float = 0.0,
         alpha_learnable: bool = True,
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         m = self.input_size
         n = self.hidden_size
-
+        # Modules
+        self.nonlinearity = nonlinearity
         # PARAMETERS
-        self.alpha = nn.Parameter(torch.tensor(0.0), requires_grad=True)
+        self.alpha = nn.Parameter(
+            torch.tensor(alpha_value),
+            requires_grad=alpha_learnable,
+        )
         # self.epsilonA = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         # self.epsilonB = nn.Parameter(torch.tensor(0.0), requires_grad=True)
         self.A = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
@@ -328,4 +333,4 @@ class NonLinearCell(CellBase):
         z = torch.where(mask, z, self.ZERO)  # (..., m)
         z = torch.einsum("ji, ...j -> ...i", self.H, z)  # (..., n)
         z = torch.einsum("ij, ...j -> ...i", self.B, z)
-        return x - self.alpha * self.layers(z)
+        return x - self.alpha * self.nonlinearity(z)

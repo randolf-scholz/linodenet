@@ -22,7 +22,6 @@ from typing import (
     Any,
     Protocol,
     TypeIs,
-    cast,
     get_protocol_members,
     is_protocol,
     overload,
@@ -30,7 +29,7 @@ from typing import (
 
 from typing_extensions import TypeForm
 
-from linodenet.signature import parse_signature
+from linodenet.signature import SignatureType, parse_signature
 from linodenet.types import NestedDict, NestedMapping
 
 
@@ -42,16 +41,19 @@ class SelfMap[T](Protocol):
     def __call__[S](self, arg: S, /) -> S: ...
 
 
-def signature(sig: str, /) -> SelfMap:
+class signature(SignatureType):
     r"""To be used as a no-op decorator for annotating function signatures."""
 
-    def decorator[Fn: Callable](fn: Fn) -> Fn:
-        fn.signature = parse_signature(sig)  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
-        if isinstance(fn.__doc__, str):
-            fn.__doc__ = fn.__doc__ + f"\n.. Signature:: ``{sig}``"
-        return fn
+    def __init__(self, sig_string: str, /) -> None:
+        sig = parse_signature(sig_string)
+        super().__init__(sig.argument_types, sig.return_types)
 
-    return cast("SelfMap", decorator)
+    def __call__[Fn: Callable](self, fn: Fn) -> Fn:
+        r"""Decorator to annotate function signatures."""
+        fn.signature = self  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
+        if isinstance(fn.__doc__, str):
+            fn.__doc__ = fn.__doc__ + f"\n.. Signature:: ``{self}``"
+        return fn
 
 
 @overload

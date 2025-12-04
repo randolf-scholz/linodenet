@@ -26,7 +26,7 @@ __all__ = [
     "FilterBase",
     # Classes
     "ReZeroFilter",
-    "MissingValueFilter",
+    "MissingValueCell",
     "CellList",
     "CellSequence",
     "ResidualCellSequence",
@@ -63,7 +63,7 @@ from linodenet.filters.linear import (
     LinearCell,
     LinearResidualCell,
 )
-from linodenet.filters.missing_value_filter import MissingValueFilter
+from linodenet.filters.missing_value_filter import MissingValueCell
 
 CELLS: dict[str, type[Cell]]  = {
     # torch cells
@@ -74,14 +74,13 @@ CELLS: dict[str, type[Cell]]  = {
     "KalmanCell"         : NonLinearKalmanCell,
     "LinearCell"         : LinearCell,
     "LinearResidualCell" : LinearResidualCell,
-    # "MissingValueCell"   : MissingValueCell,
+    "MissingValueCell"   : MissingValueCell,
     "NonLinearCell"      : NonLinearCell,
     "PseudoKalmanCell"   : PseudoKalmanCell,
 }  # fmt: skip
 r"""Dictionary of all available cells (basic building blocks for filters)."""
 
 FILTERS: dict[str, type[Filter]] = {
-    "MissingValueFilter"  : MissingValueFilter,
     # "ProbabilisticFilter" : ProbabilisticFilter,
     # "ResidualFilterBlock" : ResidualFilterBlock,
 }  # fmt: skip
