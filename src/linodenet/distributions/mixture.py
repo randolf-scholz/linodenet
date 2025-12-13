@@ -137,7 +137,7 @@ class MixtureSameFamily[D: DistributionBase](DistributionBase):
     def sample_and_log_prob(self, num: int = 1, /) -> tuple[Tensor, Tensor]:
         indices, index_ll = self.mixture_distribution.sample_and_log_prob(num)
         latents, sample_ll = self.component_distribution.sample_and_log_prob(num)
-        self.samples = latents.gather(0, indices)  #  (H, ...) -> (...)
+        self.samples = latents.gather(0, indices)  # (H, ...) -> (...)
         # logits = self.mixture_distribution.logits
 
         self.log_probs = (index_ll + sample_ll).logsumexp(

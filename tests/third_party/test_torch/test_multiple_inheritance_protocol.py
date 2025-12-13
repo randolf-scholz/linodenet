@@ -21,7 +21,6 @@ class Filter(Protocol):
 
 
 def test_inherit_protocol_init() -> None:
-
     class FilterClass(Filter):
         pass
 
@@ -31,7 +30,6 @@ def test_inherit_protocol_init() -> None:
 
 
 def test_inherit_protocol_torch() -> None:
-
     class FilterModule(Filter, nn.Module):
         @abstractmethod
         def forward(self, y: Tensor, x: Tensor) -> Tensor: ...

@@ -509,8 +509,8 @@ class GRU_ODE_Bayes(nn.Module):
         current_time: Tensor = torch.zeros(())
 
         loss_1: Tensor = torch.zeros(())  # Pre-jump loss
-        loss_2: Tensor = (
-            torch.zeros(())
+        loss_2: Tensor = torch.zeros(
+            ()
         )  # Post-jump loss (KL between p_updated and the actual sample)
 
         path_t: list[Tensor] = [torch.zeros(())]

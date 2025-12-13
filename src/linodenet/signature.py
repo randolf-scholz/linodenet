@@ -375,7 +375,6 @@ class Parser:
     # ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
 
     def _parse_shape_type(self) -> ShapeType:
-
         self.consume(TokenKind.LPAREN)
 
         dims: list[EllipsisType | int | Dim] = []

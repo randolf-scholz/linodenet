@@ -90,23 +90,27 @@ r"""Dictionary of all available filters."""
 def get_filter(kind: object = None, /, **cfg: object) -> Filter:
     r"""Initialize from a configuration."""
     match kind:
-        # if instance, return as-is
+        # if an instance, return as-is
         case Filter() as instance:
             if cfg:
                 raise ValueError(f"Cannot pass arguments to an instance: {instance!r}")
             return instance
-        # if class, try to instantiate it with the given configuration
+        # if a name, look up in the dictionary
+        case str(name):
+            try:
+                obj = FILTERS[name]
+            except KeyError as exc:
+                exc.add_note(f"Filter {name!r} not found in {list(FILTERS)=}")
+                raise
+            return get_filter(obj, **cfg)
+        # if a class, try to instantiate it with the given configuration
         case type() as cls:
             try:
                 return cls(**cfg)
             except TypeError as exc:
                 exc.add_note(f"Failed to instantiate {cls} with arguments {cfg!r}")
                 raise
-        # if name, look up in the dictionary
-        case str(name):
-            _kind = FILTERS[name]
-            return get_filter(_kind, **cfg)
-        # if config, extract the name and instantiate
+        # if a config, extract the name and instantiate
         case None:
             if "__module__" in cfg:
                 from linodenet.containers import (  # noqa: PLC0415

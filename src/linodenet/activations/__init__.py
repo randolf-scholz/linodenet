@@ -70,23 +70,27 @@ r"""Dictionary containing all available activations."""
 def get_activation(kind: object = None, /, **cfg: object) -> Activation:
     r"""Get an activation function by name."""
     match kind:
-        # if instance, return as-is
+        # if an instance, return as-is
         case Activation() as instance:
             if cfg:
                 raise ValueError(f"Cannot pass arguments to an instance: {instance!r}")
             return instance
-        # if class, try to instantiate it with the given configuration
+        # if a name, look up in the dictionary
+        case str(name):
+            try:
+                obj = ACTIVATIONS[name]
+            except KeyError as exc:
+                exc.add_note(f"Activation {name!r} not found in {list(ACTIVATIONS)=}")
+                raise
+            return get_activation(obj, **cfg)
+        # if a class, try to instantiate it with the given configuration
         case type() as cls:
             try:
                 return cls(**cfg)
             except TypeError as exc:
                 exc.add_note(f"Failed to instantiate {cls} with arguments {cfg!r}")
                 raise
-        # if name, look up in the dictionary
-        case str(name):
-            _kind = ACTIVATIONS[name]
-            return get_activation(_kind, **cfg)
-        # if config, extract the name and instantiate
+        # if a config, extract the name and instantiate
         case None:
             if "__module__" in cfg:
                 from linodenet.containers import (  # noqa: PLC0415

@@ -14,7 +14,7 @@ from typing import Any, Final
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.activations import MODULAR_ACTIVATIONS, Activation
+from linodenet.activations import get_activation
 from linodenet.containers import ModuleSequence
 from linodenet.layers.linear_contraction import LinearContraction
 from linodenet.layers.rezero import ReZero
@@ -147,7 +147,7 @@ class iResNetBlock(nn.Module):
     }
     r"""The hyperparameter dictionary"""
 
-    def __init__(self, input_size: int, **HP: Any):
+    def __init__(self, input_size: int, **HP: Any) -> None:
         super().__init__()
         self.HP = HP = deep_dict_update(self.HP, HP)
 
@@ -163,8 +163,7 @@ class iResNetBlock(nn.Module):
         self.rtol = HP["rtol"]
         self.maxiter = HP["maxiter"]
         self.bias = HP["bias"]
-        self._Activation: type[Activation] = MODULAR_ACTIVATIONS[HP["activation"]]
-        self.activation = self._Activation(**HP["activation_config"])
+        self.activation = get_activation(HP["activation"], **HP["activation_config"])
 
         layers: list[nn.Module] = [
             LinearContraction(self.input_size, self.hidden_size, bias=self.bias),
@@ -218,7 +217,7 @@ class iResNet(nn.Module):
             The dimensionality of the input space.
         output_size: int
             The dimensionality of the output space.
-        blocks:  nn.Sequential
+        blocks: nn.Sequential
             Sequential model consisting of the iResNetBlocks
         HP: dict
             Nested dictionary containing the hyperparameters.

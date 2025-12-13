@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 # region project configuration ---------------------------------------------------------
 [project]
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.13,<3.14"
 name = "linodenet"
 version = "0.3.2"
 authors = [{ name = "Randolf Scholz", email = "randolf.scholz@gmail.com" }]
@@ -23,7 +23,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
@@ -78,37 +77,36 @@ docs = [
 ]
 linters = [
     "pre-commit>=4.5.0",
-    "pylint>=3.3.9",
-    "ruff>=0.14.7",
-    "tach>=0.32.1",
+    "ruff>=0.14.9",
+    "tach>=0.32.2",
 ]
 tests = [
-    "coverage>=7.12.0",
-    "hypothesis[numpy,pytest]>=6.148.6",
-    "matplotlib>=3.10.7",
+    "coverage>=7.13.0",
+    "hypothesis[numpy,pytest]>=6.148.7",
+    "matplotlib>=3.10.8",
     "psutil>=7.1.3",
-    "pygal>=3.0.5",
+    "pygal>=3.1.0",
     "pytest-benchmark[histogram]>=5.2.3",
     "pytest-cov>=7.0.0",
     "pytest-repeat>=0.9.4",
     "pytest-rerunfailures>=16.1",
     "pytest-xdist>=3.8.0",
-    "pytest>=9.0.1",
+    "pytest>=9.0.2",
     "tqdm>=4.67.1",
     "typing-extensions>=4.15.0",
 ]
 typing = [
     "mypy>=1.19.0",
+    "pyrefly>=0.45.2",
     "pyright>=1.1.407",
-    "pyrefly>=0.44.1",
-    "scipy-stubs>=1.16.3.2",
+    "scipy-stubs>=1.16.3.3",
     "types-colorama>=0.4.15.20250801",
     "types-decorator>=5.2.0.20251101",
     "types-docutils>=0.22.3.20251115",
     "types-jsonschema>=4.25.1.20251009",
     "types-pillow>=10.2.0.20240822",
-    "types-protobuf>=6.32.1.20251105",
-    "types-psutil>=7.1.3.20251202",
+    "types-protobuf>=6.32.1.20251210",
+    "types-psutil>=7.1.3.20251211",
     "types-pygments>=2.19.0.20251121",
     "types-pytz>=2025.2.0.20251108",
     "types-pyyaml>=6.0.12.20250915",
@@ -132,7 +130,6 @@ target-version = "py313"
 output-format = "concise"
 
 [tool.ruff.format]
-preview = true
 quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
@@ -203,6 +200,7 @@ ignore = [
     "PLR0402",  # manual-from-import
     "PLR2004",  # Magic value used in comparison
     "PLR6104",  # non-augmented-assignment
+    "PLR6201",  # Use a set literal when testing for membership
     "PLR6301",  # no-self-use
     # pylint "too-many-*" rules
     "PLR0904",  # Too many public methods
@@ -271,8 +269,18 @@ python-version = "3.13"
 [tool.ty.terminal]
 output-format = "concise"
 
+
+
+# region pyrefly configuration ---------------------------------------------------------
 [tool.pyrefly]
-python_version = "3.13"
+python-version = "3.13"
+output-format="min-text"
+
+[tool.pyrefly.errors]
+invalid-overload = false
+# endregion pyrefly configuration ------------------------------------------------------
+
+
 
 
 # region mypy configuration ------------------------------------------------------------

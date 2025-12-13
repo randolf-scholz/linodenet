@@ -71,36 +71,36 @@ class MissingValueCell(CellBase):
 
         # initialize imputation strategy
         # imputation_strategy: ImputationStrategy
-        _imputer: ImputerProtocol
+        imputer: ImputerProtocol
         match imputation:
             case "zero":
                 imputation_strategy = ImputationStrategy.ZERO
-                _imputer = imp.ZeroImputer()
+                imputer = imp.ZeroImputer()
             case "last":
                 imputation_strategy = ImputationStrategy.LAST
-                _imputer = imp.LastValueImputer()
+                imputer = imp.LastValueImputer()
             case "learnable":
                 imputation_strategy = ImputationStrategy.LEARNABLE
-                _imputer = imp.LearnableValueImputer((self.input_size,))
+                imputer = imp.LearnableValueImputer((self.input_size,))
             case "linear":
                 imputation_strategy = ImputationStrategy.LINEAR
-                _imputer = imp.LinearImputer(
+                imputer = imp.LinearImputer(
                     input_size=self.input_size,
                     hidden_size=hidden_size,
                 )
             case (Tensor() | float()) as value:
                 imputation_strategy = ImputationStrategy.CONSTANT
-                _imputer = imp.ConstantValueImputer(value)
-            case nn.Module as imputer:
+                imputer = imp.ConstantValueImputer(value)
+            case nn.Module as module:
                 imputation_strategy = ImputationStrategy.OTHER
-                _imputer = cast("ImputerProtocol", imputer)
+                imputer = cast("ImputerProtocol", module)
             case _:
                 raise ValueError(f"Unknown imputation strategy: {imputation}")
 
         # FIXME: https://github.com/python/mypy/issues/10736
         #   Need to unconditionally assign Final due to mypy bug
         self.imputation_strategy = imputation_strategy
-        self._imputer = _imputer
+        self._imputer = imputer
 
     @jit.export
     def impute(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:

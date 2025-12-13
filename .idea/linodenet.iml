@@ -236,6 +236,7 @@
       <excludeFolder url="file://$MODULE_DIR$/tests/liblinodenet/reports" />
       <excludeFolder url="file://$MODULE_DIR$/.pdm-build" />
       <excludeFolder url="file://$MODULE_DIR$/.tach" />
+      <excludeFolder url="file://$MODULE_DIR$/dev" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
     <orderEntry type="jdk" jdkName="uv (linodenet)" jdkType="Python SDK" />
