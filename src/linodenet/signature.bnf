@@ -1,0 +1,32 @@
+// BNF grammar for function signatures
+
+// e.g. [T, Tensor[(..., N, 3), 4]] -> Tensor[(..., N, 3), 4]
+SignatureType ::= (ArgList | ArgType) "->" (ArgList | ArgType);
+
+// e.g. '[T, U, Tensor[(N, 3)]]'
+ArgList ::= "[" (ArgType ("," ArgType)*)? "]"
+
+// e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]'
+ArgType ::= ShapeType | IdentifierType | GenericType
+
+// e.g. '()', '(1,2,3)', '(..., m, n)'
+ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
+
+// e.g. '3', 'N', '*xs', '?'
+DimType ::= "?" | Number | ("*"? IdentifierType)
+
+// e.g. 'Foo[Bar, (1,2)]'
+GenericType ::= IdentifierType ArgList
+
+// Basic tokens
+IdentifierType ::= Letter (Letter | Digit | '_' )*
+Number ::= Digit+ ;
+Digit ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
+Letter ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
+       | "H" | "I" | "J" | "K" | "L" | "M" | "N"
+       | "O" | "P" | "Q" | "R" | "S" | "T" | "U"
+       | "V" | "W" | "X" | "Y" | "Z" | "a" | "b"
+       | "c" | "d" | "e" | "f" | "g" | "h" | "i"
+       | "j" | "k" | "l" | "m" | "n" | "o" | "p"
+       | "q" | "r" | "s" | "t" | "u" | "v" | "w"
+       | "x" | "y" | "z" ;

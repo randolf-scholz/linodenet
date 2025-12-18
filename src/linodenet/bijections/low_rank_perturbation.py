@@ -2,13 +2,13 @@ r"""Low-rank perturbation layer."""
 
 __all__ = ["iLowRankLayer"]
 
-from typing import Any, Final
+from typing import Final
 
 import torch
 from torch import Tensor, nn
 
 from linodenet.initializations import low_rank
-from linodenet.utils import deep_dict_update
+from linodenet.utils import signature
 
 
 class iLowRankLayer(nn.Module):
@@ -50,30 +50,21 @@ class iLowRankLayer(nn.Module):
     V: Tensor
     r"""PARAM: $n×k$ tensor"""
 
-    def __init__(self, input_size: int, rank: int, **HP: Any):
+    def __init__(self, input_size: int, *, rank: int) -> None:
         super().__init__()
-        self.HP = deep_dict_update(self.HP, HP)
         self.U = low_rank(input_size)
         self.V = low_rank(input_size)
         self.rank = rank
 
+    @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         z = torch.einsum("...n, nk -> ...k", self.V, x)
         y = torch.einsum("...k, nk -> ...n", self.U, z)
         return x + y
 
+    @signature("(..., n) -> (..., n)")
     def inverse(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         z = torch.einsum("...n, nk -> ...k", self.V, x)
         A = torch.eye(self.rank) + torch.einsum("nk, nk -> kk", self.U, self.V)
         y = torch.linalg.solve(A, z)
         return x - torch.einsum("...k, nk -> ...n", self.U, y)
-
-    # def __invert__(self):
-    #     r"""Compute the inverse of the low rank layer.
-    #     Returns
-    #     -------
-    #     iLowRankLayer
-    #     """
-    #     return iLowRankLayer(self.V, self.U)

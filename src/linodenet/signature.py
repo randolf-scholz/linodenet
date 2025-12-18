@@ -2,18 +2,24 @@ r"""Module for parsing and representing function signatures between vector space
 
 __all__ = [
     # Types
-    "Dim",
-    "IdentifierType",
-    "GenericType",
     "SignatureType",
     "ShapeType",
     "ArgType",
     "ArgList",
     # Classes
+    "Identifier",
+    "GenericType",
     "Parser",
     "Token",
     "TokenKind",
     "DimKind",
+    # dimension types
+    "Dim",
+    "DimType",
+    "ConstantDim",
+    "StaticDim",
+    "DynamicDim",
+    "UnknownDim",
     # Functions
     "parse_arglist",
     "parse_signature",
@@ -24,12 +30,13 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 from types import EllipsisType
-from typing import Literal, overload
+from typing import Final, Literal, TypeIs, overload
 
-type ShapeType = tuple[EllipsisType | int | Dim, ...]
-type ArgType = ShapeType | IdentifierType | GenericType
+type ShapeType = tuple[DimType, ...] | tuple[EllipsisType, *tuple[DimType, ...]]
+type DimType = ConstantDim | StaticDim | DynamicDim | UnknownDim
+type ArgType = ShapeType | Identifier | GenericType
 type ArgList = list[ArgType]
-type DimType = int | Dim
+type QMARK = Literal["?"]
 
 
 def _shape_to_str(shape: ShapeType) -> str:
@@ -44,23 +51,26 @@ def _arg_to_str(arg: ArgType) -> str:
     return str(arg)
 
 
-class IdentifierType(str):
+class Identifier(str):
     r"""Class for representing identifier types."""
 
     __slots__ = ()
 
     def __init__(self, name: str) -> None:
-        if not self.isidentifier():
+        if not is_identifier(name):
             raise ValueError(f"Invalid identifier: {name}")
-        if self.startswith("_"):
-            raise ValueError(f"Identifier cannot start with underscore: {name}")
+
+
+def is_identifier(s: str, /) -> TypeIs[Identifier]:
+    r"""Check if the string is a valid identifier."""
+    return s.isidentifier() and not s.startswith("_")
 
 
 @dataclass(frozen=True, slots=True)
 class GenericType:
     r"""Class for representing generic types with type arguments."""
 
-    id: IdentifierType
+    id: Identifier
     arglist: ArgList
 
     def __str__(self) -> str:
@@ -70,28 +80,56 @@ class GenericType:
 class DimKind(StrEnum):
     r"""Enumeration of dimension kinds."""
 
-    STATIC = "static"  # plain identifier: n
-    DYNAMIC = "dynamic"  # *n
-    VARIADIC = "variadic"  # **n
+    CONSTANT = "constant"  # '1', '2', '3', ... fixed-size dimension
+    STATIC = "static"  # 'n' variable (fixed at initialization time)
+    DYNAMIC = "dynamic"  # '*n' variable size dimension
+    UNKNOWN = "unknown"  # for future use
 
 
 @dataclass(frozen=True, slots=True)
 class Dim:
-    r"""Class for representing a dimension with a name and kind."""
+    r"""Class for representing a single dimension."""
 
-    name: IdentifierType
+    value: Identifier | int | QMARK
     kind: DimKind
 
     def __str__(self) -> str:
-        match self.kind:
-            case DimKind.STATIC:
-                return self.name
-            case DimKind.DYNAMIC:
-                return f"*{self.name!s}"
-            case DimKind.VARIADIC:
-                return f"**{self.name!s}"
-            case _:
-                raise ValueError(f"Unknown dimension kind: {self.kind}")
+        return f"{self.value!s}"
+
+
+@dataclass(frozen=True, slots=True)
+class ConstantDim(Dim):
+    r"""Class for representing constant dimensions."""
+
+    value: int
+    kind: Final[DimKind] = DimKind.CONSTANT
+
+
+@dataclass(frozen=True, slots=True)
+class StaticDim(Dim):
+    r"""Class for representing static dimensions."""
+
+    value: Identifier
+    kind: Final[DimKind] = DimKind.STATIC
+
+
+@dataclass(frozen=True, slots=True)
+class DynamicDim(Dim):
+    r"""Class for representing dynamic dimensions."""
+
+    value: Identifier
+    kind: Final[DimKind] = DimKind.DYNAMIC
+
+    def __repr__(self) -> str:
+        return f"*{self.value!s}"
+
+
+@dataclass(frozen=True, slots=True)
+class UnknownDim(Dim):
+    r"""Class for representing unknown dimensions."""
+
+    value: Final[QMARK] = "?"
+    kind: Final[DimKind] = DimKind.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +192,7 @@ class TokenKind(StrEnum):
     IDENT = r"[A-Za-z]\w*]"
     INT = r"\d+"
     ELLIPSIS = "..."
-    DSTAR = "**"
+    QMARK = "?"
     STAR = "*"
     ARROW = "->"
     LBRACKET = "["
@@ -180,9 +218,6 @@ class Token:
     @overload
     def __init__(self, pos: int, kind: TokenKind) -> None: ...
     def __init__(self, pos: int, kind: TokenKind, value: str | None = None) -> None:
-        object.__setattr__(self, "pos", int(pos))
-        object.__setattr__(self, "kind", TokenKind(kind))
-
         if kind in (TokenKind.IDENT, TokenKind.INT) and value is None:
             raise AssertionError("IDENT and INT tokens require a value")
         if kind not in (TokenKind.IDENT, TokenKind.INT) and value is not None:
@@ -191,7 +226,9 @@ class Token:
             assert value is None
             value = kind.value
 
-        object.__setattr__(self, "value", value)
+        object.__setattr__(self, "pos", int(pos))
+        object.__setattr__(self, "value", str(value))
+        object.__setattr__(self, "kind", TokenKind(kind))
 
     def __repr__(self) -> str:
         return f"Token({self.kind}, {self.value!r}, pos={self.pos})"
@@ -215,18 +252,13 @@ def tokenize(source: str, /) -> Iterator[Token]:
             i += 3
             continue
 
-        if source.startswith("**", i):
-            yield Token(i, TokenKind.DSTAR)
-            i += 2
-            continue
-
         if source.startswith("->", i):
             yield Token(i, TokenKind.ARROW)
             i += 2
             continue
 
         # Single-character punctuation / operators
-        if c in "[](),*":
+        if c in "[](),*?":
             yield Token(i, TokenKind(c))  # maps "[" -> LBRACKET, etc.
             i += 1
             continue
@@ -360,6 +392,7 @@ class Parser:
             # ShapeType starts with "("
             case TokenKind.LPAREN:
                 return self._parse_shape_type()
+
             # IdentifierType ArgList?
             case TokenKind.IDENT:
                 ident = self._parse_identifier()
@@ -367,6 +400,7 @@ class Parser:
                     arglist = self._parse_arglist()
                     return GenericType(id=ident, arglist=arglist)
                 return ident
+
             case _:
                 raise SyntaxError(
                     f"Expected ArgType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
@@ -377,16 +411,18 @@ class Parser:
     def _parse_shape_type(self) -> ShapeType:
         self.consume(TokenKind.LPAREN)
 
-        dims: list[EllipsisType | int | Dim] = []
+        dims: list[EllipsisType | DimType] = []
 
         # check first token after "("
         match self.current.kind:
             case TokenKind.RPAREN:  # empty shape, exit early
                 self.consume(TokenKind.RPAREN)
                 return ()
+
             case TokenKind.ELLIPSIS:
                 self.consume(TokenKind.ELLIPSIS)
                 dims.append(...)
+
             case _:
                 dim = self._parse_dim_type()
                 dims.append(dim)
@@ -399,7 +435,7 @@ class Parser:
         self.consume(TokenKind.RPAREN)
         return tuple(dims)
 
-    # DimType ::= IntegerLiteral | ("*" | "**")? IdentifierType
+    # DimType ::= "?" | Number | ("*"? IdentifierType)
 
     def _parse_dim_type(self) -> DimType:
         match (tok := self.current).kind:
@@ -411,21 +447,20 @@ class Parser:
 
             case TokenKind.INT:
                 self.consume(TokenKind.INT)
-                return int(tok.value)
+                return ConstantDim(int(tok.value))
 
             case TokenKind.IDENT:
                 ident = self._parse_identifier()
-                return Dim(name=ident, kind=DimKind.STATIC)
+                return StaticDim(ident)
 
             case TokenKind.STAR:
                 self.consume(TokenKind.STAR)
                 ident = self._parse_identifier()
-                return Dim(name=ident, kind=DimKind.DYNAMIC)
+                return DynamicDim(ident)
 
-            case TokenKind.DSTAR:
-                self.consume(TokenKind.DSTAR)
-                ident = self._parse_identifier()
-                return Dim(name=ident, kind=DimKind.VARIADIC)
+            case TokenKind.QMARK:
+                self.consume(TokenKind.QMARK)
+                return UnknownDim()
 
             case _:
                 raise SyntaxError(
@@ -434,11 +469,11 @@ class Parser:
 
     # IdentifierType ::= /[A-Za-z]\w*/
 
-    def _parse_identifier(self) -> IdentifierType:
+    def _parse_identifier(self) -> Identifier:
         match (tok := self.current).kind:
             case TokenKind.IDENT:
                 self.consume(TokenKind.IDENT)
-                return IdentifierType(tok.value)
+                return Identifier(tok.value)
             case _:
                 raise SyntaxError(
                     f"Expected identifier at position {tok.pos}, "

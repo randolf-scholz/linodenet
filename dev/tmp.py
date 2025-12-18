@@ -1,14 +1,6 @@
-def xor(x: bool, y: bool) -> int:
-    if x:
-        if y:
-            result = 0
-        else:
-            result = 1
+class Foo:
+    def demo(self, *, x: int) -> None: ...
 
-    else:
-        if y:
-            result = 1
-        else:
-            result = 0
-
-    return result
+class Bar(Foo):
+    # OK: [mypy, ty, zuban, pyrefly] ERROR: [pyright]
+    def demo(self, x: int) -> None: ...

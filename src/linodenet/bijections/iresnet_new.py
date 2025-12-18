@@ -18,6 +18,7 @@ class iResNetBlock(nn.Module):
           | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
           | International Conference on Machine Learning 2019
           | http://proceedings.mlr.press/v97/behrmann19a.html
+        - https://github.com/jhjacobsen/invertible-resnet
     """
 
     maxiter: Final[int]
@@ -26,8 +27,6 @@ class iResNetBlock(nn.Module):
     r"""CONST: Absolute tolerance for fixed point iteration"""
     rtol: Final[float]
     r"""CONST: Relative tolerance for fixed point iteration"""
-    is_inverse: Final[bool]
-    r"""CONST: Whether to use the inverse or the forward map"""
     converged: Tensor
     r"""BUFFER: Boolean tensor indicating convergence"""
 
@@ -84,11 +83,35 @@ class iResNetBlock(nn.Module):
         return self._decode(y)
 
     @jit.export
-    def _encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
+        r"""y = x + f(x)"""
         return x + self.block(x)
 
     @jit.export
-    def _decode(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor) -> Tensor:
+        r"""Compute the inverse through fixed point iteration.
+
+        .. math::
+            x = y - f(x)
+
+        Note that in this case the gradient can be computed through implicit differentiation::
+
+
+        .. math::
+            z = f(z, x, θ)
+            ⟹ ∂z/∂θ =  df/dθ = ∂f/∂z ∂z/∂θ + ∂f/∂x ∂x/∂θ + ∂f/∂θ
+            ⟹ (I-∂f/∂z) ∂z/∂θ = ∂f/∂x ∂x/∂θ + ∂f/∂θ
+            ⟹ ∂z/∂θ = (I-∂f/∂z)⁻¹ (∂f/∂x ∂x/∂θ + ∂f/∂θ)
+
+        Moreover, the jacobian-vector product can be computed as:
+
+        .. math::
+
+            vᵀ(∂z/∂θ) = ... = (∂f/∂x ∂x/∂θ + ∂f/∂θ)ᵀ(I-∂f/∂z)⁻ᵀv
+
+        References:
+            https://implicit-layers-tutorial.org/
+        """
         x = y.clone().detach()
         # m = torch.isnan(y)
         residual = torch.zeros_like(y)
@@ -102,6 +125,7 @@ class iResNetBlock(nn.Module):
                 self.converged = residual < tol
                 if self.converged:
                     break
+
         if not self.converged:
             warnings.warn(
                 f"No convergence in {self.maxiter} iterations. "

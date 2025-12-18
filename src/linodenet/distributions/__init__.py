@@ -10,15 +10,17 @@ There are several available libraries for normalizing flows [0]_, we considered 
 +-----------------------+-------------------+--------------+---------------------------+
 | library               | no extra deps     | last release | subclasses `Distribution` |
 +=======================+===================+==============+===========================+
-| `zuko`_               | ✅                | 2024-01      | ✅                        |
+| `zuko`_               | ✅️                | 2024-01      | ✅️                        |
 +-----------------------+-------------------+--------------+---------------------------+
-| `flowtorch`_          | ✅                | 2022-04      | ✅                        |
+| `flowtorch`_          | ✅️                | 2022-04      | ✅️                        |
 +-----------------------+-------------------+--------------+---------------------------+
-| `nflows`_             | tensorboard, umnn | 2020-12      | ✅                        |
+| `nflows`_             | tensorboard, umnn | 2020-12      | ✅️                        |
 +-----------------------+-------------------+--------------+---------------------------+
-| `normalizing-flows`_  | ✅                | 2023-11      | ❌                        |
+| `normalizing-flows`_  | ✅️                | 2023-11      | ❌️                        |
 +-----------------------+-------------------+--------------+---------------------------+
-| `freia`_              | ✅                | 2022-04      | ❌                        |
+| `freia`_              | ✅️                | 2022-04      | ❌️                        |
++-----------------------+-------------------+--------------+---------------------------+
+| `pyro`_               | ✅️                | 2024-06      | ✅️️                        |
 +-----------------------+-------------------+--------------+---------------------------+
 
 From which we already decide only to consider `zuko`_ and `flowtorch`_.
@@ -49,6 +51,7 @@ References:
     .. _nflows: https://github.com/facebookincubator/flowtorch
     .. _normalizing-flows: https://github.com/VincentStimper/normalizing-flows
     .. _freia: https://github.com/vislearn/FrEIA
+    .. _pyro: https://github.com/pyro-ppl/pyro
     .. target-notes::
 """
 

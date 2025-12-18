@@ -15,7 +15,8 @@ LIBTORCH_URL="https://download.pytorch.org/libtorch/$LIBTORCH_CUDA/$LIBTORCH_ARC
 
 # 2.2.0+cu121: 0a1a034b1980199543ec5cbc8d42215f55b188ac188b3dac42d83aeb449922bb
 # 2.5.1+cu124: 470ab7f7f56e96d28d1dc9ae34ceb2e0d8723cc2899c5d0192f4cb12b8f7843b
-LIBTORCH_HASH="470ab7f7f56e96d28d1dc9ae34ceb2e0d8723cc2899c5d0192f4cb12b8f7843b"
+# 2.9.1+cu128: b052452965093db69f537b3cf376812d5acf6dca28819b20d28d7f0b171d7699
+LIBTORCH_HASH="b052452965093db69f537b3cf376812d5acf6dca28819b20d28d7f0b171d7699"
 
 # check if libtorch folder exists
 if [ -d "$LIBTORCH_DIR" ]; then
@@ -92,7 +93,7 @@ echo "Python env: $(type python)"
 
 # prepend correct CUDA version
 export PATH="/usr/local/cuda-$CUDA_VERSION/bin:$PATH"
-export CMAKE_INCLUDE_PATH="/usr/local/cuda-12.4/include"
+export CMAKE_INCLUDE_PATH="/usr/local/cuda-$CUDA_VERSION/include"
 export LD_LIBRARY_PATH="/usr/local/cuda-$CUDA_VERSION/lib64:$LD_LIBRARY_PATH"
 echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 cmake -DCMAKE_PREFIX_PATH="${LIBTORCH_DIR}" ..

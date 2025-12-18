@@ -42,7 +42,16 @@ class SelfMap[T](Protocol):
 
 
 class signature(SignatureType):
-    r"""To be used as a no-op decorator for annotating function signatures."""
+    r"""To be used as a no-op decorator for annotating function signatures.
+
+    Signature DSL:
+
+    - `3`: axis of size 3
+    - `x`: single axis of statically known size
+    - `*xs`: single axis of variable size
+    - `**xs`: multiple axes of variable size
+    - `...`: axes to vectorize over
+    """
 
     def __init__(self, sig_string: str, /) -> None:
         sig = parse_signature(sig_string)

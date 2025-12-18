@@ -25,16 +25,19 @@ Note that `torch.distributions.Transform` has some differences:
 
 __all__ = [
     # Protocols & ABCs
-    "BijectionBase",
-    "TransformABC",
     "Bijection",
     "Transform",
     # Classes
+    "BijectionBase",
+    "TransformBase",
     "BijectionSequence",
     "TransformSequence",
+    "InverseBijection",
+    "InverseTransform",
 ]
 
 from abc import abstractmethod
+from collections.abc import Iterable
 from typing import Protocol, runtime_checkable
 
 import torch
@@ -54,7 +57,7 @@ class Bijection[X, Y](Protocol):
 
 
 @runtime_checkable
-class Transform[X, Y](Bijection, Protocol):
+class Transform[X, Y](Bijection[X, Y], Protocol):
     r"""Protocol for diffeomorphism with logabsdet."""
 
     @abstractmethod
@@ -63,49 +66,89 @@ class Transform[X, Y](Bijection, Protocol):
     def decode_and_logabsdet(self, y: Y, /) -> tuple[X, Tensor]: ...
 
 
-class BijectionBase[X, Y](nn.Module, Bijection[X, Y]):
-    r"""Abstract base class for invertible layers."""
+class BijectionBase(nn.Module, Bijection[Tensor, Tensor]):
+    r"""Base class for bijections operating on single tensor."""
+
+    def __invert__(self) -> "BijectionBase":
+        return InverseBijection(self)
 
     @abstractmethod
-    def __invert__(self) -> Bijection[Y, X]: ...
+    def encode(self, x: Tensor, /) -> Tensor: ...
+    @abstractmethod
+    def decode(self, y: Tensor, /) -> Tensor: ...
+
+
+class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
+    r"""Base class for transforms operating on single tensor."""
 
     @abstractmethod
-    def encode(self, x: X, /) -> Y: ...
+    def encode(self, x: Tensor, /) -> Tensor: ...
     @abstractmethod
-    def decode(self, y: Y, /) -> X: ...
+    def decode(self, y: Tensor, /) -> Tensor: ...
+
+    @abstractmethod
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]: ...
+    @abstractmethod
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]: ...
+
+
+class InverseBijection[B: BijectionBase](BijectionBase):
+    r"""Inverse of a bijection."""
+
+    bijection: B
+    r"""The bijection to be inverted."""
+
+    def __init__(self, bijection: B) -> None:
+        super().__init__()
+        self.bijection = bijection
 
     @jit.export
-    def transform(self, x: X) -> Y:
-        r"""Alias for encode."""
-        return self.encode(x)
+    def encode(self, x: Tensor, /) -> Tensor:
+        return self.bijection.decode(x)
 
     @jit.export
-    def inverse_transform(self, y: Y) -> X:
-        r"""Alias for decode."""
-        return self.decode(y)
+    def decode(self, y: Tensor, /) -> Tensor:
+        return self.bijection.encode(y)
 
 
-class TransformABC[X, Y](nn.Module, Transform[X, Y]):
-    r"""Abstract base class for diffeomorphism."""
+class InverseTransform[T: TransformBase](TransformBase):
+    r"""Inverse of a transform."""
 
-    @abstractmethod
-    def encode_and_logabsdet(self, x: X, /) -> tuple[Y, Tensor]: ...
-    @abstractmethod
-    def decode_and_logabsdet(self, y: Y, /) -> tuple[X, Tensor]: ...
+    transform: T
+    r"""The transform to be inverted."""
 
-    @jit.export
-    def transform_and_log_det(self, x: X) -> tuple[Y, Tensor]:
-        r"""Alias for encode_and_logabsdet."""
-        return self.encode_and_logabsdet(x)
+    def __init__(self, transform: T) -> None:
+        super().__init__()
+        self.transform = transform
 
     @jit.export
-    def inverse_and_log_det(self, y: Y) -> tuple[X, Tensor]:
-        r"""Alias for decode_and_logabsdet."""
-        return self.decode_and_logabsdet(y)
+    def encode(self, x: Tensor, /) -> Tensor:
+        return self.transform.decode(x)
+
+    @jit.export
+    def decode(self, y: Tensor, /) -> Tensor:
+        return self.transform.encode(y)
+
+    @jit.export
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        y, logabsdet = self.transform.decode_and_logabsdet(x)
+        return y, -logabsdet
+
+    @jit.export
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        x, logabsdet = self.transform.encode_and_logabsdet(y)
+        return x, -logabsdet
 
 
-class BijectionSequence(ModuleSequence[BijectionBase]):
-    r"""Invertible Sequential model."""
+class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
+    r"""Apply multiple bijections sequentially."""
+
+    def __init__(self, modules: Iterable[B] = (), /) -> None:
+        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
+        ModuleSequence[B].__init__(self, modules)
+
+    def __invert__(self) -> "BijectionSequence":
+        return self.__class__([~layer for layer in self[::-1]])
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:
@@ -120,12 +163,28 @@ class BijectionSequence(ModuleSequence[BijectionBase]):
         return y
 
 
-class TransformSequence[T](ModuleSequence[TransformABC[T, T]]):
-    r"""Sequence of transformations."""
+class TransformSequence[T: TransformBase](BijectionSequence[T]):
+    r"""Apply multiple transforms sequentially."""
+
+    def __invert__(self) -> "TransformSequence":
+        return TransformSequence([~layer for layer in self[::-1]])
+
+    @jit.export
+    def encode(self, x: Tensor, /) -> Tensor:
+        for layer in self:
+            x = layer.encode(x)
+        return x
+
+    @jit.export
+    def decode(self, y: Tensor, /) -> Tensor:
+        for layer in self[::-1]:  # traverse in reverse
+            y = layer.decode(y)
+        return y
 
     @jit.export
     def encode_and_logabsdet(self, x: T) -> tuple[T, Tensor]:
         logabsdets: list[Tensor] = []
+
         for layer in self:
             x, logabsdet = layer.encode_and_logabsdet(x)
             logabsdets.append(logabsdet)

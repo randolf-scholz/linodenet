@@ -2,6 +2,7 @@
   <dictionary name="project">
     <words>
       <w>arglist</w>
+      <w>logabsdets</w>
     </words>
   </dictionary>
 </component>

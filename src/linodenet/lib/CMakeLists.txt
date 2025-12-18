@@ -1,17 +1,29 @@
-cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
 project(linodenet LANGUAGES CXX)
+
+message(STATUS "Configuring linodenet...")
+
+# determine project root
+execute_process (
+    COMMAND bash -c "git rev-parse --show-toplevel | xargs echo -n"
+    OUTPUT_VARIABLE PROJECT_ROOT
+)
+message(STATUS "NOTE: PROJECT_ROOT=${PROJECT_ROOT}")
+
+# determine cuda version from calling torch.__version__ in python
+execute_process (
+    COMMAND python3 -c "import torch; print(torch.version.cuda, end='')"
+    OUTPUT_VARIABLE CUDA_VERSION
+)
+message(STATUS "NOTE: CUDA_VERSION=${CUDA_VERSION}")
 
 # set global flags
 set(CMAKE_CXX_STANDARD 17)
-
-# run clang-tidy
 set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 
-# select cuda version
-set(CUDA_VERSION 12.4)
-set(CMAKE_CUDA_COMPILER "/usr/local/cuda-12.4/bin/nvcc")
-set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.4")
-set(CMAKE_INCLUDE_PATH  /usr/local/cuda-12.4/include)
+set(CMAKE_CUDA_COMPILER "/usr/local/cuda-${CUDA_VERSION}/bin/nvcc")
+set(CMAKE_INCLUDE_PATH  "/usr/local/cuda-${CUDA_VERSION}/include")
+set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-${CUDA_VERSION}")
 
 # set compiler flags
 set(USE_CUDA true)
@@ -22,11 +34,7 @@ option(USE_CUDNN "Use CUDNN" ON)
 # option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
 
 # Info
-execute_process (
-    COMMAND bash -c "git rev-parse --show-toplevel | xargs echo -n"
-    OUTPUT_VARIABLE PROJECT_ROOT
-)
-message(STATUS "NOTE: PROJECT_ROOT=${PROJECT_ROOT}")
+
 
 # get dependencies
 list(APPEND CMAKE_PREFIX_PATH "libtorch/share/cmake/Torch")

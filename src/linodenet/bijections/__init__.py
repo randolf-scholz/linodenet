@@ -27,6 +27,12 @@ __all__ = [
     # protocols & base classes
     "Bijection",
     "BijectionBase",
+    "BijectionSequence",
+    "InverseBijection",
+    "InverseTransform",
+    "Transform",
+    "TransformBase",
+    "TransformSequence",
     # classes
     "iResNet",
     "iResNetBlock",
@@ -35,7 +41,16 @@ __all__ = [
 ]
 
 
-from linodenet.bijections.base import Bijection, BijectionBase
+from linodenet.bijections.base import (
+    Bijection,
+    BijectionBase,
+    BijectionSequence,
+    InverseBijection,
+    InverseTransform,
+    Transform,
+    TransformBase,
+    TransformSequence,
+)
 from linodenet.bijections.iresnet import iResNet, iResNetBlock, iResNetLayer
 from linodenet.bijections.low_rank_perturbation import iLowRankLayer
 
