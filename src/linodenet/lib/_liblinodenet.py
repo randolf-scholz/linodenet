@@ -11,6 +11,7 @@ __all__ = [
     "LIB_NAME",
     "SOURCE_DIR",
     # Protocols
+    "KnownFunctions",
     "SingularTriplet",
     "SpectralNorm",
     # Implementations
@@ -24,28 +25,28 @@ __all__ = [
     "spectral_norm_riemann",
 ]
 
+import os
 import warnings
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final, Optional, Protocol, runtime_checkable
+from typing import Any, Final, Optional, Protocol, TypedDict, runtime_checkable
 
 import torch
 from torch import Tensor
-from torch.utils import cpp_extension
 
 # constants
 # we use FP32 machine epsilon as default tolerance
 ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
-LIB_NAME = "liblinodenet"
+LIB_NAME: Final[str] = "liblinodenet"
 r"""The name of the custom library."""
-LIB = torch.ops.liblinodenet
+LIB: Final = torch.ops.liblinodenet
 r"""The custom library."""
-BUILD_DIR = Path(__file__).parent / "build"
+BUILD_DIR: Final[Path] = Path(__file__).parent / "build"
 r"""The build directory."""
-SOURCE_DIR = Path(__file__).parent / "src" / f"{LIB_NAME}"
+SOURCE_DIR: Final[Path] = Path(__file__).parent / "src" / f"{LIB_NAME}"
 r"""The source directory."""
-CUSTOM_OPS = [
+CUSTOM_OPS: Final[list[str]] = [
     "singular_triplet",
     "singular_triplet_debug",
     "singular_triplet_riemann",
@@ -59,12 +60,19 @@ r"""List of custom operators."""
 # region compile functions -------------------------------------------------------------
 def load_function(name: str, /) -> Any:
     r"""Load a function from the custom library."""
+    from torch.utils import cpp_extension  # noqa: PLC0415
+
+    cpp_extension.verify_ninja_availability()
+
     try:  # compile the function
+        print(f"Compiling {name}...", flush=True)
         cpp_extension.load(
             name=name,
             sources=[str(SOURCE_DIR / f"{name}.cpp")],
+            extra_cflags=["-O3"],
             is_python_module=False,
             verbose=True,
+            with_cuda=torch.cuda.is_available(),
         )
     except Exception as exc:
         exc.add_note(f"Could not compile {name}!")
@@ -79,50 +87,60 @@ def load_function(name: str, /) -> Any:
     return function
 
 
-def _load_linodenet() -> dict[str, Callable]:
-    def _compile_fns() -> dict[str, Callable]:
-        r"""Fallback to compiling the functions."""
-        compiled_fns = {}
-        exceptions = {}
+def _compile_fns() -> dict[str, Callable]:
+    r"""Fallback to compiling the functions."""
+    os.environ["CUDA_HOME"] = "/usr/local/cuda-12.8"
+    compiled_fns = {}
+    exceptions = {}
+    for name in CUSTOM_OPS:
+        try:
+            compiled_fns[name] = load_function(name)
+        except Exception as _exc:  # noqa: BLE001
+            exceptions[name] = _exc
+    if exceptions:
+        exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
+        error = RuntimeError(
+            f"Failed to compile {len(exceptions)}/{len(CUSTOM_OPS)} custom operators!"
+        )
+        max_len = max(map(len, CUSTOM_OPS))
+        FAILURE = "\033[91m❌️ FAILED\033[0m"
+        SUCCESS = "\033[92m✅️ SUCCESS\033[0m"
         for name in CUSTOM_OPS:
-            try:
-                compiled_fns[name] = load_function(name)
-            except Exception as _exc:  # noqa: BLE001
-                exceptions[name] = _exc
-        if exceptions:
-            exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
-            error = RuntimeError(
-                f"Failed to compile {len(exceptions)}/{len(CUSTOM_OPS)} custom operators!"
+            error.add_note(
+                f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
             )
-            max_len = max(map(len, CUSTOM_OPS))
-            FAILURE = "\033[91m❌️ FAILED\033[0m"
-            SUCCESS = "\033[92m✅️ SUCCESS\033[0m"
-            for name in CUSTOM_OPS:
-                error.add_note(
-                    f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
-                )
-            raise error from exc_group
-        return compiled_fns
+        raise error from exc_group
+    return compiled_fns
 
-    try:  # load pre-compiled binaries
-        torch.ops.load_library(BUILD_DIR / f"{LIB_NAME}.so")
-        # load the functions
-        return {name: getattr(LIB, name) for name in CUSTOM_OPS}
-    except Exception as exc:  # noqa: BLE001
+
+def _load_linodenet() -> dict[str, Callable]:
+    LIB = BUILD_DIR / f"{LIB_NAME}.so"
+
+    if not LIB.exists():
         warnings.warn(
-            "Custom binaries not found!"
-            "\n\t-> Trying to compile them on the fly!."
-            "\n\t-> Consider compiling the extension in the linodenet/lib folder."
-            f"\n\t-> Full error: {exc}"
-            f"\n{'-' * 80}",
+            "\n\t Custom binaries not found!"
+            "\n\t -> Consider compiling the extension in the linodenet/lib folder."
+            "\n\t -> Trying to compile them on the fly...",
             UserWarning,
             stacklevel=2,
         )
-        return _compile_fns()
+    else:
+        try:  # load pre-compiled binaries
+            torch.ops.load_library(BUILD_DIR / f"{LIB_NAME}.so")
+            # load the functions
+            return {name: getattr(LIB, name) for name in CUSTOM_OPS}
+        except Exception as exc:  # noqa: BLE001
+            warnings.warn(
+                f"\n\t Custom binaries could not be loaded (raised {type(exc)})!"
+                "\n\t Please ensure they are compiled for the correct platform."
+                "\n\t Consider submitting a bug report."
+                "\n\t Attempting to compile them on the fly instead...",
+                UserWarning,
+                stacklevel=2,
+            )
+    return _compile_fns()
 
 
-COMPILED_FNS = _load_linodenet()
-r"""The compiled functions."""
 # endregion compile functions ----------------------------------------------------------
 
 
@@ -187,13 +205,29 @@ class SingularTriplet(Protocol):
         ...
 
 
+# endregion protocols ------------------------------------------------------------------
+
+
+# region load compiled functions -------------------------------------------------------
+class KnownFunctions(TypedDict):
+    singular_triplet: SingularTriplet
+    singular_triplet_debug: SingularTriplet
+    singular_triplet_riemann: SingularTriplet
+    spectral_norm: SpectralNorm
+    spectral_norm_debug: SpectralNorm
+    spectral_norm_riemann: SpectralNorm
+
+
+COMPILED_FNS: Final[KnownFunctions] = _load_linodenet()
+r"""The compiled functions."""
+
 _singular_triplet: SingularTriplet = COMPILED_FNS["singular_triplet"]
 _singular_triplet_debug: SingularTriplet = COMPILED_FNS["singular_triplet_debug"]
 _singular_triplet_riemann: SingularTriplet = COMPILED_FNS["singular_triplet_riemann"]
 _spectral_norm: SpectralNorm = COMPILED_FNS["spectral_norm"]
 _spectral_norm_debug: SpectralNorm = COMPILED_FNS["spectral_norm_debug"]
 _spectral_norm_riemann: SpectralNorm = COMPILED_FNS["spectral_norm_riemann"]
-# endregion protocols ------------------------------------------------------------------
+# endregion load compiled functions ----------------------------------------------------
 
 
 # region spectral norm -----------------------------------------------------------------

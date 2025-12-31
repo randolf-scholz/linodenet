@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=2.3.5",
+    "numpy>=2.4.0",
     "scipy>=1.16.3",
     "torch>=2.9.1",
     "torchdiffeq>=0.2.5",
@@ -47,16 +47,16 @@ dev = [
     {include-group="linters"}, {include-group="tests"}, {include-group="typing"},
 ]
 devtools = [
-    "cmake>=4.2.0",
+    "cmake>=4.2.1",
     "ninja>=1.13.0",
     "pybadges>=3.0.1",
 ]
 debug = [
     "ipympl>=0.9.8",
     "ipywidgets>=8.1.8",
-    "jupyterlab-execute-time>=3.2.0",
-    "jupyterlab>=4.5.0",
-    "psutil>=7.1.3",
+    "jupyterlab-execute-time>=3.3.0",
+    "jupyterlab>=4.5.1",
+    "psutil>=7.2.1",
     "torchinfo>=1.8.0",
 ]
 docs = [
@@ -68,7 +68,7 @@ docs = [
     "pygments>=2.19.2",
     "sphinx-autoapi>=3.6.0",
     "sphinx-autodoc2>=0.5.0",
-    "sphinx-automodapi>=0.21.0",
+    "sphinx-automodapi>=0.22.0",
     "sphinx-copybutton>=0.5.2",
     "sphinx-math-dollar>=1.2.1",
     "sphinx-togglebutton>=0.3.2",
@@ -76,15 +76,15 @@ docs = [
     "sphinx>=8.2.3",
 ]
 linters = [
-    "pre-commit>=4.5.0",
-    "ruff>=0.14.9",
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.10",
     "tach>=0.32.2",
 ]
 tests = [
-    "coverage>=7.13.0",
-    "hypothesis[numpy,pytest]>=6.148.7",
+    "coverage>=7.13.1",
+    "hypothesis[numpy,pytest]>=6.148.8",
     "matplotlib>=3.10.8",
-    "psutil>=7.1.3",
+    "psutil>=7.2.1",
     "pygal>=3.1.0",
     "pytest-benchmark[histogram]>=5.2.3",
     "pytest-cov>=7.0.0",
@@ -96,8 +96,8 @@ tests = [
     "typing-extensions>=4.15.0",
 ]
 typing = [
-    "mypy>=1.19.0",
-    "pyrefly>=0.45.2",
+    "mypy>=1.19.1",
+    "pyrefly>=0.46.3",
     "pyright>=1.1.407",
     "scipy-stubs>=1.16.3.3",
     "types-colorama>=0.4.15.20250801",
@@ -106,12 +106,12 @@ typing = [
     "types-jsonschema>=4.25.1.20251009",
     "types-pillow>=10.2.0.20240822",
     "types-protobuf>=6.32.1.20251210",
-    "types-psutil>=7.1.3.20251211",
+    "types-psutil>=7.2.1.20251231",
     "types-pygments>=2.19.0.20251121",
     "types-pytz>=2025.2.0.20251108",
     "types-pyyaml>=6.0.12.20250915",
     "types-requests>=2.32.4.20250913",
-    "types-setuptools>=80.9.0.20250822",
+    "types-setuptools>=80.9.0.20251223",
     "types-six>=1.17.0.20251009",
     "types-tabulate>=0.9.0.20241207",
     "types-tqdm>=4.67.0.20250809",
@@ -270,7 +270,6 @@ python-version = "3.13"
 output-format = "concise"
 
 
-
 # region pyrefly configuration ---------------------------------------------------------
 [tool.pyrefly]
 python-version = "3.13"
@@ -279,8 +278,6 @@ output-format="min-text"
 [tool.pyrefly.errors]
 invalid-overload = false
 # endregion pyrefly configuration ------------------------------------------------------
-
-
 
 
 # region mypy configuration ------------------------------------------------------------

@@ -61,7 +61,7 @@ class signature(SignatureType):
         r"""Decorator to annotate function signatures."""
         fn.signature = self  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
         if isinstance(fn.__doc__, str):
-            fn.__doc__ = fn.__doc__ + f"\n.. Signature:: ``{self}``"
+            fn.__doc__ = f"{fn.__doc__}\n.. Signature:: ``{self!s}``"
         return fn
 
 

@@ -1,5 +1,17 @@
 cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
-project(linodenet LANGUAGES CXX)
+project(linodenet VERSION 0.1.0 LANGUAGES CXX CUDA)
+
+
+# OPTIONS
+
+
+
+# Global settings
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_CLANG_TIDY clang-tidy)
+
 
 message(STATUS "Configuring linodenet...")
 
@@ -10,42 +22,49 @@ execute_process (
 )
 message(STATUS "NOTE: PROJECT_ROOT=${PROJECT_ROOT}")
 
+set(PYTHON_EXECUTABLE "${PROJECT_ROOT}/.venv/bin/python3")
+if(NOT EXISTS "${PYTHON_EXECUTABLE}")
+  message(STATUS "NOTE: venv python not found at ${PYTHON_EXECUTABLE} — falling back to system python3")
+  set(PYTHON_EXECUTABLE "python3")
+endif()
+message(STATUS "NOTE: PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}")
+
 # determine cuda version from calling torch.__version__ in python
 execute_process (
-    COMMAND python3 -c "import torch; print(torch.version.cuda, end='')"
+    COMMAND ${PYTHON_EXECUTABLE} -c "import torch; print(torch.version.cuda, end='')"
     OUTPUT_VARIABLE CUDA_VERSION
 )
 message(STATUS "NOTE: CUDA_VERSION=${CUDA_VERSION}")
 
-# set global flags
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_CLANG_TIDY clang-tidy)
+
 
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda-${CUDA_VERSION}/bin/nvcc")
 set(CMAKE_INCLUDE_PATH  "/usr/local/cuda-${CUDA_VERSION}/include")
+set(CMAKE_LIBRARY_PATH "/usr/local/cuda-${CUDA_VERSION}/lib64")
 set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-${CUDA_VERSION}")
 
+# get dependencies
+list(APPEND CMAKE_PREFIX_PATH "libtorch/share/cmake")
+
+
+
 # set compiler flags
-set(USE_CUDA true)
-set(USE_CUDNN true)
 set(CAFFE2_USE_CUDNN true)
 option(USE_CUDA "Use CUDA" ON)
 option(USE_CUDNN "Use CUDNN" ON)
 # option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
 
-# Info
-
-
-# get dependencies
-list(APPEND CMAKE_PREFIX_PATH "libtorch/share/cmake/Torch")
-find_package(Python REQUIRED COMPONENTS Development)
+# Dependency discovery
 find_package(Torch REQUIRED)
+find_package(Python REQUIRED COMPONENTS Development)
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-#message(STATUS "NOTE: CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
-#message(STATUS "NOTE: TORCH_CXX_FLAGS=${TORCH_CXX_FLAGS}")
+if(LINODENET_USE_CUDA)
+  enable_language(CUDA)
+  find_package(CUDAToolkit)
+endif()
 
-# Define our library target
+
+# Targets
 add_library(
         linodenet
         SHARED
@@ -59,9 +78,7 @@ add_library(
         src/liblinodenet/matrix_root.cpp
 )
 
-# Enable C++17
+# Target configuration
 target_compile_features(linodenet PRIVATE cxx_std_17)
 # Link against LibTorch
 target_link_libraries(linodenet "${TORCH_LIBRARIES}")
-# # Link against OpenCV
-# target_link_libraries(spectral_norm opencv_core opencv_imgproc)

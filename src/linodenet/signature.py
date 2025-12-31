@@ -21,6 +21,7 @@ __all__ = [
     "DynamicDim",
     "UnknownDim",
     # Functions
+    "is_identifier",
     "parse_arglist",
     "parse_signature",
     "tokenize",

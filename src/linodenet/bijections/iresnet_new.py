@@ -84,7 +84,7 @@ class iResNetBlock(nn.Module):
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:
-        r"""y = x + f(x)"""
+        r"""Computes $y = x + f(x)$."""
         return x + self.block(x)
 
     @jit.export
