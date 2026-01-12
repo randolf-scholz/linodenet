@@ -39,6 +39,7 @@ from torch.linalg import matrix_norm
 from torch.nn import functional
 
 from linodenet.lib import singular_triplet
+from linodenet.signatures import signature
 
 
 class LinearContraction(nn.Module):
@@ -114,8 +115,8 @@ class LinearContraction(nn.Module):
     #     )
 
     @jit.export
+    @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
         # self.spectral_norm = spectral_norm(self.weight)
@@ -215,8 +216,8 @@ class AltLinearContraction(nn.Module):
     #     )
 
     @jit.export
+    @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
         # σ_max = torch.linalg.norm(self.weight, ord=2)
         # σ_max = spectral_norm(self.weight)
@@ -253,12 +254,11 @@ class NaiveLinearContraction(nn.Module):
         self.register_buffer("c", torch.tensor(float(c)), persistent=True)
         self.register_buffer("one", torch.tensor(1.0), persistent=True)
 
+    @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         sigma = matrix_norm(self.weight, ord=2)
         gamma = torch.minimum(self.c / sigma, self.one)
         return functional.linear(x, gamma * self.weight, self.bias)
-        # return self.layer(x / sigma)
 
 
 class LinearContractionManualParametrized(nn.Module):
@@ -402,6 +402,6 @@ class LinearContractionManualParametrized(nn.Module):
             self.weight.copy_(self.cached_weight)
 
     @jit.export
+    @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         return functional.linear(x, self.cached_weight, self.bias)

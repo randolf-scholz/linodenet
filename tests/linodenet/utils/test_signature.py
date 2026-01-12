@@ -2,7 +2,7 @@ r"""Test Signature utility."""
 
 import pytest
 
-from linodenet.signature import parse_arglist, parse_signature
+from linodenet.signatures import Parser
 
 
 @pytest.mark.parametrize(
@@ -13,7 +13,7 @@ from linodenet.signature import parse_arglist, parse_signature
 )
 def test_signature(argument: str, expected: str) -> None:
     r"""Test Signature utility."""
-    sig = parse_signature(argument)
+    sig = Parser.parse_signature(argument)
     assert str(sig) == expected
 
 
@@ -29,7 +29,7 @@ def test() -> None:
     for src in examples:
         print("SOURCE:", src)
         try:
-            ast = parse_arglist(src)
+            ast = Parser.parse_arglist(src)
             print("AST:   ", ast)
         except SyntaxError as e:
             print("ERROR:", e)
@@ -43,7 +43,7 @@ def test() -> None:
     for src in examples_sig:
         print("SIGNATURE SOURCE:", src)
         try:
-            sig = parse_signature(src)
+            sig = Parser.parse_signature(src)
             print("SIG:   ", sig)
         except SyntaxError as e:
             print("ERROR:", e)

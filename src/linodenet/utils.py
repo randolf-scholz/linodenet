@@ -13,7 +13,6 @@ __all__ = [
     "is_dunder",
     "is_private",
     "unflatten_dict",
-    "signature",
 ]
 
 from collections.abc import Callable, Iterable, Mapping
@@ -31,7 +30,6 @@ from typing import (
 from typing_extensions import TypeForm
 
 from linodenet.constants import NOT_GIVEN
-from linodenet.signature import SignatureType, parse_signature
 from linodenet.types import NestedDict, NestedMapping
 
 
@@ -41,30 +39,6 @@ class SelfMap[T](Protocol):
     # TODO: make this generic and upper-bound T to the generic type.
     # alternatively, use signature def[S](T & S) -> (T & S)
     def __call__[S](self, arg: S, /) -> S: ...
-
-
-class signature(SignatureType):
-    r"""To be used as a no-op decorator for annotating function signatures.
-
-    Signature DSL:
-
-    - `3`: axis of size 3
-    - `x`: single axis of statically known size
-    - `*xs`: single axis of variable size
-    - `**xs`: multiple axes of variable size
-    - `...`: axes to vectorize over
-    """
-
-    def __init__(self, sig_string: str, /) -> None:
-        sig = parse_signature(sig_string)
-        super().__init__(sig.argument_types, sig.return_types)
-
-    def __call__[Fn: Callable](self, fn: Fn) -> Fn:
-        r"""Decorator to annotate function signatures."""
-        fn.signature = self  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
-        if isinstance(fn.__doc__, str):
-            fn.__doc__ = f"{fn.__doc__}\n.. Signature:: ``{self!s}``"
-        return fn
 
 
 @overload

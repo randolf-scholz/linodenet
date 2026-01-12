@@ -19,25 +19,23 @@ import torch
 from torch import Tensor, jit, nn
 from torch.nn import functional
 
+from linodenet.signatures import signature
+
 
 @runtime_checkable
 class Embedding[X, Y](Protocol):
     r"""Protocol for Embedding Components."""
 
     @abstractmethod
+    @signature("(...) -> (...)")
     def __call__(self, x: X, /) -> Y:
-        r"""Forward pass of the embedding.
-
-        .. Signature: ``... -> ...``.
-        """
+        r"""Forward pass of the embedding."""
         ...
 
     @abstractmethod
+    @signature("(...) -> (...)")
     def left_inverse(self, y: Y, /) -> X:
-        r"""Left-inverse pass of the embedding.
-
-        .. Signature: ``... -> ...``.
-        """
+        r"""Left-inverse pass of the embedding."""
         ...
 
 

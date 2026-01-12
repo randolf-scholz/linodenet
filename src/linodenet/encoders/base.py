@@ -17,23 +17,22 @@ from typing import Protocol, runtime_checkable
 
 from torch import Tensor, nn
 
+from linodenet.signatures import signature
+
 
 @runtime_checkable
 class Encoder(Protocol):
     r"""Protocol for Encoder Components."""
 
-    def __call__(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the encoder.
-
-        .. Signature: ``(..., d) -> (..., d)``.
-        """
-        ...
+    @signature("(..., *xs) -> (..., *xs)")
+    def __call__(self, x: Tensor, /) -> Tensor: ...
 
 
 class EncoderABC(nn.Module):
     r"""Abstract Base Class for Encoder components."""
 
     @abstractmethod
+    @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Forward pass of the encoder.
 

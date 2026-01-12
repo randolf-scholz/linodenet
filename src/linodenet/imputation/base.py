@@ -17,7 +17,7 @@ from typing import Protocol
 import torch
 from torch import Tensor, nn
 
-from linodenet.utils import signature
+from linodenet.signatures import signature
 
 
 class ImputerProtocol(Protocol):

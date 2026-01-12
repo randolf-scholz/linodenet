@@ -13,6 +13,8 @@ from typing import Concatenate, Protocol, runtime_checkable
 
 from torch import Tensor, nn
 
+from linodenet.signatures import signature
+
 type GenericActivation = Callable[Concatenate[Tensor, ...], Tensor]
 r"""Type alias for generic activation functions (may require additional args!)."""
 
@@ -22,22 +24,17 @@ class Activation(Protocol):
     r"""Protocol for Activation Components."""
 
     @abstractmethod
-    def __call__(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the activation.
-
-        .. Signature: ``[..., *xs] -> [..., *xs]``.
-        """
-        ...
+    @signature("(..., *xs) -> (..., *xs)")
+    def __call__(self, x: Tensor, /) -> Tensor: ...
 
 
 class ActivationBase(nn.Module):
     r"""Abstract Base Class for Activation components."""
 
     @abstractmethod
+    @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Forward pass of the activation.
-
-        .. Signature: ``... -> ...``.
 
         Args:
             x: The input tensor to be activated.
@@ -45,3 +42,4 @@ class ActivationBase(nn.Module):
         Returns:
             y: The activated tensor.
         """
+        ...

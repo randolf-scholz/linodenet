@@ -30,11 +30,13 @@ import torch
 from torch import Tensor
 
 from linodenet.constants import ATOL, RTOL, TRUE
+from linodenet.signatures import signature
 
 
 class MatrixTest(Protocol):
     r"""Protocol for testing certain matrix property."""
 
+    @signature("(..., m, n) -> bool[(...)]")
     def __call__(
         self,
         x: Tensor,
@@ -45,8 +47,6 @@ class MatrixTest(Protocol):
         atol: float = ATOL,
     ) -> Tensor:
         r"""Check whether the given matrix belongs to a matrix group/manifold.
-
-        .. Signature:: ``(..., m, n) -> bool[...]``
 
         Note:
             - There are different kinds of matrix groups, which are not cleanly separated
@@ -59,16 +59,29 @@ class MatrixTest(Protocol):
 
 # region is_* checks -------------------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
+@signature("(..., m, n) -> bool[(...)]")
+def is_low_rank(
+    x: Tensor,
+    rank: int = 1,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is low-rank."""
+    # move target dims to -1 and -2
+    x = x.movedim(dim, (-2, -1))
+    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
+    return ranks <= rank
+
+
+@signature("(..., m, n) -> bool[()]")
 def is_square(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,  # noqa: ARG001
     atol: float = 0.0,  # noqa: ARG001
 ) -> Tensor:
-    r"""Check whether the given tensor is square along the given dimensions.
-
-    .. Signature:: ``(..., m, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is square along the given dimensions."""
     return torch.tensor(
         x.shape[dim[0]] == x.shape[dim[1]],
         dtype=torch.bool,
@@ -76,16 +89,14 @@ def is_square(
     )
 
 
+@signature("(..., n, n) -> bool[(...)]")
 def is_symmetric(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is symmetric.
-
-    .. Signature:: ``(..., n, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is symmetric."""
     return torch.isclose(
         x,
         x.swapaxes(*dim),
@@ -94,16 +105,14 @@ def is_symmetric(
     ).all(dim=dim)
 
 
+@signature("(..., n, n) -> bool[(...)]")
 def is_skew_symmetric(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is skew-symmetric.
-
-    .. Signature:: ``(..., n, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is skew-symmetric."""
     return torch.isclose(
         x,
         -x.swapaxes(*dim),
@@ -112,33 +121,14 @@ def is_skew_symmetric(
     ).all(dim=dim)
 
 
-def is_low_rank(
-    x: Tensor,
-    rank: int = 1,
-    dim: tuple[int, int] = (-2, -1),
-    rtol: float = RTOL,
-    atol: float = ATOL,
-) -> Tensor:
-    r"""Check whether the given tensor is low-rank.
-
-    .. Signature:: ``(..., m, n) -> bool[...]``
-    """
-    # move target dims to -1 and -2
-    x = x.movedim(dim, (-2, -1))
-    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
-    return ranks <= rank
-
-
+@signature("(..., n, n) -> bool[(...)]")
 def is_orthogonal(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is orthogonal.
-
-    .. Signature:: ``(..., n, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is orthogonal."""
     return torch.isclose(
         x @ x.swapaxes(*dim),
         torch.eye(x.shape[dim[-1]], device=x.device),
@@ -147,6 +137,7 @@ def is_orthogonal(
     ).all(dim=dim)
 
 
+@signature("(..., n, n) -> bool[(...)]")
 def is_traceless(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
@@ -154,8 +145,6 @@ def is_traceless(
     atol: float = ATOL,
 ) -> Tensor:
     r"""Checks whether the trace of the given tensor is zero.
-
-    .. Signature:: ``(..., n, n) -> bool[...]``
 
     Note:
         - Traceless matrices are an additive group.
@@ -171,16 +160,14 @@ def is_traceless(
     )  # NOTE: no need for `all(dim=dim)` here
 
 
+@signature("(..., n, n) -> bool[(...)]")
 def is_normal(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is normal.
-
-    .. Signature:: ``(..., n, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is normal."""
     return torch.isclose(
         x @ x.swapaxes(*dim),
         x.swapaxes(*dim) @ x,
@@ -189,16 +176,14 @@ def is_normal(
     ).all(dim=dim)
 
 
+@signature("(..., 2n, 2n) -> bool[(...)]")
 def is_symplectic(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is symplectic.
-
-    .. Signature:: ``(..., 2n, 2n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is symplectic."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
 
@@ -220,16 +205,14 @@ def is_symplectic(
     ).all(dim=dim)
 
 
+@signature("(..., 2n, 2n) -> bool[(...)]")
 def is_hamiltonian(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is Hamiltonian.
-
-    .. Signature:: ``(..., 2n, 2n) -> bool``
-    """
+    r"""Check whether the given tensor is Hamiltonian."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
 
@@ -251,16 +234,14 @@ def is_hamiltonian(
 
 
 # region masked ------------------------------------------------------------------------
+@signature("(..., m, n) -> bool[(...)]")
 def is_diagonal(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
-    r"""Check whether the given tensor is diagonal.
-
-    .. Signature:: ``(..., m, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is diagonal."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
 
@@ -274,6 +255,7 @@ def is_diagonal(
     ).all(dim=dim)
 
 
+@signature("(..., m, n) -> bool[(...)]")
 def is_lower_triangular(
     x: Tensor,
     lower: int = 0,
@@ -281,16 +263,14 @@ def is_lower_triangular(
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
-    r"""Check whether the given tensor is lower triangular.
-
-    .. Signature:: ``(..., m, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is lower triangular."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
 
     return torch.isclose(x, x.tril(lower), rtol=rtol, atol=atol).all(dim=dim)
 
 
+@signature("(..., m, n) -> bool[(...)]")
 def is_upper_triangular(
     x: Tensor,
     upper: int = 0,
@@ -298,10 +278,7 @@ def is_upper_triangular(
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
-    r"""Check whether the given tensor is lower triangular.
-
-    .. Signature:: ``(..., m, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is lower triangular."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
 
@@ -313,6 +290,7 @@ def is_upper_triangular(
     ).all(dim=dim)
 
 
+@signature("(..., m, n) -> bool[(...)]")
 def is_banded(
     x: Tensor,
     upper: int = 0,
@@ -321,10 +299,7 @@ def is_banded(
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
-    r"""Check whether the given tensor is banded.
-
-    .. Signature:: ``(..., m, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is banded."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
 
@@ -336,6 +311,7 @@ def is_banded(
     ).all(dim=dim)
 
 
+@signature("(..., m, n) -> bool[(...)]")
 def is_masked(
     x: Tensor,
     mask: Tensor = TRUE,
@@ -343,10 +319,7 @@ def is_masked(
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
-    r"""Check whether the given tensor is masked.
-
-    .. Signature:: ``(..., m, n) -> bool[...]``
-    """
+    r"""Check whether the given tensor is masked."""
     mask_ = torch.as_tensor(mask, dtype=x.dtype, device=x.device)
     return torch.isclose(
         x,
@@ -360,6 +333,7 @@ def is_masked(
 
 
 # region other projections -------------------------------------------------------------
+@signature("(..., m, n) -> bool[(...)]")
 def is_contraction(
     x: Tensor,
     strict: bool = False,
@@ -368,8 +342,6 @@ def is_contraction(
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is a contraction.
-
-    .. Signature:: ``(..., m, n) -> bool``
 
     This is done by checking whether the spectral norm is less than or equal to 1.
     If strict, we require that the spectral norm is strictly less than 1, more specifically
@@ -384,6 +356,7 @@ def is_contraction(
     return sigma <= 1.0
 
 
+@signature("(..., m, n) -> bool[(...)]")
 def is_diagonally_dominant(
     x: Tensor,
     strict: bool = False,
@@ -392,8 +365,6 @@ def is_diagonally_dominant(
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given matrix is diagonally dominant.
-
-    .. Signature:: ``(..., n, n) -> bool``
 
     The test is based on the definition of diagonally dominant matrices:
 
@@ -433,6 +404,7 @@ def is_diagonally_dominant(
     return (lhs >= rhs).all(dim=-1)
 
 
+@signature("(..., m, n) -> bool[(...)]")
 def is_forward_stable(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),
@@ -454,6 +426,7 @@ def is_forward_stable(
     return mean_stable & stdv_stable
 
 
+@signature("(..., m, n) -> bool[(...)]")
 def is_backward_stable(
     x: Tensor,
     dim: tuple[int, int] = (-2, -1),

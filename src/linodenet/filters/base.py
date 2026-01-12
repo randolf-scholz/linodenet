@@ -55,6 +55,8 @@ from typing import Final, Protocol, TypeIs, runtime_checkable
 
 from torch import Tensor, nn
 
+from linodenet.signatures import signature
+
 
 @runtime_checkable
 class AbstractCell[X, Y](Protocol):
@@ -71,7 +73,7 @@ class AbstractCell[X, Y](Protocol):
 
 
 @runtime_checkable
-class AbstractFilter[Y](Protocol):
+class AbstractFilter[Y](AbstractCell[Y, Y], Protocol):
     r"""Abstract Protocol for filters.
 
     Currently unused and only included for documentation purposes.
@@ -99,9 +101,8 @@ class Cell(AbstractCell[Tensor, Tensor], Protocol):
         self.input_size = int(input_size)
         self.hidden_size = int(hidden_size)
 
-    def __call__(self, y: Tensor, x: Tensor, /) -> Tensor:
-        r""".. Signature: ``[(..., d), (..., h)] -> (..., h)``."""
-        ...
+    @signature("[(..., d), (..., h)] -> (..., h)")
+    def __call__(self, y: Tensor, x: Tensor, /) -> Tensor: ...
 
 
 @runtime_checkable
@@ -121,9 +122,9 @@ class Filter(AbstractFilter[Tensor], Protocol):
         self.input_size = int(input_size)
         self.hidden_size = int(input_size)
 
-    def __call__(self, y_obs: Tensor, y_pred: Tensor, /) -> Tensor:
-        r""".. Signature: ``[(..., d), (..., d)] -> (..., d)``."""
-        ...
+    @abstractmethod
+    @signature("[(..., d), (..., d)] -> (..., d)")
+    def __call__(self, y_obs: Tensor, y_pred: Tensor, /) -> Tensor: ...
 
 
 class CellBase(nn.Module, Cell):
@@ -133,7 +134,6 @@ class CellBase(nn.Module, Cell):
     are vectors.
 
     .. math::  x' = F(y, x)
-    .. Signature: ``[(..., d), (..., h)] -> (..., h)``.
     """
 
     def __init__(self, /, input_size: int, hidden_size: int) -> None:
@@ -143,6 +143,7 @@ class CellBase(nn.Module, Cell):
         Cell.__init__(self, input_size, hidden_size)
 
     @abstractmethod
+    @signature("[(..., d), (..., h)] -> (..., h)")
     def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
         r"""Forward pass of the filter.
 
@@ -163,7 +164,6 @@ class FilterBase(CellBase):
     are vectors.
 
     .. math::  y' = F(y_obs, y_pred)
-    .. Signature: ``[(..., d), (..., d)] -> (..., d)``.
 
     Where $x$ is the current state of the system, $y$ is the current measurement, and
     $x'$ is the new state of the system. $ϕ$ is a function that maps the measurement
@@ -178,6 +178,7 @@ class FilterBase(CellBase):
         super().__init__(input_size, input_size)
 
     @abstractmethod
+    @signature("[(..., d), (..., d)] -> (..., d)")
     def forward(self, y_obs: Tensor, y_hat: Tensor, /) -> Tensor:
         r"""Forward pass of the filter.
 

@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.initializations import low_rank
-from linodenet.utils import signature
+from linodenet.signatures import signature
 
 
 class iLowRankLayer(nn.Module):

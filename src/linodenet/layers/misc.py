@@ -8,6 +8,8 @@ __all__ = [
 import torch
 from torch import Tensor, nn
 
+from linodenet.signatures import signature
+
 
 class Constant(nn.Module):
     r"""Constant function."""
@@ -24,7 +26,8 @@ class Constant(nn.Module):
         super().__init__()
         self.register_buffer("value", torch.as_tensor(value))
 
-    def forward(self, _: Tensor) -> Tensor:
+    @signature("() -> (...)")
+    def forward(self) -> Tensor:
         return self.value
 
 
@@ -37,6 +40,6 @@ class Identity(nn.Module):
     }
     r"""Hyperparameters of the component."""
 
+    @signature("(...) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature: ``... -> ...``."""
         return x

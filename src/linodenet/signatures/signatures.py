@@ -1,4 +1,4 @@
-r"""Module for parsing and representing function signatures between vector spaces."""
+r"""Implementation of the `@signature` decorator."""
 
 __all__ = [
     # Types
@@ -13,28 +13,31 @@ __all__ = [
     "Token",
     "TokenKind",
     "DimKind",
+    "Sign",
     # dimension types
     "Dim",
     "DimType",
     "ConstantDim",
     "StaticDim",
+    "AffineDim",
     "DynamicDim",
     "UnknownDim",
     # Functions
     "is_identifier",
-    "parse_arglist",
-    "parse_signature",
     "tokenize",
+    "signature",
 ]
 
-from collections.abc import Iterator
+from abc import abstractmethod
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import IntEnum, StrEnum
+from functools import cached_property
 from types import EllipsisType
-from typing import Literal, TypeIs, overload
+from typing import ClassVar, Literal, TypeIs, overload
 
 type ShapeType = tuple[DimType, ...] | tuple[EllipsisType, *tuple[DimType, ...]]
-type DimType = ConstantDim | StaticDim | DynamicDim | UnknownDim
+type DimType = ConstantDim | StaticDim | DynamicDim | AffineDim | UnknownDim
 type ArgType = ShapeType | Identifier | GenericType
 type ArgList = list[ArgType]
 type QMARK = Literal["?"]
@@ -84,6 +87,7 @@ class DimKind(StrEnum):
     CONSTANT = "constant"  # '1', '2', '3', ... fixed-size dimension
     STATIC = "static"  # 'n' variable (fixed at initialization time)
     DYNAMIC = "dynamic"  # '*n' variable size dimension
+    COMPOUND = "compound"  # "2n", "3n+1", "u+v"
     UNKNOWN = "unknown"  # for future use
 
 
@@ -91,37 +95,45 @@ class DimKind(StrEnum):
 class Dim:
     r"""Class for representing a single dimension."""
 
-    value: Identifier | int | QMARK
-    kind: DimKind
+    kind: ClassVar[DimKind]
 
-    def __str__(self) -> str:
-        return f"{self.value!s}"
+    @abstractmethod
+    def __str__(self) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
 class ConstantDim(Dim):
     r"""Class for representing constant dimensions."""
 
-    value: int
-    kind: Literal[DimKind.CONSTANT] = DimKind.CONSTANT
+    kind: ClassVar[Literal[DimKind.CONSTANT]] = DimKind.CONSTANT
+
+    value: int  # (>= 0)
+
+    def __str__(self) -> str:
+        return f"{self.value!s}"
 
 
 @dataclass(frozen=True, slots=True)
 class StaticDim(Dim):
     r"""Class for representing static dimensions."""
 
+    kind: ClassVar[Literal[DimKind.STATIC]] = DimKind.STATIC
+
     value: Identifier
-    kind: Literal[DimKind.STATIC] = DimKind.STATIC
+
+    def __str__(self) -> str:
+        return f"{self.value!s}"
 
 
 @dataclass(frozen=True, slots=True)
 class DynamicDim(Dim):
     r"""Class for representing dynamic dimensions."""
 
-    value: Identifier
-    kind: Literal[DimKind.DYNAMIC] = DimKind.DYNAMIC
+    kind: ClassVar[Literal[DimKind.DYNAMIC]] = DimKind.DYNAMIC
 
-    def __repr__(self) -> str:
+    value: Identifier
+
+    def __str__(self) -> str:
         return f"*{self.value!s}"
 
 
@@ -129,8 +141,74 @@ class DynamicDim(Dim):
 class UnknownDim(Dim):
     r"""Class for representing unknown dimensions."""
 
+    kind: ClassVar[Literal[DimKind.UNKNOWN]] = DimKind.UNKNOWN
+
     value: Literal["?"] = "?"
-    kind: Literal[DimKind.UNKNOWN] = DimKind.UNKNOWN
+
+    def __str__(self) -> str:
+        return "?"
+
+
+class Sign(IntEnum):
+    r"""Enumeration of signs for affine dimensions."""
+
+    POS = +1
+    NEG = -1
+
+
+@dataclass(frozen=True, slots=True)
+class AffineDim(Dim):
+    r"""Class for representing compound dimensions.
+
+    Currently, affine combinations of static dimensions are supported, e.g.,
+
+    - `2n`
+    - `3n + 1`
+    - `u + v`
+    - `1a - 2b + 3c - 4d +5`
+    """
+
+    kind: ClassVar[Literal[DimKind.COMPOUND]] = DimKind.COMPOUND
+
+    terms: list[tuple[Sign, ConstantDim, StaticDim]]
+    offset: ConstantDim | None = None
+
+    # signs: list[Sign]
+    # coefficients: list[ConstantDim]
+    # variables: list[StaticDim]
+
+    def __post_init__(self) -> None:
+        # if len(self.terms) == 0:
+        # raise ValueError("AffineDim must have at least one term")
+        if len(set(self.variables)) != len(self.terms):
+            raise ValueError("AffineDim variables must be unique")
+
+    @property
+    def variables(self) -> list[StaticDim]:
+        return [var for _, _, var in self.terms]
+
+    @property
+    def coefficients(self) -> list[ConstantDim]:
+        return [coef for _, coef, _ in self.terms]
+
+    @property
+    def signs(self) -> list[Sign]:
+        return [sign for sign, _, _ in self.terms]
+
+    def __str__(self) -> str:
+        terms: list[str] = []
+
+        for sign, coef, var in self.terms:
+            sign_str = "+" if sign is Sign.POS else "-"
+            coef_str = "" if coef.value == 1 else str(coef.value)
+            terms.append(f"{sign_str}{coef_str}{var!s}")
+
+        if self.offset is not None:
+            offset_sign = "+" if self.offset.value >= 0 else "-"
+            terms.append(f"{offset_sign}{self.offset!s}")
+
+        # Combine and clean up leading plus sign
+        return " ".join(terms).lstrip("+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,7 +269,7 @@ class TokenKind(StrEnum):
     r"""Enumeration of token kinds for the ArgList / Signature parser."""
 
     IDENT = r"[A-Za-z]\w*]"
-    INT = r"\d+"
+    NUMBER = r"\d+"
     ELLIPSIS = "..."
     QMARK = "?"
     STAR = "*"
@@ -201,6 +279,8 @@ class TokenKind(StrEnum):
     LPAREN = "("
     RPAREN = ")"
     COMMA = ","
+    PLUS = "+"
+    MINUS = "-"
     EOF = "EOF"
 
 
@@ -214,16 +294,16 @@ class Token:
 
     @overload
     def __init__(
-        self, pos: int, kind: Literal[TokenKind.IDENT, TokenKind.INT], value: str
+        self, pos: int, kind: Literal[TokenKind.IDENT, TokenKind.NUMBER], value: str
     ) -> None: ...
     @overload
     def __init__(self, pos: int, kind: TokenKind) -> None: ...
     def __init__(self, pos: int, kind: TokenKind, value: str | None = None) -> None:
-        if kind in (TokenKind.IDENT, TokenKind.INT) and value is None:
+        if kind in (TokenKind.IDENT, TokenKind.NUMBER) and value is None:
             raise AssertionError("IDENT and INT tokens require a value")
-        if kind not in (TokenKind.IDENT, TokenKind.INT) and value is not None:
+        if kind not in (TokenKind.IDENT, TokenKind.NUMBER) and value is not None:
             raise AssertionError("Only IDENT and INT tokens may carry custom values")
-        if kind not in (TokenKind.IDENT, TokenKind.INT):
+        if kind not in (TokenKind.IDENT, TokenKind.NUMBER):
             assert value is None
             value = kind.value
 
@@ -236,6 +316,23 @@ class Token:
 
 
 def tokenize(source: str, /) -> Iterator[Token]:
+    r"""Tokenize a signature DSL string.
+
+    Args:
+        source: Signature string to tokenize.
+
+    Yields:
+        Token: A stream of `Token` objects (pos, kind, value) for each lexical token.
+               The final token yielded is always an EOF token.
+
+    Raises:
+        SyntaxError: If an unexpected or invalid character is encountered.
+
+    Notes:
+        - Whitespace is skipped.
+        - Recognizes identifiers, integer literals, punctuation (`[ ] ( ) , * ?`),
+          the arrow `->`, and the ellipsis `...`.
+    """
     i = 0
     n = len(source)
 
@@ -259,7 +356,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
             continue
 
         # Single-character punctuation / operators
-        if c in "[](),*?":
+        if c in "[](),*+-?":
             yield Token(i, TokenKind(c))  # maps "[" -> LBRACKET, etc.
             i += 1
             continue
@@ -281,7 +378,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
             while i < n and source[i].isdigit():
                 i += 1
             value = source[start:i]
-            yield Token(start, TokenKind.INT, value)
+            yield Token(start, TokenKind.NUMBER, value)
             continue
 
         # If we get here, it's an invalid character
@@ -293,8 +390,49 @@ def tokenize(source: str, /) -> Iterator[Token]:
 class Parser:
     r"""Recursive-descent parser consuming an Iterator[Token]."""
 
-    def __init__(self, tokens: Iterator[Token]) -> None:
-        self._tokens = iter(tokens)
+    @staticmethod
+    def parse_signature(arg: str, /) -> SignatureType:
+        r"""Parse the grammar starting from SignatureType and ensure full consumption."""
+        self = Parser(tokenize(arg))
+        try:
+            result = self._parse_signature()
+            self._check_eof()
+        except SyntaxError as exc:
+            exc.add_note(f"Failed to parse signature from {arg!r}")
+            raise
+
+        return result
+
+    @staticmethod
+    def parse_arglist(arg: str, /) -> ArgList:
+        r"""Parse the grammar starting from ArgList and ensure full consumption."""
+        self = Parser(tokenize(arg))
+
+        try:
+            result = self._parse_arglist()
+            self._check_eof()
+        except SyntaxError as exc:
+            exc.add_note(f"Failed to parse arglist from {arg!r}")
+            raise
+
+        return result
+
+    @staticmethod
+    def parse_identifier(arg: str, /) -> Identifier:
+        r"""Parse the grammar starting from IdentifierType and ensure full consumption."""
+        self = Parser(tokenize(arg))
+
+        try:
+            result = self._parse_identifier()
+            self._check_eof()
+        except SyntaxError as exc:
+            exc.add_note(f"Failed to parse identifier from {arg!r}")
+            raise
+
+        return result
+
+    def __init__(self, tokens: Iterator[Token], /) -> None:
+        self._tokens = tokens
         # prime the first token
         try:
             self._current: Token = next(self._tokens)
@@ -314,8 +452,6 @@ class Parser:
             if self._current.kind is not TokenKind.EOF:
                 self._current = Token(self._current.pos, TokenKind.EOF)
 
-    # Utility methods
-
     def consume(self, kind: TokenKind) -> Token:
         tok = self.current
         if tok.kind is not kind:
@@ -326,30 +462,15 @@ class Parser:
         self._advance()
         return tok
 
-    def parse_signature(self) -> SignatureType:
-        r"""Parse the grammar starting from SignatureType and ensure full consumption."""
-        result = self._parse_signature()
+    def _check_eof(self) -> None:
         if self.current.kind is not TokenKind.EOF:
             tok = self.current
             raise SyntaxError(
                 f"Unexpected token {tok.kind.name} {tok.value!r} at position {tok.pos}, "
                 "expected end of input"
             )
-        return result
-
-    def parse_arglist(self) -> ArgList:
-        r"""Parse the grammar starting from ArgList and ensure full consumption."""
-        result = self._parse_arglist()
-        if self.current.kind is not TokenKind.EOF:
-            tok = self.current
-            raise SyntaxError(
-                f"Unexpected token {tok.kind.name} {tok.value!r} at position {tok.pos}, "
-                "expected end of input"
-            )
-        return result
 
     # SignatureType ::= (ArgList | ArgType) "->" (ArgList | ArgType)
-
     def _parse_signature(self) -> SignatureType:
         """Parse the grammar starting from SignatureType and ensure full consumption.
 
@@ -372,7 +493,6 @@ class Parser:
         return SignatureType(lhs, rhs)
 
     # ArgList ::= "[" (ArgType ("," ArgType)*)? "]"
-
     def _parse_arglist(self) -> ArgList:
         self.consume(TokenKind.LBRACKET)
         args: ArgList = []
@@ -387,7 +507,6 @@ class Parser:
         return args
 
     # ArgType ::= ShapeType | IdentifierType | GenericType
-
     def _parse_argtype(self) -> ArgType:
         match (tok := self.current).kind:
             # ShapeType starts with "("
@@ -408,7 +527,6 @@ class Parser:
                 )
 
     # ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
-
     def _parse_shape_type(self) -> ShapeType:
         self.consume(TokenKind.LPAREN)
 
@@ -443,7 +561,6 @@ class Parser:
         return (Ellipsis, *dims) if with_ellipsis else tuple(dims)  # type: ignore[arg-type]
 
     # DimType ::= "?" | Number | ("*"? IdentifierType)
-
     def _parse_dim_type(self) -> DimType:
         match (tok := self.current).kind:
             case TokenKind.ELLIPSIS:
@@ -452,13 +569,45 @@ class Parser:
                     "and if present, it must be the first item."
                 )
 
-            case TokenKind.INT:
-                self.consume(TokenKind.INT)
-                return ConstantDim(int(tok.value))
+            case TokenKind.PLUS:
+                # drop plus sign (so "+n" is same as "n")
+                self.consume(TokenKind.PLUS)
+                return self._parse_dim_type()
+
+            case TokenKind.MINUS:
+                return self._parse_affine_dim()
+
+            case TokenKind.NUMBER:
+                # peek the next token to see if it's IDENT, PLUS, or MINUS
+                t = self.consume(TokenKind.NUMBER)
+                dim = ConstantDim(int(t.value))
+
+                # peek the next token to see if it's IDENT (for compound dimension)
+                if self.current.kind is TokenKind.IDENT:
+                    t = self.consume(TokenKind.IDENT)
+                    var = StaticDim(Identifier(t.value))
+                    affine_dim = self._parse_affine_dim()
+                    # combine
+                    return AffineDim(
+                        [(Sign.POS, dim, var)] + affine_dim.terms,
+                        offset=affine_dim.offset,
+                    )
+                return dim
 
             case TokenKind.IDENT:
                 ident = self._parse_identifier()
-                return StaticDim(ident)
+                var = StaticDim(ident)
+
+                # check for compound dimension
+                if self.current.kind in (TokenKind.PLUS, TokenKind.MINUS):
+                    affine_dim = self._parse_affine_dim()
+                    # combine
+                    return AffineDim(
+                        [(Sign.POS, ConstantDim(1), var)] + affine_dim.terms,
+                        offset=affine_dim.offset,
+                    )
+
+                return var
 
             case TokenKind.STAR:
                 self.consume(TokenKind.STAR)
@@ -474,8 +623,53 @@ class Parser:
                     f"Expected DimType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
                 )
 
-    # IdentifierType ::= /[A-Za-z]\w*/
+    def _parse_affine_dim(self) -> AffineDim:
+        terms: list[tuple[Sign, ConstantDim, StaticDim]] = []
+        offset: ConstantDim | None = None
 
+        sign: Sign
+        coef: ConstantDim
+        var: StaticDim
+
+        while True:
+            match (tok := self.current).kind:
+                case TokenKind.PLUS:
+                    self.consume(TokenKind.PLUS)
+                    sign = Sign.POS
+                case TokenKind.MINUS:
+                    self.consume(TokenKind.MINUS)
+                    sign = Sign.NEG
+                case _:
+                    break
+
+            match (tok := self.current).kind:
+                case TokenKind.IDENT:
+                    coef = ConstantDim(1)
+                    t = self.consume(TokenKind.IDENT)
+                    var = StaticDim(Identifier(t.value))
+                    terms.append((sign, coef, var))
+                    continue
+                case TokenKind.NUMBER:
+                    t = self.consume(TokenKind.NUMBER)
+                    coef = ConstantDim(int(t.value))
+
+                    match self.current.kind:
+                        case TokenKind.IDENT:
+                            t = self.consume(TokenKind.IDENT)
+                            var = StaticDim(Identifier(t.value))
+                            terms.append((sign, coef, var))
+                            continue
+                        case _:
+                            offset = coef
+                            break
+                case _:
+                    raise SyntaxError(
+                        f"Expected coefficient or variable in compound dimension at position {tok.pos}, "
+                        f"got {tok.kind.name} {tok.value!r}"
+                    )
+        return AffineDim(terms=terms, offset=offset)
+
+    # IdentifierType ::= /[A-Za-z]\w*/
     def _parse_identifier(self) -> Identifier:
         match (tok := self.current).kind:
             case TokenKind.IDENT:
@@ -488,11 +682,31 @@ class Parser:
                 )
 
 
-def parse_arglist(source: str) -> ArgList:
-    parser = Parser(tokenize(source))
-    return parser.parse_arglist()
+class signature:
+    r"""To be used as a no-op decorator for annotating function signatures.
 
+    Signature DSL:
 
-def parse_signature(source: str) -> SignatureType:
-    parser = Parser(tokenize(source))
-    return parser.parse_signature()
+    - `3`: axis of size 3
+    - `x`: single axis of statically known size
+    - `*xs`: single axis of variable size
+    - `**xs`: multiple axes of variable size
+    - `...`: axes to vectorize over
+    """
+
+    def __init__(self, sig_string: str, /, lazy: bool = False) -> None:
+        self.original_signature = sig_string
+        if not lazy:
+            _ = self.parsed
+
+    @cached_property
+    def parsed(self) -> SignatureType:
+        return Parser.parse_signature(self.original_signature)
+
+    def __str__(self) -> str:
+        return str(self.parsed)
+
+    def __call__[Fn: Callable](self, fn: Fn) -> Fn:
+        r"""Decorator to annotate function signatures."""
+        fn.signature = self  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
+        return fn

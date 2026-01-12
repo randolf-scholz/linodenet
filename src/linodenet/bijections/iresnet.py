@@ -18,6 +18,7 @@ from linodenet.activations import get_activation
 from linodenet.containers import ModuleSequence
 from linodenet.layers.linear_contraction import LinearContraction
 from linodenet.layers.rezero import ReZero
+from linodenet.signatures import signature
 from linodenet.utils import deep_dict_update
 
 
@@ -49,8 +50,8 @@ class iResNetLayer(nn.Module):
         self.register_buffer("converged", torch.tensor(False))
 
     @jit.export
+    @signature("(..., n) -> (..., n)")
     def encode(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         return x + self.layer(x)
 
     @jit.export

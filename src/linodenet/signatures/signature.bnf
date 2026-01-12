@@ -12,8 +12,18 @@ ArgType ::= ShapeType | IdentifierType | GenericType
 // e.g. '()', '(1,2,3)', '(..., m, n)'
 ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
 
-// e.g. '3', 'N', '*xs', '?'
-DimType ::= "?" | Number | ("*"? IdentifierType)
+// Dimension types
+DimType ::= UnknownDim | DynamicDim | ConstantDim | StaticDim | CompoundDim
+UnknownDim ::= "?"
+ConstantDim ::= Number
+DynamicDim ::= "*" IdentifierType
+StaticDim ::= IdentifierType
+
+// e.g. "2n", "3n+3", "n+2", "2u + 3v", "2a + 2b + 2c + 1", "2n - 1"
+// affine combination of Static Dims
+CompoundDim ::= ConstantDim StaticDim
+    | (ConstantDim? StaticDim) (("+" | "-") (ConstantDim? StaticDim))* (("+" | "-") (ConstantDim))
+    | (ConstantDim? StaticDim) (("+" | "-") (ConstantDim? StaticDim))+ (("+" | "-") (ConstantDim))?
 
 // e.g. 'Foo[Bar, (1,2)]'
 GenericType ::= IdentifierType ArgList

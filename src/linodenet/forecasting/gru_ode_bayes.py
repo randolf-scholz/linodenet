@@ -433,6 +433,7 @@ class GRU_ODE_Bayes(nn.Module):
         self,
         h: Tensor,
         p: Tensor,
+        *,
         delta_t: float | Tensor,
         current_time: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
@@ -532,11 +533,11 @@ class GRU_ODE_Bayes(nn.Module):
             ):  # 0.0001 delta_t used for numerical consistency.
                 if self.solver == "dopri5":
                     h, p, current_time, eval_times, eval_ps = self.ode_step(
-                        h, p, obs_time - current_time, current_time
+                        h, p, delta_t=obs_time - current_time, current_time=current_time
                     )
                 else:
                     h, p, current_time, eval_times, eval_ps = self.ode_step(
-                        h, p, delta_t, current_time
+                        h, p, delta_t=delta_t, current_time=current_time
                     )
                 eval_times_total = torch.cat((eval_times_total, eval_times))
                 eval_vals_total = torch.cat((eval_vals_total, eval_ps))
@@ -578,11 +579,11 @@ class GRU_ODE_Bayes(nn.Module):
         while current_time < T:
             if self.solver == "dopri5":
                 h, p, current_time, eval_times, eval_ps = self.ode_step(
-                    h, p, T - current_time, current_time
+                    h, p, delta_t=T - current_time, current_time=current_time
                 )
             else:
                 h, p, current_time, eval_times, eval_ps = self.ode_step(
-                    h, p, delta_t, current_time
+                    h, p, delta_t=delta_t, current_time=current_time
                 )
             eval_times_total = torch.cat((eval_times_total, eval_times))
             eval_vals_total = torch.cat((eval_vals_total, eval_ps))
@@ -607,6 +608,7 @@ def compute_kl_loss(
     p_obs: Tensor,
     X_obs: Tensor,
     M_obs: Tensor,
+    *,
     obs_noise_std: float | Tensor = 1e-2,
     logvar: bool = True,
 ) -> Tensor:
