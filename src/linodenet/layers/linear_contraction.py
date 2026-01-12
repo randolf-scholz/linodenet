@@ -43,10 +43,10 @@ from linodenet.signatures import signature
 
 
 class LinearContraction(nn.Module):
-    r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2$.
+    r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖₂ ≤ ‖x-y‖₂$.
 
     This is achieved by normalizing the weight matrix by
-    $A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)$, where $c<1$ is a hyperparameter.
+    $A' = A⋅\min(\tfrac{c}{‖A‖₂}, 1)$, where $c<1$ is a hyperparameter.
 
     Attributes:
         input_size:  int
@@ -56,7 +56,7 @@ class LinearContraction(nn.Module):
         c: Tensor
             The regularization hyperparameter.
         spectral_norm: Tensor
-            BUFFER: The value of `‖W‖_2`
+            BUFFER: The value of `‖W‖₂`
         weight: Tensor
             The weight matrix.
         bias: Tensor or None
@@ -74,7 +74,7 @@ class LinearContraction(nn.Module):
 
     # Buffers
     spectral_norm: Tensor
-    r"""BUFFER: The value of $‖W‖_2$"""
+    r"""BUFFER: The value of $‖W‖₂$"""
 
     # Parameters
     weight: Tensor
@@ -127,10 +127,10 @@ class LinearContraction(nn.Module):
 
 
 class AltLinearContraction(nn.Module):
-    r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖_2 ≤ ‖x-y‖_2`.
+    r"""A linear layer `f(x) = A⋅x` satisfying the contraction property `‖f(x)-f(y)‖₂ ≤ ‖x-y‖₂`.
 
     This is achieved by normalizing the weight matrix by
-    `A' = A⋅\min(\tfrac{c}{‖A‖_2}, 1)`, where `c<1` is a hyperparameter.
+    `A' = A⋅\min(\tfrac{c}{‖A‖₂}, 1)`, where `c<1` is a hyperparameter.
 
     Attributes:
         input_size:  int
@@ -383,8 +383,8 @@ class LinearContractionManualParametrized(nn.Module):
         Note:
             - The following is not quite correct, since we substitute the spectral norm with the euclidean norm.
             - even if ‖w‖=1, we still compute this step to get gradient information.
-            - since ∇w w/‖w‖ = 𝕀/‖w‖ - ww^⊤/‖w‖³ = (𝕀 - ww^⊤), then for outer gradient ξ,
-              the VJP is given by ξ - (ξ^⊤w)w which is the projection of ξ onto the tangent space.
+            - since ∇w w/‖w‖ = 𝕀/‖w‖ - wwᵀ/‖w‖³ = (𝕀 - wwᵀ), then for outer gradient ξ,
+              the VJP is given by ξ - (ξᵀw)w which is the projection of ξ onto the tangent space.
 
         NOTE: Riemannian optimization on n-sphere:
         Given point p on unit sphere and tangent vector v, the geodesic is given by:

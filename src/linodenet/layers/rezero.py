@@ -18,6 +18,8 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.signatures import signature
+
 
 class ReZero(nn.Module):
     r"""ReZero module.
@@ -53,8 +55,8 @@ class ReZero(nn.Module):
         self.module = module
 
     @jit.export
+    @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(...,) -> (...,)``."""
         if self.module is None:
             return self.scalar * x
         return self.scalar * self.module(x)

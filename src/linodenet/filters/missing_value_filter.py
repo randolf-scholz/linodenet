@@ -13,6 +13,7 @@ import linodenet.imputation as imp
 from linodenet.constants import EMPTY_MAP
 from linodenet.filters.base import Cell, CellBase
 from linodenet.imputation import ImputationStrategy, ImputerProtocol
+from linodenet.signatures import signature
 
 
 class MissingValueCell(CellBase):
@@ -106,8 +107,8 @@ class MissingValueCell(CellBase):
     def impute(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
         return self._imputer(mask, y, x)
 
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         # compute and buffer mask
         self.mask = ~torch.isnan(y)
         # impute missing values

@@ -13,11 +13,19 @@ ArgType ::= ShapeType | IdentifierType | GenericType
 ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
 
 // Dimension types
-DimType ::= UnknownDim | DynamicDim | ConstantDim | StaticDim | CompoundDim
+DimType ::= UnknownDim | VariadicDim | ConstantDim | StaticDim | CompoundDim
+// a single unknown dimension (could be one of Constant, Static or Dynamic)
 UnknownDim ::= "?"
+// multiple unknown dimensions (could be one of Constant, Static or Dynamic)
+//  "*?"
+// e.g. '3': a fixed size dimension
 ConstantDim ::= Number
-DynamicDim ::= "*" IdentifierType
+// e.g. 'n': a single axis whose size will be fixed at runtime
 StaticDim ::= IdentifierType
+// e.g. '*Xs': a bundle of axes (x₁, ..., xₙ) whose shape will be fixed at runtime
+VariadicDim ::= "*" IdentifierType
+// e.g. '$n' a single axes whose size is variable at runtime
+DynamicDim ::= "$n"
 
 // e.g. "2n", "3n+3", "n+2", "2u + 3v", "2a + 2b + 2c + 1", "2n - 1"
 // affine combination of Static Dims

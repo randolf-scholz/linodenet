@@ -20,6 +20,7 @@ __all__ = [
     "ConstantDim",
     "StaticDim",
     "AffineDim",
+    "VariadicDim",
     "DynamicDim",
     "UnknownDim",
     # Functions
@@ -29,7 +30,7 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from functools import cached_property
@@ -37,7 +38,9 @@ from types import EllipsisType
 from typing import ClassVar, Literal, TypeIs, overload
 
 type ShapeType = tuple[DimType, ...] | tuple[EllipsisType, *tuple[DimType, ...]]
-type DimType = ConstantDim | StaticDim | DynamicDim | AffineDim | UnknownDim
+type DimType = (
+    ConstantDim | StaticDim | VariadicDim | AffineDim | UnknownDim | DynamicDim
+)
 type ArgType = ShapeType | Identifier | GenericType
 type ArgList = list[ArgType]
 type QMARK = Literal["?"]
@@ -85,8 +88,9 @@ class DimKind(StrEnum):
     r"""Enumeration of dimension kinds."""
 
     CONSTANT = "constant"  # '1', '2', '3', ... fixed-size dimension
-    STATIC = "static"  # 'n' variable (fixed at initialization time)
-    DYNAMIC = "dynamic"  # '*n' variable size dimension
+    STATIC = "static"  # 'n' static shape / single axis
+    VARIADIC = "variadic"  # '*n' static shape / bundle of axes
+    DYNAMIC = "dynamic"  # '$n' variable sized axis
     COMPOUND = "compound"  # "2n", "3n+1", "u+v"
     UNKNOWN = "unknown"  # for future use
 
@@ -103,7 +107,10 @@ class Dim:
 
 @dataclass(frozen=True, slots=True)
 class ConstantDim(Dim):
-    r"""Class for representing constant dimensions."""
+    r"""Class for representing constant dimensions.
+
+    E.g. a single axis of fixed size `3` that is known at compile time.
+    """
 
     kind: ClassVar[Literal[DimKind.CONSTANT]] = DimKind.CONSTANT
 
@@ -115,7 +122,10 @@ class ConstantDim(Dim):
 
 @dataclass(frozen=True, slots=True)
 class StaticDim(Dim):
-    r"""Class for representing static dimensions."""
+    r"""Class for representing static dimensions.
+
+    E.g. a single axis `n` that is fixed at runtime.
+    """
 
     kind: ClassVar[Literal[DimKind.STATIC]] = DimKind.STATIC
 
@@ -126,15 +136,33 @@ class StaticDim(Dim):
 
 
 @dataclass(frozen=True, slots=True)
-class DynamicDim(Dim):
-    r"""Class for representing dynamic dimensions."""
+class VariadicDim(Dim):
+    r"""Class for representing variadic dimensions.
 
-    kind: ClassVar[Literal[DimKind.DYNAMIC]] = DimKind.DYNAMIC
+    E.g. a bundle of axes `*xs` that is fixed at runtime.
+    """
+
+    kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
 
     value: Identifier
 
     def __str__(self) -> str:
         return f"*{self.value!s}"
+
+
+@dataclass(frozen=True, slots=True)
+class DynamicDim(Dim):
+    r"""Class for representing dynamic dimensions.
+
+    E.g. a single axis `$n` that can vary in size at runtime.
+    """
+
+    kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
+
+    value: Identifier
+
+    def __str__(self) -> str:
+        return f"${self.value!s}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,12 +198,8 @@ class AffineDim(Dim):
 
     kind: ClassVar[Literal[DimKind.COMPOUND]] = DimKind.COMPOUND
 
-    terms: list[tuple[Sign, ConstantDim, StaticDim]]
+    terms: Sequence[tuple[Sign, ConstantDim, StaticDim | DynamicDim]]
     offset: ConstantDim | None = None
-
-    # signs: list[Sign]
-    # coefficients: list[ConstantDim]
-    # variables: list[StaticDim]
 
     def __post_init__(self) -> None:
         # if len(self.terms) == 0:
@@ -184,7 +208,7 @@ class AffineDim(Dim):
             raise ValueError("AffineDim variables must be unique")
 
     @property
-    def variables(self) -> list[StaticDim]:
+    def variables(self) -> list[StaticDim | DynamicDim]:
         return [var for _, _, var in self.terms]
 
     @property
@@ -281,6 +305,7 @@ class TokenKind(StrEnum):
     COMMA = ","
     PLUS = "+"
     MINUS = "-"
+    DOLLAR = "$"
     EOF = "EOF"
 
 
@@ -356,7 +381,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
             continue
 
         # Single-character punctuation / operators
-        if c in "[](),*+-?":
+        if c in "[](),*+-?$":
             yield Token(i, TokenKind(c))  # maps "[" -> LBRACKET, etc.
             i += 1
             continue
@@ -456,7 +481,7 @@ class Parser:
         tok = self.current
         if tok.kind is not kind:
             raise SyntaxError(
-                f"Expected {kind.name} at position {tok.pos}, "
+                f"Expected {kind.name} ({kind.value!r}) at position {tok.pos}, "
                 f"got {tok.kind.name} ({tok.value!r})"
             )
         self._advance()
@@ -569,104 +594,83 @@ class Parser:
                     "and if present, it must be the first item."
                 )
 
-            case TokenKind.PLUS:
-                # drop plus sign (so "+n" is same as "n")
-                self.consume(TokenKind.PLUS)
-                return self._parse_dim_type()
-
-            case TokenKind.MINUS:
-                return self._parse_affine_dim()
-
-            case TokenKind.NUMBER:
-                # peek the next token to see if it's IDENT, PLUS, or MINUS
-                t = self.consume(TokenKind.NUMBER)
-                dim = ConstantDim(int(t.value))
-
-                # peek the next token to see if it's IDENT (for compound dimension)
-                if self.current.kind is TokenKind.IDENT:
-                    t = self.consume(TokenKind.IDENT)
-                    var = StaticDim(Identifier(t.value))
-                    affine_dim = self._parse_affine_dim()
-                    # combine
-                    return AffineDim(
-                        [(Sign.POS, dim, var)] + affine_dim.terms,
-                        offset=affine_dim.offset,
-                    )
-                return dim
-
-            case TokenKind.IDENT:
-                ident = self._parse_identifier()
-                var = StaticDim(ident)
-
-                # check for compound dimension
-                if self.current.kind in (TokenKind.PLUS, TokenKind.MINUS):
-                    affine_dim = self._parse_affine_dim()
-                    # combine
-                    return AffineDim(
-                        [(Sign.POS, ConstantDim(1), var)] + affine_dim.terms,
-                        offset=affine_dim.offset,
-                    )
-
-                return var
-
             case TokenKind.STAR:
                 self.consume(TokenKind.STAR)
                 ident = self._parse_identifier()
-                return DynamicDim(ident)
+                return VariadicDim(ident)
 
             case TokenKind.QMARK:
                 self.consume(TokenKind.QMARK)
                 return UnknownDim()
 
             case _:
-                raise SyntaxError(
-                    f"Expected DimType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
-                )
+                try:
+                    affine_dim = self._parse_affine_dim()
+                except SyntaxError as exc:
+                    raise SyntaxError(
+                        f"Expected DimType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
+                    ) from exc
+
+                # simplify single-term affine dims
+                match affine_dim.terms, affine_dim.offset:
+                    case [], None:
+                        raise AssertionError(
+                            "AffineDim must have at least one term or offset"
+                        )
+                    case [], offset:
+                        assert offset is not None
+                        return offset
+                    case [(Sign.POS, ConstantDim(1), var)], None:
+                        return var  # type: ignore[unreachable]
+                    case _:
+                        return affine_dim
 
     def _parse_affine_dim(self) -> AffineDim:
-        terms: list[tuple[Sign, ConstantDim, StaticDim]] = []
+        terms: list[tuple[Sign, ConstantDim, StaticDim | DynamicDim]] = []
         offset: ConstantDim | None = None
 
         sign: Sign
         coef: ConstantDim
-        var: StaticDim
+        var: StaticDim | DynamicDim
 
         while True:
-            match (tok := self.current).kind:
+            # parse sign
+            match self.current.kind:
                 case TokenKind.PLUS:
                     self.consume(TokenKind.PLUS)
                     sign = Sign.POS
                 case TokenKind.MINUS:
                     self.consume(TokenKind.MINUS)
                     sign = Sign.NEG
+                case _ if not terms:
+                    # leading term without sign -> positive
+                    sign = Sign.POS
                 case _:
                     break
 
-            match (tok := self.current).kind:
-                case TokenKind.IDENT:
-                    coef = ConstantDim(1)
-                    t = self.consume(TokenKind.IDENT)
-                    var = StaticDim(Identifier(t.value))
-                    terms.append((sign, coef, var))
-                    continue
+            # parse coefficient
+            match self.current.kind:
                 case TokenKind.NUMBER:
-                    t = self.consume(TokenKind.NUMBER)
-                    coef = ConstantDim(int(t.value))
-
-                    match self.current.kind:
-                        case TokenKind.IDENT:
-                            t = self.consume(TokenKind.IDENT)
-                            var = StaticDim(Identifier(t.value))
-                            terms.append((sign, coef, var))
-                            continue
-                        case _:
-                            offset = coef
-                            break
+                    coef = self._parse_constant_dim()
                 case _:
-                    raise SyntaxError(
-                        f"Expected coefficient or variable in compound dimension at position {tok.pos}, "
-                        f"got {tok.kind.name} {tok.value!r}"
-                    )
+                    coef = ConstantDim(1)
+
+            # parse variable
+            match self.current.kind:
+                case TokenKind.IDENT:
+                    var = self._parse_static_dim()
+
+                case TokenKind.DOLLAR:
+                    var = self._parse_dynamic_dim()
+
+                case _:
+                    # no variable -> offset term
+                    offset = coef
+                    break
+
+            # append term
+            terms.append((sign, coef, var))
+
         return AffineDim(terms=terms, offset=offset)
 
     # IdentifierType ::= /[A-Za-z]\w*/
@@ -680,6 +684,24 @@ class Parser:
                     f"Expected identifier at position {tok.pos}, "
                     f"got {tok.kind.name} {tok.value!r}"
                 )
+
+    def _parse_constant_dim(self) -> ConstantDim:
+        tok = self.consume(TokenKind.NUMBER)
+        return ConstantDim(int(tok.value))
+
+    def _parse_static_dim(self) -> StaticDim:
+        ident = self._parse_identifier()
+        return StaticDim(ident)
+
+    def _parse_variadic_dim(self) -> VariadicDim:
+        self.consume(TokenKind.STAR)
+        ident = self._parse_identifier()
+        return VariadicDim(ident)
+
+    def _parse_dynamic_dim(self) -> DynamicDim:
+        self.consume(TokenKind.DOLLAR)
+        ident = self._parse_identifier()
+        return DynamicDim(ident)
 
 
 class signature:

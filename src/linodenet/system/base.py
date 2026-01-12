@@ -12,6 +12,8 @@ from typing import Final, Protocol, runtime_checkable
 
 from torch import Tensor, nn
 
+from linodenet.signatures import signature
+
 
 @runtime_checkable
 class ContinuousSystem(Protocol):
@@ -20,11 +22,9 @@ class ContinuousSystem(Protocol):
     input_size: Final[int]  # type: ignore[misc]
     r"""CONST: The dimensionality of inputs."""
 
+    @signature("[(...), (..., d)] -> (..., d)")
     def __call__(self, dt: float | Tensor, z: Tensor, /) -> Tensor:
-        r"""Forward pass of the system.
-
-        .. Signature: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
-        """
+        r"""Propagate the system for time-step `dt`."""
         ...
 
 
@@ -34,11 +34,9 @@ class DiscreteSystem(Protocol):
     input_size: Final[int]  # type: ignore[misc]
     r"""CONST: The dimensionality of inputs."""
 
+    @signature("[int, (..., d)] -> (..., d)")
     def __call__(self, n_steps: int | Tensor, z: Tensor, /) -> Tensor:
-        r"""Forward pass of the system.
-
-        .. Signature: ``(…, d) -> (…, d)``.
-        """
+        r"""Propagate the system for `n_steps`."""
         ...
 
 

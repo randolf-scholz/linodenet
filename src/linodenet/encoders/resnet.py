@@ -18,6 +18,7 @@ from linodenet.layers import (
     ReverseDense,
     ReZero,
 )
+from linodenet.signatures import signature
 
 
 class ResNetBlock(ModuleSequence):
@@ -68,8 +69,8 @@ class ResNet(ModuleSequence[ResNetBlock]):
         super().__init__(blocks)
 
     @jit.export
+    @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         for block in self:
             x = x + block(x)
         return x

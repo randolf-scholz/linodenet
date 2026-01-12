@@ -18,6 +18,7 @@ from torch import Tensor, jit, nn
 from linodenet.containers import ModuleSequence
 from linodenet.filters.base import CellBase, FilterBase
 from linodenet.filters.kalman_cell import _Alpha
+from linodenet.signatures import signature
 
 
 class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):
@@ -71,8 +72,8 @@ class FilterSequence[C: CellBase](FilterList[C]):
 
         super().__init__(modules, input_size=input_size)
 
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y_obs: Tensor, y: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         for cell in self:
             y = cell(y_obs, y)
         return y
@@ -91,8 +92,8 @@ class FilterResNet[C: CellBase](FilterSequence[C]):
     }
     r"""The HyperparameterDict of this class."""
 
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y_obs: Tensor, y: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         for cell in self:
             y = y + cell(y_obs, y)
         return y
@@ -137,8 +138,8 @@ class ReZeroFilter[C: CellBase](FilterSequence[C]):
         # add the weight last.
         self.weight = nn.Parameter(torch.zeros(len(self)))
 
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y_obs: Tensor, y: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         for w, layer in zip(self.weight, self, strict=True):
             y = y + w * layer(y_obs, y)
         return y
@@ -208,8 +209,8 @@ class PseudoKalmanCell(CellBase):
             self.register_buffer("ZERO", torch.zeros(1))
 
     @jit.export
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         # refresh buffer
         kernel = self.epsilon * self.weight
 

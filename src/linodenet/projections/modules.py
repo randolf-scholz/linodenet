@@ -41,6 +41,7 @@ from torch import Tensor, jit, nn
 import linodenet.projections.functional as F
 from linodenet.constants import FALSE
 from linodenet.domains import MatrixDomains
+from linodenet.signatures import signature
 
 
 @runtime_checkable
@@ -58,18 +59,14 @@ class Projection[T](Protocol):
     """
 
     @abstractmethod
+    @signature("(..., *xs) -> (..., *ys)")
     def forward(self, x: T, /) -> T:
-        r"""Forward pass of the projection.
-
-        .. Signature: ``(..., *xs) -> (..., *xs)``.
-        """
+        r"""Forward pass of the projection."""
         ...
 
+    @signature("(..., *ys) -> (..., *xs)")
     def right_inverse(self, y: T, /) -> T:
-        r"""Right inverse of the projection, i.e. the identity on the image.
-
-        .. Signature: ``(..., *xs) -> (..., *xs)``.
-        """
+        r"""Right inverse of the projection, i.e. the identity on the image."""
         return y
 
 
@@ -77,10 +74,9 @@ class ProjectionBase(nn.Module, Projection[Tensor]):
     r"""Abstract Base Class for Projection components."""
 
     @abstractmethod
+    @signature("(..., *xs) -> (..., *ys)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Forward pass of the projection.
-
-        .. Signature: ``(..., *xs) -> (..., *ys)``.
 
         Args:
             x: The input tensor to be projected.
@@ -90,10 +86,9 @@ class ProjectionBase(nn.Module, Projection[Tensor]):
         """
 
     @jit.export
+    @signature("(..., *ys) -> (..., *xs)")
     def right_inverse(self, y: Tensor) -> Tensor:
         r"""Right inverse of the projection, i.e. the identity on the image.
-
-        .. Signature: ``(..., *ys) -> (..., *xs)``.
 
         Args:
             y: The projected tensor.
@@ -119,67 +114,62 @@ class ProjectionBase(nn.Module, Projection[Tensor]):
 class Identity(ProjectionBase):
     r"""Return x as-is.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2
+    .. math:: \min_Y ½‖X-Y‖²
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
 
     @jit.export
+    @signature("(...) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of matrices."""
+        r"""Project into space of matrices."""
         return F.identity(x)
 
 
 class Symmetric(ProjectionBase):
     r"""Return the closest symmetric matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = Y
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = Y
-
-    One can show analytically that Y = ½(X + X^⊤) is the unique minimizer.
+    One can show analytically that Y = ½(X + Xᵀ) is the unique minimizer.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMMETRIC
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of symmetric matrices."""
+        r"""Project into space of symmetric matrices."""
         return F.symmetric(x)
 
 
 class SkewSymmetric(ProjectionBase):
     r"""Return the closest skew-symmetric matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = -Y
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
-
-    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
+    One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of skew-symmetric matrices."""
+        r"""Project into space of skew-symmetric matrices."""
         return F.skew_symmetric(x)
 
 
 class Orthogonal(ProjectionBase):
     r"""Return the closest orthogonal matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ Y = 𝕀 = YYᵀ
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^𝖳 Y = 𝕀 = YY^𝖳
-
-    One can show analytically that $Y = UV^𝖳$ is the unique minimizer,
-    where $X=UΣV^𝖳$ is the SVD of $X$.
+    One can show analytically that $Y = UVᵀ$ is the unique minimizer,
+    where $X=UΣVᵀ$ is the SVD of $X$.
 
     References:
         https://math.stackexchange.com/q/2215359
@@ -189,45 +179,43 @@ class Orthogonal(ProjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.ORTHOGONAL
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        r"""Project into space of orthogonal matrices."""
         return F.orthogonal(x)
 
 
 class Traceless(ProjectionBase):
     r"""Return the closest traceless matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = -Y
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤ = -Y
-
-    One can show analytically that Y = ½(X - X^⊤) is the unique minimizer.
+    One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.TRACELESS
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        r"""Project into space of traceless matrices."""
         return F.traceless(x)
 
 
 class Normal(ProjectionBase):
     r"""Return the closest normal matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y^⊤Y = YY^⊤
+    .. math:: \min_Y ½‖X-Y‖² s.t. YᵀY = YYᵀ
 
     **The Lagrangian:**
 
-    .. math:: ℒ(Y, Λ) = ½∥X-Y∥_F^2 + ⟨Λ, [Y, Y^⊤]⟩
+    .. math:: ℒ(Y, Λ) = ½‖X-Y‖² + ⟨Λ, [Y, Yᵀ]⟩
 
     **First order necessary KKT condition:**
 
     .. math::
-            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λ^⊤) - (Λ + Λ^⊤)Y
+            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λᵀ) - (Λ + Λᵀ)Y
         \\⟺ Y &= X + [Y, Λ]
 
     **Second order sufficient KKT condition:**
@@ -242,21 +230,20 @@ class Normal(ProjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.NORMAL
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        r"""Project into space of normal matrices."""
         return F.normal(x)
 
 
 class Hamiltonian(ProjectionBase):
     r"""Return the closest symplectic matrix to X.
 
-    .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
 
     Alternatively, the above is equivalent to
 
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J= 𝔻₊₁-𝔻₋₁
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J= 𝔻₊₁-𝔻₋₁
 
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
     """
@@ -265,21 +252,20 @@ class Hamiltonian(ProjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.HAMILTONIAN
 
     @jit.export
+    @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
+        r"""Project into space of hamiltonian matrices."""
         return F.hamiltonian(x)
 
 
 class Symplectic(ProjectionBase):
     r"""Return the closest symplectic matrix to X.
 
-    .. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
 
     Alternatively, the above is equivalent to
 
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   Y^𝖳 J Y = J   where   J= 𝔻₊₁-𝔻₋₁
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J= 𝔻₊₁-𝔻₋₁
 
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
     """
@@ -288,8 +274,9 @@ class Symplectic(ProjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMPLECTIC
 
     @jit.export
+    @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., 2n, 2n) -> (..., 2n, 2n)``."""
+        r"""Project into space of symplectic matrices."""
         return F.symplectic(x)
 
 
@@ -300,9 +287,7 @@ class Symplectic(ProjectionBase):
 class Diagonal(ProjectionBase):
     r"""Return the closest diagonal matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕀⊙Y
+    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕀⊙Y
 
     One can show analytically that the unique smallest norm minimizer is $Y = 𝕀⊙X$.
 
@@ -318,19 +303,18 @@ class Diagonal(ProjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.DIAGONAL
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        r"""Project into space of diagonal matrices."""
         return F.diagonal(x)
 
 
 class UpperTriangular(ProjectionBase):
     r"""Return the closest upper triangular matrix to X.
 
-    .. Signature:: ``(..., m, n) -> (..., m, n)``
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   U⊙Y = Y
 
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   𝕌⊙Y = Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = 𝕌⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = U⊙X$.
 
     See Also:
         - `projections.Masked`
@@ -351,19 +335,18 @@ class UpperTriangular(ProjectionBase):
         self.upper = upper
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        r"""Project into space of upper triangular matrices."""
         return F.upper_triangular(x, upper=self.upper)
 
 
 class LowerTriangular(ProjectionBase):
     r"""Return the closest lower triangular matrix to X.
 
-    .. Signature:: ``(..., m, n) -> (..., m, n)``
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   𝕃⊙Y = Y
 
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   𝕃⊙Y = Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = 𝕃⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = L⊙X$.
 
     See Also:
         - `projections.Masked`
@@ -384,19 +367,18 @@ class LowerTriangular(ProjectionBase):
         self.lower = lower
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        r"""Project into space of lower triangular matrices."""
         return F.lower_triangular(x, lower=self.lower)
 
 
 class Banded(ProjectionBase):
     r"""Return the closest banded matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝔹⊙Y
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝔹⊙Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = 𝔹⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
 
     See Also:
         - `projections.Masked`
@@ -420,19 +402,18 @@ class Banded(ProjectionBase):
         self.lower = lower
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        r"""Project into space of banded matrices."""
         return F.banded(x, upper=self.upper, lower=self.lower)
 
 
 class Masked(ProjectionBase):
     r"""Return the closest banded matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
+    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕄⊙Y
 
-    .. math:: \min_Y ½∥X-Y∥_F^2 s.t. Y = 𝕄⊙Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = 𝕄⊙X$.
+    One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
 
     See Also:
         - `projections.Masked`
@@ -453,8 +434,9 @@ class Masked(ProjectionBase):
         self.mask = torch.as_tensor(mask, dtype=torch.bool)
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        r"""Project into space of masked matrices."""
         return F.masked(x, mask=self.mask)
 
 
@@ -465,9 +447,7 @@ class Masked(ProjectionBase):
 class DiagonallyDominant(ProjectionBase):
     r"""Return the closest diagonally dominant matrix to X.
 
-    .. Signature:: ``(..., n, n) -> (..., n, n)``
-
-    .. math:: \min_Y ∥X-Y∥_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
+    .. math:: \min_Y ‖X-Y‖_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
 
     References:
         Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
@@ -477,17 +457,16 @@ class DiagonallyDominant(ProjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMMETRIC
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
+        r"""Project into space of diagonally dominant matrices."""
         return F.diagonally_dominant(x)
 
 
 class Contraction(ProjectionBase):
     r"""Return the closest contraction matrix to X.
 
-    .. Signature:: ``(..., m, n) -> (..., m, n)``
-
-    .. math:: \min_Y ∥X-Y∥₂  s.t. ‖Y‖₂ ≤ 1
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ 1
 
     One can show analytically that the unique smallest norm minimizer is
     $Y = \min(1, σ⁻¹) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
@@ -500,20 +479,19 @@ class Contraction(ProjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project x into space of contraction matrices."""
+        r"""Project into space of contraction matrices."""
         return F.contraction(x)
 
 
 class LowRank(ProjectionBase):
     r"""Return the closest low rank matrix to X.
 
-    .. Signature:: ``(..., m, n) -> (..., m, n)``
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ k
 
-    .. math:: \min_Y ½∥X-Y∥_F^2   s.t.   rank(Y) ≤ k
-
-    One can show analytically that Y = UₖΣₖVₖ^𝖳 is the unique minimizer,
-    where X=UΣV^𝖳 is the SVD of X.
+    One can show analytically that Y = UₖΣₖVₖᵀ is the unique minimizer,
+    where X=UΣVᵀ is the SVD of X.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
@@ -525,8 +503,9 @@ class LowRank(ProjectionBase):
         self.rank = rank
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
+        r"""Project into space of low rank matrices."""
         return F.low_rank(x, rank=self.rank)
 
 

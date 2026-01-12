@@ -9,6 +9,7 @@ from typing import Final, Optional
 from torch import Tensor, nn
 
 from linodenet.activations import Activation, get_activation
+from linodenet.signatures import signature
 
 
 class ReverseDense(nn.Module):
@@ -66,6 +67,6 @@ class ReverseDense(nn.Module):
         if self.bias is not None:
             nn.init.kaiming_uniform_(self.bias[None], nonlinearity=activation_name)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
 
+    @signature("(..., m) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m) -> (..., n)``."""
         return self.linear(self.activation(x))

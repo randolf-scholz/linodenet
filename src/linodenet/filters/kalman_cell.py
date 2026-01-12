@@ -41,6 +41,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.filters.base import CellBase
 from linodenet.layers import ReverseDense
+from linodenet.signatures import signature
 from linodenet.utils import deep_dict_update
 
 
@@ -146,11 +147,9 @@ class PseudoKalmanCell(CellBase):
         return torch.einsum("ji, ...j -> ...i", H, x)
 
     @jit.export
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Return $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$.
-
-        .. Signature:: ``[(..., m), (..., n)] -> (..., n)``.
-        """
+        r"""Return $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$."""
         mask = ~torch.isnan(y)  # → [..., m]
         z = self.h(x)
         z = torch.where(mask, z - y, self.ZERO)  # → [..., m]
@@ -248,11 +247,9 @@ class NonLinearKalmanCell(CellBase):
         nn.init.kaiming_normal_(self.H, nonlinearity="linear")
 
     @jit.export
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Return $BΠAΠ(x - y)$.
-
-        .. Signature:: ``[(..., m), (..., n)] -> (..., n)``.
-        """
+        r"""Return $BΠAΠ(x - y)$."""
         mask = ~torch.isnan(y)  # → [..., m]
         yhat = torch.einsum("ij, ...j -> ...i", self.H, x)
         r = torch.where(mask, yhat - y, self.ZERO)  # → [..., m]
@@ -316,8 +313,9 @@ class NonLinearCell(CellBase):
         self.register_buffer("ZERO", torch.zeros(1))
 
     @jit.export
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r""".. Signature:: ``[(..., m), (..., n)] -> (..., n)``.
+        r"""Return the updated state tensor.
 
         Args:
             y: The observation Tensor. May contain NaNs for missing values.

@@ -33,6 +33,7 @@ from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
 from linodenet.lib import singular_triplet
 from linodenet.parametrize.base import ParametrizationBase, WrappedParametrization
+from linodenet.signatures import signature
 from linodenet.testing import is_square
 
 
@@ -58,13 +59,13 @@ class CayleyMap(ParametrizationBase):
         self.register_buffer("Id", torch.eye(n))
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return torch.linalg.lstsq(self.Id + x, self.Id - x).solution
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return torch.linalg.lstsq(self.Id - y, self.Id + y).solution
 
 
@@ -81,15 +82,14 @@ class MatrixExponential(ParametrizationBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.INVERTIBLE
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return torch.matrix_exp(x)
 
     @jit.export
     def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``.
+        r"""This requires the matrix logarithm, which is not implemented in PyTorch.
 
-        This requires the matrix logarithm, which is not implemented in PyTorch.
         See: https://github.com/pytorch/pytorch/issues/9983
         """
         raise NotImplementedError
@@ -102,15 +102,15 @@ class GramMatrix(ParametrizationBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SEMIDEFINITE
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``."""
         return x.transpose(-2, -1) @ x
 
     @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n, n) -> (..., n, n)``.
+        r"""This requires the matrix square root, which is not implemented in PyTorch.
 
-        This requires the matrix square root, which is not implemented in PyTorch.
         See: https://github.com/pytorch/pytorch/issues/9983
         """
         raise NotImplementedError
@@ -188,11 +188,9 @@ class SpectralNormalization(ParametrizationBase):
         self.register_buffer("GAMMA", gamma * torch.ones((), **options))
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, weight: Tensor) -> Tensor:
-        r"""Perform spectral normalization w ↦ w/‖w‖₂.
-
-        .. Signature:: ``(..., m, n) -> (..., m, n)``.
-        """
+        r"""Perform spectral normalization w ↦ w/‖w‖₂."""
         # We use the cached singular vectors as initial guess for the power method.
         sigma, u, v = singular_triplet(
             weight,
@@ -216,8 +214,8 @@ class SpectralNormalization(ParametrizationBase):
         return gamma * weight
 
     @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., m, n) -> (..., m, n)``."""
         return y
 
 

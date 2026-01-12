@@ -181,11 +181,12 @@ class iResNetBlock(nn.Module):
         self.register_buffer("residual", torch.tensor(()), persistent=False)
 
     @jit.export
+    @signature("(..., n) -> (..., n)")
     def encode(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         return x + self.bottleneck(x)
 
     @jit.export
+    @signature("(..., n) -> (..., n)")
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
@@ -279,11 +280,12 @@ class iResNet(nn.Module):
         self.blocks = ModuleSequence(blocks)
 
     @jit.export
+    @signature("(..., *xs) -> (..., *xs)")
     def encode(self, x: Tensor) -> Tensor:
-        r""".. Signature:: ``(..., n) -> (..., n)``."""
         return self.blocks(x)
 
     @jit.export
+    @signature("(..., *xs) -> (..., *xs)")
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fix point iteration in each block in reversed order."""
         for block in self.blocks[::-1]:  # traverse in reverse

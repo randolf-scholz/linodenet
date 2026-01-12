@@ -18,6 +18,7 @@ from linodenet.encoders import ResNet
 from linodenet.filters import MissingValueCell
 from linodenet.linalg import pad
 from linodenet.projections.surjections import ConcatProjection
+from linodenet.signatures import signature
 from linodenet.system import LinODECell
 from linodenet.utils import deep_dict_update
 
@@ -174,6 +175,7 @@ class LinODEnet(nn.Module):
         self.z0 = nn.Parameter(torch.randn(self.latent_size))
 
     @jit.export
+    @signature("[(..., $n), (..., $n, d)] -> (..., $n, d)")
     def forward(
         self,
         T: Tensor,
@@ -181,7 +183,7 @@ class LinODEnet(nn.Module):
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
-        r""".. Signature:: ``[(..., n), (..., n, d)] -> (..., n, d)``.
+        r"""Forward pass of the LinODEnet model.
 
         **Model Sketch**::
 
@@ -268,6 +270,7 @@ class LinODEnet(nn.Module):
         return yhat
 
     @jit.export
+    @signature("[(..., $m), (..., $n), (..., $n, d)] -> (..., $m, d)")
     def predict(
         self,
         q: Tensor,
@@ -276,10 +279,7 @@ class LinODEnet(nn.Module):
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
-        r"""Predict the future of the system.
-
-        .. Signature:: ``[(..., m), (..., n), (..., n, d)] -> (..., m, d)``.
-        """
+        r"""Predict the future of the system."""
         t0 = t0 if t0 is not None else t[..., 0].unsqueeze(-1)
         z0 = z0 if z0 is not None else self.z0
 
@@ -484,10 +484,9 @@ class LatentLinODECell(nn.Module):
         self.kernel = self.system.kernel
         self.z0 = nn.Parameter(torch.randn(self.latent_size))
 
+    @signature("[(..., d), (..., l), (...,)] -> (..., l)")
     def forward(self, x_obs: Tensor, z: Tensor, dt: Tensor) -> Tensor:
         r"""Propagate the latent state forward in time.
-
-        .. Signature:: ``[(..., N), (..., d), (...,)] -> (..., N, d)``.
 
         Args:
             x_obs: The observation at the current time step. May contain NaNs.

@@ -28,9 +28,9 @@ class HardBend(nn.Module):
 
     .. math:: ϕ(x, a, t) =
         \begin{cases}
-            x + t    &  x  >  \frac{t}{e^{at} - 1} \\
-            e^{at} x & |x| ≤  \frac{t}{e^{at} - 1} \\
-            x - t    &  x  < -\frac{t}{e^{at} - 1}
+            x + t    &  x  >  \frac{t}{eᵃᵗ - 1} \\
+            eᵃᵗ x & |x| ≤  \frac{t}{eᵃᵗ - 1} \\
+            x - t    &  x  < -\frac{t}{eᵃᵗ - 1}
         \end{cases}
     """
 

@@ -168,11 +168,11 @@ struct InverseFunction : public torch::autograd::Function<InverseFunction> {
             jac.index_put_({torch::indexing::Slice(), i, torch::indexing::Slice()}, grad_r);
         }
 
-        // Form the linear system (I - J^T) g = grad_view, where
+        // Form the linear system (I - Jᵀ) g = grad_view, where
         // J = d(residual)/d(x) = -d(f)/d(x).  This implies
-        // I - J^T = I + d(f)/d(x)^T.  We solve for g which is
+        // I - Jᵀ = I + d(f)/d(x)ᵀ.  We solve for g which is
         // ∂L/∂y.  We perform batched solves by inverting each
-        // matrix R[b] = I - J[b]^T separately.  For moderate
+        // matrix R[b] = I - J[b]ᵀ separately.  For moderate
         // dimensions this explicit inverse is acceptable.
         auto eye = torch::eye(feature_dim, x.options()).unsqueeze(0).expand({batch_size, feature_dim, feature_dim});
         auto R = eye - jac.transpose(1, 2);
@@ -193,7 +193,7 @@ struct InverseFunction : public torch::autograd::Function<InverseFunction> {
 
         // Compute gradients with respect to the parameters of the
         // transformation.  The inverse function theorem yields
-        // ∂L/∂p = -(g^T) * d(f(x))/d(p).  We achieve this by
+        // ∂L/∂p = -(gᵀ) * d(f(x))/d(p).  We achieve this by
         // differentiating f(x) with respect to each parameter using
         // autograd and grad_outputs = -g reshaped to the shape of
         // x.  This step ensures that the Python transformation's

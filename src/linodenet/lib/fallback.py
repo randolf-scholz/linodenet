@@ -10,18 +10,20 @@ import torch
 from torch import Tensor
 from torch.linalg import vector_norm
 
+from linodenet.signatures import signature
+
 
 class SpectralNorm(torch.autograd.Function):
-    r"""$‖A‖_2=λ_\max(A^⊤A)$.
+    r"""$‖A‖₂=λ_\max(AᵀA)$.
 
-    The spectral norm $∥A∥_2 ≔ \sup_x ∥Ax∥_2 / ∥x∥_2$ can be shown to be equal to
-    $σ_{\max}(A) = \sqrt{λ_{\max} (A^⊤A)}$, the largest singular value of $A$.
+    The spectral norm $‖A‖₂ ≔ \sup_x ‖Ax‖₂ / ‖x‖₂$ can be shown to be equal to
+    $σ_{\max}(A) = \sqrt{λ_{\max} (AᵀA)}$, the largest singular value of $A$.
 
     It can be computed efficiently via Power iteration.
 
     One can show that the derivative is equal to:
 
-    .. math::  \pdv{½∥A∥_2}{A} = uv^⊤
+    .. math::  \pdv{½‖A‖₂}{A} = uvᵀ
 
     where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
 
@@ -32,8 +34,8 @@ class SpectralNorm(torch.autograd.Function):
     """
 
     @staticmethod
+    @signature("(m, n) -> ()")
     def forward(ctx: Any, /, *tensors: Tensor, **kwargs: Any) -> Tensor:
-        r""".. Signature:: ``(m, n) -> 1``."""
         A = tensors[0]
         if A.ndim != 2:
             raise ValueError(f"Expected 2d input, got {A.shape}.")

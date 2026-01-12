@@ -126,7 +126,7 @@ torch::Tensor IResNetBlockImpl::inverse(const torch::Tensor& y,
     // gradient of some scalar loss L with respect to x (denoted
     // ∂L/∂x), this hook is invoked with `grad` = ∂L/∂x.  We return
     // the gradient with respect to y, ∂L/∂y, by solving the linear
-    // system (I - J^T) g = grad, where J is the Jacobian of
+    // system (I - Jᵀ) g = grad, where J is the Jacobian of
     // residual(x) = y - f(x) with respect to x.  See the deep
     // equilibrium tutorial for derivation.
     auto hook = [this, y_clone, x](const torch::Tensor& grad) {
@@ -193,9 +193,9 @@ torch::Tensor IResNetBlockImpl::inverse(const torch::Tensor& y,
             jac.index_put_({Slice(), i, Slice()}, grad_residual);
         }
 
-        // Form the linear system (I - J^T) g = grad_view.  Note that
+        // Form the linear system (I - Jᵀ) g = grad_view.  Note that
         // J has shape (B, feat, feat).  We transpose the last two
-        // dimensions to obtain J^T (for each batch), subtract from
+        // dimensions to obtain Jᵀ (for each batch), subtract from
         // the identity, and then invert.  Instead of using
         // torch::linalg::solve, which may not be present in all
         // versions, we call torch::inverse followed by matmul.  For

@@ -14,6 +14,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.containers import ModuleSequence
 from linodenet.filters.base import Cell, CellBase
+from linodenet.signatures import signature
 
 
 class CellList[C: CellBase](CellBase, ModuleSequence[C]):
@@ -68,8 +69,8 @@ class CellSequence[C: CellBase](CellList[C]):
         super().__init__(modules, input_size=input_size, hidden_size=hidden_size)
 
     @jit.export
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         for cell in self:
             x = cell(y, x)
         return x
@@ -112,8 +113,8 @@ class ResidualCellSequence[C: CellBase](CellSequence[C]):
         self.alphas = nn.Parameter(alphas, requires_grad=alpha_learnable)
 
     @jit.export
+    @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Signature: ``[(..., m), (..., n)] -> (..., n)``."""
         for alpha, cell in zip(self.alphas, self, strict=True):
             x = x + alpha * cell(y, x)
         return x

@@ -385,7 +385,7 @@ def is_diagonally_dominant(
 
     .. math:: \relu{\sum_{n=1}^{10} f_n(x)}
 
-    .. math:: \argmax_{x \in \mathbb{R}^n} f(x)
+    .. math:: \argmax_{x ∈ ℝⁿ} f(x)
 
     Note:
         Strictly diagonally dominant matrices are invertible.

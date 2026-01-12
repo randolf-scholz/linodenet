@@ -12,6 +12,8 @@ from typing import Final, Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.signatures import signature
+
 
 @runtime_checkable
 class Surjection[X, Y](Protocol):
@@ -81,18 +83,14 @@ class ConcatProjection(SurjectionBase):
         self.padding = nn.Parameter(torch.randn(self.padding_size))
 
     @jit.export
+    @signature("(..., d+e) -> (..., d)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Remove the padded state.
-
-        .. Signature: ``(..., d+e) -> (..., d)``.
-        """
+        r"""Remove the padded state."""
         return x[..., : self.output_size]
 
     @jit.export
+    @signature("(..., d) -> (..., d+e)")
     def right_inverse(self, y: Tensor) -> Tensor:
-        r"""Concatenate the input with the padding.
-
-        .. Signature:: ``(..., d) -> (..., d+e)``.
-        """
+        r"""Concatenate the input with the padding."""
         shape = y.shape[:-1] + (self.padding_size,)
         return torch.cat([y, self.padding.expand(shape)], dim=-1)

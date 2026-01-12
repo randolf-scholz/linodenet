@@ -15,14 +15,13 @@ from torch import Tensor, jit, nn
 from linodenet.containers import initialize_from_dict
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection
+from linodenet.signatures import signature
 from linodenet.types import SelfMap
 from linodenet.utils import deep_dict_update
 
 
 class LinODECell(nn.Module):
     r"""Linear System module, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}x_t$.
-
-    .. Signature:: ``[∆t=(...,), x=(..., d)] -> (..., d)]``.
 
     By default, the Cell is parametrized by
 
@@ -150,8 +149,9 @@ class LinODECell(nn.Module):
         return self._kernel_parametrization(w)
 
     @jit.export
+    @signature("[(...,), (..., d)] -> (..., d)")
     def forward(self, dt: Tensor, x0: Tensor) -> Tensor:
-        r"""Signature: ``[(...,), (..., d)] -> (..., d)``.
+        r"""Propagate the linear ODE from time t₀ to t₁ = t₀ + ∆t.
 
         Args:
             dt: The time difference t₁ - t₀ between x₀ and x̂.
@@ -218,11 +218,9 @@ class LinODE(nn.Module):
         self.register_buffer("xhat", torch.tensor(()), persistent=False)
 
     @jit.export
+    @signature("[(..., $n), (..., d)] -> (..., $n, d)")
     def forward(self, T: Tensor, x0: Tensor) -> Tensor:
-        r""".. Signature:: ``[(..., N), (..., d)] -> (..., N, d)``.
-
-        Returns the estimated true state of the system at the times $t∈T$.
-        """
+        r"""Returns the estimated true state of the system at the times $t∈T$."""
         DT = torch.moveaxis(torch.diff(T), -1, 0)
         X: list[Tensor] = [x0]
 

@@ -435,7 +435,6 @@ class Parallel[M: Fn](FnSequence[M]):
     # actual: tuple[*Xs] -> tuple[*Ys]
     # Modules: tuple[M[X, Y] for X, Y in zip(Xs, Ys)]
     def __call__(self, xs: tuple, /) -> tuple:
-        r""".. Signature:: ``(..., n) -> [..., (..., n)]``."""
         return tuple(module(x) for x, module in zip(xs, self, strict=True))
 
 

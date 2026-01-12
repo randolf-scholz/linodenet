@@ -22,7 +22,7 @@ TORCH_FUNCTIONAL_ACTIVATIONS: dict[str, Activation] = {
     "elu": nn.functional.elu,
     # Applies element-wise, `ELU(x)=\max(0,x)+\min(0,α⋅(\exp(x)−1))`.
     "selu": nn.functional.selu,
-    # Applies element-wise, `SELU(x)=β⋅(\max(0,x)+\min(0,α⋅(e^x−1)))` with `α≈1.677` and `β≈1.05`.
+    # Applies element-wise, `SELU(x)=β⋅(\max(0,x)+\min(0,α⋅(eˣ−1)))` with `α≈1.677` and `β≈1.05`.
     "celu": nn.functional.celu,
     # Applies element-wise, `CELU(x)= \max(0,x)+\min(0,α⋅(\exp(x/α)−1)`.
     "leaky_relu": nn.functional.leaky_relu,

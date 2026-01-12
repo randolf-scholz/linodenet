@@ -105,7 +105,7 @@ def symmetric(
     dtype: Optional[Dtype] = None,
     device: Optional[str | Device] = None,
 ) -> Tensor:
-    r"""Sample a symmetric matrix, i.e. $A^⊤ = A$.
+    r"""Sample a symmetric matrix, i.e. $Aᵀ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
@@ -131,7 +131,7 @@ def skew_symmetric(
     dtype: Optional[Dtype] = None,
     device: Optional[str | Device] = None,
 ) -> Tensor:
-    r"""Sample a random skew-symmetric matrix, i.e. $A^⊤ = -A$.
+    r"""Sample a random skew-symmetric matrix, i.e. $Aᵀ = -A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
@@ -150,7 +150,7 @@ def orthogonal(
     dtype: Optional[Dtype] = None,
     device: Optional[str | Device] = None,
 ) -> Tensor:
-    r"""Sample a random orthogonal matrix, i.e. $A^⊤ = A$.
+    r"""Sample a random orthogonal matrix, i.e. $Aᵀ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
@@ -172,7 +172,7 @@ def special_orthogonal(
     dtype: Optional[Dtype] = None,
     device: Optional[str | Device] = None,
 ) -> Tensor:
-    r"""Sample a random special orthogonal matrix, i.e. $A^⊤ = A⁻¹$ with $\det(A)=1$.
+    r"""Sample a random special orthogonal matrix, i.e. $Aᵀ = A⁻¹$ with $\det(A)=1$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
@@ -195,7 +195,7 @@ def low_rank(
     dtype: Optional[Dtype] = None,
     device: Optional[str | Device] = None,
 ) -> Tensor:
-    r"""Sample a random low-rank m×n matrix, i.e. $A = UV^⊤$.
+    r"""Sample a random low-rank m×n matrix, i.e. $A = UVᵀ$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """

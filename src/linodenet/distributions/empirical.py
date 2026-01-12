@@ -11,6 +11,7 @@ import torch
 from torch import Tensor
 
 from linodenet.distributions.base import DistributionBase
+from linodenet.signatures import signature
 
 
 class Empirical(DistributionBase):
@@ -53,6 +54,7 @@ class Empirical(DistributionBase):
                 "Empirical distribution with batch shape is not implemented."
             )
 
+    @signature("int -> (..., *xs)")
     def sample(
         self,
         num: int = 1,
@@ -62,12 +64,11 @@ class Empirical(DistributionBase):
         self.samples = self.data[idx]  # TODO: support batch shape
         return self.samples
 
+    @signature("(..., *xs) -> (...,)")
     def log_prob(self, value: Tensor) -> Tensor:
         r"""Log probability of the empirical distribution.
 
         Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
-
-        .. Signature: ``[..., *D] -> [...]``.
         """
         # (..., *D), (N, *D) -> (..., N, *D)
         # NOTE: list[-n: n and None] fancy way to get last n elements for n≥0
@@ -97,17 +98,17 @@ class Dirac(Empirical):
         # overwrite data with correct squeezed shape.
         self.data = self.data.squeeze(dim=0)
 
+    @signature("int -> (..., *xs)")
     def sample(self, num: int = 1) -> Tensor:
         r"""Sample from the Dirac distribution."""
         self.samples = self.data.expand(*(num,), *self.event_shape)
         return self.samples
 
+    @signature("(..., *xs) -> (..., *xs)")
     def log_prob(self, value: Tensor) -> Tensor:
         r"""Log probability of the Dirac distribution.
 
         Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
-
-        .. Signature: ``[...] -> [...]``.
         """
         # NOTE: list[-n: n and None] fancy way to get last n elements for n≥0
         assert value.shape[-self.ndims : self.ndims and None] == self.event_shape

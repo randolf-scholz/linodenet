@@ -18,6 +18,7 @@ from linodenet.encoders import ResNet
 from linodenet.filters import Filter, MissingValueCell
 from linodenet.linalg import pad
 from linodenet.projections.surjections import ConcatProjection
+from linodenet.signatures import signature
 from linodenet.system import ContinuousSystem, LinODECell
 from linodenet.utils import deep_dict_update
 
@@ -199,6 +200,7 @@ class LatentStateSpaceModel(nn.Module):
         self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
 
     @jit.export
+    @signature("[(..., $n), (..., $n, d)] -> (..., $n, d)")
     def forward(
         self,
         T: Tensor,
@@ -206,7 +208,7 @@ class LatentStateSpaceModel(nn.Module):
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
-        r""".. Signature:: ``[(..., n), (...,n,d) -> (..., N, d)``.
+        r"""Forward pass of the Latent State Space Model.
 
         **Model Sketch**::
 

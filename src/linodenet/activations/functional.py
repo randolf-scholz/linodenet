@@ -51,9 +51,9 @@ def hard_bend(x: Tensor, a: float = 1, t: float = 1) -> Tensor:
 
     .. math:: ϕ(x, a, t) =
         \begin{cases}
-            x + t    &  x  >  \frac{t}{e^{at} - 1} \\
-            e^{at} x & |x| ≤  \frac{t}{e^{at} - 1} \\
-            x - t    &  x  < -\frac{t}{e^{at} - 1}
+            x + t    &  x  >  \frac{t}{eᵃᵗ - 1} \\
+            eᵃᵗ x & |x| ≤  \frac{t}{eᵃᵗ - 1} \\
+            x - t    &  x  < -\frac{t}{eᵃᵗ - 1}
         \end{cases}
     """
     exp_at = torch.tensor(a * t, device=x.device, dtype=x.dtype).exp()

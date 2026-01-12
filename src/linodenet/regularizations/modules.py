@@ -54,6 +54,7 @@ from linodenet.regularizations.functional import (
     traceless,
     upper_triangular,
 )
+from linodenet.signatures import signature
 from linodenet.types import BoolTensor
 
 
@@ -61,10 +62,9 @@ class RegularizationBase(nn.Module):
     r"""Abstract Base Class for Regularization components."""
 
     @abstractmethod
+    @signature("(..., ?) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Forward pass of the regularization.
-
-        .. Signature: ``... -> 1``.
 
         Args:
             x: The input tensor to be regularized.
@@ -76,17 +76,15 @@ class RegularizationBase(nn.Module):
 
 # region regularizations ---------------------------------------------------------------
 class LogDetExp(RegularizationBase):
-    r"""Bias $\det(e^A)$ towards 1.
-
-    .. Signature:: ``(..., n, n) -> ...``
+    r"""Bias $\det(eᴬ)$ towards 1.
 
     By Jacobi's formula
 
-    .. math:: \det(e^A) = e^{\tr(A)} ⟺ \log(\det(e^A)) = \tr(A)
+    .. math:: \det(eᴬ) = e^{\tr(A)} ⟺ \log(\det(eᴬ)) = \tr(A)
 
     In particular, we can regularize the LinODE model by adding a regularization term of the form
 
-    .. math:: |\tr(A)|^p
+    .. math:: \abs{\tr(A)}ᵖ
     """
 
     p: Final[float]
@@ -97,16 +95,14 @@ class LogDetExp(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Bias $\det(e^A)$ towards 1."""
+        r"""Bias $\det(eᴬ)$ towards 1."""
         return log_det_exp(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class MatrixNorm(RegularizationBase):
-    r"""Return the matrix regularization term.
-
-    .. Signature:: ``(..., n, n) -> ...``
-    """
+    r"""Return the matrix regularization term."""
 
     p: Final[str | int]
     size_normalize: Final[bool]
@@ -116,6 +112,7 @@ class MatrixNorm(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards zero matrix."""
         return matrix_norm(x, p=self.p, size_normalize=self.size_normalize)
@@ -123,10 +120,7 @@ class MatrixNorm(RegularizationBase):
 
 # region matrix groups -----------------------------------------------------------------
 class Identity(RegularizationBase):
-    r"""Identity regularization.
-
-    .. Signature:: ``(..., n, n) -> ...``
-    """
+    r"""Identity regularization."""
 
     p: Final[str | int]
     size_normalize: Final[bool]
@@ -136,59 +130,18 @@ class Identity(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards zero matrix."""
         return identity(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Symmetric(RegularizationBase):
-    r"""Bias the matrix towards being symmetric.
-
-    .. Signature:: ``(..., n, n) -> ...``
-
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = +X
-    """
-
-    p: Final[str | int]
-    size_normalize: Final[bool]
-
-    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
-        super().__init__()
-        self.p = p
-        self.size_normalize = size_normalize
-
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Bias x towards symmetric matrix."""
-        return symmetric(x, p=self.p, size_normalize=self.size_normalize)
-
-
-class SkewSymmetric(RegularizationBase):
-    r"""Bias the matrix towards being skew-symmetric.
-
-    .. Signature:: ``(..., n, n) -> ...``
-
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤ = -X
-    """
-
-    p: Final[str | int]
-    size_normalize: Final[bool]
-
-    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
-        super().__init__()
-        self.p = p
-        self.size_normalize = size_normalize
-
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Bias x towards skew-symmetric matrix."""
-        return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
-
-
 class LowRank(RegularizationBase):
     r"""Bias the matrix towards being low-rank.
 
-    .. Signature:: ``(..., m, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. rank(X) ≤ k
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $rank(X) ≤ k$
     """
 
     rank: Final[int]
@@ -203,17 +156,16 @@ class LowRank(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards low-rank matrix."""
         return low_rank(x, rank=self.rank, p=self.p, size_normalize=self.size_normalize)
 
 
-class Orthogonal(RegularizationBase):
-    r"""Bias the matrix towards being orthogonal.
+class Symmetric(RegularizationBase):
+    r"""Bias the matrix towards being symmetric.
 
-    .. Signature:: ``(..., n, n) -> ...``
-
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
+    .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = +X
     """
 
     p: Final[str | int]
@@ -224,16 +176,56 @@ class Orthogonal(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards symmetric matrix."""
+        return symmetric(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class SkewSymmetric(RegularizationBase):
+    r"""Bias the matrix towards being skew-symmetric.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = -X
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards skew-symmetric matrix."""
+        return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Orthogonal(RegularizationBase):
+    r"""Bias the matrix towards being orthogonal.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $XᵀX = 𝕀$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards orthogonal matrix."""
         return orthogonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Traceless(RegularizationBase):
-    r"""Bias the matrix towards being traceless.
-
-    .. Signature:: ``(..., n, n) -> ...``
-    """
+    r"""Bias the matrix towards being traceless."""
 
     p: Final[str | int]
     size_normalize: Final[bool]
@@ -243,6 +235,7 @@ class Traceless(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards normal matrix."""
         return traceless(x, p=self.p, size_normalize=self.size_normalize)
@@ -251,9 +244,9 @@ class Traceless(RegularizationBase):
 class Normal(RegularizationBase):
     r"""Bias the matrix towards being orthogonal.
 
-    .. Signature:: ``(..., n, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. X^⊤X = 𝕀
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $XᵀX = 𝕀$
     """
 
     p: Final[str | int]
@@ -272,10 +265,9 @@ class Normal(RegularizationBase):
 class Symplectic(RegularizationBase):
     r"""Bias the matrix towards being symplectic.
 
-    .. Signature:: ``(..., 2n, 2n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. J^TXJ = X
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $JᵀXJ = X$
     """
 
     p: Final[str | int]
@@ -286,6 +278,7 @@ class Symplectic(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., 2n, 2n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards normal matrix."""
         return symplectic(x, p=self.p, size_normalize=self.size_normalize)
@@ -294,10 +287,9 @@ class Symplectic(RegularizationBase):
 class Hamiltonian(RegularizationBase):
     r"""Bias the matrix towards being hamiltonian.
 
-    .. Signature:: ``(..., 2n, 2n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. (JX)^T = JX
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $(JX)ᵀ = JX$
     """
 
     p: Final[str | int]
@@ -308,6 +300,7 @@ class Hamiltonian(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., 2n, 2n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards normal matrix."""
         return hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
@@ -320,10 +313,9 @@ class Hamiltonian(RegularizationBase):
 class Diagonal(RegularizationBase):
     r"""Bias the matrix towards being diagonal.
 
-    .. Signature:: ``(..., m, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕀⊙X = X
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $𝕀⊙X = X$
     """
 
     p: Final[str | int]
@@ -334,6 +326,7 @@ class Diagonal(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards diagonal matrix."""
         return diagonal(x, p=self.p, size_normalize=self.size_normalize)
@@ -342,10 +335,9 @@ class Diagonal(RegularizationBase):
 class LowerTriangular(RegularizationBase):
     r"""Bias the matrix towards being lower triangular.
 
-    .. Signature:: ``(..., m, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕃⊙X = X
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $L⊙X = X$
     """
 
     p: Final[str | int]
@@ -360,6 +352,7 @@ class LowerTriangular(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards lower triangular matrix."""
         return lower_triangular(
@@ -370,10 +363,9 @@ class LowerTriangular(RegularizationBase):
 class UpperTriangular(RegularizationBase):
     r"""Bias the matrix towards being upper triangular.
 
-    .. Signature:: ``(..., m, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕌⊙X = X
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $U⊙X = X$
     """
 
     p: Final[str | int]
@@ -388,6 +380,7 @@ class UpperTriangular(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards upper triangular matrix."""
         return upper_triangular(
@@ -398,10 +391,9 @@ class UpperTriangular(RegularizationBase):
 class Banded(RegularizationBase):
     r"""Bias the matrix towards being banded.
 
-    .. Signature:: ``(..., m, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝔹⊙X = X
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $B⊙X = X$
     """
 
     p: Final[str | int]
@@ -423,6 +415,7 @@ class Banded(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards banded matrix."""
         return banded(
@@ -437,10 +430,9 @@ class Banded(RegularizationBase):
 class Masked(RegularizationBase):
     r"""Bias the matrix towards being masked.
 
-    .. Signature:: ``(..., m, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ½∥X-A∥_F^2 s.t. 𝕄⊙X = X
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $M⊙X = X$
     """
 
     p: Final[str | int]
@@ -459,6 +451,7 @@ class Masked(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards masked matrix."""
         return masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)
@@ -471,10 +464,9 @@ class Masked(RegularizationBase):
 class Contraction(RegularizationBase):
     r"""Bias the matrix towards being a contraction.
 
-    .. Signature:: ``(..., m, n) -> ...``
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
 
-    .. math:: A ↦ ‖A-Π(A)‖_p
-        where Π(A) = \argmin_X ∥X-A∥₂ s.t. ‖X‖₂≤1
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
     """
 
     p: Final[str | int]
@@ -485,6 +477,7 @@ class Contraction(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
+    @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards contraction."""
         return contraction(x)

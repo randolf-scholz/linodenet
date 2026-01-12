@@ -81,6 +81,9 @@ class BijectionBase(nn.Module, Bijection[Tensor, Tensor]):
 class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
     r"""Base class for transforms operating on single tensor."""
 
+    def __invert__(self) -> "TransformBase":
+        return InverseTransform(self)
+
     @abstractmethod
     def encode(self, x: Tensor, /) -> Tensor: ...
     @abstractmethod
@@ -174,19 +177,19 @@ class TransformSequence[T: TransformBase](BijectionSequence[T]):
         return TransformSequence([~layer for layer in self[::-1]])
 
     @jit.export
-    def encode(self, x: Tensor, /) -> Tensor:
+    def encode(self, x: Tensor) -> Tensor:
         for layer in self:
             x = layer.encode(x)
         return x
 
     @jit.export
-    def decode(self, y: Tensor, /) -> Tensor:
+    def decode(self, y: Tensor) -> Tensor:
         for layer in self[::-1]:  # traverse in reverse
             y = layer.decode(y)
         return y
 
     @jit.export
-    def encode_and_logabsdet(self, x: T) -> tuple[T, Tensor]:
+    def encode_and_logabsdet(self, x: Tensor) -> tuple[Tensor, Tensor]:
         logabsdets: list[Tensor] = []
 
         for layer in self:
@@ -197,7 +200,7 @@ class TransformSequence[T: TransformBase](BijectionSequence[T]):
         return x, logabsdet
 
     @jit.export
-    def decode_and_logabsdet(self, y: T) -> tuple[T, Tensor]:
+    def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
         logabsdets: list[Tensor] = []
 
         for layer in self[::-1]:  # traverse in reverse

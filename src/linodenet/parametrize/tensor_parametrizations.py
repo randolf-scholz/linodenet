@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.parametrize.base import ParametrizationBase
+from linodenet.signatures import signature
 
 
 class ReZero(ParametrizationBase):
@@ -34,11 +35,11 @@ class ReZero(ParametrizationBase):
         self.scalar = nn.Parameter(initial_value) if self.learnable else initial_value
 
     @jit.export
+    @signature("(...) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(...,) -> (...,)``."""
         return self.scalar * x
 
     @jit.export
+    @signature("(...) -> (...)")
     def right_inverse(self, y: Tensor, /) -> Tensor:
-        r""".. Signature:: ``(...,) -> (...,)``."""
         return y / self.scalar

@@ -107,20 +107,16 @@ class ConcatEmbedding(EmbeddingBase):
         self.padding = nn.Parameter(torch.randn(self.padding_size))
 
     @jit.export
+    @signature("(..., d) -> (..., d+e)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Concatenate the input with the padding.
-
-        .. Signature:: ``(..., d) -> (..., d+e)``.
-        """
+        r"""Concatenate the input with the padding."""
         shape = x.shape[:-1] + (self.padding_size,)
         return torch.cat([x, self.padding.expand(shape)], dim=-1)
 
     @jit.export
+    @signature("(..., d+e) -> (..., d)")
     def left_inverse(self, y: Tensor) -> Tensor:
-        r"""Remove the padded state.
-
-        .. Signature: ``(..., d+e) -> (..., d)``.
-        """
+        r"""Remove the padded state."""
         return y[..., : self.input_size]
 
 
@@ -187,19 +183,15 @@ class LinearEmbedding(EmbeddingBase):
                 self.bias.uniform_(-bound, bound)
 
     @jit.export
+    @signature("(..., d) -> (..., e)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Concatenate the input with the padding.
-
-        .. Signature:: ``(..., d) -> (..., e)``.
-        """
+        r"""Concatenate the input with the padding."""
         return functional.linear(x, self.weight, self.bias)
 
     @jit.export
+    @signature("(..., d) -> (..., e)")
     def left_inverse(self, y: Tensor) -> Tensor:
-        r"""Remove the padded state.
-
-        .. Signature: ``(..., d+e) -> (..., d)``.
-        """
+        r"""Remove the padded state."""
         if self.with_bias:
             y = y - self.bias
         return torch.linalg.lstsq(self.weight, y)[0]
