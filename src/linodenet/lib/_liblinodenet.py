@@ -29,7 +29,7 @@ import os
 import warnings
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final, Optional, Protocol, TypedDict, runtime_checkable
+from typing import Any, Final, Optional, Protocol, TypedDict, cast, runtime_checkable
 
 import torch
 from torch import Tensor
@@ -57,19 +57,27 @@ CUSTOM_OPS: Final[list[str]] = [
 r"""List of custom operators."""
 
 
+class KnownFunctions(TypedDict):
+    singular_triplet: "SingularTriplet"
+    singular_triplet_debug: "SingularTriplet"
+    singular_triplet_riemann: "SingularTriplet"
+    spectral_norm: "SpectralNorm"
+    spectral_norm_debug: "SpectralNorm"
+    spectral_norm_riemann: "SpectralNorm"
+
+
 # region compile functions -------------------------------------------------------------
 def load_function(name: str, /) -> Any:
     r"""Load a function from the custom library."""
     from torch.utils import cpp_extension  # noqa: PLC0415
-
-    cpp_extension.verify_ninja_availability()
 
     try:  # compile the function
         print(f"Compiling {name}...", flush=True)
         cpp_extension.load(
             name=name,
             sources=[str(SOURCE_DIR / f"{name}.cpp")],
-            extra_cflags=["-O3"],
+            extra_cflags=["-O3", "-DPy_LIMITED_API=0x030A0000"],
+            extra_cuda_cflags=["-O3"],
             is_python_module=False,
             verbose=True,
             with_cuda=torch.cuda.is_available(),
@@ -89,7 +97,21 @@ def load_function(name: str, /) -> Any:
 
 def _compile_fns() -> dict[str, Callable]:
     r"""Fallback to compiling the functions."""
+    from torch.utils import cpp_extension  # noqa: PLC0415
+
+    cpp_extension.verify_ninja_availability()
     os.environ["CUDA_HOME"] = "/usr/local/cuda-12.8"
+    cache_dir = Path(
+        os.environ.get("TORCH_EXTENSIONS_DIR", cpp_extension.get_default_build_root())
+    )
+    assert not cache_dir.exists() or cache_dir.is_dir()
+    print(
+        "Compiling custom operators..."
+        f"\n\t If problems occur, consider clearing the torch_extension cache"
+        f" at {cache_dir!s}",
+        flush=True,
+    )
+
     compiled_fns = {}
     exceptions = {}
     for name in CUSTOM_OPS:
@@ -110,37 +132,46 @@ def _compile_fns() -> dict[str, Callable]:
                 f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
             )
         raise error from exc_group
+
     return compiled_fns
 
 
 def _load_linodenet() -> dict[str, Callable]:
-    LIB = BUILD_DIR / f"{LIB_NAME}.so"
+    lib_file = BUILD_DIR / f"{LIB_NAME}.so"
 
-    if not LIB.exists():
-        warnings.warn(
-            "\n\t Custom binaries not found!"
-            "\n\t -> Consider compiling the extension in the linodenet/lib folder."
-            "\n\t -> Trying to compile them on the fly...",
-            UserWarning,
-            stacklevel=2,
-        )
-    else:
+    if lib_file.exists():
         try:  # load pre-compiled binaries
-            torch.ops.load_library(BUILD_DIR / f"{LIB_NAME}.so")
+            torch.ops.load_library(lib_file)
             # load the functions
             return {name: getattr(LIB, name) for name in CUSTOM_OPS}
         except Exception as exc:  # noqa: BLE001
             warnings.warn(
-                f"\n\t Custom binaries could not be loaded (raised {type(exc)})!"
+                f"\n\t Custom binaries could not be loaded (raised {type(exc)!s})!"
                 "\n\t Please ensure they are compiled for the correct platform."
-                "\n\t Consider submitting a bug report."
-                "\n\t Attempting to compile them on the fly instead...",
+                "\n\t Consider submitting a bug report.",
                 UserWarning,
                 stacklevel=2,
             )
+    else:
+        warnings.warn(
+            f"\n\t Custom binaries not found! ({lib_file!s})"
+            "\n\t -> Consider compiling the extension in the linodenet/lib folder.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     return _compile_fns()
 
 
+COMPILED_FNS: Final[KnownFunctions] = cast("KnownFunctions", _load_linodenet())
+r"""The compiled functions."""
+
+_singular_triplet: "SingularTriplet" = COMPILED_FNS["singular_triplet"]
+_singular_triplet_debug: "SingularTriplet" = COMPILED_FNS["singular_triplet_debug"]
+_singular_triplet_riemann: "SingularTriplet" = COMPILED_FNS["singular_triplet_riemann"]
+_spectral_norm: "SpectralNorm" = COMPILED_FNS["spectral_norm"]
+_spectral_norm_debug: "SpectralNorm" = COMPILED_FNS["spectral_norm_debug"]
+_spectral_norm_riemann: "SpectralNorm" = COMPILED_FNS["spectral_norm_riemann"]
 # endregion compile functions ----------------------------------------------------------
 
 
@@ -206,28 +237,6 @@ class SingularTriplet(Protocol):
 
 
 # endregion protocols ------------------------------------------------------------------
-
-
-# region load compiled functions -------------------------------------------------------
-class KnownFunctions(TypedDict):
-    singular_triplet: SingularTriplet
-    singular_triplet_debug: SingularTriplet
-    singular_triplet_riemann: SingularTriplet
-    spectral_norm: SpectralNorm
-    spectral_norm_debug: SpectralNorm
-    spectral_norm_riemann: SpectralNorm
-
-
-COMPILED_FNS: Final[KnownFunctions] = _load_linodenet()
-r"""The compiled functions."""
-
-_singular_triplet: SingularTriplet = COMPILED_FNS["singular_triplet"]
-_singular_triplet_debug: SingularTriplet = COMPILED_FNS["singular_triplet_debug"]
-_singular_triplet_riemann: SingularTriplet = COMPILED_FNS["singular_triplet_riemann"]
-_spectral_norm: SpectralNorm = COMPILED_FNS["spectral_norm"]
-_spectral_norm_debug: SpectralNorm = COMPILED_FNS["spectral_norm_debug"]
-_spectral_norm_riemann: SpectralNorm = COMPILED_FNS["spectral_norm_riemann"]
-# endregion load compiled functions ----------------------------------------------------
 
 
 # region spectral norm -----------------------------------------------------------------

@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=2.4.0",
+    "numpy>=2.4.1",
     "scipy>=1.16.3",
     "torch>=2.9.1",
     "torchdiffeq>=0.2.5",
@@ -77,12 +77,12 @@ docs = [
 ]
 linters = [
     "pre-commit>=4.5.1",
-    "ruff>=0.14.10",
-    "tach>=0.32.2",
+    "ruff>=0.14.11",
+    "tach>=0.33.0",
 ]
 tests = [
     "coverage>=7.13.1",
-    "hypothesis[numpy,pytest]>=6.148.8",
+    "hypothesis[numpy,pytest]>=6.150.0",
     "matplotlib>=3.10.8",
     "psutil>=7.2.1",
     "pygal>=3.1.0",
@@ -97,20 +97,20 @@ tests = [
 ]
 typing = [
     "mypy>=1.19.1",
-    "pyrefly>=0.46.3",
-    "pyright>=1.1.407",
-    "scipy-stubs>=1.16.3.3",
+    "pyrefly>=0.47.0",
+    "pyright>=1.1.408",
+    "scipy-stubs>=1.17.0.0",
     "types-colorama>=0.4.15.20250801",
     "types-decorator>=5.2.0.20251101",
     "types-docutils>=0.22.3.20251115",
-    "types-jsonschema>=4.25.1.20251009",
+    "types-jsonschema>=4.26.0.20260109",
     "types-pillow>=10.2.0.20240822",
     "types-protobuf>=6.32.1.20251210",
     "types-psutil>=7.2.1.20251231",
     "types-pygments>=2.19.0.20251121",
     "types-pytz>=2025.2.0.20251108",
     "types-pyyaml>=6.0.12.20250915",
-    "types-requests>=2.32.4.20250913",
+    "types-requests>=2.32.4.20260107",
     "types-setuptools>=80.9.0.20251223",
     "types-six>=1.17.0.20251009",
     "types-tabulate>=0.9.0.20241207",
@@ -269,6 +269,8 @@ python-version = "3.13"
 [tool.ty.terminal]
 output-format = "concise"
 
+[tool.ty.analysis]
+respect-type-ignore-comments = false
 
 # region pyrefly configuration ---------------------------------------------------------
 [tool.pyrefly]

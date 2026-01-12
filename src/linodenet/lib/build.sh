@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+BUILD_DIR='./build'
 
 # determine project dir
 PROJECT_DIR=$(git rev-parse --show-toplevel | xargs echo -n)
@@ -83,9 +84,7 @@ fi
 echo "-------------------------------------------------------------------------"
 echo "Building..."
 
-# create build directory
-mkdir -p build && rm -rf build/*
-cd build || exit 1
+
 
 # activate correct python
 source "${PROJECT_DIR}/.venv/bin/activate"
@@ -96,10 +95,20 @@ export PATH="/usr/local/cuda-$CUDA_VERSION/bin:$PATH"
 export CMAKE_INCLUDE_PATH="/usr/local/cuda-$CUDA_VERSION/include"
 export LD_LIBRARY_PATH="/usr/local/cuda-$CUDA_VERSION/lib64:$LD_LIBRARY_PATH"
 echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-cmake -DCMAKE_PREFIX_PATH="${LIBTORCH_DIR}" ..
-make -j
 
-cd ..  # exit build directory
+# create build directory and clean it
+mkdir -p "$BUILD_DIR" && rm -rf "${BUILD_DIR:?}/"*
+CMAKE_ARGS=(
+  -S .                                     # source directory
+  -B "$BUILD_DIR"                          # build directory
+  -DCMAKE_PREFIX_PATH="${LIBTORCH_DIR}"    #
+  -DCMAKE_BUILD_TYPE=Release               #
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON       #
+)
+printf 'Running: %q \n' cmake "${CMAKE_ARGS[*]}"
+cmake "${CMAKE_ARGS[@]}"
+cmake --build "$BUILD_DIR" --config Release -j
+
 echo "-------------------------------------------------------------------------"
 # endregion build ----------------------------------------------------------------------
 

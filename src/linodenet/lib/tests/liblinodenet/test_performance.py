@@ -332,7 +332,7 @@ def test_singular_triplet_backward(
     benchmark.pedantic(backward, setup=setup, rounds=512, warmup_rounds=128)
 
 
-@pytest.mark.skip(reason="Errors too large for custom impl.")
+@pytest.mark.xfail(reason="Errors too large for custom impl.", strict=True)
 @pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("impl", SINGULAR_TRIPLETS, ids=SINGULAR_TRIPLETS.get)

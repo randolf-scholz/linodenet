@@ -30,7 +30,7 @@ class CellList[C: CellBase](CellBase, ModuleSequence[C]):
         # because it will overwrite internal state otherwise.
         # Therefore, we need to carefully manually reproduce the __init__ logic here.
         assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[C].__init__(self, modules)  # type: ignore[arg-type]
+        ModuleSequence[C].__init__(self, modules)
         # Note: Need to call Cell.__init__, not CellBase.__init__
         #   Otherwise nn.Module.__init__ gets called twice!
         Cell.__init__(self, input_size, hidden_size)

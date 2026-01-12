@@ -58,31 +58,6 @@ class iResNetBlock(nn.Module):
             )
 
     @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        """.. Signature:: ``(..., n) -> (..., n)``."""
-        if self.is_inverse:
-            return self._decode(x)
-        return self._encode(x)
-
-    @jit.export
-    def encode(self, x: Tensor) -> Tensor:
-        r"""Compute the forward map with residual connection."""
-        if self.is_inverse:
-            return self._decode(x)
-        return self._encode(x)
-
-    @jit.export
-    def decode(self, y: Tensor) -> Tensor:
-        r"""Compute the inverse through fixed point iteration.
-
-        Terminates once ``maxiter`` or tolerance threshold
-        $|x'-x|≤\text{atol} + \text{rtol}⋅|x|$ is reached.
-        """
-        if self.is_inverse:
-            return self._encode(y)
-        return self._decode(y)
-
-    @jit.export
     def encode(self, x: Tensor) -> Tensor:
         r"""Computes $y = x + f(x)$."""
         return x + self.block(x)

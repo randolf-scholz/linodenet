@@ -31,7 +31,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 from types import EllipsisType
-from typing import Final, Literal, TypeIs, overload
+from typing import Literal, TypeIs, overload
 
 type ShapeType = tuple[DimType, ...] | tuple[EllipsisType, *tuple[DimType, ...]]
 type DimType = ConstantDim | StaticDim | DynamicDim | UnknownDim
@@ -103,7 +103,7 @@ class ConstantDim(Dim):
     r"""Class for representing constant dimensions."""
 
     value: int
-    kind: Final[DimKind] = DimKind.CONSTANT
+    kind: Literal[DimKind.CONSTANT] = DimKind.CONSTANT
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +111,7 @@ class StaticDim(Dim):
     r"""Class for representing static dimensions."""
 
     value: Identifier
-    kind: Final[DimKind] = DimKind.STATIC
+    kind: Literal[DimKind.STATIC] = DimKind.STATIC
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +119,7 @@ class DynamicDim(Dim):
     r"""Class for representing dynamic dimensions."""
 
     value: Identifier
-    kind: Final[DimKind] = DimKind.DYNAMIC
+    kind: Literal[DimKind.DYNAMIC] = DimKind.DYNAMIC
 
     def __repr__(self) -> str:
         return f"*{self.value!s}"
@@ -129,8 +129,8 @@ class DynamicDim(Dim):
 class UnknownDim(Dim):
     r"""Class for representing unknown dimensions."""
 
-    value: Final[QMARK] = "?"
-    kind: Final[DimKind] = DimKind.UNKNOWN
+    value: Literal["?"] = "?"
+    kind: Literal[DimKind.UNKNOWN] = DimKind.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,7 +412,8 @@ class Parser:
     def _parse_shape_type(self) -> ShapeType:
         self.consume(TokenKind.LPAREN)
 
-        dims: list[EllipsisType | DimType] = []
+        with_ellipsis: bool = False
+        dims: list[DimType] = []
 
         # check first token after "("
         match self.current.kind:
@@ -422,7 +423,12 @@ class Parser:
 
             case TokenKind.ELLIPSIS:
                 self.consume(TokenKind.ELLIPSIS)
-                dims.append(...)
+                if with_ellipsis or dims:
+                    raise SyntaxError(
+                        "At most one Ellipsis (...) is allowed per ShapeType, "
+                        "and if present, it must be the first item."
+                    )
+                with_ellipsis = True
 
             case _:
                 dim = self._parse_dim_type()
@@ -434,7 +440,7 @@ class Parser:
             dims.append(self._parse_dim_type())
 
         self.consume(TokenKind.RPAREN)
-        return tuple(dims)
+        return (Ellipsis, *dims) if with_ellipsis else tuple(dims)  # type: ignore[arg-type]
 
     # DimType ::= "?" | Number | ("*"? IdentifierType)
 

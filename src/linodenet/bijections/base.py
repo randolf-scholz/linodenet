@@ -148,7 +148,11 @@ class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
         ModuleSequence[B].__init__(self, modules)
 
     def __invert__(self) -> "BijectionSequence":
-        return self.__class__([~layer for layer in self[::-1]])
+        if type(self) is not BijectionSequence:
+            raise NotImplementedError(
+                f"Inversion not implemented for subclass {type(self)}"
+            )
+        return BijectionSequence([~layer for layer in self[::-1]])
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:

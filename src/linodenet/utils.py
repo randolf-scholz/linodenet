@@ -22,6 +22,7 @@ from typing import (
     Any,
     Protocol,
     TypeIs,
+    cast,
     get_protocol_members,
     is_protocol,
     overload,
@@ -29,6 +30,7 @@ from typing import (
 
 from typing_extensions import TypeForm
 
+from linodenet.constants import NOT_GIVEN
 from linodenet.signature import SignatureType, parse_signature
 from linodenet.types import NestedDict, NestedMapping
 
@@ -127,13 +129,31 @@ def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict
     return d
 
 
+@overload
+def flatten_dict(
+    d: NestedMapping[str, Any],
+    /,
+    *,
+    join_fn: Callable[[Iterable[str]], str] = ...,
+    split_fn: Callable[[str], Iterable[str]] = ...,
+    recursive: bool | int = ...,
+) -> dict[str, Any]: ...
+@overload
+def flatten_dict[K, K2](
+    d: NestedMapping[K, Any],
+    /,
+    *,
+    join_fn: Callable[[Iterable[K]], K2],
+    split_fn: Callable[[K2], Iterable[K]],
+    recursive: bool | int = ...,
+) -> dict[K2, Any]: ...
 def flatten_dict[K, K2](
     d: NestedMapping[K, Any],
     /,
     *,
     recursive: bool | int = True,
-    join_fn: Callable[[Iterable[K]], K2] = ".".join,  # type: ignore[assignment]
-    split_fn: Callable[[K2], Iterable[K]] = lambda s: s.split("."),  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+    join_fn: Callable[[Iterable[K]], K2] = NOT_GIVEN,
+    split_fn: Callable[[K2], Iterable[K]] = NOT_GIVEN,
 ) -> dict[K2, Any]:
     r"""Flatten dictionaries recursively.
 
@@ -142,7 +162,9 @@ def flatten_dict[K, K2](
         recursive: whether to flatten recursively. If `recursive` is an integer,
             then it flattens recursively up to `recursive` levels.
         join_fn: function to join keys
+            Optional if all keys are strings. In this case defaults to ``'.'.join``.
         split_fn: function to split keys
+            Optional if all keys are strings. In this case defaults to ``str.split('.')``.
 
     Examples:
         Using ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``
@@ -190,6 +212,20 @@ def flatten_dict[K, K2](
         ... )
         {('a', 1, True): 'foo', ('a', 2, False): 'bar'}
     """
+    if join_fn is NOT_GIVEN:
+        if not all(isinstance(key, str) for key in d):
+            raise TypeError("join_fn must be provided when keys are not all strings.")
+        actual_join = cast("Callable[[Iterable[K]], K2]", ".".join)
+    else:
+        actual_join = join_fn
+
+    if split_fn is NOT_GIVEN:
+        if not all(isinstance(key, str) for key in d):
+            raise TypeError("split_fn must be provided when keys are not all strings.")
+        actual_split = cast("Callable[[K2], Iterable[K]]", lambda s: s.split("."))
+    else:
+        actual_split = split_fn
+
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K2, Any] = {}
     for key, item in d.items():
@@ -200,23 +236,50 @@ def flatten_dict[K, K2](
                 join_fn=join_fn,
                 split_fn=split_fn,
             ).items():
-                new_key = join_fn((key, *split_fn(subkey)))
+                new_key = actual_join((key, *actual_split(subkey)))
                 result[new_key] = subitem
         else:
-            new_key = join_fn((key,))
+            new_key = actual_join((key,))
             result[new_key] = item
     return result
 
 
+@overload
+def unflatten_dict(
+    d: Mapping[str, Any],
+    /,
+    *,
+    join_fn: Callable[[Iterable[str]], str] = ...,
+    split_fn: Callable[[str], Iterable[str]] = ...,
+    recursive: bool | int = ...,
+) -> NestedDict[str, Any]: ...
+@overload
+def unflatten_dict[K, K2](
+    d: Mapping[K2, Any],
+    /,
+    *,
+    join_fn: Callable[[Iterable[K]], K2],
+    split_fn: Callable[[K2], Iterable[K]],
+    recursive: bool | int = ...,
+) -> NestedDict[K, Any]: ...
 def unflatten_dict[K, K2](
     d: Mapping[K2, Any],
     /,
     *,
     recursive: bool | int = True,
-    join_fn: Callable[[Iterable[K]], K2] = ".".join,  # type: ignore[assignment]
-    split_fn: Callable[[K2], Iterable[K]] = lambda s: s.split("."),  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue]
+    join_fn: Callable[[Iterable[K]], K2] = NOT_GIVEN,
+    split_fn: Callable[[K2], Iterable[K]] = NOT_GIVEN,
 ) -> NestedDict[K, Any]:
     r"""Unflatten dictionaries recursively.
+
+    Args:
+        d: dictionary to unflatten
+        recursive: whether to unflatten recursively. If `recursive` is an integer,
+            then it unflattens recursively up to `recursive` levels.
+        join_fn: function to join keys
+            Optional if all keys are strings. In this case defaults to ``'.'.join``.
+        split_fn: function to split keys
+            Optional if all keys are strings. In this case defaults to ``str.split('.')``.
 
     Examples:
         Using ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``
@@ -238,14 +301,28 @@ def unflatten_dict[K, K2](
         ... )
         {'a': {17: 'foo', 18: 'bar'}}
     """
+    if join_fn is NOT_GIVEN:
+        if not all(isinstance(key, str) for key in d):
+            raise TypeError("join_fn must be provided when keys are not all strings.")
+        actual_join = cast("Callable[[Iterable[K]], K2]", ".".join)
+    else:
+        actual_join = join_fn
+
+    if split_fn is NOT_GIVEN:
+        if not all(isinstance(key, str) for key in d):
+            raise TypeError("split_fn must be provided when keys are not all strings.")
+        actual_split = cast("Callable[[K2], Iterable[K]]", lambda s: s.split("."))
+    else:
+        actual_split = split_fn
+
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K, Any] = {}
     for key, item in d.items():
-        outer_key, *inner_keys = split_fn(key)
+        outer_key, *inner_keys = actual_split(key)
         if recursive and inner_keys:
             result.setdefault(outer_key, {})
             result[outer_key] |= unflatten_dict(
-                {join_fn(inner_keys): item},
+                {actual_join(inner_keys): item},
                 recursive=recursive,
                 split_fn=split_fn,
                 join_fn=join_fn,
