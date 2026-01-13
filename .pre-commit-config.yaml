@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.22
+    rev: 0.9.24
     hooks:
       - id: uv-lock
       - id: uv-export
@@ -104,7 +104,7 @@ repos:
         name: unknown-inline-pragma
         description: "Check for unknown inline pragmas."
         language: pygrep
-        entry: '^[^\n]*\S[^\n]*\#\x20+(?!type|pyright|noqa|fmt|shape|mypy|ruff|FIXME|SEE|NOTE|TODO)\w+:[^\n]+$'
+        entry: '^[^\n]*\S[^\n]*\#\x20+(?!type|pyright|pyrefly|ty|noqa|fmt|shape|mypy|ruff|FIXME|SEE|NOTE|TODO)\w+:[^\n]+$'
         types: [ python ]
         files: '^src/|^tests/'
   # markdownlint

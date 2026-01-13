@@ -1,14 +1,11 @@
 r"""Utility functions."""
 
 __all__ = [
-    # types
-    "SelfMap",
     # Classes
     # Functions
     "deep_dict_update",
     "flatten_dict",
     "get_module",
-    "implements",
     "is_allcaps",
     "is_dunder",
     "is_private",
@@ -17,50 +14,10 @@ __all__ = [
 
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
-from typing import (
-    Any,
-    Protocol,
-    TypeIs,
-    cast,
-    get_protocol_members,
-    is_protocol,
-    overload,
-)
-
-from typing_extensions import TypeForm
+from typing import Any, cast, overload
 
 from linodenet.constants import NOT_GIVEN
 from linodenet.types import NestedDict, NestedMapping
-
-
-class SelfMap[T](Protocol):
-    r"""A callable that returns the same type as its argument."""
-
-    # TODO: make this generic and upper-bound T to the generic type.
-    # alternatively, use signature def[S](T & S) -> (T & S)
-    def __call__[S](self, arg: S, /) -> S: ...
-
-
-@overload
-def implements[T](protocol: TypeForm[T], /) -> SelfMap[type[T]]: ...
-@overload
-def implements[T](obj: object, protocol: type[T], /) -> TypeIs[T]: ...
-def implements[T](
-    obj: object, protocol: None | type[T] = None
-) -> TypeIs[T] | SelfMap[T]:
-    r"""Check if an object implements a protocol.
-
-    Args:
-        obj: object to check
-        protocol: protocol class
-    """
-    if protocol is None:
-        return lambda x: x
-
-    if not isinstance(protocol, type) or not is_protocol(protocol):
-        raise TypeError(f"{protocol} is not a protocol class.")
-
-    return all(hasattr(obj, member) for member in get_protocol_members(protocol))
 
 
 def is_allcaps(s: str, /) -> bool:

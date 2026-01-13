@@ -29,10 +29,9 @@ classifiers = [
 
 dependencies = [
     "numpy>=2.4.1",
-    "scipy>=1.16.3",
+    "scipy>=1.17.0",
     "torch>=2.9.1",
     "torchdiffeq>=0.2.5",
-    "typing-extensions>=4.15.0",
 ]
 
 [project.urls]
@@ -55,7 +54,7 @@ debug = [
     "ipympl>=0.9.8",
     "ipywidgets>=8.1.8",
     "jupyterlab-execute-time>=3.3.0",
-    "jupyterlab>=4.5.1",
+    "jupyterlab>=4.5.2",
     "psutil>=7.2.1",
     "torchinfo>=1.8.0",
 ]
@@ -82,7 +81,7 @@ linters = [
 ]
 tests = [
     "coverage>=7.13.1",
-    "hypothesis[numpy,pytest]>=6.150.0",
+    "hypothesis[numpy,pytest]>=6.150.1",
     "matplotlib>=3.10.8",
     "psutil>=7.2.1",
     "pygal>=3.1.0",
@@ -97,7 +96,7 @@ tests = [
 ]
 typing = [
     "mypy>=1.19.1",
-    "pyrefly>=0.47.0",
+    "pyrefly>=0.48.0",
     "pyright>=1.1.408",
     "scipy-stubs>=1.17.0.0",
     "types-colorama>=0.4.15.20250801",
@@ -276,6 +275,9 @@ respect-type-ignore-comments = false
 [tool.pyrefly]
 python-version = "3.13"
 output-format="min-text"
+replace-imports-with-any = [
+    "torchdiffeq",
+]
 
 [tool.pyrefly.errors]
 invalid-overload = false

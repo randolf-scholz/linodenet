@@ -159,7 +159,7 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
         def __iter__(self) -> Iterator[M]: ...
 
         @overload  # type: ignore[override]
-        def __getitem__(self, index: int, /) -> M: ...
+        def __getitem__(self, index: int, /) -> M: ...  # pyrefly: ignore[bad-override]
         @overload
         def __getitem__(self, index: slice, /) -> Self: ...  # pyright: ignore[reportIncompatibleMethodOverride]
 
