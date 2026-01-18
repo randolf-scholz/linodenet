@@ -27,9 +27,9 @@ class MissingValueCell(CellBase):
     0. "default": uses "decoder", if available, and "zero" otherwise.
     1. "zero": Replace missing values with zeros.
     2. "constant": Replace missing values with a constant value.
-    2. "last": Replace missing values with the last observed value. (initialized with zero)
-    3. "decoder": Replace missing values with the output of the decoder: $s = h(x)$.
-    4. Tensor: replaces missing values with a fixed tensor. (for example, the mean of the data)
+    3. "last": Replace missing values with the last observed value. (initialized with zero)
+    4. "decoder": Replace missing values with the output of the decoder: $s = h(x)$.
+    5. Tensor: replaces missing values with a fixed tensor. (for example, the mean of the data)
 
     Optionally, the mask can be concatenated to the input.
 

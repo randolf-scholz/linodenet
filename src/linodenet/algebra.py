@@ -1,20 +1,25 @@
 r"""Functional Algebra.
 
++----------+----------+------------+------------+
 | operator | meaning  | i-operator | iterated   |
-|----------|----------|------------|------------|
++==========+==========+============+============+
 | `>>`     | series   | `**`       | repeat     |
++----------+----------+------------+------------+
 | `^`      | parallel | `//`       | concurrent |
++----------+----------+------------+------------+
 | `&`      | meet     | `%`        | fork       |
++----------+----------+------------+------------+
 | `|`      | join     | `%`        | fork       |
++----------+----------+------------+------------+
 
-# @: tensor product?
-# +: sum-reduce
-# -: ?
-# / num: ? reduce?
-# % num: ? reduce?
-# // num: ? concurrent/duplicate?
-# ** num: repeat (>>)
-# * num: duplicate? (⇝ similar to (x,) * n)
+- ``@``: tensor product?
+- ``+``: sum-reduce
+- ``-``: ?
+- ``/ num``: ? reduce?
+- ``% num``: ? reduce?
+- ``// num``: ? concurrent/duplicate?
+- ``** num``: repeat (``>>``)
+- ``* num``: duplicate? (⇝ similar to ``(x,) * n``)
 """
 
 __all__ = [
@@ -424,9 +429,9 @@ class Parallel[M: Fn](FnSequence[M]):
              ⋮
         xₙ ────▶ fₙ(xₙ)
 
-    .. math:: parallel(f₁, ..., fₙ):
-        X₁×…×Xₙ ⟶ Y₁×…×Yₙ
-        (x₁, ..., xₙ) ⟼ (f₁(x₁), ..., fₙ(xₙ))
+    .. math::
+        parallel(f₁, ..., fₙ): X₁×…×Xₙ &⟶ Y₁×…×Yₙ
+        \\  (x₁, ..., xₙ) &⟼ (f₁(x₁), ..., fₙ(xₙ))
     """
 
     def __invert__(self) -> "Parallel":

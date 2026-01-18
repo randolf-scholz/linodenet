@@ -9,13 +9,15 @@ import torch
 from numpy.typing import ArrayLike
 from torch import Tensor, einsum, jit, nn, stack
 
+from linodenet.signatures import signature
+
 
 class DiscreteKalmanFilter(nn.Module):
     r"""Discrete, time-invariant Kalman Filter.
 
     .. math::
-        xₖ₊₁ = Fxₖ + wₖ,    wₖ ~ N(0, Q)
-        yₖ   = Hxₖ + vₖ,    vₖ ~ N(0, R)
+        xₖ₊₁ &= Fxₖ + wₖ   &   wₖ &~ N(0, Q) \\
+        yₖ   &= Hxₖ + vₖ   &   vₖ &~ N(0, R)
     """
 
     input_size: Final[int]
@@ -196,6 +198,10 @@ class DiscreteKalmanFilter(nn.Module):
         nn.init.kaiming_uniform_(t)
         return t
 
+    @signature(
+        "[int[q], (..., *n, d), Optional[(..., d), (..., d, d)]] "
+        "-> [(..., *q, d), (..., *q, d, d)]"
+    )
     def forward(
         self,
         n_steps: int,
@@ -205,13 +211,13 @@ class DiscreteKalmanFilter(nn.Module):
         r"""Predict ``n_steps`` into the future given observations.
 
         Args:
-            y_obs: Input sequence of shape (*B, T, input_size)
             n_steps: Number of steps to predict into the future
-            initial_state: Initial hidden state (num_layers, *B, hidden_size)
+            y_obs: Input sequence $(y₁, ..., yₙ)$
+            initial_state: Initial hidden state $(μ₀, Σ₀)$
 
         Returns:
-            y_pred: Predicted means of shape (*B, T, input_size)
-            S_pred: Predicted covariances of shape (*B, T, input_size, input_size)
+            y_pred: Predicted means $μ̂ₖ=\E[ŷₖ]$ for $k=1,...,m$
+            S_pred: Predicted covariances $Σ̂ₖ=\Var[ŷₖ]$ for $k=1,...,m$
         """
         F = self.system_matrix
         Q = self.process_covariance

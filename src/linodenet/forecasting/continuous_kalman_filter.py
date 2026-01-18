@@ -10,13 +10,15 @@ from numpy.typing import ArrayLike
 from torch import Tensor, einsum, jit, nn, stack
 from torch.linalg import matrix_exp
 
+from linodenet.signatures import signature
+
 
 class ContinuousKalmanFilter(nn.Module):
     r"""Continuous, time-invariant Kalman Filter.
 
     .. math::
-        ∂ₜxₜ = Fxₜ + wₜ,    wₜ ~ N(0, Qₜ)
-          yₜ = Hxₜ + vₜ,    vₜ ~ N(0, Rₜ)
+        ∂ₜxₜ &= Fxₜ + wₜ  &  wₜ &~ N(0, Qₜ)  \\
+          yₜ &= Hxₜ + vₜ  &  vₜ &~ N(0, Rₜ)
     """
 
     input_size: Final[int]
@@ -202,6 +204,10 @@ class ContinuousKalmanFilter(nn.Module):
         nn.init.kaiming_uniform_(t)
         return t
 
+    @signature(
+        "[(..., *Q), tuple[(..., *T), (..., *T, D)], Optional[(...), (..., D), (..., D, D)]] "
+        "-> [(..., *Q, D), (..., *Q, D, D)]"
+    )
     def forward(
         self,
         query: Tensor,
@@ -211,13 +217,13 @@ class ContinuousKalmanFilter(nn.Module):
         r"""Predict ``n_steps`` into the future given observations.
 
         Args:
-            query: time points at which to forecast (T,) or (*B, T)
-            context: observations (t, y) (*B, T) and (*B, T, input_size)
-            initial_state: (t₀, μ₀, Σ₀) of shape ((*B,), (*B, n), (*B, n, n))
+            query: time points at which to forecast
+            context: known observations $(t, y)$
+            initial_state: initial latent state $(t₀, μ₀, Σ₀)$
 
         Returns:
-            y_pred: Predicted means of shape (*B, T, input_size)
-            S_pred: Predicted covariances of shape (*B, T, input_size, input_size)
+            y_pred: Predicted means $μ̂ₜ=\E[ŷₜ]$ for each query time
+            S_pred: Predicted covariances $Σ̂ₜ=\Var[ŷₜ]$ for each query time
         """
         n_steps = query.shape[-1]
         times, values = context

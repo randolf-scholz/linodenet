@@ -1,10 +1,10 @@
 r"""Implementation of GRU-ODE-Bayes model for time series forecasting.
 
 References:
-    - GRU-ODE-Bayes: Continuous modeling of sporadically-observed time series
-    Edward De Brouwer, Jaak Simm, Adam Arany, Yves Moreau
-    33rd Conference on Neural Information Processing Systems (NeurIPS 2019)
-    https://proceedings.neurips.cc/paper/2019/hash/455cb2657aaa59e32fad80cb0b65b9dc-Abstract.html
+    - | GRU-ODE-Bayes: Continuous modeling of sporadically-observed time series
+      | Edward De Brouwer, Jaak Simm, Adam Arany, Yves Moreau
+      | 33rd Conference on Neural Information Processing Systems (NeurIPS 2019)
+      | https://proceedings.neurips.cc/paper/2019/hash/455cb2657aaa59e32fad80cb0b65b9dc-Abstract.html
     - https://github.com/edebrouwer/gru_ode_bayes
 """
 

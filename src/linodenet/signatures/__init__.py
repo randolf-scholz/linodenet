@@ -4,6 +4,7 @@ __all__ = [
     # Types
     "SignatureType",
     "ShapeType",
+    "Arg",
     "ArgType",
     "ArgList",
     # Classes
@@ -26,6 +27,7 @@ __all__ = [
     "signature",
 ]
 from linodenet.signatures.signatures import (
+    Arg,
     ArgList,
     ArgType,
     ConstantDim,

@@ -33,7 +33,7 @@ class Empirical(DistributionBase):
         r"""Initialize the empirical distribution.
 
         Args:
-            values: (N, *D) or (*Bs, N, *D): The dataset that defines the empirical distribution.
+            values: `(N, *D)` or `(*Bs, N, *D)`: The dataset that defines the empirical distribution.
             ndim: The number of dimensions of each data point. If not given,
             it is assumed that unbatched data is given, i.e., `ndim=values.ndim - 1`.
         """

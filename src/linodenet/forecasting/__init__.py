@@ -9,12 +9,16 @@ __all__ = [
     # Classes
     "LatentStateSpaceModel",
     "LinODEnet",
+    "ContinuousKalmanFilter",
+    "DiscreteKalmanFilter",
 ]
 
 from linodenet.forecasting.base import (
     PointForecastingModel,
     ProbabilisticForecastingModel,
 )
+from linodenet.forecasting.continuous_kalman_filter import ContinuousKalmanFilter
+from linodenet.forecasting.discrete_kalman_filter import DiscreteKalmanFilter
 from linodenet.forecasting.linodenet import LinODEnet
 from linodenet.forecasting.lssm import LatentStateSpaceModel
 

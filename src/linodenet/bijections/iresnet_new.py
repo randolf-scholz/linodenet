@@ -66,23 +66,19 @@ class iResNetBlock(nn.Module):
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
-        .. math::
-            x = y - f(x)
+        .. math:: x = y - f(x)
 
-        Note that in this case the gradient can be computed through implicit differentiation::
-
+        Note that in this case the gradient can be computed through implicit differentiation:
 
         .. math::
-            z = f(z, x, θ)
-            ⟹ ∂z/∂θ =  df/dθ = ∂f/∂z ∂z/∂θ + ∂f/∂x ∂x/∂θ + ∂f/∂θ
-            ⟹ (I-∂f/∂z) ∂z/∂θ = ∂f/∂x ∂x/∂θ + ∂f/∂θ
-            ⟹ ∂z/∂θ = (I-∂f/∂z)⁻¹ (∂f/∂x ∂x/∂θ + ∂f/∂θ)
+            && z &= f(z, x, θ)
+            \\ &⟹& ∂z/∂θ &= df/dθ = ∂f/∂z ∂z/∂θ + ∂f/∂x ∂x/∂θ + ∂f/∂θ
+            \\ &⟹& (I-∂f/∂z) ∂z/∂θ &= ∂f/∂x ∂x/∂θ + ∂f/∂θ
+            \\ &⟹& ∂z/∂θ &= (I-∂f/∂z)⁻¹ (∂f/∂x ∂x/∂θ + ∂f/∂θ)
 
         Moreover, the jacobian-vector product can be computed as:
 
-        .. math::
-
-            vᵀ(∂z/∂θ) = ... = (∂f/∂x ∂x/∂θ + ∂f/∂θ)ᵀ(I-∂f/∂z)⁻ᵀv
+        .. math:: vᵀ(∂z/∂θ) = ... = (∂f/∂x ∂x/∂θ + ∂f/∂θ)ᵀ(I-∂f/∂z)⁻ᵀv
 
         References:
             https://implicit-layers-tutorial.org/

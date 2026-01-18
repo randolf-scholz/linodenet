@@ -1,10 +1,10 @@
 r"""ReZero layers.
 
 References:
-    - ReZero is all you need: fast convergence at large depth.
-    Thomas Bachlechner, Bodhisattwa Prasad Majumder, Henry Mao, Gary Cottrell, Julian McAuley
-    Proceedings of the Thirty-Seventh Conference on Uncertainty in Artificial Intelligence, PMLR
-    https://proceedings.mlr.press/v161/bachlechner21a.html
+    - | ReZero is all you need: fast convergence at large depth.
+      | Thomas Bachlechner, Bodhisattwa Prasad Majumder, Henry Mao, Gary Cottrell, Julian McAuley
+      | Proceedings of the Thirty-Seventh Conference on Uncertainty in Artificial Intelligence, PMLR
+      | https://proceedings.mlr.press/v161/bachlechner21a.html
 """
 
 __all__ = [

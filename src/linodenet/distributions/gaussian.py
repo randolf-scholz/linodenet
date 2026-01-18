@@ -13,7 +13,7 @@ Note:
     but actually, we need to update the weights $w$ and then apply the parametrization.
 
     In essence, this means we need to be able to find a mapping $w → w'$ such that the
-    following diagram commutes:
+    following diagram commutes::
 
             parametrize
         w ──────────────► θ
@@ -25,6 +25,9 @@ Note:
         ▼   parametrize   ▼
         w'──────────────► θ'
 
+    I.e. we need to find a mapping $φ$ on the unconstrained parameters such that
+    $f(φ(w)) = m(f(w))$ where $m$ is the marginalization operation on the
+    parameters.
 """
 
 __all__ = ["MultivariateNormal", "MultiHeadGaussian"]

@@ -295,23 +295,7 @@ intersphinx_disabled_reftypes = ["std:doc"]  # list of disabled cross-reference 
 # SEE: https://www.sphinx-doc.org/en/master/usage/extensions/math.html#module-sphinx.ext.mathjax
 # SEE: https://docs.mathjax.org/en/latest/web/configuration.html
 
-# region mathjax_startup_patch ---------------------------------------------------------
-# SEE: https://github.com/orgs/sphinx-doc/discussions/13147#discussioncomment-11837201
-
-# mathjax_options = {}
-# mathjax3_config = "_static/mathjax_startup.js"
-custom_mathjax = "_static/mathjax_startup.js"
-
-with open("_static/mathjax_startup.js", "r", encoding="utf-8") as f:
-    mathjax_script = f.read()
-
-
-def setup(app):
-    app.add_js_file("", body=mathjax_script)
-
-
-# endregion mathjax_startup_patch ------------------------------------------------------
-
+mathjax_config_path = "_static/mathjax_config.js"
 
 # endregion sphinx.ext.mathjax configuration -------------------------------------------
 

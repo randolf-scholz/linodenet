@@ -3,17 +3,18 @@ r"""Different Filter models to be used in conjunction with LinODENet.
 We distinguish between two main types of modules: Cells and Filters.
 
 - A cell is anything that operationally is similar to torch.nn.RNNCell:
-  - `__init__` takes two positional arguments: input_size and hidden_size
-  - `forward` takes two positional inputs: $y$ (the current measurement) and
-    $x$ (the current estimation of the hidden state), and returns the updated state of the system.
-  - For example, a linear cell is of the form: $F(y, x) = Ax + By + b$
-    Note that linear here means linear-affine in both inputs jointly, not separately, e.g.
-    $F(y₁+y₂, x₁+x₂)$ and $F(y₁, x₁) + F(y₂, x₂)$ are equal up to a constant.
+    - `__init__` takes two positional arguments: input_size and hidden_size
+    - `forward` takes two positional inputs: $y$ (the current measurement) and
+      $x$ (the current estimation of the hidden state), and returns the updated state of the system.
+    - For example, a linear cell is of the form: $F(y, x) = Ax + By + b$
+      Note that linear here means linear-affine in both inputs jointly, not separately, e.g.
+      $F(y₁+y₂, x₁+x₂)$ and $F(y₁, x₁) + F(y₂, x₂)$ are equal up to a constant.
 - A filter is a special case of a cell where `input_size == hidden_size`.
-  - on this case, the same transformation is applied to both the measurement and the
-    current estimation of the state.
+    - on this case, the same transformation is applied to both the measurement and the
+      current estimation of the state.
 
 A Filter takes two positional inputs:
+
 - An input tensor y: the current measurement of the system
 - An input tensor x: the current estimation of the state of the system
 

@@ -4,7 +4,9 @@
 SignatureType ::= (ArgList | ArgType) "->" (ArgList | ArgType);
 
 // e.g. '[T, U, Tensor[(N, 3)]]'
-ArgList ::= "[" (ArgType ("," ArgType)*)? "]"
+ArgList ::= "["  (Arg ("," Arg)*)?  (KeyArg ("," KeyArg)*)?  "]"
+Arg ::= ArgType
+KeyArg ::= IdentifierType "?"? "=" ArgType
 
 // e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]'
 ArgType ::= ShapeType | IdentifierType | GenericType

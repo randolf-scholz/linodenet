@@ -5,6 +5,8 @@ __all__ = [
     "SignatureType",
     "ShapeType",
     "ArgType",
+    "Arg",
+    "KeyArg",
     "ArgList",
     # Classes
     "Identifier",
@@ -42,17 +44,17 @@ type DimType = (
     ConstantDim | StaticDim | VariadicDim | AffineDim | UnknownDim | DynamicDim
 )
 type ArgType = ShapeType | Identifier | GenericType
-type ArgList = list[ArgType]
+type ArgList = list[Arg]
 type QMARK = Literal["?"]
 
 
-def _shape_to_str(shape: ShapeType) -> str:
+def _shape_to_str(shape: ShapeType, /) -> str:
     if len(shape) > 0 and shape[0] is Ellipsis:
         return f"(..., {', '.join(str(dim) for dim in shape[1:])})"
     return f"({', '.join(str(dim) for dim in shape)})"
 
 
-def _arg_to_str(arg: ArgType) -> str:
+def _arg_to_str(arg: ArgType, /) -> str:
     if isinstance(arg, tuple):
         return _shape_to_str(arg)
     return str(arg)
@@ -74,6 +76,29 @@ def is_identifier(s: str, /) -> TypeIs[Identifier]:
 
 
 @dataclass(frozen=True, slots=True)
+class Arg:
+    r"""Base class for representing argument types."""
+
+    value: ArgType
+    optional: bool
+
+    def __str__(self) -> str:
+        return f"{_arg_to_str(self.value)}{'?' if self.optional else ''})"
+
+
+@dataclass(frozen=True, slots=True)
+class KeyArg:
+    r"""Base class for representing argument types."""
+
+    name: Identifier
+    value: ArgType
+    optional: bool
+
+    def __str__(self) -> str:
+        return f"{_arg_to_str(self.value)}{'?' if self.optional else ''})"
+
+
+@dataclass(frozen=True, slots=True)
 class GenericType:
     r"""Class for representing generic types with type arguments."""
 
@@ -81,7 +106,7 @@ class GenericType:
     arglist: ArgList
 
     def __str__(self) -> str:
-        return f"{self.id!s}[{','.join(map(_arg_to_str, self.arglist))}]"
+        return f"{self.id!s}[{','.join(map(str, self.arglist))}]"
 
 
 class DimKind(StrEnum):
@@ -91,7 +116,7 @@ class DimKind(StrEnum):
     STATIC = "static"  # 'n' static shape / single axis
     VARIADIC = "variadic"  # '*n' static shape / bundle of axes
     DYNAMIC = "dynamic"  # '$n' variable sized axis
-    COMPOUND = "compound"  # "2n", "3n+1", "u+v"
+    AFFINE = "affine"  # "2n", "3n+1", "u+v"
     UNKNOWN = "unknown"  # for future use
 
 
@@ -196,7 +221,7 @@ class AffineDim(Dim):
     - `1a - 2b + 3c - 4d +5`
     """
 
-    kind: ClassVar[Literal[DimKind.COMPOUND]] = DimKind.COMPOUND
+    kind: ClassVar[Literal[DimKind.AFFINE]] = DimKind.AFFINE
 
     terms: Sequence[tuple[Sign, ConstantDim, StaticDim | DynamicDim]]
     offset: ConstantDim | None = None
@@ -267,25 +292,11 @@ class SignatureType:
 
     def __str__(self) -> str:
         r"""Convert the signature to a string."""
-        args = self.argument_types
-        rets = self.return_types
+        arg_strs = list(map(str, self.argument_types))
+        ret_strs = list(map(str, self.return_types))
 
-        arg_strs: list[str] = []
-        for arg in args:
-            if isinstance(arg, tuple):
-                arg_strs.append(_shape_to_str(arg))
-            else:
-                arg_strs.append(str(arg))
-
-        ret_strs: list[str] = []
-        for ret in rets:
-            if isinstance(ret, tuple):
-                ret_strs.append(_shape_to_str(ret))
-            else:
-                ret_strs.append(str(ret))
-
-        arg_part = arg_strs[0] if len(args) == 1 else f"[{', '.join(arg_strs)}]"
-        ret_part = ret_strs[0] if len(rets) == 1 else f"[{', '.join(ret_strs)}]"
+        arg_part = arg_strs[0] if len(arg_strs) == 1 else f"[{', '.join(arg_strs)}]"
+        ret_part = ret_strs[0] if len(ret_strs) == 1 else f"[{', '.join(ret_strs)}]"
         return f"{arg_part} -> {ret_part}"
 
 
@@ -495,16 +506,16 @@ class Parser:
                 "expected end of input"
             )
 
-    # SignatureType ::= (ArgList | ArgType) "->" (ArgList | ArgType)
+    # SignatureType ::= (ArgList | Arg) "->" (ArgList | Arg)
     def _parse_signature(self) -> SignatureType:
         """Parse the grammar starting from SignatureType and ensure full consumption.
 
-        SignatureType ::= (ArgList | ArgType) "->" (ArgList | ArgType)
+        SignatureType ::= (ArgList | Arg) "->" (ArgList | Arg)
         """
         lhs = (
             self._parse_arglist()
             if self.current.kind is TokenKind.LBRACKET
-            else [self._parse_argtype()]
+            else [self._parse_arg()]
         )
 
         self.consume(TokenKind.ARROW)
@@ -512,44 +523,54 @@ class Parser:
         rhs = (
             self._parse_arglist()
             if self.current.kind is TokenKind.LBRACKET
-            else [self._parse_argtype()]
+            else [self._parse_arg()]
         )
 
         return SignatureType(lhs, rhs)
 
-    # ArgList ::= "[" (ArgType ("," ArgType)*)? "]"
+    # ArgList ::= "[" (Arg ("," Arg)*)? "]"
     def _parse_arglist(self) -> ArgList:
         self.consume(TokenKind.LBRACKET)
         args: ArgList = []
 
         if self.current.kind is not TokenKind.RBRACKET:
-            args.append(self._parse_argtype())
+            args.append(self._parse_arg())
             while self.current.kind is TokenKind.COMMA:
                 self.consume(TokenKind.COMMA)
-                args.append(self._parse_argtype())
+                args.append(self._parse_arg())
 
         self.consume(TokenKind.RBRACKET)
         return args
 
-    # ArgType ::= ShapeType | IdentifierType | GenericType
-    def _parse_argtype(self) -> ArgType:
+    def _accept_optional(self) -> bool:
+        if self.current.kind is TokenKind.QMARK:
+            self.consume(TokenKind.QMARK)
+            return True
+        return False
+
+    # Arg ::= ArgType "?"?
+    def _parse_arg(self) -> Arg:
+        value: ArgType
         match (tok := self.current).kind:
             # ShapeType starts with "("
             case TokenKind.LPAREN:
-                return self._parse_shape_type()
+                value = self._parse_shape_type()
 
             # IdentifierType ArgList?
             case TokenKind.IDENT:
                 ident = self._parse_identifier()
                 if self.current.kind is TokenKind.LBRACKET:
                     arglist = self._parse_arglist()
-                    return GenericType(id=ident, arglist=arglist)
-                return ident
+                    value = GenericType(id=ident, arglist=arglist)
+                else:
+                    value = ident
 
             case _:
                 raise SyntaxError(
                     f"Expected ArgType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
                 )
+        optional = self._accept_optional()
+        return Arg(value, optional=optional)
 
     # ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
     def _parse_shape_type(self) -> ShapeType:
