@@ -72,7 +72,7 @@ add_library(
         src/liblinodenet/spectral_norm_debug.cpp
         src/liblinodenet/spectral_norm_riemann.cpp
         src/liblinodenet/utils.cpp
-        src/liblinodenet/matrix_root.cpp
+        # src/liblinodenet/matrix_root.cpp
 )
 
 # Target configuration
