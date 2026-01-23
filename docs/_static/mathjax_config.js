@@ -97,7 +97,7 @@ const unicodeSubscriptsToTeX = (s) => {
 	let i = 0;	 // current index while iterating
 
 	for (const ch of s) {
-		const mapped = SUPERSCRIPT_MAP.get(ch);
+		const mapped = SUBSCRIPT_MAP.get(ch);
 
 		if (mapped !== undefined) {  // starting or continuing superscript
 			if (!buffer) { parts.push(s.slice(start, i)); }
@@ -124,8 +124,8 @@ MathJax = {
 		    // Define pre-filter to convert Unicode superscripts to TeX syntax
             // SEE: https://docs.mathjax.org/en/v4.0/advanced/synchronize/filters.html#converting-unicode-numeric-superscripts-to-tex-ones
 			// NOTE: math is a MathItem object, math.math is a string.
-			({ math }) => { math.math = unicodeSuperscriptsToTeX(math.math); },
 			({ math }) => { math.math = unicodeSubscriptsToTeX(math.math); },
+            ({ math }) => { math.math = unicodeSuperscriptsToTeX(math.math); },
 		],
 		inlineMath: [["\\(", "\\)"]],
 		displayMath: [["\\[", "\\]"]],
