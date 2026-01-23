@@ -83,7 +83,7 @@ class Arg:
     optional: bool
 
     def __str__(self) -> str:
-        return f"{_arg_to_str(self.value)}{'?' if self.optional else ''})"
+        return f"{_arg_to_str(self.value)}{'?' if self.optional else ''}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +95,7 @@ class KeyArg:
     optional: bool
 
     def __str__(self) -> str:
-        return f"{_arg_to_str(self.value)}{'?' if self.optional else ''})"
+        return f"{_arg_to_str(self.value)}{'?' if self.optional else ''}"
 
 
 @dataclass(frozen=True, slots=True)
