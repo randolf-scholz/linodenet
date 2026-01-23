@@ -37,12 +37,13 @@ project_copyright = f"{YEAR}, {AUTHOR}"
 version = VERSION  # major project version, e.g. '2.6'
 release = version  # full project version, e.g. '2.6.0rc1' or '2.6+git@abcdef'
 
-# general configuration
-# needs_sphinx = ...  # set minimum Sphinx version
+# region General Configuration ---------------------------------------------------------
+# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+
 extensions = [
     # Sphinx builtin extensions
     "sphinx.ext.autodoc",
-    # "sphinx.ext.autosectionlabel",
+    "sphinx.ext.autosectionlabel",
     "sphinx.ext.autosummary",
     "sphinx.ext.coverage",
     "sphinx.ext.doctest",
@@ -53,14 +54,13 @@ extensions = [
     "sphinx.ext.todo",
     "sphinx.ext.viewcode",
     # 1st party extensions
-    "signatures",
     "details",
-    # "custom_mathjax",
+    "signatures",
     # 3rd party extensions
     # "autoapi.extension",
     # "myst_parser",
     "sphinx_copybutton",
-    # "sphinx_math_dollar",
+    "sphinx_math_dollar",
     "sphinx_togglebutton",
     # "sphinx_autodoc_typehints",
     # "sphinx_toolbox.more_autodoc.typehints",
@@ -117,9 +117,10 @@ html_theme_path = ["theme"]  # paths that contain custom themes
 # piccolo_theme, karma_sphinx_theme, sphinx_rtd_theme, pydata_sphinx_theme, sphinx_typo3_theme
 html_theme = "pydata_sphinx_theme"  # select the theme
 html_theme_options = {
-    # faster builds? SEE: https://stackoverflow.com/a/52175461/9318372
+    # faster builds?  SEE: https://stackoverflow.com/a/52175461
     "collapse_navigation": False,
-    "navigation_depth": 4,
+    "navigation_depth": 2,
+    #
     "header_links_before_dropdown": 7,
     "icon_links": [
         {
@@ -176,17 +177,6 @@ html_search_scorer = ""  # class for search scoring
 html_scaled_image_link = True  # scale images to fit the page
 html_math_renderer = "mathjax"  # Math renderer to use
 # endregion HTML Configuration ---------------------------------------------------------
-
-
-# region MyST Configuration ------------------------------------------------------------
-# SEE: https://myst-parser.readthedocs.io/en/latest/configuration.html
-myst_enable_extensions = [
-    "colon_fence",
-    "dollarmath",
-    "html_admonition",
-    "html_image",
-]
-# endregion MyST Configuration ---------------------------------------------------------
 
 
 # region sphinx.ext.autodoc configuration ----------------------------------------------
@@ -279,10 +269,10 @@ autosummary_filename_map = {}  # dict mapping filenames to objects
 # SEE: https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
 intersphinx_mapping = {  # targets for cross-referencing
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "pytest": ("https://docs.pytest.org/en/stable/", None),
     "python": ("https://docs.python.org/3/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None),
     "torch": ("https://docs.pytorch.org/docs/stable/", None),
-    "pytest": ("https://docs.pytest.org/en/stable/", None),
     "typing": ("https://typing-extensions.readthedocs.io/en/latest/", None),
 }
 intersphinx_cache_limit = 5  # maximum number of days to cache remote inventories
@@ -355,3 +345,28 @@ viewcode_line_numbers = True  # print inline line numbers
 #
 # register_node(pending_xref_condition)
 # endregion sphinx_math_dollar configuration -------------------------------------------
+
+
+# region MyST Configuration ------------------------------------------------------------
+myst_enable_extensions = [
+    "colon_fence",
+    "dollarmath",
+    "html_admonition",
+    "html_image",
+]
+
+# endregion MyST Configuration ---------------------------------------------------------
+
+
+# region sphinx_math_dollar configuration ----------------------------------------------
+# SEE: https://www.sympy.org/sphinx-math-dollar/#configuration
+# math_dollar_debug = True
+# math_dollar_node_blacklist = NODE_BLACKLIST + (header, pending_xref_condition)
+
+from sphinx.addnodes import pending_xref_condition  # noqa: E402
+from sphinx.util.docutils import register_node  # noqa: E402
+
+register_node(pending_xref_condition)
+# endregion sphinx_math_dollar configuration -------------------------------------------
+
+# -- end of configuration --------------------------------------------------------------
