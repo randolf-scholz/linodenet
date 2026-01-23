@@ -107,7 +107,7 @@ def _compile_fns() -> dict[str, Callable]:
     assert not cache_dir.exists() or cache_dir.is_dir()
     print(
         "Compiling custom operators..."
-        f"\n\t If problems occur, consider clearing the torch_extension cache"
+        f"\n\t ⚠️ If problems occur, consider clearing the torch_extension cache ⚠️"
         f" at {cache_dir!s}",
         flush=True,
     )
