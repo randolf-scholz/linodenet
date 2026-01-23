@@ -16,7 +16,6 @@ from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from typing import Any, cast, overload
 
-from linodenet.constants import NOT_GIVEN
 from linodenet.types import NestedDict, NestedMapping
 
 
@@ -82,24 +81,26 @@ def flatten_dict[K, K2](
     d: NestedMapping[K, Any],
     /,
     *,
+    join_fn: Callable[[Iterable[K]], K2] = cast("Any", ".".join),  # noqa: B008
+    split_fn: Callable[[K2], Iterable[K]] = cast("Any", lambda s: s.split(".")),  # noqa: B008
     recursive: bool | int = True,
-    join_fn: Callable[[Iterable[K]], K2] = NOT_GIVEN,
-    split_fn: Callable[[K2], Iterable[K]] = NOT_GIVEN,
 ) -> dict[K2, Any]:
     r"""Flatten dictionaries recursively.
 
     Args:
         d: dictionary to flatten
-        recursive: whether to flatten recursively. If `recursive` is an integer,
-            then it flattens recursively up to `recursive` levels.
+        recursive: whether to flatten recursively.
+            If `recursive` is an integer, flattens that many levels.
         join_fn: function to join keys
-            Optional if all keys are strings. In this case defaults to ``'.'.join``.
+            Defaults to ``'.'.join``, implicitly assuming that all keys are strings.
         split_fn: function to split keys
-            Optional if all keys are strings. In this case defaults to ``str.split('.')``.
+            Defaults to ``str.split('.')``, implicitly assuming that all keys are strings.
 
-    Examples:
-        Using ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``
-        will combine string keys like ``"a"`` and ``"b"`` into ``"a.b"``.
+    Example: flattening with string keys.
+        When ``join_fn`` and ``split_fn`` are not provided, they default to
+        ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``,
+        implicitly assuming that all keys are strings.
+        This will combine string keys like ``"a"`` and ``"b"`` into ``"a.b"``.
 
         >>> flatten_dict({"a": {"b": 1, "c": 2}})
         {'a.b': 1, 'a.c': 2}
@@ -107,56 +108,37 @@ def flatten_dict[K, K2](
         >>> flatten_dict({"a": {"b": {"x": 2}, "c": 2}})
         {'a.b.x': 2, 'a.c': 2}
 
-        >>> flatten_dict({"a": {"b": 1, "c": 2}}, recursive=False)
-        {'a': {'b': 1, 'c': 2}}
-
+    Example: flattening with custom key functions.
         Using ``join_fn = tuple`` and ``split_fn = lambda s: s`` will combine
         keys like ``("a", "b")`` and ``("a", "c")`` into ``("a", "b", "c")``.
+        This choice works for arbitrary key types.
 
         >>> flatten_dict({"a": {"b": 1, "c": 2}}, join_fn=tuple, split_fn=lambda x: x)
         {('a', 'b'): 1, ('a', 'c'): 2}
 
         >>> flatten_dict(
-        ...     {"a": {"b": {"x": 2}, "c": 2}}, join_fn=tuple, split_fn=lambda x: x
+        ...     {"a": {"b": {"x": 2}, "c": 2}},
+        ...     join_fn=tuple,
+        ...     split_fn=lambda x: x,
         ... )
         {('a', 'b', 'x'): 2, ('a', 'c'): 2}
 
+    Example: partial flattening with ``recursive``.
+        >>> flatten_dict({"a": {"i": {"x": 0}, "b": {"y": 1}}})
+        {'a.i.x': 0, 'a.b.y': 1}
+
         >>> flatten_dict(
-        ...     {"a": {17: "foo", 18: "bar"}}, join_fn=tuple, split_fn=lambda x: x
+        ...     {"a": {"i": {"x": 0}, "b": {"y": 1}}},
+        ...     recursive=2,
         ... )
-        {('a', 17): 'foo', ('a', 18): 'bar'}
-
-        When trying to flatten a partially flattened dictionary, setting recursive=<int>.
+        {'a.i': {'x': 0}, 'a.b': {'y': 1}}
 
         >>> flatten_dict(
-        ...     {"a": {(1, True): "foo", (2, False): "bar"}},
-        ...     join_fn=tuple,
-        ...     split_fn=lambda x: x,
-        ... )
-        {('a', (1, True)): 'foo', ('a', (2, False)): 'bar'}
-
-        >>> flatten_dict(
-        ...     {"a": {(1, True): "foo", (2, False): "bar"}},
-        ...     join_fn=tuple,
-        ...     split_fn=lambda x: x,
+        ...     {"a": {"i": {"x": 0}, "b": {"y": 1}}},
         ...     recursive=1,
         ... )
-        {('a', 1, True): 'foo', ('a', 2, False): 'bar'}
+        {'a': {'i': {'x': 0}, 'b': {'y': 1}}}
     """
-    if join_fn is NOT_GIVEN:
-        if not all(isinstance(key, str) for key in d):
-            raise TypeError("join_fn must be provided when keys are not all strings.")
-        actual_join = cast("Callable[[Iterable[K]], K2]", ".".join)
-    else:
-        actual_join = join_fn
-
-    if split_fn is NOT_GIVEN:
-        if not all(isinstance(key, str) for key in d):
-            raise TypeError("split_fn must be provided when keys are not all strings.")
-        actual_split = cast("Callable[[K2], Iterable[K]]", lambda s: s.split("."))
-    else:
-        actual_split = split_fn
-
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K2, Any] = {}
     for key, item in d.items():
@@ -167,10 +149,10 @@ def flatten_dict[K, K2](
                 join_fn=join_fn,
                 split_fn=split_fn,
             ).items():
-                new_key = actual_join((key, *actual_split(subkey)))
+                new_key = join_fn((key, *split_fn(subkey)))
                 result[new_key] = subitem
         else:
-            new_key = actual_join((key,))
+            new_key = join_fn((key,))
             result[new_key] = item
     return result
 
@@ -198,66 +180,58 @@ def unflatten_dict[K, K2](
     /,
     *,
     recursive: bool | int = True,
-    join_fn: Callable[[Iterable[K]], K2] = NOT_GIVEN,
-    split_fn: Callable[[K2], Iterable[K]] = NOT_GIVEN,
+    join_fn: Callable[[Iterable[K]], K2] = cast("Any", ".".join),  # noqa: B008
+    split_fn: Callable[[K2], Iterable[K]] = cast("Any", lambda s: s.split(".")),  # noqa: B008
 ) -> NestedDict[K, Any]:
     r"""Unflatten dictionaries recursively.
 
-    Args:
-        d: dictionary to unflatten
-        recursive: whether to unflatten recursively. If `recursive` is an integer,
-            then it unflattens recursively up to `recursive` levels.
-        join_fn: function to join keys
-            Optional if all keys are strings. In this case defaults to ``'.'.join``.
-        split_fn: function to split keys
-            Optional if all keys are strings. In this case defaults to ``str.split('.')``.
-
-    Examples:
-        Using ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``
-        will split up string keys like ``"a.b.c"`` into ``{"a": {"b": {"c": ...}}}``.
-
+    Example: Unflattening with string keys.
+        When ``join_fn`` and ``split_fn`` are not provided, they default to
+        ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``,
+        implicitly assuming that all keys are strings.
+        This will split up keys like ``"a.b"`` into ``{"a": {"b": ...}}``.
         >>> unflatten_dict({"a.b": 1, "a.c": 2})
         {'a': {'b': 1, 'c': 2}}
 
-        >>> unflatten_dict({"a.b": 1, "a.c": 2}, recursive=False)
-        {'a.b': 1, 'a.c': 2}
-
+    Example: unflattening with custom join function.
         Using ``join_fn = tuple`` and ``split_fn = lambda s: s`` will split up
         keys like ``("a", "b", "c")`` into ``{"a": {"b": {"c": ...}}}``.
-
         >>> unflatten_dict(
         ...     {("a", 17): "foo", ("a", 18): "bar"},
         ...     join_fn=tuple,
         ...     split_fn=lambda x: x,
         ... )
         {'a': {17: 'foo', 18: 'bar'}}
+
+    Example: partial unflattening with ``recursive``.
+        >>> unflatten_dict({"a.b.c.d": 0, "a.x.y.z": 1})
+        {'a': {'b': {'c': {'d': 0}}, 'x': {'y': {'z': 1}}}}
+
+        >>> unflatten_dict({"a.b.c.d": 0, "a.x.y.z": 1}, recursive=2)
+        {'a': {'b': {'c.d': 0}, 'x': {'y.z': 1}}}
+
+        >>> unflatten_dict({"a.b.c.d": 0, "a.x.y.z": 1}, recursive=1)
+        {'a': {'b.c.d': 0, 'x.y.z': 1}}
     """
-    if join_fn is NOT_GIVEN:
-        if not all(isinstance(key, str) for key in d):
-            raise TypeError("join_fn must be provided when keys are not all strings.")
-        actual_join = cast("Callable[[Iterable[K]], K2]", ".".join)
-    else:
-        actual_join = join_fn
-
-    if split_fn is NOT_GIVEN:
-        if not all(isinstance(key, str) for key in d):
-            raise TypeError("split_fn must be provided when keys are not all strings.")
-        actual_split = cast("Callable[[K2], Iterable[K]]", lambda s: s.split("."))
-    else:
-        actual_split = split_fn
-
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K, Any] = {}
     for key, item in d.items():
-        outer_key, *inner_keys = actual_split(key)
-        if recursive and inner_keys:
+        outer_key, *inner_keys = split_fn(key)
+        if inner_keys:
             result.setdefault(outer_key, {})
-            result[outer_key] |= unflatten_dict(
-                {actual_join(inner_keys): item},
-                recursive=recursive,
-                split_fn=split_fn,
-                join_fn=join_fn,
-            )
+            if not isinstance(result[outer_key], dict):
+                raise KeyError(f"Key conflict at {outer_key}! Cannot unflatten.")
+            if recursive:
+                result[outer_key] |= unflatten_dict(
+                    {join_fn(inner_keys): item},
+                    recursive=recursive,
+                    split_fn=split_fn,
+                    join_fn=join_fn,
+                )
+            else:
+                result[outer_key] |= {join_fn(inner_keys): item}
+        elif outer_key in result:
+            raise KeyError(f"Key conflict at {outer_key}! Cannot unflatten.")
         else:
             result[outer_key] = item
     return result
