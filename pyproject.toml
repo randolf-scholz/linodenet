@@ -30,7 +30,7 @@ classifiers = [
 dependencies = [
     "numpy>=2.4.1",
     "scipy>=1.17.0",
-    "torch>=2.9.1",
+    "torch>=2.10.0",
     "torchdiffeq>=0.2.5",
 ]
 
@@ -51,10 +51,10 @@ devtools = [
     "pybadges>=3.0.1",
 ]
 debug = [
-    "ipympl>=0.9.8",
+    "ipympl>=0.10.0",
     "ipywidgets>=8.1.8",
     "jupyterlab-execute-time>=3.3.0",
-    "jupyterlab>=4.5.2",
+    "jupyterlab>=4.5.3",
     "psutil>=7.2.1",
     "torchinfo>=1.8.0",
 ]
@@ -76,12 +76,12 @@ docs = [
 ]
 linters = [
     "pre-commit>=4.5.1",
-    "ruff>=0.14.13",
-    "tach>=0.33.0",
+    "ruff>=0.14.14",
+    "tach>=0.33.1",
 ]
 tests = [
     "coverage>=7.13.1",
-    "hypothesis[numpy,pytest]>=6.150.2",
+    "hypothesis[numpy,pytest]>=6.150.3",
     "matplotlib>=3.10.8",
     "psutil>=7.2.1",
     "pygal>=3.1.0",
@@ -96,9 +96,9 @@ tests = [
 ]
 typing = [
     "mypy>=1.19.1",
-    "pyrefly>=0.48.1",
+    "pyrefly>=0.49.0",
     "pyright>=1.1.408",
-    "scipy-stubs>=1.17.0.1",
+    "scipy-stubs>=1.17.0.2",
     "types-colorama>=0.4.15.20250801",
     "types-decorator>=5.2.0.20251101",
     "types-docutils>=0.22.3.20251115",

@@ -1,8 +1,8 @@
 exclude: 'bugs/'
 minimum_pre_commit_version: 3.6.0
 default_language_version:
-  python: '3.13'
-  node: '24.11.1'
+  python: '3.14'
+  node: '24.13.0'
 repos:
   # https://pre-commit.com/hooks.html
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.13
+    rev: v0.14.14
     hooks:
       - id: ruff-check
         name: ruff isort
@@ -42,19 +42,23 @@ repos:
       - id: uv-export
         args: [ "--no-dev", "--frozen", "--output-file=pylock.toml" ]
   # tach
-  - repo: https://github.com/gauge-sh/tach-pre-commit
-    rev: v0.29.0
+  - repo: local
     hooks:
       - id: tach
+        name: tach
+        description: "Check that the pyproject.toml and setup.cfg versions match."
+        entry: "tach check"
+        pass_filenames: false
+        language: system
   # nbstripout-fast
   - repo: https://github.com/deshaw/nbstripout-fast.git
     rev: v1.1.1
     hooks:
       - id: nbstripout-fast
-        exclude: '^experiments/'
+        exclude: '^docs/|^experiments/'
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.7.2
+    rev: v0.7.3
     hooks:
       # pygrep hooks
       - id: check-separator-length-88
@@ -125,7 +129,7 @@ repos:
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
   # pyright
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.7.2
+    rev: v0.7.3
     hooks:
       - id: pyright-concise
         files: '^src/|^tests/'
