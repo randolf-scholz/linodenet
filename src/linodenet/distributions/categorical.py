@@ -31,13 +31,13 @@ class Categorical(DistributionBase):
         self.register_buffer("weights", weights)
 
     @classmethod
-    def from_logits(cls, logits: Tensor, /) -> "Categorical":
+    def from_logits(cls, logits: Tensor, /) -> Categorical:
         r"""Create a categorical distribution from logits."""
         assert logits.ndim >= 1, "Logits must be at least 1-dimensional."
         raise NotImplementedError
 
     @classmethod
-    def from_probs(cls, probs: Tensor, /) -> "Categorical":
+    def from_probs(cls, probs: Tensor, /) -> Categorical:
         r"""Create a categorical distribution from probabilities."""
         assert probs.ndim >= 1, "Probs must be at least 1-dimensional."
         assert torch.all(probs >= 0), "Probs must be non-negative."
@@ -68,7 +68,7 @@ class Categorical(DistributionBase):
         self.log_probs = self.logits.gather(-1, samples).squeeze(-1)
         return self.log_probs
 
-    def exclude(self, indices: Tensor, /) -> "Categorical":
+    def exclude(self, indices: Tensor, /) -> Categorical:
         r"""Condition the categorical distribution assuming the indices cannot occur.
 
         For a categorical distribution with parameters p∈Δⁿ, there is a nice fact:

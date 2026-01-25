@@ -4,9 +4,9 @@ build-backend = "uv_build"
 
 # region project configuration ---------------------------------------------------------
 [project]
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14,<3.15"
 name = "linodenet"
-version = "0.3.2"
+version = "0.4.0"
 authors = [{ name = "Randolf Scholz", email = "randolf.scholz@gmail.com" }]
 description = "Linear ODE Network for Time-Series Forecasting"
 
@@ -22,7 +22,7 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
@@ -80,7 +80,7 @@ linters = [
     "tach>=0.33.1",
 ]
 tests = [
-    "coverage>=7.13.1",
+    "coverage>=7.13.2",
     "hypothesis[numpy,pytest]>=6.150.3",
     "matplotlib>=3.10.8",
     "psutil>=7.2.1",
@@ -110,7 +110,7 @@ typing = [
     "types-pytz>=2025.2.0.20251108",
     "types-pyyaml>=6.0.12.20250915",
     "types-requests>=2.32.4.20260107",
-    "types-setuptools>=80.9.0.20251223",
+    "types-setuptools>=80.10.0.20260124",
     "types-six>=1.17.0.20251009",
     "types-tabulate>=0.9.0.20241207",
     "types-tqdm>=4.67.0.20250809",
@@ -125,7 +125,7 @@ typing = [
 src = ["src/", "tests/"]
 indent-width = 4
 line-length = 88
-target-version = "py313"
+target-version = "py314"
 output-format = "concise"
 
 [tool.ruff.format]
@@ -263,7 +263,7 @@ combine-as-imports = true
 
 [tool.ty]
 [tool.ty.environment]
-python-version = "3.13"
+python-version = "3.14"
 
 [tool.ty.terminal]
 output-format = "concise"
@@ -273,7 +273,7 @@ respect-type-ignore-comments = false
 
 # region pyrefly configuration ---------------------------------------------------------
 [tool.pyrefly]
-python-version = "3.13"
+python-version = "3.14"
 output-format="min-text"
 replace-imports-with-any = [
     "torchdiffeq",
@@ -290,8 +290,7 @@ invalid-overload = false
 files = ["src/", "tests/"]
 platform = "linux"
 plugins = []
-python_version = "3.13"
-enable_incomplete_feature = ["TypeForm"]
+python_version = "3.14"
 disable_error_code = [
     "func-returns-value", # SEE: https://github.com/python/mypy/issues/6549
     "method-assign",      # SEE: https://github.com/python/mypy/issues/2427#issuecomment-1419206807
@@ -367,7 +366,7 @@ defineConstant = {"__debug__" = true}
 #stubPath = ""
 venvPath = ".venv"
 #venv = ".venv"
-pythonVersion = "3.13"
+pythonVersion = "3.14"
 pythonPlatform = "Linux"
 #executionEnvironments = []
 useLibraryCodeForTypes = false  # `pandas` has way too many false positives

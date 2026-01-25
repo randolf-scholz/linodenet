@@ -137,7 +137,7 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
 
     @classmethod
-    def from_config(cls, config: Mapping[str, Any], /) -> "ModuleSequence":
+    def from_config(cls, config: Mapping[str, Any], /) -> ModuleSequence:
         r"""Initialize from hyperparameters."""
         layers: list[Module] = []
         for layer_cfg in config["layers"]:
@@ -147,7 +147,7 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
         return ModuleSequence(layers)
 
     @classmethod
-    def from_modules(cls, modules: Iterable[M], /) -> "ModuleSequence[M]":
+    def from_modules(cls, modules: Iterable[M], /) -> ModuleSequence[M]:
         r"""Initialize from an iterable of modules."""
         return ModuleSequence(modules)
 
@@ -176,7 +176,7 @@ class ModuleMapping[M: Module](ModuleDict, Mapping[str, M]):
         # Since they are skipped at runtime, they won't interfere with JIT compilation
 
         @overload
-        def __init__(self: "ModuleMapping[Never]", /) -> None: ...
+        def __init__(self: ModuleMapping[Never], /) -> None: ...
         @overload
         def __init__(self, modules: Mapping[str, M], /) -> None: ...
 

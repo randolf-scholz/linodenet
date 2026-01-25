@@ -239,7 +239,7 @@ class MultiHeadGaussian(DistributionBase):
         self.log_probs = log_prob  # store buffer for post-hoc analysis
         return log_prob
 
-    def marginalize(self, indices: Tensor, /) -> "MultiHeadGaussian":
+    def marginalize(self, indices: Tensor, /) -> MultiHeadGaussian:
         r"""Marginalize the distribution over the given indices."""
         # (M, D) -> (M, D), (M, D, D) -> (M, D, D)
         idx = indices.tolist()

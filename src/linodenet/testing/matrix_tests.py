@@ -370,34 +370,12 @@ def is_diagonally_dominant(
 
     .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| \quad\text{for all \(i = 1, …, n\)}
 
-    If strict, we require that the inequality is strict for all i, more specifically
+    If `strict=True`, we require that the inequality is strict for all $i$, more specifically
     we include tolerance:
 
-    .. math:: Aᵢᵢ ≥ (1+rtol)⋅(∑_{j≠i} |Aᵢⱼ|) + atol \quad\text{for all \(i = 1, …, n\)}
+    .. math:: Aᵢᵢ ≥ (1+\text{rtol})⋅(∑_{j≠i} |Aᵢⱼ|) + \text{atol} \quad\text{for all \(i = 1, …, n\)}
 
-    .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| for all i = 1, …, n
-
-    .. math:: A² + A³ + A⁺ + A⁻¹ + A¹² + A²³ A^{23}  A²ᵞ³
-
-    .. math:: A² + A³ + A⁺ + Aᵢ₌ⱼ⁻¹ + Aᵢ₌ⱼ¹² + A²³ᵢ₌ⱼ Aᵢ₌ⱼ^{23}  Aᵢ₌ⱼ²ᵞ³
-
-    .. math::  \pdv{½‖A‖₂}{A} = uvᵀ
-
-    .. math:: A^2 + A^3 + A^+ + A⁻¹ + A^{12} + A^{23}
-
-    .. math:: \bmat{1 & 2 \\ 3 & 4}
-
-    .. math:: \relu{\sum_{n=1}^{10} f_n(x)}
-
-    .. math:: \argmax_{x ∈ ℝⁿ} f(x)
-
-    .. math:: \argmax_{x ∈ ℝⁿ } f(x)
-
-    .. math:: A²j
-
-
-    Note:
-        Strictly diagonally dominant matrices are invertible.
+    In this case, the matrix is guaranteed to be invertible
     """
     m, n = dim
 

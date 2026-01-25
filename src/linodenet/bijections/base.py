@@ -69,7 +69,7 @@ class Transform[X, Y](Bijection[X, Y], Protocol):
 class BijectionBase(nn.Module, Bijection[Tensor, Tensor]):
     r"""Base class for bijections operating on single tensor."""
 
-    def __invert__(self) -> "BijectionBase":
+    def __invert__(self) -> BijectionBase:
         return InverseBijection(self)
 
     @abstractmethod
@@ -81,7 +81,7 @@ class BijectionBase(nn.Module, Bijection[Tensor, Tensor]):
 class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
     r"""Base class for transforms operating on single tensor."""
 
-    def __invert__(self) -> "TransformBase":
+    def __invert__(self) -> TransformBase:
         return InverseTransform(self)
 
     @abstractmethod
@@ -150,7 +150,7 @@ class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
         assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
         ModuleSequence[B].__init__(self, modules)
 
-    def __invert__(self) -> "BijectionSequence":
+    def __invert__(self) -> BijectionSequence:
         if type(self) is not BijectionSequence:
             raise NotImplementedError(
                 f"Inversion not implemented for subclass {type(self)}"
@@ -173,7 +173,7 @@ class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
 class TransformSequence[T: TransformBase](BijectionSequence[T]):
     r"""Apply multiple transforms sequentially."""
 
-    def __invert__(self) -> "TransformSequence":
+    def __invert__(self) -> TransformSequence:
         return TransformSequence([~layer for layer in self[::-1]])
 
     @jit.export

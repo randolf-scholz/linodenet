@@ -58,12 +58,12 @@ r"""List of custom operators."""
 
 
 class KnownFunctions(TypedDict):
-    singular_triplet: "SingularTriplet"
-    singular_triplet_debug: "SingularTriplet"
-    singular_triplet_riemann: "SingularTriplet"
-    spectral_norm: "SpectralNorm"
-    spectral_norm_debug: "SpectralNorm"
-    spectral_norm_riemann: "SpectralNorm"
+    singular_triplet: SingularTriplet
+    singular_triplet_debug: SingularTriplet
+    singular_triplet_riemann: SingularTriplet
+    spectral_norm: SpectralNorm
+    spectral_norm_debug: SpectralNorm
+    spectral_norm_riemann: SpectralNorm
 
 
 # region compile functions -------------------------------------------------------------
@@ -166,12 +166,12 @@ def _load_linodenet() -> dict[str, Callable]:
 COMPILED_FNS: Final[KnownFunctions] = cast("KnownFunctions", _load_linodenet())
 r"""The compiled functions."""
 
-_singular_triplet: "SingularTriplet" = COMPILED_FNS["singular_triplet"]
-_singular_triplet_debug: "SingularTriplet" = COMPILED_FNS["singular_triplet_debug"]
-_singular_triplet_riemann: "SingularTriplet" = COMPILED_FNS["singular_triplet_riemann"]
-_spectral_norm: "SpectralNorm" = COMPILED_FNS["spectral_norm"]
-_spectral_norm_debug: "SpectralNorm" = COMPILED_FNS["spectral_norm_debug"]
-_spectral_norm_riemann: "SpectralNorm" = COMPILED_FNS["spectral_norm_riemann"]
+_singular_triplet: SingularTriplet = COMPILED_FNS["singular_triplet"]
+_singular_triplet_debug: SingularTriplet = COMPILED_FNS["singular_triplet_debug"]
+_singular_triplet_riemann: SingularTriplet = COMPILED_FNS["singular_triplet_riemann"]
+_spectral_norm: SpectralNorm = COMPILED_FNS["spectral_norm"]
+_spectral_norm_debug: SpectralNorm = COMPILED_FNS["spectral_norm_debug"]
+_spectral_norm_riemann: SpectralNorm = COMPILED_FNS["spectral_norm_riemann"]
 # endregion compile functions ----------------------------------------------------------
 
 
