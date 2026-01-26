@@ -1,5 +1,5 @@
 exclude: 'bugs/'
-minimum_pre_commit_version: 4.4.0
+minimum_pre_commit_version: 4.5.1
 default_language_version:
   python: '3.14'
   node: '24.13.0'

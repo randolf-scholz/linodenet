@@ -56,7 +56,7 @@ class Interval(Domain):
         self.upper_inclusive = upper_inclusive
 
     @classmethod
-    def from_string(cls, s: str) -> Interval:
+    def from_string(cls, s: str, /) -> Interval:
         r"""Create an Interval from a string representation.
 
         Examples:

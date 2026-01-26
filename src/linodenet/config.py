@@ -99,7 +99,7 @@ class Config:
         return self._autojit
 
     @autojit.setter
-    def autojit(self, value: bool) -> None:
+    def autojit(self, value: bool, /) -> None:
         self._autojit = bool(value)
         os.environ["LINODENET_AUTOJIT"] = str(value)
 

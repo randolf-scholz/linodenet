@@ -304,7 +304,7 @@ class BoundParametrization(Protocol):
             self.update_cache()
 
 
-def is_parametrization(obj: Any) -> TypeIs[Parametrization]:
+def is_parametrization(obj: Any, /) -> TypeIs[Parametrization]:
     r"""Check if the object is a Parametrization.
 
     This method is needed because standard isinstance checks do not work with jit.ScriptModule.

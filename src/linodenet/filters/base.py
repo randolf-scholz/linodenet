@@ -193,7 +193,7 @@ class FilterBase(CellBase):
         ...
 
 
-def is_filter(arg: object) -> TypeIs[Filter]:
+def is_filter(arg: object, /) -> TypeIs[Filter]:
     r"""Check whether an object is a Filter."""
     input_size = getattr(arg, "input_size", None)
     hidden_size = getattr(arg, "hidden_size", None)
