@@ -1,23 +1,14 @@
-from collections.abc import Iterable, Sequence
-from typing import Never, overload
+from typing import reveal_type
 
 
-class Foo: ...
+class Foo[T]:
+    def __init__(self) -> None:
+        pass
 
 
-class Bar(Foo): ...
-
-
-class FooSequence[F: Foo](Foo, Sequence[F]):
-    @overload
-    def __init__(self: "FooSequence[Never]", /) -> None: ...
-
-    @overload
-    def __init__(self, modules: Iterable[F], /) -> None: ...
-
-    def __init__(self, modules: Iterable[F] = (), /) -> None: ...
-
-
-class BarSequence[B: Bar](Bar, FooSequence[B]):
-    def __init__(self, modules: Iterable[B] = (), /) -> None:
-        FooSequence[B].__init__(self, modules)
+class Bar[S](Foo[S]):
+    def __init__(self) -> None:
+        reveal_type(Foo.__init__)
+        reveal_type(Foo[S].__init__)
+        reveal_type(Foo[int].__init__)  # E: BoundMethod
+        Foo[S].__init__(self)

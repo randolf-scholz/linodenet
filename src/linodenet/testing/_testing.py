@@ -13,13 +13,12 @@ __all__ = [
     "assert_is_trainable",
     "assert_jit_compatible",
     "assert_signatures_compatible",
-    "assert_class_ok",
     "assert_model_ok",
     # check functions
     "check_backward",
     "check_forward",
     "check_jit_serializable",
-    "check_initializable",
+    "check_initialization",
     "check_jit_scriptable",
     # helper functions
     "all_close",
@@ -28,7 +27,7 @@ __all__ = [
     "get_device",
     "get_grads",
     "get_norm",
-    "get_parameters",
+    "iter_tensors_requiring_grad",
     "get_shapes",
     "iter_parameters",
     "iter_tensors",
@@ -241,16 +240,18 @@ def iter_tensors(x: Module | Tree, /) -> Iterator[Tensor]:
             raise TypeError(f"Unsupported input type {type(x)!r}")
 
 
+def iter_tensors_requiring_grad(x: Module | Tree, /) -> Iterator[Tensor]:
+    r"""Return the parameters of the model / parameters."""
+    for w in iter_tensors(x):
+        if w.requires_grad:
+            yield w
+
+
 def iter_parameters(x: Module | Tree, /) -> Iterator[nn.Parameter]:
     r"""Yields the parameters of the model."""
     for w in iter_tensors(x):
         if isinstance(w, nn.Parameter):
             yield w
-
-
-def get_parameters(x: Module | Tree, /) -> list[Tensor]:
-    r"""Return the parameters of the model / parameters."""
-    return [w for w in iter_tensors(x) if w.requires_grad]
 
 
 def zero_grad(x: Module | Tree | Func, /) -> None:
@@ -336,7 +337,7 @@ def make_tensors_parameters(arg: Any, /) -> Any:
 # region check helper functions --------------------------------------------------------
 
 
-def check_initializable[M: Module](
+def check_initialization[M: Module](
     module_type: type[M],
     /,
     *,
@@ -367,8 +368,8 @@ def check_forward(
     func: Module | Func,
     /,
     *,
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_args: tuple[Any, ...],
+    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional: reference outputs and shapes
     reference_values: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
@@ -380,7 +381,7 @@ def check_forward(
             reference values / shapes.
     """
     try:
-        outputs = func(*args, **kwargs)
+        outputs = func(*call_args, **call_kwargs)
     except Exception as exc:
         raise AssertionError("Forward pass failed!!") from exc
 
@@ -400,11 +401,11 @@ def check_backward(
     module_or_func: Module | Func,
     /,
     *,
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_args: tuple[Any, ...],
+    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # Optional: reference gradients
-    reference_values: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_gradients: Optional[Nested[Tensor]] = None,
     treat_inputs_as_parameters: bool = True,
 ) -> list[Tensor]:
     r"""Test a backward pass.
@@ -414,21 +415,23 @@ def check_backward(
             the reference values / shapes.
     """
     params: list[Tensor] = (
-        get_parameters(module_or_func) if isinstance(module_or_func, Module) else []
+        list(iter_tensors_requiring_grad(module_or_func))
+        if isinstance(module_or_func, Module)
+        else []
     )
 
     if treat_inputs_as_parameters:
-        args = make_tensors_parameters(args)
-        kwargs = make_tensors_parameters(kwargs)
-        params.extend(get_parameters(args))
-        params.extend(get_parameters(kwargs))
+        call_args = make_tensors_parameters(call_args)
+        call_kwargs = make_tensors_parameters(call_kwargs)
+        params.extend(iter_tensors_requiring_grad(call_args))
+        params.extend(iter_tensors_requiring_grad(call_kwargs))
 
     with torch.enable_grad():
         zero_grad(module_or_func)
         outputs = check_forward(
             module_or_func,
-            args=args,
-            kwargs=kwargs,
+            call_args=call_args,
+            call_kwargs=call_kwargs,
         )
 
         # compute a simple scalar value.
@@ -452,8 +455,8 @@ def check_backward(
         raise AssertionError(f"Shapes mismatch! {reference_shapes=} {shapes=}")
 
     # validate values
-    if reference_values is not None:
-        assert_all_close(gradients, reference_values)
+    if reference_gradients is not None:
+        assert_all_close(gradients, reference_gradients)
 
     return gradients
 
@@ -514,8 +517,8 @@ def assert_is_trainable(
     module: Module,
     /,
     *,
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_args: tuple[Any, ...],
+    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional
     niter: int = 4,
     use_copy: bool = True,
@@ -532,8 +535,8 @@ def assert_is_trainable(
     if use_copy:
         with torch.no_grad():
             model = deepcopy(module)
-            args = deepcopy(args)
-            kwargs = deepcopy(kwargs)
+            call_args = deepcopy(call_args)
+            call_kwargs = deepcopy(call_kwargs)
         # fix the gradient state
         for w, p in zip(model.parameters(), module.parameters(), strict=True):
             w.requires_grad_(bool(p.requires_grad))
@@ -545,7 +548,7 @@ def assert_is_trainable(
 
     with torch.no_grad():
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-        original_outputs = model(*args, **kwargs)
+        original_outputs = model(*call_args, **call_kwargs)
         original_loss = get_norm(original_outputs)
         # original_params = [w.clone().detach() for w in model.parameters()]
 
@@ -555,7 +558,7 @@ def assert_is_trainable(
     # perform iterations
     for _ in range(niter):
         model.zero_grad(set_to_none=True)
-        outputs = model(*args, **kwargs)
+        outputs = model(*call_args, **call_kwargs)
         loss = get_norm(outputs)
         assert loss.isfinite()
         loss.backward()
@@ -571,8 +574,8 @@ def assert_jit_compatible(
     module_or_function: Module | Func,
     /,
     *,
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_args: tuple[Any, ...],
+    call_kwargs: Mapping[str, Tree],
     # optional arguments
     reference_model: Optional[Module | Func] = None,
     check_is_trainable: bool = True,
@@ -582,14 +585,14 @@ def assert_jit_compatible(
     ref_obj = module_or_function if reference_model is None else reference_model
     ref_outs = check_forward(
         ref_obj,
-        args=args,
-        kwargs=kwargs,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
     )
 
     ref_grads = check_backward(
         ref_obj,
-        args=args,
-        kwargs=kwargs,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
     )
 
     # script the module
@@ -597,24 +600,24 @@ def assert_jit_compatible(
     # perform forward pass
     check_forward(
         scripted_obj,
-        args=args,
-        kwargs=kwargs,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
         reference_values=ref_outs,
         reference_shapes=get_shapes(ref_outs),
     )
     # perform backward pass
     check_backward(
         scripted_obj,
-        args=args,
-        kwargs=kwargs,
-        reference_values=ref_grads,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+        reference_gradients=ref_grads,
         reference_shapes=get_shapes(ref_grads),
     )
     if check_is_trainable and isinstance(scripted_obj, Module):
         assert_is_trainable(
             scripted_obj,
-            args=args,
-            kwargs=kwargs,
+            call_args=call_args,
+            call_kwargs=call_kwargs,
         )
 
     # check serialization
@@ -623,25 +626,25 @@ def assert_jit_compatible(
     # perform forward pass
     check_forward(
         deserialized_obj,
-        args=args,
-        kwargs=kwargs,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
         reference_values=ref_outs,
         reference_shapes=get_shapes(ref_outs),
     )
     # perform backward pass
     check_backward(
         deserialized_obj,
-        args=args,
-        kwargs=kwargs,
-        reference_values=ref_grads,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+        reference_gradients=ref_grads,
         reference_shapes=get_shapes(ref_grads),
     )
 
     if check_is_trainable and isinstance(deserialized_obj, Module):
         assert_is_trainable(
             deserialized_obj,
-            args=args,
-            kwargs=kwargs,
+            call_args=call_args,
+            call_kwargs=call_kwargs,
         )
 
 
@@ -650,8 +653,8 @@ def assert_model_ok(
     /,
     *,
     # input arguments
-    args: tuple[Any, ...],
-    kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_args: tuple[Any, ...],
+    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # reference arguments
     reference_model: Optional[Module | Func] = None,
     reference_gradients: Optional[Nested[Tensor]] = None,
@@ -689,15 +692,17 @@ def assert_model_ok(
     # endregion reference model --------------------------------------------------------
 
     # region change device -------------------------------------------------------------
-    test_obj, args, kwargs = to_device((test_obj, args, kwargs), device=device)
+    test_obj, call_args, call_kwargs = to_device(
+        (test_obj, call_args, call_kwargs), device=device
+    )
     ref_model = to_device(ref_model, device=device)
     # endregion change device ----------------------------------------------------------
 
     # region check forward pass --------------------------------------------------------
     check_forward(
         test_obj,
-        args=args,
-        kwargs=kwargs,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
         reference_values=reference_outputs,
         reference_shapes=reference_shapes,
     )
@@ -707,33 +712,17 @@ def assert_model_ok(
     # region check backward pass -------------------------------------------------------
     check_backward(
         test_obj,
-        args=args,
-        kwargs=kwargs,
-        reference_values=reference_gradients,
-        reference_shapes=reference_shapes,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+        reference_gradients=reference_gradients,
+        reference_shapes=None,
         treat_inputs_as_parameters=treat_inputs_as_parameters,
     )
     logger.info(">>> Backward ✅️ ")
     # endregion check backward pass ----------------------------------------------------
 
     if test_optim and isinstance(test_obj, Module):
-        assert_is_trainable(test_obj, args=args, kwargs=kwargs)
+        assert_is_trainable(test_obj, call_args=call_args, call_kwargs=call_kwargs)
 
     if test_jit:
-        assert_jit_compatible(test_obj, args=args, kwargs=kwargs)
-
-
-def assert_class_ok(
-    model_class: type[Module],
-    /,
-    *,
-    init_args: tuple[Any, ...],
-    init_kwargs: Mapping[str, Any] = EMPTY_MAP,
-    # input arguments
-    **check_model_kwargs: Any,
-) -> None:
-    r"""Test a model class."""
-    model = check_initializable(
-        model_class, init_args=init_args, init_kwargs=init_kwargs
-    )
-    assert_model_ok(model, **check_model_kwargs)
+        assert_jit_compatible(test_obj, call_args=call_args, call_kwargs=call_kwargs)

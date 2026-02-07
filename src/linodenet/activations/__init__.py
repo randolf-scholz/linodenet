@@ -73,7 +73,7 @@ def get_activation(kind: object = None, /, **cfg: object) -> Activation:
         # if an instance, return as-is
         case Activation() as instance:
             if cfg:
-                raise ValueError(f"Cannot pass arguments to an instance: {instance!r}")
+                raise ValueError(f"Cannot pass arguments to an instance: {cfg!r}")
             return instance
         # if a name, look up in the dictionary
         case str(name):

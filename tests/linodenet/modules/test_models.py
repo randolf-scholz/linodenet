@@ -12,7 +12,7 @@ from linodenet.config import CONFIG, PROJECT
 from linodenet.forecasting import LinODEnet
 from linodenet.layers import LinearContraction
 from linodenet.system import LinODE, LinODECell
-from linodenet.testing import assert_class_ok
+from linodenet.testing import assert_model_ok, check_initialization
 
 CONFIG.autojit = False
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
@@ -110,17 +110,23 @@ def test_all_models(cls: type[nn.Module], params: dict) -> None:
             device,
             batch_sizes,
         )
-        inputs = _make_tensors(
+        call_args = _make_tensors(
             input_shapes, batch_sizes=batch_sizes, dtype=DTYPE, device=device
         )
         reference_shapes = _make_reference_shapes(
             output_shapes, batch_sizes=batch_sizes
         )
-        assert_class_ok(
+
+        model = check_initialization(
             cls,
             init_args=params["init_args"],
             init_kwargs=params["init_kwargs"],
-            args=(inputs,),
+        )
+
+        assert_model_ok(
+            model,
+            call_args=call_args,
+            call_kwargs=params["init_kwargs"],
             reference_shapes=reference_shapes,
             device=device,
         )

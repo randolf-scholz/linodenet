@@ -91,13 +91,6 @@ class LinODECell(nn.Module):
                 case str(key):
                     init = INITIALIZATIONS[key]
                     return lambda: init(input_size)
-                case Tensor() as tensor:
-                    if tensor.shape != (input_size, input_size):
-                        raise ValueError(
-                            f"Kernel has bad shape! {tensor.shape} but should be"
-                            f" {(input_size, input_size)}"
-                        )
-                    return lambda: tensor
                 case Callable() as func:
                     tensor = Tensor(func(input_size))
                     if tensor.shape != (input_size, input_size):
@@ -106,8 +99,19 @@ class LinODECell(nn.Module):
                             f" {(input_size, input_size)}"
                         )
                     return lambda: Tensor(func(input_size))
-                case _:
-                    raise TypeError(f"{type(kernel_initialization)=} not supported!")
+                case other:
+                    try:
+                        tensor = torch.as_tensor(other)
+                    except Exception as e:
+                        raise TypeError(
+                            f"Cannot convert {other} to a tensor for kernel initialization!"
+                        ) from e
+                    if tensor.shape != (input_size, input_size):
+                        raise ValueError(
+                            f"Kernel has bad shape! {tensor.shape} but should be"
+                            f" {(input_size, input_size)}"
+                        )
+                    return lambda: tensor
 
         # this looks funny, but it needs to be written that way to be compatible with torchscript
         def kernel_parametrization_dispatch() -> SelfMap[Tensor]:

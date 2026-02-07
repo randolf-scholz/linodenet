@@ -88,7 +88,7 @@ class SubclassWithMetaclass(ModuleWithMetaclass, metaclass=AddPostInit):
 def test_post_init_jit() -> None:
     r"""Checks that models with metaclasses can be scripted."""
     model = ModuleWithMetaclass(3, 3)
-    assert_model_ok(model, args=(torch.randn(2, 3),), test_jit=True)
+    assert_model_ok(model, call_args=(torch.randn(2, 3),), test_jit=True)
 
 
 def test_post_init() -> None:

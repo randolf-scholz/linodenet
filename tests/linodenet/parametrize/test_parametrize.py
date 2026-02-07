@@ -382,8 +382,8 @@ def test_parametrize() -> None:
     # check compatibility
     assert_model_ok(
         model,
-        args=(x,),
-        kwargs={},
+        call_args=(x,),
+        call_kwargs={},
         reference_model=reference_model,
         test_jit=True,
     )
@@ -396,7 +396,9 @@ def test_parametrize() -> None:
     model.param = param
 
     # check compatibility
-    assert_model_ok(model, args=(x,), reference_model=reference_model, test_jit=True)
+    assert_model_ok(
+        model, call_args=(x,), reference_model=reference_model, test_jit=True
+    )
 
 
 def test_jit_preserves_parameters() -> None:
@@ -445,7 +447,7 @@ def test_jit() -> None:
 
     register_parametrization(model, "weight", UpperTriangular)
 
-    assert_model_ok(model, args=(inputs,))
+    assert_model_ok(model, call_args=(inputs,))
 
 
 def test_jit_attribute() -> None:
