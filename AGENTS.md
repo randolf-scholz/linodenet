@@ -11,7 +11,8 @@ Project conventions for automated agents contributing to `linodenet`.
 ## Code Style
 
 - Prefer `match` over long `if`/`elif` chains when it improves clarity.
-- Avoid deep nesting; favor early returns when sensible.
+- Avoid deep nesting; refactor into helper functions if necessary.
+- Avoid function definition inside functions (except for decorators).
 - Use f-strings for formatting.
 - Prefer comprehensions over `for`-loops and `map`/`filter`.
 - Use context managers for resources.

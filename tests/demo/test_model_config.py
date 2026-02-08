@@ -3,21 +3,24 @@ r"""Demonstration of model configuration inference and export."""
 import inspect
 import json
 import os
-from collections.abc import Callable
-from dataclasses import asdict, dataclass, is_dataclass
+from collections.abc import Callable, Iterator, Mapping
 from importlib import metadata
+from inspect import Parameter
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import ModuleType
 from typing import (
     Any,
-    NotRequired,
+    ClassVar,
     Protocol,
     ReadOnly,
     Self,
     TypedDict,
+    TypeGuard,
     TypeIs,
     runtime_checkable,
 )
+from zipfile import ZipFile
 
 import torch
 from torch import Tensor, nn
@@ -33,35 +36,327 @@ type FilePath = str | os.PathLike[str]
 type Hyperparameters = dict[str, Any]
 
 
-class SerializedTensorSpec(TypedDict):
+class TensorSpec(TypedDict):
     __tensor__: str
     path: str
     dtype: str
     shape: list[int]
 
 
-type Leaf = None | bool | int | float | str | Tensor | nn.Module
-type C = Leaf | list[C] | tuple[C, ...] | dict[str, C]
-type Config = dict[str, C]
+ALLOWED_TYPES = (
+    str,
+    int,
+    float,
+    bool,
+    type(None),
+    Tensor,
+    tuple,
+    list,
+    dict,
+    nn.Module,
+)
+
+type Key = str  # identifier
+type InitKey = str  # identifier & not dunder
+type DunderKey = str  # identifier & dunder
+
+
+# The types allowed in the config dictionary.
+# configs should not contain ModelSpecs or TensorSpecs directly, but actual models and tensors
+type ArgLeaf = None | bool | int | float | str | Tensor | nn.Module
+type ArgValue = ArgLeaf | list[ArgValue] | tuple[ArgValue, ...] | dict[Key, ArgValue]
+type POArgs = list[ArgValue]
+type KWArgs = dict[InitKey, ArgValue]
+type Args = tuple[POArgs, KWArgs]
+type Config = KWArgs  # Alias
 r"""Only contains non-dunder keys and values of allowed types."""
+
+# FIXME: do we need an intermediate Spec type for in memory spec, where only
+# models are replaces with ModelSpec?
+
+# The Types allowed in serialized specs. (no actual models or tensors, only specs)
+type JSON_Leaf = None | bool | int | float | str | TensorSpec | ModelSpec
+type JSON_Value = JSON_Leaf | list[JSON_Value] | dict[Key, JSON_Value]
+type JSON = dict[Key, JSON_Value]
+
+type SpecArgs = list[JSON_Value]
+type SpecKWArgs = dict[Key, JSON_Value]
 
 
 class ModelSpec(TypedDict):
-    __module__: ReadOnly[str]
-    __name__: ReadOnly[str]
-    __spec_version__: NotRequired[ReadOnly[str]]
-    __module_version__: NotRequired[ReadOnly[str | None]]
-    # **config parameters**
+    r"""A dictionary that allows initializing a model."""
+
+    __module_name__: ReadOnly[str]
+    __class_name__: ReadOnly[str]
+
+    __args__: ReadOnly[SpecArgs]
+    __kwargs__: ReadOnly[SpecKWArgs]
+    # **DunderKey: object (reserved for future use)
 
 
-class SerializedModelSpec(TypedDict):
-    __module__: ReadOnly[str]
-    __name__: ReadOnly[str]
-    __format__: ReadOnly[str]
+class SerializedModelSpec(ModelSpec, TypedDict):
+    # __module_name__: ReadOnly[str]
+    # __class_name__: ReadOnly[str]
+    #
+    # __args__: ReadOnly[SpecArgs]
+    # __kwargs__: ReadOnly[SpecKWArgs]
+
+    # new keys for serialized models
+    __module_version__: ReadOnly[str]
     __spec_version__: ReadOnly[str]
-    __module_version__: ReadOnly[str | None]
-    __state_dict__: ReadOnly[str | None]
-    # **config parameters**
+
+    __storage_path__: ReadOnly[str]
+    __storage_format__: ReadOnly[str]
+    # **DunderKey: object (reserved for future use)
+
+
+def is_dunder(value: str, /) -> TypeGuard[DunderKey]:
+    return (
+        len(value) > 4
+        and value.startswith("__")
+        and value.endswith("__")
+        and not value.startswith("___")
+        and not value.endswith("___")
+    )
+
+
+def is_scalar(arg: object, /) -> TypeIs[ArgLeaf]:
+    return arg is None or isinstance(arg, (bool, int, float, str))
+
+
+def is_config_key(arg: object, /) -> TypeGuard[Key]:
+    return isinstance(arg, str) and arg.isidentifier() and not is_dunder(arg)
+
+
+def is_config_value(arg: object, /) -> TypeIs[ArgValue]:
+    match arg:
+        case None | bool() | int() | float() | str() | Tensor() | nn.Module():
+            return True
+        case list() | tuple():
+            return all(is_config_value(value) for value in arg)
+        case dict():
+            return all(
+                is_config_key(key) and is_config_value(value)
+                for key, value in arg.items()
+            )
+        case _:
+            return False
+
+
+def is_config(arg: object, /) -> TypeIs[Config]:
+    if not isinstance(arg, dict):
+        return False
+    return all(
+        is_config_key(key) and is_config_value(value) for key, value in arg.items()
+    )
+
+
+class ModelRegistry(Mapping[type[nn.Module], Callable[[nn.Module], Args]]):
+    def __init__(self) -> None:
+        self._registry: dict[type[nn.Module], Callable[[nn.Module], Args]] = {}
+        self.register(nn.Sequential, self.infer_nn_Sequential)
+        self.register(nn.ModuleList, self.infer_nn_ModuleList)
+        self.register(nn.ModuleDict, self.infer_nn_ModuleDict)
+        self.register(nn.Linear, self.infer_nn_Linear)
+
+    def __getitem__[T: nn.Module](self, key: type[T], /) -> Callable[[T], Args]:
+        return self._registry[key]
+
+    def __len__(self) -> int:
+        return len(self._registry)
+
+    def __iter__(self) -> Iterator[type[nn.Module]]:
+        return iter(self._registry)
+
+    def register[T: nn.Module](
+        self,
+        model_cls: type[T],
+        infer_fn: Callable[[T], Args],
+    ) -> None:
+        if model_cls in self._registry:
+            raise ValueError(
+                f"Model class {model_cls.__qualname__} is already registered."
+            )
+        self._registry[model_cls] = infer_fn
+
+    def infer_nn_Linear(self, model: nn.Linear) -> Args:
+        return [], {
+            "in_features": model.in_features,
+            "out_features": model.out_features,
+            "bias": model.bias is not None,
+        }
+
+    def infer_nn_Sequential(self, model: nn.Sequential) -> Args:
+        return list(model), {}
+
+    def infer_nn_ModuleList(self, model: nn.ModuleList) -> Args:
+        return [list(model)], {}
+
+    def infer_nn_ModuleDict(self, model: nn.ModuleDict) -> Args:
+        return [dict(model)], {}
+
+
+REGISTRY = ModelRegistry()
+
+
+def _infer_config_from_init(model: nn.Module, /) -> Args:
+    if (infer_fn := REGISTRY.get(type(model))) is not None:
+        return infer_fn(model)
+
+    signature = inspect.signature(model.__init__)
+    params = list(signature.parameters.values())
+
+    if len(params) == 0:
+        raise ValueError("illegal signature (no self parameter)")
+
+    params = params[1:]  # skip 'self'
+
+    if any(p.kind is Parameter.POSITIONAL_ONLY for p in params):
+        raise ValueError("Positional-only parameters are not supported")
+
+    if any(p.kind is Parameter.VAR_POSITIONAL for p in params):
+        raise ValueError("*args parameters are not supported")
+
+    if any(p.kind is Parameter.VAR_KEYWORD for p in params):
+        raise ValueError("**kwargs parameters are not supported")
+
+    # skip 'self'
+    kwargs = {p.name: p for p in params}
+
+    # validate names
+    if not all(name.isidentifier() for name in kwargs):
+        raise ValueError("All parameter names must be valid identifiers.")
+    if any(is_dunder(name) for name in kwargs):
+        raise ValueError("Parameter names cannot be dunder names.")
+
+    if missing := {
+        name
+        for name in kwargs
+        if not hasattr(model, name) and kwargs[name].default is Parameter.empty
+    }:
+        raise ValueError(f"Missing model attributes for config: {sorted(missing)}")
+
+    return [], {name: getattr(model, name) for name in (kwargs.keys() - missing)}
+
+
+def infer_config(model: nn.Module, *, verify_init: bool = True) -> Args:
+    r"""Infer the configuration dictionary for a model.
+
+    Args:
+        model: The model to infer the configuration from.
+        verify_init: Whether to verify that the inferred config can be used
+            to initialize the model.
+    """
+    args: POArgs
+    kwargs: KWArgs
+    if has_config(model):
+        args, kwargs = [], model.config
+    else:
+        args, kwargs = _infer_config_from_init(model)
+
+    if verify_init:
+        model_cls = type(model)
+        try:
+            if issubclass(model_cls, SupportsFromConfig):
+                assert not args
+                model_cls.from_config(kwargs)
+            else:
+                model_cls(*args, **kwargs)
+        except Exception as exc:
+            raise ValueError(
+                f"Failed to initialize {model_cls.__qualname__} from inferred config."
+            ) from exc
+
+    assert is_config(kwargs)
+    return args, kwargs
+
+
+def is_spec_key(arg: object, /) -> TypeGuard[DunderKey]:
+    return isinstance(arg, str) and arg.isidentifier() and is_dunder(arg)
+
+
+def is_spec_value(arg: object, /) -> TypeIs[JSON_Value]:
+    match arg:
+        case None | bool() | int() | float() | str():
+            return True
+        case list() | tuple():
+            return all(is_spec_value(value) for value in arg)
+        case dict():
+            if any(is_dunder(key) for key in arg):
+                return is_tensor_spec(arg) or is_model_spec(arg)
+            return all(
+                is_config_key(key) and is_spec_value(value)
+                for key, value in arg.items()
+            )
+        case _:
+            return False
+
+
+def is_model_spec(arg: object, /) -> TypeIs[ModelSpec]:
+    if not isinstance(arg, dict):
+        return False
+    if not ModelSpec.__required_keys__.issubset(arg.keys()):
+        return False
+    if not isinstance(arg.get("__module_name__"), str):
+        return False
+    if not isinstance(arg.get("__class_name__"), str):
+        return False
+    if not isinstance(arg.get("__args__"), list):
+        return False
+    if not isinstance(arg.get("__kwargs__"), dict):
+        return False
+    if not all(is_spec_value(item) for item in arg["__args__"]):
+        return False
+    if not all(
+        is_config_key(key) and is_spec_value(value)
+        for key, value in arg["__kwargs__"].items()
+    ):
+        return False
+    if not all(is_spec_key(key) for key in arg):
+        return False
+    return True
+
+
+def is_serialized_model_spec(arg: object, /) -> TypeIs[SerializedModelSpec]:
+    if not is_model_spec(arg):
+        return False
+    if not SerializedModelSpec.__required_keys__.issubset(arg.keys()):
+        return False
+    if not isinstance(arg.get("__storage_format__"), str):
+        return False
+    if not isinstance(arg.get("__storage_path__"), str):
+        return False
+    return True
+
+
+def config_to_spec(value: ArgValue, *, verify_init: bool = True) -> JSON_Value:
+    match value:
+        case nn.Module():
+            return infer_modelspec(value, verify_init=verify_init)
+        case list():
+            return [config_to_spec(item) for item in value]
+        case tuple():
+            return tuple(config_to_spec(item) for item in value)
+        case dict():
+            return {key: config_to_spec(item) for key, item in value.items()}
+        case _:
+            return value
+
+
+def infer_modelspec(model: nn.Module, *, verify_init: bool = True) -> ModelSpec:
+    args, kwargs = infer_config(model, verify_init=verify_init)
+    converted_args = config_to_spec(args, verify_init=verify_init)
+    converted_kwargs = config_to_spec(kwargs, verify_init=verify_init)
+
+    spec: ModelSpec = {
+        "__module_name__": model.__class__.__module__,
+        "__class_name__": model.__class__.__qualname__,
+        "__args__": converted_args,
+        "__kwargs__": converted_kwargs,
+    }
+
+    assert is_model_spec(spec)
+    return spec
 
 
 class SupportsConfig(Protocol):
@@ -78,6 +373,25 @@ class SupportsConfig(Protocol):
     def config(self) -> Config: ...
 
 
+class SupportsDefaultConfig(Protocol):
+    r"""Models that have a default configuration dataclass."""
+
+    DEFAULT_CONFIG: ClassVar[type]
+
+
+def has_config(arg: object, /) -> TypeIs[SupportsConfig]:
+    if (config := getattr(arg, "config", None)) is None:
+        return False
+    return is_config(config)
+
+
+def has_default_config(arg: object, /) -> TypeIs[SupportsDefaultConfig]:
+    if not isinstance(arg, type):
+        arg = type(arg)
+    default_config = getattr(arg, "DEFAULT_CONFIG", None)
+    return default_config is not None
+
+
 @runtime_checkable
 class SupportsFromConfig(Protocol):
     r"""Models that can be explicitly initialized from a configuration dictionary."""
@@ -86,235 +400,138 @@ class SupportsFromConfig(Protocol):
     def from_config(cls, config: Config, /) -> Self: ...
 
 
-ALLOWED_TYPES = (
-    str,
-    int,
-    float,
-    bool,
-    type(None),
-    Tensor,
-    tuple,
-    list,
-    dict,
-    nn.Module,
-)
+def _import_value(arg: JSON_Value, /) -> object:
+    match arg:
+        case _ if is_tensor_spec(arg):
+            return import_tensor(arg)
+        case _ if is_model_spec(arg):
+            return import_model(arg)
+        case list():
+            return [_import_value(item) for item in arg]
+        case tuple():
+            return tuple(_import_value(item) for item in arg)
+        case dict():
+            return {key: _import_value(item) for key, item in arg.items()}
+        case _:
+            return arg
 
 
-def _validate_plain_config(config: Config) -> None:
-    for key in config:
-        if not isinstance(key, str):
-            raise TypeError(f"Config keys must be str, got {type(key).__name__}")
-        if not key.isidentifier():
-            raise ValueError(f"Config keys must be identifiers, got {key!r}")
-    for value in config.values():
-        match value:
-            case None | bool() | int() | float() | str() | Tensor() | nn.Module():
-                pass
-            case list() | tuple():
-                pass
-            case dict(subconfig):
-                _validate_plain_config(subconfig)
-            case _:
-                raise TypeError
+def initialize_model_from_spec(spec: ModelSpec) -> nn.Module:
+    if not is_model_spec(spec):
+        raise TypeError("Expected a model spec dictionary.")
+
+    module_name = spec["__module_name__"]
+    class_name = spec["__class_name__"]
+
+    module = __import__(module_name, fromlist=[class_name])
+    cls = getattr(module, class_name)
+    args = [_import_value(item) for item in spec["__args__"]]
+    kwargs = {key: _import_value(item) for key, item in spec["__kwargs__"].items()}
+
+    if issubclass(cls, SupportsFromConfig):
+        if args:
+            raise ValueError("from_config does not support positional arguments.")
+        return cls.from_config(kwargs)
+    return cls(*args, **kwargs)
 
 
-def _infer_config_from_init(model: nn.Module, /) -> Config:
-    init = model.__init__
-    signature = inspect.signature(init)
-    params = list(signature.parameters.values())
+def import_model(spec: ModelSpec, /) -> nn.Module:
+    if is_serialized_model_spec(spec):
+        return import_model_from_spec(spec)
 
-    if len(params) == 0:
-        raise ValueError("illegal signature (no self parameter)")
+    model = initialize_model_from_spec(spec)
+    validate_model_spec(model, spec)
 
-    if any(p.kind is inspect.Parameter.POSITIONAL_ONLY for p in params):
-        raise ValueError("Positional-only parameters are not supported")
-
-    if any(p.kind is inspect.Parameter.VAR_POSITIONAL for p in params):
-        raise ValueError("*args parameters are not supported")
-
-    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params):
-        raise ValueError("**kwargs parameters are not supported")
-
-    # skip 'self'
-    param_names = [p.name for p in params[1:]]
-
-    # validate names
-    if not all(name.isidentifier() for name in param_names):
-        raise ValueError("All parameter names must be valid identifiers.")
-    if any(is_dunder(name) for name in param_names):
-        raise ValueError("Parameter names cannot be dunder names.")
-
-    if missing := [n for n in param_names if not hasattr(model, n)]:
-        raise ValueError(f"Missing model attributes for config: {sorted(missing)}")
-
-    return {name: getattr(model, name) for name in param_names}
+    return model
 
 
-def infer_config(
-    model: nn.Module,
-    *,
-    verify_init: bool = True,
-) -> dict[str, Any]:
-    r"""Infer the configuration dictionary for a model.
+def serialize_model(
+    model: nn.Module | ExportedProgram, filepath: FilePath
+) -> SerializedModelSpec:
+    spec = infer_modelspec(model)
+    path = Path(filepath)
+    # ensure path ends with .pt or .zip
+    if path.suffix not in (".pt", ".zip"):
+        raise ValueError("Model file extension must be .pt or .zip")
 
-    Args:
-        model: The model to infer the configuration from.
-        recursive: Whether to recursively infer configs for submodules.
-        verify_init: Whether to verify that the inferred config can be used
-            to initialize the model.
-    """
-    if (cfg := getattr(model, "config", None)) is None:
-        config = _infer_config_from_init(model)
-    else:
-        config = cfg
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with ZipFile(path, "w") as archive:
+        with archive.open("model.pt", "w") as model_file:
+            match model:
+                case torch.jit.RecursiveScriptModule():
+                    fmt = "torchscript"
+                    torch.jit.save(model, model_file)
+                case ExportedProgram():
+                    fmt = "torch_export"
+                    torch.export.save(model, model_file)
+                case nn.Module():
+                    fmt = "state_dict"
+                    torch.save(model.state_dict(), model_file)
+                case _:
+                    raise TypeError(f"Expected nn.Module, got {type(model)}")
 
-    if not verify_init:
-        return config
+        # TODO: replace any tensors in the spec with tensor specs,
+        #  and save them in assets/initialization/*.pt
 
-    model_cls = type(model)
-    try:
-        if issubclass(model_cls, SupportsFromConfig):
-            model_cls.from_config(config)
-        else:
-            model_cls(**config)
-    except Exception as exc:
-        raise ValueError(
-            f"Failed to initialize {model_cls.__qualname__} from inferred config."
-        ) from exc
-    return config
-
-
-def infer_spec(model: nn.Module, *, verify_init: bool = True) -> ModelSpec:
-    config = infer_config(model, verify_init=verify_init)
-
-    spec: ModelSpec = {
-        "__module__": model.__class__.__module__,
-        "__name__": model.__class__.__qualname__,
-        "__spec_version__": SPEC_VERSION,
-        "__module_version__": _infer_module_version(model.__class__.__module__),
-    } | config
-
-    # recursively substitute submodules with their specs
-    for name, value in spec.items():
-        if isinstance(value, nn.Module):
-            config[name] = infer_spec(value, verify_init=verify_init)
+        spec = spec | {
+            "__storage_path__": str(path),
+            "__storage_format__": fmt,
+            "__spec_version__": SPEC_VERSION,
+            "__module_version__": _infer_module_version(model.__class__.__module__),
+        }
+        archive.writestr("config.json", json.dumps(spec))
 
     return spec
 
 
-def supports_config(module: object, /) -> TypeIs[SupportsConfig]:
-    if not hasattr(module, "DEFAULT_CONFIG") or not hasattr(module, "HP"):
-        return False
-    hp = module.HP
-    return is_model_spec(hp)
+def deserialize_model(path: FilePath) -> nn.Module:
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Model file not found: {path}")
+    if path.suffix not in (".pt", ".zip"):
+        raise ValueError("Model file extension must be .pt or .zip")
+
+    with (
+        ZipFile(path, "r") as archive,
+        archive.open("config.json", "r") as config_file,
+    ):
+        spec = json.load(config_file)
+
+    assert is_serialized_model_spec(spec)
+    return import_model_from_spec(spec)
 
 
-def is_dunder(value: str, /) -> bool:
-    return (
-        len(value) > 4
-        and value.startswith("__")
-        and value.endswith("__")
-        and not value.startswith("___")
-        and not value.endswith("___")
-    )
+def import_model_from_spec(spec: SerializedModelSpec) -> nn.Module:
+    if not is_serialized_model_spec(spec):
+        raise TypeError("Expected a serialized model spec dictionary.")
 
+    fmt = spec["__storage_format__"]
+    path = Path(spec["__storage_path__"])
 
-def is_tensor_spec(value: object, /) -> TypeIs[SerializedTensorSpec]:
-    if not isinstance(value, dict):
-        return False
-    required = set(SerializedTensorSpec.__required_keys__)
-    if not required.issubset(value.keys()):
-        return False
-    return all(isinstance(key, str) and key.isidentifier() for key in value)
+    if not path.is_file():
+        raise FileNotFoundError(f"Model file not found: {path}")
+    if path.suffix not in (".pt", ".zip"):
+        raise ValueError("Model file extension must be .pt or .zip")
 
-
-def is_scalar(value: object, /) -> bool:
-    return value is None or isinstance(value, (bool, int, float, str, complex))
-
-
-def is_model_spec(value: object, /) -> TypeIs[ModelSpec]:
-    if not isinstance(value, dict):
-        return False
-    required = set(ModelSpec.__required_keys__)
-    if not required.issubset(value.keys()):
-        return False
-    return all(isinstance(key, str) and key.isidentifier() for key in value)
-
-
-def is_serialized_model_spec(value: object, /) -> TypeIs[SerializedModelSpec]:
-    if not is_model_spec(value):
-        return False
-    required = set(SerializedModelSpec.__required_keys__)
-    return required.issubset(value.keys())
-
-
-def spec_from_tensor(tensor: Tensor, path: FilePath) -> SerializedTensorSpec:
-    return {
-        "__tensor__": "torch",
-        "path": str(path),
-        "dtype": str(tensor.dtype),
-        "shape": list(tensor.shape),
-    }
-
-
-def import_tensor(spec: SerializedTensorSpec) -> Tensor:
-    tensor = torch.load(spec["path"])
-    validate_tensor_spec(tensor, spec)
-    return tensor
-
-
-def deserialize_model(spec: SerializedModelSpec) -> nn.Module:
-    fmt = spec["__format__"]
-    path = spec["__state_dict__"]
-    if path is None:
-        raise ValueError("Serialized model spec missing '__state_dict__'.")
-
-    match fmt:
-        case "torchscript":
-            module = torch.jit.load(path)
-            assert isinstance(module, nn.Module)
-            return module
-        case "torch_export":
-            imported = torch.export.load(path)
-            return imported.module()
-        case "state_dict":
-            instance = initialize_model_from_spec(spec)
-            state = torch.load(path)
-            instance.load_state_dict(state)
-            return instance
-        case _:
-            raise ValueError(f"Unsupported model format: {fmt!r}")
-
-
-def initialize_model[T: nn.Module](arg: Makes[T], /) -> T:
-    spec = infer_spec(arg)
-    return initialize_model_from_spec(spec)
-
-
-def initialize_model_from_spec(spec: ModelSpec) -> nn.Module:
-    module_name = spec["__module__"]
-    class_name = spec["__name__"]
-
-    module = __import__(module_name, fromlist=[class_name])
-    cls = getattr(module, class_name)
-    params = {key: value for key, value in spec.items() if not is_dunder(key)}
-
-    if issubclass(cls, SupportsFromConfig):
-        return cls.from_config(params)
-    return cls(**params)
-
-
-def validate_tensor_spec(tensor: Tensor, spec: SerializedTensorSpec) -> None:
-    expected_dtype = spec["dtype"]
-    expected_shape = spec["shape"]
-    if str(tensor.dtype) != expected_dtype:
-        raise ValueError(
-            f"Tensor dtype mismatch: expected {expected_dtype}, got {tensor.dtype}"
-        )
-    if list(tensor.shape) != list(expected_shape):
-        raise ValueError(
-            f"Tensor shape mismatch: expected {expected_shape}, got {list(tensor.shape)}"
-        )
+    with (
+        ZipFile(path, "r") as archive,
+        archive.open("model.pt", "r") as model_file,
+    ):
+        match fmt:
+            case "torchscript":
+                module = torch.jit.load(model_file)
+                assert isinstance(module, nn.Module)
+                return module
+            case "torch_export":
+                imported = torch.export.load(model_file)
+                return imported.module()
+            case "state_dict":
+                instance = initialize_model_from_spec(spec)
+                state = torch.load(model_file)
+                instance.load_state_dict(state)
+                return instance
+            case _:
+                raise ValueError(f"Unsupported model format: {fmt!r}")
 
 
 def validate_model_spec(model: nn.Module | type[nn.Module], spec: ModelSpec) -> None:
@@ -326,8 +543,8 @@ def validate_model_spec(model: nn.Module | type[nn.Module], spec: ModelSpec) -> 
     model_cls = model if isinstance(model, type) else model.__class__
     assert issubclass(model_cls, nn.Module)
 
-    expected_module = spec["__module__"]
-    expected_name = spec["__name__"]
+    expected_module = spec["__module_name__"]
+    expected_name = spec["__class_name__"]
 
     if model_cls.__module__ != expected_module:
         raise ValueError(
@@ -340,117 +557,12 @@ def validate_model_spec(model: nn.Module | type[nn.Module], spec: ModelSpec) -> 
             f" got {model_cls.__qualname__}"
         )
 
-    if isinstance(model, nn.Module) and supports_config(model):
-        hp_keys = set(model.hyperparameters.keys())
-        spec_keys = {key for key in spec if not is_dunder(key)}
+    if isinstance(model, nn.Module) and has_config(model):
+        hp_keys = set(model.config.keys())
+        spec_keys = set(spec["__kwargs__"].keys())
         missing = spec_keys - hp_keys
         if missing:
             raise ValueError(f"Model spec keys not present in HP: {sorted(missing)}")
-
-
-def spec_from_dataclass(config: object) -> ModelSpec:
-    assert is_dataclass(config) and not isinstance(config, type)
-    model_name = config.__class__.__qualname__.split(".", 1)[0]
-    model_spec: ModelSpec = {
-        "__module__": config.__class__.__module__,
-        "__name__": model_name,
-        "__spec_version__": SPEC_VERSION,
-        "__module_version__": _infer_module_version(config.__class__.__module__),
-    } | asdict(config)
-    return model_spec
-
-
-def infer_spec[T: nn.Module](spec: Makes[T]) -> ModelSpec:
-    match spec:
-        case nn.Module():
-            model_spec = infer_spec(spec)
-        case dict():
-            model_spec = dict(spec)
-        case type() as cls:
-            model_spec = {"__module__": cls.__module__, "__name__": cls.__qualname__}
-        case dtc if is_dataclass(dtc):
-            model_spec = spec_from_dataclass(dtc)
-        case _:
-            raise TypeError(f"Unsupported model spec type: {type(spec).__name__}")
-
-    if not is_model_spec(model_spec):
-        raise TypeError("Expected a model spec dictionary.")
-
-    module_name = model_spec["__module__"]
-    class_name = model_spec["__name__"]
-    module = __import__(module_name, fromlist=[class_name])
-    cls = getattr(module, class_name)
-    validate_model_spec(cls, model_spec)
-    return model_spec
-
-
-def validate_config(conf: object) -> None:
-    match conf:
-        case _ if is_scalar(conf):
-            pass
-        case Tensor():
-            pass
-        case nn.Module():
-            pass
-        case list() | tuple():
-            for item in conf:
-                validate_config(item)
-        case dict():
-            if (
-                is_tensor_spec(conf)
-                or is_model_spec(conf)
-                or is_serialized_model_spec(conf)
-            ):
-                return
-            for key, value in conf.items():
-                if not isinstance(key, str):
-                    raise TypeError(
-                        f"Config dict keys must be str, got {type(key).__name__}"
-                    )
-                if not key.isidentifier():
-                    raise TypeError(f"Config dict key must be identifier: {key!r}")
-                validate_config(value)
-        case _:
-            raise TypeError(f"Unsupported config type: {type(conf).__name__}")
-
-
-def export_tensor(tensor: Tensor, path: FilePath) -> SerializedTensorSpec:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(tensor, path)
-    return {
-        "__tensor__": "torch",
-        "path": str(path),
-        "dtype": str(tensor.dtype),
-        "shape": list(tensor.shape),
-    }
-
-
-def export_model(
-    arg: nn.Module | ExportedProgram, path: FilePath
-) -> SerializedModelSpec:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    spec = infer_spec(arg)
-
-    match arg:
-        case torch.jit.RecursiveScriptModule():
-            torch.jit.save(arg, str(path))
-            fmt = "torchscript"
-        case ExportedProgram():
-            torch.export.save(arg, str(path))
-            fmt = "torch_export"
-        case nn.Module():
-            torch.save(arg.state_dict(), path)
-            fmt = "state_dict"
-        case _:
-            raise TypeError(f"Expected nn.Module, got {type(arg).__name__}")
-
-    serialized_spec: SerializedModelSpec = spec | {
-        "__state_dict__": str(path),
-        "__format__": fmt,
-    }
-    return serialized_spec
 
 
 def _infer_module_version(arg: str | ModuleType) -> str | None:
@@ -482,94 +594,121 @@ def _infer_module_version(arg: str | ModuleType) -> str | None:
     return str(version) if version is not None else None
 
 
-def export_config(arg: object, path: FilePath) -> None:
-    validate_config(arg)
+def is_tensor_spec(value: object, /) -> TypeIs[TensorSpec]:
+    if not isinstance(value, dict):
+        return False
+    required = set(TensorSpec.__required_keys__)
+    if not required.issubset(value.keys()):
+        return False
+    return all(isinstance(key, str) and key.isidentifier() for key in value)
+
+
+def validate_tensor_spec(tensor: Tensor, spec: TensorSpec) -> None:
+    expected_dtype = spec["dtype"]
+    expected_shape = spec["shape"]
+    if str(tensor.dtype) != expected_dtype:
+        raise ValueError(
+            f"Tensor dtype mismatch: expected {expected_dtype}, got {tensor.dtype}"
+        )
+    if list(tensor.shape) != list(expected_shape):
+        raise ValueError(
+            f"Tensor shape mismatch: expected {expected_shape}, got {list(tensor.shape)}"
+        )
+
+
+def spec_from_tensor(tensor: Tensor, path: FilePath) -> TensorSpec:
+    return {
+        "__tensor__": "torch",
+        "path": str(path),
+        "dtype": str(tensor.dtype),
+        "shape": list(tensor.shape),
+    }
+
+
+def import_tensor(spec: TensorSpec) -> Tensor:
+    tensor = torch.load(spec["path"])
+    validate_tensor_spec(tensor, spec)
+    return tensor
+
+
+def export_tensor(tensor: Tensor, path: FilePath) -> TensorSpec:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    assets_dir = path.parent / "assets"
-    assets_dir.mkdir(parents=True, exist_ok=True)
-
-    def convert(value: object, prefix: str) -> object:
-        match value:
-            case _ if (
-                is_scalar(value)
-                or is_tensor_spec(value)
-                or is_model_spec(value)
-                or is_serialized_model_spec(value)
-            ):
-                return value
-            case Tensor():
-                return export_tensor(value, assets_dir / f"{prefix}.pt")
-            case ExportedProgram():
-                return export_model(value, assets_dir / f"{prefix}.pt")
-            case nn.Module():
-                return export_model(value, assets_dir / f"{prefix}.pt")
-            case list():
-                return [convert(item, f"{prefix}_{i}") for i, item in enumerate(value)]
-            case tuple():
-                return [convert(item, f"{prefix}_{i}") for i, item in enumerate(value)]
-            case dict():
-                return {k: convert(v, f"{prefix}_{k}") for k, v in value.items()}
-            case _:
-                raise TypeError(f"Unsupported config type: {type(value).__name__}")
-
-    payload = convert(arg, "config")
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
+    torch.save(tensor, path)
+    return {
+        "__tensor__": "torch",
+        "path": str(path),
+        "dtype": str(tensor.dtype),
+        "shape": list(tensor.shape),
+    }
 
 
-class CustomReLU(nn.Module):
-    @dataclass
-    class DEFAULT_CONFIG:
-        inplace: bool = False
+class TestInitialization:
+    def test_linear_model(self) -> None:
+        model = nn.Linear(4, 8, bias=False)
+        spec = infer_modelspec(model)
+        validate_model_spec(model, spec)
+        clone = initialize_model_from_spec(spec)
+        assert isinstance(clone, nn.Linear)
+        assert clone.in_features == 4
+        assert clone.out_features == 8
+        assert clone.bias is None
 
-    def __init__(self, inplace: bool = False) -> None:
-        super().__init__()
-        self.inplace = inplace
-
-    def forward(self, x: Tensor) -> Tensor:
-        return torch.relu_(x) if self.inplace else torch.relu(x)
-
-
-class ReverseDense(nn.Module):
-    @dataclass
-    class DEFAULT_CONFIG:
-        input_size: int
-        output_size: int
-        bias: bool = True
-        activation: Makes[Activation] = CustomReLU
-
-    def __init__(
-        self,
-        input_size: int,
-        output_size: int,
-        *,
-        bias: bool = True,
-        activation: str | nn.Module | dict[str, Any],
-    ) -> None:
-        super().__init__()
-
-        cfg = self.DEFAULT_CONFIG(
-            input_size=input_size,
-            output_size=output_size,
-            bias=bias,
-            activation=activation,
+    def test_sequence_model(self) -> None:
+        model = nn.Sequential(
+            nn.Linear(4, 8),
+            nn.ReLU(),
         )
-        self.HP = infer_spec(cfg)
-
-        self.linear = nn.Linear(input_size, output_size, bias=bias)
-        self.activation = initialize_model(activation)
-
-
-def test_initialization() -> None:
-    cfg = ReverseDense.DEFAULT_CONFIG(input_size=4, output_size=8)
-    model = ReverseDense(**asdict(cfg))
-
-    assert isinstance(model.activation, CustomReLU)
-    assert model.linear.in_features == 4
-    assert model.linear.out_features == 8
+        spec = infer_modelspec(model)
+        validate_model_spec(model, spec)
+        clone = initialize_model_from_spec(spec)
+        assert isinstance(clone, nn.Sequential)
+        assert len(clone) == 2
+        assert isinstance(clone[0], nn.Linear)
+        assert clone[0].in_features == 4
+        assert clone[0].out_features == 8
+        assert isinstance(clone[1], nn.ReLU)
 
 
-def test_export() -> None:
-    cfg = ReverseDense.DEFAULT_CONFIG(input_size=4, output_size=8)
-    export_config(asdict(cfg), Path("demo_config.json"))
+class TestSerialization:
+    def test_linear(self) -> None:
+        model = nn.Linear(4, 8, bias=False)
+        spec = infer_modelspec(model)
+        validate_model_spec(model, spec)
+        serialize_model(model, "model.zip")
+        deserialized = deserialize_model("model.zip")
+        assert isinstance(deserialized, nn.Linear)
+        assert deserialized.in_features == 4
+        assert deserialized.out_features == 8
+        assert deserialized.bias is None
+
+    def test_sequential(self) -> None:
+        model = nn.Sequential(
+            nn.Linear(4, 8),
+            nn.ReLU(),
+        )
+        spec = infer_modelspec(model)
+        validate_model_spec(model, spec)
+
+        with TemporaryDirectory() as tmpdir:
+            model_path = Path(tmpdir) / "model.pt"
+            spec_path = Path(tmpdir) / "config.json"
+            serialized_spec = serialize_model(model, model_path)
+
+            with spec_path.open("w", encoding="utf-8") as file:
+                json.dump(serialized_spec, file)
+            with spec_path.open("r", encoding="utf-8") as file:
+                deserialized_spec = json.load(file)
+
+            deserialized = deserialize_model(model_path)
+            # deserialized = import_model_from_spec(deserialized_spec)
+
+        assert isinstance(deserialized, nn.Sequential)
+        assert len(deserialized) == 2
+        assert isinstance(deserialized[0], nn.Linear)
+        assert deserialized[0].in_features == 4
+        assert deserialized[0].out_features == 8
+        assert isinstance(deserialized[1], nn.ReLU)
+        assert isinstance(original_weight := model[0].weight, Tensor)
+        assert isinstance(deserialized_weight := deserialized[0].weight, Tensor)
+        assert torch.equal(original_weight, deserialized_weight)
