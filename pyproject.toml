@@ -96,7 +96,7 @@ tests = [
 ]
 typing = [
     "mypy>=1.19.1",
-    "pyrefly>=0.51.1",
+    "pyrefly>=0.51.2",
     "pyright>=1.1.408",
     "scipy-stubs>=1.17.0.2",
     "ty>=0.0.15",
