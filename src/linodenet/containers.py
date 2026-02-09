@@ -34,6 +34,8 @@ from typing import (
 
 from torch.nn import Module, ModuleDict, ModuleList
 
+from linodenet.types import Makes
+
 Config = NewType("Config", Mapping[str, Any])
 
 
@@ -84,8 +86,8 @@ class SupportsFromConfig(Protocol):
     #     return cls(**config)  # type: ignore[arg-type]
 
 
-def initialize_from_dict(cfg: Mapping[str, Any], /) -> Module:
-    r"""Initialize a class from a dictionary.
+def initialize_from_dict[M: Module](cfg: Makes[M], /) -> M:
+    r"""Initialize a module from a dictionary.
 
     Args:
         cfg: A dictionary containing the default configuration of the class.

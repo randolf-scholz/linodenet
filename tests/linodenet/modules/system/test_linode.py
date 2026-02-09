@@ -14,9 +14,10 @@ from numpy.typing import NDArray
 from scipy.integrate import solve_ivp
 from tqdm.autonotebook import trange
 
-from linodenet.config import PROJECT
+from linodenet.linalg import scaled_norm
 from linodenet.system import LinODE
-from tests.test_utils import scaled_norm, visualize_distribution
+from tests.utils import visualize_distribution
+from tests.utils.project import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.getLogger("matplotlib").setLevel(logging.WARNING)

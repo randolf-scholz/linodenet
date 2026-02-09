@@ -22,7 +22,6 @@ __all__ = [
     "testing",
     # Sub-Modules
     "containers",
-    "config",
     "constants",
     "context",
     "domains",
@@ -47,11 +46,9 @@ except metadata.PackageNotFoundError:
 finally:
     del metadata
 
-
 from linodenet import (
     activations,
     bijections,
-    config,
     constants,
     containers,
     context,

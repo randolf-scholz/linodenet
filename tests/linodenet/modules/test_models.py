@@ -8,13 +8,12 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.bijections import iResNet, iResNetBlock
-from linodenet.config import CONFIG, PROJECT
 from linodenet.forecasting import LinODEnet
 from linodenet.layers import LinearContraction
 from linodenet.system import LinODE, LinODECell
 from linodenet.testing import assert_model_ok, check_initialization
+from tests.utils.project import PROJECT
 
-CONFIG.autojit = False
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 OUTER_BATCH = 3

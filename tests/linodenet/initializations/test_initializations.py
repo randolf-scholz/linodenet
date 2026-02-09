@@ -10,9 +10,9 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet.config import PROJECT
 from linodenet.initializations import INITIALIZATIONS
 from linodenet.testing import MATRIX_TESTS
+from tests.utils.project import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

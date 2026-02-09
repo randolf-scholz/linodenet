@@ -59,7 +59,7 @@ ALLOWED_TYPES = (
 type Key = str  # identifier
 type InitKey = str  # identifier & not dunder
 type DunderKey = str  # identifier & dunder
-
+type SunderKey = str  # identifier & sunder (not dunder)
 
 # The types allowed in the config dictionary.
 # configs should not contain ModelSpecs or TensorSpecs directly, but actual models and tensors
@@ -110,13 +110,25 @@ class SerializedModelSpec(ModelSpec, TypedDict):
     # **DunderKey: object (reserved for future use)
 
 
-def is_dunder(value: str, /) -> TypeGuard[DunderKey]:
+def is_dunder_key(value: str, /) -> TypeGuard[DunderKey]:
     return (
         len(value) > 4
+        and value.isidentifier()
         and value.startswith("__")
         and value.endswith("__")
         and not value.startswith("___")
         and not value.endswith("___")
+    )
+
+
+def is_sunder_key(value: str, /) -> TypeGuard[SunderKey]:
+    return (
+        len(value) > 2
+        and value.isidentifier()
+        and value.startswith("_")
+        and value.endswith("_")
+        and not value.startswith("__")
+        and not value.endswith("__")
     )
 
 
@@ -125,7 +137,7 @@ def is_scalar(arg: object, /) -> TypeIs[ArgLeaf]:
 
 
 def is_config_key(arg: object, /) -> TypeGuard[Key]:
-    return isinstance(arg, str) and arg.isidentifier() and not is_dunder(arg)
+    return isinstance(arg, str) and arg.isidentifier() and not is_dunder_key(arg)
 
 
 def is_config_value(arg: object, /) -> TypeIs[ArgValue]:
@@ -226,7 +238,7 @@ def _infer_config_from_init(model: nn.Module, /) -> Args:
     # validate names
     if not all(name.isidentifier() for name in kwargs):
         raise ValueError("All parameter names must be valid identifiers.")
-    if any(is_dunder(name) for name in kwargs):
+    if any(is_dunder_key(name) for name in kwargs):
         raise ValueError("Parameter names cannot be dunder names.")
 
     if missing := {
@@ -272,7 +284,7 @@ def infer_config(model: nn.Module, *, verify_init: bool = True) -> Args:
 
 
 def is_spec_key(arg: object, /) -> TypeGuard[DunderKey]:
-    return isinstance(arg, str) and arg.isidentifier() and is_dunder(arg)
+    return isinstance(arg, str) and arg.isidentifier() and is_dunder_key(arg)
 
 
 def is_spec_value(arg: object, /) -> TypeIs[JSON_Value]:
@@ -282,7 +294,7 @@ def is_spec_value(arg: object, /) -> TypeIs[JSON_Value]:
         case list() | tuple():
             return all(is_spec_value(value) for value in arg)
         case dict():
-            if any(is_dunder(key) for key in arg):
+            if any(is_dunder_key(key) for key in arg):
                 return is_tensor_spec(arg) or is_model_spec(arg)
             return all(
                 is_config_key(key) and is_spec_value(value)

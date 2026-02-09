@@ -15,9 +15,10 @@ import torch
 from torch import Tensor
 
 from linodenet.bijections import iResNetBlock
-from linodenet.config import PROJECT
 from linodenet.layers import LinearContraction
-from tests.test_utils import scaled_norm, visualize_distribution
+from linodenet.linalg import scaled_norm
+from tests.utils import visualize_distribution
+from tests.utils.project import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

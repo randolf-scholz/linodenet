@@ -9,6 +9,7 @@ from typing import Final, Optional
 from torch import Tensor, nn
 
 from linodenet.activations import Activation, get_activation
+from linodenet.constants import UNDEFINED
 from linodenet.signatures import signature
 
 
@@ -31,8 +32,8 @@ class ReverseDense(nn.Module):
     HP = {
         "__name__": __qualname__,
         "__module__": __name__,
-        "input_size": int,
-        "output_size": int,
+        "input_size": UNDEFINED,
+        "output_size": UNDEFINED,
         "bias": True,
         "activation": {
             "__name__": "ReLU",

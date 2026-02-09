@@ -148,15 +148,38 @@ class iResNetBlock(nn.Module):
     }
     r"""The hyperparameter dictionary"""
 
-    def __init__(self, input_size: int, **HP: Any) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        hidden_size: int | None = None,
+        output_size: int | None = None,
+        atol: float = 1e-08,
+        rtol: float = 1e-05,
+        maxiter: int = 10,
+        activation: str | nn.Module = "ReLU",
+        bias: bool = True,
+        rezero: bool = False,
+    ) -> None:
         super().__init__()
-        self.HP = HP = deep_dict_update(self.HP, HP)
+        cfg = {
+            "input_size": input_size,
+            "output_size": output_size,
+            "hidden_size": hidden_size,
+            "atol": atol,
+            "rtol": rtol,
+            "maxiter": maxiter,
+            "activation": activation,
+            "activation_config": activation_config or {"inplace": False},
+            "bias": bias,
+            "rezero": rezero,
+        }
+        self.HP = HP = deep_dict_update(self.HP, cfg)
 
-        HP["input_size"] = input_size
         HP["input_size"] = input_size
         HP["hidden_size"] = HP["hidden_size"] or int(sqrt(input_size))
 
-        self.input_size = HP["input_size"]
+        self.input_size = input_size
         self.output_size = HP["input_size"]
         self.hidden_size = HP["hidden_size"]
 

@@ -14,11 +14,6 @@ path = "linodenet.nn"
 depends_on = ["linodenet.embeddings", "linodenet.encoders", "linodenet.bijections", "linodenet.forecasting", "linodenet.projections", "linodenet.system", "linodenet.filters", "linodenet.layers", "linodenet.activations", "linodenet.imputation"]
 
 [[modules ]]
-path = "linodenet.config"
-depends_on = []
-utility = true
-
-[[modules ]]
 path = "linodenet.utils"
 depends_on = []
 utility = true
@@ -88,11 +83,6 @@ path = "linodenet.testing"
 depends_on = []
 
 [[modules ]]
-path = "linodenet.signature"
-depends_on = []
-utility = true
-
-[[modules ]]
 path = "linodenet.layers"
 depends_on = ["linodenet.lib", "linodenet.activations"]
 
@@ -123,5 +113,15 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet.containers"
+depends_on = []
+utility = true
+
+[[modules ]]
+path = "linodenet.signatures"
+depends_on = []
+utility = true
+
+[[modules ]]
+path = "linodenet.project"
 depends_on = []
 utility = true

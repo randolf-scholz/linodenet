@@ -19,7 +19,7 @@ __all__ = [
     "RTOL",
     "TRUE",
     "ZERO",
-    "NOT_GIVEN",
+    "UNDEFINED",
 ]
 
 
@@ -59,7 +59,7 @@ EMPTY_SIZE: Final[torch.Size] = torch.Size([])
 r"""Constant: Empty shape."""
 EMPTY_FN: Final[Callable[..., None]] = lambda *_, **__: None  # noqa: E731
 r"""Constant: Empty function, use as default in function signatures."""
-NOT_GIVEN: Final[Any] = object()
+UNDEFINED: Final[Any] = object()
 r"""Constant: Sentinel value for unspecified arguments."""
 # endregion collection constants -------------------------------------------------------
 

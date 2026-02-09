@@ -11,6 +11,7 @@ __all__ = [
     "DeviceArg",
     "DtypeArg",
     "DimArg",
+    "Makes",
     "Shape",
     "Nested",
     "NestedDict",
@@ -40,6 +41,8 @@ IntTensor = Tensor
 FloatTensor = Tensor
 ComplexTensor = Tensor
 
+type Makes[T] = dict
+r"""Type hint for dictionaries that make objects of type T."""
 type PathLike = str | Path | os.PathLike[str]
 r"""Type hint for path-like objects."""
 type Scalar = None | bool | int | float

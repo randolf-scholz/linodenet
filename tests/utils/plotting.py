@@ -1,14 +1,4 @@
-r"""Test utils."""
-
-__all__ = [
-    # Functions
-    "camel2snake",
-    "geometric_mean",
-    "scaled_norm",
-    "snake2camel",
-    "visualize_distribution",
-]
-
+r"""Plotting utilities."""
 
 from typing import Literal, Optional
 
@@ -18,7 +8,7 @@ from matplotlib.axes import Axes
 from matplotlib.offsetbox import AnchoredText
 from numpy.typing import ArrayLike, NDArray
 from scipy.stats import mode
-from torch import Tensor, jit
+from torch import Tensor
 
 type Location = Literal[
     "upper right",
@@ -111,68 +101,3 @@ def visualize_distribution(
         )
         textbox.patch.set_alpha(0.8)
         ax.add_artist(textbox)
-
-
-@jit.script
-def geometric_mean(
-    x: Tensor,
-    axis: Optional[int | list[int]] = None,
-    keepdim: bool = False,
-) -> Tensor:
-    r"""Geometric mean of a tensor.
-
-    .. signature:: ``(..., n) -> (...)``
-    """
-    if axis is None:
-        dim = list(range(x.ndim))
-    elif isinstance(axis, int):
-        dim = [axis]
-    else:
-        dim = axis
-
-    return x.log().nanmean(dim=dim, keepdim=keepdim).exp()
-
-
-@jit.script
-def scaled_norm(
-    x: Tensor,
-    p: float = 2.0,
-    axis: Optional[int | list[int]] = None,
-    keepdim: bool = False,
-) -> Tensor:
-    r"""Shortcut for scaled norm.
-
-    .. signature:: ``(..., n) -> ...``
-    """
-    # TODO: deal with nan values
-    x = x.abs()
-
-    if axis is None:
-        dim = list(range(x.ndim))
-    elif isinstance(axis, int):
-        dim = [axis]
-    else:
-        dim = axis
-
-    if p == float("inf"):
-        return x.amax(dim=dim, keepdim=keepdim)
-    if p == -float("inf"):
-        return x.amin(dim=dim, keepdim=keepdim)
-    if p == 0:
-        return geometric_mean(x, axis=dim, keepdim=keepdim)
-
-    # NOTE: preconditioning with x_max is not necessary, but it helps with numerical stability and prevents overflow
-    x_max = x.abs().amax(dim=dim, keepdim=True)
-    result = x_max * (x / x_max).pow(p).mean(dim=dim, keepdim=True).pow(1 / p)
-    return result.squeeze(dim=dim * (1 - int(keepdim)))  # branchless
-    # return x.pow(p).mean(dim=dim, keepdim=keepdim).pow(1 / p)
-
-
-def camel2snake(string: str) -> str:
-    r"""Convert camel case to snake case."""
-    return "".join(["_" + c.lower() if c.isupper() else c for c in string]).lstrip("_")
-
-
-def snake2camel(string: str) -> str:
-    r"""Convert snake case to camel case."""
-    return "".join([c.title() for c in string.split("_")])

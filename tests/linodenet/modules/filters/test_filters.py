@@ -6,8 +6,8 @@ import pytest
 import torch
 
 import linodenet
-from linodenet.config import PROJECT
 from linodenet.constants import NAN
+from tests.utils.project import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
