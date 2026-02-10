@@ -1,75 +1,79 @@
 r"""Functions for serializing and deserializing PyTorch models and tensors."""
+# ruff: noqa: SIM103
 
 __all__ = [
     "SavedModelBluePrint",
-    "SavedTensorBluePrint",
+    "SavedStateDictBluePrint",
+    "SavedTorchScriptBluePrint",
+    "SavedTorchExportBluePrint",
+    # "SavedTensorBluePrint",
     "is_serialized_model_blueprint",
     # functions
     "serialize_model",
     "deserialize_model",
     "deserialize_model_from_blueprint",
-    "serialize_tensor",
-    "deserialize_tensor",
-    "deserialize_tensor_from_blueprint",
 ]
 
-import json
+import logging
 import os
 from importlib import metadata
 from pathlib import Path
 from types import ModuleType
-from typing import ReadOnly, TypedDict, TypeIs
+from typing import IO, Literal, Optional, ReadOnly, TypedDict, TypeGuard, cast
 from zipfile import ZipFile
 
 import torch
-from torch import Tensor, nn
+import yaml
+from torch import nn
 from torch.export import ExportedProgram
+from torch.jit import (  # type: ignore[attr-defined]
+    RecursiveScriptModule,  # pyright: ignore[reportPrivateImportUsage]
+)
 
 from linodenet.config import (
-    ArgKey,
-    ArgValue,
+    JSON,
     BluePrint,
+    blueprint_to_json,
     infer_blueprint,
     initialize,
     is_blueprint,
-    validate_blueprint,
+    is_model_blueprint,
 )
+
+__logger__ = logging.getLogger(__name__)
 
 FORMAT_VERSION = "1.0"
 r"""CONST: The version of the model spec format."""
 
+
+MODEL_FILE = "model.pt"
+HYPERPARAMETERS_FILE = "hyperparameters.yaml"
+BLUEPRINT_FILE = "blueprint.yaml"
+
 type FilePath = str | os.PathLike[str]
+type FileLike = FilePath | IO[bytes]
 # The Types allowed in serialized specs. (no actual models or tensors, only specs)
-type ArgKey = str  # identifier, except dunder or sunder
+
 
 # type JSON_Leaf = None | bool | int | float | str
-# type JSON_Value = JSON_Leaf | list[str] | dict[str, JSON_Value]
-# type JSON = dict[str, JSON_Value]
-
-type JSON_Leaf = None | bool | int | float | str
-type JSON_List[T: JSON_Value = JSON_Value] = list[T]
-type JSON_Dict[T: JSON_Value = JSON_Value] = dict[str, T]
-type JSON_Value[T: JSON_Value = JSON_Value] = JSON_Leaf | JSON_List[T] | JSON_Dict[T]
-type JSON[T: JSON_Value] = dict[str, T]
+# type JSON_List[T: JSON_Value = JSON_Value] = list[T]
+# type JSON_Dict[T: JSON_Value = JSON_Value] = dict[str, T]
+# type JSON_Value[T: JSON_Value = JSON_Value] = JSON_Leaf | JSON_List[T] | JSON_Dict[T]
+# type JSON[T: JSON_Value] = dict[str, T]
 
 
-class SavedTensorBluePrint(BluePrint[Tensor], TypedDict):
-    __storage_path__: ReadOnly[str]
-    __storage_format__: ReadOnly[str]  # e.g. "torch", "numpy", "tf", "safetensors"
-    __spec_version__: ReadOnly[str]
-    __module_name__: ReadOnly[str]  # e.g. "torch", "numpy", "tf"
-    __module_version__: ReadOnly[str]
-    r"""Version of the library that created the tensor, e.g. torch.__version__"""
+class SavedModelBluePrint[T](TypedDict):
+    r"""In memory representation of a YAML-serializable model specification.
 
-
-class SavedModelBluePrint[T: nn.Module | ExportedProgram](BluePrint[T], TypedDict):
-    r"""In memory representation of a JSON-serializable model specification."""
-
-    # __module_name__: ReadOnly[str]
-    # __class_name__: ReadOnly[str]
-    #
-    # __args__: ReadOnly[list[JSON_Value]]
-    # __kwargs__: ReadOnly[dict[ArgKey, JSON_Value]]
+    Storage schema (zip archive):
+    archive.zip
+    ├─ blueprint.yaml         (required) saved model blueprint, includes storage metadata
+    ├─ hyperparameters.yaml   (required) inferred or provided hyperparameters
+    ├─ model.<ext>            (required) serialized model file, e.g. .pt or .zip
+    ├─ pylock.toml            (optional) environment lockfile
+    ├─ requirements.txt       (optional) environment requirements
+    └─ etc.
+    """
 
     # new keys for serialized models
     __spec_version__: ReadOnly[str]
@@ -79,7 +83,56 @@ class SavedModelBluePrint[T: nn.Module | ExportedProgram](BluePrint[T], TypedDic
     # **DunderKey: object (reserved for future use)
 
 
-def is_serialized_model_blueprint(arg: object, /) -> TypeIs[SavedModelBluePrint]:
+class SavedStateDictBluePrint[T: nn.Module](
+    SavedModelBluePrint[T],
+    TypedDict,
+):
+    r"""State-dict storage layout.
+
+    archive.zip
+    ├─ blueprint.yaml         (required) includes storage metadata
+    ├─ hyperparameters.yaml   (required) inferred or provided hyperparameters
+    ├─ model_init.yaml        (required) model blueprint for initialization
+    ├─ model.pt               (required) torch state_dict
+    └─ assets/                (optional) tensors referenced by model_init.yaml
+    """
+
+    __storage_format__: ReadOnly[Literal["state_dict"]]  # type: ignore[misc]
+    __blueprint__: ReadOnly[BluePrint[T]]
+    __assets__: ReadOnly[list[str]]
+
+
+class SavedTorchScriptBluePrint[T: RecursiveScriptModule](
+    SavedModelBluePrint[T],
+    TypedDict,
+):
+    r"""TorchScript storage layout.
+
+    archive.zip
+    ├─ blueprint.yaml         (required) storage metadata only
+    ├─ hyperparameters.yaml   (required) inferred or provided hyperparameters
+    └─ model.pt               (required) torchscript payload
+    """
+
+    __storage_format__: ReadOnly[Literal["torchscript"]]  # type: ignore[misc]
+
+
+class SavedTorchExportBluePrint[T: ExportedProgram](
+    SavedModelBluePrint[T],
+    TypedDict,
+):
+    r"""Torch export storage layout.
+
+    archive.zip
+    ├─ blueprint.yaml         (required) storage metadata only
+    ├─ hyperparameters.yaml   (required) inferred or provided hyperparameters
+    └─ model.pt               (required) torch export payload
+    """
+
+    __storage_format__: ReadOnly[Literal["torch_export"]]  # type: ignore[misc]
+
+
+def is_serialized_model_blueprint(arg: object, /) -> TypeGuard[SavedModelBluePrint]:
     if not is_blueprint(arg):
         return False
     if not SavedModelBluePrint.__required_keys__.issubset(arg.keys()):
@@ -105,49 +158,62 @@ def _infer_module_version(arg: str | ModuleType, /) -> str | None:
 
     try:
         return metadata.version(root_name)
-    except Exception:
-        pass
+    except Exception as exc:
+        __logger__.exception(exc)
 
     if isinstance(arg, ModuleType):
         module = arg
     else:
         try:
             module = __import__(arg)
-        except Exception:
+        except Exception as exc:
+            __logger__.exception(exc)
             return None
 
     version = getattr(module, "__version__", None)
     return str(version) if version is not None else None
 
 
-def _config_to_blueprint(value: ArgValue, *, verify_init: bool = True) -> JSON_Value:
-    match value:
-        case nn.Module():
-            return infer_blueprint(value)
-        case list():
-            return [_config_to_blueprint(item) for item in value]
-        case tuple():
-            return tuple(_config_to_blueprint(item) for item in value)
-        case dict():
-            return {key: _config_to_blueprint(item) for key, item in value.items()}
-        case _:
-            return value
-
-
 def serialize_model[M: nn.Module | ExportedProgram](
-    model: M, filepath: FilePath, /
+    model: M,
+    filepath: FilePath,
+    /,
+    *,
+    hyperparameters: Optional[JSON] = None,
 ) -> SavedModelBluePrint[M]:
-    spec = infer_blueprint(model)
-    path = Path(filepath)
+    r"""Serialize a model to a file and return its blueprint spec."""
     # ensure path ends with .pt or .zip
+    path = Path(filepath)
     if path.suffix not in (".pt", ".zip"):
         raise ValueError("Model file extension must be .pt or .zip")
-
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    # determine the hyperparameters to save
+    hp: JSON
+    match hyperparameters:
+        case None:
+            try:
+                hp = blueprint_to_json(infer_blueprint(model))
+            except Exception as exc:
+                __logger__.exception(exc)
+                hp = {}
+        case {**kwargs}:
+            hp = {"__args__": [], "__kwargs__": dict(kwargs)}  # type: ignore[arg-type]
+        case _:
+            raise TypeError(f"Unsupported type: {type(hyperparameters)}")
+
+    # write the hyperparameters
     with ZipFile(path, "w") as archive:
-        with archive.open("model.pt", "w") as model_file:
+        archive.writestr(
+            "hyperparameters.yaml",
+            yaml.safe_dump(hp, sort_keys=True),
+        )
+
+    # write the model file
+    with ZipFile(path, "w") as archive:
+        with archive.open(MODEL_FILE, "w") as model_file:
             match model:
-                case torch.jit.RecursiveScriptModule():
+                case RecursiveScriptModule():
                     fmt = "torchscript"
                     torch.jit.save(model, model_file)
                 case ExportedProgram():
@@ -158,19 +224,29 @@ def serialize_model[M: nn.Module | ExportedProgram](
                     torch.save(model.state_dict(), model_file)
                 case _:
                     raise TypeError(f"Expected nn.Module, got {type(model)}")
+        if fmt == "state_dict":
+            model_init: JSON = blueprint_to_json(infer_blueprint(model))
+            assert is_model_blueprint(model_init)
+            archive.writestr(
+                "model_init.yaml",
+                yaml.safe_dump(model_init, sort_keys=True),
+            )
 
-        # TODO: replace any tensors in the spec with tensor specs,
-        #  and save them in assets/initialization/*.pt
+    # write the blueprint
+    blueprint: JSON = {
+        "__storage_path__": str(path),
+        "__storage_format__": fmt,
+        "__spec_version__": FORMAT_VERSION,
+        "__module_version__": _infer_module_version(model.__class__.__module__),
+    }
+    with ZipFile(path, "a") as archive:
+        archive.writestr(
+            "blueprint.yaml",
+            yaml.safe_dump(blueprint, sort_keys=True),
+        )
 
-        spec = spec | {
-            "__storage_path__": str(path),
-            "__storage_format__": fmt,
-            "__spec_version__": FORMAT_VERSION,
-            "__module_version__": _infer_module_version(model.__class__.__module__),
-        }
-        archive.writestr("config.json", json.dumps(spec))
-
-    return spec
+    assert is_serialized_model_blueprint(blueprint)
+    return blueprint
 
 
 def deserialize_model(path: FilePath, /) -> nn.Module:
@@ -183,9 +259,9 @@ def deserialize_model(path: FilePath, /) -> nn.Module:
 
     with (
         ZipFile(path, "r") as archive,
-        archive.open("config.json", "r") as config_file,
+        archive.open("blueprint.yaml", "r") as config_file,
     ):
-        spec = json.load(config_file)
+        spec = yaml.safe_load(config_file)
 
     assert is_serialized_model_blueprint(spec)
     return deserialize_model_from_blueprint(spec)
@@ -213,66 +289,16 @@ def deserialize_model_from_blueprint[M: nn.Module | ExportedProgram](
             case "torchscript":
                 module = torch.jit.load(model_file)
                 assert isinstance(module, nn.Module)
-                return module
+                return cast("M", module)
             case "torch_export":
                 imported = torch.export.load(model_file)
-                return imported.module()
+                return cast("M", imported.module())
             case "torch_state_dict" | "state_dict":
-                with archive.open("blueprint.json", "r") as blueprint_file:
-                    conf = json.load(blueprint_file)
-                instance = initialize(conf)
+                with archive.open("model_init.yaml", "r") as model_init_file:
+                    model_init = yaml.safe_load(model_init_file)
+                instance: nn.Module = initialize(model_init)
                 state = torch.load(model_file)
                 instance.load_state_dict(state)
-                return instance
+                return cast("M", instance)
             case _:
                 raise ValueError(f"Unsupported model format: {fmt!r}")
-
-
-def serialize_tensor(tensor: Tensor, path: FilePath, /) -> SavedTensorBluePrint:
-    r"""Serialize a tensor to a file."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    match path.suffix:
-        case ".pt":
-            fmt = "torch"
-            torch.save(tensor, path)
-        case ".safetensors":
-            fmt = "safetensors"
-            import safetensors.torch
-
-            safetensors.torch.save_file(tensor, path)
-        case _:
-            raise NotImplementedError(f"Unsupported tensor format: {path.suffix!r}")
-
-    return {
-        "__storage_path__": str(path),
-        "__storage_format__": fmt,
-        "__spec_version__": FORMAT_VERSION,
-        "__module_name__": tensor.__class__.__module__,
-        "__module_version__": _infer_module_version(tensor.__class__.__module__),
-    }
-
-
-def deserialize_tensor(path: FilePath, /) -> Tensor:
-    r"""Deserialize a tensor from a file."""
-    path = Path(path)
-    if not path.is_file():
-        raise FileNotFoundError(f"Tensor file not found: {path}")
-
-    match path.suffix:
-        case ".pt":
-            return torch.load(path)
-        case ".safetensors":
-            import safetensors.torch
-
-            return safetensors.torch.load_file(path)
-        case _:
-            raise NotImplementedError(f"Unsupported tensor format: {path.suffix!r}")
-
-
-def deserialize_tensor_from_blueprint(spec: SavedTensorBluePrint, /) -> Tensor:
-    r"""Deserialize a tensor from a blueprint spec."""
-    tensor = deserialize_tensor(spec["__storage_path__"])
-    validate_blueprint(tensor, spec)
-    return tensor

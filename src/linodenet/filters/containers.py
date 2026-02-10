@@ -84,12 +84,12 @@ class ResidualCellSequence[C: CellBase](CellSequence[C]):
     Args:
         modules: An iterable of Cell modules to be applied sequentially.
         alpha_learnable (default=True): If True, the residual scaling factors αₖ are learnable
-        alpha_value (default=0.0): Initial value for the residual scaling factors αₖ.
+        alpha (default=0.0): Initial value for the residual scaling factors αₖ.
 
     A regular ResNet is obtained by setting all αₖ=1.0 and making them non-learnable.
     """
 
-    alphas: Tensor
+    alpha: Tensor
     r"""PARAM: The residual scaling factors αₖ."""
 
     def __init__(
@@ -98,10 +98,10 @@ class ResidualCellSequence[C: CellBase](CellSequence[C]):
         /,
         *,
         alpha_learnable: bool = True,
-        alpha_value: float | list[float] | Tensor = 0.0,
+        alpha: float | list[float] | Tensor = 0.0,
     ) -> None:
         super().__init__(modules)
-        alphas = torch.as_tensor(alpha_value).ravel()
+        alphas = torch.as_tensor(alpha).ravel()
         num = len(self)
         if alphas.numel() == 1:
             alphas = alphas.repeat(num)
@@ -110,11 +110,11 @@ class ResidualCellSequence[C: CellBase](CellSequence[C]):
                 f"alpha_value must be a scalar or have length {num}, but got {alphas.shape}"
             )
         assert alphas.shape == (num,)
-        self.alphas = nn.Parameter(alphas, requires_grad=alpha_learnable)
+        self.alpha = nn.Parameter(alphas, requires_grad=alpha_learnable)
 
     @jit.export
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        for alpha, cell in zip(self.alphas, self, strict=True):
+        for alpha, cell in zip(self.alpha, self, strict=True):
             x = x + alpha * cell(y, x)
         return x

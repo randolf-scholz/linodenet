@@ -2,6 +2,8 @@ r"""Configuration protocols and utilities."""
 
 # ruff: noqa: SIM103
 __all__ = [
+    # types
+    "JSON",
     # constants
     "BLUEPRINT_REGISTRY",
     "INFER_ARGS_REGISTRY",
@@ -13,6 +15,8 @@ __all__ = [
     "TensorBluePrint",
     "BluePrintRegistry",
     "is_blueprint",
+    "is_model_blueprint",
+    "blueprint_to_json",
     # protocols
     "SupportsConfig",
     "has_config",
@@ -47,6 +51,10 @@ from typing import (
 )
 
 from torch import Tensor, nn
+from torch.export import ExportedProgram
+
+MAX_SHAPE = (5, 5)
+r"""Maximum tensor shape to inline as lists in hyperparameters."""
 
 
 # region config protocols --------------------------------------------------------------
@@ -104,23 +112,27 @@ type Makes[T] = type[T] | BluePrint[T]  # dataclass
 type FilePath = str | os.PathLike[str]
 
 # region key and value types -----------------------------------------------------------
-type Key = str  # identifier
+type Key = str  # any string.
+type ArgKey = str  # identifier
 type DunderKey = str  # identifier & dunder
 type SunderKey = str  # identifier & sunder (not dunder)
 type PrivateKey = str  # identifier & starts with _ (includes dunder and sunder)
 
-type ArgKey = str  # identifier & not (dunder or sunder)
 
 # The types allowed in the config dictionary.
-# configs should not contain ModelSpecs or TensorSpecs directly, but actual models and tensors
+# configs should not contain ModelBluePrints or TensorSpecs directly, but actual models and tensors
 type ArgLeaf = None | bool | int | float | str | Tensor | nn.Module
-type ArgValue = ArgLeaf | list[ArgValue] | tuple[ArgValue, ...] | dict[Key, ArgValue]
+type ArgValue = ArgLeaf | list[ArgValue] | tuple[ArgValue, ...] | dict[str, ArgValue]
 type POArgs = list[ArgValue]
 type KWArgs = dict[ArgKey, ArgValue]
 type Args = tuple[POArgs, KWArgs]
 
+type JSON_Leaf = None | bool | int | float | str
+type JSON_Value = JSON_Leaf | list[JSON_Value] | dict[str, JSON_Value]
+type JSON = dict[str, JSON_Value]
+
 # FIXME: do we need an intermediate Spec type for in memory spec, where only
-# models are replaces with ModelSpec?
+# models are replaces with ModelBluePrint?
 
 
 def is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
@@ -152,11 +164,7 @@ def is_private_key(value: object, /) -> TypeGuard[PrivateKey]:
 
 
 def is_arg_key(value: object, /) -> TypeGuard[ArgKey]:
-    return (
-        isinstance(value, str)
-        and value.isidentifier()
-        and not (value.startswith("_") and value.endswith("_"))  # private allowed
-    )
+    return isinstance(value, str) and value.isidentifier()
 
 
 def is_arg_value(arg: object, /) -> TypeGuard[ArgValue]:
@@ -166,9 +174,7 @@ def is_arg_value(arg: object, /) -> TypeGuard[ArgValue]:
         case list() | tuple():
             return all(is_arg_value(value) for value in arg)
         case dict():
-            return all(
-                is_arg_key(key) and is_arg_value(value) for key, value in arg.items()
-            )
+            return all(is_arg_value(value) for value in arg.values())
         case _:
             return False
 
@@ -194,23 +200,31 @@ class BluePrint[T](TypedDict):
     # dunder and sunder keys only (not expressible in the type system)
 
 
-class ObjectBluePrint[T](BluePrint[T], TypedDict):
+class ObjectBluePrint[T](TypedDict):
     r"""A dictionary that allows initializing an object."""
 
     __module_name__: ReadOnly[str]
-    __module_version__: NotRequired[ReadOnly[str]]
     __class_name__: ReadOnly[str]
+    __module_version__: NotRequired[ReadOnly[str]]
 
     __args__: ReadOnly[list[ArgValue]]
     __kwargs__: ReadOnly[dict[ArgKey, ArgValue]]
     # **DunderKey: object (reserved for future use)
 
 
-class ModelBluePrint[T: nn.Module](ObjectBluePrint[T]):
+class ModelBluePrint[T: nn.Module](TypedDict):
     r"""A blueprint that allows initializing a ``nn.Module``."""
 
+    __module_name__: ReadOnly[str]
+    __class_name__: ReadOnly[str]
+    __module_version__: NotRequired[ReadOnly[str]]
 
-class TensorBluePrint[T: Tensor = Tensor](BluePrint[T], TypedDict):
+    __args__: ReadOnly[list[ArgValue]]
+    __kwargs__: ReadOnly[dict[ArgKey, ArgValue]]
+    # **DunderKey: object (reserved for future use)
+
+
+class TensorBluePrint[T: Tensor = Tensor](TypedDict):
     r"""A pseudo-blueprint that wraps a tensor value."""
 
     __tensor__: ReadOnly[Any]
@@ -343,13 +357,20 @@ def _infer_nn_moduledict(model: nn.ModuleDict, /) -> Args:
     return [dict(model)], {}
 
 
+def _infer_exported_module(model: ExportedProgram, /) -> Args:
+    return infer_args(model.module())
+
+
 class InferArgsRegistry(Mapping[type, Callable[[Any], Args]]):
+    r"""Registry for functions that infer model args and kwargs from instances."""
+
     def __init__(self) -> None:
         self._registry: dict[type, Callable[[Any], Args]] = {}
         self.register(nn.Sequential, _infer_nn_sequential)
         self.register(nn.ModuleList, _infer_nn_modulelist)
         self.register(nn.ModuleDict, _infer_nn_moduledict)
         self.register(nn.Linear, _infer_nn_linear)
+        self.register(ExportedProgram, _infer_exported_module)
 
     def __getitem__[T](self, key: type[T], /) -> Callable[[T], Args]:
         return self._registry[key]
@@ -389,7 +410,12 @@ def infer_args(arg: object, /, *, verify_init: bool = True) -> Args:
 
     if verify_init:
         cls = type(arg)
-        m = initialize_from_args(cls, args, kwargs)
+        try:
+            m = initialize_from_args(cls, args, kwargs)
+        except Exception as exc:
+            raise ValueError(
+                f"Failed to verify inferred config for {cls.__qualname__}."
+            ) from exc
         assert type(m) is cls
 
     assert is_config(kwargs)
@@ -534,11 +560,8 @@ def validate_blueprint[T](arg: T, spec: BluePrint[T], /) -> None:
 
 
 type BluePrintPredicate[T] = Callable[[Any], TypeGuard[BluePrint[T]]]
-
 type BluePrintMaker[T] = Callable[[T], BluePrint[T]]
-
 type BluePrintValidator[T] = Callable[[T, BluePrint[T]], None]
-
 type BluePrintInitializer[T] = Callable[[BluePrint[T]], T]
 
 
@@ -623,3 +646,34 @@ class BluePrintRegistry:
 
 
 BLUEPRINT_REGISTRY = BluePrintRegistry()
+
+
+def _value_to_json(value: ArgValue, /) -> JSON_Value:
+    match value:
+        case Tensor():
+            if value.numel() == 1:
+                return _value_to_json(value.item())
+            if value.ndim <= len(MAX_SHAPE) and value.shape <= MAX_SHAPE:
+                return _value_to_json(value.tolist())
+            raise NotImplementedError(
+                f"Tensor shape {tuple(value.shape)!r} exceeds MAX_SHAPE."
+            )
+        case nn.Module():
+            blueprint = infer_blueprint(value)
+            return blueprint_to_json(blueprint)
+        case list():
+            return [_value_to_json(item) for item in value]
+        case tuple():
+            return [_value_to_json(item) for item in value]
+        case dict():
+            return {key: _value_to_json(item) for key, item in value.items()}
+        case None | bool() | int() | float() | str():
+            return value
+        case _:
+            raise TypeError(f"Unsupported argument value type: {type(value)!r}.")
+
+
+def blueprint_to_json(arg: BluePrint, /) -> JSON:
+    parsed = _value_to_json(cast("dict", arg))
+    assert isinstance(parsed, dict)
+    return parsed
