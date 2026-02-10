@@ -1,9 +1,5 @@
 r"""Demonstration of model configuration inference and export."""
 
-import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
 import torch
 from torch import Tensor, nn
 
@@ -30,20 +26,8 @@ class TestSerialization:
         )
         spec = infer_blueprint(model)
         validate_blueprint(model, spec)
-
-        with TemporaryDirectory() as tmpdir:
-            model_path = Path(tmpdir) / "model.pt"
-            spec_path = Path(tmpdir) / "config.json"
-            serialized_spec = serialize_model(model, model_path)
-
-            with spec_path.open("w", encoding="utf-8") as file:
-                json.dump(serialized_spec, file)
-            with spec_path.open("r", encoding="utf-8") as file:
-                deserialized_spec = json.load(file)
-
-            deserialized = deserialize_model(model_path)
-            # deserialized = import_model_from_spec(deserialized_spec)
-
+        serialize_model(model, "model.zip")
+        deserialized = deserialize_model("model.zip")
         assert isinstance(deserialized, nn.Sequential)
         assert len(deserialized) == 2
         assert isinstance(deserialized[0], nn.Linear)

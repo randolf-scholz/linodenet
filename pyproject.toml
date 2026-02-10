@@ -29,7 +29,6 @@ classifiers = [
 
 dependencies = [
     "numpy>=2.4.2",
-    "pyyaml>=6.0.3",
     "scipy>=1.17.0",
     "torch>=2.10.0",
     "torchdiffeq>=0.2.5",

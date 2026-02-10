@@ -1059,7 +1059,6 @@ version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
-    { name = "pyyaml" },
     { name = "scipy" },
     { name = "torch" },
     { name = "torchdiffeq" },
@@ -1204,7 +1203,6 @@ typing = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.4.2" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scipy", specifier = ">=1.17.0" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "torchdiffeq", specifier = ">=0.2.5" },

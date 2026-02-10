@@ -60,8 +60,6 @@ nvidia-nvshmem-cu12==3.4.5 ; platform_machine == 'x86_64' and sys_platform == 'l
     # via torch
 nvidia-nvtx-cu12==12.8.90 ; platform_machine == 'x86_64' and sys_platform == 'linux'
     # via torch
-pyyaml==6.0.3
-    # via linodenet
 scipy==1.17.0
     # via
     #   linodenet
