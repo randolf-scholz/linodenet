@@ -29,11 +29,10 @@ from linodenet.config import (
     ArgKey,
     ArgValue,
     BluePrint,
-    FilePath,
-    _infer_object_blueprint,
-    _validate_tensor_blueprint,
+    infer_blueprint,
     initialize,
     is_blueprint,
+    validate_blueprint,
 )
 
 FORMAT_VERSION = "1.0"
@@ -124,7 +123,7 @@ def _infer_module_version(arg: str | ModuleType, /) -> str | None:
 def _config_to_blueprint(value: ArgValue, *, verify_init: bool = True) -> JSON_Value:
     match value:
         case nn.Module():
-            return _infer_object_blueprint(value, verify_init=verify_init)
+            return infer_blueprint(value)
         case list():
             return [_config_to_blueprint(item) for item in value]
         case tuple():
@@ -138,7 +137,7 @@ def _config_to_blueprint(value: ArgValue, *, verify_init: bool = True) -> JSON_V
 def serialize_model[M: nn.Module | ExportedProgram](
     model: M, filepath: FilePath, /
 ) -> SavedModelBluePrint[M]:
-    spec = _infer_object_blueprint(model)
+    spec = infer_blueprint(model)
     path = Path(filepath)
     # ensure path ends with .pt or .zip
     if path.suffix not in (".pt", ".zip"):
@@ -275,5 +274,5 @@ def deserialize_tensor(path: FilePath, /) -> Tensor:
 def deserialize_tensor_from_blueprint(spec: SavedTensorBluePrint, /) -> Tensor:
     r"""Deserialize a tensor from a blueprint spec."""
     tensor = deserialize_tensor(spec["__storage_path__"])
-    _validate_tensor_blueprint(tensor, spec)
+    validate_blueprint(tensor, spec)
     return tensor
