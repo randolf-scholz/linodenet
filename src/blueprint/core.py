@@ -1,141 +1,71 @@
-r"""Configuration protocols and utilities."""
-
+r"""Core types and functions for blueprint initialization and inference."""
 # ruff: noqa: SIM103
+
 __all__ = [
-    # types
-    "JSON",
-    # constants
+    # Constants
     "BLUEPRINT_REGISTRY",
     "INFER_ARGS_REGISTRY",
-    # blueprint types
+    # Blueprint types
     "Blueprint",
-    "InferArgsRegistry",
+    "HydraBlueprint",
     "ObjectBlueprint",
-    "ModelBlueprint",
-    "TensorBlueprint",
-    "BlueprintRegistry",
-    "is_blueprint",
-    "is_model_blueprint",
-    "blueprint_to_json",
-    # protocols
-    "SupportsConfig",
-    "has_config",
-    "is_config",
-    "SupportsDefaultConfig",
-    "has_default_config",
-    "SupportsFromConfig",
+    "BasicBlueprint",
     # functions
-    "infer_args",
+    "is_blueprint",
+    "is_object_blueprint",
+    "is_hydra_blueprint",
     "initialize",
-    "initialize_from_args",
     "infer_blueprint",
     "validate_blueprint",
 ]
 
-
 import inspect
 import os
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from inspect import Parameter
 from typing import (
     Any,
-    ClassVar,
     NotRequired,
-    Protocol,
     ReadOnly,
-    Self,
     TypedDict,
     TypeGuard,
+    TypeIs,
     cast,
-    runtime_checkable,
 )
 
-from torch import Tensor, nn
-from torch.export import ExportedProgram
+from blueprint.config import SupportsFromConfig, has_config, is_config
 
-MAX_SHAPE = (5, 5)
-r"""Maximum tensor shape to inline as lists in hyperparameters."""
-
-
-# region config protocols --------------------------------------------------------------
-class SupportsConfig(Protocol):
-    r"""Models that support a hyperparameter dictionary.
-
-    A hyperparameter dictionary should be such that
-
-    type(model)(**model.config)
-
-    recovers the model.
-    """
-
-    @property
-    def config(self) -> dict[ArgKey, ArgValue]: ...
-
-
-def is_config(arg: object, /) -> TypeGuard[dict[ArgKey, ArgValue]]:
-    if not isinstance(arg, dict):
-        return False
-    return all(is_arg_key(key) and is_arg_value(value) for key, value in arg.items())
-
-
-def has_config(arg: object, /) -> TypeGuard[SupportsConfig]:
-    if (config := getattr(arg, "config", None)) is None:
-        return False
-    return is_config(config)
-
-
-class SupportsDefaultConfig(Protocol):
-    r"""Models that have a default configuration dataclass."""
-
-    DEFAULT_CONFIG: ClassVar[type]
-
-
-def has_default_config(arg: object, /) -> TypeGuard[SupportsDefaultConfig]:
-    if not isinstance(arg, type):
-        arg = type(arg)
-    default_config = getattr(arg, "DEFAULT_CONFIG", None)
-    return default_config is not None
-
-
-@runtime_checkable
-class SupportsFromConfig(Protocol):
-    r"""Models that can be explicitly initialized from a configuration dictionary."""
-
-    @classmethod
-    def from_config(cls, config: dict[ArgKey, ArgValue], /) -> Self: ...
-
-
-# endregion config protocols -----------------------------------------------------------
-
-
-type Makes[T] = type[T] | Blueprint[T]  # dataclass
+type Makes[T] = T | type[T] | Blueprint[T]
 type FilePath = str | os.PathLike[str]
-
-# region key and value types -----------------------------------------------------------
-type Key = str  # any string.
-type ArgKey = str  # identifier
-type DunderKey = str  # identifier & dunder
-type SunderKey = str  # identifier & sunder (not dunder)
-type PrivateKey = str  # identifier & starts with _ (includes dunder and sunder)
-
 
 # The types allowed in the config dictionary.
 # configs should not contain ModelBlueprints or TensorSpecs directly, but actual models and tensors
-type ArgLeaf = None | bool | int | float | str | Tensor | nn.Module
+type ArgLeaf = None | bool | int | float | str | Any
 type ArgValue = ArgLeaf | list[ArgValue] | tuple[ArgValue, ...] | dict[str, ArgValue]
 type POArgs = list[ArgValue]
-type KWArgs = dict[ArgKey, ArgValue]
+type KWArgs = dict[Identifier, ArgValue]
 type Args = tuple[POArgs, KWArgs]
 
 type JSON_Leaf = None | bool | int | float | str
 type JSON_Value = JSON_Leaf | list[JSON_Value] | dict[str, JSON_Value]
 type JSON = dict[str, JSON_Value]
 
-# FIXME: do we need an intermediate Spec type for in memory spec, where only
-# models are replaces with ModelBlueprint?
+
+# region key and value types -----------------------------------------------------------
+type Key = str  # any string.
+type Identifier = str  # identifier
+type DunderKey = str  # identifier & dunder
+type SunderKey = str  # identifier & sunder (not dunder)
+type PrivateKey = str  # identifier & starts with _ (includes dunder and sunder)
+
+
+def is_identifier(arg: object, /) -> TypeGuard[Identifier]:
+    r"""String that is a valid identifier (i.e. can be used as a keyword argument)."""
+    return isinstance(arg, str) and arg.isidentifier()
 
 
 def is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
+    r"""String that starts and ends with double underscores and is a valid identifier."""
     return (
         isinstance(value, str)
         and len(value) > 4
@@ -147,7 +77,13 @@ def is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
     )
 
 
+def is_private_key(value: object, /) -> TypeGuard[PrivateKey]:
+    r"""String that starts with a single underscore and is a valid identifier."""
+    return isinstance(value, str) and value.isidentifier() and value.startswith("_")
+
+
 def is_sunder_key(value: object, /) -> TypeGuard[SunderKey]:
+    r"""Strings of the form `_key_` that are valid identifiers, but not dunder keys."""
     return (
         isinstance(value, str)
         and len(value) > 2
@@ -159,27 +95,8 @@ def is_sunder_key(value: object, /) -> TypeGuard[SunderKey]:
     )
 
 
-def is_private_key(value: object, /) -> TypeGuard[PrivateKey]:
-    return isinstance(value, str) and value.isidentifier() and value.startswith("_")
-
-
-def is_arg_key(value: object, /) -> TypeGuard[ArgKey]:
-    return isinstance(value, str) and value.isidentifier()
-
-
-def is_arg_value(arg: object, /) -> TypeGuard[ArgValue]:
-    match arg:
-        case None | bool() | int() | float() | str() | Tensor() | nn.Module():
-            return True
-        case list() | tuple():
-            return all(is_arg_value(value) for value in arg)
-        case dict():
-            return all(is_arg_value(value) for value in arg.values())
-        case _:
-            return False
-
-
 def is_blueprint_key(value: object, /) -> TypeGuard[DunderKey | SunderKey]:
+    r"""Any Sunder/Dunder string is considered a blueprint key."""
     return (
         isinstance(value, str)
         and value.isidentifier()
@@ -200,6 +117,16 @@ class Blueprint[T](TypedDict):
     # dunder and sunder keys only (not expressible in the type system)
 
 
+class BasicBlueprint[T](TypedDict):
+    r"""A basic blueprint that only contains the module and class name."""
+
+    __name__: ReadOnly[str]
+    __module__: ReadOnly[str]
+    # **InitKey: kwargs to pass to the model
+    # **DunderKey: object (reserved for future use)
+    # **SunderKey: object (reserved for future use)
+
+
 class ObjectBlueprint[T](TypedDict):
     r"""A dictionary that allows initializing an object."""
 
@@ -208,42 +135,21 @@ class ObjectBlueprint[T](TypedDict):
     __module_version__: NotRequired[ReadOnly[str]]
 
     __args__: ReadOnly[list[ArgValue]]
-    __kwargs__: ReadOnly[dict[ArgKey, ArgValue]]
+    __kwargs__: ReadOnly[dict[Identifier, ArgValue]]
     # **DunderKey: object (reserved for future use)
 
 
-class ModelBlueprint[T: nn.Module = nn.Module](TypedDict):
-    r"""A blueprint that allows initializing a ``nn.Module``."""
+class HydraBlueprint[T](TypedDict):
+    r"""A blueprint compatible with Hydra's instantiation syntax."""
 
-    __module_name__: ReadOnly[str]
-    __class_name__: ReadOnly[str]
-    __module_version__: NotRequired[ReadOnly[str]]
-
-    __args__: ReadOnly[list[ArgValue]]
-    __kwargs__: ReadOnly[dict[ArgKey, ArgValue]]
-    # **DunderKey: object (reserved for future use)
-
-
-class TensorBlueprint[T: Tensor = Tensor](TypedDict):
-    r"""A pseudo-blueprint that wraps a tensor value."""
-
-    __tensor__: ReadOnly[Any]
-    __dtype__: ReadOnly[str]
-    __shape__: ReadOnly[list[int]]
+    _target_: ReadOnly[str]
+    _args_: NotRequired[ReadOnly[list[ArgValue]]]
 
 
 def is_blueprint(arg: object, /) -> TypeGuard[Blueprint]:
     if not isinstance(arg, dict):
         return False
     if not all(is_blueprint_key(key) for key in arg):
-        return False
-    return True
-
-
-def is_tensor_blueprint(arg: object, /) -> TypeGuard[TensorBlueprint]:
-    if not is_blueprint(arg):
-        return False
-    if not TensorBlueprint.__required_keys__.issubset(arg.keys()):
         return False
     return True
 
@@ -257,38 +163,58 @@ def is_object_blueprint(arg: object, /) -> TypeGuard[ObjectBlueprint]:
         return False
     if not isinstance(arg.get("__class_name__"), str):
         return False
-    if not (
-        isinstance(args := arg.get("__args__"), list)
-        and all(is_arg_value(item) for item in args)
-    ):
+    if not (isinstance(arg.get("__args__"), list)):
         return False
     if not (
         isinstance(kwargs := arg.get("__kwargs__"), dict)
-        and all(
-            is_arg_key(key) and is_arg_value(value) for key, value in kwargs.items()
-        )
+        and all(is_identifier(key) for key in kwargs)
     ):
         return False
     return True
 
 
-def is_model_blueprint(arg: object, /) -> TypeGuard[ModelBlueprint]:
-    r"""Check if the argument is a valid model blueprint.
+def is_hydra_blueprint(arg: object, /) -> TypeGuard[HydraBlueprint]:
+    if not is_blueprint(arg):
+        return False
+    if not HydraBlueprint.__required_keys__.issubset(arg.keys()):
+        return False
+    if not isinstance(arg.get("_target_"), str):
+        return False
+    if not (isinstance(arg.get("_args_"), None | list)):
+        return False
+    return True
 
-    Note: This will import the module and check if the class is a subclass of nn.Module.
+
+def is_basic_blueprint(obj: object, /) -> TypeIs[BasicBlueprint]:
+    r"""Check if the object is a configuration dictionary.
+
+    A configuration is mapping with the following keys:
+
+    - `__module__` (`str`): The module name.
+    - `__name__` (`str`): The class name.
+    - `__args__` (`Sequence`, optional): The positional arguments for the class.
+    - any extra keys that are valid, non-private identifiers.
+
     """
-    if not is_object_blueprint(arg):
+    if not isinstance(obj, Mapping):
         return False
-    # import the class and check if it is a subclass of nn.Module
-    module_name = arg["__module_name__"]
-    class_name = arg["__class_name__"]
-    try:
-        module = __import__(module_name, fromlist=[class_name])
-        cls = getattr(module, class_name)
-    except ImportError, AttributeError:
+    if not isinstance(obj.get("__module__"), str):
         return False
-    if not (isinstance(cls, type) and issubclass(cls, nn.Module)):
+    if not isinstance(obj.get("__name__"), str):
         return False
+    if not isinstance(obj.get("__args__"), None | Sequence):
+        return False
+
+    # check that extra keys are valid identifiers
+    for key in obj:
+        if not isinstance(key, str):
+            return False
+        if key in {"__module__", "__name__", "__args__"}:
+            continue
+        if not key.isidentifier() or key.startswith("_"):
+            return False
+
+    # check JSON serializability
     return True
 
 
@@ -337,40 +263,11 @@ def _infer_args_from_init(arg: object, /) -> Args:
     return [], {name: getattr(arg, name) for name in (kwargs.keys() - missing)}
 
 
-def _infer_nn_linear(model: nn.Linear, /) -> Args:
-    return [], {
-        "in_features": model.in_features,
-        "out_features": model.out_features,
-        "bias": model.bias is not None,
-    }
-
-
-def _infer_nn_sequential(model: nn.Sequential, /) -> Args:
-    return list(model), {}
-
-
-def _infer_nn_modulelist(model: nn.ModuleList, /) -> Args:
-    return [list(model)], {}
-
-
-def _infer_nn_moduledict(model: nn.ModuleDict, /) -> Args:
-    return [dict(model)], {}
-
-
-def _infer_exported_module(model: ExportedProgram, /) -> Args:
-    return infer_args(model.module())
-
-
 class InferArgsRegistry(Mapping[type, Callable[[Any], Args]]):
     r"""Registry for functions that infer model args and kwargs from instances."""
 
     def __init__(self) -> None:
         self._registry: dict[type, Callable[[Any], Args]] = {}
-        self.register(nn.Sequential, _infer_nn_sequential)
-        self.register(nn.ModuleList, _infer_nn_modulelist)
-        self.register(nn.ModuleDict, _infer_nn_moduledict)
-        self.register(nn.Linear, _infer_nn_linear)
-        self.register(ExportedProgram, _infer_exported_module)
 
     def __getitem__[T](self, key: type[T], /) -> Callable[[T], Args]:
         return self._registry[key]
@@ -477,21 +374,6 @@ def _validate_object_blueprint[T](arg: T | type[T], spec: Blueprint, /) -> None:
         )
 
 
-def _validate_tensor_blueprint(tensor: Tensor, spec: Blueprint, /) -> None:
-    if not is_tensor_blueprint(spec):
-        raise TypeError("Invalid tensor spec.")
-    expected_dtype = spec["__dtype__"]
-    expected_shape = spec["__shape__"]
-    if str(tensor.dtype) != expected_dtype:
-        raise ValueError(
-            f"Tensor dtype mismatch: expected {expected_dtype}, got {tensor.dtype}"
-        )
-    if list(tensor.shape) != list(expected_shape):
-        raise ValueError(
-            f"Tensor shape mismatch: expected {expected_shape}, got {list(tensor.shape)}"
-        )
-
-
 def _infer_object_blueprint[T](
     arg: T, /, *, verify_init: bool = True
 ) -> ObjectBlueprint[T]:
@@ -508,21 +390,7 @@ def _infer_object_blueprint[T](
     return spec
 
 
-def _infer_tensor_blueprint(tensor: Tensor) -> TensorBlueprint:
-    return {
-        "__tensor__": tensor,
-        "__dtype__": str(tensor.dtype),
-        "__shape__": list(tensor.shape),
-    }
-
-
-def _infer_model_blueprint[T: nn.Module](
-    arg: T, /, *, verify_init: bool = True
-) -> ModelBlueprint[T]:
-    return _infer_object_blueprint(arg, verify_init=verify_init)
-
-
-def _initialize_type[T](cls: type[T], /) -> T:
+def initialize_type[T](cls: type[T], /) -> T:
     try:
         return cls()
     except Exception as exc:
@@ -530,7 +398,7 @@ def _initialize_type[T](cls: type[T], /) -> T:
         raise
 
 
-def _initialize_object_blueprint[T](spec: Blueprint[T], /) -> T:
+def initialize_object[T](spec: Blueprint[T], /) -> T:
     if not is_object_blueprint(spec):
         raise TypeError("Expected an object blueprint dictionary.")
 
@@ -545,20 +413,6 @@ def _initialize_object_blueprint[T](spec: Blueprint[T], /) -> T:
     return initialize_from_args(cls, args, kwargs)
 
 
-def _initialize_model_blueprint[T: nn.Module](spec: Blueprint[T], /) -> T:
-    obj: T = _initialize_object_blueprint(spec)
-    assert isinstance(obj, nn.Module)
-    return obj
-
-
-def _initialize_tensor_blueprint[T: Tensor](spec: Blueprint[T], /) -> T:
-    if not is_tensor_blueprint(spec):
-        raise TypeError("Expected a tensor blueprint dictionary.")
-    tensor = spec["__tensor__"]
-    _validate_tensor_blueprint(tensor, spec)
-    return cast("T", tensor)
-
-
 type BlueprintPredicate[T] = Callable[[Any], TypeGuard[Blueprint[T]]]
 type BlueprintMaker[T] = Callable[[T], Blueprint[T]]
 type BlueprintValidator[T] = Callable[[T, Blueprint[T]], None]
@@ -570,17 +424,8 @@ class BlueprintRegistry:
 
     def __init__(self) -> None:
         self._initializers: list[tuple[BlueprintPredicate, BlueprintInitializer]] = []
-        self.register_initializer(is_object_blueprint, _initialize_object_blueprint)
-        self.register_initializer(is_model_blueprint, _initialize_model_blueprint)
-        self.register_initializer(is_tensor_blueprint, _initialize_tensor_blueprint)
-
         self._validators: list[tuple[BlueprintPredicate, BlueprintValidator]] = []
-        self.register_validator(is_object_blueprint, _validate_object_blueprint)
-        self.register_validator(is_tensor_blueprint, _validate_tensor_blueprint)
-
         self._makers: dict[type, BlueprintMaker] = {}
-        self.register_maker(nn.Module, _infer_model_blueprint)
-        self.register_maker(Tensor, _infer_tensor_blueprint)
 
     def register_initializer[T](
         self,
@@ -646,31 +491,39 @@ class BlueprintRegistry:
 
 
 BLUEPRINT_REGISTRY = BlueprintRegistry()
+BLUEPRINT_REGISTRY.register_initializer(is_object_blueprint, initialize_object)
+BLUEPRINT_REGISTRY.register_validator(is_object_blueprint, _validate_object_blueprint)
 
 
 def _value_to_json(value: ArgValue, /) -> JSON_Value:
     match value:
-        case Tensor():
-            if value.numel() == 1:
-                return _value_to_json(value.item())
-            if value.ndim <= len(MAX_SHAPE) and value.shape <= MAX_SHAPE:
-                return _value_to_json(value.tolist())
-            raise NotImplementedError(
-                f"Tensor shape {tuple(value.shape)!r} exceeds MAX_SHAPE."
-            )
-        case nn.Module():
-            blueprint = infer_blueprint(value)
-            return blueprint_to_json(blueprint)
         case list():
             return [_value_to_json(item) for item in value]
         case tuple():
             return [_value_to_json(item) for item in value]
-        case dict():
-            return {key: _value_to_json(item) for key, item in value.items()}
-        case None | bool() | int() | float() | str():
-            return value
-        case _:
-            raise TypeError(f"Unsupported argument value type: {type(value)!r}.")
+        case dict(mapping):
+            if is_blueprint(mapping):
+                return blueprint_to_json(mapping)
+            return {str(key): _value_to_json(item) for key, item in value.items()}
+        case None:
+            return None
+        case bool():
+            return bool(value)
+        case int():
+            return int(value)
+        case float():
+            return float(value)
+        case str():
+            return str(value)
+        case other:
+            try:
+                blueprint = infer_blueprint(other)
+            except Exception as exc:
+                exc.add_note(
+                    f"Failed to infer blueprint for value of type {type(other)}."
+                )
+                raise
+            return _value_to_json(blueprint)
 
 
 def blueprint_to_json(arg: Blueprint, /) -> JSON:
@@ -690,7 +543,7 @@ def initialize[T](spec: T | type[T] | Blueprint[T], /) -> T:
         spec: The blueprint to initialize from, or the object to return if it's not a blueprint.
     """
     if isinstance(spec, type):
-        return _initialize_type(cast("type[T]", spec))
+        return initialize_type(cast("type[T]", spec))
     if not isinstance(spec, dict):
         return spec
     if not is_blueprint(spec):

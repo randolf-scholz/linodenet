@@ -30,15 +30,15 @@ from torch.jit import (  # type: ignore[attr-defined]
     RecursiveScriptModule,  # pyright: ignore[reportPrivateImportUsage]
 )
 
-from linodenet.config import (
+from blueprint.core import (
     JSON,
     Blueprint,
     blueprint_to_json,
     infer_blueprint,
     initialize,
     is_blueprint,
-    is_model_blueprint,
 )
+from blueprint.torch import is_model_blueprint
 
 __logger__ = logging.getLogger(__name__)
 

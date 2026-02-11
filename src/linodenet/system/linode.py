@@ -12,7 +12,7 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.config import ModelBlueprint, initialize
+from blueprint import ModelBlueprint, initialize
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection
 from linodenet.signatures import signature

@@ -4,23 +4,23 @@ build-backend = "uv_build"
 
 # region project configuration ---------------------------------------------------------
 [project]
-requires-python = ">=3.14,<3.15"
+authors = [{ name = "Randolf Scholz", email = "randolf.scholz@gmail.com" }]
 name = "linodenet"
 version = "0.4.0"
-authors = [{ name = "Randolf Scholz", email = "randolf.scholz@gmail.com" }]
 description = "Linear ODE Network for Time-Series Forecasting"
-
-# package content
-license = { file = "LICENSE" }
 readme = "README.md"
+license-files = [ "LICENSE" ]
+requires-python = ">=3.14,<3.15"
+urls = { repository = "https://github.com/randolf-scholz/linodenet.git" }
+import-names = ["linodenet", "blueprint"]
 
 # meta-information
 keywords = ["time-series", "machine-learning", "neural-ode", "kalman-filter"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Environment :: GPU :: NVIDIA CUDA :: 12.8",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "Environment :: GPU :: NVIDIA CUDA",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -33,9 +33,6 @@ dependencies = [
     "torch>=2.10.0",
     "torchdiffeq>=0.2.5",
 ]
-
-[project.urls]
-repository = "https://github.com/randolf-scholz/linodenet.git"
 # endregion project configuration ------------------------------------------------------
 
 

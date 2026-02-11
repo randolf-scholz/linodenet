@@ -2,7 +2,7 @@ r"""Demonstration of model configuration inference and export."""
 
 from torch import nn
 
-from linodenet.config import infer_blueprint, initialize, validate_blueprint
+from blueprint import infer_blueprint, initialize, validate_blueprint
 
 
 class TestInitialization:

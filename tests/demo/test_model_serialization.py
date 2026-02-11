@@ -3,8 +3,8 @@ r"""Demonstration of model configuration inference and export."""
 import torch
 from torch import Tensor, nn
 
-from linodenet.config import infer_blueprint, validate_blueprint
-from linodenet.serialization import deserialize_model, serialize_model
+from blueprint import infer_blueprint, validate_blueprint
+from blueprint.serialization import deserialize_model, serialize_model
 
 
 class TestSerialization:

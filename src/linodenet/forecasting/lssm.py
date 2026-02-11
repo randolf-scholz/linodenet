@@ -12,8 +12,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.config import Blueprint, initialize
-from linodenet.containers import initialize_from_dict
+from blueprint import Blueprint, initialize
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
 from linodenet.filters import Filter, MissingValueCell
@@ -72,13 +71,13 @@ def from_config(cfg: dict[str, Any]) -> LatentStateSpaceModel:
     config["Filter"] |= {"hidden_size": hidden_size}
 
     LOGGER.debug("Initializing Encoder %s", config["Encoder"])
-    encoder: nn.Module = initialize_from_dict(config["Encoder"])
+    encoder: nn.Module = initialize(config["Encoder"])
     LOGGER.debug("Initializing System %s", config["Encoder"])
-    system: nn.Module = initialize_from_dict(config["System"])
+    system: nn.Module = initialize(config["System"])
     LOGGER.debug("Initializing Decoder %s", config["Encoder"])
-    decoder: nn.Module = initialize_from_dict(config["Decoder"])
+    decoder: nn.Module = initialize(config["Decoder"])
     LOGGER.debug("Initializing Filter %s", config["Encoder"])
-    filter: nn.Module = initialize_from_dict(config["Filter"])  # noqa: A001
+    filter: nn.Module = initialize(config["Filter"])  # noqa: A001
 
     return LatentStateSpaceModel(
         encoder=encoder,

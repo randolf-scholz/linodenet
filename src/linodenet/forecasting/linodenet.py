@@ -12,7 +12,7 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.config import Blueprint, ObjectBlueprint, initialize
+from blueprint import Blueprint, ObjectBlueprint, initialize
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
 from linodenet.linalg import pad

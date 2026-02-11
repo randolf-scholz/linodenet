@@ -12,7 +12,7 @@ from typing import Optional
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder
 
-from linodenet.config import (
+from blueprint import (
     ModelBlueprint,
     infer_blueprint,
     initialize,

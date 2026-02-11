@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: v0.15.0
     hooks:
       - id: ruff-check
         name: ruff isort
@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.9.26
+    rev: 0.10.2
     hooks:
       - id: uv-lock
       - id: uv-export
@@ -58,7 +58,7 @@ repos:
         exclude: '^docs/|^experiments/'
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.7.12
+    rev: v0.7.13
     hooks:
       # pygrep hooks
       - id: check-separator-length-88
@@ -129,7 +129,7 @@ repos:
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
   # pyright
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.7.12
+    rev: v0.7.13
     hooks:
       - id: pyright-concise
         files: '^src/|^tests/'

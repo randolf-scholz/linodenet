@@ -113,9 +113,7 @@ def get_filter(kind: object = None, /, **cfg: object) -> Filter:
         # if a config, extract the name and instantiate
         case None:
             if "__module__" in cfg:
-                from linodenet.containers import (  # noqa: PLC0415
-                    initialize_from_dict,
-                )
+                from blueprint import initialize_from_dict
 
                 result = initialize_from_dict(cfg)
                 assert isinstance(result, Filter)
