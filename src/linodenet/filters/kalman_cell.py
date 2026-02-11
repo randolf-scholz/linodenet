@@ -34,15 +34,13 @@ __all__ = [
 
 from enum import Enum
 from math import sqrt
-from typing import Any, Optional, SupportsFloat
+from typing import Optional, SupportsFloat
 
 import torch
 from torch import Tensor, jit, nn
 
 from linodenet.filters.base import CellBase
-from linodenet.layers import ReverseDense
 from linodenet.signatures import signature
-from linodenet.utils import deep_dict_update
 
 
 class _Alpha(float, Enum):
@@ -94,14 +92,14 @@ class PseudoKalmanCell(CellBase):
     alpha: Tensor
     r"""PARAM/BUFFER: The alpha parameter."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "alpha": "last-value",
-        "alpha_learnable": False,
-        "autoregressive": False,
-    }
-    r"""The HyperparameterDict of this class."""
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "hidden_size": self.hidden_size,
+            "alpha": float(self.alpha),
+            "alpha_learnable": self.alpha.requires_grad,
+        }
 
     def __init__(
         self,
@@ -219,20 +217,23 @@ class NonLinearKalmanCell(CellBase):
     ZERO: Tensor
     r"""BUFFER: A constant value of zero."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "hidden_size": None,
-        "autoregressive": False,
-    }
-    r"""The HyperparameterDict of this class."""
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "hidden_size": self.hidden_size,
+            "autoregressive": self.autoregressive,
+        }
 
-    def __init__(self, /, **cfg: Any):
-        config = deep_dict_update(self.HP, cfg)
-        input_size = config["input_size"]
-        hidden_size = config["hidden_size"]
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        autoregressive: bool = False,
+    ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
+        self.autoregressive = bool(autoregressive)
 
         # BUFFERS
         self.register_buffer("ZERO", torch.zeros(1))
@@ -273,20 +274,18 @@ class NonLinearCell(CellBase):
     ZERO: Tensor
     r"""BUFFER: A constant value of zero."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "hidden_size": None,
-        "autoregressive": False,
-        "num_blocks": 2,
-        "block": ReverseDense.HP | {"bias": False},
-    }
-    r"""The HyperparameterDict of this class."""
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "hidden_size": self.hidden_size,
+            "nonlinearity": self.nonlinearity,
+            "alpha_value": float(self.alpha),
+            "alpha_learnable": self.alpha.requires_grad,
+        }
 
     def __init__(
         self,
-        /,
         input_size: int,
         hidden_size: int,
         *,
