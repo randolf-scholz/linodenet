@@ -13,7 +13,7 @@ from torch import Tensor, nn
 from torch.nn import TransformerEncoder
 
 from linodenet.config import (
-    ModelBluePrint,
+    ModelBlueprint,
     infer_blueprint,
     initialize,
 )
@@ -75,7 +75,7 @@ class Transformer(nn.Module):
 
     def __init__(
         self,
-        encoder_layer: nn.Module | ModelBluePrint,
+        encoder_layer: nn.Module | ModelBlueprint,
         *,
         num_layers: int = 6,
         norm: Optional[nn.Module] = None,

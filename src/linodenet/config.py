@@ -8,12 +8,12 @@ __all__ = [
     "BLUEPRINT_REGISTRY",
     "INFER_ARGS_REGISTRY",
     # blueprint types
-    "BluePrint",
+    "Blueprint",
     "InferArgsRegistry",
-    "ObjectBluePrint",
-    "ModelBluePrint",
-    "TensorBluePrint",
-    "BluePrintRegistry",
+    "ObjectBlueprint",
+    "ModelBlueprint",
+    "TensorBlueprint",
+    "BlueprintRegistry",
     "is_blueprint",
     "is_model_blueprint",
     "blueprint_to_json",
@@ -108,7 +108,7 @@ class SupportsFromConfig(Protocol):
 # endregion config protocols -----------------------------------------------------------
 
 
-type Makes[T] = type[T] | BluePrint[T]  # dataclass
+type Makes[T] = type[T] | Blueprint[T]  # dataclass
 type FilePath = str | os.PathLike[str]
 
 # region key and value types -----------------------------------------------------------
@@ -120,7 +120,7 @@ type PrivateKey = str  # identifier & starts with _ (includes dunder and sunder)
 
 
 # The types allowed in the config dictionary.
-# configs should not contain ModelBluePrints or TensorSpecs directly, but actual models and tensors
+# configs should not contain ModelBlueprints or TensorSpecs directly, but actual models and tensors
 type ArgLeaf = None | bool | int | float | str | Tensor | nn.Module
 type ArgValue = ArgLeaf | list[ArgValue] | tuple[ArgValue, ...] | dict[str, ArgValue]
 type POArgs = list[ArgValue]
@@ -132,7 +132,7 @@ type JSON_Value = JSON_Leaf | list[JSON_Value] | dict[str, JSON_Value]
 type JSON = dict[str, JSON_Value]
 
 # FIXME: do we need an intermediate Spec type for in memory spec, where only
-# models are replaces with ModelBluePrint?
+# models are replaces with ModelBlueprint?
 
 
 def is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
@@ -191,7 +191,7 @@ def is_blueprint_key(value: object, /) -> TypeGuard[DunderKey | SunderKey]:
 
 
 # region blueprint types ---------------------------------------------------------------
-class BluePrint[T](TypedDict):
+class Blueprint[T](TypedDict):
     r"""A dictionary that can be used to initialize an object of type T.
 
     All keys must be dunder or sunder.
@@ -200,7 +200,7 @@ class BluePrint[T](TypedDict):
     # dunder and sunder keys only (not expressible in the type system)
 
 
-class ObjectBluePrint[T](TypedDict):
+class ObjectBlueprint[T](TypedDict):
     r"""A dictionary that allows initializing an object."""
 
     __module_name__: ReadOnly[str]
@@ -212,7 +212,7 @@ class ObjectBluePrint[T](TypedDict):
     # **DunderKey: object (reserved for future use)
 
 
-class ModelBluePrint[T: nn.Module = nn.Module](TypedDict):
+class ModelBlueprint[T: nn.Module = nn.Module](TypedDict):
     r"""A blueprint that allows initializing a ``nn.Module``."""
 
     __module_name__: ReadOnly[str]
@@ -224,7 +224,7 @@ class ModelBluePrint[T: nn.Module = nn.Module](TypedDict):
     # **DunderKey: object (reserved for future use)
 
 
-class TensorBluePrint[T: Tensor = Tensor](TypedDict):
+class TensorBlueprint[T: Tensor = Tensor](TypedDict):
     r"""A pseudo-blueprint that wraps a tensor value."""
 
     __tensor__: ReadOnly[Any]
@@ -232,7 +232,7 @@ class TensorBluePrint[T: Tensor = Tensor](TypedDict):
     __shape__: ReadOnly[list[int]]
 
 
-def is_blueprint(arg: object, /) -> TypeGuard[BluePrint]:
+def is_blueprint(arg: object, /) -> TypeGuard[Blueprint]:
     if not isinstance(arg, dict):
         return False
     if not all(is_blueprint_key(key) for key in arg):
@@ -240,18 +240,18 @@ def is_blueprint(arg: object, /) -> TypeGuard[BluePrint]:
     return True
 
 
-def is_tensor_blueprint(arg: object, /) -> TypeGuard[TensorBluePrint]:
+def is_tensor_blueprint(arg: object, /) -> TypeGuard[TensorBlueprint]:
     if not is_blueprint(arg):
         return False
-    if not TensorBluePrint.__required_keys__.issubset(arg.keys()):
+    if not TensorBlueprint.__required_keys__.issubset(arg.keys()):
         return False
     return True
 
 
-def is_object_blueprint(arg: object, /) -> TypeGuard[ObjectBluePrint]:
+def is_object_blueprint(arg: object, /) -> TypeGuard[ObjectBlueprint]:
     if not is_blueprint(arg):
         return False
-    if not ObjectBluePrint.__required_keys__.issubset(arg.keys()):
+    if not ObjectBlueprint.__required_keys__.issubset(arg.keys()):
         return False
     if not isinstance(arg.get("__module_name__"), str):
         return False
@@ -272,7 +272,7 @@ def is_object_blueprint(arg: object, /) -> TypeGuard[ObjectBluePrint]:
     return True
 
 
-def is_model_blueprint(arg: object, /) -> TypeGuard[ModelBluePrint]:
+def is_model_blueprint(arg: object, /) -> TypeGuard[ModelBlueprint]:
     r"""Check if the argument is a valid model blueprint.
 
     Note: This will import the module and check if the class is a subclass of nn.Module.
@@ -457,7 +457,7 @@ def resolve_value(arg: ArgValue, /) -> Any:
             return arg
 
 
-def _initialize_object_blueprint[T](spec: BluePrint[T], /) -> T:
+def _initialize_object_blueprint[T](spec: Blueprint[T], /) -> T:
     if not is_object_blueprint(spec):
         raise TypeError("Expected an object blueprint dictionary.")
 
@@ -472,7 +472,7 @@ def _initialize_object_blueprint[T](spec: BluePrint[T], /) -> T:
     return initialize_from_args(cls, args, kwargs)
 
 
-def _initialize_tensor_blueprint[T: Tensor](spec: BluePrint[T], /) -> T:
+def _initialize_tensor_blueprint[T: Tensor](spec: Blueprint[T], /) -> T:
     if not is_tensor_blueprint(spec):
         raise TypeError("Expected a tensor blueprint dictionary.")
     tensor = spec["__tensor__"]
@@ -480,7 +480,7 @@ def _initialize_tensor_blueprint[T: Tensor](spec: BluePrint[T], /) -> T:
     return cast("T", tensor)
 
 
-def _validate_object_blueprint[T](arg: T | type[T], spec: BluePrint, /) -> None:
+def _validate_object_blueprint[T](arg: T | type[T], spec: Blueprint, /) -> None:
     if not is_object_blueprint(spec):
         raise TypeError("Invalid model spec.")
     if any(not key.isidentifier() for key in spec):
@@ -500,7 +500,7 @@ def _validate_object_blueprint[T](arg: T | type[T], spec: BluePrint, /) -> None:
         )
 
 
-def _validate_tensor_blueprint(tensor: Tensor, spec: BluePrint, /) -> None:
+def _validate_tensor_blueprint(tensor: Tensor, spec: Blueprint, /) -> None:
     if not is_tensor_blueprint(spec):
         raise TypeError("Invalid tensor spec.")
     expected_dtype = spec["__dtype__"]
@@ -517,10 +517,10 @@ def _validate_tensor_blueprint(tensor: Tensor, spec: BluePrint, /) -> None:
 
 def _infer_object_blueprint[T](
     arg: T, /, *, verify_init: bool = True
-) -> ObjectBluePrint[T]:
+) -> ObjectBlueprint[T]:
     args, kwargs = infer_args(arg, verify_init=verify_init)
 
-    spec: ObjectBluePrint[T] = {
+    spec: ObjectBlueprint[T] = {
         "__module_name__": arg.__class__.__module__,
         "__class_name__": arg.__class__.__qualname__,
         "__args__": args,
@@ -531,7 +531,7 @@ def _infer_object_blueprint[T](
     return spec
 
 
-def _infer_tensor_blueprint(tensor: Tensor) -> TensorBluePrint:
+def _infer_tensor_blueprint(tensor: Tensor) -> TensorBlueprint:
     return {
         "__tensor__": tensor,
         "__dtype__": str(tensor.dtype),
@@ -541,51 +541,51 @@ def _infer_tensor_blueprint(tensor: Tensor) -> TensorBluePrint:
 
 def _infer_model_blueprint[T: nn.Module](
     arg: T, /, *, verify_init: bool = True
-) -> ModelBluePrint[T]:
+) -> ModelBlueprint[T]:
     return _infer_object_blueprint(arg, verify_init=verify_init)
 
 
-def infer_blueprint[T](arg: T, /) -> BluePrint[T]:
+def infer_blueprint[T](arg: T, /) -> Blueprint[T]:
     return BLUEPRINT_REGISTRY.infer(arg)
 
 
-def initialize[T](spec: BluePrint[T], /) -> T:
+def initialize[T](spec: Blueprint[T], /) -> T:
     if not is_blueprint(spec):
         raise TypeError("Expected a blueprint dictionary.")
     return BLUEPRINT_REGISTRY.initialize(spec)
 
 
-def validate_blueprint[T](arg: T, spec: BluePrint[T], /) -> None:
+def validate_blueprint[T](arg: T, spec: Blueprint[T], /) -> None:
     BLUEPRINT_REGISTRY.validate(arg, spec)
 
 
-type BluePrintPredicate[T] = Callable[[Any], TypeGuard[BluePrint[T]]]
-type BluePrintMaker[T] = Callable[[T], BluePrint[T]]
-type BluePrintValidator[T] = Callable[[T, BluePrint[T]], None]
-type BluePrintInitializer[T] = Callable[[BluePrint[T]], T]
+type BlueprintPredicate[T] = Callable[[Any], TypeGuard[Blueprint[T]]]
+type BlueprintMaker[T] = Callable[[T], Blueprint[T]]
+type BlueprintValidator[T] = Callable[[T, Blueprint[T]], None]
+type BlueprintInitializer[T] = Callable[[Blueprint[T]], T]
 
 
-class BluePrintRegistry:
+class BlueprintRegistry:
     r"""Registry for blueprint initializers, validators and makers."""
 
     def __init__(self) -> None:
-        self._initializers: list[tuple[BluePrintPredicate, BluePrintInitializer]] = []
+        self._initializers: list[tuple[BlueprintPredicate, BlueprintInitializer]] = []
         self.register(is_object_blueprint, _initialize_object_blueprint)
         self.register(is_model_blueprint, _initialize_object_blueprint)
         self.register(is_tensor_blueprint, _initialize_tensor_blueprint)
 
-        self._validators: list[tuple[BluePrintPredicate, BluePrintValidator]] = []
+        self._validators: list[tuple[BlueprintPredicate, BlueprintValidator]] = []
         self.register_validator(is_object_blueprint, _validate_object_blueprint)
         self.register_validator(is_tensor_blueprint, _validate_tensor_blueprint)
 
-        self._makers: dict[type, BluePrintMaker] = {}
+        self._makers: dict[type, BlueprintMaker] = {}
         self.register_maker(nn.Module, _infer_model_blueprint)
         self.register_maker(Tensor, _infer_tensor_blueprint)
 
     def register[T](
         self,
-        predicate: BluePrintPredicate[T],
-        initializer: BluePrintInitializer[T],
+        predicate: BlueprintPredicate[T],
+        initializer: BlueprintInitializer[T],
         /,
     ) -> None:
         if any(existing is predicate for existing, _ in self._initializers):
@@ -594,58 +594,58 @@ class BluePrintRegistry:
 
     def register_validator[T](
         self,
-        predicate: BluePrintPredicate[T],
-        validator: Callable[[T, BluePrint[T]], None],
+        predicate: BlueprintPredicate[T],
+        validator: Callable[[T, Blueprint[T]], None],
         /,
     ) -> None:
         if any(existing is predicate for existing, _ in self._validators):
             raise ValueError("Blueprint predicate is already registered.")
         self._validators.append((predicate, validator))
 
-    def register_maker[T](self, cls: type[T], maker: BluePrintMaker[T], /) -> None:
+    def register_maker[T](self, cls: type[T], maker: BlueprintMaker[T], /) -> None:
         if cls in self._makers:
             raise ValueError(f"Model class {cls.__qualname__} is already registered.")
         self._makers[cls] = maker
 
     def _select_initializer[T = Any](
-        self, spec: BluePrint[T], /
-    ) -> BluePrintInitializer[T]:
+        self, spec: Blueprint[T], /
+    ) -> BlueprintInitializer[T]:
         for predicate, initializer in self._initializers:
             if predicate(spec):
                 return initializer
         raise TypeError("Unsupported blueprint type.")
 
     def _select_validator[T = Any](
-        self, spec: BluePrint[T], /
-    ) -> BluePrintValidator[T]:
+        self, spec: Blueprint[T], /
+    ) -> BlueprintValidator[T]:
         for predicate, validator in self._validators:
             if predicate(spec):
                 return validator
         raise TypeError("Unsupported blueprint type.")
 
-    def _select_maker[T](self, arg: T, /) -> BluePrintMaker[T]:
+    def _select_maker[T](self, arg: T, /) -> BlueprintMaker[T]:
         for cls, maker in self._makers.items():
             if isinstance(arg, cls):
                 return maker
         return _infer_object_blueprint
 
-    def initialize[T](self, spec: BluePrint[T], /, *, validate: bool = False) -> T:
+    def initialize[T](self, spec: Blueprint[T], /, *, validate: bool = False) -> T:
         initializer = self._select_initializer(spec)
         result = initializer(spec)
         if validate:
             self.validate(result, spec)
         return result
 
-    def validate[T](self, result: T, spec: BluePrint[T], /) -> None:
+    def validate[T](self, result: T, spec: Blueprint[T], /) -> None:
         validator = self._select_validator(spec)
         validator(result, spec)
 
-    def infer[T](self, arg: T, /) -> BluePrint[T]:
+    def infer[T](self, arg: T, /) -> Blueprint[T]:
         maker = self._select_maker(arg)
         return maker(arg)
 
 
-BLUEPRINT_REGISTRY = BluePrintRegistry()
+BLUEPRINT_REGISTRY = BlueprintRegistry()
 
 
 def _value_to_json(value: ArgValue, /) -> JSON_Value:
@@ -673,7 +673,7 @@ def _value_to_json(value: ArgValue, /) -> JSON_Value:
             raise TypeError(f"Unsupported argument value type: {type(value)!r}.")
 
 
-def blueprint_to_json(arg: BluePrint, /) -> JSON:
+def blueprint_to_json(arg: Blueprint, /) -> JSON:
     parsed = _value_to_json(cast("dict", arg))
     assert isinstance(parsed, dict)
     return parsed

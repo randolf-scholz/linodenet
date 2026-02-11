@@ -2,11 +2,11 @@ r"""Functions for serializing and deserializing PyTorch models and tensors."""
 # ruff: noqa: SIM103
 
 __all__ = [
-    "SavedModelBluePrint",
-    "SavedStateDictBluePrint",
-    "SavedTorchScriptBluePrint",
-    "SavedTorchExportBluePrint",
-    # "SavedTensorBluePrint",
+    "SavedModelBlueprint",
+    "SavedStateDictBlueprint",
+    "SavedTorchScriptBlueprint",
+    "SavedTorchExportBlueprint",
+    # "SavedTensorBlueprint",
     "is_serialized_model_blueprint",
     # functions
     "serialize_model",
@@ -32,7 +32,7 @@ from torch.jit import (  # type: ignore[attr-defined]
 
 from linodenet.config import (
     JSON,
-    BluePrint,
+    Blueprint,
     blueprint_to_json,
     infer_blueprint,
     initialize,
@@ -64,7 +64,7 @@ type FileLike = FilePath | IO[bytes]
 # type JSON[T: JSON_Value] = dict[str, T]
 
 
-class SavedModelBluePrint[T](TypedDict):
+class SavedModelBlueprint[T](TypedDict):
     r"""In memory representation of a JSON-serializable model specification.
 
     Storage schema (zip archive):
@@ -85,8 +85,8 @@ class SavedModelBluePrint[T](TypedDict):
     # **DunderKey: object (reserved for future use)
 
 
-class SavedStateDictBluePrint[T: nn.Module](
-    SavedModelBluePrint[T],
+class SavedStateDictBlueprint[T: nn.Module](
+    SavedModelBlueprint[T],
     TypedDict,
 ):
     r"""State-dict storage layout.
@@ -100,12 +100,12 @@ class SavedStateDictBluePrint[T: nn.Module](
     """
 
     __storage_format__: ReadOnly[Literal["state_dict"]]  # type: ignore[misc]
-    __blueprint__: ReadOnly[BluePrint[T]]
+    __blueprint__: ReadOnly[Blueprint[T]]
     __assets__: ReadOnly[list[str]]
 
 
-class SavedTorchScriptBluePrint[T: RecursiveScriptModule](
-    SavedModelBluePrint[T],
+class SavedTorchScriptBlueprint[T: RecursiveScriptModule](
+    SavedModelBlueprint[T],
     TypedDict,
 ):
     r"""TorchScript storage layout.
@@ -119,8 +119,8 @@ class SavedTorchScriptBluePrint[T: RecursiveScriptModule](
     __storage_format__: ReadOnly[Literal["torchscript"]]  # type: ignore[misc]
 
 
-class SavedTorchExportBluePrint[T: ExportedProgram](
-    SavedModelBluePrint[T],
+class SavedTorchExportBlueprint[T: ExportedProgram](
+    SavedModelBlueprint[T],
     TypedDict,
 ):
     r"""Torch export storage layout.
@@ -134,10 +134,10 @@ class SavedTorchExportBluePrint[T: ExportedProgram](
     __storage_format__: ReadOnly[Literal["torch_export"]]  # type: ignore[misc]
 
 
-def is_serialized_model_blueprint(arg: object, /) -> TypeGuard[SavedModelBluePrint]:
+def is_serialized_model_blueprint(arg: object, /) -> TypeGuard[SavedModelBlueprint]:
     if not is_blueprint(arg):
         return False
-    if not SavedModelBluePrint.__required_keys__.issubset(arg.keys()):
+    if not SavedModelBlueprint.__required_keys__.issubset(arg.keys()):
         return False
     if not isinstance(arg.get("__storage_format__"), str):
         return False
@@ -205,7 +205,7 @@ def serialize_model[M: nn.Module | ExportedProgram](
     /,
     *,
     hyperparameters: Optional[JSON] = None,
-) -> SavedModelBluePrint[M]:
+) -> SavedModelBlueprint[M]:
     r"""Serialize a model to a file and return its blueprint spec."""
     # ensure path ends with .pt or .zip
     path = Path(filepath)
@@ -288,7 +288,7 @@ def deserialize_model(path: FilePath, /) -> nn.Module:
 
 
 def deserialize_model_from_blueprint[M: nn.Module | ExportedProgram](
-    spec: SavedModelBluePrint[M], /
+    spec: SavedModelBlueprint[M], /
 ) -> M:
     r"""Deserialize a model from a blueprint spec."""
     if not is_serialized_model_blueprint(spec):
