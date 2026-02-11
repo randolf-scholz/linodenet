@@ -7,20 +7,35 @@ __all__ = [
 ]
 
 import warnings
-from typing import Any, Final, Optional
+from typing import Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.containers import initialize_from_dict
+from linodenet.config import Blueprint, ObjectBlueprint, initialize
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
-from linodenet.filters import MissingValueCell
 from linodenet.linalg import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
 from linodenet.system import LinODECell
-from linodenet.utils import deep_dict_update
+
+
+def _module_blueprint[T](cls: type[T]) -> ObjectBlueprint[T]:
+    return {
+        "__module_name__": cls.__module__,
+        "__class_name__": cls.__qualname__,
+        "__args__": [],
+        "__kwargs__": {},
+    }
+
+
+_DEFAULT_EMBEDDING_BLUEPRINT = _module_blueprint(ConcatEmbedding)
+_DEFAULT_ENCODER_BLUEPRINT = _module_blueprint(ResNet)
+_DEFAULT_SYSTEM_BLUEPRINT = _module_blueprint(LinODECell)
+_DEFAULT_DECODER_BLUEPRINT = _module_blueprint(ResNet)
+_DEFAULT_PROJECTION_BLUEPRINT = _module_blueprint(ConcatProjection)
+_DEFAULT_FILTER_BLUEPRINT = _module_blueprint(nn.GRUCell)
 
 
 class LinODEnet(nn.Module):
@@ -38,22 +53,6 @@ class LinODEnet(nn.Module):
     | System  S (default: :class:`~LinODECell`)       | zᵢ₊₁ = S(zᵢ, ∆tᵢ) |
     +-------------------------------------------------+-------------------+
     """
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "hidden_size": None,
-        "latent_size": None,
-        "output_size": None,
-        "System": LinODECell,
-        "Embedding": ConcatEmbedding,
-        "Projection": ConcatProjection,
-        "Filter": MissingValueCell,
-        "Encoder": ResNet,
-        "Decoder": ResNet,
-    }
-    r"""Dictionary of Hyperparameters."""
 
     # Constants
     name: Final[str] = __name__
@@ -109,13 +108,34 @@ class LinODEnet(nn.Module):
     # filter: nn.Module
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "latent_size": self.latent_size,
+            "hidden_size": self.hidden_size,
+            "system": self.system,
+            "embedding": self.embedding,
+            "projection": self.projection,
+            "filter": self.filter,
+            "encoder": self.encoder,
+            "decoder": self.decoder,
+            "validate_inputs": self.validate_inputs,
+        }
+
     def __init__(
         self,
         input_size: int,
         latent_size: int,
         *,
         hidden_size: Optional[int] = None,
-        **cfg: Any,
+        embedding: nn.Module | Blueprint[nn.Module] = _DEFAULT_EMBEDDING_BLUEPRINT,
+        encoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_ENCODER_BLUEPRINT,
+        system: nn.Module | Blueprint[nn.Module] = _DEFAULT_SYSTEM_BLUEPRINT,
+        decoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_DECODER_BLUEPRINT,
+        projection: nn.Module | Blueprint[nn.Module] = _DEFAULT_PROJECTION_BLUEPRINT,
+        filter: nn.Module | Blueprint[nn.Module] = _DEFAULT_FILTER_BLUEPRINT,  # noqa: A002
+        validate_inputs: bool = False,
     ) -> None:
         super().__init__()
 
@@ -129,25 +149,13 @@ class LinODEnet(nn.Module):
             )
             hidden_size = input_size
 
-        # Config
-        config = deep_dict_update(self.HP, cfg)
-        config["Encoder"]["input_size"] = latent_size
-        config["Decoder"]["input_size"] = latent_size
-        config["System"]["input_size"] = latent_size
-        config["Filter"]["input_size"] = hidden_size
-        config["Filter"]["hidden_size"] = hidden_size
-        config["Embedding"]["input_size"] = hidden_size
-        config["Embedding"]["output_size"] = latent_size
-        config["Projection"]["input_size"] = latent_size
-        config["Projection"]["output_size"] = hidden_size
-
         # Constants
         self.hidden_size = hidden_size
         self.input_size = input_size
         self.latent_size = latent_size
         self.output_size = input_size
         self.padding_size = self.hidden_size - self.input_size
-        self.validate_inputs = config.get("validate_inputs", False)
+        self.validate_inputs = validate_inputs
 
         # Buffers
         self.register_buffer("ZERO", torch.tensor(0.0), persistent=True)
@@ -160,12 +168,13 @@ class LinODEnet(nn.Module):
         self.register_buffer("predictions", torch.tensor(()), persistent=False)
 
         # Submodules
-        self.embedding: nn.Module = initialize_from_dict(config["Embedding"])
-        self.encoder: nn.Module = initialize_from_dict(config["Encoder"])
-        self.system: nn.Module = initialize_from_dict(config["System"])
-        self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
-        self.projection: nn.Module = initialize_from_dict(config["Projection"])
-        self.filter: nn.Module = initialize_from_dict(config["Filter"])
+        self.embedding = initialize(embedding)
+        self.encoder = initialize(encoder)
+        self.system = initialize(system)
+        self.decoder = initialize(decoder)
+        self.projection = initialize(projection)
+        self.filter = initialize(filter)
+        # TODO: check sizes are compatible
 
         # Parameters
         kernel = getattr(self.system, "kernel", None)
@@ -394,22 +403,6 @@ class LinODEnet(nn.Module):
 class LatentLinODECell(nn.Module):
     r"""Latent Linear ODE Cell."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "hidden_size": None,
-        "latent_size": None,
-        "output_size": None,
-        "System": LinODECell,
-        "Embedding": ConcatEmbedding,
-        "Projection": ConcatProjection,
-        "Filter": MissingValueCell,
-        "Encoder": ResNet,
-        "Decoder": ResNet,
-    }
-    r"""Dictionary of Hyperparameters."""
-
     # CONSTANTS
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
@@ -436,18 +429,37 @@ class LatentLinODECell(nn.Module):
     dt: Tensor
     r"""BUFFER: Stores the timedelta values."""
 
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "latent_size": self.latent_size,
+            "hidden_size": self.hidden_size,
+            "System": self.system,
+            "Embedding": self.embedding,
+            "Projection": self.projection,
+            "Filter": self.filter,
+            "Encoder": self.encoder,
+            "Decoder": self.decoder,
+            "validate_inputs": self.validate_inputs,
+        }
+
     def __init__(
         self,
         input_size: int,
         latent_size: int,
         *,
         hidden_size: Optional[int] = None,
-        **cfg: Any,
+        embedding: nn.Module | Blueprint[nn.Module] = _DEFAULT_EMBEDDING_BLUEPRINT,
+        encoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_ENCODER_BLUEPRINT,
+        system: nn.Module | Blueprint[nn.Module] = _DEFAULT_SYSTEM_BLUEPRINT,
+        decoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_DECODER_BLUEPRINT,
+        projection: nn.Module | Blueprint[nn.Module] = _DEFAULT_PROJECTION_BLUEPRINT,
+        filter: nn.Module | Blueprint[nn.Module] = _DEFAULT_FILTER_BLUEPRINT,  # noqa: A002
+        validate_inputs: bool = False,
     ) -> None:
         super().__init__()
-
-        config = deep_dict_update(self.HP, cfg)
-        self.validate_inputs = config.get("validate_inputs", False)
+        self.validate_inputs = validate_inputs
 
         hidden_size = hidden_size if hidden_size is not None else input_size
         if hidden_size < input_size:
@@ -473,12 +485,12 @@ class LatentLinODECell(nn.Module):
         self.register_buffer("dt", torch.tensor(()), persistent=False)
 
         # Submodules
-        self.embedding: nn.Module = initialize_from_dict(config["Embedding"])
-        self.encoder: nn.Module = initialize_from_dict(config["Encoder"])
-        self.system: nn.Module = initialize_from_dict(config["System"])
-        self.decoder: nn.Module = initialize_from_dict(config["Decoder"])
-        self.projection: nn.Module = initialize_from_dict(config["Projection"])
-        self.filter: nn.Module = initialize_from_dict(config["Filter"])
+        self.embedding = initialize(embedding)
+        self.encoder = initialize(encoder)
+        self.system = initialize(system)
+        self.decoder = initialize(decoder)
+        self.projection = initialize(projection)
+        self.filter = initialize(filter)
 
         # Parameters
         self.kernel = self.system.kernel

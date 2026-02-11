@@ -12,6 +12,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.config import Blueprint, initialize
 from linodenet.containers import initialize_from_dict
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
@@ -21,6 +22,71 @@ from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
 from linodenet.system import ContinuousSystem, LinODECell
 from linodenet.utils import deep_dict_update
+
+
+def _module_config(cls: type[nn.Module]) -> dict[str, Any]:
+    return {"__module__": cls.__module__, "__name__": cls.__qualname__}
+
+
+_DEFAULT_LSSM_CONFIG = {
+    "input_size": None,
+    "hidden_size": None,
+    "latent_size": None,
+    "output_size": None,
+    "System": _module_config(LinODECell),
+    "Embedding": _module_config(ConcatEmbedding),
+    "Projection": _module_config(ConcatProjection),
+    "Filter": _module_config(MissingValueCell),
+    "Encoder": _module_config(ResNet),
+    "Decoder": _module_config(ResNet),
+}
+
+
+def from_config(cfg: dict[str, Any]) -> LatentStateSpaceModel:
+    r"""Constructs a new model from a configuration dictionary."""
+    LOGGER = logging.getLogger(f"{__package__}.from_config")
+    config = deep_dict_update(_DEFAULT_LSSM_CONFIG, cfg)
+    input_size = config["input_size"]
+    latent_size = config["latent_size"]
+    hidden_size = config.get("hidden_size", input_size)
+    # padding_size = hidden_size - input_size
+    # output_size = config.get("output_size", input_size)
+
+    if hidden_size < input_size:
+        warnings.warn(
+            "hidden_size < input_size. Falling back to using no hidden units.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+        hidden_size = input_size
+    if not (hidden_size >= input_size):
+        raise ValueError(
+            f"{hidden_size=} must be greater than or equal to {input_size=}"
+        )
+
+    config["Encoder"] |= {"input_size": latent_size}
+    config["Decoder"] |= {"input_size": latent_size}
+    config["System"] |= {"input_size": latent_size}
+    config["Filter"] |= {"input_size": hidden_size}
+    config["Filter"] |= {"hidden_size": hidden_size}
+
+    LOGGER.debug("Initializing Encoder %s", config["Encoder"])
+    encoder: nn.Module = initialize_from_dict(config["Encoder"])
+    LOGGER.debug("Initializing System %s", config["Encoder"])
+    system: nn.Module = initialize_from_dict(config["System"])
+    LOGGER.debug("Initializing Decoder %s", config["Encoder"])
+    decoder: nn.Module = initialize_from_dict(config["Decoder"])
+    LOGGER.debug("Initializing Filter %s", config["Encoder"])
+    filter: nn.Module = initialize_from_dict(config["Filter"])  # noqa: A001
+
+    return LatentStateSpaceModel(
+        encoder=encoder,
+        system=system,
+        decoder=decoder,
+        filter=filter,
+        padding_size=hidden_size - input_size,
+    )
 
 
 class LatentStateSpaceModel(nn.Module):
@@ -43,22 +109,6 @@ class LatentStateSpaceModel(nn.Module):
 
     name: Final[str] = __name__
     r"""str: The name of the model."""
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "hidden_size": None,
-        "latent_size": None,
-        "output_size": None,
-        "System": LinODECell,
-        "Embedding": ConcatEmbedding,
-        "Projection": ConcatProjection,
-        "Filter": MissingValueCell,
-        "Encoder": ResNet,
-        "Decoder": ResNet,
-    }
-    r"""Dictionary of Hyperparameters."""
 
     # Constants
     input_size: Final[int]
@@ -108,66 +158,30 @@ class LatentStateSpaceModel(nn.Module):
     # filter: nn.Module
     # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
 
-    @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> LatentStateSpaceModel:
-        r"""Constructs a new model from a configuration dictionary."""
-        config = deep_dict_update(cls.HP, cfg)
-        input_size = config["input_size"]
-        latent_size = config["latent_size"]
-        hidden_size = config.get("hidden_size", input_size)
-        # padding_size = hidden_size - input_size
-        # output_size = config.get("output_size", input_size)
-
-        if hidden_size < input_size:
-            warnings.warn(
-                "hidden_size < input_size. Falling back to using no hidden units.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-
-            hidden_size = input_size
-        if not (hidden_size >= input_size):
-            raise ValueError(
-                f"{hidden_size=} must be greater than or equal to {input_size=}"
-            )
-
-        config["Encoder"] |= {"input_size": latent_size}
-        config["Decoder"] |= {"input_size": latent_size}
-        config["System"] |= {"input_size": latent_size}
-        config["Filter"] |= {"input_size": hidden_size}
-        config["Filter"] |= {"hidden_size": hidden_size}
-
-        cls.LOGGER.debug("Initializing Encoder %s", config["Encoder"])
-        encoder: nn.Module = initialize_from_dict(config["Encoder"])
-        cls.LOGGER.debug("Initializing System %s", config["Encoder"])
-        system: nn.Module = initialize_from_dict(config["System"])
-        cls.LOGGER.debug("Initializing Decoder %s", config["Encoder"])
-        decoder: nn.Module = initialize_from_dict(config["Decoder"])
-        cls.LOGGER.debug("Initializing Filter %s", config["Encoder"])
-        filter: nn.Module = initialize_from_dict(config["Filter"])  # noqa: A001
-
-        return LatentStateSpaceModel(
-            encoder=encoder,
-            system=system,
-            decoder=decoder,
-            filter=filter,
-            padding_size=hidden_size - input_size,
-        )
+    @property
+    def config(self) -> dict:
+        return {
+            "encoder": self.encoder,
+            "system": self.system,
+            "decoder": self.decoder,
+            "filter": self.filter,
+            "padding_size": self.padding_size,
+        }
 
     def __init__(
         self,
         *,
-        encoder: nn.Module,
-        system: nn.Module,
-        decoder: nn.Module,
-        filter: nn.Module,  # noqa: A002
+        encoder: nn.Module | Blueprint[nn.Module],
+        system: nn.Module | Blueprint[nn.Module],
+        decoder: nn.Module | Blueprint[nn.Module],
+        filter: nn.Module | Blueprint[nn.Module],  # noqa: A002
         padding_size: int = 0,
     ) -> None:
         super().__init__()
-        self.encoder = encoder
-        self.system = system
-        self.decoder = decoder
-        self.filter = filter
+        self.encoder = initialize(encoder)
+        self.system = initialize(system)
+        self.decoder = initialize(decoder)
+        self.filter = initialize(filter)
 
         # ensure filter and system satisfy the protocols
         assert isinstance(self.filter, Filter)
@@ -178,6 +192,7 @@ class LatentStateSpaceModel(nn.Module):
         self.latent_size = int(self.system.input_size)
         self.hidden_size = -1
         self.padding_size = padding_size
+        self.validate_sizes()
 
         # self.input_size =  filter.input_size  # type: ignore[assignment]
         # self.output_size = filter.output_size  # type: ignore[assignment]
@@ -198,6 +213,51 @@ class LatentStateSpaceModel(nn.Module):
         self.register_buffer("xhat_post", torch.tensor(()), persistent=False)
         self.register_buffer("zhat_pre", torch.tensor(()), persistent=False)
         self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
+
+    def validate_sizes(self) -> None:
+        assert isinstance(self.filter, Filter)
+        assert isinstance(self.system, ContinuousSystem)
+        filter_input = int(self.filter.input_size)
+        filter_hidden = int(self.filter.hidden_size)
+        if filter_input != filter_hidden:
+            raise ValueError(
+                "Filter input_size must match hidden_size; "
+                f"got {filter_input} and {filter_hidden}."
+            )
+
+        system_input = int(getattr(self.system, "input_size", -1))
+        system_output = int(getattr(self.system, "output_size", system_input))
+        if system_input != system_output:
+            raise ValueError(
+                "System input_size must match output_size; "
+                f"got {system_input} and {system_output}."
+            )
+
+        decoder_input = int(getattr(self.decoder, "input_size", -1))
+        decoder_output = int(getattr(self.decoder, "output_size", decoder_input))
+        if decoder_input != system_input:
+            raise ValueError(
+                "Decoder input_size must match system input_size; "
+                f"got {decoder_input} and {system_input}."
+            )
+        if decoder_output != filter_input:
+            raise ValueError(
+                "Decoder output_size must match filter input_size; "
+                f"got {decoder_output} and {filter_input}."
+            )
+
+        encoder_input = int(getattr(self.encoder, "input_size", -1))
+        encoder_output = int(getattr(self.encoder, "output_size", -1))
+        if encoder_input != filter_input:
+            raise ValueError(
+                "Encoder input_size must match filter input_size; "
+                f"got {encoder_input} and {filter_input}."
+            )
+        if encoder_output != system_input:
+            raise ValueError(
+                "Encoder output_size must match system input_size; "
+                f"got {encoder_output} and {system_input}."
+            )
 
     @jit.export
     @signature("[(..., $n), (..., $n, d)] -> (..., $n, d)")
