@@ -6,13 +6,46 @@ __all__ = [
     "TransformerEncoder",
 ]
 
-from typing import Any, Optional
+from copy import deepcopy
+from typing import Optional
 
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder
 
-from linodenet.containers import initialize_from_dict
-from linodenet.utils import deep_dict_update
+from linodenet.config import (
+    ModelBluePrint,
+    infer_blueprint,
+    initialize,
+)
+
+_DEFAULT_TRANSFORMER_CONFIG = {
+    "num_layers": 6,
+    # the layer normalization component (optional).
+    "norm": None,
+    "EncoderLayer": {
+        # the class name of the encoder layer
+        "__name__": "TransformerEncoderLayer",
+        # the module name of the encoder layer
+        "__module__": "torch.nn.",
+        # the number of expected features in the input (required).
+        "d_model": 8,
+        # the number of heads in the multi-head-attention models (required).
+        "nhead": 8,
+        # the dimension of the feedforward network model (default=2048).
+        "dim_feedforward": 2048,
+        # the dropout value (default=0.1).
+        "dropout": 0.1,
+        # the activation function of the intermediate layer.
+        "activation": "relu",
+        # the eps value in layer normalization components (default=1e-5).
+        "layer_norm_eps": 1e-5,
+        # If True, then the input and output tensors are provided as (batch, seq, feature).
+        "batch_first": False,
+        # if True, layer norm is done prior to attention and feedforward operations.
+        # Otherwise, it’s done after. Default: False (after).
+        "norm_first": False,
+    },
+}
 
 
 class Transformer(nn.Module):
@@ -32,47 +65,32 @@ class Transformer(nn.Module):
 
     __constants__ = ["norm"]
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "num_layers": 6,
-        # the layer normalization component (optional).
-        "norm": None,
-        "EncoderLayer": {
-            # the class name of the encoder layer
-            "__name__": "TransformerEncoderLayer",
-            # the module name of the encoder layer
-            "__module__": "torch.nn.",
-            # the number of expected features in the input (required).
-            "d_model": 8,
-            # the number of heads in the multi-head-attention models (required).
-            "nhead": 8,
-            # the dimension of the feedforward network model (default=2048).
-            "dim_feedforward": 2048,
-            # the dropout value (default=0.1).
-            "dropout": 0.1,
-            # the activation function of the intermediate layer.
-            "activation": "relu",
-            # the eps value in layer normalization components (default=1e-5).
-            "layer_norm_eps": 1e-5,
-            # If True, then the input and output tensors are provided as (batch, seq, feature).
-            "batch_first": False,
-            # if True, layer norm is done prior to attention and feedforward operations.
-            # Otherwise, it’s done after. Default: False (after).
-            "norm_first": False,
-        },
-    }
+    @property
+    def config(self) -> dict:
+        return {
+            "encoder_layer": self.encoder_layer,
+            "num_layers": self.num_layers,
+            "norm": self.norm,
+        }
 
-    def __init__(self, **cfg: Any) -> None:
+    def __init__(
+        self,
+        encoder_layer: nn.Module | ModelBluePrint,
+        *,
+        num_layers: int = 6,
+        norm: Optional[nn.Module] = None,
+    ) -> None:
         super().__init__()
-        config = deep_dict_update(self.HP, cfg)
+        if isinstance(encoder_layer, nn.Module):
+            layers = [deepcopy(encoder_layer) for _ in range(num_layers)]
+            self.encoder_layer = layers[0]
+        else:
+            layers = [initialize(encoder_layer) for _ in range(num_layers)]
+            self.encoder_layer = infer_blueprint(layers[0])
 
-        self.layers = nn.ModuleList(
-            initialize_from_dict(config["EncoderLayer"])
-            for _ in range(config["num_layers"])
-        )
-        self.num_layers = config["num_layers"]
-        self.norm = config["norm"]
+        self.layers = nn.ModuleList(layers)
+        self.num_layers = num_layers
+        self.norm = norm
 
     def forward(
         self,
