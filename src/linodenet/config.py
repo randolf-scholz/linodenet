@@ -457,29 +457,6 @@ def resolve_value(arg: ArgValue, /) -> Any:
             return arg
 
 
-def _initialize_object_blueprint[T](spec: Blueprint[T], /) -> T:
-    if not is_object_blueprint(spec):
-        raise TypeError("Expected an object blueprint dictionary.")
-
-    module_name = spec["__module_name__"]
-    class_name = spec["__class_name__"]
-
-    module = __import__(module_name, fromlist=[class_name])
-    cls = getattr(module, class_name)
-    args = [resolve_value(item) for item in spec["__args__"]]
-    kwargs = {key: resolve_value(item) for key, item in spec["__kwargs__"].items()}
-
-    return initialize_from_args(cls, args, kwargs)
-
-
-def _initialize_tensor_blueprint[T: Tensor](spec: Blueprint[T], /) -> T:
-    if not is_tensor_blueprint(spec):
-        raise TypeError("Expected a tensor blueprint dictionary.")
-    tensor = spec["__tensor__"]
-    _validate_tensor_blueprint(tensor, spec)
-    return cast("T", tensor)
-
-
 def _validate_object_blueprint[T](arg: T | type[T], spec: Blueprint, /) -> None:
     if not is_object_blueprint(spec):
         raise TypeError("Invalid model spec.")
@@ -545,18 +522,41 @@ def _infer_model_blueprint[T: nn.Module](
     return _infer_object_blueprint(arg, verify_init=verify_init)
 
 
-def infer_blueprint[T](arg: T, /) -> Blueprint[T]:
-    return BLUEPRINT_REGISTRY.infer(arg)
+def _initialize_type[T](cls: type[T], /) -> T:
+    try:
+        return cls()
+    except Exception as exc:
+        exc.add_note(f"Failed to initialize {cls.__qualname__} from config.")
+        raise
 
 
-def initialize[T](spec: Blueprint[T], /) -> T:
-    if not is_blueprint(spec):
-        raise TypeError("Expected a blueprint dictionary.")
-    return BLUEPRINT_REGISTRY.initialize(spec)
+def _initialize_object_blueprint[T](spec: Blueprint[T], /) -> T:
+    if not is_object_blueprint(spec):
+        raise TypeError("Expected an object blueprint dictionary.")
+
+    module_name = spec["__module_name__"]
+    class_name = spec["__class_name__"]
+
+    module = __import__(module_name, fromlist=[class_name])
+    cls = getattr(module, class_name)
+    args = [resolve_value(item) for item in spec["__args__"]]
+    kwargs = {key: resolve_value(item) for key, item in spec["__kwargs__"].items()}
+
+    return initialize_from_args(cls, args, kwargs)
 
 
-def validate_blueprint[T](arg: T, spec: Blueprint[T], /) -> None:
-    BLUEPRINT_REGISTRY.validate(arg, spec)
+def _initialize_model_blueprint[T: nn.Module](spec: Blueprint[T], /) -> T:
+    obj: T = _initialize_object_blueprint(spec)
+    assert isinstance(obj, nn.Module)
+    return obj
+
+
+def _initialize_tensor_blueprint[T: Tensor](spec: Blueprint[T], /) -> T:
+    if not is_tensor_blueprint(spec):
+        raise TypeError("Expected a tensor blueprint dictionary.")
+    tensor = spec["__tensor__"]
+    _validate_tensor_blueprint(tensor, spec)
+    return cast("T", tensor)
 
 
 type BlueprintPredicate[T] = Callable[[Any], TypeGuard[Blueprint[T]]]
@@ -570,9 +570,9 @@ class BlueprintRegistry:
 
     def __init__(self) -> None:
         self._initializers: list[tuple[BlueprintPredicate, BlueprintInitializer]] = []
-        self.register(is_object_blueprint, _initialize_object_blueprint)
-        self.register(is_model_blueprint, _initialize_object_blueprint)
-        self.register(is_tensor_blueprint, _initialize_tensor_blueprint)
+        self.register_initializer(is_object_blueprint, _initialize_object_blueprint)
+        self.register_initializer(is_model_blueprint, _initialize_model_blueprint)
+        self.register_initializer(is_tensor_blueprint, _initialize_tensor_blueprint)
 
         self._validators: list[tuple[BlueprintPredicate, BlueprintValidator]] = []
         self.register_validator(is_object_blueprint, _validate_object_blueprint)
@@ -582,7 +582,7 @@ class BlueprintRegistry:
         self.register_maker(nn.Module, _infer_model_blueprint)
         self.register_maker(Tensor, _infer_tensor_blueprint)
 
-    def register[T](
+    def register_initializer[T](
         self,
         predicate: BlueprintPredicate[T],
         initializer: BlueprintInitializer[T],
@@ -677,3 +677,26 @@ def blueprint_to_json(arg: Blueprint, /) -> JSON:
     parsed = _value_to_json(cast("dict", arg))
     assert isinstance(parsed, dict)
     return parsed
+
+
+def infer_blueprint[T](arg: T, /) -> Blueprint[T]:
+    return BLUEPRINT_REGISTRY.infer(arg)
+
+
+def initialize[T](spec: T | type[T] | Blueprint[T], /) -> T:
+    r"""Initialize an object from a blueprint or return the object if it's not a blueprint.
+
+    Args:
+        spec: The blueprint to initialize from, or the object to return if it's not a blueprint.
+    """
+    if isinstance(spec, type):
+        return _initialize_type(cast("type[T]", spec))
+    if not isinstance(spec, dict):
+        return spec
+    if not is_blueprint(spec):
+        raise TypeError("Expected a blueprint dictionary.")
+    return BLUEPRINT_REGISTRY.initialize(spec)
+
+
+def validate_blueprint[T](arg: T, spec: Blueprint[T], /) -> None:
+    BLUEPRINT_REGISTRY.validate(arg, spec)
