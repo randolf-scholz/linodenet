@@ -51,14 +51,6 @@ class ConcatProjection(SurjectionBase):
         - `linodenet.embeddings.ConcatEmbedding`
     """
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": int,
-        "output_size": int,
-    }
-    r"""Dictionary of hyperparameters."""
-
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
@@ -66,6 +58,13 @@ class ConcatProjection(SurjectionBase):
     r"""CONST: The dimensionality of the outputs."""
     padding_size: Final[int]
     r"""CONST: The size of the padding."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "output_size": self.output_size,
+        }
 
     def __init__(
         self,

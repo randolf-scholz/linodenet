@@ -67,14 +67,6 @@ class ConcatEmbedding(EmbeddingBase):
         - `linodenet.projections.ConcatProjection`
     """
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": int,
-        "output_size": int,
-    }
-    r"""Dictionary of hyperparameters."""
-
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
@@ -90,6 +82,13 @@ class ConcatEmbedding(EmbeddingBase):
     # Parameters
     padding: Tensor
     r"""PARAM: The padding vector."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "output_size": self.output_size,
+        }
 
     def __init__(
         self,
@@ -129,14 +128,6 @@ class LinearEmbedding(EmbeddingBase):
         In the former case, the map is right-invertible, in the latter left-invertible.
     """
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": int,
-        "output_size": int,
-    }
-    r"""Dictionary of hyperparameters."""
-
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of the inputs."""
@@ -150,6 +141,14 @@ class LinearEmbedding(EmbeddingBase):
     r"""PARAM: The weight matriz."""
     bias: Tensor
     r"""PARAM: The bias vector."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "output_size": self.output_size,
+            "bias": self.with_bias,
+        }
 
     def __init__(
         self,

@@ -27,15 +27,14 @@ class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):
     Note: This class takes care of tricky multiple inheritance issues with nn.Module.
     """
 
-    HP: dict = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "layers": [],
-    }
-    r"""The HyperparameterDict of this class."""
+    @property
+    def config(self) -> dict:
+        return {
+            "modules": list(self),
+            "input_size": self.input_size,
+        }
 
-    def __init__(self, modules: Iterable[C] = (), /, *, input_size: int) -> None:
+    def __init__(self, modules: Iterable[C] = (), *, input_size: int) -> None:
         # ⚠️ multiple inheritance ⚠️
         # due to how nn.Module.__init__ works, it should only be ever called once
         # because it will overwrite internal state otherwise.
@@ -51,7 +50,7 @@ class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):
 class FilterSequence[C: CellBase](FilterList[C]):
     r"""Apply multiple Filters sequentially."""
 
-    def __init__(self, modules: Iterable[C] = (), /) -> None:
+    def __init__(self, modules: Iterable[C] = ()) -> None:
         filters = list(modules)
 
         if not filters:
@@ -85,13 +84,6 @@ class FilterResNet[C: CellBase](FilterSequence[C]):
     .. math:: yₖ₊₁ = yₖ + Fₖ(y_obs, yₖ)
     """
 
-    HP: dict = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "layers": [],
-    }
-    r"""The HyperparameterDict of this class."""
-
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y_obs: Tensor, y: Tensor) -> Tensor:
         for cell in self:
@@ -105,15 +97,11 @@ class ReZeroFilter[C: CellBase](FilterSequence[C]):
     .. math:: xₖ₊₁ = xₖ + εₖ⋅Fₖ(y, xₖ)
     """
 
-    HP: dict = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "learnable": True,
-        "layers": [],
-    }
-    r"""The HyperparameterDict of this class."""
+    @property
+    def config(self) -> dict:
+        return {"layers": list(self)}
 
-    def __init__(self, layers: Iterable[C], /) -> None:
+    def __init__(self, layers: Iterable[C]) -> None:
         r"""Initialize from modules."""
         # TODO: Use intersection Type Filter & nn.Module
         module_list: list[C] = list(layers)
@@ -175,16 +163,14 @@ class PseudoKalmanCell(CellBase):
     ZERO: Tensor
     r"""BUFFER: A constant value of zero."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "hidden_size": None,
-        "alpha": "last-value",
-        "alpha_learnable": False,
-        "projection": "Symmetric",
-    }
-    r"""The HyperparameterDict of this class."""
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "hidden_size": self.hidden_size,
+            "alpha": float(self.alpha),
+            "alpha_learnable": self.alpha.requires_grad,
+        }
 
     def __init__(
         self,

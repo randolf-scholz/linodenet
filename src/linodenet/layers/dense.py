@@ -9,7 +9,6 @@ from typing import Final, Optional
 from torch import Tensor, nn
 
 from linodenet.activations import Activation, get_activation
-from linodenet.constants import UNDEFINED
 from linodenet.signatures import signature
 
 
@@ -29,19 +28,14 @@ class ReverseDense(nn.Module):
     bias: Optional[Tensor]
     r"""The bias vector."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": UNDEFINED,
-        "output_size": UNDEFINED,
-        "bias": True,
-        "activation": {
-            "__name__": "ReLU",
-            "__module__": "torch.nn",
-            "inplace": False,
-        },
-    }
-    r"""The hyperparameter dictionary"""
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "output_size": self.output_size,
+            "bias": self.bias is not None,
+            "activation": self.activation,
+        }
 
     def __init__(
         self,

@@ -27,12 +27,6 @@ class ReZero(nn.Module):
     Simply multiplies the inputs by a scalar initialized to zero.
     """
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-    }
-    r"""The hyperparameter dictionary"""
-
     # CONSTANTS
     learnable: Final[bool]
     r"""CONST: Whether the scalar is learnable."""
@@ -40,6 +34,14 @@ class ReZero(nn.Module):
     # PARAMETERS
     scalar: Tensor
     r"""The scalar to multiply the inputs by."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "module": self.module,
+            "scalar": self.scalar,
+            "learnable": self.learnable,
+        }
 
     def __init__(
         self,
@@ -65,11 +67,9 @@ class ReZero(nn.Module):
 class ReZeroResNet(nn.ModuleList):
     r"""A Residual Network with ReZero scalars."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-    }
-    r"""The hyperparameter dictionary"""
+    @property
+    def config(self) -> dict:
+        return {"modules": list(self)}
 
     def __init__(self, modules: Iterable[nn.Module]) -> None:
         module_list = list(modules)

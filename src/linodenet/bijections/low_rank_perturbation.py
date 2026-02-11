@@ -34,12 +34,6 @@ class iLowRankLayer(nn.Module):
         .. [2] https://en.wikipedia.org/wiki/Matrix_determinant_lemma
     """
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-    }
-    r"""The hyperparameter dictionary"""
-
     # CONSTANTS
     rank: Final[int]
     r"""CONST: The rank of the low rank matrix."""
@@ -50,11 +44,19 @@ class iLowRankLayer(nn.Module):
     V: Tensor
     r"""PARAM: $n×k$ tensor"""
 
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "rank": self.rank,
+        }
+
     def __init__(self, input_size: int, *, rank: int) -> None:
         super().__init__()
+        self.input_size = input_size
+        self.rank = rank
         self.U = low_rank(input_size)
         self.V = low_rank(input_size)
-        self.rank = rank
 
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:

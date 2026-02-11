@@ -14,16 +14,16 @@ from torch import nn
 class MLP(nn.Sequential):
     r"""A standard Multi-Layer Perceptron."""
 
-    HP: dict = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "inputs_size": None,
-        "output_size": None,
-        "hidden_size": None,
-        "num_layers": 2,
-        "dropout": 0.0,
-    }
-    r"""Dictionary of hyperparameters."""
+    @property
+    def config(self) -> dict:
+        r"""Configuration dictionary."""
+        return {
+            "inputs_size": self.inputs_size,
+            "output_size": self.output_size,
+            "hidden_size": self.hidden_size,
+            "num_blocks": self.num_blocks,
+            "dropout": self.dropout,
+        }
 
     def __init__(
         self,
@@ -31,13 +31,14 @@ class MLP(nn.Sequential):
         output_size: int,
         *,
         hidden_size: Optional[int] = None,
-        num_layers: int = 2,
+        num_blocks: int = 2,
         dropout: float = 0.2,
     ) -> None:
         self.dropout = dropout
         self.hidden_size = inputs_size if hidden_size is None else hidden_size
         self.inputs_size = inputs_size
         self.output_size = output_size
+        self.num_blocks = num_blocks
 
         layers: list[nn.Module] = []
 
@@ -48,7 +49,7 @@ class MLP(nn.Sequential):
         layers.append(layer)
 
         # hidden layers
-        for _ in range(num_layers - 1):
+        for _ in range(num_blocks - 1):
             # initialize the layers
             act = nn.ReLU()
             drop = nn.Dropout(self.dropout)
