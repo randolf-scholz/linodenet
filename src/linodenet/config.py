@@ -212,7 +212,7 @@ class ObjectBluePrint[T](TypedDict):
     # **DunderKey: object (reserved for future use)
 
 
-class ModelBluePrint[T: nn.Module](TypedDict):
+class ModelBluePrint[T: nn.Module = nn.Module](TypedDict):
     r"""A blueprint that allows initializing a ``nn.Module``."""
 
     __module_name__: ReadOnly[str]
