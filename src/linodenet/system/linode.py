@@ -7,17 +7,16 @@ __all__ = [
 ]
 
 from collections.abc import Callable
-from typing import Any, Final, Optional
+from typing import Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.containers import initialize_from_dict
+from linodenet.config import ModelBlueprint, initialize
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection
 from linodenet.signatures import signature
 from linodenet.types import SelfMap
-from linodenet.utils import deep_dict_update
 
 
 class LinODECell(nn.Module):
@@ -29,16 +28,6 @@ class LinODECell(nn.Module):
     """
 
     # TODO: Use proper parametrization
-
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "input_size": None,
-        "kernel_initialization": None,
-        "kernel_parametrization": None,
-        "scalar": 0.0,
-        "scalar_learnable": True,
-    }
 
     # Constants
     input_size: Final[int]
@@ -57,6 +46,16 @@ class LinODECell(nn.Module):
     kernel: Tensor
     r"""BUFFER: The system matrix of the linear ODE component."""
 
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "kernel_initialization": self.kernel_initialization_spec,
+            "kernel_parametrization": self.kernel_parametrization_spec,
+            "scalar": self.scalar_init,
+            "scalar_learnable": self.scalar_learnable,
+        }
+
     def __init__(
         self,
         input_size: int,
@@ -68,22 +67,9 @@ class LinODECell(nn.Module):
     ) -> None:
         r"""Initialize the Linear ODE Cell."""
         super().__init__()
-        config = deep_dict_update(
-            self.HP,
-            {
-                "input_size": input_size,
-                "kernel_initialization": kernel_initialization,
-                "kernel_parametrization": kernel_parametrization,
-                "scalar": scalar,
-                "scalar_learnable": scalar_learnable,
-            },
-        )
-
-        kernel_initialization = config["kernel_initialization"]
-        kernel_parametrization = config["kernel_parametrization"]
-        scalar = config["scalar"]
-        scalar_learnable = config["scalar_learnable"]
-        del config
+        self.kernel_initialization_spec = kernel_initialization
+        self.kernel_parametrization_spec = kernel_parametrization
+        self.scalar_init = scalar
 
         def kernel_initialization_dispatch() -> Callable[[], Tensor]:
             r"""Dispatch the kernel initialization."""
@@ -174,15 +160,6 @@ class LinODECell(nn.Module):
 class LinODE(nn.Module):
     r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-        "cell": LinODECell.HP,
-        "kernel_initialization": None,
-        "kernel_projection": None,
-    }
-    r"""Dictionary of hyperparameters."""
-
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of inputs."""
@@ -203,15 +180,38 @@ class LinODE(nn.Module):
     kernel_projection: Projection
     r"""FUNC: Regularization function for the kernel."""
 
-    def __init__(self, input_size: int, **cfg: Any) -> None:
-        super().__init__()
-        config = deep_dict_update(self.HP, cfg)
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "cell": self.cell,
+        }
 
-        config["cell"]["input_size"] = input_size
+    _DEFAULT_CELL_BLUEPRINT = {
+        "__name__": LinODECell.__name__,
+        "__module__": LinODECell.__module__,
+        "input_size": None,
+        "kernel_initialization": None,
+        "kernel_parametrization": None,
+        "scalar": 0.0,
+        "scalar_learnable": True,
+    }
+
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        cell: nn.Module | ModelBlueprint = _DEFAULT_CELL_BLUEPRINT,
+    ) -> None:
+        super().__init__()
+        if isinstance(cell, nn.Module):
+            self.cell = cell
+        else:
+            cell["input_size"] = input_size
+            self.cell = initialize(cell)
 
         self.input_size = input_size
         self.output_size = input_size
-        self.cell: nn.Module = initialize_from_dict(config["cell"])
 
         # Buffers
         kernel = getattr(self.cell, "kernel", None)
