@@ -36,8 +36,6 @@ class MissingValueCell(CellBase):
     .. math:: u = concat([impute(m, y, x)，m])
     """
 
-    HP: dict[str, Any] = {}  # FIXME: Remove
-
     # CONSTANTS
     concat_mask: Final[bool]
     r"""CONST: Whether to concatenate the mask to the input or not."""
@@ -48,6 +46,17 @@ class MissingValueCell(CellBase):
     r"""BUFFER: The mask tensor (true if observed)."""
     imputed: Tensor
     r"""BUFFER: The most recent imputed value."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "hidden_size": self.hidden_size,
+            "cell_type": self.cell_type,
+            "cell_kwargs": dict(self.cell_kwargs),
+            "concat_mask": self.concat_mask,
+            "imputation": self.imputation,
+        }
 
     def __init__(
         self,
@@ -60,6 +69,9 @@ class MissingValueCell(CellBase):
         imputation: str | float | Tensor | nn.Module = "zero",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
+        self.cell_type = cell_type
+        self.cell_kwargs = dict(cell_kwargs)
+        self.imputation = imputation
         self.concat_mask = bool(concat_mask)
 
         # initialize filter

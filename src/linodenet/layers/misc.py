@@ -14,13 +14,14 @@ from linodenet.signatures import signature
 class Constant(nn.Module):
     r"""Constant function."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-    }
-
     value: Tensor
     r"""BUFFER: The constant value."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "value": self.value,
+        }
 
     def __init__(self, value: float | Tensor) -> None:
         super().__init__()
@@ -32,13 +33,11 @@ class Constant(nn.Module):
 
 
 class Identity(nn.Module):
-    r"""Identity with HP attribute."""
+    r"""Identity layer."""
 
-    HP = {
-        "__name__": __qualname__,
-        "__module__": __name__,
-    }
-    r"""Hyperparameters of the component."""
+    @property
+    def config(self) -> dict:
+        return {}
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
