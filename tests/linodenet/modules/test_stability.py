@@ -23,11 +23,15 @@ def test_model_stability() -> None:
         "input_size": D,
         "hidden_size": L,
         "embedding_type": "concat",
-        "Filter": linodenet.filters.deprecated.FilterList.HP,
-        "System": system.LinODECell.HP | {"kernel_initialization": "skew-symmetric"},
-        "Encoder": ResNet.HP,
-        "Decoder": ResNet.HP,
-        "Embedding": embeddings.ConcatEmbedding.HP,
+        "Filter": linodenet.filters.deprecated.FilterList,
+        "System": {
+            "__module__": system.LinODECell.__module__,
+            "__name__": system.LinODECell.__qualname__,
+            "kernel_initialization": "skew-symmetric",
+        },
+        "Encoder": ResNet,
+        "Decoder": ResNet,
+        "Embedding": embeddings.ConcatEmbedding,
     }
     print(MODEL_CONFIG)
     T = torch.randn(N)
