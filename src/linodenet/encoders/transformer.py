@@ -12,11 +12,7 @@ from typing import Optional
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder
 
-from blueprint import (
-    ModelBlueprint,
-    infer_blueprint,
-    initialize,
-)
+from blueprint import Blueprint, initialize
 
 _DEFAULT_TRANSFORMER_CONFIG = {
     "num_layers": 6,
@@ -75,7 +71,7 @@ class Transformer(nn.Module):
 
     def __init__(
         self,
-        encoder_layer: nn.Module | ModelBlueprint,
+        encoder_layer: nn.Module | Blueprint[nn.Module],
         *,
         num_layers: int = 6,
         norm: Optional[nn.Module] = None,
@@ -83,11 +79,10 @@ class Transformer(nn.Module):
         super().__init__()
         if isinstance(encoder_layer, nn.Module):
             layers = [deepcopy(encoder_layer) for _ in range(num_layers)]
-            self.encoder_layer = layers[0]
         else:
             layers = [initialize(encoder_layer) for _ in range(num_layers)]
-            self.encoder_layer = infer_blueprint(layers[0])
 
+        self.encoder_layer = layers[0]
         self.layers = nn.ModuleList(layers)
         self.num_layers = num_layers
         self.norm = norm

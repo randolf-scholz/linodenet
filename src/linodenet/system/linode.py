@@ -12,7 +12,7 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from blueprint import ModelBlueprint, initialize
+from blueprint import Blueprint, initialize
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.projections import FUNCTIONAL_PROJECTIONS, Projection
 from linodenet.signatures import signature
@@ -201,7 +201,7 @@ class LinODE(nn.Module):
         self,
         input_size: int,
         *,
-        cell: nn.Module | ModelBlueprint = _DEFAULT_CELL_BLUEPRINT,
+        cell: nn.Module | Blueprint[nn.Module] = _DEFAULT_CELL_BLUEPRINT,
     ) -> None:
         super().__init__()
         if isinstance(cell, nn.Module):

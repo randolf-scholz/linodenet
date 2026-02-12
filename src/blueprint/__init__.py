@@ -7,6 +7,7 @@ __all__ = [
     "torch",
     # types
     "JSON",
+    "Makes",
     # constants
     "BLUEPRINT_REGISTRY",
     "INFER_ARGS_REGISTRY",
@@ -51,6 +52,7 @@ from blueprint.core import (
     Blueprint,
     BlueprintRegistry,
     InferArgsRegistry,
+    Makes,
     ObjectBlueprint,
     blueprint_to_json,
     infer_args,

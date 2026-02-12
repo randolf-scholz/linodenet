@@ -8,7 +8,7 @@ from typing import NamedTuple, is_protocol
 import pytest
 
 import linodenet as lib
-from linodenet.activations import ACTIVATIONS, Activation
+from linodenet.activations import ALL_ACTIVATIONS, Activation
 from linodenet.bijections import BIJECTIONS, Bijection, BijectionBase
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
 from linodenet.embeddings import EMBEDDINGS, Embedding, EmbeddingBase
@@ -44,7 +44,7 @@ class Case(NamedTuple):
 
 
 CASES: dict[str, Case] = {
-    "activations"         : Case(lib.activations    , Activation     , None               , ACTIVATIONS               ),
+    "activations"         : Case(lib.activations, Activation, None, ALL_ACTIVATIONS),
     "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
     "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
     "embeddings"          : Case(lib.embeddings     , Embedding      , EmbeddingBase      , EMBEDDINGS                ),

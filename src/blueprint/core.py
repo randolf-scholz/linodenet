@@ -5,6 +5,8 @@ __all__ = [
     # Constants
     "BLUEPRINT_REGISTRY",
     "INFER_ARGS_REGISTRY",
+    # types
+    "Makes",
     # Blueprint types
     "Blueprint",
     "HydraBlueprint",
@@ -544,11 +546,12 @@ def initialize[T](spec: T | type[T] | Blueprint[T], /) -> T:
     """
     if isinstance(spec, type):
         return initialize_type(cast("type[T]", spec))
-    if not isinstance(spec, dict):
-        return spec
-    if not is_blueprint(spec):
-        raise TypeError("Expected a blueprint dictionary.")
-    return BLUEPRINT_REGISTRY.initialize(spec)
+    if isinstance(spec, dict):
+        if not is_blueprint(spec):
+            raise TypeError("Expected a blueprint dictionary.")
+        return BLUEPRINT_REGISTRY.initialize(spec)
+    # fall through
+    return spec
 
 
 def validate_blueprint[T](arg: T, spec: Blueprint[T], /) -> None:

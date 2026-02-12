@@ -52,6 +52,7 @@ from linodenet.filters.base import (
     CellBase,
     Filter,
     FilterBase,
+    get_filter,
 )
 from linodenet.filters.containers import CellList, CellSequence, ResidualCellSequence
 from linodenet.filters.deprecated import PseudoKalmanCell, ReZeroFilter
@@ -85,43 +86,3 @@ FILTERS: dict[str, type[Filter]] = {
     # "ResidualFilterBlock" : ResidualFilterBlock,
 }  # fmt: skip
 r"""Dictionary of all available filters."""
-
-
-def get_filter(kind: object = None, /, **cfg: object) -> Filter:
-    r"""Initialize from a configuration."""
-    match kind:
-        # if an instance, return as-is
-        case Filter() as instance:
-            if cfg:
-                raise ValueError(f"Cannot pass arguments to an instance: {instance!r}")
-            return instance
-        # if a name, look up in the dictionary
-        case str(name):
-            try:
-                obj = FILTERS[name]
-            except KeyError as exc:
-                exc.add_note(f"Filter {name!r} not found in {list(FILTERS)=}")
-                raise
-            return get_filter(obj, **cfg)
-        # if a class, try to instantiate it with the given configuration
-        case type() as cls:
-            try:
-                return cls(**cfg)
-            except TypeError as exc:
-                exc.add_note(f"Failed to instantiate {cls} with arguments {cfg!r}")
-                raise
-        # if a config, extract the name and instantiate
-        case None:
-            if "__module__" in cfg:
-                from blueprint import initialize_from_dict
-
-                result = initialize_from_dict(cfg)
-                assert isinstance(result, Filter)
-                return result
-            try:
-                return get_filter(cfg.pop("__name__"), **cfg)
-            except KeyError as exc:
-                exc.add_note(f"Expected {cfg=} to contain '__name__'")
-                raise
-        case _:
-            raise TypeError(f"Invalid argument: {kind!r}")

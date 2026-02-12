@@ -49,13 +49,15 @@ __all__ = [
     "FilterBase",
     # functions
     "is_filter",
+    "get_filter",
 ]
 
 from abc import abstractmethod
-from typing import Final, Protocol, TypeIs, runtime_checkable
+from typing import Final, Protocol, TypeIs, overload, runtime_checkable
 
 from torch import Tensor, nn
 
+from blueprint import Makes, initialize
 from linodenet.signatures import signature
 
 
@@ -202,3 +204,54 @@ def is_filter(arg: object, /) -> TypeIs[Filter]:
         and isinstance(hidden_size, int)
         and input_size == hidden_size
     )
+
+
+@overload
+def get_filter[T: Filter](arg: Makes[T], /, **cfg: object) -> T: ...
+@overload
+def get_filter(arg: str | dict, /, **cfg: object) -> Filter: ...
+def get_filter(arg: object, /, **cfg: object) -> Filter:
+    r"""Initialize from a configuration.
+
+    Args:
+        arg: The configuration to initialize from. Can be one of the following:
+            - A string name of a filter in the `FILTERS` dictionary.
+            - A class that can be instantiated with the given configuration.
+            - A dictionary (Blueprint) with instructions for initializing a filter.
+            - An instance of a filter.
+        **cfg: Additional keyword arguments to pass to the filter when initializing.
+    """
+    match arg:
+        # if a name, look up in the dictionary
+        case str(name):
+            from linodenet.filters import FILTERS  # noqa: PLC0415
+
+            try:
+                obj = FILTERS[name]
+            except KeyError as exc:
+                exc.add_note(f"Filter {name!r} not found in {list(FILTERS)=}")
+                raise
+            return get_filter(obj, **cfg)
+
+        # if a class, try to instantiate it with the given configuration
+        case type() as cls:
+            try:
+                return cls(**cfg)
+            except TypeError as exc:
+                exc.add_note(f"Failed to instantiate {cls} with arguments {cfg!r}")
+                raise
+
+        # if a config, extract the name and instantiate
+        case dict(spec):
+            result = initialize(spec)
+            assert isinstance(result, Filter)
+            return result
+
+        # if an instance, return as-is
+        case Filter() as instance:
+            if cfg:
+                raise ValueError(f"Cannot pass arguments to an instance: {instance!r}")
+            return instance
+
+        case _:
+            raise TypeError(f"Invalid argument: {arg!r}")
