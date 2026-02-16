@@ -32,6 +32,7 @@ dependencies = [
     "scipy>=1.17.0",
     "torch>=2.10.0",
     "torchdiffeq>=0.2.5",
+    "typing_extensions>=4.15.0",
 ]
 # endregion project configuration ------------------------------------------------------
 
@@ -89,7 +90,6 @@ tests = [
     "pytest-xdist>=3.8.0",
     "pytest>=9.0.2",
     "tqdm>=4.67.3",
-    "typing-extensions>=4.15.0",
 ]
 typing = [
     "mypy>=1.19.1",
@@ -157,6 +157,8 @@ ignore = [
     "T20",      # flake8-print
     "TD",       # todo
     # partially ignored:
+    # blind-except
+    "BLE001",
     # pydocstyle
     "D102",     # Missing docstring in public method
     "D103",     # Missing docstring in public function
