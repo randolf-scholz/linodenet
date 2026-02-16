@@ -12,7 +12,7 @@ __all__ = [
     "initialize_tensor",
     "is_model_blueprint",
     "is_tensor_blueprint",
-    "tensor_to_json",
+    "_small_tensor_to_json",
     "validate_tensor_blueprint",
 ]
 
@@ -24,6 +24,7 @@ from torch.export import ExportedProgram
 from blueprint.core import (
     BLUEPRINT_REGISTRY,
     INFER_ARGS_REGISTRY,
+    JSON,
     Args,
     ArgValue,
     Blueprint,
@@ -31,6 +32,7 @@ from blueprint.core import (
     JSON_Value,
     _infer_object_blueprint,
     _initialize_object,
+    _naive_serializer,
     infer_args,
     is_blueprint,
     is_object_blueprint,
@@ -84,7 +86,45 @@ def _initialize_model_blueprint[T: nn.Module](spec: Blueprint[T], /) -> T:
     return obj
 
 
+def _small_tensor_to_json(value: Tensor, /) -> JSON_Value:
+    assert isinstance(value, Tensor)
+    if value.numel() == 1:
+        return value.item()
+    if value.ndim <= len(MAX_SHAPE) and value.shape <= MAX_SHAPE:
+        return value.tolist()
+    raise NotImplementedError(f"Tensor shape {tuple(value.shape)!r} exceeds MAX_SHAPE.")
+
+
+def _model_blueprint_to_json[T: nn.Module](spec: Blueprint[T], /) -> JSON:
+    # As an extra step, we convert small tensors in the args/kwargs to lists,
+    # so that they do not need to be stored as separate objects.
+    if not is_model_blueprint(spec):
+        raise TypeError("Expected a model blueprint dictionary.")
+
+    def _map_small_tensors(arg: ArgValue) -> JSON_Value:
+        match arg:
+            case Tensor():
+                return _small_tensor_to_json(arg)
+            case list() | tuple():
+                return [_map_small_tensors(a) for a in arg]
+            case dict(mapping) if not is_blueprint(mapping):
+                return {k: _map_small_tensors(v) for k, v in mapping.items()}
+            case other:
+                return _naive_serializer(other)
+
+    return {
+        "__args__": _map_small_tensors(spec["__args__"]),
+        "__kwargs__": _map_small_tensors(spec["__kwargs__"]),
+        **{
+            key: _naive_serializer(value)
+            for key, value in spec.items()
+            if key not in ("__args__", "__kwargs__")
+        },
+    }
+
+
 BLUEPRINT_REGISTRY.register_initializer(is_model_blueprint, _initialize_model_blueprint)
+BLUEPRINT_REGISTRY.register_serializer(is_model_blueprint, _model_blueprint_to_json)
 BLUEPRINT_REGISTRY.register_maker(nn.Module, _infer_model_blueprint)
 
 
@@ -165,16 +205,6 @@ def validate_tensor_blueprint[T: Tensor](tensor: T, spec: Blueprint[T], /) -> No
         raise ValueError(
             f"Tensor shape mismatch: expected {expected_shape}, got {list(tensor.shape)}"
         )
-
-
-def tensor_to_json(spec: TensorBlueprint, /) -> JSON_Value:
-    value = spec["__tensor__"]
-    assert isinstance(value, Tensor)
-    if value.numel() == 1:
-        return value.item()
-    if value.ndim <= len(MAX_SHAPE) and value.shape <= MAX_SHAPE:
-        return value.tolist()
-    raise NotImplementedError(f"Tensor shape {tuple(value.shape)!r} exceeds MAX_SHAPE.")
 
 
 # Register nn.Module as a base class for blueprints

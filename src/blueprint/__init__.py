@@ -11,16 +11,17 @@ __all__ = [
     # constants
     "BLUEPRINT_REGISTRY",
     "INFER_ARGS_REGISTRY",
+    # Classes
+    "BlueprintRegistry",
+    "InferArgsRegistry",
     # blueprint types
     "Blueprint",
-    "InferArgsRegistry",
-    "ObjectBlueprint",
     "ModelBlueprint",
+    "ObjectBlueprint",
     "TensorBlueprint",
-    "BlueprintRegistry",
     "is_blueprint",
     "is_model_blueprint",
-    "blueprint_to_json",
+    "is_tensor_blueprint",
     # protocols
     "SupportsConfig",
     "has_config",
@@ -31,9 +32,9 @@ __all__ = [
     # functions
     "infer_args",
     "initialize",
-    "_initialize_from_args",
     "infer_blueprint",
     "validate_blueprint",
+    "blueprint_to_json",
 ]
 
 from blueprint.config import (
@@ -53,7 +54,6 @@ from blueprint.core import (
     InferArgsRegistry,
     Makes,
     ObjectBlueprint,
-    _initialize_from_args,
     blueprint_to_json,
     infer_args,
     infer_blueprint,
@@ -61,4 +61,9 @@ from blueprint.core import (
     is_blueprint,
     validate_blueprint,
 )
-from blueprint.torch import ModelBlueprint, TensorBlueprint, is_model_blueprint
+from blueprint.torch import (
+    ModelBlueprint,
+    TensorBlueprint,
+    is_model_blueprint,
+    is_tensor_blueprint,
+)

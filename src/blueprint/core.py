@@ -39,6 +39,7 @@ from typing import (
     TypeGuard,
     TypeIs,
     cast,
+    overload,
 )
 
 from typing_extensions import TypedDict  # using extra_items (3.15)
@@ -410,19 +411,82 @@ def _initialize_object[T](spec: Blueprint[T], /) -> T:
     return _initialize_from_args(cls, args, kwargs)
 
 
+@overload
+def _is_json(value: Blueprint, /) -> TypeGuard[JSON]: ...
+@overload
+def _is_json(value: object, /) -> TypeGuard[JSON_Value]: ...
+def _is_json(value: object, /) -> TypeGuard[JSON_Value]:
+    match value:
+        case list():
+            return all(_is_json(item) for item in value)
+        case dict(mapping):
+            return all(
+                isinstance(key, str) and _is_json(item) for key, item in mapping.items()
+            )
+        case None | bool() | int() | float() | str():
+            return True
+        case _:
+            return False
+
+
+@overload
+def _naive_serializer(value: Blueprint, /) -> JSON: ...
+@overload
+def _naive_serializer(value: ArgValue, /) -> JSON_Value: ...
+def _naive_serializer(value: ArgValue, /) -> JSON_Value:
+    match value:
+        case None:
+            return None
+        case bool():
+            return bool(value)
+        case int():
+            return int(value)
+        case float():
+            return float(value)
+        case str():
+            return str(value)
+        case list():
+            return [_naive_serializer(item) for item in value]
+        case tuple():
+            return [_naive_serializer(item) for item in value]
+        case dict():
+            return {str(key): _naive_serializer(item) for key, item in value.items()}
+        case other:
+            try:
+                blueprint = infer_blueprint(other)
+            except Exception as exc:
+                exc.add_note(
+                    f"Failed to infer blueprint for value of type {type(other)}."
+                )
+                raise
+            return blueprint_to_json(blueprint)
+
+
 type BlueprintPredicate[T] = Callable[[Any], TypeGuard[Blueprint[T]]]
 type BlueprintMaker[T] = Callable[[T], Blueprint[T]]
 type BlueprintValidator[T] = Callable[[T, Blueprint[T]], None]
 type BlueprintInitializer[T] = Callable[[Blueprint[T]], T]
+type BlueprintSerializer[T] = Callable[[Blueprint[T]], JSON]
 
 
 class BlueprintRegistry:
     r"""Registry for blueprint initializers, validators and makers."""
 
     def __init__(self) -> None:
+        self._blueprints: dict[type[Blueprint], object] = {}
+
         self._initializers: list[tuple[BlueprintPredicate, BlueprintInitializer]] = []
         self._validators: list[tuple[BlueprintPredicate, BlueprintValidator]] = []
+        self._serializers: dict[BlueprintPredicate, BlueprintSerializer] = {}
+
         self._makers: dict[type, BlueprintMaker] = {}
+
+    def register_blueprint[T](self, cls: type[Blueprint[T]], /) -> None:
+        if cls in self._blueprints:
+            raise ValueError(
+                f"Blueprint class {cls.__qualname__} is already registered."
+            )
+        self._blueprints[cls] = None
 
     def register_initializer[T](
         self,
@@ -449,6 +513,13 @@ class BlueprintRegistry:
             raise ValueError(f"Model class {cls.__qualname__} is already registered.")
         self._makers[cls] = maker
 
+    def register_serializer[T](
+        self, predicate: BlueprintPredicate[T], serializer: BlueprintSerializer[T], /
+    ) -> None:
+        if any(existing is predicate for existing, _ in self._serializers.items()):
+            raise ValueError("Blueprint predicate is already registered.")
+        self._serializers[predicate] = serializer
+
     def _select_initializer[T = Any](
         self, spec: Blueprint[T], /
     ) -> BlueprintInitializer[T]:
@@ -464,6 +535,12 @@ class BlueprintRegistry:
             if predicate(spec):
                 return validator
         raise TypeError("Unsupported blueprint type.")
+
+    def _select_serializer[T](self, spec: Blueprint[T], /) -> BlueprintSerializer[T]:
+        for predicate, serializer in self._serializers.items():
+            if predicate(spec):
+                return serializer
+        return _naive_serializer
 
     def _select_maker[T](self, arg: T, /) -> BlueprintMaker[T]:
         for cls, maker in self._makers.items():
@@ -486,51 +563,30 @@ class BlueprintRegistry:
         maker = self._select_maker(arg)
         return maker(arg)
 
+    def serialize[T](self, spec: Blueprint[T], /) -> JSON:
+        if _is_json(spec):
+            return spec
+
+        serializer = self._select_serializer(spec)
+        return serializer(spec)
+
 
 BLUEPRINT_REGISTRY = BlueprintRegistry()
 BLUEPRINT_REGISTRY.register_initializer(is_object_blueprint, _initialize_object)
 BLUEPRINT_REGISTRY.register_validator(is_object_blueprint, _validate_object_blueprint)
+# BLUEPRINT_REGISTRY.register_serializer(is_blueprint, _object_to_json)
 
 
-def _value_to_json(value: ArgValue, /) -> JSON_Value:
-    match value:
-        case list():
-            return [_value_to_json(item) for item in value]
-        case tuple():
-            return [_value_to_json(item) for item in value]
-        case dict(mapping):
-            if is_blueprint(mapping):
-                return blueprint_to_json(mapping)
-            return {str(key): _value_to_json(item) for key, item in value.items()}
-        case None:
-            return None
-        case bool():
-            return bool(value)
-        case int():
-            return int(value)
-        case float():
-            return float(value)
-        case str():
-            return str(value)
-        case other:
-            try:
-                blueprint = infer_blueprint(other)
-            except Exception as exc:
-                exc.add_note(
-                    f"Failed to infer blueprint for value of type {type(other)}."
-                )
-                raise
-            return _value_to_json(blueprint)
-
-
-def blueprint_to_json(arg: Blueprint, /) -> JSON:
-    parsed = _value_to_json(cast("dict", arg))
-    assert isinstance(parsed, dict)
-    return parsed
+def blueprint_to_json[T](arg: Blueprint[T], /) -> JSON:
+    return BLUEPRINT_REGISTRY.serialize(arg)
 
 
 def infer_blueprint[T](arg: T, /) -> Blueprint[T]:
     return BLUEPRINT_REGISTRY.infer(arg)
+
+
+def validate_blueprint[T](arg: T, spec: Blueprint[T], /) -> None:
+    BLUEPRINT_REGISTRY.validate(arg, spec)
 
 
 def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
@@ -547,7 +603,3 @@ def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
         return BLUEPRINT_REGISTRY.initialize(spec)
     # fall through
     return spec
-
-
-def validate_blueprint[T](arg: T, spec: Blueprint[T], /) -> None:
-    BLUEPRINT_REGISTRY.validate(arg, spec)
