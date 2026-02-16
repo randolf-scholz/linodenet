@@ -2,6 +2,9 @@ r"""Functions for serializing and deserializing PyTorch models and tensors."""
 # ruff: noqa: SIM103
 
 __all__ = [
+    # CONSTANTS
+    "CONFIG",
+    # Types
     "SavedModelBlueprint",
     "SavedStateDictBlueprint",
     "SavedTorchScriptBlueprint",
@@ -12,6 +15,7 @@ __all__ = [
     "serialize_model",
     "deserialize_model",
     "deserialize_model_from_blueprint",
+    "write_environment",
 ]
 
 import json
@@ -42,15 +46,17 @@ from blueprint.torch import is_model_blueprint
 
 __logger__ = logging.getLogger(__name__)
 
-FORMAT_VERSION = "1.0"
-r"""CONST: The version of the model spec format."""
 
+class CONFIG:
+    r"""Configuration constants for model serialization."""
 
-MODEL_FILE = "model.pt"
-HYPERPARAMETERS_FILE = "hyperparameters.json"
-BLUEPRINT_FILE = "blueprint.json"
-MODEL_INIT_FILE = "model_init.json"
-ENVIRONMENT_FILE = "requirements.txt"
+    FORMAT_VERSION = "1.0"
+    MODEL_FILE = "model.pt"
+    HYPERPARAMETERS_FILE = "hyperparameters.json"
+    BLUEPRINT_FILE = "blueprint.json"
+    MODEL_INIT_FILE = "model_init.json"
+    ENVIRONMENT_FILE = "requirements.txt"
+
 
 type FilePath = str | os.PathLike[str]
 type FileLike = FilePath | IO[bytes]
@@ -187,7 +193,7 @@ def _collect_environment_requirements() -> list[str]:
     return sorted(requirements, key=str.casefold)
 
 
-def write_environment(archive: ZipFile, /, *, filename: str = ENVIRONMENT_FILE) -> None:
+def write_environment(archive: ZipFile, filename: str, /) -> None:
     r"""Write a simple requirements-style environment snapshot into the archive."""
     try:
         requirements = _collect_environment_requirements()
@@ -230,11 +236,11 @@ def serialize_model[M: nn.Module | ExportedProgram](
     # write model payload and metadata files
     with ZipFile(path, "w") as archive:
         archive.writestr(
-            HYPERPARAMETERS_FILE,
+            CONFIG.HYPERPARAMETERS_FILE,
             json.dumps(hp, indent="\t"),
         )
-        write_environment(archive)
-        with archive.open(MODEL_FILE, "w") as model_file:
+        write_environment(archive, CONFIG.ENVIRONMENT_FILE)
+        with archive.open(CONFIG.MODEL_FILE, "w") as model_file:
             match model:
                 case RecursiveScriptModule():
                     fmt = "torchscript"
@@ -251,17 +257,17 @@ def serialize_model[M: nn.Module | ExportedProgram](
             model_init: JSON = blueprint_to_json(infer_blueprint(model))
             assert is_model_blueprint(model_init)
             archive.writestr(
-                MODEL_INIT_FILE,
+                CONFIG.MODEL_INIT_FILE,
                 json.dumps(model_init, indent="\t"),
             )
         blueprint: JSON = {
             "__storage_path__": str(path),
             "__storage_format__": fmt,
-            "__spec_version__": FORMAT_VERSION,
+            "__spec_version__": CONFIG.FORMAT_VERSION,
             "__module_version__": _infer_module_version(model.__class__.__module__),
         }
         archive.writestr(
-            BLUEPRINT_FILE,
+            CONFIG.BLUEPRINT_FILE,
             json.dumps(blueprint, indent="\t"),
         )
 
@@ -279,7 +285,7 @@ def deserialize_model(path: FilePath, /) -> nn.Module:
 
     with (
         ZipFile(path, "r") as archive,
-        archive.open(BLUEPRINT_FILE, "r") as config_file,
+        archive.open(CONFIG.BLUEPRINT_FILE, "r") as config_file,
     ):
         spec = json.load(config_file)
 
@@ -314,7 +320,7 @@ def deserialize_model_from_blueprint[M: nn.Module | ExportedProgram](
                 imported = torch.export.load(model_file)
                 return cast("M", imported.module())
             case "torch_state_dict" | "state_dict":
-                with archive.open(MODEL_INIT_FILE, "r") as model_init_file:
+                with archive.open(CONFIG.MODEL_INIT_FILE, "r") as model_init_file:
                     model_init = json.load(model_init_file)
                 instance: nn.Module = initialize(model_init)
                 state = torch.load(model_file)
