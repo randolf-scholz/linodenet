@@ -117,7 +117,7 @@ def _compile_fns() -> dict[str, Callable]:
     for name in CUSTOM_OPS:
         try:
             compiled_fns[name] = load_function(name)
-        except Exception as _exc:  # noqa: BLE001
+        except Exception as _exc:
             exceptions[name] = _exc
     if exceptions:
         exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
@@ -144,7 +144,7 @@ def _load_linodenet() -> dict[str, Callable]:
             torch.ops.load_library(lib_file)
             # load the functions
             return {name: getattr(LIB, name) for name in CUSTOM_OPS}
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             warnings.warn(
                 f"\n\t Custom binaries could not be loaded (raised {type(exc)!s})!"
                 "\n\t Please ensure they are compiled for the correct platform."

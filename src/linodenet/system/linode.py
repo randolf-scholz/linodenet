@@ -187,7 +187,7 @@ class LinODE(nn.Module):
             "cell": self.cell,
         }
 
-    _DEFAULT_CELL_BLUEPRINT = {
+    _DEFAULT_CELL_BLUEPRINT: Blueprint[nn.Module] = {  # type: ignore[typeddict-unknown-key]
         "__name__": LinODECell.__name__,
         "__module__": LinODECell.__module__,
         "input_size": None,
@@ -204,11 +204,7 @@ class LinODE(nn.Module):
         cell: nn.Module | Blueprint[nn.Module] = _DEFAULT_CELL_BLUEPRINT,
     ) -> None:
         super().__init__()
-        if isinstance(cell, nn.Module):
-            self.cell = cell
-        else:
-            cell["input_size"] = input_size
-            self.cell = initialize(cell)
+        self.cell = initialize(cell)
 
         self.input_size = input_size
         self.output_size = input_size

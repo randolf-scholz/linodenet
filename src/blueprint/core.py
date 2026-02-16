@@ -7,17 +7,24 @@ __all__ = [
     "INFER_ARGS_REGISTRY",
     # types
     "Makes",
+    # registries
+    "InferArgsRegistry",
+    "BlueprintRegistry",
     # Blueprint types
     "Blueprint",
+    "BasicBlueprint",
     "HydraBlueprint",
     "ObjectBlueprint",
-    "BasicBlueprint",
-    # functions
     "is_blueprint",
-    "is_object_blueprint",
+    "is_blueprint_key",
+    "is_basic_blueprint",
     "is_hydra_blueprint",
-    "initialize",
+    "is_object_blueprint",
+    # functions
+    "blueprint_to_json",
+    "infer_args",
     "infer_blueprint",
+    "initialize",
     "validate_blueprint",
 ]
 
@@ -29,11 +36,12 @@ from typing import (
     Any,
     NotRequired,
     ReadOnly,
-    TypedDict,
     TypeGuard,
     TypeIs,
     cast,
 )
+
+from typing_extensions import TypedDict  # using extra_items (3.15)
 
 from blueprint.config import SupportsFromConfig, has_config, is_config
 
@@ -61,12 +69,7 @@ type SunderKey = str  # identifier & sunder (not dunder)
 type PrivateKey = str  # identifier & starts with _ (includes dunder and sunder)
 
 
-def is_identifier(arg: object, /) -> TypeGuard[Identifier]:
-    r"""String that is a valid identifier (i.e. can be used as a keyword argument)."""
-    return isinstance(arg, str) and arg.isidentifier()
-
-
-def is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
+def _is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
     r"""String that starts and ends with double underscores and is a valid identifier."""
     return (
         isinstance(value, str)
@@ -79,12 +82,12 @@ def is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
     )
 
 
-def is_private_key(value: object, /) -> TypeGuard[PrivateKey]:
-    r"""String that starts with a single underscore and is a valid identifier."""
-    return isinstance(value, str) and value.isidentifier() and value.startswith("_")
+def _is_public_key(value: object, /) -> TypeGuard[Identifier]:
+    r"""String that is a valid identifier and does not start with an underscore."""
+    return isinstance(value, str) and value.isidentifier() and not value.startswith("_")
 
 
-def is_sunder_key(value: object, /) -> TypeGuard[SunderKey]:
+def _is_sunder_key(value: object, /) -> TypeGuard[SunderKey]:
     r"""Strings of the form `_key_` that are valid identifiers, but not dunder keys."""
     return (
         isinstance(value, str)
@@ -99,18 +102,14 @@ def is_sunder_key(value: object, /) -> TypeGuard[SunderKey]:
 
 def is_blueprint_key(value: object, /) -> TypeGuard[DunderKey | SunderKey]:
     r"""Any Sunder/Dunder string is considered a blueprint key."""
-    return (
-        isinstance(value, str)
-        and value.isidentifier()
-        and (value.startswith("_") and value.endswith("_"))
-    )
+    return _is_sunder_key(value) or _is_dunder_key(value)
 
 
 # endregion allowed types --------------------------------------------------------------
 
 
 # region blueprint types ---------------------------------------------------------------
-class Blueprint[T](TypedDict):
+class Blueprint[T](TypedDict, extra_items=ReadOnly[object]):  # type: ignore[call-arg]
     r"""A dictionary that can be used to initialize an object of type T.
 
     All keys must be dunder or sunder.
@@ -119,7 +118,7 @@ class Blueprint[T](TypedDict):
     # dunder and sunder keys only (not expressible in the type system)
 
 
-class BasicBlueprint[T](TypedDict):
+class BasicBlueprint[T](Blueprint[T]):
     r"""A basic blueprint that only contains the module and class name."""
 
     __name__: ReadOnly[str]
@@ -129,7 +128,7 @@ class BasicBlueprint[T](TypedDict):
     # **SunderKey: object (reserved for future use)
 
 
-class ObjectBlueprint[T](TypedDict):
+class ObjectBlueprint[T](Blueprint[T]):
     r"""A dictionary that allows initializing an object."""
 
     __module_name__: ReadOnly[str]
@@ -169,9 +168,10 @@ def is_object_blueprint(arg: object, /) -> TypeGuard[ObjectBlueprint]:
         return False
     if not (
         isinstance(kwargs := arg.get("__kwargs__"), dict)
-        and all(is_identifier(key) for key in kwargs)
+        and all(_is_public_key(key) for key in kwargs)
     ):
         return False
+
     return True
 
 
@@ -183,6 +183,9 @@ def is_hydra_blueprint(arg: object, /) -> TypeGuard[HydraBlueprint]:
     if not isinstance(arg.get("_target_"), str):
         return False
     if not (isinstance(arg.get("_args_"), None | list)):
+        return False
+    # all keys should be sunder_keys or public_keys.
+    if not all(_is_sunder_key(key) or _is_public_key(key) for key in arg):
         return False
     return True
 
@@ -252,7 +255,7 @@ def _infer_args_from_init(arg: object, /) -> Args:
     # validate names
     if not all(name.isidentifier() for name in kwargs):
         raise ValueError("All parameter names must be valid identifiers.")
-    if any(is_dunder_key(name) for name in kwargs):
+    if any(_is_dunder_key(name) for name in kwargs):
         raise ValueError("Parameter names cannot be dunder names.")
 
     if missing := {
@@ -310,7 +313,7 @@ def infer_args(arg: object, /, *, verify_init: bool = True) -> Args:
     if verify_init:
         cls = type(arg)
         try:
-            m = initialize_from_args(cls, args, kwargs)
+            m = _initialize_from_args(cls, args, kwargs)
         except Exception as exc:
             raise ValueError(
                 f"Failed to verify inferred config for {cls.__qualname__}."
@@ -321,7 +324,7 @@ def infer_args(arg: object, /, *, verify_init: bool = True) -> Args:
     return args, kwargs
 
 
-def initialize_from_args[T](cls: type[T], args: POArgs, kwargs: KWArgs, /) -> T:
+def _initialize_from_args[T](cls: type[T], args: POArgs, kwargs: KWArgs, /) -> T:
     r"""Initialize a model from args and kwargs."""
     if not args and issubclass(cls, SupportsFromConfig):
         try:
@@ -342,16 +345,16 @@ def initialize_from_args[T](cls: type[T], args: POArgs, kwargs: KWArgs, /) -> T:
 # endregion for inferring config from instance -----------------------------------------
 
 
-def resolve_value(arg: ArgValue, /) -> Any:
+def _resolve_value(arg: ArgValue, /) -> Any:
     match arg:
         case blueprint if is_blueprint(blueprint):
             return initialize(blueprint)
         case list():
-            return [resolve_value(item) for item in arg]
+            return [_resolve_value(item) for item in arg]
         case tuple():
-            return tuple(resolve_value(item) for item in arg)
+            return tuple(_resolve_value(item) for item in arg)
         case dict():
-            return {key: resolve_value(item) for key, item in arg.items()}
+            return {key: _resolve_value(item) for key, item in arg.items()}
         case _:
             return arg
 
@@ -392,15 +395,7 @@ def _infer_object_blueprint[T](
     return spec
 
 
-def initialize_type[T](cls: type[T], /) -> T:
-    try:
-        return cls()
-    except Exception as exc:
-        exc.add_note(f"Failed to initialize {cls.__qualname__} from config.")
-        raise
-
-
-def initialize_object[T](spec: Blueprint[T], /) -> T:
+def _initialize_object[T](spec: Blueprint[T], /) -> T:
     if not is_object_blueprint(spec):
         raise TypeError("Expected an object blueprint dictionary.")
 
@@ -409,10 +404,10 @@ def initialize_object[T](spec: Blueprint[T], /) -> T:
 
     module = __import__(module_name, fromlist=[class_name])
     cls = getattr(module, class_name)
-    args = [resolve_value(item) for item in spec["__args__"]]
-    kwargs = {key: resolve_value(item) for key, item in spec["__kwargs__"].items()}
+    args = [_resolve_value(item) for item in spec["__args__"]]
+    kwargs = {key: _resolve_value(item) for key, item in spec["__kwargs__"].items()}
 
-    return initialize_from_args(cls, args, kwargs)
+    return _initialize_from_args(cls, args, kwargs)
 
 
 type BlueprintPredicate[T] = Callable[[Any], TypeGuard[Blueprint[T]]]
@@ -493,7 +488,7 @@ class BlueprintRegistry:
 
 
 BLUEPRINT_REGISTRY = BlueprintRegistry()
-BLUEPRINT_REGISTRY.register_initializer(is_object_blueprint, initialize_object)
+BLUEPRINT_REGISTRY.register_initializer(is_object_blueprint, _initialize_object)
 BLUEPRINT_REGISTRY.register_validator(is_object_blueprint, _validate_object_blueprint)
 
 
@@ -538,14 +533,14 @@ def infer_blueprint[T](arg: T, /) -> Blueprint[T]:
     return BLUEPRINT_REGISTRY.infer(arg)
 
 
-def initialize[T](spec: T | type[T] | Blueprint[T], /) -> T:
+def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
     r"""Initialize an object from a blueprint or return the object if it's not a blueprint.
 
     Args:
         spec: The blueprint to initialize from, or the object to return if it's not a blueprint.
     """
     if isinstance(spec, type):
-        return initialize_type(cast("type[T]", spec))
+        return _initialize_from_args(cast("type[T]", spec), [], {})
     if isinstance(spec, dict):
         if not is_blueprint(spec):
             raise TypeError("Expected a blueprint dictionary.")

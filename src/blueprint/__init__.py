@@ -2,9 +2,9 @@ r"""Configuration protocols and utilities."""
 
 __all__ = [
     # modules
-    "config",
-    "serialization",
-    "torch",
+    # "config",
+    # "serialization",
+    # "torch",
     # types
     "JSON",
     "Makes",
@@ -31,12 +31,11 @@ __all__ = [
     # functions
     "infer_args",
     "initialize",
-    "initialize_from_args",
+    "_initialize_from_args",
     "infer_blueprint",
     "validate_blueprint",
 ]
 
-from blueprint import config, serialization, torch
 from blueprint.config import (
     SupportsConfig,
     SupportsDefaultConfig,
@@ -54,11 +53,11 @@ from blueprint.core import (
     InferArgsRegistry,
     Makes,
     ObjectBlueprint,
+    _initialize_from_args,
     blueprint_to_json,
     infer_args,
     infer_blueprint,
     initialize,
-    initialize_from_args,
     is_blueprint,
     validate_blueprint,
 )

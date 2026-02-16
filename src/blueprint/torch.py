@@ -2,41 +2,45 @@ r"""Blueprints for PyTorch models and tensors."""
 # ruff: noqa: SIM103
 
 __all__ = [
+    # constants
+    "MAX_SHAPE",
+    # types
     "ModelBlueprint",
-    "is_model_blueprint",
     "TensorBlueprint",
-    "is_tensor_blueprint",
+    # functions
     "infer_tensor_blueprint",
-    "validate_tensor_blueprint",
     "initialize_tensor",
-    "initialize_from_dict",
+    "is_model_blueprint",
+    "is_tensor_blueprint",
+    "tensor_to_json",
+    "validate_tensor_blueprint",
 ]
 
-from importlib import import_module
-from typing import Any, NotRequired, ReadOnly, TypedDict, TypeGuard, cast
+from typing import Any, NotRequired, ReadOnly, TypeGuard
 
 from torch import Tensor, nn
 from torch.export import ExportedProgram
 
-from blueprint.config import SupportsFromConfig
 from blueprint.core import (
     BLUEPRINT_REGISTRY,
     INFER_ARGS_REGISTRY,
-    JSON,
     Args,
     ArgValue,
     Blueprint,
     Identifier,
-    Makes,
+    JSON_Value,
     _infer_object_blueprint,
+    _initialize_object,
     infer_args,
-    initialize_object,
     is_blueprint,
     is_object_blueprint,
 )
 
+MAX_SHAPE = (5, 5)
+r"""CONF: Maximum tensor shape to inline as lists in hyperparameters."""
 
-class ModelBlueprint[T: nn.Module = nn.Module](TypedDict):
+
+class ModelBlueprint[T: nn.Module = nn.Module](Blueprint[T]):
     r"""A blueprint that allows initializing a ``nn.Module``."""
 
     __module_name__: ReadOnly[str]
@@ -66,6 +70,22 @@ def is_model_blueprint(arg: object, /) -> TypeGuard[ModelBlueprint]:
     if not (isinstance(cls, type) and issubclass(cls, nn.Module)):
         return False
     return True
+
+
+def _infer_model_blueprint[T: nn.Module](
+    arg: T, /, *, verify_init: bool = True
+) -> ModelBlueprint[T]:
+    return _infer_object_blueprint(arg, verify_init=verify_init)
+
+
+def _initialize_model_blueprint[T: nn.Module](spec: Blueprint[T], /) -> T:
+    obj: T = _initialize_object(spec)
+    assert isinstance(obj, nn.Module)
+    return obj
+
+
+BLUEPRINT_REGISTRY.register_initializer(is_model_blueprint, _initialize_model_blueprint)
+BLUEPRINT_REGISTRY.register_maker(nn.Module, _infer_model_blueprint)
 
 
 def _infer_nn_linear(model: nn.Linear, /) -> Args:
@@ -100,7 +120,7 @@ INFER_ARGS_REGISTRY.register(nn.Linear, _infer_nn_linear)
 INFER_ARGS_REGISTRY.register(ExportedProgram, _infer_exported_module)
 
 
-class TensorBlueprint[T: Tensor = Tensor](TypedDict):
+class TensorBlueprint[T: Tensor = Tensor](Blueprint[T]):
     r"""A pseudo-blueprint that wraps a tensor value."""
 
     __tensor__: ReadOnly[Any]
@@ -116,7 +136,7 @@ def is_tensor_blueprint(arg: object, /) -> TypeGuard[TensorBlueprint]:
     return True
 
 
-def infer_tensor_blueprint(tensor: Tensor) -> TensorBlueprint:
+def infer_tensor_blueprint[T: Tensor](tensor: T, /) -> TensorBlueprint[T]:
     return {
         "__tensor__": tensor,
         "__dtype__": str(tensor.dtype),
@@ -124,7 +144,15 @@ def infer_tensor_blueprint(tensor: Tensor) -> TensorBlueprint:
     }
 
 
-def validate_tensor_blueprint(tensor: Tensor, spec: TensorBlueprint, /) -> None:
+def initialize_tensor[T: Tensor](spec: Blueprint[T], /) -> T:
+    if not is_tensor_blueprint(spec):
+        raise TypeError("Expected a tensor blueprint dictionary.")
+    tensor = spec["__tensor__"]
+    validate_tensor_blueprint(tensor, spec)
+    return tensor
+
+
+def validate_tensor_blueprint[T: Tensor](tensor: T, spec: Blueprint[T], /) -> None:
     if not is_tensor_blueprint(spec):
         raise TypeError("Invalid tensor spec.")
     expected_dtype = spec["__dtype__"]
@@ -139,24 +167,13 @@ def validate_tensor_blueprint(tensor: Tensor, spec: TensorBlueprint, /) -> None:
         )
 
 
-def initialize_tensor(spec: TensorBlueprint, /) -> Tensor:
-    if not is_tensor_blueprint(spec):
-        raise TypeError("Expected a tensor blueprint dictionary.")
-    tensor = spec["__tensor__"]
-    validate_tensor_blueprint(tensor, spec)
-    return tensor
-
-
-MAX_SHAPE = (5, 5)
-r"""Maximum tensor shape to inline as lists in hyperparameters."""
-
-
-def tensor_to_json(spec: TensorBlueprint, /) -> JSON:
+def tensor_to_json(spec: TensorBlueprint, /) -> JSON_Value:
     value = spec["__tensor__"]
+    assert isinstance(value, Tensor)
     if value.numel() == 1:
-        return _value_to_json(value.item())
+        return value.item()
     if value.ndim <= len(MAX_SHAPE) and value.shape <= MAX_SHAPE:
-        return _value_to_json(value.tolist())
+        return value.tolist()
     raise NotImplementedError(f"Tensor shape {tuple(value.shape)!r} exceeds MAX_SHAPE.")
 
 
@@ -164,68 +181,3 @@ def tensor_to_json(spec: TensorBlueprint, /) -> JSON:
 BLUEPRINT_REGISTRY.register_initializer(is_tensor_blueprint, initialize_tensor)
 BLUEPRINT_REGISTRY.register_validator(is_tensor_blueprint, validate_tensor_blueprint)
 BLUEPRINT_REGISTRY.register_maker(Tensor, infer_tensor_blueprint)
-
-
-def _infer_model_blueprint[T: nn.Module](
-    arg: T, /, *, verify_init: bool = True
-) -> ModelBlueprint[T]:
-    return _infer_object_blueprint(arg, verify_init=verify_init)
-
-
-def _initialize_model_blueprint[T: nn.Module](spec: Blueprint[T], /) -> T:
-    obj: T = initialize_object(spec)
-    assert isinstance(obj, nn.Module)
-    return obj
-
-
-BLUEPRINT_REGISTRY.register_initializer(is_model_blueprint, _initialize_model_blueprint)
-BLUEPRINT_REGISTRY.register_maker(nn.Module, _infer_model_blueprint)
-
-
-def initialize_from_dict[M: nn.Module](cfg: Makes[M], /) -> M:
-    r"""Initialize a module from a dictionary.
-
-    Args:
-        cfg: A dictionary containing the default configuration of the class.
-
-    Note:
-        The configuration must provide the keys `__module__` and `__name__`.
-        The function will attempt to import the module and class and initialize it.
-    """
-    config = dict(cfg)
-
-    if (lib_name := config.pop("__module__", None)) is None:
-        raise ValueError(f"Expected {config=} to contain '__module__'")
-    if (cls_name := config.pop("__name__", None)) is None:
-        raise ValueError(f"Expected {config=} to contain '__name__'")
-
-    try:  # import the module
-        library = import_module(lib_name)
-    except ModuleNotFoundError as exc:
-        exc.add_note(f"Failed to import {lib_name=}")
-        raise
-
-    try:  # import the class from the module
-        cls = getattr(library, cls_name)
-    except AttributeError as exc:
-        exc.add_note(f"Failed to import {cls_name} from {lib_name}")
-        raise
-    if not issubclass(cls, nn.Module):
-        raise TypeError(f"Expected a subclass of {nn.Module}, but got {cls}")
-
-    # attempt to initialize the class
-    #  check if classmethod from_config is available
-    if issubclass(cls, SupportsFromConfig):
-        try:
-            module = cls.from_config(config)
-        except Exception as exc:
-            exc.add_note(f"Failed to initialize {cls} with {config=}")
-            raise
-        return module
-
-    try:
-        module = cls(**config)
-    except Exception as exc:
-        exc.add_note(f"Failed to initialize {cls} with {config=}")
-        raise
-    return module

@@ -41,53 +41,6 @@ _DEFAULT_LSSM_CONFIG = {
 }
 
 
-def from_config(cfg: dict[str, Any]) -> LatentStateSpaceModel:
-    r"""Constructs a new model from a configuration dictionary."""
-    LOGGER = logging.getLogger(f"{__package__}.from_config")
-    config = deep_dict_update(_DEFAULT_LSSM_CONFIG, cfg)
-    input_size = config["input_size"]
-    latent_size = config["latent_size"]
-    hidden_size = config.get("hidden_size", input_size)
-    # padding_size = hidden_size - input_size
-    # output_size = config.get("output_size", input_size)
-
-    if hidden_size < input_size:
-        warnings.warn(
-            "hidden_size < input_size. Falling back to using no hidden units.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-
-        hidden_size = input_size
-    if not (hidden_size >= input_size):
-        raise ValueError(
-            f"{hidden_size=} must be greater than or equal to {input_size=}"
-        )
-
-    config["Encoder"] |= {"input_size": latent_size}
-    config["Decoder"] |= {"input_size": latent_size}
-    config["System"] |= {"input_size": latent_size}
-    config["Filter"] |= {"input_size": hidden_size}
-    config["Filter"] |= {"hidden_size": hidden_size}
-
-    LOGGER.debug("Initializing Encoder %s", config["Encoder"])
-    encoder: nn.Module = initialize(config["Encoder"])
-    LOGGER.debug("Initializing System %s", config["Encoder"])
-    system: nn.Module = initialize(config["System"])
-    LOGGER.debug("Initializing Decoder %s", config["Encoder"])
-    decoder: nn.Module = initialize(config["Decoder"])
-    LOGGER.debug("Initializing Filter %s", config["Encoder"])
-    filter: nn.Module = initialize(config["Filter"])  # noqa: A001
-
-    return LatentStateSpaceModel(
-        encoder=encoder,
-        system=system,
-        decoder=decoder,
-        filter=filter,
-        padding_size=hidden_size - input_size,
-    )
-
-
 class LatentStateSpaceModel(nn.Module):
     r"""General purpose Latent State Space Model.
 
@@ -359,3 +312,50 @@ class LatentStateSpaceModel(nn.Module):
 
         yhat = self.xhat_pre[..., : self.output_size]
         return yhat
+
+    @staticmethod
+    def from_config(cfg: dict[str, Any]) -> LatentStateSpaceModel:
+        r"""Constructs a new model from a configuration dictionary."""
+        LOGGER = logging.getLogger(f"{__package__}.from_config")
+        config = deep_dict_update(_DEFAULT_LSSM_CONFIG, cfg)
+        input_size = config["input_size"]
+        latent_size = config["latent_size"]
+        hidden_size = config.get("hidden_size", input_size)
+        # padding_size = hidden_size - input_size
+        # output_size = config.get("output_size", input_size)
+
+        if hidden_size < input_size:
+            warnings.warn(
+                "hidden_size < input_size. Falling back to using no hidden units.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+            hidden_size = input_size
+        if not (hidden_size >= input_size):
+            raise ValueError(
+                f"{hidden_size=} must be greater than or equal to {input_size=}"
+            )
+
+        config["Encoder"] |= {"input_size": latent_size}
+        config["Decoder"] |= {"input_size": latent_size}
+        config["System"] |= {"input_size": latent_size}
+        config["Filter"] |= {"input_size": hidden_size}
+        config["Filter"] |= {"hidden_size": hidden_size}
+
+        LOGGER.debug("Initializing Encoder %s", config["Encoder"])
+        encoder: nn.Module = initialize(config["Encoder"])
+        LOGGER.debug("Initializing System %s", config["Encoder"])
+        system: nn.Module = initialize(config["System"])
+        LOGGER.debug("Initializing Decoder %s", config["Encoder"])
+        decoder: nn.Module = initialize(config["Decoder"])
+        LOGGER.debug("Initializing Filter %s", config["Encoder"])
+        filter: nn.Module = initialize(config["Filter"])  # noqa: A001
+
+        return LatentStateSpaceModel(
+            encoder=encoder,
+            system=system,
+            decoder=decoder,
+            filter=filter,
+            padding_size=hidden_size - input_size,
+        )
