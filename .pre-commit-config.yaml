@@ -1,4 +1,4 @@
-exclude: 'bugs/'
+exclude: 'bugs/|dev/'
 minimum_pre_commit_version: 4.5.1
 default_language_version:
   python: '3.14'
@@ -22,7 +22,7 @@ repos:
       - id: trailing-whitespace
   # ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.0
+    rev: v0.15.1
     hooks:
       - id: ruff-check
         name: ruff isort
@@ -34,7 +34,7 @@ repos:
         files: '^src/|^tests/'
   # uv
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.10.2
+    rev: 0.10.3
     hooks:
       - id: uv-lock
       - id: uv-export
@@ -58,7 +58,7 @@ repos:
         exclude: '^docs/|^experiments/'
   # personal hooks
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.7.13
+    rev: v0.7.14
     hooks:
       # pygrep hooks
       - id: check-separator-length-88
@@ -93,7 +93,7 @@ repos:
       # script-based hooks
       - id: check-clean-interface
         files: '^src/'
-        exclude: '/tests/'
+        exclude: '^tests/|/tests/'
       - id: update-requirements
       - id: check-requirements-valid
       - id: check-requirements-maintained
@@ -129,7 +129,7 @@ repos:
         args: ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
   # pyright
   - repo: https://github.com/randolf-scholz/assorted-hooks.git
-    rev: v0.7.13
+    rev: v0.7.14
     hooks:
       - id: pyright-concise
         files: '^src/|^tests/'
