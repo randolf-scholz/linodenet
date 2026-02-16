@@ -12,6 +12,7 @@ __all__ = [
 ]
 
 import os
+import tomllib
 from functools import cached_property
 from importlib import import_module
 from itertools import chain
@@ -19,7 +20,43 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Final
 
-type PathLike = str | Path | os.PathLike[str]
+type PathLike = str | os.PathLike[str]
+
+
+def _discover_root_packages(source_path: Path, /) -> list[ModuleType]:
+    if not source_path.exists():
+        raise ValueError(f"Source directory {source_path} does not exist!")
+    candidates = [
+        entry
+        for entry in source_path.iterdir()
+        if entry.is_dir() and (entry / "__init__.py").is_file()
+    ]
+    packages: list[ModuleType] = []
+    errors: dict[str, Exception] = {}
+    for candidate in candidates:
+        try:
+            pkg = import_module(candidate.name)
+        except ModuleNotFoundError as exc:
+            errors[candidate.name] = exc
+        else:
+            packages.append(pkg)
+    if errors:
+        raise ExceptionGroup(
+            f"Failed to import root packages under {source_path}",
+            list(errors.values()),
+        )
+    if not packages:
+        raise ValueError(
+            f"No root packages found under {source_path} (no candidates found)."
+        )
+    return packages
+
+
+def _flattened_package_structure(d: dict[str, Any], /) -> list[str]:
+    r"""Flatten nested dictionary."""
+    return list(d) + list(
+        chain.from_iterable(map(_flattened_package_structure, d.values()))
+    )
 
 
 def get_package_structure(root_module: ModuleType, /) -> dict[str, Any]:
@@ -80,56 +117,63 @@ class Project:
     r"""Holds Project related data."""
 
     @cached_property
-    def NAME(self) -> str:
-        r"""Get project name."""
-        return self.ROOT_PACKAGE.__name__
-
-    @cached_property
-    def ROOT_PACKAGE(self) -> ModuleType:
-        r"""Get project root package."""
-        if __package__ is None:
-            raise ValueError(f"Unexpected package: {__package__=}")
-        hierarchy = __package__.split(".")
-        return import_module(hierarchy[0])
-
-    @cached_property
     def ROOT_PATH(self) -> Path:
         r"""Return the root directory."""
-        if len(self.ROOT_PACKAGE.__path__) != 1:
-            raise ValueError(f"Unexpected path: {self.ROOT_PACKAGE.__path__=}")
-
-        path = Path(self.ROOT_PACKAGE.__path__[0])
-
-        if path.parent.stem != "src":
-            raise ValueError(
-                f"This seems to be an installed version of {self.NAME},"
-                f" as {path} is not in src/*"
-            )
-        return path.parent.parent
+        start = Path(__file__).resolve().parent
+        for candidate in (start, *start.parents):
+            if (candidate / "pyproject.toml").is_file():
+                return candidate
+        raise FileNotFoundError(
+            f"Could not locate project root from {start}; pyproject.toml not found."
+        )
 
     @cached_property
     def DOCS_PATH(self) -> Path:
         r"""Return the `docs` directory."""
         docs_path = self.ROOT_PATH / "docs"
-        if not docs_path.exists():
-            raise ValueError(f"Docs directory {docs_path} does not exist!")
+        if not docs_path.is_dir():
+            raise FileNotFoundError(f"Docs directory {docs_path} does not exist!")
         return docs_path
 
     @cached_property
     def SOURCE_PATH(self) -> Path:
         r"""Return the source directory."""
         source_path = self.ROOT_PATH / "src"
-        if not source_path.exists():
-            raise ValueError(f"Source directory {source_path} does not exist!")
+        if not source_path.is_dir():
+            raise FileNotFoundError(f"Source directory {source_path} does not exist!")
         return source_path
 
     @cached_property
     def TESTS_PATH(self) -> Path:
         r"""Return the test directory."""
         tests_path = self.ROOT_PATH / "tests"
-        if not tests_path.exists():
-            raise ValueError(f"Tests directory {tests_path} does not exist!")
+        if not tests_path.is_dir():
+            raise FileNotFoundError(f"Tests directory {tests_path} does not exist!")
         return tests_path
+
+    @cached_property
+    def PROJECT_FILE(self) -> dict[str, Any]:
+        r"""Return `pyproject.toml` as a dictionary."""
+        project_file = self.ROOT_PATH / "pyproject.toml"
+        if not project_file.is_file():
+            raise FileNotFoundError(f"Project file {project_file} does not exist!")
+        with project_file.open("rb") as handle:
+            return tomllib.load(handle)
+
+    @cached_property
+    def NAME(self) -> str:
+        r"""Get project name."""
+        project = self.PROJECT_FILE.get("project")
+        match project:
+            case {"name": str(name)}:
+                return name
+            case _:
+                raise ValueError("Missing `project.name` in pyproject.toml.")
+
+    @cached_property
+    def ROOT_PACKAGES(self) -> list[ModuleType]:
+        r"""Get project root packages under `src`."""
+        return _discover_root_packages(self.SOURCE_PATH)
 
     @cached_property
     def TEST_RESULTS_PATH(self) -> Path:
@@ -143,14 +187,12 @@ class Project:
 
     def make_test_folders(self, *, dry_run: bool = True) -> None:
         r"""Make the tests folder if it does not exist."""
-        package_structure = get_package_structure(self.ROOT_PACKAGE)
+        packages = [
+            get_package_structure(root_package) for root_package in self.ROOT_PACKAGES
+        ]
 
-        def flattened(d: dict[str, Any], /) -> list[str]:
-            r"""Flatten nested dictionary."""
-            return list(d) + list(chain.from_iterable(map(flattened, d.values())))
-
-        for package in flattened(package_structure):
-            test_package_path = self.TESTS_PATH / package.replace(".", "/")
+        for dirs in chain.from_iterable(map(_flattened_package_structure, packages)):
+            test_package_path = self.TESTS_PATH / dirs.replace(".", "/")
             test_package_init_file = test_package_path / "__init__.py"
 
             if not test_package_path.exists():
@@ -169,7 +211,7 @@ class Project:
                     print(f"Dry-Run: Creating {test_package_init_file}")
                 else:
                     print(f"Creating {test_package_init_file}")
-                    message = f'"""Tests for {package}."""\n'
+                    message = f'"""Tests for {dirs}."""\n'
                     test_package_init_file.write_text(message, encoding="utf8")
         if dry_run:
             print("Pass option `dry_run=False` to actually create the folders.")
