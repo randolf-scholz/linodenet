@@ -51,10 +51,8 @@ type FilePath = str | os.PathLike[str]
 
 # The types allowed in the config dictionary.
 # configs should not contain ModelBlueprints or TensorSpecs directly, but actual models and tensors
-type ArgLeaf = None | bool | int | float | str | Any
-type ArgValue = ArgLeaf | list[ArgValue] | tuple[ArgValue, ...] | dict[str, ArgValue]
-type POArgs = list[ArgValue]
-type KWArgs = dict[Identifier, ArgValue]
+type POArgs = list[object]
+type KWArgs = dict[Identifier, object]
 type Args = tuple[POArgs, KWArgs]
 
 type JSON_Leaf = None | bool | int | float | str
@@ -136,8 +134,8 @@ class ObjectBlueprint[T](Blueprint[T]):
     __class_name__: ReadOnly[str]
     __module_version__: NotRequired[ReadOnly[str]]
 
-    __args__: ReadOnly[list[ArgValue]]
-    __kwargs__: ReadOnly[dict[Identifier, ArgValue]]
+    __args__: ReadOnly[list[object]]
+    __kwargs__: ReadOnly[dict[Identifier, object]]
     # **DunderKey: object (reserved for future use)
 
 
@@ -145,7 +143,7 @@ class HydraBlueprint[T](TypedDict):
     r"""A blueprint compatible with Hydra's instantiation syntax."""
 
     _target_: ReadOnly[str]
-    _args_: NotRequired[ReadOnly[list[ArgValue]]]
+    _args_: NotRequired[ReadOnly[list[object]]]
 
 
 def is_blueprint(arg: object, /) -> TypeGuard[Blueprint]:
@@ -346,7 +344,7 @@ def _initialize_from_args[T](cls: type[T], args: POArgs, kwargs: KWArgs, /) -> T
 # endregion for inferring config from instance -----------------------------------------
 
 
-def _resolve_value(arg: ArgValue, /) -> Any:
+def _resolve_value(arg: object, /) -> Any:
     match arg:
         case blueprint if is_blueprint(blueprint):
             return initialize(blueprint)
@@ -432,8 +430,8 @@ def _is_json(value: object, /) -> TypeGuard[JSON_Value]:
 @overload
 def _naive_serializer(value: Blueprint, /) -> JSON: ...
 @overload
-def _naive_serializer(value: ArgValue, /) -> JSON_Value: ...
-def _naive_serializer(value: ArgValue, /) -> JSON_Value:
+def _naive_serializer(value: object, /) -> JSON_Value: ...
+def _naive_serializer(value: object, /) -> JSON_Value:
     match value:
         case None:
             return None

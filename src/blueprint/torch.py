@@ -26,7 +26,6 @@ from blueprint.core import (
     INFER_ARGS_REGISTRY,
     JSON,
     Args,
-    ArgValue,
     Blueprint,
     Identifier,
     JSON_Value,
@@ -49,8 +48,8 @@ class ModelBlueprint[T: nn.Module = nn.Module](Blueprint[T]):
     __class_name__: ReadOnly[str]
     __module_version__: NotRequired[ReadOnly[str]]
 
-    __args__: ReadOnly[list[ArgValue]]
-    __kwargs__: ReadOnly[dict[Identifier, ArgValue]]
+    __args__: ReadOnly[list[object]]
+    __kwargs__: ReadOnly[dict[Identifier, object]]
     # **DunderKey: object (reserved for future use)
 
 
@@ -101,7 +100,7 @@ def _model_blueprint_to_json[T: nn.Module](spec: Blueprint[T], /) -> JSON:
     if not is_model_blueprint(spec):
         raise TypeError("Expected a model blueprint dictionary.")
 
-    def _map_small_tensors(arg: ArgValue) -> JSON_Value:
+    def _map_small_tensors(arg: object) -> JSON_Value:
         match arg:
             case Tensor():
                 return _small_tensor_to_json(arg)
