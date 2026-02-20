@@ -16,7 +16,7 @@ from torch import Tensor
 
 from linodenet.bijections import iResNetBlock
 from linodenet.layers import LinearContraction
-from linodenet.linalg import scaled_norm
+from linodenet.lib import scaled_norm
 from tests.utils import visualize_distribution
 from tests.utils.project import PROJECT
 

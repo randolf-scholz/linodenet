@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 from scipy.integrate import solve_ivp
 from tqdm.autonotebook import trange
 
-from linodenet.linalg import scaled_norm
+from linodenet.lib import scaled_norm
 from linodenet.system import LinODE
 from tests.utils import visualize_distribution
 from tests.utils.project import PROJECT

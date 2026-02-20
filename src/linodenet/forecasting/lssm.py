@@ -16,7 +16,7 @@ from blueprint import Blueprint, initialize
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
 from linodenet.filters import Filter, MissingValueCell
-from linodenet.linalg import pad
+from linodenet.lib import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
 from linodenet.system import ContinuousSystem, LinODECell

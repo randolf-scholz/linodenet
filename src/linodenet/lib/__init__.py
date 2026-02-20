@@ -13,6 +13,10 @@ __all__ = [
     "spectral_norm_debug",
     "spectral_norm_native",
     "spectral_norm_riemann",
+    # Linalg
+    "pad",
+    "scaled_norm",
+    "geometric_mean",
 ]
 
 from linodenet.lib._liblinodenet import (
@@ -26,4 +30,9 @@ from linodenet.lib._liblinodenet import (
     spectral_norm_debug,
     spectral_norm_native,
     spectral_norm_riemann,
+)
+from linodenet.lib.linalg import (
+    geometric_mean,
+    pad,
+    scaled_norm,
 )

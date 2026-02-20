@@ -21,7 +21,7 @@ from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm
 from torch.nn import functional
 
-from linodenet.context import timer
+from linodenet.utils import timer
 
 
 class NaiveContraction(nn.Module):

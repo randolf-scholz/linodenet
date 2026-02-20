@@ -23,9 +23,7 @@ __all__ = [
     # Sub-Modules
     "containers",
     "constants",
-    "context",
     "domains",
-    "linalg",
     "types",
     "utils",
 ]
@@ -51,7 +49,6 @@ from linodenet import (
     bijections,
     constants,
     containers,
-    context,
     distributions,
     domains,
     embeddings,
@@ -61,7 +58,6 @@ from linodenet import (
     imputation,
     initializations,
     lib,
-    linalg,
     parametrize,
     projections,
     regularizations,

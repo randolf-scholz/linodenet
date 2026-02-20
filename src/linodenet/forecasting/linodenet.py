@@ -15,7 +15,7 @@ from torch import Tensor, jit, nn
 from blueprint import Blueprint, ObjectBlueprint, initialize
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
-from linodenet.linalg import pad
+from linodenet.lib import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
 from linodenet.system import LinODECell

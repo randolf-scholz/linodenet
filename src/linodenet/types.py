@@ -14,8 +14,6 @@ __all__ = [
     "Makes",
     "Shape",
     "Nested",
-    "NestedDict",
-    "NestedMapping",
     "PathLike",
     "Range",
     "Scalar",
@@ -55,10 +53,6 @@ type Shape = tuple[int, ...]
 r"""Type hint for shapes."""
 type DimArg = None | int | Sequence[SupportsIndex]
 r"""Type hint for dimension arguments."""
-type NestedMapping[K, V] = Mapping[K, V | "NestedMapping[K, V]"]
-r"""Generic Type Alias for nested `Mapping`."""
-type NestedDict[K, V] = dict[K, V | "NestedDict[K, V]"]
-r"""Generic Type Alias for nested `dict`."""
 type Range[T] = SupportsLenAndGetItem[T] | Iterable[T]
 r"""Type hint for ranges of values."""
 type Nested[T] = T | Mapping[str, Nested[T]] | Sequence[Nested[T]]

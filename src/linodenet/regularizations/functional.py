@@ -55,13 +55,12 @@ class Regularization(Protocol):
 def log_det_exp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     r"""Bias $\det(eᴬ)$ towards 1.
 
+    Returns:
+        .. math:: |\tr(A)|ᵖ
+
     By Jacobi's formula
 
     .. math:: \det(eᴬ) = e^{\tr(A)} ⟺ \log(\det(eᴬ)) = \tr(A)
-
-    In particular, we can regularize the LinODE model by adding a regularization term of the form
-
-    .. math:: |\tr(A)|ᵖ
     """
     diag = torch.diagonal(x, dim1=-1, dim2=-2)
     traces = diag.mean(dim=-1) if size_normalize else diag.sum(dim=-1)

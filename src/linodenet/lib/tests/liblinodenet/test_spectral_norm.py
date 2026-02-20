@@ -4,13 +4,13 @@ import pytest
 import torch
 from torch import nn
 
-from linodenet.context import timer
 from linodenet.lib import (
     singular_triplet,
     singular_triplet_native,
     spectral_norm,
     spectral_norm_native,
 )
+from linodenet.utils import timer
 
 DEVICES = ["cpu", "cuda"] if torch.cuda.is_available() else ["cpu"]
 NORM_ONLY = {True: "norm_only", False: "triplet"}
