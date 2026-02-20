@@ -46,7 +46,7 @@ dev = [
 devtools = [
     "cmake>=4.2.1",
     "ninja>=1.13.0",
-    "prek>=0.3.2",
+    "prek>=0.3.3",
     "pybadges>=3.0.1",
 ]
 debug = [
@@ -74,12 +74,12 @@ docs = [
     "sphinx>=9.1.0",
 ]
 linters = [
-    "ruff>=0.15.0",
+    "ruff>=0.15.2",
     "tach>=0.33.3",
 ]
 tests = [
     "coverage>=7.13.4",
-    "hypothesis[numpy,pytest]>=6.151.6",
+    "hypothesis[numpy,pytest]>=6.151.9",
     "matplotlib>=3.10.8",
     "psutil>=7.2.2",
     "pygal>=3.1.0",
@@ -93,10 +93,10 @@ tests = [
 ]
 typing = [
     "mypy>=1.19.1",
-    "pyrefly>=0.52.0",
+    "pyrefly>=0.53.0",
     "pyright>=1.1.408",
     "scipy-stubs>=1.17.0.2",
-    "ty>=0.0.16",
+    "ty>=0.0.17",
     "types-colorama>=0.4.15.20250801",
     "types-decorator>=5.2.0.20251101",
     "types-docutils>=0.22.3.20251115",

@@ -23,10 +23,10 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/b8/5e/db279a3bfbd18d5
 
 [[packages]]
 name = "filelock"
-version = "3.21.0"
+version = "3.24.3"
 index = "https://pypi.org/simple"
-sdist = { url = "https://files.pythonhosted.org/packages/c0/6b/cc63cdbff46eba1ce2fbd058e9699f99c43f7e604da15413ca0331040bff/filelock-3.21.0.tar.gz", upload-time = 2026-02-12T15:40:48Z, size = 31341, hashes = { sha256 = "48c739c73c6fcacd381ed532226991150947c4a76dcd674f84d6807fd55dbaf2" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/da/ab/05190b5a64101fcb743bc63a034c0fac86a515c27c303c69221093565f28/filelock-3.21.0-py3-none-any.whl", upload-time = 2026-02-12T15:40:46Z, size = 21381, hashes = { sha256 = "0f90eee4c62101243df3007db3cf8fc3ebf1bb13541d3e72c687d6e0f3f7d531" } }]
+sdist = { url = "https://files.pythonhosted.org/packages/73/92/a8e2479937ff39185d20dd6a851c1a63e55849e447a55e798cc2e1f49c65/filelock-3.24.3.tar.gz", upload-time = 2026-02-19T00:48:20Z, size = 37935, hashes = { sha256 = "011a5644dc937c22699943ebbfc46e969cdde3e171470a6e40b9533e5a72affa" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/9c/0f/5d0c71a1aefeb08efff26272149e07ab922b64f46c63363756224bd6872e/filelock-3.24.3-py3-none-any.whl", upload-time = 2026-02-19T00:48:18Z, size = 24331, hashes = { sha256 = "426e9a4660391f7f8a810d71b0555bce9008b0a1cc342ab1f6947d37639e002d" } }]
 
 [[packages]]
 name = "fsspec"
