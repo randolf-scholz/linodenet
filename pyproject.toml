@@ -34,6 +34,11 @@ dependencies = [
     "torchdiffeq>=0.2.5",
     "typing_extensions>=4.15.0",
 ]
+
+[project.optional-dependencies]
+extra = [
+    "tqdm>=4.67.3",
+]
 # endregion project configuration ------------------------------------------------------
 
 

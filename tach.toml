@@ -23,10 +23,6 @@ path = "linodenet.filters"
 depends_on = [ "linodenet.distributions", "linodenet.imputation", "blueprint"]
 
 [[modules ]]
-path = "linodenet.linalg"
-depends_on = []
-
-[[modules ]]
 path = "linodenet.initializations"
 depends_on = []
 
@@ -37,7 +33,7 @@ utility = true
 
 [[modules ]]
 path = "linodenet.forecasting"
-depends_on = ["linodenet.filters", "linodenet.projections", "linodenet.linalg", "linodenet.embeddings", "linodenet.system", "linodenet.encoders", "blueprint"]
+depends_on = ["linodenet.filters", "linodenet.projections", "linodenet.embeddings", "linodenet.system", "linodenet.encoders", "blueprint", "linodenet.lib"]
 
 [[modules ]]
 path = "linodenet.system"
@@ -46,16 +42,6 @@ depends_on = ["linodenet.projections", "linodenet.initializations", "blueprint"]
 [[modules ]]
 path = "linodenet.regularizations"
 depends_on = [ "linodenet.projections"]
-
-[[modules ]]
-path = "linodenet.context"
-depends_on = []
-utility = true
-
-[[modules ]]
-path = "linodenet.algebra"
-depends_on = []
-utility = true
 
 [[modules ]]
 path = "linodenet.imputation"
@@ -84,7 +70,7 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet.layers"
-depends_on = ["linodenet.lib", "linodenet.activations"]
+depends_on = ["linodenet.activations", "linodenet.lib"]
 
 [[modules ]]
 path = "linodenet.encoders"
@@ -100,7 +86,7 @@ depends_on = ["blueprint"]
 
 [[modules ]]
 path = "linodenet.parametrize"
-depends_on = ["linodenet.projections", "linodenet.lib", "linodenet.testing"]
+depends_on = ["linodenet.projections", "linodenet.testing", "linodenet.lib"]
 
 [[modules ]]
 path = "linodenet.domains"

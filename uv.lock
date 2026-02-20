@@ -1073,6 +1073,11 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
+[package.optional-dependencies]
+extra = [
+    { name = "tqdm" },
+]
+
 [package.dev-dependencies]
 debug = [
     { name = "ipympl" },
@@ -1214,8 +1219,10 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.17.0" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "torchdiffeq", specifier = ">=0.2.5" },
+    { name = "tqdm", marker = "extra == 'extra'", specifier = ">=4.67.3" },
     { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
+provides-extras = ["extra"]
 
 [package.metadata.requires-dev]
 debug = [
