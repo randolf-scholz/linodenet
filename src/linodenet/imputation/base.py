@@ -108,7 +108,7 @@ class ConstantImputer(nn.Module):
 
     def __init__(self, constant: float | Tensor, /, *, learnable: bool = False) -> None:
         super().__init__()
-        tensor = torch.tensor(constant)
+        tensor = torch.as_tensor(constant)
         self.learnable = learnable
         self.value = nn.Parameter(tensor, requires_grad=learnable)
 
