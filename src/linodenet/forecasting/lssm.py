@@ -16,10 +16,10 @@ from blueprint import Blueprint, initialize
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
 from linodenet.filters import Filter, MissingValueCell
+from linodenet.flows import ContinuousFlow, LinearFlow
 from linodenet.lib import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
-from linodenet.system import ContinuousSystem, LinODECell
 from linodenet.utils import deep_dict_update
 
 
@@ -32,7 +32,7 @@ _DEFAULT_LSSM_CONFIG = {
     "hidden_size": None,
     "latent_size": None,
     "output_size": None,
-    "System": _module_config(LinODECell),
+    "System": _module_config(LinearFlow),
     "Embedding": _module_config(ConcatEmbedding),
     "Projection": _module_config(ConcatProjection),
     "Filter": _module_config(MissingValueCell),
@@ -102,7 +102,7 @@ class LatentStateSpaceModel(nn.Module):
     # embedding: nn.Module
     # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
     # system: nn.Module
-    # r"""MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`."""
+    # r"""MODULE: Responsible for propagating `ẑₜ→ẑ_{t+∆t}`."""
     # decoder: nn.Module
     # r"""MODULE: Responsible for projecting `ẑ→x̂`."""
     # projection: nn.Module
@@ -137,7 +137,7 @@ class LatentStateSpaceModel(nn.Module):
 
         # ensure filter and system satisfy the protocols
         assert isinstance(self.filter, Filter)
-        assert isinstance(self.system, ContinuousSystem)
+        assert isinstance(self.system, ContinuousFlow)
 
         self.input_size = int(self.filter.input_size)
         self.output_size = int(self.filter.hidden_size)
@@ -168,7 +168,7 @@ class LatentStateSpaceModel(nn.Module):
 
     def validate_sizes(self) -> None:
         assert isinstance(self.filter, Filter)
-        assert isinstance(self.system, ContinuousSystem)
+        assert isinstance(self.system, ContinuousFlow)
         filter_input = int(self.filter.input_size)
         filter_hidden = int(self.filter.hidden_size)
         if filter_input != filter_hidden:

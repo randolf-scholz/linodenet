@@ -4,15 +4,15 @@ __all__ = [
     # modules
     "activations",
     "bijections",
+    "containers",
     "embeddings",
     "encoders",
-    "containers",
     "filters",
+    "flows",
     "forecasting",
     "imputation",
     "layers",
     "projections",
-    "system",
 ]
 
 from linodenet import (
@@ -22,11 +22,11 @@ from linodenet import (
     embeddings,
     encoders,
     filters,
+    flows,
     forecasting,
     imputation,
     layers,
     projections,
-    system,
 )
 
 __all__ += activations.__all__
@@ -38,5 +38,5 @@ __all__ += forecasting.__all__
 __all__ += imputation.__all__
 __all__ += layers.__all__
 __all__ += projections.__all__
-__all__ += system.__all__
+__all__ += flows.__all__
 __all__ += containers.__all__

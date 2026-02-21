@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import linodenet.filters.deprecated
-from linodenet import embeddings, system
+from linodenet import embeddings, flows
 from linodenet.encoders import ResNet
 from linodenet.forecasting import LinODEnet
 
@@ -25,8 +25,8 @@ def test_model_stability() -> None:
         "embedding_type": "concat",
         "Filter": linodenet.filters.deprecated.FilterList,
         "System": {
-            "__module__": system.LinODECell.__module__,
-            "__name__": system.LinODECell.__qualname__,
+            "__module__": flows.LinearFlow.__module__,
+            "__name__": flows.LinearFlow.__qualname__,
             "kernel_initialization": "skew-symmetric",
         },
         "Encoder": ResNet,

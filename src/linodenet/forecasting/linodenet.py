@@ -15,10 +15,10 @@ from torch import Tensor, jit, nn
 from blueprint import Blueprint, ObjectBlueprint, initialize
 from linodenet.embeddings import ConcatEmbedding
 from linodenet.encoders import ResNet
+from linodenet.flows import LinearFlow
 from linodenet.lib import pad
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
-from linodenet.system import LinODECell
 
 
 def _module_blueprint[T](cls: type[T]) -> ObjectBlueprint[T]:
@@ -32,7 +32,7 @@ def _module_blueprint[T](cls: type[T]) -> ObjectBlueprint[T]:
 
 _DEFAULT_EMBEDDING_BLUEPRINT = _module_blueprint(ConcatEmbedding)
 _DEFAULT_ENCODER_BLUEPRINT = _module_blueprint(ResNet)
-_DEFAULT_SYSTEM_BLUEPRINT = _module_blueprint(LinODECell)
+_DEFAULT_SYSTEM_BLUEPRINT = _module_blueprint(LinearFlow)
 _DEFAULT_DECODER_BLUEPRINT = _module_blueprint(ResNet)
 _DEFAULT_PROJECTION_BLUEPRINT = _module_blueprint(ConcatProjection)
 _DEFAULT_FILTER_BLUEPRINT = _module_blueprint(nn.GRUCell)

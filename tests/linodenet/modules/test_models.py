@@ -8,9 +8,9 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.bijections import iResNet, iResNetBlock
+from linodenet.flows import LinearFlow
 from linodenet.forecasting import LinODEnet
 from linodenet.layers import LinearContraction
-from linodenet.system import LinODE, LinODECell
 from linodenet.testing import assert_model_ok, check_initialization
 from tests.utils.project import PROJECT
 
@@ -50,17 +50,11 @@ MODELS: dict[type[nn.Module], dict] = {
         "input_shapes": [(LEN, DIM)],  # X
         "output_shapes": [(LEN, DIM)],
     },
-    LinODECell: {
+    LinearFlow: {
         "init_args": (DIM,),
         "init_kwargs": {},
         "input_shapes": [(), (DIM,)],  # Δt, x0
         "output_shapes": [(DIM,)],
-    },
-    LinODE: {
-        "init_args": (DIM,),
-        "init_kwargs": {},
-        "input_shapes": [(LEN,), (DIM,)],  # T, x0
-        "output_shapes": [(LEN, DIM)],
     },
     LinODEnet: {
         "init_args": (DIM, LAT),

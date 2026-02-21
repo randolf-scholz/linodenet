@@ -149,7 +149,7 @@ class HydraBlueprint[T](TypedDict):
 def is_blueprint(arg: object, /) -> TypeGuard[Blueprint]:
     if not isinstance(arg, dict):
         return False
-    if not all(is_blueprint_key(key) for key in arg):
+    if not any(is_blueprint_key(key) for key in arg):
         return False
     return True
 

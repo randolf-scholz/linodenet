@@ -14,8 +14,8 @@ from numpy.typing import NDArray
 from scipy.integrate import solve_ivp
 from tqdm.autonotebook import trange
 
+from linodenet.flows import LinearFlow
 from linodenet.lib import scaled_norm
-from linodenet.system import LinODE
 from tests.utils import visualize_distribution
 from tests.utils.project import PROJECT
 
@@ -38,7 +38,7 @@ def compute_linode_error(
     """
     N = num or random.choice([10 * k for k in range(2, 11)])
     D = dim or random.choice([2**k for k in range(1, 8)])
-    logger = logging.getLogger(f"{__name__}/{LinODE.__name__}-test-{N}-{D}")
+    logger = logging.getLogger(f"{__name__}/{LinearFlow.__name__}-test-{N}-{D}")
 
     numpy_dtype: type[np.number]
     torch_dtype: torch.dtype
@@ -80,18 +80,16 @@ def compute_linode_error(
     T_torch = torch.tensor(t_span, dtype=torch_dtype, device=device)
     x0_torch = torch.tensor(x0, dtype=torch_dtype, device=device)
 
-    model = LinODE(
+    flow = LinearFlow(
         input_size=D,
-        cell={
-            "kernel_initialization": A,
-            "scalar": 1.0,
-            "scalar_learnable": False,
-        },
+        kernel_initialization=A,
+        scalar=1.0,
+        scalar_learnable=False,
     )
-    model.to(dtype=torch_dtype, device=device)
-    assert model.cell.scalar == 1.0
+    flow.to(dtype=torch_dtype, device=device)
+    # assert model.cell.scalar == 1.0
 
-    Xhat = model(T_torch, x0_torch)
+    Xhat = flow.forecast(T_torch, x0_torch, t0=t0)
     Xhat = Xhat.clone().detach().cpu()
 
     residual = (X - Xhat).abs()
@@ -176,6 +174,8 @@ def make_error_plots(
     )
 
     fig.savefig(RESULT_DIR / "LinODE_odeint_comparison.pdf")
+    fig.savefig(RESULT_DIR / "LinODE_odeint_comparison.svg")
+    fig.savefig(RESULT_DIR / "LinODE_odeint_comparison.png", dpi=300)
 
 
 @pytest.mark.flaky(reruns=3)
@@ -202,8 +202,8 @@ def test_linode_error(
         case _:
             raise AssertionError(f"Unknown precision {precision}")
 
-    logger = logging.getLogger(f"{__name__}/{LinODE.__name__}")
-    logger.info("Testing %s.", LinODE)
+    logger = logging.getLogger(f"{__name__}/{LinearFlow.__name__}")
+    logger.info("Testing %s.", LinearFlow)
 
     logger.info(f"Generating {num_samples} samples in {precision} precision")
     errors = np.array(
@@ -223,13 +223,13 @@ def test_linode_error(
             raise AssertionError(
                 f"The tolerance seems too loose: {quantile} quantile {q} << {tol}"
             )
-    logger.info("%s passes test ✔ ", LinODE)
+    logger.info("%s passes test ✔ ", LinearFlow)
 
 
 @pytest.mark.slow
 def test_make_error_plot(num_samples: int = 100) -> None:  # noqa: PT028
-    logger = logging.getLogger(f"{__name__}/{LinODE.__name__}")
-    logger.info("Testing %s.", LinODE)
+    logger = logging.getLogger(f"{__name__}/{LinearFlow.__name__}")
+    logger.info("Testing %s.", LinearFlow)
 
     logger.info(f"Generating {num_samples} samples in single precision")
     err_single = np.array(

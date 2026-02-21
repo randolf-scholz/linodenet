@@ -11,7 +11,7 @@ source_roots = [ "src",
 
 [[modules ]]
 path = "linodenet.nn"
-depends_on = ["linodenet.embeddings", "linodenet.encoders", "linodenet.bijections", "linodenet.forecasting", "linodenet.projections", "linodenet.system", "linodenet.filters", "linodenet.layers", "linodenet.activations", "linodenet.imputation"]
+depends_on = ["linodenet.embeddings", "linodenet.encoders", "linodenet.bijections", "linodenet.forecasting", "linodenet.projections", "linodenet.filters", "linodenet.layers", "linodenet.activations", "linodenet.imputation", "linodenet.flows"]
 
 [[modules ]]
 path = "linodenet.utils"
@@ -33,11 +33,7 @@ utility = true
 
 [[modules ]]
 path = "linodenet.forecasting"
-depends_on = ["linodenet.filters", "linodenet.projections", "linodenet.embeddings", "linodenet.system", "linodenet.encoders", "blueprint", "linodenet.lib"]
-
-[[modules ]]
-path = "linodenet.system"
-depends_on = ["linodenet.projections", "linodenet.initializations", "blueprint"]
+depends_on = ["linodenet.filters", "linodenet.projections", "linodenet.embeddings", "linodenet.encoders", "blueprint", "linodenet.lib", "linodenet.flows"]
 
 [[modules ]]
 path = "linodenet.regularizations"
@@ -110,3 +106,7 @@ utility = true
 [[modules ]]
 path = "blueprint"
 depends_on = []
+
+[[modules ]]
+path = "linodenet.flows"
+depends_on = ["linodenet.projections", "linodenet.initializations"]
