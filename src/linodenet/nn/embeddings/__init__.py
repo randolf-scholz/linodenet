@@ -19,7 +19,7 @@ __all__ = [
     "LinearEmbedding",
 ]
 
-from linodenet.embeddings.embeddings import (
+from linodenet.nn.embeddings.embeddings import (
     ConcatEmbedding,
     Embedding,
     EmbeddingBase,

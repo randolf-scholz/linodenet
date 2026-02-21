@@ -122,7 +122,7 @@ import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
-from linodenet.containers import ModuleSequence
+from linodenet.nn import ModuleSequence
 
 
 @runtime_checkable

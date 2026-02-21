@@ -8,12 +8,17 @@ from typing import NamedTuple, is_protocol
 import pytest
 
 import linodenet as lib
-from linodenet.activations import ALL_ACTIVATIONS, Activation
 from linodenet.bijections import BIJECTIONS, Bijection, BijectionBase
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
-from linodenet.embeddings import EMBEDDINGS, Embedding, EmbeddingBase
+from linodenet.flows import (
+    FLOWS,
+    Flow,
+    FlowBase,
+)
 from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATIONS, Initialization
+from linodenet.nn.activations import ALL_ACTIVATIONS, Activation
+from linodenet.nn.embeddings import EMBEDDINGS, Embedding, EmbeddingBase
 from linodenet.parametrize import (
     PARAMETRIZATIONS,
     Parametrization,
@@ -44,10 +49,11 @@ class Case(NamedTuple):
 
 
 CASES: dict[str, Case] = {
-    "activations"         : Case(lib.activations, Activation, None, ALL_ACTIVATIONS),
+    "activations"         : Case(lib.nn.activations , Activation     , None               , ALL_ACTIVATIONS           ),
     "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
     "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
-    "embeddings"          : Case(lib.embeddings     , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
+    "embeddings"          : Case(lib.nn.embeddings  , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
+    "flows"               : Case(lib.flows          , Flow           , FlowBase           , FLOWS                     ),
     "imputation"          : Case(lib.imputation     , ImputerProtocol, None               , IMPUTERS                  ),
     "initializations"     : Case(lib.initializations, Initialization , None               , INITIALIZATIONS           ),
     "matrix_tests"        : Case(lib.testing        , MatrixTest     , None               , MATRIX_TESTS              ),

@@ -43,7 +43,7 @@ from typing import Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.containers import ModuleSequence
+from linodenet.nn import ModuleSequence
 
 
 @runtime_checkable

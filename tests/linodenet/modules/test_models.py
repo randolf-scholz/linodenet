@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from linodenet.bijections import iResNet, iResNetBlock
 from linodenet.flows import LinearFlow
 from linodenet.forecasting import LinODEnet
-from linodenet.layers import LinearContraction
+from linodenet.nn import LinearContraction
 from linodenet.testing import assert_model_ok, check_initialization
 from tests.utils.project import PROJECT
 

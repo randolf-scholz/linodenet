@@ -1,9 +1,4 @@
-r"""Residual Network Implementation.
-
-Modified variant of the implementation from https://github.com/yandex-research/rtdl
-
-Original Licensed under Apache License 2.0
-"""
+r"""Residual Network Implementation."""
 
 __all__ = [
     # Classes
@@ -13,11 +8,9 @@ __all__ = [
 
 from torch import Tensor, jit, nn
 
-from linodenet.containers import ModuleSequence
-from linodenet.layers import (
-    ReverseDense,
-    ReZero,
-)
+from linodenet.nn.containers import ModuleSequence
+from linodenet.nn.reverse_dense import ReverseDense
+from linodenet.nn.rezero import ReZero
 from linodenet.signatures import signature
 
 
@@ -25,10 +18,10 @@ class ResNetBlock(ModuleSequence):
     r"""Pre-activation ResNet block.
 
     References:
-        Identity Mappings in Deep Residual Networks
-        Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
-        European Conference on Computer Vision 2016
-        https://link.springer.com/chapter/10.1007/978-3-319-46493-0_38
+        - | Identity Mappings in Deep Residual Networks
+          | Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+          | European Conference on Computer Vision 2016
+          | https://link.springer.com/chapter/10.1007/978-3-319-46493-0_38
     """
 
     def __init__(

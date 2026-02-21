@@ -8,8 +8,7 @@ __all__ = [
     "ImputationStrategy",
     # classes
     "ZeroImputer",
-    "ConstantValueImputer",
-    "LearnableValueImputer",
+    "ConstantImputer",
     "LastValueImputer",
     "LinearImputer",
     # functions
@@ -17,11 +16,10 @@ __all__ = [
 ]
 
 from linodenet.imputation.base import (
-    ConstantValueImputer,
+    ConstantImputer,
     ImputationStrategy,
     ImputerProtocol,
     LastValueImputer,
-    LearnableValueImputer,
     LinearImputer,
     ZeroImputer,
     zero_impute,
@@ -29,8 +27,7 @@ from linodenet.imputation.base import (
 
 IMPUTERS: dict[str, type[ImputerProtocol]] = {
     "ZeroImputer"           : ZeroImputer,
-    "ConstantValueImputer"  : ConstantValueImputer,
-    "LearnableValueImputer" : LearnableValueImputer,
+    "ConstantValueImputer"  : ConstantImputer,
     "LastValueImputer"      : LastValueImputer,
     "LinearImputer"         : LinearImputer,
 }  # fmt: skip

@@ -6,9 +6,9 @@ import pytest
 import torch
 
 import linodenet.filters.deprecated
-from linodenet import embeddings, flows
-from linodenet.encoders import ResNet
+from linodenet import flows
 from linodenet.forecasting import LinODEnet
+from linodenet.nn import ResNet, embeddings
 
 
 @pytest.mark.skip(reason="Not implemented yet.")

@@ -11,8 +11,8 @@ from typing import Final
 import torch
 from torch import Tensor
 
-from linodenet.containers import ModuleSequence
 from linodenet.distributions.base import DistributionBase
+from linodenet.nn import ModuleSequence
 
 
 class Product[D: DistributionBase](ModuleSequence[D]):

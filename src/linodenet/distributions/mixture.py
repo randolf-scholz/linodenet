@@ -8,9 +8,9 @@ from typing import Final, Self, SupportsIndex, overload
 import torch
 from torch import Tensor, nn
 
-from linodenet.containers import ModuleSequence
 from linodenet.distributions.base import DistributionBase
 from linodenet.distributions.categorical import Categorical
+from linodenet.nn import ModuleSequence
 
 
 class Mixture[D: DistributionBase](nn.Module):

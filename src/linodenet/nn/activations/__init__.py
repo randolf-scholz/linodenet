@@ -8,8 +8,6 @@ Notes:
 __all__ = [
     # Sub-Modules
     "base",
-    "functional",
-    "modules",
     # Constants
     "ALL_ACTIVATIONS",
     "ACTIVATION_FUNCTIONS",
@@ -24,7 +22,7 @@ __all__ = [
     "GenericActivation",
     # Classes
     "HardBend",
-    "GeGLU",
+    "GEGLU",
     "ReGLU",
     # Functions
     "geglu",
@@ -36,15 +34,16 @@ __all__ = [
 
 from torch import nn
 
-from linodenet.activations import base, functional, modules
-from linodenet.activations.base import (
+from linodenet.nn.activations import base
+from linodenet.nn.activations.base import (
     Activation,
     ActivationBase,
     GenericActivation,
     get_activation,
 )
-from linodenet.activations.functional import geglu, hard_bend, reglu
-from linodenet.activations.modules import GeGLU, HardBend, ReGLU
+from linodenet.nn.activations.geglu import GEGLU, geglu
+from linodenet.nn.activations.hard_bend import HardBend, hard_bend
+from linodenet.nn.activations.reglu import ReGLU, reglu
 
 TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     "relu": nn.functional.relu,
@@ -181,7 +180,7 @@ r"""Dictionary containing all available activation functions."""
 ACTIVATION_CLASSES: dict[str, type[Activation]] = {
     **TORCH_ACTIVATION_CLASSES,
     "HardBend": HardBend,
-    "GeGLU": GeGLU,
+    "GeGLU": GEGLU,
     "ReGLU": ReGLU,
 }
 r"""Dictionary containing all available activation classes."""

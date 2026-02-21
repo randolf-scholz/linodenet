@@ -4,11 +4,8 @@ __all__ = [
     # Constants
     "__version__",
     # Sub-Packages
-    "activations",
     "bijections",
     "distributions",
-    "embeddings",
-    "encoders",
     "filters",
     "flows",
     "forecasting",
@@ -21,7 +18,6 @@ __all__ = [
     "signatures",
     "testing",
     # Sub-Modules
-    "containers",
     "constants",
     "domains",
     "types",
@@ -45,14 +41,10 @@ finally:
     del metadata
 
 from linodenet import (
-    activations,
     bijections,
     constants,
-    containers,
     distributions,
     domains,
-    embeddings,
-    encoders,
     filters,
     flows,
     forecasting,

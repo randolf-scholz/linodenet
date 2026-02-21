@@ -67,7 +67,7 @@ def get_activation(arg: object, /, **cfg: object) -> Activation:
         # if a name, look up in the dictionary
         case str(name):
             # avoid circular import
-            from linodenet.activations import ALL_ACTIVATIONS  # noqa: PLC0415
+            from linodenet.nn.activations import ALL_ACTIVATIONS  # noqa: PLC0415
 
             try:
                 obj = ALL_ACTIVATIONS[name]

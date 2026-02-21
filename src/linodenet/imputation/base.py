@@ -5,14 +5,13 @@ __all__ = [
     "ImputationStrategy",
     "zero_impute",
     "ZeroImputer",
-    "ConstantValueImputer",
-    "LearnableValueImputer",
+    "ConstantImputer",
     "LastValueImputer",
     "LinearImputer",
 ]
 
 from enum import StrEnum
-from typing import Protocol
+from typing import Final, Protocol
 
 import torch
 from torch import Tensor, nn
@@ -99,43 +98,22 @@ class ZeroImputer(nn.Module):
         return torch.where(m, y, torch.zeros_like(y))
 
 
-class ConstantValueImputer(nn.Module):
+class ConstantImputer(nn.Module):
     r"""Impute missing values with a constant."""
 
     value: Tensor
     r"""Constant value to impute missing values."""
+    learnable: Final[bool]
+    r"""Whether the constant value is learnable or not."""
 
-    def __init__(self, constant: float | Tensor, /) -> None:
+    def __init__(self, constant: float | Tensor, /, *, learnable: bool = False) -> None:
         super().__init__()
         tensor = torch.tensor(constant)
-        self.value = nn.Parameter(tensor, requires_grad=False)
+        self.learnable = learnable
+        self.value = nn.Parameter(tensor, requires_grad=learnable)
 
     def forward(self, mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
         r"""Impute missing values with a constant.
-
-        .. math:: (m, y, *) ⟼ ⟦m ? y : c⟧
-
-        Args:
-            mask (Tensor): Mask tensor (true if observed)
-            y (Tensor): Observed state.
-            _ (Tensor): Hidden state.
-        """
-        return torch.where(mask, y, self.value)
-
-
-class LearnableValueImputer(nn.Module):
-    r"""Impute missing values in a tensor."""
-
-    value: Tensor
-    r"""Impute missing values in a tensor."""
-
-    def __init__(self, shape: tuple[int, ...], /) -> None:
-        super().__init__()
-        tensor = torch.randn(shape)
-        self.value = nn.Parameter(tensor, requires_grad=True)
-
-    def forward(self, mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
-        r"""Impute missing values in a tensor.
 
         .. math:: (m, y, *) ⟼ ⟦m ? y : c⟧
 

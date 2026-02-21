@@ -1,6 +1,8 @@
 r"""Implementation of the `@signature` decorator."""
 
 __all__ = [
+    # Config
+    "LAZY_EVAL",
     # Types
     "SignatureType",
     "ShapeType",
@@ -35,7 +37,6 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
-from functools import cached_property
 from types import EllipsisType
 from typing import ClassVar, Literal, TypeIs, overload
 
@@ -433,9 +434,10 @@ class Parser:
         try:
             result = self._parse_signature()
             self._check_eof()
-        except SyntaxError as exc:
-            exc.add_note(f"Failed to parse signature from {arg!r}")
-            raise
+        except SyntaxError as parser_error:
+            exc = RuntimeError(f"Failed to parse signature {arg!r}")
+            exc.add_note(str(parser_error))
+            raise exc from parser_error
 
         return result
 
@@ -725,6 +727,10 @@ class Parser:
         return DynamicDim(ident)
 
 
+LAZY_EVAL = False
+r"""Config flag to control whether to parse signatures lazily or eagerly."""
+
+
 class signature:
     r"""To be used as a no-op decorator for annotating function signatures.
 
@@ -737,14 +743,20 @@ class signature:
     - `...`: axes to vectorize over
     """
 
-    def __init__(self, sig_string: str, /, lazy: bool = False) -> None:
+    def __init__(self, sig_string: str, /, lazy: bool = LAZY_EVAL) -> None:
         self.original_signature = sig_string
         if not lazy:
-            _ = self.parsed
+            self._parse()
 
-    @cached_property
+    def _parse(self) -> None:
+        # parse the signature string and cache the result
+        self._parsed = Parser.parse_signature(self.original_signature)
+
+    @property
     def parsed(self) -> SignatureType:
-        return Parser.parse_signature(self.original_signature)
+        if not hasattr(self, "_parsed"):
+            self._parse()
+        return self._parsed
 
     def __str__(self) -> str:
         return str(self.parsed)

@@ -11,7 +11,7 @@ source_roots = [ "src",
 
 [[modules ]]
 path = "linodenet.nn"
-depends_on = ["linodenet.embeddings", "linodenet.encoders", "linodenet.bijections", "linodenet.forecasting", "linodenet.projections", "linodenet.filters", "linodenet.layers", "linodenet.activations", "linodenet.imputation", "linodenet.flows"]
+depends_on = [ "linodenet.nn.activations", "linodenet.lib", "linodenet.nn.embeddings", "linodenet.nn.containers"]
 
 [[modules ]]
 path = "linodenet.utils"
@@ -20,7 +20,7 @@ utility = true
 
 [[modules ]]
 path = "linodenet.filters"
-depends_on = [ "linodenet.distributions", "linodenet.imputation", "blueprint"]
+depends_on = [ "linodenet.distributions", "linodenet.imputation", "blueprint", "linodenet.nn"]
 
 [[modules ]]
 path = "linodenet.initializations"
@@ -33,7 +33,7 @@ utility = true
 
 [[modules ]]
 path = "linodenet.forecasting"
-depends_on = ["linodenet.filters", "linodenet.projections", "linodenet.embeddings", "linodenet.encoders", "blueprint", "linodenet.lib", "linodenet.flows"]
+depends_on = ["linodenet.filters", "linodenet.projections", "blueprint", "linodenet.lib", "linodenet.flows", "linodenet.nn", "linodenet.nn.embeddings"]
 
 [[modules ]]
 path = "linodenet.regularizations"
@@ -45,10 +45,6 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet.lib"
-depends_on = []
-
-[[modules ]]
-path = "linodenet.embeddings"
 depends_on = []
 
 [[modules ]]
@@ -65,24 +61,12 @@ path = "linodenet.testing"
 depends_on = []
 
 [[modules ]]
-path = "linodenet.layers"
-depends_on = ["linodenet.activations", "linodenet.lib"]
-
-[[modules ]]
-path = "linodenet.encoders"
-depends_on = ["linodenet.layers", "linodenet.bijections", "blueprint"]
-
-[[modules ]]
 path = "linodenet.bijections"
-depends_on = ["linodenet.layers", "linodenet.initializations", "linodenet.activations"]
-
-[[modules ]]
-path = "linodenet.activations"
-depends_on = ["blueprint"]
+depends_on = [ "linodenet.initializations", "linodenet.nn", "linodenet.nn.activations"]
 
 [[modules ]]
 path = "linodenet.parametrize"
-depends_on = ["linodenet.projections", "linodenet.testing", "linodenet.lib"]
+depends_on = ["linodenet.projections", "linodenet.testing", "linodenet.lib", "linodenet.nn"]
 
 [[modules ]]
 path = "linodenet.domains"
@@ -91,12 +75,7 @@ utility = true
 
 [[modules ]]
 path = "linodenet.distributions"
-depends_on = []
-
-[[modules ]]
-path = "linodenet.containers"
-depends_on = []
-utility = true
+depends_on = ["linodenet.nn"]
 
 [[modules ]]
 path = "linodenet.signatures"
@@ -110,3 +89,15 @@ depends_on = []
 [[modules ]]
 path = "linodenet.flows"
 depends_on = ["linodenet.projections", "linodenet.initializations"]
+
+[[modules ]]
+path = "linodenet.nn.embeddings"
+depends_on = []
+
+[[modules ]]
+path = "linodenet.nn.activations"
+depends_on = ["blueprint"]
+
+[[modules ]]
+path = "linodenet.nn.containers"
+depends_on = []

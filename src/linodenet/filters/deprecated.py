@@ -15,9 +15,9 @@ from collections.abc import Iterable
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.containers import ModuleSequence
 from linodenet.filters.base import CellBase, FilterBase
 from linodenet.filters.kalman_cell import _Alpha
+from linodenet.nn import ModuleSequence
 from linodenet.signatures import signature
 
 

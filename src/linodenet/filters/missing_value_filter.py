@@ -103,7 +103,7 @@ class MissingValueCell(CellBase):
                 )
             case (Tensor() | float()) as value:
                 imputation_strategy = ImputationStrategy.CONSTANT
-                imputer = imp.ConstantValueImputer(value)
+                imputer = imp.ConstantImputer(value)
             case nn.Module as module:
                 imputation_strategy = ImputationStrategy.OTHER
                 imputer = cast("ImputerProtocol", module)

@@ -8,12 +8,23 @@ from typing import Final, Optional
 
 from torch import Tensor, nn
 
-from linodenet.activations import Activation, get_activation
+from linodenet.nn.activations import Activation, get_activation
 from linodenet.signatures import signature
 
 
 class ReverseDense(nn.Module):
-    r"""ReverseDense module $x ⟼ A⋅ϕ(x) + b$."""
+    r"""Linear layer with pre-activation rather than post activation $x ⟼ A⋅ϕ(x) + b$.
+
+    It has been shown that doing the activation first leads to consistently better performance in
+    ResNets. Note that due to the residual structure, this is equivalent in expressiveness
+    to post-activation.
+
+    References:
+        - | Identity Mappings in Deep Residual Networks
+          | He, Kaiming, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+          | European Conference on Computer Vision 2016
+          | https://doi.org/10.1007/978-3-319-46493-0_38
+    """
 
     input_size: Final[int]
     r"""The size of the input"""
