@@ -24,7 +24,11 @@ r"""Type alias for generic activation functions (may require additional args!)."
 
 @runtime_checkable
 class Activation(Protocol):
-    r"""Protocol for Activation Components."""
+    r"""Protocol for activation functions.
+
+    We define activations as callables that take a single tensor input
+    and returns a tensor of the same shape.
+    """
 
     @abstractmethod
     @signature("(..., *xs) -> (..., *xs)")

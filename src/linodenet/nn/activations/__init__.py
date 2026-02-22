@@ -21,12 +21,12 @@ __all__ = [
     "ActivationBase",
     "GenericActivation",
     # Classes
-    "HardBend",
+    "HardBendExp",
     "GEGLU",
     "ReGLU",
     # Functions
     "geglu",
-    "hard_bend",
+    "hard_bend_exp",
     "reglu",
     # utils
     "get_activation",
@@ -42,7 +42,7 @@ from linodenet.nn.activations.base import (
     get_activation,
 )
 from linodenet.nn.activations.geglu import GEGLU, geglu
-from linodenet.nn.activations.hard_bend import HardBend, hard_bend
+from linodenet.nn.activations.hard_bend import HardBendExp, hard_bend_exp
 from linodenet.nn.activations.reglu import ReGLU, reglu
 
 TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
@@ -172,14 +172,14 @@ ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     **TORCH_ACTIVATION_FUNCTIONS,
     "reglu": reglu,
     "geglu": geglu,
-    "hard_bend": hard_bend,
+    "hard_bend": hard_bend_exp,
 }
 r"""Dictionary containing all available activation functions."""
 
 
 ACTIVATION_CLASSES: dict[str, type[Activation]] = {
     **TORCH_ACTIVATION_CLASSES,
-    "HardBend": HardBend,
+    "HardBend": HardBendExp,
     "GeGLU": GEGLU,
     "ReGLU": ReGLU,
 }
