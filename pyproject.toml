@@ -374,7 +374,7 @@ venvPath = ".venv"
 pythonVersion = "3.14"
 pythonPlatform = "Linux"
 #executionEnvironments = []
-useLibraryCodeForTypes = false  # `pandas` has way too many false positives
+useLibraryCodeForTypes = true  # `pandas` has way too many false positives
 
 # Type Check Diagnostics Settings
 typeCheckingMode = "standard"  # "off", "basic", "strict", "standard"
