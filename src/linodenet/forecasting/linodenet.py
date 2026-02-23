@@ -17,8 +17,8 @@ from linodenet.flows import LinearFlow
 from linodenet.nn import ResNet
 from linodenet.nn.embeddings import ConcatEmbedding
 from linodenet.projections.surjections import ConcatProjection
-from linodenet.signatures import signature
 from linodenet_special import pad
+from signatures import signature
 
 
 def _module_blueprint[T](cls: type[T]) -> ObjectBlueprint[T]:

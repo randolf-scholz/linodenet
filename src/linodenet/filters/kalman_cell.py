@@ -40,7 +40,7 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.filters.base import CellBase
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class _Alpha(float, Enum):

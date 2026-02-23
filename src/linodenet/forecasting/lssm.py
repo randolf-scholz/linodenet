@@ -18,9 +18,9 @@ from linodenet.flows import ContinuousFlow, LinearFlow
 from linodenet.nn import ResNet
 from linodenet.nn.embeddings import ConcatEmbedding
 from linodenet.projections.surjections import ConcatProjection
-from linodenet.signatures import signature
 from linodenet.utils import deep_dict_update
 from linodenet_special import pad
+from signatures import signature
 
 
 def _module_config(cls: type[nn.Module]) -> dict[str, Any]:

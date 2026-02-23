@@ -10,8 +10,8 @@ from torch import Tensor, jit, nn
 
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.projections import FUNCTIONAL_PROJECTIONS
-from linodenet.signatures import signature
 from linodenet.types import SelfMap
+from signatures import signature
 
 
 class LinearFlow(nn.Module):

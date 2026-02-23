@@ -35,8 +35,8 @@ from torch import Tensor
 
 from linodenet.constants import TRUE
 from linodenet.projections import functional as projections
-from linodenet.signatures import signature
 from linodenet.types import BoolTensor
+from signatures import signature
 
 
 @runtime_checkable

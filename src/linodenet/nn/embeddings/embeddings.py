@@ -19,7 +19,7 @@ import torch
 from torch import Tensor, jit, nn
 from torch.nn import functional
 
-from linodenet.signatures import signature
+from signatures import signature
 
 
 @runtime_checkable

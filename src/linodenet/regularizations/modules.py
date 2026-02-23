@@ -54,8 +54,8 @@ from linodenet.regularizations.functional import (
     traceless,
     upper_triangular,
 )
-from linodenet.signatures import signature
 from linodenet.types import BoolTensor
+from signatures import signature
 
 
 class RegularizationBase(nn.Module):

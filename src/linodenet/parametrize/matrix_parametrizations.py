@@ -32,9 +32,9 @@ import linodenet.projections as projections
 from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
 from linodenet.parametrize.base import ParametrizationBase, WrappedParametrization
-from linodenet.signatures import signature
 from linodenet.testing import is_square
 from linodenet_special import singular_triplet
+from signatures import signature
 
 
 class CayleyMap(ParametrizationBase):

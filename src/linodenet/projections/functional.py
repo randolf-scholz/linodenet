@@ -33,7 +33,7 @@ import torch
 from torch import Tensor
 
 from linodenet.constants import FALSE
-from linodenet.signatures import signature
+from signatures import signature
 
 type FunctionalProjection = Callable[[Tensor], Tensor]
 

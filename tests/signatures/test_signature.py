@@ -2,7 +2,7 @@ r"""Test Signature utility."""
 
 import pytest
 
-from linodenet.signatures import Parser
+from signatures import Parser
 
 
 @pytest.mark.parametrize(

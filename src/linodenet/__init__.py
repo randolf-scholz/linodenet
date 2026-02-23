@@ -41,6 +41,7 @@ finally:
     del metadata
 
 import linodenet_special as special
+import signatures
 from linodenet import (
     bijections,
     constants,
@@ -54,7 +55,6 @@ from linodenet import (
     parametrize,
     projections,
     regularizations,
-    signatures,
     testing,
     types,
     utils,

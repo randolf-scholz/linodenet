@@ -58,7 +58,7 @@ from typing import Final, Protocol, TypeIs, overload, runtime_checkable
 from torch import Tensor, nn
 
 from blueprint import Makes, initialize
-from linodenet.signatures import signature
+from signatures import signature
 
 
 @runtime_checkable

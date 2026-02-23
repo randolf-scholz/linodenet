@@ -13,7 +13,7 @@ from typing import Final, Protocol
 
 from torch import Tensor, nn
 
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class Flow(Protocol):

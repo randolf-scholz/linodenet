@@ -13,7 +13,7 @@ import linodenet.imputation as imp
 from linodenet.constants import EMPTY_MAP
 from linodenet.filters.base import Cell, CellBase
 from linodenet.imputation import ImputationStrategy, ImputerProtocol
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class MissingValueCell(CellBase):

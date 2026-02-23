@@ -12,7 +12,7 @@ from typing import Final, Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.signatures import signature
+from signatures import signature
 
 
 @runtime_checkable

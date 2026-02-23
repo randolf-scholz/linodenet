@@ -9,7 +9,7 @@ from typing import Final, Optional
 from torch import Tensor, nn
 
 from linodenet.nn.activations import Activation, get_activation
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class ReverseDense(nn.Module):

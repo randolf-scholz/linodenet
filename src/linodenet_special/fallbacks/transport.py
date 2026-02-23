@@ -1,21 +1,31 @@
 r"""Implementation of the optimal transport based activation function."""
+# mypy: disable-error-code="no-untyped-def"
 
 __all__ = [
     "SQRT_2",
     "MAXITER",
-    "Psi",
-    "InvPsi",
+    "_TwinToGaussian",
+    "_GaussianToTwin",
+    "_GaussianToBimodal",
+    "_BimodalToGaussian",
+    "_GaussianToMixture",
+    "_MixtureToGaussian",
+    # functional interfaces
+    "gaussian_to_twin",
+    "twin_to_gaussian",
+    "gaussian_to_bimodal",
+    "bimodal_to_gaussian",
+    "gaussian_to_mixture",
+    "mixture_to_gaussian",
 ]
 
 
 import math
-from typing import Any, Final
+from typing import Final
 
 import torch
 from torch import Tensor
 from torch.autograd import Function
-
-type Context = Any  # torch offers no type hint
 
 SQRT_2: Final[float] = math.sqrt(2)
 r"""CONST: √2, used for scaling the erfinv output."""
@@ -23,11 +33,11 @@ MAXITER: int = 10
 r"""CONFIG: maximum number of iterations for Newton's method in InvPsi."""
 
 
-class Psi(Function):
-    r"""Optimal Transport from N(0, σ²) to mixture ½N(-μ, σ²) + ½N(μ, σ²)."""
+class _TwinToGaussian(Function):
+    r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
 
     @staticmethod
-    def forward(ctx, x, mu, sigma):
+    def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
         s = sigma * SQRT_2
         EPS = 8 * torch.finfo(x.dtype).eps
 
@@ -49,7 +59,7 @@ class Psi(Function):
         return y
 
     @staticmethod
-    def backward(ctx: Context, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         (g,) = outer
         a, b, z, mask = ctx.saved_tensors
         finfo = torch.finfo(z.dtype)
@@ -80,9 +90,11 @@ class Psi(Function):
         return (g * d_x), (g * d_mu), (g * d_sigma)
 
 
-class InvPsi(Function):
+class _GaussianToTwin(Function):
+    r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
+
     @staticmethod
-    def forward(ctx: Context, y: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
+    def forward(ctx, y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
         r"""Solve y = Ψ(x, μ, σ) for x using Newton's method.
 
         Note: ∂Ψ/∂x = \exp(-½μ²/σ²) at x=0. This is the minimum slope of Ψ
@@ -210,7 +222,7 @@ class InvPsi(Function):
         return x
 
     @staticmethod
-    def backward(ctx: Context, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """Use the derivatives of Ψ to compute the derivatives of x with respect to y, μ, and σ.
 
         .. math::  ∂Ψ(x(y, μ, σ)) = y
@@ -224,3 +236,97 @@ class InvPsi(Function):
         dmu = g * (-dmu / dx)
         dsigma = g * (-dsigma / dx)
         return dy, dmu, dsigma
+
+
+class _GaussianToMixture(Function):
+    r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
+
+    @staticmethod
+    def forward(
+        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+    ) -> Tensor:
+        raise NotImplementedError
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        raise NotImplementedError
+
+
+class _MixtureToGaussian(Function):
+    r"""Optimal Transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$."""
+
+    @staticmethod
+    def forward(
+        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+    ) -> Tensor:
+        raise NotImplementedError
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        raise NotImplementedError
+
+
+class _GaussianToBimodal(Function):
+    r"""Optimal Transport from $N(0,1)$ to mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$."""
+
+    @staticmethod
+    def forward(
+        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+    ) -> Tensor:
+        raise NotImplementedError
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        raise NotImplementedError
+
+
+class _BimodalToGaussian(Function):
+    r"""Optimal Transport from mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$ to $N(0,1)$."""
+
+    @staticmethod
+    def forward(
+        ctx, y: Tensor, weights: Tensor, means: Tensor, sigmas: Tensor, /
+    ) -> Tensor:
+        raise NotImplementedError
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        raise NotImplementedError
+
+
+def gaussian_to_twin(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+    r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
+    return _GaussianToTwin.apply(y, mu, sigma)
+
+
+def twin_to_gaussian(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+    r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
+    return _TwinToGaussian.apply(x, mu, sigma)
+
+
+def gaussian_to_bimodal(
+    y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+) -> Tensor:
+    r"""Optimal Transport from $N(0,1)$ to mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$."""
+    return _GaussianToBimodal.apply(y, weights, means, sigmas)
+
+
+def bimodal_to_gaussian(
+    x: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+) -> Tensor:
+    r"""Optimal Transport from mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$ to $N(0,1)$."""
+    return _BimodalToGaussian.apply(x, weights, means, sigmas)
+
+
+def gaussian_to_mixture(
+    y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+) -> Tensor:
+    r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
+    return _GaussianToMixture.apply(y, weights, means, sigmas)
+
+
+def mixture_to_gaussian(
+    x: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+) -> Tensor:
+    r"""Optimal Transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$."""
+    return _MixtureToGaussian.apply(x, weights, means, sigmas)

@@ -12,7 +12,7 @@ readme = "README.md"
 license-files = [ "LICENSE" ]
 requires-python = ">=3.14,<3.15"
 urls = { repository = "https://github.com/randolf-scholz/linodenet.git" }
-import-names = ["linodenet", "linodenet_special", "blueprint"]
+import-names = ["linodenet", "linodenet_special", "blueprint", "signatures"]
 
 # meta-information
 keywords = ["time-series", "machine-learning", "neural-ode", "kalman-filter"]

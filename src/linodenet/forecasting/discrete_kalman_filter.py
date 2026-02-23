@@ -9,7 +9,7 @@ import torch
 from numpy.typing import ArrayLike
 from torch import Tensor, einsum, jit, nn, stack
 
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class DiscreteKalmanFilter(nn.Module):

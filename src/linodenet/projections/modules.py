@@ -41,7 +41,7 @@ from torch import Tensor, jit, nn
 import linodenet.projections.functional as F
 from linodenet.constants import FALSE
 from linodenet.domains import MatrixDomains
-from linodenet.signatures import signature
+from signatures import signature
 
 
 @runtime_checkable

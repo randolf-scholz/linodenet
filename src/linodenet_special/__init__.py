@@ -34,9 +34,9 @@ from linodenet_special.core import (
     spectral_norm_native,
     spectral_norm_riemann,
 )
+from linodenet_special.fallbacks import ndtri_exp, ndtri_exp_naive
 from linodenet_special.linalg import (
     geometric_mean,
     pad,
     scaled_norm,
 )
-from linodenet_special.ndtri_exp import ndtri_exp, ndtri_exp_naive

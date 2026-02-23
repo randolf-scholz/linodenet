@@ -16,7 +16,7 @@ from typing import Concatenate, Protocol, overload, runtime_checkable
 from torch import Tensor, nn
 
 from blueprint import Makes, initialize
-from linodenet.signatures import signature
+from signatures import signature
 
 type GenericActivation = Callable[Concatenate[Tensor, ...], Tensor]
 r"""Type alias for generic activation functions (may require additional args!)."""

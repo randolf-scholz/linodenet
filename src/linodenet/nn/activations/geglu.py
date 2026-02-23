@@ -8,7 +8,7 @@ __all__ = [
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from linodenet.signatures import signature
+from signatures import signature
 
 
 @signature("[(..., d), (..., d)] -> (..., d)")

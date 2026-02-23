@@ -10,7 +10,7 @@ from numpy.typing import ArrayLike
 from torch import Tensor, einsum, jit, nn, stack
 from torch.linalg import matrix_exp
 
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class ContinuousKalmanFilter(nn.Module):

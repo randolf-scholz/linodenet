@@ -18,8 +18,8 @@ from linodenet.nn import ModuleSequence
 from linodenet.nn.activations import get_activation
 from linodenet.nn.linear_contraction import LinearContraction
 from linodenet.nn.rezero import ReZero
-from linodenet.signatures import signature
 from linodenet.utils import deep_dict_update
+from signatures import signature
 
 
 class iResNetLayer(nn.Module):

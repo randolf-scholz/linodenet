@@ -18,7 +18,7 @@ from torch import Tensor, jit, nn
 from linodenet.filters.base import CellBase, FilterBase
 from linodenet.filters.kalman_cell import _Alpha
 from linodenet.nn import ModuleSequence
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):

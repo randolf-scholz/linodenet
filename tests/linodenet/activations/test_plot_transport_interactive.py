@@ -1,4 +1,5 @@
-r"""Interactivate plot of the optimal transport from a Gaussian to a mixture of Gaussians."""
+r"""Interactive plot of the optimal transport from a Gaussian to a mixture of Gaussians."""
+# mypy: disable-error-code="no-untyped-def"
 
 import math
 from collections.abc import Mapping
@@ -9,6 +10,8 @@ import matplotlib.pyplot as plt
 import torch
 from matplotlib.widgets import Slider
 from torch import Tensor
+
+from linodenet_special import ndtri_exp_naive as ndtri_exp
 
 SQRT_2: Final[float] = math.sqrt(2)
 type Context = Any  # torch offers no type hint
@@ -108,8 +111,24 @@ LOG_HALF: Final[float] = math.log(0.5)
 r"""CONST: log(0.5) is used in the tail handling of the erfinv computation."""
 
 
-def asymptotic_line(x, mu, sigma, omega_k, mu_k, sigma_k):
-    return (x - mu_k) * (sigma / sigma_k) + mu
+def asymptotic_line(
+    x,
+    /,
+    mu,
+    sigma,
+    weight_k,
+    mu_k,
+    sigma_k,
+    *,
+    use_correction: bool = False,
+):
+    z = (x - mu_k) / sigma_k
+    y = mu + sigma * z
+
+    if use_correction:
+        # non-linear O(1/x) correction term.
+        y = y - torch.log(weight_k) * (sigma / z)
+    return y
 
 
 USE_NAIVE = False

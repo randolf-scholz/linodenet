@@ -8,7 +8,7 @@ import torch
 from torch import Tensor, jit, nn
 
 from linodenet.parametrize.base import ParametrizationBase
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class ReZero(ParametrizationBase):

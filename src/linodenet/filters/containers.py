@@ -14,7 +14,7 @@ from torch import Tensor, jit, nn
 
 from linodenet.filters.base import Cell, CellBase
 from linodenet.nn import ModuleSequence
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class CellList[C: CellBase](CellBase, ModuleSequence[C]):

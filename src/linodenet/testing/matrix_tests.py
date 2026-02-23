@@ -30,7 +30,7 @@ import torch
 from torch import Tensor
 
 from linodenet.constants import ATOL, RTOL, TRUE
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class MatrixTest(Protocol):

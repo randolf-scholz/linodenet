@@ -2,15 +2,19 @@ r"""Fallback implementations of linear algebra routines."""
 
 __all__ = [
     "SpectralNorm",
+    "spectral_norm",
 ]
 
-from typing import Any
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor
 from torch.linalg import vector_norm
 
-from linodenet.signatures import signature
+from signatures import signature
+
+ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
+RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 
 
 class SpectralNorm(torch.autograd.Function):
@@ -35,17 +39,23 @@ class SpectralNorm(torch.autograd.Function):
 
     @staticmethod
     @signature("(m, n) -> ()")
-    def forward(ctx: Any, /, *tensors: Tensor, **kwargs: Any) -> Tensor:
-        A = tensors[0]
+    def forward(
+        ctx: Any,
+        A: Tensor,
+        /,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+        maxiter: int = 1000,
+        u0: Optional[Tensor] = None,
+        v0: Optional[Tensor] = None,
+    ) -> Tensor:
         if A.ndim != 2:
             raise ValueError(f"Expected 2d input, got {A.shape}.")
 
-        atol: float = kwargs.get("atol", 1e-6)
-        rtol: float = kwargs.get("rtol", 1e-6)
-        maxiter: int = kwargs.get("maxiter", 1000)
-        # initialize u and v, median should be useful guess.
-        u = u_next = A.median(dim=1).values
-        v = v_next = A.median(dim=0).values
+        u = u0 if u0 is not None else A.median(dim=1).values
+        v = v0 if v0 is not None else A.median(dim=0).values
+        u_next = u
+        v_next = v
         sigma: Tensor = torch.einsum("ij, i, j ->", A, u, v)
 
         for _ in range(maxiter):
@@ -79,3 +89,17 @@ class SpectralNorm(torch.autograd.Function):
         r"""Jacobian-vector product forward mode."""
         u, v = ctx.saved_tensors
         return torch.einsum("...ij, i, j -> ...", grad_inputs[0], u, v)
+
+
+def spectral_norm(
+    A: Tensor,
+    /,
+    *,
+    u0: Optional[Tensor] = None,
+    v0: Optional[Tensor] = None,
+    maxiter: Optional[int] = None,
+    atol: float = ATOL,
+    rtol: float = RTOL,
+) -> Tensor:
+    r"""Compute the spectral norm of a matrix."""
+    return SpectralNorm.apply(A, atol=atol, rtol=rtol, maxiter=maxiter, u0=u0, v0=v0)

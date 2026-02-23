@@ -26,7 +26,7 @@ __all__ = [
     "tokenize",
     "signature",
 ]
-from linodenet.signatures.signatures import (
+from signatures.signatures import (
     Arg,
     ArgList,
     ArgType,

@@ -12,7 +12,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.filters.base import CellBase
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class LinearCell(CellBase):

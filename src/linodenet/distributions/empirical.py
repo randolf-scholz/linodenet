@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 
 from linodenet.distributions.base import DistributionBase
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class Empirical(DistributionBase):

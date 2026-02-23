@@ -11,7 +11,7 @@ from torch import Tensor, jit, nn
 from linodenet.nn.containers import ModuleSequence
 from linodenet.nn.reverse_dense import ReverseDense
 from linodenet.nn.rezero import ReZero
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class ResNetBlock(ModuleSequence):

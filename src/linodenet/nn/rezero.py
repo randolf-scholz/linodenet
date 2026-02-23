@@ -18,7 +18,7 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.signatures import signature
+from signatures import signature
 
 
 class ReZero(nn.Module):
