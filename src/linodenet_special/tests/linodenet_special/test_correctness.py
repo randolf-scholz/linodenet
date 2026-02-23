@@ -29,10 +29,11 @@ import torch
 from numpy.random import default_rng
 from scipy.stats import ortho_group
 
-import linodenet
-from linodenet.lib import (  # singular_triplet,; singular_triplet_native,; singular_triplet_riemann,;
+import linodenet_special
+from linodenet_special import (  # singular_triplet,; singular_triplet_native,; singular_triplet_riemann,;
     SingularTriplet,
     SpectralNorm,
+    singular_triplet,
     spectral_norm,
     spectral_norm_native,
     spectral_norm_riemann,
@@ -55,7 +56,7 @@ SVD_METHODS: dict[str, Callable] = {
     "numpy_svd": np.linalg.svd,
     "scipy_svd": scipy.linalg.svd,
     "torch_svd": torch.linalg.svd,
-    "linodenet_svd": linodenet.lib.singular_triplet,
+    "linodenet_svd": singular_triplet,
 }
 SPECTRAL_NORMS: dict[str, SpectralNorm | SingularTriplet] = {
     "custom": spectral_norm,
@@ -130,9 +131,9 @@ def test_svd_rank_one(
             # cols of U = LSV, rows of Vh: RSV
             u, s, v = U[:, 0], S[0], Vh[0, :]
             assert torch.allclose(s * torch.outer(u, v), B, atol=atol, rtol=rtol)
-        case linodenet.lib.singular_triplet:
+        case linodenet_special.singular_triplet:
             B = torch.from_numpy(matrix)
-            s, u, v = linodenet.lib.singular_triplet(B)
+            s, u, v = singular_triplet(B)
             assert torch.allclose(s * torch.outer(u, v), B, atol=atol, rtol=rtol)
         case _:
             raise ValueError(f"Unknown method: {method}")

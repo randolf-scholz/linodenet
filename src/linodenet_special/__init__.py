@@ -22,7 +22,7 @@ __all__ = [
     "ndtri_exp_naive",
 ]
 
-from linodenet.lib._liblinodenet import (
+from linodenet_special.core import (
     SingularTriplet,
     SpectralNorm,
     singular_triplet,
@@ -34,9 +34,9 @@ from linodenet.lib._liblinodenet import (
     spectral_norm_native,
     spectral_norm_riemann,
 )
-from linodenet.lib.linalg import (
+from linodenet_special.linalg import (
     geometric_mean,
     pad,
     scaled_norm,
 )
-from linodenet.lib.ndtri_exp import ndtri_exp, ndtri_exp_naive
+from linodenet_special.ndtri_exp import ndtri_exp, ndtri_exp_naive

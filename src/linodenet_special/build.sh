@@ -127,7 +127,7 @@ echo "-------------------------------------------------------------------------"
 # region tests -------------------------------------------------------------------------
 read -r -p "Run tests? [Y/n] " run_tests
 case "${run_tests:-Y}" in
-	y|Y) pytest tests/liblinodenet/test_correctness.py -n 0 --no-cov ;;
+	y|Y) pytest tests/linodenet_special/test_correctness.py -n 0 --no-cov ;;
 	n|N) echo "Skipping tests..." ;;
 	*) echo "Invalid input. Exiting..."; exit 1 ;;
 esac

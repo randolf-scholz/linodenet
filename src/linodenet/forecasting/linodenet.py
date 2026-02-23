@@ -14,11 +14,11 @@ from torch import Tensor, jit, nn
 
 from blueprint import Blueprint, ObjectBlueprint, initialize
 from linodenet.flows import LinearFlow
-from linodenet.lib import pad
 from linodenet.nn import ResNet
 from linodenet.nn.embeddings import ConcatEmbedding
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
+from linodenet_special import pad
 
 
 def _module_blueprint[T](cls: type[T]) -> ObjectBlueprint[T]:

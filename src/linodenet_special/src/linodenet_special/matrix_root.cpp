@@ -65,7 +65,7 @@ std::tuple<Tensor, Tensor, Tensor> matrix_root(
 }
 
 
-TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
+TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def(
         "matrix_root("
             "Tensor A,"

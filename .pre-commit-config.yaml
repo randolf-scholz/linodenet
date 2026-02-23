@@ -77,7 +77,7 @@ repos:
         files: '^src/|^tests/'
       - id: check-signatures
         files: '^src/'
-        exclude: 'functional.py|matrix_tests.py|_liblinodenet.py'
+        exclude: 'functional.py|matrix_tests.py|core.py'
         args:
           - "--ignore-names"
           - "forward"

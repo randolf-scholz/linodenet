@@ -11,7 +11,7 @@ __all__ = [
     "forecasting",
     "imputation",
     "initializations",
-    "lib",
+    "special",
     "parametrize",
     "projections",
     "regularizations",
@@ -40,6 +40,7 @@ except metadata.PackageNotFoundError:
 finally:
     del metadata
 
+import linodenet_special as special
 from linodenet import (
     bijections,
     constants,
@@ -50,7 +51,6 @@ from linodenet import (
     forecasting,
     imputation,
     initializations,
-    lib,
     parametrize,
     projections,
     regularizations,

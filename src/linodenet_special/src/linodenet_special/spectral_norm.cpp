@@ -15,8 +15,38 @@ using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 
+/*
+ * NOTE: discontinuity of singular vectors.
+ *
+ * A = [[1, 0], [0, 1+ε]]
+ * Then σ₁ = 1, σ₂ = 1+ε;
+ * right singular vectors are [1, 0] and [0, 1]
+ * left singular vectors are [1, 0] and [0, 1]
+ * singular dyads are [1, 0]⊗[1, 0]= [[1,0],[0,0]] and [0, 1]⊗[0, 1]= [[0,0],[0,1]]
+ *
+ * B = [[1, ε],[ε,1]]
+ * Then σ₁ = 1+ε, σ₂ = 1-ε;
+ * right singular vectors are [1, 1] and [1, -1] (un-normalized)
+ * left singular vectors are [1, 1] and [1, -1] (un-normalized)
+ * singular dyads are [1, 1]⊗[1, 1]= [[1,1],[1,1]] and [1, -1]⊗[1, -1]= [[1,-1],[-1,1]]
+ *
+ * Therefore, the singular dyads are discontinuous in the matrix entries.
+ * This happens when singular values are repeated.
+ * Since every path from A to B requires a singular value to be repeated, this is a general problem.
+ * However, there should be "good" paths, that, in a path connected sense deform the singular dyads.
+ * Case in point: when A is the identity matrix, then **every** vector is a singular vector.
+ *
+ * */
 
-struct SpectralNormRiemann: public Function<SpectralNormRiemann> {
+ /*
+  * IDEA: regularized rank-1 approximation
+  * argmin_{u,v} ‖A - uvᵀ‖² + λ‖u‖²‖v‖²
+  *   in this case, R_λ(u,v) = ‖u‖²‖v‖² is the resulting singular value
+  *   the larger λ, the smaller the discovered σ. However, we want σ ≥ σₘₐₓ.
+  */
+
+
+struct SpectralNorm: public Function<SpectralNorm> {
     /** @brief Spectral norm of a matrix.
      *
      * Formalizing as a optimization problem:
@@ -54,12 +84,32 @@ struct SpectralNormRiemann: public Function<SpectralNormRiemann> {
      * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
      *
      * @note (Stopping criterion):
-     *     The standard stopping criterion is ‖ũ - σu‖ ≤ α + β⋅σ
+     *     The standard stopping criterion for a non-negative smooth function is
+     *     ‖∇f(x)‖ ≤ α + β⋅f(x)
+     *
+     *     Here, we factorize into two parts for u and v respectively:
+     *
+     *     ‖∇ᵤf(u,v)‖ ≤ α + β⋅f(u,v) and ‖∇ᵥf(u,v)‖ ≤ α + β⋅f(u,v)
+     *
+     *     iff
+     *
+     *     ‖Av - σu‖ ≤ α + β⋅σ and ‖Aᵀu - σv‖ ≤ α + β⋅σ
+     *
+     *     iff, using ũ = Av and ṽ=Aᵀu, u'= ũ/‖ũ‖ and v'=  ṽ/‖ṽ‖ and σ = ⟨u'∣u⟩ = ⟨v'∣v⟩
+     *
+     *     ‖ũ - σu‖ ≤ α + β⋅σ and ‖ṽ - σv‖ ≤ α + β⋅σ
+     *
+     * @note (Alt. stopping criterion):
      *     Plugging in the definition of ũ and σ, and dividing by ‖ũ‖ yields, using u'=  ũ/‖ũ‖
+     *
      *     ‖u'-⟨u∣u'⟩u‖ ≤ α/‖ũ‖ + β ⟨u∣u'⟩
+     *
      *     close to convergence, ⟨u∣u'⟩ ≈ 1, giving the stopping criterion
+     *
      *     ‖u'-u‖ ≤ α/‖ũ‖ + β
+     *
      *     Assuming ‖ũ‖>1, we can the first term. Squaring gives the final criterion:i
+     *
      *     ‖u'-u‖² ≤ β²
      *
      * @note: positiveness of the result
@@ -104,7 +154,7 @@ struct SpectralNormRiemann: public Function<SpectralNormRiemann> {
         const auto M = A_in.size(0);
         const auto N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        const int64_t MAXITER = maxiter ? maxiter.value() : 2*(M + N + 64);
+        const int64_t MAXITER = maxiter ? maxiter.value() : (M + N + 64);
 
         // Initialize tolerance scalars
         const Tensor ATOL = torch::full({}, atol, OPTIONS);
@@ -143,7 +193,7 @@ struct SpectralNormRiemann: public Function<SpectralNormRiemann> {
         // NOTE: performing at least 2 iterations before the first convergence check is crucial,
         //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
         for (auto i = 0; i<MAXITER; i++) {
-            #pragma unroll
+            #pragma unroll  // we test convergence only every 8th iteration.
             for (auto j = 0; j<7; j++) {
                 // update u
                 u = A.mv(v);
@@ -152,30 +202,16 @@ struct SpectralNormRiemann: public Function<SpectralNormRiemann> {
                 v = A_t.mv(u);
                 v /= v.norm();
             }
-            { // update u
-                // compute gradient in ℝᵐ
-                grad_u = A.mv(v);
-                sigma_u = grad_u.dot(u);  // use abs since this should be >0
-                // project gradient to tangent space 𝕋𝕊ᵐ
-                // NOTE: NEVER try to normalize the gradient, it converges to zero!
-                grad_u -= sigma_u * u;
-                gamma_u = grad_u.norm();
-                // update u = σᵤ/√(σᵤ²+ρᵤ²)⋅u + /√(σᵤ²+ρᵤ²)⋅eᵤ = normalize(σᵤu + gᵤ)
-                u = sigma_u * u + grad_u;
-                u /= u.norm();
-            }
-            { // update v
-                // compute gradient in ℝⁿ
-                grad_v = A_t.mv(u);
-                sigma_v = grad_v.dot(v);
-                // project gradient to tangent space 𝕋𝕊ᵐ
-                // NOTE: NEVER try to normalize the gradient, it converges to zero!
-                grad_v -= sigma_v * v;
-                gamma_v = grad_v.norm();
-                // update v = σᵥ/√(σᵥ²+ρᵥ²)⋅v + /√(σᵥ²+ρᵥ²)⋅eᵥ = normalize(σᵥv + gᵥ)
-                v = sigma_v * v + grad_v;
-                v /= v.norm();
-            }
+            // update u
+            grad_u = A.mv(v);
+            sigma_u = grad_u.dot(u);
+            gamma_u = (grad_u - sigma_u * u).norm();
+            u = grad_u / grad_u.norm();
+            // update v
+            grad_v = A_t.mv(u);
+            sigma_v = grad_v.dot(v);
+            gamma_v = (grad_v - sigma_v * v).norm();
+            v = grad_v / grad_v.norm();
 
             // check convergence
             // NOTE:(1/√2)(‖u‖+‖v‖) ≤ ‖(u,v)‖ ≤ ‖u‖+‖v‖ (via Jensen-Inequality)
@@ -232,7 +268,7 @@ struct SpectralNormRiemann: public Function<SpectralNormRiemann> {
 };
 
 
-static inline Tensor spectral_norm_riemann(
+static inline Tensor spectral_norm(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
@@ -243,13 +279,13 @@ static inline Tensor spectral_norm_riemann(
     /**
      * Wrap the struct into function.
      */
-    return SpectralNormRiemann::apply(A, u0, v0, maxiter, atol, rtol);
+    return SpectralNorm::apply(A, u0, v0, maxiter, atol, rtol);
 }
 
 
-TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
+TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def(
-        "spectral_norm_riemann("
+        "spectral_norm("
             "Tensor A,"
             "Tensor? u0=None,"
             "Tensor? v0=None,"
@@ -257,6 +293,6 @@ TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
             "float atol=1e-6,"
             "float rtol=1e-6"
         ") -> Tensor",
-        spectral_norm_riemann
+        spectral_norm
     );
 }

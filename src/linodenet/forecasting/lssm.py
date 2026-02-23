@@ -15,12 +15,12 @@ from torch import Tensor, jit, nn
 from blueprint import Blueprint, initialize
 from linodenet.filters import Filter, MissingValueCell
 from linodenet.flows import ContinuousFlow, LinearFlow
-from linodenet.lib import pad
 from linodenet.nn import ResNet
 from linodenet.nn.embeddings import ConcatEmbedding
 from linodenet.projections.surjections import ConcatProjection
 from linodenet.signatures import signature
 from linodenet.utils import deep_dict_update
+from linodenet_special import pad
 
 
 def _module_config(cls: type[nn.Module]) -> dict[str, Any]:

@@ -129,7 +129,7 @@ static inline Tensor spectral_norm_debug(
 }
 
 
-TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
+TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def(
         "spectral_norm_debug("
             "Tensor A,"

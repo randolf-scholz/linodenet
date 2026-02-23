@@ -38,8 +38,8 @@ from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm
 from torch.nn import functional
 
-from linodenet.lib import singular_triplet
 from linodenet.signatures import signature
+from linodenet_special import singular_triplet
 
 
 class LinearContraction(nn.Module):

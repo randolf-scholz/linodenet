@@ -9,7 +9,7 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from linodenet.lib import (
+from linodenet_special import (
     singular_triplet,
     singular_triplet_native,
     spectral_norm,

@@ -318,7 +318,7 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet_debug(
 }
 
 
-TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
+TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def(
         "singular_triplet_debug("
             "Tensor A,"

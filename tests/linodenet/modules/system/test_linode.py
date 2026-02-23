@@ -15,7 +15,7 @@ from scipy.integrate import solve_ivp
 from tqdm.autonotebook import trange
 
 from linodenet.flows import LinearFlow
-from linodenet.lib import scaled_norm
+from linodenet_special import scaled_norm
 from tests.utils import visualize_distribution
 from tests.utils.project import PROJECT
 

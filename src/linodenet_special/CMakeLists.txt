@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
-project(linodenet VERSION 0.1.0 LANGUAGES CXX CUDA)
+project(linodenet_special VERSION 0.2.0 LANGUAGES CXX CUDA)
 
 
 # OPTIONS
@@ -11,7 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 
 
-message(STATUS "Configuring linodenet...")
+message(STATUS "Configuring linodenet_special...")
 
 # determine project root
 execute_process (
@@ -63,19 +63,19 @@ endif()
 
 # Targets
 add_library(
-        linodenet
+        linodenet_special
         SHARED
-        src/liblinodenet/singular_triplet.cpp
-        src/liblinodenet/singular_triplet_debug.cpp
-        src/liblinodenet/singular_triplet_riemann.cpp
-        src/liblinodenet/spectral_norm.cpp
-        src/liblinodenet/spectral_norm_debug.cpp
-        src/liblinodenet/spectral_norm_riemann.cpp
-        src/liblinodenet/utils.cpp
-        # src/liblinodenet/matrix_root.cpp
+        src/linodenet_special/singular_triplet.cpp
+        src/linodenet_special/singular_triplet_debug.cpp
+        src/linodenet_special/singular_triplet_riemann.cpp
+        src/linodenet_special/spectral_norm.cpp
+        src/linodenet_special/spectral_norm_debug.cpp
+        src/linodenet_special/spectral_norm_riemann.cpp
+        src/linodenet_special/utils.cpp
+        # src/linodenet_special/matrix_root.cpp
 )
 
 # Target configuration
-target_compile_features(linodenet PRIVATE cxx_std_17)
+target_compile_features(linodenet_special PRIVATE cxx_std_17)
 # Link against LibTorch
-target_link_libraries(linodenet "${TORCH_LIBRARIES}")
+target_link_libraries(linodenet_special "${TORCH_LIBRARIES}")

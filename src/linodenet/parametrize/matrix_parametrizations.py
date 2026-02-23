@@ -31,10 +31,10 @@ from torch import Tensor, jit, nn
 import linodenet.projections as projections
 from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
-from linodenet.lib import singular_triplet
 from linodenet.parametrize.base import ParametrizationBase, WrappedParametrization
 from linodenet.signatures import signature
 from linodenet.testing import is_square
+from linodenet_special import singular_triplet
 
 
 class CayleyMap(ParametrizationBase):

@@ -38,9 +38,9 @@ from torch import Tensor
 # we use FP32 machine epsilon as default tolerance
 ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
-LIB_NAME: Final[str] = "liblinodenet"
+LIB_NAME: Final[str] = "liblinodenet_special"
 r"""The name of the custom library."""
-LIB: Final = torch.ops.liblinodenet
+LIB: Final = torch.ops.linodenet_special
 r"""The custom library."""
 BUILD_DIR: Final[Path] = Path(__file__).parent / "build"
 r"""The build directory."""
@@ -58,6 +58,8 @@ r"""List of custom operators."""
 
 
 class KnownFunctions(TypedDict):
+    r"""The known functions in the custom library."""
+
     singular_triplet: SingularTriplet
     singular_triplet_debug: SingularTriplet
     singular_triplet_riemann: SingularTriplet
@@ -67,7 +69,7 @@ class KnownFunctions(TypedDict):
 
 
 # region compile functions -------------------------------------------------------------
-def load_function(name: str, /) -> Any:
+def _load_function(name: str, /) -> Any:
     r"""Load a function from the custom library."""
     from torch.utils import cpp_extension  # noqa: PLC0415
 
@@ -105,18 +107,13 @@ def _compile_fns() -> dict[str, Callable]:
         os.environ.get("TORCH_EXTENSIONS_DIR", cpp_extension.get_default_build_root())
     )
     assert not cache_dir.exists() or cache_dir.is_dir()
-    print(
-        "Compiling custom operators..."
-        f"\n\t ⚠️ If problems occur, consider clearing the torch_extension cache ⚠️"
-        f" at {cache_dir!s}",
-        flush=True,
-    )
+    print("Compiling custom operators...")
 
     compiled_fns = {}
     exceptions = {}
     for name in CUSTOM_OPS:
         try:
-            compiled_fns[name] = load_function(name)
+            compiled_fns[name] = _load_function(name)
         except Exception as _exc:
             exceptions[name] = _exc
     if exceptions:
@@ -131,6 +128,7 @@ def _compile_fns() -> dict[str, Callable]:
             error.add_note(
                 f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
             )
+        error.add_note(f"Consider clearing the torch_extension cache at {cache_dir!s}")
         raise error from exc_group
 
     return compiled_fns
@@ -155,7 +153,7 @@ def _load_linodenet() -> dict[str, Callable]:
     else:
         warnings.warn(
             f"\n\t Custom binaries not found! ({lib_file!s})"
-            "\n\t -> Consider compiling the extension in the linodenet/lib folder.",
+            "\n\t -> Consider compiling the linodenet_special extension.",
             UserWarning,
             stacklevel=2,
         )
@@ -163,15 +161,15 @@ def _load_linodenet() -> dict[str, Callable]:
     return _compile_fns()
 
 
-COMPILED_FNS: Final[KnownFunctions] = cast("KnownFunctions", _load_linodenet())
+_COMPILED_FNS: Final[KnownFunctions] = cast("KnownFunctions", _load_linodenet())
 r"""The compiled functions."""
 
-_singular_triplet: SingularTriplet = COMPILED_FNS["singular_triplet"]
-_singular_triplet_debug: SingularTriplet = COMPILED_FNS["singular_triplet_debug"]
-_singular_triplet_riemann: SingularTriplet = COMPILED_FNS["singular_triplet_riemann"]
-_spectral_norm: SpectralNorm = COMPILED_FNS["spectral_norm"]
-_spectral_norm_debug: SpectralNorm = COMPILED_FNS["spectral_norm_debug"]
-_spectral_norm_riemann: SpectralNorm = COMPILED_FNS["spectral_norm_riemann"]
+_singular_triplet: SingularTriplet = _COMPILED_FNS["singular_triplet"]
+_singular_triplet_debug: SingularTriplet = _COMPILED_FNS["singular_triplet_debug"]
+_singular_triplet_riemann: SingularTriplet = _COMPILED_FNS["singular_triplet_riemann"]
+_spectral_norm: SpectralNorm = _COMPILED_FNS["spectral_norm"]
+_spectral_norm_debug: SpectralNorm = _COMPILED_FNS["spectral_norm_debug"]
+_spectral_norm_riemann: SpectralNorm = _COMPILED_FNS["spectral_norm_riemann"]
 # endregion compile functions ----------------------------------------------------------
 
 

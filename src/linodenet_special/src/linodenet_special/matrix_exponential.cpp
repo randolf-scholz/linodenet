@@ -172,7 +172,7 @@ std::tuple<Tensor, Tensor, Tensor> matrix_exp_action(
     return std::make_tuple(output[0], output[1], output[2]);
 }
 
-TORCH_LIBRARY_FRAGMENT(liblinodenet, m) {
+TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def(
         "matrix_exp("
             "Tensor A,"

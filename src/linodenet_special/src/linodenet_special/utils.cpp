@@ -1,6 +1,6 @@
 #include <torch/torch.h>
 
-namespace linodenet {
+namespace linodenet_special {
 namespace utils {
 // lookup table for the tolerance for different floating point types
 constexpr double toleranceLookup(at::ScalarType scalarType) {
@@ -57,4 +57,4 @@ inline bool close(
     return ((input - other).norm() <= a + r * other.norm()).item<bool>();
 }
 } // namespace utils
-} // namespace liblinodenet
+} // namespace linodenet_special
