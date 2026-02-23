@@ -3,7 +3,7 @@ r"""Test type hints for algebra module."""
 from collections.abc import Sequence
 from typing import assert_type
 
-from linodenet_special.algebra import Fn, Parallel, Seq, parallel
+from linodenet.nn.algebra import Fn, Parallel, Seq, parallel
 
 
 def check_upcast_sequence[T](s: Sequence[T]) -> Seq[T]:
