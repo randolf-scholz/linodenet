@@ -1,0 +1,226 @@
+r"""Implementation of the optimal transport based activation function."""
+
+__all__ = [
+    "SQRT_2",
+    "MAXITER",
+    "Psi",
+    "InvPsi",
+]
+
+
+import math
+from typing import Any, Final
+
+import torch
+from torch import Tensor
+from torch.autograd import Function
+
+type Context = Any  # torch offers no type hint
+
+SQRT_2: Final[float] = math.sqrt(2)
+r"""CONST: √2, used for scaling the erfinv output."""
+MAXITER: int = 10
+r"""CONFIG: maximum number of iterations for Newton's method in InvPsi."""
+
+
+class Psi(Function):
+    r"""Optimal Transport from N(0, σ²) to mixture ½N(-μ, σ²) + ½N(μ, σ²)."""
+
+    @staticmethod
+    def forward(ctx, x, mu, sigma):
+        s = sigma * SQRT_2
+        EPS = 8 * torch.finfo(x.dtype).eps
+
+        a = (x + mu) / s
+        b = (x - mu) / s
+        mix = 0.5 * (torch.erf(a) + torch.erf(b))
+        mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
+        mask = mix.abs() < (1 - EPS)
+
+        # compute y = √2σ * erfinv(mix), with tail handling
+        z = torch.erfinv(mix)
+        y = torch.where(mask, s * z, x - torch.sign(x) * mu)
+        assert y.isfinite().all()
+
+        # project to legal range
+        y = torch.clamp(y, x - mu, x + mu)
+
+        ctx.save_for_backward(a, b, z, mask)
+        return y
+
+    @staticmethod
+    def backward(ctx: Context, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        (g,) = outer
+        a, b, z, mask = ctx.saved_tensors
+        finfo = torch.finfo(z.dtype)
+        TINY = finfo.tiny
+
+        phi1 = torch.exp(z**2 - a**2)
+        phi2 = torch.exp(z**2 - b**2)
+
+        # compute the exact derivatives
+        d_x_exact = 0.5 * (phi1 + phi2)
+        d_mu_exact = 0.5 * (phi1 - phi2)
+        d_sigma_exact = SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
+
+        # clamp gradient away from zero.
+        d_x_exact = torch.clamp(d_x_exact, TINY, 1)
+        d_mu_exact = torch.clamp(d_mu_exact, -1, 1)
+
+        # compute the tail terms
+        d_x_tail = torch.ones_like(d_x_exact)
+        d_mu_tail = -torch.sign(z)
+        d_sigma_tail = torch.zeros_like(d_sigma_exact)
+
+        # combine via mask
+        d_x = torch.where(mask, d_x_exact, d_x_tail)
+        d_mu = torch.where(mask, d_mu_exact, d_mu_tail)
+        d_sigma = torch.where(mask, d_sigma_exact, d_sigma_tail)
+
+        return (g * d_x), (g * d_mu), (g * d_sigma)
+
+
+class InvPsi(Function):
+    @staticmethod
+    def forward(ctx: Context, y: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
+        r"""Solve y = Ψ(x, μ, σ) for x using Newton's method.
+
+        Note: ∂Ψ/∂x = \exp(-½μ²/σ²) at x=0. This is the minimum slope of Ψ
+        So:   ∂Ψ⁻¹/∂y = 1 / (∂Ψ/∂x) ≈ \exp(½μ²/σ²) at y=0.
+
+        How to make good initial guess:
+            1. approximate Ψ⁻¹(y, μ, σ) ≈ hard_bend(y, λ=\exp(μ²/σ²), c=μ)
+            2. invert hard_bend to get initial guess for x.
+        """
+        s = sigma * SQRT_2
+        finfo = torch.finfo(y.dtype)
+        EPS = 8 * finfo.eps
+        TINY = finfo.tiny
+
+        # we know the solution is in the interval [y-μ, y+μ]
+        # and we may also use bisection.
+        lower = y - mu
+        upper = y + mu
+
+        # Use hard_bend approximation to get initial guess for x
+        #
+        # hard_bend(z, λ, c) = {
+        #    z + c       if   λz > z+c         (i.e. z > c/(λ-1))
+        #    λz          if   z-c ≤ λz ≤ z+c   (i.e. z∈[-c/(λ-1), c/(λ-1)])
+        #    z - c       if   λz < z-c         (i.e. z < -c/(λ-1))
+        # }
+        # Inverse of hard_bend is:
+        # hard_bend_inv(y, λ, c) = {
+        #    y - c       if   y > cλ/(λ-1)     (i.e. y > cλ/(λ-1))
+        #    y / λ        if   -cλ/(λ-1) ≤ y ≤ cλ/(λ-1)   (i.e. y∈[-cλ/(λ-1), cλ/(λ-1)])
+        #    y + c       if   y < -cλ/(λ-1)     (i.e. y < -cλ/(λ-1))
+        # }
+        lam = torch.exp(-0.5 * (mu / sigma) ** 2)
+        x = torch.where(
+            (y / lam).abs() <= y.abs() - mu,
+            y / lam,
+            y + torch.sign(y) * mu,
+        )
+
+        for _ in range(MAXITER):
+            # project onto legal range
+            x = torch.clamp(x, lower, upper)
+
+            a = (x + mu) / s
+            b = (x - mu) / s
+            mix = 0.5 * (torch.erf(a) + torch.erf(b))
+            mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
+            mask = mix.abs() < 1 - EPS
+
+            # compute y = √2σ * erfinv(mix), with tail handling
+            z = torch.erfinv(mix)
+            fx = torch.where(mask, s * z, x - torch.sign(x) * mu)
+            assert fx.isfinite().all()
+
+            # project to legal range
+            fx = torch.clamp(fx, x - mu, x + mu)
+
+            # compute the exact derivatives
+            phi1 = torch.exp(z**2 - a**2)
+            phi2 = torch.exp(z**2 - b**2)
+
+            # clamp gradient away from zero.
+            d_x_exact = 0.5 * (phi1 + phi2)
+            d_x_exact = torch.clamp(d_x_exact, TINY, 1)
+
+            # compute the tail terms
+            d_x_tail = torch.ones_like(d_x_exact)
+
+            # combine via mask
+            d_fx = torch.where(mask, d_x_exact, d_x_tail)
+
+            # compute residual, update bounds using monotonicity
+            r = fx - y
+            lower = torch.where(r < 0, x, lower)
+            upper = torch.where(r > 0, x, upper)
+
+            x_newton = x - r / d_fx
+            x_bisect = 0.5 * (lower + upper)
+
+            # only do newton if it stays in the legal range, otherwise do bisection
+            x = torch.where(
+                (x_newton >= lower) & (x_newton <= upper),
+                x_newton,
+                x_bisect,
+            )
+
+        # compute final derivatives for backward pass
+        # project onto legal range
+        x = torch.clamp(x, lower, upper)
+
+        a = (x + mu) / s
+        b = (x - mu) / s
+        mix = 0.5 * (torch.erf(a) + torch.erf(b))
+        mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
+        mask = mix.abs() < 1 - EPS
+
+        # compute y = √2σ * erfinv(mix), with tail handling
+        z = torch.erfinv(mix)
+        fx = torch.where(mask, s * z, x - torch.sign(x) * mu)
+        assert fx.isfinite().all()
+
+        # compute the exact derivatives
+        phi1 = torch.exp(z**2 - a**2)
+        phi2 = torch.exp(z**2 - b**2)
+        # compute the exact derivatives
+        d_x_exact = 0.5 * (phi1 + phi2)
+        d_mu_exact = 0.5 * (phi1 - phi2)
+        d_sigma_exact = SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
+
+        # clamp gradient away from zero.
+        d_x_exact = torch.clamp(d_x_exact, TINY, 1)
+        d_mu_exact = torch.clamp(d_mu_exact, -1, 1)
+
+        # compute the tail terms
+        d_x_tail = torch.ones_like(d_x_exact)
+        d_mu_tail = -torch.sign(z)
+        d_sigma_tail = torch.zeros_like(d_sigma_exact)
+
+        # combine via mask
+        d_x = torch.where(mask, d_x_exact, d_x_tail)
+        d_mu = torch.where(mask, d_mu_exact, d_mu_tail)
+        d_sigma = torch.where(mask, d_sigma_exact, d_sigma_tail)
+
+        ctx.save_for_backward(d_x, d_mu, d_sigma)
+        return x
+
+    @staticmethod
+    def backward(ctx: Context, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        """Use the derivatives of Ψ to compute the derivatives of x with respect to y, μ, and σ.
+
+        .. math::  ∂Ψ(x(y, μ, σ)) = y
+            ⟹ ∂x/∂y = (∂Ψ/∂x)⁻¹
+            ⟹ ∂x/∂μ = - (∂Ψ/∂x)⁻¹ * (∂Ψ/∂μ)
+            ⟹ ∂x/∂σ = - (∂Ψ/∂x)⁻¹ * (∂Ψ/∂σ)
+        """
+        (g,) = outer
+        dx, dmu, dsigma = ctx.saved_tensors
+        dy = g * (1 / dx)
+        dmu = g * (-dmu / dx)
+        dsigma = g * (-dsigma / dx)
+        return dy, dmu, dsigma
