@@ -17,6 +17,9 @@ __all__ = [
     "pad",
     "scaled_norm",
     "geometric_mean",
+    # Special
+    "ndtri_exp",
+    "ndtri_exp_naive",
 ]
 
 from linodenet.lib._liblinodenet import (
@@ -36,3 +39,4 @@ from linodenet.lib.linalg import (
     pad,
     scaled_norm,
 )
+from linodenet.lib.ndtri_exp import ndtri_exp, ndtri_exp_naive
