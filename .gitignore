@@ -36,6 +36,4 @@ dev/**/*.png
 experiments/**/*.parquet
 experiments/**/*.pdf
 experiments/**/*.png
-tests/**/results/
-tests/**/reports/
 # endregion custom ---------------------------------------------------------------------

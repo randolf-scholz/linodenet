@@ -12,6 +12,7 @@ from matplotlib.widgets import Slider
 from torch import Tensor
 
 from linodenet_special import ndtri_exp_naive as ndtri_exp
+from tests.utils.project import PROJECT
 
 SQRT_2: Final[float] = math.sqrt(2)
 type Context = Any  # torch offers no type hint
@@ -202,6 +203,9 @@ def test_plot_transport_2():
 
     y = psi(x, mu, sigma, omegas, mus, sigmas)
 
+    result_dir = PROJECT.RESULTS_DIR[__file__] / "transport_plots"
+    result_dir.mkdir(exist_ok=True)
+
     with plt.style.context("bmh"):
         fig, ax = plt.subplots()
         ax.plot(x, y, lw=5)
@@ -209,8 +213,11 @@ def test_plot_transport_2():
             ax.plot(
                 x, asymptotic_line(x, mu, sigma, omegas[k], mus[k], sigmas[k]), "k--"
             )
+
+        file = result_dir / "transport_2.png"
         ax.set_title("Optimal Transport from N(0, 1) to mixture of 2 Gaussians")
-        plt.show()
+        fig.savefig(file, dpi=300)
+        print(f"Saved transport plot to {file!s}")
 
 
 def _slider_positions(

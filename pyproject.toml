@@ -29,7 +29,7 @@ classifiers = [
 
 dependencies = [
     "numpy>=2.4.2",
-    "scipy>=1.17.0",
+    "scipy>=1.17.1",
     "torch>=2.10.0",
     "torchdiffeq>=0.2.5",
     "typing_extensions>=4.15.0",
@@ -49,16 +49,16 @@ dev = [
     {include-group="linters"}, {include-group="tests"}, {include-group="typing"},
 ]
 devtools = [
-    "cmake>=4.2.1",
+    "cmake>=4.2.3",
     "ninja>=1.13.0",
-    "prek>=0.3.3",
+    "prek>=0.3.4",
     "pybadges>=3.0.1",
 ]
 debug = [
     "ipympl>=0.10.0",
     "ipywidgets>=8.1.8",
     "jupyterlab-execute-time>=3.3.0",
-    "jupyterlab>=4.5.4",
+    "jupyterlab>=4.5.5",
     "psutil>=7.2.2",
     "torchinfo>=1.8.0",
 ]
@@ -79,8 +79,8 @@ docs = [
     "sphinx>=9.1.0",
 ]
 linters = [
-    "ruff>=0.15.2",
-    "tach>=0.33.3",
+    "ruff>=0.15.5",
+    "tach>=0.33.4",
 ]
 tests = [
     "coverage>=7.13.4",
@@ -98,25 +98,25 @@ tests = [
 ]
 typing = [
     "mypy>=1.19.1",
-    "pyrefly>=0.53.0",
+    "pyrefly>=0.55.0",
     "pyright>=1.1.408",
-    "scipy-stubs>=1.17.0.2",
-    "ty>=0.0.17",
+    "scipy-stubs>=1.17.1.0",
+    "ty>=0.0.21",
     "types-colorama>=0.4.15.20250801",
     "types-decorator>=5.2.0.20251101",
-    "types-docutils>=0.22.3.20251115",
+    "types-docutils>=0.22.3.20260223",
     "types-jsonschema>=4.26.0.20260202",
     "types-pillow>=10.2.0.20240822",
-    "types-protobuf>=6.32.1.20251210",
+    "types-protobuf>=6.32.1.20260221",
     "types-psutil>=7.2.2.20260130",
     "types-pygments>=2.19.0.20251121",
-    "types-pytz>=2025.2.0.20251108",
+    "types-pytz>=2026.1.1.20260304",
     "types-pyyaml>=6.0.12.20250915",
     "types-requests>=2.32.4.20260107",
     "types-setuptools>=82.0.0.20260210",
     "types-six>=1.17.0.20251009",
     "types-tabulate>=0.9.0.20241207",
-    "types-tqdm>=4.67.3.20260205",
+    "types-tqdm>=4.67.3.20260303",
     "types-urllib3>=1.26.25.14",
     "typing-extensions>=4.15.0",
 ]
@@ -138,6 +138,36 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.per-file-ignores]
+"**/test*" = [
+    "D100",
+    "D101",
+    "D104",
+    "D106",
+    "S101",
+    "SIM300",
+    "T20",
+    "UP018",
+    "RUF046"
+]
+
+[tool.ruff.lint.pylint]
+allow-dunder-method-names = ["__array__", "__array_ufunc__", "__dataframe__", "_repr_html_"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 120
+max-line-length = 120
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
 
 [tool.ruff.lint]
 # Allow fix for all enabled rules (when `--fix`) is provided.
@@ -244,26 +274,6 @@ ignore = [
     # pyupgrade
     "UP045",    # Use `X | Y` for type annotations
 ]
-
-[tool.ruff.lint.per-file-ignores]
-"**/test*" = ["D101", "S101", "SIM300", "T20", "UP018", "RUF046"]
-
-[tool.ruff.lint.pylint]
-allow-dunder-method-names = ["__array__", "__array_ufunc__", "__dataframe__", "_repr_html_"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.pycodestyle]
-max-doc-length = 120
-max-line-length = 120
-
-[tool.ruff.lint.flake8-pytest-style]
-fixture-parentheses = false
-mark-parentheses = false
-
-[tool.ruff.lint.isort]
-combine-as-imports = true
 # endregion ruff configuration ---------------------------------------------------------
 
 [tool.ty]
@@ -484,11 +494,11 @@ reportWildcardImportFromLibrary = "error"  # default: "warning"
 
 [tool.pytest.ini_options]
 xfail_strict = true
-minversion = "8.0"
+minversion = "9.0.2"
 testpaths = ["src/", "tests/"]
 addopts = [
     "--doctest-modules",
-    # "--junit-xml=reports/pytest.xml",
+    # "--junit-xml=.reports/pytest.xml",
     # rerunfailures options
     #    "--reruns=",          # number of times to re-run failed tests (default 0)
     #    "--reruns-delay=",    # add time (seconds) delay between reruns.
@@ -499,8 +509,8 @@ addopts = [
     # coverage options
     # "--cov=linodenet",
     # "--cov-report=term:skip-covered",
-    # "--cov-report=xml:reports/coverage.xml",
-    # "--cov-report=annotate:reports/coverage",
+    # "--cov-report=xml:.reports/coverage.xml",
+    # "--cov-report=annotate:.reports/coverage",
     # benchmark options
     "--benchmark-group-by=func",
     "--benchmark-sort=mean",
