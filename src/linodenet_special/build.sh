@@ -95,8 +95,6 @@ fi
 echo "-------------------------------------------------------------------------"
 echo "Building..."
 
-
-
 # activate correct python
 source "${PROJECT_DIR}/.venv/bin/activate"
 echo "Python env: $(type python)"
@@ -112,6 +110,7 @@ mkdir -p "$BUILD_DIR" && rm -rf "${BUILD_DIR:?}/"*
 CMAKE_ARGS=(
   -S .                                     # source directory
   -B "$BUILD_DIR"                          # build directory
+  -G "Ninja"                               # use Ninja generator
   -DCMAKE_PREFIX_PATH="${LIBTORCH_DIR}"    #
   -DCMAKE_BUILD_TYPE=Release               #
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON       #
