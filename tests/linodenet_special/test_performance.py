@@ -66,6 +66,19 @@ ROUNDS = {
 }
 
 
+def set_benchmark_group(
+    benchmark: BenchmarkFixture,
+    base: str,
+    /,
+    *,
+    shape: tuple[int, int],
+    device: str,
+) -> None:
+    r"""Group benchmarks by base name, shape, and device."""
+    shape_id = f"{shape[0]}x{shape[1]}"
+    benchmark.group = f"{base}/{shape_id}/{device}"
+
+
 def get_param(
     shape: tuple[int, int],
     *,
@@ -92,6 +105,12 @@ def test_spectral_norm_forward(
     shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm forward pass."""
+    set_benchmark_group(
+        benchmark,
+        "spectral_norm_forward",
+        shape=shape,
+        device=device,
+    )
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -135,6 +154,12 @@ def test_spectral_norm_backward(
     shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm backward pass."""
+    set_benchmark_group(
+        benchmark,
+        "spectral_norm_backward",
+        shape=shape,
+        device=device,
+    )
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -190,6 +215,12 @@ def test_spectral_norm(
     shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm forward+backward."""
+    set_benchmark_group(
+        benchmark,
+        "spectral_norm",
+        shape=shape,
+        device=device,
+    )
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -246,6 +277,12 @@ def test_singular_triplet_forward(
     shape: tuple[int, int],
 ) -> None:
     r"""Test the spectral norm implementation."""
+    set_benchmark_group(
+        benchmark,
+        "singular_triplet_forward",
+        shape=shape,
+        device=device,
+    )
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
     A_original = get_param(shape, device=device, generator=generator)
@@ -294,6 +331,12 @@ def test_singular_triplet_backward(
     shape: tuple[int, int],
 ) -> None:
     r"""Test simplified backward when only singular value used."""
+    set_benchmark_group(
+        benchmark,
+        "singular_triplet_backward",
+        shape=shape,
+        device=device,
+    )
     torch.manual_seed(0)
     generator = torch.Generator(device=device)
     generator.manual_seed(0)
@@ -344,6 +387,12 @@ def test_singular_triplet_full_backward(
     shape: tuple[int, int],
 ) -> None:
     r"""Test full backward when singular triplet used."""
+    set_benchmark_group(
+        benchmark,
+        "singular_triplet_full_backward",
+        shape=shape,
+        device=device,
+    )
     torch.manual_seed(0)
     m, n = shape
     generator = torch.Generator(device=device)
