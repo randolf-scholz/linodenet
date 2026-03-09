@@ -522,7 +522,9 @@ addopts = [
     # "--cov-report=xml:.reports/coverage.xml",
     # "--cov-report=annotate:.reports/coverage",
     # benchmark options
-    "--benchmark-group-by=func",
+    "--benchmark-group-by=group",
+    "--benchmark-autosave",
+    "--benchmark-compare",
     "--benchmark-sort=mean",
 ]
 # endregion pytest configuration -------------------------------------------------------
