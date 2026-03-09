@@ -184,8 +184,6 @@ struct SpectralNorm: public Function<SpectralNorm> {
         // Initialize convergence flag
         bool converged = false;
 
-
-
         // pre-allocate buffers
         Tensor grad_u = torch::empty_like(u);
         Tensor grad_v = torch::empty_like(v);

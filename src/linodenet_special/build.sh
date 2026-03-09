@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 set -e
-BUILD_DIR='./build'
 
 # determine project dir
 PROJECT_DIR=$(git rev-parse --show-toplevel | xargs echo -n)
+SOURCE_DIR="${PROJECT_DIR}/src/linodenet_special"
+BUILD_DIR="${SOURCE_DIR}/build"
+LIBTORCH_DIR="${SOURCE_DIR}/libtorch"
+
 echo "PROJECT_DIR: ${PROJECT_DIR}"
+echo "SOURCE_DIR: ${SOURCE_DIR}"
+echo "BUILD_DIR: ${BUILD_DIR}"
+echo "LIBTORCH_DIR: ${LIBTORCH_DIR}"
+mkdir -p "$BUILD_DIR"
+mkdir -p "$LIBTORCH_DIR"
+cd "$SOURCE_DIR"
 
 CUDA_VERSION="$(python -c 'import torch; print(torch.version.cuda)')"
 TORCH_VERSION="$(python -c 'import torch; print(torch.__version__)')"  # e.g. 2.5.1+cu124
 LIBTORCH_VERSION="$TORCH_VERSION"
 LIBTORCH_CUDA="cu${CUDA_VERSION//./}"  # e.g. cu124
-LIBTORCH_DIR="libtorch"
 LIBTORCH_ARCHIVE="libtorch-shared-with-deps-$LIBTORCH_VERSION.zip"
 LIBTORCH_URL="https://download.pytorch.org/libtorch/$LIBTORCH_CUDA/$LIBTORCH_ARCHIVE"
 
@@ -43,7 +51,7 @@ if [ -d "$LIBTORCH_DIR" ]; then
 		# ask if libtorch should be re-downloaded (default: yes)
 		read -r -p "Re-download libtorch? [Y/n] " re_download
 		case "${re_download:-Y}" in
-			y|Y) rm -rf $LIBTORCH_DIR ;;
+			y|Y) rm -rf "$LIBTORCH_DIR" ;;
 			n|N) echo "Skipping re-download..." ;;
 			*) echo "Invalid input. Skipping re-download..." ;;
 		esac
@@ -51,7 +59,7 @@ if [ -d "$LIBTORCH_DIR" ]; then
 fi
 
 # check that libtorch exists
-if [ ! -d "libtorch/" ]; then
+if [ ! -d "$LIBTORCH_DIR" ]; then
 	# check if libtorch archive exists
 	if [ ! -f "$LIBTORCH_ARCHIVE" ]; then
 		echo "Downloading libtorch..."
@@ -81,14 +89,6 @@ if [ ! -d "libtorch/" ]; then
 	unzip -q "$LIBTORCH_ARCHIVE" "$LIBTORCH_DIR/*"
 fi
 
-# assert that libtorch exists and update LIBTORCH_DIR
-if [ ! -d "$LIBTORCH_DIR/" ]; then
-	echo "Error: libtorch not found!"
-	exit 1
-else
-	LIBTORCH_DIR=$(realpath "libtorch/")
-	echo "LIBTORCH_DIR: ${LIBTORCH_DIR}"
-fi
 
 # region build -------------------------------------------------------------------------
 # NOTE: cxx11 ABI throws error messages, use pre-cxx11 ABI

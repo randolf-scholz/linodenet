@@ -3,7 +3,6 @@ project(linodenet_special VERSION 0.2.0 LANGUAGES CXX CUDA)
 
 
 # OPTIONS
-
 # Global settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,9 +34,9 @@ execute_process (
 message(STATUS "NOTE: CUDA_VERSION=${CUDA_VERSION}")
 
 
-set(CMAKE_CUDA_COMPILER "/usr/local/cuda-${CUDA_VERSION}/bin/nvcc")
 set(CMAKE_INCLUDE_PATH  "/usr/local/cuda-${CUDA_VERSION}/include")
 set(CMAKE_LIBRARY_PATH "/usr/local/cuda-${CUDA_VERSION}/lib64")
+set(CUDAToolkit_ROOT "/usr/local/cuda-${CUDA_VERSION}")
 set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-${CUDA_VERSION}")
 
 # get dependencies
@@ -55,7 +54,7 @@ option(USE_CUDNN "Use CUDNN" ON)
 find_package(Torch REQUIRED)
 find_package(Python REQUIRED COMPONENTS Development)
 
-if(LINODENET_USE_CUDA)
+if(USE_CUDA)
   enable_language(CUDA)
   find_package(CUDAToolkit)
 endif()

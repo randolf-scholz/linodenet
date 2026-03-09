@@ -4,7 +4,10 @@
     <option name="executionMode" value="BINARY" />
     <option name="sdkName" value="Python 3.13 (linodenet)" />
   </component>
-  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/src/linodenet/lib">
+  <component name="CMakePythonSetting">
+    <option name="pythonIntegrationState" value="YES" />
+  </component>
+  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/src/linodenet_special">
     <contentRoot DIR="$PROJECT_DIR$" />
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="uv (linodenet)" project-jdk-type="Python SDK" />
