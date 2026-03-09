@@ -2,6 +2,7 @@
   <dictionary name="project">
     <words>
       <w>arglist</w>
+      <w>crelu</w>
       <w>erfinv</w>
       <w>logabsdets</w>
       <w>ndtr</w>
