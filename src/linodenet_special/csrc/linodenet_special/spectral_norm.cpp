@@ -58,8 +58,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
      * s.t. [u, v]ᵀ [[𝕀ₘ, 0], [0, 0]] [u, v] - 1 =0
      * and  [u, v]ᵀ [[0, 0], [0, 𝕀ₙ]] [u, v] - 1 =0
      *
-     * @related https://math.stackexchange.com/questions/4658991
-     * @related https://math.stackexchange.com/questions/4697688
+     * @ref https://math.stackexchange.com/questions/4658991
+     * @ref https://math.stackexchange.com/questions/4697688
      *
      * Lagrangian: L(u,v,λ,μ) = uᵀAv - λ(uᵀu - 1) - μ(vᵀv - 1)
      * KKT conditions: ∇L = 0 ⟺ A v - 2λu = 0 ⟺ [-2λ𝕀ₘ, A    ] [u] = [0]
@@ -133,7 +133,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const Tensor &A_in,
         const optional<Tensor> &u0,
         const optional<Tensor> &v0,
-        const optional<int64_t> maxiter,
+        const optional<int64_t> &maxiter,
         const double atol = 1e-6,
         const double rtol = 1e-6
     ) {
@@ -204,28 +204,29 @@ struct SpectralNorm: public Function<SpectralNorm> {
             #pragma unroll
             for (auto j = 0; j<7; j++) {
                 // update u
-                u = A.mv(v);
-                u /= u.norm();
+                at::mv_out(grad_u, A, v);               // gᵤ ← Av
+                at::div_out(u, grad_u, grad_u.norm());  // u ← gᵤ/‖gᵤ‖
                 // update v
-                v = A_t.mv(u);
-                v /= v.norm();
+                at::mv_out(grad_v, A_t, u);             // gᵥ ← Aᵀu
+                at::div_out(v, grad_v, grad_v.norm());  // v ← gᵥ/‖gᵥ‖
             }
             // update u
-            grad_u = A.mv(v);
-            sigma_u = grad_u.dot(u);
-            gamma_u = (grad_u - sigma_u * u).norm();
-            u = grad_u / grad_u.norm();
+            at::mv_out(grad_u, A, v);                    // gᵤ ← Av
+            at::dot_out(sigma_u, grad_u, u);             // σᵤ ← ⟨u∣gᵤ⟩
+            at::norm_out(gamma_u, grad_u - sigma_u * u); // γᵤ ← ‖gᵤ - σᵤu‖
+            at::div_out(u, grad_u, grad_u.norm());       // u ← gᵤ/‖gᵤ‖
             // update v
-            grad_v = A_t.mv(u);
-            sigma_v = grad_v.dot(v);
-            gamma_v = (grad_v - sigma_v * v).norm();
-            v = grad_v / grad_v.norm();
+            at::mv_out(grad_v, A_t, u);                  // gᵥ ← Aᵀu
+            at::dot_out(sigma_v, grad_v, v);             // σᵥ ← ⟨v∣gᵥ⟩
+            at::norm_out(gamma_v, grad_v - sigma_v * v); // γᵥ ← ‖gᵥ - σᵥv‖
+            at::div_out(v, grad_v, grad_v.norm());       // v ← gᵥ/‖gᵥ‖
 
             // check convergence
-            // NOTE:(1/√2)(‖u‖+‖v‖) ≤ ‖(u,v)‖ ≤ ‖u‖+‖v‖ (via Jensen-Inequality)
-            if ((converged = (  // compare against geometric mean
-                torch::max(gamma_u, gamma_v) < (ATOL + RTOL*torch::min(sigma_u, sigma_v))
-            ).item<bool>())) {break;}
+            if ((converged = (
+                  (gamma_u < (ATOL + RTOL * sigma_u))
+                & (gamma_v < (ATOL + RTOL * sigma_v))
+                ).item<bool>())
+            ) {break;}
         }
 
         // Emit warning if no convergence within maxiter iterations.
@@ -233,29 +234,26 @@ struct SpectralNorm: public Function<SpectralNorm> {
             TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes());
         }
 
-        // compute pre-conditioned sigma
-        const Tensor sigma = A.mv(v).dot(u);
-
         // store pre-conditioned tensors for backward
         ctx->save_for_backward({u, v});
 
-        // reverse pre-conditioning
-        const Tensor sigma_out = sigma * SCALE;
+        // compute pre-conditioned sigma
+        const Tensor sigma = SCALE * A.mv(v).dot(u);
 
         // check for NaNs, infinities and non-positive values
-        if ((~torch::isfinite(sigma_out) | (sigma_out <= 0)).item<bool>()) [[unlikely]] {
+        if ((~torch::isfinite(sigma) | (sigma <= 0)).item<bool>()) {
             throw std::runtime_error(at::str(
-                "Computation resulted in invalid singular value σ=", sigma_out,
+                "Computation resulted in invalid singular value σ=", sigma,
                 " for input of shape ", A.sizes(), ". ",
                 "Try increasing the number of iterations or the tolerance. ",
                 "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
             ));
         }
-        return sigma_out;
+        return sigma;
     }
 
     static variable_list backward(
-        AutogradContext *ctx,
+        const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
         /** @brief Backward Pass.
@@ -267,20 +265,51 @@ struct SpectralNorm: public Function<SpectralNorm> {
          * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
          *
          */
-        auto saved = ctx->get_saved_variables();
-        const Tensor u = saved[0];
-        const Tensor v = saved[1];
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &u = saved[0];
+        const Tensor &v = saved[1];
         const Tensor g_sigma = grad_output[0] * outer(u, v);
         return { g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor() };
     }
 };
 
 
-static inline Tensor spectral_norm(
+static Tensor spectral_norm_meta(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
-    const optional<int64_t> maxiter,
+    const optional<int64_t> &maxiter,
+    const double atol = 1e-6,
+    const double rtol = 1e-6
+) {
+    /**
+     * Meta function for spectral norm.
+     * This function is used to check the validity of the inputs and to infer the output shape and dtype.
+     */
+    TORCH_CHECK(A.dim() == 2, "Input must be a 2D matrix.");
+    TORCH_CHECK(A.is_floating_point(), "Input must be a floating point tensor.");
+    const auto M = A.size(0);
+    const auto N = A.size(1);
+    if (u0.has_value()) {
+        TORCH_CHECK(u0.value().sizes() == torch::IntArrayRef({M}), "u0 must have shape (M,).");
+        TORCH_CHECK(u0.value().dtype() == A.dtype(), "u0 must have the same dtype as A.");
+    }
+    if (v0.has_value()) {
+        TORCH_CHECK(v0.value().sizes() == torch::IntArrayRef({N}), "v0 must have shape (N,).");
+        TORCH_CHECK(v0.value().dtype() == A.dtype(), "v0 must have the same dtype as A.");
+    }
+    if (maxiter.has_value()) {
+        TORCH_CHECK(maxiter.value() > 0, "maxiter must be a positive integer.");
+    }
+    return torch::empty({}, A.options());
+}
+
+
+static Tensor spectral_norm(
+    const Tensor &A,
+    const optional<Tensor> &u0,
+    const optional<Tensor> &v0,
+    const optional<int64_t> &maxiter,
     const double atol = 1e-6,
     const double rtol = 1e-6
 ) {
@@ -300,7 +329,14 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
             "int? maxiter=None,"
             "float atol=1e-6,"
             "float rtol=1e-6"
-        ") -> Tensor",
-        spectral_norm
+        ") -> Tensor"
     );
+}
+
+TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
+    m.impl("spectral_norm", &spectral_norm);
+}
+
+TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
+    m.impl("spectral_norm", &spectral_norm_meta);
 }

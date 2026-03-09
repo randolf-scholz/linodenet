@@ -33,7 +33,7 @@ NORM_ONLY = {True: "norm_only", False: "triplet"}
 SPECTRAL_NORMS = {
     spectral_norm: "custom",
     spectral_norm_native: "native",
-    spectral_norm_riemann: "riemann",
+    # spectral_norm_riemann: "riemann",
     # spectral_norm_debug: "debug",
     # jit.script(spectral_norm_native): "native+jit",
     # torch.compile(spectral_norm_native): "native+compile",
@@ -46,7 +46,7 @@ SPECTRAL_NORMS = {
 SINGULAR_TRIPLETS = {
     singular_triplet: "custom",
     singular_triplet_native: "native",
-    singular_triplet_riemann: "riemann",
+    # singular_triplet_riemann: "riemann",
 }
 ATOL = 1e-5
 RTOL = 1e-3
@@ -60,9 +60,9 @@ ROUNDS = {
     32: 512,
     64: 512,
     128: 256,
-    256: 128,
-    512: 32,
-    1024: 16,
+    256: 256,
+    512: 64,
+    1024: 64,
 }
 
 
