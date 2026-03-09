@@ -35,14 +35,14 @@ from inspect import Parameter
 from typing import (
     Any,
     NotRequired,
-    ReadOnly,
+    ReadOnly,  # using extra_items (3.15)
     TypeGuard,
     TypeIs,
     cast,
     overload,
 )
 
-from typing_extensions import TypedDict  # using extra_items (3.15)
+from typing_extensions import TypedDict
 
 from blueprint.config import SupportsFromConfig, has_config, is_config
 

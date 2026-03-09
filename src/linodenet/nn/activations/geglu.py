@@ -5,20 +5,22 @@ __all__ = [
     "GEGLU",
 ]
 
+import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor
 
 from signatures import signature
 
 
-@signature("[(..., d), (..., d)] -> (..., d)")
+@signature("[(..., *ds), (..., *ds)] -> (..., *ds)")
 def geglu(a: Tensor, b: Tensor) -> Tensor:
     r"""GEGLU activation function.
 
     .. math:: GeGLU( (a, b) ) = a ⊙ gelu(b)
 
-    >>> geglu(torch.tensor([-1.0, 0.0, 1.0, 2.0]))
-    tensor([-1.9545,  0.0000])
+    >>> x = torch.tensor([-1.0, 0.0, 1.0, 2.0])
+    >>> geglu(x, x)
+    tensor([0.1587, 0.0000, 0.8413, 3.9090])
 
     References:
         - | Shazeer, Noam.
@@ -29,14 +31,15 @@ def geglu(a: Tensor, b: Tensor) -> Tensor:
     return a * F.gelu(b)
 
 
-class GEGLU(nn.Module):
+class GEGLU(torch.nn.Module):
     r"""GEGLU activation function with learnable parameters.
 
     .. math:: GEGLU( (a, b) ) = a ⊙ gelu(b)
 
     >>> act = GEGLU()
-    >>> act(torch.tensor([-1.0, 0.0, 1.0, 2.0]))
-    tensor([-1.9545,  0.0000])
+    >>> x = torch.tensor([-1.0, 0.0, 1.0, 2.0])
+    >>> act(x, x)
+    tensor([0.1587, 0.0000, 0.8413, 3.9090])
 
     References:
         - | Shazeer, Noam.
@@ -45,9 +48,6 @@ class GEGLU(nn.Module):
           | https://doi.org/10.48550/arXiv.2002.05202.
     """
 
-    def __init__(self, input_size: int) -> None:
-        super().__init__()
-        self.input_size = input_size
-
-    def forward(self, x: Tensor) -> Tensor:
-        return geglu(x)
+    @signature("[(..., *ds), (..., *ds)] -> (..., *ds)")
+    def forward(self, a: Tensor, b: Tensor) -> Tensor:
+        return geglu(a, b)

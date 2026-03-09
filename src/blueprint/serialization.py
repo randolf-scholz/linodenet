@@ -24,7 +24,7 @@ import os
 from importlib import metadata
 from pathlib import Path
 from types import ModuleType
-from typing import IO, Literal, Optional, ReadOnly, TypedDict, TypeGuard, cast
+from typing import IO, Literal, Optional, ReadOnly, TypeGuard, cast
 from zipfile import ZipFile
 
 import torch
@@ -33,6 +33,7 @@ from torch.export import ExportedProgram
 from torch.jit import (  # type: ignore[attr-defined]
     RecursiveScriptModule,  # pyright: ignore[reportPrivateImportUsage]
 )
+from typing_extensions import TypedDict
 
 from blueprint.core import (
     JSON,

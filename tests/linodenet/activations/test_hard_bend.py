@@ -7,11 +7,13 @@ from tests.utils.project import PROJECT
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
-def bend(x: Tensor, a: Tensor, c: Tensor) -> Tensor:
+def bend(x: Tensor, a: Tensor | float, c: Tensor | float) -> Tensor:
     if a == 1:
         return x
     return torch.where(
-        x > c / (a - 1), x + c, torch.where(x < -c / (a - 1), x - c, a * x)
+        x > c / (a - 1),
+        x + c,
+        torch.where(x < -c / (a - 1), x - c, a * x),
     )
 
 

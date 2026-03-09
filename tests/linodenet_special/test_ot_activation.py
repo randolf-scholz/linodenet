@@ -13,7 +13,7 @@ SQRT_2 = math.sqrt(2)
 class TestSimpleVariants:
     r"""Test some simple implementations."""
 
-    def test_ot_activation_gradcheck(self):
+    def test_ot_activation_gradcheck(self) -> None:
         MU = 1.0
         SIGMA = 0.5
         x = torch.randn(10, dtype=torch.double, requires_grad=True)
@@ -37,9 +37,9 @@ class TestSimpleVariants:
                 )
                 return g * y_prime
 
-        gradcheck(F.apply, (x,), eps=1e-6, atol=1e-4)
+        gradcheck(F.apply, (x,), eps=1e-6, atol=1e-4)  # pyright: ignore[reportArgumentType]
 
-    def test_gradcheck_with_parameters(self):
+    def test_gradcheck_with_parameters(self) -> None:
         class F(Function):
             @staticmethod
             def forward(ctx: Context, x: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
@@ -67,9 +67,9 @@ class TestSimpleVariants:
         mu = torch.tensor(1.0, dtype=torch.double, requires_grad=True)
         sigma = torch.tensor(0.5, dtype=torch.double, requires_grad=True)
         x = torch.linspace(-2.0, 2.0, steps=6, dtype=torch.double, requires_grad=True)
-        gradcheck(F.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)
+        gradcheck(F.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)  # pyright: ignore[reportArgumentType]
 
-    def test_gradcheck_simplified(self):
+    def test_gradcheck_simplified(self) -> None:
         class Psi(Function):
             @staticmethod
             def forward(ctx: Context, x: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
@@ -96,7 +96,7 @@ class TestSimpleVariants:
         x = torch.linspace(
             -2.0, 2.0, steps=1000, dtype=torch.double, requires_grad=True
         )
-        gradcheck(Psi.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)
+        gradcheck(Psi.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)  # pyright: ignore[reportArgumentType]
 
 
 MAXITER = 10
@@ -105,7 +105,7 @@ MAXITER = 10
 class TestImplementation:
     class Psi(Function):
         @staticmethod
-        def forward(ctx, x, mu, sigma):
+        def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
             s = sigma * SQRT_2
             EPS = 8 * torch.finfo(x.dtype).eps
 
@@ -157,6 +157,9 @@ class TestImplementation:
 
             return (g * d_x), (g * d_mu), (g * d_sigma)
 
+    def psi(self, x: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
+        return self.Psi.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
+
     class InvPsi(Function):
         @staticmethod
         def forward(ctx: Context, y: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
@@ -192,7 +195,7 @@ class TestImplementation:
             #    y / λ        if   -cλ/(λ-1) ≤ y ≤ cλ/(λ-1)   (i.e. y∈[-cλ/(λ-1), cλ/(λ-1)])
             #    y + c       if   y < -cλ/(λ-1)     (i.e. y < -cλ/(λ-1))
             # }
-            lam = torch.exp(-0.5 * (mu / sigma) ** 2)
+            lam = torch.exp(-0.5 * (mu / sigma) ** 2).item()
             x = torch.where(
                 (y / lam).abs() <= y.abs() - mu,
                 y / lam,
@@ -302,21 +305,26 @@ class TestImplementation:
             dsigma = g * (-dsigma / dx)
             return dy, dmu, dsigma
 
+    def invpsi(self, y: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
+        return self.InvPsi.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
+
     @pytest.mark.parametrize("sigma", [0.01, 0.1, 1, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_hard_bend_approximation(self, dtype, mu, sigma):
+    def test_hard_bend_approximation(
+        self, dtype: torch.dtype, mu: float, sigma: float
+    ) -> None:
         μ = torch.tensor(mu, dtype=dtype)
         σ = torch.tensor(sigma, dtype=dtype)
 
         # Test the hard_bend approximation for a range of y values
         x = torch.linspace(-20.0, 20.0, steps=1000, dtype=dtype)
-        y = self.Psi.apply(x, μ, σ)
+        y = self.psi(x, μ, σ)
         assert y.dtype == dtype
         assert y.isfinite().all(), "Psi should produce finite outputs for finite inputs"
 
         # compute the inverse approximation
-        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
         x_approx = torch.where(
             (y / lam).abs() <= y.abs() - μ,
             y / lam,
@@ -331,23 +339,23 @@ class TestImplementation:
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_psi_forward(self, dtype, mu, sigma):
+    def test_psi_forward(self, dtype: torch.dtype, mu: float, sigma: float) -> None:
         μ = torch.tensor(mu, dtype=dtype)
         σ = torch.tensor(sigma, dtype=dtype)
 
         # zero check: Ψ(0, μ, σ) = 0
         zero = torch.tensor(0, dtype=dtype)
-        assert torch.allclose(self.Psi.apply(zero, μ, σ), zero)
+        assert torch.allclose(self.psi(zero, μ, σ), zero)
 
         # positive x values
         x1 = torch.linspace(0, 20, steps=1000, dtype=dtype)
-        y1 = self.Psi.apply(x1, μ, σ)
+        y1 = self.psi(x1, μ, σ)
         assert y1.dtype == dtype
         assert y1.isfinite().all()
 
         # negative x values
         x2 = torch.linspace(0, -20, steps=1000, dtype=dtype)
-        y2 = self.Psi.apply(x2, μ, σ)
+        y2 = self.psi(x2, μ, σ)
         assert y2.dtype == dtype
         assert y2.isfinite().all()
 
@@ -358,38 +366,38 @@ class TestImplementation:
         # large here means x ≫ x⁎, where x⁎ comes from the hard_contract approximation:
         # x⁎=c/(1-λ) with c=μ and λ=exp(-½μ²/σ²)
         # we pick the threshold as c⋅max(1, 1/(1-λ))
-        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
         x_star = μ * max(1, 1 / (1 - lam))
         assert x_star.item() > 0
         x1 = torch.linspace(10 * x_star, 100 * x_star, steps=1000, dtype=dtype)
         x2 = torch.linspace(-10 * x_star, -100 * x_star, steps=1000, dtype=dtype)
         tail1 = x1 - torch.sign(x1) * μ
         tail2 = x2 - torch.sign(x2) * μ
-        y1 = self.Psi.apply(x1, μ, σ)
-        y2 = self.Psi.apply(x2, μ, σ)
+        y1 = self.psi(x1, μ, σ)
+        y2 = self.psi(x2, μ, σ)
         assert torch.allclose(y1, tail1)
         assert torch.allclose(y2, tail2)
 
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_inv_psi_forward(self, dtype, mu, sigma):
+    def test_inv_psi_forward(self, dtype: torch.dtype, mu: float, sigma: float) -> None:
         μ = torch.tensor(mu, dtype=dtype)
         σ = torch.tensor(sigma, dtype=dtype)
 
         # zero check: Ψ(0, μ, σ) = 0
         zero = torch.tensor(0, dtype=dtype)
-        assert torch.allclose(self.InvPsi.apply(zero, μ, σ), zero)
+        assert torch.allclose(self.invpsi(zero, μ, σ), zero)
 
         # positive x values
         y1 = torch.linspace(0, 20, steps=1000, dtype=dtype)
-        x1 = self.InvPsi.apply(y1, μ, σ)
+        x1 = self.invpsi(y1, μ, σ)
         assert x1.dtype == dtype
         assert x1.isfinite().all()
 
         # negative x values
         y2 = torch.linspace(0, -20, steps=1000, dtype=dtype)
-        x2 = self.InvPsi.apply(y2, μ, σ)
+        x2 = self.invpsi(y2, μ, σ)
         assert x2.dtype == dtype
         assert x2.isfinite().all()
 
@@ -400,15 +408,15 @@ class TestImplementation:
         # here, large means y ≫ y⁎, where y⁎ comes from the PL-approximation:
         # For hard_expand, y⁎=c/(λ-1)=cλ⁻¹/(1-λ⁻¹) with c=μ and λ=exp(½μ²/σ²)
         # we pick the threshold as c⋅max(1, λ⁻¹/(1-λ⁻¹))
-        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
         y_star = μ * max(1, lam / (1 - lam))
         assert y_star.item() > 0
         y1 = torch.linspace(10 * y_star, 100 * y_star, steps=1000, dtype=dtype)
         y2 = torch.linspace(-10 * y_star, -100 * y_star, steps=1000, dtype=dtype)
         tail1 = y1 + μ
         tail2 = y2 - μ
-        x1 = self.InvPsi.apply(y1, μ, σ)
-        x2 = self.InvPsi.apply(y2, μ, σ)
+        x1 = self.invpsi(y1, μ, σ)
+        x2 = self.invpsi(y2, μ, σ)
         assert x1.isfinite().all()
         assert x2.isfinite().all()
         assert torch.allclose(x1, tail1)
@@ -417,17 +425,17 @@ class TestImplementation:
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_psi_grad(self, dtype, mu, sigma):
+    def test_psi_grad(self, dtype: torch.dtype, mu: float, sigma: float) -> None:
         μ = torch.tensor(mu, dtype=dtype)
         σ = torch.tensor(sigma, dtype=dtype)
         # minimum grad value is at x=0, where
         lam = torch.exp(-0.5 * (μ / σ) ** 2)
         g_rtol = 2**-4
-        lower_grad_bound = max(0, lam * (1 - g_rtol))
+        lower_grad_bound = max(0, lam.item() * (1 - g_rtol))
 
         # positive x values
         x1 = torch.linspace(0, 20, steps=1000, dtype=dtype, requires_grad=True)
-        y1 = self.Psi.apply(x1, μ, σ)
+        y1 = self.psi(x1, μ, σ)
         y1.sum().backward()
         assert x1.grad is not None
         assert x1.grad.isfinite().all()
@@ -437,7 +445,7 @@ class TestImplementation:
 
         # negative x values
         x2 = torch.linspace(0, -20, steps=1000, dtype=dtype, requires_grad=True)
-        y2 = self.Psi.apply(x2, μ, σ)
+        y2 = self.psi(x2, μ, σ)
         y2.sum().backward()
         assert x2.grad is not None
         assert x2.grad.isfinite().all()
@@ -453,13 +461,13 @@ class TestImplementation:
         # x⁎=c/(1-λ) with c=μ and λ=exp(-½μ²/σ²)
         # we pick the threshold as c⋅max(1, 1/(1-λ))
         lam = torch.exp(-0.5 * (μ / σ) ** 2)
-        x_star = μ * max(1, 1 / (1 - lam))
+        x_star = μ * max(1, 1 / (1 - lam.item()))
         assert x_star.item() > 0
         tail_values = torch.linspace(10 * x_star, 100 * x_star, steps=1000, dtype=dtype)
         tail = torch.tensor(
             torch.cat([tail_values, tail_values.neg()]), dtype=dtype, requires_grad=True
         )
-        y_tail = self.Psi.apply(tail, μ, σ)
+        y_tail = self.psi(tail, μ, σ)
         assert y_tail.isfinite().all()
         y_tail.sum().backward()
         assert tail.grad is not None
@@ -469,11 +477,11 @@ class TestImplementation:
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_inv_psi_grad(self, dtype, mu, sigma):
+    def test_inv_psi_grad(self, dtype: torch.dtype, mu: float, sigma: float) -> None:
         μ = torch.tensor(mu, dtype=dtype)
         σ = torch.tensor(sigma, dtype=dtype)
         # minimum grad value is at x=0, where
-        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
         lam_inv_log = 0.5 * (μ / σ) ** 2  # log(1/λ) = 0.5 * (μ/σ)²
         g_rtol = 2**-4
         log_tol = math.log2(1 + g_rtol)
@@ -481,7 +489,7 @@ class TestImplementation:
 
         # positive x values
         y1 = torch.linspace(0, 20, steps=1000, dtype=dtype, requires_grad=True)
-        x1 = self.InvPsi.apply(y1, μ, σ)
+        x1 = self.invpsi(y1, μ, σ)
         x1.sum().backward()
         assert y1.grad is not None
         assert y1.grad.isfinite().all()
@@ -491,7 +499,7 @@ class TestImplementation:
 
         # negative x values
         y2 = torch.linspace(0, -20, steps=1000, dtype=dtype, requires_grad=True)
-        x2 = self.InvPsi.apply(y2, μ, σ)
+        x2 = self.invpsi(y2, μ, σ)
         x2.sum().backward()
         assert y2.grad is not None
         assert y2.grad.isfinite().all()
@@ -512,7 +520,7 @@ class TestImplementation:
         tail = torch.tensor(
             torch.cat([tail_values, tail_values.neg()]), dtype=dtype, requires_grad=True
         )
-        y_tail = self.InvPsi.apply(tail, μ, σ)
+        y_tail = self.invpsi(tail, μ, σ)
         assert y_tail.isfinite().all()
         y_tail.sum().backward()
         assert tail.grad is not None
@@ -522,7 +530,7 @@ class TestImplementation:
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_psi_gradcheck(self, dtype, mu, sigma):
+    def test_psi_gradcheck(self, dtype: torch.dtype, mu: float, sigma: float) -> None:
         # perform gradcheck on a narrower range to avoid numerical issues at the tails
         # only test gradcheck in the interval [-x_star, x_star]
         # outside, due to clamping, there may be flat regions,
@@ -531,7 +539,7 @@ class TestImplementation:
         μ = torch.tensor(mu, dtype=dtype, requires_grad=True)
         σ = torch.tensor(sigma, dtype=dtype, requires_grad=True)
 
-        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
         x_star = μ * min(1, 1 / (1 - lam))
         x_narrow = torch.linspace(
             -x_star, x_star, steps=100, dtype=dtype, requires_grad=True
@@ -545,12 +553,14 @@ class TestImplementation:
             case _:
                 raise ValueError(f"Unsupported dtype: {dtype}")
 
-        gradcheck(self.Psi.apply, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
+        gradcheck(self.psi, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
     @pytest.mark.parametrize("sigma", [0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 1.5], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_inv_psi_gradcheck(self, dtype, mu, sigma):
+    def test_inv_psi_gradcheck(
+        self, dtype: torch.dtype, mu: float, sigma: float
+    ) -> None:
         # perform gradcheck on a narrower range to avoid numerical issues at the tails
         # only test gradcheck in the interval [-x_star, x_star]
         # outside, due to clamping, there may be flat regions,
@@ -559,7 +569,7 @@ class TestImplementation:
         μ = torch.tensor(mu, dtype=dtype, requires_grad=True)
         σ = torch.tensor(sigma, dtype=dtype, requires_grad=True)
 
-        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
         y_star = μ * min(1, lam / (1 - lam))
         y_narrow = torch.linspace(
             -y_star / 2, y_star / 2, steps=100, dtype=dtype, requires_grad=True
@@ -573,19 +583,19 @@ class TestImplementation:
             case _:
                 raise ValueError(f"Unsupported dtype: {dtype}")
 
-        gradcheck(self.InvPsi.apply, (y_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
+        gradcheck(self.invpsi, (y_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_composition(self, dtype, mu, sigma):
+    def test_composition(self, dtype: torch.dtype, mu: float, sigma: float) -> None:
         μ = torch.tensor(mu, dtype=dtype)
         σ = torch.tensor(sigma, dtype=dtype)
 
         # y -> x_inv -> y_inv
         y = torch.linspace(-20, 20, steps=1000, dtype=dtype)
-        x_inv = self.InvPsi.apply(y, μ, σ)
-        y_inv = self.Psi.apply(x_inv, μ, σ)
+        x_inv = self.invpsi(y, μ, σ)
+        y_inv = self.psi(x_inv, μ, σ)
         # check the errors are small relative to x
         r = torch.relu((y_inv - y).abs() - 1e6)
         assert (r / y).abs().mean() <= 1e-4, "Mean relative error too large"
@@ -593,8 +603,8 @@ class TestImplementation:
 
         # x -> y -> x_inv
         x = torch.linspace(-20, 20, steps=1000, dtype=dtype)
-        y = self.Psi.apply(x, μ, σ)
-        x_inv = self.InvPsi.apply(y, μ, σ)
+        y = self.psi(x, μ, σ)
+        x_inv = self.invpsi(y, μ, σ)
         # check the errors are small relative to x
         r = torch.relu((x_inv - x).abs() - 1e6)
         assert (r / x).abs().mean() <= 1e-4, "Mean relative error too large"
@@ -603,14 +613,16 @@ class TestImplementation:
     @pytest.mark.parametrize("sigma", [0.5, 1, 2, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 1.5], ids=lambda x: f"mu={x}")
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-    def test_composition_grads(self, dtype, mu, sigma):
+    def test_composition_grads(
+        self, dtype: torch.dtype, mu: float, sigma: float
+    ) -> None:
         μ = torch.tensor(mu, dtype=dtype, requires_grad=True)
         σ = torch.tensor(sigma, dtype=dtype, requires_grad=True)
         x = torch.linspace(-2, 2, steps=6, dtype=dtype, requires_grad=True)
 
         # x -> y -> x_inv
-        y = self.Psi.apply(x, μ, σ)
-        x_inv = self.InvPsi.apply(y, μ, σ)
+        y = self.psi(x, μ, σ)
+        x_inv = self.invpsi(y, μ, σ)
         z = x_inv.sum()
         z.backward()
         assert x.grad is not None
@@ -618,15 +630,15 @@ class TestImplementation:
 
         # y -> x_inv -> y_inv
         y = torch.linspace(-2, 2, steps=6, dtype=dtype, requires_grad=True)
-        x_inv = self.InvPsi.apply(y, μ, σ)
-        y_inv = self.Psi.apply(x_inv, μ, σ)
+        x_inv = self.invpsi(y, μ, σ)
+        y_inv = self.psi(x_inv, μ, σ)
         z = y_inv.sum()
         z.backward()
         assert y.grad is not None
         assert torch.allclose(y.grad, torch.ones_like(y), atol=1e-3)
 
     @pytest.mark.parametrize("dtype", [torch.float64, torch.float32], ids=str)
-    def test_erfinv_range(self, dtype):
+    def test_erfinv_range(self, dtype: torch.dtype) -> None:
         finfo_eps = torch.finfo(dtype).eps
         finfo_eps_log = int(math.floor(math.log2(finfo_eps)))
 

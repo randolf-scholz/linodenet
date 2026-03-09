@@ -5,6 +5,7 @@ import math
 import matplotlib.pyplot as plt
 import pytest
 import torch
+from matplotlib.axes import Axes
 from torch import Tensor
 
 from linodenet.nn.activations import ACTIVATION_FUNCTIONS
@@ -28,13 +29,13 @@ class TestActivationGallery:
     xticks = list(range(math.ceil(xmin), math.floor(xmax) + 1))
     yticks = list(range(math.ceil(ymin), math.floor(ymax) + 1))
 
-    def plot(self, ax: plt.Axes, name: str) -> None:
+    def plot(self, ax: Axes, name: str) -> None:
         y = self.compute_activation(name)
         with plt.style.context("bmh"):
             ax.plot(self.x, y)
             ax.set_title(name)
 
-    def fmt_axes(self, ax: plt.Axes) -> None:
+    def fmt_axes(self, ax: Axes) -> None:
         ax.set_xlim(self.xmin, self.xmax)
         ax.set_ylim(self.ymin, self.ymax)
         # hide top and right spines

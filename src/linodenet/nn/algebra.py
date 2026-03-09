@@ -384,9 +384,9 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
             return Series((x, y))
         case Fn(), [*modules]:
             return Series((x, *modules))
-        case [[*modules], Fn()]:
+        case [*modules], Fn():
             return Series((*modules, y))
-        case [[*left_modules], [*right_modules]]:
+        case [*left_modules], [*right_modules]:
             return Series((*left_modules, *right_modules))
         case _:
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
@@ -468,9 +468,9 @@ def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Paralle
             return Parallel((x, y))
         case Fn(), [*modules]:
             return Parallel((x, *modules))
-        case [[*modules], Fn()]:
+        case [*modules], Fn():
             return Parallel((*modules, y))
-        case [[*left_modules], [*right_modules]]:
+        case [*left_modules], [*right_modules]:
             return Parallel((*left_modules, *right_modules))
         case _:
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
@@ -574,9 +574,9 @@ def fork[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Fork[M | N]
             return Fork((x, y))
         case Fn(), [*modules]:
             return Fork((x, *modules))
-        case [[*modules], Fn()]:
+        case [*modules], Fn():
             return Fork((*modules, y))
-        case [[*left_modules], [*right_modules]]:
+        case [*left_modules], [*right_modules]:
             return Fork((*left_modules, *right_modules))
         case _:
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")

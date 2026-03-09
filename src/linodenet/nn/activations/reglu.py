@@ -5,14 +5,18 @@ __all__ = ["reglu", "ReGLU"]
 import torch
 from torch import Tensor, nn
 
+from signatures import signature
 
-def reglu(x: Tensor) -> Tensor:
+
+@signature("[(..., *ds), (..., *ds)] -> (..., *ds)")
+def reglu(a: Tensor, b: Tensor) -> Tensor:
     r"""Regularized gelu activation function.
 
     .. math:: ReGLU( (a, b) ) = a ⊙ relu(b)
 
-    >>> reglu(torch.tensor([-1.0, 0.0, 1.0, 2.0]))
-    tensor([-1.,  0.])
+    >>> x = torch.tensor([-1.0, 0.0, 1.0, 2.0])
+    >>> reglu(x, x)
+    tensor([-0., 0., 1., 4.])
 
     References:
         - | Shazeer, Noam.
@@ -20,7 +24,6 @@ def reglu(x: Tensor) -> Tensor:
           | arXiv:2002.05202. Preprint, arXiv, February 12, 2020.
           | https://doi.org/10.48550/arXiv.2002.05202.
     """
-    a, b = x.chunk(2, dim=-1)
     return a * torch.relu(b)
 
 
@@ -30,8 +33,9 @@ class ReGLU(nn.Module):
     .. math:: ReGLU( (a, b) ) = a ⊙ relu(b)
 
     >>> act = ReGLU()
-    >>> act(torch.tensor([-1.0, 0.0, 1.0, 2.0]))
-    tensor([-1.,  0.])
+    >>> x = torch.tensor([-1.0, 0.0, 1.0, 2.0])
+    >>> act(x, x)
+    tensor([-0., 0., 1., 4.])
 
     References:
         - | Shazeer, Noam.
@@ -40,5 +44,6 @@ class ReGLU(nn.Module):
           | https://doi.org/10.48550/arXiv.2002.05202.
     """
 
-    def forward(self, x: Tensor) -> Tensor:
-        return reglu(x)
+    @signature("[(..., *ds), (..., *ds)] -> (..., *ds)")
+    def forward(self, a: Tensor, b: Tensor) -> Tensor:
+        return reglu(a, b)

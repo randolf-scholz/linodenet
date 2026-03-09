@@ -102,4 +102,4 @@ def spectral_norm(
     rtol: float = RTOL,
 ) -> Tensor:
     r"""Compute the spectral norm of a matrix."""
-    return SpectralNorm.apply(A, atol=atol, rtol=rtol, maxiter=maxiter, u0=u0, v0=v0)
+    return SpectralNorm.apply(A, atol=atol, rtol=rtol, maxiter=maxiter, u0=u0, v0=v0)  # pyright: ignore[reportReturnType]

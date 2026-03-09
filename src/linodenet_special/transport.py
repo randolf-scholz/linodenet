@@ -97,6 +97,8 @@ class BimodalToGaussian(MixtureToGaussian):
 
 
 class GaussianToBimodal(GaussianToMixture):
+    r"""Learnable transport map from a Gaussian distribution to a bimodal distribution."""
+
     def __init__(self) -> None:
         super().__init__(2)
 
