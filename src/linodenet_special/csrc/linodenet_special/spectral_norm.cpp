@@ -160,14 +160,6 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const Tensor ATOL = torch::full({}, atol, OPTIONS);
         const Tensor RTOL = torch::full({}, rtol, OPTIONS);
 
-        // Preconditioning: normalize A by its infinity norm
-        const Tensor SCALE = A_in.abs().max();
-        const Tensor A = A_in / SCALE;
-        const Tensor A_t = A.t();  // precompute transpose (maybe skip for small MAXITER?)
-
-        // Initialize convergence flag
-        bool converged = false;
-
         // Initialize u and v with random values if not given
         Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
         Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
@@ -175,6 +167,24 @@ struct SpectralNorm: public Function<SpectralNorm> {
         // initialize vectors for power iteration
         v /= v.norm();
         u /= u.norm();
+
+        // Preconditioning: normalize A by its infinity norm
+        const Tensor SCALE = A_in.abs().max();
+
+        // special case: if SCALE == 0, then A is the zero matrix,
+        // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
+        if (SCALE.item<double>() == 0) {
+			ctx->save_for_backward({u, v});
+			return torch::zeros({}, OPTIONS);
+		}
+
+        const Tensor A = A_in / SCALE;
+        const Tensor A_t = A.t();  // precompute transpose (maybe skip for small MAXITER?)
+
+        // Initialize convergence flag
+        bool converged = false;
+
+
 
         // pre-allocate buffers
         Tensor grad_u = torch::empty_like(u);
@@ -187,13 +197,13 @@ struct SpectralNorm: public Function<SpectralNorm> {
         Tensor sigma_v = torch::empty({}, OPTIONS);
 
         // Perform power-iteration for maxiter times or until convergence.
-        // NOTE: Perform 2 iterations per loop to increase performance.
-        //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
-        //   The compiler cannot do this optimization on it's own because it would change behavior.
         // NOTE: performing at least 2 iterations before the first convergence check is crucial,
         //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
-        for (auto i = 0; i<MAXITER; i++) {
-            #pragma unroll  // we test convergence only every 8th iteration.
+        for (int64_t i = 0; i<MAXITER; i++) {
+			// NOTE: Perform multiple iterations per loop to increase performance.
+			//  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
+			//   The compiler cannot do this optimization on it's own because it would change behavior.
+            #pragma unroll
             for (auto j = 0; j<7; j++) {
                 // update u
                 u = A.mv(v);
@@ -222,7 +232,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
 
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
+            TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes());
         }
 
         // compute pre-conditioned sigma
@@ -272,9 +282,9 @@ static inline Tensor spectral_norm(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
-    optional<int64_t> maxiter,
-    double atol = 1e-6,
-    double rtol = 1e-6
+    const optional<int64_t> maxiter,
+    const double atol = 1e-6,
+    const double rtol = 1e-6
 ) {
     /**
      * Wrap the struct into function.
