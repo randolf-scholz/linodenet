@@ -133,9 +133,9 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const Tensor &A_in,
         const optional<Tensor> &u0,
         const optional<Tensor> &v0,
-        optional<int64_t> maxiter,
-        double atol = 1e-6,
-        double rtol = 1e-6
+        const optional<int64_t> maxiter,
+        const double atol = 1e-6,
+        const double rtol = 1e-6
     ) {
         /** @brief Forward pass.
          *
@@ -162,8 +162,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
-        const auto A = A_in / SCALE;
-        const auto A_t = A.t();  // precompute transpose (maybe skip for small MAXITER?)
+        const Tensor A = A_in / SCALE;
+        const Tensor A_t = A.t();  // precompute transpose (maybe skip for small MAXITER?)
 
         // Initialize convergence flag
         bool converged = false;
@@ -260,9 +260,9 @@ struct SpectralNorm: public Function<SpectralNorm> {
          *
          */
         auto saved = ctx->get_saved_variables();
-        auto u = saved[0];
-        auto v = saved[1];
-        auto g_sigma = grad_output[0] * outer(u, v);
+        const Tensor u = saved[0];
+        const Tensor v = saved[1];
+        const Tensor g_sigma = grad_output[0] * outer(u, v);
         return { g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor() };
     }
 };
