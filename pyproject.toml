@@ -491,12 +491,21 @@ reportWildcardImportFromLibrary = "error"  # default: "warning"
 
 # region pytest configuration ----------------------------------------------------------
 [tool.pytest]
-# NOTE: currently unused https://docs.pytest.org/en/stable/reference/customize.html
-
-[tool.pytest.ini_options]
-xfail_strict = true
 minversion = "9.0.2"
 testpaths = ["src/", "tests/"]
+xfail_strict = true
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "serial",
+    "interactive",
+]
+required_plugins = [
+    "pytest-benchmark",
+    "pytest-cov",
+    "pytest-repeat",
+    "pytest-rerunfailures",
+    "pytest-xdist",
+]
 addopts = [
     "--doctest-modules",
     # "--junit-xml=.reports/pytest.xml",
@@ -515,16 +524,5 @@ addopts = [
     # benchmark options
     "--benchmark-group-by=func",
     "--benchmark-sort=mean",
-]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "serial",
-]
-required_plugins = [
-    "pytest-benchmark",
-    "pytest-cov",
-    "pytest-repeat",
-    "pytest-rerunfailures",
-    "pytest-xdist",
 ]
 # endregion pytest configuration -------------------------------------------------------

@@ -4,6 +4,7 @@ __all__ = [
     # ABCs & Protocols
     "Activation",
     "GenericActivation",
+    "ActivationRequiresDim",
     "ActivationBase",
     # functions
     "get_activation",
@@ -11,14 +12,14 @@ __all__ = [
 
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import Concatenate, Protocol, overload, runtime_checkable
+from typing import Protocol, overload, runtime_checkable
 
 from torch import Tensor, nn
 
 from blueprint import Makes, initialize
 from signatures import signature
 
-type GenericActivation = Callable[Concatenate[Tensor, ...], Tensor]
+type GenericActivation = Callable[..., Tensor | tuple[Tensor, ...]]
 r"""Type alias for generic activation functions (may require additional args!)."""
 
 
@@ -26,13 +27,21 @@ r"""Type alias for generic activation functions (may require additional args!)."
 class Activation(Protocol):
     r"""Protocol for activation functions.
 
-    We define activations as callables that take a single tensor input
+    We define (element-wise) activations as callables that take a single tensor input
     and returns a tensor of the same shape.
     """
 
     @abstractmethod
     @signature("(..., *xs) -> (..., *xs)")
     def __call__(self, x: Tensor, /) -> Tensor: ...
+
+
+class ActivationRequiresDim(Protocol):
+    r"""Protocol for activation functions that require a dimension argument."""
+
+    @abstractmethod
+    @signature("[(..., *xs), dim] -> (..., *xs)")
+    def __call__(self, x: Tensor, /, *, dim: int | tuple[int, ...]) -> Tensor: ...
 
 
 class ActivationBase(nn.Module):

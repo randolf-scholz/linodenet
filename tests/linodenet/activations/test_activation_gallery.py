@@ -79,13 +79,13 @@ class TestActivationGallery:
             sharex=True,
             sharey=True,
         )
-        axes = axes.flatten()
-        for ax, name in zip(axes, ACTIVATION_FUNCTIONS, strict=True):
+        for ax in axes.flatten():
+            self.fmt_axes(ax)
+        for ax, name in zip(axes.flatten(), ACTIVATION_FUNCTIONS, strict=False):
             try:
                 self.plot(ax, name)
             except Exception:
                 ax.set_title(f"{name} (error)")
-            self.fmt_axes(ax)
 
         fig.savefig(RESULT_DIR / "all_activations.png", dpi=200)
         plt.close(fig)

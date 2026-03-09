@@ -12,21 +12,24 @@ __all__ = [
     "ALL_ACTIVATIONS",
     "ACTIVATION_FUNCTIONS",
     "ACTIVATION_CLASSES",
+    "SPECIAL_ACTIVATIONS",
+    "TORCH_ACTIVATION_CLASSES",
     "TORCH_ACTIVATION_FUNCTIONS",
     "TORCH_INPLACE_ACTIVATIONS",
     "TORCH_SPECIAL_ACTIVATIONS",
-    "TORCH_ACTIVATION_CLASSES",
     # ABCs & Protocols
     "Activation",
     "ActivationBase",
     "GenericActivation",
     # Classes
-    "HardBendExp",
+    "CReLU",
     "GEGLU",
     "ReGLU",
     # Functions
+    "crelu",
     "geglu",
-    "hard_bend_exp",
+    "hard_expand",
+    "hard_contract",
     "reglu",
     # utils
     "get_activation",
@@ -41,8 +44,9 @@ from linodenet.nn.activations.base import (
     GenericActivation,
     get_activation,
 )
+from linodenet.nn.activations.crelu import CReLU, crelu
 from linodenet.nn.activations.geglu import GEGLU, geglu
-from linodenet.nn.activations.hard_bend import HardBendExp, hard_bend_exp
+from linodenet.nn.activations.hard_contract import hard_contract, hard_expand
 from linodenet.nn.activations.reglu import ReGLU, reglu
 
 TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
@@ -64,8 +68,6 @@ TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     # Applies element-wise, `LeakyReLU(x)=\max(0,x)+negative_slope⋅\min(0,x)`.
     "rrelu": nn.functional.rrelu,
     # Randomized leaky ReLU.
-    "glu": nn.functional.glu,
-    # The gated linear unit.
     "gelu": nn.functional.gelu,
     # Applies element-wise the function `GELU(x)=x⋅Φ(x)`.
     "log_sigmoid": nn.functional.logsigmoid,  # FIXME: name is different for some reason.
@@ -78,16 +80,8 @@ TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     # Applies element-wise, the function `SoftSign(x)=x/(1+∣x∣)`.
     "softplus": nn.functional.softplus,
     # Applies element-wise, the function `Softplus(x)=1/β⋅\log(1+\exp(β⋅x))`.
-    "softmin": nn.functional.softmin,
-    # Applies a softmin function.
-    "softmax": nn.functional.softmax,
-    # Applies a softmax function.
     "softshrink": nn.functional.softshrink,
     # Applies the soft shrinkage function elementwise
-    "gumbel_softmax": nn.functional.gumbel_softmax,
-    # Samples from the Gumbel-Softmax distribution and optionally discretizes.
-    "log_softmax": nn.functional.log_softmax,
-    # Applies a softmax followed by a logarithm.
     "tanh": nn.functional.tanh,
     # Applies element-wise, `\tanh(x)=(\exp(x)−\exp(−x))/(\exp(x)+\exp(−x))`.
     "sigmoid": nn.functional.sigmoid,
@@ -98,8 +92,6 @@ TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     # Applies the Sigmoid Linear Unit (SiLU) function, element-wise.
     "mish": nn.functional.mish,
     # Applies the Mish function, element-wise.
-    "normalize": nn.functional.normalize,
-    # Performs Lp normalization of inputs over specified dimension.
 }
 r"""Dictionary containing all available functional activations in torch."""
 
@@ -116,11 +108,16 @@ TORCH_INPLACE_ACTIVATIONS: dict[str, Activation] = {
     "rrelu_": nn.functional.rrelu_,
     # In-place version of rrelu().
 }
+r"""Dictionary containing all available in-place functional activations in torch."""
 
 
 TORCH_SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
     "threshold": nn.functional.threshold,
     # Thresholds each element of the input Tensor.
+    "glu": nn.functional.glu,
+    # The gated linear unit.
+    "normalize": nn.functional.normalize,
+    # Performs Lp normalization of inputs over specified dimension.
     "prelu": nn.functional.prelu,
     # `PReLU(x)=\max(0,x)+ω⋅\min(0,x)` where ω is a learnable parameter.
     "batch_norm": nn.functional.batch_norm,
@@ -131,6 +128,14 @@ TORCH_SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
     # Applies Layer Normalization for last certain number of dimensions.
     "local_response_norm": nn.functional.local_response_norm,
     # Applies local response normalization over an input signal composed of several input planes.
+    "softmin": nn.functional.softmin,  # NOTE: requires dim argument!
+    # Applies a softmin function.
+    "softmax": nn.functional.softmax,  # NOTE: requires dim argument!
+    # Applies a softmax function.
+    "log_softmax": nn.functional.log_softmax,  # NOTE: requires dim argument!
+    # Applies a softmax followed by a logarithm.
+    "gumbel_softmax": nn.functional.gumbel_softmax,  # NOTE: requires dim argument!
+    # Samples from the Gumbel-Softmax distribution and optionally discretizes.
 }
 r"""Special activations that do not represent usual activation functions."""
 
@@ -170,19 +175,24 @@ r"""Dictionary containing all available activations in torch."""
 
 ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     **TORCH_ACTIVATION_FUNCTIONS,
+    "hard_contract": hard_contract,
+    "hard_expand": hard_expand,
+}  # fmt: skip
+r"""Dictionary containing all available activation functions."""
+
+SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
     "reglu": reglu,
     "geglu": geglu,
-    "hard_bend": hard_bend_exp,
-}
-r"""Dictionary containing all available activation functions."""
+    "crelu": crelu,
+}  # fmt: skip
+r"""Activations that do not match the usual signature of activations."""
 
 
 ACTIVATION_CLASSES: dict[str, type[Activation]] = {
     **TORCH_ACTIVATION_CLASSES,
-    "HardBend": HardBendExp,
     "GeGLU": GEGLU,
     "ReGLU": ReGLU,
-}
+}  # fmt: skip
 r"""Dictionary containing all available activation classes."""
 
 
@@ -191,7 +201,7 @@ ALL_ACTIVATIONS: dict[str, Activation | type[Activation]] = {
     **ACTIVATION_CLASSES,
     **TORCH_ACTIVATION_FUNCTIONS,
     **TORCH_ACTIVATION_CLASSES,
-}
+}  # fmt: skip
 r"""Dictionary containing all available activations."""
 
 

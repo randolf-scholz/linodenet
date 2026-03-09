@@ -1,6 +1,9 @@
 r"""Implementations of the hard bend activation function."""
 
-__all__ = ["hard_bend_exp", "HardBendExp"]
+__all__ = [
+    "hard_contract",
+    "hard_expand",
+]
 
 import torch
 from torch import Tensor, nn
@@ -54,7 +57,7 @@ def hard_expand(x: Tensor, a: float = 1, c: float = 1) -> Tensor:
     return torch.where(y.abs() <= z.abs(), y, z)
 
 
-def hard_bend_exp(x: Tensor, a: float = 1, t: float = 1) -> Tensor:
+def _hard_bend_exp(x: Tensor, a: float = 1, t: float = 1) -> Tensor:
     r"""Hard step activation function.
 
     .. math:: ϕ(x, a, t) =
@@ -69,7 +72,7 @@ def hard_bend_exp(x: Tensor, a: float = 1, t: float = 1) -> Tensor:
     return torch.where(mask, exp_at * x, x + torch.sign(x) * t)
 
 
-class HardBendExp(nn.Module):
+class _HardBendExp(nn.Module):
     r"""Optimized implementation of 2-parameter HardBend that precomputes the threshold and slope.
 
     .. math:: ϕ(x, a, t) = odesolve(u'(t) = a * tanh(u), t, u(0) = x) = sinh⁻¹(eᵃᵗ sinh(ax))
