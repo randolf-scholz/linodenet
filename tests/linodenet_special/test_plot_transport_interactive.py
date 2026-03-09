@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 import matplotlib.pyplot as plt
+import pytest
 import torch
 from matplotlib.widgets import Slider
 from torch import Tensor
@@ -221,9 +222,14 @@ def test_plot_transport_2():
 
 
 def _slider_positions(
-    count: int, /, *, bottom: float = 0.02, height: float = 0.025, gap: float = 0.005
-) -> list[list[float]]:
-    return [[0.12, bottom + i * (height + gap), 0.76, height] for i in range(count)]
+    count: int,
+    /,
+    *,
+    bottom: float = 0.02,
+    height: float = 0.025,
+    gap: float = 0.005,
+) -> list[tuple[float, float, float, float]]:
+    return [(0.12, bottom + i * (height + gap), 0.76, height) for i in range(count)]
 
 
 @dataclass
@@ -314,6 +320,7 @@ class TransportPlotState2:
         self.line.figure.canvas.draw_idle()
 
 
+@pytest.mark.interactive
 def test_plot_transport_3_interactive():
     dtype = torch.float64
 
@@ -372,6 +379,7 @@ def test_plot_transport_3_interactive():
         plt.show()
 
 
+@pytest.mark.interactive
 def test_plot_transport_2_interactive():
     dtype = torch.float64
 
