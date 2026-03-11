@@ -281,7 +281,7 @@ class TestPerformance:
     }
 
     @staticmethod
-    def get_param(
+    def make_test_case(
         shape: tuple[int, int],
         *,
         device: str | torch.device,
@@ -312,7 +312,7 @@ class TestPerformance:
 
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.get_param(shape, device=device, generator=generator)
+        A_original = self.make_test_case(shape, device=device, generator=generator)
 
         # get reference gradient
         A_native = nn.Parameter(A_original.clone().detach())
@@ -335,7 +335,7 @@ class TestPerformance:
         )
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.get_param(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, generator=generator)
             return (param,), {}
 
         # perform benchmark
@@ -366,7 +366,7 @@ class TestPerformance:
         torch.manual_seed(0)
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.get_param(shape, device=device, generator=generator)
+        A_original = self.make_test_case(shape, device=device, generator=generator)
         g_s = torch.randn((), device=device, generator=generator)
 
         def backward(s: Tensor, /) -> None:
@@ -393,7 +393,7 @@ class TestPerformance:
         )
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.get_param(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, generator=generator)
             s, _, _ = impl(param)
             return (s,), {}
 
@@ -420,7 +420,7 @@ class TestPerformance:
         m, n = shape
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.get_param(shape, device=device, generator=generator)
+        A_original = self.make_test_case(shape, device=device, generator=generator)
         g_s = torch.randn((), device=device)
         g_u = torch.randn(m, device=device)
         g_v = torch.randn(n, device=device)
@@ -450,7 +450,7 @@ class TestPerformance:
         )
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.get_param(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, generator=generator)
             s, u, v = impl(param)
             return (s, u, v), {}
 
