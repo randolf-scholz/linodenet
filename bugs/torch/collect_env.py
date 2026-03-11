@@ -652,7 +652,7 @@ def main():
             )
             msg = (
                 f"\n*** Detected a minidump at {latest} created on {creation_time}, "
-                 "if this is related to your bug please include it when you file a"
+                "if this is related to your bug please include it when you file a"
                 " report ***"
             )
             print(msg, file=sys.stderr)

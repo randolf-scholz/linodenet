@@ -83,7 +83,10 @@ def test():
             strict=True,
         )
 
-    with timer("Compiled export+import time: {:.3f} s"), tempfile.TemporaryFile() as tmp:
+    with (
+        timer("Compiled export+import time: {:.3f} s"),
+        tempfile.TemporaryFile() as tmp,
+    ):
         torch.export.save(exported, tmp)
         tmp.seek(0)
         deserialized_model = torch.export.load(tmp).module()
