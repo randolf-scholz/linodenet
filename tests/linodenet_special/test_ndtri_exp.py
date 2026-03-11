@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pytest
 import torch
+from pytest_benchmark.fixture import BenchmarkFixture
 from scipy.special import ndtri_exp as scipy_ndtri_exp_py
 from torch.autograd import gradcheck
 
@@ -17,6 +18,10 @@ from .fixtures import DEVICES, DTYPES
 
 ATOL = 1e-6
 RTOL = 1e-3
+IMPLS = {
+    "py": ndtri_exp_py,
+    "cpp": ndtri_exp_cpp,
+}
 
 
 def _scipy_reference(values: torch.Tensor) -> torch.Tensor:
@@ -35,10 +40,9 @@ def _assert_matches_reference(values: torch.Tensor, actual: torch.Tensor) -> Non
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
-def test_ndtri_exp_special_values(
-    impl, dtype: torch.dtype, device: torch.device
-) -> None:
+@pytest.mark.parametrize("name", IMPLS, ids=str)
+def test_special_values(name: str, dtype: torch.dtype, device: str) -> None:
+    impl = IMPLS[name]
 
     # ndtri_exp_py(-∞) = ndtri(0) = -∞
     # ndtri_exp_py(0) = ndtri(1) = +∞
@@ -62,8 +66,9 @@ def test_ndtri_exp_special_values(
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
-def test_ndtri_exp_domain(impl, dtype: torch.dtype, device: torch.device) -> None:
+@pytest.mark.parametrize("name", IMPLS, ids=str)
+def test_domain(name: str, dtype: torch.dtype, device: str) -> None:
+    impl = IMPLS[name]
     # ndtri_exp_py is defined for log_p <= 0
     # test on a geometric range of values from finfo.min to finfo.max
     # assert that for log_p > 0, the result is NaN
@@ -94,24 +99,26 @@ def test_ndtri_exp_domain(impl, dtype: torch.dtype, device: torch.device) -> Non
         (_LOWER_CUTOFF, _UPPER_CUTOFF),
         (_UPPER_CUTOFF + 1e-6, -1e-6),
     ],
-    ids=["small", "mid", "large"],
+    ids=["small", "medium", "large"],
 )
-@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
-def test_ndtri_exp_correctness(
-    impl,
+@pytest.mark.parametrize("name", IMPLS, ids=str)
+def test_correctness(
+    name: str,
     lower: float,
     upper: float,
-    device: torch.device,
+    device: str,
     dtype: torch.dtype,
 ) -> None:
+    impl = IMPLS[name]
     log_p = torch.linspace(lower, upper, steps=256, dtype=dtype, device=device)
     _assert_matches_reference(log_p, impl(log_p))
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
-def test_ndtri_exp_gradcheck(impl, dtype: torch.dtype, device: torch.device) -> None:
+@pytest.mark.parametrize("name", IMPLS, ids=str)
+def test_gradcheck(name: str, dtype: torch.dtype, device: str) -> None:
+    impl = IMPLS[name]
     log_p = torch.linspace(
         _LOWER_CUTOFF,
         _UPPER_CUTOFF,
@@ -129,3 +136,35 @@ def test_ndtri_exp_gradcheck(impl, dtype: torch.dtype, device: torch.device) -> 
         atol = 1e-6
         rtol = 1e-6
     gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol)
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", IMPLS, ids=str)
+@pytest.mark.parametrize(
+    ("lower", "upper"),
+    [
+        (-80.0, _LOWER_CUTOFF - 1e-3),
+        (_LOWER_CUTOFF, _UPPER_CUTOFF),
+        (_UPPER_CUTOFF + 1e-6, -1e-6),
+    ],
+    ids=["small", "medium", "large"],
+)
+def test_performance(
+    name: str,
+    benchmark: BenchmarkFixture,
+    lower: float,
+    upper: float,
+    dtype: torch.dtype,
+    device: str,
+) -> None:
+    impl = IMPLS[name]
+    benchmark.group = f"ndtri_exp/{device}/{dtype}"
+    log_p = torch.linspace(lower, upper, steps=256, dtype=dtype, device=device)
+
+    def bench():
+        torch.cuda.synchronize()
+        impl(log_p)
+        torch.cuda.synchronize()
+
+    benchmark.pedantic(bench, (), iterations=10, rounds=20, warmup_rounds=20)

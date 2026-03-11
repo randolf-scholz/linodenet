@@ -21,7 +21,8 @@ using torch::autograd::Function;
 using torch::indexing::Slice;
 
 
-// TensorFlow uses https://www.sciencedirect.com/science/article/pii/0024379587901182 (cf. https://www.tensorflow.org/api_docs/python/tf/linalg/sqrtm)
+// TensorFlow uses https://www.sciencedirect.com/science/article/pii/0024379587901182
+//  (cf. https://www.tensorflow.org/api_docs/python/tf/linalg/sqrtm)
 // MATLAB and SciPy use https://link.springer.com/chapter/10.1007/978-3-642-36803-5_12
 // cf. https://www.mathworks.com/help/matlab/ref/sqrtm.html
 // cf. https://docs.scipy.org/doc/scipy/reference/generated/scipy.linalg.sqrtm.html
