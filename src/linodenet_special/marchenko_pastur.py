@@ -152,7 +152,7 @@ class MarchenkoPastur(Distribution):
         return torch.where(target <= point_mass, zeros, inv)
 
     def sample(self, sample_shape: Size = ()) -> Tensor:
-        shape = self.batch_shape + tuple(sample_shape)
+        shape = tuple(sample_shape) + self.batch_shape
         value = torch.rand(shape, device=self.gamma.device, dtype=self.gamma.dtype)
         return self.icdf(value)
 
