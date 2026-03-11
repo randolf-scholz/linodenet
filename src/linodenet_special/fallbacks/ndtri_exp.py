@@ -35,7 +35,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 __all__ = [
-    "ndtri_exp",
+    # functions
+    "ndtri_exp_fallback",
     "ndtri_exp_naive",
 ]
 
@@ -45,7 +46,7 @@ from typing import Final
 import torch
 from torch import Tensor
 
-P1 = torch.tensor(
+_P1 = torch.tensor(
     [
         4.05544892305962419923,
         3.15251094599893866154e1,
@@ -60,7 +61,7 @@ P1 = torch.tensor(
     dtype=torch.float64,
     pin_memory=True,
 )
-Q1 = torch.tensor(
+_Q1 = torch.tensor(
     [
         1.57799883256466749731e1,
         4.53907635128879210584e1,
@@ -74,7 +75,7 @@ Q1 = torch.tensor(
     dtype=torch.float64,
     pin_memory=True,
 )
-P2 = torch.tensor(
+_P2 = torch.tensor(
     [
         3.23774891776946035970,
         6.91522889068984211695,
@@ -89,7 +90,7 @@ P2 = torch.tensor(
     dtype=torch.float64,
     pin_memory=True,
 )
-Q2 = torch.tensor(
+_Q2 = torch.tensor(
     [
         6.02427039364742014255,
         3.67983563856160859403,
@@ -105,10 +106,9 @@ Q2 = torch.tensor(
 )
 
 
-UPPER_CUTOFF: Final[float] = -0.14541345786885906  # log(1-e⁻²)
-LOWER_CUTOFF: Final[float] = -2.0
-SQRT_2: Final[float] = math.sqrt(2.0)
-USE_NAIVE = True
+_UPPER_CUTOFF: Final[float] = -0.14541345786885906  # log(1-e⁻²)
+_LOWER_CUTOFF: Final[float] = -2.0
+_SQRT_2: Final[float] = math.sqrt(2.0)
 
 
 def _polevl(x: Tensor, coeffs: Tensor) -> Tensor:
@@ -131,15 +131,15 @@ def _ndtri_exp_small(log_p: Tensor) -> Tensor:
     r"""Rational approximation of Φ⁻¹√(-2 log p) when log_p < -2."""
     finfo = torch.finfo(log_p.dtype)
     # cast the coefficients to the same dtype and device as log_p
-    p1 = P1.to(device=log_p.device, dtype=log_p.dtype)
-    q1 = Q1.to(device=log_p.device, dtype=log_p.dtype)
-    p2 = P2.to(device=log_p.device, dtype=log_p.dtype)
-    q2 = Q2.to(device=log_p.device, dtype=log_p.dtype)
+    p1 = _P1.to(device=log_p.device, dtype=log_p.dtype)
+    q1 = _Q1.to(device=log_p.device, dtype=log_p.dtype)
+    p2 = _P2.to(device=log_p.device, dtype=log_p.dtype)
+    q2 = _Q2.to(device=log_p.device, dtype=log_p.dtype)
     # Avoid potential overflow in -2*y for absurdly negative y (mirrors SciPy idea)
     x = torch.where(
         log_p >= 0.5 * finfo.min,
         torch.sqrt(-2 * log_p),
-        (SQRT_2 * torch.sqrt(-log_p)),
+        (_SQRT_2 * torch.sqrt(-log_p)),
     )
     z = x.reciprocal()  # 1/x
     x0 = x - z * x.log()  # x - log(x)/x
@@ -148,7 +148,7 @@ def _ndtri_exp_small(log_p: Tensor) -> Tensor:
         z * _polevl(z, p1) / _p1evl(z, q1),
         z * _polevl(z, p2) / _p1evl(z, q2),
     )
-    return x0 - x1
+    return x1 - x0
 
 
 def ndtri_exp_naive(log_p: Tensor) -> Tensor:
@@ -156,7 +156,7 @@ def ndtri_exp_naive(log_p: Tensor) -> Tensor:
     return torch.special.ndtri(log_p.exp())
 
 
-def ndtri_exp(log_p: Tensor) -> Tensor:
+def ndtri_exp_fallback(log_p: Tensor) -> Tensor:
     r"""Inverse of `log_ndtr`, i.e. the log-quantile function of the standard normal distribution.
 
     torch currently does not implement the inverse of `log_ndtr`,
@@ -167,14 +167,14 @@ def ndtri_exp(log_p: Tensor) -> Tensor:
     """
     finfo = torch.finfo(log_p.dtype)
     return torch.where(
-        log_p < LOWER_CUTOFF,
+        log_p < _LOWER_CUTOFF,
         torch.where(
             log_p < finfo.min,
             torch.full_like(log_p, -math.inf),
             _ndtri_exp_small(log_p),
         ),
         torch.where(
-            log_p < UPPER_CUTOFF,
+            log_p < _UPPER_CUTOFF,
             torch.special.ndtri(log_p.exp()),
             -torch.special.ndtri(-log_p.expm1()),
         ),

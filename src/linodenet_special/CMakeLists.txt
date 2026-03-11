@@ -70,6 +70,7 @@ add_library(
         csrc/linodenet_special/spectral_norm.cpp
         csrc/linodenet_special/spectral_norm_debug.cpp
         csrc/linodenet_special/spectral_norm_riemann.cpp
+        csrc/linodenet_special/ndtri_exp.cpp
         csrc/linodenet_special/utils.cpp
         # csrc/linodenet_special/matrix_root.cpp
 )

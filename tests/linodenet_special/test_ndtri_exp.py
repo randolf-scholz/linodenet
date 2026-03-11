@@ -6,11 +6,18 @@ import torch
 from scipy.special import ndtri_exp as scipy_ndtri_exp
 from torch.autograd import gradcheck
 
-from linodenet_special import ndtri_exp, ndtri_exp_naive
-from linodenet_special.fallbacks.ndtri_exp import LOWER_CUTOFF, UPPER_CUTOFF
+from linodenet_special import ndtri_exp_fallback
+from linodenet_special.core import ndtri_exp as ndtri_exp_cpp
+from linodenet_special.fallbacks.ndtri_exp import _LOWER_CUTOFF, _UPPER_CUTOFF
 
 ATOL = 1e-6
 RTOL = 1e-3
+
+DEVICES = (
+    [torch.device("cpu"), torch.device("cuda")]
+    if torch.cuda.is_available()
+    else [torch.device("cpu")]
+)
 
 
 def _scipy_reference(values: torch.Tensor) -> torch.Tensor:
@@ -27,8 +34,15 @@ def _assert_matches_reference(values: torch.Tensor, actual: torch.Tensor) -> Non
     assert torch.allclose(actual[finite], reference[finite], atol=ATOL, rtol=RTOL)
 
 
-@pytest.mark.parametrize("dtype", ["float32", "float64"], ids="dtype={}".format)
-def test_ndtri_exp_special_values(dtype: str) -> None:
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+@pytest.mark.parametrize(
+    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
+)
+def test_ndtri_exp_special_values(
+    impl, dtype: torch.dtype, device: torch.device
+) -> None:
+
     # ndtri_exp(-∞) = ndtri(0) = -∞
     # ndtri_exp(0) = ndtri(1) = +∞
     # ndtri_exp(log(0.5)) = ndtri(0.5) = 0
@@ -36,73 +50,91 @@ def test_ndtri_exp_special_values(dtype: str) -> None:
     expected = [-math.inf, 0.0, math.inf]
 
     # check reference implementation
-    np_dtype = np.float32 if dtype == "float32" else np.float64
+    np_dtype: type[np.floating] = np.float32 if dtype is torch.float32 else np.float64
     np_args = np.array(args, dtype=np_dtype)
     np_expected = np.array(expected, dtype=np_dtype)
     np_result = scipy_ndtri_exp(np_args)
     assert np.allclose(np_result, np_expected)
 
     # check our implementation
-    pt_dtype = torch.float32 if dtype == "float32" else torch.float64
-    pt_args = torch.tensor(args, dtype=pt_dtype)
-    pt_expected = torch.tensor(expected, dtype=pt_dtype)
-    pt_result = ndtri_exp(pt_args)
+    pt_args = torch.tensor(args, dtype=dtype, device=device)
+    pt_expected = torch.tensor(expected, dtype=dtype, device=device)
+    pt_result = impl(pt_args)
     assert torch.allclose(pt_result, pt_expected)
 
 
-@pytest.mark.parametrize("dtype", ["float32", "float64"], ids="dtype={}".format)
-def test_ndtri_exp_domain(dtype: str) -> None:
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+@pytest.mark.parametrize(
+    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
+)
+def test_ndtri_exp_domain(impl, dtype: torch.dtype, device: torch.device) -> None:
     # ndtri_exp is defined for log_p <= 0
     # test on a geometric range of values from finfo.min to finfo.max
     # assert that for log_p > 0, the result is NaN
     # assert that for log_p <= 0, the result is finite or -inf
-    pt_dtype = torch.float32 if dtype == "float32" else torch.float64
-    finfo = torch.finfo(pt_dtype)
+    finfo = torch.finfo(dtype)
     exp_min = math.log10(finfo.tiny)
     exp_max = math.log10(finfo.max)
-    magnitudes = torch.logspace(exp_min, exp_max, steps=96, dtype=pt_dtype)
-    log_p = torch.cat((-magnitudes, torch.zeros(1, dtype=pt_dtype), magnitudes))
-    result = ndtri_exp(log_p)
-    mask_pos = log_p > 0
-    mask_neg = log_p < 0
-    assert result[mask_pos].isnan().all()
-    assert (result[mask_neg].isfinite() | result[mask_neg].isneginf()).all()
+    magnitudes = torch.logspace(exp_min, exp_max, steps=96, dtype=dtype, device=device)
+    log_p_pos = magnitudes
+    log_p_neg = -magnitudes
+    log_p_zero = torch.tensor([0.0], dtype=dtype, device=device)
+
+    result_pos = impl(log_p_pos)
+    result_neg = impl(log_p_neg)
+    result_zero = impl(log_p_zero)
+
+    assert result_pos.isnan().all()
+    assert (result_neg.isfinite() | result_neg.isneginf()).all()
+    assert result_zero.isposinf().item()
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
 @pytest.mark.parametrize(
     ("lower", "upper"),
     [
-        (-80.0, LOWER_CUTOFF - 1e-3),
-        (LOWER_CUTOFF + 1e-6, UPPER_CUTOFF - 1e-6),
-        (UPPER_CUTOFF + 1e-6, -1e-6),
+        (-80.0, _LOWER_CUTOFF - 1e-3),
+        (_LOWER_CUTOFF, _UPPER_CUTOFF),
+        (_UPPER_CUTOFF + 1e-6, -1e-6),
     ],
     ids=["small", "mid", "large"],
 )
-@pytest.mark.parametrize("dtype", ["float32", "float64"], ids="dtype={}".format)
-def test_ndtri_exp_correctness(lower: float, upper: float, dtype: str) -> None:
-    pt_dtype = torch.float32 if dtype == "float32" else torch.float64
-    log_p = torch.linspace(lower, upper, steps=256, dtype=pt_dtype)
-    _assert_matches_reference(log_p, ndtri_exp(log_p))
-
-
 @pytest.mark.parametrize(
-    ("lower", "upper"),
-    [
-        (-80.0, LOWER_CUTOFF - 1e-3),
-        (LOWER_CUTOFF + 1e-6, UPPER_CUTOFF - 1e-6),
-        (UPPER_CUTOFF + 1e-6, -1e-6),
-    ],
-    ids=["small", "mid", "large"],
+    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
 )
-@pytest.mark.parametrize("dtype", ["float32", "float64"], ids="dtype={}".format)
-def test_ndtri_exp_naive_correctness(lower: float, upper: float, dtype: str) -> None:
-    pt_dtype = torch.float32 if dtype == "float32" else torch.float64
-    log_p = torch.linspace(lower, upper, steps=256, dtype=pt_dtype)
-    _assert_matches_reference(log_p, ndtri_exp_naive(log_p))
+def test_ndtri_exp_correctness(
+    impl,
+    lower: float,
+    upper: float,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    log_p = torch.linspace(lower, upper, steps=256, dtype=dtype, device=device)
+    _assert_matches_reference(log_p, impl(log_p))
 
 
-@pytest.mark.parametrize("dtype", ["float32", "float64"], ids="dtype={}".format)
-def test_ndtri_exp_gradcheck(dtype: str) -> None:
-    pt_dtype = torch.float32 if dtype == "float32" else torch.float64
-    log_p = torch.linspace(-1.5, -0.3, steps=11, dtype=pt_dtype, requires_grad=True)
-    gradcheck(ndtri_exp, (log_p,), eps=1e-6, atol=1e-4, rtol=1e-3)
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+@pytest.mark.parametrize(
+    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
+)
+def test_ndtri_exp_gradcheck(impl, dtype: torch.dtype, device: torch.device) -> None:
+    log_p = torch.linspace(
+        _LOWER_CUTOFF,
+        _UPPER_CUTOFF,
+        steps=100,
+        dtype=dtype,
+        device=device,
+        requires_grad=True,
+    )
+    if dtype is torch.float32:
+        eps = 1e-4
+        atol = 1e-3
+        rtol = 1e-3
+    else:
+        eps = 1e-6
+        atol = 1e-6
+        rtol = 1e-6
+    gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol)

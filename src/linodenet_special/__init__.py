@@ -1,6 +1,7 @@
 r"""C++ Extensions used by LinODEnet."""
 
 __all__ = [
+    "KnownFunctions",
     # Protocols
     "SpectralNorm",
     "SingularTriplet",
@@ -18,12 +19,13 @@ __all__ = [
     "scaled_norm",
     "geometric_mean",
     # Special
-    "ndtri_exp",
+    "ndtri_exp_fallback",
     "ndtri_exp_naive",
     "thomson_initialization",
 ]
 
 from linodenet_special.core import (
+    KnownFunctions,
     SingularTriplet,
     SpectralNorm,
     singular_triplet,
@@ -35,7 +37,7 @@ from linodenet_special.core import (
     spectral_norm_native,
     spectral_norm_riemann,
 )
-from linodenet_special.fallbacks import ndtri_exp, ndtri_exp_naive
+from linodenet_special.fallbacks import ndtri_exp_fallback, ndtri_exp_naive
 from linodenet_special.linalg import (
     geometric_mean,
     pad,

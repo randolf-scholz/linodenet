@@ -6,7 +6,6 @@ __all__ = [
     "ATOL",
     "RTOL",
     "BUILD_DIR",
-    "CUSTOM_OPS",
     "LIB",
     "LIB_NAME",
     "SOURCE_DIR",
@@ -23,6 +22,7 @@ __all__ = [
     "spectral_norm_debug",
     "spectral_norm_native",
     "spectral_norm_riemann",
+    "ndtri_exp",
 ]
 
 import os
@@ -46,15 +46,6 @@ BUILD_DIR: Final[Path] = Path(__file__).parent / "build"
 r"""The build directory."""
 SOURCE_DIR: Final[Path] = Path(__file__).parent / "src" / f"{LIB_NAME}"
 r"""The source directory."""
-CUSTOM_OPS: Final[list[str]] = [
-    "singular_triplet",
-    "singular_triplet_debug",
-    "singular_triplet_riemann",
-    "spectral_norm",
-    "spectral_norm_debug",
-    "spectral_norm_riemann",
-]
-r"""List of custom operators."""
 
 
 class KnownFunctions(TypedDict):
@@ -66,6 +57,7 @@ class KnownFunctions(TypedDict):
     spectral_norm: SpectralNorm
     spectral_norm_debug: SpectralNorm
     spectral_norm_riemann: SpectralNorm
+    ndtri_exp: Callable[[Tensor], Tensor]
 
 
 # region compile functions -------------------------------------------------------------
@@ -97,7 +89,7 @@ def _load_function(name: str, /) -> Any:
     return function
 
 
-def _compile_fns() -> dict[str, Callable]:
+def _compile_fns() -> KnownFunctions:
     r"""Fallback to compiling the functions."""
     from torch.utils import cpp_extension  # noqa: PLC0415
 
@@ -111,7 +103,9 @@ def _compile_fns() -> dict[str, Callable]:
 
     compiled_fns = {}
     exceptions = {}
-    for name in CUSTOM_OPS:
+    fn_names = KnownFunctions.__required_keys__
+
+    for name in fn_names:
         try:
             compiled_fns[name] = _load_function(name)
         except Exception as _exc:
@@ -119,29 +113,31 @@ def _compile_fns() -> dict[str, Callable]:
     if exceptions:
         exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
         error = RuntimeError(
-            f"Failed to compile {len(exceptions)}/{len(CUSTOM_OPS)} custom operators!"
+            f"Failed to compile {len(exceptions)}/{len(fn_names)} custom operators!"
         )
-        max_len = max(map(len, CUSTOM_OPS))
+        max_len = max(map(len, fn_names))
         FAILURE = "\033[91m❌️ FAILED\033[0m"
         SUCCESS = "\033[92m✅️ SUCCESS\033[0m"
-        for name in CUSTOM_OPS:
+        for name in fn_names:
             error.add_note(
                 f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
             )
         error.add_note(f"Consider clearing the torch_extension cache at {cache_dir!s}")
         raise error from exc_group
 
-    return compiled_fns
+    return cast("KnownFunctions", compiled_fns)
 
 
-def _load_linodenet() -> dict[str, Callable]:
+def _load_linodenet() -> KnownFunctions:
     lib_file = BUILD_DIR / f"{LIB_NAME}.so"
+    fn_names = KnownFunctions.__required_keys__
 
     if lib_file.exists():
         try:  # load pre-compiled binaries
             torch.ops.load_library(lib_file)
             # load the functions
-            return {name: getattr(LIB, name) for name in CUSTOM_OPS}
+            compiled_fns = {name: getattr(LIB, name) for name in fn_names}
+            return cast("KnownFunctions", compiled_fns)
         except Exception as exc:
             warnings.warn(
                 f"\n\t Custom binaries could not be loaded (raised {type(exc)!s})!"
@@ -161,7 +157,7 @@ def _load_linodenet() -> dict[str, Callable]:
     return _compile_fns()
 
 
-_COMPILED_FNS: Final[KnownFunctions] = cast("KnownFunctions", _load_linodenet())
+_COMPILED_FNS: Final[KnownFunctions] = _load_linodenet()
 r"""The compiled functions."""
 
 _singular_triplet: SingularTriplet = _COMPILED_FNS["singular_triplet"]
@@ -170,6 +166,7 @@ _singular_triplet_riemann: SingularTriplet = _COMPILED_FNS["singular_triplet_rie
 _spectral_norm: SpectralNorm = _COMPILED_FNS["spectral_norm"]
 _spectral_norm_debug: SpectralNorm = _COMPILED_FNS["spectral_norm_debug"]
 _spectral_norm_riemann: SpectralNorm = _COMPILED_FNS["spectral_norm_riemann"]
+ndtri_exp: Callable[[Tensor], Tensor] = _COMPILED_FNS["ndtri_exp"]
 # endregion compile functions ----------------------------------------------------------
 
 

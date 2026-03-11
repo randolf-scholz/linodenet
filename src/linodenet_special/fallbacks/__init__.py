@@ -4,7 +4,7 @@ Used as fallback when C++ extensions are not available.
 """
 
 __all__ = [
-    "ndtri_exp",
+    "ndtri_exp_fallback",
     "ndtri_exp_naive",
     "bimodal_to_gaussian",
     "gaussian_to_bimodal",
@@ -15,7 +15,7 @@ __all__ = [
     "spectral_norm",
 ]
 
-from linodenet_special.fallbacks.ndtri_exp import ndtri_exp, ndtri_exp_naive
+from linodenet_special.fallbacks.ndtri_exp import ndtri_exp_fallback, ndtri_exp_naive
 from linodenet_special.fallbacks.spectral_norm import spectral_norm
 from linodenet_special.fallbacks.transport import (
     bimodal_to_gaussian,
