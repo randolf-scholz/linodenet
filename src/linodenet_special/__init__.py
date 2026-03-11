@@ -20,6 +20,7 @@ __all__ = [
     # Special
     "ndtri_exp",
     "ndtri_exp_naive",
+    "thomson_initialization",
 ]
 
 from linodenet_special.core import (
@@ -40,3 +41,4 @@ from linodenet_special.linalg import (
     pad,
     scaled_norm,
 )
+from linodenet_special.thomson_initialization import thomson_initialization

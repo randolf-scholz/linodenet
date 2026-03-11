@@ -28,7 +28,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor, jit, nn
 
-import linodenet.projections as projections
+from linodenet import projections
 from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
 from linodenet.parametrize.base import ParametrizationBase, WrappedParametrization

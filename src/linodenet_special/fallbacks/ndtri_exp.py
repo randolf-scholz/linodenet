@@ -152,11 +152,12 @@ def _ndtri_exp_small(log_p: Tensor) -> Tensor:
 
 
 def ndtri_exp_naive(log_p: Tensor) -> Tensor:
+    r"""Computes the inverse of `log_ndtr` using the naive implementation."""
     return torch.special.ndtri(log_p.exp())
 
 
 def ndtri_exp(log_p: Tensor) -> Tensor:
-    r"""Inverse of `log_ndtr`, i.e. the quantile function of the standard normal distribution.
+    r"""Inverse of `log_ndtr`, i.e. the log-quantile function of the standard normal distribution.
 
     torch currently does not implement the inverse of `log_ndtr`,
     this is simply a placeholder using the naive implementation.
