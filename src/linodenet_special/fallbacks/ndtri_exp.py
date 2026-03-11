@@ -36,7 +36,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 __all__ = [
     # functions
-    "ndtri_exp_fallback",
+    "ndtri_exp",
     "ndtri_exp_naive",
 ]
 
@@ -156,7 +156,7 @@ def ndtri_exp_naive(log_p: Tensor) -> Tensor:
     return torch.special.ndtri(log_p.exp())
 
 
-def ndtri_exp_fallback(log_p: Tensor) -> Tensor:
+def ndtri_exp(log_p: Tensor) -> Tensor:
     r"""Inverse of `log_ndtr`, i.e. the log-quantile function of the standard normal distribution.
 
     torch currently does not implement the inverse of `log_ndtr`,

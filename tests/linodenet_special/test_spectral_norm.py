@@ -1,18 +1,24 @@
 r"""Test the spectral norm implementation."""
 
+from collections.abc import Callable
+from typing import Any
+
 import pytest
 import torch
-from torch import nn
+from numpy.random import default_rng
+from scipy.stats import ortho_group
+from torch import Tensor, nn
 
 from linodenet_special import (
-    singular_triplet,
-    singular_triplet_native,
+    SpectralNorm,
     spectral_norm,
     spectral_norm_native,
+    spectral_norm_riemann,
 )
 from tests.utils import timer
 
-DEVICES = ["cpu", "cuda"] if torch.cuda.is_available() else ["cpu"]
+from .fixtures import DEVICES, SEEDS
+
 NORM_ONLY = {True: "norm_only", False: "triplet"}
 SHAPES = [
     # m > n
@@ -35,7 +41,7 @@ SHAPES = [
 
 @pytest.mark.skip(reason="Expensive and covered by other tests.")
 @pytest.mark.flaky(reruns=3)
-@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     r"""Test the spectral norm implementation."""
@@ -82,71 +88,392 @@ def test_spectral_norm(device: str, shape: tuple[int, int]) -> None:
     assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
 
 
-@pytest.mark.skip(reason="Expensive and covered by other tests.")
-@pytest.mark.flaky(reruns=3)
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-@pytest.mark.parametrize("norm_only", NORM_ONLY, ids=NORM_ONLY.get)
-def test_singular_triplet(device: str, shape: tuple[int, int], norm_only: bool) -> None:
-    r"""Test the singular triplet implementation."""
+def scaled_norm(x: Tensor) -> Tensor:
+    r"""Scaled norm of a tensor."""
+    return x.pow(2).mean().sqrt()
+
+
+def inner(x: Tensor, y: Tensor) -> Tensor:
+    r"""Compute the inner product."""
+    return torch.einsum("..., ... ->", x, y)
+
+
+def compute_spectral_norm_impl(
+    impl: Callable[..., Tensor], shape: tuple[int, int], **kwargs: Any
+) -> tuple[Tensor, Tensor]:
+    r"""Test the spectral norm implementation."""
     m, n = shape
-    A0 = torch.randn(m, n, device=device)
-    xi = torch.randn(1, device=device)
-    phi = torch.randn(m, device=device) * (1 - norm_only)
-    psi = torch.randn(n, device=device) * (1 - norm_only)
-    cond = torch.linalg.cond(A0)
+    A0 = torch.randn(m, n)
+
+    # outer gradients
+    g_s = torch.randn(())
 
     # Native Forward
     A_native = nn.Parameter(A0.clone())
-    with timer() as time:
-        s_native, u_native, v_native = singular_triplet_native(A_native)
-    time_val_native = time.elapsed_time
+    s_native = spectral_norm_native(A_native)
 
     # Native Backward
-    with timer() as time:
-        r_native = xi * s_native + phi.dot(u_native) + psi.dot(v_native)
-        r_native.backward()
-        assert A_native.grad is not None
-        g_native = A_native.grad.clone().detach()
-    time_grad_native = time.elapsed_time
+    r_native = inner(g_s, s_native)
+    r_native.backward()
+
+    # Native Gradient
+    assert A_native.grad is not None
+    g_native = A_native.grad.clone().detach()
 
     # Custom Forward
     A_custom = nn.Parameter(A0.clone())
-    with timer() as time:
-        s_custom, u_custom, v_custom = singular_triplet(A_custom)
-    time_val_custom = time.elapsed_time
-
-    # Adjust signs so they match
-    if (u_custom - u_native).norm() > (u_custom + u_native).norm():
-        u_custom = -1 * u_custom
-        v_custom = -1 * v_custom
+    s_custom = impl(A_custom, **kwargs)
 
     # Custom Backward
-    with timer() as time:
-        # NOTE: We flip signs if appropriate to match the native implementation
-        r_custom = xi * s_custom + phi.dot(u_custom) + psi.dot(v_custom)
-        r_custom.backward()
-        assert A_custom.grad is not None
-        g_custom = A_custom.grad.clone().detach()
-    time_grad_custom = time.elapsed_time
+    r_custom = inner(g_s, s_custom)
+    r_custom.backward()
 
-    err_s = (s_custom - s_native).norm() / s_native.norm()
-    err_u = (u_custom - u_native).norm() / u_native.norm()
-    err_v = (v_custom - v_native).norm() / v_native.norm()
+    # Custom Gradient
+    assert A_custom.grad is not None
+    g_custom = A_custom.grad.clone().detach()
+
+    # Compute the errors
+    err_value = (s_custom - s_native).norm() / s_native.norm()
     err_grads = (g_custom - g_native).norm() / g_native.norm()
 
-    print(f"{shape=}  {device=}  {cond=}")
-    print(f"ERRORS: value: {err_s:.4%}/{err_u:.4%}/{err_v:.4%}, grad: {err_grads:.4%}")
-    print(f"TIME (native): value: {time_val_native:.4f}, grad: {time_grad_native:.4f}")
-    print(f"TIME (custom): value: {time_val_custom:.4f}, grad: {time_grad_custom:.4f}")
-    print((g_native - xi * torch.outer(u_native, v_native)).norm() / g_native.norm())
-    print((g_custom - xi * torch.outer(u_custom, v_custom)).norm() / g_custom.norm())
+    return err_value, err_grads
 
-    assert s_custom > 0, "Singular value is non-positive."
-    assert err_s < 1e-4, "Large error in spectral norm value"
-    assert err_u < 1e-3, "Large error in left singular vector"
-    assert err_v < 1e-3, "Large error in right singular vector"
-    assert err_grads < 1e-2, "Large error in spectral norm gradient"
 
-    if norm_only:
-        assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
+@pytest.mark.parametrize("value_tol", [1e-5])
+@pytest.mark.parametrize("grads_tol", [1e-3])
+def test_spectral_norm_grad(value_tol: float, grads_tol: float) -> None:
+    r"""Test the spectral norm."""
+    M, N, NUM_RUNS, SEED = 16, 16, 100, 0
+    torch.manual_seed(SEED)
+    err_vals = []
+    err_grad = []
+    for _ in range(NUM_RUNS):
+        err_value, err_grads = compute_spectral_norm_impl(spectral_norm, (M, N))
+        err_vals.append(err_value.item())
+        err_grad.append(err_grads.item())
+    avgerr_vals = sum(err_vals) / len(err_vals)
+    avgerr_grad = sum(err_grad) / len(err_grad)
+    print(f"Average Error:: {avgerr_vals:.3e}, grad: {avgerr_grad:.3e}")
+    assert avgerr_vals < value_tol, (
+        f"Value error too large! {avgerr_vals:.3e} > {value_tol=}"
+    )
+    assert avgerr_grad < grads_tol, (
+        f"Grads error too large! {avgerr_grad:.3e} > {grads_tol=}"
+    )
+    print("All tests passed.")
+
+
+class TestCorrectness:
+    RANK_ONE_SHAPES: list[tuple[int, int]] = [
+        (1, 1),
+        (1, 2),
+        (1, 4),
+        (1, 16),
+        (1, 64),
+        (1, 256),
+        (2, 1),
+        (4, 1),
+        (16, 1),
+        (64, 1),
+        (256, 1),
+    ]
+
+    SHAPES: list[tuple[int, int]] = [
+        # square matrices
+        (2, 2),
+        (4, 4),
+        (16, 16),
+        (64, 64),
+        (256, 256),
+        # rectangular matrices
+        (16, 64),
+        (256, 64),
+    ]
+    DIMS = [2, 4, 16, 64, 256]
+    ATOL = 1e-3
+    RTOL = 1e-5
+
+    SPECTRAL_NORMS: dict[str, SpectralNorm] = {
+        "custom": spectral_norm,
+        "native": spectral_norm_native,
+        "riemann": spectral_norm_riemann,
+    }
+
+    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+    @pytest.mark.parametrize(
+        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+    )
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda shape: f"{shape=}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
+    def test_rank_one(
+        self,
+        method: str,
+        *,
+        shape: tuple[int, int],
+        seed: int,
+        device: str | torch.device,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        r"""Test the accuracy of the gradient for rank one matrices.
+
+        The analytical gradient is ∂‖A‖₂/∂A = uvᵀ, where u and v are the singular vectors.
+        In particular, for rank one matrices A=uvᵀ, the gradient is ∂‖A‖₂/∂A = uvᵀ/(‖u‖⋅‖v‖).
+        """
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+        device = torch.device(device)
+        impl = self.SPECTRAL_NORMS[method]
+        torch.manual_seed(seed)
+
+        # generate random rank one matrix
+        m, n = shape
+        sigma_star = 1000 * torch.rand((), device=device) + 1
+        u_star = torch.randn(m, device=device)
+        u_star = u_star / u_star.norm()
+        v_star = torch.randn(n, device=device)
+        v_star = v_star / v_star.norm()
+        A = sigma_star * torch.outer(u_star, v_star)
+        A = A.clone().detach().requires_grad_(True)
+
+        # analytical result
+        analytical_value = sigma_star
+        analytical_grad = torch.outer(u_star, v_star)
+
+        # check forward pass
+        sigma = impl(A)
+        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
+
+        # backward pass
+        sigma.backward()
+
+        # check backward pass
+        assert A.grad is not None
+        assert scaled_norm(A.grad - analytical_grad) < (
+            atol + rtol * scaled_norm(analytical_grad)
+        ), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+        )
+        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+        )
+
+    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+    @pytest.mark.parametrize(
+        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+    )
+    @pytest.mark.parametrize("dim", DIMS, ids=lambda dim: f"{dim=}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
+    def test_diagonal(
+        self,
+        method: str,
+        *,
+        device: str | torch.device,
+        dim: int,
+        seed: int,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        r"""Checks that the singular triplet method works for diagonal matrices.
+
+        NOTE: builtin SVD seems to have auto-detection for diagonal matrices...
+        """
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+        device = torch.device(device)
+        impl = self.SPECTRAL_NORMS[method]
+        torch.manual_seed(seed)
+
+        # generate a random diagonal matrix
+        S = 10 * torch.randn(dim, device=device)
+        A = torch.diag(S)
+        A = A.clone().detach().requires_grad_(True)
+
+        # analytical result
+        idx_star = S.abs().argmax()
+        unit_vector = torch.eye(dim, device=device)
+        sigma_star = S[idx_star].abs()
+        sign_star = torch.sign(S[idx_star])
+        u_star = unit_vector[idx_star]
+        v_star = unit_vector[idx_star]
+
+        # analytical result
+        analytical_value = sigma_star
+        analytical_grad = sign_star * torch.outer(u_star, v_star)
+
+        # check forward pass
+        sigma = impl(A)
+        assert (sigma - analytical_value).norm() < atol + rtol * analytical_value.norm()
+        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
+
+        # backward pass
+        sigma.backward()
+
+        # check backward pass
+        assert A.grad is not None
+        assert scaled_norm(A.grad - analytical_grad) < (
+            atol + rtol * scaled_norm(analytical_grad)
+        ), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+        )
+        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+        )
+
+    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+    @pytest.mark.parametrize(
+        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+    )
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda shape: f"{shape=}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
+    def test_analytical(
+        self,
+        method: str,
+        *,
+        device: str | torch.device,
+        shape: tuple[int, int],
+        seed: int,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        r"""We test the analytical result for random matrices.
+
+        We randomly sample U, S and V.
+        """
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+        device = torch.device(device)
+        impl = self.SPECTRAL_NORMS[method]
+        torch.manual_seed(seed)
+        rng = default_rng(seed=seed)
+
+        # randomly generate a matrix with known SVD
+        M, N = shape
+        K = min(M, N)
+        S = torch.abs(10 * torch.randn(K, device=device))
+        _U = ortho_group.rvs(M, random_state=rng)
+        _V = ortho_group.rvs(N, random_state=rng)
+        # take the first K vectors
+        U = torch.tensor(_U[:, :K], dtype=torch.float, device=device)
+        Vh = torch.tensor(_V[:, :K].T, dtype=torch.float, device=device)
+        A = torch.einsum("ij,j,jk->ik", U, S, Vh)
+        A = A.clone().detach().requires_grad_(True)
+
+        # analytical result
+        idx_star = S.abs().argmax()
+        sigma_star = S[idx_star]
+        u_star = U[:, idx_star]
+        v_star = Vh[idx_star, :]
+
+        # analytical result
+        analytical_value = sigma_star
+        analytical_grad = torch.outer(u_star, v_star)
+
+        # check forward pass
+        sigma = impl(A)
+        assert (sigma - analytical_value).norm() < atol + rtol * analytical_value.norm()
+        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
+
+        # backward pass
+        sigma.backward()
+
+        # check backward pass
+        assert A.grad is not None
+        assert scaled_norm(A.grad - analytical_grad) < (
+            atol + rtol * scaled_norm(analytical_grad)
+        ), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+        )
+        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+        )
+
+    @pytest.mark.xfail(reason="Algorithms are unstable for repeated singular values.")
+    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+    @pytest.mark.parametrize(
+        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+    )
+    @pytest.mark.parametrize("dim", DIMS, ids=lambda dim: f"{dim=}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
+    def test_orthogonal(
+        self,
+        method: str,
+        *,
+        device: str | torch.device,
+        dim: int,
+        seed: int,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        r"""Tests algorithm against orthogonal matrix.
+
+        Note:
+            For repeated singular values, the gradient is no longer well-defined,
+            but (I think), any sum  $∑_{j≤i} uᵢvᵢᵀ$ is a subgradient.
+            In particular, if A is already orthogonal, then $∂‖A‖₂/∂A = A$.
+            Is, in some sense, the largest subgradient.
+        """
+        if device == "cuda" and not torch.cuda.is_available():
+            pytest.skip("CUDA not available")
+        device = torch.device(device)
+        impl = self.SPECTRAL_NORMS[method]
+        torch.manual_seed(seed)
+        rng = default_rng(seed=seed)
+
+        # sample random orthogonal matrix
+        U = ortho_group.rvs(dim, random_state=rng)
+        S = torch.ones(dim, dtype=torch.float, device=device)
+        A = (
+            torch.from_numpy(U)
+            .to(dtype=torch.float, device=device)
+            .requires_grad_(True)
+        )
+
+        # analytical result
+        analytical_value = S[0]
+        analytical_grad = A.clone().detach()
+
+        # check forward pass
+        sigma = impl(A)
+        assert (sigma - analytical_value).norm() < atol + rtol * analytical_value.norm()
+        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
+
+        # backward pass
+        sigma.backward()
+
+        # check backward pass
+        assert A.grad is not None
+        assert scaled_norm(A.grad - analytical_grad) < (
+            atol + rtol * scaled_norm(analytical_grad)
+        ), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+        )
+        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
+            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"  ‖A‖₂={analytical_value:.3e}"
+            f"  κ(A)={torch.linalg.cond(A):.3e}"
+            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+        )

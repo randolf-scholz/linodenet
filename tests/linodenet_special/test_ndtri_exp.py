@@ -3,25 +3,24 @@ import math
 import numpy as np
 import pytest
 import torch
-from scipy.special import ndtri_exp as scipy_ndtri_exp
+from scipy.special import ndtri_exp as scipy_ndtri_exp_py
 from torch.autograd import gradcheck
 
-from linodenet_special import ndtri_exp_fallback
 from linodenet_special.core import ndtri_exp as ndtri_exp_cpp
-from linodenet_special.fallbacks.ndtri_exp import _LOWER_CUTOFF, _UPPER_CUTOFF
+from linodenet_special.fallbacks.ndtri_exp import (
+    _LOWER_CUTOFF,
+    _UPPER_CUTOFF,
+    ndtri_exp as ndtri_exp_py,
+)
+
+from .fixtures import DEVICES, DTYPES
 
 ATOL = 1e-6
 RTOL = 1e-3
 
-DEVICES = (
-    [torch.device("cpu"), torch.device("cuda")]
-    if torch.cuda.is_available()
-    else [torch.device("cpu")]
-)
-
 
 def _scipy_reference(values: torch.Tensor) -> torch.Tensor:
-    reference = scipy_ndtri_exp(values.detach().cpu().numpy())
+    reference = scipy_ndtri_exp_py(values.detach().cpu().numpy())
     return torch.from_numpy(np.asarray(reference)).to(values.device, values.dtype)
 
 
@@ -35,17 +34,15 @@ def _assert_matches_reference(values: torch.Tensor, actual: torch.Tensor) -> Non
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-@pytest.mark.parametrize(
-    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
-)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
 def test_ndtri_exp_special_values(
     impl, dtype: torch.dtype, device: torch.device
 ) -> None:
 
-    # ndtri_exp(-∞) = ndtri(0) = -∞
-    # ndtri_exp(0) = ndtri(1) = +∞
-    # ndtri_exp(log(0.5)) = ndtri(0.5) = 0
+    # ndtri_exp_py(-∞) = ndtri(0) = -∞
+    # ndtri_exp_py(0) = ndtri(1) = +∞
+    # ndtri_exp_py(log(0.5)) = ndtri(0.5) = 0
     args = [-math.inf, math.log(0.5), 0.0]
     expected = [-math.inf, 0.0, math.inf]
 
@@ -53,7 +50,7 @@ def test_ndtri_exp_special_values(
     np_dtype: type[np.floating] = np.float32 if dtype is torch.float32 else np.float64
     np_args = np.array(args, dtype=np_dtype)
     np_expected = np.array(expected, dtype=np_dtype)
-    np_result = scipy_ndtri_exp(np_args)
+    np_result = scipy_ndtri_exp_py(np_args)
     assert np.allclose(np_result, np_expected)
 
     # check our implementation
@@ -64,12 +61,10 @@ def test_ndtri_exp_special_values(
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-@pytest.mark.parametrize(
-    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
-)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
 def test_ndtri_exp_domain(impl, dtype: torch.dtype, device: torch.device) -> None:
-    # ndtri_exp is defined for log_p <= 0
+    # ndtri_exp_py is defined for log_p <= 0
     # test on a geometric range of values from finfo.min to finfo.max
     # assert that for log_p > 0, the result is NaN
     # assert that for log_p <= 0, the result is finite or -inf
@@ -91,7 +86,7 @@ def test_ndtri_exp_domain(impl, dtype: torch.dtype, device: torch.device) -> Non
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize(
     ("lower", "upper"),
     [
@@ -101,9 +96,7 @@ def test_ndtri_exp_domain(impl, dtype: torch.dtype, device: torch.device) -> Non
     ],
     ids=["small", "mid", "large"],
 )
-@pytest.mark.parametrize(
-    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
-)
+@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
 def test_ndtri_exp_correctness(
     impl,
     lower: float,
@@ -116,10 +109,8 @@ def test_ndtri_exp_correctness(
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-@pytest.mark.parametrize(
-    "impl", [ndtri_exp_fallback, ndtri_exp_cpp], ids=["fallback", "cpp"]
-)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("impl", [ndtri_exp_py, ndtri_exp_cpp], ids=["fallback", "cpp"])
 def test_ndtri_exp_gradcheck(impl, dtype: torch.dtype, device: torch.device) -> None:
     log_p = torch.linspace(
         _LOWER_CUTOFF,

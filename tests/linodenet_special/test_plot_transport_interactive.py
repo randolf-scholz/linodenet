@@ -12,7 +12,7 @@ import torch
 from matplotlib.widgets import Slider
 from torch import Tensor
 
-from linodenet_special import ndtri_exp_naive as ndtri_exp
+from linodenet_special import ndtri_exp
 from tests.utils.project import PROJECT
 
 SQRT_2: Final[float] = math.sqrt(2)

@@ -1,5 +1,4 @@
 r"""Custom operators for the linodenet package."""
-# ruff: noqa: ARG001
 
 __all__ = [
     # CONSTANTS
@@ -11,16 +10,12 @@ __all__ = [
     "SOURCE_DIR",
     # Protocols
     "KnownFunctions",
-    "SingularTriplet",
-    "SpectralNorm",
     # Implementations
     "singular_triplet",
     "singular_triplet_debug",
-    "singular_triplet_native",
     "singular_triplet_riemann",
     "spectral_norm",
     "spectral_norm_debug",
-    "spectral_norm_native",
     "spectral_norm_riemann",
     "ndtri_exp",
 ]
@@ -29,10 +24,14 @@ import os
 import warnings
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Final, Optional, Protocol, TypedDict, cast, runtime_checkable
+from types import ModuleType
+from typing import Any, Final, Optional, TypedDict, cast
 
 import torch
 from torch import Tensor
+
+from linodenet_special.fallbacks.singular_triplet import SingularTriplet
+from linodenet_special.fallbacks.spectral_norm import SpectralNorm
 
 # constants
 # we use FP32 machine epsilon as default tolerance
@@ -40,7 +39,7 @@ ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 LIB_NAME: Final[str] = "liblinodenet_special"
 r"""The name of the custom library."""
-LIB: Final = torch.ops.linodenet_special
+LIB: Final[ModuleType] = torch.ops.linodenet_special
 r"""The custom library."""
 BUILD_DIR: Final[Path] = Path(__file__).parent / "build"
 r"""The build directory."""
@@ -170,70 +169,6 @@ ndtri_exp: Callable[[Tensor], Tensor] = _COMPILED_FNS["ndtri_exp"]
 # endregion compile functions ----------------------------------------------------------
 
 
-# region protocols ---------------------------------------------------------------------
-@runtime_checkable
-class SpectralNorm(Protocol):
-    r"""Protocol for spectral norm implementations."""
-
-    def __call__(
-        self,
-        A: Tensor,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = None,
-        atol: float = ATOL,
-        rtol: float = RTOL,
-    ) -> Tensor:
-        r"""Computes the spectral norm.
-
-        Args:
-            A: The input matrix (shape: M×N).
-            u0: The initial guess for the left singular vector (shape: M).
-            v0: The initial guess for the right singular vector (shape: N).
-            maxiter: The maximum number of iterations. (Default: O(M+N))
-            atol: The absolute tolerance. (Default: 1e-6)
-            rtol: The relative tolerance. (Default: 1e-6)
-
-        Returns:
-            sigma: The singular value (scaler).
-        """
-        ...
-
-
-@runtime_checkable
-class SingularTriplet(Protocol):
-    r"""Protocol for singular triplet implementations."""
-
-    def __call__(
-        self,
-        A: Tensor,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = None,
-        atol: float = ATOL,
-        rtol: float = RTOL,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        r"""Computes the singular triplet.
-
-        Args:
-            A: The input matrix (shape: M×N).
-            u0: The initial guess for the left singular vector (shape: M).
-            v0: The initial guess for the right singular vector (shape: N).
-            maxiter: The maximum number of iterations. (Default: O(M+N))
-            atol: The absolute tolerance. (Default: 1e-6)
-            rtol: The relative tolerance. (Default: 1e-6)
-
-        Returns:
-            sigma: The singular value (scaler).
-            u: The left singular vector (shape: M).
-            v: The right singular vector (shape: N).
-        """
-        ...
-
-
-# endregion protocols ------------------------------------------------------------------
-
-
 # region spectral norm -----------------------------------------------------------------
 def spectral_norm(
     A: Tensor,
@@ -244,7 +179,7 @@ def spectral_norm(
     rtol: float = RTOL,
 ) -> Tensor:
     r"""Computes the spectral norm."""
-    return _spectral_norm(A, u0, v0, maxiter, atol, rtol)
+    return _spectral_norm(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
 
 
 def spectral_norm_debug(
@@ -256,7 +191,7 @@ def spectral_norm_debug(
     rtol: float = RTOL,
 ) -> Tensor:
     r"""Computes the spectral norm."""
-    return _spectral_norm_debug(A, u0, v0, maxiter, atol, rtol)
+    return _spectral_norm_debug(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
 
 
 def spectral_norm_riemann(
@@ -268,19 +203,9 @@ def spectral_norm_riemann(
     rtol: float = RTOL,
 ) -> Tensor:
     r"""Computes the spectral norm."""
-    return _spectral_norm_riemann(A, u0, v0, maxiter, atol, rtol)
-
-
-def spectral_norm_native(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = 1e-8,
-    rtol: float = 1e-5,
-) -> Tensor:
-    r"""Computes the spectral norm."""
-    return torch.linalg.matrix_norm(A, ord=2)
+    return _spectral_norm_riemann(
+        A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol
+    )
 
 
 # endregion spectral norm --------------------------------------------------------------
@@ -296,7 +221,7 @@ def singular_triplet(
     rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Computes the singular triplet."""
-    return _singular_triplet(A, u0, v0, maxiter, atol, rtol)
+    return _singular_triplet(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
 
 
 def singular_triplet_debug(
@@ -308,7 +233,9 @@ def singular_triplet_debug(
     rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Computes the singular triplet."""
-    return _singular_triplet_debug(A, u0, v0, maxiter, atol, rtol)
+    return _singular_triplet_debug(
+        A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol
+    )
 
 
 def singular_triplet_riemann(
@@ -320,21 +247,9 @@ def singular_triplet_riemann(
     rtol: float = RTOL,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Computes the singular triplet."""
-    return _singular_triplet_riemann(A, u0, v0, maxiter, atol, rtol)
-
-
-def singular_triplet_native(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = 1e-8,
-    rtol: float = 1e-5,
-) -> tuple[Tensor, Tensor, Tensor]:
-    r"""Computes the singular triplet."""
-    U, S, Vh = torch.linalg.svd(A)
-    # cols of U = LSV, rows of Vh: RSV
-    return S[0], U[:, 0], Vh[0, :]
+    return _singular_triplet_riemann(
+        A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol
+    )
 
 
 # endregion singular triplet -----------------------------------------------------------

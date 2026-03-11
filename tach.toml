@@ -121,7 +121,7 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet_special.core"
-depends_on = []
+depends_on = ["linodenet_special.fallbacks"]
 
 [[modules ]]
 path = "linodenet.nn.algebra"

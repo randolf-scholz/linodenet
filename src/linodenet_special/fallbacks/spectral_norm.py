@@ -1,11 +1,14 @@
 r"""Fallback implementations of linear algebra routines."""
 
 __all__ = [
+    "ATOL",
+    "RTOL",
     "SpectralNorm",
     "spectral_norm",
+    "spectral_norm_native",
 ]
 
-from typing import Any, Final, Optional
+from typing import Any, Final, Optional, Protocol
 
 import torch
 from torch import Tensor
@@ -17,7 +20,38 @@ ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
 
 
-class SpectralNorm(torch.autograd.Function):
+class SpectralNorm(Protocol):
+    r"""Protocol for spectral norm implementations."""
+
+    @signature("(m, n) -> ()")
+    def __call__(
+        self,
+        A: Tensor,
+        /,
+        *,
+        u0: Optional[Tensor] = None,
+        v0: Optional[Tensor] = None,
+        maxiter: Optional[int] = None,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+    ) -> Tensor:
+        r"""Computes the spectral norm.
+
+        Args:
+            A: The input matrix (shape: M×N).
+            u0: The initial guess for the left singular vector (shape: M).
+            v0: The initial guess for the right singular vector (shape: N).
+            maxiter: The maximum number of iterations. (Default: O(M+N))
+            atol: The absolute tolerance. (Default: 1e-6)
+            rtol: The relative tolerance. (Default: 1e-6)
+
+        Returns:
+            sigma: The singular value (scaler).
+        """
+        ...
+
+
+class _SpectralNormImpl(torch.autograd.Function):
     r"""$‖A‖₂=λ_\max(AᵀA)$.
 
     The spectral norm $‖A‖₂ ≔ \sup_x ‖Ax‖₂ / ‖x‖₂$ can be shown to be equal to
@@ -38,7 +72,6 @@ class SpectralNorm(torch.autograd.Function):
     """
 
     @staticmethod
-    @signature("(m, n) -> ()")
     def forward(
         ctx: Any,
         A: Tensor,
@@ -102,4 +135,20 @@ def spectral_norm(
     rtol: float = RTOL,
 ) -> Tensor:
     r"""Compute the spectral norm of a matrix."""
-    return SpectralNorm.apply(A, atol=atol, rtol=rtol, maxiter=maxiter, u0=u0, v0=v0)  # pyright: ignore[reportReturnType]
+    return _SpectralNormImpl.apply(
+        A, atol=atol, rtol=rtol, maxiter=maxiter, u0=u0, v0=v0
+    )  # pyright: ignore[reportReturnType]
+
+
+def spectral_norm_native(
+    A: Tensor,
+    /,
+    *,
+    u0: Optional[Tensor] = None,  # noqa: ARG001
+    v0: Optional[Tensor] = None,  # noqa: ARG001
+    maxiter: Optional[int] = None,  # noqa: ARG001
+    atol: float = 1e-8,  # noqa: ARG001
+    rtol: float = 1e-5,  # noqa: ARG001
+) -> Tensor:
+    r"""Computes the spectral norm."""
+    return torch.linalg.matrix_norm(A, ord=2)

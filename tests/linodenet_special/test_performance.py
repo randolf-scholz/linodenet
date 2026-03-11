@@ -20,10 +20,8 @@ from torch import Tensor, nn
 from linodenet_special import (
     singular_triplet,
     singular_triplet_native,
-    singular_triplet_riemann,
     spectral_norm,
     spectral_norm_native,
-    spectral_norm_riemann,
 )
 
 torch.manual_seed(0)
