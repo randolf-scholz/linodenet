@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
-from typing import Final, Optional
+from typing import Final, Optional, Self
 
 import torch
 from torch import Tensor, jit, nn
 from torch.nn import functional
 from torch.optim import SGD
-from typing_extensions import Self
 
 
 class LinearEmbedding(nn.Module):

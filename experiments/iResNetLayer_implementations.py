@@ -274,7 +274,7 @@ def test_implementation(
             r.backward()
         print(f"2nd run: {t.elapsed:.3f} s")
     except RuntimeError:
-        print(f"2nd run failed!")
+        print("2nd run failed!")
     else:
         assert torch.allclose(grad, model.layer.weight.grad.flatten())
 

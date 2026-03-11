@@ -8,7 +8,6 @@ Shortcut for sphinx-toggle button admonition.
   hidden message
 """
 
-from pprint import pprint
 
 from docutils import nodes
 from docutils.parsers.rst import Directive

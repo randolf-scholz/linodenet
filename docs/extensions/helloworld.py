@@ -1,6 +1,6 @@
 r"""Example extension for Sphinx.
 
-References
+References:
 ----------
 - https://www.sphinx-doc.org/en/master/development/tutorials/helloworld.html
 - https://www.sphinx-doc.org/en/master/development/tutorials/todo.html
