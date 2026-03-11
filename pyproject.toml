@@ -47,7 +47,7 @@ dev = [
 devtools = [
     "cmake>=4.2.3",
     "ninja>=1.13.0",
-    "prek>=0.3.4",
+    "prek>=0.3.5",
     "pybadges>=3.0.1",
 ]
 debug = [
@@ -75,7 +75,7 @@ docs = [
     "sphinx>=9.1.0",
 ]
 linters = [
-    "prek>=0.3.4",
+    "prek>=0.3.5",
     "ruff>=0.15.5",
     "tach>=0.33.4",
 ]

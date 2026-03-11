@@ -1244,7 +1244,7 @@ dev = [
     { name = "nbsphinx", specifier = ">=0.9.8" },
     { name = "ninja", specifier = ">=1.13.0" },
     { name = "piccolo-theme", specifier = ">=0.24.0" },
-    { name = "prek", specifier = ">=0.3.4" },
+    { name = "prek", specifier = ">=0.3.5" },
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "pybadges", specifier = ">=3.0.1" },
     { name = "pydata-sphinx-theme", specifier = ">=0.16.1" },
@@ -1293,7 +1293,7 @@ dev = [
 devtools = [
     { name = "cmake", specifier = ">=4.2.3" },
     { name = "ninja", specifier = ">=1.13.0" },
-    { name = "prek", specifier = ">=0.3.4" },
+    { name = "prek", specifier = ">=0.3.5" },
     { name = "pybadges", specifier = ">=3.0.1" },
 ]
 docs = [
@@ -1313,7 +1313,7 @@ docs = [
     { name = "sphinx-typo3-theme", specifier = ">=4.9.0" },
 ]
 linters = [
-    { name = "prek", specifier = ">=0.3.4" },
+    { name = "prek", specifier = ">=0.3.5" },
     { name = "ruff", specifier = ">=0.15.5" },
     { name = "tach", specifier = ">=0.33.4" },
 ]
