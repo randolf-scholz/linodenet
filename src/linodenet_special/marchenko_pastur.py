@@ -28,6 +28,8 @@ import torch
 from torch import Tensor
 from torch.distributions import Distribution, constraints
 
+type Size = tuple[int, ...] | list[int]
+
 
 class MarchenkoPastur(Distribution):
     r"""Marchenko-Pastur distribution with parameters γ and σ²."""
@@ -80,8 +82,17 @@ class MarchenkoPastur(Distribution):
     def skewness(self) -> Tensor:
         return torch.sqrt(self.gamma)
 
+    @property
+    def point_mass(self) -> Tensor:
+        return torch.where(
+            self.gamma > 1,
+            1 - (1 / self.gamma),
+            torch.zeros_like(self.gamma),
+        )
+
     def log_prob(self, value: Tensor) -> Tensor:
-        """
+        r"""Compute the log probability density function of the Marchenko-Pastur distribution.
+
         For x in [λ₋, λ₊], where λ₋ = σ²(1-√γ)² and λ₊ = σ²(1+√γ)²
             √(λ₊-x)(x-λ₋) / (2πσ²γx) + max(0, (1-1/γ))⋅δ₀
 
@@ -100,16 +111,10 @@ class MarchenkoPastur(Distribution):
         value = 0.5 * torch.log(term) - torch.log(
             2 * math.pi * self.sigma2 * self.gamma * x
         )
-        weight = torch.where(
-            self.gamma > 1,
-            1 - (1 / self.gamma),
-            torch.zeros_like(self.gamma),
-        )
-        log_weight = torch.log(weight)
 
         return torch.where(
             x == 0,
-            log_weight,
+            torch.log(self.point_mass),
             torch.where(in_support, value, -math.inf),
         )
 
@@ -129,12 +134,7 @@ class MarchenkoPastur(Distribution):
             + math.pi * (c - m)
         ) / (2 * math.pi * self.sigma2 * self.gamma)
 
-        weight = torch.where(
-            self.gamma > 1,
-            1 - (1 / self.gamma),
-            torch.zeros_like(self.gamma),
-        )
-        jump = torch.where(x >= 0, weight, torch.zeros_like(x))
+        jump = torch.where(x >= 0, self.point_mass, torch.zeros_like(x))
         return torch.where(
             x <= a,
             jump,
@@ -144,19 +144,15 @@ class MarchenkoPastur(Distribution):
     def icdf(self, value: Tensor) -> Tensor:
         if self._validate_args:
             self._validate_sample(value)
-        weight = torch.where(
-            self.gamma > 1,
-            1 - (1 / self.gamma),
-            torch.zeros_like(self.gamma),
-        )
-        weight = torch.broadcast_to(weight, value.shape)
+
+        point_mass = torch.broadcast_to(self.point_mass, value.shape)
         zeros = torch.zeros_like(value)
         target = torch.clamp(value, min=0.0, max=1.0)
         inv = _icdf_bisect(self, target)
-        return torch.where(target <= weight, zeros, inv)
+        return torch.where(target <= point_mass, zeros, inv)
 
-    def sample(self, sample_shape: torch.Size = torch.Size()) -> Tensor:
-        shape = sample_shape + self.batch_shape
+    def sample(self, sample_shape: Size = ()) -> Tensor:
+        shape = self.batch_shape + tuple(sample_shape)
         value = torch.rand(shape, device=self.gamma.device, dtype=self.gamma.dtype)
         return self.icdf(value)
 
