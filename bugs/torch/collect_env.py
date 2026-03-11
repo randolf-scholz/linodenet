@@ -95,7 +95,7 @@ def run_and_return_first_line(run_lambda, command):
 
 def get_conda_packages(run_lambda):
     conda = os.environ.get("CONDA_EXE", "conda")
-    out = run_and_read_all(run_lambda, "{} list".format(conda))
+    out = run_and_read_all(run_lambda, f"{conda} list")
     if out is None:
         return out
 
@@ -105,7 +105,7 @@ def get_conda_packages(run_lambda):
         if not line.startswith("#")
         and any(
             name in line
-            for name in {
+            for name in (
                 "torch",
                 "numpy",
                 "cudatoolkit",
@@ -114,7 +114,7 @@ def get_conda_packages(run_lambda):
                 "magma",
                 "triton",
                 "optree",
-            }
+            )
         )
     )
 
@@ -171,7 +171,7 @@ def get_cudnn_version(run_lambda):
         system_root = os.environ.get("SYSTEMROOT", "C:\\Windows")
         cuda_path = os.environ.get("CUDA_PATH", "%CUDA_PATH%")
         where_cmd = os.path.join(system_root, "System32", "where")
-        cudnn_cmd = '{} /R "{}\\bin" cudnn*.dll'.format(where_cmd, cuda_path)
+        cudnn_cmd = f'{where_cmd} /R "{cuda_path}\\bin" cudnn*.dll'
     elif get_platform() == "darwin":
         # CUDA libraries and drivers can be found in /usr/local/cuda/. See
         # https://docs.nvidia.com/cuda/cuda-installation-guide-mac-os-x/index.html#install
@@ -199,7 +199,7 @@ def get_cudnn_version(run_lambda):
     if len(files) == 1:
         return files[0]
     result = "\n".join(files)
-    return "Probably one of the following:\n{}".format(result)
+    return f"Probably one of the following:\n{result}"
 
 
 def get_nvidia_smi():
@@ -215,7 +215,7 @@ def get_nvidia_smi():
         smis = [new_path, legacy_path]
         for candidate_smi in smis:
             if os.path.exists(candidate_smi):
-                smi = '"{}"'.format(candidate_smi)
+                smi = f'"{candidate_smi}"'
                 break
     return smi
 
@@ -319,14 +319,13 @@ def get_cpu_info(run_lambda):
 def get_platform():
     if sys.platform.startswith("linux"):
         return "linux"
-    elif sys.platform.startswith("win32"):
+    if sys.platform.startswith("win32"):
         return "win32"
-    elif sys.platform.startswith("cygwin"):
+    if sys.platform.startswith("cygwin"):
         return "cygwin"
-    elif sys.platform.startswith("darwin"):
+    if sys.platform.startswith("darwin"):
         return "darwin"
-    else:
-        return sys.platform
+    return sys.platform
 
 
 def get_mac_version(run_lambda):
@@ -338,7 +337,7 @@ def get_windows_version(run_lambda):
     wmic_cmd = os.path.join(system_root, "System32", "Wbem", "wmic")
     findstr_cmd = os.path.join(system_root, "System32", "findstr")
     return run_and_read_all(
-        run_lambda, "{} os get Caption | {} /v Caption".format(wmic_cmd, findstr_cmd)
+        run_lambda, f"{wmic_cmd} os get Caption | {findstr_cmd} /v Caption"
     )
 
 
@@ -366,20 +365,20 @@ def get_os(run_lambda):
         version = get_mac_version(run_lambda)
         if version is None:
             return None
-        return "macOS {} ({})".format(version, machine())
+        return f"macOS {version} ({machine()})"
 
     if platform == "linux":
         # Ubuntu/Debian based
         desc = get_lsb_version(run_lambda)
         if desc is not None:
-            return "{} ({})".format(desc, machine())
+            return f"{desc} ({machine()})"
 
         # Try reading /etc/*-release
         desc = check_release_file(run_lambda)
         if desc is not None:
-            return "{} ({})".format(desc, machine())
+            return f"{desc} ({machine()})"
 
-        return "{} ({})".format(platform, machine())
+        return f"{platform} ({machine()})"
 
     # Unknown platform
     return platform
@@ -401,7 +400,8 @@ def get_libc_version():
 
 def get_pip_packages(run_lambda):
     """Returns `pip list` output. Note: will also find conda-installed pytorch
-    and numpy packages."""
+    and numpy packages.
+    """
 
     # People generally have `pip` as `pip` or `pip3`
     # But here it is invoked as `python -mpip`
@@ -412,7 +412,7 @@ def get_pip_packages(run_lambda):
             for line in out.splitlines()
             if any(
                 name in line
-                for name in {
+                for name in (
                     "torch",
                     "numpy",
                     "mypy",
@@ -420,7 +420,7 @@ def get_pip_packages(run_lambda):
                     "triton",
                     "optree",
                     "onnx",
-                }
+                )
             )
         )
 
@@ -440,8 +440,7 @@ def get_cuda_module_loading_config():
         torch.cuda.init()
         config = os.environ.get("CUDA_MODULE_LOADING", "")
         return config
-    else:
-        return "N/A"
+    return "N/A"
 
 
 def is_xnnpack_available():
@@ -449,8 +448,7 @@ def is_xnnpack_available():
         import torch.backends.xnnpack
 
         return str(torch.backends.xnnpack.enabled)  # type: ignore[attr-defined]
-    else:
-        return "N/A"
+    return "N/A"
 
 
 def get_env_info():
@@ -486,9 +484,7 @@ def get_env_info():
     return SystemEnv(
         torch_version=version_str,
         is_debug_build=debug_mode_str,
-        python_version="{} ({}-bit runtime)".format(
-            sys_version, sys.maxsize.bit_length() + 1
-        ),
+        python_version=f"{sys_version} ({sys.maxsize.bit_length() + 1}-bit runtime)",
         python_platform=get_python_platform(),
         is_cuda_available=cuda_available_str,
         cuda_compiled_version=cuda_version_str,
@@ -576,7 +572,7 @@ def pretty_str(envinfo):
     def maybe_start_on_next_line(string):
         # If `string` is multiline, prepend a \n to it.
         if string is not None and len(string.split("\n")) > 1:
-            return "\n{}\n".format(string)
+            return f"\n{string}\n"
         return string
 
     mutable_dict = envinfo._asdict()
@@ -620,7 +616,7 @@ def pretty_str(envinfo):
     # If they were previously None, they'll show up as ie '[conda] Could not collect'
     if mutable_dict["pip_packages"]:
         mutable_dict["pip_packages"] = prepend(
-            mutable_dict["pip_packages"], "[{}] ".format(envinfo.pip_version)
+            mutable_dict["pip_packages"], f"[{envinfo.pip_version}] "
         )
     if mutable_dict["conda_packages"]:
         mutable_dict["conda_packages"] = prepend(
@@ -655,10 +651,8 @@ def main():
                 "%Y-%m-%d %H:%M:%S"
             )
             msg = (
-                "\n*** Detected a minidump at {} created on {}, ".format(
-                    latest, creation_time
-                )
-                + "if this is related to your bug please include it when you file a"
+                f"\n*** Detected a minidump at {latest} created on {creation_time}, "
+                 "if this is related to your bug please include it when you file a"
                 " report ***"
             )
             print(msg, file=sys.stderr)
