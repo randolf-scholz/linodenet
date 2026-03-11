@@ -120,7 +120,6 @@ html_theme_options = {
     # faster builds?  SEE: https://stackoverflow.com/a/52175461
     "collapse_navigation": False,
     "navigation_depth": 2,
-    #
     "header_links_before_dropdown": 7,
     "icon_links": [
         {
@@ -340,8 +339,8 @@ viewcode_line_numbers = True  # print inline line numbers
 # math_dollar_debug = True
 # math_dollar_node_blacklist = NODE_BLACKLIST + (header, pending_xref_condition)
 
-# from sphinx.addnodes import pending_xref_condition  # noqa: E402
-# from sphinx.util.docutils import register_node  # noqa: E402
+# from sphinx.addnodes import pending_xref_condition
+# from sphinx.util.docutils import register_node
 #
 # register_node(pending_xref_condition)
 # endregion sphinx_math_dollar configuration -------------------------------------------

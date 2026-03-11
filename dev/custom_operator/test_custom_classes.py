@@ -5,8 +5,7 @@ import os
 import unittest
 
 import torch
-import torch.jit as jit
-from torch import ops
+from torch import jit, ops
 from torch.testing._internal.common_utils import TestCase, run_tests
 
 

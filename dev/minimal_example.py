@@ -4,7 +4,7 @@ from torchinfo import summary
 
 import linodenet.filters.containers
 import linodenet.filters.deprecated
-from linodenet import encoders, filters, system
+from linodenet import encoders, system
 from linodenet.forecasting import LatentStateSpaceModel as LSSM
 
 if __name__ == "__main__":
