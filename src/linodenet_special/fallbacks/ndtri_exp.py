@@ -137,8 +137,8 @@ def _ndtri_exp_small(log_p: Tensor) -> Tensor:
     q2 = Q2.to(device=log_p.device, dtype=log_p.dtype)
     # Avoid potential overflow in -2*y for absurdly negative y (mirrors SciPy idea)
     x = torch.where(
-        log_p >= -0.5 * finfo.max,
-        torch.sqrt(-2.0 * log_p),
+        log_p >= 0.5 * finfo.min,
+        torch.sqrt(-2 * log_p),
         (SQRT_2 * torch.sqrt(-log_p)),
     )
     z = x.reciprocal()  # 1/x
@@ -165,9 +165,14 @@ def ndtri_exp(log_p: Tensor) -> Tensor:
     References:
         - scipy.special.ndtri_exp
     """
+    finfo = torch.finfo(log_p.dtype)
     return torch.where(
         log_p < LOWER_CUTOFF,
-        _ndtri_exp_small(log_p),
+        torch.where(
+            log_p < finfo.min,
+            torch.full_like(log_p, -math.inf),
+            _ndtri_exp_small(log_p),
+        ),
         torch.where(
             log_p < UPPER_CUTOFF,
             torch.special.ndtri(log_p.exp()),
