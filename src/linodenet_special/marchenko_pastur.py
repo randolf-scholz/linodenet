@@ -25,7 +25,7 @@ __all__ = ["MarchenkoPastur"]
 import math
 
 import torch
-from torch import Tensor
+from torch import Generator, Tensor
 from torch.distributions import Distribution, constraints
 
 type Size = tuple[int, ...] | list[int]
@@ -151,9 +151,14 @@ class MarchenkoPastur(Distribution):
         inv = _icdf_bisect(self, target)
         return torch.where(target <= point_mass, zeros, inv)
 
-    def sample(self, sample_shape: Size = ()) -> Tensor:
+    def sample(self, sample_shape: Size = (), rng: Generator | None = None) -> Tensor:
         shape = tuple(sample_shape) + self.batch_shape
-        value = torch.rand(shape, device=self.gamma.device, dtype=self.gamma.dtype)
+        value = torch.rand(
+            shape,
+            device=self.gamma.device,
+            dtype=self.gamma.dtype,
+            generator=rng,
+        )
         return self.icdf(value)
 
 
