@@ -579,6 +579,7 @@ class LearnableLRS(TransformBase):
     heights: Tensor  # (*H, K)
     lambdas: Tensor  # (*H, K)
     derivatives: Tensor  # (*H, K+1)
+    bias: Tensor  # (*H,)
 
     spline: UnconstrainedLinearRationalSpline
     derivative_init: Final[float] = math.log(math.expm1(1.0))
@@ -607,6 +608,7 @@ class LearnableLRS(TransformBase):
         self.derivatives = nn.Parameter(
             torch.full((*self.n_heads, num_bins + 1), self.derivative_init)
         )
+        self.bias = nn.Parameter(torch.zeros(self.n_heads))
         # Submodules
         left, right = x_bounds
         bottom, top = y_bounds
@@ -661,11 +663,13 @@ class LearnableLRS(TransformBase):
         marg_heights = self.heights.index_select(dim=-2, index=kept)
         marg_lambdas = self.lambdas.index_select(dim=-2, index=kept)
         marg_derivatives = self.derivatives.index_select(dim=-2, index=kept)
+        marg_bias = self.bias.index_select(dim=-1, index=kept)
 
         new.widths.copy_(marg_widths)
         new.heights.copy_(marg_heights)
         new.lambdas.copy_(marg_lambdas)
         new.derivatives.copy_(marg_derivatives)
+        new.bias.copy_(marg_bias)
         return new
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -687,6 +691,7 @@ class LearnableLRS(TransformBase):
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
+        x = x + self.bias
         return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
     def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
@@ -701,6 +706,7 @@ class LearnableLRS(TransformBase):
         """
         batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
         params = self.normalized_parameters(batch_shape)
+        y = y - self.bias
         y, logabsdet = self.spline.decode_and_logabsdet(
             y,
             widths=params.w,

@@ -180,7 +180,7 @@ def test_single_spline_can_learn_monotone_function() -> None:
             derivatives=params.derivatives,
         )
         knot_x = knots.x
-        knot_y = knots.y
+        knot_y = knots.y + layer.bias
         knot_d = knots.derivatives
 
     fig, ax = plt.subplots(figsize=(6.5, 4.0), tight_layout=True)
@@ -259,6 +259,48 @@ def test_unconstrained_spline_uses_boundary_anchored_linear_tails() -> None:
         knots.derivatives[-1].log().expand(2),
     )
 
+    assert torch.allclose(xhat, x, atol=1e-5, rtol=1e-5)
+    assert torch.allclose(
+        forward_logabsdet + inverse_logabsdet,
+        torch.zeros_like(forward_logabsdet),
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_spline_bias_shifts_effective_y_endpoints() -> None:
+    model = SplineFlow(
+        num_flow_layers=1,
+        num_bins=4,
+        x_bounds=(-3.0, 3.0),
+        y_bounds=(-2.0, 4.0),
+        use_fp64=False,
+    )
+    layer = model[0]
+
+    with torch.no_grad():
+        layer.bias.fill_(1.25)
+
+    params = layer.normalized_parameters(torch.Size())
+    knots = layer.spline.get_spline_parameters(
+        widths=params.w,
+        heights=params.h,
+        lambdas=params.lambdas,
+        derivatives=params.derivatives,
+    )
+
+    x = torch.tensor([-4.5, -3.5, -3.0, 3.0, 3.5, 4.5])
+    y, forward_logabsdet = model.encode_and_logabsdet(x)
+    xhat, inverse_logabsdet = model.decode_and_logabsdet(y)
+
+    shifted_knots = knots.y + layer.bias
+    left_expected = shifted_knots[0] + knots.derivatives[0] * (x[:2] - knots.x[0])
+    right_expected = shifted_knots[-1] + knots.derivatives[-1] * (x[-2:] - knots.x[-1])
+
+    assert shifted_knots[0] > layer.y_bounds[0]
+    assert shifted_knots[-1] > layer.y_bounds[1]
+    assert torch.allclose(y[:2], left_expected)
+    assert torch.allclose(y[-2:], right_expected)
     assert torch.allclose(xhat, x, atol=1e-5, rtol=1e-5)
     assert torch.allclose(
         forward_logabsdet + inverse_logabsdet,
