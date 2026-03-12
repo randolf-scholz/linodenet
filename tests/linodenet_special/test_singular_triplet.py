@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 import pytest
@@ -7,13 +7,24 @@ import scipy
 import torch
 from numpy.random import default_rng
 from pytest_benchmark.fixture import BenchmarkFixture
+from scipy.stats import ortho_group
 from torch import Tensor, nn
 
 import linodenet_special
 from linodenet_special import singular_triplet, singular_triplet_native
+from linodenet_special.marchenko_pastur import MarchenkoPastur
 from tests.utils import timer
 
 from .fixtures import DEVICES, SEEDS
+
+
+class TestCase(NamedTuple):
+    r"""Test matrix with known SVD."""
+
+    A: nn.Parameter  # matrix (..., m, n)
+    U: Tensor  # left singular vectors (..., m, k)
+    S: Tensor  # singular values (..., k)
+    V: Tensor  # right singular vectors (..., n, k)
 
 
 def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
@@ -293,6 +304,37 @@ class TestPerformance:
             torch.tensor(n)
         )
         return nn.Parameter(A)
+
+    def make_quasi_gaussian(
+        self,
+        shape: tuple[int, int],
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+        seed: int | None = None,
+    ) -> TestCase:
+        r"""Generates a random m×n matrix with known spectral norm and gradient.
+
+        We sample random singular values from an MP distribution,
+        as well as random orthogonal matrices U and V from the haar distribution.
+
+        Values should approximately be sampled from N(0, 1/n)
+        """
+        m, n = shape
+        k = min(m, n)
+        gamma = m / n
+        rng = default_rng(seed)
+
+        # only the first k vectors
+        U_numpy = ortho_group(m).rvs(random_state=rng)[..., :k]
+        V_numpy = ortho_group(n).rvs(random_state=rng)[..., :k]
+        U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
+        V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
+        dist = MarchenkoPastur(gamma=gamma, sigma2=1.0, validate_args=False)
+        S = dist.sample([k]).to(dtype=dtype, device=device).sqrt()
+        A = torch.einsum("...mk, ...k, ...nk ->  ...mn", U, S, V)
+        A = nn.Parameter(A, requires_grad=True)
+        return TestCase(A, U=U, S=S, V=V)
 
     @pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
