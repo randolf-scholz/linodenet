@@ -39,6 +39,7 @@ __all__ = [
     "iResNetLayer",
     "LowRankFlow",
     "SplineFlow",
+    "TriangularFlow",
 ]
 
 
@@ -53,12 +54,14 @@ from linodenet.bijections.base import (
     TransformSequence,
 )
 from linodenet.bijections.iresnet import iResNet, iResNetBlock, iResNetLayer
-from linodenet.bijections.low_rank_perturbation import LowRankFlow
+from linodenet.bijections.low_rank import LowRankFlow
 from linodenet.bijections.spline_flow import SplineFlow
+from linodenet.bijections.triangular import TriangularFlow
 
 BIJECTIONS: dict[str, type[Bijection]] = {
     "iResNet": iResNet,
     "SplineFlow": SplineFlow,
     "LowRankFlow": LowRankFlow,
+    "TriangularFlow": TriangularFlow,
 }  # fmt: skip
 r"""Dictionary containing all available bijections."""

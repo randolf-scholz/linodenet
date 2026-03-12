@@ -10,8 +10,10 @@ from torch import Tensor, nn
 
 from signatures import signature
 
+from .base import TransformBase
 
-class LowRankFlow(nn.Module):
+
+class LowRankFlow(TransformBase):
     r"""An invertible, efficient low rank perturbation layer.
 
     .. math:: y = (𝕀ₙ + UVᵀ)x
@@ -74,15 +76,15 @@ class LowRankFlow(nn.Module):
     @signature("(..., n) -> (..., n)")
     def decode(self, y: Tensor) -> Tensor:
         r"""Computes $x = (𝕀+UVᵀ)⁻¹y = y - U(𝕀ₖ + VᵀU)⁻¹Vᵀy$."""
-        A = self.eye + torch.einsum("nk, nk -> kk", self.U, self.V)
+        A = self.eye + torch.einsum("ni, nj -> ij", self.V, self.U)
         v = torch.einsum("nk, ...n -> ...k", self.V, y)  # v = Vᵀy
-        z = torch.linalg.solve(A, v)  # z = (𝕀ₖ + VᵀU)⁻¹v
+        z = torch.linalg.solve(A, v[..., None]).squeeze(-1)  # z = (𝕀ₖ + VᵀU)⁻¹v
         u = torch.einsum("nk, ...k -> ...n", self.U, z)  # u = Uz
         return y - u
 
     @signature("(..., n) -> [(..., n), (...)]")
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        A = self.eye + torch.einsum("nk, nk -> kk", self.U, self.V)
+        A = self.eye + torch.einsum("ni, nj -> ij", self.V, self.U)
         _, logabsdet = torch.linalg.slogdet(A)
         v = torch.einsum("nk, ...n -> ...k", self.V, x)  # v = Vᵀx
         u = torch.einsum("nk, ...k -> ...n", self.U, v)  # u = Uv
@@ -92,9 +94,9 @@ class LowRankFlow(nn.Module):
 
     @signature("(..., n) -> [(..., n), (...)]")
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
-        A = self.eye + torch.einsum("nk, nk -> kk", self.U, self.V)
+        A = self.eye + torch.einsum("ni, nj -> ij", self.V, self.U)
         v = torch.einsum("nk, ...n -> ...k", self.V, y)  # v = Vᵀy
-        z = torch.linalg.solve(A, v)  # z = (𝕀ₖ + VᵀU)⁻¹v
+        z = torch.linalg.solve(A, v[..., None]).squeeze(-1)  # z = (𝕀ₖ + VᵀU)⁻¹v
         u = torch.einsum("nk, ...k -> ...n", self.U, z)  # u = Uz
         x = y - u
         _, logabsdet = torch.linalg.slogdet(A)
