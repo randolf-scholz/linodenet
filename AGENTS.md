@@ -41,3 +41,4 @@ Project conventions for automated agents contributing to `linodenet`.
 - Matplotlib supports CPU torch tensors directly; prefer passing CPU tensors rather than converting to NumPy.
 - Prefer f-string debug syntax (`{var=}`) for simple diagnostic prints.
 - `torch.jit` is deprecated for this project; do not introduce `torch.jit` usage in new code.
+- When running tests, don't forget to prepend `PYTHONPATH=src`.
