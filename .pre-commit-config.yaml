@@ -108,7 +108,28 @@ repos:
         name: unknown-inline-pragma
         description: "Check for unknown inline pragmas."
         language: pygrep
-        entry: '^[^\n]*\S[^\n]*\#\x20+(?!type|pyright|pyrefly|ty|noqa|fmt|shape|mypy|ruff|FIXME|SEE|NOTE|TODO)\w+:[^\n]+$'
+        entry: '(?x)
+          ^[^\n]*\S[^\n]*\#\x20+
+          (?!
+            type
+            |pyright
+            |pyrefly
+            |ty
+            |noqa
+            |fmt
+            |shape
+            |mypy
+            |ruff
+            |FIXME
+            |SEE
+            |NOTE
+            |TODO
+            |REF
+            |see
+            |ref
+            |note
+          )\w+:
+          [^\n]+$'
         types: [ python ]
         files: '^src/|^tests/'
   # markdownlint
