@@ -40,3 +40,4 @@ Project conventions for automated agents contributing to `linodenet`.
 - Docstrings follow Google style; document invariants and edge cases.
 - Matplotlib supports CPU torch tensors directly; prefer passing CPU tensors rather than converting to NumPy.
 - Prefer f-string debug syntax (`{var=}`) for simple diagnostic prints.
+- `torch.jit` is deprecated for this project; do not introduce `torch.jit` usage in new code.
