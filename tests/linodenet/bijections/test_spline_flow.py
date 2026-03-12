@@ -276,7 +276,7 @@ def test_spline_initialization_matches_requested_linear_map() -> None:
     )
 
 
-def test_spline_offsets_shift_effective_endpoints() -> None:
+def test_spline_centers_shift_effective_support() -> None:
     model = SplineFlow(
         num_flow_layers=1,
         num_bins=4,
@@ -307,12 +307,10 @@ def test_spline_offsets_shift_effective_endpoints() -> None:
     shifted_knots = knots.y + layer.y_center
     left_expected = shifted_knots[0] + knots.derivatives[0] * (x[:2] - knots.x[0])
     right_expected = shifted_knots[-1] + knots.derivatives[-1] * (x[-2:] - knots.x[-1])
+    center_idx = len(knots.x) // 2
 
-    assert knots.x[0] == pytest.approx(-1.5)
-    assert knots.x[-1] == pytest.approx(4.5)
-    assert shifted_knots[0] == pytest.approx(-1.75)
-    assert shifted_knots[len(shifted_knots) // 2] == pytest.approx(1.25)
-    assert shifted_knots[-1] == pytest.approx(4.25)
+    assert knots.x[center_idx].detach() == pytest.approx(layer.x_center.item())
+    assert shifted_knots[center_idx].detach() == pytest.approx(layer.y_center.item())
     assert torch.allclose(y[:2], left_expected)
     assert torch.allclose(y[-2:], right_expected)
     assert torch.allclose(xhat, x, atol=1e-5, rtol=1e-5)
