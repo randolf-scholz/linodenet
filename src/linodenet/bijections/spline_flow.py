@@ -22,7 +22,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from linodenet.nn.containers import ModuleSequence
+from linodenet.bijections.base import TransformBase, TransformSequence
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
@@ -61,10 +61,10 @@ class BinKnots(NamedTuple):
     r"""Bin parameters (knot x/y) that specify a rational linear spline."""
 
     # position of knots as well as derivatives and lambda-parameters
-    x: Tensor  # (..., K)
-    y: Tensor  # (..., K)
+    x: Tensor  # (..., K+1)
+    y: Tensor  # (..., K+1)
     lambdas: Tensor  # (..., K)
-    derivatives: Tensor  # (..., K)
+    derivatives: Tensor  # (..., K+1)
 
     def to_coefficients(self) -> SplineCoefficients:
         return SplineCoefficients.from_knots(self)
@@ -202,7 +202,8 @@ class SplineCoefficients(NamedTuple):
         wb = torch.sqrt(da / db) * wa
         wc = ((1 - λ) * wb * db + λ * wa * da) * (xb - xa) / (yb - ya)
         xc = (1 - λ) * xa + λ * xb
-        yc = (1 - λ) * ya + λ * yb
+        # TODO: check, it was yc = (1 - λ) * ya + λ * yb before.
+        yc = ((1 - λ) * wa * ya + λ * wb * yb) / ((1 - λ) * wa + λ * wb)
 
         return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
 
@@ -301,7 +302,7 @@ class StaticLinearRationalSpline(nn.Module):
 
         return BinKnots(x=x, y=y, lambdas=lambdas, derivatives=derivatives)
 
-    def forward(
+    def encode_and_logabsdet(
         self,
         inputs: Tensor,  # (...)
         *,
@@ -349,7 +350,7 @@ class StaticLinearRationalSpline(nn.Module):
 
         return outputs, logabsdet  # (...), (...)
 
-    def inverse(
+    def decode_and_logabsdet(
         self,
         inputs: Tensor,  # (...)
         *,
@@ -401,7 +402,7 @@ class StaticLinearRationalSpline(nn.Module):
 class StaticUnconstrainedLRS(StaticLinearRationalSpline):
     r"""Non-trainable unconstrained LRS with linear tails."""
 
-    def forward(
+    def encode_and_logabsdet(
         self,
         inputs: Tensor,  # (...)
         *,
@@ -413,7 +414,7 @@ class StaticUnconstrainedLRS(StaticLinearRationalSpline):
         """Identity mapping for inputs outside the interval."""
         mask = (inputs >= self.LEFT) & (inputs <= self.RIGHT)
 
-        outputs, logabsdet = super().forward(
+        outputs, logabsdet = super().encode_and_logabsdet(
             inputs,
             widths=widths,
             heights=heights,
@@ -425,7 +426,7 @@ class StaticUnconstrainedLRS(StaticLinearRationalSpline):
 
         return outputs, logabsdet
 
-    def inverse(
+    def decode_and_logabsdet(
         self,
         inputs: Tensor,  # (...)
         *,
@@ -437,7 +438,7 @@ class StaticUnconstrainedLRS(StaticLinearRationalSpline):
         """Identity mapping for inputs outside the interval."""
         mask = (inputs >= self.BOTTOM) & (inputs <= self.TOP)
 
-        outputs, logabsdet = super().inverse(
+        outputs, logabsdet = super().decode_and_logabsdet(
             inputs,
             widths=widths,
             heights=heights,
@@ -450,7 +451,7 @@ class StaticUnconstrainedLRS(StaticLinearRationalSpline):
         return outputs, logabsdet
 
 
-class LRS(nn.Module):
+class LRS(TransformBase):
     r"""Trainable Linear Rational Spline."""
 
     n_heads: Final[torch.Size]  # tuple[*H]
@@ -494,6 +495,20 @@ class LRS(nn.Module):
             left=left, right=right, bottom=bottom, top=top
         )
 
+    def _normalized_parameters(self, batch_shape: torch.Size, /) -> BinWidths:
+        r"""Expand normalized spline parameters to match the batch shape."""
+        widths = torch.softmax(self.widths, dim=-1)
+        heights = torch.softmax(self.heights, dim=-1)
+        lambdas = torch.sigmoid(self.lambdas)
+        derivatives = F.softplus(self.derivatives)
+
+        return BinWidths(
+            w=widths.expand(*batch_shape, *widths.shape),
+            h=heights.expand(*batch_shape, *heights.shape),
+            lambdas=lambdas.expand(*batch_shape, *lambdas.shape),
+            derivatives=derivatives.expand(*batch_shape, *derivatives.shape),
+        )
+
     @torch.no_grad()
     def marginalize(self, kept: list[int] | Tensor) -> LRS:
         """Marginalize out the specified variables.
@@ -504,8 +519,9 @@ class LRS(nn.Module):
         device = self.widths.device
         kept = torch.as_tensor(kept, device=device)
         if kept.dtype == torch.bool:
-            assert kept.shape == (self.num_features,)
+            assert kept.shape == (self.n_heads[-1],)
             num_kept = int(kept.sum().item())
+            kept = kept.nonzero(as_tuple=False).squeeze(-1)
         else:
             assert kept.min() >= 0
             assert kept.max() < self.n_heads[-1]
@@ -531,7 +547,16 @@ class LRS(nn.Module):
         new.derivatives.copy_(marg_derivatives)
         return new
 
-    def forward(self, z: Tensor) -> tuple[Tensor, Tensor]:
+    def encode(self, z: Tensor) -> Tensor:
+
+        z, _ = self.encode_and_logabsdet(z)
+        return z
+
+    def decode(self, z: Tensor, /) -> Tensor:
+        z, _ = self.decode_and_logabsdet(z)
+        return z
+
+    def encode_and_logabsdet(self, z: Tensor, /) -> tuple[Tensor, Tensor]:
         r"""Forward pass of the flow.
 
         Args:
@@ -541,31 +566,18 @@ class LRS(nn.Module):
             z (..., *H, D): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
-        # z.shape: (batch_size, *n_heads, n_feats) = (..., *H, D)
-        batch_shape = z.shape[: -len(self.n_heads)]  # batch dimensions
-        # W, H = 2 * self.B * W, 2 * self.B * H
-        # for each head and dimension, these need to be normalized, i.e. W[m, d]∈∆ᴷ
-        W = torch.softmax(self.widths, dim=-1)  # partition of interval [0, 1]
-        H = torch.softmax(self.heights, dim=-1)  # partition of interval [0, 1]
-        L = torch.sigmoid(self.lambdas)
-        D = F.softplus(self.derivatives)
-
-        # duplicate the parameters for the batch
-        W = W.expand(*batch_shape, *W.shape)
-        H = H.expand(*batch_shape, *H.shape)
-        L = L.expand(*batch_shape, *L.shape)
-        D = D.expand(*batch_shape, *D.shape)
-
-        z, ld = self.spline.forward(  # (..., *H, D), (..., *H, D)
+        batch_shape = z.shape[: -len(self.n_heads)]
+        params = self._normalized_parameters(batch_shape)
+        z, logabsdet = self.spline.encode_and_logabsdet(
             z,
-            widths=W,
-            heights=H,
-            lambdas=L,
-            derivatives=D,
+            widths=params.w,
+            heights=params.h,
+            lambdas=params.lambdas,
+            derivatives=params.derivatives,
         )
-        return z, ld.sum(-1)  # (..., *H, D), (..., *H)
+        return z, logabsdet.sum(dim=-1)
 
-    def inverse(self, z: Tensor) -> tuple[Tensor, Tensor]:
+    def decode_and_logabsdet(self, z: Tensor) -> tuple[Tensor, Tensor]:
         r"""Inverse pass of the flow.
 
         Args:
@@ -575,33 +587,23 @@ class LRS(nn.Module):
             z (..., *H, D): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
-        # z.shape: (batch_size, n_heads, n_feats) = (..., *H, D)
-        batch_shape = z.shape[: -len(self.n_heads)]  # batch dimensions
-        W = torch.softmax(self.widths, dim=-1)
-        H = torch.softmax(self.heights, dim=-1)
-        L = torch.sigmoid(self.lambdas)
-        D = F.softplus(self.derivatives)
-
-        W = W.expand(*batch_shape, *W.shape)
-        H = H.expand(*batch_shape, *H.shape)
-        L = L.expand(*batch_shape, *L.shape)
-        D = D.expand(*batch_shape, *D.shape)
-
-        z, ld = self.spline.inverse(  # (B,M,D), (B,M,D)
+        batch_shape = z.shape[: -len(self.n_heads)]
+        params = self._normalized_parameters(batch_shape)
+        z, logabsdet = self.spline.decode_and_logabsdet(
             z,
-            widths=W,
-            heights=H,
-            derivatives=D,
-            lambdas=L,
+            widths=params.w,
+            heights=params.h,
+            lambdas=params.lambdas,
+            derivatives=params.derivatives,
         )
-        return z, ld.sum(-1)  # (B, M, D), (B, M)
+        return z, logabsdet.sum(dim=-1)
 
 
-class SplineFlow(ModuleSequence[LRS]):
+class SplineFlow(TransformSequence[LRS]):
     r"""Implements a sequence of rational linear spline layers."""
 
-    @staticmethod
-    def from_iterable(layers: Iterable[LRS]) -> SplineFlow:
+    @classmethod
+    def from_iterable(cls, layers: Iterable[LRS], /) -> SplineFlow:
         """Create a SplineFlow from an iterable of LRS layers."""
         new = SplineFlow.__new__(SplineFlow)
         super(SplineFlow, new).__init__(layers)
@@ -625,22 +627,3 @@ class SplineFlow(ModuleSequence[LRS]):
     def marginalize(self, variables: list[int] | Tensor) -> SplineFlow:
         """Marginalize out the specified variables."""
         return SplineFlow.from_iterable(layer.marginalize(variables) for layer in self)
-
-    def forward(self, z: Tensor, ldj: Tensor) -> tuple[Tensor, Tensor]:
-        """Forward pass of the flow."""
-        for layer in self:
-            z, ldj_splines = layer(z)
-            ldj = ldj + ldj_splines
-        return z, ldj
-
-    def encode(self, z: Tensor) -> Tensor:
-        """Encode the input tensor by applying the forward pass of the flow."""
-        for layer in self:
-            z, _ = layer(z)
-        return z
-
-    def inverse(self, z: Tensor) -> Tensor:
-        """Inverse pass of the flow."""
-        for layer in reversed(self):
-            z, _ = layer.inverse(z)
-        return z
