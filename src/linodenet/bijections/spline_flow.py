@@ -4,13 +4,18 @@ Defines spline parameter structures and flow modules.
 """
 
 __all__ = [
+    # Constants
+    "DEFAULT_MIN_BIN_WIDTH",
+    "DEFAULT_MIN_DERIVATIVE",
+    "DEFAULT_MIN_BIN_HEIGHT",
     # Classes
+    "BinWidths",
     "BinKnots",
     "SplineCoefficients",
     # Models
-    "StaticLinearRationalSpline",
-    "StaticUnconstrainedLRS",
-    "LRS",
+    "LinearRationalSpline",
+    "UnconstrainedLinearRationalSpline",
+    "LearnableLRS",
     "SplineFlow",
 ]
 
@@ -135,7 +140,7 @@ class BinKnots(NamedTuple):
 
 
 class SplineCoefficients(NamedTuple):
-    """Tuple of coefficients for a rational linear spline."""
+    r"""Tuple of coefficients for a rational linear spline."""
 
     lam: Tensor  # (..., K)
     wa: Tensor  # (..., K)
@@ -208,7 +213,7 @@ class SplineCoefficients(NamedTuple):
         return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
 
 
-class StaticLinearRationalSpline(nn.Module):
+class LinearRationalSpline(nn.Module):
     r"""Non-trainable Linear Rational Spline."""
 
     # BUFFERS
@@ -399,7 +404,7 @@ class StaticLinearRationalSpline(nn.Module):
         return outputs, logabsdet  # (...), (...)
 
 
-class StaticUnconstrainedLRS(StaticLinearRationalSpline):
+class UnconstrainedLinearRationalSpline(LinearRationalSpline):
     r"""Non-trainable unconstrained LRS with linear tails."""
 
     def encode_and_logabsdet(
@@ -411,7 +416,7 @@ class StaticUnconstrainedLRS(StaticLinearRationalSpline):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
-        """Identity mapping for inputs outside the interval."""
+        r"""Identity mapping for inputs outside the interval."""
         mask = (inputs >= self.LEFT) & (inputs <= self.RIGHT)
 
         outputs, logabsdet = super().encode_and_logabsdet(
@@ -435,7 +440,7 @@ class StaticUnconstrainedLRS(StaticLinearRationalSpline):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
-        """Identity mapping for inputs outside the interval."""
+        r"""Identity mapping for inputs outside the interval."""
         mask = (inputs >= self.BOTTOM) & (inputs <= self.TOP)
 
         outputs, logabsdet = super().decode_and_logabsdet(
@@ -451,7 +456,7 @@ class StaticUnconstrainedLRS(StaticLinearRationalSpline):
         return outputs, logabsdet
 
 
-class LRS(TransformBase):
+class LearnableLRS(TransformBase):
     r"""Trainable Linear Rational Spline."""
 
     n_heads: Final[torch.Size]  # tuple[*H]
@@ -465,7 +470,7 @@ class LRS(TransformBase):
     lambdas: Tensor  # (*H, K)
     derivatives: Tensor  # (*H, K+1)
 
-    spline: StaticUnconstrainedLRS
+    spline: UnconstrainedLinearRationalSpline
 
     def __init__(
         self,
@@ -491,7 +496,7 @@ class LRS(TransformBase):
         bottom, top = y_bounds
         assert left < right
         assert bottom < top
-        self.spline = StaticUnconstrainedLRS(
+        self.spline = UnconstrainedLinearRationalSpline(
             left=left, right=right, bottom=bottom, top=top
         )
 
@@ -510,7 +515,7 @@ class LRS(TransformBase):
         )
 
     @torch.no_grad()
-    def marginalize(self, kept: list[int] | Tensor) -> LRS:
+    def marginalize(self, kept: list[int] | Tensor) -> LearnableLRS:
         """Marginalize out the specified variables.
 
         Assumes that n_heads = (*heads, dims),
@@ -528,7 +533,7 @@ class LRS(TransformBase):
             num_kept = len(kept)
 
         new_heads = (*self.n_heads[:-1], num_kept)
-        new = LRS(
+        new = LearnableLRS(
             n_heads=new_heads,
             num_bins=self.num_bins,
             x_bounds=self.x_bounds,
@@ -547,64 +552,55 @@ class LRS(TransformBase):
         new.derivatives.copy_(marg_derivatives)
         return new
 
-    def encode(self, z: Tensor) -> Tensor:
-
-        z, _ = self.encode_and_logabsdet(z)
-        return z
-
-    def decode(self, z: Tensor, /) -> Tensor:
-        z, _ = self.decode_and_logabsdet(z)
-        return z
-
-    def encode_and_logabsdet(self, z: Tensor, /) -> tuple[Tensor, Tensor]:
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         r"""Forward pass of the flow.
 
         Args:
-            z (..., *H, D): input tensor
+            x (..., *H, D): input tensor
 
         Returns:
-            z (..., *H, D): transformed tensor
+            y (..., *H, D): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
-        batch_shape = z.shape[: -len(self.n_heads)]
+        batch_shape = x.shape[: -len(self.n_heads)]
         params = self._normalized_parameters(batch_shape)
-        z, logabsdet = self.spline.encode_and_logabsdet(
-            z,
+        x, logabsdet = self.spline.encode_and_logabsdet(
+            x,
             widths=params.w,
             heights=params.h,
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
-        return z, logabsdet.sum(dim=-1)
+        return x, logabsdet.sum(dim=-1)
 
-    def decode_and_logabsdet(self, z: Tensor) -> tuple[Tensor, Tensor]:
+    def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
         r"""Inverse pass of the flow.
 
         Args:
-            z (..., *H, D): input tensor
+            y (..., *H, D): input tensor
 
         Returns:
-            z (..., *H, D): transformed tensor
+            x (..., *H, D): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
-        batch_shape = z.shape[: -len(self.n_heads)]
+        batch_shape = y.shape[: -len(self.n_heads)]
         params = self._normalized_parameters(batch_shape)
-        z, logabsdet = self.spline.decode_and_logabsdet(
-            z,
+        y, logabsdet = self.spline.decode_and_logabsdet(
+            y,
             widths=params.w,
             heights=params.h,
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
-        return z, logabsdet.sum(dim=-1)
+        return y, logabsdet.sum(dim=-1)
 
 
-class SplineFlow(TransformSequence[LRS]):
+class SplineFlow(TransformSequence[LearnableLRS]):
     r"""Implements a sequence of rational linear spline layers."""
 
     @classmethod
-    def from_iterable(cls, layers: Iterable[LRS], /) -> SplineFlow:
-        """Create a SplineFlow from an iterable of LRS layers."""
+    def from_iterable(cls, layers: Iterable[LearnableLRS], /) -> SplineFlow:
+        r"""Create a SplineFlow from an iterable of LRS layers."""
         new = SplineFlow.__new__(SplineFlow)
         super(SplineFlow, new).__init__(layers)
         return new
@@ -619,11 +615,13 @@ class SplineFlow(TransformSequence[LRS]):
         y_bounds: tuple[float, float],
     ) -> None:
         layers = [
-            LRS(n_heads, num_bins=num_bins, x_bounds=x_bounds, y_bounds=y_bounds)
+            LearnableLRS(
+                n_heads, num_bins=num_bins, x_bounds=x_bounds, y_bounds=y_bounds
+            )
             for _ in range(num_flow_layers)
         ]
         super().__init__(layers)
 
     def marginalize(self, variables: list[int] | Tensor) -> SplineFlow:
-        """Marginalize out the specified variables."""
+        r"""Marginalize out the specified variables."""
         return SplineFlow.from_iterable(layer.marginalize(variables) for layer in self)
