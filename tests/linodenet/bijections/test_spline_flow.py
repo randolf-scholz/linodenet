@@ -11,6 +11,7 @@ RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 @pytest.mark.parametrize("n_heads", [1, 4, (), (1,), (2, 3), (2, 2, 3)], ids=str)
 def test_num_heads(n_heads: int | tuple[int, ...]) -> None:
+    r"""Verify head-shaped inputs preserve event and logdet shapes in both directions."""
     batch_size = 8
     flow = SplineFlow(
         n_heads,
@@ -42,6 +43,11 @@ def test_num_heads(n_heads: int | tuple[int, ...]) -> None:
 @pytest.mark.parametrize("layers", [1, 2, 3, 4], ids="layers={}".format)
 @pytest.mark.parametrize("bins", [1, 2, 4, 8], ids="bins={}".format)
 def test_invertibility(seed: int, layers, bins) -> None:
+    """Check encode/decode round trips within tolerances that scale with layer depth.
+
+    The spline stack is only approximately invertible in finite precision, so the
+    admissible absolute error grows slightly with the number of composed layers.
+    """
     torch.manual_seed(seed)
     value_atol = 1.5e-2 * layers
     value_rtol = 1e-3
@@ -153,6 +159,7 @@ TEST_FNS = {
 @pytest.mark.parametrize("case", TEST_FNS)
 @pytest.mark.parametrize("bins", [7, 8])
 def test_single_spline_can_learn_monotone_function(case: str, bins: int) -> None:
+    r"""Verify one spline layer can fit simple monotone targets from its initialization."""
     test_fn = TEST_FNS[case]
     torch.manual_seed(0)
 
@@ -233,6 +240,7 @@ def test_single_spline_can_learn_monotone_function(case: str, bins: int) -> None
 
 
 def test_spline_initialization_matches_requested_linear_map() -> None:
+    r"""Ensure the default initialization realizes the affine map implied by the bounds."""
     model = SplineFlow(
         num_flow_layers=1,
         num_bins=4,
@@ -277,6 +285,7 @@ def test_spline_initialization_matches_requested_linear_map() -> None:
 
 
 def test_spline_centers_shift_effective_support() -> None:
+    r"""Confirm center offsets move the spline support while preserving linear tails."""
     model = SplineFlow(
         num_flow_layers=1,
         num_bins=4,
