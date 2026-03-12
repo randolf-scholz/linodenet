@@ -20,7 +20,7 @@ Note that `torch.distributions.Transform` has some differences:
 >>>         if id(x) == id(self._last_x):
 >>>             y = self._last_y
 >>>         else:
->>>             y = self.forward(x)
+>>>             y = self.encode(x)
 """
 
 __all__ = [
@@ -85,14 +85,18 @@ class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
         return InverseTransform(self)
 
     @abstractmethod
-    def encode(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def decode(self, y: Tensor, /) -> Tensor: ...
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]: ...
 
     @abstractmethod
-    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]: ...
-    @abstractmethod
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]: ...
+
+    def encode(self, x: Tensor, /) -> Tensor:
+        y, _ = self.encode_and_logabsdet(x)
+        return y
+
+    def decode(self, y: Tensor, /) -> Tensor:
+        x, _ = self.encode_and_logabsdet(y)
+        return x
 
 
 class InverseBijection[B: BijectionBase](BijectionBase):
