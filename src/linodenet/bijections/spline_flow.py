@@ -44,6 +44,14 @@ class BinWidths(NamedTuple):
     lambdas: Tensor  # (..., K)
     derivatives: Tensor  # (..., K+1)
 
+    def to(self, dtype: torch.dtype | None, device: torch.device | None) -> BinWidths:
+        return BinWidths(
+            w=self.w.to(dtype=dtype, device=device),
+            h=self.h.to(dtype=dtype, device=device),
+            lambdas=self.lambdas.to(dtype=dtype, device=device),
+            derivatives=self.derivatives.to(dtype=dtype, device=device),
+        )
+
     def to_coefficients(self) -> SplineCoefficients:
         knots = BinKnots.from_widths(self)
         return SplineCoefficients.from_knots(knots)
@@ -71,6 +79,14 @@ class BinKnots(NamedTuple):
     y: Tensor  # (..., K+1)
     lambdas: Tensor  # (..., K)
     derivatives: Tensor  # (..., K+1)
+
+    def to(self, dtype: torch.dtype | None, device: torch.device | None) -> BinKnots:
+        return BinKnots(
+            x=self.x.to(dtype=dtype, device=device),
+            y=self.y.to(dtype=dtype, device=device),
+            lambdas=self.lambdas.to(dtype=dtype, device=device),
+            derivatives=self.derivatives.to(dtype=dtype, device=device),
+        )
 
     def to_coefficients(self) -> SplineCoefficients:
         return SplineCoefficients.from_knots(self)
@@ -466,8 +482,10 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
-        r"""Identity mapping for inputs outside the interval."""
-        mask = (inputs >= self.LEFT) & (inputs <= self.RIGHT)
+        r"""Use boundary-anchored linear tails outside the spline interval."""
+        original_dtype = inputs.dtype
+        work_dtype = self.ONE.dtype
+        inputs = inputs.to(dtype=work_dtype)
 
         outputs, logabsdet = super().encode_and_logabsdet(
             inputs,
@@ -476,10 +494,30 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
             derivatives=derivatives,
             lambdas=lambdas,
         )
-        outputs = torch.where(mask, outputs, inputs)
-        logabsdet = torch.where(mask, logabsdet, 0.0)
+        left_mask = inputs < self.LEFT
+        right_mask = inputs > self.RIGHT
 
-        return outputs, logabsdet
+        spline_params = self.get_spline_parameters(
+            widths=widths,
+            heights=heights,
+            derivatives=derivatives,
+            lambdas=lambdas,
+        )
+        left_x = spline_params.x[..., 0]
+        left_y = spline_params.y[..., 0]
+        left_d = spline_params.derivatives[..., 0]
+        right_x = spline_params.x[..., -1]
+        right_y = spline_params.y[..., -1]
+        right_d = spline_params.derivatives[..., -1]
+        left_linear = left_y + left_d * (inputs - left_x)
+        right_linear = right_y + right_d * (inputs - right_x)
+
+        outputs = torch.where(left_mask, left_linear, outputs)
+        outputs = torch.where(right_mask, right_linear, outputs)
+        logabsdet = torch.where(left_mask, left_d.log(), logabsdet)
+        logabsdet = torch.where(right_mask, right_d.log(), logabsdet)
+
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
 
     def decode_and_logabsdet(
         self,
@@ -490,8 +528,10 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
-        r"""Identity mapping for inputs outside the interval."""
-        mask = (inputs >= self.BOTTOM) & (inputs <= self.TOP)
+        r"""Invert the boundary-anchored linear tails outside the spline interval."""
+        original_dtype = inputs.dtype
+        work_dtype = self.ONE.dtype
+        inputs = inputs.to(dtype=work_dtype)
 
         outputs, logabsdet = super().decode_and_logabsdet(
             inputs,
@@ -500,10 +540,30 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
             derivatives=derivatives,
             lambdas=lambdas,
         )
-        outputs = torch.where(mask, outputs, inputs)
-        logabsdet = torch.where(mask, logabsdet, 0.0)
+        spline_params = self.get_spline_parameters(
+            widths=widths,
+            heights=heights,
+            derivatives=derivatives,
+            lambdas=lambdas,
+        )
+        left_y = spline_params.y[..., 0]
+        left_x = spline_params.x[..., 0]
+        left_d = spline_params.derivatives[..., 0]
+        right_y = spline_params.y[..., -1]
+        right_x = spline_params.x[..., -1]
+        right_d = spline_params.derivatives[..., -1]
 
-        return outputs, logabsdet
+        left_mask = inputs < left_y
+        right_mask = inputs > right_y
+        left_linear = left_x + (inputs - left_y) / left_d
+        right_linear = right_x + (inputs - right_y) / right_d
+
+        outputs = torch.where(left_mask, left_linear, outputs)
+        outputs = torch.where(right_mask, right_linear, outputs)
+        logabsdet = torch.where(left_mask, -left_d.log(), logabsdet)
+        logabsdet = torch.where(right_mask, -right_d.log(), logabsdet)
+
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
 
 
 class LearnableLRS(TransformBase):
@@ -531,6 +591,7 @@ class LearnableLRS(TransformBase):
         num_bins: int,
         x_bounds: tuple[float, float],
         y_bounds: tuple[float, float],
+        use_fp64: bool = True,
     ) -> None:
         super().__init__()
         #  Constants
@@ -552,7 +613,7 @@ class LearnableLRS(TransformBase):
         assert left < right
         assert bottom < top
         self.spline = UnconstrainedLinearRationalSpline(
-            left=left, right=right, bottom=bottom, top=top
+            left=left, right=right, bottom=bottom, top=top, use_fp64=use_fp64
         )
 
     def normalized_parameters(self, batch_shape: torch.Size, /) -> BinWidths:
@@ -668,10 +729,15 @@ class SplineFlow(TransformSequence[LearnableLRS]):
         num_bins: int,
         x_bounds: tuple[float, float],
         y_bounds: tuple[float, float],
+        use_fp64: bool = True,
     ) -> None:
         layers = [
             LearnableLRS(
-                n_heads, num_bins=num_bins, x_bounds=x_bounds, y_bounds=y_bounds
+                n_heads,
+                num_bins=num_bins,
+                x_bounds=x_bounds,
+                y_bounds=y_bounds,
+                use_fp64=use_fp64,
             )
             for _ in range(num_flow_layers)
         ]

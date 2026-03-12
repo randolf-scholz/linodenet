@@ -179,20 +179,20 @@ def test_single_spline_can_learn_monotone_function() -> None:
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
-        knot_x = knots.x.squeeze(0)
-        knot_y = knots.y.squeeze(0)
-        knot_d = knots.derivatives.squeeze(0)
+        knot_x = knots.x
+        knot_y = knots.y
+        knot_d = knots.derivatives
 
     fig, ax = plt.subplots(figsize=(6.5, 4.0), tight_layout=True)
-    ax.plot(x.squeeze(-1), y.squeeze(-1), label="target", linewidth=2.0)
+    ax.plot(x, y, label="target", linewidth=2.0)
+    ax.plot(x, final_prediction, label="trained", linewidth=2)
     ax.plot(
-        x.squeeze(-1),
-        initial_prediction.squeeze(-1),
+        x,
+        initial_prediction,
         label="initial",
-        linewidth=1.5,
+        linewidth=2,
         linestyle="--",
     )
-    ax.plot(x.squeeze(-1), final_prediction.squeeze(-1), label="trained", linewidth=1.8)
     ax.scatter(knot_x, knot_y, label="knots", s=28, zorder=3)
     dx = torch.tensor([0.25])
     dy = knot_d * dx
@@ -226,3 +226,43 @@ def test_single_spline_can_learn_monotone_function() -> None:
     )
 
     assert final_loss < initial_loss * 1e-1
+
+
+def test_unconstrained_spline_uses_boundary_anchored_linear_tails() -> None:
+    model = SplineFlow(
+        num_flow_layers=1,
+        num_bins=4,
+        x_bounds=(-3.0, 3.0),
+        y_bounds=(-2.0, 4.0),
+        use_fp64=False,
+    )
+    layer = model[0]
+    params = layer.normalized_parameters(torch.Size())
+    knots = layer.spline.get_spline_parameters(
+        widths=params.w,
+        heights=params.h,
+        lambdas=params.lambdas,
+        derivatives=params.derivatives,
+    )
+
+    x = torch.tensor([-4.5, -3.5, -3.0, 3.0, 3.5, 4.5])
+    y, forward_logabsdet = model.encode_and_logabsdet(x)
+    xhat, inverse_logabsdet = model.decode_and_logabsdet(y)
+
+    left_expected = knots.y[0] + knots.derivatives[0] * (x[:2] - knots.x[0])
+    right_expected = knots.y[-1] + knots.derivatives[-1] * (x[-2:] - knots.x[-1])
+    assert torch.allclose(y[:2], left_expected)
+    assert torch.allclose(y[-2:], right_expected)
+    assert torch.allclose(forward_logabsdet[:2], knots.derivatives[0].log().expand(2))
+    assert torch.allclose(
+        forward_logabsdet[-2:],
+        knots.derivatives[-1].log().expand(2),
+    )
+
+    assert torch.allclose(xhat, x, atol=1e-5, rtol=1e-5)
+    assert torch.allclose(
+        forward_logabsdet + inverse_logabsdet,
+        torch.zeros_like(forward_logabsdet),
+        atol=1e-5,
+        rtol=1e-5,
+    )
