@@ -5,9 +5,7 @@ from typing import Any
 
 import pytest
 import torch
-from numpy.random import default_rng
 from pytest_benchmark.fixture import BenchmarkFixture
-from scipy.stats import ortho_group
 from torch import Tensor, nn
 
 from linodenet_special import (
@@ -18,7 +16,14 @@ from linodenet_special import (
 )
 from tests.utils import timer
 
-from .fixtures import DEVICES, SEEDS
+from .fixtures import (
+    DEVICES,
+    SEEDS,
+    make_diagonal_matrix,
+    make_orthogonal_matrix,
+    make_quasi_gaussian,
+    make_rank_one_matrix,
+)
 
 
 def scaled_norm(x: Tensor) -> Tensor:
@@ -225,19 +230,14 @@ class TestCorrectness:
         The analytical gradient is ∂‖A‖₂/∂A = uvᵀ, where u and v are the singular vectors.
         In particular, for rank one matrices A=uvᵀ, the gradient is ∂‖A‖₂/∂A = uvᵀ/(‖u‖⋅‖v‖).
         """
-        device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
 
-        # generate random rank one matrix
-        m, n = shape
-        sigma_star = 1000 * torch.rand((), device=device) + 1
-        u_star = torch.randn(m, device=device)
-        u_star = u_star / u_star.norm()
-        v_star = torch.randn(n, device=device)
-        v_star = v_star / v_star.norm()
-        A = sigma_star * torch.outer(u_star, v_star)
-        A = A.clone().detach().requires_grad_(True)
+        case = make_rank_one_matrix(shape, dtype=torch.float, device=device, seed=seed)
+        A = case.value
+        sigma_star = case.S[0]
+        u_star = case.U[:, 0]
+        v_star = case.V[:, 0]
 
         # analytical result
         analytical_value = sigma_star
@@ -286,14 +286,12 @@ class TestCorrectness:
 
         NOTE: builtin SVD seems to have auto-detection for diagonal matrices...
         """
-        device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
 
-        # generate a random diagonal matrix
-        S = 10 * torch.randn(dim, device=device)
-        A = torch.diag(S)
-        A = A.clone().detach().requires_grad_(True)
+        case = make_diagonal_matrix(dim, dtype=torch.float, device=device, seed=seed)
+        A = case.value
+        S = case.S
 
         # analytical result
         idx_star = S.abs().argmax()
@@ -353,28 +351,18 @@ class TestCorrectness:
 
         We randomly sample U, S and V.
         """
-        device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
-        torch.manual_seed(seed)
-        rng = default_rng(seed=seed)
-
-        # randomly generate a matrix with known SVD
-        M, N = shape
-        K = min(M, N)
-        S = torch.abs(10 * torch.randn(K, device=device))
-        _U = ortho_group.rvs(M, random_state=rng)
-        _V = ortho_group.rvs(N, random_state=rng)
-        # take the first K vectors
-        U = torch.tensor(_U[:, :K], dtype=torch.float, device=device)
-        Vh = torch.tensor(_V[:, :K].T, dtype=torch.float, device=device)
-        A = torch.einsum("ij,j,jk->ik", U, S, Vh)
-        A = A.clone().detach().requires_grad_(True)
+        case = make_quasi_gaussian(shape, dtype=torch.float, device=device, seed=seed)
+        A = case.value
+        U = case.U
+        S = case.S
+        V = case.V
 
         # analytical result
         idx_star = S.abs().argmax()
         sigma_star = S[idx_star]
         u_star = U[:, idx_star]
-        v_star = Vh[idx_star, :]
+        v_star = V[:, idx_star]
 
         # analytical result
         analytical_value = sigma_star
@@ -431,19 +419,10 @@ class TestCorrectness:
             In particular, if A is already orthogonal, then $∂‖A‖₂/∂A = A$.
             Is, in some sense, the largest subgradient.
         """
-        device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
-        torch.manual_seed(seed)
-        rng = default_rng(seed=seed)
-
-        # sample random orthogonal matrix
-        U = ortho_group.rvs(dim, random_state=rng)
-        S = torch.ones(dim, dtype=torch.float, device=device)
-        A = (
-            torch.from_numpy(U)
-            .to(dtype=torch.float, device=device)
-            .requires_grad_(True)
-        )
+        case = make_orthogonal_matrix(dim, dtype=torch.float, device=device, seed=seed)
+        A = case.value
+        S = case.S
 
         # analytical result
         analytical_value = S[0]
