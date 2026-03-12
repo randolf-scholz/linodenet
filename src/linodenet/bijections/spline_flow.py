@@ -120,8 +120,14 @@ class BinKnots(NamedTuple):
         widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
 
         # scale cumulative widths to the interval [LEFT, RIGHT]
-        cumwidths = widths.cumsum(dim=-1).clip(0.0, 1.0)  # note: last value == 1.0
-        cumwidths = F.pad(cumwidths, pad=(1, 0), mode="constant", value=0.0)
+        cumwidths = torch.cat(
+            [
+                widths.new_zeros(*widths.shape[:-1], 1),
+                widths.cumsum(dim=-1)[..., :-1],
+                widths.new_ones(*widths.shape[:-1], 1),
+            ],
+            dim=-1,
+        )
         # get the actual knots in [LEFT, RIGHT]
         x = (right - left) * cumwidths + left  # (..., K)
 
@@ -129,8 +135,14 @@ class BinKnots(NamedTuple):
         # ensure >= MIN_BIN_HEIGHT, by scaling down to 1-nε, and adding ε.
         heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
         # scale cumulative heights to the interval [BOTTOM, TOP]
-        cumheights = heights.cumsum(dim=-1).clip(0.0, 1.0)  # note: last value == 1.0
-        cumheights = F.pad(cumheights, pad=(1, 0), mode="constant", value=0.0)
+        cumheights = torch.cat(
+            [
+                heights.new_zeros(*heights.shape[:-1], 1),
+                heights.cumsum(dim=-1)[..., :-1],
+                heights.new_ones(*heights.shape[:-1], 1),
+            ],
+            dim=-1,
+        )
         y = (top - bottom) * cumheights + bottom  # (..., K)
 
         # calculate lambdas and derivatives
@@ -207,7 +219,6 @@ class SplineCoefficients(NamedTuple):
         wb = torch.sqrt(da / db) * wa
         wc = ((1 - λ) * wb * db + λ * wa * da) * (xb - xa) / (yb - ya)
         xc = (1 - λ) * xa + λ * xb
-        # TODO: check, it was yc = (1 - λ) * ya + λ * yb before.
         yc = ((1 - λ) * wa * ya + λ * wb * yb) / ((1 - λ) * wa + λ * wb)
 
         return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
@@ -289,8 +300,14 @@ class LinearRationalSpline(nn.Module):
         widths = self.MIN_BIN_WIDTH + (1 - self.MIN_BIN_WIDTH * num_bins) * widths
 
         # scale cumulative widths to the interval [LEFT, RIGHT]
-        cumwidths = widths.cumsum(dim=-1).clip(0.0, 1.0)  # note: last value == 1.0
-        cumwidths = F.pad(cumwidths, pad=(1, 0), mode="constant", value=0.0)
+        cumwidths = torch.cat(
+            [
+                widths.new_zeros(*widths.shape[:-1], 1),
+                widths.cumsum(dim=-1)[..., :-1],
+                widths.new_ones(*widths.shape[:-1], 1),
+            ],
+            dim=-1,
+        )
         # get the actual knots in [LEFT, RIGHT]
         x = self.WIDTH * cumwidths + self.LEFT  # (..., K)
 
@@ -298,8 +315,14 @@ class LinearRationalSpline(nn.Module):
         # ensure >= MIN_BIN_HEIGHT, by scaling down to 1-nε, and adding ε.
         heights = self.MIN_BIN_HEIGHT + (1 - self.MIN_BIN_HEIGHT * num_bins) * heights
         # scale cumulative heights to the interval [BOTTOM, TOP]
-        cumheights = heights.cumsum(dim=-1).clip(0.0, 1.0)  # note: last value == 1.0
-        cumheights = F.pad(cumheights, pad=(1, 0), mode="constant", value=0.0)
+        cumheights = torch.cat(
+            [
+                heights.new_zeros(*heights.shape[:-1], 1),
+                heights.cumsum(dim=-1)[..., :-1],
+                heights.new_ones(*heights.shape[:-1], 1),
+            ],
+            dim=-1,
+        )
         y = self.HEIGHT * cumheights + self.BOTTOM  # (..., K)
 
         # calculate lambdas and derivatives
@@ -324,9 +347,11 @@ class LinearRationalSpline(nn.Module):
         )
         # select the bins
         num_bins = widths.shape[-1]
-        bin_mask = inputs.unsqueeze(-1) >= spline_params.x
-        # NOTE: subtract 1 to get the correct bin index, clip to avoid out-of-bounds
-        bin_idx = (bin_mask.sum(dim=-1, keepdim=True) - 1).clip(0, num_bins - 1)
+        bin_idx = torch.searchsorted(
+            spline_params.x[..., 1:-1].contiguous(),
+            inputs.unsqueeze(-1),
+            side="right",
+        ).clip(0, num_bins - 1)
 
         # get the parameters/coefficients for the selected bins
         coef = SplineCoefficients.from_selected_knots(spline_params, bin_idx)
@@ -371,10 +396,12 @@ class LinearRationalSpline(nn.Module):
             lambdas=lambdas,
         )
         # select the bins
-        bin_mask = inputs.unsqueeze(-1) >= spline_params.y  # 0...K
-        # NOTE: subtract 1 to get the correct bin index, clip to avoid out-of-bounds
         num_knots = heights.shape[-1]
-        bin_idx = (bin_mask.sum(dim=-1, keepdim=True) - 1).clip(0, num_knots - 1)
+        bin_idx = torch.searchsorted(
+            spline_params.y[..., 1:-1].contiguous(),
+            inputs.unsqueeze(-1),
+            side="right",
+        ).clip(0, num_knots - 1)
 
         # get the parameters/coefficients for the selected bins
         coef = SplineCoefficients.from_selected_knots(spline_params, bin_idx)
