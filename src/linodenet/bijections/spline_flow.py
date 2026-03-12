@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 
+import math
 from collections.abc import Iterable
 from typing import Final, NamedTuple
 
@@ -239,6 +240,7 @@ class LinearRationalSpline(nn.Module):
     MIN_DERIVATIVE: Tensor
 
     ONE: Tensor
+    use_fp64: Final[bool]
 
     def __init__(
         self,
@@ -250,18 +252,27 @@ class LinearRationalSpline(nn.Module):
         min_bin_width: float = DEFAULT_MIN_BIN_WIDTH,
         min_bin_height: float = DEFAULT_MIN_BIN_HEIGHT,
         min_derivative: float = DEFAULT_MIN_DERIVATIVE,
+        use_fp64: bool = True,
     ) -> None:
         super().__init__()
-        self.register_buffer("ONE", torch.tensor(1.0))
-        self.register_buffer("LEFT", torch.as_tensor(left))
-        self.register_buffer("RIGHT", torch.as_tensor(right))
-        self.register_buffer("BOTTOM", torch.as_tensor(bottom))
-        self.register_buffer("TOP", torch.as_tensor(top))
+        self.use_fp64 = use_fp64
+        dtype = torch.float64 if use_fp64 else torch.float32
+        self.register_buffer("ONE", torch.tensor(1.0, dtype=dtype))
+        self.register_buffer("LEFT", torch.as_tensor(left, dtype=dtype))
+        self.register_buffer("RIGHT", torch.as_tensor(right, dtype=dtype))
+        self.register_buffer("BOTTOM", torch.as_tensor(bottom, dtype=dtype))
+        self.register_buffer("TOP", torch.as_tensor(top, dtype=dtype))
         self.register_buffer("WIDTH", self.RIGHT - self.LEFT)
         self.register_buffer("HEIGHT", self.TOP - self.BOTTOM)
-        self.register_buffer("MIN_DERIVATIVE", torch.tensor(float(min_derivative)))
-        self.register_buffer("MIN_BIN_WIDTH", torch.tensor(float(min_bin_width)))
-        self.register_buffer("MIN_BIN_HEIGHT", torch.tensor(float(min_bin_height)))
+        self.register_buffer(
+            "MIN_DERIVATIVE", torch.tensor(float(min_derivative), dtype=dtype)
+        )
+        self.register_buffer(
+            "MIN_BIN_WIDTH", torch.tensor(float(min_bin_width), dtype=dtype)
+        )
+        self.register_buffer(
+            "MIN_BIN_HEIGHT", torch.tensor(float(min_bin_height), dtype=dtype)
+        )
         assert (self.LEFT < self.RIGHT).all()
         assert (self.BOTTOM < self.TOP).all()
 
@@ -285,6 +296,12 @@ class LinearRationalSpline(nn.Module):
             lambdas: The raw lambdas of the bins. (λ∈(0,1)ᴷ⁻¹)
             derivatives: The raw derivatives of the knots. (d>0)
         """
+        work_dtype = self.ONE.dtype
+        widths = widths.to(dtype=work_dtype)
+        heights = heights.to(dtype=work_dtype)
+        lambdas = lambdas.to(dtype=work_dtype)
+        derivatives = derivatives.to(dtype=work_dtype)
+
         num_bins = widths.shape[-1]
         assert self.MIN_BIN_WIDTH * num_bins < 1.0, "bin width too small"
         assert self.MIN_BIN_HEIGHT * num_bins < 1.0, "bin height too small"
@@ -339,6 +356,9 @@ class LinearRationalSpline(nn.Module):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        original_dtype = inputs.dtype
+        work_dtype = self.ONE.dtype
+        inputs = inputs.to(dtype=work_dtype)
         spline_params: BinKnots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
@@ -378,7 +398,7 @@ class LinearRationalSpline(nn.Module):
         ) / (xb - xa)  # fmt: skip
         logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
 
-        return outputs, logabsdet  # (...), (...)
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
 
     def decode_and_logabsdet(
         self,
@@ -389,6 +409,9 @@ class LinearRationalSpline(nn.Module):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        original_dtype = inputs.dtype
+        work_dtype = self.ONE.dtype
+        inputs = inputs.to(dtype=work_dtype)
         spline_params: BinKnots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
@@ -428,7 +451,7 @@ class LinearRationalSpline(nn.Module):
 
         logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
 
-        return outputs, logabsdet  # (...), (...)
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
 
 
 class UnconstrainedLinearRationalSpline(LinearRationalSpline):
@@ -498,6 +521,8 @@ class LearnableLRS(TransformBase):
     derivatives: Tensor  # (*H, K+1)
 
     spline: UnconstrainedLinearRationalSpline
+    derivative_init: Final[float] = math.log(math.expm1(1.0))
+    r"""Raw initialization such that ``softplus(raw) == 1``."""
 
     def __init__(
         self,
@@ -514,10 +539,13 @@ class LearnableLRS(TransformBase):
         self.y_bounds = y_bounds
         self.n_heads = torch.Size((n_heads,) if isinstance(n_heads, int) else n_heads)
         # Parameters
-        self.widths = nn.Parameter(torch.randn(*self.n_heads, num_bins))
-        self.heights = nn.Parameter(torch.randn(*self.n_heads, num_bins))
-        self.lambdas = nn.Parameter(torch.randn(*self.n_heads, num_bins))
-        self.derivatives = nn.Parameter(torch.randn(*self.n_heads, num_bins + 1))
+        # ensure initialization looks like identity for stability.
+        self.widths = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
+        self.heights = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
+        self.lambdas = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
+        self.derivatives = nn.Parameter(
+            torch.full((*self.n_heads, num_bins + 1), self.derivative_init)
+        )
         # Submodules
         left, right = x_bounds
         bottom, top = y_bounds
