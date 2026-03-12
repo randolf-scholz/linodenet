@@ -379,7 +379,6 @@ class TestCorrectness:
             f"  δ(A)={case.S.sort().values.diff()[-1:]}"
         )
 
-    @pytest.mark.xfail(reason="Algorithms are unstable for repeated singular values.")
     @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
     @pytest.mark.parametrize(
         ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
@@ -397,13 +396,12 @@ class TestCorrectness:
         atol: float,
         rtol: float,
     ) -> None:
-        r"""Tests algorithm against orthogonal matrix.
+        r"""Tests algorithm against an orthogonal matrix.
 
         Note:
-            For repeated singular values, the gradient is no longer well-defined,
-            but (I think), any sum  $∑_{j≤i} uᵢvᵢᵀ$ is a subgradient.
-            In particular, if A is already orthogonal, then $∂‖A‖₂/∂A = A$.
-            Is, in some sense, the largest subgradient.
+            For repeated singular values, the gradient is no longer unique.
+            We therefore only test that the returned gradient is a valid
+            subgradient of the spectral norm.
         """
         impl = self.SPECTRAL_NORMS[method]
         case = make_test_case_repeated_singular_values(
@@ -413,7 +411,6 @@ class TestCorrectness:
 
         # analytical result
         analytical_value = case.spectral_norm
-        analytical_grad = case.spectral_norm_gradient
 
         # check forward pass
         sigma = impl(A)
@@ -425,16 +422,24 @@ class TestCorrectness:
 
         # check backward pass
         assert A.grad is not None
-        assert scaled_norm(A.grad - analytical_grad) < (
-            atol + rtol * scaled_norm(analytical_grad)
+        grad = A.grad
+        grad_inner = inner(grad, A)
+        grad_nuclear_norm = torch.linalg.matrix_norm(grad, ord="nuc")
+
+        # For the spectral norm, subgradients admit the dual characterization
+        #   ∂‖A‖₂ = {G : ‖G‖_* ≤ 1 and ⟨G, A⟩ = ‖A‖₂},
+        # where ‖·‖_* is the nuclear norm dual to ‖·‖₂. This avoids checking the
+        # global subgradient inequality against all perturbations X explicitly.
+        assert (grad_inner - analytical_value).abs() < (
+            atol + rtol * analytical_value.abs()
         ), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+            f"Invalid subgradient pairing: ⟨G, A⟩={grad_inner:.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
             f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
         )
-        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
+        assert grad_nuclear_norm <= atol + rtol + 1, (
+            f"Invalid subgradient dual norm: ‖G‖_*={grad_nuclear_norm:.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
             f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
