@@ -142,7 +142,16 @@ def test_invertibility(seed: int, layers, bins) -> None:
     check_inverse()
 
 
-def test_single_spline_can_learn_monotone_function() -> None:
+TEST_FNS = {
+    "sinusoid": lambda x: x + 3 + 0.5 * torch.sin(x + 3),
+    "small_slope": lambda x: 0.2 * x,
+    "large_slope": lambda x: 5 * x,
+}
+
+
+@pytest.mark.parametrize("case", TEST_FNS)
+def test_single_spline_can_learn_monotone_function(case: str) -> None:
+    test_fn = TEST_FNS[case]
     torch.manual_seed(0)
 
     model = SplineFlow(
@@ -154,7 +163,7 @@ def test_single_spline_can_learn_monotone_function() -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
     x = torch.linspace(-4.0, 4.0, steps=256)
-    y = x + 3 + 0.5 * torch.sin(x + 3)
+    y = test_fn(x)
 
     with torch.no_grad():
         initial_prediction = model.encode(x)
@@ -214,8 +223,8 @@ def test_single_spline_can_learn_monotone_function() -> None:
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.legend()
-    fig.savefig(RESULT_DIR / "single_spline_training.pdf")
-    fig.savefig(RESULT_DIR / "single_spline_training.png", dpi=300)
+    fig.savefig(RESULT_DIR / f"{case}.pdf")
+    fig.savefig(RESULT_DIR / f"{case}.png", dpi=300)
     plt.close(fig)
 
     print(
