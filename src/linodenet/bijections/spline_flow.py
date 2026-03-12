@@ -617,7 +617,7 @@ class LearnableLRS(TransformBase):
             y (..., *H, D): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
-        batch_shape = x.shape[: -len(self.n_heads)]
+        batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
         params = self._normalized_parameters(batch_shape)
         x, logabsdet = self.spline.encode_and_logabsdet(
             x,
@@ -626,7 +626,7 @@ class LearnableLRS(TransformBase):
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
-        return x, logabsdet.sum(dim=-1)
+        return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
     def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
         r"""Inverse pass of the flow.
@@ -638,7 +638,7 @@ class LearnableLRS(TransformBase):
             x (..., *H, D): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
-        batch_shape = y.shape[: -len(self.n_heads)]
+        batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
         params = self._normalized_parameters(batch_shape)
         y, logabsdet = self.spline.decode_and_logabsdet(
             y,
@@ -647,7 +647,7 @@ class LearnableLRS(TransformBase):
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
-        return y, logabsdet.sum(dim=-1)
+        return y, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
 
 class SplineFlow(TransformSequence[LearnableLRS]):
@@ -662,7 +662,7 @@ class SplineFlow(TransformSequence[LearnableLRS]):
 
     def __init__(
         self,
-        n_heads: int | tuple[int, ...],
+        n_heads: int | tuple[int, ...] = (),
         *,
         num_flow_layers: int,
         num_bins: int,
