@@ -37,7 +37,7 @@ __all__ = [
     "iResNet",
     "iResNetBlock",
     "iResNetLayer",
-    "iLowRankLayer",
+    "LowRankFlow",
 ]
 
 
@@ -52,7 +52,7 @@ from linodenet.bijections.base import (
     TransformSequence,
 )
 from linodenet.bijections.iresnet import iResNet, iResNetBlock, iResNetLayer
-from linodenet.bijections.low_rank_perturbation import iLowRankLayer
+from linodenet.bijections.low_rank_perturbation import LowRankFlow
 
 BIJECTIONS: dict[str, type[Bijection]] = {
     "iResNet": iResNet,

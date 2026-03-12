@@ -1,27 +1,28 @@
 r"""Low-rank perturbation layer."""
 
-__all__ = ["iLowRankLayer"]
+__all__ = ["LowRankFlow"]
 
+from math import sqrt
 from typing import Final
 
 import torch
 from torch import Tensor, nn
 
-from linodenet.initializations import low_rank
 from signatures import signature
 
 
-class iLowRankLayer(nn.Module):
+class LowRankFlow(nn.Module):
     r"""An invertible, efficient low rank perturbation layer.
 
-    With the help of the Matrix Inversion Lemma [1]_ (also known as Woodbury matrix identity),
-    we have
+    .. math:: y = (𝕀ₙ + UVᵀ)x
+
+    where U and V are both is n×k. With the help of the Matrix Inversion Lemma [1]_,
+    also known as Woodbury matrix identity, holds:
 
     .. math:: (𝕀ₙ + UVᵀ)⁻¹ = 𝕀ₙ - U(𝕀ₖ + VᵀU)⁻¹Vᵀ
 
-    I.e. to compute the inverse of the perturbed matrix, it is sufficient to compute the
-    inverse of the lower dimensional low rank matrix $𝕀ₖ + VᵀU$.
-    In particular, when $k=1$ the formula reduces to
+    Thus, to compute the inverse pass, we do not need to solve an n×n system,
+    but only a k×k one. In particular, when k=1, the formula reduces to
 
     .. math:: (𝕀ₙ + uvᵀ)⁻¹ = 𝕀ₙ - \frac{1}{1+uᵀv} uvᵀ
 
@@ -43,6 +44,8 @@ class iLowRankLayer(nn.Module):
     r"""PARAM: $n×k$ tensor"""
     V: Tensor
     r"""PARAM: $n×k$ tensor"""
+    eye: Tensor
+    r"""BUFFER: Identity matrix in latent rank space."""
 
     @property
     def config(self) -> dict:
@@ -55,18 +58,45 @@ class iLowRankLayer(nn.Module):
         super().__init__()
         self.input_size = input_size
         self.rank = rank
-        self.U = low_rank(input_size)
-        self.V = low_rank(input_size)
+        self.U = nn.Parameter(torch.empty(input_size, rank))
+        self.V = nn.Parameter(torch.empty(input_size, rank))
+        nn.init.normal_(self.U, std=1 / sqrt(rank))
+        nn.init.normal_(self.V, std=1 / sqrt(input_size))
+        self.register_buffer("eye", torch.eye(rank), persistent=True)
 
     @signature("(..., n) -> (..., n)")
-    def forward(self, x: Tensor) -> Tensor:
-        z = torch.einsum("...n, nk -> ...k", self.V, x)
-        y = torch.einsum("...k, nk -> ...n", self.U, z)
-        return x + y
+    def encode(self, x: Tensor) -> Tensor:
+        r"""Computes $y = (𝕀ₙ + UVᵀ)x$."""
+        v = torch.einsum("nk, ...n -> ...k", self.V, x)  # v = Vᵀx
+        u = torch.einsum("nk, ...k -> ...n", self.U, v)  # u = Uv
+        return x + u
 
     @signature("(..., n) -> (..., n)")
-    def inverse(self, x: Tensor) -> Tensor:
-        z = torch.einsum("...n, nk -> ...k", self.V, x)
-        A = torch.eye(self.rank) + torch.einsum("nk, nk -> kk", self.U, self.V)
-        y = torch.linalg.solve(A, z)
-        return x - torch.einsum("...k, nk -> ...n", self.U, y)
+    def decode(self, y: Tensor) -> Tensor:
+        r"""Computes $x = (𝕀+UVᵀ)⁻¹y = y - U(𝕀ₖ + VᵀU)⁻¹Vᵀy$."""
+        A = self.eye + torch.einsum("nk, nk -> kk", self.U, self.V)
+        v = torch.einsum("nk, ...n -> ...k", self.V, y)  # v = Vᵀy
+        z = torch.linalg.solve(A, v)  # z = (𝕀ₖ + VᵀU)⁻¹v
+        u = torch.einsum("nk, ...k -> ...n", self.U, z)  # u = Uz
+        return y - u
+
+    @signature("(..., n) -> [(..., n), (...)]")
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        A = self.eye + torch.einsum("nk, nk -> kk", self.U, self.V)
+        _, logabsdet = torch.linalg.slogdet(A)
+        v = torch.einsum("nk, ...n -> ...k", self.V, x)  # v = Vᵀx
+        u = torch.einsum("nk, ...k -> ...n", self.U, v)  # u = Uv
+        y = x + u
+        logabsdet = logabsdet.expand(x.shape[:-1])
+        return y, logabsdet
+
+    @signature("(..., n) -> [(..., n), (...)]")
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        A = self.eye + torch.einsum("nk, nk -> kk", self.U, self.V)
+        v = torch.einsum("nk, ...n -> ...k", self.V, y)  # v = Vᵀy
+        z = torch.linalg.solve(A, v)  # z = (𝕀ₖ + VᵀU)⁻¹v
+        u = torch.einsum("nk, ...k -> ...n", self.U, z)  # u = Uz
+        x = y - u
+        _, logabsdet = torch.linalg.slogdet(A)
+        logabsdet = (-logabsdet).expand(y.shape[:-1])
+        return x, logabsdet
