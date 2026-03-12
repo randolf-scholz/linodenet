@@ -555,7 +555,7 @@ class LearnableLRS(TransformBase):
             left=left, right=right, bottom=bottom, top=top
         )
 
-    def _normalized_parameters(self, batch_shape: torch.Size, /) -> BinWidths:
+    def normalized_parameters(self, batch_shape: torch.Size, /) -> BinWidths:
         r"""Expand normalized spline parameters to match the batch shape."""
         widths = torch.softmax(self.widths, dim=-1)
         heights = torch.softmax(self.heights, dim=-1)
@@ -618,7 +618,7 @@ class LearnableLRS(TransformBase):
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
-        params = self._normalized_parameters(batch_shape)
+        params = self.normalized_parameters(batch_shape)
         x, logabsdet = self.spline.encode_and_logabsdet(
             x,
             widths=params.w,
@@ -639,7 +639,7 @@ class LearnableLRS(TransformBase):
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
-        params = self._normalized_parameters(batch_shape)
+        params = self.normalized_parameters(batch_shape)
         y, logabsdet = self.spline.decode_and_logabsdet(
             y,
             widths=params.w,

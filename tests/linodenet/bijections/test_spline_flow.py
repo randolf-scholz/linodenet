@@ -9,6 +9,35 @@ from tests.utils.project import PROJECT
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
+@pytest.mark.parametrize("n_heads", [1, 4, (), (1,), (2, 3), (2, 2, 3)], ids=str)
+def test_num_heads(n_heads: int | tuple[int, ...]) -> None:
+    batch_size = 8
+    flow = SplineFlow(
+        n_heads,
+        num_flow_layers=2,
+        num_bins=4,
+        x_bounds=(-3.0, 3.0),
+        y_bounds=(-3.0, 3.0),
+    )
+
+    head_shape = (n_heads,) if isinstance(n_heads, int) else n_heads
+    x = torch.randn(batch_size, *head_shape, requires_grad=True)
+    y, forward_logabsdet = flow.encode_and_logabsdet(x)
+    forward_loss = y.square().mean() + forward_logabsdet.square().mean()
+    forward_loss.backward()
+
+    assert y.shape == x.shape
+    assert forward_logabsdet.shape == (batch_size, *head_shape[:-1])
+
+    z = torch.randn(batch_size, *head_shape, requires_grad=True)
+    xhat, inverse_logabsdet = flow.decode_and_logabsdet(z)
+    inverse_loss = xhat.square().mean() + inverse_logabsdet.square().mean()
+    inverse_loss.backward()
+
+    assert xhat.shape == z.shape
+    assert inverse_logabsdet.shape == (batch_size, *head_shape[:-1])
+
+
 @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
 @pytest.mark.parametrize("layers", [1, 2, 3, 4], ids="layers={}".format)
 @pytest.mark.parametrize("bins", [1, 2, 4, 8], ids="bins={}".format)
@@ -48,9 +77,12 @@ def test_invertibility(seed: int, layers, bins) -> None:
         forward_inverse_logabsdet_error = (forward_logabsdet + inverse_logabsdet).abs()
         print(
             "forward -> inverse "
-            f"\n\tvalue     max_abs_error={forward_inverse_abs_error.max():.6e}   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tvalue     max_rel_error={forward_inverse_rel_error.max():.6e}   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tlogabsdet max_abs_error={forward_inverse_logabsdet_error.max():.6e}   (atol={logabsdet_atol}, rtol={logabsdet_rtol})"
+            f"\n\tvalue     max_abs_error={forward_inverse_abs_error.max():.6e}   "
+            f"   (atol={value_atol}, rtol={value_rtol})"
+            f"\n\tvalue     max_rel_error={forward_inverse_rel_error.max():.6e}"
+            f"   (atol={value_atol}, rtol={value_rtol})"
+            f"\n\tlogabsdet max_abs_error={forward_inverse_logabsdet_error.max():.6e}"
+            f"   (atol={logabsdet_atol}, rtol={logabsdet_rtol})"
         )
         assert torch.allclose(xhat, x, atol=value_atol, rtol=value_rtol), (
             f"forward_inverse max_abs_error={forward_inverse_abs_error.max():.6e}, "
@@ -84,9 +116,12 @@ def test_invertibility(seed: int, layers, bins) -> None:
 
         print(
             "inverse -> forward "
-            f"\n\tvalue     max_abs_error={inverse_forward_abs_error.max():.6e}   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tvalue     max_rel_error={inverse_forward_rel_error.max():.6e}   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tlogabsdet max_abs_error={inverse_forward_logabsdet_error.max():.6e}   (atol={logabsdet_atol}, rtol={logabsdet_rtol})"
+            f"\n\tvalue     max_abs_error={inverse_forward_abs_error.max():.6e}"
+            f"   (atol={value_atol}, rtol={value_rtol})"
+            f"\n\tvalue     max_rel_error={inverse_forward_rel_error.max():.6e}"
+            f"   (atol={value_atol}, rtol={value_rtol})"
+            f"\n\tlogabsdet max_abs_error={inverse_forward_logabsdet_error.max():.6e}"
+            f"   (atol={logabsdet_atol}, rtol={logabsdet_rtol})"
         )
         assert torch.allclose(yhat, y, atol=value_atol, rtol=value_rtol), (
             f"inverse_forward max_abs_error={inverse_forward_abs_error.max():.6e}, "
@@ -111,7 +146,6 @@ def test_single_spline_can_learn_monotone_function() -> None:
     torch.manual_seed(0)
 
     model = SplineFlow(
-        1,
         num_flow_layers=1,
         num_bins=8,
         x_bounds=(-3.0, 3.0),
@@ -119,7 +153,7 @@ def test_single_spline_can_learn_monotone_function() -> None:
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
-    x = torch.linspace(-4.0, 4.0, steps=256).unsqueeze(-1)
+    x = torch.linspace(-4.0, 4.0, steps=256)
     y = x + 3 + 0.5 * torch.sin(x + 3)
 
     with torch.no_grad():
@@ -137,6 +171,17 @@ def test_single_spline_can_learn_monotone_function() -> None:
         final_prediction = model.encode(x)
         final_loss = torch.mean((final_prediction - y) ** 2)
         max_abs_error = (final_prediction - y).abs().max()
+        layer = model[0]
+        params = layer.normalized_parameters(torch.Size())
+        knots = layer.spline.get_spline_parameters(
+            widths=params.w,
+            heights=params.h,
+            lambdas=params.lambdas,
+            derivatives=params.derivatives,
+        )
+        knot_x = knots.x.squeeze(0)
+        knot_y = knots.y.squeeze(0)
+        knot_d = knots.derivatives.squeeze(0)
 
     fig, ax = plt.subplots(figsize=(6.5, 4.0), tight_layout=True)
     ax.plot(x.squeeze(-1), y.squeeze(-1), label="target", linewidth=2.0)
@@ -148,6 +193,23 @@ def test_single_spline_can_learn_monotone_function() -> None:
         linestyle="--",
     )
     ax.plot(x.squeeze(-1), final_prediction.squeeze(-1), label="trained", linewidth=1.8)
+    ax.scatter(knot_x, knot_y, label="knots", s=28, zorder=3)
+    dx = torch.tensor([0.25])
+    dy = knot_d * dx
+    ax.quiver(
+        knot_x,
+        knot_y,
+        dx.expand_as(knot_x),
+        dy,
+        angles="xy",
+        scale_units="xy",
+        scale=1.0,
+        width=0.003,
+        color="black",
+        alpha=0.8,
+        zorder=4,
+        label="knot derivatives",
+    )
     ax.set_title("Single Spline Training")
     ax.set_xlabel("x")
     ax.set_ylabel("y")
