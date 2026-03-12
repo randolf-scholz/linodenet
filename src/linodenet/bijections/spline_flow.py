@@ -35,8 +35,32 @@ DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
 DEFAULT_MIN_DERIVATIVE: Final[float] = 1e-3
 
 
+def _centered_cumulative_knots(widths: Tensor, center: Tensor, /) -> Tensor:
+    r"""Convert positive increments to centered knot coordinates."""
+    cumwidths = torch.cat(
+        [
+            widths.new_zeros(*widths.shape[:-1], 1),
+            widths.cumsum(dim=-1),
+        ],
+        dim=-1,
+    )
+    num_knots = cumwidths.shape[-1]
+    if num_knots % 2 == 1:
+        center_idx = num_knots // 2
+        center_offset = cumwidths[..., center_idx : center_idx + 1]
+    else:
+        right_center_idx = num_knots // 2
+        left_center_idx = right_center_idx - 1
+        center_offset = 0.5 * (
+            cumwidths[..., left_center_idx : left_center_idx + 1]
+            + cumwidths[..., right_center_idx : right_center_idx + 1]
+        )
+
+    return cumwidths - center_offset + center.unsqueeze(-1)
+
+
 class BinWidths(NamedTuple):
-    r"""Bin parameters (widths/heights) that specify a rational linear spline."""
+    r"""Positive bin parameters that specify a rational linear spline."""
 
     # widths and heights of the bins as well as derivatives and lambda-parameters
     w: Tensor  # (..., K)
@@ -72,7 +96,7 @@ class BinWidths(NamedTuple):
 
 
 class BinKnots(NamedTuple):
-    r"""Bin parameters (knot x/y) that specify a rational linear spline."""
+    r"""Knot parameters that specify a rational linear spline."""
 
     # position of knots as well as derivatives and lambda-parameters
     x: Tensor  # (..., K+1)
@@ -99,23 +123,19 @@ class BinKnots(NamedTuple):
         bins: BinWidths,
         *,  # optional arguments
         left: float = 0.0,
-        right: float = 1.0,
         bottom: float = 0.0,
-        top: float = 1.0,
-        min_bin_width: float = DEFAULT_MIN_BIN_WIDTH,
-        min_bin_height: float = DEFAULT_MIN_BIN_HEIGHT,
         min_derivative: float = DEFAULT_MIN_DERIVATIVE,
     ) -> BinKnots:
         """Determine the spline parameters from the raw inputs.
 
         Note:
-            Instead of x and y, we expect widths and height, which are rescaled to
-            the interval [LEFT, RIGHT] and [BOTTOM, TOP] respectively.
+            Instead of x and y, we expect positive widths and heights together with
+            the x/y center coordinates.
 
         Note:
             SplineBinWidths:
-                w: The raw widths of the bins. (w∈∆ᴷ⁻¹)
-                h: The raw heights of the bins. (h∈∆ᴷ⁻¹)
+                w: The positive widths of the bins.
+                h: The positive heights of the bins.
                 λ: The raw lambdas of the bins. (λ∈(0,1)ᴷ⁻¹)
                 d: The raw derivatives of the knots. (d>0)
         """
@@ -125,44 +145,21 @@ class BinKnots(NamedTuple):
         lambdas = bins.lambdas
 
         num_bins = widths.shape[-1]
-        one = torch.tensor(1.0, device=widths.device)
-        assert min_bin_width * num_bins < 1.0, "bin width too small"
-        assert min_bin_height * num_bins < 1.0, "bin height too small"
-        assert (widths > 0.0).all() & widths.sum(-1).isclose(one).all()
-        assert (heights > 0.0).all() & heights.sum(-1).isclose(one).all()
+        assert num_bins > 0
+        assert (widths > 0.0).all()
+        assert (heights > 0.0).all()
         assert ((lambdas > 0.0) & (lambdas < 1.0)).all()
         assert (derivatives > 0.0).all()
 
-        # ensure >= MIN_BIN_WIDTH, by scaling down to 1-nε, and adding ε.
-        widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
-
-        # scale cumulative widths to the interval [LEFT, RIGHT]
-        cumwidths = torch.cat(
-            [
-                widths.new_zeros(*widths.shape[:-1], 1),
-                widths.cumsum(dim=-1)[..., :-1],
-                widths.new_ones(*widths.shape[:-1], 1),
-            ],
-            dim=-1,
+        x = _centered_cumulative_knots(
+            widths,
+            torch.as_tensor(left, dtype=widths.dtype, device=widths.device),
         )
-        # get the actual knots in [LEFT, RIGHT]
-        x = (right - left) * cumwidths + left  # (..., K)
-
-        # calculate heights
-        # ensure >= MIN_BIN_HEIGHT, by scaling down to 1-nε, and adding ε.
-        heights = min_bin_height + (1 - min_bin_height * num_bins) * heights
-        # scale cumulative heights to the interval [BOTTOM, TOP]
-        cumheights = torch.cat(
-            [
-                heights.new_zeros(*heights.shape[:-1], 1),
-                heights.cumsum(dim=-1)[..., :-1],
-                heights.new_ones(*heights.shape[:-1], 1),
-            ],
-            dim=-1,
+        y = _centered_cumulative_knots(
+            heights,
+            torch.as_tensor(bottom, dtype=heights.dtype, device=heights.device),
         )
-        y = (top - bottom) * cumheights + bottom  # (..., K)
 
-        # calculate lambdas and derivatives
         derivatives = derivatives.clip(min_derivative)
 
         return BinKnots(x=x, y=y, lambdas=lambdas, derivatives=derivatives)
@@ -245,26 +242,15 @@ class LinearRationalSpline(nn.Module):
     r"""Non-trainable Linear Rational Spline."""
 
     # BUFFERS
-    LEFT: Tensor
-    RIGHT: Tensor
-    BOTTOM: Tensor
-    TOP: Tensor
-    WIDTH: Tensor
-    HEIGHT: Tensor
     MIN_BIN_WIDTH: Tensor
     MIN_BIN_HEIGHT: Tensor
     MIN_DERIVATIVE: Tensor
 
-    ONE: Tensor
     use_fp64: Final[bool]
 
     def __init__(
         self,
         *,
-        left: float | Tensor = 0.0,
-        right: float | Tensor = 1.0,
-        bottom: float | Tensor = 0.0,
-        top: float | Tensor = 1.0,
         min_bin_width: float = DEFAULT_MIN_BIN_WIDTH,
         min_bin_height: float = DEFAULT_MIN_BIN_HEIGHT,
         min_derivative: float = DEFAULT_MIN_DERIVATIVE,
@@ -273,13 +259,6 @@ class LinearRationalSpline(nn.Module):
         super().__init__()
         self.use_fp64 = use_fp64
         dtype = torch.float64 if use_fp64 else torch.float32
-        self.register_buffer("ONE", torch.tensor(1.0, dtype=dtype))
-        self.register_buffer("LEFT", torch.as_tensor(left, dtype=dtype))
-        self.register_buffer("RIGHT", torch.as_tensor(right, dtype=dtype))
-        self.register_buffer("BOTTOM", torch.as_tensor(bottom, dtype=dtype))
-        self.register_buffer("TOP", torch.as_tensor(top, dtype=dtype))
-        self.register_buffer("WIDTH", self.RIGHT - self.LEFT)
-        self.register_buffer("HEIGHT", self.TOP - self.BOTTOM)
         self.register_buffer(
             "MIN_DERIVATIVE", torch.tensor(float(min_derivative), dtype=dtype)
         )
@@ -289,8 +268,6 @@ class LinearRationalSpline(nn.Module):
         self.register_buffer(
             "MIN_BIN_HEIGHT", torch.tensor(float(min_bin_height), dtype=dtype)
         )
-        assert (self.LEFT < self.RIGHT).all()
-        assert (self.BOTTOM < self.TOP).all()
 
     def get_spline_parameters(
         self,
@@ -299,66 +276,42 @@ class LinearRationalSpline(nn.Module):
         heights: Tensor,  # (..., K)
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K)
+        x_center: Tensor,  # (...,)
+        y_center: Tensor,  # (...,)
     ) -> BinKnots:
         r"""Determine the spline parameters from the raw inputs.
 
         Note:
-            Instead of x and y, we expect widths and height, which are rescaled to
-            the interval [LEFT, RIGHT] and [BOTTOM, TOP] respectively.
+            Instead of x and y, we expect positive widths and heights together with
+            the x/y center coordinates.
 
         Args:
-            widths: The raw widths of the bins. (w∈∆ᴷ⁻¹)
-            heights: The raw heights of the bins. (h∈∆ᴷ⁻¹)
+            widths: The positive widths of the bins.
+            heights: The positive heights of the bins.
             lambdas: The raw lambdas of the bins. (λ∈(0,1)ᴷ⁻¹)
             derivatives: The raw derivatives of the knots. (d>0)
+            x_center: The x center of the bins. (d>0)
+            y_center: The y center of the bins. (d>0)
         """
-        work_dtype = self.ONE.dtype
+        work_dtype = self.MIN_DERIVATIVE.dtype
         widths = widths.to(dtype=work_dtype)
         heights = heights.to(dtype=work_dtype)
         lambdas = lambdas.to(dtype=work_dtype)
         derivatives = derivatives.to(dtype=work_dtype)
+        x_center = x_center.to(dtype=work_dtype)
+        y_center = y_center.to(dtype=work_dtype)
 
         num_bins = widths.shape[-1]
-        assert self.MIN_BIN_WIDTH * num_bins < 1.0, "bin width too small"
-        assert self.MIN_BIN_HEIGHT * num_bins < 1.0, "bin height too small"
-        assert (widths > 0.0).all()
-        assert widths.sum(-1).isclose(self.ONE).all()
-        assert (heights > 0.0).all()
-        assert heights.sum(-1).isclose(self.ONE).all()
+        assert num_bins > 0
+        assert (widths >= self.MIN_BIN_WIDTH).all()
+        assert (heights >= self.MIN_BIN_HEIGHT).all()
         assert (lambdas > 0.0).all()
         assert (lambdas < 1.0).all()
         assert (derivatives > 0.0).all()
 
-        # ensure >= MIN_BIN_WIDTH, by scaling down to 1-nε, and adding ε.
-        widths = self.MIN_BIN_WIDTH + (1 - self.MIN_BIN_WIDTH * num_bins) * widths
+        x = _centered_cumulative_knots(widths, x_center)
+        y = _centered_cumulative_knots(heights, y_center)
 
-        # scale cumulative widths to the interval [LEFT, RIGHT]
-        cumwidths = torch.cat(
-            [
-                widths.new_zeros(*widths.shape[:-1], 1),
-                widths.cumsum(dim=-1)[..., :-1],
-                widths.new_ones(*widths.shape[:-1], 1),
-            ],
-            dim=-1,
-        )
-        # get the actual knots in [LEFT, RIGHT]
-        x = self.WIDTH * cumwidths + self.LEFT  # (..., K)
-
-        # calculate heights
-        # ensure >= MIN_BIN_HEIGHT, by scaling down to 1-nε, and adding ε.
-        heights = self.MIN_BIN_HEIGHT + (1 - self.MIN_BIN_HEIGHT * num_bins) * heights
-        # scale cumulative heights to the interval [BOTTOM, TOP]
-        cumheights = torch.cat(
-            [
-                heights.new_zeros(*heights.shape[:-1], 1),
-                heights.cumsum(dim=-1)[..., :-1],
-                heights.new_ones(*heights.shape[:-1], 1),
-            ],
-            dim=-1,
-        )
-        y = self.HEIGHT * cumheights + self.BOTTOM  # (..., K)
-
-        # calculate lambdas and derivatives
         derivatives = derivatives.clip(self.MIN_DERIVATIVE)
 
         return BinKnots(x=x, y=y, lambdas=lambdas, derivatives=derivatives)
@@ -373,13 +326,15 @@ class LinearRationalSpline(nn.Module):
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         original_dtype = inputs.dtype
-        work_dtype = self.ONE.dtype
+        work_dtype = self.MIN_DERIVATIVE.dtype
         inputs = inputs.to(dtype=work_dtype)
         spline_params: BinKnots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
             lambdas=lambdas,
             derivatives=derivatives,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
         )
         # select the bins
         num_bins = widths.shape[-1]
@@ -426,13 +381,15 @@ class LinearRationalSpline(nn.Module):
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         original_dtype = inputs.dtype
-        work_dtype = self.ONE.dtype
+        work_dtype = self.MIN_DERIVATIVE.dtype
         inputs = inputs.to(dtype=work_dtype)
         spline_params: BinKnots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
             derivatives=derivatives,
             lambdas=lambdas,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
         )
         # select the bins
         num_knots = heights.shape[-1]
@@ -482,9 +439,9 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
-        r"""Use boundary-anchored linear tails outside the spline interval."""
+        r"""Use linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
-        work_dtype = self.ONE.dtype
+        work_dtype = self.MIN_DERIVATIVE.dtype
         inputs = inputs.to(dtype=work_dtype)
 
         outputs, logabsdet = super().encode_and_logabsdet(
@@ -494,14 +451,14 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
             derivatives=derivatives,
             lambdas=lambdas,
         )
-        left_mask = inputs < self.LEFT
-        right_mask = inputs > self.RIGHT
 
         spline_params = self.get_spline_parameters(
             widths=widths,
             heights=heights,
             derivatives=derivatives,
             lambdas=lambdas,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
         )
         left_x = spline_params.x[..., 0]
         left_y = spline_params.y[..., 0]
@@ -509,6 +466,8 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         right_x = spline_params.x[..., -1]
         right_y = spline_params.y[..., -1]
         right_d = spline_params.derivatives[..., -1]
+        left_mask = inputs < left_x
+        right_mask = inputs > right_x
         left_linear = left_y + left_d * (inputs - left_x)
         right_linear = right_y + right_d * (inputs - right_x)
 
@@ -528,9 +487,9 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         lambdas: Tensor,  # (..., K)
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
-        r"""Invert the boundary-anchored linear tails outside the spline interval."""
+        r"""Invert the linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
-        work_dtype = self.ONE.dtype
+        work_dtype = self.MIN_DERIVATIVE.dtype
         inputs = inputs.to(dtype=work_dtype)
 
         outputs, logabsdet = super().decode_and_logabsdet(
@@ -545,6 +504,8 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
             heights=heights,
             derivatives=derivatives,
             lambdas=lambdas,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
         )
         left_y = spline_params.y[..., 0]
         left_x = spline_params.x[..., 0]
@@ -579,11 +540,10 @@ class LearnableLRS(TransformBase):
     heights: Tensor  # (*H, K)
     lambdas: Tensor  # (*H, K)
     derivatives: Tensor  # (*H, K+1)
-    bias: Tensor  # (*H,)
+    x_center: Tensor  # (*H,)
+    y_center: Tensor  # (*H,)
 
     spline: UnconstrainedLinearRationalSpline
-    derivative_init: Final[float] = math.log(math.expm1(1.0))
-    r"""Raw initialization such that ``softplus(raw) == 1``."""
 
     def __init__(
         self,
@@ -600,28 +560,48 @@ class LearnableLRS(TransformBase):
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
         self.n_heads = torch.Size((n_heads,) if isinstance(n_heads, int) else n_heads)
-        # Parameters
-        # ensure initialization looks like identity for stability.
-        self.widths = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
-        self.heights = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
-        self.lambdas = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
-        self.derivatives = nn.Parameter(
-            torch.full((*self.n_heads, num_bins + 1), self.derivative_init)
-        )
-        self.bias = nn.Parameter(torch.zeros(self.n_heads))
-        # Submodules
         left, right = x_bounds
         bottom, top = y_bounds
         assert left < right
         assert bottom < top
-        self.spline = UnconstrainedLinearRationalSpline(
-            left=left, right=right, bottom=bottom, top=top, use_fp64=use_fp64
-        )
+        slope = (top - bottom) / (right - left)
+        assert slope > 0.0
+        width_init = (right - left) / self.num_bins
+        height_init = (top - bottom) / self.num_bins
+        min_bin_width = float(DEFAULT_MIN_BIN_WIDTH)
+        min_bin_height = float(DEFAULT_MIN_BIN_HEIGHT)
+        assert width_init > min_bin_width
+        assert height_init > min_bin_height
 
-    def normalized_parameters(self, batch_shape: torch.Size, /) -> BinWidths:
-        r"""Expand normalized spline parameters to match the batch shape."""
-        widths = torch.softmax(self.widths, dim=-1)
-        heights = torch.softmax(self.heights, dim=-1)
+        def inverse_softplus(value: float, /) -> float:
+            return value + math.log(-math.expm1(-value))
+
+        # Parameters
+        self.widths = nn.Parameter(
+            torch.full(
+                (*self.n_heads, num_bins),
+                inverse_softplus(width_init - min_bin_width),
+            )
+        )
+        self.heights = nn.Parameter(
+            torch.full(
+                (*self.n_heads, num_bins),
+                inverse_softplus(height_init - min_bin_height),
+            )
+        )
+        self.lambdas = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
+        self.derivatives = nn.Parameter(
+            torch.full((*self.n_heads, num_bins + 1), inverse_softplus(slope))
+        )
+        self.x_center = nn.Parameter(torch.full(self.n_heads, 0.5 * (left + right)))
+        self.y_center = nn.Parameter(torch.full(self.n_heads, 0.5 * (bottom + top)))
+        # Submodules
+        self.spline = UnconstrainedLinearRationalSpline(use_fp64=use_fp64)
+
+    def spline_parameters(self, batch_shape: torch.Size, /) -> BinWidths:
+        r"""Expand spline parameters to match the batch shape."""
+        widths = self.spline.MIN_BIN_WIDTH + F.softplus(self.widths)
+        heights = self.spline.MIN_BIN_HEIGHT + F.softplus(self.heights)
         lambdas = torch.sigmoid(self.lambdas)
         derivatives = F.softplus(self.derivatives)
 
@@ -663,13 +643,15 @@ class LearnableLRS(TransformBase):
         marg_heights = self.heights.index_select(dim=-2, index=kept)
         marg_lambdas = self.lambdas.index_select(dim=-2, index=kept)
         marg_derivatives = self.derivatives.index_select(dim=-2, index=kept)
-        marg_bias = self.bias.index_select(dim=-1, index=kept)
+        marg_x_center = self.x_center.index_select(dim=-1, index=kept)
+        marg_y_center = self.y_center.index_select(dim=-1, index=kept)
 
         new.widths.copy_(marg_widths)
         new.heights.copy_(marg_heights)
         new.lambdas.copy_(marg_lambdas)
         new.derivatives.copy_(marg_derivatives)
-        new.bias.copy_(marg_bias)
+        new.x_center.copy_(marg_x_center)
+        new.y_center.copy_(marg_y_center)
         return new
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -683,16 +665,16 @@ class LearnableLRS(TransformBase):
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
-        params = self.normalized_parameters(batch_shape)
-        x, logabsdet = self.spline.encode_and_logabsdet(
-            x,
+        params = self.spline_parameters(batch_shape)
+        y, logabsdet = self.spline.encode_and_logabsdet(
+            x - self.x_center,
             widths=params.w,
             heights=params.h,
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
-        x = x + self.bias
-        return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
+        y = y + self.y_center
+        return y, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
     def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
         r"""Inverse pass of the flow.
@@ -705,16 +687,17 @@ class LearnableLRS(TransformBase):
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
-        params = self.normalized_parameters(batch_shape)
-        y = y - self.bias
-        y, logabsdet = self.spline.decode_and_logabsdet(
+        params = self.spline_parameters(batch_shape)
+        y = y - self.y_center
+        x, logabsdet = self.spline.decode_and_logabsdet(
             y,
             widths=params.w,
             heights=params.h,
             lambdas=params.lambdas,
             derivatives=params.derivatives,
         )
-        return y, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
+        x = x + self.x_center
+        return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
 
 class SplineFlow(TransformSequence[LearnableLRS]):

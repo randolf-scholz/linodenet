@@ -146,17 +146,19 @@ TEST_FNS = {
     "sinusoid": lambda x: x + 3 + 0.5 * torch.sin(x + 3),
     "small_slope": lambda x: 0.2 * x,
     "large_slope": lambda x: 5 * x,
+    "offset": lambda x: x + 2,
 }
 
 
 @pytest.mark.parametrize("case", TEST_FNS)
-def test_single_spline_can_learn_monotone_function(case: str) -> None:
+@pytest.mark.parametrize("bins", [7, 8])
+def test_single_spline_can_learn_monotone_function(case: str, bins: int) -> None:
     test_fn = TEST_FNS[case]
     torch.manual_seed(0)
 
     model = SplineFlow(
         num_flow_layers=1,
-        num_bins=8,
+        num_bins=bins,
         x_bounds=(-3.0, 3.0),
         y_bounds=(-3.5, 3.5),
     )
@@ -181,34 +183,27 @@ def test_single_spline_can_learn_monotone_function(case: str) -> None:
         final_loss = torch.mean((final_prediction - y) ** 2)
         max_abs_error = (final_prediction - y).abs().max()
         layer = model[0]
-        params = layer.normalized_parameters(torch.Size())
+        params = layer.spline_parameters(torch.Size())
         knots = layer.spline.get_spline_parameters(
             widths=params.w,
             heights=params.h,
             lambdas=params.lambdas,
             derivatives=params.derivatives,
+            x_center=layer.x_center,
+            y_center=layer.y_center,
         )
-        knot_x = knots.x
-        knot_y = knots.y + layer.bias
-        knot_d = knots.derivatives
 
     fig, ax = plt.subplots(figsize=(6.5, 4.0), tight_layout=True)
     ax.plot(x, y, label="target", linewidth=2.0)
     ax.plot(x, final_prediction, label="trained", linewidth=2)
-    ax.plot(
-        x,
-        initial_prediction,
-        label="initial",
-        linewidth=2,
-        linestyle="--",
-    )
-    ax.scatter(knot_x, knot_y, label="knots", s=28, zorder=3)
-    dx = torch.tensor([0.25])
-    dy = knot_d * dx
+    ax.plot(x, initial_prediction, label="initial", lw=2, linestyle="--")
+    ax.scatter(knots.x, knots.y, label="knots", s=28, zorder=3)
+    dx = torch.full_like(knots.derivatives, 0.25)
+    dy = knots.derivatives * dx
     ax.quiver(
-        knot_x,
-        knot_y,
-        dx.expand_as(knot_x),
+        knots.x,
+        knots.y,
+        dx,
         dy,
         angles="xy",
         scale_units="xy",
@@ -223,8 +218,8 @@ def test_single_spline_can_learn_monotone_function(case: str) -> None:
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.legend()
-    fig.savefig(RESULT_DIR / f"{case}.pdf")
-    fig.savefig(RESULT_DIR / f"{case}.png", dpi=300)
+    fig.savefig(RESULT_DIR / f"{case}-{bins=}.pdf")
+    fig.savefig(RESULT_DIR / f"{case}-{bins=}.png", dpi=300)
     plt.close(fig)
 
     print(
@@ -237,7 +232,7 @@ def test_single_spline_can_learn_monotone_function(case: str) -> None:
     assert final_loss < initial_loss * 1e-1
 
 
-def test_unconstrained_spline_uses_boundary_anchored_linear_tails() -> None:
+def test_spline_initialization_matches_requested_linear_map() -> None:
     model = SplineFlow(
         num_flow_layers=1,
         num_bins=4,
@@ -246,28 +241,32 @@ def test_unconstrained_spline_uses_boundary_anchored_linear_tails() -> None:
         use_fp64=False,
     )
     layer = model[0]
-    params = layer.normalized_parameters(torch.Size())
+    params = layer.spline_parameters(torch.Size())
     knots = layer.spline.get_spline_parameters(
         widths=params.w,
         heights=params.h,
         lambdas=params.lambdas,
         derivatives=params.derivatives,
+        x_center=layer.x_center,
+        y_center=torch.zeros_like(layer.x_center),
     )
 
-    x = torch.tensor([-4.5, -3.5, -3.0, 3.0, 3.5, 4.5])
+    assert torch.allclose(knots.x, torch.linspace(-3.0, 3.0, steps=5))
+    assert torch.allclose(knots.y + layer.y_center, torch.linspace(-2.0, 4.0, steps=5))
+    assert torch.allclose(knots.derivatives, torch.ones_like(knots.derivatives))
+
+    x = torch.linspace(-5.0, 5.0, steps=17)
     y, forward_logabsdet = model.encode_and_logabsdet(x)
     xhat, inverse_logabsdet = model.decode_and_logabsdet(y)
 
-    left_expected = knots.y[0] + knots.derivatives[0] * (x[:2] - knots.x[0])
-    right_expected = knots.y[-1] + knots.derivatives[-1] * (x[-2:] - knots.x[-1])
-    assert torch.allclose(y[:2], left_expected)
-    assert torch.allclose(y[-2:], right_expected)
-    assert torch.allclose(forward_logabsdet[:2], knots.derivatives[0].log().expand(2))
+    expected = x + 1.0
+    assert torch.allclose(y, expected, atol=1e-5, rtol=1e-5)
     assert torch.allclose(
-        forward_logabsdet[-2:],
-        knots.derivatives[-1].log().expand(2),
+        forward_logabsdet,
+        torch.zeros_like(forward_logabsdet),
+        atol=1e-5,
+        rtol=1e-5,
     )
-
     assert torch.allclose(xhat, x, atol=1e-5, rtol=1e-5)
     assert torch.allclose(
         forward_logabsdet + inverse_logabsdet,
@@ -277,7 +276,7 @@ def test_unconstrained_spline_uses_boundary_anchored_linear_tails() -> None:
     )
 
 
-def test_spline_bias_shifts_effective_y_endpoints() -> None:
+def test_spline_offsets_shift_effective_endpoints() -> None:
     model = SplineFlow(
         num_flow_layers=1,
         num_bins=4,
@@ -288,26 +287,32 @@ def test_spline_bias_shifts_effective_y_endpoints() -> None:
     layer = model[0]
 
     with torch.no_grad():
-        layer.bias.fill_(1.25)
+        layer.x_center.fill_(1.5)
+        layer.y_center.fill_(1.25)
 
-    params = layer.normalized_parameters(torch.Size())
+    params = layer.spline_parameters(torch.Size())
     knots = layer.spline.get_spline_parameters(
         widths=params.w,
         heights=params.h,
         lambdas=params.lambdas,
         derivatives=params.derivatives,
+        x_center=layer.x_center,
+        y_center=torch.zeros_like(layer.x_center),
     )
 
-    x = torch.tensor([-4.5, -3.5, -3.0, 3.0, 3.5, 4.5])
+    x = torch.tensor([-3.0, -2.0, -1.5, 4.5, 5.0, 6.0])
     y, forward_logabsdet = model.encode_and_logabsdet(x)
     xhat, inverse_logabsdet = model.decode_and_logabsdet(y)
 
-    shifted_knots = knots.y + layer.bias
+    shifted_knots = knots.y + layer.y_center
     left_expected = shifted_knots[0] + knots.derivatives[0] * (x[:2] - knots.x[0])
     right_expected = shifted_knots[-1] + knots.derivatives[-1] * (x[-2:] - knots.x[-1])
 
-    assert shifted_knots[0] > layer.y_bounds[0]
-    assert shifted_knots[-1] > layer.y_bounds[1]
+    assert knots.x[0] == pytest.approx(-1.5)
+    assert knots.x[-1] == pytest.approx(4.5)
+    assert shifted_knots[0] == pytest.approx(-1.75)
+    assert shifted_knots[len(shifted_knots) // 2] == pytest.approx(1.25)
+    assert shifted_knots[-1] == pytest.approx(4.25)
     assert torch.allclose(y[:2], left_expected)
     assert torch.allclose(y[-2:], right_expected)
     assert torch.allclose(xhat, x, atol=1e-5, rtol=1e-5)
