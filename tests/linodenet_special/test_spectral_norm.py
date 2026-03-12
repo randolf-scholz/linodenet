@@ -225,8 +225,6 @@ class TestCorrectness:
         The analytical gradient is ∂‖A‖₂/∂A = uvᵀ, where u and v are the singular vectors.
         In particular, for rank one matrices A=uvᵀ, the gradient is ∂‖A‖₂/∂A = uvᵀ/(‖u‖⋅‖v‖).
         """
-        if device == "cuda" and not torch.cuda.is_available():
-            pytest.skip("CUDA not available")
         device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
@@ -288,8 +286,6 @@ class TestCorrectness:
 
         NOTE: builtin SVD seems to have auto-detection for diagonal matrices...
         """
-        if device == "cuda" and not torch.cuda.is_available():
-            pytest.skip("CUDA not available")
         device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
@@ -357,8 +353,6 @@ class TestCorrectness:
 
         We randomly sample U, S and V.
         """
-        if device == "cuda" and not torch.cuda.is_available():
-            pytest.skip("CUDA not available")
         device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
@@ -437,8 +431,6 @@ class TestCorrectness:
             In particular, if A is already orthogonal, then $∂‖A‖₂/∂A = A$.
             Is, in some sense, the largest subgradient.
         """
-        if device == "cuda" and not torch.cuda.is_available():
-            pytest.skip("CUDA not available")
         device = torch.device(device)
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
