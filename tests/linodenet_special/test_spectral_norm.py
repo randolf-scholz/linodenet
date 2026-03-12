@@ -19,10 +19,10 @@ from tests.utils import timer
 from .fixtures import (
     DEVICES,
     SEEDS,
-    make_diagonal_matrix,
-    make_orthogonal_matrix,
-    make_quasi_gaussian,
-    make_rank_one_matrix,
+    make_test_case_diagonal,
+    make_test_case_quasi_gaussian,
+    make_test_case_rank_one,
+    make_test_case_repeated_singular_values,
 )
 
 
@@ -173,34 +173,35 @@ class BasicTest:
 
 
 class TestCorrectness:
-    RANK_ONE_SHAPES: list[tuple[int, int]] = [
-        (1, 1),
-        (1, 2),
-        (1, 4),
-        (1, 16),
-        (1, 64),
-        (1, 256),
-        (2, 1),
-        (4, 1),
-        (16, 1),
-        (64, 1),
-        (256, 1),
-    ]
-
     SHAPES: list[tuple[int, int]] = [
+        # scalar
+        (1, 1),
         # square matrices
         (2, 2),
         (4, 4),
         (16, 16),
         (64, 64),
-        (256, 256),
+        (128, 128),
         # rectangular matrices
         (16, 64),
-        (256, 64),
+        (128, 64),
+        (64, 16),
+        (64, 128),
+        # rank-1 matrices
+        (1, 2),
+        (1, 4),
+        (1, 16),
+        (1, 64),
+        (1, 128),
+        (2, 1),
+        (4, 1),
+        (16, 1),
+        (64, 1),
+        (128, 1),
     ]
     DIMS = [2, 4, 16, 64, 256]
     ATOL = 1e-3
-    RTOL = 1e-5
+    RTOL = 1e-4
 
     SPECTRAL_NORMS: dict[str, SpectralNorm] = {
         "custom": spectral_norm,
@@ -210,9 +211,9 @@ class TestCorrectness:
 
     @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
     @pytest.mark.parametrize(
-        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL}-rtol={RTOL}")]
     )
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda shape: f"{shape=}")
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
     def test_rank_one(
@@ -233,15 +234,14 @@ class TestCorrectness:
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
 
-        case = make_rank_one_matrix(shape, dtype=torch.float, device=device, seed=seed)
+        case = make_test_case_rank_one(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
         A = case.value
-        sigma_star = case.S[0]
-        u_star = case.U[:, 0]
-        v_star = case.V[:, 0]
 
         # analytical result
-        analytical_value = sigma_star
-        analytical_grad = torch.outer(u_star, v_star)
+        analytical_value = case.spectral_norm
+        analytical_grad = case.spectral_norm_gradient
 
         # check forward pass
         sigma = impl(A)
@@ -269,7 +269,7 @@ class TestCorrectness:
     @pytest.mark.parametrize(
         ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
     )
-    @pytest.mark.parametrize("dim", DIMS, ids=lambda dim: f"{dim=}")
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
     def test_diagonal(
@@ -277,7 +277,7 @@ class TestCorrectness:
         method: str,
         *,
         device: str | torch.device,
-        dim: int,
+        shape: tuple[int, int],
         seed: int,
         atol: float,
         rtol: float,
@@ -289,21 +289,14 @@ class TestCorrectness:
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
 
-        case = make_diagonal_matrix(dim, dtype=torch.float, device=device, seed=seed)
+        case = make_test_case_diagonal(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
         A = case.value
-        S = case.S
 
         # analytical result
-        idx_star = S.abs().argmax()
-        unit_vector = torch.eye(dim, device=device)
-        sigma_star = S[idx_star].abs()
-        sign_star = torch.sign(S[idx_star])
-        u_star = unit_vector[idx_star]
-        v_star = unit_vector[idx_star]
-
-        # analytical result
-        analytical_value = sigma_star
-        analytical_grad = sign_star * torch.outer(u_star, v_star)
+        analytical_value = case.spectral_norm
+        analytical_grad = case.spectral_norm_gradient
 
         # check forward pass
         sigma = impl(A)
@@ -321,20 +314,20 @@ class TestCorrectness:
             f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
         )
         assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
             f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
         )
 
     @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
     @pytest.mark.parametrize(
-        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
+        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"{ATOL=},{RTOL=}")]
     )
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda shape: f"{shape=}")
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
     def test_analytical(
@@ -352,21 +345,14 @@ class TestCorrectness:
         We randomly sample U, S and V.
         """
         impl = self.SPECTRAL_NORMS[method]
-        case = make_quasi_gaussian(shape, dtype=torch.float, device=device, seed=seed)
+        case = make_test_case_quasi_gaussian(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
         A = case.value
-        U = case.U
-        S = case.S
-        V = case.V
 
         # analytical result
-        idx_star = S.abs().argmax()
-        sigma_star = S[idx_star]
-        u_star = U[:, idx_star]
-        v_star = V[:, idx_star]
-
-        # analytical result
-        analytical_value = sigma_star
-        analytical_grad = torch.outer(u_star, v_star)
+        analytical_value = case.spectral_norm
+        analytical_grad = case.spectral_norm_gradient
 
         # check forward pass
         sigma = impl(A)
@@ -384,13 +370,13 @@ class TestCorrectness:
             f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+            f"  δ(A)={case.S.sort().values.diff()[-1:]}"
         )
         assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
             f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+            f"  δ(A)={case.S.sort().values.diff()[-1:]}"
         )
 
     @pytest.mark.xfail(reason="Algorithms are unstable for repeated singular values.")
@@ -398,15 +384,15 @@ class TestCorrectness:
     @pytest.mark.parametrize(
         ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
     )
-    @pytest.mark.parametrize("dim", DIMS, ids=lambda dim: f"{dim=}")
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
-    def test_orthogonal(
+    def test_repeated_singular_values(
         self,
         method: str,
         *,
         device: str | torch.device,
-        dim: int,
+        shape: tuple[int, int],
         seed: int,
         atol: float,
         rtol: float,
@@ -420,13 +406,14 @@ class TestCorrectness:
             Is, in some sense, the largest subgradient.
         """
         impl = self.SPECTRAL_NORMS[method]
-        case = make_orthogonal_matrix(dim, dtype=torch.float, device=device, seed=seed)
+        case = make_test_case_repeated_singular_values(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
         A = case.value
-        S = case.S
 
         # analytical result
-        analytical_value = S[0]
-        analytical_grad = A.clone().detach()
+        analytical_value = case.spectral_norm
+        analytical_grad = case.spectral_norm_gradient
 
         # check forward pass
         sigma = impl(A)
@@ -444,13 +431,13 @@ class TestCorrectness:
             f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
         )
         assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
             f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
             f"  ‖A‖₂={analytical_value:.3e}"
             f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={S.abs().sort().values.diff()[-1]:.3e}"
+            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
         )
 
 

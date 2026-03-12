@@ -65,6 +65,30 @@ def test_marchenko_pastur(shape: tuple[int, int]) -> None:
     assert out.exists()
 
 
+@pytest.mark.parametrize(
+    ("gamma", "sigma2"),
+    [(2.0, 1.0), (0.5, 1.0), (2.0, 3.0)],
+    ids=str,
+)
+def test_marchenko_pastur_sample_positive(gamma: float, sigma2: float) -> None:
+    torch.manual_seed(SEED)
+    dist = MarchenkoPastur(gamma=gamma, sigma2=sigma2, validate_args=False)
+    samples = dist.sample_positive((4096,))
+
+    assert torch.all(samples > 0)
+    assert torch.all(samples >= dist.lower_bound)
+    assert torch.all(samples <= dist.upper_bound)
+
+
+def test_marchenko_pastur_support_includes_zero_atom() -> None:
+    dist = MarchenkoPastur(gamma=2.0, sigma2=1.0, validate_args=True)
+
+    assert dist.support.check(torch.tensor(0.0))
+    assert dist.support.check(dist.lower_bound)
+    assert not dist.support.check(torch.tensor(-1.0))
+    assert torch.isfinite(dist.log_prob(torch.tensor(0.0)))
+
+
 @pytest.mark.flaky(returns=3)
 @pytest.mark.parametrize("batch", [512], ids="batch={}".format)
 @pytest.mark.parametrize("seed", [SEED], ids="seed={}".format)
@@ -88,7 +112,7 @@ def test_matrix_construction_from_marchenko_pastur(
     U = torch.from_numpy(U_numpy).to(dtype=dtype)
     V = torch.from_numpy(V_numpy).to(dtype=dtype)
     dist = MarchenkoPastur(gamma=gamma, sigma2=1.0, validate_args=False)
-    S = dist.sample((batch, k)).to(dtype=dtype).sqrt()
+    S = dist.sample_positive((batch, k)).to(dtype=dtype).sqrt()
     A = torch.einsum("...mk, ...k, ...nk ->  ...mn", U, S, V)
 
     mean = A.mean(dim=0)

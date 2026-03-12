@@ -20,7 +20,7 @@ and has probability density function
 .. math:: f(x) = \frac{1}{2\pi σ² x} \sqrt{(σ²(1 + √γ)² - x)(x - σ²(1 - √γ)²)}
 """
 
-__all__ = ["MarchenkoPastur"]
+__all__ = ["MarchenkoPastur", "Union"]
 
 import math
 
@@ -29,6 +29,20 @@ from torch import Generator, Tensor
 from torch.distributions import Distribution, constraints
 
 type Size = tuple[int, ...] | list[int]
+
+
+class Union(constraints.Constraint):
+    r"""Constraint satisfied when any constituent constraint is satisfied."""
+
+    def __init__(self, *constraints_: constraints.Constraint) -> None:
+        super().__init__()
+        self.constraints = constraints_
+
+    def check(self, value: Tensor) -> Tensor:
+        if not self.constraints:
+            return torch.zeros_like(value, dtype=torch.bool)
+        checks = [constraint.check(value) for constraint in self.constraints]
+        return torch.stack(checks).any(dim=0)
 
 
 class MarchenkoPastur(Distribution):
@@ -60,7 +74,12 @@ class MarchenkoPastur(Distribution):
 
     @property
     def support(self) -> constraints.Constraint:
-        return constraints.interval(self.lower_bound, self.upper_bound)
+        interval = constraints.interval(self.lower_bound, self.upper_bound)
+        if torch.any(self.gamma > 1):
+            zero = torch.zeros_like(self.lower_bound)
+            atom = constraints.interval(zero, zero)
+            return Union(atom, interval)
+        return interval
 
     @property
     def lower_bound(self) -> Tensor:
@@ -160,6 +179,28 @@ class MarchenkoPastur(Distribution):
             generator=rng,
         )
         return self.icdf(value)
+
+    def sample_positive(
+        self,
+        sample_shape: Size = (),
+        rng: Generator | None = None,
+    ) -> Tensor:
+        r"""Sample from the conditional distribution MP(γ, σ² | x > 0).
+
+        For γ > 1, the Marchenko-Pastur law has an atom at x = 0 with mass
+        1 - 1/γ. This method excludes that atom and samples from the
+        renormalized continuous part on [λ₋, λ₊]. For γ <= 1, this is identical
+        to :meth:`sample`.
+        """
+        shape = tuple(sample_shape) + self.batch_shape
+        value = torch.rand(
+            shape,
+            device=self.gamma.device,
+            dtype=self.gamma.dtype,
+            generator=rng,
+        )
+        point_mass = torch.broadcast_to(self.point_mass, shape)
+        return self.icdf(point_mass + (1 - point_mass) * value)
 
 
 def _icdf_bisect(

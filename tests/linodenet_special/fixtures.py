@@ -4,10 +4,10 @@ __all__ = [
     "SEEDS",
     "SEED",
     "TestCase",
-    "make_quasi_gaussian",
-    "make_rank_one_matrix",
-    "make_diagonal_matrix",
-    "make_orthogonal_matrix",
+    "make_test_case_quasi_gaussian",
+    "make_test_case_rank_one",
+    "make_test_case_diagonal",
+    "make_test_case_repeated_singular_values",
 ]
 
 from typing import Final, NamedTuple
@@ -60,8 +60,38 @@ class TestCase(NamedTuple):
         v = V.gather(dim=-1, index=idx_vec.expand(*V.shape[:-1], 1))  # (..., n, 1)
         return u.squeeze(-1), s.squeeze(-1), v.squeeze(-1)
 
+    def singular_triplet_vjp(
+        self, g_u: Tensor, g_s: Tensor, g_v: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        r"""Return the VJP contributions of the dominant singular triplet."""
+        A = self.value
+        u, sigma, v = self.singular_triplet
 
-def make_quasi_gaussian(
+        g_sigma_out = g_s * torch.outer(u, v)
+        if not (g_u.any() or g_v.any()).item():
+            return g_sigma_out, torch.zeros_like(A), torch.zeros_like(A)
+
+        m, n = A.shape
+        zero_u = torch.zeros((m, 1), dtype=A.dtype, device=A.device)
+        zero_v = torch.zeros((n, 1), dtype=A.dtype, device=A.device)
+        eye_m = torch.eye(m, dtype=A.dtype, device=A.device)
+        eye_n = torch.eye(n, dtype=A.dtype, device=A.device)
+
+        k_top = torch.cat((sigma * eye_m, -A, u.unsqueeze(-1), zero_u), dim=1)
+        k_bottom = torch.cat((-A.T, sigma * eye_n, zero_v, v.unsqueeze(-1)), dim=1)
+        k_mat = torch.cat((k_top, k_bottom), dim=0)
+        c_vec = torch.cat((g_u, g_v), dim=0)
+
+        x = torch.linalg.lstsq(k_mat, c_vec).solution
+        p = x[:m]
+        q = x[m : m + n]
+
+        g_u_out = torch.outer(p - torch.dot(u, p) * u, v)
+        g_v_out = torch.outer(u, q - torch.dot(v, q) * v)
+        return g_sigma_out, g_u_out, g_v_out
+
+
+def make_test_case_quasi_gaussian(
     shape: tuple[int, int],
     *,
     dtype: torch.dtype,
@@ -86,11 +116,11 @@ def make_quasi_gaussian(
     U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
     V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
     dist = MarchenkoPastur(gamma=gamma, sigma2=1.0, validate_args=False)
-    S = dist.sample([k]).to(dtype=dtype, device=device).sqrt()
+    S = dist.sample_positive([k]).to(dtype=dtype, device=device).sqrt()
     return TestCase(U=U, S=S, V=V)
 
 
-def make_rank_one_matrix(
+def make_test_case_rank_one(
     shape: tuple[int, int],
     *,
     dtype: torch.dtype,
@@ -113,34 +143,42 @@ def make_rank_one_matrix(
     return TestCase(U=U, S=S, V=V)
 
 
-def make_diagonal_matrix(
-    size: int,
+def make_test_case_diagonal(
+    shape: tuple[int, int],
     *,
     dtype: torch.dtype,
     device: str | torch.device,
     seed: int | None = None,
 ) -> TestCase:
     r"""Generate a diagonal matrix with known SVD."""
+    m, n = shape
     generator = torch.Generator(device=device)
     generator.manual_seed(seed or 0)
 
-    S = 10 * torch.randn(size, dtype=dtype, device=device, generator=generator)
-    U = torch.eye(size, device=device, dtype=dtype)
-    V = torch.eye(size, device=device, dtype=dtype)
+    k = min(m, n)
+    diag = 10 * torch.randn(k, dtype=dtype, device=device, generator=generator)
+    signs = torch.sign(diag)
+    signs = torch.where(signs == 0, torch.ones_like(signs), signs)
+    S = diag.abs()
+    U = torch.eye(m, device=device, dtype=dtype)[:, :k]
+    V = torch.eye(n, device=device, dtype=dtype)[:, :k] * signs
     return TestCase(U=U, S=S, V=V)
 
 
-def make_orthogonal_matrix(
-    size: int,
+def make_test_case_repeated_singular_values(
+    shape: tuple[int, int],
     *,
     dtype: torch.dtype,
     device: str | torch.device,
     seed: int | None = None,
 ) -> TestCase:
     r"""Generate an orthogonal matrix with known SVD."""
+    m, n = shape
+    k = min(m, n)
     rng = default_rng(seed)
-    U_numpy = ortho_group.rvs(size, random_state=rng)
+    U_numpy = ortho_group.rvs(m, random_state=rng)[:, :k]
+    V_numpy = ortho_group.rvs(n, random_state=rng)[:, :k]
     U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
-    V = torch.eye(size, device=device, dtype=dtype)
-    S = torch.ones(size, device=device, dtype=dtype)
+    V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
+    S = torch.ones(k, device=device, dtype=dtype)
     return TestCase(U=U, S=S, V=V)
