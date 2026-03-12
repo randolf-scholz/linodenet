@@ -159,7 +159,7 @@ class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
             raise NotImplementedError(
                 f"Inversion not implemented for subclass {type(self)}"
             )
-        return BijectionSequence([~layer for layer in self[::-1]])
+        return BijectionSequence(~layer for layer in reversed(self))
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:
@@ -169,7 +169,7 @@ class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
 
     @jit.export
     def decode(self, y: Tensor) -> Tensor:
-        for layer in self[::-1]:  # traverse in reverse
+        for layer in reversed(self):
             y = layer.decode(y)
         return y
 
@@ -178,7 +178,7 @@ class TransformSequence[T: TransformBase](BijectionSequence[T]):
     r"""Apply multiple transforms sequentially."""
 
     def __invert__(self) -> TransformSequence:
-        return TransformSequence([~layer for layer in self[::-1]])
+        return TransformSequence(~layer for layer in reversed(self))
 
     @jit.export
     def encode(self, x: Tensor) -> Tensor:
@@ -188,7 +188,7 @@ class TransformSequence[T: TransformBase](BijectionSequence[T]):
 
     @jit.export
     def decode(self, y: Tensor) -> Tensor:
-        for layer in self[::-1]:  # traverse in reverse
+        for layer in reversed(self):
             y = layer.decode(y)
         return y
 
@@ -207,7 +207,7 @@ class TransformSequence[T: TransformBase](BijectionSequence[T]):
     def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
         logabsdets: list[Tensor] = []
 
-        for layer in self[::-1]:  # traverse in reverse
+        for layer in reversed(self):
             y, logabsdet = layer.decode_and_logabsdet(y)
             logabsdets.append(logabsdet)
 
