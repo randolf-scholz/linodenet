@@ -46,8 +46,8 @@ from linodenet.nn.activations.base import (
 )
 from linodenet.nn.activations.crelu import CReLU, crelu
 from linodenet.nn.activations.geglu import GEGLU, geglu
-from linodenet.nn.activations.hard_contract import hard_contract, hard_expand
 from linodenet.nn.activations.reglu import ReGLU, reglu
+from linodenet_special.hard_contract import hard_contract, hard_expand
 
 TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     "relu": nn.functional.relu,

@@ -4,7 +4,12 @@ import pytest
 import torch
 from torch.autograd import gradcheck
 
-from linodenet_special.fallbacks.transport import mixture_to_gaussian
+from linodenet_special.fallbacks.transport import (
+    gaussian_to_twin,
+    mixture_to_gaussian,
+    twin_to_gaussian,
+)
+from linodenet_special.hard_contract import hard_contract, hard_expand
 from tests.linodenet_special.fixtures import DEVICES, DTYPES
 
 
@@ -65,3 +70,35 @@ def test_mixture_to_gaussian_gradcheck(
         atol=atol,
         rtol=rtol,
     )
+
+
+class TestTwinToGaussian:
+    def test_hard_contract_approximation(self) -> None:
+        pass
+
+    def test_hard_expand_approximation(self) -> None:
+        pass
+
+    def test_twin_to_gaussian_forward(self) -> None:
+        pass
+
+    def test_twin_to_gaussian_backward(self) -> None:
+        pass
+
+    def test_twin_to_gaussian_gradcheck(self) -> None:
+        pass
+
+    def test_gaussian_to_twin_forward(self) -> None:
+        pass
+
+    def test_gaussian_to_twin_backward(self) -> None:
+        pass
+
+    def test_gaussian_to_twin_gradcheck(self) -> None:
+        pass
+
+    def test_composition_forward(self) -> None:
+        pass
+
+    def test_composition_backward(self) -> None:
+        pass
