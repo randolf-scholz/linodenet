@@ -307,13 +307,14 @@ class TestGaussianToTwin(Fixture):
         )
         μ = torch.tensor(mu, dtype=dtype, device=device)
         σ = torch.tensor(sigma, dtype=dtype, device=device)
+        lam = torch.exp(0.5 * (μ / σ) ** 2).item()
+
         x = gaussian_to_twin(y, μ, σ)
         assert x.dtype == dtype
         assert x.isfinite().all(), (
             "gaussian_to_twin should produce finite outputs for finite inputs"
         )
 
-        lam = torch.exp(0.5 * (μ / σ) ** 2).item()
         x_approx = hard_expand(y, a=lam, c=mu)
         assert x_approx.dtype == dtype
         assert x_approx.isfinite().all(), (

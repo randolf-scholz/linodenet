@@ -44,10 +44,6 @@ def asymptotic_line(
     return y
 
 
-def twin_asymptotic_line(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
-    return (x - torch.sign(x) * mu) / sigma
-
-
 def make_input_mixture(
     mu: Tensor,
     sigma: Tensor,
@@ -350,15 +346,12 @@ class TransportPlotStateTwin:
         target = stats.Normal(mu=0.0, sigma=1.0)
         x_samples = torch.tensor(twin.sample(shape=1_000, rng=0), dtype=dtype)
         y_samples = twin_to_gaussian(x_samples, mu, sigma)
-        asymptote = twin_asymptotic_line(self.x, mu, sigma)
+        asymptote0 = asymptotic_line(self.x, 0, 1, 0.5, mu, sigma)
+        asymptote1 = asymptotic_line(self.x, 0, 1, 0.5, -mu, sigma)
 
         self.line.set_ydata(y)
-        self.component_lines[0].set_ydata(
-            torch.where(self.x <= 0, asymptote, torch.nan)
-        )
-        self.component_lines[1].set_ydata(
-            torch.where(self.x >= 0, asymptote, torch.nan)
-        )
+        self.component_lines[0].set_ydata(asymptote0)
+        self.component_lines[1].set_ydata(asymptote1)
         self.input_pdf_line.set_xdata(self.x)
         self.input_pdf_line.set_ydata(twin.pdf(self.x))
         self.target_pdf_line.set_xdata(self.x)
@@ -412,10 +405,11 @@ def test_twin_to_gaussian_interactive() -> None:
         ax_twin.set_zorder(1)
 
         (line,) = ax.plot(x, y, label="transport", lw=5)
-        asymptote = twin_asymptotic_line(x, mu, sigma)
+        asymptote0 = asymptotic_line(x, 0, 1, 0.5, mu, sigma)
+        asymptote1 = asymptotic_line(x, 0, 1, 0.5, -mu, sigma)
         component_lines = [
-            ax.plot(x, torch.where(x <= 0, asymptote, torch.nan), "k--")[0],
-            ax.plot(x, torch.where(x >= 0, asymptote, torch.nan), "k--")[0],
+            ax.plot(x, asymptote0, "k--")[0],
+            ax.plot(x, asymptote1, "k--")[0],
         ]
         (input_pdf_line,) = ax_twin.plot(
             x,
