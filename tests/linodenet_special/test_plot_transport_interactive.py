@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pytest
 import torch
 from matplotlib.widgets import Slider
+from scipy import stats
 from torch import Tensor
 
 from linodenet_special import ndtri_exp
@@ -130,6 +131,24 @@ def asymptotic_line(
         # non-linear O(1/x) correction term.
         y = y - torch.log(weight_k) * (sigma / z)
     return y
+
+
+def make_input_mixture(
+    mu: Tensor,
+    sigma: Tensor,
+    omegas: Tensor,
+    mus: Tensor,
+    sigmas: Tensor,
+    /,
+) -> stats.Mixture:
+    components = [
+        stats.Normal(
+            mu=float(mu + sigma * mus[k]),
+            sigma=float(sigma * sigmas[k]),
+        )
+        for k in range(mus.numel())
+    ]
+    return stats.Mixture(components, weights=omegas.detach().cpu().tolist())
 
 
 USE_NAIVE = False
@@ -324,6 +343,11 @@ class TransportPlotState2New:
     x: Tensor
     line: Any
     component_lines: list[Any]
+    input_pdf_line: Any
+    target_pdf_line: Any
+    twin_ax: Any
+    input_hist_container: Any
+    output_hist_container: Any
     sliders: Mapping[str, Slider]
 
     def update(self, _value: float) -> None:
@@ -347,8 +371,16 @@ class TransportPlotState2New:
         )
 
         y = mixture_to_gaussian((self.x - mu) / sigma, omegas, mus, sigmas)
+        mixture = make_input_mixture(mu, sigma, omegas, mus, sigmas)
+        target = stats.Normal(mu=0.0, sigma=1.0)
+        x_samples = torch.tensor(mixture.sample(shape=1_000, rng=0), dtype=dtype)
+        y_samples = mixture_to_gaussian((x_samples - mu) / sigma, omegas, mus, sigmas)
 
         self.line.set_ydata(y)
+        self.input_pdf_line.set_xdata(self.x)
+        self.input_pdf_line.set_ydata(mixture.pdf(self.x))
+        self.target_pdf_line.set_xdata(self.x)
+        self.target_pdf_line.set_ydata(target.pdf(self.x))
         for k, line in enumerate(self.component_lines):
             line.set_ydata(
                 asymptotic_line(
@@ -360,6 +392,27 @@ class TransportPlotState2New:
                     sigmas[k],
                 )
             )
+
+        self.input_hist_container.remove()
+        self.input_hist_container = self.twin_ax.hist(
+            x_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="green",
+        )[2]
+        self.output_hist_container.remove()
+        self.output_hist_container = self.twin_ax.hist(
+            y_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="red",
+        )[2]
+        self.twin_ax.set_xlabel("density")
+        self.twin_ax.grid(False)
+        self.twin_ax.patch.set_alpha(0)
+        self.twin_ax.set_ylim(0, 3)
         self.line.figure.canvas.draw_idle()
 
 
@@ -492,9 +545,20 @@ def test_plot_transport_2_interactive_new():
     sigmas = torch.tensor([0.5, 0.5], dtype=dtype)
 
     y = mixture_to_gaussian((x - mu) / sigma, omegas, mus, sigmas)
+    mixture = make_input_mixture(mu, sigma, omegas, mus, sigmas)
+    target = stats.Normal(mu=0.0, sigma=1.0)
+    x_samples = torch.tensor(mixture.sample(shape=1_000, rng=0), dtype=dtype)
+    y_samples = mixture_to_gaussian((x_samples - mu) / sigma, omegas, mus, sigmas)
 
     with plt.style.context("bmh"):
         fig, ax = plt.subplots(figsize=(10, 6))
+        ax_twin = ax.twinx()
+        ax.patch.set_alpha(0)
+        ax_twin.patch.set_alpha(0)
+        ax_twin.grid(False)
+        ax.set_zorder(2)
+        ax_twin.set_zorder(1)
+
         (line,) = ax.plot(x, y, label="transport", lw=5)
         component_lines = [
             ax.plot(
@@ -506,6 +570,39 @@ def test_plot_transport_2_interactive_new():
             )[0]
             for k in range(mus.numel())
         ]
+
+        (input_pdf_line,) = ax_twin.plot(
+            x,
+            mixture.pdf(x),
+            color="green",
+            alpha=0.3,
+            lw=2,
+            zorder=0,
+        )
+        (target_pdf_line,) = ax_twin.plot(
+            x,
+            target.pdf(x),
+            color="red",
+            alpha=0.5,
+            lw=2,
+            zorder=0,
+        )
+        _, _, input_hist_container = ax_twin.hist(
+            x_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="green",
+        )
+        _, _, output_hist_container = ax_twin.hist(
+            y_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="red",
+        )
+        ax_twin.set_ylabel("density")
+        ax_twin.set_ylim(0, 3)
         ax.set_title("Interactive Transport via gaussian_to_mixture")
         ax.legend(loc="upper left")
 
@@ -530,7 +627,15 @@ def test_plot_transport_2_interactive_new():
         }
 
         state = TransportPlotState2New(
-            x=x, line=line, component_lines=component_lines, sliders=sliders
+            x=x,
+            line=line,
+            component_lines=component_lines,
+            input_pdf_line=input_pdf_line,
+            target_pdf_line=target_pdf_line,
+            twin_ax=ax_twin,
+            input_hist_container=input_hist_container,
+            output_hist_container=output_hist_container,
+            sliders=sliders,
         )
         for slider in sliders.values():
             slider.on_changed(state.update)
