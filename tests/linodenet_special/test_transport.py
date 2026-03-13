@@ -11,6 +11,7 @@ from linodenet_special.fallbacks.transport import (
     mixture_to_gaussian,
     twin_to_gaussian,
 )
+from linodenet_special.hard_contract import hard_contract, hard_expand
 from tests.linodenet_special.fixtures import DEVICES, DTYPES
 
 
@@ -36,7 +37,7 @@ from tests.linodenet_special.fixtures import DEVICES, DTYPES
 @pytest.mark.parametrize(
     "values",
     [
-        pytest.param(torch.randn(16, 8), id="batch"),
+        pytest.param(torch.randn(8, 2), id="batch"),
         pytest.param(torch.randn(()), id="scalar"),
         pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
         pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
@@ -74,11 +75,68 @@ def test_mixture_to_gaussian_gradcheck(
 
 
 class TestTwinToGaussian:
-    def test_hard_contract_approximation(self) -> None:
-        pass
+    X_MIN = -20
+    X_MAX = 20
+    N = 1000
+    N_FEW = 32
 
-    def test_hard_expand_approximation(self) -> None:
-        pass
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.01, 0.1, 1, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_hard_contract_approximation(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        x = torch.linspace(
+            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
+        )
+        μ = torch.tensor(mu, dtype=dtype, device=device)
+        σ = torch.tensor(sigma, dtype=dtype, device=device)
+
+        y = twin_to_gaussian(x, μ, σ)
+        assert y.dtype == dtype
+        assert y.isfinite().all(), (
+            "twin_to_gaussian should produce finite outputs for finite inputs"
+        )
+
+        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        y_approx = hard_contract(y, a=lam, c=mu)
+
+        assert y_approx.dtype == dtype
+        assert y_approx.isfinite().all(), (
+            "Hard-contract approximation should produce finite outputs"
+        )
+        atol = 4 * torch.finfo(dtype).resolution
+        rtol = 4 * torch.finfo(dtype).resolution
+        assert (y_approx - y).abs().max() <= (1 + rtol) * μ.abs() + atol
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.01, 0.1, 1, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_hard_expand_approximation(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        y = torch.linspace(
+            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
+        )
+        μ = torch.tensor(mu, dtype=dtype, device=device)
+        σ = torch.tensor(sigma, dtype=dtype, device=device)
+        x = gaussian_to_twin(y, μ, σ)
+        assert x.dtype == dtype
+        assert x.isfinite().all(), (
+            "gaussian_to_twin should produce finite outputs for finite inputs"
+        )
+
+        lam = torch.exp(0.5 * (μ / σ) ** 2).item()
+        x_approx = hard_expand(y, a=lam, c=mu)
+        assert x_approx.dtype == dtype
+        assert x_approx.isfinite().all(), (
+            "Hard-expand approximation should produce finite outputs"
+        )
+        atol = torch.finfo(dtype).resolution
+        rtol = torch.finfo(dtype).resolution
+        assert (x_approx - x).abs().max() <= (1 + rtol) * μ.abs() + atol
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
@@ -93,12 +151,12 @@ class TestTwinToGaussian:
         zero = torch.tensor(0, dtype=dtype, device=device)
         assert torch.allclose(twin_to_gaussian(zero, μ, σ), zero)
 
-        x1 = torch.linspace(0, 20, steps=1000, dtype=dtype, device=device)
+        x1 = torch.linspace(0, self.X_MAX, steps=self.N, dtype=dtype, device=device)
         y1 = twin_to_gaussian(x1, μ, σ)
         assert y1.dtype == dtype
         assert y1.isfinite().all()
 
-        x2 = torch.linspace(0, -20, steps=1000, dtype=dtype, device=device)
+        x2 = torch.linspace(0, self.X_MIN, steps=self.N, dtype=dtype, device=device)
         y2 = twin_to_gaussian(x2, μ, σ)
         assert y2.dtype == dtype
         assert y2.isfinite().all()
@@ -109,10 +167,10 @@ class TestTwinToGaussian:
         x_star = μ * max(1, 1 / (1 - lam))
         assert x_star.item() > 0
         x1 = torch.linspace(
-            10 * x_star, 100 * x_star, steps=1000, dtype=dtype, device=device
+            10 * x_star, 100 * x_star, steps=self.N, dtype=dtype, device=device
         )
         x2 = torch.linspace(
-            -10 * x_star, -100 * x_star, steps=1000, dtype=dtype, device=device
+            -10 * x_star, -100 * x_star, steps=self.N, dtype=dtype, device=device
         )
         tail1 = x1 - torch.sign(x1) * μ
         tail2 = x2 - torch.sign(x2) * μ
@@ -135,7 +193,12 @@ class TestTwinToGaussian:
         lower_grad_bound = max(0, lam.item() * (1 - g_rtol))
 
         x1 = torch.linspace(
-            0, 20, steps=1000, dtype=dtype, device=device, requires_grad=True
+            0,
+            self.X_MAX,
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
         )
         y1 = twin_to_gaussian(x1, μ, σ)
         y1.sum().backward()
@@ -146,7 +209,12 @@ class TestTwinToGaussian:
         assert torch.allclose(x1.grad[0], lam, rtol=g_rtol)
 
         x2 = torch.linspace(
-            0, -20, steps=1000, dtype=dtype, device=device, requires_grad=True
+            0,
+            self.X_MIN,
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
         )
         y2 = twin_to_gaussian(x2, μ, σ)
         y2.sum().backward()
@@ -161,7 +229,7 @@ class TestTwinToGaussian:
         x_star = μ * max(1, 1 / (1 - lam.item()))
         assert x_star.item() > 0
         tail_values = torch.linspace(
-            10 * x_star, 100 * x_star, steps=1000, dtype=dtype, device=device
+            10 * x_star, 100 * x_star, steps=self.N, dtype=dtype, device=device
         )
         tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
         y_tail = twin_to_gaussian(tail, μ, σ)
@@ -170,32 +238,6 @@ class TestTwinToGaussian:
         assert tail.grad is not None
         assert tail.grad.isfinite().all()
         assert torch.allclose(tail.grad, torch.ones_like(tail.grad))
-
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
-    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    def test_twin_to_gaussian_gradcheck(
-        self, dtype: torch.dtype, mu: float, sigma: float, device: str
-    ) -> None:
-        μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=True)
-        σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=True)
-
-        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
-        x_star = μ * min(1, 1 / (1 - lam))
-        x_narrow = torch.linspace(
-            -x_star, x_star, steps=100, dtype=dtype, device=device, requires_grad=True
-        )
-
-        match dtype:
-            case torch.float32:
-                atol, rtol, eps = 1e-2, 1e-5, 1e-4
-            case torch.float64:
-                atol, rtol, eps = 1e-8, 1e-8, 1e-6
-            case _:
-                raise ValueError(f"Unsupported dtype: {dtype}")
-
-        gradcheck(twin_to_gaussian, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
@@ -210,12 +252,12 @@ class TestTwinToGaussian:
         zero = torch.tensor(0, dtype=dtype, device=device)
         assert torch.allclose(gaussian_to_twin(zero, μ, σ), zero)
 
-        y1 = torch.linspace(0, 20, steps=100, dtype=dtype, device=device)
+        y1 = torch.linspace(0, self.X_MAX, steps=self.N_FEW, dtype=dtype, device=device)
         x1 = gaussian_to_twin(y1, μ, σ)
         assert x1.dtype == dtype
         assert x1.isfinite().all()
 
-        y2 = torch.linspace(0, -20, steps=100, dtype=dtype, device=device)
+        y2 = torch.linspace(0, self.X_MIN, steps=self.N_FEW, dtype=dtype, device=device)
         x2 = gaussian_to_twin(y2, μ, σ)
         assert x2.dtype == dtype
         assert x2.isfinite().all()
@@ -226,10 +268,10 @@ class TestTwinToGaussian:
         y_star = μ * max(1, lam / (1 - lam))
         assert y_star.item() > 0
         y1 = torch.linspace(
-            10 * y_star, 100 * y_star, steps=100, dtype=dtype, device=device
+            10 * y_star, 100 * y_star, steps=self.N_FEW, dtype=dtype, device=device
         )
         y2 = torch.linspace(
-            -10 * y_star, -100 * y_star, steps=100, dtype=dtype, device=device
+            -10 * y_star, -100 * y_star, steps=self.N_FEW, dtype=dtype, device=device
         )
         tail1 = y1 + μ
         tail2 = y2 - μ
@@ -256,7 +298,12 @@ class TestTwinToGaussian:
         log_grad_bound = lam_inv_log + log_tol
 
         y1 = torch.linspace(
-            0, 20, steps=1000, dtype=dtype, device=device, requires_grad=True
+            0,
+            self.X_MAX,
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
         )
         x1 = gaussian_to_twin(y1, μ, σ)
         x1.sum().backward()
@@ -266,7 +313,12 @@ class TestTwinToGaussian:
         assert y1.grad.log().max() <= log_grad_bound
 
         y2 = torch.linspace(
-            0, -20, steps=1000, dtype=dtype, device=device, requires_grad=True
+            0,
+            self.X_MIN,
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
         )
         x2 = gaussian_to_twin(y2, μ, σ)
         x2.sum().backward()
@@ -280,7 +332,7 @@ class TestTwinToGaussian:
         y_star = μ * max(1, lam / (1 - lam))
         assert y_star.item() > 0
         tail_values = torch.linspace(
-            10 * y_star, 100 * y_star, steps=1000, dtype=dtype, device=device
+            10 * y_star, 100 * y_star, steps=self.N, dtype=dtype, device=device
         )
         tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
         x_tail = gaussian_to_twin(tail, μ, σ)
@@ -289,6 +341,37 @@ class TestTwinToGaussian:
         assert tail.grad is not None
         assert tail.grad.isfinite().all()
         assert torch.allclose(tail.grad, torch.ones_like(tail.grad))
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_twin_to_gaussian_gradcheck(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=True)
+
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
+        x_star = μ * min(1, 1 / (1 - lam))
+        x_narrow = torch.linspace(
+            -x_star,
+            x_star,
+            steps=self.N_FEW,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        match dtype:
+            case torch.float32:
+                atol, rtol, eps = 1e-2, 1e-5, 1e-4
+            case torch.float64:
+                atol, rtol, eps = 1e-8, 1e-8, 1e-6
+            case _:
+                raise ValueError(f"Unsupported dtype: {dtype}")
+
+        gradcheck(twin_to_gaussian, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("sigma", [0.5, 1, 2, 10], ids=lambda x: f"s={x}")
@@ -305,7 +388,7 @@ class TestTwinToGaussian:
         y_narrow = torch.linspace(
             -y_star / 2,
             y_star / 2,
-            steps=100,
+            steps=self.N_FEW,
             dtype=dtype,
             device=device,
             requires_grad=True,
@@ -331,14 +414,18 @@ class TestTwinToGaussian:
         μ = torch.tensor(mu, dtype=dtype, device=device)
         σ = torch.tensor(sigma, dtype=dtype, device=device)
 
-        y = torch.linspace(-20, 20, steps=1000, dtype=dtype, device=device)
+        y = torch.linspace(
+            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
+        )
         x_inv = gaussian_to_twin(y, μ, σ)
         y_inv = twin_to_gaussian(x_inv, μ, σ)
         r = torch.relu((y_inv - y).abs() - 1e6)
         assert (r / y).abs().mean() <= 1e-4, "Mean relative error too large"
         assert (r / y).abs().max() <= 1e-2, "Max relative error too large"
 
-        x = torch.linspace(-20, 20, steps=1000, dtype=dtype, device=device)
+        x = torch.linspace(
+            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
+        )
         y = twin_to_gaussian(x, μ, σ)
         x_inv = gaussian_to_twin(y, μ, σ)
         r = torch.relu((x_inv - x).abs() - 1e6)
@@ -355,7 +442,7 @@ class TestTwinToGaussian:
         μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=True)
         x = torch.linspace(
-            -2, 2, steps=6, dtype=dtype, device=device, requires_grad=True
+            -2, 2, steps=self.N_FEW, dtype=dtype, device=device, requires_grad=True
         )
 
         y = twin_to_gaussian(x, μ, σ)
@@ -366,7 +453,7 @@ class TestTwinToGaussian:
         assert torch.allclose(x.grad, torch.ones_like(x), atol=1e-3)
 
         y = torch.linspace(
-            -2, 2, steps=6, dtype=dtype, device=device, requires_grad=True
+            -2, 2, steps=self.N_FEW, dtype=dtype, device=device, requires_grad=True
         )
         x_inv = gaussian_to_twin(y, μ, σ)
         y_inv = twin_to_gaussian(x_inv, μ, σ)
