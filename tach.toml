@@ -58,7 +58,7 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet.bijections"
-depends_on = [ "linodenet.initializations", "linodenet.nn", "linodenet.nn.activations"]
+depends_on = [ "linodenet.nn", "linodenet.nn.activations"]
 
 [[modules ]]
 path = "linodenet.parametrize"
@@ -88,7 +88,7 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet.nn.activations"
-depends_on = []
+depends_on = ["linodenet_special"]
 
 [[modules ]]
 path = "linodenet.nn.containers"

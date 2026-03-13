@@ -1,5 +1,7 @@
 r"""Tests for transport maps."""
 
+import math
+
 import pytest
 import torch
 from torch.autograd import gradcheck
@@ -9,7 +11,6 @@ from linodenet_special.fallbacks.transport import (
     mixture_to_gaussian,
     twin_to_gaussian,
 )
-from linodenet_special.hard_contract import hard_contract, hard_expand
 from tests.linodenet_special.fixtures import DEVICES, DTYPES
 
 
@@ -79,26 +80,297 @@ class TestTwinToGaussian:
     def test_hard_expand_approximation(self) -> None:
         pass
 
-    def test_twin_to_gaussian_forward(self) -> None:
-        pass
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_twin_to_gaussian_forward(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device)
+        σ = torch.tensor(sigma, dtype=dtype, device=device)
 
-    def test_twin_to_gaussian_backward(self) -> None:
-        pass
+        zero = torch.tensor(0, dtype=dtype, device=device)
+        assert torch.allclose(twin_to_gaussian(zero, μ, σ), zero)
 
-    def test_twin_to_gaussian_gradcheck(self) -> None:
-        pass
+        x1 = torch.linspace(0, 20, steps=1000, dtype=dtype, device=device)
+        y1 = twin_to_gaussian(x1, μ, σ)
+        assert y1.dtype == dtype
+        assert y1.isfinite().all()
 
-    def test_gaussian_to_twin_forward(self) -> None:
-        pass
+        x2 = torch.linspace(0, -20, steps=1000, dtype=dtype, device=device)
+        y2 = twin_to_gaussian(x2, μ, σ)
+        assert y2.dtype == dtype
+        assert y2.isfinite().all()
 
-    def test_gaussian_to_twin_backward(self) -> None:
-        pass
+        assert torch.allclose(y1, -y2)
 
-    def test_gaussian_to_twin_gradcheck(self) -> None:
-        pass
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
+        x_star = μ * max(1, 1 / (1 - lam))
+        assert x_star.item() > 0
+        x1 = torch.linspace(
+            10 * x_star, 100 * x_star, steps=1000, dtype=dtype, device=device
+        )
+        x2 = torch.linspace(
+            -10 * x_star, -100 * x_star, steps=1000, dtype=dtype, device=device
+        )
+        tail1 = x1 - torch.sign(x1) * μ
+        tail2 = x2 - torch.sign(x2) * μ
+        y1 = twin_to_gaussian(x1, μ, σ)
+        y2 = twin_to_gaussian(x2, μ, σ)
+        assert torch.allclose(y1, tail1)
+        assert torch.allclose(y2, tail2)
 
-    def test_composition_forward(self) -> None:
-        pass
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_twin_to_gaussian_backward(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device)
+        σ = torch.tensor(sigma, dtype=dtype, device=device)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2)
+        g_rtol = 2**-4
+        lower_grad_bound = max(0, lam.item() * (1 - g_rtol))
 
-    def test_composition_backward(self) -> None:
-        pass
+        x1 = torch.linspace(
+            0, 20, steps=1000, dtype=dtype, device=device, requires_grad=True
+        )
+        y1 = twin_to_gaussian(x1, μ, σ)
+        y1.sum().backward()
+        assert x1.grad is not None
+        assert x1.grad.isfinite().all()
+        assert x1.grad.max() <= 1
+        assert x1.grad.min() > lower_grad_bound
+        assert torch.allclose(x1.grad[0], lam, rtol=g_rtol)
+
+        x2 = torch.linspace(
+            0, -20, steps=1000, dtype=dtype, device=device, requires_grad=True
+        )
+        y2 = twin_to_gaussian(x2, μ, σ)
+        y2.sum().backward()
+        assert x2.grad is not None
+        assert x2.grad.isfinite().all()
+        assert x2.grad.max() <= 1
+        assert x2.grad.min() > lower_grad_bound
+        assert torch.allclose(x2.grad[0], lam, rtol=g_rtol)
+
+        assert torch.allclose(x1.grad, x2.grad)
+
+        x_star = μ * max(1, 1 / (1 - lam.item()))
+        assert x_star.item() > 0
+        tail_values = torch.linspace(
+            10 * x_star, 100 * x_star, steps=1000, dtype=dtype, device=device
+        )
+        tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
+        y_tail = twin_to_gaussian(tail, μ, σ)
+        assert y_tail.isfinite().all()
+        y_tail.sum().backward()
+        assert tail.grad is not None
+        assert tail.grad.isfinite().all()
+        assert torch.allclose(tail.grad, torch.ones_like(tail.grad))
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_twin_to_gaussian_gradcheck(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=True)
+
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
+        x_star = μ * min(1, 1 / (1 - lam))
+        x_narrow = torch.linspace(
+            -x_star, x_star, steps=100, dtype=dtype, device=device, requires_grad=True
+        )
+
+        match dtype:
+            case torch.float32:
+                atol, rtol, eps = 1e-2, 1e-5, 1e-4
+            case torch.float64:
+                atol, rtol, eps = 1e-8, 1e-8, 1e-6
+            case _:
+                raise ValueError(f"Unsupported dtype: {dtype}")
+
+        gradcheck(twin_to_gaussian, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_gaussian_to_twin_forward(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device)
+        σ = torch.tensor(sigma, dtype=dtype, device=device)
+
+        zero = torch.tensor(0, dtype=dtype, device=device)
+        assert torch.allclose(gaussian_to_twin(zero, μ, σ), zero)
+
+        y1 = torch.linspace(0, 20, steps=100, dtype=dtype, device=device)
+        x1 = gaussian_to_twin(y1, μ, σ)
+        assert x1.dtype == dtype
+        assert x1.isfinite().all()
+
+        y2 = torch.linspace(0, -20, steps=100, dtype=dtype, device=device)
+        x2 = gaussian_to_twin(y2, μ, σ)
+        assert x2.dtype == dtype
+        assert x2.isfinite().all()
+
+        assert torch.allclose(x1, -x2)
+
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
+        y_star = μ * max(1, lam / (1 - lam))
+        assert y_star.item() > 0
+        y1 = torch.linspace(
+            10 * y_star, 100 * y_star, steps=100, dtype=dtype, device=device
+        )
+        y2 = torch.linspace(
+            -10 * y_star, -100 * y_star, steps=100, dtype=dtype, device=device
+        )
+        tail1 = y1 + μ
+        tail2 = y2 - μ
+        x1 = gaussian_to_twin(y1, μ, σ)
+        x2 = gaussian_to_twin(y2, μ, σ)
+        assert x1.isfinite().all()
+        assert x2.isfinite().all()
+        assert torch.allclose(x1, tail1)
+        assert torch.allclose(x2, tail2)
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_gaussian_to_twin_backward(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device)
+        σ = torch.tensor(sigma, dtype=dtype, device=device)
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
+        lam_inv_log = 0.5 * (μ / σ) ** 2
+        g_rtol = 2**-4
+        log_tol = math.log2(1 + g_rtol)
+        log_grad_bound = lam_inv_log + log_tol
+
+        y1 = torch.linspace(
+            0, 20, steps=1000, dtype=dtype, device=device, requires_grad=True
+        )
+        x1 = gaussian_to_twin(y1, μ, σ)
+        x1.sum().backward()
+        assert y1.grad is not None
+        assert y1.grad.isfinite().all()
+        assert y1.grad.min() >= 1
+        assert y1.grad.log().max() <= log_grad_bound
+
+        y2 = torch.linspace(
+            0, -20, steps=1000, dtype=dtype, device=device, requires_grad=True
+        )
+        x2 = gaussian_to_twin(y2, μ, σ)
+        x2.sum().backward()
+        assert y2.grad is not None
+        assert y2.grad.isfinite().all()
+        assert y2.grad.min() >= 1
+        assert y2.grad.log().max() <= log_grad_bound
+
+        assert torch.allclose(y1.grad, y2.grad)
+
+        y_star = μ * max(1, lam / (1 - lam))
+        assert y_star.item() > 0
+        tail_values = torch.linspace(
+            10 * y_star, 100 * y_star, steps=1000, dtype=dtype, device=device
+        )
+        tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
+        x_tail = gaussian_to_twin(tail, μ, σ)
+        assert x_tail.isfinite().all()
+        x_tail.sum().backward()
+        assert tail.grad is not None
+        assert tail.grad.isfinite().all()
+        assert torch.allclose(tail.grad, torch.ones_like(tail.grad))
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 1.5], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_gaussian_to_twin_gradcheck(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=True)
+
+        lam = torch.exp(-0.5 * (μ / σ) ** 2).item()
+        y_star = μ * min(1, lam / (1 - lam))
+        y_narrow = torch.linspace(
+            -y_star / 2,
+            y_star / 2,
+            steps=100,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        match dtype:
+            case torch.float32:
+                atol, rtol, eps = 1e-2, 1e-2, 1e-4
+            case torch.float64:
+                atol, rtol, eps = 1e-6, 1e-6, 1e-6
+            case _:
+                raise ValueError(f"Unsupported dtype: {dtype}")
+
+        gradcheck(gaussian_to_twin, (y_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_composition_forward(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device)
+        σ = torch.tensor(sigma, dtype=dtype, device=device)
+
+        y = torch.linspace(-20, 20, steps=1000, dtype=dtype, device=device)
+        x_inv = gaussian_to_twin(y, μ, σ)
+        y_inv = twin_to_gaussian(x_inv, μ, σ)
+        r = torch.relu((y_inv - y).abs() - 1e6)
+        assert (r / y).abs().mean() <= 1e-4, "Mean relative error too large"
+        assert (r / y).abs().max() <= 1e-2, "Max relative error too large"
+
+        x = torch.linspace(-20, 20, steps=1000, dtype=dtype, device=device)
+        y = twin_to_gaussian(x, μ, σ)
+        x_inv = gaussian_to_twin(y, μ, σ)
+        r = torch.relu((x_inv - x).abs() - 1e6)
+        assert (r / x).abs().mean() <= 1e-4, "Mean relative error too large"
+        assert (r / x).abs().max() <= 1e-2, "Max relative error too large"
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("sigma", [0.5, 1, 2, 10], ids=lambda x: f"s={x}")
+    @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 1.5], ids=lambda x: f"mu={x}")
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_composition_backward(
+        self, dtype: torch.dtype, mu: float, sigma: float, device: str
+    ) -> None:
+        μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=True)
+        x = torch.linspace(
+            -2, 2, steps=6, dtype=dtype, device=device, requires_grad=True
+        )
+
+        y = twin_to_gaussian(x, μ, σ)
+        x_inv = gaussian_to_twin(y, μ, σ)
+        z = x_inv.sum()
+        z.backward()
+        assert x.grad is not None
+        assert torch.allclose(x.grad, torch.ones_like(x), atol=1e-3)
+
+        y = torch.linspace(
+            -2, 2, steps=6, dtype=dtype, device=device, requires_grad=True
+        )
+        x_inv = gaussian_to_twin(y, μ, σ)
+        y_inv = twin_to_gaussian(x_inv, μ, σ)
+        z = y_inv.sum()
+        z.backward()
+        assert y.grad is not None
+        assert torch.allclose(y.grad, torch.ones_like(y), atol=1e-3)
