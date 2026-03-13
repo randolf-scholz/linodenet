@@ -1,12 +1,15 @@
 <component name="ProjectDictionaryState">
   <dictionary name="project">
     <words>
+      <w>Bigl</w>
+      <w>Bigr</w>
       <w>Marchenko</w>
       <w>Pastur</w>
       <w>arglist</w>
       <w>crelu</w>
       <w>erfinv</w>
       <w>logabsdets</w>
+      <w>logsumexp</w>
       <w>ndtr</w>
       <w>ndtri</w>
       <w>pred</w>
