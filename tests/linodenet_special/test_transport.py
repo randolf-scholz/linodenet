@@ -17,13 +17,8 @@ def _mixture_to_gaussian_with_raw_params(
     return mixture_to_gaussian(x, weights, means, sigmas)
 
 
-@pytest.mark.parametrize(
-    "values",
-    [
-        pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
-        pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
-    ],
-)
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize(
     ("logits", "means", "log_stds"),
     [
@@ -41,8 +36,15 @@ def _mixture_to_gaussian_with_raw_params(
         ),
     ],
 )
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize(
+    "values",
+    [
+        pytest.param(torch.randn(16, 8), id="batch"),
+        pytest.param(torch.randn(()), id="scalar"),
+        pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
+        pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
+    ],
+)
 def test_mixture_to_gaussian_gradcheck(
     values: list[float],
     logits: list[float],
