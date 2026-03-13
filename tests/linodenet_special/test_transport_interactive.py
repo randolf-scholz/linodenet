@@ -13,7 +13,11 @@ from matplotlib.widgets import Slider
 from scipy import stats
 from torch import Tensor
 
-from linodenet_special.fallbacks import mixture_to_gaussian, twin_to_gaussian
+from linodenet_special.fallbacks import (
+    gaussian_to_twin,
+    mixture_to_gaussian,
+    twin_to_gaussian,
+)
 from tests.utils.project import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
@@ -380,6 +384,158 @@ class TransportPlotStateTwin:
         self.line.figure.canvas.draw_idle()
 
 
+@dataclass
+class TransportPlotStateGaussian:
+    y: Tensor
+    line: Any
+    component_lines: list[Any]
+    input_pdf_line: Any
+    target_pdf_line: Any
+    twin_ax: Any
+    input_hist_container: Any
+    output_hist_container: Any
+    sliders: Mapping[str, Slider]
+
+    def update(self, _value: float) -> None:
+        dtype = self.y.dtype
+
+        mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
+        sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
+
+        x = gaussian_to_twin(self.y, mu, sigma)
+        source = stats.Normal(mu=0.0, sigma=1.0)
+        twin = make_twin_distribution(mu, sigma)
+        y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
+        x_samples = gaussian_to_twin(y_samples, mu, sigma)
+
+        self.line.set_ydata(x)
+        self.component_lines[0].set_ydata(self.y + mu)
+        self.component_lines[1].set_ydata(self.y - mu)
+        self.input_pdf_line.set_xdata(self.y)
+        self.input_pdf_line.set_ydata(source.pdf(self.y))
+        self.target_pdf_line.set_xdata(self.y)
+        self.target_pdf_line.set_ydata(twin.pdf(self.y))
+
+        self.input_hist_container.remove()
+        self.input_hist_container = self.twin_ax.hist(
+            y_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="green",
+        )[2]
+        self.output_hist_container.remove()
+        self.output_hist_container = self.twin_ax.hist(
+            x_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="red",
+        )[2]
+        self.twin_ax.set_xlabel("density")
+        self.twin_ax.grid(False)
+        self.twin_ax.patch.set_alpha(0)
+        self.twin_ax.set_ylim(0, PDF_MAX)
+        self.line.figure.canvas.draw_idle()
+
+
+@pytest.mark.interactive
+def test_gaussian_to_twin_interactive() -> None:
+    dtype = torch.float64
+
+    y = torch.linspace(X_MIN, X_MAX, 200, dtype=dtype)
+
+    mu = torch.tensor(3.0, dtype=dtype)
+    sigma = torch.tensor(0.5, dtype=dtype)
+
+    x = gaussian_to_twin(y, mu, sigma)
+    source = stats.Normal(mu=0.0, sigma=1.0)
+    target = make_twin_distribution(mu, sigma)
+    y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
+    x_samples = gaussian_to_twin(y_samples, mu, sigma)
+
+    with plt.style.context("bmh"):
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax_twin = ax.twinx()
+        ax.patch.set_alpha(0)
+        ax_twin.patch.set_alpha(0)
+        ax_twin.grid(False)
+        ax.set_zorder(2)
+        ax_twin.set_zorder(1)
+
+        (line,) = ax.plot(y, x, label="transport", lw=5)
+        component_lines = [
+            ax.plot(y, y + mu, "k--")[0],
+            ax.plot(y, y - mu, "k--")[0],
+        ]
+        (input_pdf_line,) = ax_twin.plot(
+            y,
+            source.pdf(y),
+            color="green",
+            alpha=0.3,
+            lw=2,
+            zorder=0,
+        )
+        (target_pdf_line,) = ax_twin.plot(
+            y,
+            target.pdf(y),
+            color="red",
+            alpha=0.5,
+            lw=2,
+            zorder=0,
+        )
+        _, _, input_hist_container = ax_twin.hist(
+            y_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="green",
+        )
+        _, _, output_hist_container = ax_twin.hist(
+            x_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="red",
+        )
+        ax.set_xlim(X_MIN, X_MAX)
+        ax_twin.set_xlim(X_MIN, X_MAX)
+        ax_twin.set_ylabel("density")
+        ax_twin.set_ylim(0, PDF_MAX)
+        ax.set_title("Interactive Transport via gaussian_to_twin")
+        ax.legend(loc="upper left")
+
+        slider_specs = [
+            ("mu", "μ", -5.0, 5.0, float(mu)),
+            ("sigma", "σ", 0.1, 3.0, float(sigma)),
+        ]
+
+        fig.subplots_adjust(bottom=0.14)
+        axes = [fig.add_axes(pos) for pos in _slider_positions(len(slider_specs))]
+        sliders = {
+            key: Slider(ax_, label, min_, max_, valinit=init)
+            for ax_, (key, label, min_, max_, init) in zip(
+                axes, slider_specs, strict=True
+            )
+        }
+
+        state = TransportPlotStateGaussian(
+            y=y,
+            line=line,
+            component_lines=component_lines,
+            input_pdf_line=input_pdf_line,
+            target_pdf_line=target_pdf_line,
+            twin_ax=ax_twin,
+            input_hist_container=input_hist_container,
+            output_hist_container=output_hist_container,
+            sliders=sliders,
+        )
+        for slider in sliders.values():
+            slider.on_changed(state.update)
+
+        plt.show()
+
+
 @pytest.mark.interactive
 def test_twin_to_gaussian_interactive() -> None:
     dtype = torch.float64
@@ -390,9 +546,9 @@ def test_twin_to_gaussian_interactive() -> None:
     sigma = torch.tensor(0.5, dtype=dtype)
 
     y = twin_to_gaussian(x, mu, sigma)
-    twin = make_twin_distribution(mu, sigma)
+    source = make_twin_distribution(mu, sigma)
     target = stats.Normal(mu=0.0, sigma=1.0)
-    x_samples = torch.tensor(twin.sample(shape=1_000, rng=0), dtype=dtype)
+    x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
     y_samples = twin_to_gaussian(x_samples, mu, sigma)
 
     with plt.style.context("bmh"):
@@ -413,7 +569,7 @@ def test_twin_to_gaussian_interactive() -> None:
         ]
         (input_pdf_line,) = ax_twin.plot(
             x,
-            twin.pdf(x),
+            source.pdf(x),
             color="green",
             alpha=0.3,
             lw=2,
@@ -493,9 +649,9 @@ def test_2_components_interactive() -> None:
     sigmas = torch.tensor([0.5, 0.5], dtype=dtype)
 
     y = mixture_to_gaussian((x - mu) / sigma, omegas, mus, sigmas)
-    mixture = make_input_mixture(mu, sigma, omegas, mus, sigmas)
+    source = make_input_mixture(mu, sigma, omegas, mus, sigmas)
     target = stats.Normal(mu=0.0, sigma=1.0)
-    x_samples = torch.tensor(mixture.sample(shape=1_000, rng=0), dtype=dtype)
+    x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
     y_samples = mixture_to_gaussian((x_samples - mu) / sigma, omegas, mus, sigmas)
 
     with plt.style.context("bmh"):
@@ -521,7 +677,7 @@ def test_2_components_interactive() -> None:
 
         (input_pdf_line,) = ax_twin.plot(
             x,
-            mixture.pdf(x),
+            source.pdf(x),
             color="green",
             alpha=0.3,
             lw=2,
@@ -641,14 +797,14 @@ class TransportPlotState3Components:
         )
 
         y = mixture_to_gaussian((self.x - mu) / sigma, omegas, mus, sigmas)
-        mixture = make_input_mixture(mu, sigma, omegas, mus, sigmas)
+        source = make_input_mixture(mu, sigma, omegas, mus, sigmas)
         target = stats.Normal(mu=0.0, sigma=1.0)
-        x_samples = torch.tensor(mixture.sample(shape=1_000, rng=0), dtype=dtype)
+        x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
         y_samples = mixture_to_gaussian((x_samples - mu) / sigma, omegas, mus, sigmas)
 
         self.line.set_ydata(y)
         self.input_pdf_line.set_xdata(self.x)
-        self.input_pdf_line.set_ydata(mixture.pdf(self.x))
+        self.input_pdf_line.set_ydata(source.pdf(self.x))
         self.target_pdf_line.set_xdata(self.x)
         self.target_pdf_line.set_ydata(target.pdf(self.x))
         for k, line in enumerate(self.component_lines):
@@ -700,9 +856,9 @@ def test_3_components_interactive() -> None:
     sigmas = torch.tensor([0.5, 0.5, 0.5], dtype=dtype)
 
     y = mixture_to_gaussian((x - mu) / sigma, omegas, mus, sigmas)
-    mixture = make_input_mixture(mu, sigma, omegas, mus, sigmas)
+    source = make_input_mixture(mu, sigma, omegas, mus, sigmas)
     target = stats.Normal(mu=0.0, sigma=1.0)
-    x_samples = torch.tensor(mixture.sample(shape=1_000, rng=0), dtype=dtype)
+    x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
     y_samples = mixture_to_gaussian((x_samples - mu) / sigma, omegas, mus, sigmas)
 
     with plt.style.context("bmh"):
@@ -728,7 +884,7 @@ def test_3_components_interactive() -> None:
 
         (input_pdf_line,) = ax_twin.plot(
             x,
-            mixture.pdf(x),
+            source.pdf(x),
             color="green",
             alpha=0.3,
             lw=2,
