@@ -4,6 +4,8 @@ Used as fallback when C++ extensions are not available.
 """
 
 __all__ = [
+    "FALLBACKS",
+    # functions
     "ndtri_exp",
     "ndtri_exp_naive",
     "bimodal_to_gaussian",
@@ -31,3 +33,9 @@ from linodenet_special.fallbacks.transport import (
     mixture_to_gaussian,
     twin_to_gaussian,
 )
+
+FALLBACKS = {
+    "ndtri_exp": ndtri_exp,
+    "singular_triplet": singular_triplet,
+    "spectral_norm": spectral_norm,
+}
