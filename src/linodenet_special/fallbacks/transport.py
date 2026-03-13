@@ -274,11 +274,6 @@ class _MixtureToGaussian(Function):
     .. math:: \dv{y}{μₖ} = -\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
     .. math:: \dv{y}{σₖ} = -\frac{ωₖ zₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
 
-    For numerical stability, the implementation evaluates $\dv*{y}{ωₖ}$ via either
-    $Φ(zₖ)/φ(y)$ or $-Φ(-zₖ)/φ(y)$ depending on the active branch. These differ by the
-    $k$-independent constant $1/φ(y)$, so after the upstream softmax normalization of the
-    mixture weights they induce the same gradient.
-
     Proof:
 
         Via chain rule. The outer derivative is
@@ -317,13 +312,13 @@ class _MixtureToGaussian(Function):
         u = torch.where(log_p < _LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
         assert u.isfinite().all()
 
-        ctx.save_for_backward(z, u, log_w, torch.log(sigmas), log_p < _LOG_HALF)
+        ctx.save_for_backward(z, u, log_w, torch.log(sigmas))
         return u
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         (g,) = outer
-        z, y, log_w, log_sigmas, use_p = ctx.saved_tensors
+        z, y, log_w, log_sigmas = ctx.saved_tensors
 
         y2 = y.square()
 
@@ -340,19 +335,19 @@ class _MixtureToGaussian(Function):
         d_sigmas = -z * scaled_ratio
 
         log_pdf_u = -0.5 * (_LOG_2PI + y2)
-        # ∂y/∂ωₖ = Φ(zₖ) / φ(y) on the p-branch, and -Φ(-zₖ) / φ(y) on the q-branch.
-        # The two differ by the k-independent constant 1 / φ(y), so after the upstream
-        # softmax normalization of the mixture weights they induce the same gradient.
-        d_weights = torch.where(
-            use_p.unsqueeze(-1),
-            torch.exp(log_ndtr(z) - log_pdf_u.unsqueeze(-1)),
-            -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1)),
-        )
+        d_weights = -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1))
 
         grad_values = g * d_values
         grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
         grad_means = torch.einsum("..., ...k -> k", g, d_means)
         grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
+
+        # Project weight gradient onto the simplex tangent space.
+        # ∆ⁿ = {x∈ℝⁿ⁺¹ : ∑ₖxₖ = 0, xₖ≥0}
+        # 𝓣ₓ∆ⁿ = {v∈ℝⁿ⁺¹ : ∑ₖvₖ = 0} is the tangent space of the simplex at x.
+        # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
+        grad_weights = grad_weights - grad_weights.mean(dim=-1, keepdim=True)
+
         return grad_values, grad_weights, grad_means, grad_sigmas
 
 
