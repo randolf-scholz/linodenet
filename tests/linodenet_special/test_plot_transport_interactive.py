@@ -251,6 +251,28 @@ def _slider_positions(
 
 
 @dataclass
+class ComplementarySliderCallback:
+    target: Slider
+
+    def __call__(self, value: float) -> None:
+        target_value = min(1.0, max(0.0, 1.0 - value))
+        if math.isclose(self.target.val, target_value):
+            return
+
+        target_eventson = self.target.eventson
+        self.target.eventson = False
+        try:
+            self.target.set_val(target_value)
+        finally:
+            self.target.eventson = target_eventson
+
+
+def couple_complementary_sliders(slider_1: Slider, slider_2: Slider, /) -> None:
+    slider_1.on_changed(ComplementarySliderCallback(slider_2))
+    slider_2.on_changed(ComplementarySliderCallback(slider_1))
+
+
+@dataclass
 class TransportPlotState:
     x: Tensor
     line: Any
@@ -505,8 +527,8 @@ def test_plot_transport_2_interactive():
         slider_specs = [
             ("mu", "mu", -5.0, 5.0, float(mu)),
             ("sigma", "sigma", 0.2, 5.0, float(sigma)),
-            ("omega_1", "omega_1", 0.1, 5.0, float(omegas[0])),
-            ("omega_2", "omega_2", 0.1, 5.0, float(omegas[1])),
+            ("omega_1", "omega_1", 0.0, 1.0, float(omegas[0])),
+            ("omega_2", "omega_2", 0.0, 1.0, float(omegas[1])),
             ("mu_1", "mu_1", -8.0, 8.0, float(mus[0])),
             ("mu_2", "mu_2", -8.0, 8.0, float(mus[1])),
             ("sigma_1", "sigma_1", 0.1, 3.0, float(sigmas[0])),
@@ -609,8 +631,8 @@ def test_plot_transport_2_interactive_new():
         slider_specs = [
             ("mu", "mu", -5.0, 5.0, float(mu)),
             ("sigma", "sigma", 0.2, 5.0, float(sigma)),
-            ("omega_1", "omega_1", 0.1, 5.0, float(omegas[0])),
-            ("omega_2", "omega_2", 0.1, 5.0, float(omegas[1])),
+            ("omega_1", "omega_1", 0.0, 1.0, float(omegas[0])),
+            ("omega_2", "omega_2", 0.0, 1.0, float(omegas[1])),
             ("mu_1", "mu_1", -8.0, 8.0, float(mus[0])),
             ("mu_2", "mu_2", -8.0, 8.0, float(mus[1])),
             ("sigma_1", "sigma_1", 0.1, 3.0, float(sigmas[0])),
@@ -625,6 +647,7 @@ def test_plot_transport_2_interactive_new():
                 axes, slider_specs, strict=True
             )
         }
+        couple_complementary_sliders(sliders["omega_1"], sliders["omega_2"])
 
         state = TransportPlotState2New(
             x=x,
