@@ -136,6 +136,8 @@ MathJax = {
 			Median : "\\operatorname{Median}",
 			diag   : "\\operatorname{diag}",
 			dist   : "\\operatorname{dist}",
+			logsumexp: "\\operatorname{logsumexp}",
+            NdtriExp: "\\operatorname{ndtri\\_exp}",
 			rank   : "\\operatorname{rank}",
 			relu   : "\\operatorname{ReLU}",
 			KL     : "\\operatorname{KL}",
