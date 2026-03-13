@@ -3,17 +3,9 @@ r"""Implementation of the optimal transport based activation function."""
 
 __all__ = [
     "MAXITER",
-    "_TwinToGaussian",
-    "_GaussianToTwin",
-    "_GaussianToBimodal",
-    "_BimodalToGaussian",
-    "_GaussianToMixture",
-    "_MixtureToGaussian",
     # functional interfaces
     "gaussian_to_twin",
     "twin_to_gaussian",
-    "gaussian_to_bimodal",
-    "bimodal_to_gaussian",
     "gaussian_to_mixture",
     "mixture_to_gaussian",
 ]
@@ -39,7 +31,42 @@ r"""CONFIG: maximum number of iterations for Newton's method in InvPsi."""
 
 
 class _TwinToGaussian(Function):
-    r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
+    r"""Optimal Transport from mixture $p = ½N(-μ, σ²) + ½N(μ, σ²)$ to $q = N(0, 1)$.
+
+    If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the optimal transport map is given by
+
+    .. math:: y = F_q⁻¹(F_p(x))
+
+    Letting Φ be the CDF of $N(0,1)$, then we have
+
+    .. math:: y = Φ⁻¹\Bigl( ½Φ((x+μ)/σ) + ½Φ((x-μ)/σ) \Bigr)
+
+    Unlike the general mixture case, the two components share the mean $±μ$ and scale $σ$.
+    Writing $z₊ = \frac{x+μ}{σ}$ and $z₋ = \frac{x-μ}{σ}$, then the derivatives are
+
+    .. math::
+        \dv{y}{x} &= \frac{1}{2}ℯ^{½(y²-z₊²)} + \frac{1}{2}ℯ^{½(y²-z₋²)} \\
+        \dv{y}{μ} &= \frac{1}{2}ℯ^{½(y²-z₊²)} - \frac{1}{2}ℯ^{½(y²-z₋²)} \\
+        \dv{y}{σ} &= y - \frac{z₊}{2}ℯ^{½(y²-z₊²)} - \frac{z₋}{2}ℯ^{½(y²-z₋²)}
+
+    Proof:
+
+        Let $p = ½Φ(z₊) + ½Φ(z₋)$, then, by the chain rule,
+
+        .. math:: \dv{y}{p} = \frac{1}{Φ'(Φ⁻¹(p))} = \sqrt{2π} ℯ^{½y²}
+
+        Using $Φ'(z) = \frac{1}{\sqrt{2π}}ℯ^{-½z²}$ and the coupling of the parameters,
+
+        .. math::
+            \dv{p}{x} &= \frac{1}{2\sqrt{2π}}ℯ^{-½z₊²}\frac{1}{σ}
+                      + \frac{1}{2\sqrt{2π}}ℯ^{-½z₋²}\frac{1}{σ} \\
+            \dv{p}{μ} &= \frac{1}{2\sqrt{2π}}ℯ^{-½z₊²}\frac{1}{σ}
+                      - \frac{1}{2\sqrt{2π}}ℯ^{-½z₋²}\frac{1}{σ} \\
+            \dv{p}{σ} &= -\frac{1}{2\sqrt{2π}}ℯ^{-½z₊²}\frac{z₊}{σ}
+                      - \frac{1}{2\sqrt{2π}}ℯ^{-½z₋²}\frac{z₋}{σ}
+
+        Combining these terms yields the formulas above.
+    """
 
     @staticmethod
     def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
@@ -269,10 +296,11 @@ class _MixtureToGaussian(Function):
 
     Regarding the derivative, we have, with $zₖ = (x-μₖ)/σₖ$
 
-    .. math:: \dv{y}{x}  = ∑ₖ\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
-    .. math:: \dv{y}{ωₖ} = \sqrt{2π} ℯ^{½y²} Φ(zₖ)
-    .. math:: \dv{y}{μₖ} = -\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
-    .. math:: \dv{y}{σₖ} = -\frac{ωₖ zₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
+    .. math::
+        \dv{y}{x}  &= ∑ₖ\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}    \\
+        \dv{y}{ωₖ} &= \sqrt{2π} ℯ^{½y²} Φ(zₖ)             \\
+        \dv{y}{μₖ} &= -\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}     \\
+        \dv{y}{σₖ} &= -\frac{ωₖ zₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
 
     Proof:
 
@@ -352,35 +380,11 @@ class _MixtureToGaussian(Function):
 
 
 class _GaussianToMixture(Function):
-    r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
+    r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$.
 
-    @staticmethod
-    def forward(
-        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
-    ) -> Tensor:
-        raise NotImplementedError
-
-    @staticmethod
-    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        raise NotImplementedError
-
-
-class _BimodalToGaussian(Function):
-    r"""Optimal Transport from mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$ to $N(0,1)$."""
-
-    @staticmethod
-    def forward(
-        ctx, y: Tensor, weights: Tensor, means: Tensor, sigmas: Tensor, /
-    ) -> Tensor:
-        raise NotImplementedError
-
-    @staticmethod
-    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        raise NotImplementedError
-
-
-class _GaussianToBimodal(Function):
-    r"""Optimal Transport from $N(0,1)$ to mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$."""
+    This transform cannot be expressed in "closed form", so we compute the
+    inverse through newton-iteration / bisection.
+    """
 
     @staticmethod
     def forward(
@@ -401,20 +405,6 @@ def gaussian_to_twin(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
 def twin_to_gaussian(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
     r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
     return _TwinToGaussian.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
-
-
-def gaussian_to_bimodal(
-    y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
-) -> Tensor:
-    r"""Optimal Transport from $N(0,1)$ to mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$."""
-    return _GaussianToBimodal.apply(y, weights, means, sigmas)  # pyright: ignore[reportReturnType]
-
-
-def bimodal_to_gaussian(
-    x: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
-) -> Tensor:
-    r"""Optimal Transport from mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$ to $N(0,1)$."""
-    return _BimodalToGaussian.apply(x, weights, means, sigmas)  # pyright: ignore[reportReturnType]
 
 
 def gaussian_to_mixture(
