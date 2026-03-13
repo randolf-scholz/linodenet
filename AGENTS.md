@@ -38,6 +38,11 @@ Project conventions for automated agents contributing to `linodenet`.
 
 - Follow formatting and linting configured in `pyproject.toml`.
 - Docstrings follow Google style; document invariants and edge cases.
+- Use Unicode characters in latex formulas in docstrings to improve readability.
+  so $ℝ$ rather than $\mathbb{R}$, $ϕ$ rather that $\phi$, $∑$ rather than $\sum$, etc.
+  This includes super- and subscripts, e.g. $xᵢⱼ$ rather than $x_{ij}$ and $f⁻¹$ rather than $f^{-1}$.
+- We use `sphinx-dollarmath`, so prefer `$...$` inline math over `:math:` for better readability.
+  Use `.. math::` for display math.
 - Matplotlib supports CPU torch tensors directly; prefer passing CPU tensors rather than converting to NumPy.
 - Prefer f-string debug syntax (`{var=}`) for simple diagnostic prints.
 - `torch.jit` is deprecated for this project; do not introduce `torch.jit` usage in new code.
