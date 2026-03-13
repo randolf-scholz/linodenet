@@ -243,20 +243,6 @@ class _GaussianToTwin(Function):
         return dy, dmu, dsigma
 
 
-class _GaussianToMixture(Function):
-    r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
-
-    @staticmethod
-    def forward(
-        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
-    ) -> Tensor:
-        raise NotImplementedError
-
-    @staticmethod
-    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        raise NotImplementedError
-
-
 class _MixtureToGaussian(Function):
     r"""Optimal Transport from mixture $p = ∑ₖωₖN(μₖ,σₖ²)$ to $q = N(0,1)$.
 
@@ -313,8 +299,8 @@ class _MixtureToGaussian(Function):
 
         So the total derivative is
 
-        .. math:: \dv{y}{x} = \dv{y}{p}\dv{p}{x}
-        .. math:: \hphantom{\dv{y}{x}} = \sqrt{2π} ℯ^{½y²} \frac{1}{\sqrt{2π}}∑ₖ\frac{ωₖ}{σₖ}\exp{-½zₖ²}
+        .. math:: \dv{y}{x} &= \dv{y}{p}\dv{p}{x} \\
+                            &= \sqrt{2π} ℯ^{½y²} \frac{1}{\sqrt{2π}}∑ₖ\frac{ωₖ}{σₖ}\exp{-½zₖ²}
     """
 
     @staticmethod
@@ -370,8 +356,8 @@ class _MixtureToGaussian(Function):
         return grad_values, grad_weights, grad_means, grad_sigmas
 
 
-class _GaussianToBimodal(Function):
-    r"""Optimal Transport from $N(0,1)$ to mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$."""
+class _GaussianToMixture(Function):
+    r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
 
     @staticmethod
     def forward(
@@ -390,6 +376,20 @@ class _BimodalToGaussian(Function):
     @staticmethod
     def forward(
         ctx, y: Tensor, weights: Tensor, means: Tensor, sigmas: Tensor, /
+    ) -> Tensor:
+        raise NotImplementedError
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        raise NotImplementedError
+
+
+class _GaussianToBimodal(Function):
+    r"""Optimal Transport from $N(0,1)$ to mixture $ω₁N(μ₁,σ₁²) + ω₂N(μ₂,σ₂²)$."""
+
+    @staticmethod
+    def forward(
+        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
     ) -> Tensor:
         raise NotImplementedError
 
