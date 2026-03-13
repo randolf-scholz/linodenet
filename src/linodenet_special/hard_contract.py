@@ -3,12 +3,22 @@ r"""Implementations of the hard bend activation function."""
 __all__ = [
     "hard_contract",
     "hard_expand",
+    "hard_bend",
 ]
 
 import torch
 from torch import Tensor
 
 from signatures import signature
+
+
+@signature("[(...), (), ()] -> (...)")
+def hard_bend(x: Tensor, a: Tensor | float = 1, c: Tensor | float = 1) -> Tensor:
+    r"""Inverse of the hard bend activation function."""
+    a = torch.as_tensor(a, dtype=x.dtype, device=x.device)
+    c = torch.as_tensor(c, dtype=x.dtype, device=x.device)
+    s = torch.sign(a - 1)
+    return torch.where(s * (a - 1) * x.abs() <= c, a * x, x + s * x.sign() * c)
 
 
 @signature("[(...), (), ()] -> (...)")
@@ -32,6 +42,7 @@ def hard_expand(x: Tensor, a: Tensor | float = 1, c: Tensor | float = 1) -> Tens
         ``hard_expand(x, λ, c)`` is the inverse of ``hard_contract(x, 1/λ, c)``.
         `hard_expand` is a piecewise linear approximation of `gaussian_to_twin`.
     """
+    assert a >= 1.0
     return torch.where((a - 1) * x.abs() <= c, a * x, x + x.sign() * c)
 
 
@@ -56,4 +67,5 @@ def hard_contract(x: Tensor, a: Tensor | float = 1, c: Tensor | float = 1) -> Te
         ``hard_contract(x, λ, c)`` is the inverse of ``hard_expand(x, 1/λ, c)``.
         `hard_contract` is a piecewise linear approximation of `twin_to_gaussian`.
     """
+    assert a <= 1.0
     return torch.where((1 - a) * x.abs() <= c, a * x, x - x.sign() * c)

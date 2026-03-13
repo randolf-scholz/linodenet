@@ -4,6 +4,7 @@ __all__ = [
     "SEEDS",
     "SEED",
     "TestCase",
+    "Fixture",
     "make_test_case_quasi_gaussian",
     "make_test_case_rank_one",
     "make_test_case_diagonal",
@@ -23,6 +24,38 @@ DEVICES: Final[list[str]] = ["cpu", "cuda"] if torch.cuda.is_available() else ["
 DTYPES: Final[list[torch.dtype]] = [torch.float32, torch.float64]
 SEEDS: Final[list[int]] = [1000, 1001, 1002, 1003, 1004]
 SEED: Final[int] = 0
+
+
+class Fixture:
+    ATOL = 1e-6
+    RTOL = 1e-6
+
+    def assert_close(
+        self,
+        value: Tensor | float,
+        true_value: Tensor | float,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+    ) -> None:
+        __tracebackhide__ = True
+
+        value = torch.as_tensor(value)
+        true_value = torch.as_tensor(true_value)
+        residual = (value - true_value).abs()
+        magnitude = true_value.abs()
+        ok = residual <= rtol * magnitude + atol
+
+        if not ok.all():
+            max_abs_err = residual.max().item()
+            max_rel_err = (residual / magnitude).max().item()
+            msg = (
+                f"Values not close! "
+                f"\n\tleft:  {value.tolist()}"
+                f"\n\tright: {true_value.tolist()}"
+                f"\n\tmax abs error={max_abs_err}  (expected {atol})"
+                f"\n\tmax rel error={max_rel_err}  (expected {rtol})"
+            )
+            raise AssertionError(msg)
 
 
 class TestCase(NamedTuple):

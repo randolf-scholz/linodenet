@@ -40,74 +40,73 @@ class _TwinToGaussian(Function):
     Letting Φ be the CDF of $N(0,1)$, then we have
 
     .. math:: y = Φ⁻¹\Bigl( ½Φ((x+μ)/σ) + ½Φ((x-μ)/σ) \Bigr)
+                = √2 \erf⁻¹\Bigl( ½\erf((x+μ)/√2σ) + ½\erf((x-μ)/√2σ) \Bigr)
 
     Unlike the general mixture case, the two components share the mean $±μ$ and scale $σ$.
     Writing $z₊ = \frac{x+μ}{σ}$ and $z₋ = \frac{x-μ}{σ}$, then the derivatives are
 
     .. math::
-        \dv{y}{x} &= \frac{1}{2}ℯ^{½(y²-z₊²)} + \frac{1}{2}ℯ^{½(y²-z₋²)} \\
-        \dv{y}{μ} &= \frac{1}{2}ℯ^{½(y²-z₊²)} - \frac{1}{2}ℯ^{½(y²-z₋²)} \\
-        \dv{y}{σ} &= y - \frac{z₊}{2}ℯ^{½(y²-z₊²)} - \frac{z₋}{2}ℯ^{½(y²-z₋²)}
+        \dv{y}{x} &= ½σ⁻¹(ℯ^{½(y²-z₊²)} + ℯ^{½(y²-z₋²)}) \\
+        \dv{y}{μ} &= ½σ⁻¹(ℯ^{½(y²-z₊²)} - ℯ^{½(y²-z₋²)}) \\
+        \dv{y}{σ} &= -½σ⁻¹(z₊ℯ^{½(y²-z₊²)} + z₋ℯ^{½(y²-z₋²)})
 
     Proof:
 
-        Let $p = ½Φ(z₊) + ½Φ(z₋)$, then, by the chain rule,
+        Let $u = ½Φ(z₊) + ½Φ(z₋)$, then, by the chain rule,
 
-        .. math:: \dv{y}{p} = \frac{1}{Φ'(Φ⁻¹(p))} = \sqrt{2π} ℯ^{½y²}
+        .. math:: \dv{y}{u} = \frac{1}{Φ'(Φ⁻¹(u))} = \sqrt{2π} ℯ^{½y²}
 
         Using $Φ'(z) = \frac{1}{\sqrt{2π}}ℯ^{-½z²}$ and the coupling of the parameters,
 
         .. math::
-            \dv{p}{x} &= \frac{1}{2\sqrt{2π}}ℯ^{-½z₊²}\frac{1}{σ}
-                      + \frac{1}{2\sqrt{2π}}ℯ^{-½z₋²}\frac{1}{σ} \\
-            \dv{p}{μ} &= \frac{1}{2\sqrt{2π}}ℯ^{-½z₊²}\frac{1}{σ}
-                      - \frac{1}{2\sqrt{2π}}ℯ^{-½z₋²}\frac{1}{σ} \\
-            \dv{p}{σ} &= -\frac{1}{2\sqrt{2π}}ℯ^{-½z₊²}\frac{z₊}{σ}
-                      - \frac{1}{2\sqrt{2π}}ℯ^{-½z₋²}\frac{z₋}{σ}
+            \dv{u}{x} &= ½(√2πσ)⁻¹(ℯ^{-½z₊²} + ℯ^{-½z₋²}) \\
+            \dv{u}{μ} &= ½(√2πσ)⁻¹(ℯ^{-½z₊²} - ℯ^{-½z₋²}) \\
+            \dv{u}{σ} &= -½(√2πσ)⁻¹(z₊ℯ^{-½z₊²} + z₋ℯ^{-½z₋²})
 
         Combining these terms yields the formulas above.
     """
 
     @staticmethod
     def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
-        s = sigma * _SQRT_2
-        EPS = 8 * torch.finfo(x.dtype).eps
+        upper = (x + mu) / sigma
+        lower = (x - mu) / sigma
 
-        a = (x + mu) / s
-        b = (x - mu) / s
-        mix = 0.5 * (torch.erf(a) + torch.erf(b))
-        mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
-        mask = mix.abs() < (1 - EPS)
+        log_p = torch.logaddexp(
+            _LOG_HALF + log_ndtr(upper), _LOG_HALF + log_ndtr(lower)
+        )
+        log_q = torch.logaddexp(
+            _LOG_HALF + log_ndtr(-upper), _LOG_HALF + log_ndtr(-lower)
+        )
+        y = torch.where(log_p < _LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
 
         # compute y = √2σ * erfinv(mix), with tail handling
-        z = torch.erfinv(mix)
-        y = torch.where(mask, s * z, x - torch.sign(x) * mu)
+        # y = torch.where(mask, z, x + torch.sign(x) * mu)
         assert y.isfinite().all()
 
         # project to legal range
-        y = torch.clamp(y, x - mu, x + mu)
+        y = torch.clamp(y, lower, upper)
 
-        ctx.save_for_backward(a, b, z, mask)
+        ctx.save_for_backward(y, lower, upper, sigma)
         return y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         (g,) = outer
-        a, b, z, mask = ctx.saved_tensors
-        finfo = torch.finfo(z.dtype)
+        finfo = torch.finfo(g.dtype)
         TINY = finfo.tiny
-
-        phi1 = torch.exp(z**2 - a**2)
-        phi2 = torch.exp(z**2 - b**2)
+        z, lower, upper, sigma = ctx.saved_tensors
+        log_sigma = torch.log(sigma)
+        phi1 = torch.exp(0.5 * (z**2 - upper**2) - log_sigma)
+        phi2 = torch.exp(0.5 * (z**2 - lower**2) - log_sigma)
 
         # compute the exact derivatives
         d_x_exact = 0.5 * (phi1 + phi2)
         d_mu_exact = 0.5 * (phi1 - phi2)
-        d_sigma_exact = _SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
+        d_sigma_exact = _SQRT_2 * (z - 0.5 * (lower * phi1 + upper * phi2))
 
-        # clamp gradient away from zero.
-        d_x_exact = torch.clamp(d_x_exact, TINY, 1)
-        d_mu_exact = torch.clamp(d_mu_exact, -1, 1)
+        # clamp gradient away from zero. (ℯ^(-½μ²/σ²))
+        d_x_exact = torch.clamp(d_x_exact, TINY, 1 / sigma)
+        d_mu_exact = torch.clamp(d_mu_exact, -1 / sigma, 1 / sigma)
 
         # compute the tail terms
         d_x_tail = torch.ones_like(d_x_exact)
@@ -115,6 +114,7 @@ class _TwinToGaussian(Function):
         d_sigma_tail = torch.zeros_like(d_sigma_exact)
 
         # combine via mask
+        mask = torch.ones_like(d_x_exact, dtype=torch.bool)
         d_x = torch.where(mask, d_x_exact, d_x_tail)
         d_mu = torch.where(mask, d_mu_exact, d_mu_tail)
         d_sigma = torch.where(mask, d_sigma_exact, d_sigma_tail)
@@ -173,8 +173,8 @@ class _GaussianToTwin(Function):
             a = (x + mu) / s
             b = (x - mu) / s
             mix = 0.5 * (torch.erf(a) + torch.erf(b))
-            mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
             mask = mix.abs() < 1 - EPS
+            mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
 
             # compute y = √2σ * erfinv(mix), with tail handling
             z = torch.erfinv(mix)
@@ -330,9 +330,9 @@ class _MixtureToGaussian(Function):
     def forward(
         ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
     ) -> Tensor:
-        z = (y.unsqueeze(-1) - means) / sigmas
-        assert z.shape[-1] == weights.shape[0] == means.shape[0] == sigmas.shape[0]
+        assert weights.shape[0] == means.shape[0] == sigmas.shape[0]
 
+        z = (y.unsqueeze(-1) - means) / sigmas
         log_w = torch.log(weights)
         log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
         log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
