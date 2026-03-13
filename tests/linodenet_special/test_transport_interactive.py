@@ -455,7 +455,7 @@ def test_twin_to_gaussian_interactive() -> None:
         ax.legend(loc="upper left")
 
         slider_specs = [
-            ("mu", "μ", 0.0, 5.0, float(mu)),
+            ("mu", "μ", -5.0, 5.0, float(mu)),
             ("sigma", "σ", 0.1, 3.0, float(sigma)),
         ]
 

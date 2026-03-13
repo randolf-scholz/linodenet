@@ -68,56 +68,56 @@ class _TwinToGaussian(Function):
 
     @staticmethod
     def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
-        upper = (x + mu) / sigma
-        lower = (x - mu) / sigma
+        z_plus = (x + mu) / sigma
+        z_minus = (x - mu) / sigma
+        z_lo = torch.minimum(z_minus, z_plus)
+        z_hi = torch.maximum(z_minus, z_plus)
 
         log_p = torch.logaddexp(
-            _LOG_HALF + log_ndtr(upper), _LOG_HALF + log_ndtr(lower)
+            _LOG_HALF + log_ndtr(z_plus), _LOG_HALF + log_ndtr(z_minus)
         )
         log_q = torch.logaddexp(
-            _LOG_HALF + log_ndtr(-upper), _LOG_HALF + log_ndtr(-lower)
+            _LOG_HALF + log_ndtr(-z_plus), _LOG_HALF + log_ndtr(-z_minus)
         )
         y = torch.where(log_p < _LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
 
-        # compute y = √2σ * erfinv(mix), with tail handling
-        # y = torch.where(mask, z, x + torch.sign(x) * mu)
         assert y.isfinite().all()
 
         # project to legal range
-        y = torch.clamp(y, lower, upper)
+        y = torch.clamp(y, z_lo, z_hi)
 
-        ctx.save_for_backward(y, lower, upper, sigma)
+        ctx.save_for_backward(y, z_minus, z_plus, mu, sigma)
         return y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         (g,) = outer
-        finfo = torch.finfo(g.dtype)
-        TINY = finfo.tiny
-        z, lower, upper, sigma = ctx.saved_tensors
-        log_sigma = torch.log(sigma)
-        phi1 = torch.exp(0.5 * (z**2 - upper**2) - log_sigma)
-        phi2 = torch.exp(0.5 * (z**2 - lower**2) - log_sigma)
+        z, z_minus, z_plus, mu, sigma = ctx.saved_tensors
 
-        # compute the exact derivatives
-        d_x_exact = 0.5 * (phi1 + phi2)
-        d_mu_exact = 0.5 * (phi1 - phi2)
-        d_sigma_exact = _SQRT_2 * (z - 0.5 * (lower * phi1 + upper * phi2))
+        z2 = z.square()
+        log_sigma = sigma.log()
+        log_phi_plus = 0.5 * (z2 - z_plus.square()) - log_sigma + _LOG_HALF
+        log_phi_minus = 0.5 * (z2 - z_minus.square()) - log_sigma + _LOG_HALF
 
-        # clamp gradient away from zero. (ℯ^(-½μ²/σ²))
-        d_x_exact = torch.clamp(d_x_exact, TINY, 1 / sigma)
-        d_mu_exact = torch.clamp(d_mu_exact, -1 / sigma, 1 / sigma)
+        # compute the exact derivatives in numerically robust manner
+        d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
+        hi = torch.maximum(log_phi_plus, log_phi_minus)
+        lo = torch.minimum(log_phi_plus, log_phi_minus)
+        d_mu_exact = (
+            torch.sign(log_phi_plus - log_phi_minus)  #
+            * torch.exp(hi + torch.log1p(-torch.exp(lo - hi)))
+        )
+        d_sigma_exact = -(
+            0.5 * (z_plus + z_minus) * d_x_exact  #
+            + (mu / sigma) * d_mu_exact
+        )
 
-        # compute the tail terms
-        d_x_tail = torch.ones_like(d_x_exact)
-        d_mu_tail = -torch.sign(z)
-        d_sigma_tail = torch.zeros_like(d_sigma_exact)
-
-        # combine via mask
-        mask = torch.ones_like(d_x_exact, dtype=torch.bool)
-        d_x = torch.where(mask, d_x_exact, d_x_tail)
-        d_mu = torch.where(mask, d_mu_exact, d_mu_tail)
-        d_sigma = torch.where(mask, d_sigma_exact, d_sigma_tail)
+        # clamp gradient away from zero. (ℯ^(-½μ²/σ²)/sigma)
+        lower_bound = torch.exp(-0.5 * (mu / sigma) ** 2) / sigma
+        upper_bound = 1 / sigma
+        d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
+        d_mu = torch.clamp(d_mu_exact, -upper_bound, upper_bound)
+        d_sigma = d_sigma_exact
 
         return (g * d_x), (g * d_mu), (g * d_sigma)
 

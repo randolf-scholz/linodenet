@@ -198,7 +198,7 @@ class TestTwinToGaussian(Fixture):
         assert x1.grad is not None
         assert x1.grad.isfinite().all()
         assert x1.grad.max() <= upper_grad_bound
-        assert x1.grad.min() > lower_grad_bound
+        assert x1.grad.min() >= lower_grad_bound
         self.assert_close(x1.grad[0], λ, rtol=g_rtol)
 
         x2 = torch.linspace(
@@ -214,7 +214,7 @@ class TestTwinToGaussian(Fixture):
         assert x2.grad is not None
         assert x2.grad.isfinite().all()
         assert x2.grad.max() <= upper_grad_bound
-        assert x2.grad.min() > lower_grad_bound
+        assert x2.grad.min() >= lower_grad_bound
         self.assert_close(x2.grad[0], λ, rtol=g_rtol)
         self.assert_close(x1.grad, x2.grad)
 
@@ -229,7 +229,7 @@ class TestTwinToGaussian(Fixture):
         y_tail.sum().backward()
         assert tail.grad is not None
         assert tail.grad.isfinite().all()
-        self.assert_close(tail.grad, upper_grad_bound, rtol=2.0)
+        self.assert_close(tail.grad, upper_grad_bound, rtol=0.5)
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("sigma", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"s={x}")
@@ -238,8 +238,8 @@ class TestTwinToGaussian(Fixture):
     def test_twin_to_gaussian_gradcheck(
         self, dtype: torch.dtype, mu: float, sigma: float, device: str
     ) -> None:
-        μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=False)
-        σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=False)
+        μ = torch.tensor(mu, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(sigma, dtype=dtype, device=device, requires_grad=True)
         λ = torch.exp(-0.5 * (μ / σ) ** 2) / sigma
         x_star = μ * min(1, 1 / (1 - λ.item()))
         x_narrow = torch.linspace(
@@ -253,7 +253,7 @@ class TestTwinToGaussian(Fixture):
 
         match dtype:
             case torch.float32:
-                atol, rtol, eps = 1e-2, 1e-3, 1e-3
+                atol, rtol, eps = 1e-3, 1e-3, 1e-3
             case torch.float64:
                 atol, rtol, eps = 1e-6, 1e-6, 1e-6
             case _:
