@@ -25,6 +25,7 @@ from typing import Final
 import torch
 from torch import Tensor
 from torch.autograd import Function
+from torch.special import log_ndtr
 
 from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
 
@@ -32,6 +33,7 @@ _SQRT_2: Final[float] = math.sqrt(2)
 r"""CONST: √2, used for scaling the erfinv output."""
 _LOG_HALF: Final[float] = math.log(0.5)
 r"""CONST: log(0.5) is used in the tail handling of the erfinv computation."""
+_LOG_2PI: Final[float] = math.log(math.tau)
 MAXITER: int = 10
 r"""CONFIG: maximum number of iterations for Newton's method in InvPsi."""
 
@@ -261,16 +263,16 @@ class _MixtureToGaussian(Function):
     If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the
     optimal transport map is given by
 
-    .. math::  T(x) = F_q⁻¹(F_p(x))
+    .. math:: y = F_q⁻¹(F_p(x))
 
     Letting Φ be the CDF of $N(0,1)$, and letting $pₖ = N(μₖ,σₖ²)$ be the k-th component
     of $p$, then $F_p = ∑ₖωₖΦ((x-μₖ)/σₖ)$, and the optimal transport map is given by
 
-    .. math:: T(x) = Φ⁻¹( ∑ₖ ωₖ⋅Φ((x-μₖ)/σₖ) )
+    .. math:: y = Φ⁻¹( ∑ₖ ωₖ⋅Φ((x-μₖ)/σₖ) )
 
     To increase numerical stability, we compute the log of the CDFs and use the log-sum-exp trick:
 
-    .. math:: T(x) =
+    .. math:: y =
         \begin{cases}
             \NdtriExp\Bigl(\logsumexp(\log ωₖ + \log Φ(zₖ)) \Bigr) & \text{if } \log p < \log(½) \\
             -\NdtriExp\Bigl(\logsumexp_k(\log ωₖ + \log Φ(-zₖ))\Bigr) & \text{otherwise}
@@ -278,6 +280,41 @@ class _MixtureToGaussian(Function):
 
     where $zₖ = (x-μₖ)/σₖ$ and $\log p = \log ∑ₖ ωₖ Φ(zₖ)$. The second branch uses
     $\log(1-p) = \log ∑ₖ ωₖ Φ(-zₖ)$ to avoid loss of precision when $p$ is close to $1$.
+
+    Regarding the derivative, we have, with $zₖ = (x-μₖ)/σₖ$
+
+    .. math:: \dv{y}{x}  = ∑ₖ\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
+    .. math:: \dv{y}{ωₖ} = \sqrt{2π} ℯ^{½y²} Φ(zₖ)
+    .. math:: \dv{y}{μₖ} = -\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
+    .. math:: \dv{y}{σₖ} = -\frac{ωₖ zₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
+
+    For numerical stability, the implementation evaluates $\dv*{y}{ωₖ}$ via either
+    $Φ(zₖ)/φ(y)$ or $-Φ(-zₖ)/φ(y)$ depending on the active branch. These differ by the
+    $k$-independent constant $1/φ(y)$, so after the upstream softmax normalization of the
+    mixture weights they induce the same gradient.
+
+    Proof:
+
+        Via chain rule. The outer derivative is
+
+        .. math:: \dv{Φ⁻¹(p)}{p} = \frac{1}{Φ'(Φ⁻¹(p))}
+
+        and since $Φ'(x) = \frac{1}{\sqrt{2π}} ℯ^{-½x²}$, we have
+
+        .. math::  \dv{Φ⁻¹}{p} = \sqrt{2π} ℯ^{½Φ⁻¹(p)²} =  \sqrt{2π} ℯ^{½y²}
+
+        the inner derivative is, with some simplification
+
+        .. math:: \dv{p}{x} &= \dv{x} ∑ₖ ωₖ⋅Φ((x-μₖ)/σₖ)   \\
+                            &= \frac{1}{\sqrt{2π}}∑ₖ\frac{ωₖ}{σₖ}\exp{-½zₖ²}
+        .. math:: \dv{p}{ωₖ} = Φ(zₖ)
+        .. math:: \dv{p}{μₖ} = -\frac{1}{\sqrt{2π}}\frac{ωₖ}{σₖ}\exp{-½zₖ²}
+        .. math:: \dv{p}{σₖ} = -\frac{zₖ}{\sqrt{2π}}\frac{ωₖ}{σₖ}\exp{-½zₖ²}
+
+        So the total derivative is
+
+        .. math:: \dv{y}{x} = \dv{y}{p}\dv{p}{x}
+        .. math:: \hphantom{\dv{y}{x}} = \sqrt{2π} ℯ^{½y²} \frac{1}{\sqrt{2π}}∑ₖ\frac{ωₖ}{σₖ}\exp{-½zₖ²}
     """
 
     @staticmethod
@@ -288,41 +325,49 @@ class _MixtureToGaussian(Function):
         assert z.shape[-1] == weights.shape[0] == means.shape[0] == sigmas.shape[0]
 
         log_w = torch.log(weights)
-        log_p = torch.logsumexp(log_w + torch.special.log_ndtr(z), dim=-1)
-        log_q = torch.logsumexp(log_w + torch.special.log_ndtr(-z), dim=-1)
+        log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
+        log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
 
         u = torch.where(log_p < _LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
         assert u.isfinite().all()
 
-        ctx.save_for_backward(z, u, weights, sigmas, log_p < _LOG_HALF)
+        ctx.save_for_backward(z, u, log_w, torch.log(sigmas), log_p < _LOG_HALF)
         return u
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         (g,) = outer
-        z, u, weights, sigmas, use_p = ctx.saved_tensors
+        z, y, log_w, log_sigmas, use_p = ctx.saved_tensors
 
-        u2 = u.unsqueeze(-1)
-        log_ratio = 0.5 * (u2.square() - z.square())
-        density_ratio = torch.exp(log_ratio)
-        scaled_ratio = density_ratio * (weights / sigmas)
+        y2 = y.square()
 
-        d_y = scaled_ratio.sum(dim=-1)
+        # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
+        log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
+        # (ωₖ / σₖ) exp(½(y² - zₖ²)) appears in ∂y/∂x, ∂y/∂μₖ, and ∂y/∂σₖ.
+        scaled_ratio = torch.exp(log_ratio + log_w - log_sigmas)
+
+        # ∂y/∂x = ∑ₖ (ωₖ / σₖ) exp(½(y² - zₖ²))
+        d_values = scaled_ratio.sum(dim=-1)
+        # ∂y/∂μₖ = -(ωₖ / σₖ) exp(½(y² - zₖ²))
         d_means = -scaled_ratio
-        d_sigmas = -(scaled_ratio * z)
+        # ∂y/∂σₖ = -(ωₖ zₖ / σₖ) exp(½(y² - zₖ²))
+        d_sigmas = -z * scaled_ratio
 
-        log_pdf_u = -0.5 * u.square() - 0.5 * math.log(2 * math.pi)
+        log_pdf_u = -0.5 * (_LOG_2PI + y2)
+        # ∂y/∂ωₖ = Φ(zₖ) / φ(y) on the p-branch, and -Φ(-zₖ) / φ(y) on the q-branch.
+        # The two differ by the k-independent constant 1 / φ(y), so after the upstream
+        # softmax normalization of the mixture weights they induce the same gradient.
         d_weights = torch.where(
             use_p.unsqueeze(-1),
-            torch.exp(torch.special.log_ndtr(z) - log_pdf_u.unsqueeze(-1)),
-            -torch.exp(torch.special.log_ndtr(-z) - log_pdf_u.unsqueeze(-1)),
+            torch.exp(log_ndtr(z) - log_pdf_u.unsqueeze(-1)),
+            -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1)),
         )
 
-        g_components = g.unsqueeze(-1)
-        grad_weights = (g_components * d_weights).sum_to_size(weights.shape)
-        grad_means = (g_components * d_means).sum_to_size(weights.shape)
-        grad_sigmas = (g_components * d_sigmas).sum_to_size(sigmas.shape)
-        return (g * d_y), grad_weights, grad_means, grad_sigmas
+        grad_values = g * d_values
+        grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
+        grad_means = torch.einsum("..., ...k -> k", g, d_means)
+        grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
+        return grad_values, grad_weights, grad_means, grad_sigmas
 
 
 class _GaussianToBimodal(Function):
