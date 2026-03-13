@@ -13,9 +13,12 @@ from matplotlib.widgets import Slider
 from torch import Tensor
 
 from linodenet_special import ndtri_exp
+from linodenet_special.fallbacks import mixture_to_gaussian
 from tests.utils.project import PROJECT
 
 SQRT_2: Final[float] = math.sqrt(2)
+LOG_HALF: Final[float] = math.log(0.5)
+r"""CONST: log(0.5) is used in the tail handling of the erfinv computation."""
 type Context = Any  # torch offers no type hint
 
 
@@ -107,10 +110,6 @@ def psi_old(x, mu, sigma, omegas, mus, sigmas):
             torch.where(x < x_middle, y_left, y_right),
         ),
     )
-
-
-LOG_HALF: Final[float] = math.log(0.5)
-r"""CONST: log(0.5) is used in the tail handling of the erfinv computation."""
 
 
 def asymptotic_line(
@@ -320,6 +319,50 @@ class TransportPlotState2:
         self.line.figure.canvas.draw_idle()
 
 
+@dataclass
+class TransportPlotState2New:
+    x: Tensor
+    line: Any
+    component_lines: list[Any]
+    sliders: Mapping[str, Slider]
+
+    def update(self, _value: float) -> None:
+        dtype = self.x.dtype
+
+        mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
+        sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
+
+        omegas = torch.tensor(
+            [self.sliders["omega_1"].val, self.sliders["omega_2"].val],
+            dtype=dtype,
+        )
+        omegas = omegas / omegas.sum()
+
+        mus = torch.tensor(
+            [self.sliders["mu_1"].val, self.sliders["mu_2"].val], dtype=dtype
+        )
+
+        sigmas = torch.tensor(
+            [self.sliders["sigma_1"].val, self.sliders["sigma_2"].val], dtype=dtype
+        )
+
+        y = mixture_to_gaussian((self.x - mu) / sigma, omegas, mus, sigmas)
+
+        self.line.set_ydata(y)
+        for k, line in enumerate(self.component_lines):
+            line.set_ydata(
+                asymptotic_line(
+                    (self.x - mu) / sigma,
+                    mus[k],
+                    sigmas[k],
+                    omegas[k],
+                    mus[k],
+                    sigmas[k],
+                )
+            )
+        self.line.figure.canvas.draw_idle()
+
+
 @pytest.mark.interactive
 def test_plot_transport_3_interactive():
     dtype = torch.float64
@@ -427,6 +470,66 @@ def test_plot_transport_2_interactive():
         }
 
         state = TransportPlotState2(
+            x=x, line=line, component_lines=component_lines, sliders=sliders
+        )
+        for slider in sliders.values():
+            slider.on_changed(state.update)
+
+        plt.show()
+
+
+@pytest.mark.interactive
+def test_plot_transport_2_interactive_new():
+    dtype = torch.float64
+
+    x = torch.linspace(-10, 10, 200, dtype=dtype)
+
+    mu = torch.tensor(0, dtype=dtype)
+    sigma = torch.tensor(1, dtype=dtype)
+    omegas = torch.tensor([2, 1], dtype=dtype)
+    omegas = omegas / omegas.sum()
+    mus = torch.tensor([-3, 3], dtype=dtype)
+    sigmas = torch.tensor([0.5, 0.5], dtype=dtype)
+
+    y = mixture_to_gaussian((x - mu) / sigma, omegas, mus, sigmas)
+
+    with plt.style.context("bmh"):
+        fig, ax = plt.subplots(figsize=(10, 6))
+        (line,) = ax.plot(x, y, label="transport", lw=5)
+        component_lines = [
+            ax.plot(
+                x,
+                asymptotic_line(
+                    (x - mu) / sigma, mus[k], sigmas[k], omegas[k], mus[k], sigmas[k]
+                ),
+                "k--",
+            )[0]
+            for k in range(mus.numel())
+        ]
+        ax.set_title("Interactive Transport via gaussian_to_mixture")
+        ax.legend(loc="upper left")
+
+        slider_specs = [
+            ("mu", "mu", -5.0, 5.0, float(mu)),
+            ("sigma", "sigma", 0.2, 5.0, float(sigma)),
+            ("omega_1", "omega_1", 0.1, 5.0, float(omegas[0])),
+            ("omega_2", "omega_2", 0.1, 5.0, float(omegas[1])),
+            ("mu_1", "mu_1", -8.0, 8.0, float(mus[0])),
+            ("mu_2", "mu_2", -8.0, 8.0, float(mus[1])),
+            ("sigma_1", "sigma_1", 0.1, 3.0, float(sigmas[0])),
+            ("sigma_2", "sigma_2", 0.1, 3.0, float(sigmas[1])),
+        ]
+
+        fig.subplots_adjust(bottom=0.32)
+        axes = [fig.add_axes(pos) for pos in _slider_positions(len(slider_specs))]
+        sliders = {
+            key: Slider(ax_, label, min_, max_, valinit=init)
+            for ax_, (key, label, min_, max_, init) in zip(
+                axes, slider_specs, strict=True
+            )
+        }
+
+        state = TransportPlotState2New(
             x=x, line=line, component_lines=component_lines, sliders=sliders
         )
         for slider in sliders.values():

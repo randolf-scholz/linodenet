@@ -2,7 +2,6 @@ r"""Implementation of the optimal transport based activation function."""
 # mypy: disable-error-code="no-untyped-def"
 
 __all__ = [
-    "SQRT_2",
     "MAXITER",
     "_TwinToGaussian",
     "_GaussianToTwin",
@@ -27,8 +26,12 @@ import torch
 from torch import Tensor
 from torch.autograd import Function
 
-SQRT_2: Final[float] = math.sqrt(2)
+from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
+
+_SQRT_2: Final[float] = math.sqrt(2)
 r"""CONST: √2, used for scaling the erfinv output."""
+_LOG_HALF: Final[float] = math.log(0.5)
+r"""CONST: log(0.5) is used in the tail handling of the erfinv computation."""
 MAXITER: int = 10
 r"""CONFIG: maximum number of iterations for Newton's method in InvPsi."""
 
@@ -38,7 +41,7 @@ class _TwinToGaussian(Function):
 
     @staticmethod
     def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
-        s = sigma * SQRT_2
+        s = sigma * _SQRT_2
         EPS = 8 * torch.finfo(x.dtype).eps
 
         a = (x + mu) / s
@@ -71,7 +74,7 @@ class _TwinToGaussian(Function):
         # compute the exact derivatives
         d_x_exact = 0.5 * (phi1 + phi2)
         d_mu_exact = 0.5 * (phi1 - phi2)
-        d_sigma_exact = SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
+        d_sigma_exact = _SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
 
         # clamp gradient away from zero.
         d_x_exact = torch.clamp(d_x_exact, TINY, 1)
@@ -104,7 +107,7 @@ class _GaussianToTwin(Function):
             1. approximate Ψ⁻¹(y, μ, σ) ≈ hard_bend(y, λ=\exp(μ²/σ²), c=μ)
             2. invert hard_bend to get initial guess for x.
         """
-        s = sigma * SQRT_2
+        s = sigma * _SQRT_2
         finfo = torch.finfo(y.dtype)
         EPS = 8 * finfo.eps
         TINY = finfo.tiny
@@ -202,7 +205,7 @@ class _GaussianToTwin(Function):
         # compute the exact derivatives
         d_x_exact = 0.5 * (phi1 + phi2)
         d_mu_exact = 0.5 * (phi1 - phi2)
-        d_sigma_exact = SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
+        d_sigma_exact = _SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
 
         # clamp gradient away from zero.
         d_x_exact = torch.clamp(d_x_exact, TINY, 1)
@@ -253,17 +256,73 @@ class _GaussianToMixture(Function):
 
 
 class _MixtureToGaussian(Function):
-    r"""Optimal Transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$."""
+    r"""Optimal Transport from mixture $p = ∑ₖωₖN(μₖ,σₖ²)$ to $q = N(0,1)$.
+
+    If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the
+    optimal transport map is given by
+
+    .. math::  T(x) = F_q⁻¹(F_p(x))
+
+    Letting Φ be the CDF of $N(0,1)$, and letting $pₖ = N(μₖ,σₖ²)$ be the k-th component
+    of $p$, then $F_p = ∑ₖωₖΦ((x-μₖ)/σₖ)$, and the optimal transport map is given by
+
+    .. math:: T(x) = Φ⁻¹( ∑ₖ ωₖ⋅Φ((x-μₖ)/σₖ) )
+
+    To increase numerical stability, we compute the log of the CDFs and use the log-sum-exp trick:
+
+    .. math:: T(x) =
+        \begin{cases}
+            \NdtriExp\Bigl(\logsumexp(\log ωₖ + \log Φ(zₖ)) \Bigr) & \text{if } \log p < \log(½) \\
+            -\NdtriExp\Bigl(\logsumexp_k(\log ωₖ + \log Φ(-zₖ))\Bigr) & \text{otherwise}
+        \end{cases}
+
+    where $zₖ = (x-μₖ)/σₖ$ and $\log p = \log ∑ₖ ωₖ Φ(zₖ)$. The second branch uses
+    $\log(1-p) = \log ∑ₖ ωₖ Φ(-zₖ)$ to avoid loss of precision when $p$ is close to $1$.
+    """
 
     @staticmethod
     def forward(
         ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
     ) -> Tensor:
-        raise NotImplementedError
+        z = (y.unsqueeze(-1) - means) / sigmas
+        assert z.shape[-1] == weights.shape[0] == means.shape[0] == sigmas.shape[0]
+
+        log_w = torch.log(weights)
+        log_p = torch.logsumexp(log_w + torch.special.log_ndtr(z), dim=-1)
+        log_q = torch.logsumexp(log_w + torch.special.log_ndtr(-z), dim=-1)
+
+        u = torch.where(log_p < _LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
+        assert u.isfinite().all()
+
+        ctx.save_for_backward(z, u, weights, sigmas, log_p < _LOG_HALF)
+        return u
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        raise NotImplementedError
+        (g,) = outer
+        z, u, weights, sigmas, use_p = ctx.saved_tensors
+
+        u2 = u.unsqueeze(-1)
+        log_ratio = 0.5 * (u2.square() - z.square())
+        density_ratio = torch.exp(log_ratio)
+        scaled_ratio = density_ratio * (weights / sigmas)
+
+        d_y = scaled_ratio.sum(dim=-1)
+        d_means = -scaled_ratio
+        d_sigmas = -(scaled_ratio * z)
+
+        log_pdf_u = -0.5 * u.square() - 0.5 * math.log(2 * math.pi)
+        d_weights = torch.where(
+            use_p.unsqueeze(-1),
+            torch.exp(torch.special.log_ndtr(z) - log_pdf_u.unsqueeze(-1)),
+            -torch.exp(torch.special.log_ndtr(-z) - log_pdf_u.unsqueeze(-1)),
+        )
+
+        g_components = g.unsqueeze(-1)
+        grad_weights = (g_components * d_weights).sum_to_size(weights.shape)
+        grad_means = (g_components * d_means).sum_to_size(weights.shape)
+        grad_sigmas = (g_components * d_sigmas).sum_to_size(sigmas.shape)
+        return (g * d_y), grad_weights, grad_means, grad_sigmas
 
 
 class _GaussianToBimodal(Function):
