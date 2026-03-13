@@ -46,6 +46,9 @@ from typing import Final
 import torch
 from torch import Tensor
 
+# only pin when cuda is actually available (errors otherwise)
+_PIN_MEMORY = torch.cuda.is_available()
+
 _P1 = torch.tensor(
     [
         4.05544892305962419923,
@@ -59,7 +62,7 @@ _P1 = torch.tensor(
         -8.57456785154685413611e-4,
     ],
     dtype=torch.float64,
-    pin_memory=True,
+    pin_memory=_PIN_MEMORY,
 )
 _Q1 = torch.tensor(
     [
@@ -73,7 +76,7 @@ _Q1 = torch.tensor(
         -9.33259480895457427372e-4,
     ],
     dtype=torch.float64,
-    pin_memory=True,
+    pin_memory=_PIN_MEMORY,
 )
 _P2 = torch.tensor(
     [
@@ -88,7 +91,7 @@ _P2 = torch.tensor(
         6.23974539184983293730e-9,
     ],
     dtype=torch.float64,
-    pin_memory=True,
+    pin_memory=_PIN_MEMORY,
 )
 _Q2 = torch.tensor(
     [
@@ -102,7 +105,7 @@ _Q2 = torch.tensor(
         6.79019408009981274425e-9,
     ],
     dtype=torch.float64,
-    pin_memory=True,
+    pin_memory=_PIN_MEMORY,
 )
 
 
