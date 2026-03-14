@@ -44,8 +44,30 @@ def asymptotic_line(
 
     if use_correction:
         # non-linear O(1/x) correction term.
+        # TODO: possibly incorrect, need to double check
         y = y - torch.log(weight_k) * (sigma / z)
     return y
+
+
+def asymptotic_inverse(
+    y,
+    /,
+    mu,
+    sigma,
+    weight_k,
+    mu_k,
+    sigma_k,
+    *,
+    use_correction: bool = False,
+):
+    z = (y - mu) / sigma
+    x = sigma_k * z + mu_k
+
+    if use_correction:
+        # non-linear O(1/x) correction term.
+        # TODO: possibly incorrect, need to double check
+        x = x + torch.log(weight_k) * (sigma_k / z)
+    return x
 
 
 def make_input_mixture(
@@ -409,8 +431,12 @@ class TransportPlotStateGaussian:
         x_samples = gaussian_to_twin(y_samples, mu, sigma)
 
         self.line.set_ydata(x)
-        self.component_lines[0].set_ydata(self.y + mu)
-        self.component_lines[1].set_ydata(self.y - mu)
+        self.component_lines[0].set_ydata(
+            asymptotic_inverse(self.y, 0, 1, 0.5, +mu, sigma)
+        )
+        self.component_lines[1].set_ydata(
+            asymptotic_inverse(self.y, 0, 1, 0.5, -mu, sigma)
+        )
         self.input_pdf_line.set_xdata(self.y)
         self.input_pdf_line.set_ydata(source.pdf(self.y))
         self.target_pdf_line.set_xdata(self.y)
@@ -465,8 +491,8 @@ def test_gaussian_to_twin_interactive() -> None:
 
         (line,) = ax.plot(y, x, label="transport", lw=5)
         component_lines = [
-            ax.plot(y, y + mu, "k--")[0],
-            ax.plot(y, y - mu, "k--")[0],
+            ax.plot(y, asymptotic_inverse(y, 0, 1, 0.5, +mu, sigma), "k--")[0],
+            ax.plot(y, asymptotic_inverse(y, 0, 1, 0.5, -mu, sigma), "k--")[0],
         ]
         (input_pdf_line,) = ax_twin.plot(
             y,
@@ -561,7 +587,7 @@ def test_twin_to_gaussian_interactive() -> None:
         ax_twin.set_zorder(1)
 
         (line,) = ax.plot(x, y, label="transport", lw=5)
-        asymptote0 = asymptotic_line(x, 0, 1, 0.5, mu, sigma)
+        asymptote0 = asymptotic_line(x, 0, 1, 0.5, +mu, sigma)
         asymptote1 = asymptotic_line(x, 0, 1, 0.5, -mu, sigma)
         component_lines = [
             ax.plot(x, asymptote0, "k--")[0],
