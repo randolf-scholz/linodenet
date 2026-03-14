@@ -185,41 +185,55 @@ struct SingularTriplet : public Function<SingularTriplet> {
         // TODO: Test Anderson Acceleration
 
         // Initialize maxiter depending on the size of the matrix.
-        const auto M = A_in.size(0);
-        const auto N = A_in.size(1);
+        constexpr int64_t DEFAULT_MAXITER = 256;
+        const int64_t M = A_in.size(0);
+        const int64_t N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        const int64_t MAXITER = maxiter ? maxiter.value() : (M + N + 64);
-
-        // Initialize tolerance scalars
-        const Tensor ATOL = torch::full({}, atol, OPTIONS);
-        const Tensor RTOL = torch::full({}, rtol, OPTIONS);
-
-        // Preconditioning: normalize A by its infinity norm
-        const Tensor SCALE = A_in.abs().max();
-        const auto A = A_in / SCALE;
-        // precompute transpose
-        const auto A_t = A.t();
-
-        // Initialize convergence flag
+        const int64_t MAXITER = maxiter ? maxiter.value() : DEFAULT_MAXITER;
         bool converged = false;
+        // Preconditioning: normalize A by its infinity norm
+        const Tensor SCALE = A_in.abs().mean();
+        const Tensor A = A_in / SCALE;
+        const Tensor A_t = A.transpose(-2, -1);
 
-        // Initialize u and v with random values if not given
-        Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
-        Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
-
-        // initialize vectors for power iteration
-        v /= v.norm();
-        u /= u.norm();
-
+        // Initialize tolerance scalars, scale ATOL
+        const Tensor ATOL = torch::scalar_tensor(atol, OPTIONS);
+        const Tensor RTOL = torch::scalar_tensor(rtol, OPTIONS);
         // pre-allocate buffers
-        Tensor grad_u = torch::empty_like(u);
-        Tensor grad_v = torch::empty_like(v);
-
-        // scalars
+        Tensor u = torch::empty({M}, OPTIONS);
+        Tensor v = torch::empty({N}, OPTIONS);
+        Tensor grad_u = torch::empty({M}, OPTIONS);
+        Tensor grad_v = torch::empty({N}, OPTIONS);
         Tensor gamma_u = torch::empty({}, OPTIONS);
         Tensor gamma_v = torch::empty({}, OPTIONS);
         Tensor sigma_u = torch::empty({}, OPTIONS);
         Tensor sigma_v = torch::empty({}, OPTIONS);
+
+
+        if (u0 && v0) {
+            u = u0.value();
+            v = v0.value();
+        } else if (!u0 && !v0) {
+            if (N <= M) {
+                v = torch::randn({N}, OPTIONS);
+                v /= v.norm();
+                u = A.mv(v);
+                u /= u.norm();
+                v = A.t().mv(u);
+                v /= v.norm();
+            } else {
+                u = torch::randn({M}, OPTIONS);
+                u /= u.norm();
+                v = A.t().mv(u);
+                v /= v.norm();
+                u = A.mv(v);
+                u /= u.norm();
+            }
+        } else {
+            throw std::invalid_argument("Expected both u0 and v0, or neither.");
+        }
+
+
 
         // Perform power-iteration for maxiter times or until convergence.
         // NOTE: Perform 2 iterations per loop to increase performance.
