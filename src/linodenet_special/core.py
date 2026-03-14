@@ -7,6 +7,7 @@ __all__ = [
     "BUILD_DIR",
     "LIB",
     "LIB_NAME",
+    "LIB_FILE",
     "SOURCE_DIR",
     # Protocols
     "KnownFunctions",
@@ -18,10 +19,11 @@ __all__ = [
     "spectral_norm_debug",
     "spectral_norm_riemann",
     "ndtri_exp",
+    "hard_bend",
 ]
 
+import logging
 import os
-import warnings
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -30,6 +32,8 @@ from typing import Any, Final, Optional, TypedDict, cast
 import torch
 from torch import Tensor
 
+from linodenet_special.fallbacks import FALLBACKS
+from linodenet_special.fallbacks.hard_bend import HardBend
 from linodenet_special.fallbacks.singular_triplet import SingularTriplet
 from linodenet_special.fallbacks.spectral_norm import SpectralNorm
 
@@ -43,8 +47,15 @@ LIB: Final[ModuleType] = torch.ops.linodenet_special
 r"""The custom library."""
 BUILD_DIR: Final[Path] = Path(__file__).parent / "build"
 r"""The build directory."""
-SOURCE_DIR: Final[Path] = Path(__file__).parent / "src" / f"{LIB_NAME}"
+SOURCE_DIR: Final[Path] = Path(__file__).parent / "csrc" / f"{LIB_NAME}"
 r"""The source directory."""
+LIB_FILE: Final[Path] = BUILD_DIR / f"{LIB_NAME}.so"
+r"""The name of the custom library."""
+
+assert SOURCE_DIR.is_dir(), f"{SOURCE_DIR} is not a directory!"
+
+logging.basicConfig(level=logging.WARNING)
+__logger__ = logging.getLogger(__package__)
 
 
 class KnownFunctions(TypedDict):
@@ -57,58 +68,46 @@ class KnownFunctions(TypedDict):
     spectral_norm_debug: SpectralNorm
     spectral_norm_riemann: SpectralNorm
     ndtri_exp: Callable[[Tensor], Tensor]
+    hard_bend: HardBend
 
 
 # region compile functions -------------------------------------------------------------
-def _load_function(name: str, /) -> Any:
-    r"""Load a function from the custom library."""
-    from torch.utils import cpp_extension  # noqa: PLC0415
-
-    try:  # compile the function
-        print(f"Compiling {name}...", flush=True)
-        cpp_extension.load(
-            name=name,
-            sources=[str(SOURCE_DIR / f"{name}.cpp")],
-            extra_cflags=["-O3", "-DPy_LIMITED_API=0x030A0000"],
-            extra_cuda_cflags=["-O3"],
-            is_python_module=False,
-            verbose=True,
-            with_cuda=torch.cuda.is_available(),
-        )
-    except Exception as exc:
-        exc.add_note(f"Could not compile {name}!")
-        raise
-
-    try:  # load the function
-        function = getattr(LIB, name)
-    except AttributeError as exc:
-        exc.add_note(f"Could not load {name}!")
-        raise
-
-    return function
-
-
-def _compile_fns() -> KnownFunctions:
-    r"""Fallback to compiling the functions."""
+def _compile_fns() -> dict[str, Any]:
+    r"""Compile the available custom operators."""
     from torch.utils import cpp_extension  # noqa: PLC0415
 
     cpp_extension.verify_ninja_availability()
     os.environ["CUDA_HOME"] = "/usr/local/cuda-12.8"
     cache_dir = Path(
-        os.environ.get("TORCH_EXTENSIONS_DIR", cpp_extension.get_default_build_root())
+        os.environ.get(
+            "TORCH_EXTENSIONS_DIR",
+            cpp_extension.get_default_build_root(),
+        )
     )
     assert not cache_dir.exists() or cache_dir.is_dir()
     print("Compiling custom operators...")
 
-    compiled_fns = {}
-    exceptions = {}
-    fn_names = KnownFunctions.__required_keys__
+    compiled_fns: dict[str, Any] = {}
+    exceptions: dict[str, Exception] = {}
 
-    for name in fn_names:
+    for name in (fn_names := KnownFunctions.__required_keys__):
         try:
-            compiled_fns[name] = _load_function(name)
+            print(f"Compiling {name}...", flush=True)
+            cpp_extension.load(
+                name=name,
+                sources=[str(SOURCE_DIR / f"{name}.cpp")],
+                extra_cflags=["-O3"],  # , "-DPy_LIMITED_API=0x030A0000"],
+                extra_cuda_cflags=["-O3"],
+                is_python_module=False,
+                verbose=False,
+                with_cuda=torch.cuda.is_available(),
+            )
         except Exception as _exc:
+            _exc.add_note(f"Could not compile {name}!")
             exceptions[name] = _exc
+        else:
+            compiled_fns[name] = getattr(LIB, name)
+
     if exceptions:
         exc_group = ExceptionGroup("Failed to compile", list(exceptions.values()))
         error = RuntimeError(
@@ -124,48 +123,68 @@ def _compile_fns() -> KnownFunctions:
         error.add_note(f"Consider clearing the torch_extension cache at {cache_dir!s}")
         raise error from exc_group
 
-    return cast("KnownFunctions", compiled_fns)
+    return compiled_fns
+
+
+def _load_prebuilts() -> dict[str, Any]:
+    r"""Load prebuilt binaries and return registered operators."""
+    try:  # load pre-compiled binaries
+        torch.ops.load_library(LIB_FILE)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not load custom binaries from {LIB_FILE!s}."
+        ) from exc
+
+    prebuilt_fns: dict[str, Any] = {}
+    missing: set[str] = set()
+    for name in KnownFunctions.__required_keys__:
+        if (fn := getattr(LIB, name, None)) is not None:
+            prebuilt_fns[name] = fn
+        else:
+            missing.add(name)
+
+    if missing:
+        __logger__.warning(
+            "Prebuilt libs exist, but the following functions are missing:"
+            f"\n\t- {'\n\t- '.join(missing)}"
+            "\nUsing pure python fallbacks for these functions."
+        )
+
+    return prebuilt_fns
 
 
 def _load_linodenet() -> KnownFunctions:
-    lib_file = BUILD_DIR / f"{LIB_NAME}.so"
-    fn_names = KnownFunctions.__required_keys__
-
-    if lib_file.exists():
-        try:  # load pre-compiled binaries
-            torch.ops.load_library(lib_file)
-            # load the functions
-            compiled_fns = {name: getattr(LIB, name) for name in fn_names}
-            return cast("KnownFunctions", compiled_fns)
-        except Exception as exc:
-            warnings.warn(
-                f"\n\t Custom binaries could not be loaded (raised {type(exc)!s})!"
-                "\n\t Please ensure they are compiled for the correct platform."
-                "\n\t Consider submitting a bug report.",
-                UserWarning,
-                stacklevel=2,
-            )
+    if LIB_FILE.exists():
+        compiled_fns = _load_prebuilts()
     else:
-        warnings.warn(
-            f"\n\t Custom binaries not found! ({lib_file!s})"
-            "\n\t -> Consider compiling the linodenet_special extension.",
-            UserWarning,
-            stacklevel=2,
+        __logger__.warning(
+            f"\n\t Custom binaries not found! ({LIB_FILE!s})"
+            "\n\t -> Consider compiling the linodenet_special extension."
         )
+        compiled_fns = _compile_fns()
 
-    return _compile_fns()
+    # fill missing slots with fallbacks
+    impls: dict[str, Any] = {}
+    for name in KnownFunctions.__required_keys__:
+        if name in compiled_fns:
+            impls[name] = compiled_fns[name]
+        else:
+            impls[name] = FALLBACKS[name]
+
+    return cast("KnownFunctions", impls)
 
 
 _COMPILED_FNS: Final[KnownFunctions] = _load_linodenet()
 r"""The compiled functions."""
 
-_singular_triplet: SingularTriplet = _COMPILED_FNS["singular_triplet"]
-_singular_triplet_debug: SingularTriplet = _COMPILED_FNS["singular_triplet_debug"]
-_singular_triplet_riemann: SingularTriplet = _COMPILED_FNS["singular_triplet_riemann"]
-_spectral_norm: SpectralNorm = _COMPILED_FNS["spectral_norm"]
-_spectral_norm_debug: SpectralNorm = _COMPILED_FNS["spectral_norm_debug"]
-_spectral_norm_riemann: SpectralNorm = _COMPILED_FNS["spectral_norm_riemann"]
-ndtri_exp: Callable[[Tensor], Tensor] = _COMPILED_FNS["ndtri_exp"]
+_singular_triplet = _COMPILED_FNS["singular_triplet"]
+_singular_triplet_debug = _COMPILED_FNS["singular_triplet_debug"]
+_singular_triplet_riemann = _COMPILED_FNS["singular_triplet_riemann"]
+_spectral_norm = _COMPILED_FNS["spectral_norm"]
+_spectral_norm_debug = _COMPILED_FNS["spectral_norm_debug"]
+_spectral_norm_riemann = _COMPILED_FNS["spectral_norm_riemann"]
+ndtri_exp = _COMPILED_FNS["ndtri_exp"]
+hard_bend = _COMPILED_FNS["hard_bend"]
 # endregion compile functions ----------------------------------------------------------
 
 
