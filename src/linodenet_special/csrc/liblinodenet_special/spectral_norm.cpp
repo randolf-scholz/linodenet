@@ -305,7 +305,7 @@ static Tensor spectral_norm_meta(
 }
 
 
-static Tensor spectral_norm(
+static Tensor spectral_norm_impl(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
@@ -334,7 +334,7 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("spectral_norm", &spectral_norm);
+    m.impl("spectral_norm", &spectral_norm_impl);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
