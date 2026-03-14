@@ -2,6 +2,7 @@
 # hidden/private directories
 _*/
 .*/
+.*.log
 # exceptions
 !/**/.idea/
 !/**/.vscode/
