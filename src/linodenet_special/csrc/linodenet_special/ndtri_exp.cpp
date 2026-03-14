@@ -8,6 +8,7 @@ namespace {
 constexpr double UPPER_CUTOFF = -0.14541345786885906;  // log(1-e^-2)
 constexpr double LOWER_CUTOFF = -2.0;
 constexpr double SQRT_2 = 1.4142135623730951;
+constexpr double NEG_INFINITY = std::numeric_limits<double>::infinity();
 
 constexpr std::array<double, 9> P1 = {
     4.05544892305962419923,
@@ -52,25 +53,21 @@ constexpr std::array<double, 8> Q2 = {
     6.79019408009981274425e-9,
 };
 
-double finfo_min(at::ScalarType scalar_type) {
-    switch (scalar_type) {
-        case at::ScalarType::Half:
-            return -65504.0;
-        case at::ScalarType::BFloat16:
-            return std::numeric_limits<float>::lowest();
-        case at::ScalarType::Float:
-            return std::numeric_limits<float>::lowest();
-        case at::ScalarType::Double:
-            return std::numeric_limits<double>::lowest();
-        default:
-            TORCH_CHECK(false, "ndtri_exp: unsupported dtype.");
-    }
+
+double finfo_min(const at::ScalarType &scalar_type) {
+    return AT_DISPATCH_FLOATING_TYPES_AND2(
+        at::kHalf, at::kBFloat16, scalar_type, "finfo_min",
+        [&] {
+            return static_cast<double>(std::numeric_limits<scalar_t>::lowest());
+        }
+    );
 }
+
 
 template <size_t N>
 Tensor polevl(const Tensor &x, const std::array<double, N> &coeffs) {
     Tensor y = torch::zeros_like(x);
-    for (double c : coeffs) {
+    for (const double c : coeffs) {
         y = y * x + c;
     }
     return y;
@@ -79,7 +76,7 @@ Tensor polevl(const Tensor &x, const std::array<double, N> &coeffs) {
 template <size_t N>
 Tensor p1evl(const Tensor &x, const std::array<double, N> &coeffs) {
     Tensor y = torch::ones_like(x);
-    for (double c : coeffs) {
+    for (const double c : coeffs) {
         y = y * x + c;
     }
     return y;
@@ -87,11 +84,10 @@ Tensor p1evl(const Tensor &x, const std::array<double, N> &coeffs) {
 
 Tensor ndtri_exp_small(const Tensor &log_p) {
     const double finfo_min_value = finfo_min(log_p.scalar_type());
-    const Tensor finfo_min_tensor = torch::full_like(log_p, finfo_min_value);
 
     const Tensor x = torch::where(
-        log_p >= finfo_min_tensor * 0.5,
-        torch::sqrt(-2 * log_p),
+        log_p >= 0.5 * finfo_min_value,
+        torch::sqrt(-2.0 * log_p),
         SQRT_2 * torch::sqrt(-log_p)
     );
     const Tensor z = x.reciprocal();
@@ -112,13 +108,12 @@ static Tensor ndtri_exp(const Tensor &log_p) {
     TORCH_CHECK(log_p.is_floating_point(), "ndtri_exp: log_p must be a floating point tensor.");
 
     const double finfo_min_value = finfo_min(log_p.scalar_type());
-    const Tensor finfo_min_tensor = torch::full_like(log_p, finfo_min_value);
-    const Tensor neg_infinity = torch::full_like(log_p, -std::numeric_limits<double>::infinity());
+    const Tensor neg_infinity = torch::scalar_tensor(NEG_INFINITY, log_p.options());
 
     return torch::where(
         log_p < LOWER_CUTOFF,
         torch::where(
-            log_p < finfo_min_tensor,
+            log_p < finfo_min_value,
             neg_infinity,
             ndtri_exp_small(log_p)
         ),
