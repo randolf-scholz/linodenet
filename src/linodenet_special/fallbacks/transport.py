@@ -2,7 +2,6 @@ r"""Implementation of the optimal transport based activation function."""
 # mypy: disable-error-code="no-untyped-def"
 
 __all__ = [
-    "MAXITER",
     # functional interfaces
     "gaussian_to_twin",
     "twin_to_gaussian",
@@ -10,8 +9,6 @@ __all__ = [
     "mixture_to_gaussian",
 ]
 
-
-import math
 from typing import Final
 
 import torch
@@ -19,15 +16,87 @@ from torch import Tensor
 from torch.autograd import Function
 from torch.special import log_ndtr
 
+from linodenet_special.fallbacks.hard_bend import hard_bend
 from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
 
-_SQRT_2: Final[float] = math.sqrt(2)
-r"""CONST: √2, used for scaling the erfinv output."""
-_LOG_HALF: Final[float] = math.log(0.5)
-r"""CONST: log(0.5) is used in the tail handling of the erfinv computation."""
-_LOG_2PI: Final[float] = math.log(math.tau)
-MAXITER: int = 10
-r"""CONFIG: maximum number of iterations for Newton's method in InvPsi."""
+
+@torch.no_grad()
+def _twin_to_gaussian_forward(
+    x: Tensor, mu: Tensor, sigma: Tensor
+) -> tuple[Tensor, Tensor, Tensor]:
+    r"""Evaluate the twin-to-Gaussian transport and cache the normalized coordinates."""
+    LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+
+    m = mu.abs()
+    z_plus = (x + m) / sigma
+    z_minus = (x - m) / sigma
+
+    log_p = torch.logaddexp(LOG_HALF + log_ndtr(z_plus), LOG_HALF + log_ndtr(z_minus))
+    log_q = torch.logaddexp(LOG_HALF + log_ndtr(-z_plus), LOG_HALF + log_ndtr(-z_minus))
+    y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
+    y = torch.clamp(y, z_minus, z_plus)
+    assert y.isfinite().all()
+    return y, z_minus, z_plus
+
+
+@torch.no_grad()
+def _twin_to_gaussian_x_derivative(
+    y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
+) -> Tensor:
+    r"""Compute stable partial derivatives for the twin-to-Gaussian transport."""
+    LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+    m = mu.abs()
+    y2 = y.square()
+    log_sigma = sigma.log()
+    log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
+    log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
+    d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
+    lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
+    upper_bound = 1 / sigma
+    d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
+    return d_x
+
+
+@torch.no_grad()
+def _twin_to_gaussian_derivatives(
+    y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
+) -> tuple[Tensor, Tensor, Tensor]:
+    r"""Compute stable partial derivatives for the twin-to-Gaussian transport."""
+    LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+
+    m = mu.abs()
+    mu_sign = torch.sign(mu)
+    y2 = y.square()
+    log_sigma = sigma.log()
+    log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
+    log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
+
+    d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
+    hi = torch.maximum(log_phi_plus, log_phi_minus)
+    lo = torch.minimum(log_phi_plus, log_phi_minus)
+    d_m_exact = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
+        hi + torch.log1p(-torch.exp(lo - hi))
+    )
+    d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x_exact + (m / sigma) * d_m_exact)
+
+    lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
+    upper_bound = 1 / sigma
+    d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
+    d_mu = mu_sign * torch.clamp(d_m_exact, -upper_bound, upper_bound)
+    return d_x, d_mu, d_sigma_exact
+
+
+@torch.no_grad()
+def _gaussian_to_twin_guess(x, mu, sigma):
+    """Idea: use piecewise-linear approximation $Ψ⁻¹(x, μ, σ) ≈ hard_bend(x, 1/λ, μ, σ)$.
+
+    Here, λ is the slope at the origin $Ψ'(0, μ, σ) = σ⁻¹ℯ^{-½(μ/σ)²}$.
+
+    Inversion rule: $y = hard_bend(x, 1/λ, μ, σ) ⟺ x = hard_bend(y, λ, μ, 1/σ)$
+    """
+    # slope at the origin
+    λ = torch.exp(-0.5 * (mu / sigma) ** 2) / sigma
+    return hard_bend(x, λ, mu, 1 / sigma)
 
 
 class _TwinToGaussian(Function):
@@ -68,57 +137,17 @@ class _TwinToGaussian(Function):
 
     @staticmethod
     def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
-        z_plus = (x + mu) / sigma
-        z_minus = (x - mu) / sigma
-        z_lo = torch.minimum(z_minus, z_plus)
-        z_hi = torch.maximum(z_minus, z_plus)
-
-        log_p = torch.logaddexp(
-            _LOG_HALF + log_ndtr(z_plus), _LOG_HALF + log_ndtr(z_minus)
-        )
-        log_q = torch.logaddexp(
-            _LOG_HALF + log_ndtr(-z_plus), _LOG_HALF + log_ndtr(-z_minus)
-        )
-        y = torch.where(log_p < _LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-
-        assert y.isfinite().all()
-
-        # project to legal range
-        y = torch.clamp(y, z_lo, z_hi)
-
+        y, z_minus, z_plus = _twin_to_gaussian_forward(x, mu, sigma)
         ctx.save_for_backward(y, z_minus, z_plus, mu, sigma)
         return y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         (g,) = outer
-        z, z_minus, z_plus, mu, sigma = ctx.saved_tensors
-
-        z2 = z.square()
-        log_sigma = sigma.log()
-        log_phi_plus = 0.5 * (z2 - z_plus.square()) - log_sigma + _LOG_HALF
-        log_phi_minus = 0.5 * (z2 - z_minus.square()) - log_sigma + _LOG_HALF
-
-        # compute the exact derivatives in numerically robust manner
-        d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
-        hi = torch.maximum(log_phi_plus, log_phi_minus)
-        lo = torch.minimum(log_phi_plus, log_phi_minus)
-        d_mu_exact = (
-            torch.sign(log_phi_plus - log_phi_minus)  #
-            * torch.exp(hi + torch.log1p(-torch.exp(lo - hi)))
+        y, z_minus, z_plus, mu, sigma = ctx.saved_tensors
+        d_x, d_mu, d_sigma = _twin_to_gaussian_derivatives(
+            y, z_minus, z_plus, mu, sigma
         )
-        d_sigma_exact = -(
-            0.5 * (z_plus + z_minus) * d_x_exact  #
-            + (mu / sigma) * d_mu_exact
-        )
-
-        # clamp gradient away from zero. (ℯ^(-½μ²/σ²)/sigma)
-        lower_bound = torch.exp(-0.5 * (mu / sigma) ** 2) / sigma
-        upper_bound = 1 / sigma
-        d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
-        d_mu = torch.clamp(d_mu_exact, -upper_bound, upper_bound)
-        d_sigma = d_sigma_exact
-
         return (g * d_x), (g * d_mu), (g * d_sigma)
 
 
@@ -127,147 +156,70 @@ class _GaussianToTwin(Function):
 
     @staticmethod
     def forward(ctx, y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
-        r"""Solve y = Ψ(x, μ, σ) for x using Newton's method.
+        r"""Solve $y = T(x, μ, σ)$ for $x$ using Newton's method.
 
-        Note: ∂Ψ/∂x = \exp(-½μ²/σ²) at x=0. This is the minimum slope of Ψ
-        So:   ∂Ψ⁻¹/∂y = 1 / (∂Ψ/∂x) ≈ \exp(½μ²/σ²) at y=0.
+        Here $T$ is the transport from the symmetric twin mixture to $N(0,1)$.
+        Since $T'(0) = σ⁻¹ℯ^{-½|μ|²/σ²}$, the inverse slope at the origin is
 
-        How to make good initial guess:
-            1. approximate Ψ⁻¹(y, μ, σ) ≈ hard_bend(y, λ=\exp(μ²/σ²), c=μ)
-            2. invert hard_bend to get initial guess for x.
+        .. math:: (T⁻¹)'(0) = σℯ^{½|μ|²/σ²}.
+
+        The transport only depends on $|μ|$. The tails satisfy
+        $T(x, μ, σ) ≈ (x-\operatorname{sign}(x)|μ|)/σ$, so
+        $T⁻¹(y, μ, σ) ≈ σy + \operatorname{sign}(y)|μ|$.
         """
-        s = sigma * _SQRT_2
-        finfo = torch.finfo(y.dtype)
-        EPS = 8 * finfo.eps
-        TINY = finfo.tiny
+        MAXITER: Final[int] = 10
 
-        # we know the solution is in the interval [y-μ, y+μ]
-        # and we may also use bisection.
-        lower = y - mu
-        upper = y + mu
-
-        # Use hard_bend approximation to get initial guess for x
-        #
-        # hard_bend(z, λ, c) = {
-        #    z + c       if   λz > z+c         (i.e. z > c/(λ-1))
-        #    λz          if   z-c ≤ λz ≤ z+c   (i.e. z∈[-c/(λ-1), c/(λ-1)])
-        #    z - c       if   λz < z-c         (i.e. z < -c/(λ-1))
-        # }
-        # Inverse of hard_bend is:
-        # hard_bend_inv(y, λ, c) = {
-        #    y - c       if   y > cλ/(λ-1)     (i.e. y > cλ/(λ-1))
-        #    y / λ        if   -cλ/(λ-1) ≤ y ≤ cλ/(λ-1)   (i.e. y∈[-cλ/(λ-1), cλ/(λ-1)])
-        #    y + c       if   y < -cλ/(λ-1)     (i.e. y < -cλ/(λ-1))
-        # }
-        lam = torch.exp(-0.5 * (mu / sigma) ** 2)
-        x = torch.where(
-            (y / lam).abs() <= y.abs() - mu,
-            y / lam,
-            y + torch.sign(y) * mu,
-        )
+        m = mu.abs()
+        lower = sigma * y - m
+        upper = sigma * y + m
+        x = _gaussian_to_twin_guess(y, mu, sigma)
 
         for _ in range(MAXITER):
-            # project onto legal range
             x = torch.clamp(x, lower, upper)
-
-            a = (x + mu) / s
-            b = (x - mu) / s
-            mix = 0.5 * (torch.erf(a) + torch.erf(b))
-            mask = mix.abs() < 1 - EPS
-            mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
-
-            # compute y = √2σ * erfinv(mix), with tail handling
-            z = torch.erfinv(mix)
-            fx = torch.where(mask, s * z, x - torch.sign(x) * mu)
-            assert fx.isfinite().all()
-
-            # project to legal range
-            fx = torch.clamp(fx, x - mu, x + mu)
-
-            # compute the exact derivatives
-            phi1 = torch.exp(z**2 - a**2)
-            phi2 = torch.exp(z**2 - b**2)
-
-            # clamp gradient away from zero.
-            d_x_exact = 0.5 * (phi1 + phi2)
-            d_x_exact = torch.clamp(d_x_exact, TINY, 1)
-
-            # compute the tail terms
-            d_x_tail = torch.ones_like(d_x_exact)
-
-            # combine via mask
-            d_fx = torch.where(mask, d_x_exact, d_x_tail)
-
-            # compute residual, update bounds using monotonicity
+            fx, z_minus, z_plus = _twin_to_gaussian_forward(x, mu, sigma)
+            d_fx = _twin_to_gaussian_x_derivative(fx, z_minus, z_plus, mu, sigma)
             r = fx - y
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
-
             x_newton = x - r / d_fx
             x_bisect = 0.5 * (lower + upper)
-
-            # only do newton if it stays in the legal range, otherwise do bisection
             x = torch.where(
                 (x_newton >= lower) & (x_newton <= upper),
                 x_newton,
                 x_bisect,
             )
 
-        # compute final derivatives for backward pass
-        # project onto legal range
         x = torch.clamp(x, lower, upper)
+        fx, z_minus, z_plus = _twin_to_gaussian_forward(x, mu, sigma)
 
-        a = (x + mu) / s
-        b = (x - mu) / s
-        mix = 0.5 * (torch.erf(a) + torch.erf(b))
-        mix = torch.clamp(mix, -1 + EPS, 1 - EPS)
-        mask = mix.abs() < 1 - EPS
-
-        # compute y = √2σ * erfinv(mix), with tail handling
-        z = torch.erfinv(mix)
-        fx = torch.where(mask, s * z, x - torch.sign(x) * mu)
-        assert fx.isfinite().all()
-
-        # compute the exact derivatives
-        phi1 = torch.exp(z**2 - a**2)
-        phi2 = torch.exp(z**2 - b**2)
-        # compute the exact derivatives
-        d_x_exact = 0.5 * (phi1 + phi2)
-        d_mu_exact = 0.5 * (phi1 - phi2)
-        d_sigma_exact = _SQRT_2 * (z - 0.5 * (a * phi1 + b * phi2))
-
-        # clamp gradient away from zero.
-        d_x_exact = torch.clamp(d_x_exact, TINY, 1)
-        d_mu_exact = torch.clamp(d_mu_exact, -1, 1)
-
-        # compute the tail terms
-        d_x_tail = torch.ones_like(d_x_exact)
-        d_mu_tail = -torch.sign(z)
-        d_sigma_tail = torch.zeros_like(d_sigma_exact)
-
-        # combine via mask
-        d_x = torch.where(mask, d_x_exact, d_x_tail)
-        d_mu = torch.where(mask, d_mu_exact, d_mu_tail)
-        d_sigma = torch.where(mask, d_sigma_exact, d_sigma_tail)
-
-        ctx.save_for_backward(d_x, d_mu, d_sigma)
+        ctx.save_for_backward(fx, z_minus, z_plus, mu, sigma)
         return x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        """Use the derivatives of Ψ to compute the derivatives of x with respect to y, μ, and σ.
+        """Use the derivatives of $T$ to compute the derivatives of $T⁻¹$.
 
-        .. math::  ∂Ψ(x(y, μ, σ)) = y
-            ⟹ ∂x/∂y = (∂Ψ/∂x)⁻¹
-            ⟹ ∂x/∂μ = - (∂Ψ/∂x)⁻¹ * (∂Ψ/∂μ)
-            ⟹ ∂x/∂σ = - (∂Ψ/∂x)⁻¹ * (∂Ψ/∂σ)
+        .. math::  ∂T(x(y, μ, σ)) = y
+            ⟹ ∂x/∂y = (∂T/∂x)⁻¹
+            ⟹ ∂x/∂μ = - (∂T/∂x)⁻¹ * (∂T/∂μ)
+            ⟹ ∂x/∂σ = - (∂T/∂x)⁻¹ * (∂T/∂σ)
         """
         (g,) = outer
-        dx, dmu, dsigma = ctx.saved_tensors
-        dy = g * (1 / dx)
-        dmu = g * (-dmu / dx)
-        dsigma = g * (-dsigma / dx)
-        return dy, dmu, dsigma
+        fx, z_minus, z_plus, mu, sigma = ctx.saved_tensors
+        d_x, d_mu, d_sigma = _twin_to_gaussian_derivatives(
+            fx, z_minus, z_plus, mu, sigma
+        )
+        d_y = 1 / d_x
+        d_mu = -d_mu / d_x
+        d_sigma = -d_sigma / d_x
+
+        # clamp to legal range
+        lower_bound = sigma
+        upper_bound = sigma * torch.exp(0.5 * (mu / sigma) ** 2)
+        d_y = d_y.clamp(lower_bound, upper_bound)
+        d_mu = d_mu.clamp(-upper_bound, upper_bound)
+
+        return (g * d_y), (g * d_mu), (g * d_sigma)
 
 
 class _MixtureToGaussian(Function):
@@ -331,13 +283,14 @@ class _MixtureToGaussian(Function):
         ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
     ) -> Tensor:
         assert weights.shape[0] == means.shape[0] == sigmas.shape[0]
+        LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
         z = (y.unsqueeze(-1) - means) / sigmas
         log_w = torch.log(weights)
         log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
         log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
 
-        u = torch.where(log_p < _LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
+        u = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
         assert u.isfinite().all()
 
         ctx.save_for_backward(z, u, log_w, torch.log(sigmas))
@@ -345,6 +298,8 @@ class _MixtureToGaussian(Function):
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
+
         (g,) = outer
         z, y, log_w, log_sigmas = ctx.saved_tensors
 
@@ -362,7 +317,7 @@ class _MixtureToGaussian(Function):
         # ∂y/∂σₖ = -(ωₖ zₖ / σₖ) exp(½(y² - zₖ²))
         d_sigmas = -z * scaled_ratio
 
-        log_pdf_u = -0.5 * (_LOG_2PI + y2)
+        log_pdf_u = -0.5 * (LOG_2PI + y2)
         d_weights = -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1))
 
         grad_values = g * d_values
