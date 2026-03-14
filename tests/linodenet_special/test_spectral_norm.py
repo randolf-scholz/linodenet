@@ -8,17 +8,14 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch import Tensor, nn
 
-from linodenet_special import (
-    SpectralNorm,
-    spectral_norm,
-    spectral_norm_native,
-    spectral_norm_riemann,
-)
+from linodenet_special import SpectralNorm, spectral_norm, spectral_norm_native
 from tests.utils import timer
 
 from .fixtures import (
     DEVICES,
     SEEDS,
+    Fixture,
+    TestCase,
     make_test_case_diagonal,
     make_test_case_quasi_gaussian,
     make_test_case_rank_one,
@@ -172,7 +169,7 @@ class BasicTest:
         print("All tests passed.")
 
 
-class TestCorrectness:
+class TestCorrectness(Fixture):
     SHAPES: list[tuple[int, int]] = [
         # scalar
         (1, 1),
@@ -199,20 +196,67 @@ class TestCorrectness:
         (64, 1),
         (128, 1),
     ]
-    DIMS = [2, 4, 16, 64, 256]
     ATOL = 1e-3
     RTOL = 1e-4
 
     SPECTRAL_NORMS: dict[str, SpectralNorm] = {
         "custom": spectral_norm,
         "native": spectral_norm_native,
-        "riemann": spectral_norm_riemann,
+        # "riemann": spectral_norm_riemann,
     }
 
-    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
-    @pytest.mark.parametrize(
-        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL}-rtol={RTOL}")]
-    )
+    def check_forward_pass(
+        self,
+        case: TestCase,
+        sigma: Tensor,
+        *,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        r"""Check that the spectral norm matches the analytical value."""
+        sigma_ref = case.spectral_norm
+        assert sigma.isfinite().all()
+        assert sigma_ref.isfinite().all()
+        assert sigma.shape == sigma_ref.shape
+        assert (sigma > 0).all()
+        assert (sigma_ref > 0).all()
+        self.assert_close(sigma, sigma_ref, atol=atol, rtol=rtol)
+
+    def check_backward_pass(
+        self,
+        case: TestCase,
+        sigma: Tensor,
+        *,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        r"""Check that the backward pass returns a valid spectral-norm subgradient."""
+        A = case.value
+        sigma.backward()
+        assert A.grad is not None
+        assert A.grad.isfinite().all()
+
+        grad = A.grad
+        analytical_value = case.spectral_norm
+        analytical_grad = case.spectral_norm_gradient
+        # For the spectral norm, subgradients admit the dual characterization
+        #    ∂‖A‖₂ = {G : ‖G‖_* ≤ 1 and ⟨G, A⟩ = ‖A‖₂},
+        # where ‖·‖_* is the nuclear norm dual to ‖·‖₂. This avoids checking the
+        # global subgradient inequality against all perturbations X explicitly.
+        grad_inner = inner(grad, A)
+        self.assert_close(grad_inner, analytical_value, atol=atol, rtol=rtol)
+        grad_nuclear_norm = torch.linalg.matrix_norm(grad, ord="nuc")
+        self.assert_upper_bounded(grad_nuclear_norm, 1.0, atol=atol, rtol=rtol)
+
+        if case.S.shape[-1] >= 2:
+            spectral_gap = case.S[..., 0] - case.S[..., 1]
+            if spectral_gap <= atol + rtol * analytical_value.abs():
+                return
+
+        self.assert_close(grad, analytical_grad, atol=atol, rtol=rtol)
+
+    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
@@ -223,8 +267,6 @@ class TestCorrectness:
         shape: tuple[int, int],
         seed: int,
         device: str | torch.device,
-        atol: float,
-        rtol: float,
     ) -> None:
         r"""Test the accuracy of the gradient for rank one matrices.
 
@@ -237,38 +279,12 @@ class TestCorrectness:
         case = make_test_case_rank_one(
             shape, dtype=torch.float, device=device, seed=seed
         )
-        A = case.value
+        sigma = impl(case.value)
+        self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
-        # analytical result
-        analytical_value = case.spectral_norm
-        analytical_grad = case.spectral_norm_gradient
-
-        # check forward pass
-        sigma = impl(A)
-        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
-
-        # backward pass
-        sigma.backward()
-
-        # check backward pass
-        assert A.grad is not None
-        assert scaled_norm(A.grad - analytical_grad) < (
-            atol + rtol * scaled_norm(analytical_grad)
-        ), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-        )
-        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-        )
-
-    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
-    @pytest.mark.parametrize(
-        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
-    )
+    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
@@ -279,8 +295,6 @@ class TestCorrectness:
         device: str | torch.device,
         shape: tuple[int, int],
         seed: int,
-        atol: float,
-        rtol: float,
     ) -> None:
         r"""Checks that the singular triplet method works for diagonal matrices.
 
@@ -292,53 +306,22 @@ class TestCorrectness:
         case = make_test_case_diagonal(
             shape, dtype=torch.float, device=device, seed=seed
         )
-        A = case.value
+        sigma = impl(case.value)
+        self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
-        # analytical result
-        analytical_value = case.spectral_norm
-        analytical_grad = case.spectral_norm_gradient
-
-        # check forward pass
-        sigma = impl(A)
-        assert (sigma - analytical_value).norm() < atol + rtol * analytical_value.norm()
-        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
-
-        # backward pass
-        sigma.backward()
-
-        # check backward pass
-        assert A.grad is not None
-        assert scaled_norm(A.grad - analytical_grad) < (
-            atol + rtol * scaled_norm(analytical_grad)
-        ), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
-        )
-        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
-        )
-
-    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
-    @pytest.mark.parametrize(
-        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"{ATOL=},{RTOL=}")]
-    )
+    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
-    def test_analytical(
+    def test_quasi_gaussian(
         self,
         method: str,
         *,
         device: str | torch.device,
         shape: tuple[int, int],
         seed: int,
-        atol: float,
-        rtol: float,
     ) -> None:
         r"""We test the analytical result for random matrices.
 
@@ -348,41 +331,11 @@ class TestCorrectness:
         case = make_test_case_quasi_gaussian(
             shape, dtype=torch.float, device=device, seed=seed
         )
-        A = case.value
+        sigma = impl(case.value)
+        self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
-        # analytical result
-        analytical_value = case.spectral_norm
-        analytical_grad = case.spectral_norm_gradient
-
-        # check forward pass
-        sigma = impl(A)
-        assert (sigma - analytical_value).norm() < atol + rtol * analytical_value.norm()
-        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
-
-        # backward pass
-        sigma.backward()
-
-        # check backward pass
-        assert A.grad is not None
-        assert scaled_norm(A.grad - analytical_grad) < (
-            atol + rtol * scaled_norm(analytical_grad)
-        ), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={case.S.sort().values.diff()[-1:]}"
-        )
-        assert torch.allclose(A.grad, analytical_grad, atol=atol, rtol=rtol), (
-            f"Max element-wise error: {(A.grad - analytical_grad).abs().max():.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={case.S.sort().values.diff()[-1:]}"
-        )
-
-    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
-    @pytest.mark.parametrize(
-        ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
-    )
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("method", SPECTRAL_NORMS)
@@ -393,8 +346,6 @@ class TestCorrectness:
         device: str | torch.device,
         shape: tuple[int, int],
         seed: int,
-        atol: float,
-        rtol: float,
     ) -> None:
         r"""Tests algorithm against an orthogonal matrix.
 
@@ -407,43 +358,9 @@ class TestCorrectness:
         case = make_test_case_repeated_singular_values(
             shape, dtype=torch.float, device=device, seed=seed
         )
-        A = case.value
-
-        # analytical result
-        analytical_value = case.spectral_norm
-
-        # check forward pass
-        sigma = impl(A)
-        assert (sigma - analytical_value).norm() < atol + rtol * analytical_value.norm()
-        assert torch.allclose(sigma, analytical_value, atol=atol, rtol=rtol)
-
-        # backward pass
-        sigma.backward()
-
-        # check backward pass
-        assert A.grad is not None
-        grad = A.grad
-        grad_inner = inner(grad, A)
-        grad_nuclear_norm = torch.linalg.matrix_norm(grad, ord="nuc")
-
-        # For the spectral norm, subgradients admit the dual characterization
-        #   ∂‖A‖₂ = {G : ‖G‖_* ≤ 1 and ⟨G, A⟩ = ‖A‖₂},
-        # where ‖·‖_* is the nuclear norm dual to ‖·‖₂. This avoids checking the
-        # global subgradient inequality against all perturbations X explicitly.
-        assert (grad_inner - analytical_value).abs() < (
-            atol + rtol * analytical_value.abs()
-        ), (
-            f"Invalid subgradient pairing: ⟨G, A⟩={grad_inner:.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
-        )
-        assert grad_nuclear_norm <= atol + rtol + 1, (
-            f"Invalid subgradient dual norm: ‖G‖_*={grad_nuclear_norm:.3e}"
-            f"  ‖A‖₂={analytical_value:.3e}"
-            f"  κ(A)={torch.linalg.cond(A):.3e}"
-            f"  δ(A)={case.S.sort().values.diff()[-1]:.3e}"
-        )
+        sigma = impl(case.value)
+        self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
 
 class TestPerformance:

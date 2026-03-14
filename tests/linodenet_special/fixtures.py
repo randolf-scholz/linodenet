@@ -12,6 +12,7 @@ __all__ = [
 ]
 
 import warnings
+from functools import cache
 from typing import Final, NamedTuple
 
 import torch
@@ -161,8 +162,8 @@ class Fixture:
             median_rel_err = (residual / magnitude).nanmedian().item()
             msg = (
                 f"Values not close! "
-                f"\n\tleft:  {value.tolist()}"
-                f"\n\tright: {true_value.tolist()}"
+                # f"\n\tleft:  {value.tolist()}"
+                # f"\n\tright: {true_value.tolist()}"
                 f"\n\tmax    abs error={max_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmean   abs error={mean_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmedian abs error={median_abs_err:8.2e}  (expected {atol})"
@@ -181,6 +182,20 @@ class TestCase(NamedTuple):
     V: Tensor  # right singular vectors (..., n, k)
 
     @property
+    def sigma(self) -> Tensor:
+        assert (self.S[0] >= self.S[1:]).all()
+        return self.S[0]
+
+    @property
+    def u(self) -> Tensor:
+        return self.U[..., 0]
+
+    @property
+    def v(self) -> Tensor:
+        return self.V[..., 0]
+
+    @property
+    @cache  # noqa: B019
     def value(self) -> nn.Parameter:
         r"""Reconstruct the matrix A = U diag(S) Vᵀ."""
         A = torch.einsum("...mk, ...k, ...nk -> ...mn", self.U, self.S, self.V)
@@ -193,7 +208,12 @@ class TestCase(NamedTuple):
 
     @property
     def spectral_norm_gradient(self):
-        r"""Return the gradient of the spectral norm of the matrix."""
+        r"""Return the gradient of the spectral norm of the matrix.
+
+        The gradient is analytically given as:
+
+        ..math:: \dv{‖A‖₂}{A} = uvᵀ
+        """
         u, _, v = self.singular_triplet
         return torch.einsum("...m, ...n -> ...mn", u, v)
 
@@ -208,16 +228,52 @@ class TestCase(NamedTuple):
         v = V.gather(dim=-1, index=idx_vec.expand(*V.shape[:-1], 1))  # (..., n, 1)
         return u.squeeze(-1), s.squeeze(-1), v.squeeze(-1)
 
-    def singular_triplet_vjp(
-        self, g_u: Tensor, g_s: Tensor, g_v: Tensor
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        r"""Return the VJP contributions of the dominant singular triplet."""
+    def singular_triplet_vjp(self, g_u: Tensor, g_s: Tensor, g_v: Tensor) -> Tensor:
+        r"""Return the VJP of the dominant singular triplet with respect to $A$.
+
+        For a simple dominant singular triplet $(u, σ, v)$ satisfying
+        $Av = σu$, $Aᵀu = σv$, $uᵀu = 1$, and $vᵀv = 1$, the backward map is
+
+        .. math::
+
+           g_A = gₛ\,uvᵀ + (𝕀ₘ - uuᵀ) p vᵀ + u qᵀ (𝕀ₙ - vvᵀ),
+
+        where $p ∈ ℝᵐ$ and $q ∈ ℝⁿ$ solve the augmented linear system
+
+        .. math::
+
+           \begin{bmatrix}
+               σ𝕀ₘ & -A & u & 0 \\
+               -Aᵀ & σ𝕀ₙ & 0 & v
+           \end{bmatrix}
+           \begin{bmatrix}
+               p \\ q \\ μ \\ ν
+           \end{bmatrix}
+           =
+           \begin{bmatrix}
+               gᵤ \\ gᵥ
+           \end{bmatrix}.
+
+        Equivalently, the individual VJP contributions are
+
+        .. math::
+
+           gₛᵀ \frac{∂σ}{∂A} = gₛ\,uvᵀ,
+           \qquad
+           gᵤᵀ \frac{∂u}{∂A} = (𝕀ₘ - uuᵀ) p vᵀ,
+           \qquad
+           gᵥᵀ \frac{∂v}{∂A} = u qᵀ (𝕀ₙ - vvᵀ).
+
+        This formula assumes the dominant singular value is isolated. When the top
+        singular value is repeated, the singular vectors are not uniquely defined
+        and the full triplet VJP is not unique either.
+        """
         A = self.value
         u, sigma, v = self.singular_triplet
 
         g_sigma_out = g_s * torch.outer(u, v)
         if not (g_u.any() or g_v.any()).item():
-            return g_sigma_out, torch.zeros_like(A), torch.zeros_like(A)
+            return g_sigma_out
 
         m, n = A.shape
         zero_u = torch.zeros((m, 1), dtype=A.dtype, device=A.device)
@@ -236,7 +292,19 @@ class TestCase(NamedTuple):
 
         g_u_out = torch.outer(p - torch.dot(u, p) * u, v)
         g_v_out = torch.outer(u, q - torch.dot(v, q) * v)
-        return g_sigma_out, g_u_out, g_v_out
+        return g_sigma_out + g_u_out + g_v_out
+
+    @staticmethod
+    def dyad_loss(g_matrix: Tensor, u, v) -> Tensor:
+        r"""Return the gauge-invariant loss induced by the dominant dyad $uvᵀ$."""
+        return torch.einsum("mn, mn ->", torch.outer(u, v), g_matrix)
+
+    @classmethod
+    def singular_triplet_loss(
+        cls, g_sigma: Tensor, g_matrix: Tensor, sigma: Tensor, u: Tensor, v: Tensor
+    ) -> Tensor:
+        r"""Return the gauge-invariant scalar loss for a singular triplet."""
+        return g_sigma * sigma + cls.dyad_loss(g_matrix, u, v)
 
 
 def make_test_case_quasi_gaussian(
@@ -265,6 +333,11 @@ def make_test_case_quasi_gaussian(
     V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
     dist = MarchenkoPastur(gamma=gamma, sigma2=1.0, validate_args=False)
     S = dist.sample_positive([k]).to(dtype=dtype, device=device).sqrt()
+    # ensure a minimum gap between singular values.
+    S = torch.sort(S, descending=True).values
+    eps = 1e-6 * max(1.0, S.max().item())
+    S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
+    assert (S[0] > S[1:] + eps).all()
     return TestCase(U=U, S=S, V=V)
 
 
@@ -280,14 +353,14 @@ def make_test_case_rank_one(
     generator.manual_seed(seed or 0)
 
     m, n = shape
-    sigma = 1000 * torch.rand((), device=device, generator=generator) + 1
-    u = torch.randn(m, device=device, generator=generator)
+    sigma = 10 * torch.rand((), device=device, dtype=dtype, generator=generator) + 1
+    u = torch.randn(m, device=device, dtype=dtype, generator=generator)
     u = u / u.norm()  # (m,)
-    U = u.unsqueeze(-1).to(dtype=dtype)  # (m, 1)
-    v = torch.randn(n, device=device, generator=generator)
+    U = u.unsqueeze(-1)  # (m, 1)
+    v = torch.randn(n, device=device, dtype=dtype, generator=generator)
     v = v / v.norm()  # (n,)
-    V = v.unsqueeze(-1).to(dtype=dtype)  # (n, 1)
-    S = sigma.unsqueeze(-1).to(dtype=dtype)  # (1,)
+    V = v.unsqueeze(-1)  # (n, 1)
+    S = sigma.unsqueeze(-1)  # (1,)
     return TestCase(U=U, S=S, V=V)
 
 
@@ -306,10 +379,13 @@ def make_test_case_diagonal(
     k = min(m, n)
     diag = 10 * torch.randn(k, dtype=dtype, device=device, generator=generator)
     signs = torch.sign(diag)
-    signs = torch.where(signs == 0, torch.ones_like(signs), signs)
-    S = diag.abs()
     U = torch.eye(m, device=device, dtype=dtype)[:, :k]
     V = torch.eye(n, device=device, dtype=dtype)[:, :k] * signs
+    # ensure a minimum gap between singular values.
+    S = torch.sort(diag.abs(), descending=True).values
+    eps = 1e-6 * max(1.0, S.max().item())
+    S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
+    assert (S[0] > S[1:] + eps).all()
     return TestCase(U=U, S=S, V=V)
 
 

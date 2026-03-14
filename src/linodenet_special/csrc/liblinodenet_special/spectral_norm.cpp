@@ -150,49 +150,41 @@ struct SpectralNorm: public Function<SpectralNorm> {
          */
         // TODO: Test Anderson Acceleration
 
-        // Initialize maxiter depending on the size of the matrix.
-        const auto M = A_in.size(0);
-        const auto N = A_in.size(1);
+        // Sec: Option parsing
+        constexpr int64_t DEFAULT_MAXITER = 256;
+        const int64_t MAXITER = maxiter ? maxiter.value() : DEFAULT_MAXITER;
+        const int64_t M = A_in.size(0);
+        const int64_t N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        const int64_t MAXITER = maxiter ? maxiter.value() : (M + N + 64);
-
-        // Initialize tolerance scalars
-        const Tensor ATOL = torch::full({}, atol, OPTIONS);
-        const Tensor RTOL = torch::full({}, rtol, OPTIONS);
-
-        // Initialize u and v with random values if not given
-        Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
-        Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
-
-        // initialize vectors for power iteration
-        v /= v.norm();
-        u /= u.norm();
+        bool converged = false;
+        const Tensor ATOL = torch::scalar_tensor(atol, OPTIONS);
+        const Tensor RTOL = torch::scalar_tensor(rtol, OPTIONS);
 
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
+        const Tensor A = A_in / SCALE;
+        const Tensor A_t = A.transpose(-2, -1);
+
+        // pre-allocate buffers
+        Tensor grad_u = torch::empty({M}, OPTIONS);
+        Tensor grad_v = torch::empty({N}, OPTIONS);
+        Tensor gamma_u = torch::empty({}, OPTIONS);
+        Tensor gamma_v = torch::empty({}, OPTIONS);
+        Tensor sigma_u = torch::empty({}, OPTIONS);
+        Tensor sigma_v = torch::empty({}, OPTIONS);
+
+        Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
+        Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
+        at::div_out(u, u, u.norm());
+        at::div_out(v, v, v.norm());
+        Tensor sigma = torch::zeros({}, OPTIONS);
 
         // special case: if SCALE == 0, then A is the zero matrix,
         // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
         if (SCALE.item<double>() == 0) {
 			ctx->save_for_backward({u, v});
-			return torch::zeros({}, OPTIONS);
+			return sigma;
 		}
-
-        const Tensor A = A_in / SCALE;
-        const Tensor A_t = A.t();  // precompute transpose (maybe skip for small MAXITER?)
-
-        // Initialize convergence flag
-        bool converged = false;
-
-        // pre-allocate buffers
-        Tensor grad_u = torch::empty_like(u);
-        Tensor grad_v = torch::empty_like(v);
-
-        // scalars
-        Tensor gamma_u = torch::empty({}, OPTIONS);
-        Tensor gamma_v = torch::empty({}, OPTIONS);
-        Tensor sigma_u = torch::empty({}, OPTIONS);
-        Tensor sigma_v = torch::empty({}, OPTIONS);
 
         // Perform power-iteration for maxiter times or until convergence.
         // NOTE: performing at least 2 iterations before the first convergence check is crucial,
@@ -213,7 +205,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
             // update u
             at::mv_out(grad_u, A, v);                    // gᵤ ← Av
             at::dot_out(sigma_u, grad_u, u);             // σᵤ ← ⟨u∣gᵤ⟩
-            at::norm_out(gamma_u, grad_u - sigma_u * u); // γᵤ ← ‖gᵤ - σᵤu‖
+            at::norm_out(gamma_u, grad_u - sigma_u * u);  // γᵤ ← ‖gᵤ - σᵤu‖
             at::div_out(u, grad_u, grad_u.norm());       // u ← gᵤ/‖gᵤ‖
             // update v
             at::mv_out(grad_v, A_t, u);                  // gᵥ ← Aᵀu
@@ -234,11 +226,8 @@ struct SpectralNorm: public Function<SpectralNorm> {
             TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes());
         }
 
-        // store pre-conditioned tensors for backward
-        ctx->save_for_backward({u, v});
-
         // compute pre-conditioned sigma
-        const Tensor sigma = SCALE * A.mv(v).dot(u);
+        sigma = SCALE * A.mv(v).dot(u);
 
         // check for NaNs, infinities and non-positive values
         if ((~torch::isfinite(sigma) | (sigma <= 0)).item<bool>()) {
@@ -249,6 +238,10 @@ struct SpectralNorm: public Function<SpectralNorm> {
                 "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
             ));
         }
+
+        // store pre-conditioned tensors for backward
+        ctx->save_for_backward({u, v});
+
         return sigma;
     }
 

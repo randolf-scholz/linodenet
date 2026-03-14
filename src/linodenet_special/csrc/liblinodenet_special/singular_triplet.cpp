@@ -184,24 +184,22 @@ struct SingularTriplet : public Function<SingularTriplet> {
          */
         // TODO: Test Anderson Acceleration
 
-        // Initialize maxiter depending on the size of the matrix.
+        // Sec: Option parsing
         constexpr int64_t DEFAULT_MAXITER = 256;
+        const int64_t MAXITER = maxiter ? maxiter.value() : DEFAULT_MAXITER;
         const int64_t M = A_in.size(0);
         const int64_t N = A_in.size(1);
         const auto OPTIONS = A_in.options();
-        const int64_t MAXITER = maxiter ? maxiter.value() : DEFAULT_MAXITER;
         bool converged = false;
+        const Tensor ATOL = torch::scalar_tensor(atol, OPTIONS);
+        const Tensor RTOL = torch::scalar_tensor(rtol, OPTIONS);
+
         // Preconditioning: normalize A by its infinity norm
-        const Tensor SCALE = A_in.abs().mean();
+        const Tensor SCALE = A_in.abs().max();
         const Tensor A = A_in / SCALE;
         const Tensor A_t = A.transpose(-2, -1);
 
-        // Initialize tolerance scalars, scale ATOL
-        const Tensor ATOL = torch::scalar_tensor(atol, OPTIONS);
-        const Tensor RTOL = torch::scalar_tensor(rtol, OPTIONS);
         // pre-allocate buffers
-        Tensor u = torch::empty({M}, OPTIONS);
-        Tensor v = torch::empty({N}, OPTIONS);
         Tensor grad_u = torch::empty({M}, OPTIONS);
         Tensor grad_v = torch::empty({N}, OPTIONS);
         Tensor gamma_u = torch::empty({}, OPTIONS);
@@ -209,39 +207,47 @@ struct SingularTriplet : public Function<SingularTriplet> {
         Tensor sigma_u = torch::empty({}, OPTIONS);
         Tensor sigma_v = torch::empty({}, OPTIONS);
 
+        Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
+        Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
+        at::div_out(u, u, u.norm());
+        at::div_out(v, v, v.norm());
+        Tensor sigma = torch::zeros({}, OPTIONS);
 
-        if (u0 && v0) {
-            u = u0.value();
-            v = v0.value();
-        } else if (!u0 && !v0) {
-            if (N <= M) {
-                v = torch::randn({N}, OPTIONS);
-                v /= v.norm();
-                u = A.mv(v);
-                u /= u.norm();
-                v = A.t().mv(u);
-                v /= v.norm();
-            } else {
-                u = torch::randn({M}, OPTIONS);
-                u /= u.norm();
-                v = A.t().mv(u);
-                v /= v.norm();
-                u = A.mv(v);
-                u /= u.norm();
-            }
-        } else {
-            throw std::invalid_argument("Expected both u0 and v0, or neither.");
+        // // Initialize u and v
+        // if (u0 && v0) {
+        //     u = u0.value();
+        //     v = v0.value();
+        // } else if (!u0 && !v0) {
+        //     if (N <= M) {
+        //         v = torch::randn({N}, OPTIONS);
+        //         v /= v.norm();
+        //         u = A.mv(v);
+        //         u /= u.norm();
+        //         v = A.t().mv(u);
+        //         v /= v.norm();
+        //     } else {
+        //         u = torch::randn({M}, OPTIONS);
+        //         u /= u.norm();
+        //         v = A.t().mv(u);
+        //         v /= v.norm();
+        //         u = A.mv(v);
+        //         u /= u.norm();
+        //     }
+        // } else {
+        //     throw std::invalid_argument("Expected both u0 and v0, or neither.");
+        // }
+
+        // special case: if SCALE == 0, then A is the zero matrix,
+        // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
+        if (SCALE.item<double>() == 0) {
+            ctx->save_for_backward({u, v, sigma, A, SCALE});
+            return {sigma, u, v};
         }
 
-
-
         // Perform power-iteration for maxiter times or until convergence.
-        // NOTE: Perform 2 iterations per loop to increase performance.
-        //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
-        //   The compiler cannot do this optimization on it's own because it would change behavior.
         // NOTE: performing at least 2 iterations before the first convergence check is crucial,
         //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
-        for (auto i = 0; i<MAXITER; i++) {
+        for (int64_t i = 0; i<MAXITER; i++) {
 			// NOTE: Perform multiple iterations per loop to increase performance.
 			//  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
 			//   The compiler cannot do this optimization on it's own because it would change behavior.
@@ -257,7 +263,7 @@ struct SingularTriplet : public Function<SingularTriplet> {
             // update u
             at::mv_out(grad_u, A, v);                    // gᵤ ← Av
             at::dot_out(sigma_u, grad_u, u);             // σᵤ ← ⟨u∣gᵤ⟩
-            at::norm_out(gamma_u, grad_u - sigma_u * u); // γᵤ ← ‖gᵤ - σᵤu‖
+            at::norm_out(gamma_u, grad_u - sigma_u * u);  // γᵤ ← ‖gᵤ - σᵤu‖
             at::div_out(u, grad_u, grad_u.norm());       // u ← gᵤ/‖gᵤ‖
             // update v
             at::mv_out(grad_v, A_t, u);                  // gᵥ ← Aᵀu
@@ -275,14 +281,11 @@ struct SingularTriplet : public Function<SingularTriplet> {
 
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes())
+            TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes());
         }
 
         // compute pre-conditioned sigma
-        const Tensor sigma = A.mv(v).dot(u);
-
-        // store pre-conditioned tensors for backward
-        ctx->save_for_backward({A, sigma, u, v, SCALE});
+        sigma = A.mv(v).dot(u);
 
         // check for NaNs, infinities and non-positive values
         if ((~torch::isfinite(sigma) | (sigma <= 0)).item<bool>()) {
@@ -293,6 +296,10 @@ struct SingularTriplet : public Function<SingularTriplet> {
                 "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
             ));
         }
+
+        // store pre-conditioned tensors for backward
+        ctx->save_for_backward({u, v,sigma, A, SCALE});
+
         return {SCALE*sigma, u, v};
     }
 
@@ -311,77 +318,57 @@ struct SingularTriplet : public Function<SingularTriplet> {
          * Φᵀ(∂u/∂A) = (𝕀ₘ-uuᵀ)Φ'vᵀ
          * Ψᵀ(∂v/∂A) = uΨ'(𝕀ₙ-vvᵀ)
          *
-         * Here, Φ' and Ψ' are given as the solutions to the linear system
-         * [σ𝕀ₘ, -Aᵀ]  [Φ'] = [Φ]
-         * [-Aᵀ, σ𝕀ₙ]  [Ψ'] = [Ψ]
+         * Here, p and q are obtained from the augmented linear system
+         * [ σ𝕀ₘ, -A  , u, 0 ] [p ]   [Φ]
+         * [ -Aᵀ , σ𝕀ₙ, 0, v ] [q ] = [Ψ].
+         *                         [μ ]
+         *                         [ν ]
          *
          * We can use the formula for the 2x2 block inverse to see that we can solve 4 smaller systems instead.
          *  [𝕀ₘ - BBᵀ]x = Φ  [𝕀ₙ - BᵀB]y = BΨ
          *  [𝕀ₙ - BᵀB]w = BᵀΦ  [𝕀ₘ - BBᵀ]z = Ψ
          */
         const auto saved = ctx->get_saved_variables();
-        const Tensor &A = saved[0];
-        const Tensor &sigma = saved[1];
-        const Tensor &u = saved[2];
-        const Tensor &v = saved[3];
-        const Tensor &SCALE = saved[4];
-        const Tensor &xi = grad_output[0];
-        const Tensor &phi = grad_output[1];
-        const Tensor &psi = grad_output[2];
-
-        // Computing reference values via SVD
-        // auto SVD = torch::linalg::svd(A, true, nullopt);
-        // Tensor u = std::get<0>(SVD).index({torch::indexing::Slice(), 0});
-        // Tensor s = std::get<1>(SVD).index({0});
-        // Tensor v = std::get<2>(SVD).index({0, torch::indexing::Slice()});
-
-        const Tensor g_sigma = xi * outer(u, v);
+        const Tensor &u = saved[0];
+        const Tensor &v = saved[1];
+        const Tensor g_sigma = grad_output[0] * outer(u, v);
 
         // exit early if grad_output is zero for both u and v.
+        const Tensor &phi = grad_output[1];
+        const Tensor &psi = grad_output[2];
         if ( !(phi.any() | psi.any()).item<bool>() ) {
             return {g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
         }
 
-        // Consider the additional outer gradients for u and v.
-        const auto M = A.size(0);
-        const auto N = A.size(1);
+        // parse the remaining inputs
+        const Tensor &sigma = saved[2];
+        const Tensor &A = saved[3];
+        const Tensor &SCALE = saved[4];
+        const int64_t M = A.size(0);
+        const int64_t N = A.size(1);
         const auto OPTIONS = A.options();
-        // augmented K matrix: (m+n+2) x (m+n)
-        // [ σ𝕀ₘ | -A  | u | 0 ] ⋅ [p, q, μ, ν] = [ϕ]
-        // [ -Aᵀ | σ𝕀ₙ | 0 | v ]                  [ψ]
-
-        // construct the K matrix
-        // Tensor K = torch::zeros({m+n, m+n+2}, options);
-        // K.index_put_({Slice(0, m+n), Slice(0, m+n)}, sigma*eye(m+n, options));
-        // K.index_put_({Slice(0, m), Slice(m, m+n)}, -A);
-        // K.index_put_({Slice(m, m+n), Slice(0, m)}, -A.t());
-        // K.index_put_({Slice(0, m), m+n}, u);
-        // K.index_put_({Slice(m, m+n), m+n+1}, v);
 
         const Tensor zero_u = torch::zeros_like(u).unsqueeze(-1);
         const Tensor zero_v = torch::zeros_like(v).unsqueeze(-1);
-        const Tensor eye_m = eye(M, OPTIONS);
-        const Tensor eye_n = eye(N, OPTIONS);
 
+        // construct the K matrix
+        // [ σ𝕀ₘ | -A  | u | 0 ] ⋅ [p, q, μ, ν] = [ϕ]
+        // [ -Aᵀ | σ𝕀ₙ | 0 | v ]                  [ψ]
         const Tensor K = cat(
             {
-                cat({sigma * eye_m, -A,     u.unsqueeze(-1), zero_u}, 1),
-                cat({-A.t(), sigma * eye_n, zero_v, v.unsqueeze(-1)}, 1)
+                cat({sigma * eye(M, OPTIONS), -A,     u.unsqueeze(-1), zero_u}, 1),
+                cat({-A.t(), sigma * eye(N, OPTIONS), zero_v, v.unsqueeze(-1)}, 1)
             },
             0
         );
-        const Tensor c = torch::cat({phi, psi}, 0);
+        const Tensor c = cat({phi, psi}, 0);
 
         // solve the underdetermined system
-        const Tensor x = std::get<0>(
-            linalg_lstsq(K, c, nullopt, nullopt)
-        );
+        const Tensor x = std::get<0>(linalg_lstsq(K, c, nullopt, nullopt));
 
         // extract the solution, reverse pre-conditioning
         const Tensor p = x.slice(0, 0, M) / SCALE;
         const Tensor q = x.slice(0, M, M + N) / SCALE;
-        // Tensor mu = x.slice(0, m+n, m+n+1);
-        // Tensor nu = x.slice(0, m+n+1, m+n+2);
 
         // compute the VJP
         const Tensor g_u = outer(p - dot(u, p) * u, v);
@@ -454,7 +441,7 @@ static std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
     );
 }
 
-static std::tuple<Tensor, Tensor, Tensor> singular_triplet(
+static std::tuple<Tensor, Tensor, Tensor> singular_triplet_impl(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
@@ -485,7 +472,7 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("singular_triplet", &singular_triplet);
+    m.impl("singular_triplet", &singular_triplet_impl);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {

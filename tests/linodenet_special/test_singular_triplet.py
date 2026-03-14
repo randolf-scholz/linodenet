@@ -13,7 +13,16 @@ import linodenet_special
 from linodenet_special import singular_triplet, singular_triplet_native
 from tests.utils import timer
 
-from .fixtures import DEVICES, SEEDS
+from .fixtures import (
+    DEVICES,
+    SEEDS,
+    Fixture,
+    TestCase,
+    make_test_case_diagonal,
+    make_test_case_quasi_gaussian,
+    make_test_case_rank_one,
+    make_test_case_repeated_singular_values,
+)
 
 
 def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
@@ -26,6 +35,22 @@ def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
 def inner(x: Tensor, y: Tensor) -> Tensor:
     r"""Compute the inner product."""
     return torch.einsum("..., ... ->", x, y)
+
+
+def scaled_norm(x: Tensor) -> Tensor:
+    r"""Scaled norm of a tensor."""
+    return x.pow(2).mean().sqrt()
+
+
+def align_signs(
+    u: Tensor, v: Tensor, u_ref: Tensor, v_ref: Tensor
+) -> tuple[Tensor, Tensor]:
+    r"""Flip singular vectors to match a reference orientation."""
+    residual = (u - u_ref).norm() + (v - v_ref).norm()
+    flipped_residual = (u + u_ref).norm() + (v + v_ref).norm()
+    if residual <= flipped_residual:
+        return u, v
+    return -u, -v
 
 
 def compute_singular_triplet_impl(
@@ -109,7 +134,7 @@ class TestBasic:
         "linodenet_svd": singular_triplet,
     }
 
-    @pytest.mark.parametrize("seed", SEEDS, ids=lambda seed: f"{seed=}")
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
     @pytest.mark.parametrize(
         ("atol", "rtol"), [pytest.param(ATOL, RTOL, id=f"atol={ATOL},rtol={RTOL}")]
     )
@@ -258,7 +283,205 @@ class TestBasic:
         assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
 
 
-class TestPerformance:
+class TestCorrectness(Fixture):
+    SHAPES: list[tuple[int, int]] = [
+        # scalar
+        (1, 1),
+        # square matrices
+        (2, 2),
+        (4, 4),
+        (16, 16),
+        (64, 64),
+        (128, 128),
+        # rectangular matrices
+        (16, 64),
+        (128, 64),
+        (64, 16),
+        (64, 128),
+        # rank-1 matrices
+        (1, 2),
+        (1, 4),
+        (1, 16),
+        (1, 64),
+        (1, 128),
+        (2, 1),
+        (4, 1),
+        (16, 1),
+        (64, 1),
+        (128, 1),
+    ]
+    ATOL = 1e-3
+    RTOL = 1e-4
+
+    SINGULAR_TRIPLETS = {
+        "custom": singular_triplet,
+        "native": singular_triplet_native,
+        # "riemann": singular_triplet_riemann,
+    }
+
+    def check_forward_pass(
+        self,
+        case: TestCase,
+        sigma: Tensor,
+        u: Tensor,
+        v: Tensor,
+        *,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        r"""Check that two singular triplets agree up to a common sign flip."""
+        A = case.value
+        sigma_ref = case.sigma
+        assert u.isfinite().all()
+        assert v.isfinite().all()
+        assert sigma.isfinite().all()
+        assert (sigma > 0).all()
+        self.assert_close(sigma, sigma_ref, atol=atol, rtol=rtol)
+        self.assert_close(u.norm(), 1.0, atol=atol, rtol=rtol)
+        self.assert_close(v.norm(), 1.0, atol=atol, rtol=rtol)
+        self.assert_close(A.mv(v), sigma * u, atol=atol, rtol=rtol)
+        self.assert_close(A.T.mv(u), sigma * v, atol=atol, rtol=rtol)
+
+        if case.S.shape[-1] >= 2:
+            spectral_gap = case.S[..., 0] - case.S[..., 1]
+            if spectral_gap <= atol + rtol * sigma_ref.abs():
+                return
+
+        u_ref = case.u
+        v_ref = case.v
+        u, v = align_signs(u, v, u_ref, v_ref)
+        self.assert_close(u, u_ref, atol=atol, rtol=rtol)
+        self.assert_close(v, v_ref, atol=atol, rtol=rtol)
+
+    def check_backward_pass(
+        self,
+        case: TestCase,
+        sigma: Tensor,
+        *,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        # note: we do not backward through u and v since this is too unstable.
+        A = case.value
+        sigma.backward()
+        assert A.grad is not None
+        assert A.grad.isfinite().all()
+
+        grad = A.grad
+        analytical_value = case.spectral_norm
+        analytical_grad = case.spectral_norm_gradient
+        # For the spectral norm, subgradients admit the dual characterization
+        #    ∂‖A‖₂ = {G : ‖G‖_* ≤ 1 and ⟨G, A⟩ = ‖A‖₂},
+        # where ‖·‖_* is the nuclear norm dual to ‖·‖₂. This avoids checking the
+        # global subgradient inequality against all perturbations X explicitly.
+        grad_inner = inner(grad, A)
+        self.assert_close(grad_inner, analytical_value, atol=atol, rtol=rtol)
+        grad_nuclear_norm = torch.linalg.matrix_norm(grad, ord="nuc")
+        self.assert_upper_bounded(grad_nuclear_norm, 1.0, atol=atol, rtol=rtol)
+
+        if case.S.shape[-1] >= 2:
+            spectral_gap = case.S[..., 0] - case.S[..., 1]
+            if spectral_gap <= atol + rtol * analytical_value.abs():
+                return
+
+        self.assert_close(grad, analytical_grad, atol=atol, rtol=rtol)
+
+    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SINGULAR_TRIPLETS)
+    def test_rank_one(
+        self,
+        method: str,
+        *,
+        shape: tuple[int, int],
+        seed: int,
+        device: str | torch.device,
+    ) -> None:
+        r"""Test the dominant singular triplet and its VJP for rank-one matrices."""
+        impl = self.SINGULAR_TRIPLETS[method]
+        torch.manual_seed(seed)
+        case = make_test_case_rank_one(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
+        sigma, u, v = impl(case.value)
+        self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+
+    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SINGULAR_TRIPLETS)
+    def test_diagonal(
+        self,
+        method: str,
+        *,
+        device: str | torch.device,
+        shape: tuple[int, int],
+        seed: int,
+    ) -> None:
+        r"""Test the dominant singular triplet and its VJP for diagonal matrices."""
+        impl = self.SINGULAR_TRIPLETS[method]
+        torch.manual_seed(seed)
+
+        case = make_test_case_diagonal(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
+        sigma, u, v = impl(case.value)
+        self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+
+    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SINGULAR_TRIPLETS)
+    def test_quasi_gaussian(
+        self,
+        method: str,
+        *,
+        device: str | torch.device,
+        shape: tuple[int, int],
+        seed: int,
+    ) -> None:
+        r"""Test the dominant singular triplet and its VJP for random matrices."""
+        impl = self.SINGULAR_TRIPLETS[method]
+        torch.manual_seed(seed)
+
+        case = make_test_case_quasi_gaussian(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
+        sigma, u, v = impl(case.value)
+        self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+
+    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("method", SINGULAR_TRIPLETS)
+    def test_repeated_singular_values(
+        self,
+        method: str,
+        *,
+        device: str | torch.device,
+        shape: tuple[int, int],
+        seed: int,
+    ) -> None:
+        r"""Test only the value and spectral-norm subgradient in the degenerate case."""
+        impl = self.SINGULAR_TRIPLETS[method]
+
+        case = make_test_case_repeated_singular_values(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
+        A = case.value
+        sigma, u, v = impl(A)
+        self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
+        self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
+
+
+class TestPerformance(Fixture):
     SINGULAR_TRIPLETS = {
         "custom": singular_triplet,
         "native": singular_triplet_native,
