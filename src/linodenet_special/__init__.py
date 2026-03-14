@@ -21,10 +21,12 @@ __all__ = [
     # Special
     "ndtri_exp",
     "thomson_initialization",
+    "hard_bend",
 ]
 
 from linodenet_special.core import (
     KnownFunctions,
+    hard_bend,
     ndtri_exp,
     singular_triplet,
     singular_triplet_debug,

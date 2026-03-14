@@ -28,8 +28,7 @@ __all__ = [
     # Functions
     "crelu",
     "geglu",
-    "hard_expand",
-    "hard_contract",
+    "hard_bend",
     "reglu",
     # utils
     "get_activation",
@@ -47,7 +46,7 @@ from linodenet.nn.activations.base import (
 from linodenet.nn.activations.crelu import CReLU, crelu
 from linodenet.nn.activations.geglu import GEGLU, geglu
 from linodenet.nn.activations.reglu import ReGLU, reglu
-from linodenet_special.hard_contract import hard_contract, hard_expand
+from linodenet_special import hard_bend
 
 TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     "relu": nn.functional.relu,
@@ -175,8 +174,7 @@ r"""Dictionary containing all available activations in torch."""
 
 ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     **TORCH_ACTIVATION_FUNCTIONS,
-    "hard_contract": hard_contract,
-    "hard_expand": hard_expand,
+    "hard_bend": hard_bend,
 }  # fmt: skip
 r"""Dictionary containing all available activation functions."""
 
