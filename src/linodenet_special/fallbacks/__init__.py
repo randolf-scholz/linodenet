@@ -15,8 +15,12 @@ __all__ = [
     "singular_triplet",
     "singular_triplet_native",
     "spectral_norm",
+    "hard_bend",
+    "hard_contract",
+    "hard_expand",
 ]
 
+from linodenet_special.fallbacks.hard_bend import hard_bend, hard_contract, hard_expand
 from linodenet_special.fallbacks.ndtri_exp import ndtri_exp, ndtri_exp_naive
 from linodenet_special.fallbacks.singular_triplet import (
     singular_triplet,
@@ -31,7 +35,11 @@ from linodenet_special.fallbacks.transport import (
 )
 
 FALLBACKS = {
-    "ndtri_exp": ndtri_exp,
-    "singular_triplet": singular_triplet,
-    "spectral_norm": spectral_norm,
-}
+    "ndtri_exp"        : ndtri_exp,
+    "singular_triplet" : singular_triplet,
+    "spectral_norm"    : spectral_norm,
+    "hard_bend"        : hard_bend,
+    "hard_contract"    : hard_contract,
+    "hard_expand"      : hard_expand,
+}  # fmt: skip
+r"""Pure python implementations of special functions used by LinODEnet."""
