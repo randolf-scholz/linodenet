@@ -1,10 +1,14 @@
 r"""Implementations of the hard bend activation function."""
 
 __all__ = [
+    "HardBend",
     "hard_contract",
     "hard_expand",
     "hard_bend",
 ]
+
+import math
+from typing import Protocol
 
 import torch
 from torch import Tensor
@@ -12,17 +16,56 @@ from torch import Tensor
 from signatures import signature
 
 
-@signature("[(...), (), ()] -> (...)")
-def hard_bend(x: Tensor, a: Tensor | float = 1, c: Tensor | float = 1) -> Tensor:
-    r"""Inverse of the hard bend activation function."""
+class HardBend(Protocol):
+    r"""Protocol for hard bend activation function."""
+
+    def __call__(
+        self,
+        x: Tensor,
+        /,
+        a: Tensor | float = ...,
+        c: Tensor | float = ...,
+        m: Tensor | float = ...,
+    ) -> Tensor: ...
+
+
+@signature("[(...), (), (), ()] -> (...)")
+def hard_bend(
+    x: Tensor,
+    /,
+    a: Tensor | float = math.e**2,
+    c: Tensor | float = 2.0,
+    m: Tensor | float = 1.0,
+) -> Tensor:
+    r"""Piecewise linear function (3 regions), close the origin: a*x, outside: mx±c.
+
+    Args:
+        x: The input tensor to be activated.
+        a: The slope of the middle region, defaults to ℯ²
+        c: The offset of the parallel lines, defaults to 2.0.
+        m: The slope of the outer regions, defaults to 1.0.
+
+    Note:
+        An optimal transport from $N(0,1)$ to $½N(μ, σ²) + ½N(-μ, σ²)$ can be
+        approximated with hard_bend(x, σℯ^{½μ²/σ²}, μ, σ).
+        The defaults are chosen to approximate the optimal transport from $N(0,1)$ to $½N(2,1) + ½N(-2,1)$.
+
+    Inversion formula: y = f(x, a, c, m) ⟺ x = f(y, 1/a, c, 1/m)
+    """
     a = torch.as_tensor(a, dtype=x.dtype, device=x.device)
-    c = torch.as_tensor(c, dtype=x.dtype, device=x.device)
-    s = torch.sign(a - 1)
-    return torch.where(s * (a - 1) * x.abs() <= c, a * x, x + s * x.sign() * c)
+    m = torch.as_tensor(m, dtype=x.dtype, device=x.device)
+    c_abs = torch.as_tensor(c, dtype=x.dtype, device=x.device).abs()
+    m = torch.copysign(m, a)
+    z = (a - m) * x
+    return torch.where(
+        z.abs() <= c_abs,
+        a * x,
+        (m * x + z.sign() * c_abs),
+    )
 
 
 @signature("[(...), (), ()] -> (...)")
-def hard_expand(x: Tensor, a: Tensor | float = 1, c: Tensor | float = 1) -> Tensor:
+def hard_expand(x: Tensor, a: Tensor | float = 1.0, c: Tensor | float = 1.0) -> Tensor:
     r"""Hard expand activation function.
 
     Args:
