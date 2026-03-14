@@ -64,15 +64,15 @@ endif()
 add_library(
         linodenet_special
         SHARED
-        csrc/linodenet_special/singular_triplet.cpp
-        csrc/linodenet_special/singular_triplet_debug.cpp
-        csrc/linodenet_special/singular_triplet_riemann.cpp
-        csrc/linodenet_special/spectral_norm.cpp
-        csrc/linodenet_special/spectral_norm_debug.cpp
-        csrc/linodenet_special/spectral_norm_riemann.cpp
-        csrc/linodenet_special/ndtri_exp.cpp
-        csrc/linodenet_special/utils.cpp
-        # csrc/linodenet_special/matrix_root.cpp
+        csrc/liblinodenet_special/singular_triplet.cpp
+        csrc/liblinodenet_special/singular_triplet_debug.cpp
+        csrc/liblinodenet_special/singular_triplet_riemann.cpp
+        csrc/liblinodenet_special/spectral_norm.cpp
+        csrc/liblinodenet_special/spectral_norm_debug.cpp
+        csrc/liblinodenet_special/spectral_norm_riemann.cpp
+        csrc/liblinodenet_special/ndtri_exp.cpp
+        # csrc/liblinodenet_special/utils.cpp
+        # csrc/liblinodenet_special/matrix_root.cpp
 )
 
 # Target configuration
