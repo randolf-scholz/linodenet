@@ -10,7 +10,11 @@ Tensor hard_bend_impl(const Tensor &x, const Tensor &a, const Tensor &c, const T
     const Tensor c_abs = c.abs();
     const Tensor m_signed = torch::copysign(m, a);
     const Tensor z = (a - m_signed) * x;
-    return torch::where(z.abs() <= c_abs, a * x, m_signed * x + z.sign() * c_abs);
+    return torch::where(
+        z.abs() <= c_abs,
+        a * x,
+        at::addcmul(m_signed * x, z.sign(), c_abs)
+    );
 }
 }  // namespace
 
@@ -20,7 +24,7 @@ Tensor hard_bend_meta(const Tensor &x, const Tensor &a, const Tensor &c, const T
     TORCH_CHECK(c.is_floating_point(), "hard_bend: c must be a floating point tensor.");
     TORCH_CHECK(m.is_floating_point(), "hard_bend: m must be a floating point tensor.");
 
-    auto broadcasted = torch::broadcast_tensors({x, a, c, m});
+    const auto broadcasted = torch::broadcast_tensors({x, a, c, m});
     return torch::empty_like(broadcasted[0]);
 }
 
