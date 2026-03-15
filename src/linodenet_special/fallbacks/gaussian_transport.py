@@ -409,17 +409,10 @@ class _GaussianToMixture(Function):
         d_x, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
             y, z, weights, sigmas
         )
-        dx_inv = d_x.reciprocal()
-
-        d_y = dx_inv
-        d_weights = -d_weights * dx_inv.unsqueeze(-1)
-        d_mus = -d_mus * dx_inv.unsqueeze(-1)
-        d_sigmas = -d_sigmas * dx_inv.unsqueeze(-1)
-
-        grad_y = g * d_y
-        grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
-        grad_mus = torch.einsum("..., ...k -> k", g, d_mus)
-        grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
+        grad_y = g * d_x.reciprocal()
+        grad_weights = torch.einsum("..., ...k -> k", grad_y, -d_weights)
+        grad_mus = torch.einsum("..., ...k -> k", grad_y, -d_mus)
+        grad_sigmas = torch.einsum("..., ...k -> k", grad_y, -d_sigmas)
 
         # Project weight gradient onto the simplex tangent space.
         # ∆ⁿ = {x∈ℝⁿ⁺¹ : ∑ₖxₖ = 0, xₖ≥0}
