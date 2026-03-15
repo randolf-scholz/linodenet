@@ -2,8 +2,10 @@ r"""Implementation of the optimal transport based activation function."""
 # mypy: disable-error-code="no-untyped-def"
 
 __all__ = [
-    "GaussianToBimodal",
     "BimodalToGaussian",
+    "GaussianToBimodal",
+    "GaussianToMixture",
+    "MixtureToGaussian",
     # functional interfaces
     "gaussian_to_bimodal",
     "bimodal_to_gaussian",
@@ -11,7 +13,7 @@ __all__ = [
     "mixture_to_gaussian",
 ]
 
-from typing import Final
+from typing import Final, Protocol
 
 import torch
 from torch import Tensor
@@ -20,6 +22,34 @@ from torch.special import log_ndtr
 
 from linodenet_special.fallbacks.hard_bend import hard_bend
 from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
+
+
+class GaussianToBimodal(Protocol):
+    r"""Protocol for Gaussian-to-bimodal transport implementations."""
+
+    def __call__(self, y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor: ...
+
+
+class BimodalToGaussian(Protocol):
+    r"""Protocol for bimodal-to-Gaussian transport implementations."""
+
+    def __call__(self, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor: ...
+
+
+class GaussianToMixture(Protocol):
+    r"""Protocol for Gaussian-to-mixture transport implementations."""
+
+    def __call__(
+        self, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+    ) -> Tensor: ...
+
+
+class MixtureToGaussian(Protocol):
+    r"""Protocol for mixture-to-Gaussian transport implementations."""
+
+    def __call__(
+        self, x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+    ) -> Tensor: ...
 
 
 @torch.no_grad()
@@ -161,7 +191,7 @@ def _mixture_to_gaussian_derivatives(
     return d_x, d_weights, d_mus, d_sigmas
 
 
-class BimodalToGaussian(Function):
+class _BimodalToGaussianImpl(Function):
     r"""Optimal Transport from mixture $p = ½N(-μ, σ²) + ½N(μ, σ²)$ to $q = N(0, 1)$.
 
     If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the optimal transport map is given by
@@ -213,7 +243,7 @@ class BimodalToGaussian(Function):
         return (g * d_x), (g * d_mu), (g * d_sigma)
 
 
-class GaussianToBimodal(Function):
+class _GaussianToBimodalImpl(Function):
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
 
     @staticmethod
@@ -434,12 +464,12 @@ class _GaussianToMixture(Function):
 
 def gaussian_to_bimodal(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
-    return GaussianToBimodal.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
+    return _GaussianToBimodalImpl.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
 
 
 def bimodal_to_gaussian(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
     r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
-    return BimodalToGaussian.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
+    return _BimodalToGaussianImpl.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
 
 
 def gaussian_to_mixture(
