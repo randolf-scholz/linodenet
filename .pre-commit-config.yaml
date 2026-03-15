@@ -79,16 +79,11 @@ repos:
         files: '^src/'
         exclude: 'functional.py|matrix_tests.py|core.py'
         args:
+          - "--max-positional-args"
+          - "4"
           - "--ignore-names"
           - "forward"
           - "backward"
-          - "jvp"
-          - "predict"
-          - "register_parametrization"
-          - "--ignore-decorators"
-          - "jit.script"
-          - "jit.export"
-          - "torch.no_grad"
           - "--"
       # script-based hooks
       - id: check-clean-interface
