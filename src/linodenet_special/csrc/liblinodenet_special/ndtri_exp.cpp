@@ -89,7 +89,7 @@ Tensor ndtri_exp_small(const Tensor &log_p) {
         SQRT_2 * torch::sqrt(-log_p)
     );
     const Tensor z = x.reciprocal();
-    const Tensor x0 = x - z * x.log();
+    const Tensor x0 = at::addcmul(x, z, x.log(), -1.0);
     const Tensor x1_small = z * polevl(z, P1) / p1evl(z, Q1);
     const Tensor x1_large = z * polevl(z, P2) / p1evl(z, Q2);
     const Tensor x1 = torch::where(x < 8.0, x1_small, x1_large);
