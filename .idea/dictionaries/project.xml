@@ -10,8 +10,10 @@
       <w>erfinv</w>
       <w>logabsdets</w>
       <w>logsumexp</w>
+      <w>marchenko</w>
       <w>ndtr</w>
       <w>ndtri</w>
+      <w>pastur</w>
       <w>pred</w>
     </words>
   </dictionary>
