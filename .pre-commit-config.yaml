@@ -1,4 +1,4 @@
-exclude: 'bugs/|dev/'
+exclude: '.idea/|.vscode/|bugs/|dev/'
 minimum_pre_commit_version: 4.5.1
 default_language_version:
   python: '3.14'
