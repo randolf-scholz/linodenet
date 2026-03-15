@@ -1,9 +1,4 @@
-// #include <ATen/ATen.h>
 #include "spectral_norm.h"
-
-// #include <torch/linalg.h>
-// #include <vector>
-// #include <string>
 
 // import someLib as sl      ⟶  namespace sl = someLib;
 // from someLib import func  ⟶  using someLib::func;
@@ -38,99 +33,103 @@ namespace linodenet_special {
  * Since every path from A to B requires a singular value to be repeated, this is a general problem.
  * However, there should be "good" paths, that, in a path connected sense deform the singular dyads.
  * Case in point: when A is the identity matrix, then **every** vector is a singular vector.
+ **/
+
+
+/** @brief Spectral norm of a matrix.
  *
- * */
+ * Formalizing as a optimization problem:
+ * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖² s.t. ‖u‖₂ = ‖v‖₂ = 1
+ * Equivalently: max_{u,v} ⟨A∣uvᵀ⟩ s.t. ‖u‖₂ = ‖v‖₂ = 1
+ *
+ * This is a non-convex QCQP, in standard form:
+ * max_{(u,v)}  ½ [u, v]ᵀ [[0, A], [Aᵀ, 0]] [u, v]
+ * s.t. [u, v]ᵀ [[𝕀ₘ, 0], [0, 0]] [u, v] - 1 =0
+ * and  [u, v]ᵀ [[0, 0], [0, 𝕀ₙ]] [u, v] - 1 =0
+ *
+ * @ref https://math.stackexchange.com/questions/4658991
+ * @ref https://math.stackexchange.com/questions/4697688
+ *
+ * Lagrangian: L(u,v,λ,μ) = uᵀAv - λ(uᵀu - 1) - μ(vᵀv - 1)
+ * KKT conditions: ∇L = 0 ⟺ A v - 2λu = 0 ⟺ [-2λ𝕀ₘ, A    ] [u] = [0]
+ *                          Aᵀu - 2μv = 0   [Aᵀ   , -2μ𝕀ₙ] [v] = [0]
+ *
+ * Second order conditions:  sᵀ∇²Ls ≥ 0 uf ∇hᵀs = 0
+ * ∇hᵀ = [2uᵀ, 2vᵀ]
+ * ∇²L =  [-2λ𝕀ₘ, A    ]
+ *        [Aᵀ   , -2μ𝕀ₙ]
+ *
+ * NOTE: the gradient is linear, and the problem is a quadratic optimization problem!
+ * in particular, the problem can be solved by a single Newton step!
+ *
+ * Equality constrained optimization problem:
+ * The first order convergence criterion is ‖Av-σu‖₂ = 0 and ‖Aᵀu-σv‖₂ = 0
+ * Plugging in the iteration, we get ‖u' - σũ‖ = 0 and ‖v' - σṽ‖ = 0 (tilde indicates normalized vector)
+ * secondly we can estimate σ in each iteration via one of the 3 formulas
+ * (1) σ = uᵀAv  (2) σᵤ = ũᵀu'  (3) σᵥ = ṽᵀv'
+ * Plugging these into the equations we get
+ * ‖u' -  u'ᵀ ũᵀũ‖
+ * Error estimate: Note that
+ * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
+ *
+ * @note (Stopping criterion):
+ *     The standard stopping criterion for a non-negative smooth function is
+ *     ‖∇f(x)‖ ≤ α + β⋅f(x)
+ *
+ *     Here, we factorize into two parts for u and v respectively:
+ *
+ *     ‖∇ᵤf(u,v)‖ ≤ α + β⋅f(u,v) and ‖∇ᵥf(u,v)‖ ≤ α + β⋅f(u,v)
+ *
+ *     iff
+ *
+ *     ‖Av - σu‖ ≤ α + β⋅σ and ‖Aᵀu - σv‖ ≤ α + β⋅σ
+ *
+ *     iff, using ũ = Av and ṽ=Aᵀu, u'= ũ/‖ũ‖ and v'=  ṽ/‖ṽ‖ and σ = ⟨u'∣u⟩ = ⟨v'∣v⟩
+ *
+ *     ‖ũ - σu‖ ≤ α + β⋅σ and ‖ṽ - σv‖ ≤ α + β⋅σ
+ *
+ * @note (Alt. stopping criterion):
+ *     Plugging in the definition of ũ and σ, and dividing by ‖ũ‖ yields, using u'=  ũ/‖ũ‖
+ *
+ *     ‖u'-⟨u∣u'⟩u‖ ≤ α/‖ũ‖ + β ⟨u∣u'⟩
+ *
+ *     close to convergence, ⟨u∣u'⟩ ≈ 1, giving the stopping criterion
+ *
+ *     ‖u'-u‖ ≤ α/‖ũ‖ + β
+ *
+ *     Assuming ‖ũ‖>1, we can the first term. Squaring gives the final criterion:i
+ *
+ *     ‖u'-u‖² ≤ β²
+ *
+ * @note: positiveness of the result
+ * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
+ * then uᵀAv' = (Av/‖Av‖)ᵀ A (AᵀAv/‖AᵀAv‖) = (AᵀAv)ᵀ(AᵀAv)/(‖Av‖⋅‖AᵀAv‖)
+ *            = ‖AᵀAv‖²/(‖Av‖⋅‖AᵀAv‖) = ‖AᵀAv‖/‖Av‖ ≥ 0
+ * likewise, if we start the iteration with v = Aᵀu/‖Aᵀu‖, then vᵀAᵀu' = ‖AAᵀu‖/‖Aᵀu‖ ≥ 0
+ *
+ * These actually suggest a different iteration scheme:
+ * u <- Av
+ * v <- Aᵀu
+ * σ ← ‖v‖/‖u‖
+ * u <- u/‖u‖
+ * v <- v/‖v‖
+ * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
+ *
+ **/
+struct SpectralNorm: Function<SpectralNorm> {
 
- /*
-  * IDEA: regularized rank-1 approximation
-  * argmin_{u,v} ‖A - uvᵀ‖² + λ‖u‖²‖v‖²
-  *   in this case, R_λ(u,v) = ‖u‖²‖v‖² is the resulting singular value
-  *   the larger λ, the smaller the discovered σ. However, we want σ ≥ σₘₐₓ.
-  */
 
-
-struct SpectralNorm: public Function<SpectralNorm> {
-    /** @brief Spectral norm of a matrix.
+    /** @brief Forward pass.
      *
-     * Formalizing as a optimization problem:
-     * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖² s.t. ‖u‖₂ = ‖v‖₂ = 1
-     * Equivalently: max_{u,v} ⟨A∣uvᵀ⟩ s.t. ‖u‖₂ = ‖v‖₂ = 1
-     *
-     * This is a non-convex QCQP, in standard form:
-     * max_{(u,v)}  ½ [u, v]ᵀ [[0, A], [Aᵀ, 0]] [u, v]
-     * s.t. [u, v]ᵀ [[𝕀ₘ, 0], [0, 0]] [u, v] - 1 =0
-     * and  [u, v]ᵀ [[0, 0], [0, 𝕀ₙ]] [u, v] - 1 =0
-     *
-     * @ref https://math.stackexchange.com/questions/4658991
-     * @ref https://math.stackexchange.com/questions/4697688
-     *
-     * Lagrangian: L(u,v,λ,μ) = uᵀAv - λ(uᵀu - 1) - μ(vᵀv - 1)
-     * KKT conditions: ∇L = 0 ⟺ A v - 2λu = 0 ⟺ [-2λ𝕀ₘ, A    ] [u] = [0]
-     *                          Aᵀu - 2μv = 0   [Aᵀ   , -2μ𝕀ₙ] [v] = [0]
-     *
-     * Second order conditions:  sᵀ∇²Ls ≥ 0 uf ∇hᵀs = 0
-     * ∇hᵀ = [2uᵀ, 2vᵀ]
-     * ∇²L =  [-2λ𝕀ₘ, A    ]
-     *        [Aᵀ   , -2μ𝕀ₙ]
-     *
-     * NOTE: the gradient is linear, and the problem is a quadratic optimization problem!
-     * in particular, the problem can be solved by a single Newton step!
-     *
-     * Equality constrained optimization problem:
-     * The first order convergence criterion is ‖Av-σu‖₂ = 0 and ‖Aᵀu-σv‖₂ = 0
-     * Plugging in the iteration, we get ‖u' - σũ‖ = 0 and ‖v' - σṽ‖ = 0 (tilde indicates normalized vector)
-     * secondly we can estimate σ in each iteration via one of the 3 formulas
-     * (1) σ = uᵀAv  (2) σᵤ = ũᵀu'  (3) σᵥ = ṽᵀv'
-     * Plugging these into the equations we get
-     * ‖u' -  u'ᵀ ũᵀũ‖
-     * Error estimate: Note that
-     * ‖Av - σu‖ = ‖σ̃ũ - σu‖ = ‖σ̃ũ - σũ + σũ -σu‖ ≤ ‖σ̃ũ - σũ‖ + ‖σũ -σu‖ = (σ̃ - σ) + σ‖ũ - u‖
-     *
-     * @note (Stopping criterion):
-     *     The standard stopping criterion for a non-negative smooth function is
-     *     ‖∇f(x)‖ ≤ α + β⋅f(x)
-     *
-     *     Here, we factorize into two parts for u and v respectively:
-     *
-     *     ‖∇ᵤf(u,v)‖ ≤ α + β⋅f(u,v) and ‖∇ᵥf(u,v)‖ ≤ α + β⋅f(u,v)
-     *
-     *     iff
-     *
-     *     ‖Av - σu‖ ≤ α + β⋅σ and ‖Aᵀu - σv‖ ≤ α + β⋅σ
-     *
-     *     iff, using ũ = Av and ṽ=Aᵀu, u'= ũ/‖ũ‖ and v'=  ṽ/‖ṽ‖ and σ = ⟨u'∣u⟩ = ⟨v'∣v⟩
-     *
-     *     ‖ũ - σu‖ ≤ α + β⋅σ and ‖ṽ - σv‖ ≤ α + β⋅σ
-     *
-     * @note (Alt. stopping criterion):
-     *     Plugging in the definition of ũ and σ, and dividing by ‖ũ‖ yields, using u'=  ũ/‖ũ‖
-     *
-     *     ‖u'-⟨u∣u'⟩u‖ ≤ α/‖ũ‖ + β ⟨u∣u'⟩
-     *
-     *     close to convergence, ⟨u∣u'⟩ ≈ 1, giving the stopping criterion
-     *
-     *     ‖u'-u‖ ≤ α/‖ũ‖ + β
-     *
-     *     Assuming ‖ũ‖>1, we can the first term. Squaring gives the final criterion:i
-     *
-     *     ‖u'-u‖² ≤ β²
-     *
-     * @note: positiveness of the result
-     * given u = Av/‖Av‖ and v' = Aᵀu/‖Aᵀu‖ = Aᵀ(Av/‖Av‖)/‖Aᵀ(Av/‖Av‖)‖ = AᵀAv/‖AᵀAv‖
-     * then uᵀAv' = (Av/‖Av‖)ᵀ A (AᵀAv/‖AᵀAv‖) = (AᵀAv)ᵀ(AᵀAv)/(‖Av‖⋅‖AᵀAv‖)
-     *            = ‖AᵀAv‖²/(‖Av‖⋅‖AᵀAv‖) = ‖AᵀAv‖/‖Av‖ ≥ 0
-     * likewise, if we start the iteration with v = Aᵀu/‖Aᵀu‖, then vᵀAᵀu' = ‖AAᵀu‖/‖Aᵀu‖ ≥ 0
-     *
-     * These actually suggest a different iteration scheme:
-     * u <- Av
-     * v <- Aᵀu
-     * σ ← ‖v‖/‖u‖
-     * u <- u/‖u‖
-     * v <- v/‖v‖
-     * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
-     *
-     **/
-
+     * @param ctx: context object
+     * @param A_in: m x n matrix
+     * @param u0: initial guess for left singular vector
+     * @param v0: initial guess for right singular vector
+     * @param maxiter: maximum number of iterations
+     * @param atol: absolute tolerance
+     * @param rtol: relative tolerance
+     * @returns sigma: singular value
+     */
     static Tensor forward(
         AutogradContext *ctx,
         const Tensor &A_in,
@@ -140,17 +139,7 @@ struct SpectralNorm: public Function<SpectralNorm> {
         const double atol = 1e-6,
         const double rtol = 1e-6
     ) {
-        /** @brief Forward pass.
-         *
-         * @param ctx: context object
-         * @param A: m x n matrix
-         * @param u0: initial guess for left singular vector
-         * @param v0: initial guess for right singular vector
-         * @param maxiter: maximum number of iterations
-         * @param atol: absolute tolerance
-         * @param rtol: relative tolerance
-         * @returns sigma: singular value
-         */
+
         // TODO: Test Anderson Acceleration
 
         // Sec: Option parsing
@@ -248,19 +237,19 @@ struct SpectralNorm: public Function<SpectralNorm> {
         return sigma;
     }
 
+
+    /** @brief Backward Pass.
+     *
+     * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
+     *
+     * @param ctx: context object
+     * @param grad_output: outer gradients
+     * @returns g: gradient with respect to inputs
+     */
     static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
-        /** @brief Backward Pass.
-         *
-         * @param ctx: context object
-         * @param grad_output: outer gradients
-         * @returns g: gradient with respect to inputs
-         *
-         * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
-         *
-         */
         const auto saved = ctx->get_saved_variables();
         const Tensor &u = saved[0];
         const Tensor &v = saved[1];
@@ -278,10 +267,6 @@ Tensor spectral_norm_meta(
     const double atol,
     const double rtol
 ) {
-    /**
-     * Meta function for spectral norm.
-     * This function is used to check the validity of the inputs and to infer the output shape and dtype.
-     */
     TORCH_CHECK(A.dim() == 2, "Input must be a 2D matrix.");
     TORCH_CHECK(A.is_floating_point(), "Input must be a floating point tensor.");
     const auto M = A.size(0);
@@ -297,6 +282,8 @@ Tensor spectral_norm_meta(
     if (maxiter.has_value()) {
         TORCH_CHECK(maxiter.value() > 0, "maxiter must be a positive integer.");
     }
+    TORCH_CHECK(atol > 0.0, "atol must be a positive number.");
+    TORCH_CHECK(rtol > 0.0, "rtol must be a positive number.");
     return torch::empty({}, A.options());
 }
 
@@ -309,9 +296,6 @@ Tensor spectral_norm(
     const double atol,
     const double rtol
 ) {
-    /**
-     * Wrap the struct into function.
-     */
     return SpectralNorm::apply(A, u0, v0, maxiter, atol, rtol);
 }
 
