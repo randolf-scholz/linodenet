@@ -23,6 +23,7 @@ __all__ = [
 ]
 
 import logging
+import math
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -184,7 +185,7 @@ _spectral_norm = _COMPILED_FNS["spectral_norm"]
 _spectral_norm_debug = _COMPILED_FNS["spectral_norm_debug"]
 _spectral_norm_riemann = _COMPILED_FNS["spectral_norm_riemann"]
 ndtri_exp = _COMPILED_FNS["ndtri_exp"]
-hard_bend = _COMPILED_FNS["hard_bend"]
+_hard_bend = _COMPILED_FNS["hard_bend"]
 # endregion compile functions ----------------------------------------------------------
 
 
@@ -228,6 +229,20 @@ def spectral_norm_riemann(
 
 
 # endregion spectral norm --------------------------------------------------------------
+
+
+def hard_bend(
+    x: Tensor,
+    /,
+    a: Tensor | float = math.e**2,
+    c: Tensor | float = 2.0,
+    m: Tensor | float = 1.0,
+) -> Tensor:
+    r"""Apply the hard bend activation function."""
+    a = torch.as_tensor(a, dtype=x.dtype, device=x.device)
+    c = torch.as_tensor(c, dtype=x.dtype, device=x.device)
+    m = torch.as_tensor(m, dtype=x.dtype, device=x.device)
+    return _hard_bend(x, a, c, m)
 
 
 # region singular triplet --------------------------------------------------------------

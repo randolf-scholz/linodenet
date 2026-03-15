@@ -1,9 +1,9 @@
-#include <torch/torch.h>
+#include "ndtri_exp.h"
+
 #include <array>
 #include <limits>
 
-using torch::Tensor;
-
+namespace linodenet_special {
 namespace {
 constexpr double UPPER_CUTOFF = -0.14541345786885906;  // log(1-e^-2)
 constexpr double LOWER_CUTOFF = -2.0;
@@ -53,7 +53,6 @@ constexpr std::array<double, 8> Q2 = {
     6.79019408009981274425e-9,
 };
 
-
 double finfo_min(const at::ScalarType &scalar_type) {
     return AT_DISPATCH_FLOATING_TYPES_AND2(
         at::kHalf, at::kBFloat16, scalar_type, "finfo_min",
@@ -62,7 +61,6 @@ double finfo_min(const at::ScalarType &scalar_type) {
         }
     );
 }
-
 
 template <size_t N>
 Tensor polevl(const Tensor &x, const std::array<double, N> &coeffs) {
@@ -97,14 +95,14 @@ Tensor ndtri_exp_small(const Tensor &log_p) {
     const Tensor x1 = torch::where(x < 8.0, x1_small, x1_large);
     return x1 - x0;
 }
-} // namespace
+}  // namespace
 
-static Tensor ndtri_exp_meta(const Tensor &log_p) {
+Tensor ndtri_exp_meta(const Tensor &log_p) {
     TORCH_CHECK(log_p.is_floating_point(), "ndtri_exp: log_p must be a floating point tensor.");
     return torch::empty_like(log_p);
 }
 
-static Tensor ndtri_exp(const Tensor &log_p) {
+Tensor ndtri_exp(const Tensor &log_p) {
     TORCH_CHECK(log_p.is_floating_point(), "ndtri_exp: log_p must be a floating point tensor.");
 
     const double finfo_min_value = finfo_min(log_p.scalar_type());
@@ -124,15 +122,16 @@ static Tensor ndtri_exp(const Tensor &log_p) {
         )
     );
 }
+}  // namespace linodenet_special
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("ndtri_exp(Tensor log_p) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, CompositeImplicitAutograd, m) {
-    m.impl("ndtri_exp", &ndtri_exp);
+    m.impl("ndtri_exp", &linodenet_special::ndtri_exp);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("ndtri_exp", &ndtri_exp_meta);
+    m.impl("ndtri_exp", &linodenet_special::ndtri_exp_meta);
 }

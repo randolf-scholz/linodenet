@@ -441,7 +441,7 @@ static std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
     );
 }
 
-static std::tuple<Tensor, Tensor, Tensor> singular_triplet_impl(
+static std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
@@ -472,7 +472,7 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("singular_triplet", &singular_triplet_impl);
+    m.impl("singular_triplet", &singular_triplet);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
