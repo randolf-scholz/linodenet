@@ -486,21 +486,28 @@ class TestPerformance(Fixture):
         "custom": singular_triplet,
         "native": singular_triplet_native,
     }
-    ATOL = 1e-5
-    RTOL = 1e-3
     SHAPES = [
-        (64, 64),
-        (256, 256),
-        (512, 512),
+        (128, 128),
+        (128, 64),
+        (64, 128),
     ]
     ROUNDS = {
-        16: 1024,
-        32: 512,
-        64: 512,
-        128: 256,
-        256: 256,
-        512: 64,
-        1024: 64,
+        16: 512,
+        32: 256,
+        64: 256,
+        128: 128,
+        256: 128,
+        512: 32,
+        1024: 32,
+    }
+    WARMUP_ROUNDS = {
+        16: 128,
+        32: 64,
+        64: 64,
+        128: 32,
+        256: 32,
+        512: 8,
+        1024: 8,
     }
 
     @staticmethod
@@ -517,7 +524,7 @@ class TestPerformance(Fixture):
         )
         return nn.Parameter(A)
 
-    @pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("name", SINGULAR_TRIPLETS)
     @pytest.mark.benchmark(group="singular_triplet_forward")
@@ -535,42 +542,20 @@ class TestPerformance(Fixture):
 
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.make_test_case(shape, device=device, generator=generator)
-
-        # get reference gradient
-        A_native = nn.Parameter(A_original.clone().detach())
-        s_native, u_native, v_native = singular_triplet_native(A_native)
-        dyadic_native = torch.outer(u_native, v_native)
-
-        # get custom gradient
-        A_custom = nn.Parameter(A_original.clone().detach())
-        s_custom, u_custom, v_custom = impl(A_custom)
-        dyadic_custom = torch.outer(u_custom, v_custom)
-
-        # check correctness
-        assert (s_custom - s_native).norm() < self.ATOL + self.RTOL * s_native.norm(), (
-            "Large error in singular value!"
-        )
-        assert (
-            dyadic_custom - dyadic_native
-        ).norm() < self.ATOL + self.RTOL * dyadic_native.norm(), (
-            "Large error in singular vectors!"
-        )
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
             param = self.make_test_case(shape, device=device, generator=generator)
             return (param,), {}
 
-        # perform benchmark
         with torch.no_grad():
             benchmark.pedantic(
                 impl,
                 setup=setup,
                 rounds=self.ROUNDS[shape[0]],
-                warmup_rounds=self.ROUNDS[shape[0]] // 4,
+                warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
             )
 
-    @pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("name", SINGULAR_TRIPLETS)
     @pytest.mark.benchmark(group="singular_triplet_backward")
@@ -583,47 +568,33 @@ class TestPerformance(Fixture):
         shape: tuple[int, int],
     ) -> None:
         r"""Test simplified backward when only singular value used."""
-        benchmark.group = f"singular_triplet_forward/{shape[0]}x{shape[1]}/{device}"
+        benchmark.group = (
+            f"singular_triplet_simple_backward/{shape[0]}x{shape[1]}/{device}"
+        )
         impl = self.SINGULAR_TRIPLETS[name]
 
         torch.manual_seed(0)
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.make_test_case(shape, device=device, generator=generator)
         g_s = torch.randn((), device=device, generator=generator)
 
         def backward(s: Tensor, /) -> None:
             loss = g_s * s
             loss.backward()
 
-        # get reference gradient
-        A_native = nn.Parameter(A_original.clone().detach())
-        s_native, _, _ = singular_triplet_native(A_native)
-        backward(s_native)
-        assert A_native.grad is not None
-        g_native = A_native.grad.clone().detach()
-
-        # get custom gradient
-        A_custom = nn.Parameter(A_original.clone().detach())
-        s_custom, _, _ = impl(A_custom)
-        backward(s_custom)
-        assert A_custom.grad is not None
-        g_custom = A_custom.grad.clone().detach()
-
-        # check correctness
-        assert (g_custom - g_native).norm() < self.ATOL + self.RTOL * g_native.norm(), (
-            "Large error in spectral norm gradient!"
-        )
-
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
             param = self.make_test_case(shape, device=device, generator=generator)
             s, _, _ = impl(param)
             return (s,), {}
 
-        # perform benchmark
-        benchmark.pedantic(backward, setup=setup, rounds=512, warmup_rounds=128)
+        benchmark.pedantic(
+            backward,
+            setup=setup,
+            rounds=self.ROUNDS[shape[0]],
+            warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
+        )
 
-    @pytest.mark.parametrize("shape", [(256, 256)], ids=lambda x: f"{x[0]}x{x[1]}")
+    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("name", SINGULAR_TRIPLETS)
     @pytest.mark.benchmark(group="singular_triplet_full_backward")
@@ -636,46 +607,31 @@ class TestPerformance(Fixture):
         shape: tuple[int, int],
     ) -> None:
         r"""Test full backward when singular triplet used."""
-        benchmark.group = f"singular_triplet_forward/{shape[0]}x{shape[1]}/{device}"
+        benchmark.group = (
+            f"singular_triplet_full_backward/{shape[0]}x{shape[1]}/{device}"
+        )
         impl = self.SINGULAR_TRIPLETS[name]
 
         torch.manual_seed(0)
         m, n = shape
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.make_test_case(shape, device=device, generator=generator)
-        g_s = torch.randn((), device=device)
-        g_u = torch.randn(m, device=device)
-        g_v = torch.randn(n, device=device)
+        g_s = torch.randn((), device=device, generator=generator)
+        g_u = torch.randn(m, device=device, generator=generator)
+        g_v = torch.randn(n, device=device, generator=generator)
 
         def backward(s: Tensor, u: Tensor, v: Tensor, /) -> None:
             loss = g_s * s + g_u.dot(u) + g_v.dot(v)
             loss.backward()
-
-        # get reference gradient
-        A_native = nn.Parameter(A_original.clone().detach())
-        s_native, u_native, v_native = singular_triplet_native(A_native)
-        backward(s_native, u_native, v_native)
-        assert A_native.grad is not None
-        g_native = A_native.grad.clone().detach()
-
-        # get custom gradient
-        A_custom = nn.Parameter(A_original.clone().detach())
-        s_custom, u_custom, v_custom = impl(A_custom)
-        backward(s_custom, u_custom, v_custom)
-        assert A_custom.grad is not None
-        g_custom = A_custom.grad.clone().detach()
-
-        # check correctness
-        residual = g_custom - g_native
-        assert residual.norm() < self.ATOL + self.RTOL * g_native.norm(), (
-            "Large error in spectral norm gradient!"
-        )
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
             param = self.make_test_case(shape, device=device, generator=generator)
             s, u, v = impl(param)
             return (s, u, v), {}
 
-        # perform benchmark
-        benchmark.pedantic(backward, setup=setup, rounds=512, warmup_rounds=128)
+        benchmark.pedantic(
+            backward,
+            setup=setup,
+            rounds=self.ROUNDS[shape[0]],
+            warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
+        )

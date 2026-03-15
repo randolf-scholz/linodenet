@@ -363,31 +363,37 @@ class TestCorrectness(Fixture):
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
 
-class TestPerformance:
+class TestPerformance(Fixture):
     SPECTRAL_NORMS = {
         "custom": spectral_norm,
         "native": spectral_norm_native,
     }
-
-    ATOL = 1e-5
-    RTOL = 1e-3
     SHAPES = [
-        (64, 64),
-        (256, 256),
-        (512, 512),
+        (128, 128),
+        (128, 64),
+        (64, 128),
     ]
     ROUNDS = {
-        16: 1024,
-        32: 512,
-        64: 512,
-        128: 256,
-        256: 256,
-        512: 64,
-        1024: 64,
+        16: 512,
+        32: 256,
+        64: 256,
+        128: 128,
+        256: 128,
+        512: 32,
+        1024: 32,
+    }
+    WARMUP_ROUNDS = {
+        16: 128,
+        32: 64,
+        64: 64,
+        128: 32,
+        256: 32,
+        512: 8,
+        1024: 8,
     }
 
     @staticmethod
-    def get_param(
+    def make_test_case(
         shape: tuple[int, int],
         *,
         device: str | torch.device,
@@ -417,24 +423,9 @@ class TestPerformance:
         impl = self.SPECTRAL_NORMS[name]
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.get_param(shape, device=device, generator=generator)
-
-        # get reference gradient
-        A_native = nn.Parameter(A_original.clone().detach())
-        s_native = spectral_norm_native(A_native)
-
-        # get custom gradient
-        A_custom = nn.Parameter(A_original.clone().detach())
-        s_custom = impl(A_custom)
-
-        # check correctness
-        residual = s_custom - s_native
-        assert residual.norm() < self.ATOL + self.RTOL * s_native.norm(), (
-            "Large error in spectral norm value!"
-        )
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.get_param(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, generator=generator)
             return (param,), {}
 
         with torch.no_grad():
@@ -442,7 +433,7 @@ class TestPerformance:
                 impl,
                 setup=setup,
                 rounds=self.ROUNDS[shape[0]],
-                warmup_rounds=self.ROUNDS[shape[0]] // 4,
+                warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
             )
 
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
@@ -458,41 +449,20 @@ class TestPerformance:
         shape: tuple[int, int],
     ) -> None:
         r"""Test the spectral norm backward pass."""
-        benchmark.group = f"spectral_norm_forward/{shape[0]}x{shape[1]}/{device}"
+        benchmark.group = f"spectral_norm_backward/{shape[0]}x{shape[1]}/{device}"
         impl = self.SPECTRAL_NORMS[name]
 
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
-        A_original = self.get_param(shape, device=device, generator=generator)
         g_s = torch.randn((), device=device, generator=generator)
 
         def backward(s: Tensor, /) -> None:
             loss = g_s * s
             loss.backward()
+            torch.cuda.synchronize()
 
-        # get reference gradient
-        A_native = nn.Parameter(A_original.clone().detach())
-        s_native = spectral_norm_native(A_native)
-        backward(s_native)
-        assert A_native.grad is not None
-        g_native = A_native.grad.clone().detach()
-
-        # get custom gradient
-        A_custom = nn.Parameter(A_original.clone().detach())
-        s_custom = impl(A_custom)
-        backward(s_custom)
-        assert A_custom.grad is not None
-        g_custom = A_custom.grad.clone().detach()
-
-        # check correctness
-        residual = g_custom - g_native
-        assert residual.norm() < self.ATOL + self.RTOL * g_native.norm(), (
-            "Large error in spectral norm gradient!"
-        )
-
-        # perform benchmark
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.get_param(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, generator=generator)
             output = impl(param)
             return (output,), {}
 
@@ -500,62 +470,5 @@ class TestPerformance:
             backward,
             setup=setup,
             rounds=self.ROUNDS[shape[0]],
-            warmup_rounds=self.ROUNDS[shape[0]] // 4,
-        )
-
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-    @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize("name", SPECTRAL_NORMS)
-    @pytest.mark.benchmark(group="spectral_norm")
-    def test_spectral_norm(
-        self,
-        benchmark: BenchmarkFixture,
-        name: str,
-        *,
-        device: str,
-        shape: tuple[int, int],
-    ) -> None:
-        r"""Test the spectral norm forward+backward."""
-        benchmark.group = f"spectral_norm_forward/{shape[0]}x{shape[1]}/{device}"
-        impl = self.SPECTRAL_NORMS[name]
-
-        generator = torch.Generator(device=device)
-        generator.manual_seed(0)
-        A_original = self.get_param(shape, device=device, generator=generator)
-        g_s = torch.randn((), device=device, generator=generator)
-
-        def backward(sigma: Tensor, /) -> None:
-            loss = g_s * sigma
-            loss.backward()
-
-        # get reference gradient
-        A_native = nn.Parameter(A_original.clone().detach())
-        s_native = spectral_norm_native(A_native)
-        backward(s_native)
-        assert A_native.grad is not None
-        g_native = A_native.grad.clone().detach()
-
-        # get custom gradient
-        A_custom = nn.Parameter(A_original.clone().detach())
-        s_custom = impl(A_custom)
-        backward(s_custom)
-        assert A_custom.grad is not None
-        g_custom = A_custom.grad.clone().detach()
-
-        # check correctness
-        residual = g_custom - g_native
-        assert residual.norm() < self.ATOL + self.RTOL * g_native.norm(), (
-            "Large error in spectral norm gradient!"
-        )
-
-        def func() -> None:
-            param = self.get_param(shape, device=device, generator=generator)
-            sigma = impl(param)
-            loss = g_s * sigma
-            loss.backward()
-
-        benchmark.pedantic(
-            func,
-            rounds=self.ROUNDS[shape[0]],
-            warmup_rounds=self.ROUNDS[shape[0]] // 4,
+            warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
         )
