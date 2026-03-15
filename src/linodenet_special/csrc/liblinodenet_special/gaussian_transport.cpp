@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "hard_bend.h"
 #include "ndtri_exp.h"
 
 using torch::Tensor;
@@ -13,13 +14,6 @@ namespace {
 constexpr double LOG_HALF = -0.6931471805599453;
 constexpr double LOG_2PI = 1.8378770664093453;
 constexpr int64_t MAXITER = 10;
-
-Tensor hard_bend_guess(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) {
-    const Tensor c_abs = c.abs();
-    const Tensor m_signed = torch::copysign(m, a);
-    const Tensor z = (a - m_signed) * x;
-    return torch::where(z.abs() <= c_abs, a * x, m_signed * x + z.sign() * c_abs);
-}
 
 std::vector<int64_t> leading_dims(const Tensor &x) {
     std::vector<int64_t> dims;
@@ -37,7 +31,7 @@ void check_bimodal_args(const Tensor &x, const Tensor &mu, const Tensor &sigma) 
     TORCH_CHECK(x.dtype() == mu.dtype(), "x and mu must have the same dtype.");
     TORCH_CHECK(x.dtype() == sigma.dtype(), "x and sigma must have the same dtype.");
     TORCH_CHECK(torch::all(sigma > 0).item<bool>(), "sigma must be strictly positive.");
-    (void)torch::broadcast_tensors({x, mu, sigma});
+    (void) torch::broadcast_tensors({x, mu, sigma});
 }
 
 void check_mixture_args(
@@ -140,7 +134,7 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives_impl(
 
 Tensor gaussian_to_bimodal_guess_impl(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
     const Tensor lambda = torch::exp(-0.5 * (mu / sigma).square()) / sigma;
-    return hard_bend_guess(x, lambda, mu, sigma.reciprocal());
+    return linodenet_special::hard_bend(x, lambda, mu, sigma.reciprocal());
 }
 
 std::tuple<Tensor, Tensor> mixture_to_gaussian_forward_impl(
@@ -196,7 +190,7 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_to_gaussian_derivatives_impl(
     return {d_x, d_weights, d_mus, d_sigmas};
 }
 
-struct BimodalToGaussian : public Function<BimodalToGaussian> {
+struct BimodalToGaussian : Function<BimodalToGaussian> {
     static Tensor forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu, const Tensor &sigma) {
         const auto [y, z_minus, z_plus] = bimodal_to_gaussian_forward_impl(x, mu, sigma);
         ctx->save_for_backward({y, z_minus, z_plus, mu, sigma});
@@ -218,7 +212,7 @@ static variable_list backward(const AutogradContext *ctx, const variable_list &g
     }
 };
 
-struct GaussianToBimodal : public Function<GaussianToBimodal> {
+struct GaussianToBimodal : Function<GaussianToBimodal> {
     static Tensor forward(AutogradContext *ctx, const Tensor &y, const Tensor &mu, const Tensor &sigma) {
         const Tensor m = mu.abs();
         Tensor lower = sigma * y - m;
@@ -268,7 +262,7 @@ struct GaussianToBimodal : public Function<GaussianToBimodal> {
     }
 };
 
-struct MixtureToGaussian : public Function<MixtureToGaussian> {
+struct MixtureToGaussian : Function<MixtureToGaussian> {
     static Tensor forward(
         AutogradContext *ctx,
         const Tensor &x,
@@ -290,7 +284,7 @@ struct MixtureToGaussian : public Function<MixtureToGaussian> {
         const Tensor &g = grad_output[0];
 
         const auto [d_values, d_weights, d_mus, d_sigmas] =
-            mixture_to_gaussian_derivatives_impl(y, z, weights, sigmas);
+                mixture_to_gaussian_derivatives_impl(y, z, weights, sigmas);
         const std::vector<int64_t> dims = leading_dims(g);
 
         const Tensor grad_values = g * d_values;
@@ -303,7 +297,7 @@ struct MixtureToGaussian : public Function<MixtureToGaussian> {
     }
 };
 
-struct GaussianToMixture : public Function<GaussianToMixture> {
+struct GaussianToMixture : Function<GaussianToMixture> {
     static Tensor forward(
         AutogradContext *ctx,
         const Tensor &y,
@@ -359,20 +353,27 @@ struct GaussianToMixture : public Function<GaussianToMixture> {
     }
 };
 
-}  // namespace
+} // namespace
 
 namespace linodenet_special {
-
 Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
     check_bimodal_args(x, mu, sigma);
     const auto tensors = torch::broadcast_tensors({x, mu, sigma});
     return torch::empty_like(tensors[0]);
 }
 
+Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+    return BimodalToGaussian::apply(x, mu, sigma);
+}
+
 Tensor gaussian_to_bimodal_meta(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
     check_bimodal_args(y, mu, sigma);
     const auto tensors = torch::broadcast_tensors({y, mu, sigma});
     return torch::empty_like(tensors[0]);
+}
+
+Tensor gaussian_to_bimodal(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
+    return GaussianToBimodal::apply(y, mu, sigma);
 }
 
 Tensor mixture_to_gaussian_meta(
@@ -385,6 +386,15 @@ Tensor mixture_to_gaussian_meta(
     return torch::empty_like(x);
 }
 
+Tensor mixture_to_gaussian(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) {
+    return MixtureToGaussian::apply(x, weights, mus, sigmas);
+}
+
 Tensor gaussian_to_mixture_meta(
     const Tensor &y,
     const Tensor &weights,
@@ -393,23 +403,6 @@ Tensor gaussian_to_mixture_meta(
 ) {
     check_mixture_args(y, weights, mus, sigmas);
     return torch::empty_like(y);
-}
-
-Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
-    return BimodalToGaussian::apply(x, mu, sigma);
-}
-
-Tensor gaussian_to_bimodal(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
-    return GaussianToBimodal::apply(y, mu, sigma);
-}
-
-Tensor mixture_to_gaussian(
-    const Tensor &x,
-    const Tensor &weights,
-    const Tensor &mus,
-    const Tensor &sigmas
-) {
-    return MixtureToGaussian::apply(x, weights, mus, sigmas);
 }
 
 Tensor gaussian_to_mixture(
@@ -421,7 +414,7 @@ Tensor gaussian_to_mixture(
     return GaussianToMixture::apply(y, weights, mus, sigmas);
 }
 
-}  // namespace linodenet_special
+} // namespace linodenet_special
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("bimodal_to_gaussian(Tensor _, Tensor mu, Tensor sigma) -> Tensor");
