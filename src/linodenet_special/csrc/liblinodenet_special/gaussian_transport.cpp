@@ -1,4 +1,4 @@
-#include <torch/torch.h>
+#include "gaussian_transport.h"
 
 #include <vector>
 
@@ -203,7 +203,7 @@ struct BimodalToGaussian : public Function<BimodalToGaussian> {
         return y;
     }
 
-    static variable_list backward(const AutogradContext *ctx, const variable_list &grad_output) {
+static variable_list backward(const AutogradContext *ctx, const variable_list &grad_output) {
         const auto saved = ctx->get_saved_variables();
         const Tensor &y = saved[0];
         const Tensor &z_minus = saved[1];
@@ -359,19 +359,23 @@ struct GaussianToMixture : public Function<GaussianToMixture> {
     }
 };
 
-static Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+}  // namespace
+
+namespace linodenet_special {
+
+Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
     check_bimodal_args(x, mu, sigma);
     const auto tensors = torch::broadcast_tensors({x, mu, sigma});
     return torch::empty_like(tensors[0]);
 }
 
-static Tensor gaussian_to_bimodal_meta(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
+Tensor gaussian_to_bimodal_meta(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
     check_bimodal_args(y, mu, sigma);
     const auto tensors = torch::broadcast_tensors({y, mu, sigma});
     return torch::empty_like(tensors[0]);
 }
 
-static Tensor mixture_to_gaussian_meta(
+Tensor mixture_to_gaussian_meta(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
@@ -381,7 +385,7 @@ static Tensor mixture_to_gaussian_meta(
     return torch::empty_like(x);
 }
 
-static Tensor gaussian_to_mixture_meta(
+Tensor gaussian_to_mixture_meta(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
@@ -391,15 +395,15 @@ static Tensor gaussian_to_mixture_meta(
     return torch::empty_like(y);
 }
 
-static Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
     return BimodalToGaussian::apply(x, mu, sigma);
 }
 
-static Tensor gaussian_to_bimodal(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
+Tensor gaussian_to_bimodal(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
     return GaussianToBimodal::apply(y, mu, sigma);
 }
 
-static Tensor mixture_to_gaussian(
+Tensor mixture_to_gaussian(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
@@ -408,7 +412,7 @@ static Tensor mixture_to_gaussian(
     return MixtureToGaussian::apply(x, weights, mus, sigmas);
 }
 
-static Tensor gaussian_to_mixture(
+Tensor gaussian_to_mixture(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
@@ -416,7 +420,8 @@ static Tensor gaussian_to_mixture(
 ) {
     return GaussianToMixture::apply(y, weights, mus, sigmas);
 }
-}  // namespace
+
+}  // namespace linodenet_special
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("bimodal_to_gaussian(Tensor _, Tensor mu, Tensor sigma) -> Tensor");
@@ -426,15 +431,15 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("bimodal_to_gaussian", &bimodal_to_gaussian);
-    m.impl("gaussian_to_bimodal", &gaussian_to_bimodal);
-    m.impl("mixture_to_gaussian", &mixture_to_gaussian);
-    m.impl("gaussian_to_mixture", &gaussian_to_mixture);
+    m.impl("bimodal_to_gaussian", &linodenet_special::bimodal_to_gaussian);
+    m.impl("gaussian_to_bimodal", &linodenet_special::gaussian_to_bimodal);
+    m.impl("mixture_to_gaussian", &linodenet_special::mixture_to_gaussian);
+    m.impl("gaussian_to_mixture", &linodenet_special::gaussian_to_mixture);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("bimodal_to_gaussian", &bimodal_to_gaussian_meta);
-    m.impl("gaussian_to_bimodal", &gaussian_to_bimodal_meta);
-    m.impl("mixture_to_gaussian", &mixture_to_gaussian_meta);
-    m.impl("gaussian_to_mixture", &gaussian_to_mixture_meta);
+    m.impl("bimodal_to_gaussian", &linodenet_special::bimodal_to_gaussian_meta);
+    m.impl("gaussian_to_bimodal", &linodenet_special::gaussian_to_bimodal_meta);
+    m.impl("mixture_to_gaussian", &linodenet_special::mixture_to_gaussian_meta);
+    m.impl("gaussian_to_mixture", &linodenet_special::gaussian_to_mixture_meta);
 }

@@ -41,7 +41,7 @@ struct MatrixRoot : public Function<MatrixRoot> {
     }
 
     static variable_list backward(
-        AutogradContext *ctx,
+        const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
         const auto saved = ctx->get_saved_variables();

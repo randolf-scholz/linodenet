@@ -1,5 +1,6 @@
 // #include <ATen/ATen.h>
-#include <torch/torch.h>
+#include "spectral_norm.h"
+
 // #include <torch/linalg.h>
 // #include <vector>
 // #include <string>
@@ -14,6 +15,8 @@ using torch::dot;
 using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
+
+namespace linodenet_special {
 
 /*
  * NOTE: discontinuity of singular vectors.
@@ -267,13 +270,13 @@ struct SpectralNorm: public Function<SpectralNorm> {
 };
 
 
-static Tensor spectral_norm_meta(
+Tensor spectral_norm_meta(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const optional<int64_t> &maxiter,
-    const double atol = 1e-6,
-    const double rtol = 1e-6
+    const double atol,
+    const double rtol
 ) {
     /**
      * Meta function for spectral norm.
@@ -298,19 +301,21 @@ static Tensor spectral_norm_meta(
 }
 
 
-static Tensor spectral_norm(
+Tensor spectral_norm(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const optional<int64_t> &maxiter,
-    const double atol = 1e-6,
-    const double rtol = 1e-6
+    const double atol,
+    const double rtol
 ) {
     /**
      * Wrap the struct into function.
      */
     return SpectralNorm::apply(A, u0, v0, maxiter, atol, rtol);
 }
+
+}  // namespace linodenet_special
 
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
@@ -327,9 +332,9 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("spectral_norm", &spectral_norm);
+    m.impl("spectral_norm", &linodenet_special::spectral_norm);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("spectral_norm", &spectral_norm_meta);
+    m.impl("spectral_norm", &linodenet_special::spectral_norm_meta);
 }

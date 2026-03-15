@@ -1,5 +1,6 @@
 // #include <ATen/ATen.h>
-#include <torch/torch.h>
+#include "singular_triplet.h"
+
 #include <vector>
 // #include <string>
 
@@ -21,6 +22,7 @@ using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 using torch::indexing::Slice;
 
+namespace linodenet_special {
 
 struct SingularTriplet : public Function<SingularTriplet> {
     /** @brief Compute the singular triplet of a matrix.
@@ -407,13 +409,13 @@ struct SingularTriplet : public Function<SingularTriplet> {
  * }
  */
 
-static std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
+std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const optional<int64_t> &maxiter,
-    const double atol = 1e-6,
-    const double rtol = 1e-6
+    const double atol,
+    const double rtol
 ) {
     /** * Meta function for singular triplet.
      * This function is used to check the validity of the inputs and to infer the output shape and dtype.
@@ -441,13 +443,13 @@ static std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
     );
 }
 
-static std::tuple<Tensor, Tensor, Tensor> singular_triplet(
+std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const optional<int64_t> &maxiter,
-    const double atol = 1e-6,
-    const double rtol = 1e-6
+    const double atol,
+    const double rtol
 ) {
     /**
      * Wrap the struct into function.
@@ -456,6 +458,8 @@ static std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     assert(output.size() == 3);
     return std::make_tuple(output[0], output[1], output[2]);
 }
+
+}  // namespace linodenet_special
 
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
@@ -472,9 +476,9 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("singular_triplet", &singular_triplet);
+    m.impl("singular_triplet", &linodenet_special::singular_triplet);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("singular_triplet", &singular_triplet_meta);
+    m.impl("singular_triplet", &linodenet_special::singular_triplet_meta);
 }
