@@ -24,7 +24,7 @@ from .fixtures import DTYPES, SEED
     ],
     ids=lambda x: f"{x[0]}x{x[1]}",
 )
-def test_marchenko_pastur(shape: tuple[int, int]) -> None:
+def test_plot_marchenko_pastur(shape: tuple[int, int]) -> None:
     mpl.use("Agg")
     torch.manual_seed(0)
 
