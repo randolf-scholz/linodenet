@@ -9,6 +9,7 @@ using torch::Tensor;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 using torch::autograd::variable_list;
+using torch::special::log_ndtr;
 
 namespace {
 constexpr double LOG_HALF = -0.6931471805599453;
@@ -56,23 +57,15 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_forward_impl(
     const Tensor m = mu.abs();
     const Tensor z_plus = (x + m) / sigma;
     const Tensor z_minus = (x - m) / sigma;
-
-    const Tensor log_p = torch::logaddexp(
-        LOG_HALF + torch::special::log_ndtr(z_plus),
-        LOG_HALF + torch::special::log_ndtr(z_minus)
-    );
-    const Tensor log_q = torch::logaddexp(
-        LOG_HALF + torch::special::log_ndtr(-z_plus),
-        LOG_HALF + torch::special::log_ndtr(-z_minus)
-    );
+    const Tensor log_p = LOG_HALF + at::logaddexp(log_ndtr(z_plus), log_ndtr(z_minus));
+    const Tensor log_q = LOG_HALF + at::logaddexp(log_ndtr(-z_plus),log_ndtr(-z_minus));
 
     Tensor y = torch::where(
-        log_p < LOG_HALF,
+        x < 0,
         linodenet_special::ndtri_exp(log_p),
         -linodenet_special::ndtri_exp(log_q)
     );
-    y = torch::clamp(y, z_minus, z_plus);
-    TORCH_CHECK(torch::isfinite(y).all().item<bool>(), "bimodal_to_gaussian produced non-finite values.");
+    y = y.clamp_(z_minus, z_plus);
     return {y, z_minus, z_plus};
 }
 
@@ -91,7 +84,7 @@ Tensor bimodal_to_gaussian_x_derivative_impl(
     const Tensor d_x_exact = torch::logaddexp(log_phi_plus, log_phi_minus).exp();
     const Tensor lower_bound = torch::exp(-0.5 * (m / sigma).square()) / sigma;
     const Tensor upper_bound = sigma.reciprocal();
-    return torch::clamp(d_x_exact, lower_bound, upper_bound);
+    return d_x_exact.clamp_( lower_bound, upper_bound);
 }
 
 std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives_impl(
@@ -105,10 +98,10 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives_impl(
     const Tensor mu_sign = mu.sign();
     const Tensor y2 = y.square();
     const Tensor log_sigma = sigma.log();
-    const Tensor log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF;
-    const Tensor log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF;
+    const Tensor log_phi_plus = LOG_HALF + 0.5 * (y2 - z_plus.square()) - log_sigma;
+    const Tensor log_phi_minus = LOG_HALF + 0.5 * (y2 - z_minus.square()) - log_sigma ;
 
-    const Tensor d_x_exact = torch::logaddexp(log_phi_plus, log_phi_minus).exp();
+    const Tensor d_x_exact = at::logaddexp(log_phi_plus, log_phi_minus).exp();
     const Tensor hi = torch::maximum(log_phi_plus, log_phi_minus);
     const Tensor lo = torch::minimum(log_phi_plus, log_phi_minus);
     const Tensor d_m_exact =
@@ -118,8 +111,8 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives_impl(
 
     const Tensor lower_bound = torch::exp(-0.5 * (m / sigma).square()) / sigma;
     const Tensor upper_bound = sigma.reciprocal();
-    const Tensor d_x = torch::clamp(d_x_exact, lower_bound, upper_bound);
-    const Tensor d_mu = mu_sign * torch::clamp(d_m_exact, -upper_bound, upper_bound);
+    const Tensor d_x = d_x_exact.clamp(lower_bound, upper_bound);
+    const Tensor d_mu = mu_sign * d_m_exact.clamp(-upper_bound, upper_bound);
     return {d_x, d_mu, d_sigma_exact};
 }
 
@@ -136,16 +129,15 @@ std::tuple<Tensor, Tensor> mixture_to_gaussian_forward_impl(
 ) {
     const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
     const Tensor log_w = weights.log();
-    const Tensor log_p = torch::logsumexp(log_w + torch::special::log_ndtr(z), -1);
-    const Tensor log_q = torch::logsumexp(log_w + torch::special::log_ndtr(-z), -1);
+    const Tensor log_p = at::logsumexp(log_w + torch::special::log_ndtr(z), -1);
+    const Tensor log_q = at::logsumexp(log_w + torch::special::log_ndtr(-z), -1);
 
     Tensor y = torch::where(
         log_p < LOG_HALF,
         linodenet_special::ndtri_exp(log_p),
         -linodenet_special::ndtri_exp(log_q)
     );
-    y = torch::clamp(y, std::get<0>(z.min(-1)), std::get<0>(z.max(-1)));
-    TORCH_CHECK(torch::isfinite(y).all().item<bool>(), "mixture_to_gaussian produced non-finite values.");
+    y = y.clamp_(std::get<0>(z.min(-1)), std::get<0>(z.max(-1)));
     return {y, z};
 }
 
@@ -174,16 +166,17 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_to_gaussian_derivatives_impl(
 
     const Tensor d_x = scaled_ratio.sum(-1);
     const Tensor d_mus = -scaled_ratio;
-    const Tensor d_sigmas = -z * scaled_ratio;
+    const Tensor d_sigmas = z * -scaled_ratio;
 
     const Tensor log_pdf_u = -0.5 * (LOG_2PI + y2);
-    const Tensor d_weights = -torch::exp(torch::special::log_ndtr(-z) - log_pdf_u.unsqueeze(-1));
+    const Tensor d_weights = -torch::exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1));
     return {d_x, d_weights, d_mus, d_sigmas};
 }
 
 struct BimodalToGaussian : Function<BimodalToGaussian> {
     static Tensor forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu, const Tensor &sigma) {
         const auto [y, z_minus, z_plus] = bimodal_to_gaussian_forward_impl(x, mu, sigma);
+        TORCH_CHECK(y.isfinite().all().item<bool>(), "bimodal_to_gaussian produced non-finite values.");
         ctx->save_for_backward({y, z_minus, z_plus, mu, sigma});
         return y;
     }
@@ -208,21 +201,25 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         const Tensor m = mu.abs();
         Tensor lower = sigma * y - m;
         Tensor upper = sigma * y + m;
-        Tensor x = gaussian_to_bimodal_guess_impl(y, mu, sigma);
+        Tensor x = gaussian_to_bimodal_guess_impl(y, mu, sigma).clamp(lower, upper);
+        Tensor residual = torch::empty_like(x);
+        Tensor x_newton = torch::empty_like(x);
+        Tensor x_bisect = torch::empty_like(x);
 
         for (int64_t i = 0; i < MAXITER; ++i) {
-            x = torch::clamp(x, lower, upper);
             const auto [fx, z_minus, z_plus] = bimodal_to_gaussian_forward_impl(x, mu, sigma);
             const Tensor d_fx = bimodal_to_gaussian_x_derivative_impl(fx, z_minus, z_plus, mu, sigma);
-            const Tensor r = fx - y;
-            lower = torch::where(r < 0, x, lower);
-            upper = torch::where(r > 0, x, upper);
-            const Tensor x_newton = x - r / d_fx;
-            const Tensor x_bisect = 0.5 * (lower + upper);
-            x = torch::where((x_newton >= lower) & (x_newton <= upper), x_newton, x_bisect);
+            at::sub_out(residual, fx, y);
+            at::where_out(lower, residual < 0, x, lower);
+            at::where_out(upper, residual > 0, x, upper);
+            at::addcdiv_out(x_newton, x, residual, d_fx, -1.0);
+            at::add_out(x_bisect, lower, upper);
+            at::mul_out(x_bisect, x_bisect, 0.5);
+            at::where_out(x, (x_newton >= lower) & (x_newton <= upper), x_newton, x_bisect);
+            x = x.clamp_(lower, upper);
         }
 
-        x = torch::clamp(x, lower, upper);
+        x = x.clamp_(lower, upper);
         const auto [fx, z_minus, z_plus] = bimodal_to_gaussian_forward_impl(x, mu, sigma);
         ctx->save_for_backward({fx, z_minus, z_plus, mu, sigma});
         return x;
@@ -239,15 +236,14 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
 
         const auto [d_x, d_mu, d_sigma] =
             bimodal_to_gaussian_derivatives_impl(fx, z_minus, z_plus, mu, sigma);
-        const Tensor dx_inv = d_x.reciprocal();
 
-        Tensor d_y = dx_inv;
-        Tensor grad_mu = -d_mu * dx_inv;
-        Tensor grad_sigma = -d_sigma * dx_inv;
+        Tensor d_y = d_x.reciprocal();
+        Tensor grad_mu = -d_mu * d_y;
+        Tensor grad_sigma = -d_sigma * d_y;
 
         const Tensor upper_bound = sigma * torch::exp(0.5 * (mu / sigma).square());
-        d_y = torch::clamp(d_y, sigma, upper_bound);
-        grad_mu = torch::clamp(grad_mu, -upper_bound, upper_bound);
+        d_y = d_y.clamp_(sigma, upper_bound);
+        grad_mu = grad_mu.clamp_(-upper_bound, upper_bound);
 
         return {g * d_y, g * grad_mu, g * grad_sigma};
     }
@@ -262,6 +258,7 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         const Tensor &sigmas
     ) {
         const auto [y, z] = mixture_to_gaussian_forward_impl(x, weights, mus, sigmas);
+        TORCH_CHECK(y.isfinite().all().item<bool>(), "mixture_to_gaussian produced non-finite values.");
         ctx->save_for_backward({z, y, weights, sigmas});
         return y;
     }
@@ -277,12 +274,17 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         const auto [d_values, d_weights, d_mus, d_sigmas] =
                 mixture_to_gaussian_derivatives_impl(y, z, weights, sigmas);
         const Tensor grad_values = g * d_values;
-        Tensor grad_weights = torch::einsum("..., ...k -> k", {g, d_weights});
-        const Tensor grad_mus = torch::einsum("..., ...k -> k", {g, d_mus});
-        const Tensor grad_sigmas = torch::einsum("..., ...k -> k", {g, d_sigmas});
-        grad_weights = grad_weights - grad_weights.mean(-1, true);
+        const Tensor grad_weights = at::einsum("..., ...k -> k", {g, d_weights});
+        const Tensor grad_mus = at::einsum("..., ...k -> k", {g, d_mus});
+        const Tensor grad_sigmas = at::einsum("..., ...k -> k", {g, d_sigmas});
 
-        return {grad_values, grad_weights, grad_mus, grad_sigmas};
+        return {
+            grad_values,
+            // Note: project onto tangent plane.
+            grad_weights - grad_weights.mean(-1, true),
+            grad_mus,
+            grad_sigmas
+        };
     }
 };
 
@@ -297,21 +299,24 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const Tensor lines = mus + sigmas * y.unsqueeze(-1);
         Tensor lower = std::get<0>(lines.min(-1));
         Tensor upper = std::get<0>(lines.max(-1));
-        Tensor x = (weights * lines).sum(-1);
+        Tensor x = (weights * lines).sum(-1).clamp(lower, upper);
+        Tensor residual = torch::empty_like(x);
+        Tensor x_newton = torch::empty_like(x);
+        Tensor x_bisect = torch::empty_like(x);
 
         for (int64_t i = 0; i < MAXITER; ++i) {
-            x = torch::clamp(x, lower, upper);
             const auto [fy, z] = mixture_to_gaussian_forward_impl(x, weights, mus, sigmas);
             const Tensor d_fy = mixture_to_gaussian_x_derivative_impl(fy, z, weights, sigmas);
-            const Tensor r = fy - y;
-            lower = torch::where(r < 0, x, lower);
-            upper = torch::where(r > 0, x, upper);
-            const Tensor x_newton = x - r / d_fy;
-            const Tensor x_bisect = 0.5 * (lower + upper);
-            x = torch::where((x_newton >= lower) & (x_newton <= upper), x_newton, x_bisect);
+            at::sub_out(residual, fy, y);
+            at::where_out(lower, residual < 0, x, lower);
+            at::where_out(upper, residual > 0, x, upper);
+            at::addcdiv_out(x_newton, x, residual, d_fy, -1.0);
+            at::add_out(x_bisect, lower, upper);
+            at::mul_out(x_bisect, x_bisect, 0.5);
+            at::where_out(x, (x_newton >= lower) & (x_newton <= upper), x_newton, x_bisect);
+            x = x.clamp_(lower, upper);
         }
 
-        x = torch::clamp(x, lower, upper);
         const auto [fy, z] = mixture_to_gaussian_forward_impl(x, weights, mus, sigmas);
         ctx->save_for_backward({z, fy, weights, mus, sigmas});
         return x;
@@ -327,17 +332,19 @@ struct GaussianToMixture : Function<GaussianToMixture> {
 
         const auto [d_x, d_weights, d_mus, d_sigmas] =
             mixture_to_gaussian_derivatives_impl(y, z, weights, sigmas);
-        const Tensor dx_inv = d_x.reciprocal();
 
-        const Tensor grad_y = g * dx_inv;
-        const Tensor scaled_g = g * dx_inv;
-        Tensor grad_weights = torch::einsum("..., ...k -> k", {scaled_g, -d_weights});
-        const Tensor grad_mus = torch::einsum("..., ...k -> k", {scaled_g, -d_mus});
-        const Tensor grad_sigmas = torch::einsum("..., ...k -> k", {scaled_g, -d_sigmas});
+        const Tensor grad_y = g * d_x.reciprocal();
+        const Tensor grad_weights = at::einsum("..., ...k -> k", {grad_y, -d_weights});
+        const Tensor grad_mus = at::einsum("..., ...k -> k", {grad_y, -d_mus});
+        const Tensor grad_sigmas = at::einsum("..., ...k -> k", {grad_y, -d_sigmas});
 
-        grad_weights = grad_weights - grad_weights.mean(-1, true);
-
-        return {grad_y, grad_weights, grad_mus, grad_sigmas};
+        return {
+            grad_y,
+            // Note: project onto tangent plane.
+            grad_weights - grad_weights.mean(-1, true),
+            grad_mus,
+            grad_sigmas
+        };
     }
 };
 
