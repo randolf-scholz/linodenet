@@ -2,9 +2,11 @@ r"""Implementation of the optimal transport based activation function."""
 # mypy: disable-error-code="no-untyped-def"
 
 __all__ = [
+    "GaussianToBimodal",
+    "BimodalToGaussian",
     # functional interfaces
-    "gaussian_to_twin",
-    "twin_to_gaussian",
+    "gaussian_to_bimodal",
+    "bimodal_to_gaussian",
     "gaussian_to_mixture",
     "mixture_to_gaussian",
 ]
@@ -21,10 +23,10 @@ from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
 
 
 @torch.no_grad()
-def _twin_to_gaussian_forward(
+def _bimodal_to_gaussian_forward(
     x: Tensor, mu: Tensor, sigma: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
-    r"""Evaluate the twin-to-Gaussian transport and cache the normalized coordinates."""
+    r"""Evaluate the bimodal-to-Gaussian transport and cache the normalized coordinates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     m = mu.abs()
@@ -40,10 +42,10 @@ def _twin_to_gaussian_forward(
 
 
 @torch.no_grad()
-def _twin_to_gaussian_x_derivative(
+def _bimodal_to_gaussian_x_derivative(
     y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
 ) -> Tensor:
-    r"""Compute stable partial derivatives for the twin-to-Gaussian transport."""
+    r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
     m = mu.abs()
     y2 = y.square()
@@ -58,10 +60,10 @@ def _twin_to_gaussian_x_derivative(
 
 
 @torch.no_grad()
-def _twin_to_gaussian_derivatives(
+def _bimodal_to_gaussian_derivatives(
     y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
-    r"""Compute stable partial derivatives for the twin-to-Gaussian transport."""
+    r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     m = mu.abs()
@@ -87,7 +89,7 @@ def _twin_to_gaussian_derivatives(
 
 
 @torch.no_grad()
-def _gaussian_to_twin_guess(x, mu, sigma):
+def _gaussian_to_bimodal_guess(x, mu, sigma):
     r"""Approximate $Ψ⁻¹(x, μ, σ)$ by the matching `hard_bend` inverse.
 
     Here $λ = Ψ'(0, μ, σ) = σ⁻¹ℯ^{-½(μ/σ)²}$ is the slope at the origin.
@@ -159,7 +161,7 @@ def _mixture_to_gaussian_derivatives(
     return d_x, d_weights, d_means, d_sigmas
 
 
-class _TwinToGaussian(Function):
+class BimodalToGaussian(Function):
     r"""Optimal Transport from mixture $p = ½N(-μ, σ²) + ½N(μ, σ²)$ to $q = N(0, 1)$.
 
     If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the optimal transport map is given by
@@ -197,7 +199,7 @@ class _TwinToGaussian(Function):
 
     @staticmethod
     def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
-        y, z_minus, z_plus = _twin_to_gaussian_forward(x, mu, sigma)
+        y, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
         ctx.save_for_backward(y, z_minus, z_plus, mu, sigma)
         return y
 
@@ -205,20 +207,20 @@ class _TwinToGaussian(Function):
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         (g,) = outer
         y, z_minus, z_plus, mu, sigma = ctx.saved_tensors
-        d_x, d_mu, d_sigma = _twin_to_gaussian_derivatives(
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(
             y, z_minus, z_plus, mu, sigma
         )
         return (g * d_x), (g * d_mu), (g * d_sigma)
 
 
-class _GaussianToTwin(Function):
+class GaussianToBimodal(Function):
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
 
     @staticmethod
     def forward(ctx, y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
         r"""Solve $y = T(x, μ, σ)$ for $x$ using Newton's method.
 
-        Here $T$ is the transport from the symmetric twin mixture to $N(0,1)$.
+        Here $T$ is the transport from the symmetric bimodal mixture to $N(0,1)$.
         Since $T'(0) = σ⁻¹ℯ^{-½|μ|²/σ²}$, the inverse slope at the origin is
 
         .. math:: (T⁻¹)'(0) = σℯ^{½|μ|²/σ²}.
@@ -232,12 +234,12 @@ class _GaussianToTwin(Function):
         m = mu.abs()
         lower = sigma * y - m
         upper = sigma * y + m
-        x = _gaussian_to_twin_guess(y, mu, sigma)
+        x = _gaussian_to_bimodal_guess(y, mu, sigma)
 
         for _ in range(MAXITER):
             x = torch.clamp(x, lower, upper)
-            fx, z_minus, z_plus = _twin_to_gaussian_forward(x, mu, sigma)
-            d_fx = _twin_to_gaussian_x_derivative(fx, z_minus, z_plus, mu, sigma)
+            fx, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
+            d_fx = _bimodal_to_gaussian_x_derivative(fx, z_minus, z_plus, mu, sigma)
             r = fx - y
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
@@ -250,7 +252,7 @@ class _GaussianToTwin(Function):
             )
 
         x = torch.clamp(x, lower, upper)
-        fx, z_minus, z_plus = _twin_to_gaussian_forward(x, mu, sigma)
+        fx, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
 
         ctx.save_for_backward(fx, z_minus, z_plus, mu, sigma)
         return x
@@ -270,7 +272,7 @@ class _GaussianToTwin(Function):
         """
         (g,) = outer
         fx, z_minus, z_plus, mu, sigma = ctx.saved_tensors
-        d_x, d_mu, d_sigma = _twin_to_gaussian_derivatives(
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(
             fx, z_minus, z_plus, mu, sigma
         )
         dx_inv = d_x.reciprocal()
@@ -430,14 +432,14 @@ class _GaussianToMixture(Function):
         return grad_y, grad_weights, grad_means, grad_sigmas
 
 
-def gaussian_to_twin(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+def gaussian_to_bimodal(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
-    return _GaussianToTwin.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
+    return GaussianToBimodal.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
 
 
-def twin_to_gaussian(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+def bimodal_to_gaussian(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
     r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
-    return _TwinToGaussian.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
+    return BimodalToGaussian.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
 
 
 def gaussian_to_mixture(

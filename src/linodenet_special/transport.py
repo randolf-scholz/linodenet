@@ -12,10 +12,10 @@ import torch
 from torch import Tensor, nn
 
 from linodenet_special.fallbacks import (
+    bimodal_to_gaussian,
+    gaussian_to_bimodal,
     gaussian_to_mixture,
-    gaussian_to_twin,
     mixture_to_gaussian,
-    twin_to_gaussian,
 )
 
 
@@ -74,7 +74,7 @@ class MixtureToGaussian(nn.Module):
 
 
 class GaussianToTwin(nn.Module):
-    r"""Learnable transport map from a Gaussian distribution to a twin distribution."""
+    r"""Learnable transport map from a Gaussian distribution to a bimodal distribution."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -88,16 +88,16 @@ class GaussianToTwin(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
-        return gaussian_to_twin(x, mu, sigma)
+        return gaussian_to_bimodal(x, mu, sigma)
 
     def inverse(self, x: Tensor) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
-        return twin_to_gaussian(x, mu, sigma)
+        return bimodal_to_gaussian(x, mu, sigma)
 
 
 class TwinToGaussian(nn.Module):
-    r"""Learnable transport map from a twin distribution to a Gaussian distribution."""
+    r"""Learnable transport map from a bimodal distribution to a Gaussian distribution."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -111,9 +111,9 @@ class TwinToGaussian(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
-        return twin_to_gaussian(x, mu, sigma)
+        return bimodal_to_gaussian(x, mu, sigma)
 
     def inverse(self, x: Tensor) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
-        return gaussian_to_twin(x, mu, sigma)
+        return gaussian_to_bimodal(x, mu, sigma)

@@ -83,7 +83,7 @@ def hard_expand(x: Tensor, a: Tensor | float = 1.0, c: Tensor | float = 1.0) -> 
 
     Note:
         ``hard_expand(x, λ, c)`` is the inverse of ``hard_contract(x, 1/λ, c)``.
-        `hard_expand` is a piecewise linear approximation of `gaussian_to_twin`.
+        `hard_expand` is a piecewise linear approximation of `gaussian_to_bimodal`.
     """
     assert a >= 1.0
     return torch.where((a - 1) * x.abs() <= c, a * x, x + x.sign() * c)
@@ -108,7 +108,7 @@ def hard_contract(x: Tensor, a: Tensor | float = 1, c: Tensor | float = 1) -> Te
 
     Note:
         ``hard_contract(x, λ, c)`` is the inverse of ``hard_expand(x, 1/λ, c)``.
-        `hard_contract` is a piecewise linear approximation of `twin_to_gaussian`.
+        `hard_contract` is a piecewise linear approximation of `bimodal_to_gaussian`.
     """
     assert a <= 1.0
     return torch.where((1 - a) * x.abs() <= c, a * x, x - x.sign() * c)

@@ -14,9 +14,9 @@ from scipy import stats
 from torch import Tensor
 
 from linodenet_special.fallbacks import (
-    gaussian_to_twin,
+    bimodal_to_gaussian,
+    gaussian_to_bimodal,
     mixture_to_gaussian,
-    twin_to_gaussian,
 )
 from tests.utils.project import PROJECT
 
@@ -88,7 +88,7 @@ def make_input_mixture(
     return stats.Mixture(components, weights=omegas.detach().cpu().tolist())
 
 
-def make_twin_distribution(mu: Tensor, sigma: Tensor, /) -> stats.Mixture:
+def make_bimodal_distribution(mu: Tensor, sigma: Tensor, /) -> stats.Mixture:
     components = [
         stats.Normal(mu=float(-mu), sigma=float(sigma)),
         stats.Normal(mu=float(mu), sigma=float(sigma)),
@@ -350,7 +350,7 @@ class TransportPlotState2:
 
 
 @dataclass
-class TransportPlotStateTwin:
+class TransportPlotStateBimodal:
     x: Tensor
     line: Any
     component_lines: list[Any]
@@ -367,11 +367,11 @@ class TransportPlotStateTwin:
         mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
         sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
 
-        y = twin_to_gaussian(self.x, mu, sigma)
-        twin = make_twin_distribution(mu, sigma)
+        y = bimodal_to_gaussian(self.x, mu, sigma)
+        twin = make_bimodal_distribution(mu, sigma)
         target = stats.Normal(mu=0.0, sigma=1.0)
         x_samples = torch.tensor(twin.sample(shape=1_000, rng=0), dtype=dtype)
-        y_samples = twin_to_gaussian(x_samples, mu, sigma)
+        y_samples = bimodal_to_gaussian(x_samples, mu, sigma)
         asymptote0 = asymptotic_line(self.x, 0, 1, 0.5, mu, sigma)
         asymptote1 = asymptotic_line(self.x, 0, 1, 0.5, -mu, sigma)
 
@@ -424,11 +424,11 @@ class TransportPlotStateGaussian:
         mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
         sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
 
-        x = gaussian_to_twin(self.y, mu, sigma)
+        x = gaussian_to_bimodal(self.y, mu, sigma)
         source = stats.Normal(mu=0.0, sigma=1.0)
-        twin = make_twin_distribution(mu, sigma)
+        twin = make_bimodal_distribution(mu, sigma)
         y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
-        x_samples = gaussian_to_twin(y_samples, mu, sigma)
+        x_samples = gaussian_to_bimodal(y_samples, mu, sigma)
 
         self.line.set_ydata(x)
         self.component_lines[0].set_ydata(
@@ -466,7 +466,7 @@ class TransportPlotStateGaussian:
 
 
 @pytest.mark.interactive
-def test_gaussian_to_twin_interactive() -> None:
+def test_gaussian_to_bimodal_interactive() -> None:
     dtype = torch.float64
 
     y = torch.linspace(X_MIN, X_MAX, 200, dtype=dtype)
@@ -474,11 +474,11 @@ def test_gaussian_to_twin_interactive() -> None:
     mu = torch.tensor(3.0, dtype=dtype)
     sigma = torch.tensor(0.5, dtype=dtype)
 
-    x = gaussian_to_twin(y, mu, sigma)
+    x = gaussian_to_bimodal(y, mu, sigma)
     source = stats.Normal(mu=0.0, sigma=1.0)
-    target = make_twin_distribution(mu, sigma)
+    target = make_bimodal_distribution(mu, sigma)
     y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
-    x_samples = gaussian_to_twin(y_samples, mu, sigma)
+    x_samples = gaussian_to_bimodal(y_samples, mu, sigma)
 
     with plt.style.context("bmh"):
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -528,7 +528,7 @@ def test_gaussian_to_twin_interactive() -> None:
         ax_twin.set_xlim(X_MIN, X_MAX)
         ax_twin.set_ylabel("density")
         ax_twin.set_ylim(0, PDF_MAX)
-        ax.set_title("Interactive Transport via gaussian_to_twin")
+        ax.set_title("Interactive Transport via gaussian_to_bimodal")
         ax.legend(loc="upper left")
 
         slider_specs = [
@@ -563,7 +563,7 @@ def test_gaussian_to_twin_interactive() -> None:
 
 
 @pytest.mark.interactive
-def test_twin_to_gaussian_interactive() -> None:
+def test_bimodal_to_gaussian_interactive() -> None:
     dtype = torch.float64
 
     x = torch.linspace(X_MIN, X_MAX, 200, dtype=dtype)
@@ -571,11 +571,11 @@ def test_twin_to_gaussian_interactive() -> None:
     mu = torch.tensor(3.0, dtype=dtype)
     sigma = torch.tensor(0.5, dtype=dtype)
 
-    y = twin_to_gaussian(x, mu, sigma)
-    source = make_twin_distribution(mu, sigma)
+    y = bimodal_to_gaussian(x, mu, sigma)
+    source = make_bimodal_distribution(mu, sigma)
     target = stats.Normal(mu=0.0, sigma=1.0)
     x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
-    y_samples = twin_to_gaussian(x_samples, mu, sigma)
+    y_samples = bimodal_to_gaussian(x_samples, mu, sigma)
 
     with plt.style.context("bmh"):
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -627,7 +627,7 @@ def test_twin_to_gaussian_interactive() -> None:
         ax_twin.set_xlim(X_MIN, X_MAX)
         ax_twin.set_ylabel("density")
         ax_twin.set_ylim(0, PDF_MAX)
-        ax.set_title("Interactive Transport via twin_to_gaussian")
+        ax.set_title("Interactive Transport via bimodal_to_gaussian")
         ax.legend(loc="upper left")
 
         slider_specs = [
@@ -644,7 +644,7 @@ def test_twin_to_gaussian_interactive() -> None:
             )
         }
 
-        state = TransportPlotStateTwin(
+        state = TransportPlotStateBimodal(
             x=x,
             line=line,
             component_lines=component_lines,

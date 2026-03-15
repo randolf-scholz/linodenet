@@ -8,17 +8,17 @@ from torch.autograd import gradcheck
 
 from linodenet_special.fallbacks.hard_bend import hard_bend
 from linodenet_special.fallbacks.transport import (
+    bimodal_to_gaussian,
+    gaussian_to_bimodal,
     gaussian_to_mixture,
-    gaussian_to_twin,
     mixture_to_gaussian,
-    twin_to_gaussian,
 )
 from tests.linodenet_special.fixtures import DEVICES, DTYPES
 
 from .fixtures import Fixture
 
 
-class TestTwinToGaussian(Fixture):
+class TestBimodalToGaussian(Fixture):
     X_MIN = -20
     X_MAX = 20
     N = 1000
@@ -51,10 +51,10 @@ class TestTwinToGaussian(Fixture):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = torch.exp(-0.5 * (μ / σ) ** 2) / σ
 
-        y = twin_to_gaussian(x, μ, σ)
+        y = bimodal_to_gaussian(x, μ, σ)
         assert y.dtype == dtype
         assert y.isfinite().all(), (
-            "twin_to_gaussian should produce finite outputs for finite inputs"
+            "bimodal_to_gaussian should produce finite outputs for finite inputs"
         )
 
         y_approx = hard_bend(x, λ, μ / σ, 1 / σ)
@@ -68,7 +68,7 @@ class TestTwinToGaussian(Fixture):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    def test_twin_to_gaussian_forward(
+    def test_bimodal_to_gaussian_forward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
         μ = torch.tensor(mean, dtype=dtype, device=device)
@@ -76,16 +76,16 @@ class TestTwinToGaussian(Fixture):
         λ = (torch.exp(-0.5 * (μ / σ) ** 2) / σ).item()
 
         zero = torch.tensor(0, dtype=dtype, device=device)
-        y_zero = twin_to_gaussian(zero, μ, σ)
+        y_zero = bimodal_to_gaussian(zero, μ, σ)
         self.assert_close(y_zero, zero)
 
         x1 = torch.linspace(0, self.X_MAX, steps=self.N, dtype=dtype, device=device)
-        y1 = twin_to_gaussian(x1, μ, σ)
+        y1 = bimodal_to_gaussian(x1, μ, σ)
         assert y1.dtype == dtype
         assert y1.isfinite().all()
 
         x2 = torch.linspace(0, self.X_MIN, steps=self.N, dtype=dtype, device=device)
-        y2 = twin_to_gaussian(x2, μ, σ)
+        y2 = bimodal_to_gaussian(x2, μ, σ)
         assert y2.dtype == dtype
         assert y2.isfinite().all()
 
@@ -99,8 +99,8 @@ class TestTwinToGaussian(Fixture):
         x2 = -x1
         tail1 = (x1 - torch.sign(x1) * μ) / σ
         tail2 = (x2 - torch.sign(x2) * μ) / σ
-        y1 = twin_to_gaussian(x1, μ, σ)
-        y2 = twin_to_gaussian(x2, μ, σ)
+        y1 = bimodal_to_gaussian(x1, μ, σ)
+        y2 = bimodal_to_gaussian(x2, μ, σ)
         assert y1.isfinite().all()
         assert y2.isfinite().all()
         self.assert_close(y1, tail1)
@@ -110,7 +110,7 @@ class TestTwinToGaussian(Fixture):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    def test_twin_to_gaussian_backward(
+    def test_bimodal_to_gaussian_backward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
         μ = torch.tensor(mean, dtype=dtype, device=device)
@@ -128,7 +128,7 @@ class TestTwinToGaussian(Fixture):
             device=device,
             requires_grad=True,
         )
-        y1 = twin_to_gaussian(x1, μ, σ)
+        y1 = bimodal_to_gaussian(x1, μ, σ)
         y1.sum().backward()
         assert x1.grad is not None
         assert x1.grad.isfinite().all()
@@ -144,7 +144,7 @@ class TestTwinToGaussian(Fixture):
             device=device,
             requires_grad=True,
         )
-        y2 = twin_to_gaussian(x2, μ, σ)
+        y2 = bimodal_to_gaussian(x2, μ, σ)
         y2.sum().backward()
         assert x2.grad is not None
         assert x2.grad.isfinite().all()
@@ -159,7 +159,7 @@ class TestTwinToGaussian(Fixture):
             10 * x_tail, 100 * x_tail, steps=self.N, dtype=dtype, device=device
         )
         tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
-        y_tail = twin_to_gaussian(tail, μ, σ)
+        y_tail = bimodal_to_gaussian(tail, μ, σ)
         assert y_tail.isfinite().all()
         y_tail.sum().backward()
         assert tail.grad is not None
@@ -170,7 +170,7 @@ class TestTwinToGaussian(Fixture):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    def test_twin_to_gaussian_gradcheck(
+    def test_bimodal_to_gaussian_gradcheck(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
@@ -193,7 +193,7 @@ class TestTwinToGaussian(Fixture):
             case _:
                 raise ValueError(f"Unsupported dtype: {dtype}")
 
-        gradcheck(twin_to_gaussian, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
+        gradcheck(bimodal_to_gaussian, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
@@ -214,8 +214,8 @@ class TestTwinToGaussian(Fixture):
             device=device,
             requires_grad=True,
         )
-        y = twin_to_gaussian(x, μ, σ)
-        x_inv = gaussian_to_twin(y, μ, σ)
+        y = bimodal_to_gaussian(x, μ, σ)
+        x_inv = gaussian_to_bimodal(y, μ, σ)
         z = x_inv.sum()
         z.backward()
         assert x.grad is not None
@@ -223,7 +223,7 @@ class TestTwinToGaussian(Fixture):
         self.assert_close(x.grad, 1.0, rtol=1e-4, atol=1e-4)
 
 
-class TestGaussianToTwin(Fixture):
+class TestGaussianToBimodal(Fixture):
     X_MIN = -20
     X_MAX = 20
     N = 1000
@@ -254,10 +254,10 @@ class TestGaussianToTwin(Fixture):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = (torch.exp(-0.5 * (μ / σ) ** 2) / σ).item()
 
-        x = gaussian_to_twin(y, μ, σ)
+        x = gaussian_to_bimodal(y, μ, σ)
         assert x.dtype == dtype
         assert x.isfinite().all(), (
-            "gaussian_to_twin should produce finite outputs for finite inputs"
+            "gaussian_to_bimodal should produce finite outputs for finite inputs"
         )
 
         x_approx = hard_bend(y, 1 / λ, μ, σ)
@@ -271,7 +271,7 @@ class TestGaussianToTwin(Fixture):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    def test_gaussian_to_twin_forward(
+    def test_gaussian_to_bimodal_forward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
         μ = torch.tensor(mean, dtype=dtype, device=device)
@@ -279,16 +279,16 @@ class TestGaussianToTwin(Fixture):
         λ = (torch.exp(-0.5 * (μ / σ) ** 2) / σ).item()
 
         zero = torch.tensor(0, dtype=dtype, device=device)
-        x_zero = gaussian_to_twin(zero, μ, σ)
+        x_zero = gaussian_to_bimodal(zero, μ, σ)
         self.assert_close(x_zero, zero)
 
         y1 = torch.linspace(0, self.X_MAX, steps=self.N_FEW, dtype=dtype, device=device)
-        x1 = gaussian_to_twin(y1, μ, σ)
+        x1 = gaussian_to_bimodal(y1, μ, σ)
         assert x1.dtype == dtype
         assert x1.isfinite().all()
 
         y2 = torch.linspace(0, self.X_MIN, steps=self.N_FEW, dtype=dtype, device=device)
-        x2 = gaussian_to_twin(y2, μ, σ)
+        x2 = gaussian_to_bimodal(y2, μ, σ)
         assert x2.dtype == dtype
         assert x2.isfinite().all()
 
@@ -302,8 +302,8 @@ class TestGaussianToTwin(Fixture):
         y2 = -y1
         tail1 = σ * y1 - μ
         tail2 = σ * y2 + μ
-        x1 = gaussian_to_twin(y1, μ, σ)
-        x2 = gaussian_to_twin(y2, μ, σ)
+        x1 = gaussian_to_bimodal(y1, μ, σ)
+        x2 = gaussian_to_bimodal(y2, μ, σ)
         assert x1.isfinite().all()
         assert x2.isfinite().all()
         self.assert_close(x1, tail1, rtol=1e-3)
@@ -313,7 +313,7 @@ class TestGaussianToTwin(Fixture):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    def test_gaussian_to_twin_backward(
+    def test_gaussian_to_bimodal_backward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
         μ = torch.tensor(mean, dtype=dtype, device=device)
@@ -331,7 +331,7 @@ class TestGaussianToTwin(Fixture):
             device=device,
             requires_grad=True,
         )
-        x1 = gaussian_to_twin(y1, μ, σ)
+        x1 = gaussian_to_bimodal(y1, μ, σ)
         x1.sum().backward()
         assert y1.grad is not None
         assert y1.grad.isfinite().all()
@@ -346,7 +346,7 @@ class TestGaussianToTwin(Fixture):
             device=device,
             requires_grad=True,
         )
-        x2 = gaussian_to_twin(y2, μ, σ)
+        x2 = gaussian_to_bimodal(y2, μ, σ)
         x2.sum().backward()
         assert y2.grad is not None
         assert y2.grad.isfinite().all()
@@ -361,7 +361,7 @@ class TestGaussianToTwin(Fixture):
             10 * y_tail, 100 * y_tail, steps=self.N, dtype=dtype, device=device
         )
         tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
-        x_tail = gaussian_to_twin(tail, μ, σ)
+        x_tail = gaussian_to_bimodal(tail, μ, σ)
         assert x_tail.isfinite().all()
         x_tail.sum().backward()
         assert tail.grad is not None
@@ -373,7 +373,7 @@ class TestGaussianToTwin(Fixture):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    def test_gaussian_to_twin_gradcheck(
+    def test_gaussian_to_bimodal_gradcheck(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
@@ -396,7 +396,7 @@ class TestGaussianToTwin(Fixture):
             case _:
                 raise ValueError(f"Unsupported dtype: {dtype}")
 
-        gradcheck(gaussian_to_twin, (y_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
+        gradcheck(gaussian_to_bimodal, (y_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
@@ -415,8 +415,8 @@ class TestGaussianToTwin(Fixture):
             device=device,
             requires_grad=True,
         )
-        x_inv = gaussian_to_twin(y, μ, σ)
-        y_inv = twin_to_gaussian(x_inv, μ, σ)
+        x_inv = gaussian_to_bimodal(y, μ, σ)
+        y_inv = bimodal_to_gaussian(x_inv, μ, σ)
         z = y_inv.sum()
         z.backward()
         assert y.grad is not None
@@ -441,12 +441,12 @@ class TestGaussianToTwin(Fixture):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
 
         self.assert_close(
-            gaussian_to_twin(y, μ_pos, σ),
-            gaussian_to_twin(y, μ_neg, σ),
+            gaussian_to_bimodal(y, μ_pos, σ),
+            gaussian_to_bimodal(y, μ_neg, σ),
         )
         self.assert_close(
-            twin_to_gaussian(x, μ_pos, σ),
-            twin_to_gaussian(x, μ_neg, σ),
+            bimodal_to_gaussian(x, μ_pos, σ),
+            bimodal_to_gaussian(x, μ_neg, σ),
         )
 
 
