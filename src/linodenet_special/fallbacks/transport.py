@@ -99,6 +99,63 @@ def _gaussian_to_twin_guess(x, mu, sigma):
     return hard_bend(x, λ, mu, 1 / sigma)
 
 
+@torch.no_grad()
+def _mixture_to_gaussian_forward(
+    x: Tensor, weights: Tensor, means: Tensor, sigmas: Tensor
+) -> tuple[Tensor, Tensor]:
+    r"""Evaluate the mixture-to-Gaussian transport and cache normalized coordinates."""
+    LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+
+    z = (x.unsqueeze(-1) - means) / sigmas
+    log_w = torch.log(weights)
+    log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
+    log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
+
+    y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
+    y = torch.clamp(y, z.min(dim=-1).values, z.max(dim=-1).values)
+    assert y.isfinite().all()
+    return y, z
+
+
+@torch.no_grad()
+def _mixture_to_gaussian_x_derivative(
+    y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
+) -> Tensor:
+    r"""Compute the partial derivative with respect to the mixture value."""
+    y2 = y.square()
+    log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
+    scaled_ratio = torch.exp(log_ratio + torch.log(weights) - torch.log(sigmas))
+    return scaled_ratio.sum(dim=-1)
+
+
+@torch.no_grad()
+def _mixture_to_gaussian_derivatives(
+    y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    r"""Compute stable partial derivatives for the mixture-to-Gaussian transport."""
+    LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
+
+    y2 = y.square()
+    # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
+    log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
+    log_w = torch.log(weights)
+    log_sigmas = torch.log(sigmas)
+    # (ωₖ / σₖ) exp(½(y² - zₖ²)) appears in ∂y/∂x, ∂y/∂μₖ, and ∂y/∂σₖ.
+    scaled_ratio = torch.exp(log_ratio + log_w - log_sigmas)
+
+    # ∂y/∂x = ∑ₖ (ωₖ / σₖ) exp(½(y² - zₖ²))
+    d_x = scaled_ratio.sum(dim=-1)
+    # ∂y/∂μₖ = -(ωₖ / σₖ) exp(½(y² - zₖ²))
+    d_means = -scaled_ratio
+    # ∂y/∂σₖ = -(ωₖ zₖ / σₖ) exp(½(y² - zₖ²))
+    d_sigmas = -z * scaled_ratio
+
+    log_pdf_u = -0.5 * (LOG_2PI + y2)
+    d_weights = -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1))
+
+    return d_x, d_weights, d_means, d_sigmas
+
+
 class _TwinToGaussian(Function):
     r"""Optimal Transport from mixture $p = ½N(-μ, σ²) + ½N(μ, σ²)$ to $q = N(0, 1)$.
 
@@ -209,9 +266,11 @@ class _GaussianToTwin(Function):
         d_x, d_mu, d_sigma = _twin_to_gaussian_derivatives(
             fx, z_minus, z_plus, mu, sigma
         )
-        d_y = 1 / d_x
-        d_mu = -d_mu / d_x
-        d_sigma = -d_sigma / d_x
+        dx_inv = d_x.reciprocal()
+
+        d_y = dx_inv
+        d_mu = -d_mu * dx_inv
+        d_sigma = -d_sigma * dx_inv
 
         # clamp to legal range
         lower_bound = sigma
@@ -283,42 +342,17 @@ class _MixtureToGaussian(Function):
         ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
     ) -> Tensor:
         assert weights.shape[0] == means.shape[0] == sigmas.shape[0]
-        LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
-
-        z = (y.unsqueeze(-1) - means) / sigmas
-        log_w = torch.log(weights)
-        log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
-        log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
-
-        u = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-        assert u.isfinite().all()
-
-        ctx.save_for_backward(z, u, log_w, torch.log(sigmas))
+        u, z = _mixture_to_gaussian_forward(y, weights, means, sigmas)
+        ctx.save_for_backward(z, u, weights, sigmas)
         return u
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
-
         (g,) = outer
-        z, y, log_w, log_sigmas = ctx.saved_tensors
-
-        y2 = y.square()
-
-        # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
-        log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
-        # (ωₖ / σₖ) exp(½(y² - zₖ²)) appears in ∂y/∂x, ∂y/∂μₖ, and ∂y/∂σₖ.
-        scaled_ratio = torch.exp(log_ratio + log_w - log_sigmas)
-
-        # ∂y/∂x = ∑ₖ (ωₖ / σₖ) exp(½(y² - zₖ²))
-        d_values = scaled_ratio.sum(dim=-1)
-        # ∂y/∂μₖ = -(ωₖ / σₖ) exp(½(y² - zₖ²))
-        d_means = -scaled_ratio
-        # ∂y/∂σₖ = -(ωₖ zₖ / σₖ) exp(½(y² - zₖ²))
-        d_sigmas = -z * scaled_ratio
-
-        log_pdf_u = -0.5 * (LOG_2PI + y2)
-        d_weights = -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1))
+        z, y, weights, sigmas = ctx.saved_tensors
+        d_values, d_weights, d_means, d_sigmas = _mixture_to_gaussian_derivatives(
+            y, z, weights, sigmas
+        )
 
         grad_values = g * d_values
         grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
@@ -345,11 +379,80 @@ class _GaussianToMixture(Function):
     def forward(
         ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
     ) -> Tensor:
-        raise NotImplementedError
+        MAXITER: Final[int] = 10
+
+        assert weights.shape[0] == means.shape[0] == sigmas.shape[0]
+
+        # Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
+        # must lie between the smallest and largest of these affine tail candidates,
+        # so we use their pointwise min/max as a safe bracket and their weighted mean
+        # as a cheap initial guess for the safeguarded Newton iteration.
+        lines = means + sigmas * y.unsqueeze(-1)
+        lower = lines.min(dim=-1).values
+        upper = lines.max(dim=-1).values
+        x = torch.einsum("k, ...k -> ...", weights, lines)
+
+        for _ in range(MAXITER):
+            x = torch.clamp(x, lower, upper)
+            fy, z = _mixture_to_gaussian_forward(x, weights, means, sigmas)
+            d_fy = _mixture_to_gaussian_x_derivative(fy, z, weights, sigmas)
+            r = fy - y
+            lower = torch.where(r < 0, x, lower)
+            upper = torch.where(r > 0, x, upper)
+            x_newton = x - r / d_fy
+            x_bisect = 0.5 * (lower + upper)
+            x = torch.where(
+                (x_newton >= lower) & (x_newton <= upper),
+                x_newton,
+                x_bisect,
+            )
+
+        x = torch.clamp(x, lower, upper)
+        fy, z = _mixture_to_gaussian_forward(x, weights, means, sigmas)
+
+        ctx.save_for_backward(z, fy, weights, means, sigmas)
+        return x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        raise NotImplementedError
+        r"""Use the derivatives of $T$ to compute the derivatives of $T⁻¹$.
+
+        Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
+
+        .. math:: ∂T(x(y, ω, μ, σ), ω, μ, σ) = y
+
+        Hence
+
+        .. math:: ∂x/∂y = (∂T/∂x)⁻¹
+
+        and for each parameter block $θ∈\{ω,μ,σ\}$
+
+        .. math:: ∂x/∂θ = -(∂T/∂x)⁻¹ ∂T/∂θ.
+        """
+        (g,) = outer
+        z, y, weights, _, sigmas = ctx.saved_tensors
+        d_x, d_weights, d_means, d_sigmas = _mixture_to_gaussian_derivatives(
+            y, z, weights, sigmas
+        )
+        dx_inv = d_x.reciprocal()
+
+        d_y = dx_inv
+        d_weights = -d_weights * dx_inv.unsqueeze(-1)
+        d_means = -d_means * dx_inv.unsqueeze(-1)
+        d_sigmas = -d_sigmas * dx_inv.unsqueeze(-1)
+
+        grad_y = g * d_y
+        grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
+        grad_means = torch.einsum("..., ...k -> k", g, d_means)
+        grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
+
+        # Project weight gradient onto the simplex tangent space.
+        # ∆ⁿ = {x∈ℝⁿ⁺¹ : ∑ₖxₖ = 0, xₖ≥0}
+        # 𝓣ₓ∆ⁿ = {v∈ℝⁿ⁺¹ : ∑ₖvₖ = 0} is the tangent space of the simplex at x.
+        # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
+        grad_weights = grad_weights - grad_weights.mean(dim=-1, keepdim=True)
+
+        return grad_y, grad_weights, grad_means, grad_sigmas
 
 
 def gaussian_to_twin(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:

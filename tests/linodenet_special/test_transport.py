@@ -8,6 +8,7 @@ from torch.autograd import gradcheck
 
 from linodenet_special.fallbacks.hard_bend import hard_bend
 from linodenet_special.fallbacks.transport import (
+    gaussian_to_mixture,
     gaussian_to_twin,
     mixture_to_gaussian,
     twin_to_gaussian,
@@ -15,65 +16,6 @@ from linodenet_special.fallbacks.transport import (
 from tests.linodenet_special.fixtures import DEVICES, DTYPES
 
 from .fixtures import Fixture
-
-
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize(
-    ("weights", "means", "sigmas"),
-    [
-        pytest.param(
-            [0.4, 0.25, 0.35],
-            [-1.0, 0.5, 1.5],
-            [0.8, 1.1, 0.9],
-            id="asymmetric",
-        ),
-        pytest.param(
-            [0.2, 0.5, 0.3],
-            [-1.5, -0.5, 1.0],
-            [1.0, 0.8, 1.2],
-            id="shifted",
-        ),
-    ],
-)
-@pytest.mark.parametrize(
-    "values",
-    [
-        pytest.param(torch.randn(8, 2), id="batch"),
-        pytest.param(torch.randn(()), id="scalar"),
-        pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
-        pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
-    ],
-)
-def test_mixture_to_gaussian_gradcheck(
-    values: list[float],
-    weights: list[float],
-    means: list[float],
-    sigmas: list[float],
-    device: str,
-    dtype: torch.dtype,
-) -> None:
-    x = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
-    w = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-    mu = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-    sigma = torch.tensor(sigmas, dtype=dtype, device=device, requires_grad=True)
-
-    if dtype is torch.float32:
-        eps = 1e-4
-        atol = 1e-2
-        rtol = 1e-3
-    else:
-        eps = 1e-6
-        atol = 1e-6
-        rtol = 1e-6
-
-    gradcheck(
-        lambda z, ω, μ, σ: mixture_to_gaussian(z, ω / ω.sum(), μ, σ),
-        (x, w, mu, sigma),
-        eps=eps,
-        atol=atol,
-        rtol=rtol,
-    )
 
 
 class TestTwinToGaussian(Fixture):
@@ -121,24 +63,6 @@ class TestTwinToGaussian(Fixture):
             "Hard-contract approximation should produce finite outputs"
         )
         self.assert_upper_bounded(y - y_approx, μ / σ)
-
-    # @pytest.mark.parametrize("device", DEVICES, ids=str)
-    # @pytest.mark.parametrize("sigma", [0.01, 0.1, 1, 10], ids=lambda x: f"s={x}")
-    # @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")
-    # @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    # def test_hard_expand_approximation(
-    #     self, dtype: torch.dtype, mu: float, sigma: float, device: str
-    # ) -> None:
-    #     y = torch.linspace(
-    #         self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
-    #     )
-    #     μ = torch.tensor(mu, dtype=dtype, device=device)
-    #     σ = torch.tensor(sigma, dtype=dtype, device=device)
-    #     x = gaussian_to_twin(y, μ, σ)
-    #     assert x.dtype == dtype
-    #     assert x.isfinite().all(), (
-    #         "gaussian_to_twin should produce finite outputs for finite inputs"
-    #     )
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
@@ -523,4 +447,224 @@ class TestGaussianToTwin(Fixture):
         self.assert_close(
             twin_to_gaussian(x, μ_pos, σ),
             twin_to_gaussian(x, μ_neg, σ),
+        )
+
+
+class TestMixtureToGaussian(Fixture):
+    N = 64
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize(
+        ("weights", "means", "sigmas"),
+        [
+            pytest.param(
+                [0.4, 0.25, 0.35],
+                [-1.0, 0.5, 1.5],
+                [0.8, 1.1, 0.9],
+                id="asymmetric",
+            ),
+            pytest.param(
+                [0.2, 0.5, 0.3],
+                [-1.5, -0.5, 1.0],
+                [1.0, 0.8, 1.2],
+                id="shifted",
+            ),
+        ],
+    )
+    def test_reversible(
+        self,
+        dtype: torch.dtype,
+        weights: list[float],
+        means: list[float],
+        sigmas: list[float],
+        device: str,
+    ) -> None:
+        w = torch.tensor(weights, dtype=dtype, device=device)
+        mu = torch.tensor(means, dtype=dtype, device=device)
+        sigma = torch.tensor(sigmas, dtype=dtype, device=device)
+        x_min = torch.min(mu - 3 * sigma).item()
+        x_max = torch.max(mu + 3 * sigma).item()
+        x = torch.linspace(
+            x_min,
+            x_max,
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        y = mixture_to_gaussian(x, w, mu, sigma)
+        x_inv = gaussian_to_mixture(y, w, mu, sigma)
+        x_inv.sum().backward()
+        assert x.grad is not None
+        self.assert_close(x_inv, x, rtol=1e-4, atol=1e-4)
+        self.assert_close(x.grad, 1.0, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize(
+        ("weights", "means", "sigmas"),
+        [
+            pytest.param(
+                [0.4, 0.25, 0.35],
+                [-1.0, 0.5, 1.5],
+                [0.8, 1.1, 0.9],
+                id="asymmetric",
+            ),
+            pytest.param(
+                [0.2, 0.5, 0.3],
+                [-1.5, -0.5, 1.0],
+                [1.0, 0.8, 1.2],
+                id="shifted",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "values",
+        [
+            pytest.param([[-1.25, -0.5], [0.25, 1.75]], id="batch"),
+            pytest.param(0.375, id="scalar"),
+            pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
+            pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
+        ],
+    )
+    def test_gradcheck(
+        self,
+        values: list[float] | float,
+        weights: list[float],
+        means: list[float],
+        sigmas: list[float],
+        device: str,
+        dtype: torch.dtype,
+    ) -> None:
+        x = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
+        w = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mu = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigma = torch.tensor(sigmas, dtype=dtype, device=device, requires_grad=True)
+
+        if dtype is torch.float32:
+            eps = 1e-4
+            atol = 1e-2
+            rtol = 1e-3
+        else:
+            eps = 1e-6
+            atol = 1e-6
+            rtol = 1e-6
+
+        gradcheck(
+            lambda z, ω, μ, σ: mixture_to_gaussian(z, ω / ω.sum(), μ, σ),
+            (x, w, mu, sigma),
+            eps=eps,
+            atol=atol,
+            rtol=rtol,
+        )
+
+
+class TestGaussianToMixture(Fixture):
+    N = 64
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize(
+        ("weights", "means", "sigmas"),
+        [
+            pytest.param(
+                [0.4, 0.25, 0.35],
+                [-1.0, 0.5, 1.5],
+                [0.8, 1.1, 0.9],
+                id="asymmetric",
+            ),
+            pytest.param(
+                [0.2, 0.5, 0.3],
+                [-1.5, -0.5, 1.0],
+                [1.0, 0.8, 1.2],
+                id="shifted",
+            ),
+        ],
+    )
+    def test_reversible(
+        self,
+        dtype: torch.dtype,
+        weights: list[float],
+        means: list[float],
+        sigmas: list[float],
+        device: str,
+    ) -> None:
+        w = torch.tensor(weights, dtype=dtype, device=device)
+        mu = torch.tensor(means, dtype=dtype, device=device)
+        sigma = torch.tensor(sigmas, dtype=dtype, device=device)
+        y = torch.linspace(
+            -4,
+            4,
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        x = gaussian_to_mixture(y, w, mu, sigma)
+        y_inv = mixture_to_gaussian(x, w, mu, sigma)
+        y_inv.sum().backward()
+        assert y.grad is not None
+        self.assert_close(y_inv, y, rtol=1e-4, atol=1e-4)
+        self.assert_close(y.grad, 1.0, rtol=1e-4, atol=1e-4)
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize(
+        ("weights", "means", "sigmas"),
+        [
+            pytest.param(
+                [0.4, 0.25, 0.35],
+                [-1.0, 0.5, 1.5],
+                [0.8, 1.1, 0.9],
+                id="asymmetric",
+            ),
+            pytest.param(
+                [0.2, 0.5, 0.3],
+                [-1.5, -0.5, 1.0],
+                [1.0, 0.8, 1.2],
+                id="shifted",
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "values",
+        [
+            pytest.param([[-2.0, -0.75], [0.25, 1.5]], id="batch"),
+            pytest.param(-0.375, id="scalar"),
+            pytest.param([-3.0, -1.5, -0.5, 0.0, 0.5], id="left"),
+            pytest.param([0.0, 0.5, 1.5, 2.25, 3.0], id="right"),
+        ],
+    )
+    def test_gradcheck(
+        self,
+        values: list[float] | float,
+        weights: list[float],
+        means: list[float],
+        sigmas: list[float],
+        device: str,
+        dtype: torch.dtype,
+    ) -> None:
+        y = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
+        w = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mu = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigma = torch.tensor(sigmas, dtype=dtype, device=device, requires_grad=True)
+
+        if dtype is torch.float32:
+            eps = 1e-4
+            atol = 1e-2
+            rtol = 1e-2
+        else:
+            eps = 1e-6
+            atol = 1e-6
+            rtol = 1e-6
+
+        gradcheck(
+            lambda z, ω, μ, σ: gaussian_to_mixture(z, ω / ω.sum(), μ, σ),
+            (y, w, mu, sigma),
+            eps=eps,
+            atol=atol,
+            rtol=rtol,
         )
