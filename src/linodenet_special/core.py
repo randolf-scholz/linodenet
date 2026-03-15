@@ -5,12 +5,15 @@ __all__ = [
     "ATOL",
     "RTOL",
     "BUILD_DIR",
+    "COMPILED",
+    "KERNELS",
     "LIB",
     "LIB_NAME",
     "LIB_FILE",
     "SOURCE_DIR",
     # Protocols
     "KnownFunctions",
+    "Kernels",
     # Implementations
     "singular_triplet",
     "spectral_norm",
@@ -21,16 +24,17 @@ __all__ = [
 import logging
 import math
 import os
-from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Final, Optional, TypedDict, cast
+from typing import Any, Final, Optional, TypedDict
 
 import torch
 from torch import Tensor
 
 from linodenet_special.fallbacks import FALLBACKS
 from linodenet_special.fallbacks.hard_bend import HardBend
+from linodenet_special.fallbacks.ndtri_exp import NdtriExp
 from linodenet_special.fallbacks.singular_triplet import SingularTriplet
 from linodenet_special.fallbacks.spectral_norm import SpectralNorm
 
@@ -58,14 +62,24 @@ __logger__ = logging.getLogger(__package__)
 class KnownFunctions(TypedDict):
     r"""The known functions in the custom library."""
 
+    singular_triplet: SingularTriplet | None
+    spectral_norm: SpectralNorm | None
+    ndtri_exp: NdtriExp | None
+    hard_bend: HardBend | None
+
+
+@dataclass(frozen=True)
+class Kernels:
+    r"""The selected kernels exposed as attributes."""
+
     singular_triplet: SingularTriplet
     spectral_norm: SpectralNorm
-    ndtri_exp: Callable[[Tensor], Tensor]
+    ndtri_exp: NdtriExp
     hard_bend: HardBend
 
 
 # region compile functions -------------------------------------------------------------
-def _compile_fns() -> dict[str, Any]:
+def _compile_fns() -> KnownFunctions:
     r"""Compile the available custom operators."""
     from torch.utils import cpp_extension  # noqa: PLC0415
 
@@ -116,10 +130,15 @@ def _compile_fns() -> dict[str, Any]:
         error.add_note(f"Consider clearing the torch_extension cache at {cache_dir!s}")
         raise error from exc_group
 
-    return compiled_fns
+    return {
+        "singular_triplet": compiled_fns.get("singular_triplet"),
+        "spectral_norm": compiled_fns.get("spectral_norm"),
+        "ndtri_exp": compiled_fns.get("ndtri_exp"),
+        "hard_bend": compiled_fns.get("hard_bend"),
+    }
 
 
-def _load_prebuilts() -> dict[str, Any]:
+def _load_prebuilts() -> KnownFunctions:
     r"""Load prebuilt binaries and return registered operators."""
     try:  # load pre-compiled binaries
         torch.ops.load_library(LIB_FILE)
@@ -128,22 +147,12 @@ def _load_prebuilts() -> dict[str, Any]:
             f"Could not load custom binaries from {LIB_FILE!s}."
         ) from exc
 
-    prebuilt_fns: dict[str, Any] = {}
-    missing: set[str] = set()
-    for name in KnownFunctions.__required_keys__:
-        if (fn := getattr(LIB, name, None)) is not None:
-            prebuilt_fns[name] = fn
-        else:
-            missing.add(name)
-
-    if missing:
-        __logger__.warning(
-            "Prebuilt libs exist, but the following functions are missing:"
-            f"\n\t- {'\n\t- '.join(missing)}"
-            "\nUsing pure python fallbacks for these functions."
-        )
-
-    return prebuilt_fns
+    return {
+        "singular_triplet": getattr(LIB, "singular_triplet", None),
+        "spectral_norm": getattr(LIB, "spectral_norm", None),
+        "ndtri_exp": getattr(LIB, "ndtri_exp", None),
+        "hard_bend": getattr(LIB, "hard_bend", None),
+    }
 
 
 def _load_linodenet() -> KnownFunctions:
@@ -156,24 +165,52 @@ def _load_linodenet() -> KnownFunctions:
         )
         compiled_fns = _compile_fns()
 
-    # fill missing slots with fallbacks
+    return compiled_fns
+
+
+def _select_fns(compiled_fns: KnownFunctions, /) -> Kernels:
+    r"""Select compiled kernels when available and fall back otherwise."""
     impls: dict[str, Any] = {}
+    missing: set[str] = set()
     for name in KnownFunctions.__required_keys__:
-        if name in compiled_fns:
-            impls[name] = compiled_fns[name]
+        if (compiled_fn := compiled_fns.get(name)) is not None:
+            impls[name] = compiled_fn
         else:
             impls[name] = FALLBACKS[name]
+            missing.add(name)
 
-    return cast("KnownFunctions", impls)
+    if missing:
+        __logger__.warning(
+            "Missing compiled versions of the following kernels:"
+            f"\n\t- {'\n\t- '.join(missing)}"
+            "\nUsing pure python fallbacks for these functions."
+        )
+
+    return Kernels(**impls)
 
 
-_COMPILED_FNS: Final[KnownFunctions] = _load_linodenet()
-r"""The compiled functions."""
+COMPILED: Final[KnownFunctions] = _load_linodenet()
+r"""The compiled functions that were successfully loaded."""
 
-_singular_triplet = _COMPILED_FNS["singular_triplet"]
-_spectral_norm = _COMPILED_FNS["spectral_norm"]
-ndtri_exp = _COMPILED_FNS["ndtri_exp"]
-_hard_bend = _COMPILED_FNS["hard_bend"]
+KERNELS: Final[Kernels] = _select_fns(COMPILED)
+r"""The selected kernels, using compiled functions and fallback implementations."""
+
+_singular_triplet = KERNELS.singular_triplet
+_spectral_norm = KERNELS.spectral_norm
+_ndtri_exp = KERNELS.ndtri_exp
+_hard_bend = KERNELS.hard_bend
+
+
+def ndtri_exp(log_p: Tensor, /) -> Tensor:
+    r"""Inverse of `log_ndtr`, i.e. the log-quantile function of the standard normal distribution.
+
+    torch currently does not implement the inverse of `log_ndtr`,
+    this is simply a placeholder using the naive implementation.
+
+    References:
+        - scipy.special.ndtri_exp
+    """
+    return _ndtri_exp(log_p)
 
 
 def spectral_norm(

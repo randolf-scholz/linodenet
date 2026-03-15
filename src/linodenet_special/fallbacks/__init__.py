@@ -35,11 +35,15 @@ from linodenet_special.fallbacks.transport import (
 )
 
 FALLBACKS = {
-    "ndtri_exp"        : ndtri_exp,
-    "singular_triplet" : singular_triplet,
-    "spectral_norm"    : spectral_norm,
-    "hard_bend"        : hard_bend,
-    "hard_contract"    : hard_contract,
-    "hard_expand"      : hard_expand,
+    "ndtri_exp"           : ndtri_exp,
+    "singular_triplet"    : singular_triplet,
+    "spectral_norm"       : spectral_norm,
+    "hard_bend"           : hard_bend,
+    "hard_contract"       : hard_contract,
+    "hard_expand"         : hard_expand,
+    "bimodal_to_gaussian" : bimodal_to_gaussian,
+    "gaussian_to_bimodal" : gaussian_to_bimodal,
+    "gaussian_to_mixture" : gaussian_to_mixture,
+    "mixture_to_gaussian" : mixture_to_gaussian,
 }  # fmt: skip
 r"""Pure python implementations of special functions used by LinODEnet."""
