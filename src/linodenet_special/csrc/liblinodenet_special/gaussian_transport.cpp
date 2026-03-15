@@ -15,15 +15,6 @@ constexpr double LOG_HALF = -0.6931471805599453;
 constexpr double LOG_2PI = 1.8378770664093453;
 constexpr int64_t MAXITER = 10;
 
-std::vector<int64_t> leading_dims(const Tensor &x) {
-    std::vector<int64_t> dims;
-    dims.reserve(x.dim());
-    for (int64_t i = 0; i < x.dim(); ++i) {
-        dims.push_back(i);
-    }
-    return dims;
-}
-
 void check_bimodal_args(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
     TORCH_CHECK(x.is_floating_point(), "x must be a floating point tensor.");
     TORCH_CHECK(mu.is_floating_point(), "mu must be a floating point tensor.");
@@ -285,12 +276,10 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
 
         const auto [d_values, d_weights, d_mus, d_sigmas] =
                 mixture_to_gaussian_derivatives_impl(y, z, weights, sigmas);
-        const std::vector<int64_t> dims = leading_dims(g);
-
         const Tensor grad_values = g * d_values;
-        Tensor grad_weights = (g.unsqueeze(-1) * d_weights).sum(dims);
-        const Tensor grad_mus = (g.unsqueeze(-1) * d_mus).sum(dims);
-        const Tensor grad_sigmas = (g.unsqueeze(-1) * d_sigmas).sum(dims);
+        Tensor grad_weights = torch::einsum("..., ...k -> k", {g, d_weights});
+        const Tensor grad_mus = torch::einsum("..., ...k -> k", {g, d_mus});
+        const Tensor grad_sigmas = torch::einsum("..., ...k -> k", {g, d_sigmas});
         grad_weights = grad_weights - grad_weights.mean(-1, true);
 
         return {grad_values, grad_weights, grad_mus, grad_sigmas};
@@ -339,17 +328,16 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const auto [d_x, d_weights, d_mus, d_sigmas] =
             mixture_to_gaussian_derivatives_impl(y, z, weights, sigmas);
         const Tensor dx_inv = d_x.reciprocal();
-        const std::vector<int64_t> dims = leading_dims(g);
 
         const Tensor grad_y = g * dx_inv;
-        Tensor grad_weights = -(g * dx_inv).unsqueeze(-1) * d_weights;
-        const Tensor grad_mus = -(g * dx_inv).unsqueeze(-1) * d_mus;
-        const Tensor grad_sigmas = -(g * dx_inv).unsqueeze(-1) * d_sigmas;
+        const Tensor scaled_g = g * dx_inv;
+        Tensor grad_weights = torch::einsum("..., ...k -> k", {scaled_g, -d_weights});
+        const Tensor grad_mus = torch::einsum("..., ...k -> k", {scaled_g, -d_mus});
+        const Tensor grad_sigmas = torch::einsum("..., ...k -> k", {scaled_g, -d_sigmas});
 
-        grad_weights = grad_weights.sum(dims);
         grad_weights = grad_weights - grad_weights.mean(-1, true);
 
-        return {grad_y, grad_weights, grad_mus.sum(dims), grad_sigmas.sum(dims)};
+        return {grad_y, grad_weights, grad_mus, grad_sigmas};
     }
 };
 

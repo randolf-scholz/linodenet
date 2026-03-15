@@ -2,7 +2,8 @@ r"""Custom operators for the linodenet package."""
 
 __all__ = [
     # CONSTANTS
-    "COMPILED",
+    "RAW_KERNELS",
+    "WRAPPED_KERNELS",
     # Implementations
     "bimodal_to_gaussian",
     "gaussian_to_bimodal",
@@ -252,15 +253,28 @@ def singular_triplet(
 # endregion wrappers -------------------------------------------------------------------
 
 
-COMPILED: Final[KnownFunctions] = _compile_liblinodenet()
+RAW_KERNELS: Final[KnownFunctions] = _compile_liblinodenet()
 
 # fmt: off
-_bimodal_to_gaussian: BimodalToGaussian | None = COMPILED.get("bimodal_to_gaussian")
-_gaussian_to_bimodal: GaussianToBimodal | None = COMPILED.get("gaussian_to_bimodal")
-_gaussian_to_mixture: GaussianToMixture | None = COMPILED.get("gaussian_to_mixture")
-_mixture_to_gaussian: MixtureToGaussian | None = COMPILED.get("mixture_to_gaussian")
-_hard_bend:           HardBend          | None = COMPILED.get("hard_bend")
-_ndtri_exp:           NdtriExp          | None = COMPILED.get("ndtri_exp")
-_singular_triplet:    SingularTriplet   | None = COMPILED.get("singular_triplet")
-_spectral_norm:       SpectralNorm      | None = COMPILED.get("spectral_norm")
+_bimodal_to_gaussian: BimodalToGaussian | None = RAW_KERNELS.get("bimodal_to_gaussian")
+_gaussian_to_bimodal: GaussianToBimodal | None = RAW_KERNELS.get("gaussian_to_bimodal")
+_gaussian_to_mixture: GaussianToMixture | None = RAW_KERNELS.get("gaussian_to_mixture")
+_mixture_to_gaussian: MixtureToGaussian | None = RAW_KERNELS.get("mixture_to_gaussian")
+_hard_bend:           HardBend          | None = RAW_KERNELS.get("hard_bend")
+_ndtri_exp:           NdtriExp          | None = RAW_KERNELS.get("ndtri_exp")
+_singular_triplet:    SingularTriplet   | None = RAW_KERNELS.get("singular_triplet")
+_spectral_norm:       SpectralNorm      | None = RAW_KERNELS.get("spectral_norm")
 # fmt: on
+
+
+WRAPPED_KERNELS: Final[KnownFunctions] = {
+    "bimodal_to_gaussian" : None if RAW_KERNELS.get("bimodal_to_gaussian") is None else bimodal_to_gaussian,
+    "gaussian_to_bimodal" : None if RAW_KERNELS.get("gaussian_to_bimodal") is None else gaussian_to_bimodal,
+    "gaussian_to_mixture" : None if RAW_KERNELS.get("gaussian_to_mixture") is None else gaussian_to_mixture,
+    "mixture_to_gaussian" : None if RAW_KERNELS.get("mixture_to_gaussian") is None else mixture_to_gaussian,
+    "hard_bend"           : None if RAW_KERNELS.get("hard_bend")           is None else hard_bend,
+    "ndtri_exp"           : None if RAW_KERNELS.get("ndtri_exp")           is None else ndtri_exp,
+    "singular_triplet"    : None if RAW_KERNELS.get("singular_triplet")    is None else singular_triplet,
+    "spectral_norm"       : None if RAW_KERNELS.get("spectral_norm")       is None else spectral_norm,
+}  # fmt: skip
+r"""Wrapped C++ kernels."""

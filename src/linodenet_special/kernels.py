@@ -3,8 +3,8 @@ r"""Available kernels exposed as attributes."""
 __all__ = [
     # CONSTANTS
     "KERNELS",
-    "COMPILED",
     "FALLBACKS",
+    "COMPILED",
     # Classes
     "Kernels",
     # functions
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from linodenet_special import compiled, fallbacks
-from linodenet_special.compiled import COMPILED as COMPILED_FN
+from linodenet_special.compiled import WRAPPED_KERNELS
 from linodenet_special.interfaces import (
     BimodalToGaussian,
     GaussianToBimodal,
@@ -59,7 +59,7 @@ def _select_fns() -> Kernels:
     impls: dict[str, Any] = {}
     missing: set[str] = set()
     for name in KnownFunctions.__required_keys__:
-        if (compiled_fn := COMPILED_FN.get(name)) is not None:
+        if (compiled_fn := WRAPPED_KERNELS.get(name)) is not None:
             impls[name] = compiled_fn
         elif (fallback_fn := FALLBACKS.get(name)) is not None:
             impls[name] = fallback_fn
@@ -90,18 +90,16 @@ FALLBACKS: Final[KnownFunctions] = {
     "mixture_to_gaussian" : fallbacks.mixture_to_gaussian,
 }  # fmt: skip
 
-
 COMPILED: Final[KnownFunctions] = {
-    "ndtri_exp": compiled.ndtri_exp,
-    "singular_triplet": compiled.singular_triplet,
-    "spectral_norm": compiled.spectral_norm,
-    "hard_bend": compiled.hard_bend,
-    "bimodal_to_gaussian": compiled.bimodal_to_gaussian,
-    "gaussian_to_bimodal": compiled.gaussian_to_bimodal,
-    "gaussian_to_mixture": compiled.gaussian_to_mixture,
-    "mixture_to_gaussian": compiled.mixture_to_gaussian,
-}
-
+    "ndtri_exp"           : compiled.ndtri_exp,
+    "singular_triplet"    : compiled.singular_triplet,
+    "spectral_norm"       : compiled.spectral_norm,
+    "hard_bend"           : compiled.hard_bend,
+    "bimodal_to_gaussian" : compiled.bimodal_to_gaussian,
+    "gaussian_to_bimodal" : compiled.gaussian_to_bimodal,
+    "gaussian_to_mixture" : compiled.gaussian_to_mixture,
+    "mixture_to_gaussian" : compiled.mixture_to_gaussian,
+}  # fmt: skip
 
 KERNELS: Final[Kernels] = _select_fns()
 

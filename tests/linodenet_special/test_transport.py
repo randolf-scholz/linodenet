@@ -13,6 +13,7 @@ from linodenet_special import (
     hard_bend,
     mixture_to_gaussian,
 )
+from linodenet_special.compiled import gaussian_to_mixture as gaussian_to_mixture_cpp
 
 from .fixtures import DEVICES, DTYPES, Fixture
 
@@ -667,3 +668,29 @@ class TestGaussianToMixture(Fixture):
             atol=atol,
             rtol=rtol,
         )
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    def test_compiled_scalar_backward_shapes(
+        self,
+        device: str,
+        dtype: torch.dtype,
+    ) -> None:
+        y = torch.tensor(-0.375, dtype=dtype, device=device, requires_grad=True)
+        omegas = torch.tensor(
+            [0.2, 0.5, 0.3], dtype=dtype, device=device, requires_grad=True
+        )
+        mus = torch.tensor(
+            [-1.5, -0.5, 1.0], dtype=dtype, device=device, requires_grad=True
+        )
+        sigmas = torch.tensor(
+            [1.0, 0.8, 1.2], dtype=dtype, device=device, requires_grad=True
+        )
+
+        x = gaussian_to_mixture_cpp(y, omegas, mus, sigmas)
+        x.backward()
+
+        assert y.grad is not None
+        assert omegas.grad is not None
+        assert mus.grad is not None
+        assert sigmas.grad is not None
