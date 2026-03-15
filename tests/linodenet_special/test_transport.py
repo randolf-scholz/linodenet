@@ -456,7 +456,7 @@ class TestMixtureToGaussian(Fixture):
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     @pytest.mark.parametrize(
-        ("weights", "means", "sigmas"),
+        ("weights", "means", "stdvs"),
         [
             pytest.param(
                 [0.4, 0.25, 0.35],
@@ -477,14 +477,14 @@ class TestMixtureToGaussian(Fixture):
         dtype: torch.dtype,
         weights: list[float],
         means: list[float],
-        sigmas: list[float],
+        stdvs: list[float],
         device: str,
     ) -> None:
-        w = torch.tensor(weights, dtype=dtype, device=device)
-        mu = torch.tensor(means, dtype=dtype, device=device)
-        sigma = torch.tensor(sigmas, dtype=dtype, device=device)
-        x_min = torch.min(mu - 3 * sigma).item()
-        x_max = torch.max(mu + 3 * sigma).item()
+        omegas = torch.tensor(weights, dtype=dtype, device=device)
+        mus = torch.tensor(means, dtype=dtype, device=device)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
+        x_min = torch.min(mus - 3 * sigmas).item()
+        x_max = torch.max(mus + 3 * sigmas).item()
         x = torch.linspace(
             x_min,
             x_max,
@@ -494,8 +494,8 @@ class TestMixtureToGaussian(Fixture):
             requires_grad=True,
         )
 
-        y = mixture_to_gaussian(x, w, mu, sigma)
-        x_inv = gaussian_to_mixture(y, w, mu, sigma)
+        y = mixture_to_gaussian(x, omegas, mus, sigmas)
+        x_inv = gaussian_to_mixture(y, omegas, mus, sigmas)
         x_inv.sum().backward()
         assert x.grad is not None
         self.assert_close(x_inv, x, rtol=1e-4, atol=1e-4)
@@ -504,7 +504,7 @@ class TestMixtureToGaussian(Fixture):
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     @pytest.mark.parametrize(
-        ("weights", "means", "sigmas"),
+        ("weights", "means", "stdvs"),
         [
             pytest.param(
                 [0.4, 0.25, 0.35],
@@ -534,14 +534,14 @@ class TestMixtureToGaussian(Fixture):
         values: list[float] | float,
         weights: list[float],
         means: list[float],
-        sigmas: list[float],
+        stdvs: list[float],
         device: str,
         dtype: torch.dtype,
     ) -> None:
         x = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
-        w = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mu = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigma = torch.tensor(sigmas, dtype=dtype, device=device, requires_grad=True)
+        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
 
         if dtype is torch.float32:
             eps = 1e-4
@@ -554,7 +554,7 @@ class TestMixtureToGaussian(Fixture):
 
         gradcheck(
             lambda z, ω, μ, σ: mixture_to_gaussian(z, ω / ω.sum(), μ, σ),
-            (x, w, mu, sigma),
+            (x, omegas, mus, sigmas),
             eps=eps,
             atol=atol,
             rtol=rtol,
@@ -567,7 +567,7 @@ class TestGaussianToMixture(Fixture):
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     @pytest.mark.parametrize(
-        ("weights", "means", "sigmas"),
+        ("weights", "means", "stdvs"),
         [
             pytest.param(
                 [0.4, 0.25, 0.35],
@@ -588,12 +588,12 @@ class TestGaussianToMixture(Fixture):
         dtype: torch.dtype,
         weights: list[float],
         means: list[float],
-        sigmas: list[float],
+        stdvs: list[float],
         device: str,
     ) -> None:
-        w = torch.tensor(weights, dtype=dtype, device=device)
-        mu = torch.tensor(means, dtype=dtype, device=device)
-        sigma = torch.tensor(sigmas, dtype=dtype, device=device)
+        omegas = torch.tensor(weights, dtype=dtype, device=device)
+        mus = torch.tensor(means, dtype=dtype, device=device)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
         y = torch.linspace(
             -4,
             4,
@@ -603,8 +603,8 @@ class TestGaussianToMixture(Fixture):
             requires_grad=True,
         )
 
-        x = gaussian_to_mixture(y, w, mu, sigma)
-        y_inv = mixture_to_gaussian(x, w, mu, sigma)
+        x = gaussian_to_mixture(y, omegas, mus, sigmas)
+        y_inv = mixture_to_gaussian(x, omegas, mus, sigmas)
         y_inv.sum().backward()
         assert y.grad is not None
         self.assert_close(y_inv, y, rtol=1e-4, atol=1e-4)
@@ -613,7 +613,7 @@ class TestGaussianToMixture(Fixture):
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     @pytest.mark.parametrize(
-        ("weights", "means", "sigmas"),
+        ("weights", "means", "stdvs"),
         [
             pytest.param(
                 [0.4, 0.25, 0.35],
@@ -643,14 +643,14 @@ class TestGaussianToMixture(Fixture):
         values: list[float] | float,
         weights: list[float],
         means: list[float],
-        sigmas: list[float],
+        stdvs: list[float],
         device: str,
         dtype: torch.dtype,
     ) -> None:
         y = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
-        w = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mu = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigma = torch.tensor(sigmas, dtype=dtype, device=device, requires_grad=True)
+        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
 
         if dtype is torch.float32:
             eps = 1e-4
@@ -663,7 +663,7 @@ class TestGaussianToMixture(Fixture):
 
         gradcheck(
             lambda z, ω, μ, σ: gaussian_to_mixture(z, ω / ω.sum(), μ, σ),
-            (y, w, mu, sigma),
+            (y, omegas, mus, sigmas),
             eps=eps,
             atol=atol,
             rtol=rtol,

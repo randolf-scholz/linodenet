@@ -106,12 +106,12 @@ def _gaussian_to_bimodal_guess(x, mu, sigma):
 
 @torch.no_grad()
 def _mixture_to_gaussian_forward(
-    x: Tensor, weights: Tensor, means: Tensor, sigmas: Tensor
+    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the mixture-to-Gaussian transport and cache normalized coordinates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
-    z = (x.unsqueeze(-1) - means) / sigmas
+    z = (x.unsqueeze(-1) - mus) / sigmas
     log_w = torch.log(weights)
     log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
     log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
@@ -151,14 +151,14 @@ def _mixture_to_gaussian_derivatives(
     # ∂y/∂x = ∑ₖ (ωₖ / σₖ) exp(½(y² - zₖ²))
     d_x = scaled_ratio.sum(dim=-1)
     # ∂y/∂μₖ = -(ωₖ / σₖ) exp(½(y² - zₖ²))
-    d_means = -scaled_ratio
+    d_mus = -scaled_ratio
     # ∂y/∂σₖ = -(ωₖ zₖ / σₖ) exp(½(y² - zₖ²))
     d_sigmas = -z * scaled_ratio
 
     log_pdf_u = -0.5 * (LOG_2PI + y2)
     d_weights = -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1))
 
-    return d_x, d_weights, d_means, d_sigmas
+    return d_x, d_weights, d_mus, d_sigmas
 
 
 class BimodalToGaussian(Function):
@@ -313,10 +313,10 @@ class _MixtureToGaussian(Function):
 
     @staticmethod
     def forward(
-        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+        ctx, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
     ) -> Tensor:
-        assert weights.shape[0] == means.shape[0] == sigmas.shape[0]
-        u, z = _mixture_to_gaussian_forward(y, weights, means, sigmas)
+        assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
+        u, z = _mixture_to_gaussian_forward(y, weights, mus, sigmas)
         ctx.save_for_backward(z, u, weights, sigmas)
         return u
 
@@ -325,13 +325,13 @@ class _MixtureToGaussian(Function):
         r"""Differentiate the explicit mixture-to-Gaussian transport map."""
         (g,) = outer
         z, y, weights, sigmas = ctx.saved_tensors
-        d_values, d_weights, d_means, d_sigmas = _mixture_to_gaussian_derivatives(
+        d_values, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
             y, z, weights, sigmas
         )
 
         grad_values = g * d_values
         grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
-        grad_means = torch.einsum("..., ...k -> k", g, d_means)
+        grad_mus = torch.einsum("..., ...k -> k", g, d_mus)
         grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
 
         # Project weight gradient onto the simplex tangent space.
@@ -340,7 +340,7 @@ class _MixtureToGaussian(Function):
         # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
         grad_weights = grad_weights - grad_weights.mean(dim=-1, keepdim=True)
 
-        return grad_values, grad_weights, grad_means, grad_sigmas
+        return grad_values, grad_weights, grad_mus, grad_sigmas
 
 
 class _GaussianToMixture(Function):
@@ -352,25 +352,25 @@ class _GaussianToMixture(Function):
 
     @staticmethod
     def forward(
-        ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+        ctx, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
     ) -> Tensor:
         r"""Solve $T(x, ω, μ, σ)=y$ by safeguarded Newton iteration."""
         MAXITER: Final[int] = 10
 
-        assert weights.shape[0] == means.shape[0] == sigmas.shape[0]
+        assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
 
         # Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
         # must lie between the smallest and largest of these affine tail candidates,
         # so we use their pointwise min/max as a safe bracket and their weighted mean
         # as a cheap initial guess for the safeguarded Newton iteration.
-        lines = means + sigmas * y.unsqueeze(-1)
+        lines = mus + sigmas * y.unsqueeze(-1)
         lower = lines.min(dim=-1).values
         upper = lines.max(dim=-1).values
         x = torch.einsum("k, ...k -> ...", weights, lines)
 
         for _ in range(MAXITER):
             x = torch.clamp(x, lower, upper)
-            fy, z = _mixture_to_gaussian_forward(x, weights, means, sigmas)
+            fy, z = _mixture_to_gaussian_forward(x, weights, mus, sigmas)
             d_fy = _mixture_to_gaussian_x_derivative(fy, z, weights, sigmas)
             r = fy - y
             # Since T is monotone, the sign of the residual tells us which side of
@@ -386,9 +386,9 @@ class _GaussianToMixture(Function):
             )
 
         x = torch.clamp(x, lower, upper)
-        fy, z = _mixture_to_gaussian_forward(x, weights, means, sigmas)
+        fy, z = _mixture_to_gaussian_forward(x, weights, mus, sigmas)
 
-        ctx.save_for_backward(z, fy, weights, means, sigmas)
+        ctx.save_for_backward(z, fy, weights, mus, sigmas)
         return x
 
     @staticmethod
@@ -408,19 +408,19 @@ class _GaussianToMixture(Function):
         """
         (g,) = outer
         z, y, weights, _, sigmas = ctx.saved_tensors
-        d_x, d_weights, d_means, d_sigmas = _mixture_to_gaussian_derivatives(
+        d_x, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
             y, z, weights, sigmas
         )
         dx_inv = d_x.reciprocal()
 
         d_y = dx_inv
         d_weights = -d_weights * dx_inv.unsqueeze(-1)
-        d_means = -d_means * dx_inv.unsqueeze(-1)
+        d_mus = -d_mus * dx_inv.unsqueeze(-1)
         d_sigmas = -d_sigmas * dx_inv.unsqueeze(-1)
 
         grad_y = g * d_y
         grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
-        grad_means = torch.einsum("..., ...k -> k", g, d_means)
+        grad_mus = torch.einsum("..., ...k -> k", g, d_mus)
         grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
 
         # Project weight gradient onto the simplex tangent space.
@@ -429,7 +429,7 @@ class _GaussianToMixture(Function):
         # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
         grad_weights = grad_weights - grad_weights.mean(dim=-1, keepdim=True)
 
-        return grad_y, grad_weights, grad_means, grad_sigmas
+        return grad_y, grad_weights, grad_mus, grad_sigmas
 
 
 def gaussian_to_bimodal(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
@@ -443,14 +443,14 @@ def bimodal_to_gaussian(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
 
 
 def gaussian_to_mixture(
-    y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+    y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
-    return _GaussianToMixture.apply(y, weights, means, sigmas)  # pyright: ignore[reportReturnType]
+    return _GaussianToMixture.apply(y, weights, mus, sigmas)  # pyright: ignore[reportReturnType]
 
 
 def mixture_to_gaussian(
-    x: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
+    x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
     r"""Optimal Transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$."""
-    return _MixtureToGaussian.apply(x, weights, means, sigmas)  # pyright: ignore[reportReturnType]
+    return _MixtureToGaussian.apply(x, weights, mus, sigmas)  # pyright: ignore[reportReturnType]
