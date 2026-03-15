@@ -13,11 +13,7 @@ __all__ = [
     "KnownFunctions",
     # Implementations
     "singular_triplet",
-    "singular_triplet_debug",
-    "singular_triplet_riemann",
     "spectral_norm",
-    "spectral_norm_debug",
-    "spectral_norm_riemann",
     "ndtri_exp",
     "hard_bend",
 ]
@@ -63,11 +59,7 @@ class KnownFunctions(TypedDict):
     r"""The known functions in the custom library."""
 
     singular_triplet: SingularTriplet
-    singular_triplet_debug: SingularTriplet
-    singular_triplet_riemann: SingularTriplet
     spectral_norm: SpectralNorm
-    spectral_norm_debug: SpectralNorm
-    spectral_norm_riemann: SpectralNorm
     ndtri_exp: Callable[[Tensor], Tensor]
     hard_bend: HardBend
 
@@ -179,19 +171,15 @@ _COMPILED_FNS: Final[KnownFunctions] = _load_linodenet()
 r"""The compiled functions."""
 
 _singular_triplet = _COMPILED_FNS["singular_triplet"]
-_singular_triplet_debug = _COMPILED_FNS["singular_triplet_debug"]
-_singular_triplet_riemann = _COMPILED_FNS["singular_triplet_riemann"]
 _spectral_norm = _COMPILED_FNS["spectral_norm"]
-_spectral_norm_debug = _COMPILED_FNS["spectral_norm_debug"]
-_spectral_norm_riemann = _COMPILED_FNS["spectral_norm_riemann"]
 ndtri_exp = _COMPILED_FNS["ndtri_exp"]
 _hard_bend = _COMPILED_FNS["hard_bend"]
-# endregion compile functions ----------------------------------------------------------
 
 
-# region spectral norm -----------------------------------------------------------------
 def spectral_norm(
     A: Tensor,
+    /,
+    *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
@@ -202,38 +190,10 @@ def spectral_norm(
     return _spectral_norm(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
 
 
-def spectral_norm_debug(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
-) -> Tensor:
-    r"""Computes the spectral norm."""
-    return _spectral_norm_debug(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
-
-
-def spectral_norm_riemann(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
-) -> Tensor:
-    r"""Computes the spectral norm."""
-    return _spectral_norm_riemann(
-        A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol
-    )
-
-
-# endregion spectral norm --------------------------------------------------------------
-
-
 def hard_bend(
     x: Tensor,
     /,
+    *,
     a: Tensor | float = math.e**2,
     c: Tensor | float = 2.0,
     m: Tensor | float = 1.0,
@@ -245,9 +205,10 @@ def hard_bend(
     return _hard_bend(x, a, c, m)
 
 
-# region singular triplet --------------------------------------------------------------
 def singular_triplet(
     A: Tensor,
+    /,
+    *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
@@ -256,34 +217,3 @@ def singular_triplet(
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Computes the singular triplet."""
     return _singular_triplet(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
-
-
-def singular_triplet_debug(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
-) -> tuple[Tensor, Tensor, Tensor]:
-    r"""Computes the singular triplet."""
-    return _singular_triplet_debug(
-        A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol
-    )
-
-
-def singular_triplet_riemann(
-    A: Tensor,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
-) -> tuple[Tensor, Tensor, Tensor]:
-    r"""Computes the singular triplet."""
-    return _singular_triplet_riemann(
-        A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol
-    )
-
-
-# endregion singular triplet -----------------------------------------------------------

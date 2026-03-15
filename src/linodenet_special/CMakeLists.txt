@@ -65,16 +65,10 @@ add_library(
         linodenet_special
         SHARED
         csrc/liblinodenet_special/singular_triplet.cpp
-        csrc/liblinodenet_special/singular_triplet_debug.cpp
-        csrc/liblinodenet_special/singular_triplet_riemann.cpp
         csrc/liblinodenet_special/spectral_norm.cpp
-        csrc/liblinodenet_special/spectral_norm_debug.cpp
-        csrc/liblinodenet_special/spectral_norm_riemann.cpp
         csrc/liblinodenet_special/ndtri_exp.cpp
         csrc/liblinodenet_special/hard_bend.cpp
         csrc/liblinodenet_special/gaussian_transport.cpp
-        # csrc/liblinodenet_special/utils.cpp
-        # csrc/liblinodenet_special/matrix_root.cpp
 )
 
 # Target configuration
