@@ -7,7 +7,7 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from scipy.special import ndtri_exp as scipy_ndtri_exp_py
 from torch.autograd import gradcheck
 
-from linodenet_special.core import ndtri_exp as ndtri_exp_cpp
+from linodenet_special.compiled import ndtri_exp as ndtri_exp_cpp
 from linodenet_special.fallbacks.ndtri_exp import (
     _LOWER_CUTOFF,
     _UPPER_CUTOFF,
@@ -15,6 +15,8 @@ from linodenet_special.fallbacks.ndtri_exp import (
 )
 
 from .fixtures import DEVICES, DTYPES
+
+assert ndtri_exp_cpp is not None
 
 ATOL = 1e-6
 RTOL = 1e-3

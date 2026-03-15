@@ -1,32 +1,17 @@
 r"""Implementations of the hard bend activation function."""
 
 __all__ = [
-    "HardBend",
     "hard_contract",
     "hard_expand",
     "hard_bend",
 ]
 
 import math
-from typing import Protocol
 
 import torch
 from torch import Tensor
 
 from signatures import signature
-
-
-class HardBend(Protocol):
-    r"""Protocol for hard bend activation function."""
-
-    def __call__(
-        self,
-        x: Tensor,
-        /,
-        a: Tensor | float = ...,
-        c: Tensor | float = ...,
-        m: Tensor | float = ...,
-    ) -> Tensor: ...
 
 
 @signature("[(...), (), (), ()] -> (...)")

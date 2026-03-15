@@ -28,8 +28,10 @@ __all__ = [
     # Functions
     "crelu",
     "geglu",
-    "hard_bend",
     "reglu",
+    "gaussian_to_bimodal",
+    "bimodal_to_gaussian",
+    "hard_bend",
     # utils
     "get_activation",
 ]
@@ -46,7 +48,7 @@ from linodenet.nn.activations.base import (
 from linodenet.nn.activations.crelu import CReLU, crelu
 from linodenet.nn.activations.geglu import GEGLU, geglu
 from linodenet.nn.activations.reglu import ReGLU, reglu
-from linodenet_special import hard_bend
+from linodenet_special import bimodal_to_gaussian, gaussian_to_bimodal, hard_bend
 
 TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
     "relu": nn.functional.relu,

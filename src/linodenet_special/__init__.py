@@ -1,40 +1,24 @@
 r"""C++ Extensions used by LinODEnet."""
+# ruff: noqa: F403
 
 __all__ = [
-    "KnownFunctions",
-    # Protocols
-    "SpectralNorm",
-    "SingularTriplet",
-    # Functions
-    "singular_triplet",
-    "singular_triplet_native",
-    "spectral_norm",
-    "spectral_norm_native",
-    # Linalg
-    "pad",
-    "scaled_norm",
-    "geometric_mean",
+    # submodules
+    "kernels",
+    "fallbacks",
+    "interfaces",
     # Special
-    "ndtri_exp",
     "thomson_initialization",
-    "hard_bend",
+    "spectral_norm_native",
+    "singular_triplet_native",
 ]
-
-from linodenet_special.core import (
-    KnownFunctions,
-    hard_bend,
-    ndtri_exp,
-    singular_triplet,
-    spectral_norm,
-)
-from linodenet_special.fallbacks.singular_triplet import (
-    SingularTriplet,
-    singular_triplet_native,
-)
-from linodenet_special.fallbacks.spectral_norm import SpectralNorm, spectral_norm_native
-from linodenet_special.linalg import (
-    geometric_mean,
-    pad,
-    scaled_norm,
-)
+from linodenet_special import fallbacks, interfaces, kernels, linalg
+from linodenet_special.fallbacks import singular_triplet_native, spectral_norm_native
+from linodenet_special.interfaces import *
+from linodenet_special.kernels import *
+from linodenet_special.linalg import *
 from linodenet_special.thomson_initialization import thomson_initialization
+
+__all__ += kernels.__all__
+__all__ += interfaces.__all__
+__all__ += fallbacks.__all__
+__all__ += linalg.__all__

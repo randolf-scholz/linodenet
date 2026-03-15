@@ -1,54 +1,15 @@
 r"""Fallback implementations of linear algebra routines."""
 
 __all__ = [
-    "ATOL",
-    "RTOL",
-    "SpectralNorm",
     "spectral_norm",
     "spectral_norm_native",
 ]
 
-from typing import Any, Final, Optional, Protocol
+from typing import Optional
 
 import torch
 from torch import Tensor
 from torch.linalg import vector_norm
-
-from signatures import signature
-
-ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
-RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
-
-
-class SpectralNorm(Protocol):
-    r"""Protocol for spectral norm implementations."""
-
-    @signature("(m, n) -> ()")
-    def __call__(
-        self,
-        A: Tensor,
-        /,
-        *,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = None,
-        atol: float = ATOL,
-        rtol: float = RTOL,
-    ) -> Tensor:
-        r"""Computes the spectral norm.
-
-        Args:
-            A: The input matrix (shape: M×N).
-            u0: The initial guess for the left singular vector (shape: M).
-            v0: The initial guess for the right singular vector (shape: N).
-            maxiter: The maximum number of iterations. (Default: O(M+N))
-            atol: The absolute tolerance. (Default: 1e-6)
-            rtol: The relative tolerance. (Default: 1e-6)
-
-        Returns:
-            sigma: The singular value (scaler).
-        """
-        ...
 
 
 class _SpectralNormImpl(torch.autograd.Function):
@@ -73,14 +34,14 @@ class _SpectralNormImpl(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx: Any,
+        ctx,
         A: Tensor,
         /,
-        atol: float = ATOL,
-        rtol: float = RTOL,
-        maxiter: int = 1000,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
+        u0: Optional[Tensor],
+        v0: Optional[Tensor],
+        maxiter: int,
+        atol: float,
+        rtol: float,
     ) -> Tensor:
         if A.ndim != 2:
             raise ValueError(f"Expected 2d input, got {A.shape}.")
@@ -113,15 +74,9 @@ class _SpectralNormImpl(torch.autograd.Function):
         return sigma
 
     @staticmethod
-    def backward(ctx: Any, *grad_outputs: Tensor) -> Tensor:
+    def backward(ctx, *grad_outputs: Tensor) -> Tensor:
         u, v = ctx.saved_tensors
         return torch.einsum("..., i, j -> ...ij", grad_outputs[0], u, v)
-
-    @staticmethod
-    def jvp(ctx: Any, *grad_inputs: Any) -> Any:
-        r"""Jacobian-vector product forward mode."""
-        u, v = ctx.saved_tensors
-        return torch.einsum("...ij, i, j -> ...", grad_inputs[0], u, v)
 
 
 def spectral_norm(
@@ -131,8 +86,8 @@ def spectral_norm(
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
+    atol: float = 1e-6,
+    rtol: float = 1e-6,
 ) -> Tensor:
     r"""Compute the spectral norm of a matrix."""
     return _SpectralNormImpl.apply(
@@ -147,8 +102,8 @@ def spectral_norm_native(
     u0: Optional[Tensor] = None,  # noqa: ARG001
     v0: Optional[Tensor] = None,  # noqa: ARG001
     maxiter: Optional[int] = None,  # noqa: ARG001
-    atol: float = 1e-8,  # noqa: ARG001
-    rtol: float = 1e-5,  # noqa: ARG001
+    atol: float = 1e-6,  # noqa: ARG001
+    rtol: float = 1e-6,  # noqa: ARG001
 ) -> Tensor:
     r"""Computes the spectral norm."""
     return torch.linalg.matrix_norm(A, ord=2)

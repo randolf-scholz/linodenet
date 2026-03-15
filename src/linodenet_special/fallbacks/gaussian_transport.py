@@ -2,10 +2,6 @@ r"""Implementation of the optimal transport based activation function."""
 # mypy: disable-error-code="no-untyped-def"
 
 __all__ = [
-    "BimodalToGaussian",
-    "GaussianToBimodal",
-    "GaussianToMixture",
-    "MixtureToGaussian",
     # functional interfaces
     "gaussian_to_bimodal",
     "bimodal_to_gaussian",
@@ -13,7 +9,7 @@ __all__ = [
     "mixture_to_gaussian",
 ]
 
-from typing import Final, Protocol
+from typing import Final
 
 import torch
 from torch import Tensor
@@ -22,34 +18,6 @@ from torch.special import log_ndtr
 
 from linodenet_special.fallbacks.hard_bend import hard_bend
 from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
-
-
-class GaussianToBimodal(Protocol):
-    r"""Protocol for Gaussian-to-bimodal transport implementations."""
-
-    def __call__(self, y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor: ...
-
-
-class BimodalToGaussian(Protocol):
-    r"""Protocol for bimodal-to-Gaussian transport implementations."""
-
-    def __call__(self, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor: ...
-
-
-class GaussianToMixture(Protocol):
-    r"""Protocol for Gaussian-to-mixture transport implementations."""
-
-    def __call__(
-        self, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
-    ) -> Tensor: ...
-
-
-class MixtureToGaussian(Protocol):
-    r"""Protocol for mixture-to-Gaussian transport implementations."""
-
-    def __call__(
-        self, x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
-    ) -> Tensor: ...
 
 
 @torch.no_grad()
@@ -462,13 +430,21 @@ class _GaussianToMixture(Function):
         return grad_y, grad_weights, grad_mus, grad_sigmas
 
 
-def gaussian_to_bimodal(y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+def gaussian_to_bimodal(
+    y: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
+) -> Tensor:
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
+    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
+    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
     return _GaussianToBimodalImpl.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
 
 
-def bimodal_to_gaussian(x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+def bimodal_to_gaussian(
+    x: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
+) -> Tensor:
     r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
+    mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
+    sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
     return _BimodalToGaussianImpl.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
 
 

@@ -105,7 +105,7 @@ utility = true
 
 [[modules ]]
 path = "linodenet_special"
-depends_on = ["linodenet_special.fallbacks", "linodenet_special.linalg", "linodenet_special.core"]
+depends_on = ["linodenet_special.fallbacks", "linodenet_special.linalg", "linodenet_special.interfaces", "linodenet_special.thomson_initialization", "linodenet_special.kernels"]
 
 [[modules ]]
 path = "linodenet_special.transport"
@@ -120,9 +120,25 @@ path = "linodenet_special.fallbacks"
 depends_on = []
 
 [[modules ]]
-path = "linodenet_special.core"
-depends_on = ["linodenet_special.fallbacks"]
-
-[[modules ]]
 path = "linodenet.nn.algebra"
 depends_on = []
+
+[[modules ]]
+path = "linodenet_special.marchenko_pastur"
+depends_on = []
+
+[[modules ]]
+path = "linodenet_special.thomson_initialization"
+depends_on = []
+
+[[modules ]]
+path = "linodenet_special.interfaces"
+depends_on = []
+
+[[modules ]]
+path = "linodenet_special.kernels"
+depends_on = ["linodenet_special.interfaces", "linodenet_special.fallbacks", "linodenet_special.compiled"]
+
+[[modules ]]
+path = "linodenet_special.compiled"
+depends_on = ["linodenet_special.interfaces"]

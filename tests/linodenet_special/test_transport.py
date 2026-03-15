@@ -6,16 +6,15 @@ import pytest
 import torch
 from torch.autograd import gradcheck
 
-from linodenet_special.fallbacks.gaussian_transport import (
+from linodenet_special import (
     bimodal_to_gaussian,
     gaussian_to_bimodal,
     gaussian_to_mixture,
+    hard_bend,
     mixture_to_gaussian,
 )
-from linodenet_special.fallbacks.hard_bend import hard_bend
-from tests.linodenet_special.fixtures import DEVICES, DTYPES
 
-from .fixtures import Fixture
+from .fixtures import DEVICES, DTYPES, Fixture
 
 
 class TestBimodalToGaussian(Fixture):

@@ -35,24 +35,16 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 __all__ = [
-    "NdtriExp",
     # functions
     "ndtri_exp",
     "ndtri_exp_naive",
 ]
 
 import math
-from typing import Final, Protocol
+from typing import Final
 
 import torch
 from torch import Tensor
-
-
-class NdtriExp(Protocol):
-    r"""Protocol of the ndtri_exp class."""
-
-    def __call__(self, log_p: Tensor, /) -> Tensor: ...
-
 
 # constants
 _UPPER_CUTOFF: Final[float] = -0.14541345786885906  # log(1-e⁻²)

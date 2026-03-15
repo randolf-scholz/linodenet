@@ -1,56 +1,15 @@
 r"""Fallback implementations of singular triplet routines."""
 
 __all__ = [
-    "ATOL",
-    "RTOL",
-    "SingularTriplet",
     "singular_triplet",
     "singular_triplet_native",
 ]
 
-from typing import Any, Final, Optional, Protocol
+from typing import Any, Optional
 
 import torch
 from torch import Tensor
 from torch.linalg import vector_norm
-
-from signatures import signature
-
-ATOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
-RTOL: Final[float] = 1e-6  # 2**-23  # ~1.19e-7
-
-
-class SingularTriplet(Protocol):
-    r"""Protocol for singular triplet implementations."""
-
-    @signature("(m, n) -> [(), (m), (n)]")
-    def __call__(
-        self,
-        A: Tensor,
-        /,
-        *,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = None,
-        atol: float = ATOL,
-        rtol: float = RTOL,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        r"""Computes the singular triplet.
-
-        Args:
-            A: The input matrix (shape: M×N).
-            u0: The initial guess for the left singular vector (shape: M).
-            v0: The initial guess for the right singular vector (shape: N).
-            maxiter: The maximum number of iterations. (Default: O(M+N))
-            atol: The absolute tolerance. (Default: 1e-6)
-            rtol: The relative tolerance. (Default: 1e-6)
-
-        Returns:
-            sigma: The singular value (scaler).
-            u: The left singular vector (shape: M).
-            v: The right singular vector (shape: N).
-        """
-        ...
 
 
 class _SingularTripletImpl(torch.autograd.Function):
@@ -61,11 +20,11 @@ class _SingularTripletImpl(torch.autograd.Function):
         ctx: Any,
         A: Tensor,
         /,
-        atol: float = ATOL,
-        rtol: float = RTOL,
-        maxiter: Optional[int] = None,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
+        u0: Optional[Tensor],
+        v0: Optional[Tensor],
+        maxiter: Optional[int],
+        atol: float,
+        rtol: float,
     ) -> tuple[Tensor, Tensor, Tensor]:
         if A.ndim != 2:
             raise ValueError(f"Expected 2d input, got {A.shape}.")
@@ -108,7 +67,7 @@ class _SingularTripletImpl(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx: Any, *grad_outputs: Optional[Tensor]
+        ctx, *grad_outputs: Tensor | None
     ) -> tuple[Tensor, None, None, None, None, None]:
         A, sigma, u, v = ctx.saved_tensors
         g_sigma, g_u, g_v = grad_outputs
@@ -153,8 +112,8 @@ def singular_triplet(
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
     maxiter: Optional[int] = None,
-    atol: float = ATOL,
-    rtol: float = RTOL,
+    atol: float = 1e-6,
+    rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute the dominant singular triplet of a matrix."""
     return _SingularTripletImpl.apply(  # pyright: ignore[reportReturnType]
@@ -169,8 +128,8 @@ def singular_triplet_native(
     u0: Optional[Tensor] = None,  # noqa: ARG001
     v0: Optional[Tensor] = None,  # noqa: ARG001
     maxiter: Optional[int] = None,  # noqa: ARG001
-    atol: float = 1e-8,  # noqa: ARG001
-    rtol: float = 1e-5,  # noqa: ARG001
+    atol: float = 1e-6,  # noqa: ARG001
+    rtol: float = 1e-6,  # noqa: ARG001
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Computes the singular triplet."""
     U, S, Vh = torch.linalg.svd(A)

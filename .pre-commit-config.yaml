@@ -77,7 +77,7 @@ repos:
         files: '^src/|^tests/'
       - id: check-signatures
         files: '^src/'
-        exclude: 'functional.py|matrix_tests.py|core.py'
+        exclude: 'functional.py|matrix_tests.py'
         args:
           - "--max-positional-args"
           - "4"
