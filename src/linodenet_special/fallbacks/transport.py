@@ -88,13 +88,16 @@ def _twin_to_gaussian_derivatives(
 
 @torch.no_grad()
 def _gaussian_to_twin_guess(x, mu, sigma):
-    """Idea: use piecewise-linear approximation $Ψ⁻¹(x, μ, σ) ≈ hard_bend(x, 1/λ, μ, σ)$.
+    r"""Approximate $Ψ⁻¹(x, μ, σ)$ by the matching `hard_bend` inverse.
 
-    Here, λ is the slope at the origin $Ψ'(0, μ, σ) = σ⁻¹ℯ^{-½(μ/σ)²}$.
+    Here $λ = Ψ'(0, μ, σ) = σ⁻¹ℯ^{-½(μ/σ)²}$ is the slope at the origin.
 
-    Inversion rule: $y = hard_bend(x, 1/λ, μ, σ) ⟺ x = hard_bend(y, λ, μ, 1/σ)$
+    Using
+
+    .. math::  y = hard\_bend(x, 1/λ, μ, σ) \iff x = hard\_bend(y, λ, μ, 1/σ),
+
+    we obtain a cheap initial guess for the safeguarded Newton solve.
     """
-    # slope at the origin
     λ = torch.exp(-0.5 * (mu / sigma) ** 2) / sigma
     return hard_bend(x, λ, mu, 1 / sigma)
 
@@ -121,7 +124,7 @@ def _mixture_to_gaussian_forward(
 def _mixture_to_gaussian_x_derivative(
     y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
 ) -> Tensor:
-    r"""Compute the partial derivative with respect to the mixture value."""
+    r"""Compute $∂T/∂x$ for the mixture-to-Gaussian transport."""
     y2 = y.square()
     log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
     scaled_ratio = torch.exp(log_ratio + torch.log(weights) - torch.log(sigmas))
@@ -254,12 +257,16 @@ class _GaussianToTwin(Function):
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        """Use the derivatives of $T$ to compute the derivatives of $T⁻¹$.
+        r"""Use the derivatives of $T$ to differentiate the inverse map.
 
-        .. math::  ∂T(x(y, μ, σ)) = y
-            ⟹ ∂x/∂y = (∂T/∂x)⁻¹
-            ⟹ ∂x/∂μ = - (∂T/∂x)⁻¹ * (∂T/∂μ)
-            ⟹ ∂x/∂σ = - (∂T/∂x)⁻¹ * (∂T/∂σ)
+        .. math::  ∂T(x(y, μ, σ), μ, σ) = y
+
+        Hence
+
+        .. math::
+            ∂x/∂y &= (∂T/∂x)⁻¹ \\
+            ∂x/∂μ &= -(∂T/∂x)⁻¹ ∂T/∂μ, \\
+            ∂x/∂σ &= -(∂T/∂x)⁻¹ ∂T/∂σ.
         """
         (g,) = outer
         fx, z_minus, z_plus, mu, sigma = ctx.saved_tensors
@@ -282,59 +289,24 @@ class _GaussianToTwin(Function):
 
 
 class _MixtureToGaussian(Function):
-    r"""Optimal Transport from mixture $p = ∑ₖωₖN(μₖ,σₖ²)$ to $q = N(0,1)$.
+    r"""Optimal transport from $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$.
 
-    If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the
-    optimal transport map is given by
-
-    .. math:: y = F_q⁻¹(F_p(x))
-
-    Letting Φ be the CDF of $N(0,1)$, and letting $pₖ = N(μₖ,σₖ²)$ be the k-th component
-    of $p$, then $F_p = ∑ₖωₖΦ((x-μₖ)/σₖ)$, and the optimal transport map is given by
-
-    .. math:: y = Φ⁻¹( ∑ₖ ωₖ⋅Φ((x-μₖ)/σₖ) )
-
-    To increase numerical stability, we compute the log of the CDFs and use the log-sum-exp trick:
-
-    .. math:: y =
-        \begin{cases}
-            \NdtriExp\Bigl(\logsumexp(\log ωₖ + \log Φ(zₖ)) \Bigr) & \text{if } \log p < \log(½) \\
-            -\NdtriExp\Bigl(\logsumexp_k(\log ωₖ + \log Φ(-zₖ))\Bigr) & \text{otherwise}
-        \end{cases}
-
-    where $zₖ = (x-μₖ)/σₖ$ and $\log p = \log ∑ₖ ωₖ Φ(zₖ)$. The second branch uses
-    $\log(1-p) = \log ∑ₖ ωₖ Φ(-zₖ)$ to avoid loss of precision when $p$ is close to $1$.
-
-    Regarding the derivative, we have, with $zₖ = (x-μₖ)/σₖ$
+    If $F_p$ is the CDF of the mixture and $Φ$ is the standard normal CDF, then
 
     .. math::
-        \dv{y}{x}  &= ∑ₖ\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}    \\
-        \dv{y}{ωₖ} &= \sqrt{2π} ℯ^{½y²} Φ(zₖ)             \\
-        \dv{y}{μₖ} &= -\frac{ωₖ}{σₖ} ℯ^{½ (y² - zₖ²)}     \\
-        \dv{y}{σₖ} &= -\frac{ωₖ zₖ}{σₖ} ℯ^{½ (y² - zₖ²)}
+        y = Φ⁻¹(F_p(x))
+          = Φ⁻¹\left(∑ₖ ωₖ Φ\left((x-μₖ)/σₖ\right)\right).
 
-    Proof:
+    Numerically, we evaluate the mixture CDF in log space and switch between the
+    lower-tail and upper-tail representations to avoid cancellation near $0$ and $1$.
 
-        Via chain rule. The outer derivative is
+    With $zₖ = (x-μₖ)/σₖ$, the derivatives are
 
-        .. math:: \dv{Φ⁻¹(p)}{p} = \frac{1}{Φ'(Φ⁻¹(p))}
-
-        and since $Φ'(x) = \frac{1}{\sqrt{2π}} ℯ^{-½x²}$, we have
-
-        .. math::  \dv{Φ⁻¹}{p} = \sqrt{2π} ℯ^{½Φ⁻¹(p)²} =  \sqrt{2π} ℯ^{½y²}
-
-        the inner derivative is, with some simplification
-
-        .. math:: \dv{p}{x} &= \dv{x} ∑ₖ ωₖ⋅Φ((x-μₖ)/σₖ)   \\
-                            &= \frac{1}{\sqrt{2π}}∑ₖ\frac{ωₖ}{σₖ}\exp{-½zₖ²}
-        .. math:: \dv{p}{ωₖ} = Φ(zₖ)
-        .. math:: \dv{p}{μₖ} = -\frac{1}{\sqrt{2π}}\frac{ωₖ}{σₖ}\exp{-½zₖ²}
-        .. math:: \dv{p}{σₖ} = -\frac{zₖ}{\sqrt{2π}}\frac{ωₖ}{σₖ}\exp{-½zₖ²}
-
-        So the total derivative is
-
-        .. math:: \dv{y}{x} &= \dv{y}{p}\dv{p}{x} \\
-                            &= \sqrt{2π} ℯ^{½y²} \frac{1}{\sqrt{2π}}∑ₖ\frac{ωₖ}{σₖ}\exp{-½zₖ²}
+    .. math::
+        ∂y/∂x &= ∑ₖ (ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
+        ∂y/∂ωₖ &= \sqrt{2π} ℯ^{½y²} Φ(zₖ), \\
+        ∂y/∂μₖ &= -(ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
+        ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) ℯ^{½(y²-zₖ²)}.
     """
 
     @staticmethod
@@ -348,6 +320,7 @@ class _MixtureToGaussian(Function):
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        r"""Differentiate the explicit mixture-to-Gaussian transport map."""
         (g,) = outer
         z, y, weights, sigmas = ctx.saved_tensors
         d_values, d_weights, d_means, d_sigmas = _mixture_to_gaussian_derivatives(
@@ -379,6 +352,7 @@ class _GaussianToMixture(Function):
     def forward(
         ctx, y: Tensor, /, weights: Tensor, means: Tensor, sigmas: Tensor
     ) -> Tensor:
+        r"""Solve $T(x, ω, μ, σ)=y$ by safeguarded Newton iteration."""
         MAXITER: Final[int] = 10
 
         assert weights.shape[0] == means.shape[0] == sigmas.shape[0]
@@ -397,6 +371,8 @@ class _GaussianToMixture(Function):
             fy, z = _mixture_to_gaussian_forward(x, weights, means, sigmas)
             d_fy = _mixture_to_gaussian_x_derivative(fy, z, weights, sigmas)
             r = fy - y
+            # Since T is monotone, the sign of the residual tells us which side of
+            # the bracket still contains the inverse solution.
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
             x_newton = x - r / d_fy
@@ -419,15 +395,14 @@ class _GaussianToMixture(Function):
 
         Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
 
-        .. math:: ∂T(x(y, ω, μ, σ), ω, μ, σ) = y
+        .. math::  ∂T(x(y, ω, μ, σ), ω, μ, σ) = y
 
         Hence
 
-        .. math:: ∂x/∂y = (∂T/∂x)⁻¹
-
-        and for each parameter block $θ∈\{ω,μ,σ\}$
-
-        .. math:: ∂x/∂θ = -(∂T/∂x)⁻¹ ∂T/∂θ.
+        .. math::
+            ∂x/∂y &= (∂T/∂x)⁻¹ \\
+            ∂x/∂θ &= -(∂T/∂x)⁻¹ ∂T/∂θ,
+            \qquad θ∈\{ω, μ, σ\}.
         """
         (g,) = outer
         z, y, weights, _, sigmas = ctx.saved_tensors
