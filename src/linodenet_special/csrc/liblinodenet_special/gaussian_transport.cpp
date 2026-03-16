@@ -213,6 +213,7 @@ std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
 
 struct BimodalToGaussian : Function<BimodalToGaussian> {
     static Tensor forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+        torch::NoGradGuard guard;
         const Tensor y = bimodal_to_gaussian_forward_impl(x, mu, sigma);
         ctx->save_for_backward({x, mu, sigma, y});
         return y;
@@ -234,6 +235,7 @@ static variable_list backward(const AutogradContext *ctx, const variable_list &g
 
 struct GaussianToBimodal : Function<GaussianToBimodal> {
     static Tensor forward(AutogradContext *ctx, const Tensor &y, const Tensor &mu, const Tensor &sigma) {
+        torch::NoGradGuard guard;
         const Tensor m = mu.abs();
         Tensor lower = sigma * y - m;
         Tensor upper = sigma * y + m;
@@ -290,6 +292,7 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         const Tensor &mus,
         const Tensor &sigmas
     ) {
+        torch::NoGradGuard guard;
         const auto [y, z] = mixture_to_gaussian_forward_impl(x, weights, mus, sigmas);
         ctx->save_for_backward({z, weights, sigmas, y});
         return y;
@@ -328,6 +331,7 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const Tensor &mus,
         const Tensor &sigmas
     ) {
+        torch::NoGradGuard guard;
         const Tensor lines = mus + sigmas * y.unsqueeze(-1);
         Tensor lower = std::get<0>(lines.min(-1));
         Tensor upper = std::get<0>(lines.max(-1));

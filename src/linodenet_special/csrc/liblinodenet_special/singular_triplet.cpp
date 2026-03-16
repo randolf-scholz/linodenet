@@ -216,6 +216,8 @@ struct SingularTriplet : Function<SingularTriplet> {
         const double atol = 1e-6,
         const double rtol = 1e-6
     ) {
+        torch::NoGradGuard guard;
+
         // Sec: Option parsing
         constexpr int64_t DEFAULT_MAXITER = 256;
         const int64_t MAXITER = maxiter ? maxiter.value() : DEFAULT_MAXITER;
