@@ -22,8 +22,6 @@ void check_bimodal_args(const Tensor &x, const Tensor &mu, const Tensor &sigma) 
     TORCH_CHECK(sigma.is_floating_point(), "sigma must be a floating point tensor.");
     TORCH_CHECK(x.dtype() == mu.dtype(), "x and mu must have the same dtype.");
     TORCH_CHECK(x.dtype() == sigma.dtype(), "x and sigma must have the same dtype.");
-    TORCH_CHECK(torch::all(sigma > 0).item<bool>(), "sigma must be strictly positive.");
-    (void) torch::broadcast_tensors({x, mu, sigma});
 }
 
 void check_mixture_args(
@@ -46,7 +44,6 @@ void check_mixture_args(
         weights.size(0) == mus.size(0) && weights.size(0) == sigmas.size(0),
         "weights, mus, and sigmas must have the same number of components."
     );
-    TORCH_CHECK(torch::all(sigmas > 0).item<bool>(), "sigmas must be strictly positive.");
 }
 
 Tensor bimodal_to_gaussian_forward_impl(
@@ -393,14 +390,14 @@ Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor 
     return torch::empty_like(tensors[0]);
 }
 
-Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
-    return BimodalToGaussian::apply(x, mu, sigma);
-}
-
 Tensor gaussian_to_bimodal_meta(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
     check_bimodal_args(y, mu, sigma);
     const auto tensors = torch::broadcast_tensors({y, mu, sigma});
     return torch::empty_like(tensors[0]);
+}
+
+Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+    return BimodalToGaussian::apply(x, mu, sigma);
 }
 
 Tensor gaussian_to_bimodal(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
@@ -414,16 +411,8 @@ Tensor mixture_to_gaussian_meta(
     const Tensor &sigmas
 ) {
     check_mixture_args(x, weights, mus, sigmas);
-    return torch::empty_like(x);
-}
-
-Tensor mixture_to_gaussian(
-    const Tensor &x,
-    const Tensor &weights,
-    const Tensor &mus,
-    const Tensor &sigmas
-) {
-    return MixtureToGaussian::apply(x, weights, mus, sigmas);
+    const auto tensors = torch::broadcast_tensors({x, weights, mus, sigmas});
+    return torch::empty_like(tensors[0]);
 }
 
 Tensor gaussian_to_mixture_meta(
@@ -433,7 +422,17 @@ Tensor gaussian_to_mixture_meta(
     const Tensor &sigmas
 ) {
     check_mixture_args(y, weights, mus, sigmas);
-    return torch::empty_like(y);
+    const auto tensors = torch::broadcast_tensors({y, weights, mus, sigmas});
+    return torch::empty_like(tensors[0]);
+}
+
+Tensor mixture_to_gaussian(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) {
+    return MixtureToGaussian::apply(x, weights, mus, sigmas);
 }
 
 Tensor gaussian_to_mixture(
