@@ -9,6 +9,14 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from torch import Tensor, nn
 
 from linodenet_special import spectral_norm, spectral_norm_native
+from linodenet_special.compiled import spectral_norm as spectral_norm_cpp
+from linodenet_special.fallbacks import spectral_norm as spectral_norm_py
+from linodenet_special.fallbacks.spectral_norm import (
+    State,
+    _body_fn as body_fn,
+    _cond_fn as cond_fn,
+    _spectral_norm_forward_impl,
+)
 from tests.utils import timer
 
 from .fixtures import (
@@ -21,6 +29,66 @@ from .fixtures import (
     make_test_case_rank_one,
     make_test_case_repeated_singular_values,
 )
+
+
+def test_compile_torch_while() -> None:
+    A = torch.randn(8, 4)
+    u = torch.randn(8)
+    v = torch.randn(4)
+    grad_u = A.mv(v)
+    grad_v = A.mT.mv(u)
+    maxiter = torch.as_tensor(10, device=A.device, dtype=torch.int32)
+    atol = torch.as_tensor(1e-6, device=A.device, dtype=A.dtype)
+    rtol = torch.as_tensor(1e-6, device=A.device, dtype=A.dtype)
+
+    # test with plain python
+    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    assert cond_fn(state)
+    while cond_fn(state):
+        state = body_fn(state)
+    assert not cond_fn(state)
+
+    # test with torch.compiled cond_fn, body_fn
+    compiled_body_fn = torch.compile(body_fn)
+    compiled_cond_fn = torch.compile(cond_fn)
+    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    assert compiled_cond_fn(state)
+    while compiled_cond_fn(state):
+        state = compiled_body_fn(state)
+    assert not compiled_cond_fn(state)
+
+    # test with torch.while_loop
+    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    assert cond_fn(state)
+    state = torch.while_loop(
+        cond_fn=cond_fn,
+        body_fn=body_fn,
+        carried_inputs=(state,),
+    )
+    assert not cond_fn(state)  # pyright: ignore[reportArgumentType]
+
+    @torch.compile
+    def loop_body(st: State) -> State:
+        return torch.while_loop(  # pyright: ignore[reportReturnType]
+            cond_fn=cond_fn,
+            body_fn=body_fn,
+            carried_inputs=(st,),
+        )
+
+    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    assert cond_fn(state)
+    state = loop_body(state)
+    assert not cond_fn(state)
+
+    # check forward_impl
+    _spectral_norm_forward_impl(A, u, v, 10, atol, rtol)
+    compiled_impl = torch.compile(_spectral_norm_forward_impl)
+    compiled_impl(A, u, v, 10, atol, rtol)
+
+    # check the entire spectral norm implementation
+    spectral_norm_py(A, maxiter=10)
+    compiled_spectral_norm = torch.compile(spectral_norm_py)
+    compiled_spectral_norm(A, maxiter=10)
 
 
 def scaled_norm(x: Tensor) -> Tensor:
@@ -170,6 +238,12 @@ class BasicTest:
 
 
 class TestCorrectness(Fixture):
+    SPECTRAL_NORMS = {
+        "py_compiled": torch.compile(spectral_norm_py),
+        "py": spectral_norm_py,
+        "cpp": spectral_norm_cpp,
+        "native": spectral_norm_native,
+    }
     SHAPES: list[tuple[int, int]] = [
         # scalar
         (1, 1),
@@ -197,13 +271,7 @@ class TestCorrectness(Fixture):
         (128, 1),
     ]
     ATOL = 1e-3
-    RTOL = 1e-4
-
-    SPECTRAL_NORMS = {
-        "custom": spectral_norm,
-        "native": spectral_norm_native,
-        # "riemann": spectral_norm_riemann,
-    }
+    RTOL = 1e-5
 
     def check_forward_pass(
         self,
@@ -365,32 +433,17 @@ class TestCorrectness(Fixture):
 
 class TestPerformance(Fixture):
     SPECTRAL_NORMS = {
-        "custom": spectral_norm,
-        "native": spectral_norm_native,
+        "py+compiled": torch.compile(spectral_norm_py),
+        "cpp+compile": torch.compile(spectral_norm_cpp),
+        "svd+compile": torch.compile(spectral_norm_native),
     }
     SHAPES = [
-        (128, 128),
+        (64, 64),
         (128, 64),
         (64, 128),
     ]
-    ROUNDS = {
-        16: 512,
-        32: 256,
-        64: 256,
-        128: 128,
-        256: 128,
-        512: 32,
-        1024: 32,
-    }
-    WARMUP_ROUNDS = {
-        16: 128,
-        32: 64,
-        64: 64,
-        128: 32,
-        256: 32,
-        512: 8,
-        1024: 8,
-    }
+    ROUNDS = 64
+    WARMUP_ROUNDS = 16
 
     @staticmethod
     def make_test_case(
@@ -419,12 +472,13 @@ class TestPerformance(Fixture):
         shape: tuple[int, int],
     ) -> None:
         r"""Test the spectral norm forward pass."""
-        benchmark.group = f"spectral_norm_forward/{shape[0]}x{shape[1]}/{device}"
+        benchmark.group = f"spectral_norm_forward/{device}/{shape[0]}x{shape[1]}"
         impl = self.SPECTRAL_NORMS[name]
         generator = torch.Generator(device=device)
         generator.manual_seed(0)
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
+            torch.set_float32_matmul_precision("high")
             param = self.make_test_case(shape, device=device, generator=generator)
             return (param,), {}
 
@@ -432,8 +486,8 @@ class TestPerformance(Fixture):
             benchmark.pedantic(
                 impl,
                 setup=setup,
-                rounds=self.ROUNDS[shape[0]],
-                warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
+                rounds=self.ROUNDS,
+                warmup_rounds=self.WARMUP_ROUNDS,
             )
 
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
@@ -449,7 +503,7 @@ class TestPerformance(Fixture):
         shape: tuple[int, int],
     ) -> None:
         r"""Test the spectral norm backward pass."""
-        benchmark.group = f"spectral_norm_backward/{shape[0]}x{shape[1]}/{device}"
+        benchmark.group = f"spectral_norm_backward/{device}/{shape[0]}x{shape[1]}"
         impl = self.SPECTRAL_NORMS[name]
 
         generator = torch.Generator(device=device)
@@ -462,6 +516,7 @@ class TestPerformance(Fixture):
             torch.cuda.synchronize()
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
+            torch.set_float32_matmul_precision("high")
             param = self.make_test_case(shape, device=device, generator=generator)
             output = impl(param)
             return (output,), {}
@@ -469,6 +524,6 @@ class TestPerformance(Fixture):
         benchmark.pedantic(
             backward,
             setup=setup,
-            rounds=self.ROUNDS[shape[0]],
-            warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
+            rounds=self.ROUNDS,
+            warmup_rounds=self.WARMUP_ROUNDS,
         )
