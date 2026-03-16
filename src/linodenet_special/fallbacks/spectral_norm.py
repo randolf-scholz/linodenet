@@ -33,6 +33,7 @@ class _SpectralNormImpl(torch.autograd.Function):
     """
 
     @staticmethod
+    @torch.no_grad()
     def forward(
         ctx,
         A: Tensor,

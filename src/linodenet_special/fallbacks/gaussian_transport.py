@@ -20,7 +20,6 @@ from linodenet_special.fallbacks.hard_bend import hard_bend
 from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
 
 
-@torch.no_grad()
 def _bimodal_to_gaussian_forward(
     x: Tensor, mu: Tensor, sigma: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
@@ -39,7 +38,6 @@ def _bimodal_to_gaussian_forward(
     return y, z_minus, z_plus
 
 
-@torch.no_grad()
 def _bimodal_to_gaussian_x_derivative(
     y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
 ) -> Tensor:
@@ -57,7 +55,6 @@ def _bimodal_to_gaussian_x_derivative(
     return d_x
 
 
-@torch.no_grad()
 def _bimodal_to_gaussian_derivatives(
     y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
@@ -86,7 +83,6 @@ def _bimodal_to_gaussian_derivatives(
     return d_x, d_mu, d_sigma_exact
 
 
-@torch.no_grad()
 def _gaussian_to_bimodal_guess(x, mu, sigma):
     r"""Approximate $Ψ⁻¹(x, μ, σ)$ by the matching `hard_bend` inverse.
 
@@ -102,7 +98,6 @@ def _gaussian_to_bimodal_guess(x, mu, sigma):
     return hard_bend(x, λ, mu, 1 / sigma)
 
 
-@torch.no_grad()
 def _mixture_to_gaussian_forward(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> tuple[Tensor, Tensor]:
@@ -120,7 +115,6 @@ def _mixture_to_gaussian_forward(
     return y, z
 
 
-@torch.no_grad()
 def _mixture_to_gaussian_x_derivative(
     y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
 ) -> Tensor:
@@ -131,7 +125,6 @@ def _mixture_to_gaussian_x_derivative(
     return scaled_ratio.sum(dim=-1)
 
 
-@torch.no_grad()
 def _mixture_to_gaussian_derivatives(
     y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -196,6 +189,7 @@ class _BimodalToGaussianImpl(Function):
     """
 
     @staticmethod
+    @torch.no_grad()
     def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
         y, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
         ctx.save_for_backward(y, z_minus, z_plus, mu, sigma)
@@ -215,6 +209,7 @@ class _GaussianToBimodalImpl(Function):
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
 
     @staticmethod
+    @torch.no_grad()
     def forward(ctx, y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
         r"""Solve $y = T(x, μ, σ)$ for $x$ using Newton's method.
 
@@ -310,6 +305,7 @@ class _MixtureToGaussian(Function):
     """
 
     @staticmethod
+    @torch.no_grad()
     def forward(
         ctx, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
     ) -> Tensor:
@@ -349,6 +345,7 @@ class _GaussianToMixture(Function):
     """
 
     @staticmethod
+    @torch.no_grad()
     def forward(
         ctx, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
     ) -> Tensor:

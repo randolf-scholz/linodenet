@@ -16,6 +16,7 @@ class _SingularTripletImpl(torch.autograd.Function):
     r"""Compute the dominant singular triplet via power iteration."""
 
     @staticmethod
+    @torch.no_grad()
     def forward(
         ctx: Any,
         A: Tensor,
