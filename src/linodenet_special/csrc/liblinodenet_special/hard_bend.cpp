@@ -1,33 +1,6 @@
 #include "hard_bend.h"
 
 namespace linodenet_special {
-namespace {
-void check_hard_bend_x(const Tensor &x) {
-    TORCH_CHECK(x.is_floating_point(), "hard_bend: x must be a floating point tensor.");
-}
-
-Tensor hard_bend_impl(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) {
-    const Tensor c_abs = c.abs();
-    const Tensor m_signed = torch::copysign(m, a);
-    const Tensor z = (a - m_signed) * x;
-    return torch::where(
-        z.abs() <= c_abs,
-        a * x,
-        at::addcmul(m_signed * x, z.sign(), c_abs)
-    );
-}
-}  // namespace
-
-Tensor hard_bend_meta(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) {
-    check_hard_bend_x(x);
-    TORCH_CHECK(a.is_floating_point(), "hard_bend: a must be a floating point tensor.");
-    TORCH_CHECK(c.is_floating_point(), "hard_bend: c must be a floating point tensor.");
-    TORCH_CHECK(m.is_floating_point(), "hard_bend: m must be a floating point tensor.");
-
-    const auto broadcasted = torch::broadcast_tensors({x, a, c, m});
-    return torch::empty_like(broadcasted[0]);
-}
-
 /**
  * Piecewise linear function (3 regions), close the origin: a*x, outside: mx±c.
  *
@@ -46,21 +19,26 @@ Tensor hard_bend_meta(const Tensor &x, const Tensor &a, const Tensor &c, const T
  * Inversion formula: y = f(x, a, c, m) ⟺ x = f(y, 1/a, c, 1/m)
  */
 Tensor hard_bend(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) {
-    check_hard_bend_x(x);
+    const Tensor c_abs = c.abs();
+    const Tensor m_signed = torch::copysign(m, a);
+    const Tensor z = (a - m_signed) * x;
+    return torch::where(
+        z.abs() <= c_abs,
+        a * x,
+        at::addcmul(m_signed * x, z.sign(), c_abs)
+    );
+}
+
+Tensor hard_bend_meta(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) {
+    TORCH_CHECK(x.is_floating_point(), "hard_bend: x must be a floating point tensor.");
     TORCH_CHECK(a.is_floating_point(), "hard_bend: a must be a floating point tensor.");
     TORCH_CHECK(c.is_floating_point(), "hard_bend: c must be a floating point tensor.");
     TORCH_CHECK(m.is_floating_point(), "hard_bend: m must be a floating point tensor.");
 
-    auto broadcasted = torch::broadcast_tensors(
-        {x, a.to(x.options()), c.to(x.options()), m.to(x.options())}
-    );
-    return hard_bend_impl(
-        broadcasted[0],
-        broadcasted[1],
-        broadcasted[2],
-        broadcasted[3]
-    );
+    const auto broadcasted = torch::broadcast_tensors({x, a, c, m});
+    return torch::empty_like(broadcasted[0]);
 }
+
 }  // namespace linodenet_special
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {

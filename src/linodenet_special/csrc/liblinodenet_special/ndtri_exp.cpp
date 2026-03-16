@@ -103,8 +103,6 @@ Tensor ndtri_exp_meta(const Tensor &log_p) {
 }
 
 Tensor ndtri_exp(const Tensor &log_p) {
-    TORCH_CHECK(log_p.is_floating_point(), "ndtri_exp: log_p must be a floating point tensor.");
-
     const double finfo_min_value = finfo_min(log_p.scalar_type());
     const Tensor neg_infinity = torch::scalar_tensor(NEG_INFINITY, log_p.options());
 
