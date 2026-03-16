@@ -424,7 +424,6 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     const double rtol
 ) {
     auto output = SingularTriplet::apply(A, u0, v0, maxiter, atol, rtol);
-    assert(output.size() == 3);
     return std::make_tuple(output[0], output[1], output[2]);
 }
 
