@@ -6,6 +6,7 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from scipy.special import ndtri_exp as scipy_ndtri_exp_py
 from torch.autograd import gradcheck
+from torch.special import log_ndtr
 
 from linodenet_special.compiled import ndtri_exp as ndtri_exp_cpp
 from linodenet_special.fallbacks.ndtri_exp import (
@@ -14,7 +15,7 @@ from linodenet_special.fallbacks.ndtri_exp import (
     ndtri_exp as ndtri_exp_py,
 )
 
-from .fixtures import DEVICES, DTYPES
+from .fixtures import DEVICES, DTYPES, Fixture
 
 assert ndtri_exp_cpp is not None
 
@@ -92,28 +93,68 @@ def test_domain(name: str, dtype: torch.dtype, device: str) -> None:
     assert result_zero.isposinf().item()
 
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize(
-    ("lower", "upper"),
-    [
+class TestCorrectness(Fixture):
+    N = 256
+    RANGES = [
         (-80.0, _LOWER_CUTOFF - 1e-3),
         (_LOWER_CUTOFF, _UPPER_CUTOFF),
         (_UPPER_CUTOFF + 1e-6, -1e-6),
-    ],
-    ids=["small", "medium", "large"],
-)
-@pytest.mark.parametrize("name", IMPLS, ids=str)
-def test_correctness(
-    name: str,
-    lower: float,
-    upper: float,
-    device: str,
-    dtype: torch.dtype,
-) -> None:
-    impl = IMPLS[name]
-    log_p = torch.linspace(lower, upper, steps=256, dtype=dtype, device=device)
-    _assert_matches_reference(log_p, impl(log_p))
+    ]
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize(
+        ("lower", "upper"), RANGES, ids=["small", "medium", "large"]
+    )
+    @pytest.mark.parametrize("name", IMPLS, ids=str)
+    def test_correctness(
+        self,
+        name: str,
+        lower: float,
+        upper: float,
+        device: str,
+        dtype: torch.dtype,
+    ) -> None:
+        impl = IMPLS[name]
+        log_p = torch.linspace(lower, upper, steps=self.N, dtype=dtype, device=device)
+        _assert_matches_reference(log_p, impl(log_p))
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize("name", IMPLS, ids=str)
+    def test_reversible(
+        self,
+        name: str,
+        device: str,
+        dtype: torch.dtype,
+    ) -> None:
+        impl = IMPLS[name]
+        match dtype:
+            case torch.float32:
+                lower = -5.0
+                upper = 5.0
+                atol = rtol = 1e-4
+            case torch.float64:
+                lower = -8.0
+                upper = 6.0
+                atol = rtol = 1e-6
+            case _:
+                raise ValueError(f"Unsupported dtype: {dtype}")
+
+        x = torch.linspace(
+            lower,
+            upper,
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+        x_recovered = impl(log_ndtr(x))
+        x_recovered.sum().backward()
+        assert x.grad is not None
+
+        self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
