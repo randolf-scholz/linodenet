@@ -41,58 +41,6 @@ def _assert_matches_reference(values: torch.Tensor, actual: torch.Tensor) -> Non
     assert torch.allclose(actual[finite], reference[finite], atol=ATOL, rtol=RTOL)
 
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("name", IMPLS, ids=str)
-def test_special_values(name: str, dtype: torch.dtype, device: str) -> None:
-    impl = IMPLS[name]
-
-    # ndtri_exp_py(-∞) = ndtri(0) = -∞
-    # ndtri_exp_py(0) = ndtri(1) = +∞
-    # ndtri_exp_py(log(0.5)) = ndtri(0.5) = 0
-    args = [-math.inf, math.log(0.5), 0.0]
-    expected = [-math.inf, 0.0, math.inf]
-
-    # check reference implementation
-    np_dtype: type[np.floating] = np.float32 if dtype is torch.float32 else np.float64
-    np_args = np.array(args, dtype=np_dtype)
-    np_expected = np.array(expected, dtype=np_dtype)
-    np_result = scipy_ndtri_exp_py(np_args)
-    assert np.allclose(np_result, np_expected)
-
-    # check our implementation
-    pt_args = torch.tensor(args, dtype=dtype, device=device)
-    pt_expected = torch.tensor(expected, dtype=dtype, device=device)
-    pt_result = impl(pt_args)
-    assert torch.allclose(pt_result, pt_expected)
-
-
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("name", IMPLS, ids=str)
-def test_domain(name: str, dtype: torch.dtype, device: str) -> None:
-    impl = IMPLS[name]
-    # ndtri_exp_py is defined for log_p <= 0
-    # test on a geometric range of values from finfo.min to finfo.max
-    # assert that for log_p > 0, the result is NaN
-    # assert that for log_p <= 0, the result is finite or -inf
-    finfo = torch.finfo(dtype)
-    exp_min = math.log10(finfo.tiny)
-    exp_max = math.log10(finfo.max)
-    magnitudes = torch.logspace(exp_min, exp_max, steps=96, dtype=dtype, device=device)
-    log_p_pos = magnitudes
-    log_p_neg = -magnitudes
-    log_p_zero = torch.tensor([0.0], dtype=dtype, device=device)
-
-    result_pos = impl(log_p_pos)
-    result_neg = impl(log_p_neg)
-    result_zero = impl(log_p_zero)
-
-    assert result_pos.isnan().all()
-    assert (result_neg.isfinite() | result_neg.isneginf()).all()
-    assert result_zero.isposinf().item()
-
-
 class TestCorrectness(Fixture):
     N = 256
     RANGES = [
@@ -100,6 +48,60 @@ class TestCorrectness(Fixture):
         (_LOWER_CUTOFF, _UPPER_CUTOFF),
         (_UPPER_CUTOFF + 1e-6, -1e-6),
     ]
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize("name", IMPLS, ids=str)
+    def test_special_values(self, name: str, dtype: torch.dtype, device: str) -> None:
+        impl = IMPLS[name]
+
+        # ndtri_exp_py(-∞) = ndtri(0) = -∞
+        # ndtri_exp_py(0) = ndtri(1) = +∞
+        # ndtri_exp_py(log(0.5)) = ndtri(0.5) = 0
+        args = [-math.inf, math.log(0.5), 0.0]
+        expected = [-math.inf, 0.0, math.inf]
+
+        # check reference implementation
+        np_dtype: type[np.floating] = (
+            np.float32 if dtype is torch.float32 else np.float64
+        )
+        np_args = np.array(args, dtype=np_dtype)
+        np_expected = np.array(expected, dtype=np_dtype)
+        np_result = scipy_ndtri_exp_py(np_args)
+        assert np.allclose(np_result, np_expected)
+
+        # check our implementation
+        pt_args = torch.tensor(args, dtype=dtype, device=device)
+        pt_expected = torch.tensor(expected, dtype=dtype, device=device)
+        pt_result = impl(pt_args)
+        assert torch.allclose(pt_result, pt_expected)
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize("name", IMPLS, ids=str)
+    def test_domain(self, name: str, dtype: torch.dtype, device: str) -> None:
+        impl = IMPLS[name]
+        # ndtri_exp_py is defined for log_p <= 0
+        # test on a geometric range of values from finfo.min to finfo.max
+        # assert that for log_p > 0, the result is NaN
+        # assert that for log_p <= 0, the result is finite or -inf
+        finfo = torch.finfo(dtype)
+        exp_min = math.log10(finfo.tiny)
+        exp_max = math.log10(finfo.max)
+        magnitudes = torch.logspace(
+            exp_min, exp_max, steps=96, dtype=dtype, device=device
+        )
+        log_p_pos = magnitudes
+        log_p_neg = -magnitudes
+        log_p_zero = torch.tensor([0.0], dtype=dtype, device=device)
+
+        result_pos = impl(log_p_pos)
+        result_neg = impl(log_p_neg)
+        result_zero = impl(log_p_zero)
+
+        assert result_pos.isnan().all()
+        assert (result_neg.isfinite() | result_neg.isneginf()).all()
+        assert result_zero.isposinf().item()
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("dtype", DTYPES, ids=str)
@@ -156,58 +158,59 @@ class TestCorrectness(Fixture):
         self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
         self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize("name", IMPLS, ids=str)
+    def test_gradcheck(self, name: str, dtype: torch.dtype, device: str) -> None:
+        impl = IMPLS[name]
+        log_p = torch.linspace(
+            _LOWER_CUTOFF,
+            _UPPER_CUTOFF,
+            steps=100,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+        if dtype is torch.float32:
+            eps = 1e-4
+            atol = 1e-3
+            rtol = 1e-3
+        else:
+            eps = 1e-6
+            atol = 1e-6
+            rtol = 1e-6
+        gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol)
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("name", IMPLS, ids=str)
-def test_gradcheck(name: str, dtype: torch.dtype, device: str) -> None:
-    impl = IMPLS[name]
-    log_p = torch.linspace(
-        _LOWER_CUTOFF,
-        _UPPER_CUTOFF,
-        steps=100,
-        dtype=dtype,
-        device=device,
-        requires_grad=True,
+
+class TestPerformance:
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+    @pytest.mark.parametrize("name", IMPLS, ids=str)
+    @pytest.mark.parametrize(
+        ("lower", "upper"),
+        [
+            (-80.0, _LOWER_CUTOFF - 1e-3),
+            (_LOWER_CUTOFF, _UPPER_CUTOFF),
+            (_UPPER_CUTOFF + 1e-6, -1e-6),
+        ],
+        ids=["small", "medium", "large"],
     )
-    if dtype is torch.float32:
-        eps = 1e-4
-        atol = 1e-3
-        rtol = 1e-3
-    else:
-        eps = 1e-6
-        atol = 1e-6
-        rtol = 1e-6
-    gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol)
+    def test_performance(
+        self,
+        name: str,
+        benchmark: BenchmarkFixture,
+        lower: float,
+        upper: float,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        impl = IMPLS[name]
+        benchmark.group = f"ndtri_exp/{device}/{dtype}"
+        log_p = torch.linspace(lower, upper, steps=128, dtype=dtype, device=device)
 
+        def bench():
+            torch.cuda.synchronize()
+            impl(log_p)
+            torch.cuda.synchronize()
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("name", IMPLS, ids=str)
-@pytest.mark.parametrize(
-    ("lower", "upper"),
-    [
-        (-80.0, _LOWER_CUTOFF - 1e-3),
-        (_LOWER_CUTOFF, _UPPER_CUTOFF),
-        (_UPPER_CUTOFF + 1e-6, -1e-6),
-    ],
-    ids=["small", "medium", "large"],
-)
-def test_performance(
-    name: str,
-    benchmark: BenchmarkFixture,
-    lower: float,
-    upper: float,
-    dtype: torch.dtype,
-    device: str,
-) -> None:
-    impl = IMPLS[name]
-    benchmark.group = f"ndtri_exp/{device}/{dtype}"
-    log_p = torch.linspace(lower, upper, steps=256, dtype=dtype, device=device)
-
-    def bench():
-        torch.cuda.synchronize()
-        impl(log_p)
-        torch.cuda.synchronize()
-
-    benchmark.pedantic(bench, (), iterations=10, rounds=20, warmup_rounds=20)
+        benchmark.pedantic(bench, (), iterations=10, rounds=20, warmup_rounds=20)
