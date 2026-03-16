@@ -190,7 +190,7 @@ class _BimodalToGaussianImpl(Function):
 
     @staticmethod
     @torch.no_grad()
-    def forward(ctx, x: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+    def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
         y, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
         ctx.save_for_backward(y, z_minus, z_plus, mu, sigma)
         return y
@@ -210,7 +210,7 @@ class _GaussianToBimodalImpl(Function):
 
     @staticmethod
     @torch.no_grad()
-    def forward(ctx, y: Tensor, /, mu: Tensor, sigma: Tensor) -> Tensor:
+    def forward(ctx, y: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
         r"""Solve $y = T(x, μ, σ)$ for $x$ using Newton's method.
 
         Here $T$ is the transport from the symmetric bimodal mixture to $N(0,1)$.
@@ -307,7 +307,7 @@ class _MixtureToGaussian(Function):
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
     ) -> Tensor:
         assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
         u, z = _mixture_to_gaussian_forward(y, weights, mus, sigmas)
@@ -347,7 +347,7 @@ class _GaussianToMixture(Function):
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
     ) -> Tensor:
         r"""Solve $T(x, ω, μ, σ)=y$ by safeguarded Newton iteration."""
         MAXITER: Final[int] = 10

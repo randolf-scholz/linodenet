@@ -8,7 +8,7 @@ import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch import Tensor, nn
 
-from linodenet_special import SpectralNorm, spectral_norm, spectral_norm_native
+from linodenet_special import spectral_norm, spectral_norm_native
 from tests.utils import timer
 
 from .fixtures import (
@@ -199,7 +199,7 @@ class TestCorrectness(Fixture):
     ATOL = 1e-3
     RTOL = 1e-4
 
-    SPECTRAL_NORMS: dict[str, SpectralNorm] = {
+    SPECTRAL_NORMS = {
         "custom": spectral_norm,
         "native": spectral_norm_native,
         # "riemann": spectral_norm_riemann,

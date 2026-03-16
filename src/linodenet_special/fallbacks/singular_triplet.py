@@ -20,12 +20,12 @@ class _SingularTripletImpl(torch.autograd.Function):
     def forward(
         ctx: Any,
         A: Tensor,
-        /,
         u0: Optional[Tensor],
         v0: Optional[Tensor],
         maxiter: Optional[int],
         atol: float,
         rtol: float,
+        /,
     ) -> tuple[Tensor, Tensor, Tensor]:
         if A.ndim != 2:
             raise ValueError(f"Expected 2d input, got {A.shape}.")
@@ -68,10 +68,10 @@ class _SingularTripletImpl(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx, *grad_outputs: Tensor | None
+        ctx, *outer: Tensor | None
     ) -> tuple[Tensor, None, None, None, None, None]:
         A, sigma, u, v = ctx.saved_tensors
-        g_sigma, g_u, g_v = grad_outputs
+        g_sigma, g_u, g_v = outer
 
         if g_sigma is None:
             g_sigma = torch.zeros((), dtype=A.dtype, device=A.device)
@@ -112,14 +112,12 @@ def singular_triplet(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
+    maxiter: Optional[int] = 256,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute the dominant singular triplet of a matrix."""
-    return _SingularTripletImpl.apply(  # pyright: ignore[reportReturnType]
-        A, atol=atol, rtol=rtol, maxiter=maxiter, u0=u0, v0=v0
-    )
+    return _SingularTripletImpl.apply(A, u0, v0, maxiter, atol, rtol)  # pyright: ignore[reportReturnType]
 
 
 def singular_triplet_native(

@@ -37,12 +37,12 @@ class _SpectralNormImpl(torch.autograd.Function):
     def forward(
         ctx,
         A: Tensor,
-        /,
         u0: Optional[Tensor],
         v0: Optional[Tensor],
         maxiter: int,
         atol: float,
         rtol: float,
+        /,
     ) -> Tensor:
         if A.ndim != 2:
             raise ValueError(f"Expected 2d input, got {A.shape}.")
@@ -75,9 +75,12 @@ class _SpectralNormImpl(torch.autograd.Function):
         return sigma
 
     @staticmethod
-    def backward(ctx, *grad_outputs: Tensor) -> Tensor:
+    def backward(
+        ctx, *grad_outputs: Tensor
+    ) -> tuple[Tensor, None, None, None, None, None]:
         u, v = ctx.saved_tensors
-        return torch.einsum("..., i, j -> ...ij", grad_outputs[0], u, v)
+        grad = torch.einsum("..., i, j -> ...ij", grad_outputs[0], u, v)
+        return grad, None, None, None, None, None
 
 
 def spectral_norm(
@@ -86,14 +89,12 @@ def spectral_norm(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
+    maxiter: Optional[int] = 256,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
     r"""Compute the spectral norm of a matrix."""
-    return _SpectralNormImpl.apply(
-        A, atol=atol, rtol=rtol, maxiter=maxiter, u0=u0, v0=v0
-    )  # pyright: ignore[reportReturnType]
+    return _SpectralNormImpl.apply(A, u0, v0, maxiter, atol, rtol)  # pyright: ignore[reportReturnType]
 
 
 def spectral_norm_native(
