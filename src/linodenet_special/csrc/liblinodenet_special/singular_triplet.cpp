@@ -236,16 +236,14 @@ struct SingularTriplet : Function<SingularTriplet> {
         // pre-allocate buffers
         Tensor grad_u = torch::empty({M}, OPTIONS);
         Tensor grad_v = torch::empty({N}, OPTIONS);
-        Tensor gamma_u = torch::empty({}, OPTIONS);
-        Tensor gamma_v = torch::empty({}, OPTIONS);
         Tensor sigma_u = torch::empty({}, OPTIONS);
         Tensor sigma_v = torch::empty({}, OPTIONS);
 
+        Tensor sigma = torch::zeros({}, OPTIONS);
         Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
         Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
-        at::div_out(u, u, u.norm());
-        at::div_out(v, v, v.norm());
-        Tensor sigma = torch::zeros({}, OPTIONS);
+        u = u.div_(linalg_vector_norm(u));
+        v = v.div_(linalg_vector_norm(v));
 
         // special case: if SCALE == 0, then A is the zero matrix,
         // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
@@ -265,26 +263,21 @@ struct SingularTriplet : Function<SingularTriplet> {
             for (auto j = 0; j<7; j++) {
                 // update u
                 at::mv_out(grad_u, A, v);               // gᵤ ← Av
-                at::div_out(u, grad_u, grad_u.norm());  // u ← gᵤ/‖gᵤ‖
+                at::div_out(u, grad_u, linalg_vector_norm(grad_u));  // u ← gᵤ/‖gᵤ‖
                 // update v
                 at::mv_out(grad_v, A_t, u);             // gᵥ ← Aᵀu
-                at::div_out(v, grad_v, grad_v.norm());  // v ← gᵥ/‖gᵥ‖
+                at::div_out(v, grad_v, linalg_vector_norm(grad_v));  // v ← gᵥ/‖gᵥ‖
             }
-            // update u
-            at::mv_out(grad_u, A, v);                    // gᵤ ← Av
-            at::dot_out(sigma_u, grad_u, u);             // σᵤ ← ⟨u∣gᵤ⟩
-            at::norm_out(gamma_u, grad_u - sigma_u * u);  // γᵤ ← ‖gᵤ - σᵤu‖
-            at::div_out(u, grad_u, grad_u.norm());       // u ← gᵤ/‖gᵤ‖
-            // update v
-            at::mv_out(grad_v, A_t, u);                  // gᵥ ← Aᵀu
-            at::dot_out(sigma_v, grad_v, v);             // σᵥ ← ⟨v∣gᵥ⟩
-            at::norm_out(gamma_v, grad_v - sigma_v * v); // γᵥ ← ‖gᵥ - σᵥv‖
-            at::div_out(v, grad_v, grad_v.norm());       // v ← gᵥ/‖gᵥ‖
-
-            // check convergence
+            // convergence check
+            at::mv_out(grad_u, A, v);                // gᵤ ← Av
+            at::mv_out(grad_v, A_t, u);              // gᵥ ← Aᵀu
+            at::dot_out(sigma_u, grad_u, u);       // σᵤ ← ⟨u∣gᵤ⟩
+            at::dot_out(sigma_v, grad_v, v);       // σᵥ ← ⟨v∣gᵥ⟩
+            grad_u = grad_u.addcmul_(sigma_u, u, -1.0); // gᵤ ← gᵤ - σᵤu
+            grad_v = grad_v.addcmul_(sigma_v, v, -1.0); // gᵥ ← gᵥ - σᵥv
             if ((converged = (
-                  (gamma_u < (ATOL + RTOL * sigma_u))
-                & (gamma_v < (ATOL + RTOL * sigma_v))
+                  (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
+                & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
                 ).item<bool>())
             ) {break;}
         }
