@@ -221,7 +221,7 @@ struct SpectralNorm: Function<SpectralNorm> {
         sigma = SCALE * A.mv(v).dot(u);
 
         // check for NaNs, infinities and non-positive values
-        if ((~torch::isfinite(sigma) | (sigma <= 0)).item<bool>()) {
+        if ((~sigma.isfinite() | (sigma <= 0)).item<bool>()) {
             throw std::runtime_error(at::str(
                 "Computation resulted in invalid singular value σ=", sigma,
                 " for input of shape ", A.sizes(), ". ",
