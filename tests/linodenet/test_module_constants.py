@@ -13,16 +13,22 @@ from linodenet.flows import FLOWS, Flow, FlowBase
 from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import (
+    BIJECTIONS,
     EMBEDDINGS,
     FUNCTIONAL_PROJECTIONS,
     MODULAR_PROJECTIONS,
     SURJECTIONS,
+    TRANSFORMS,
+    Bijection,
+    BijectionBase,
     Embedding,
     EmbeddingBase,
     Projection,
     ProjectionBase,
     Surjection,
     SurjectionBase,
+    Transform,
+    TransformBase,
 )
 from linodenet.nn.activations import ALL_ACTIVATIONS, Activation
 from linodenet.parametrize import PARAMETRIZATIONS, Parametrization, ParametrizationBase
@@ -46,7 +52,8 @@ class Case(NamedTuple):
 
 CASES: dict[str, Case] = {
     "activations"         : Case(lib.nn.activations , Activation     , None               , ALL_ACTIVATIONS           ),
-    # "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
+    "transforms"          : Case(lib.transforms     , Transform      , TransformBase      , TRANSFORMS                ),
+    "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
     "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
     "embeddings"          : Case(lib.nn.embeddings  , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
     "surjections"         : Case(lib.nn.surjections , Surjection     , SurjectionBase     , SURJECTIONS               ),
