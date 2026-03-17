@@ -25,7 +25,7 @@ __all__ = [
     "UpperTriangular",
 ]
 
-from typing import Any, Final, Optional
+from typing import Final, Optional
 
 import torch
 from torch import Tensor, jit, nn
@@ -33,7 +33,7 @@ from torch import Tensor, jit, nn
 from linodenet import projections
 from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
-from linodenet.parametrize.base import ParametrizationBase, WrappedParametrization
+from linodenet.parametrize.base import ParametrizationBase
 from linodenet.testing import is_square
 from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
@@ -208,131 +208,17 @@ class SpectralNormalization(nn.Module):
         return y
 
 
-class Diagonal(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Diagonal``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Diagonal.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Diagonal.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Diagonal(*args, **kwargs))
-
-
-class Hamiltonian(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Hamiltonian``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Hamiltonian.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Hamiltonian.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Hamiltonian(*args, **kwargs))
-
-
-class Identity(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Identity``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Identity.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Identity.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Identity(*args, **kwargs))
-
-
-class LowerTriangular(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.LowerTriangular``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.LowerTriangular.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.LowerTriangular.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.LowerTriangular(*args, **kwargs))
-
-
-class Normal(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Normal``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Normal.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Normal.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Normal(*args, **kwargs))
-
-
-class OrthogonalProjection(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.OrthogonalProjection``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Orthogonal.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Orthogonal.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Orthogonal(*args, **kwargs))
-
-
-class RankOne(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.RankOne``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.RankOne.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.RankOne.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.RankOne(*args, **kwargs))
-
-
-class SkewSymmetric(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.SkewSymmetric``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.SkewSymmetric.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.SkewSymmetric.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.SkewSymmetric(*args, **kwargs))
-
-
-class Symmetric(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Symmetric``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Symmetric.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Symmetric.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Symmetric(*args, **kwargs))
-
-
-class Symplectic(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Symplectic``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Symplectic.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Symplectic.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Symplectic(*args, **kwargs))
-
-
-class Traceless(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Traceless``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Traceless.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Traceless.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Traceless(*args, **kwargs))
-
-
-class Tridiagonal(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Tridiagonal``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Tridiagonal.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Tridiagonal.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Tridiagonal(*args, **kwargs))
-
-
-class UpperTriangular(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.UpperTriangular``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.UpperTriangular.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.UpperTriangular.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.UpperTriangular(*args, **kwargs))
+# Fixed projection modules are wrapped lazily by `register_parametrization`.
+Diagonal = projections.Diagonal()
+Hamiltonian = projections.Hamiltonian()
+Identity = projections.Identity()
+LowerTriangular = projections.LowerTriangular()
+Normal = projections.Normal()
+OrthogonalProjection = projections.Orthogonal()
+RankOne = projections.RankOne()
+SkewSymmetric = projections.SkewSymmetric()
+Symmetric = projections.Symmetric()
+Symplectic = projections.Symplectic()
+Traceless = projections.Traceless()
+Tridiagonal = projections.Tridiagonal()
+UpperTriangular = projections.UpperTriangular()
