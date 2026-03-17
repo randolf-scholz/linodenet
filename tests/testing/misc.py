@@ -14,4 +14,4 @@ def camel2snake(string: str) -> str:
 
 def snake2camel(string: str) -> str:
     r"""Convert snake case to camel case."""
-    return "".join([c.title() for c in string.split("_")])
+    return "".join([c[0].upper() + c[1:] for c in string.split("_")])
