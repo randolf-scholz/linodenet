@@ -29,7 +29,6 @@ __all__ += surjections.__all__
 
 
 FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
-    "contraction"         : functional.contraction,
     "diagonal"            : functional.diagonal,
     "hamiltonian"         : functional.hamiltonian,
     "identity"            : functional.identity,
@@ -48,9 +47,10 @@ FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
 r"""Dictionary of all available modular metrics."""
 
 SPECIAL_PROJECTIONS = {
-    "low_rank"            : functional.low_rank,
-    "banded"              : functional.banded,
-    "masked"              : functional.masked,
+    "contraction" : functional.contraction,
+    "low_rank"    : functional.low_rank,
+    "banded"      : functional.banded,
+    "masked"      : functional.masked,
 }  # fmt: skip
 r"""Projections that require additional arguments"""
 
@@ -76,8 +76,9 @@ MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
-PROJECTIONS: dict[str, FunctionalProjection | type[ProjectionBase]] = {
+PROJECTIONS = {
     **FUNCTIONAL_PROJECTIONS,
+    **SPECIAL_PROJECTIONS,
     **MODULAR_PROJECTIONS,
 }
 r"""Dictionary containing all available projections."""

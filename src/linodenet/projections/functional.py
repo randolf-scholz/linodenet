@@ -73,24 +73,6 @@ def skew_symmetric(x: Tensor) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def low_rank(x: Tensor, rank: int) -> Tensor:
-    r"""Return the closest low rank matrix to X.
-
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ k
-
-    One can show analytically that Y = UₖΣₖVₖᵀ is the unique minimizer,
-    where X=UΣVᵀ is the SVD of X.
-    """
-    U, S, Vh = torch.linalg.svd(x, full_matrices=False)
-    return torch.einsum(
-        "...ij, ...j, ...jk -> ...ik",
-        U[..., :, :rank],
-        S[..., :rank],
-        Vh[..., :rank, :],
-    )
-
-
-@signature("(..., m, n) -> (..., m, n)")
 def rank_one(x: Tensor) -> Tensor:
     r"""Return the closest rank-1 matrix to X.
 
@@ -201,24 +183,6 @@ def hamiltonian(x: Tensor) -> Tensor:
 
 
 # region masked projections ------------------------------------------------------------
-@signature("[(..., m, n), (m, n)] -> (..., m, n)")
-def masked(x: Tensor, mask: Tensor) -> Tensor:
-    r"""Return the closest banded matrix to X.
-
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   M⊙Y = Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = 𝕄⊙X$.
-
-    See Also:
-        - `projections.masked`
-        - `projections.diagonal`
-        - `projections.lower_triangular`
-        - `projections.upper_triangular`
-        - `projections.banded`
-    """
-    zero = torch.tensor(0.0, dtype=x.dtype, device=x.device)
-    mask_ = torch.as_tensor(mask, dtype=torch.bool, device=x.device)
-    return torch.where(mask_, x, zero)
 
 
 @signature("(..., m, n) -> (..., m, n)")
@@ -278,6 +242,80 @@ def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
+def tridiagonal(x: Tensor) -> Tensor:
+    r"""Return the closest tridiagonal matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   Y = T⊙Y
+
+    This is the special case of `banded` with `lower=-1` and `upper=1`.
+    """
+    return banded(x, lower=-1, upper=1)
+
+
+# endregion masked projections ---------------------------------------------------------
+
+
+# region other projections -------------------------------------------------------------
+
+
+@signature("(..., n, n) -> (..., n, n)")
+def diagonally_dominant(x: Tensor) -> Tensor:
+    r"""Return the closest diagonally dominant matrix to X.
+
+    .. math:: \min_Y ‖X-Y‖_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
+
+    References:
+        Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
+    """
+    raise NotImplementedError
+
+
+# endregion other projections ----------------------------------------------------------
+
+
+# region special projections -----------------------------------------------------------
+@signature("(..., m, n) -> (..., m, n)")
+def contraction(x: Tensor, lipschitz_const: float) -> Tensor:
+    r"""Return the closest contraction matrix to X.
+
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ θ
+
+    One can show analytically that the unique smallest norm minimizer is
+    $Y = \min(1, θ/σ) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
+
+    Proof:
+        Apply SVD: $X = UΣVᵀ$, then, the problem is equivalent to minimizing
+        $‖UΣVᵀ - Y‖₂ = ‖Σ - Uᵀ Y V‖₂ = ‖Σ - Z‖₂$ subject to $‖Z‖₂ ≤ θ$.
+        Since $Σ$ is diagonal, one can show the problem is equivalent to minimizing
+        $‖𝛔 - 𝐳‖₂$ subject to $‖𝐳‖_∞ ≤ θ$, where $𝐳 = \text{diag}(Z)$.
+        Which is solved by $𝐳 = \min(1, θ/σ₁)⋅𝛔$.
+    """
+    sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
+    factor = torch.minimum(lipschitz_const / sigma, torch.ones_like(sigma))
+    return x * factor
+
+
+@signature("[(..., m, n), (m, n)] -> (..., m, n)")
+def masked(x: Tensor, mask: Tensor) -> Tensor:
+    r"""Return the closest banded matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   M⊙Y = Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = 𝕄⊙X$.
+
+    See Also:
+        - `projections.masked`
+        - `projections.diagonal`
+        - `projections.lower_triangular`
+        - `projections.upper_triangular`
+        - `projections.banded`
+    """
+    zero = torch.tensor(0.0, dtype=x.dtype, device=x.device)
+    mask_ = torch.as_tensor(mask, dtype=torch.bool, device=x.device)
+    return torch.where(mask_, x, zero)
+
+
+@signature("(..., m, n) -> (..., m, n)")
 def banded(x: Tensor, lower: int, upper: int) -> Tensor:
     r"""Return the closest banded matrix to X.
 
@@ -298,52 +336,24 @@ def banded(x: Tensor, lower: int, upper: int) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def tridiagonal(x: Tensor) -> Tensor:
-    r"""Return the closest tridiagonal matrix to X.
+def low_rank(x: Tensor, rank: int) -> Tensor:
+    r"""Return the closest low rank matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   Y = T⊙Y
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ k
 
-    This is the special case of `banded` with `lower=-1` and `upper=1`.
+    One can show analytically that Y = UₖΣₖVₖᵀ is the unique minimizer,
+    where X=UΣVᵀ is the SVD of X.
     """
-    return banded(x, lower=-1, upper=1)
+    U, S, Vh = torch.linalg.svd(x, full_matrices=False)
+    return torch.einsum(
+        "...ij, ...j, ...jk -> ...ik",
+        U[..., :, :rank],
+        S[..., :rank],
+        Vh[..., :rank, :],
+    )
 
 
-# endregion masked projections ---------------------------------------------------------
+# endregion special projections --------------------------------------------------------
 
 
-# region other projections -------------------------------------------------------------
-@signature("(..., m, n) -> (..., m, n)")
-def contraction(x: Tensor, lipschitz_const: float = 1.0) -> Tensor:
-    r"""Return the closest contraction matrix to X.
-
-    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ θ
-
-    One can show analytically that the unique smallest norm minimizer is
-    $Y = \min(1, θ/σ) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
-
-    Proof:
-        Apply SVD: $X = UΣVᵀ$, then, the problem is equivalent to minimizing
-        $‖UΣVᵀ - Y‖₂ = ‖Σ - Uᵀ Y V‖₂ = ‖Σ - Z‖₂$ subject to $‖Z‖₂ ≤ θ$.
-        Since $Σ$ is diagonal, one can show the problem is equivalent to minimizing
-        $‖𝛔 - 𝐳‖₂$ subject to $‖𝐳‖_∞ ≤ θ$, where $𝐳 = \text{diag}(Z)$.
-        Which is solved by $𝐳 = \min(1, θ/σ₁)⋅𝛔$.
-    """
-    sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
-    factor = torch.minimum(lipschitz_const / sigma, torch.ones_like(sigma))
-    return x * factor
-
-
-@signature("(..., n, n) -> (..., n, n)")
-def diagonally_dominant(x: Tensor) -> Tensor:
-    r"""Return the closest diagonally dominant matrix to X.
-
-    .. math:: \min_Y ‖X-Y‖_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
-
-    References:
-        Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
-    """
-    raise NotImplementedError
-
-
-# endregion other projections ----------------------------------------------------------
 # endregion projections ----------------------------------------------------------------
