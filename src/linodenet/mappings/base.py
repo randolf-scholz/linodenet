@@ -107,7 +107,7 @@ class SurjectionBase(nn.Module, Surjection[Tensor, Tensor]):
         return self.right_inverse(y)
 
 
-class ProjectionBase(nn.Module):
+class ProjectionBase(SurjectionBase, Projection[Tensor]):
     r"""Abstract Base Class for Projection components."""
 
     @abstractmethod

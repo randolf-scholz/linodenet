@@ -11,9 +11,9 @@ __all__ = [
     "forecasting",
     "imputation",
     "initializations",
+    "mappings",
     "special",
     "parametrize",
-    "projections",
     "regularizations",
     "signatures",
     "testing",
@@ -52,10 +52,10 @@ from linodenet import (
     forecasting,
     imputation,
     initializations,
+    mappings,
     parametrize,
     regularizations,
     testing,
     types,
     utils,
 )
-from linodenet.mappings import projections

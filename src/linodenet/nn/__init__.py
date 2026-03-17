@@ -9,6 +9,8 @@ __all__ = [
     "activations",
     "containers",
     "embeddings",
+    "projections",
+    "surjections",
     # base classes & protocols
     "ModuleSequence",
     "ModuleMapping",
@@ -22,7 +24,7 @@ __all__ = [
     "LinearContraction",
 ]
 
-from linodenet.mappings import embeddings
+from linodenet.mappings import embeddings, projections, surjections
 from linodenet.nn import activations, containers
 from linodenet.nn.containers import ModuleMapping, ModuleSequence
 from linodenet.nn.linear_contraction import LinearContraction
@@ -33,10 +35,10 @@ from linodenet.nn.rezero import ReZero, ReZeroResNet
 
 __all__ += activations.__all__
 __all__ += embeddings.__all__
+__all__ += surjections.__all__
+__all__ += projections.__all__
 
 # __all__ += bijections.__all__
-
-
 # __all__ += filters.__all__
 # __all__ += forecasting.__all__
 # __all__ += imputation.__all__

@@ -42,7 +42,9 @@ EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
 r"""Dictionary of available embeddings."""
 
 SURJECTIONS: dict[str, type[SurjectionBase]] = {
-
+    "CayleyMap"       : CayleyMap,
+    "ConcatProjection": ConcatProjection,
+    "GramMatrix"      : GramMatrix,
 }  # fmt: skip
 r"""Dictionary containing all available surjections."""
 
