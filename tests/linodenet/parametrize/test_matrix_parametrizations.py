@@ -8,7 +8,7 @@ from torch.fx import GraphModule
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
-from linodenet.mappings.projections import SpectralNorm
+from linodenet.mappings.projections import LipschitzBounded
 from linodenet.parametrize import (
     Banded,
     Diagonal,
@@ -77,7 +77,7 @@ MATRIX_PARAMETRIZATIONS: dict[str, nn.Module | type[ParametrizationBase]] = {
     "Masked": Masked(mask=MASK),
     "RankOne": RankOne,
     "SkewSymmetric": SkewSymmetric,
-    "SpectralNormalization": SpectralNorm(lipschitz_bound=0.97),
+    "SpectralNormalization": LipschitzBounded(lipschitz_bound=0.97),
     "Symmetric": Symmetric,
     "Traceless": Traceless,
     "Tridiagonal": Tridiagonal,

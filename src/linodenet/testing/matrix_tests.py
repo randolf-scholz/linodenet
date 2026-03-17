@@ -7,6 +7,8 @@ __all__ = [
     "is_backward_stable",
     "is_banded",
     "is_contraction",
+    "is_spectral_normalized",
+    "is_lipschitz_bounded",
     "is_diagonal",
     "is_diagonally_dominant",
     "is_forward_stable",
@@ -400,11 +402,51 @@ def is_masked(
 
 # region other projections -------------------------------------------------------------
 @signature("(..., m, n) -> bool[(...)]")
+def is_spectral_normalized(
+    x: Tensor,
+    /,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,
+    atol: float = 0.0,
+) -> Tensor:
+    r"""Check whether the given tensor has unit spectral norm.
+
+    .. math:: (‖A‖₂-1) ≤ rtol⋅𝟏 + atol
+
+    This is done by checking whether the spectral norm is less than or equal to L.
+    """
+    # TODO: compute spectral norm with given tolerance
+    sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
+    return (sigma - 1.0) <= (1.0 + rtol) * 1.0 + atol
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_lipschitz_bounded(
+    x: Tensor,
+    /,
+    lipschitz_bound: float,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,
+    atol: float = 0.0,
+) -> Tensor:
+    r"""Check whether the given tensor has bounded lipschitz constant.
+
+    .. math:: ‖A‖₂ ≤ (1+rtol)⋅L + atol
+
+    This is done by checking whether the spectral norm is less than or equal to L.
+    """
+    # TODO: compute spectral norm with given tolerance
+    sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
+    return sigma <= (1 + rtol) * lipschitz_bound + atol
+
+
+@signature("(..., m, n) -> bool[(...)]")
 def is_contraction(
     x: Tensor,
     /,
     *,
-    strict: bool = False,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -415,13 +457,10 @@ def is_contraction(
     If strict, we require that the spectral norm is strictly less than 1, more specifically
     we include tolerance:
 
-    .. math:: σ(A) ≤ (1-rtol)⋅r - atol
+    .. math:: ‖A‖₂ ≤ (1-rtol)⋅𝟏 - atol
     """
-    # TODO: compute spectral norm with given tolerance
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
-    if strict:
-        return sigma <= ((1.0 - rtol) * 1.0 - atol)
-    return sigma <= 1.0
+    return sigma <= ((1.0 - rtol) * 1.0 - atol)
 
 
 @signature("(..., m, n) -> bool[(...)]")

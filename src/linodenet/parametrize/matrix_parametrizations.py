@@ -39,7 +39,7 @@ from signatures import signature
 Banded = projections.Banded
 Masked = projections.Masked
 LowRank = projections.LowRank
-SpectralNorm = projections.SpectralNorm
+SpectralNorm = projections.LipschitzBounded
 
 
 class CayleyMap(ParametrizationBase):

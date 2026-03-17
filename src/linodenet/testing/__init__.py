@@ -26,6 +26,7 @@ MATRIX_TESTS: dict[str, MatrixTest] = {
     "is_orthogonal"          : is_orthogonal,
     "is_rank_one"            : is_rank_one,
     "is_skew_symmetric"      : is_skew_symmetric,
+    "is_spectral_normalized" : is_spectral_normalized,
     "is_square"              : is_square,
     "is_symmetric"           : is_symmetric,
     "is_symplectic"          : is_symplectic,
@@ -36,7 +37,9 @@ MATRIX_TESTS: dict[str, MatrixTest] = {
 r"""Dictionary of all available matrix tests."""
 
 MATRIX_TESTS_WITH_EXTRA_ARG = {
-    "is_masked": is_masked,
-    "is_low_rank": is_low_rank,
-    "is_banded": is_banded,
-}
+    "is_banded"            : is_banded,
+    "is_lipschitz_bounded" : is_lipschitz_bounded,
+    "is_low_rank"          : is_low_rank,
+    "is_masked"            : is_masked,
+}  # fmt: skip
+r"""Matrix tests that require an additional argument."""

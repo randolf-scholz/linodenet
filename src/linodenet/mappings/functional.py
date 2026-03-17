@@ -1,8 +1,8 @@
 r"""Projections for the Linear ODE Networks.
 
 Notes:
-    - See `linodenet.projections.functional` for functional implementations.
-    - See `linodenet.projections.modules` for module-based implementations.
+    - See `linodenet.mappings.functional` for functional implementations.
+    - See `linodenet.mappings.projections` for module-based implementations.
 """
 
 __all__ = [
@@ -10,7 +10,9 @@ __all__ = [
     "FunctionalProjection",
     # Projections
     "banded",
-    "spectral_norm",
+    "contraction",
+    "lipschitz_bounded",
+    "spectral_normalized",
     "diagonal",
     "diagonally_dominant",
     "hamiltonian",
@@ -275,7 +277,7 @@ def diagonally_dominant(x: Tensor) -> Tensor:
 
 # region special projections -----------------------------------------------------------
 @signature("(..., m, n) -> (..., m, n)")
-def spectral_norm(x: Tensor, lipschitz_bound: float) -> Tensor:
+def lipschitz_bounded(x: Tensor, lipschitz_bound: float) -> Tensor:
     r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ
@@ -294,6 +296,35 @@ def spectral_norm(x: Tensor, lipschitz_bound: float) -> Tensor:
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
     factor = torch.minimum(lipschitz_bound / sigma, torch.ones_like(sigma))
     return x * factor
+
+
+@signature("(..., m, n) -> (..., m, n)")
+def spectral_normalized(x: Tensor) -> Tensor:
+    r"""Return the closest matrix to X with unit spectral norm.
+
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ = 1
+
+    One can show analytically that the unique smallest norm minimizer is
+
+    .. math:: f(X) = X/‖X‖₂
+    """
+    sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
+    return x / sigma
+
+
+@signature("(..., m, n) -> (..., m, n)")
+def contraction(x: Tensor, lipschitz_bound: float) -> Tensor:
+    r"""Return the closest matrix to X with spectral norm at most γ<1.
+
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ < 1
+
+    One can show analytically that the unique smallest norm minimizer is
+
+    .. math:: f(X) = \min(1, γ/‖X‖₂)⋅X
+    """
+    if not 0 < lipschitz_bound < 1:
+        raise ValueError("lipschitz_bound must be between 0 and 1")
+    return lipschitz_bounded(x, lipschitz_bound=lipschitz_bound)
 
 
 @signature("[(..., m, n), (m, n)] -> (..., m, n)")

@@ -1,8 +1,8 @@
 r"""Projections for the Linear ODE Networks.
 
 Notes:
-    - See `linodenet.projections.functional` for functional implementations.
-    - See `linodenet.projections.modules` for module-based implementations.
+    - See `linodenet.mappings.functional` for functional implementations.
+    - See `linodenet.mappings.projections` for module-based implementations.
 """
 # ruff: noqa: F403, F405
 
@@ -59,6 +59,7 @@ FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
     "orthogonal"          : functional.orthogonal,
     "rank_one"            : functional.rank_one,
     "skew_symmetric"      : functional.skew_symmetric,
+    "spectral_normalized" : functional.spectral_normalized,
     "symmetric"           : functional.symmetric,
     "symplectic"          : functional.symplectic,
     "traceless"           : functional.traceless,
@@ -68,19 +69,22 @@ FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
 r"""Dictionary of all available modular metrics."""
 
 SPECIAL_PROJECTIONS = {
-    "banded"       : functional.banded,
-    "low_rank"     : functional.low_rank,
-    "masked"       : functional.masked,
-    "spectral_norm": functional.spectral_norm,
+    "banded"            : functional.banded,
+    "low_rank"          : functional.low_rank,
+    "masked"            : functional.masked,
+    "contraction"       : functional.contraction,
+    "lipschitz_bounded" : functional.lipschitz_bounded,
 }  # fmt: skip
 r"""Projections that require additional arguments"""
 
 MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "Banded"             : projections.Banded,
+    "Contraction"        : projections.Contraction,
     "Diagonal"           : projections.Diagonal,
     "DiagonallyDominant" : projections.DiagonallyDominant,
     "Hamiltonian"        : projections.Hamiltonian,
     "Identity"           : projections.Identity,
+    "LipschitzBounded"   : projections.LipschitzBounded,
     "LowRank"            : projections.LowRank,
     "LowerTriangular"    : projections.LowerTriangular,
     "Masked"             : projections.Masked,
@@ -88,7 +92,7 @@ MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "Orthogonal"         : projections.Orthogonal,
     "RankOne"            : projections.RankOne,
     "SkewSymmetric"      : projections.SkewSymmetric,
-    "SpectralNorm"       : projections.SpectralNorm,
+    "SpectralNormalized" : projections.SpectralNormalized,
     "Symmetric"          : projections.Symmetric,
     "Symplectic"         : projections.Symplectic,
     "Traceless"          : projections.Traceless,

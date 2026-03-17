@@ -5,8 +5,8 @@ Then the identity map on the image of ϕ is its right inverse,
 i.e., ϕ∘\id_{\im ϕ} = \id_{\im ϕ}.
 
 Notes:
-    - See `linodenet.projections.functional` for functional implementations.
-    - See `linodenet.projections.modules` for module-based implementations.
+    - See `linodenet.mappings.functional` for functional implementations.
+    - See `linodenet.mappings.projections` for module-based implementations.
 """
 
 __all__ = [
@@ -15,7 +15,9 @@ __all__ = [
     "Banded",
     "Diagonal",
     "DiagonallyDominant",
-    "SpectralNorm",
+    "LipschitzBounded",
+    "SpectralNormalized",
+    "Contraction",
     "Hamiltonian",
     "Identity",
     "LowerTriangular",
@@ -45,7 +47,7 @@ from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
 
 
-class SpectralNorm(ProjectionBase):
+class LipschitzBounded(ProjectionBase):
     r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ
@@ -71,7 +73,8 @@ class SpectralNorm(ProjectionBase):
         can be computed via fixpoint iteration.
 
     See Also:
-        - `projections.functional.contraction`
+        - `SpectralNormalized` for the special case of γ=1.
+        - `Contraction` for the special case of $0<‖Y‖₂<1$.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
@@ -144,6 +147,97 @@ class SpectralNorm(ProjectionBase):
 
         # return the parametrized weight and the cached singular triplet
         return gamma * x
+
+
+class SpectralNormalized(LipschitzBounded):
+    r"""Return the closest matrix to X with unit spectral norm.
+
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ = 1
+
+    One can show analytically that the unique smallest norm minimizer is
+
+    .. math:: f(X) = X/‖X‖₂
+
+    Args:
+        atol: The absolute tolerance for the power method.
+        rtol: The relative tolerance for the power method.
+        maxiter: The maximum number of iterations for the power method.
+
+    Note:
+        Uses a power iteration method with cached initial guesses.
+        This is especially useful for parametrization, but means this method expects
+        the same input shape for each forward pass.
+
+    See Also:
+        - `SpectralNormBounded` for the general case $‖Y‖₂≤γ$
+        - `Contraction` for the special case of $0<‖Y‖₂<1$.
+    """
+
+    def __init__(
+        self, atol: float = ATOL, rtol: float = RTOL, maxiter: Optional[int] = None
+    ) -> None:
+        super().__init__(lipschitz_bound=1.0, atol=atol, rtol=rtol, maxiter=maxiter)
+
+    @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Perform spectral normalization w ↦ w/‖w‖₂."""
+        # We use the cached singular vectors as initial guess for the power method.
+        sigma, u, v = singular_triplet(
+            x,
+            u0=self.u,
+            v0=self.v,
+            atol=self.atol,
+            rtol=self.rtol,
+            maxiter=self.maxiter,
+        )
+
+        # store the buffers
+        self.sigma = sigma
+        self.u = u
+        self.v = v
+
+        return x / sigma
+
+
+class Contraction(LipschitzBounded):
+    r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ<1.
+
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ 1
+
+    One can show analytically that the unique smallest norm minimizer is
+
+    .. math:: f(X) = \min(1, γ/‖X‖₂)⋅X
+
+    Args:
+        lipschitz_bound: The constant γ, the transformation ensures $‖Y‖₂≤γ<1$.
+        atol: The absolute tolerance for the power method.
+        rtol: The relative tolerance for the power method.
+        maxiter: The maximum number of iterations for the power method.
+
+    Note:
+        Uses a power iteration method with cached initial guesses.
+        This is especially useful for parametrization, but means this method expects
+        the same input shape for each forward pass.
+
+    See Also:
+        - `SpectralNormBounded` for the general case $‖Y‖₂≤γ$
+        - `SpectralNormalized` for the special case of $‖Y‖₂=1$.
+    """
+
+    def __init__(
+        self,
+        lipschitz_bound: float,
+        *,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+        maxiter: Optional[int] = None,
+    ) -> None:
+        if not 0 < lipschitz_bound < 1:
+            raise ValueError("lipschitz_bound must be between 0 and 1")
+        super().__init__(
+            lipschitz_bound=lipschitz_bound, atol=atol, rtol=rtol, maxiter=maxiter
+        )
 
 
 # region projections -------------------------------------------------------------------

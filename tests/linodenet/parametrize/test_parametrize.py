@@ -10,7 +10,7 @@ from torch.linalg import matrix_norm
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
-from linodenet.mappings.projections import SpectralNorm, Symmetric
+from linodenet.mappings.projections import LipschitzBounded, Symmetric
 from linodenet.parametrize import (
     Identity,
     UpperTriangular,
@@ -314,7 +314,7 @@ def test_surgery() -> None:
     m, n = 3, 3
     inputs = torch.randn(2, 3)
     model = nn.Linear(m, n)
-    spec = SpectralNorm(model.weight)
+    spec = LipschitzBounded(model.weight)
     # cloned_model = deepcopy(model)
 
     # register the parametrization
@@ -353,7 +353,7 @@ def test_surgery_extended() -> None:
         model.weight.copy_(weight)
         assert matrix_norm(model.weight, ord=2) > 1
 
-    spec = parametrize(model.weight, SpectralNorm)
+    spec = parametrize(model.weight, LipschitzBounded)
     spec.update_parametrization()
     assert matrix_norm(spec.cached_parameter, ord=2) <= 1.0
     spec.original_parameter.norm().backward()

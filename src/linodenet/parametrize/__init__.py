@@ -26,7 +26,6 @@ __all__ = [
     "update_parametrizations",
 ]
 
-from linodenet.mappings.projections import SpectralNorm
 from linodenet.parametrize import matrix_parametrizations, tensor_parametrizations
 from linodenet.parametrize.base import (
     Parametrization,
