@@ -29,7 +29,7 @@ from typing import Protocol
 import torch
 from torch import Tensor
 
-from linodenet.constants import ATOL, RTOL, TRUE
+from linodenet.constants import ATOL, RTOL
 from signatures import signature
 
 
@@ -293,8 +293,10 @@ def is_upper_triangular(
 @signature("(..., m, n) -> bool[(...)]")
 def is_banded(
     x: Tensor,
-    upper: int = 0,
-    lower: int = 0,
+    /,
+    lower: int,
+    upper: int,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
@@ -302,10 +304,12 @@ def is_banded(
     r"""Check whether the given tensor is banded."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
+    if not (lower <= 0 <= upper):
+        raise ValueError("Lower bound must be greater than or equal to upper bound.")
 
     return torch.isclose(
         x,
-        x.tril(lower).triu(upper),
+        x.triu(lower).tril(upper),
         rtol=rtol,
         atol=atol,
     ).all(dim=dim)
@@ -314,7 +318,9 @@ def is_banded(
 @signature("(..., m, n) -> bool[(...)]")
 def is_masked(
     x: Tensor,
-    mask: Tensor = TRUE,
+    /,
+    mask: Tensor,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,

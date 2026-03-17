@@ -14,6 +14,7 @@ from linodenet.parametrize import (
     Identity,
     LowerTriangular,
     LowRank,
+    Masked,
     ParametrizationBase,
     SkewSymmetric,
     SpectralNormalization,
@@ -32,12 +33,13 @@ from linodenet.testing import (
     is_diagonal,
     is_low_rank,
     is_lower_triangular,
+    is_masked,
     is_skew_symmetric,
     is_symmetric,
     is_traceless,
     is_upper_triangular,
 )
-from tests.testing import TestCase
+from tests.testing import DEVICES, TestCase
 
 
 def is_general_matrix(
@@ -52,12 +54,23 @@ def is_general_matrix(
     return torch.ones(shape, dtype=torch.bool, device=x.device)
 
 
+MASK = torch.tensor(
+    [
+        [True, False, True, False],
+        [False, True, False, True],
+        [True, True, False, False],
+        [False, False, True, True],
+    ]
+)
+
+
 MATRIX_PARAMETRIZATIONS: dict[str, nn.Module | type[ParametrizationBase]] = {
-    "Banded": Banded,
+    "Banded": Banded(-2, +1),
     "Diagonal": Diagonal,
     "Identity": Identity,
     "LowRank": LowRank,
     "LowerTriangular": LowerTriangular,
+    "Masked": Masked(mask=MASK),
     "SkewSymmetric": SkewSymmetric,
     "SpectralNormalization": SpectralNormalization(gamma=0.97),
     "Symmetric": Symmetric,
@@ -66,11 +79,12 @@ MATRIX_PARAMETRIZATIONS: dict[str, nn.Module | type[ParametrizationBase]] = {
 }
 
 MATRIX_TESTS: dict[str, MatrixTest] = {
-    "Banded": is_banded,
+    "Banded": lambda x, **kwargs: is_banded(x, -2, +1, **kwargs),
     "Diagonal": is_diagonal,
     "Identity": is_general_matrix,
     "LowRank": is_low_rank,
     "LowerTriangular": is_lower_triangular,
+    "Masked": lambda x, **kwargs: is_masked(x, mask=MASK, **kwargs),
     "SkewSymmetric": is_skew_symmetric,
     "SpectralNormalization": is_contraction,
     "Symmetric": is_symmetric,
@@ -84,6 +98,7 @@ SHAPES: dict[str, list[tuple[int, int]]] = {
     "Identity": [(5, 4)],
     "LowRank": [(5, 4)],
     "LowerTriangular": [(5, 4)],
+    "Masked": [(4, 4)],
     "SkewSymmetric": [(4, 4)],
     "SpectralNormalization": [(5, 4)],
     "Symmetric": [(4, 4)],
@@ -98,7 +113,7 @@ class TestSuite(TestCase):
     VALUE_RTOL = 1e-6
 
     def make_test_case(
-        self, shape: tuple[int, int]
+        self, shape: tuple[int, int], /, *, device: str
     ) -> tuple[nn.Sequential, Tensor, Tensor]:
         out_features, in_features = shape
         model = nn.Sequential(
@@ -107,9 +122,9 @@ class TestSuite(TestCase):
             nn.Linear(in_features, out_features, bias=False),
             nn.ReLU(),
             nn.Linear(out_features, out_features, bias=False),
-        )
-        x = torch.randn(self.BATCH_SIZE, in_features)
-        y = torch.randn(self.BATCH_SIZE, out_features)
+        ).to(device=device)
+        x = torch.randn(self.BATCH_SIZE, in_features, device=device)
+        y = torch.randn(self.BATCH_SIZE, out_features, device=device)
         return model, x, y
 
     def get_parametrized_layer(self, model: nn.Module) -> nn.Linear:
@@ -134,16 +149,17 @@ class TestSuite(TestCase):
         assert matrix_test(weight)
 
     def assert_stale(self, parametrization: nn.Module, expected: bool) -> None:
-        assert hasattr(parametrization, "is_stale")
-        is_stale = getattr(parametrization, "is_stale")
+        is_stale = getattr(parametrization, "is_stale", None)
+        assert is_stale is not None
         assert isinstance(is_stale, Tensor)
         assert is_stale.dtype == torch.bool
         assert bool(is_stale) is expected
 
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
-    def test_register_parametrization(self, name: str) -> None:
+    def test_register_parametrization(self, name: str, device: str) -> None:
         shape = SHAPES[name][0]
-        model, _, _ = self.make_test_case(shape)
+        model, _, _ = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
 
@@ -153,11 +169,12 @@ class TestSuite(TestCase):
         self.assert_stale(parametrization, False)
         self.check_parametrization(name, model)
 
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
-    def test_forward_uses_cached_parameter(self, name: str) -> None:
+    def test_forward_uses_cached_parameter(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        model, x, _ = self.make_test_case(shape)
+        model, x, _ = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
         parametrization = get_parametrizations(layer)["weight"]
@@ -183,11 +200,12 @@ class TestSuite(TestCase):
         assert not torch.allclose(y2, y0)
         self.check_parametrization(name, model)
 
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
-    def test_trainable(self, name: str) -> None:
+    def test_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        model, x, y = self.make_test_case(shape)
+        model, x, y = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
         optimizer = SGD(model.parameters(), lr=0.1)
@@ -211,11 +229,14 @@ class TestSuite(TestCase):
         )
         assert not torch.allclose(model(x), original_output)
 
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
-    def test_compile_forward_uses_cached_parameter(self, name: str) -> None:
+    def test_compile_forward_uses_cached_parameter(
+        self, name: str, device: str
+    ) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        model, x, _ = self.make_test_case(shape)
+        model, x, _ = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
 
@@ -237,11 +258,12 @@ class TestSuite(TestCase):
         self.assert_close(y1, y0, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
         self.check_parametrization(name, compiled_model)
 
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
-    def test_compile_trainable(self, name: str) -> None:
+    def test_compile_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        model, x, y = self.make_test_case(shape)
+        model, x, y = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
 
@@ -269,11 +291,12 @@ class TestSuite(TestCase):
         )
 
     @pytest.mark.xfail
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
-    def test_exported_trainable(self, name: str) -> None:
+    def test_exported_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        model, x, y = self.make_test_case(shape)
+        model, x, y = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
         parametrization = get_parametrizations(layer)["weight"]

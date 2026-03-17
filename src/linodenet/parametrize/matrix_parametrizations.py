@@ -36,6 +36,9 @@ from linodenet.testing import is_square
 from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
 
+Banded = projections.Banded
+Masked = projections.Masked
+
 
 class CayleyMap(ParametrizationBase):
     r"""Parametrize a matrix to be orthogonal via Cayley-Map.
@@ -201,16 +204,6 @@ class SpectralNormalization(nn.Module):
         return y
 
 
-class Banded(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Banded``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Banded.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Banded.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Banded(*args, **kwargs))
-
-
 class Diagonal(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.Diagonal``."""
 
@@ -259,16 +252,6 @@ class LowerTriangular(WrappedParametrization):
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.LowerTriangular(*args, **kwargs))
-
-
-class Masked(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.Masked``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.Masked.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.Masked.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.Masked(*args, **kwargs))
 
 
 class Normal(WrappedParametrization):

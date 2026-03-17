@@ -32,7 +32,6 @@ from collections.abc import Callable
 import torch
 from torch import Tensor
 
-from linodenet.constants import FALSE
 from signatures import signature
 
 type FunctionalProjection = Callable[[Tensor], Tensor]
@@ -190,7 +189,7 @@ def hamiltonian(x: Tensor) -> Tensor:
 
 # region masked projections ------------------------------------------------------------
 @signature("[(..., m, n), (m, n)] -> (..., m, n)")
-def masked(x: Tensor, mask: Tensor = FALSE) -> Tensor:
+def masked(x: Tensor, mask: Tensor) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   M⊙Y = Y
@@ -266,7 +265,7 @@ def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
+def banded(x: Tensor, lower: int, upper: int) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   B⊙Y = Y
@@ -280,8 +279,8 @@ def banded(x: Tensor, upper: int = 0, lower: int = 0) -> Tensor:
         - `projections.upper_triangular`
         - `projections.banded`
     """
-    x = x.triu(diagonal=upper)
-    x = x.tril(diagonal=lower)
+    x = x.triu(diagonal=lower)
+    x = x.tril(diagonal=upper)
     return x
 
 

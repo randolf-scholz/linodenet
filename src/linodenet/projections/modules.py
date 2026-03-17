@@ -39,7 +39,6 @@ import torch
 from torch import Tensor, jit, nn
 
 import linodenet.projections.functional as F
-from linodenet.constants import FALSE
 from linodenet.domains import MatrixDomains
 from signatures import signature
 
@@ -396,16 +395,21 @@ class Banded(ProjectionBase):
     lower: Final[int]
     r"""CONST: The lower diagonal to consider"""
 
-    def __init__(self, *, upper: int = 0, lower: int = 0) -> None:
+    def __init__(self, lower: int, upper: int) -> None:
         super().__init__()
         self.upper = upper
         self.lower = lower
+        if not (lower <= 0 <= upper):
+            raise ValueError(
+                f"lower must be ≤ 0 and upper must be ≥ 0,"
+                f" got lower={lower} and upper={upper}"
+            )
 
     @jit.export
     @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of banded matrices."""
-        return F.banded(x, upper=self.upper, lower=self.lower)
+        return F.banded(x, lower=self.lower, upper=self.upper)
 
 
 class Masked(ProjectionBase):
@@ -429,7 +433,7 @@ class Masked(ProjectionBase):
     mask: Tensor
     r"""CONST: Boolean mask to consider"""
 
-    def __init__(self, mask: bool | Tensor = FALSE) -> None:
+    def __init__(self, mask: bool | Tensor) -> None:
         super().__init__()
         self.mask = torch.as_tensor(mask, dtype=torch.bool)
 
