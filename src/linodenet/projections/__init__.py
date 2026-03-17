@@ -29,25 +29,25 @@ __all__ += surjections.__all__
 
 
 FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
-    "contraction"       : functional.contraction,
-    "diagonal"          : functional.diagonal,
-    "hamiltonian"       : functional.hamiltonian,
-    "identity"          : functional.identity,
-    "lower_triangular"  : functional.lower_triangular,
-    "normal"            : functional.normal,
-    "orthogonal"        : functional.orthogonal,
-    "rank_one"          : functional.rank_one,
-    "skew_symmetric"    : functional.skew_symmetric,
-    "symmetric"         : functional.symmetric,
-    "symplectic"        : functional.symplectic,
-    "traceless"         : functional.traceless,
-    "tridiagonal"       : functional.tridiagonal,
-    "upper_triangular"  : functional.upper_triangular,
+    "contraction"         : functional.contraction,
+    "diagonal"            : functional.diagonal,
+    "hamiltonian"         : functional.hamiltonian,
+    "identity"            : functional.identity,
+    "diagonally_dominant" : functional.diagonally_dominant,
+    "lower_triangular"    : functional.lower_triangular,
+    "normal"              : functional.normal,
+    "orthogonal"          : functional.orthogonal,
+    "rank_one"            : functional.rank_one,
+    "skew_symmetric"      : functional.skew_symmetric,
+    "symmetric"           : functional.symmetric,
+    "symplectic"          : functional.symplectic,
+    "traceless"           : functional.traceless,
+    "tridiagonal"         : functional.tridiagonal,
+    "upper_triangular"    : functional.upper_triangular,
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
 SPECIAL_PROJECTIONS = {
-    "diagonally_dominant" : functional.diagonally_dominant,
     "low_rank"            : functional.low_rank,
     "banded"              : functional.banded,
     "masked"              : functional.masked,
