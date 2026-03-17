@@ -15,6 +15,7 @@ __all__ = [
     "hamiltonian",
     "identity",
     "log_det_exp",
+    "lipschitz_bounded",
     "low_rank",
     "lower_triangular",
     "masked",
@@ -23,6 +24,7 @@ __all__ = [
     "orthogonal",
     "rank_one",
     "skew_symmetric",
+    "spectral_normalized",
     "symmetric",
     "symplectic",
     "traceless",
@@ -331,6 +333,39 @@ def contraction(
     where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
     """
     r = x - projections.contraction(x, lipschitz_bound=lipschitz_bound)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@signature("(..., m, n) -> (...)")
+def lipschitz_bounded(
+    x: Tensor,
+    lipschitz_bound: float,
+    p: str | int = "fro",
+    size_normalize: bool = False,
+) -> Tensor:
+    r"""Bias the matrix towards having spectral norm at most γ.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤γ$
+    """
+    r = x - projections.lipschitz_bounded(x, lipschitz_bound=lipschitz_bound)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@signature("(..., m, n) -> (...)")
+def spectral_normalized(
+    x: Tensor,
+    p: str | int = "fro",
+    size_normalize: bool = False,
+) -> Tensor:
+    r"""Bias the matrix towards having unit spectral norm.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂=1$
+    """
+    r = x - projections.spectral_normalized(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

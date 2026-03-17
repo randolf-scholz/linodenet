@@ -15,6 +15,7 @@ __all__ = [
     "Hamiltonian",
     "Identity",
     "LogDetExp",
+    "LipschitzBounded",
     "LowRank",
     "LowerTriangular",
     "Masked",
@@ -23,6 +24,7 @@ __all__ = [
     "Orthogonal",
     "RankOne",
     "SkewSymmetric",
+    "SpectralNormalized",
     "Symmetric",
     "Symplectic",
     "Traceless",
@@ -42,6 +44,7 @@ from linodenet.regularizations.functional import (
     diagonal,
     hamiltonian,
     identity,
+    lipschitz_bounded,
     log_det_exp,
     low_rank,
     lower_triangular,
@@ -51,6 +54,7 @@ from linodenet.regularizations.functional import (
     orthogonal,
     rank_one,
     skew_symmetric,
+    spectral_normalized,
     symmetric,
     symplectic,
     traceless,
@@ -539,6 +543,63 @@ class Contraction(RegularizationBase):
         return contraction(
             x, self.lipschitz_bound, p=self.p, size_normalize=self.size_normalize
         )
+
+
+class LipschitzBounded(RegularizationBase):
+    r"""Bias the matrix towards having spectral norm at most γ.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤γ$
+    """
+
+    lipschitz_bound: Final[float]
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self,
+        lipschitz_bound: float,
+        *,
+        p: str | int = "fro",
+        size_normalize: bool = True,
+    ) -> None:
+        super().__init__()
+        self.lipschitz_bound = lipschitz_bound
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards a Lipschitz-bounded matrix."""
+        return lipschitz_bounded(
+            x,
+            self.lipschitz_bound,
+            p=self.p,
+            size_normalize=self.size_normalize,
+        )
+
+
+class SpectralNormalized(RegularizationBase):
+    r"""Bias the matrix towards having unit spectral norm.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂=1$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards a spectrally normalized matrix."""
+        return spectral_normalized(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion other regularizations ------------------------------------------------------

@@ -35,6 +35,7 @@ FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
     "orthogonal"       : functional.orthogonal,
     "rank_one"         : functional.rank_one,
     "skew_symmetric"   : functional.skew_symmetric,
+    "spectral_normalized": functional.spectral_normalized,
     "symmetric"        : functional.symmetric,
     "symplectic"       : functional.symplectic,
     "traceless"        : functional.traceless,
@@ -45,10 +46,11 @@ r"""Dictionary of all available modular metrics."""
 
 
 SPECIAL_REGULARIZATIONS = {
-    "contraction": functional.contraction,
-    "banded"     : functional.banded,
-    "masked"     : functional.masked,
-    "low_rank"   : functional.low_rank,
+    "banded"           : functional.banded,
+    "contraction"      : functional.contraction,
+    "lipschitz_bounded": functional.lipschitz_bounded,
+    "low_rank"         : functional.low_rank,
+    "masked"           : functional.masked,
 }  # fmt: skip
 r"""Regularizations that require additional arguments."""
 
@@ -60,6 +62,7 @@ MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Hamiltonian"     : modules.Hamiltonian,
     "Identity"        : modules.Identity,
     "LogDetExp"       : modules.LogDetExp,
+    "LipschitzBounded": modules.LipschitzBounded,
     "LowRank"         : modules.LowRank,
     "LowerTriangular" : modules.LowerTriangular,
     "Masked"          : modules.Masked,
@@ -68,6 +71,7 @@ MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Orthogonal"      : modules.Orthogonal,
     "RankOne"         : modules.RankOne,
     "SkewSymmetric"   : modules.SkewSymmetric,
+    "SpectralNormalized": modules.SpectralNormalized,
     "Symmetric"       : modules.Symmetric,
     "Symplectic"      : modules.Symplectic,
     "Traceless"       : modules.Traceless,
