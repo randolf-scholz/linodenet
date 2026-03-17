@@ -33,7 +33,6 @@ from typing import Protocol, runtime_checkable
 import torch
 from torch import Tensor
 
-from linodenet.constants import TRUE
 from linodenet.projections import functional as projections
 from linodenet.types import BoolTensor
 from signatures import signature
@@ -94,7 +93,7 @@ def identity(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
 
 @signature("(..., m, n) -> (...)")
 def low_rank(
-    x: Tensor, rank: int = 1, p: str | int = "fro", size_normalize: bool = False
+    x: Tensor, rank: int, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being low rank.
 
@@ -218,8 +217,8 @@ def diagonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
 @signature("(..., m, n) -> (...)")
 def banded(
     x: Tensor,
-    upper: int = 0,
-    lower: int = 0,
+    lower: int,
+    upper: int,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -270,7 +269,7 @@ def upper_triangular(
 @signature("(..., m, n) -> (...)")
 def masked(
     x: Tensor,
-    mask: BoolTensor = TRUE,
+    mask: BoolTensor,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:

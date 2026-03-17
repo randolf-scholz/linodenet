@@ -34,7 +34,6 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 
-from linodenet.constants import TRUE
 from linodenet.regularizations.functional import (
     banded,
     contraction,
@@ -149,7 +148,7 @@ class LowRank(RegularizationBase):
     size_normalize: Final[bool]
 
     def __init__(
-        self, *, rank: int = 1, p: str | int = "fro", size_normalize: bool = True
+        self, rank: int, *, p: str | int = "fro", size_normalize: bool = True
     ) -> None:
         super().__init__()
         self.rank = rank
@@ -403,8 +402,8 @@ class Banded(RegularizationBase):
 
     def __init__(
         self,
-        lower: int = 0,
-        upper: int = 0,
+        lower: int,
+        upper: int,
         *,
         p: str | int = "fro",
         size_normalize: bool = True,
@@ -420,8 +419,8 @@ class Banded(RegularizationBase):
         r"""Bias x towards banded matrix."""
         return banded(
             x,
-            upper=self.upper,
             lower=self.lower,
+            upper=self.upper,
             p=self.p,
             size_normalize=self.size_normalize,
         )
@@ -441,7 +440,7 @@ class Masked(RegularizationBase):
 
     def __init__(
         self,
-        mask: BoolTensor = TRUE,
+        mask: BoolTensor,
         *,
         p: str | int = "fro",
         size_normalize: bool = True,
