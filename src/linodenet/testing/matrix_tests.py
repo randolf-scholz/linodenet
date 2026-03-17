@@ -16,11 +16,13 @@ __all__ = [
     "is_masked",
     "is_normal",
     "is_orthogonal",
+    "is_rank_one",
     "is_skew_symmetric",
     "is_square",
     "is_symmetric",
     "is_symplectic",
     "is_traceless",
+    "is_tridiagonal",
     "is_upper_triangular",
 ]
 
@@ -62,7 +64,9 @@ class MatrixTest(Protocol):
 @signature("(..., m, n) -> bool[(...)]")
 def is_low_rank(
     x: Tensor,
-    rank: int = 1,
+    /,
+    rank: int,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -74,9 +78,27 @@ def is_low_rank(
     return ranks <= rank
 
 
+@signature("(..., m, n) -> bool[(...)]")
+def is_rank_one(
+    x: Tensor,
+    /,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is rank-1."""
+    # move target dims to -1 and -2
+    x = x.movedim(dim, (-2, -1))
+    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
+    return ranks <= 1
+
+
 @signature("(..., m, n) -> bool[()]")
 def is_square(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,  # noqa: ARG001
     atol: float = 0.0,  # noqa: ARG001
@@ -92,6 +114,8 @@ def is_square(
 @signature("(..., n, n) -> bool[(...)]")
 def is_symmetric(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -108,6 +132,8 @@ def is_symmetric(
 @signature("(..., n, n) -> bool[(...)]")
 def is_skew_symmetric(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -124,6 +150,8 @@ def is_skew_symmetric(
 @signature("(..., n, n) -> bool[(...)]")
 def is_orthogonal(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -140,6 +168,8 @@ def is_orthogonal(
 @signature("(..., n, n) -> bool[(...)]")
 def is_traceless(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -163,6 +193,8 @@ def is_traceless(
 @signature("(..., n, n) -> bool[(...)]")
 def is_normal(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -179,6 +211,8 @@ def is_normal(
 @signature("(..., 2n, 2n) -> bool[(...)]")
 def is_symplectic(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -208,6 +242,8 @@ def is_symplectic(
 @signature("(..., 2n, 2n) -> bool[(...)]")
 def is_hamiltonian(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -237,6 +273,8 @@ def is_hamiltonian(
 @signature("(..., m, n) -> bool[(...)]")
 def is_diagonal(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
@@ -258,7 +296,9 @@ def is_diagonal(
 @signature("(..., m, n) -> bool[(...)]")
 def is_lower_triangular(
     x: Tensor,
+    /,
     lower: int = 0,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
@@ -273,7 +313,9 @@ def is_lower_triangular(
 @signature("(..., m, n) -> bool[(...)]")
 def is_upper_triangular(
     x: Tensor,
+    /,
     upper: int = 0,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
@@ -285,6 +327,24 @@ def is_upper_triangular(
     return torch.isclose(
         x,
         x.triu(upper),
+        rtol=rtol,
+        atol=atol,
+    ).all(dim=dim)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_tridiagonal(
+    x: Tensor,
+    /,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,
+    atol: float = 0.0,
+) -> Tensor:
+    r"""Check whether the given tensor is tridiagonal."""
+    return torch.isclose(
+        x,
+        x.triu(-1).tril(+1),
         rtol=rtol,
         atol=atol,
     ).all(dim=dim)
@@ -342,6 +402,8 @@ def is_masked(
 @signature("(..., m, n) -> bool[(...)]")
 def is_contraction(
     x: Tensor,
+    /,
+    *,
     strict: bool = False,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
@@ -365,6 +427,8 @@ def is_contraction(
 @signature("(..., m, n) -> bool[(...)]")
 def is_diagonally_dominant(
     x: Tensor,
+    /,
+    *,
     strict: bool = False,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
@@ -400,6 +464,8 @@ def is_diagonally_dominant(
 @signature("(..., m, n) -> bool[(...)]")
 def is_forward_stable(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
@@ -422,6 +488,8 @@ def is_forward_stable(
 @signature("(..., m, n) -> bool[(...)]")
 def is_backward_stable(
     x: Tensor,
+    /,
+    *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
