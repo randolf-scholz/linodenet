@@ -222,32 +222,6 @@ class InverseBijection[B: BijectionBase](BijectionBase):
         return self.bijection.forward(y)
 
 
-class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
-    r"""Apply multiple bijections sequentially."""
-
-    # noinspection PyMissingConstructor
-    def __init__(self, modules: Iterable[B] = (), /) -> None:
-        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[B].__init__(self, modules)
-
-    def __invert__(self) -> BijectionSequence:
-        if type(self) is not BijectionSequence:
-            raise NotImplementedError(
-                f"Inversion not implemented for subclass {type(self)}"
-            )
-        return BijectionSequence(~layer for layer in reversed(self))
-
-    def forward(self, x: Tensor) -> Tensor:
-        for layer in self:
-            x = layer.forward(x)
-        return x
-
-    def inverse(self, y: Tensor) -> Tensor:
-        for layer in reversed(self):
-            y = layer.inverse(y)
-        return y
-
-
 class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
     r"""Base class for transforms operating on single tensor."""
 
@@ -275,7 +249,7 @@ class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
         return self.decode(y)
 
 
-class InverseTransform[T: TransformBase](TransformBase):
+class InverseTransform[T: TransformBase](TransformBase, ModuleSequence[T]):
     r"""Inverse of a transform."""
 
     transform: T
@@ -300,10 +274,45 @@ class InverseTransform[T: TransformBase](TransformBase):
         return x, -logabsdet
 
 
-class TransformSequence[T: TransformBase](BijectionSequence[T]):
+class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
+    r"""Apply multiple bijections sequentially."""
+
+    # noinspection PyMissingConstructor
+    def __init__(self, modules: Iterable[B] = (), /) -> None:
+        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
+        ModuleSequence[B].__init__(self, modules)
+
+    def __invert__(self) -> BijectionSequence:
+        if type(self) is not BijectionSequence:
+            raise NotImplementedError(
+                f"Inversion not implemented for subclass {type(self)}"
+            )
+        return BijectionSequence(~layer for layer in reversed(self))
+
+    def forward(self, x: Tensor) -> Tensor:
+        for layer in self:
+            x = layer.forward(x)
+        return x
+
+    def inverse(self, y: Tensor) -> Tensor:
+        for layer in reversed(self):
+            y = layer.inverse(y)
+        return y
+
+
+class TransformSequence[T: TransformBase](TransformBase, ModuleSequence[T]):
     r"""Apply multiple transforms sequentially."""
 
+    # noinspection PyMissingConstructor
+    def __init__(self, modules: Iterable[T] = (), /) -> None:
+        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
+        ModuleSequence[T].__init__(self, modules)
+
     def __invert__(self) -> TransformSequence:
+        if type(self) is not TransformSequence:
+            raise NotImplementedError(
+                f"Inversion not implemented for subclass {type(self)}"
+            )
         return TransformSequence(~layer for layer in reversed(self))
 
     def encode(self, x: Tensor) -> Tensor:
