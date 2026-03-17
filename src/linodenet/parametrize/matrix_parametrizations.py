@@ -33,7 +33,7 @@ from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
 from linodenet.parametrize.base import ParametrizationBase, WrappedParametrization
 from linodenet.testing import is_square
-from linodenet_special import singular_triplet
+from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
 
 
