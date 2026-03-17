@@ -6,6 +6,7 @@ Notes:
     - See `linodenet.initializations.functional` for functional implementations.
     - See `linodenet.initializations.modules` for all module-based initializations.
 """
+# ruff: noqa: F403, F405
 
 __all__ = [
     # Sub-Modules
@@ -13,46 +14,23 @@ __all__ = [
     "modules",
     # Constants
     "INITIALIZATIONS",
-    # ABCs & Protocols
-    "Initialization",
-    # Functions
-    "canonical_skew_symmetric",
-    "canonical_symplectic",
-    "diagonally_dominant",
-    "gaussian",
-    "low_rank",
-    "orthogonal",
-    "skew_symmetric",
-    "special_orthogonal",
-    "symmetric",
-    "traceless",
 ]
 
 from linodenet.initializations import functional, modules
-from linodenet.initializations.functional import (
-    Initialization,
-    canonical_skew_symmetric,
-    canonical_symplectic,
-    diagonally_dominant,
-    gaussian,
-    low_rank,
-    orthogonal,
-    skew_symmetric,
-    special_orthogonal,
-    symmetric,
-    traceless,
-)
+from linodenet.initializations.functional import *
+
+__all__ += functional.__all__
 
 INITIALIZATIONS: dict[str, Initialization] = {
-    "canonical_skew_symmetric" : canonical_skew_symmetric,
-    "canonical_symplectic"     : canonical_symplectic,
-    "diagonally_dominant"      : diagonally_dominant,
-    "gaussian"                 : gaussian,
-    "low_rank"                 : low_rank,
-    "orthogonal"               : orthogonal,
-    "skew_symmetric"           : skew_symmetric,
-    "special_orthogonal"       : special_orthogonal,
-    "symmetric"                : symmetric,
-    "traceless"                : traceless,
+    "canonical_skew_symmetric" : functional.canonical_skew_symmetric,
+    "canonical_symplectic"     : functional.canonical_symplectic,
+    "diagonally_dominant"      : functional.diagonally_dominant,
+    "gaussian"                 : functional.gaussian,
+    "low_rank"                 : functional.low_rank,
+    "orthogonal"               : functional.orthogonal,
+    "skew_symmetric"           : functional.skew_symmetric,
+    "special_orthogonal"       : functional.special_orthogonal,
+    "symmetric"                : functional.symmetric,
+    "traceless"                : functional.traceless,
 }  # fmt: skip
 r"""Dictionary containing all available initializations."""
