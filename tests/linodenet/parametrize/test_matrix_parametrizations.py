@@ -107,6 +107,12 @@ class TestSuite(TestCase):
             nn.Linear(out_features, out_features, bias=False),
         )
 
+    def _make_data(self, shape: tuple[int, int]) -> tuple[Tensor, Tensor]:
+        out_features, in_features = shape
+        x = torch.randn(self.BATCH_SIZE, in_features)
+        y = torch.randn(self.BATCH_SIZE, out_features)
+        return x, y
+
     def _parametrized_layer(self, model: nn.Module) -> nn.Linear:
         if isinstance(model, OptimizedModule):
             model = model._orig_mod
@@ -128,11 +134,12 @@ class TestSuite(TestCase):
         assert isinstance(weight, Tensor)
         assert matrix_test(weight)
 
-    def _make_data(self, shape: tuple[int, int]) -> tuple[Tensor, Tensor]:
-        out_features, in_features = shape
-        x = torch.randn(self.BATCH_SIZE, in_features)
-        y = torch.randn(self.BATCH_SIZE, out_features)
-        return x, y
+    def assert_stale(self, parametrization: nn.Module, expected: bool) -> None:
+        assert hasattr(parametrization, "is_stale")
+        is_stale = getattr(parametrization, "is_stale")
+        assert isinstance(is_stale, Tensor)
+        assert is_stale.dtype == torch.bool
+        assert bool(is_stale) is expected
 
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_register_parametrization(self, name: str) -> None:
@@ -144,6 +151,7 @@ class TestSuite(TestCase):
         parametrization = get_parametrizations(layer)["weight"]
         assert isinstance(parametrization, ParametrizationBase)
         assert layer.weight is parametrization.cached_parameter
+        self.assert_stale(parametrization, False)
         self.check_parametrization(name, model)
 
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
@@ -155,6 +163,7 @@ class TestSuite(TestCase):
         layer = self._parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
         parametrization = get_parametrizations(layer)["weight"]
+        self.assert_stale(parametrization, False)
 
         y0 = model(x)
         cached_weight = layer.weight.clone()
@@ -171,6 +180,7 @@ class TestSuite(TestCase):
         )
 
         update_parametrizations(model)
+        self.assert_stale(parametrization, False)
         y2 = model(x)
         assert not torch.allclose(y2, y0)
         self.check_parametrization(name, model)
@@ -186,6 +196,7 @@ class TestSuite(TestCase):
         optimizer = SGD(model.parameters(), lr=0.1)
         register_optimizer_hook(optimizer, model)
         parametrization = get_parametrizations(layer)["weight"]
+        self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
         original_output = model(x).detach().clone()
 
@@ -193,7 +204,9 @@ class TestSuite(TestCase):
             model.zero_grad(set_to_none=True)
             loss = mse_loss(model(x), y)
             loss.backward()
+            self.assert_stale(parametrization, True)
             optimizer.step()
+            self.assert_stale(parametrization, False)
             self.check_parametrization(name, model)
 
         assert not torch.allclose(
@@ -217,6 +230,7 @@ class TestSuite(TestCase):
         y0 = compiled_model(x)
         compiled_layer = self._parametrized_layer(compiled_model)
         parametrization = get_parametrizations(compiled_layer)["weight"]
+        self.assert_stale(parametrization, False)
 
         with torch.no_grad():
             parametrization.original_parameter.add_(
@@ -242,14 +256,17 @@ class TestSuite(TestCase):
         optimizer = SGD(compiled_model.parameters(), lr=0.1)
         compiled_layer = self._parametrized_layer(compiled_model)
         parametrization = get_parametrizations(compiled_layer)["weight"]
+        self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
 
         for _ in range(3):
             compiled_model.zero_grad(set_to_none=True)
             loss = mse_loss(compiled_model(x), y)
             loss.backward()
+            self.assert_stale(parametrization, True)
             optimizer.step()
             update_parametrizations(compiled_model)
+            self.assert_stale(parametrization, False)
             self.check_parametrization(name, compiled_model)
 
         assert not torch.allclose(
@@ -269,14 +286,17 @@ class TestSuite(TestCase):
         optimizer = SGD(exported_model.parameters(), lr=0.1)
         exported_layer = self._parametrized_layer(exported_model)
         parametrization = get_parametrizations(exported_layer)["weight"]
+        self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
 
         for _ in range(3):
             exported_model.zero_grad(set_to_none=True)
             loss = mse_loss(exported_model(x), y)
             loss.backward()
+            self.assert_stale(parametrization, True)
             optimizer.step()
             update_parametrizations(exported_model)
+            self.assert_stale(parametrization, False)
             self.check_parametrization(name, exported_model)
 
         assert not torch.allclose(

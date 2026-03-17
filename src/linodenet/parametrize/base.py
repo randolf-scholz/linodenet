@@ -345,6 +345,8 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
     r"""PARAM: Holds parametrized tensors."""
     cached_parameter: Tensor
     r"""BUFFER: Holds cached version of the parametrized tensor."""
+    is_stale: Tensor
+    r"""BUFFER: Boolean scalar indicating whether the cached parameter is stale."""
     unsafe: Final[bool]
 
     def __init__(
@@ -360,6 +362,7 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         # get the tensor to parametrize
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
+        self.register_buffer("is_stale", torch.tensor(True), persistent=True)
         self.unsafe = unsafe
 
     # TODO: use this instead of metaclass?
@@ -421,6 +424,14 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         self.cached_parameter.detach_()
 
     @jit.export
+    def set_stale(self) -> None:
+        self.is_stale.fill_(True)
+
+    @jit.export
+    def set_fresh(self) -> None:
+        self.is_stale.fill_(False)
+
+    @jit.export
     @torch.no_grad()
     def update_original(self) -> None:
         pullback = self.right_inverse(self.cached_parameter)
@@ -453,6 +464,7 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
 
         # re-enable the autograd engine
         self.update_cache()
+        self.set_fresh()
 
 
 class WrappedParametrization(ParametrizationBase):
@@ -567,6 +579,11 @@ def register_parametrization(
 
     # initialize the parametrization
     wrapper.update_parametrization()
+
+    def hook(_: Tensor) -> None:
+        wrapper.set_stale()
+
+    wrapper.original_parameter.register_post_accumulate_grad_hook(hook)
 
 
 def is_parametrized(module: nn.Module, tensor_name: Optional[str] = None) -> bool:
