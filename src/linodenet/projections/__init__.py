@@ -30,9 +30,9 @@ __all__ += surjections.__all__
 
 FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
     "diagonal"            : functional.diagonal,
+    "diagonally_dominant" : functional.diagonally_dominant,
     "hamiltonian"         : functional.hamiltonian,
     "identity"            : functional.identity,
-    "diagonally_dominant" : functional.diagonally_dominant,
     "lower_triangular"    : functional.lower_triangular,
     "normal"              : functional.normal,
     "orthogonal"          : functional.orthogonal,
@@ -47,16 +47,15 @@ FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
 r"""Dictionary of all available modular metrics."""
 
 SPECIAL_PROJECTIONS = {
-    "contraction" : functional.contraction,
-    "low_rank"    : functional.low_rank,
-    "banded"      : functional.banded,
-    "masked"      : functional.masked,
+    "banded"       : functional.banded,
+    "low_rank"     : functional.low_rank,
+    "masked"       : functional.masked,
+    "spectral_norm": functional.spectral_norm,
 }  # fmt: skip
 r"""Projections that require additional arguments"""
 
 MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "Banded"             : modules.Banded,
-    "Contraction"        : modules.Contraction,
     "Diagonal"           : modules.Diagonal,
     "DiagonallyDominant" : modules.DiagonallyDominant,
     "Hamiltonian"        : modules.Hamiltonian,
@@ -68,6 +67,7 @@ MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "Orthogonal"         : modules.Orthogonal,
     "RankOne"            : modules.RankOne,
     "SkewSymmetric"      : modules.SkewSymmetric,
+    "SpectralNorm"       : modules.SpectralNorm,
     "Symmetric"          : modules.Symmetric,
     "Symplectic"         : modules.Symplectic,
     "Traceless"          : modules.Traceless,

@@ -4,6 +4,8 @@ __all__ = [
     "Surjection",
     "SurjectionBase",
     "ConcatProjection",
+    "CayleyMap",
+    "GramMatrix",
 ]
 
 from abc import abstractmethod
@@ -12,6 +14,7 @@ from typing import Final, Protocol, runtime_checkable
 import torch
 from torch import Tensor, jit, nn
 
+from linodenet.domains import MatrixDomains
 from signatures import signature
 
 
@@ -42,6 +45,51 @@ class SurjectionBase(nn.Module, Surjection[Tensor, Tensor]):
     def decode(self, y: Tensor) -> Tensor:
         r"""Alias for `right_inverse` method."""
         return self.right_inverse(y)
+
+
+class GramMatrix(SurjectionBase):
+    r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SEMIDEFINITE
+
+    @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.einsum("...kn, ...mk -> ...mn", x, x)
+
+    @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r"""This requires the matrix square root, which is not implemented in PyTorch.
+
+        See: https://github.com/pytorch/pytorch/issues/9983
+        """
+        raise NotImplementedError
+
+
+class CayleyMap(SurjectionBase):
+    r"""Parametrize a matrix to be orthogonal via Cayley-Map.
+
+    References:
+        - https://pytorch.org/tutorials/intermediate/parametrizations.html
+        - https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SPECIAL_ORTHOGONAL
+
+    @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        I = torch.eye(x.shape[-1], dtype=x.dtype, device=x.device)
+        return torch.linalg.lstsq(I + x, I - x).solution
+
+    @jit.export
+    @signature("(..., n, n) -> (..., n, n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        I = torch.eye(y.shape[-1], dtype=y.dtype, device=y.device)
+        return torch.linalg.lstsq(I - y, I + y).solution
 
 
 class ConcatProjection(SurjectionBase):

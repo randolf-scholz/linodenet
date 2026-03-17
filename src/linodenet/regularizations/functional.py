@@ -325,7 +325,7 @@ def contraction(
 
     where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
     """
-    r = x - projections.contraction(x)
+    r = x - projections.spectral_norm(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

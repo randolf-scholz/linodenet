@@ -15,9 +15,9 @@ __all__ = [
     "ProjectionBase",
     # Classes
     "Banded",
-    "Contraction",
     "Diagonal",
     "DiagonallyDominant",
+    "SpectralNorm",
     "Hamiltonian",
     "Identity",
     "LowerTriangular",
@@ -35,23 +35,30 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from typing import Final, Protocol, runtime_checkable
+from typing import Final, Optional, Protocol, final, runtime_checkable
 
 import torch
 from torch import Tensor, jit, nn
 
 import linodenet.projections.functional as F
+from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
+from linodenet.projections.surjections import Surjection
+from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
 
 
 @runtime_checkable
-class Projection[T](Protocol):
+class Projection[T](Surjection[T, T], Protocol):
     r"""Protocol for projections.
 
-    A projection is a mapping $φ:X→X$ such that $φ∘φ=φ$.
-    In particular, $φ=i∘π$ for the embedding $i:\Im(φ)→X$ where $π:X→\Im(φ)$ is
-    $φ$ viewed as a surjection onto its image.
+    Projections are a stronger form of surjections: we additionally require
+
+    - The domain is a subset of the codomain
+    -`right_inverse` is the identity map.
+
+    That is, a projection is a mapping $φ:X→X$ such that $φ∘φ=φ$. In particular,
+    $φ=i∘π$ for the embedding $i:\Im(φ)→X$ where $π:X→\Im(φ)$ is $φ$ viewed as a surjection onto its image.
     Then the identity map on the image of $φ$ is the right inverse of $π$.
 
     References:
@@ -71,7 +78,7 @@ class Projection[T](Protocol):
         return y
 
 
-class ProjectionBase(nn.Module, Projection[Tensor]):
+class ProjectionBase(nn.Module):
     r"""Abstract Base Class for Projection components."""
 
     @abstractmethod
@@ -86,6 +93,7 @@ class ProjectionBase(nn.Module, Projection[Tensor]):
             y: The projected tensor.
         """
 
+    @final
     @jit.export
     @signature("(..., *ys) -> (..., *xs)")
     def right_inverse(self, y: Tensor) -> Tensor:
@@ -108,6 +116,107 @@ class ProjectionBase(nn.Module, Projection[Tensor]):
     def decode(self, y: Tensor) -> Tensor:
         r"""Alias for `right_inverse` method."""
         return self.right_inverse(y)
+
+
+class SpectralNorm(ProjectionBase):
+    r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ.
+
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ
+
+    One can show analytically that the unique smallest norm minimizer is
+
+    .. math:: f(X) = \min(1, γ/‖X‖₂)⋅X
+
+    Args:
+        lipschitz_bound: The constant γ, the transformation ensures $$.
+        atol: The absolute tolerance for the power method.
+        rtol: The relative tolerance for the power method.
+        maxiter: The maximum number of iterations for the power method.
+
+    Note:
+        Uses a power iteration method with cached initial guesses.
+        This is especially useful for parametrization, but means this method expects
+        the same input shape for each forward pass.
+
+    Note:
+        For $‖A‖₂<1$, it follows that $x↦Ax$ is a contraction mapping. In particular,
+        the residual mapping $x↦x ± Ax$ is invertible in this case, and the inverse
+        can be computed via fixpoint iteration.
+
+    See Also:
+        - `projections.functional.contraction`
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+
+    sigma: Tensor | None
+    r"""BUFFER: The cached singular value."""
+    u: Tensor | None
+    r"""BUFFER: The cached left singular vector."""
+    v: Tensor | None
+    r"""BUFFER: The cached right singular vector."""
+
+    GAMMA: Tensor
+    r"""CONST: The constant γ, the transformation ensures $‖A‖₂≤γ$."""
+    ONE: Tensor
+    r"""CONST: The constant 1."""
+    maxiter: Final[Optional[int]]
+    r"""CONST: The maximum number of iterations for the power method."""
+    atol: Final[float]
+    r"""CONST: The absolute tolerance for the power method."""
+    rtol: Final[float]
+    r"""CONST: The relative tolerance for the power method."""
+
+    def __init__(
+        self,
+        lipschitz_bound: float,
+        *,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+        maxiter: Optional[int] = None,
+    ) -> None:
+        super().__init__()
+
+        # constants
+        self.atol = atol
+        self.rtol = rtol
+        self.maxiter = maxiter
+
+        # shape-dependent buffers are initialized lazily on first use
+        self.register_buffer("sigma", None, persistent=True)
+        self.register_buffer("u", None, persistent=True)
+        self.register_buffer("v", None, persistent=True)
+        self.register_buffer("ONE", torch.tensor(1.0), persistent=True)
+        self.register_buffer(
+            "GAMMA", torch.tensor(float(lipschitz_bound)), persistent=True
+        )
+
+    @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Perform spectral normalization w ↦ w/‖w‖₂."""
+        # We use the cached singular vectors as initial guess for the power method.
+        sigma, u, v = singular_triplet(
+            x,
+            u0=self.u,
+            v0=self.v,
+            atol=self.atol,
+            rtol=self.rtol,
+            maxiter=self.maxiter,
+        )
+
+        # store the buffers
+        self.sigma = sigma
+        self.u = u
+        self.v = v
+
+        # map A' ← A ⋅ min(1, γ/‖A₂‖), which is the largest value that ensures
+        # ‖A'‖₂ ≤ min(γ, ‖A‖₂)
+        gamma = torch.minimum(self.ONE, self.GAMMA / sigma)
+
+        # return the parametrized weight and the cached singular triplet
+        return gamma * x
 
 
 # region projections -------------------------------------------------------------------
@@ -414,28 +523,6 @@ class DiagonallyDominant(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of diagonally dominant matrices."""
         return F.diagonally_dominant(x)
-
-
-class Contraction(ProjectionBase):
-    r"""Return the closest contraction matrix to X.
-
-    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ 1
-
-    One can show analytically that the unique smallest norm minimizer is
-    $Y = \min(1, σ⁻¹) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
-
-    See Also:
-        - `projections.functional.contraction`
-    """
-
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
-
-    @jit.export
-    @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Project into space of contraction matrices."""
-        return F.contraction(x)
 
 
 class RankOne(ProjectionBase):

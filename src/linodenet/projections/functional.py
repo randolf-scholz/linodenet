@@ -10,7 +10,7 @@ __all__ = [
     "FunctionalProjection",
     # Projections
     "banded",
-    "contraction",
+    "spectral_norm",
     "diagonal",
     "diagonally_dominant",
     "hamiltonian",
@@ -275,13 +275,14 @@ def diagonally_dominant(x: Tensor) -> Tensor:
 
 # region special projections -----------------------------------------------------------
 @signature("(..., m, n) -> (..., m, n)")
-def contraction(x: Tensor, lipschitz_const: float) -> Tensor:
-    r"""Return the closest contraction matrix to X.
+def spectral_norm(x: Tensor, lipschitz_bound: float) -> Tensor:
+    r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ.
 
-    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ θ
+    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ
 
     One can show analytically that the unique smallest norm minimizer is
-    $Y = \min(1, θ/σ) X$, where $σ = ‖X‖₂$ is the spectral norm of $X$.
+
+    .. math:: f(X) = \min(1, γ/‖X‖₂)⋅X
 
     Proof:
         Apply SVD: $X = UΣVᵀ$, then, the problem is equivalent to minimizing
@@ -291,7 +292,7 @@ def contraction(x: Tensor, lipschitz_const: float) -> Tensor:
         Which is solved by $𝐳 = \min(1, θ/σ₁)⋅𝛔$.
     """
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=(-2, -1))
-    factor = torch.minimum(lipschitz_const / sigma, torch.ones_like(sigma))
+    factor = torch.minimum(lipschitz_bound / sigma, torch.ones_like(sigma))
     return x * factor
 
 
