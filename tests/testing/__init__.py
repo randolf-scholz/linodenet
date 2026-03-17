@@ -4,6 +4,7 @@ __all__ = [
     "PROJECT",
     "DTYPES",
     "DEVICES",
+    "SEEDS_10",
     "SEEDS",
     "SEED",
     # Classes
@@ -17,7 +18,7 @@ __all__ = [
 ]
 
 from tests.testing.assertions import TestCase
-from tests.testing.constants import DEVICES, DTYPES, SEED, SEEDS
+from tests.testing.constants import DEVICES, DTYPES, SEED, SEEDS, SEEDS_10
 from tests.testing.misc import camel2snake, snake2camel
 from tests.testing.plotting import visualize_distribution
 from tests.testing.project import PROJECT

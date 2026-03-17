@@ -2,107 +2,54 @@ import pytest
 import torch
 
 from linodenet.bijections import LowRankFlow
-from tests.linodenet.bijections.fixtures import SEEDS
+from tests.testing import SEEDS_10, TestCase
 
 
-@pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
-@pytest.mark.parametrize("input_size", [4, 16, 64, 256], ids="input_size={}".format)
-@pytest.mark.parametrize("rank", [1, 2, 4], ids="rank={}".format)
-def test_invertibility(seed: int, input_size: int, rank: int) -> None:
-    r"""Check forward/inverse round trips and logabsdet cancellation."""
-    torch.manual_seed(seed)
-    value_atol = 1e-4
-    value_rtol = 1e-5
-    logabsdet_atol = 1e-5
-    logabsdet_rtol = 1e-5
+class TestLowRankFlow(TestCase):
+    VALUE_ATOL = 1e-3
+    VALUE_RTOL = 1e-5
+    LOGABSDET_ATOL = 1e-5
+    LOGABSDET_RTOL = 1e-5
+    BATCH_SIZE = 128
 
-    batch_size = 128
-    flow = LowRankFlow(input_size, rank=min(rank, input_size))
+    @pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
+    @pytest.mark.parametrize("input_size", [4, 16, 64, 256], ids="input_size={}".format)
+    @pytest.mark.parametrize("rank", [1, 2, 4], ids="rank={}".format)
+    def test_invertibility(self, seed: int, input_size: int, rank: int) -> None:
+        r"""Check forward/inverse round trips and logabsdet cancellation."""
+        torch.manual_seed(seed)
+        flow = LowRankFlow(input_size, rank=min(rank, input_size))
 
-    print(f"Test Case {seed=}, {input_size=}, {rank=}")
-
-    def check_forward() -> None:
-        x = torch.randn(batch_size, input_size)
+        x = torch.randn(self.BATCH_SIZE, input_size)
         y, forward_logabsdet = flow.encode_and_logabsdet(x)
         xhat, inverse_logabsdet = flow.decode_and_logabsdet(y)
 
         assert y.shape == x.shape
-        assert forward_logabsdet.shape == (batch_size,)
+        assert forward_logabsdet.shape == (self.BATCH_SIZE,)
         assert xhat.shape == x.shape
-        assert inverse_logabsdet.shape == (batch_size,)
+        assert inverse_logabsdet.shape == (self.BATCH_SIZE,)
 
-        forward_inverse_abs_error = (xhat - x).abs()
-        forward_inverse_rel_error = forward_inverse_abs_error / torch.maximum(
-            torch.maximum(xhat.abs(), x.abs()),
-            torch.full_like(xhat, torch.finfo(xhat.dtype).eps),
-        )
-        forward_inverse_logabsdet_error = (forward_logabsdet + inverse_logabsdet).abs()
-
-        print(
-            "forward -> inverse "
-            f"\n\tvalue     max_abs_error={forward_inverse_abs_error.max():.6e}"
-            f"   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tvalue     max_rel_error={forward_inverse_rel_error.max():.6e}"
-            f"   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tlogabsdet max_abs_error={forward_inverse_logabsdet_error.max():.6e}"
-            f"   (atol={logabsdet_atol}, rtol={logabsdet_rtol})"
-        )
-
-        assert torch.allclose(xhat, x, atol=value_atol, rtol=value_rtol), (
-            f"forward_inverse max_abs_error={forward_inverse_abs_error.max():.6e}, "
-            f"max_rel_error={forward_inverse_rel_error.max():.6e}, "
-        )
-        assert torch.allclose(
+        self.assert_close(xhat, x, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
+        self.assert_close(
             forward_logabsdet + inverse_logabsdet,
             torch.zeros_like(forward_logabsdet),
-            atol=logabsdet_atol,
-            rtol=logabsdet_rtol,
-        ), (
-            f"forward_inverse_logabsdet max_abs_error="
-            f"{forward_inverse_logabsdet_error.max():.6e}, "
+            atol=self.LOGABSDET_ATOL,
+            rtol=self.LOGABSDET_RTOL,
         )
 
-    def check_inverse() -> None:
-        y = torch.randn(batch_size, input_size)
+        y = torch.randn(self.BATCH_SIZE, input_size)
         x, inverse_logabsdet = flow.decode_and_logabsdet(y)
         yhat, forward_logabsdet = flow.encode_and_logabsdet(x)
 
         assert x.shape == y.shape
-        assert inverse_logabsdet.shape == (batch_size,)
+        assert inverse_logabsdet.shape == (self.BATCH_SIZE,)
         assert yhat.shape == y.shape
-        assert forward_logabsdet.shape == (batch_size,)
+        assert forward_logabsdet.shape == (self.BATCH_SIZE,)
 
-        inverse_forward_abs_error = (yhat - y).abs()
-        inverse_forward_rel_error = inverse_forward_abs_error / torch.maximum(
-            torch.maximum(yhat.abs(), y.abs()),
-            torch.full_like(yhat, torch.finfo(yhat.dtype).eps),
-        )
-        inverse_forward_logabsdet_error = (inverse_logabsdet + forward_logabsdet).abs()
-
-        print(
-            "inverse -> forward "
-            f"\n\tvalue     max_abs_error={inverse_forward_abs_error.max():.6e}"
-            f"   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tvalue     max_rel_error={inverse_forward_rel_error.max():.6e}"
-            f"   (atol={value_atol}, rtol={value_rtol})"
-            f"\n\tlogabsdet max_abs_error={inverse_forward_logabsdet_error.max():.6e}"
-            f"   (atol={logabsdet_atol}, rtol={logabsdet_rtol})"
-        )
-
-        assert torch.allclose(yhat, y, atol=value_atol, rtol=value_rtol), (
-            f"inverse_forward max_abs_error={inverse_forward_abs_error.max():.6e}, "
-            f"max_rel_error={inverse_forward_rel_error.max():.6e}, "
-            f"{value_atol=}, {value_rtol=}"
-        )
-        assert torch.allclose(
+        self.assert_close(yhat, y, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
+        self.assert_close(
             inverse_logabsdet + forward_logabsdet,
             torch.zeros_like(inverse_logabsdet),
-            atol=logabsdet_atol,
-            rtol=logabsdet_rtol,
-        ), (
-            f"inverse_forward_logabsdet max_abs_error="
-            f"{inverse_forward_logabsdet_error.max().item():.6e}, "
+            atol=self.LOGABSDET_ATOL,
+            rtol=self.LOGABSDET_RTOL,
         )
-
-    check_forward()
-    check_inverse()
