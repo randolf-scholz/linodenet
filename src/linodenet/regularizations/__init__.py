@@ -76,8 +76,9 @@ MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
-REGULARIZATIONS: dict[str, Regularization | type[Regularization]] = {
+REGULARIZATIONS = {
     **FUNCTIONAL_REGULARIZATIONS,
+    **SPECIAL_REGULARIZATIONS,
     **MODULAR_REGULARIZATIONS,
 }
 r"""Dictionary containing all available projections."""
