@@ -18,8 +18,8 @@ from importlib import metadata
 
 # setup path
 os.environ["GENERATING_DOCS"] = "true"
-sys.path.insert(0, os.path.abspath("../src"))  # Source code dir relative to this file
-sys.path.append(os.path.abspath("./extensions"))
+sys.path.insert(0, os.path.abspath("./extensions"))
+sys.path.insert(1, os.path.abspath("../src"))  # Source code dir relative to this file
 
 AUTHOR = "Randolf Scholz"
 MODULE = "linodenet"
@@ -55,7 +55,7 @@ extensions = [
     "sphinx.ext.viewcode",
     # 1st party extensions
     "details",
-    "signatures",
+    "signature_directive",
     # 3rd party extensions
     # "autoapi.extension",
     # "myst_parser",

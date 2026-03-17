@@ -46,7 +46,7 @@ class Signature(Directive):
 def setup(app: Sphinx) -> dict:
     r"""Install the extension."""
     app.add_directive("signature", Signature)
-    app.add_css_file("../_static/signatures.css")
+    app.add_css_file("signatures.css")
 
     return {
         "version": "0.1",
