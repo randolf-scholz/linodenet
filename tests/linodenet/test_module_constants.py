@@ -10,28 +10,23 @@ import pytest
 import linodenet as lib
 from linodenet.bijections import BIJECTIONS, Bijection, BijectionBase
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
-from linodenet.flows import (
-    FLOWS,
-    Flow,
-    FlowBase,
-)
+from linodenet.flows import FLOWS, Flow, FlowBase
 from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import (
     EMBEDDINGS,
     FUNCTIONAL_PROJECTIONS,
     MODULAR_PROJECTIONS,
+    SURJECTIONS,
     Embedding,
     EmbeddingBase,
     Projection,
     ProjectionBase,
+    Surjection,
+    SurjectionBase,
 )
 from linodenet.nn.activations import ALL_ACTIVATIONS, Activation
-from linodenet.parametrize import (
-    PARAMETRIZATIONS,
-    Parametrization,
-    ParametrizationBase,
-)
+from linodenet.parametrize import PARAMETRIZATIONS, Parametrization, ParametrizationBase
 from linodenet.regularizations import (
     FUNCTIONAL_REGULARIZATIONS,
     MODULAR_REGULARIZATIONS,
@@ -55,6 +50,7 @@ CASES: dict[str, Case] = {
     "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
     "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
     "embeddings"          : Case(lib.nn.embeddings  , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
+    "surjections"         : Case(lib.nn.surjections , Surjection     , SurjectionBase     , SURJECTIONS               ),
     "flows"               : Case(lib.flows          , Flow           , FlowBase           , FLOWS                     ),
     "imputation"          : Case(lib.imputation     , ImputerProtocol, None               , IMPUTERS                  ),
     "initializations"     : Case(lib.initializations, Initialization , None               , INITIALIZATIONS           ),
@@ -92,7 +88,7 @@ def test_name_casing(case_name: str, item_name: str) -> None:
     item = case.elements[item_name]
     assert item_name.isidentifier()
 
-    if isinstance(item, type):
+    if isinstance(item, type) or case_name == "parametrizations":
         # check if the name is in CamelCase
         assert item_name[0].isupper()
         assert "_" not in item_name

@@ -88,7 +88,7 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet"
-depends_on = ["linodenet_special", "linodenet.bijections", "linodenet.testing", "linodenet.distributions", "linodenet.filters", "linodenet.flows", "linodenet.imputation", "linodenet.parametrize", "linodenet.forecasting", "linodenet.initializations", "linodenet.regularizations", "linodenet.mappings"]
+depends_on = ["linodenet_special", "linodenet.bijections", "linodenet.testing", "linodenet.distributions", "linodenet.filters", "linodenet.flows", "linodenet.imputation", "linodenet.parametrize", "linodenet.forecasting", "linodenet.initializations", "linodenet.regularizations", "linodenet.mappings", "linodenet.nn"]
 
 [[modules ]]
 path = "signatures"

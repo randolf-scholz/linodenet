@@ -26,9 +26,9 @@ from linodenet.imputation.base import (
 )
 
 IMPUTERS: dict[str, type[ImputerProtocol]] = {
-    "ZeroImputer"           : ZeroImputer,
-    "ConstantValueImputer"  : ConstantImputer,
-    "LastValueImputer"      : LastValueImputer,
-    "LinearImputer"         : LinearImputer,
+    "ZeroImputer"      : ZeroImputer,
+    "ConstantImputer"  : ConstantImputer,
+    "LastValueImputer" : LastValueImputer,
+    "LinearImputer"    : LinearImputer,
 }  # fmt: skip
 r"""Dictionary of available imputers."""

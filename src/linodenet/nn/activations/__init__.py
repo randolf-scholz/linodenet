@@ -190,7 +190,7 @@ r"""Activations that do not match the usual signature of activations."""
 
 ACTIVATION_CLASSES: dict[str, type[Activation]] = {
     **TORCH_ACTIVATION_CLASSES,
-    "GeGLU": GEGLU,
+    "GEGLU": GEGLU,
     "ReGLU": ReGLU,
 }  # fmt: skip
 r"""Dictionary containing all available activation classes."""
