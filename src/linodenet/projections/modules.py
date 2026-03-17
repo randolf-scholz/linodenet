@@ -374,46 +374,6 @@ class LowerTriangular(ProjectionBase):
         return F.lower_triangular(x, lower=self.lower)
 
 
-class Banded(ProjectionBase):
-    r"""Return the closest banded matrix to X.
-
-    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝔹⊙Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
-
-    See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
-    """
-
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.BANDED
-
-    upper: Final[int]
-    r"""CONST: The upper diagonal to consider"""
-    lower: Final[int]
-    r"""CONST: The lower diagonal to consider"""
-
-    def __init__(self, lower: int, upper: int) -> None:
-        super().__init__()
-        self.upper = upper
-        self.lower = lower
-        if not (lower <= 0 <= upper):
-            raise ValueError(
-                f"lower must be ≤ 0 and upper must be ≥ 0,"
-                f" got lower={lower} and upper={upper}"
-            )
-
-    @jit.export
-    @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Project into space of banded matrices."""
-        return F.banded(x, lower=self.lower, upper=self.upper)
-
-
 class Tridiagonal(ProjectionBase):
     r"""Return the closest tridiagonal matrix to X.
 
@@ -431,38 +391,6 @@ class Tridiagonal(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of tridiagonal matrices."""
         return F.tridiagonal(x)
-
-
-class Masked(ProjectionBase):
-    r"""Return the closest banded matrix to X.
-
-    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕄⊙Y
-
-    One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
-
-    See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
-    """
-
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.MASKED
-
-    mask: Tensor
-    r"""CONST: Boolean mask to consider"""
-
-    def __init__(self, mask: bool | Tensor) -> None:
-        super().__init__()
-        self.mask = torch.as_tensor(mask, dtype=torch.bool)
-
-    @jit.export
-    @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Project into space of masked matrices."""
-        return F.masked(x, mask=self.mask)
 
 
 # endregion masked projections ---------------------------------------------------------
@@ -510,6 +438,60 @@ class Contraction(ProjectionBase):
         return F.contraction(x)
 
 
+class RankOne(ProjectionBase):
+    r"""Return the closest rank-1 matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
+
+    This is the special case of `LowRank` with `rank=1`.
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RANK_ONE
+
+    @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project into space of rank-1 matrices."""
+        return F.rank_one(x)
+
+
+# endregion other projections ----------------------------------------------------------
+
+
+# region special -----------------------------------------------------------------------
+class Masked(ProjectionBase):
+    r"""Return the closest banded matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕄⊙Y
+
+    One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.MASKED
+
+    mask: Tensor
+    r"""CONST: Boolean mask to consider"""
+
+    def __init__(self, mask: bool | Tensor) -> None:
+        super().__init__()
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)
+
+    @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project into space of masked matrices."""
+        return F.masked(x, mask=self.mask)
+
+
 class LowRank(ProjectionBase):
     r"""Return the closest low rank matrix to X.
 
@@ -534,23 +516,47 @@ class LowRank(ProjectionBase):
         return F.low_rank(x, rank=self.rank)
 
 
-class RankOne(ProjectionBase):
-    r"""Return the closest rank-1 matrix to X.
+class Banded(ProjectionBase):
+    r"""Return the closest banded matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
+    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝔹⊙Y
 
-    This is the special case of `LowRank` with `rank=1`.
+    One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
+
+    See Also:
+        - `projections.Masked`
+        - `projections.Diagonal`
+        - `projections.LowerTriangular`
+        - `projections.UpperTriangular`
+        - `projections.Banded`
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RANK_ONE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.BANDED
+
+    upper: Final[int]
+    r"""CONST: The upper diagonal to consider"""
+    lower: Final[int]
+    r"""CONST: The lower diagonal to consider"""
+
+    def __init__(self, lower: int, upper: int) -> None:
+        super().__init__()
+        self.upper = upper
+        self.lower = lower
+        if not (lower <= 0 <= upper):
+            raise ValueError(
+                f"lower must be ≤ 0 and upper must be ≥ 0,"
+                f" got lower={lower} and upper={upper}"
+            )
 
     @jit.export
     @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Project into space of rank-1 matrices."""
-        return F.rank_one(x)
+        r"""Project into space of banded matrices."""
+        return F.banded(x, lower=self.lower, upper=self.upper)
 
 
-# endregion other projections ----------------------------------------------------------
+# endregion special --------------------------------------------------------------------
+
+
 # endregion projections ----------------------------------------------------------------
