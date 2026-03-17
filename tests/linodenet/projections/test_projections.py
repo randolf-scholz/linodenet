@@ -6,6 +6,12 @@ import torch
 from linodenet.projections import (
     FUNCTIONAL_PROJECTIONS,
     MODULAR_PROJECTIONS,
+    RankOne,
+    Tridiagonal,
+    banded,
+    low_rank,
+    rank_one,
+    tridiagonal,
 )
 from linodenet.testing import MATRIX_TESTS
 from tests.testing import camel2snake, snake2camel
@@ -73,3 +79,19 @@ def test_projections_work(projection_name: str) -> None:
         raise pytest.skip(f"test for {projection_name} is not implemented.") from exc
 
     assert result.item() is True
+
+
+def test_rank_one_matches_low_rank_rank_1() -> None:
+    r"""Test that `rank_one` is the rank-1 specialization of `low_rank`."""
+    x = torch.randn(5, 4)
+
+    assert torch.allclose(rank_one(x), low_rank(x, rank=1))
+    assert torch.allclose(RankOne()(x), low_rank(x, rank=1))
+
+
+def test_tridiagonal_matches_banded_1() -> None:
+    r"""Test that `tridiagonal` is the tridiagonal specialization of `banded`."""
+    x = torch.randn(5, 5)
+
+    assert torch.allclose(tridiagonal(x), banded(x, lower=-1, upper=1))
+    assert torch.allclose(Tridiagonal()(x), banded(x, lower=-1, upper=1))

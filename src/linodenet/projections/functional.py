@@ -20,10 +20,12 @@ __all__ = [
     "masked",
     "normal",
     "orthogonal",
+    "rank_one",
     "skew_symmetric",
     "symmetric",
     "symplectic",
     "traceless",
+    "tridiagonal",
     "upper_triangular",
 ]
 
@@ -71,7 +73,7 @@ def skew_symmetric(x: Tensor) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def low_rank(x: Tensor, rank: int = 1) -> Tensor:
+def low_rank(x: Tensor, rank: int) -> Tensor:
     r"""Return the closest low rank matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ k
@@ -86,6 +88,17 @@ def low_rank(x: Tensor, rank: int = 1) -> Tensor:
         S[..., :rank],
         Vh[..., :rank, :],
     )
+
+
+@signature("(..., m, n) -> (..., m, n)")
+def rank_one(x: Tensor) -> Tensor:
+    r"""Return the closest rank-1 matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
+
+    This is the special case of `low_rank` with `rank=1`.
+    """
+    return low_rank(x, rank=1)
 
 
 @signature("(..., n, n) -> (..., n, n)")
@@ -282,6 +295,17 @@ def banded(x: Tensor, lower: int, upper: int) -> Tensor:
     x = x.triu(diagonal=lower)
     x = x.tril(diagonal=upper)
     return x
+
+
+@signature("(..., m, n) -> (..., m, n)")
+def tridiagonal(x: Tensor) -> Tensor:
+    r"""Return the closest tridiagonal matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   Y = T⊙Y
+
+    This is the special case of `banded` with `lower=-1` and `upper=1`.
+    """
+    return banded(x, lower=-1, upper=1)
 
 
 # endregion masked projections ---------------------------------------------------------

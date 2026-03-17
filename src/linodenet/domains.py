@@ -152,6 +152,7 @@ class MatrixDomains(StrEnum):
 
     GENERAL = "general"
     LOW_RANK = "low_rank"
+    RANK_ONE = "rank_one"
 
     SQUARE = "square"  # n x n matrices
     EVEN_SQUARE = "even_square"  # 2n x 2n matrices
@@ -180,6 +181,7 @@ class MatrixDomains(StrEnum):
 
     MASKED = "masked"
     DIAGONAL = "diagonal"
+    TRIDIAGONAL = "tridiagonal"
     UPPER_TRIANGULAR = "upper_triangular"
     LOWER_TRIANGULAR = "lower_triangular"
     BANDED = "banded"

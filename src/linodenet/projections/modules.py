@@ -25,10 +25,12 @@ __all__ = [
     "Masked",
     "Normal",
     "Orthogonal",
+    "RankOne",
     "SkewSymmetric",
     "Symmetric",
     "Symplectic",
     "Traceless",
+    "Tridiagonal",
     "UpperTriangular",
 ]
 
@@ -412,6 +414,25 @@ class Banded(ProjectionBase):
         return F.banded(x, lower=self.lower, upper=self.upper)
 
 
+class Tridiagonal(ProjectionBase):
+    r"""Return the closest tridiagonal matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖² s.t. Y = T⊙Y
+
+    One can show analytically that the unique smallest norm minimizer is
+    $Y = T⊙X$.
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.TRIDIAGONAL
+
+    @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project into space of tridiagonal matrices."""
+        return F.tridiagonal(x)
+
+
 class Masked(ProjectionBase):
     r"""Return the closest banded matrix to X.
 
@@ -511,6 +532,24 @@ class LowRank(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of low rank matrices."""
         return F.low_rank(x, rank=self.rank)
+
+
+class RankOne(ProjectionBase):
+    r"""Return the closest rank-1 matrix to X.
+
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
+
+    This is the special case of `LowRank` with `rank=1`.
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RANK_ONE
+
+    @jit.export
+    @signature("(..., m, n) -> (..., m, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Project into space of rank-1 matrices."""
+        return F.rank_one(x)
 
 
 # endregion other projections ----------------------------------------------------------
