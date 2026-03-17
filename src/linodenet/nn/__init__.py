@@ -3,6 +3,7 @@ r"""Neural Network subpackage of LinodeNet.
 This contains general-purpose building blocks for neural networks, such as layers, activations, and containers.
 This does not contain timeseries-specific layers and forecasting models.
 """
+# ruff: noqa: E402, F403
 
 __all__ = [
     # submodules/packages
@@ -33,20 +34,22 @@ from linodenet.nn.resnet import ResNet, ResNetBlock
 from linodenet.nn.reverse_dense import ReverseDense
 from linodenet.nn.rezero import ReZero, ReZeroResNet
 
-pass
+pass  # noqa: PIE790
 
-from linodenet.mappings import bijections, embeddings, projections, surjections
+from linodenet.mappings import (
+    bijections,
+    embeddings,
+    projections,
+    surjections,
+)
+from linodenet.mappings.bijections import *
+from linodenet.mappings.embeddings import *
+from linodenet.mappings.projections import *
+from linodenet.mappings.surjections import *
+from linodenet.nn.activations import *
 
 __all__ += activations.__all__
 __all__ += embeddings.__all__
 __all__ += surjections.__all__
 __all__ += projections.__all__
 __all__ += bijections.__all__
-
-# __all__ += bijections.__all__
-# __all__ += filters.__all__
-# __all__ += forecasting.__all__
-# __all__ += imputation.__all__
-# __all__ += layers.__all__
-# __all__ += projections.__all__
-# __all__ += flows.__all__
