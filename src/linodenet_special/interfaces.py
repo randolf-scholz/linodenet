@@ -84,9 +84,9 @@ class SingularTriplet(Protocol):
         *,
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = None,
-        atol: float = 1e-6,
-        rtol: float = 1e-6,
+        maxiter: Optional[int] = ...,
+        atol: float = ...,
+        rtol: float = ...,
     ) -> tuple[Tensor, Tensor, Tensor]:
         r"""Computes the singular triplet.
 
@@ -118,8 +118,8 @@ class SpectralNorm(Protocol):
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
         maxiter: Optional[int] = None,
-        atol: float = 1e-6,
-        rtol: float = 1e-6,
+        atol: float = ...,
+        rtol: float = ...,
     ) -> Tensor:
         r"""Computes the spectral norm.
 
