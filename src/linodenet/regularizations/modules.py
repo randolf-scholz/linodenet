@@ -516,18 +516,29 @@ class Contraction(RegularizationBase):
     where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
     """
 
+    lipschitz_bound: Final[float]
+
     p: Final[str | int]
     size_normalize: Final[bool]
 
-    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+    def __init__(
+        self,
+        lipschitz_bound: float,
+        *,
+        p: str | int = "fro",
+        size_normalize: bool = True,
+    ) -> None:
         super().__init__()
         self.p = p
         self.size_normalize = size_normalize
+        self.lipschitz_bound = lipschitz_bound
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards contraction."""
-        return contraction(x)
+        return contraction(
+            x, self.lipschitz_bound, p=self.p, size_normalize=self.size_normalize
+        )
 
 
 # endregion other regularizations ------------------------------------------------------

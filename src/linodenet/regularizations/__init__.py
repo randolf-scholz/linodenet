@@ -25,7 +25,6 @@ __all__ += functional.__all__
 __all__ += modules.__all__
 
 FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
-    "contraction"      : functional.contraction,
     "diagonal"         : functional.diagonal,
     "hamiltonian"      : functional.hamiltonian,
     "identity"         : functional.identity,
@@ -46,9 +45,10 @@ r"""Dictionary of all available modular metrics."""
 
 
 SPECIAL_REGULARIZATIONS = {
-    "banded"   : functional.banded,
-    "masked"   : functional.masked,
-    "low_rank" : functional.low_rank,
+    "contraction": functional.contraction,
+    "banded"     : functional.banded,
+    "masked"     : functional.masked,
+    "low_rank"   : functional.low_rank,
 }  # fmt: skip
 r"""Regularizations that require additional arguments."""
 
