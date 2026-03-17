@@ -10,6 +10,8 @@ from typing import Optional, SupportsFloat
 import torch
 from torch import Tensor
 
+from signatures import signature
+
 
 def _get_dims(dim: None | int | Sequence[int], values: Tensor) -> list[int]:
     return (
@@ -32,6 +34,7 @@ def _get_tol(tol: float | None, values: Tensor, *, dims: list[int]) -> float:
     return tol
 
 
+@signature("(..., *ds) -> (...)")
 def is_standardized(
     values: Tensor,
     /,
@@ -39,10 +42,7 @@ def is_standardized(
     dim: None | int | tuple[int, ...] | list[int] = -1,
     tol: Optional[float] = None,
 ) -> Tensor:
-    r"""Check if a tensor has zero mean and unit variance.
-
-    .. signature:: ``[..., *D] -> bool[...]``
-    """
+    r"""Check if a tensor has zero mean and unit variance."""
     # NOTE: Often, normality will be achieved approximately, in terms of the CTL.
     #   As the sample mean of n-many samples from a normal distribution is distributed as N(μ, σ²/n),
     #   Knowing that the input should be N(0, 1), we can expect the sample mean to be distributed as N(0, 1/n)

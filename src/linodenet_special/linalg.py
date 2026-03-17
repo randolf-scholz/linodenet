@@ -11,6 +11,8 @@ from typing import Optional
 import torch
 from torch import Tensor, jit
 
+from signatures import signature
+
 
 @jit.script
 def pad(
@@ -31,15 +33,13 @@ def pad(
 
 
 @jit.script
+@signature("(..., n) -> (...)")
 def geometric_mean(
     x: Tensor,
     axis: Optional[int | list[int]] = None,
     keepdim: bool = False,
 ) -> Tensor:
-    r"""Geometric mean of a tensor.
-
-    .. signature:: ``(..., n) -> (...)``
-    """
+    r"""Geometric mean of a tensor."""
     if axis is None:
         dim = list(range(x.ndim))
     elif isinstance(axis, int):
@@ -51,16 +51,14 @@ def geometric_mean(
 
 
 @jit.script
+@signature("(..., n) -> (...)")
 def scaled_norm(
     x: Tensor,
     p: float = 2.0,
     axis: Optional[int | list[int]] = None,
     keepdim: bool = False,
 ) -> Tensor:
-    r"""Shortcut for scaled norm.
-
-    .. signature:: ``(..., n) -> ...``
-    """
+    r"""Shortcut for scaled norm."""
     # TODO: deal with nan values
     x = x.abs()
 
