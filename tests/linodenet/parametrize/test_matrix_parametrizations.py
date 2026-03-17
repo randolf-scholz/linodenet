@@ -97,23 +97,22 @@ class TestSuite(TestCase):
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
 
-    def _make_model(self, shape: tuple[int, int]) -> nn.Sequential:
+    def make_test_case(
+        self, shape: tuple[int, int]
+    ) -> tuple[nn.Sequential, Tensor, Tensor]:
         out_features, in_features = shape
-        return nn.Sequential(
+        model = nn.Sequential(
             nn.Linear(in_features, in_features, bias=False),
             nn.ReLU(),
             nn.Linear(in_features, out_features, bias=False),
             nn.ReLU(),
             nn.Linear(out_features, out_features, bias=False),
         )
-
-    def _make_data(self, shape: tuple[int, int]) -> tuple[Tensor, Tensor]:
-        out_features, in_features = shape
         x = torch.randn(self.BATCH_SIZE, in_features)
         y = torch.randn(self.BATCH_SIZE, out_features)
-        return x, y
+        return model, x, y
 
-    def _parametrized_layer(self, model: nn.Module) -> nn.Linear:
+    def get_parametrized_layer(self, model: nn.Module) -> nn.Linear:
         if isinstance(model, OptimizedModule):
             model = model._orig_mod
             assert isinstance(model, nn.Sequential)
@@ -130,7 +129,7 @@ class TestSuite(TestCase):
 
     def check_parametrization(self, name: str, model: nn.Module) -> None:
         matrix_test = MATRIX_TESTS[name]
-        weight = self._parametrized_layer(model).weight
+        weight = self.get_parametrized_layer(model).weight
         assert isinstance(weight, Tensor)
         assert matrix_test(weight)
 
@@ -144,8 +143,8 @@ class TestSuite(TestCase):
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_register_parametrization(self, name: str) -> None:
         shape = SHAPES[name][0]
-        model = self._make_model(shape)
-        layer = self._parametrized_layer(model)
+        model, _, _ = self.make_test_case(shape)
+        layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
 
         parametrization = get_parametrizations(layer)["weight"]
@@ -158,9 +157,8 @@ class TestSuite(TestCase):
     def test_forward_uses_cached_parameter(self, name: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        x, _ = self._make_data(shape)
-        model = self._make_model(shape)
-        layer = self._parametrized_layer(model)
+        model, x, _ = self.make_test_case(shape)
+        layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
         parametrization = get_parametrizations(layer)["weight"]
         self.assert_stale(parametrization, False)
@@ -189,9 +187,8 @@ class TestSuite(TestCase):
     def test_trainable(self, name: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        x, y = self._make_data(shape)
-        model = self._make_model(shape)
-        layer = self._parametrized_layer(model)
+        model, x, y = self.make_test_case(shape)
+        layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
         optimizer = SGD(model.parameters(), lr=0.1)
         register_optimizer_hook(optimizer, model)
@@ -218,9 +215,8 @@ class TestSuite(TestCase):
     def test_compile_forward_uses_cached_parameter(self, name: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        x, _ = self._make_data(shape)
-        model = self._make_model(shape)
-        layer = self._parametrized_layer(model)
+        model, x, _ = self.make_test_case(shape)
+        layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
 
         compiled_model = torch.compile(model)
@@ -228,7 +224,7 @@ class TestSuite(TestCase):
         self.check_parametrization(name, compiled_model)
 
         y0 = compiled_model(x)
-        compiled_layer = self._parametrized_layer(compiled_model)
+        compiled_layer = self.get_parametrized_layer(compiled_model)
         parametrization = get_parametrizations(compiled_layer)["weight"]
         self.assert_stale(parametrization, False)
 
@@ -245,16 +241,15 @@ class TestSuite(TestCase):
     def test_compile_trainable(self, name: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        x, y = self._make_data(shape)
-        model = self._make_model(shape)
-        layer = self._parametrized_layer(model)
+        model, x, y = self.make_test_case(shape)
+        layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
 
         compiled_model = torch.compile(model)
         assert isinstance(compiled_model, OptimizedModule)
 
         optimizer = SGD(compiled_model.parameters(), lr=0.1)
-        compiled_layer = self._parametrized_layer(compiled_model)
+        compiled_layer = self.get_parametrized_layer(compiled_model)
         parametrization = get_parametrizations(compiled_layer)["weight"]
         self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
@@ -277,14 +272,15 @@ class TestSuite(TestCase):
     def test_exported_trainable(self, name: str) -> None:
         torch.manual_seed(0)
         shape = SHAPES[name][0]
-        x, y = self._make_data(shape)
-        model = self._make_model(shape)
-        layer = self._parametrized_layer(model)
+        model, x, y = self.make_test_case(shape)
+        layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
-        exported_model = torch.export.export(model, args=(x,)).module()
+        parametrization = get_parametrizations(layer)["weight"]
+        self.assert_stale(parametrization, False)
 
+        exported_model = torch.export.export(model, args=(x,)).module()
         optimizer = SGD(exported_model.parameters(), lr=0.1)
-        exported_layer = self._parametrized_layer(exported_model)
+        exported_layer = self.get_parametrized_layer(exported_model)
         parametrization = get_parametrizations(exported_layer)["weight"]
         self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
