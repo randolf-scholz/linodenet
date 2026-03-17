@@ -1,9 +1,5 @@
 __all__ = [
     "ExampleWithKnownSVD",
-    "repeated_singular_values",
-    "diagonal",
-    "rank_one",
-    "quasi_gaussian",
 ]
 
 
@@ -150,103 +146,104 @@ class ExampleWithKnownSVD(NamedTuple):
         r"""Return the gauge-invariant scalar loss for a singular triplet."""
         return g_sigma * sigma + cls.dyad_loss(g_matrix, u, v)
 
+    @classmethod
+    def quasi_gaussian(
+        cls,
+        shape: tuple[int, int],
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+        seed: int | None = None,
+    ) -> ExampleWithKnownSVD:
+        r"""Generate a random m×n matrix with known spectral data.
 
-def quasi_gaussian(
-    shape: tuple[int, int],
-    *,
-    dtype: torch.dtype,
-    device: str | torch.device,
-    seed: int | None = None,
-) -> ExampleWithKnownSVD:
-    r"""Generates a random m×n matrix with known spectral norm and gradient.
+        We sample random singular values from an MP distribution, as well as
+        random orthogonal matrices U and V from the Haar distribution.
 
-    We sample random singular values from an MP distribution,
-    as well as random orthogonal matrices U and V from the haar distribution.
+        Values should approximately be sampled from $N(0, 1/n)$.
+        """
+        m, n = shape
+        k = min(m, n)
+        gamma = m / n
+        rng = default_rng(seed)
 
-    Values should approximately be sampled from N(0, 1/n)
-    """
-    m, n = shape
-    k = min(m, n)
-    gamma = m / n
-    rng = default_rng(seed)
+        U_numpy = ortho_group(m).rvs(random_state=rng)[..., :k]
+        V_numpy = ortho_group(n).rvs(random_state=rng)[..., :k]
+        U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
+        V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
+        dist = MarchenkoPastur(gamma=gamma, sigma2=1.0, validate_args=False)
+        S = dist.sample_positive([k]).to(dtype=dtype, device=device).sqrt()
+        S = torch.sort(S, descending=True).values
+        eps = 1e-6 * max(1.0, S.max().item())
+        S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
+        assert (S[0] > S[1:] + eps).all()
+        return ExampleWithKnownSVD(U=U, S=S, V=V)
 
-    # only the first k vectors
-    U_numpy = ortho_group(m).rvs(random_state=rng)[..., :k]
-    V_numpy = ortho_group(n).rvs(random_state=rng)[..., :k]
-    U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
-    V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
-    dist = MarchenkoPastur(gamma=gamma, sigma2=1.0, validate_args=False)
-    S = dist.sample_positive([k]).to(dtype=dtype, device=device).sqrt()
-    # ensure a minimum gap between singular values.
-    S = torch.sort(S, descending=True).values
-    eps = 1e-6 * max(1.0, S.max().item())
-    S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
-    assert (S[0] > S[1:] + eps).all()
-    return ExampleWithKnownSVD(U=U, S=S, V=V)
+    @classmethod
+    def rank_one(
+        cls,
+        shape: tuple[int, int],
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+        seed: int | None = None,
+    ) -> ExampleWithKnownSVD:
+        r"""Generate a rank-one matrix with known SVD."""
+        generator = torch.Generator(device=device)
+        generator.manual_seed(seed or 0)
 
+        m, n = shape
+        sigma = 10 * torch.rand((), device=device, dtype=dtype, generator=generator) + 1
+        u = torch.randn(m, device=device, dtype=dtype, generator=generator)
+        u = u / u.norm()
+        U = u.unsqueeze(-1)
+        v = torch.randn(n, device=device, dtype=dtype, generator=generator)
+        v = v / v.norm()
+        V = v.unsqueeze(-1)
+        S = sigma.unsqueeze(-1)
+        return ExampleWithKnownSVD(U=U, S=S, V=V)
 
-def rank_one(
-    shape: tuple[int, int],
-    *,
-    dtype: torch.dtype,
-    device: str | torch.device,
-    seed: int | None = None,
-) -> ExampleWithKnownSVD:
-    r"""Generate a rank-one matrix with known SVD."""
-    generator = torch.Generator(device=device)
-    generator.manual_seed(seed or 0)
+    @classmethod
+    def diagonal(
+        cls,
+        shape: tuple[int, int],
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+        seed: int | None = None,
+    ) -> ExampleWithKnownSVD:
+        r"""Generate a diagonal matrix with known SVD."""
+        m, n = shape
+        generator = torch.Generator(device=device)
+        generator.manual_seed(seed or 0)
 
-    m, n = shape
-    sigma = 10 * torch.rand((), device=device, dtype=dtype, generator=generator) + 1
-    u = torch.randn(m, device=device, dtype=dtype, generator=generator)
-    u = u / u.norm()  # (m,)
-    U = u.unsqueeze(-1)  # (m, 1)
-    v = torch.randn(n, device=device, dtype=dtype, generator=generator)
-    v = v / v.norm()  # (n,)
-    V = v.unsqueeze(-1)  # (n, 1)
-    S = sigma.unsqueeze(-1)  # (1,)
-    return ExampleWithKnownSVD(U=U, S=S, V=V)
+        k = min(m, n)
+        diag = 10 * torch.randn(k, dtype=dtype, device=device, generator=generator)
+        signs = torch.sign(diag)
+        U = torch.eye(m, device=device, dtype=dtype)[:, :k]
+        V = torch.eye(n, device=device, dtype=dtype)[:, :k] * signs
+        S = torch.sort(diag.abs(), descending=True).values
+        eps = 1e-6 * max(1.0, S.max().item())
+        S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
+        assert (S[0] > S[1:] + eps).all()
+        return ExampleWithKnownSVD(U=U, S=S, V=V)
 
-
-def diagonal(
-    shape: tuple[int, int],
-    *,
-    dtype: torch.dtype,
-    device: str | torch.device,
-    seed: int | None = None,
-) -> ExampleWithKnownSVD:
-    r"""Generate a diagonal matrix with known SVD."""
-    m, n = shape
-    generator = torch.Generator(device=device)
-    generator.manual_seed(seed or 0)
-
-    k = min(m, n)
-    diag = 10 * torch.randn(k, dtype=dtype, device=device, generator=generator)
-    signs = torch.sign(diag)
-    U = torch.eye(m, device=device, dtype=dtype)[:, :k]
-    V = torch.eye(n, device=device, dtype=dtype)[:, :k] * signs
-    # ensure a minimum gap between singular values.
-    S = torch.sort(diag.abs(), descending=True).values
-    eps = 1e-6 * max(1.0, S.max().item())
-    S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
-    assert (S[0] > S[1:] + eps).all()
-    return ExampleWithKnownSVD(U=U, S=S, V=V)
-
-
-def repeated_singular_values(
-    shape: tuple[int, int],
-    *,
-    dtype: torch.dtype,
-    device: str | torch.device,
-    seed: int | None = None,
-) -> ExampleWithKnownSVD:
-    r"""Generate an orthogonal matrix with known SVD."""
-    m, n = shape
-    k = min(m, n)
-    rng = default_rng(seed)
-    U_numpy = ortho_group.rvs(m, random_state=rng)[:, :k]
-    V_numpy = ortho_group.rvs(n, random_state=rng)[:, :k]
-    U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
-    V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
-    S = torch.ones(k, device=device, dtype=dtype)
-    return ExampleWithKnownSVD(U=U, S=S, V=V)
+    @classmethod
+    def repeated_singular_values(
+        cls,
+        shape: tuple[int, int],
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+        seed: int | None = None,
+    ) -> ExampleWithKnownSVD:
+        r"""Generate an orthogonal matrix with repeated singular values."""
+        m, n = shape
+        k = min(m, n)
+        rng = default_rng(seed)
+        U_numpy = ortho_group.rvs(m, random_state=rng)[:, :k]
+        V_numpy = ortho_group.rvs(n, random_state=rng)[:, :k]
+        U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
+        V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
+        S = torch.ones(k, device=device, dtype=dtype)
+        return ExampleWithKnownSVD(U=U, S=S, V=V)

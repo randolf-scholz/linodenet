@@ -14,13 +14,7 @@ from linodenet_special import singular_triplet, singular_triplet_native
 from linodenet_special.compiled import singular_triplet as singular_triplet_cpp
 from linodenet_special.fallbacks import singular_triplet as singular_triplet_py
 from tests.testing import DEVICES, SEEDS, TestCase, timer
-from tests.testing.examples import (
-    ExampleWithKnownSVD,
-    diagonal,
-    quasi_gaussian,
-    rank_one,
-    repeated_singular_values,
-)
+from tests.testing.examples import ExampleWithKnownSVD
 
 
 def random_rank_one_matrix(m: int, n: int) -> np.ndarray:
@@ -402,7 +396,9 @@ class TestCorrectness(TestCase):
         r"""Test the dominant singular triplet and its VJP for rank-one matrices."""
         impl = self.SINGULAR_TRIPLETS[method]
         torch.manual_seed(seed)
-        case = rank_one(shape, dtype=torch.float, device=device, seed=seed)
+        case = ExampleWithKnownSVD.rank_one(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
         sigma, u, v = impl(case.value)
         self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -424,7 +420,9 @@ class TestCorrectness(TestCase):
         impl = self.SINGULAR_TRIPLETS[method]
         torch.manual_seed(seed)
 
-        case = diagonal(shape, dtype=torch.float, device=device, seed=seed)
+        case = ExampleWithKnownSVD.diagonal(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
         sigma, u, v = impl(case.value)
         self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -446,7 +444,9 @@ class TestCorrectness(TestCase):
         impl = self.SINGULAR_TRIPLETS[method]
         torch.manual_seed(seed)
 
-        case = quasi_gaussian(shape, dtype=torch.float, device=device, seed=seed)
+        case = ExampleWithKnownSVD.quasi_gaussian(
+            shape, dtype=torch.float, device=device, seed=seed
+        )
         sigma, u, v = impl(case.value)
         self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -466,7 +466,7 @@ class TestCorrectness(TestCase):
         r"""Test only the value and spectral-norm subgradient in the degenerate case."""
         impl = self.SINGULAR_TRIPLETS[method]
 
-        case = repeated_singular_values(
+        case = ExampleWithKnownSVD.repeated_singular_values(
             shape, dtype=torch.float, device=device, seed=seed
         )
         A = case.value
