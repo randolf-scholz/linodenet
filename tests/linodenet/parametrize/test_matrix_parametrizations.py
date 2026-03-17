@@ -1,9 +1,10 @@
-from functools import partial
+r"""Tests for matrix prametrizations."""
 
 import pytest
 import torch
 from torch import Tensor, nn
 from torch._dynamo import OptimizedModule
+from torch.fx import GraphModule
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
@@ -109,10 +110,16 @@ class TestSuite(TestCase):
     def _parametrized_layer(self, model: nn.Module) -> nn.Linear:
         if isinstance(model, OptimizedModule):
             model = model._orig_mod
-
-        assert isinstance(model, nn.Sequential)
-        layer = model[2]
-        assert isinstance(layer, nn.Linear)
+            assert isinstance(model, nn.Sequential)
+            layer = model[2]
+            assert isinstance(layer, nn.Linear)
+        if isinstance(model, GraphModule):
+            children = dict(model.named_children())
+            layer = children["2"]
+        else:
+            assert isinstance(model, nn.Sequential)
+            layer = model[2]
+            assert isinstance(layer, nn.Linear)
         return layer
 
     def check_parametrization(self, name: str, model: nn.Module) -> None:
@@ -244,6 +251,33 @@ class TestSuite(TestCase):
             optimizer.step()
             update_parametrizations(compiled_model)
             self.check_parametrization(name, compiled_model)
+
+        assert not torch.allclose(
+            parametrization.original_parameter, original_parameter
+        )
+
+    @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
+    def test_exported_trainable(self, name: str) -> None:
+        torch.manual_seed(0)
+        shape = SHAPES[name][0]
+        x, y = self._make_data(shape)
+        model = self._make_model(shape)
+        layer = self._parametrized_layer(model)
+        register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
+        exported_model = torch.export.export(model, args=(x,)).module()
+
+        optimizer = SGD(exported_model.parameters(), lr=0.1)
+        exported_layer = self._parametrized_layer(exported_model)
+        parametrization = get_parametrizations(exported_layer)["weight"]
+        original_parameter = parametrization.original_parameter.detach().clone()
+
+        for _ in range(3):
+            exported_model.zero_grad(set_to_none=True)
+            loss = mse_loss(exported_model(x), y)
+            loss.backward()
+            optimizer.step()
+            update_parametrizations(exported_model)
+            self.check_parametrization(name, exported_model)
 
         assert not torch.allclose(
             parametrization.original_parameter, original_parameter
