@@ -6,16 +6,19 @@ __all__ = [
     # Sub-Packages
     "bijections",
     "distributions",
+    "embeddings",
     "filters",
     "flows",
     "forecasting",
     "imputation",
     "initializations",
     "mappings",
-    "special",
     "parametrize",
+    "projections",
     "regularizations",
     "signatures",
+    "special",
+    "surjections",
     "testing",
     # Sub-Modules
     "constants",
@@ -59,3 +62,4 @@ from linodenet import (
     types,
     utils,
 )
+from linodenet.mappings import embeddings, projections, surjections
