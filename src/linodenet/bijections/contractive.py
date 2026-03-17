@@ -2,6 +2,9 @@ r"""ContractiveFlow implementation (iResNet-block)."""
 
 __all__ = ["ContractiveFlow"]
 
+import warnings
+
+import torch
 from torch import Tensor, nn
 
 from .base import TransformBase
@@ -49,8 +52,27 @@ class ContractiveFlow(TransformBase):
         raise NotImplementedError
 
     def decode(self, y: Tensor) -> Tensor:
-        # TODO: fix point iteration x = y - g(x)
-        pass
+        r"""Compute the inverse through fixed point iteration.
+
+        Terminates once ``maxiter`` or the elementwise tolerance threshold
+        $|x'-x| ≤ \text{rtol}⋅|x| + \text{atol}$ is reached.
+        """
+        x = y.clone()
+
+        for _ in range(self.maxiter):
+            x_prev = x
+            x = y - self.contraction(x_prev)
+            residual = torch.abs(x - x_prev)
+            tolerance = self.rtol * torch.abs(x) + self.atol
+
+            if torch.all(residual <= tolerance):
+                return x
+
+        warnings.warn(
+            f"No convergence in {self.maxiter} iterations. ",
+            stacklevel=2,
+        )
+        return x
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         raise NotImplementedError
