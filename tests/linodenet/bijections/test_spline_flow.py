@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pytest
 import torch
 
-from linodenet.bijections import SplineFlow
+from linodenet.flows.transforms import SplineFlow
 from tests.testing import PROJECT, SEEDS_10, TestCase
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]

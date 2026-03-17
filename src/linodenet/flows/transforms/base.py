@@ -25,39 +25,24 @@ Note that `torch.distributions.Transform` has some differences:
 
 __all__ = [
     # Protocols & ABCs
-    "Bijection",
     "Transform",
     # Classes
-    "BijectionBase",
     "TransformBase",
-    "BijectionSequence",
     "TransformSequence",
-    "InverseBijection",
     "InverseTransform",
 ]
 
 from abc import abstractmethod
-from collections.abc import Iterable
 from typing import Protocol, runtime_checkable
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor
 
-from linodenet.nn import ModuleSequence
-
-
-@runtime_checkable
-class Bijection[X, Y](Protocol):
-    r"""Protocol for invertible layers."""
-
-    @abstractmethod
-    def encode(self, x: X, /) -> Y: ...
-    @abstractmethod
-    def decode(self, y: Y, /) -> X: ...
+from linodenet.mappings.base import Bijection, BijectionBase, BijectionSequence
 
 
 @runtime_checkable
-class Transform[X, Y](Bijection[X, Y], Protocol):
+class Transform[X, Y](Protocol):
     r"""Protocol for diffeomorphism with logabsdet."""
 
     @abstractmethod
@@ -65,17 +50,13 @@ class Transform[X, Y](Bijection[X, Y], Protocol):
     @abstractmethod
     def decode_and_logabsdet(self, y: Y, /) -> tuple[X, Tensor]: ...
 
+    def encode(self, x: X, /) -> Y:
+        y, _ = self.encode_and_logabsdet(x)
+        return y
 
-class BijectionBase(nn.Module, Bijection[Tensor, Tensor]):
-    r"""Base class for bijections operating on single tensor."""
-
-    def __invert__(self) -> BijectionBase:
-        return InverseBijection(self)
-
-    @abstractmethod
-    def encode(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def decode(self, y: Tensor, /) -> Tensor: ...
+    def decode(self, y: Y, /) -> X:
+        x, _ = self.decode_and_logabsdet(y)
+        return x
 
 
 class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
@@ -95,27 +76,14 @@ class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
         return y
 
     def decode(self, y: Tensor, /) -> Tensor:
-        x, _ = self.encode_and_logabsdet(y)
+        x, _ = self.decode_and_logabsdet(y)
         return x
 
+    def forward(self, x: Tensor, /) -> Tensor:
+        return self.encode(x)
 
-class InverseBijection[B: BijectionBase](BijectionBase):
-    r"""Inverse of a bijection."""
-
-    bijection: B
-    r"""The bijection to be inverted."""
-
-    def __init__(self, bijection: B) -> None:
-        super().__init__()
-        self.bijection = bijection
-
-    @jit.export
-    def encode(self, x: Tensor, /) -> Tensor:
-        return self.bijection.decode(x)
-
-    @jit.export
-    def decode(self, y: Tensor, /) -> Tensor:
-        return self.bijection.encode(y)
+    def inverse(self, y: Tensor, /) -> Tensor:
+        return self.decode(y)
 
 
 class InverseTransform[T: TransformBase](TransformBase):
@@ -128,50 +96,19 @@ class InverseTransform[T: TransformBase](TransformBase):
         super().__init__()
         self.transform = transform
 
-    @jit.export
     def encode(self, x: Tensor, /) -> Tensor:
         return self.transform.decode(x)
 
-    @jit.export
     def decode(self, y: Tensor, /) -> Tensor:
         return self.transform.encode(y)
 
-    @jit.export
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         y, logabsdet = self.transform.decode_and_logabsdet(x)
         return y, -logabsdet
 
-    @jit.export
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         x, logabsdet = self.transform.encode_and_logabsdet(y)
         return x, -logabsdet
-
-
-class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
-    r"""Apply multiple bijections sequentially."""
-
-    def __init__(self, modules: Iterable[B] = (), /) -> None:
-        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[B].__init__(self, modules)
-
-    def __invert__(self) -> BijectionSequence:
-        if type(self) is not BijectionSequence:
-            raise NotImplementedError(
-                f"Inversion not implemented for subclass {type(self)}"
-            )
-        return BijectionSequence(~layer for layer in reversed(self))
-
-    @jit.export
-    def encode(self, x: Tensor) -> Tensor:
-        for layer in self:
-            x = layer.encode(x)
-        return x
-
-    @jit.export
-    def decode(self, y: Tensor) -> Tensor:
-        for layer in reversed(self):
-            y = layer.decode(y)
-        return y
 
 
 class TransformSequence[T: TransformBase](BijectionSequence[T]):
@@ -180,19 +117,16 @@ class TransformSequence[T: TransformBase](BijectionSequence[T]):
     def __invert__(self) -> TransformSequence:
         return TransformSequence(~layer for layer in reversed(self))
 
-    @jit.export
     def encode(self, x: Tensor) -> Tensor:
         for layer in self:
             x = layer.encode(x)
         return x
 
-    @jit.export
     def decode(self, y: Tensor) -> Tensor:
         for layer in reversed(self):
             y = layer.decode(y)
         return y
 
-    @jit.export
     def encode_and_logabsdet(self, x: Tensor) -> tuple[Tensor, Tensor]:
         logabsdets: list[Tensor] = []
 
@@ -203,7 +137,6 @@ class TransformSequence[T: TransformBase](BijectionSequence[T]):
         logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
         return x, logabsdet
 
-    @jit.export
     def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
         logabsdets: list[Tensor] = []
 

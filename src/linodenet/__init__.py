@@ -47,7 +47,6 @@ finally:
 import linodenet_special as special
 import signatures
 from linodenet import (
-    bijections,
     constants,
     distributions,
     domains,
@@ -64,4 +63,5 @@ from linodenet import (
     types,
     utils,
 )
+from linodenet.flows import transforms
 from linodenet.mappings import embeddings, projections, surjections

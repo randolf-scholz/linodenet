@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from linodenet.bijections import ContractiveFlow
+from linodenet.flows.transforms import ContractiveFlow
 from linodenet.nn import LinearContraction
 from tests.testing import SEEDS_10, TestCase
 

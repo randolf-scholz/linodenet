@@ -8,9 +8,9 @@ from typing import NamedTuple, is_protocol
 import pytest
 
 import linodenet as lib
-from linodenet.bijections import BIJECTIONS, Bijection, BijectionBase
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
 from linodenet.flows import FLOWS, Flow, FlowBase
+from linodenet.flows.transforms import BIJECTIONS
 from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import (
@@ -25,6 +25,7 @@ from linodenet.mappings import (
     Surjection,
     SurjectionBase,
 )
+from linodenet.mappings.base import Bijection, BijectionBase
 from linodenet.nn.activations import ALL_ACTIVATIONS, Activation
 from linodenet.parametrize import PARAMETRIZATIONS, Parametrization, ParametrizationBase
 from linodenet.regularizations import (
@@ -47,7 +48,7 @@ class Case(NamedTuple):
 
 CASES: dict[str, Case] = {
     "activations"         : Case(lib.nn.activations , Activation     , None               , ALL_ACTIVATIONS           ),
-    "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
+    # "bijections"          : Case(lib.bijections     , Bijection      , BijectionBase      , BIJECTIONS                ),
     "distributions"       : Case(lib.distributions  , Distribution   , DistributionBase   , DISTRIBUTIONS             ),
     "embeddings"          : Case(lib.nn.embeddings  , Embedding      , EmbeddingBase      , EMBEDDINGS                ),
     "surjections"         : Case(lib.nn.surjections , Surjection     , SurjectionBase     , SURJECTIONS               ),

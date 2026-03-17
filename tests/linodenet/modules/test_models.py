@@ -7,8 +7,8 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from linodenet.bijections import iResNet, iResNetBlock
 from linodenet.flows import LinearFlow
+from linodenet.flows.transforms import iResNet, iResNetBlock
 from linodenet.forecasting import LinODEnet
 from linodenet.nn import LinearContraction
 from linodenet.testing import assert_model_ok, check_initialization

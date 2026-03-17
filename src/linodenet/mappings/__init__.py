@@ -22,8 +22,16 @@ __all__ = [
     "SURJECTIONS",
 ]
 
-from linodenet.mappings import base, embeddings, functional, projections, surjections
+from linodenet.mappings import (
+    base,
+    bijections,
+    embeddings,
+    functional,
+    projections,
+    surjections,
+)
 from linodenet.mappings.base import *
+from linodenet.mappings.bijections import *
 from linodenet.mappings.embeddings import *
 from linodenet.mappings.functional import *
 from linodenet.mappings.projections import *
@@ -34,6 +42,7 @@ __all__ += embeddings.__all__
 __all__ += surjections.__all__
 __all__ += projections.__all__
 __all__ += functional.__all__
+__all__ += bijections.__all__
 
 EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
     "ConcatEmbedding"  : ConcatEmbedding,

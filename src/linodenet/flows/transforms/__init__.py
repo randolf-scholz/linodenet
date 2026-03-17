@@ -25,10 +25,6 @@ __all__ = [
     # constants
     "BIJECTIONS",
     # protocols & base classes
-    "Bijection",
-    "BijectionBase",
-    "BijectionSequence",
-    "InverseBijection",
     "InverseTransform",
     "Transform",
     "TransformBase",
@@ -44,21 +40,23 @@ __all__ = [
 ]
 
 
-from linodenet.bijections.base import (
-    Bijection,
-    BijectionBase,
-    BijectionSequence,
-    InverseBijection,
+from linodenet.flows.transforms.base import (
     InverseTransform,
     Transform,
     TransformBase,
     TransformSequence,
 )
-from linodenet.bijections.contractive import ContractiveFlow
-from linodenet.bijections.iresnet import iResNet, iResNetBlock, iResNetLayer
-from linodenet.bijections.low_rank import LowRankFlow
-from linodenet.bijections.spline_flow import SplineFlow
-from linodenet.bijections.triangular import TriangularFlow
+from linodenet.flows.transforms.contractive import ContractiveFlow
+from linodenet.flows.transforms.iresnet import iResNet, iResNetBlock, iResNetLayer
+from linodenet.flows.transforms.low_rank import LowRankFlow
+from linodenet.flows.transforms.spline_flow import SplineFlow
+from linodenet.flows.transforms.triangular import TriangularFlow
+from linodenet.mappings.base import (
+    Bijection,
+    BijectionBase,
+    BijectionSequence,
+    InverseBijection,
+)
 
 BIJECTIONS: dict[str, type[Bijection]] = {
     "iResNet": iResNet,

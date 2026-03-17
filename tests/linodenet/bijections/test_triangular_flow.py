@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from linodenet.bijections import TriangularFlow
+from linodenet.flows.transforms import TriangularFlow
 from tests.testing import SEEDS_10, TestCase
 
 

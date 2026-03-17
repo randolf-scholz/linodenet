@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from linodenet.bijections import LowRankFlow
+from linodenet.flows.transforms import LowRankFlow
 from tests.testing import SEEDS_10, TestCase
 
 

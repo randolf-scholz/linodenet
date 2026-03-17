@@ -22,7 +22,7 @@ class Flow(Protocol):
     input_shape: Final[tuple[int, ...]]  # type: ignore[misc]
     r"""CONST: The dimensionality of inputs."""
 
-    @signature("[(..., $n_steps), (..., *ds)] -> (..., $n_steps, *ds)")
+    @signature("[(..., $deltas), (..., *ds)] -> (..., $deltas, *ds)")
     def __call__(self, delta: Tensor, state: Tensor, /) -> Tensor:
         r"""Propagate the system state."""
         ...
@@ -45,7 +45,7 @@ class ContinuousFlow(Flow, Protocol):
     sdepy: y0 + (t0=0 implicit) + t_eval
     """
 
-    @signature("[(..., $n_steps), (..., *ds)] -> (..., $n_steps, *ds)")
+    @signature("[(..., $deltas), (..., *ds)] -> (..., $deltas, *ds)")
     def __call__(self, timedelta: float | Tensor, state: Tensor, /) -> Tensor:
         r"""Propagate the system for time-step `dt`."""
         ...
