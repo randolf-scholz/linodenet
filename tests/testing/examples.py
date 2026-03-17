@@ -1,9 +1,9 @@
 __all__ = [
     "ExampleWithKnownSVD",
-    "make_test_case_repeated_singular_values",
-    "make_test_case_diagonal",
-    "make_test_case_rank_one",
-    "make_test_case_quasi_gaussian",
+    "repeated_singular_values",
+    "diagonal",
+    "rank_one",
+    "quasi_gaussian",
 ]
 
 
@@ -151,7 +151,7 @@ class ExampleWithKnownSVD(NamedTuple):
         return g_sigma * sigma + cls.dyad_loss(g_matrix, u, v)
 
 
-def make_test_case_quasi_gaussian(
+def quasi_gaussian(
     shape: tuple[int, int],
     *,
     dtype: torch.dtype,
@@ -185,7 +185,7 @@ def make_test_case_quasi_gaussian(
     return ExampleWithKnownSVD(U=U, S=S, V=V)
 
 
-def make_test_case_rank_one(
+def rank_one(
     shape: tuple[int, int],
     *,
     dtype: torch.dtype,
@@ -208,7 +208,7 @@ def make_test_case_rank_one(
     return ExampleWithKnownSVD(U=U, S=S, V=V)
 
 
-def make_test_case_diagonal(
+def diagonal(
     shape: tuple[int, int],
     *,
     dtype: torch.dtype,
@@ -233,7 +233,7 @@ def make_test_case_diagonal(
     return ExampleWithKnownSVD(U=U, S=S, V=V)
 
 
-def make_test_case_repeated_singular_values(
+def repeated_singular_values(
     shape: tuple[int, int],
     *,
     dtype: torch.dtype,

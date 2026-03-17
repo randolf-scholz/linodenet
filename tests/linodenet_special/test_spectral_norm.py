@@ -20,10 +20,10 @@ from linodenet_special.fallbacks.spectral_norm import (
 from tests.testing import DEVICES, SEEDS, TestCase, timer
 from tests.testing.examples import (
     ExampleWithKnownSVD,
-    make_test_case_diagonal,
-    make_test_case_quasi_gaussian,
-    make_test_case_rank_one,
-    make_test_case_repeated_singular_values,
+    diagonal,
+    quasi_gaussian,
+    rank_one,
+    repeated_singular_values,
 )
 
 
@@ -341,9 +341,7 @@ class TestCorrectness(TestCase):
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
 
-        case = make_test_case_rank_one(
-            shape, dtype=torch.float, device=device, seed=seed
-        )
+        case = rank_one(shape, dtype=torch.float, device=device, seed=seed)
         sigma = impl(case.value)
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -368,9 +366,7 @@ class TestCorrectness(TestCase):
         impl = self.SPECTRAL_NORMS[method]
         torch.manual_seed(seed)
 
-        case = make_test_case_diagonal(
-            shape, dtype=torch.float, device=device, seed=seed
-        )
+        case = diagonal(shape, dtype=torch.float, device=device, seed=seed)
         sigma = impl(case.value)
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -393,9 +389,7 @@ class TestCorrectness(TestCase):
         We randomly sample U, S and V.
         """
         impl = self.SPECTRAL_NORMS[method]
-        case = make_test_case_quasi_gaussian(
-            shape, dtype=torch.float, device=device, seed=seed
-        )
+        case = quasi_gaussian(shape, dtype=torch.float, device=device, seed=seed)
         sigma = impl(case.value)
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -420,7 +414,7 @@ class TestCorrectness(TestCase):
             subgradient of the spectral norm.
         """
         impl = self.SPECTRAL_NORMS[method]
-        case = make_test_case_repeated_singular_values(
+        case = repeated_singular_values(
             shape, dtype=torch.float, device=device, seed=seed
         )
         sigma = impl(case.value)
