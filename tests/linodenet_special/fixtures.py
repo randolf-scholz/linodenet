@@ -3,7 +3,7 @@ __all__ = [
     "DTYPES",
     "SEEDS",
     "SEED",
-    "TestCase",
+    "ExampleWithKnownSVD",
     "Fixture",
     "make_test_case_quasi_gaussian",
     "make_test_case_rank_one",
@@ -174,7 +174,7 @@ class Fixture:
             raise AssertionError(msg)
 
 
-class TestCase(NamedTuple):
+class ExampleWithKnownSVD(NamedTuple):
     r"""Test matrix with known SVD."""
 
     U: Tensor  # left singular vectors (..., m, k)
@@ -313,7 +313,7 @@ def make_test_case_quasi_gaussian(
     dtype: torch.dtype,
     device: str | torch.device,
     seed: int | None = None,
-) -> TestCase:
+) -> ExampleWithKnownSVD:
     r"""Generates a random m×n matrix with known spectral norm and gradient.
 
     We sample random singular values from an MP distribution,
@@ -338,7 +338,7 @@ def make_test_case_quasi_gaussian(
     eps = 1e-6 * max(1.0, S.max().item())
     S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
     assert (S[0] > S[1:] + eps).all()
-    return TestCase(U=U, S=S, V=V)
+    return ExampleWithKnownSVD(U=U, S=S, V=V)
 
 
 def make_test_case_rank_one(
@@ -347,7 +347,7 @@ def make_test_case_rank_one(
     dtype: torch.dtype,
     device: str | torch.device,
     seed: int | None = None,
-) -> TestCase:
+) -> ExampleWithKnownSVD:
     r"""Generate a rank-one matrix with known SVD."""
     generator = torch.Generator(device=device)
     generator.manual_seed(seed or 0)
@@ -361,7 +361,7 @@ def make_test_case_rank_one(
     v = v / v.norm()  # (n,)
     V = v.unsqueeze(-1)  # (n, 1)
     S = sigma.unsqueeze(-1)  # (1,)
-    return TestCase(U=U, S=S, V=V)
+    return ExampleWithKnownSVD(U=U, S=S, V=V)
 
 
 def make_test_case_diagonal(
@@ -370,7 +370,7 @@ def make_test_case_diagonal(
     dtype: torch.dtype,
     device: str | torch.device,
     seed: int | None = None,
-) -> TestCase:
+) -> ExampleWithKnownSVD:
     r"""Generate a diagonal matrix with known SVD."""
     m, n = shape
     generator = torch.Generator(device=device)
@@ -386,7 +386,7 @@ def make_test_case_diagonal(
     eps = 1e-6 * max(1.0, S.max().item())
     S = S + eps * torch.arange(k, 0, -1, dtype=dtype, device=device)
     assert (S[0] > S[1:] + eps).all()
-    return TestCase(U=U, S=S, V=V)
+    return ExampleWithKnownSVD(U=U, S=S, V=V)
 
 
 def make_test_case_repeated_singular_values(
@@ -395,7 +395,7 @@ def make_test_case_repeated_singular_values(
     dtype: torch.dtype,
     device: str | torch.device,
     seed: int | None = None,
-) -> TestCase:
+) -> ExampleWithKnownSVD:
     r"""Generate an orthogonal matrix with known SVD."""
     m, n = shape
     k = min(m, n)
@@ -405,4 +405,4 @@ def make_test_case_repeated_singular_values(
     U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
     V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
     S = torch.ones(k, device=device, dtype=dtype)
-    return TestCase(U=U, S=S, V=V)
+    return ExampleWithKnownSVD(U=U, S=S, V=V)

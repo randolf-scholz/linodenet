@@ -22,8 +22,8 @@ from tests.utils import timer
 from .fixtures import (
     DEVICES,
     SEEDS,
+    ExampleWithKnownSVD,
     Fixture,
-    TestCase,
     make_test_case_diagonal,
     make_test_case_quasi_gaussian,
     make_test_case_rank_one,
@@ -239,7 +239,8 @@ class BasicTest:
 
 class TestCorrectness(Fixture):
     SPECTRAL_NORMS = {
-        "py_compiled": torch.compile(spectral_norm_py),
+        "py+compiled": torch.compile(spectral_norm_py),
+        "cpp+compile": torch.compile(spectral_norm_cpp),
         "py": spectral_norm_py,
         "cpp": spectral_norm_cpp,
         "native": spectral_norm_native,
@@ -275,7 +276,7 @@ class TestCorrectness(Fixture):
 
     def check_forward_pass(
         self,
-        case: TestCase,
+        case: ExampleWithKnownSVD,
         sigma: Tensor,
         *,
         atol: float,
@@ -292,7 +293,7 @@ class TestCorrectness(Fixture):
 
     def check_backward_pass(
         self,
-        case: TestCase,
+        case: ExampleWithKnownSVD,
         sigma: Tensor,
         *,
         atol: float,

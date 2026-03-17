@@ -11,13 +11,15 @@ from torch import Tensor, nn
 
 import linodenet_special
 from linodenet_special import singular_triplet, singular_triplet_native
+from linodenet_special.compiled import singular_triplet as singular_triplet_cpp
+from linodenet_special.fallbacks import singular_triplet as singular_triplet_py
 from tests.utils import timer
 
 from .fixtures import (
     DEVICES,
     SEEDS,
+    ExampleWithKnownSVD,
     Fixture,
-    TestCase,
     make_test_case_diagonal,
     make_test_case_quasi_gaussian,
     make_test_case_rank_one,
@@ -284,6 +286,16 @@ class TestBasic:
 
 
 class TestCorrectness(Fixture):
+    SINGULAR_TRIPLETS = {
+        "native": singular_triplet_native,
+        "py+compiled": torch.compile(singular_triplet_py),
+        "cpp+compiled": torch.compile(singular_triplet_cpp),
+        "py": singular_triplet_py,
+        "cpp": singular_triplet_cpp,
+    }
+    ATOL = 1e-3
+    RTOL = 1e-5
+
     SHAPES: list[tuple[int, int]] = [
         # scalar
         (1, 1),
@@ -310,18 +322,10 @@ class TestCorrectness(Fixture):
         (64, 1),
         (128, 1),
     ]
-    ATOL = 1e-3
-    RTOL = 1e-4
-
-    SINGULAR_TRIPLETS = {
-        "custom": singular_triplet,
-        "native": singular_triplet_native,
-        # "riemann": singular_triplet_riemann,
-    }
 
     def check_forward_pass(
         self,
-        case: TestCase,
+        case: ExampleWithKnownSVD,
         sigma: Tensor,
         u: Tensor,
         v: Tensor,
@@ -355,7 +359,7 @@ class TestCorrectness(Fixture):
 
     def check_backward_pass(
         self,
-        case: TestCase,
+        case: ExampleWithKnownSVD,
         sigma: Tensor,
         *,
         atol: float,
@@ -487,28 +491,12 @@ class TestPerformance(Fixture):
         "native": singular_triplet_native,
     }
     SHAPES = [
-        (128, 128),
+        (64, 64),
         (128, 64),
         (64, 128),
     ]
-    ROUNDS = {
-        16: 512,
-        32: 256,
-        64: 256,
-        128: 128,
-        256: 128,
-        512: 32,
-        1024: 32,
-    }
-    WARMUP_ROUNDS = {
-        16: 128,
-        32: 64,
-        64: 64,
-        128: 32,
-        256: 32,
-        512: 8,
-        1024: 8,
-    }
+    ROUNDS = 64
+    WARMUP_ROUNDS = 16
 
     @staticmethod
     def make_test_case(
@@ -537,7 +525,7 @@ class TestPerformance(Fixture):
         shape: tuple[int, int],
     ) -> None:
         r"""Test the spectral norm implementation."""
-        benchmark.group = f"singular_triplet_forward/{shape[0]}x{shape[1]}/{device}"
+        benchmark.group = f"singular_triplet_forward/{device}/{shape[0]}x{shape[1]}"
         impl = self.SINGULAR_TRIPLETS[name]
 
         generator = torch.Generator(device=device)
@@ -551,8 +539,8 @@ class TestPerformance(Fixture):
             benchmark.pedantic(
                 impl,
                 setup=setup,
-                rounds=self.ROUNDS[shape[0]],
-                warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
+                rounds=self.ROUNDS,
+                warmup_rounds=self.WARMUP_ROUNDS,
             )
 
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
@@ -569,7 +557,7 @@ class TestPerformance(Fixture):
     ) -> None:
         r"""Test simplified backward when only singular value used."""
         benchmark.group = (
-            f"singular_triplet_simple_backward/{shape[0]}x{shape[1]}/{device}"
+            f"singular_triplet_simple_backward/{device}/{shape[0]}x{shape[1]}"
         )
         impl = self.SINGULAR_TRIPLETS[name]
 
@@ -590,8 +578,8 @@ class TestPerformance(Fixture):
         benchmark.pedantic(
             backward,
             setup=setup,
-            rounds=self.ROUNDS[shape[0]],
-            warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
+            rounds=self.ROUNDS,
+            warmup_rounds=self.WARMUP_ROUNDS,
         )
 
     @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
@@ -608,7 +596,7 @@ class TestPerformance(Fixture):
     ) -> None:
         r"""Test full backward when singular triplet used."""
         benchmark.group = (
-            f"singular_triplet_full_backward/{shape[0]}x{shape[1]}/{device}"
+            f"singular_triplet_full_backward/{device}/{shape[0]}x{shape[1]}"
         )
         impl = self.SINGULAR_TRIPLETS[name]
 
@@ -632,6 +620,6 @@ class TestPerformance(Fixture):
         benchmark.pedantic(
             backward,
             setup=setup,
-            rounds=self.ROUNDS[shape[0]],
-            warmup_rounds=self.WARMUP_ROUNDS[shape[0]],
+            rounds=self.ROUNDS,
+            warmup_rounds=self.WARMUP_ROUNDS,
         )

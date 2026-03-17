@@ -6,11 +6,13 @@ __all__ = [
     "spectral_norm_native",
 ]
 
-from typing import NamedTuple, Optional
+from typing import Final, NamedTuple, Optional
 
 import torch
 from torch import Tensor
 from torch.linalg import vector_norm as v_norm
+
+_DEFAULT_MAXITER: Final[int] = 256
 
 
 class State(NamedTuple):
@@ -109,21 +111,22 @@ def _spectral_norm_forward_impl(
     A: Tensor,
     u0: Optional[Tensor],
     v0: Optional[Tensor],
-    maxiter: int | Tensor,
+    maxiter: Optional[int | Tensor],
     atol: float | Tensor,
     rtol: float | Tensor,
 ) -> tuple[Tensor, Tensor, Tensor]:
-
-    m, n = A.shape
-    u = u0 if u0 is not None else torch.randn(m, dtype=A.dtype, device=A.device)
-    v = v0 if v0 is not None else torch.randn(n, dtype=A.dtype, device=A.device)
-    grad_u = torch.empty_like(u)
-    grad_v = torch.empty_like(v)
+    maxiter = _DEFAULT_MAXITER if maxiter is None else maxiter
     maxiter = torch.as_tensor(maxiter, device=A.device, dtype=torch.int32)
     atol = torch.as_tensor(atol, device=A.device, dtype=A.dtype)
     rtol = torch.as_tensor(rtol, device=A.device, dtype=A.dtype)
 
-    initial_state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    m, n = A.shape
+    u0 = u0 if u0 is not None else torch.randn(m, dtype=A.dtype, device=A.device)
+    v0 = v0 if v0 is not None else torch.randn(n, dtype=A.dtype, device=A.device)
+    grad_u = torch.empty_like(u0)
+    grad_v = torch.empty_like(v0)
+
+    initial_state = State(maxiter, u0, v0, grad_u, grad_v, A, atol, rtol)
     final_state = torch.while_loop(_cond_fn, _body_fn, (initial_state,))
 
     _, u, v, _, _, _, _, _ = final_state  # pyright: ignore[reportGeneralTypeIssues]
@@ -159,7 +162,7 @@ class _SpectralNormImpl(torch.autograd.Function):
         A: Tensor,
         u0: Optional[Tensor],
         v0: Optional[Tensor],
-        maxiter: int,
+        maxiter: Optional[int],
         atol: float,
         rtol: float,
         /,
@@ -183,7 +186,7 @@ def spectral_norm(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = 1024,
+    maxiter: Optional[int] = _DEFAULT_MAXITER,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:

@@ -9,7 +9,8 @@ from typing import Any, Optional
 
 import torch
 from torch import Tensor
-from torch.linalg import vector_norm
+
+from .spectral_norm import _DEFAULT_MAXITER, _spectral_norm_forward_impl
 
 
 class _SingularTripletImpl(torch.autograd.Function):
@@ -22,47 +23,12 @@ class _SingularTripletImpl(torch.autograd.Function):
         A: Tensor,
         u0: Optional[Tensor],
         v0: Optional[Tensor],
-        maxiter: Optional[int],
+        maxiter: int,
         atol: float,
         rtol: float,
         /,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        if A.ndim != 2:
-            raise ValueError(f"Expected 2d input, got {A.shape}.")
-        if not A.is_floating_point():
-            raise TypeError("Expected a floating point tensor.")
-
-        m, n = A.shape
-        maxiter = maxiter if maxiter is not None else (m + n + 64)
-
-        u = u0 if u0 is not None else A.median(dim=1).values
-        v = v0 if v0 is not None else A.median(dim=0).values
-        u_next = u
-        v_next = v
-        sigma: Tensor = torch.einsum("ij, i, j ->", A, u, v)
-
-        for _ in range(maxiter):
-            u = u_next / torch.norm(u_next)
-            v = v_next / torch.norm(v_next)
-            sigma = torch.einsum("ij, i, j ->", A, u, v)
-            u_next = A @ v
-            v_next = A.T @ u
-            sigma_u = sigma * u
-            sigma_v = sigma * v
-            ru = u_next - sigma_u
-            rv = v_next - sigma_v
-            if (
-                vector_norm(ru) <= rtol * vector_norm(sigma_u) + atol
-                and vector_norm(rv) <= rtol * vector_norm(sigma_v) + atol
-            ):
-                break
-
-        if (not torch.isfinite(sigma).item()) or (sigma <= 0).item():
-            raise RuntimeError(
-                "Computation resulted in invalid singular value. "
-                "Try increasing maxiter or tolerance."
-            )
-
+        sigma, u, v = _spectral_norm_forward_impl(A, u0, v0, maxiter, atol, rtol)
         ctx.save_for_backward(A, sigma, u, v)
         return sigma, u, v
 
@@ -112,7 +78,7 @@ def singular_triplet(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = 256,
+    maxiter: Optional[int] = _DEFAULT_MAXITER,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:
