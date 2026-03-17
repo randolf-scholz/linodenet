@@ -6,6 +6,8 @@ import torch
 from linodenet.projections import (
     FUNCTIONAL_PROJECTIONS,
     MODULAR_PROJECTIONS,
+    PROJECTIONS,
+    SPECIAL_PROJECTIONS,
     RankOne,
     Tridiagonal,
     banded,
@@ -13,70 +15,66 @@ from linodenet.projections import (
     rank_one,
     tridiagonal,
 )
-from linodenet.testing import MATRIX_TESTS
+from linodenet.testing import MATRIX_TESTS, MATRIX_TESTS_WITH_EXTRA_ARG
 from tests.testing import camel2snake, snake2camel
 
 
-@pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_names_functional(projection_name: str) -> None:
+@pytest.mark.parametrize("name", PROJECTIONS)
+def test_functional_modular_both_present(name: str) -> None:
+    assert snake2camel(name) in PROJECTIONS
+    assert camel2snake(name) in PROJECTIONS
+
+
+@pytest.mark.parametrize("name", FUNCTIONAL_PROJECTIONS)
+def test_names_functional(name: str) -> None:
     r"""Test that all projections have the correct name."""
-    projection = FUNCTIONAL_PROJECTIONS[projection_name]
+    projection = FUNCTIONAL_PROJECTIONS[name]
     actual_name = getattr(projection, "__name__", None)
-    assert projection_name == actual_name
+    assert name == actual_name
 
 
-@pytest.mark.parametrize("projection_name", MODULAR_PROJECTIONS)
-def test_names_modular(projection_name: str) -> None:
+@pytest.mark.parametrize("name", MODULAR_PROJECTIONS)
+def test_names_modular(name: str) -> None:
     r"""Test that all modular projections have the correct name."""
-    projection = MODULAR_PROJECTIONS[projection_name]
+    projection = MODULAR_PROJECTIONS[name]
     actual_name = getattr(projection, "__name__", None)
-    assert projection_name == actual_name
+    assert name == actual_name
 
 
-@pytest.mark.parametrize("test_name", MATRIX_TESTS)
-def test_names_matrix_tests(test_name: str) -> None:
+@pytest.mark.parametrize("name", MATRIX_TESTS)
+def test_names_matrix_tests(name: str) -> None:
     r"""Test that all matrix tests have the correct name."""
-    matrix_test = MATRIX_TESTS[test_name]
+    matrix_test = MATRIX_TESTS[name]
     actual_name = getattr(matrix_test, "__name__", None)
-    assert test_name == actual_name
+    assert name == actual_name
 
 
-@pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_inclusion_functional_has_test(projection_name: str) -> None:
+@pytest.mark.parametrize("name", FUNCTIONAL_PROJECTIONS | SPECIAL_PROJECTIONS)
+def test_inclusion_functional_has_test(name: str) -> None:
     r"""Test that all projections have tests."""
-    if projection_name != "identity":
-        assert f"is_{projection_name}" in MATRIX_TESTS
+    if name != "identity":
+        assert f"is_{name}" in MATRIX_TESTS | MATRIX_TESTS_WITH_EXTRA_ARG
 
 
-@pytest.mark.parametrize("projection_name", MODULAR_PROJECTIONS)
-def test_inclusion_modular_has_functional(projection_name: str) -> None:
-    assert camel2snake(projection_name) in FUNCTIONAL_PROJECTIONS
-
-
-@pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_inclusion_functional_has_modular(projection_name: str) -> None:
-    assert snake2camel(projection_name) in MODULAR_PROJECTIONS
-
-
-@pytest.mark.parametrize("projection_name", FUNCTIONAL_PROJECTIONS)
-def test_projections_work(projection_name: str) -> None:
+@pytest.mark.parametrize("name", FUNCTIONAL_PROJECTIONS)
+def test_projections_work(name: str) -> None:
     r"""Test that all projections work."""
-    if projection_name == "identity":
+    if name == "identity":
         return
 
-    projection = FUNCTIONAL_PROJECTIONS[projection_name]
-    matrix_test = MATRIX_TESTS[f"is_{projection_name}"]
+    projection = FUNCTIONAL_PROJECTIONS[name]
+    matrix_test = MATRIX_TESTS[f"is_{name}"]
     x = torch.randn(4, 4)
 
     try:
         y = projection(x)
     except NotImplementedError as exc:
-        raise pytest.skip(f"{projection_name} is not implemented.") from exc
+        raise pytest.skip(f"{name} is not implemented.") from exc
 
     try:
         result = matrix_test(y)
     except NotImplementedError as exc:
-        raise pytest.skip(f"test for {projection_name} is not implemented.") from exc
+        raise pytest.skip(f"test for {name} is not implemented.") from exc
 
     assert result.item() is True
 
