@@ -21,10 +21,12 @@ __all__ = [
     "matrix_norm",
     "normal",
     "orthogonal",
+    "rank_one",
     "skew_symmetric",
     "symmetric",
     "symplectic",
     "traceless",
+    "tridiagonal",
     "upper_triangular",
 ]
 
@@ -102,6 +104,18 @@ def low_rank(
     where $Π(A)$ is the closest rank-k matrix to $A$.
     """
     r = x - projections.low_rank(x, rank=rank)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@signature("(..., m, n) -> (...)")
+def rank_one(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+    r"""Bias the matrix towards being rank-1.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A)$ is the closest rank-1 matrix to $A$.
+    """
+    r = x - projections.rank_one(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
@@ -229,6 +243,20 @@ def banded(
     where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $B⊙X = X$
     """
     r = x - projections.banded(x, upper=upper, lower=lower)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@signature("(..., m, n) -> (...)")
+def tridiagonal(
+    x: Tensor, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being tridiagonal.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A)$ is the closest tridiagonal matrix to $A$.
+    """
+    r = x - projections.tridiagonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

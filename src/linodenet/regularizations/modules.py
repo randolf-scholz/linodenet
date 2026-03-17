@@ -21,10 +21,12 @@ __all__ = [
     "MatrixNorm",
     "Normal",
     "Orthogonal",
+    "RankOne",
     "SkewSymmetric",
     "Symmetric",
     "Symplectic",
     "Traceless",
+    "Tridiagonal",
     "UpperTriangular",
 ]
 
@@ -47,10 +49,12 @@ from linodenet.regularizations.functional import (
     matrix_norm,
     normal,
     orthogonal,
+    rank_one,
     skew_symmetric,
     symmetric,
     symplectic,
     traceless,
+    tridiagonal,
     upper_triangular,
 )
 from linodenet.types import BoolTensor
@@ -159,6 +163,28 @@ class LowRank(RegularizationBase):
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards low-rank matrix."""
         return low_rank(x, rank=self.rank, p=self.p, size_normalize=self.size_normalize)
+
+
+class RankOne(RegularizationBase):
+    r"""Bias the matrix towards being rank-1.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A)$ is the closest rank-1 matrix to $A$.
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards rank-1 matrix."""
+        return rank_one(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Symmetric(RegularizationBase):
@@ -424,6 +450,28 @@ class Banded(RegularizationBase):
             p=self.p,
             size_normalize=self.size_normalize,
         )
+
+
+class Tridiagonal(RegularizationBase):
+    r"""Bias the matrix towards being tridiagonal.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A)$ is the closest tridiagonal matrix to $A$.
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards tridiagonal matrix."""
+        return tridiagonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Masked(RegularizationBase):
