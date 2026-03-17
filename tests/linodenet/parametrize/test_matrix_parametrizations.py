@@ -18,7 +18,6 @@ from linodenet.parametrize import (
     ParametrizationBase,
     RankOne,
     SkewSymmetric,
-    SpectralNormalization,
     Symmetric,
     Traceless,
     Tridiagonal,
@@ -28,6 +27,7 @@ from linodenet.parametrize import (
     register_parametrization,
     update_parametrizations,
 )
+from linodenet.projections.modules import SpectralNorm
 from linodenet.testing import (
     MatrixTest,
     is_banded,
@@ -77,7 +77,7 @@ MATRIX_PARAMETRIZATIONS: dict[str, nn.Module | type[ParametrizationBase]] = {
     "Masked": Masked(mask=MASK),
     "RankOne": RankOne,
     "SkewSymmetric": SkewSymmetric,
-    "SpectralNormalization": SpectralNormalization(gamma=0.97),
+    "SpectralNormalization": SpectralNorm(lipschitz_bound=0.97),
     "Symmetric": Symmetric,
     "Traceless": Traceless,
     "Tridiagonal": Tridiagonal,

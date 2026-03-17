@@ -48,6 +48,7 @@ from linodenet.parametrize.base import (
 )
 from linodenet.parametrize.matrix_parametrizations import *
 from linodenet.parametrize.tensor_parametrizations import *
+from linodenet.projections.modules import SpectralNorm
 
 __all__ += matrix_parametrizations.__all__
 __all__ += tensor_parametrizations.__all__
@@ -60,7 +61,7 @@ PARAMETRIZATIONS = {
     "CayleyMap"             : CayleyMap,
     "GramMatrix"            : GramMatrix,
     "MatrixExponential"     : MatrixExponential,
-    "SpectralNormalization" : SpectralNormalization,
+    "SpectralNorm"          : SpectralNorm,
     # Learnable parametrizations
     "ReZero"                : ReZero,
     # linodenet.projections

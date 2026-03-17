@@ -12,7 +12,6 @@ from torch.optim import SGD
 
 from linodenet.parametrize import (
     Identity,
-    SpectralNormalization,
     UpperTriangular,
     WrappedParametrization,
     cached,
@@ -24,6 +23,7 @@ from linodenet.parametrize import (
     update_parametrizations,
 )
 from linodenet.projections import Symmetric
+from linodenet.projections.modules import SpectralNorm
 from linodenet.testing import (
     all_close,
     assert_model_ok,
@@ -315,7 +315,7 @@ def test_surgery() -> None:
     m, n = 3, 3
     inputs = torch.randn(2, 3)
     model = nn.Linear(m, n)
-    spec = SpectralNormalization(model.weight)
+    spec = SpectralNorm(model.weight)
     # cloned_model = deepcopy(model)
 
     # register the parametrization
@@ -354,7 +354,7 @@ def test_surgery_extended() -> None:
         model.weight.copy_(weight)
         assert matrix_norm(model.weight, ord=2) > 1
 
-    spec = parametrize(model.weight, SpectralNormalization)
+    spec = parametrize(model.weight, SpectralNorm)
     spec.update_parametrization()
     assert matrix_norm(spec.cached_parameter, ord=2) <= 1.0
     spec.original_parameter.norm().backward()

@@ -3,7 +3,8 @@ r"""Check that spectral norm works as a parametrization."""
 import torch
 from torch import nn
 
-from linodenet.parametrize import SpectralNormalization, register_parametrization
+from linodenet.parametrize import register_parametrization
+from linodenet.projections.modules import SpectralNorm
 from linodenet.testing import is_contraction
 
 
@@ -13,5 +14,5 @@ def test_trainable() -> None:
     with torch.no_grad():
         model.weight.copy_(4 * torch.eye(m) + torch.randn(m, n))
     assert not is_contraction(model.weight)
-    register_parametrization(model, "weight", SpectralNormalization())
+    register_parametrization(model, "weight", SpectralNorm(0.95))
     assert is_contraction(model.weight)
