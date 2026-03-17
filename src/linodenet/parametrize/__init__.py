@@ -86,7 +86,7 @@ from linodenet.parametrize.matrix_parametrizations import (
 )
 from linodenet.parametrize.tensor_parametrizations import ReZero
 
-PARAMETRIZATIONS: dict[str, type[ParametrizationBase]] = {
+PARAMETRIZATIONS = {
     # Wrappers
     # "WrappedParametrization": WrappedParametrization,
     # Parametrizations

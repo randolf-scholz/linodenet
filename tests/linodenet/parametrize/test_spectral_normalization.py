@@ -13,5 +13,5 @@ def test_trainable() -> None:
     with torch.no_grad():
         model.weight.copy_(4 * torch.eye(m) + torch.randn(m, n))
     assert not is_contraction(model.weight)
-    register_parametrization(model, "weight", SpectralNormalization)
+    register_parametrization(model, "weight", SpectralNormalization())
     assert is_contraction(model.weight)

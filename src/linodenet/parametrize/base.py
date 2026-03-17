@@ -426,10 +426,14 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
     @jit.export
     def set_stale(self) -> None:
         self.is_stale.fill_(True)
+        # poison the cached tensor
+        self.cached_parameter.fill_(torch.nan)
 
     @jit.export
     def set_fresh(self) -> None:
         self.is_stale.fill_(False)
+        # check that the tensor is no longer poisoned.
+        assert not self.cached_parameter.isnan().all()
 
     @jit.export
     @torch.no_grad()

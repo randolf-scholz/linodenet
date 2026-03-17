@@ -116,7 +116,7 @@ class GramMatrix(ParametrizationBase):
         raise NotImplementedError
 
 
-class SpectralNormalization(ParametrizationBase):
+class SpectralNormalization(nn.Module):
     r"""Spectral normalization $‖A‖₂≤γ$.
 
     Ensures that the spectral norm of the weight matrix is at most γ (default=1.0).
@@ -130,15 +130,11 @@ class SpectralNormalization(ParametrizationBase):
     DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
 
-    original_parameter: nn.Parameter
-    r"""PARAM: The original parameter, before parametrization."""
-    cached_parameter: Tensor
-    r"""BUFFER: The cached parameter, after parametrization."""
-    sigma: Tensor
+    sigma: Tensor | None
     r"""BUFFER: The cached singular value."""
-    u: Tensor
+    u: Tensor | None
     r"""BUFFER: The cached left singular vector."""
-    v: Tensor
+    v: Tensor | None
     r"""BUFFER: The cached right singular vector."""
 
     GAMMA: Tensor
@@ -154,38 +150,24 @@ class SpectralNormalization(ParametrizationBase):
 
     def __init__(
         self,
-        weight: Tensor,
-        /,
-        *,
         gamma: float = 1.0,
         atol: float = ATOL,
         rtol: float = RTOL,
         maxiter: Optional[int] = None,
     ) -> None:
-        super().__init__(weight, unsafe=False)
-        if weight.ndim != 2:
-            raise ValueError("weight must be a matrix")
-
-        m, n = weight.shape
-        options: dict = {  # FIXME: error with mypy without dict?
-            "dtype": weight.dtype,
-            "layout": weight.layout,
-            "device": weight.device,
-        }
+        super().__init__()
 
         # constants
         self.atol = atol
         self.rtol = rtol
         self.maxiter = maxiter
 
-        # register auxiliary cached tensors
-        self.register_buffer("sigma", torch.ones((), **options))
-        self.register_buffer("u", torch.randn(m, **options))
-        self.register_buffer("v", torch.randn(n, **options))
-
-        # tensor constants
-        self.register_buffer("ONE", torch.ones((), **options))
-        self.register_buffer("GAMMA", gamma * torch.ones((), **options))
+        # shape-dependent buffers are initialized lazily on first use
+        self.register_buffer("sigma", None, persistent=True)
+        self.register_buffer("u", None, persistent=True)
+        self.register_buffer("v", None, persistent=True)
+        self.register_buffer("ONE", torch.tensor(1.0), persistent=True)
+        self.register_buffer("GAMMA", torch.tensor(float(gamma)), persistent=True)
 
     @jit.export
     @signature("(..., m, n) -> (..., m, n)")
