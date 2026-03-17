@@ -1,116 +1,42 @@
 r"""Utility functions for testing."""
+# ruff: noqa: F403, F405
 
 __all__ = [
+    "matrix_tests",
+    "assertions",
     # CONSTANTS
+    "MATRIX_TESTS_WITH_EXTRA_ARG",
     "MATRIX_TESTS",
-    # ABCs & Protocols
-    "MatrixTest",
-    # assert_* functions
-    "assert_all_close",
-    "assert_is_trainable",
-    "assert_jit_compatible",
-    "assert_signatures_compatible",
-    "assert_model_ok",
-    # check_* functions
-    "check_backward",
-    "check_forward",
-    "check_jit_serializable",
-    "check_initialization",
-    "check_jit_scriptable",
-    # is_*-checks
-    "is_banded",
-    "is_contraction",
-    "is_diagonal",
-    "is_diagonally_dominant",
-    "is_hamiltonian",
-    "is_low_rank",
-    "is_lower_triangular",
-    "is_masked",
-    "is_normal",
-    "is_orthogonal",
-    "is_skew_symmetric",
-    "is_square",
-    "is_symmetric",
-    "is_symplectic",
-    "is_traceless",
-    "is_upper_triangular",
-    # helper functions
-    "all_close",
-    "all_finite",
-    "flatten_nested_tensor",
-    "get_device",
-    "get_grads",
-    "get_norm",
-    "iter_tensors_requiring_grad",
-    "get_shapes",
-    "iter_parameters",
-    "iter_tensors",
-    "make_tensors_parameters",
-    "to_device",
-    "zero_grad",
 ]
 
-from linodenet.testing._testing import (
-    all_close,
-    all_finite,
-    assert_all_close,
-    assert_is_trainable,
-    assert_jit_compatible,
-    assert_model_ok,
-    assert_signatures_compatible,
-    check_backward,
-    check_forward,
-    check_initialization,
-    check_jit_scriptable,
-    check_jit_serializable,
-    flatten_nested_tensor,
-    get_device,
-    get_grads,
-    get_norm,
-    get_shapes,
-    iter_parameters,
-    iter_tensors,
-    iter_tensors_requiring_grad,
-    make_tensors_parameters,
-    to_device,
-    zero_grad,
-)
-from linodenet.testing.matrix_tests import (
-    MatrixTest,
-    is_banded,
-    is_contraction,
-    is_diagonal,
-    is_diagonally_dominant,
-    is_hamiltonian,
-    is_low_rank,
-    is_lower_triangular,
-    is_masked,
-    is_normal,
-    is_orthogonal,
-    is_skew_symmetric,
-    is_square,
-    is_symmetric,
-    is_symplectic,
-    is_traceless,
-    is_upper_triangular,
-)
+from linodenet.testing import assertions, matrix_tests
+from linodenet.testing.assertions import *
+from linodenet.testing.matrix_tests import *
+
+__all__ += matrix_tests.__all__
+__all__ += assertions.__all__
 
 MATRIX_TESTS: dict[str, MatrixTest] = {
-    "is_banded"              : is_banded,
     "is_contraction"         : is_contraction,
     "is_diagonal"            : is_diagonal,
     "is_diagonally_dominant" : is_diagonally_dominant,
     "is_hamiltonian"         : is_hamiltonian,
-    "is_low_rank"            : is_low_rank,
     "is_lower_triangular"    : is_lower_triangular,
-    "is_masked"              : is_masked,
     "is_normal"              : is_normal,
     "is_orthogonal"          : is_orthogonal,
+    "is_rank_one"            : is_rank_one,
     "is_skew_symmetric"      : is_skew_symmetric,
     "is_square"              : is_square,
     "is_symmetric"           : is_symmetric,
     "is_symplectic"          : is_symplectic,
     "is_traceless"           : is_traceless,
+    "is_tridiagonal"         : is_tridiagonal,
     "is_upper_triangular"    : is_upper_triangular,
 }  # fmt: skip
 r"""Dictionary of all available matrix tests."""
+
+MATRIX_TESTS_WITH_EXTRA_ARG = {
+    "is_masked": is_masked,
+    "is_low_rank": is_low_rank,
+    "is_banded": is_banded,
+}
