@@ -14,8 +14,7 @@ from linodenet_special.fallbacks.ndtri_exp import (
     _UPPER_CUTOFF,
     ndtri_exp as ndtri_exp_py,
 )
-
-from .fixtures import DEVICES, DTYPES, Fixture
+from tests.testing import DEVICES, DTYPES, TestCase
 
 assert ndtri_exp_cpp is not None
 
@@ -41,7 +40,7 @@ def _assert_matches_reference(values: torch.Tensor, actual: torch.Tensor) -> Non
     assert torch.allclose(actual[finite], reference[finite], atol=ATOL, rtol=RTOL)
 
 
-class TestCorrectness(Fixture):
+class TestCorrectness(TestCase):
     N = 256
     RANGES = [
         (-80.0, _LOWER_CUTOFF - 1e-3),

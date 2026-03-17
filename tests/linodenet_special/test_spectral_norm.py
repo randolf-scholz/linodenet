@@ -17,13 +17,9 @@ from linodenet_special.fallbacks.spectral_norm import (
     _cond_fn as cond_fn,
     _spectral_norm_forward_impl,
 )
-from tests.utils import timer
-
-from .fixtures import (
-    DEVICES,
-    SEEDS,
+from tests.testing import DEVICES, SEEDS, TestCase, timer
+from tests.testing.examples import (
     ExampleWithKnownSVD,
-    Fixture,
     make_test_case_diagonal,
     make_test_case_quasi_gaussian,
     make_test_case_rank_one,
@@ -237,7 +233,7 @@ class BasicTest:
         print("All tests passed.")
 
 
-class TestCorrectness(Fixture):
+class TestCorrectness(TestCase):
     SPECTRAL_NORMS = {
         "py+compiled": torch.compile(spectral_norm_py),
         "cpp+compile": torch.compile(spectral_norm_cpp),
@@ -432,7 +428,7 @@ class TestCorrectness(Fixture):
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
 
-class TestPerformance(Fixture):
+class TestPerformance(TestCase):
     SPECTRAL_NORMS = {
         "py+compiled": torch.compile(spectral_norm_py),
         "cpp+compile": torch.compile(spectral_norm_cpp),

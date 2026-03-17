@@ -18,7 +18,7 @@ from linodenet_special.fallbacks import (
     gaussian_to_bimodal,
     mixture_to_gaussian,
 )
-from tests.utils.project import PROJECT
+from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

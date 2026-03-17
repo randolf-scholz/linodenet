@@ -14,11 +14,10 @@ from linodenet_special import (
     mixture_to_gaussian,
 )
 from linodenet_special.compiled import gaussian_to_mixture as gaussian_to_mixture_cpp
+from tests.testing import DEVICES, DTYPES, TestCase
 
-from .fixtures import DEVICES, DTYPES, Fixture
 
-
-class TestBimodalToGaussian(Fixture):
+class TestBimodalToGaussian(TestCase):
     X_MIN = -20
     X_MAX = 20
     N = 1000
@@ -223,7 +222,7 @@ class TestBimodalToGaussian(Fixture):
         self.assert_close(x.grad, 1.0, rtol=1e-4, atol=1e-4)
 
 
-class TestGaussianToBimodal(Fixture):
+class TestGaussianToBimodal(TestCase):
     X_MIN = -20
     X_MAX = 20
     N = 1000
@@ -450,7 +449,7 @@ class TestGaussianToBimodal(Fixture):
         )
 
 
-class TestMixtureToGaussian(Fixture):
+class TestMixtureToGaussian(TestCase):
     N = 64
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -561,7 +560,7 @@ class TestMixtureToGaussian(Fixture):
         )
 
 
-class TestGaussianToMixture(Fixture):
+class TestGaussianToMixture(TestCase):
     N = 64
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)

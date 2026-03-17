@@ -10,6 +10,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/src/linodenet_special/csrc" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tests/testing" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.mypy_cache" />
       <excludeFolder url="file://$MODULE_DIR$/.pytest_cache" />
       <excludeFolder url="file://$MODULE_DIR$/dist" />

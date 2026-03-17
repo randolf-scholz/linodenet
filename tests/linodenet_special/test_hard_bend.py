@@ -9,7 +9,7 @@ from matplotlib.widgets import Slider
 from torch import Tensor
 
 from linodenet_special.fallbacks.hard_bend import hard_bend, hard_contract, hard_expand
-from tests.utils.project import PROJECT
+from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 X_MIN, X_MAX = -8.0, 8.0

@@ -8,9 +8,7 @@ import torch
 from scipy.stats import ortho_group
 
 from linodenet_special.marchenko_pastur import MarchenkoPastur
-from tests.utils.project import PROJECT
-
-from .fixtures import DTYPES, SEED
+from tests.testing import DTYPES, PROJECT, SEED
 
 
 @pytest.mark.parametrize(

@@ -13,13 +13,9 @@ import linodenet_special
 from linodenet_special import singular_triplet, singular_triplet_native
 from linodenet_special.compiled import singular_triplet as singular_triplet_cpp
 from linodenet_special.fallbacks import singular_triplet as singular_triplet_py
-from tests.utils import timer
-
-from .fixtures import (
-    DEVICES,
-    SEEDS,
+from tests.testing import DEVICES, SEEDS, TestCase, timer
+from tests.testing.examples import (
     ExampleWithKnownSVD,
-    Fixture,
     make_test_case_diagonal,
     make_test_case_quasi_gaussian,
     make_test_case_rank_one,
@@ -285,7 +281,7 @@ class TestBasic:
         assert time_grad_custom < 1.2 * time_grad_native, "Custom backward is too slow"
 
 
-class TestCorrectness(Fixture):
+class TestCorrectness(TestCase):
     SINGULAR_TRIPLETS = {
         "native": singular_triplet_native,
         "py+compiled": torch.compile(singular_triplet_py),
@@ -485,7 +481,7 @@ class TestCorrectness(Fixture):
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
 
-class TestPerformance(Fixture):
+class TestPerformance(TestCase):
     SINGULAR_TRIPLETS = {
         "custom": singular_triplet,
         "native": singular_triplet_native,

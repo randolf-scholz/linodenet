@@ -1,0 +1,153 @@
+__all__ = ["TestCase"]
+
+import warnings
+
+import torch
+from torch import Tensor
+
+
+class TestCase:
+    ATOL = 1e-6
+    RTOL = 1e-6
+
+    def assert_upper_bounded(
+        self,
+        value: Tensor | float,
+        bound: Tensor | float,
+        atol: float = 0.0,
+        rtol: float = 0.0,
+        warn_loose: bool = False,
+    ) -> None:
+        r"""Check that |left| ≤ (1+rtol) |right| + atol."""
+        __tracebackhide__ = True
+
+        value = torch.as_tensor(value)
+        bound = torch.as_tensor(bound)
+        upper_bound = (1 + rtol) * bound + atol
+        assert upper_bound >= 0.0
+        ok = value <= upper_bound
+
+        abs_violation = (value - upper_bound).clamp_min(0)
+        rel_violation = abs_violation / upper_bound.abs()
+
+        max_abs_err = abs_violation.max().item()
+        mean_abs_err = abs_violation.mean().item()
+        median_abs_err = abs_violation.median().item()
+        max_rel_err = rel_violation.max().item()
+        mean_rel_err = rel_violation.nanmean().item()
+        median_rel_err = rel_violation.nanmedian().item()
+
+        if not ok.all():
+            msg = (
+                f"Values exceed bound! "
+                f"\n\tvalue: {value.tolist()}"
+                f"\n\tbound: {bound.tolist()}"
+                f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmax    rel violation={max_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmean   rel violation={mean_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmedian rel violation={median_rel_err:8.2e}  (expected {rtol})"
+            )
+            raise AssertionError(msg)
+
+        if warn_loose and (max_abs_err < 1e-3 or max_rel_err < 1e-3):
+            warnings.warn(
+                f"Bounds are loose:"
+                f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmax    rel violation={max_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmean   rel violation={mean_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmedian rel violation={median_rel_err:8.2e}  (expected {rtol})",
+                stacklevel=2,
+            )
+
+    def assert_lower_bounded(
+        self,
+        value: Tensor | float,
+        bound: Tensor | float,
+        atol: float = 0.0,
+        rtol: float = 0.0,
+        warn_loose: bool = False,
+    ) -> None:
+        r"""Check that |left| ≥ (1-rtol) |right| - atol."""
+        __tracebackhide__ = True
+
+        value = torch.as_tensor(value)
+        bound = torch.as_tensor(bound)
+        lower_bound = (1 - rtol) * bound - atol
+        assert (1 - rtol) >= 0.0
+        ok = value >= lower_bound
+
+        abs_violation = (lower_bound - value).clamp_min(0)
+        rel_violation = abs_violation / lower_bound.abs()
+
+        max_abs_err = abs_violation.max().item()
+        mean_abs_err = abs_violation.mean().item()
+        median_abs_err = abs_violation.median().item()
+        max_rel_err = rel_violation.max().item()
+        mean_rel_err = rel_violation.nanmean().item()
+        median_rel_err = rel_violation.nanmedian().item()
+
+        if not ok.all():
+            msg = (
+                f"Values exceed bound! "
+                f"\n\tvalue: {value.tolist()}"
+                f"\n\tbound: {bound.tolist()}"
+                f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmax    rel violation={max_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmean   rel violation={mean_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmedian rel violation={median_rel_err:8.2e}  (expected {rtol})"
+            )
+            raise AssertionError(msg)
+
+        if warn_loose and (max_abs_err < 1e-3 or max_rel_err < 1e-3):
+            warnings.warn(
+                f"Bounds are loose:"
+                f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmax    rel violation={max_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmean   rel violation={mean_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmedian rel violation={median_rel_err:8.2e}  (expected {rtol})",
+                stacklevel=2,
+            )
+
+    def assert_close(
+        self,
+        value: Tensor | float,
+        expected: Tensor | float,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+    ) -> None:
+        r"""Checks that |value - expected| ≤ rtol|expected| + atol."""
+        __tracebackhide__ = True
+
+        value = torch.as_tensor(value)
+        expected = torch.as_tensor(expected)
+        residual = (value - expected).abs()
+        magnitude = expected.abs()
+        ok = residual <= rtol * magnitude + atol
+
+        if not ok.all():
+            max_abs_err = residual.max().item()
+            mean_abs_err = residual.mean().item()
+            median_abs_err = residual.median().item()
+            max_rel_err = (residual / magnitude).max().item()
+            mean_rel_err = (residual / magnitude).nanmean().item()
+            median_rel_err = (residual / magnitude).nanmedian().item()
+            msg = (
+                f"Values not close! "
+                # f"\n\tleft:  {value.tolist()}"
+                # f"\n\tright: {true_value.tolist()}"
+                f"\n\tmax    abs error={max_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmean   abs error={mean_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmedian abs error={median_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmax    rel error={max_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmean   rel error={mean_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tmedian rel error={median_rel_err:8.2e}  (expected {rtol})"
+            )
+            raise AssertionError(msg)

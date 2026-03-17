@@ -6,7 +6,7 @@ from linodenet.regularizations import (
     FUNCTIONAL_REGULARIZATIONS,
     MODULAR_REGULARIZATIONS,
 )
-from tests.utils import camel2snake, snake2camel
+from tests.testing import camel2snake, snake2camel
 
 
 @pytest.mark.parametrize("projection_name", MODULAR_REGULARIZATIONS)

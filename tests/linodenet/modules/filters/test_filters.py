@@ -7,7 +7,7 @@ import torch
 
 import linodenet
 from linodenet.constants import NAN
-from tests.utils.project import PROJECT
+from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

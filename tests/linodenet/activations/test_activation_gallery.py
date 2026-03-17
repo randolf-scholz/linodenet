@@ -9,7 +9,7 @@ from matplotlib.axes import Axes
 from torch import Tensor
 
 from linodenet.nn.activations import ACTIVATION_FUNCTIONS
-from tests.utils.project import PROJECT
+from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

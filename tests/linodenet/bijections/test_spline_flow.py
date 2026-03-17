@@ -4,7 +4,7 @@ import torch
 
 from linodenet.bijections import SplineFlow
 from tests.linodenet.bijections.fixtures import SEEDS
-from tests.utils.project import PROJECT
+from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

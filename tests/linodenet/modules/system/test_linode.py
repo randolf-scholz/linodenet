@@ -16,8 +16,7 @@ from tqdm.autonotebook import trange
 
 from linodenet.flows import LinearFlow
 from linodenet_special import scaled_norm
-from tests.utils import visualize_distribution
-from tests.utils.project import PROJECT
+from tests.testing import PROJECT, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.getLogger("matplotlib").setLevel(logging.WARNING)

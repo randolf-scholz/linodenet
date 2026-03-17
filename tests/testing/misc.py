@@ -1,4 +1,4 @@
-r"""Test utils."""
+r"""Test testing."""
 
 __all__ = [
     # Functions
