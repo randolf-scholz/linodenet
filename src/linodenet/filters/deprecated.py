@@ -13,7 +13,7 @@ from abc import abstractmethod
 from collections.abc import Iterable
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from linodenet.filters.base import CellBase, FilterBase
 from linodenet.filters.kalman_cell import _Alpha
@@ -194,7 +194,6 @@ class PseudoKalmanCell(CellBase):
             self.register_buffer("kernel", kernel)
             self.register_buffer("ZERO", torch.zeros(1))
 
-    @jit.export
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         # refresh buffer

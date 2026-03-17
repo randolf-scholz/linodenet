@@ -6,7 +6,7 @@ __all__ = [
     "ResNetBlock",
 ]
 
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from linodenet.nn.containers import ModuleSequence
 from linodenet.nn.reverse_dense import ReverseDense
@@ -61,7 +61,6 @@ class ResNet(ModuleSequence[ResNetBlock]):
 
         super().__init__(blocks)
 
-    @jit.export
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
         for block in self:

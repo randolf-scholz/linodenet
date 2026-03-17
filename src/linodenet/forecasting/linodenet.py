@@ -10,7 +10,7 @@ import warnings
 from typing import Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from blueprint import Blueprint, ObjectBlueprint, initialize
 from linodenet.flows import LinearFlow
@@ -182,7 +182,6 @@ class LinODEnet(nn.Module):
         self.kernel = kernel
         self.z0 = nn.Parameter(torch.randn(self.latent_size))
 
-    @jit.export
     @signature("[(..., $n), (..., $n, d)] -> (..., $n, d)")
     def forward(
         self,
@@ -277,7 +276,6 @@ class LinODEnet(nn.Module):
         yhat = self.x_post[..., : self.output_size]
         return yhat
 
-    @jit.export
     @signature("[(..., $m), (..., $n), (..., $n, d)] -> (..., $m, d)")
     def predict(
         self,
@@ -362,7 +360,6 @@ class LinODEnet(nn.Module):
 
         return self.predictions
 
-    @jit.export
     def _validate_inputs(
         self, q: Tensor, t: Tensor, x: Tensor, t0: Tensor, z0: Tensor
     ) -> None:
@@ -380,7 +377,6 @@ class LinODEnet(nn.Module):
         if not all(t < q):
             raise ValueError(f"Expected {t} < {q}")
 
-    @jit.export
     def _validate_model(self) -> None:
         r"""Validate the model."""
         for key in [

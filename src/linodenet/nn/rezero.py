@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from typing import Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from signatures import signature
 
@@ -56,7 +56,6 @@ class ReZero(nn.Module):
         self.learnable = learnable
         self.module = module
 
-    @jit.export
     @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
         if self.module is None:
@@ -82,7 +81,6 @@ class ReZeroResNet(nn.ModuleList):
 
         super().__init__(module_list)
 
-    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         for block in self:
             x = x + block(x)

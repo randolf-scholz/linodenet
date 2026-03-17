@@ -5,7 +5,7 @@ __all__ = ["KalmanFilter"]
 from typing import Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 
 class KalmanFilter(nn.Module):
@@ -77,7 +77,6 @@ class KalmanFilter(nn.Module):
         nn.init.kaiming_normal_(self.H, nonlinearity="linear")
         nn.init.kaiming_normal_(self.R, nonlinearity="linear")
 
-    @jit.export
     def forward(self, y: Tensor, x: Tensor, *, P: Optional[Tensor] = None) -> Tensor:
         r"""Return $x' = x + P⋅Hᵀ∏ₘᵀ(HPHᵀ + R)⁻¹ ∏ₘ (y - Hx)$."""
         P = torch.eye(x.shape[-1]) if P is None else P

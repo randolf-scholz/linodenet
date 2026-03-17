@@ -7,7 +7,7 @@ from typing import Final, Optional
 import scipy
 import torch
 from numpy.typing import ArrayLike
-from torch import Tensor, einsum, jit, nn, stack
+from torch import Tensor, einsum, nn, stack
 
 from signatures import signature
 
@@ -130,7 +130,6 @@ class DiscreteKalmanFilter(nn.Module):
         self.validate_parameters()
         self.validate_buffers()
 
-    @jit.export
     def validate_parameters(self) -> None:
         r"""Validate dimensions of parameters."""
         m = self.input_size
@@ -167,7 +166,6 @@ class DiscreteKalmanFilter(nn.Module):
             "Initial covariance P0 not positive definite"
         )
 
-    @jit.export
     def validate_buffers(self) -> None:
         m = self.input_size
         n = self.hidden_size

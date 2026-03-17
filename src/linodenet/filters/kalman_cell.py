@@ -37,7 +37,7 @@ from math import sqrt
 from typing import Optional, SupportsFloat
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from linodenet.filters.base import CellBase
 from signatures import signature
@@ -125,7 +125,6 @@ class PseudoKalmanCell(CellBase):
         # BUFFERS
         self.register_buffer("ZERO", torch.zeros(1))
 
-    @jit.export
     def h(self, x: Tensor) -> Tensor:
         r"""Apply the observation function."""
         # SEE: https://pytorch.org/docs/stable/jit_language_reference.html#optional-type-refinement
@@ -133,7 +132,6 @@ class PseudoKalmanCell(CellBase):
         assert H is not None, "H must be given in non-autoregressive mode!"
         return torch.einsum("ij, ...j -> ...i", H, x)
 
-    @jit.export
     def ht(self, x: Tensor) -> Tensor:
         r"""Apply the transpose observation function."""
         if self.autoregressive:
@@ -144,7 +142,6 @@ class PseudoKalmanCell(CellBase):
         assert H is not None, "H must be given in non-autoregressive mode!"
         return torch.einsum("ji, ...j -> ...i", H, x)
 
-    @jit.export
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Return $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$."""
@@ -247,7 +244,6 @@ class NonLinearKalmanCell(CellBase):
         self.H = nn.Parameter(torch.empty(hidden_size, input_size))
         nn.init.kaiming_normal_(self.H, nonlinearity="linear")
 
-    @jit.export
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Return $BΠAΠ(x - y)$."""
@@ -311,7 +307,6 @@ class NonLinearCell(CellBase):
         # BUFFERS
         self.register_buffer("ZERO", torch.zeros(1))
 
-    @jit.export
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Return the updated state tensor.

@@ -9,7 +9,7 @@ __all__ = [
 from typing import Final
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet.mappings.base import SurjectionBase
@@ -22,12 +22,10 @@ class GramMatrix(SurjectionBase):
     DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SEMIDEFINITE
 
-    @jit.export
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
         return torch.einsum("...kn, ...mk -> ...mn", x, x)
 
-    @jit.export
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
         r"""This requires the matrix square root, which is not implemented in PyTorch.
@@ -77,13 +75,11 @@ class ConcatProjection(SurjectionBase):
         self.padding_size = input_size - output_size
         self.padding = nn.Parameter(torch.randn(self.padding_size))
 
-    @jit.export
     @signature("(..., d+e) -> (..., d)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Remove the padded state."""
         return x[..., : self.output_size]
 
-    @jit.export
     @signature("(..., d) -> (..., d+e)")
     def right_inverse(self, y: Tensor) -> Tensor:
         r"""Concatenate the input with the padding."""

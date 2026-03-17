@@ -15,7 +15,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Final, Protocol, runtime_checkable
 
 import torch
-from torch import Size, Tensor, jit, nn
+from torch import Size, Tensor, nn
 
 from linodenet.nn import ModuleMapping, ModuleSequence
 
@@ -103,7 +103,6 @@ class DistributionBase(nn.Module):
     @abstractmethod
     def log_prob(self, value: Tensor, /) -> Tensor: ...
 
-    @jit.export
     def sample_and_log_prob(self, num: int = 1, /) -> tuple[Tensor, Tensor]:
         samples = self.sample(num)
         log_probs = self.log_prob(samples)

@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import Any, Final, cast
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 import linodenet.imputation as imp
 from linodenet.constants import EMPTY_MAP
@@ -116,7 +116,6 @@ class MissingValueCell(CellBase):
         self.imputation_strategy = imputation_strategy
         self._imputer = imputer
 
-    @jit.export
     def impute(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
         return self._imputer(mask, y, x)
 

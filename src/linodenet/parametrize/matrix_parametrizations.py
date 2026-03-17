@@ -28,7 +28,7 @@ __all__ = [
 from typing import Final
 
 import torch
-from torch import Tensor, jit
+from torch import Tensor
 
 from linodenet.domains import MatrixDomains
 from linodenet.mappings import bijections, projections, surjections
@@ -80,12 +80,10 @@ class CayleyMap(ParametrizationBase):
         super().__init__(tensor, unsafe=False)
         self.register_buffer("Id", torch.eye(n))
 
-    @jit.export
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
         return torch.linalg.lstsq(self.Id + x, self.Id - x).solution
 
-    @jit.export
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
         return torch.linalg.lstsq(self.Id - y, self.Id + y).solution

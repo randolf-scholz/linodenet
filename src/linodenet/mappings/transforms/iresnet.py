@@ -12,7 +12,7 @@ from math import sqrt
 from typing import Any, Final
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from linodenet.nn import LinearContraction, ModuleSequence, ReZero
 from linodenet.nn.activations import get_activation
@@ -47,12 +47,10 @@ class iResNetLayer(nn.Module):
         self.rtol = rtol
         self.register_buffer("converged", torch.tensor(False))
 
-    @jit.export
     @signature("(..., n) -> (..., n)")
     def encode(self, x: Tensor) -> Tensor:
         return x + self.layer(x)
 
-    @jit.export
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
@@ -201,12 +199,10 @@ class iResNetBlock(nn.Module):
         self.bottleneck = nn.Sequential(*layers)
         self.register_buffer("residual", torch.tensor(()), persistent=False)
 
-    @jit.export
     @signature("(..., n) -> (..., n)")
     def encode(self, x: Tensor) -> Tensor:
         return x + self.bottleneck(x)
 
-    @jit.export
     @signature("(..., n) -> (..., n)")
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
@@ -300,12 +296,10 @@ class iResNet(nn.Module):
 
         self.blocks = ModuleSequence(blocks)
 
-    @jit.export
     @signature("(..., *xs) -> (..., *xs)")
     def encode(self, x: Tensor) -> Tensor:
         return self.blocks(x)
 
-    @jit.export
     @signature("(..., *xs) -> (..., *xs)")
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fix point iteration in each block in reversed order."""

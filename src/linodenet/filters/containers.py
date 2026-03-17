@@ -10,7 +10,7 @@ from abc import abstractmethod
 from collections.abc import Iterable
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from linodenet.filters.base import Cell, CellBase
 from linodenet.nn import ModuleSequence
@@ -68,7 +68,6 @@ class CellSequence[C: CellBase](CellList[C]):
 
         super().__init__(modules, input_size=input_size, hidden_size=hidden_size)
 
-    @jit.export
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         for cell in self:
@@ -112,7 +111,6 @@ class ResidualCellSequence[C: CellBase](CellSequence[C]):
         assert alphas.shape == (num,)
         self.alpha = nn.Parameter(alphas, requires_grad=alpha_learnable)
 
-    @jit.export
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         for alpha, cell in zip(self.alpha, self, strict=True):

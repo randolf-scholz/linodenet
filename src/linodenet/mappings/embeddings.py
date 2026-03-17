@@ -17,7 +17,7 @@ __all__ = [
 from typing import Final
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 from torch.nn import functional
 
 from linodenet.domains import VectorDomains
@@ -75,14 +75,12 @@ class ConcatEmbedding(EmbeddingBase):
         self.padding_size = output_size - input_size
         self.padding = nn.Parameter(torch.randn(self.padding_size))
 
-    @jit.export
     @signature("(..., d) -> (..., d+e)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Concatenate the input with the padding."""
         shape = x.shape[:-1] + (self.padding_size,)
         return torch.cat([x, self.padding.expand(shape)], dim=-1)
 
-    @jit.export
     @signature("(..., d+e) -> (..., d)")
     def left_inverse(self, y: Tensor) -> Tensor:
         r"""Remove the padded state."""
@@ -145,7 +143,6 @@ class LinearEmbedding(EmbeddingBase):
         )
         self.reset_parameters()
 
-    @jit.export
     def reset_parameters(self) -> None:
         r"""Reset both weight matrix and bias vector."""
         with torch.no_grad():
@@ -154,13 +151,11 @@ class LinearEmbedding(EmbeddingBase):
             if self.bias is not None:
                 self.bias.uniform_(-bound, bound)
 
-    @jit.export
     @signature("(..., d) -> (..., e)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Concatenate the input with the padding."""
         return functional.linear(x, self.weight, self.bias)
 
-    @jit.export
     @signature("(..., d) -> (..., e)")
     def left_inverse(self, y: Tensor) -> Tensor:
         r"""Remove the padded state."""

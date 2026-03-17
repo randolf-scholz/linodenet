@@ -10,7 +10,7 @@ import warnings
 from typing import Any, Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 from blueprint import Blueprint, initialize
 from linodenet.filters import Filter, MissingValueCell
@@ -210,7 +210,6 @@ class LatentStateSpaceModel(nn.Module):
                 f"got {encoder_output} and {system_input}."
             )
 
-    @jit.export
     @signature("[(..., $n), (..., $n, d)] -> (..., $n, d)")
     def forward(
         self,

@@ -34,7 +34,7 @@ from math import sqrt
 from typing import Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 from torch.linalg import matrix_norm
 from torch.nn import functional
 
@@ -114,7 +114,6 @@ class LinearContraction(nn.Module):
     #         self.input_size, self.output_size, self.bias is not None
     #     )
 
-    @jit.export
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
@@ -215,7 +214,6 @@ class AltLinearContraction(nn.Module):
     #         self.input_size, self.output_size, self.bias is not None
     #     )
 
-    @jit.export
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
         # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
@@ -317,7 +315,6 @@ class LinearContractionManualParametrized(nn.Module):
         self.register_buffer("c", torch.tensor(self.lipschitz_constant))
         self.reset_cache()
 
-    @jit.export
     def reset_parameters(self) -> None:
         r"""Reset both weight matrix and bias vector."""
         with torch.no_grad():
@@ -326,7 +323,6 @@ class LinearContractionManualParametrized(nn.Module):
             if self.bias is not None:
                 self.bias.uniform_(-bound, bound)
 
-    @jit.export
     def reset_cache(self) -> None:
         r"""Reset the cached weight matrix.
 
@@ -345,7 +341,6 @@ class LinearContractionManualParametrized(nn.Module):
         # NOTE: we need the second run to set up the gradients
         self.recompute_cache()
 
-    @jit.export
     def recompute_cache(self) -> None:
         r"""Recompute the cached weight matrix."""
         # Compute the cached weight matrix
@@ -362,7 +357,6 @@ class LinearContractionManualParametrized(nn.Module):
         self.cached_weight.copy_(cached_weight)  # ✅️
         # self.cached_weight = cached_weight  # ❌️ (leads to RuntimeError [modified by an inplace operation])
 
-    @jit.export
     def projection(self) -> None:
         r"""Project the cached weight matrix.
 
@@ -401,7 +395,6 @@ class LinearContractionManualParametrized(nn.Module):
             self.recompute_cache()
             self.weight.copy_(self.cached_weight)
 
-    @jit.export
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
         return functional.linear(x, self.cached_weight, self.bias)

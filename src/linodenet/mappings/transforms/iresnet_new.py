@@ -7,7 +7,7 @@ import warnings
 from typing import Final, Optional, Self
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
 
 class iResNetBlock(nn.Module):
@@ -57,12 +57,10 @@ class iResNetBlock(nn.Module):
                 inverse=self,
             )
 
-    @jit.export
     def encode(self, x: Tensor) -> Tensor:
         r"""Computes $y = x + f(x)$."""
         return x + self.block(x)
 
-    @jit.export
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration.
 
