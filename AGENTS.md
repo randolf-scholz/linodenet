@@ -49,5 +49,5 @@ Project conventions for automated agents contributing to `linodenet`.
 
 ## running tests
 
-- export `PYTHONPATH=src` and disable `pytest-rerunfailures`, for example:
-  `PYTHONPATH=src pytest -p no:pytest_rerunfailures <tests>`.
+- export `PYTHONPATH=src` and disable the `pytest-rerunfailures` plugin:
+  `PYTHONPATH=src pytest -p no:rerunfailures <tests>`.
