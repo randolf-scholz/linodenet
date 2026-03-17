@@ -3,8 +3,8 @@ r"""Check that spectral norm works as a parametrization."""
 import torch
 from torch import nn
 
+from linodenet.mappings.projections import SpectralNorm
 from linodenet.parametrize import register_parametrization
-from linodenet.projections.modules import SpectralNorm
 from linodenet.testing import is_contraction
 
 

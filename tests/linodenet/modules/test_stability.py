@@ -8,7 +8,8 @@ import torch
 import linodenet.filters.deprecated
 from linodenet import flows
 from linodenet.forecasting import LinODEnet
-from linodenet.nn import ResNet, embeddings
+from linodenet.mappings import embeddings
+from linodenet.nn import ResNet
 
 
 @pytest.mark.skip(reason="Not implemented yet.")

@@ -1,61 +1,28 @@
-r"""#TODO add module summary line.
+r"""Embedding components.
 
-#TODO add module description.
+An embedding is an injective mapping $f:X → Y$, that is:
+
+1. It is left-invertible, i.e. there exists a mapping $g:Y → X$ such that
+   $g(f(x)) = x$ for all $x ∈ X$, but not necessarily $f(g(y)) = y$ for all $y ∈ Y$.
+2. The output dimensionality is (generally) larger than the input dimensionality.
+3. we require both an `forward` and a `left_inverse` method, aliased to `encode` and `decode`.
 """
 
 __all__ = [
-    # ABCs & Protocols
-    "Embedding",
-    "EmbeddingBase",
     # Classes
     "ConcatEmbedding",
     "LinearEmbedding",
 ]
 
-from abc import abstractmethod
-from typing import Final, Protocol, runtime_checkable
+from typing import Final
 
 import torch
 from torch import Tensor, jit, nn
 from torch.nn import functional
 
+from linodenet.domains import VectorDomains
+from linodenet.mappings.base import EmbeddingBase
 from signatures import signature
-
-
-@runtime_checkable
-class Embedding[X, Y](Protocol):
-    r"""Protocol for Embedding Components."""
-
-    @abstractmethod
-    @signature("(...) -> (...)")
-    def __call__(self, x: X, /) -> Y:
-        r"""Forward pass of the embedding."""
-        ...
-
-    @abstractmethod
-    @signature("(...) -> (...)")
-    def left_inverse(self, y: Y, /) -> X:
-        r"""Left-inverse pass of the embedding."""
-        ...
-
-
-class EmbeddingBase(nn.Module, Embedding[Tensor, Tensor]):
-    r"""Abstract Base Class for Embedding components."""
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def left_inverse(self, y: Tensor, /) -> Tensor: ...
-
-    @jit.export
-    def encode(self, x: Tensor) -> Tensor:
-        r"""Alias for `forward` method."""
-        return self.forward(x)
-
-    @jit.export
-    def decode(self, y: Tensor) -> Tensor:
-        r"""Alias for `left_inverse` method."""
-        return self.left_inverse(y)
 
 
 class ConcatEmbedding(EmbeddingBase):
@@ -66,6 +33,9 @@ class ConcatEmbedding(EmbeddingBase):
     See Also:
         - `linodenet.projections.ConcatProjection`
     """
+
+    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
 
     # Constants
     input_size: Final[int]
@@ -127,6 +97,9 @@ class LinearEmbedding(EmbeddingBase):
         x ↦ Ax + b is injective if A has full column rank (input_size ≥ output_size).
         In the former case, the map is right-invertible, in the latter left-invertible.
     """
+
+    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
 
     # Constants
     input_size: Final[int]

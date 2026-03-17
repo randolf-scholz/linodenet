@@ -17,18 +17,20 @@ from linodenet.flows import (
 )
 from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATIONS, Initialization
+from linodenet.mappings import (
+    EMBEDDINGS,
+    FUNCTIONAL_PROJECTIONS,
+    MODULAR_PROJECTIONS,
+    Embedding,
+    EmbeddingBase,
+    Projection,
+    ProjectionBase,
+)
 from linodenet.nn.activations import ALL_ACTIVATIONS, Activation
-from linodenet.nn.embeddings import EMBEDDINGS, Embedding, EmbeddingBase
 from linodenet.parametrize import (
     PARAMETRIZATIONS,
     Parametrization,
     ParametrizationBase,
-)
-from linodenet.projections import (
-    FUNCTIONAL_PROJECTIONS,
-    MODULAR_PROJECTIONS,
-    Projection,
-    ProjectionBase,
 )
 from linodenet.regularizations import (
     FUNCTIONAL_REGULARIZATIONS,

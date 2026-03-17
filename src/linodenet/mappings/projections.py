@@ -11,8 +11,6 @@ Notes:
 
 __all__ = [
     # ABCs & Protocols
-    "Projection",
-    "ProjectionBase",
     # Classes
     "Banded",
     "Diagonal",
@@ -34,88 +32,17 @@ __all__ = [
     "UpperTriangular",
 ]
 
-from abc import abstractmethod
-from typing import Final, Optional, Protocol, final, runtime_checkable
+from typing import Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, jit
 
-import linodenet.projections.functional as F
+import linodenet.mappings.functional as F
 from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains
-from linodenet.projections.surjections import Surjection
+from linodenet.mappings.base import ProjectionBase
 from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
-
-
-@runtime_checkable
-class Projection[T](Surjection[T, T], Protocol):
-    r"""Protocol for projections.
-
-    Projections are a stronger form of surjections: we additionally require
-
-    - The domain is a subset of the codomain
-    -`right_inverse` is the identity map.
-
-    That is, a projection is a mapping $φ:X→X$ such that $φ∘φ=φ$. In particular,
-    $φ=i∘π$ for the embedding $i:\Im(φ)→X$ where $π:X→\Im(φ)$ is $φ$ viewed as a surjection onto its image.
-    Then the identity map on the image of $φ$ is the right inverse of $π$.
-
-    References:
-        - https://en.wikipedia.org/wiki/Projection_(mathematics)
-        - https://en.wikipedia.org/wiki/Projection_(linear_algebra)
-    """
-
-    @abstractmethod
-    @signature("(..., *xs) -> (..., *ys)")
-    def forward(self, x: T, /) -> T:
-        r"""Forward pass of the projection."""
-        ...
-
-    @signature("(..., *ys) -> (..., *xs)")
-    def right_inverse(self, y: T, /) -> T:
-        r"""Right inverse of the projection, i.e. the identity on the image."""
-        return y
-
-
-class ProjectionBase(nn.Module):
-    r"""Abstract Base Class for Projection components."""
-
-    @abstractmethod
-    @signature("(..., *xs) -> (..., *ys)")
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the projection.
-
-        Args:
-            x: The input tensor to be projected.
-
-        Returns:
-            y: The projected tensor.
-        """
-
-    @final
-    @jit.export
-    @signature("(..., *ys) -> (..., *xs)")
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r"""Right inverse of the projection, i.e. the identity on the image.
-
-        Args:
-            y: The projected tensor.
-
-        Returns:
-            The input tensor as-is.
-        """
-        return y
-
-    @jit.export
-    def encode(self, x: Tensor) -> Tensor:
-        r"""Alias for `forward` method."""
-        return self.forward(x)
-
-    @jit.export
-    def decode(self, y: Tensor) -> Tensor:
-        r"""Alias for `right_inverse` method."""
-        return self.right_inverse(y)
 
 
 class SpectralNorm(ProjectionBase):

@@ -10,6 +10,7 @@ from torch.linalg import matrix_norm
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
+from linodenet.mappings.projections import SpectralNorm, Symmetric
 from linodenet.parametrize import (
     Identity,
     UpperTriangular,
@@ -22,8 +23,6 @@ from linodenet.parametrize import (
     register_parametrization,
     update_parametrizations,
 )
-from linodenet.projections import Symmetric
-from linodenet.projections.modules import SpectralNorm
 from linodenet.testing import (
     all_close,
     assert_model_ok,

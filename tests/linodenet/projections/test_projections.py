@@ -3,7 +3,7 @@ r"""Tests for linodenet.projections."""
 import pytest
 import torch
 
-from linodenet.projections import (
+from linodenet.mappings import (
     FUNCTIONAL_PROJECTIONS,
     MODULAR_PROJECTIONS,
     PROJECTIONS,

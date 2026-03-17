@@ -53,9 +53,9 @@ from linodenet import (
     imputation,
     initializations,
     parametrize,
-    projections,
     regularizations,
     testing,
     types,
     utils,
 )
+from linodenet.mappings import projections

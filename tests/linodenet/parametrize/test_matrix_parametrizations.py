@@ -8,6 +8,7 @@ from torch.fx import GraphModule
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
+from linodenet.mappings.projections import SpectralNorm
 from linodenet.parametrize import (
     Banded,
     Diagonal,
@@ -27,7 +28,6 @@ from linodenet.parametrize import (
     register_parametrization,
     update_parametrizations,
 )
-from linodenet.projections.modules import SpectralNorm
 from linodenet.testing import (
     MatrixTest,
     is_banded,

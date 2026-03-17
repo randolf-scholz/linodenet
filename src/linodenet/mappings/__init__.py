@@ -8,24 +8,43 @@ Notes:
 
 __all__ = [
     # Sub-Modules
-    "functional",
-    "modules",
+    "base",
+    "embeddings",
+    "projections",
     "surjections",
+    "functional",
     # Constants
     "FUNCTIONAL_PROJECTIONS",
     "MODULAR_PROJECTIONS",
     "SPECIAL_PROJECTIONS",
     "PROJECTIONS",
+    "EMBEDDINGS",
+    "SURJECTIONS",
 ]
 
-from linodenet.projections import functional, modules, surjections
-from linodenet.projections.functional import *
-from linodenet.projections.modules import *
-from linodenet.projections.surjections import *
+from linodenet.mappings import base, embeddings, functional, projections, surjections
+from linodenet.mappings.base import *
+from linodenet.mappings.embeddings import *
+from linodenet.mappings.functional import *
+from linodenet.mappings.projections import *
+from linodenet.mappings.surjections import *
 
-__all__ += functional.__all__
-__all__ += modules.__all__
+__all__ += base.__all__
+__all__ += embeddings.__all__
 __all__ += surjections.__all__
+__all__ += projections.__all__
+__all__ += functional.__all__
+
+EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
+    "ConcatEmbedding"  : ConcatEmbedding,
+    "LinearEmbedding"  : LinearEmbedding,
+}  # fmt: skip
+r"""Dictionary of available embeddings."""
+
+SURJECTIONS: dict[str, type[SurjectionBase]] = {
+
+}  # fmt: skip
+r"""Dictionary containing all available surjections."""
 
 
 FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
@@ -55,24 +74,24 @@ SPECIAL_PROJECTIONS = {
 r"""Projections that require additional arguments"""
 
 MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
-    "Banded"             : modules.Banded,
-    "Diagonal"           : modules.Diagonal,
-    "DiagonallyDominant" : modules.DiagonallyDominant,
-    "Hamiltonian"        : modules.Hamiltonian,
-    "Identity"           : modules.Identity,
-    "LowRank"            : modules.LowRank,
-    "LowerTriangular"    : modules.LowerTriangular,
-    "Masked"             : modules.Masked,
-    "Normal"             : modules.Normal,
-    "Orthogonal"         : modules.Orthogonal,
-    "RankOne"            : modules.RankOne,
-    "SkewSymmetric"      : modules.SkewSymmetric,
-    "SpectralNorm"       : modules.SpectralNorm,
-    "Symmetric"          : modules.Symmetric,
-    "Symplectic"         : modules.Symplectic,
-    "Traceless"          : modules.Traceless,
-    "Tridiagonal"        : modules.Tridiagonal,
-    "UpperTriangular"    : modules.UpperTriangular,
+    "Banded"             : projections.Banded,
+    "Diagonal"           : projections.Diagonal,
+    "DiagonallyDominant" : projections.DiagonallyDominant,
+    "Hamiltonian"        : projections.Hamiltonian,
+    "Identity"           : projections.Identity,
+    "LowRank"            : projections.LowRank,
+    "LowerTriangular"    : projections.LowerTriangular,
+    "Masked"             : projections.Masked,
+    "Normal"             : projections.Normal,
+    "Orthogonal"         : projections.Orthogonal,
+    "RankOne"            : projections.RankOne,
+    "SkewSymmetric"      : projections.SkewSymmetric,
+    "SpectralNorm"       : projections.SpectralNorm,
+    "Symmetric"          : projections.Symmetric,
+    "Symplectic"         : projections.Symplectic,
+    "Traceless"          : projections.Traceless,
+    "Tridiagonal"        : projections.Tridiagonal,
+    "UpperTriangular"    : projections.UpperTriangular,
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 

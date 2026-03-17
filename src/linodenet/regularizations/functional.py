@@ -35,7 +35,7 @@ from typing import Protocol, runtime_checkable
 import torch
 from torch import Tensor
 
-from linodenet.projections import functional as projections
+from linodenet.mappings import functional as projections
 from linodenet.types import BoolTensor
 from signatures import signature
 
@@ -91,20 +91,6 @@ def identity(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
     where $Π(A) = \argmin_X ½‖X‖²$
     """
     return matrix_norm(x, p=p, size_normalize=size_normalize)
-
-
-@signature("(..., m, n) -> (...)")
-def low_rank(
-    x: Tensor, rank: int, p: str | int = "fro", size_normalize: bool = False
-) -> Tensor:
-    r"""Bias the matrix towards being low rank.
-
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
-
-    where $Π(A)$ is the closest rank-k matrix to $A$.
-    """
-    r = x - projections.low_rank(x, rank=rank)
-    return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
 @signature("(..., m, n) -> (...)")
@@ -229,24 +215,6 @@ def diagonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
 
 
 @signature("(..., m, n) -> (...)")
-def banded(
-    x: Tensor,
-    lower: int,
-    upper: int,
-    p: str | int = "fro",
-    size_normalize: bool = False,
-) -> Tensor:
-    r"""Bias the matrix towards being banded.
-
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
-
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $B⊙X = X$
-    """
-    r = x - projections.banded(x, upper=upper, lower=lower)
-    return matrix_norm(r, p=p, size_normalize=size_normalize)
-
-
-@signature("(..., m, n) -> (...)")
 def tridiagonal(
     x: Tensor, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
@@ -294,6 +262,44 @@ def upper_triangular(
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
+# endregion masked projections ---------------------------------------------------------
+
+
+# region other regularizations ---------------------------------------------------------
+
+
+@signature("(..., m, n) -> (...)")
+def low_rank(
+    x: Tensor, rank: int, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being low rank.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A)$ is the closest rank-k matrix to $A$.
+    """
+    r = x - projections.low_rank(x, rank=rank)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@signature("(..., m, n) -> (...)")
+def banded(
+    x: Tensor,
+    lower: int,
+    upper: int,
+    p: str | int = "fro",
+    size_normalize: bool = False,
+) -> Tensor:
+    r"""Bias the matrix towards being banded.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $B⊙X = X$
+    """
+    r = x - projections.banded(x, upper=upper, lower=lower)
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
 @signature("(..., m, n) -> (...)")
 def masked(
     x: Tensor,
@@ -311,13 +317,12 @@ def masked(
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
-# endregion masked projections ---------------------------------------------------------
-
-
-# region other regularizations ---------------------------------------------------------
 @signature("(..., m, n) -> (...)")
 def contraction(
-    x: Tensor, p: str | int = "fro", size_normalize: bool = False
+    x: Tensor,
+    lipschitz_bound: float,
+    p: str | int = "fro",
+    size_normalize: bool = False,
 ) -> Tensor:
     r"""Bias the matrix towards being a contraction.
 
@@ -325,7 +330,7 @@ def contraction(
 
     where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
     """
-    r = x - projections.spectral_norm(x)
+    r = x - projections.spectral_norm(x, lipschitz_bound=lipschitz_bound)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

@@ -22,7 +22,8 @@ __all__ = [
     "LinearContraction",
 ]
 
-from linodenet.nn import activations, containers, embeddings
+from linodenet.mappings import embeddings
+from linodenet.nn import activations, containers
 from linodenet.nn.containers import ModuleMapping, ModuleSequence
 from linodenet.nn.linear_contraction import LinearContraction
 from linodenet.nn.mlp import MLP

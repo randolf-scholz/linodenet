@@ -1,50 +1,20 @@
 r"""Surjections are a weaker form of projections."""
 
 __all__ = [
-    "Surjection",
-    "SurjectionBase",
+    # Classes
     "ConcatProjection",
     "CayleyMap",
     "GramMatrix",
 ]
 
-from abc import abstractmethod
-from typing import Final, Protocol, runtime_checkable
+from typing import Final
 
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.domains import MatrixDomains
+from linodenet.domains import MatrixDomains, VectorDomains
+from linodenet.mappings.base import SurjectionBase
 from signatures import signature
-
-
-@runtime_checkable
-class Surjection[X, Y](Protocol):
-    r"""A protocol for surjections."""
-
-    @abstractmethod
-    def forward(self, x: X, /) -> Y: ...
-    @abstractmethod
-    def right_inverse(self, y: Y, /) -> X: ...
-
-
-class SurjectionBase(nn.Module, Surjection[Tensor, Tensor]):
-    r"""Abstract Base Class for Surjection components."""
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def right_inverse(self, y: Tensor, /) -> Tensor: ...
-
-    @jit.export
-    def encode(self, x: Tensor) -> Tensor:
-        r"""Alias for `forward` method."""
-        return self.forward(x)
-
-    @jit.export
-    def decode(self, y: Tensor) -> Tensor:
-        r"""Alias for `right_inverse` method."""
-        return self.right_inverse(y)
 
 
 class GramMatrix(SurjectionBase):
@@ -98,6 +68,9 @@ class ConcatProjection(SurjectionBase):
     See Also:
         - `linodenet.embeddings.ConcatEmbedding`
     """
+
+    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
 
     # Constants
     input_size: Final[int]

@@ -14,9 +14,8 @@ from torch import Tensor, jit, nn
 
 from blueprint import Blueprint, ObjectBlueprint, initialize
 from linodenet.flows import LinearFlow
+from linodenet.mappings import ConcatEmbedding, ConcatProjection
 from linodenet.nn import ResNet
-from linodenet.nn.embeddings import ConcatEmbedding
-from linodenet.projections.surjections import ConcatProjection
 from linodenet_special import pad
 from signatures import signature
 

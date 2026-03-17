@@ -30,10 +30,9 @@ from typing import Final
 import torch
 from torch import Tensor, jit
 
-from linodenet import projections
 from linodenet.domains import MatrixDomains
+from linodenet.mappings import projections, surjections
 from linodenet.parametrize.base import ParametrizationBase
-from linodenet.projections import surjections
 from signatures import signature
 
 # reexport special projections

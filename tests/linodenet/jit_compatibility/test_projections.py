@@ -3,7 +3,7 @@ r"""Test JIT-compatibility of `linodenet.projections.testing`."""
 import pytest
 import torch
 
-from linodenet.projections import (
+from linodenet.mappings import (
     FUNCTIONAL_PROJECTIONS,
     MODULAR_PROJECTIONS,
 )
