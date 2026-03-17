@@ -1,4 +1,5 @@
 r"""Parametrizations for torch."""
+# ruff: noqa: F403, F405
 
 __all__ = [
     # Constants
@@ -8,26 +9,6 @@ __all__ = [
     "WrappedParametrization",
     "ParametrizationBase",
     "ParametrizationList",
-    # Parametrizations
-    "Banded",
-    "CayleyMap",
-    "Diagonal",
-    "GramMatrix",
-    "Hamiltonian",
-    "Identity",
-    "LowRank",
-    "LowerTriangular",
-    "Masked",
-    "MatrixExponential",
-    "Normal",
-    "OrthogonalProjection",
-    "ReZero",
-    "SkewSymmetric",
-    "SpectralNormalization",
-    "Symmetric",
-    "Symplectic",
-    "Traceless",
-    "UpperTriangular",
     # torch.nn.utils.parametrize replacements
     "cached",
     "is_parametrized",
@@ -45,6 +26,7 @@ __all__ = [
     "update_parametrizations",
 ]
 
+from linodenet.parametrize import matrix_parametrizations, tensor_parametrizations
 from linodenet.parametrize.base import (
     Parametrization,
     ParametrizationBase,
@@ -64,27 +46,12 @@ from linodenet.parametrize.base import (
     # update_originals,
     update_parametrizations,
 )
-from linodenet.parametrize.matrix_parametrizations import (
-    Banded,
-    CayleyMap,
-    Diagonal,
-    GramMatrix,
-    Hamiltonian,
-    Identity,
-    LowerTriangular,
-    LowRank,
-    Masked,
-    MatrixExponential,
-    Normal,
-    OrthogonalProjection,
-    SkewSymmetric,
-    SpectralNormalization,
-    Symmetric,
-    Symplectic,
-    Traceless,
-    UpperTriangular,
-)
-from linodenet.parametrize.tensor_parametrizations import ReZero
+from linodenet.parametrize.matrix_parametrizations import *
+from linodenet.parametrize.tensor_parametrizations import *
+
+__all__ += matrix_parametrizations.__all__
+__all__ += tensor_parametrizations.__all__
+
 
 PARAMETRIZATIONS = {
     # Wrappers
