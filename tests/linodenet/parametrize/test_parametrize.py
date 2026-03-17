@@ -29,10 +29,10 @@ from linodenet.testing import (
     assert_model_ok,
     check_jit_scriptable,
     check_jit_serializable,
-    get_norm,
     is_symmetric,
     is_upper_triangular,
 )
+from linodenet.testing.utils import get_norm
 
 
 def check_optimization(
