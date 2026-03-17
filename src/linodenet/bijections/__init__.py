@@ -40,6 +40,7 @@ __all__ = [
     "LowRankFlow",
     "SplineFlow",
     "TriangularFlow",
+    "ContractiveFlow",
 ]
 
 
@@ -53,6 +54,7 @@ from linodenet.bijections.base import (
     TransformBase,
     TransformSequence,
 )
+from linodenet.bijections.contractive import ContractiveFlow
 from linodenet.bijections.iresnet import iResNet, iResNetBlock, iResNetLayer
 from linodenet.bijections.low_rank import LowRankFlow
 from linodenet.bijections.spline_flow import SplineFlow
