@@ -1,16 +1,16 @@
 r"""ContractiveFlow implementation (iResNet-block)."""
 
-__all__ = ["ContractiveFlow"]
+__all__ = ["ContractiveTransform"]
 
 import warnings
 
 import torch
 from torch import Tensor, nn
 
-from .base import TransformBase
+from ..base import TransformBase
 
 
-class ContractiveFlow(TransformBase):
+class ContractiveTransform(TransformBase):
     r"""A residual flow based on a contraction layer.
 
     Forward: y ← x + g(x)

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pytest
 import torch
 
-from linodenet.flows.transforms import SplineFlow
+from linodenet.mappings.transforms import SplineTransform
 from tests.testing import PROJECT, SEEDS_10, TestCase
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
@@ -31,7 +31,7 @@ class TestSplineFlow(TestCase):
     @pytest.mark.parametrize("n_heads", [1, 4, (), (1,), (2, 3), (2, 2, 3)], ids=str)
     def test_num_heads(self, n_heads: int | tuple[int, ...]) -> None:
         r"""Verify head-shaped inputs preserve event and logdet shapes in both directions."""
-        flow = SplineFlow(
+        flow = SplineTransform(
             n_heads,
             num_flow_layers=self.NUM_HEADS_LAYERS,
             num_bins=self.NUM_HEADS_BINS,
@@ -69,7 +69,7 @@ class TestSplineFlow(TestCase):
         value_atol = self.VALUE_ATOL_PER_LAYER * layers
         logabsdet_atol = self.LOGABSDET_ATOL_PER_LAYER * layers
 
-        flow = SplineFlow(
+        flow = SplineTransform(
             self.NUM_HEADS,
             num_flow_layers=layers,
             num_bins=bins,
@@ -118,7 +118,7 @@ class TestSplineFlow(TestCase):
         test_fn = self.TEST_FNS[case]
         torch.manual_seed(0)
 
-        model = SplineFlow(
+        model = SplineTransform(
             num_flow_layers=1,
             num_bins=bins,
             x_bounds=(-3.0, 3.0),
@@ -189,7 +189,7 @@ class TestSplineFlow(TestCase):
 
     def test_spline_initialization_matches_requested_linear_map(self) -> None:
         r"""Ensure the default initialization realizes the affine map implied by the bounds."""
-        model = SplineFlow(
+        model = SplineTransform(
             num_flow_layers=1,
             num_bins=4,
             x_bounds=(-3.0, 3.0),
@@ -236,7 +236,7 @@ class TestSplineFlow(TestCase):
 
     def test_spline_centers_shift_effective_support(self) -> None:
         r"""Confirm center offsets move the spline support while preserving linear tails."""
-        model = SplineFlow(
+        model = SplineTransform(
             num_flow_layers=1,
             num_bins=4,
             x_bounds=(-3.0, 3.0),

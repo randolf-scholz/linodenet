@@ -11,7 +11,7 @@ source_roots = [ "src",
 
 [[modules ]]
 path = "linodenet.nn"
-depends_on = [ "linodenet.nn.activations", "linodenet.nn.containers", "linodenet_special", "linodenet.mappings"]
+depends_on = [ "linodenet.nn.activations", "linodenet_special", "linodenet.mappings"]
 
 [[modules ]]
 path = "linodenet.utils"
@@ -54,7 +54,7 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet.bijections"
-depends_on = [ "linodenet.nn", "linodenet.nn.activations"]
+depends_on = []
 
 [[modules ]]
 path = "linodenet.parametrize"
@@ -83,12 +83,8 @@ path = "linodenet.nn.activations"
 depends_on = ["linodenet_special"]
 
 [[modules ]]
-path = "linodenet.nn.containers"
-depends_on = []
-
-[[modules ]]
 path = "linodenet"
-depends_on = ["linodenet_special", "linodenet.bijections", "linodenet.testing", "linodenet.distributions", "linodenet.filters", "linodenet.flows", "linodenet.imputation", "linodenet.parametrize", "linodenet.forecasting", "linodenet.initializations", "linodenet.regularizations", "linodenet.mappings", "linodenet.nn"]
+depends_on = ["linodenet_special", "linodenet.testing", "linodenet.distributions", "linodenet.filters", "linodenet.flows", "linodenet.imputation", "linodenet.parametrize", "linodenet.forecasting", "linodenet.initializations", "linodenet.regularizations", "linodenet.mappings", "linodenet.nn"]
 
 [[modules ]]
 path = "signatures"
@@ -109,10 +105,6 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet_special.fallbacks"
-depends_on = []
-
-[[modules ]]
-path = "linodenet.nn.algebra"
 depends_on = []
 
 [[modules ]]
@@ -137,4 +129,4 @@ depends_on = ["linodenet_special.interfaces"]
 
 [[modules ]]
 path = "linodenet.mappings"
-depends_on = ["linodenet_special.fallbacks"]
+depends_on = ["linodenet_special.fallbacks", "linodenet.nn.activations", "linodenet.nn"]

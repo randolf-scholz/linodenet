@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from linodenet.flows.transforms import ContractiveFlow
+from linodenet.mappings.transforms import ContractiveTransform
 from linodenet.nn import LinearContraction
 from tests.testing import SEEDS_10, TestCase
 
@@ -17,7 +17,7 @@ class TestContractiveFlow(TestCase):
         r"""Check forward/inverse round trips; does not test logabsdet (not implemented yet)."""
         torch.manual_seed(seed)
         layer = LinearContraction(input_size, input_size, bias=True)
-        flow = ContractiveFlow(layer)
+        flow = ContractiveTransform(layer)
 
         x = torch.randn(self.BATCH_SIZE, input_size)
         y = flow.encode(x)

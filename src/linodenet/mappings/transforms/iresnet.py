@@ -14,10 +14,8 @@ from typing import Any, Final
 import torch
 from torch import Tensor, jit, nn
 
-from linodenet.nn import ModuleSequence
+from linodenet.nn import LinearContraction, ModuleSequence, ReZero
 from linodenet.nn.activations import get_activation
-from linodenet.nn.linear_contraction import LinearContraction
-from linodenet.nn.rezero import ReZero
 from linodenet.utils import deep_dict_update
 from signatures import signature
 

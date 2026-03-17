@@ -13,6 +13,8 @@ __all__ = [
     "projections",
     "surjections",
     "functional",
+    "bijections",
+    "transforms",
     # Constants
     "FUNCTIONAL_PROJECTIONS",
     "MODULAR_PROJECTIONS",
@@ -20,6 +22,8 @@ __all__ = [
     "PROJECTIONS",
     "EMBEDDINGS",
     "SURJECTIONS",
+    "TRANSFORMS",
+    "BIJECTIONS",
 ]
 
 from linodenet.mappings import (
@@ -29,6 +33,7 @@ from linodenet.mappings import (
     functional,
     projections,
     surjections,
+    transforms,
 )
 from linodenet.mappings.base import *
 from linodenet.mappings.bijections import *
@@ -36,6 +41,19 @@ from linodenet.mappings.embeddings import *
 from linodenet.mappings.functional import *
 from linodenet.mappings.projections import *
 from linodenet.mappings.surjections import *
+from linodenet.mappings.transforms import *
+
+assert len(
+    _combined := (
+        base.__all__
+        + embeddings.__all__
+        + surjections.__all__
+        + projections.__all__
+        + functional.__all__
+        + bijections.__all__
+        + transforms.__all__
+    )
+) == len(set(_combined)), "duplicate names in __all__"
 
 __all__ += base.__all__
 __all__ += embeddings.__all__
@@ -43,6 +61,8 @@ __all__ += surjections.__all__
 __all__ += projections.__all__
 __all__ += functional.__all__
 __all__ += bijections.__all__
+__all__ += transforms.__all__
+
 
 EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
     "ConcatEmbedding"  : ConcatEmbedding,
@@ -57,6 +77,18 @@ SURJECTIONS: dict[str, type[SurjectionBase]] = {
 }  # fmt: skip
 r"""Dictionary containing all available surjections."""
 
+TRANSFORMS: dict[str, type[Transform]] = {
+    "ContractiveTransform" : transforms.ContractiveTransform,
+    "SplineTransform"      : transforms.SplineTransform,
+    "LowRankTransform"     : transforms.LowRankTransform,
+    "TriangularTransform"  : transforms.TriangularTransform,
+}  # fmt: skip
+r"""Dictionary containing all available bijections."""
+
+BIJECTIONS: dict[str, type[BijectionBase]] = {
+    "MatrixExponential" : bijections.MatrixExponential
+}  # fmt: skip
+r"""Dictionary containing all available bijections."""
 
 FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
     "diagonal"            : functional.diagonal,

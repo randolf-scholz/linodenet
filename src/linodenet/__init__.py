@@ -21,6 +21,7 @@ __all__ = [
     "special",
     "surjections",
     "testing",
+    "transforms",
     # Sub-Modules
     "constants",
     "domains",
@@ -63,5 +64,10 @@ from linodenet import (
     types,
     utils,
 )
-from linodenet.flows import transforms
-from linodenet.mappings import embeddings, projections, surjections
+from linodenet.mappings import (
+    bijections,
+    embeddings,
+    projections,
+    surjections,
+    transforms,
+)

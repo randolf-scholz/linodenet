@@ -6,15 +6,16 @@ from collections.abc import Callable
 from typing import Final, Optional
 
 import torch
-from torch import Tensor, jit, nn
+from torch import Tensor, nn
 
+from linodenet.flows.continuous import ContinuousFlowBase
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import FUNCTIONAL_PROJECTIONS
 from linodenet.types import SelfMap
 from signatures import signature
 
 
-class LinearFlow(nn.Module):
+class LinearFlow(ContinuousFlowBase):
     r"""Linear Flow, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}xₜ$.
 
     This is augmented by 2 techniques:
@@ -75,7 +76,7 @@ class LinearFlow(nn.Module):
             r"""Dispatch the kernel initialization."""
             match kernel_initialization:
                 case str(key):
-                    init = INITIALIZATIONS[key]
+                    init = INITIALIZATIONS[key.replace("-", "_")]
                     return lambda: init(input_size)
                 case Callable() as func:
                     tensor = Tensor(func(input_size))
@@ -135,12 +136,10 @@ class LinearFlow(nn.Module):
         r"""Draw an initial kernel matrix (random or static)."""
         return self._kernel_initialization()
 
-    @jit.export
     def kernel_parametrization(self, w: Tensor) -> Tensor:
         r"""Parametrize the Kernel, e.g. by projecting onto skew-symmetric matrices."""
         return self._kernel_parametrization(w)
 
-    @jit.export
     @signature("[(...), (..., d)] -> (..., d)")
     def step(self, timedeltas: Tensor, x0: Tensor) -> Tensor:
         r"""Propagate the linear ODE for a single time-delta.
@@ -149,7 +148,6 @@ class LinearFlow(nn.Module):
         """
         return self.forward(timedeltas.unsqueeze(-1), x0).squeeze(-2)
 
-    @jit.export
     @signature("[(..., $n), (..., d)] -> (..., $n, d)")
     def forward(self, timedeltas: Tensor, x0: Tensor) -> Tensor:
         r"""Propagate the linear ODE for a sequence of time-deltas.
@@ -162,7 +160,6 @@ class LinearFlow(nn.Module):
         xhat = torch.einsum("...nkl, ...l -> ...nk", expAdt, x0)
         return xhat
 
-    @jit.export
     @signature("[(..., $n), (..., d)] -> (..., $n, d)")
     def forecast(
         self,

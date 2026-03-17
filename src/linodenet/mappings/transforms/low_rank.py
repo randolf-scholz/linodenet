@@ -1,6 +1,6 @@
 r"""Low-rank perturbation layer."""
 
-__all__ = ["LowRankFlow"]
+__all__ = ["LowRankTransform"]
 
 from math import sqrt
 from typing import Final
@@ -10,10 +10,10 @@ from torch import Tensor, nn
 
 from signatures import signature
 
-from .base import TransformBase
+from ..base import TransformBase
 
 
-class LowRankFlow(TransformBase):
+class LowRankTransform(TransformBase):
     r"""An invertible, efficient low rank perturbation layer.
 
     .. math:: y = (𝕀ₙ + UVᵀ)x

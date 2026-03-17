@@ -1,6 +1,6 @@
 r"""Unit lower-triangular linear flow."""
 
-__all__ = ["TriangularFlow"]
+__all__ = ["TriangularTransform"]
 
 from collections.abc import Sequence
 from typing import Final
@@ -10,10 +10,10 @@ from torch import Tensor, nn
 
 from signatures import signature
 
-from .base import TransformBase
+from ..base import TransformBase
 
 
-class TriangularFlow(TransformBase):
+class TriangularTransform(TransformBase):
     r"""An invertible linear layer with unit lower-triangular Jacobian.
 
     The transformation is parameterized as

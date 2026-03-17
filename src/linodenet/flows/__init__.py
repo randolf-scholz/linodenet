@@ -12,7 +12,9 @@ __all__ = [
     "LinearFlow",
 ]
 
-from linodenet.flows.base import ContinuousFlow, DiscreteFlow, Flow, FlowBase
+from linodenet.flows.base import Flow, FlowBase
+from linodenet.flows.continuous import ContinuousFlow
+from linodenet.flows.discrete import DiscreteFlow
 from linodenet.flows.linear import LinearFlow
 
 FLOWS: dict[str, type[Flow]] = {

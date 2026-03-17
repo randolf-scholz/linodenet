@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from linodenet.flows.transforms import TriangularFlow
+from linodenet.mappings.transforms import TriangularTransform
 from tests.testing import SEEDS_10, TestCase
 
 
@@ -17,7 +17,7 @@ class TestTriangularFlow(TestCase):
     def test_invertibility(self, seed: int, input_size: int) -> None:
         r"""Check round trips and zero logabsdet for a unit lower-triangular flow."""
         torch.manual_seed(seed)
-        flow = TriangularFlow(input_size)
+        flow = TriangularTransform(input_size)
         with torch.no_grad():
             flow.lower.copy_(0.1 * torch.randn_like(flow.lower).tril(diagonal=-1))
 
@@ -63,7 +63,7 @@ class TestTriangularFlow(TestCase):
 
     def test_weight_is_unit_lower_triangular(self) -> None:
         r"""Check the constructed weight matrix has unit diagonal."""
-        flow = TriangularFlow(8)
+        flow = TriangularTransform(8)
         with torch.no_grad():
             flow.lower.copy_(torch.randn_like(flow.lower))
 
@@ -74,7 +74,7 @@ class TestTriangularFlow(TestCase):
 
     def test_default_permutation_is_identity(self) -> None:
         r"""Check the default permutation is the identity."""
-        flow = TriangularFlow(8)
+        flow = TriangularTransform(8)
 
         expected = torch.arange(8, dtype=torch.int64)
 
@@ -86,7 +86,7 @@ class TestTriangularFlow(TestCase):
     def test_permuted_flow_matches_manual_change_of_basis(self) -> None:
         r"""Check the permutation is applied before and after the triangular map."""
         permutation = torch.tensor([2, 0, 3, 1])
-        flow = TriangularFlow(4, permutation=permutation)
+        flow = TriangularTransform(4, permutation=permutation)
         with torch.no_grad():
             flow.lower.copy_(
                 torch.tensor(
@@ -137,4 +137,4 @@ class TestTriangularFlow(TestCase):
     ) -> None:
         r"""Check invalid permutations are rejected."""
         with pytest.raises(error):
-            TriangularFlow(4, permutation=permutation)
+            TriangularTransform(4, permutation=permutation)

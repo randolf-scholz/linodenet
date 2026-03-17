@@ -10,7 +10,6 @@ import pytest
 import linodenet as lib
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
 from linodenet.flows import FLOWS, Flow, FlowBase
-from linodenet.flows.transforms import BIJECTIONS
 from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import (
@@ -25,7 +24,6 @@ from linodenet.mappings import (
     Surjection,
     SurjectionBase,
 )
-from linodenet.mappings.base import Bijection, BijectionBase
 from linodenet.nn.activations import ALL_ACTIVATIONS, Activation
 from linodenet.parametrize import PARAMETRIZATIONS, Parametrization, ParametrizationBase
 from linodenet.regularizations import (

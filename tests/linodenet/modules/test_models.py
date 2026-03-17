@@ -8,8 +8,8 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.flows import LinearFlow
-from linodenet.flows.transforms import iResNet, iResNetBlock
 from linodenet.forecasting import LinODEnet
+from linodenet.mappings.transforms import iResNet, iResNetBlock
 from linodenet.nn import LinearContraction
 from linodenet.testing import assert_model_ok, check_initialization
 from tests.testing import PROJECT

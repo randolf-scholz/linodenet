@@ -16,7 +16,7 @@ __all__ = [
     "LinearRationalSpline",
     "UnconstrainedLinearRationalSpline",
     "LearnableLRS",
-    "SplineFlow",
+    "SplineTransform",
 ]
 
 
@@ -28,7 +28,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from linodenet.flows.transforms.base import TransformBase, TransformSequence
+from linodenet.mappings.base import TransformBase, TransformSequence
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
@@ -700,14 +700,14 @@ class LearnableLRS(TransformBase):
         return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
 
-class SplineFlow(TransformSequence[LearnableLRS]):
+class SplineTransform(TransformSequence[LearnableLRS]):
     r"""Implements a sequence of rational linear spline layers."""
 
     @classmethod
-    def from_iterable(cls, layers: Iterable[LearnableLRS], /) -> SplineFlow:
+    def from_iterable(cls, layers: Iterable[LearnableLRS], /) -> SplineTransform:
         r"""Create a SplineFlow from an iterable of LRS layers."""
-        new = SplineFlow.__new__(SplineFlow)
-        super(SplineFlow, new).__init__(layers)
+        new = SplineTransform.__new__(SplineTransform)
+        super(SplineTransform, new).__init__(layers)
         return new
 
     def __init__(
@@ -732,6 +732,8 @@ class SplineFlow(TransformSequence[LearnableLRS]):
         ]
         super().__init__(layers)
 
-    def marginalize(self, variables: list[int] | Tensor) -> SplineFlow:
+    def marginalize(self, variables: list[int] | Tensor) -> SplineTransform:
         r"""Marginalize out the specified variables."""
-        return SplineFlow.from_iterable(layer.marginalize(variables) for layer in self)
+        return SplineTransform.from_iterable(
+            layer.marginalize(variables) for layer in self
+        )
