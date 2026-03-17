@@ -16,10 +16,12 @@ from linodenet.parametrize import (
     LowRank,
     Masked,
     ParametrizationBase,
+    RankOne,
     SkewSymmetric,
     SpectralNormalization,
     Symmetric,
     Traceless,
+    Tridiagonal,
     UpperTriangular,
     get_parametrizations,
     register_optimizer_hook,
@@ -34,9 +36,11 @@ from linodenet.testing import (
     is_low_rank,
     is_lower_triangular,
     is_masked,
+    is_rank_one,
     is_skew_symmetric,
     is_symmetric,
     is_traceless,
+    is_tridiagonal,
     is_upper_triangular,
 )
 from tests.testing import DEVICES, TestCase
@@ -71,10 +75,12 @@ MATRIX_PARAMETRIZATIONS: dict[str, nn.Module | type[ParametrizationBase]] = {
     "LowRank": LowRank,
     "LowerTriangular": LowerTriangular,
     "Masked": Masked(mask=MASK),
+    "RankOne": RankOne,
     "SkewSymmetric": SkewSymmetric,
     "SpectralNormalization": SpectralNormalization(gamma=0.97),
     "Symmetric": Symmetric,
     "Traceless": Traceless,
+    "Tridiagonal": Tridiagonal,
     "UpperTriangular": UpperTriangular,
 }
 
@@ -82,13 +88,15 @@ MATRIX_TESTS: dict[str, MatrixTest] = {
     "Banded": lambda x, **kwargs: is_banded(x, -2, +1, **kwargs),
     "Diagonal": is_diagonal,
     "Identity": is_general_matrix,
-    "LowRank": is_low_rank,
+    "LowRank": lambda x, **kwargs: is_low_rank(x, rank=1, **kwargs),
     "LowerTriangular": is_lower_triangular,
     "Masked": lambda x, **kwargs: is_masked(x, mask=MASK, **kwargs),
+    "RankOne": is_rank_one,
     "SkewSymmetric": is_skew_symmetric,
     "SpectralNormalization": is_contraction,
     "Symmetric": is_symmetric,
     "Traceless": is_traceless,
+    "Tridiagonal": is_tridiagonal,
     "UpperTriangular": is_upper_triangular,
 }
 
@@ -99,10 +107,12 @@ SHAPES: dict[str, list[tuple[int, int]]] = {
     "LowRank": [(5, 4)],
     "LowerTriangular": [(5, 4)],
     "Masked": [(4, 4)],
+    "RankOne": [(5, 4)],
     "SkewSymmetric": [(4, 4)],
     "SpectralNormalization": [(5, 4)],
     "Symmetric": [(4, 4)],
     "Traceless": [(4, 4)],
+    "Tridiagonal": [(5, 5)],
     "UpperTriangular": [(5, 4)],
 }
 

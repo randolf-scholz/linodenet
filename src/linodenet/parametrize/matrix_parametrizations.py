@@ -16,10 +16,12 @@ __all__ = [
     "Masked",
     "Normal",
     "OrthogonalProjection",
+    "RankOne",
     "SkewSymmetric",
     "Symmetric",
     "Symplectic",
     "Traceless",
+    "Tridiagonal",
     "UpperTriangular",
 ]
 
@@ -36,8 +38,10 @@ from linodenet.testing import is_square
 from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
 
+# reexport special projections
 Banded = projections.Banded
 Masked = projections.Masked
+LowRank = projections.LowRank
 
 
 class CayleyMap(ParametrizationBase):
@@ -234,16 +238,6 @@ class Identity(WrappedParametrization):
         super().__init__(tensor, projections.Identity(*args, **kwargs))
 
 
-class LowRank(WrappedParametrization):
-    r"""Wrapper for ``linodenet.projections.LowRank``."""
-
-    DOMAIN: Final[MatrixDomains] = projections.LowRank.DOMAIN
-    CODOMAIN: Final[MatrixDomains] = projections.LowRank.CODOMAIN
-
-    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
-        super().__init__(tensor, projections.LowRank(*args, **kwargs))
-
-
 class LowerTriangular(WrappedParametrization):
     r"""Wrapper for ``linodenet.projections.LowerTriangular``."""
 
@@ -272,6 +266,16 @@ class OrthogonalProjection(WrappedParametrization):
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Orthogonal(*args, **kwargs))
+
+
+class RankOne(WrappedParametrization):
+    r"""Wrapper for ``linodenet.projections.RankOne``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.RankOne.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.RankOne.CODOMAIN
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.RankOne(*args, **kwargs))
 
 
 class SkewSymmetric(WrappedParametrization):
@@ -312,6 +316,16 @@ class Traceless(WrappedParametrization):
 
     def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
         super().__init__(tensor, projections.Traceless(*args, **kwargs))
+
+
+class Tridiagonal(WrappedParametrization):
+    r"""Wrapper for ``linodenet.projections.Tridiagonal``."""
+
+    DOMAIN: Final[MatrixDomains] = projections.Tridiagonal.DOMAIN
+    CODOMAIN: Final[MatrixDomains] = projections.Tridiagonal.CODOMAIN
+
+    def __init__(self, tensor: Tensor, /, *args: Any, **kwargs: Any) -> None:
+        super().__init__(tensor, projections.Tridiagonal(*args, **kwargs))
 
 
 class UpperTriangular(WrappedParametrization):

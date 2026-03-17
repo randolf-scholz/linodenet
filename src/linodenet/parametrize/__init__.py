@@ -69,6 +69,7 @@ PARAMETRIZATIONS = {
     "LowRank"               : LowRank,
     "Normal"                : Normal,
     "OrthogonalProjection"  : OrthogonalProjection,
+    "RankOne"               : RankOne,
     "SkewSymmetric"         : SkewSymmetric,
     "Symmetric"             : Symmetric,
     "Symplectic"            : Symplectic,
@@ -78,6 +79,7 @@ PARAMETRIZATIONS = {
     "Diagonal"              : Diagonal,
     "LowerTriangular"       : LowerTriangular,
     "Masked"                : Masked,
+    "Tridiagonal"           : Tridiagonal,
     "UpperTriangular"       : UpperTriangular,
 }  # fmt: skip
 r"""Dictionary of all available parametrizations."""
