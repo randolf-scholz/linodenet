@@ -26,8 +26,8 @@ class GaussianToMixture(nn.Module):
         super().__init__()
         self.num_components = num_components
         self.weights = nn.Parameter(torch.rand(num_components))
-        self.means = nn.Parameter(torch.randn(num_components))
-        self.log_std = nn.Parameter(torch.randn(num_components))
+        self.means = nn.Parameter(torch.ones(num_components))
+        self.log_std = nn.Parameter(torch.zeros(num_components))
 
     @property
     def stddev(self) -> Tensor:
@@ -53,8 +53,8 @@ class MixtureToGaussian(nn.Module):
         super().__init__()
         self.num_components = num_components
         self.weights = nn.Parameter(torch.rand(num_components))
-        self.means = nn.Parameter(torch.randn(num_components))
-        self.log_std = nn.Parameter(torch.randn(num_components))
+        self.means = nn.Parameter(torch.ones(num_components))
+        self.log_std = nn.Parameter(torch.zeros(num_components))
 
     @property
     def stddev(self) -> Tensor:
@@ -78,8 +78,8 @@ class GaussianToTwin(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.mean = nn.Parameter(torch.randn(()))
-        self.log_std = nn.Parameter(torch.randn(()))
+        self.mean = nn.Parameter(torch.ones(()))
+        self.log_std = nn.Parameter(torch.zeros(()))
 
     @property
     def stddev(self) -> Tensor:
@@ -101,8 +101,8 @@ class TwinToGaussian(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.mean = nn.Parameter(torch.randn(()))
-        self.log_std = nn.Parameter(torch.randn(()))
+        self.mean = nn.Parameter(torch.ones(()))
+        self.log_std = nn.Parameter(torch.zeros(()))
 
     @property
     def stddev(self) -> Tensor:
