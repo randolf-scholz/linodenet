@@ -3,7 +3,6 @@ r"""Surjections are a weaker form of projections."""
 __all__ = [
     # Classes
     "ConcatProjection",
-    "CayleyMap",
     "GramMatrix",
 ]
 
@@ -20,7 +19,7 @@ from signatures import signature
 class GramMatrix(SurjectionBase):
     r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SEMIDEFINITE
 
     @jit.export
@@ -36,30 +35,6 @@ class GramMatrix(SurjectionBase):
         See: https://github.com/pytorch/pytorch/issues/9983
         """
         raise NotImplementedError
-
-
-class CayleyMap(SurjectionBase):
-    r"""Parametrize a matrix to be orthogonal via Cayley-Map.
-
-    References:
-        - https://pytorch.org/tutorials/intermediate/parametrizations.html
-        - https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map
-    """
-
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SPECIAL_ORTHOGONAL
-
-    @jit.export
-    @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
-        I = torch.eye(x.shape[-1], dtype=x.dtype, device=x.device)
-        return torch.linalg.lstsq(I + x, I - x).solution
-
-    @jit.export
-    @signature("(..., n, n) -> (..., n, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
-        I = torch.eye(y.shape[-1], dtype=y.dtype, device=y.device)
-        return torch.linalg.lstsq(I - y, I + y).solution
 
 
 class ConcatProjection(SurjectionBase):

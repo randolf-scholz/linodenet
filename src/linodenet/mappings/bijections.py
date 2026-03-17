@@ -1,10 +1,14 @@
-__all__ = ["MatrixExponential"]
+r"""Bijections."""
 
+__all__ = [
+    "MatrixExponential",
+    "CayleyMap",
+]
 
 from typing import Final
 
 import torch
-from torch import Tensor, jit
+from torch import Tensor
 
 from linodenet.domains import MatrixDomains
 from signatures import signature
@@ -24,12 +28,10 @@ class MatrixExponential(BijectionBase):
     DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.INVERTIBLE
 
-    @jit.export
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
         return torch.matrix_exp(x)
 
-    @jit.export
     @signature("(..., n, n) -> (..., n, n)")
     def inverse(self, y: Tensor) -> Tensor:
         r"""This requires the matrix logarithm, which is not implemented in PyTorch.
@@ -37,3 +39,25 @@ class MatrixExponential(BijectionBase):
         See: https://github.com/pytorch/pytorch/issues/9983
         """
         raise NotImplementedError
+
+
+class CayleyMap(BijectionBase):
+    r"""Parametrize a matrix to be orthogonal via Cayley-Map.
+
+    References:
+        - https://pytorch.org/tutorials/intermediate/parametrizations.html
+        - https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.CAYLEY_ORTHOGONAL
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        I = torch.eye(x.shape[-1], dtype=x.dtype, device=x.device)
+        return torch.linalg.lstsq(I + x, I - x).solution
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def inverse(self, y: Tensor) -> Tensor:
+        I = torch.eye(y.shape[-1], dtype=y.dtype, device=y.device)
+        return torch.linalg.lstsq(I - y, I + y).solution

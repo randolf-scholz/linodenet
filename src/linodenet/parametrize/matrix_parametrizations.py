@@ -31,11 +31,28 @@ import torch
 from torch import Tensor, jit
 
 from linodenet.domains import MatrixDomains
-from linodenet.mappings import projections, surjections
+from linodenet.mappings import bijections, projections, surjections
 from linodenet.parametrize.base import ParametrizationBase
 from signatures import signature
 
-# reexport special projections
+# Fixed projection modules are wrapped lazily by `register_parametrization`.
+MatrixExponential = bijections.MatrixExponential()
+Diagonal = projections.Diagonal()
+Hamiltonian = projections.Hamiltonian()
+Identity = projections.Identity()
+LowerTriangular = projections.LowerTriangular()
+Normal = projections.Normal()
+OrthogonalProjection = projections.Orthogonal()
+RankOne = projections.RankOne()
+SkewSymmetric = projections.SkewSymmetric()
+Symmetric = projections.Symmetric()
+Symplectic = projections.Symplectic()
+Traceless = projections.Traceless()
+Tridiagonal = projections.Tridiagonal()
+UpperTriangular = projections.UpperTriangular()
+GramMatrix = surjections.GramMatrix()
+
+
 Banded = projections.Banded
 Masked = projections.Masked
 LowRank = projections.LowRank
@@ -72,46 +89,3 @@ class CayleyMap(ParametrizationBase):
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
         return torch.linalg.lstsq(self.Id - y, self.Id + y).solution
-
-
-class MatrixExponential(ParametrizationBase):
-    r"""Parametrize a matrix via matrix exponential.
-
-    Note: The following restrictions hold:
-        Mₙ(ℝ)  --exp-->  GLₙ(ℝ)
-        𝕊ₙ(ℝ)  --exp-->  𝕊ₙ⁺(ℝ)
-        𝔸ₙ(ℝ)  --exp-->  Oₙ(ℝ)
-    """
-
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.INVERTIBLE
-
-    @jit.export
-    @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
-        return torch.matrix_exp(x)
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor:
-        r"""This requires the matrix logarithm, which is not implemented in PyTorch.
-
-        See: https://github.com/pytorch/pytorch/issues/9983
-        """
-        raise NotImplementedError
-
-
-# Fixed projection modules are wrapped lazily by `register_parametrization`.
-Diagonal = projections.Diagonal()
-Hamiltonian = projections.Hamiltonian()
-Identity = projections.Identity()
-LowerTriangular = projections.LowerTriangular()
-Normal = projections.Normal()
-OrthogonalProjection = projections.Orthogonal()
-RankOne = projections.RankOne()
-SkewSymmetric = projections.SkewSymmetric()
-Symmetric = projections.Symmetric()
-Symplectic = projections.Symplectic()
-Traceless = projections.Traceless()
-Tridiagonal = projections.Tridiagonal()
-UpperTriangular = projections.UpperTriangular()
-GramMatrix = surjections.GramMatrix()

@@ -65,28 +65,28 @@ __all__ += transforms.__all__
 
 
 EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
-    "ConcatEmbedding"  : ConcatEmbedding,
-    "LinearEmbedding"  : LinearEmbedding,
+    "ConcatEmbedding"  : embeddings.ConcatEmbedding,
+    "LinearEmbedding"  : embeddings.LinearEmbedding,
 }  # fmt: skip
 r"""Dictionary of available embeddings."""
 
 SURJECTIONS: dict[str, type[SurjectionBase]] = {
-    "CayleyMap"       : CayleyMap,
-    "ConcatProjection": ConcatProjection,
-    "GramMatrix"      : GramMatrix,
+    "ConcatProjection": surjections.ConcatProjection,
+    "GramMatrix"      : surjections.GramMatrix,
 }  # fmt: skip
 r"""Dictionary containing all available surjections."""
+
+BIJECTIONS: dict[str, type[BijectionBase]] = {
+    "MatrixExponential" : bijections.MatrixExponential,
+    "CayleyMap"         : bijections.CayleyMap,
+}  # fmt: skip
+r"""Dictionary containing all available bijections."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
     "ContractiveTransform" : transforms.ContractiveTransform,
     "SplineTransform"      : transforms.SplineTransform,
     "LowRankTransform"     : transforms.LowRankTransform,
     "TriangularTransform"  : transforms.TriangularTransform,
-}  # fmt: skip
-r"""Dictionary containing all available bijections."""
-
-BIJECTIONS: dict[str, type[BijectionBase]] = {
-    "MatrixExponential" : bijections.MatrixExponential
 }  # fmt: skip
 r"""Dictionary containing all available bijections."""
 

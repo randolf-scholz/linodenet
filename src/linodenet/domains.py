@@ -150,12 +150,12 @@ class VectorDomains(StrEnum):
 class MatrixDomains(StrEnum):
     r"""Enumeration of some matrix domains."""
 
-    GENERAL = "general"
+    RECTANGULAR = "rectangular"  # m × n matrices
+    SQUARE = "square"  # n × n matrices
+    EVEN_SQUARE = "even_square"  # 2n × 2n matrices
+
     LOW_RANK = "low_rank"
     RANK_ONE = "rank_one"
-
-    SQUARE = "square"  # n x n matrices
-    EVEN_SQUARE = "even_square"  # 2n x 2n matrices
 
     SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
     SKEW_SYMMETRIC = "skew_symmetric"
@@ -172,6 +172,7 @@ class MatrixDomains(StrEnum):
 
     NORMAL = "normal"
     ORTHOGONAL = "orthogonal"  # Oₙ(R)
+    CAYLEY_ORTHOGONAL = "cayley_orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
     SPECIAL_ORTHOGONAL = "special_orthogonal"  # SOₙ(R)
     PERMUTATION = "permutation"
 

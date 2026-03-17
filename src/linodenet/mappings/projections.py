@@ -77,8 +77,8 @@ class LipschitzBounded(ProjectionBase):
         - `Contraction` for the special case of $0<‖Y‖₂<1$.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
 
     sigma: Tensor | None
     r"""BUFFER: The cached singular value."""
@@ -248,8 +248,8 @@ class Identity(ProjectionBase):
     .. math:: \min_Y ½‖X-Y‖²
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
 
     @jit.export
     @signature("(...) -> (...)")
@@ -455,7 +455,7 @@ class UpperTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.UPPER_TRIANGULAR
 
     upper: Final[int]
@@ -487,7 +487,7 @@ class LowerTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
 
     lower: Final[int]
@@ -513,7 +513,7 @@ class Tridiagonal(ProjectionBase):
     $Y = T⊙X$.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.TRIDIAGONAL
 
     @jit.export
@@ -554,7 +554,7 @@ class RankOne(ProjectionBase):
     This is the special case of `LowRank` with `rank=1`.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.RANK_ONE
 
     @jit.export
@@ -583,7 +583,7 @@ class Masked(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.MASKED
 
     mask: Tensor
@@ -609,7 +609,7 @@ class LowRank(ProjectionBase):
     where X=UΣVᵀ is the SVD of X.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.LOW_RANK
     rank: Final[int]
 
@@ -639,7 +639,7 @@ class Banded(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.GENERAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.BANDED
 
     upper: Final[int]
