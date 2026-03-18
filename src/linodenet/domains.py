@@ -31,9 +31,9 @@ class Domain(Protocol):
 
     def __contains__(self, item: Tensor, /) -> Tensor: ...
 
-    def __le__(self, other: Domain, /) -> bool: ...
+    def __le__(self, other: Self, /) -> bool: ...
 
-    def __lt__(self, other: Domain, /) -> bool: ...
+    def __lt__(self, other: Self, /) -> bool: ...
 
 
 class _PosetEnum(Enum):
@@ -542,6 +542,9 @@ class VectorDomains(_PosetEnum):
     NONNEGATIVE = "nonnegative"  # xᵢ ≥ 0
     NONPOSITIVE = "nonpositive"  # xᵢ ≤ 0
 
+    def __contains__(self, item: Tensor, /) -> Tensor:
+        raise NotImplementedError
+
 
 V = VectorDomains  # temporary alias
 VectorDomains.KNOWN_EDGES = MappingProxyType({
@@ -637,6 +640,9 @@ class MatrixDomains(_PosetEnum):
     EFFICIENTLY_INVERTIBLE = "efficient_invertible"
 
     HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
+
+    def __contains__(self, item: Tensor, /) -> Tensor:
+        raise NotImplementedError
 
 
 M = MatrixDomains  # temporary alias

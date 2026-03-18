@@ -8,7 +8,7 @@ __all__ = [
     "normalize_registry_name",
 ]
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable as Fn, Iterator, Mapping
 from dataclasses import dataclass, fields
 
 from linodenet.domains import Domain
@@ -24,7 +24,7 @@ from linodenet.regularizations import (
     REGULARIZATION_FNS_WITH_ARGS,
     REGULARIZATIONS,
 )
-from linodenet.testing import TESTS
+from linodenet.testing import MATRIX_DOMAIN_TESTS, VECTOR_DOMAIN_TESTS
 
 
 @dataclass(slots=True)
@@ -33,12 +33,12 @@ class RegistryEntry:
 
     name: str
     domain: Domain | None = None
-    test: Callable | None = None
+    test: Fn | None = None
     mapping: type | None = None
-    mapping_fn: Callable | None = None
+    mapping_fn: Fn | None = None
     regularization: type | None = None
-    regularization_fn: Callable | None = None
-    initialization: Callable | None = None
+    regularization_fn: Fn | None = None
+    initialization: Fn | None = None
     parametrization: type | None = None
 
 
@@ -79,14 +79,14 @@ class Registry(Mapping[str, RegistryEntry]):
         /,
         *,
         domain: Domain | None = None,
-        test: Callable | None = None,
+        test: Fn | None = None,
         mapping: type | None = None,
-        mapping_fn: Callable | None = None,
+        mapping_fn: Fn | None = None,
         regularization: type | None = None,
-        regularization_fn: Callable | None = None,
-        initialization: Callable | None = None,
+        regularization_fn: Fn | None = None,
+        initialization: Fn | None = None,
         parametrization: type | None = None,
-    ) -> RegistryEntry:
+    ) -> None:
         r"""Register one or more objects under a canonical name."""
         entry = self._entry_for(name)
         canonical_name = normalize_registry_name(name)
@@ -103,7 +103,7 @@ class Registry(Mapping[str, RegistryEntry]):
         )
 
         inferred_domain = (
-            getattr(mapping, "DOMAIN", None) if mapping is not None else None
+            getattr(mapping, "CODOMAIN", None) if mapping is not None else None
         )
         if inferred_domain is not None:
             current_domain = (
@@ -128,89 +128,80 @@ class Registry(Mapping[str, RegistryEntry]):
                 )
             setattr(entry, field.name, value)
 
-        return entry
-
-    def register_domain(self, name: str, domain: Domain | None, /) -> RegistryEntry:
+    def register_domain(self, name: str, domain: Domain | None, /) -> None:
         r"""Register a domain for `name`."""
-        return self.register(name, domain=domain)
+        self.register(name, domain=domain)
 
-    def register_test(self, name: str, test: Callable | None, /) -> RegistryEntry:
-        r"""Register a test for `name`."""
-        return self.register(name, test=test)
+    def register_test_on_domain(self, domain: Domain, test: Fn | None, /) -> None:
+        r"""Register a test for `domain`."""
+        matches = [entry for entry in self._entries.values() if entry.domain == domain]
+        if not matches:
+            return
 
-    def register_tests(self, tests: Mapping[str, Callable | None], /) -> None:
-        r"""Register tests from a mapping."""
-        for name, test in tests.items():
-            self.register_test(name, test)
+        for entry in matches:
+            if entry.test is not None and entry.test is not test:
+                raise ValueError(
+                    f"Registry entry {entry.name!r} already has 'test' set."
+                )
+            entry.test = test
 
-    def register_projection(
-        self, name: str, projection: type | None, /
-    ) -> RegistryEntry:
+    def register_tests_on_domain[D: Domain](
+        self, tests: Mapping[D, Fn | None], /
+    ) -> None:
+        r"""Register tests from a domain-to-test mapping."""
+        for domain, test in tests.items():
+            self.register_test_on_domain(domain, test)
+
+    def register_projection(self, name: str, projection: type | None, /) -> None:
         r"""Register a projection module for `name`."""
-        return self.register(name, mapping=projection)
+        self.register(name, mapping=projection)
 
     def register_mappings(self, projections: Mapping[str, type | None], /) -> None:
         r"""Register projection modules from a mapping."""
         for name, projection in projections.items():
             self.register_projection(name, projection)
 
-    def register_projection_fn(
-        self, name: str, projection_fn: Callable | None, /
-    ) -> RegistryEntry:
+    def register_projection_fn(self, name: str, fn: Fn | None, /) -> None:
         r"""Register a projection function for `name`."""
-        return self.register(name, mapping_fn=projection_fn)
+        self.register(name, mapping_fn=fn)
 
-    def register_mapping_fns(
-        self, projection_fns: Mapping[str, Callable | None], /
-    ) -> None:
+    def register_mapping_fns(self, fns: Mapping[str, Fn | None], /) -> None:
         r"""Register projection functions from a mapping."""
-        for name, projection_fn in projection_fns.items():
+        for name, projection_fn in fns.items():
             self.register_projection_fn(name, projection_fn)
 
-    def register_regularization(
-        self, name: str, regularization: type | None, /
-    ) -> RegistryEntry:
+    def register_regularization(self, name: str, typ: type | None, /) -> None:
         r"""Register a regularization module for `name`."""
-        return self.register(name, regularization=regularization)
+        self.register(name, regularization=typ)
 
-    def register_regularizations(
-        self, regularizations: Mapping[str, type | None], /
-    ) -> None:
+    def register_regularizations(self, typs: Mapping[str, type | None], /) -> None:
         r"""Register regularization modules from a mapping."""
-        for name, regularization in regularizations.items():
+        for name, regularization in typs.items():
             self.register_regularization(name, regularization)
 
-    def register_regularization_fn(
-        self, name: str, regularization_fn: Callable | None, /
-    ) -> RegistryEntry:
+    def register_regularization_fn(self, name: str, fn: Fn | None, /) -> None:
         r"""Register a regularization function for `name`."""
-        return self.register(name, regularization_fn=regularization_fn)
+        self.register(name, regularization_fn=fn)
 
-    def register_regularization_fns(
-        self, regularization_fns: Mapping[str, Callable | None], /
-    ) -> None:
+    def register_regularization_fns(self, fns: Mapping[str, Fn | None], /) -> None:
         r"""Register regularization functions from a mapping."""
-        for name, regularization_fn in regularization_fns.items():
+        for name, regularization_fn in fns.items():
             self.register_regularization_fn(name, regularization_fn)
 
-    def register_initialization(
-        self, name: str, initialization: Callable | None, /
-    ) -> RegistryEntry:
+    def register_initialization(self, name: str, fn: Fn | None, /) -> None:
         r"""Register an initialization for `name`."""
-        return self.register(name, initialization=initialization)
+        self.register(name, initialization=fn)
 
-    def register_initializations(
-        self, initializations: Mapping[str, Callable | None], /
-    ) -> None:
+    def register_initializations(self, fns: Mapping[str, Fn | None], /) -> None:
         r"""Register initializations from a mapping."""
-        for name, initialization in initializations.items():
+        for name, initialization in fns.items():
             self.register_initialization(name, initialization)
 
     def register_parametrization(
         self, name: str, parametrization: type | None, /
-    ) -> RegistryEntry:
+    ) -> None:
         r"""Register a parametrization for `name`."""
-        return self.register(name, parametrization=parametrization)
+        self.register(name, parametrization=parametrization)
 
     def register_parametrizations(
         self, parametrizations: Mapping[str, type | None], /
@@ -242,14 +233,15 @@ def get_registry_entry(name: str, /) -> RegistryEntry:
     return REGISTRY[name]
 
 
+REGISTRY.register_mappings(SURJECTIONS)
+REGISTRY.register_mappings(BIJECTIONS)
+REGISTRY.register_mapping_fns(PROJECTION_FNS)
 REGISTRY.register_initializations(INITIALIZATIONS)
-REGISTRY.register_tests(TESTS)
 REGISTRY.register_parametrizations(PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(MATRIX_PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(VECTOR_PARAMETRIZATIONS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITH_ARGS)
 REGISTRY.register_regularizations(REGULARIZATIONS)
-REGISTRY.register_mappings(SURJECTIONS)
-REGISTRY.register_mappings(BIJECTIONS)
-REGISTRY.register_mapping_fns(PROJECTION_FNS)
+REGISTRY.register_tests_on_domain(MATRIX_DOMAIN_TESTS)  # must be registered last
+REGISTRY.register_tests_on_domain(VECTOR_DOMAIN_TESTS)  # must be registered last
