@@ -6,6 +6,7 @@ __all__ = [
     "vector_tests",
     "assertions",
     # CONSTANTS
+    "MATRIX_DOMAIN_TESTS",
     "MATRIX_TESTS_WITH_ARGS",
     "VECTOR_TESTS_WITH_ARGS",
     "MATRIX_TESTS",
@@ -13,6 +14,7 @@ __all__ = [
     "TESTS",
 ]
 
+from linodenet.domains import MatrixDomains
 from linodenet.testing import assertions, matrix_tests, vector_tests
 from linodenet.testing.assertions import *
 from linodenet.testing.matrix_tests import *
@@ -41,6 +43,7 @@ MATRIX_TESTS: dict[str, MatrixTest] = {
     "is_lower_triangular"    : is_lower_triangular,
     "is_normal"              : is_normal,
     "is_orthogonal"          : is_orthogonal,
+    "is_special_orthogonal"  : is_special_orthogonal,
     "is_rank_one"            : is_rank_one,
     "is_skew_symmetric"      : is_skew_symmetric,
     "is_spectral_normalized" : is_spectral_normalized,
@@ -60,6 +63,33 @@ MATRIX_TESTS_WITH_ARGS: dict[str, MatrixTestWithArgs] = {
     "is_masked"            : is_masked,
 }  # fmt: skip
 r"""Matrix tests that require an additional argument."""
+
+MATRIX_DOMAIN_TESTS = {
+    MatrixDomains.SQUARE               : is_square,
+    MatrixDomains.LOW_RANK             : is_low_rank,
+    MatrixDomains.RANK_ONE             : is_rank_one,
+    MatrixDomains.SYMMETRIC            : is_symmetric,
+    MatrixDomains.SKEW_SYMMETRIC       : is_skew_symmetric,
+    MatrixDomains.CONTRACTION          : is_contraction,
+    MatrixDomains.SPECTRAL_NORMALIZED  : is_spectral_normalized,
+    MatrixDomains.LIPSCHITZ_BOUNDED    : is_lipschitz_bounded,
+    MatrixDomains.DIAGONALLY_DOMINANT  : is_diagonally_dominant,
+    MatrixDomains.NORMAL               : is_normal,
+    MatrixDomains.ORTHOGONAL           : is_orthogonal,
+    MatrixDomains.SPECIAL_ORTHOGONAL   : is_special_orthogonal,
+    MatrixDomains.TRACELESS            : is_traceless,
+    MatrixDomains.SYMPLECTIC           : is_symplectic,
+    MatrixDomains.HAMILTONIAN          : is_hamiltonian,
+    MatrixDomains.MASKED               : is_masked,
+    MatrixDomains.IDENTITY             : is_identity,
+    MatrixDomains.DIAGONAL             : is_diagonal,
+    MatrixDomains.TRIDIAGONAL          : is_tridiagonal,
+    MatrixDomains.UPPER_TRIANGULAR     : is_upper_triangular,
+    MatrixDomains.LOWER_TRIANGULAR     : is_lower_triangular,
+    MatrixDomains.BANDED               : is_banded,
+}  # fmt: skip
+r"""Map supported matrix domains to their corresponding matrix test."""
+del MatrixDomains
 
 TESTS: dict[str, VectorTest | MatrixTest | VectorTestWithArgs | MatrixTestWithArgs] = {
     **MATRIX_TESTS,
