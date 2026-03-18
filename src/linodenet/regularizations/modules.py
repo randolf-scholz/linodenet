@@ -131,7 +131,7 @@ class MatrixNorm(RegularizationBase):
 
 # region matrix groups -----------------------------------------------------------------
 class Identity(RegularizationBase):
-    r"""Identity regularization."""
+    r"""Bias the matrix towards the identity matrix."""
 
     p: Final[str | int]
     size_normalize: Final[bool]
@@ -143,7 +143,7 @@ class Identity(RegularizationBase):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
-        r"""Bias x towards zero matrix."""
+        r"""Bias x towards the identity matrix."""
         return identity(x, p=self.p, size_normalize=self.size_normalize)
 
 

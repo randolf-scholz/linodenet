@@ -7,7 +7,6 @@ __all__ = [
     "Diagonal",
     "GramMatrix",
     "Hamiltonian",
-    "Identity",
     "LipschitzBounded",
     "LowRank",
     "LowerTriangular",
@@ -38,7 +37,6 @@ Contraction = projections.Contraction
 Diagonal = projections.Diagonal
 DiagonallyDominant = projections.DiagonallyDominant
 Hamiltonian = projections.Hamiltonian
-Identity = projections.Identity
 LipschitzBounded = projections.LipschitzBounded
 LowRank = projections.LowRank
 LowerTriangular = projections.LowerTriangular

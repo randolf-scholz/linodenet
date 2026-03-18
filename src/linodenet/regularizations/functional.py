@@ -67,23 +67,6 @@ class Regularization(Protocol):
 type RegularizationWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 
 
-# region regularizations ---------------------------------------------------------------
-@signature("(..., n, n) -> (...)")
-def log_det_exp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
-    r"""Bias $\det(eᴬ)$ towards 1.
-
-    Returns:
-        .. math:: |\tr(A)|ᵖ
-
-    By Jacobi's formula
-
-    .. math:: \det(eᴬ) = e^{\tr(A)} ⟺ \log(\det(eᴬ)) = \tr(A)
-    """
-    diag = torch.diagonal(x, dim1=-1, dim2=-2)
-    traces = diag.mean(dim=-1) if size_normalize else diag.sum(dim=-1)
-    return traces.abs().pow(p)
-
-
 @signature("(..., m, n) -> (...)")
 def matrix_norm(r: Tensor, p: str | int = "fro", size_normalize: bool = True) -> Tensor:
     r"""Return the normalized matrix."""
@@ -104,16 +87,33 @@ def vector_norm(r: Tensor, p: float = 2.0, size_normalize: bool = True) -> Tenso
     return s
 
 
+# region regularizations ---------------------------------------------------------------
+@signature("(..., n, n) -> (...)")
+def log_det_exp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
+    r"""Bias $\det(eᴬ)$ towards 1.
+
+    Returns:
+        .. math:: |\tr(A)|ᵖ
+
+    By Jacobi's formula
+
+    .. math:: \det(eᴬ) = e^{\tr(A)} ⟺ \log(\det(eᴬ)) = \tr(A)
+    """
+    diag = torch.diagonal(x, dim1=-1, dim2=-2)
+    traces = diag.mean(dim=-1) if size_normalize else diag.sum(dim=-1)
+    return traces.abs().pow(p)
+
+
 # region matrix groups -----------------------------------------------------------------
 @signature("(..., m, n) -> (...)")
 def identity(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
-    r"""Bias the matrix towards being zero.
+    r"""Bias the matrix towards the identity matrix.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
-
-    where $Π(A) = \argmin_X ½‖X‖²$
+    .. math:: A ↦ ‖A-𝕀‖ₚ
     """
-    return matrix_norm(x, p=p, size_normalize=size_normalize)
+    identity = torch.eye(*x.shape[-2:], dtype=x.dtype, device=x.device)
+    r = x - identity
+    return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 
 @signature("(..., m, n) -> (...)")

@@ -52,16 +52,12 @@ def test_names_matrix_tests(name: str) -> None:
 @pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS | MATRIX_PROJECTIONS_WITH_ARGS)
 def test_inclusion_functional_has_test(name: str) -> None:
     r"""Test that all projections have tests."""
-    if name != "identity":
-        assert f"is_{name}" in MATRIX_TESTS | MATRIX_TESTS_WITH_ARGS
+    assert f"is_{name}" in MATRIX_TESTS | MATRIX_TESTS_WITH_ARGS
 
 
 @pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS)
 def test_projections_work(name: str) -> None:
     r"""Test that all projections work."""
-    if name == "identity":
-        return
-
     projection = MATRIX_PROJECTION_FNS[name]
     matrix_test = MATRIX_TESTS[f"is_{name}"]
     x = torch.randn(4, 4)

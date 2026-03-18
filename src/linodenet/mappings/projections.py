@@ -19,7 +19,6 @@ __all__ = [
     "SpectralNormalized",
     "Contraction",
     "Hamiltonian",
-    "Identity",
     "LowerTriangular",
     "LowRank",
     "Masked",
@@ -242,21 +241,6 @@ class Contraction(LipschitzBounded):
 
 # region projections -------------------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
-class Identity(ProjectionBase):
-    r"""Return x as-is.
-
-    .. math:: \min_Y ½‖X-Y‖²
-    """
-
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
-
-    @signature("(...) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
-        r"""Project into space of matrices."""
-        return F.identity(x)
-
-
 class Symmetric(ProjectionBase):
     r"""Return the closest symmetric matrix to X.
 

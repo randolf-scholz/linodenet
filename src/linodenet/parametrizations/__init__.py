@@ -51,7 +51,6 @@ MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "DiagonallyDominant"   : matrix_parametrizations.DiagonallyDominant,
     "GramMatrix"           : matrix_parametrizations.GramMatrix,
     "Hamiltonian"          : matrix_parametrizations.Hamiltonian,
-    "Identity"             : matrix_parametrizations.Identity,
     "LipschitzBounded"     : matrix_parametrizations.LipschitzBounded,
     "LowRank"              : matrix_parametrizations.LowRank,
     "LowerTriangular"      : matrix_parametrizations.LowerTriangular,

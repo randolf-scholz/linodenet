@@ -12,7 +12,6 @@ from torch.optim import SGD
 
 from linodenet.mappings.projections import LipschitzBounded, Symmetric
 from linodenet.parametrizations import (
-    Identity,
     UpperTriangular,
     WrappedParametrization,
     cached,
@@ -412,7 +411,7 @@ def test_jit_preserves_parameters() -> None:
     deserialized_param = deepcopy(tuple(deserialized_model.parameters()))
 
     # apply only a dummy parametrization for this test.
-    register_parametrization(model, "weight", Identity())
+    register_parametrization(model, "weight", nn.Identity())
     parametrized_parameters = deepcopy(tuple(model.parameters()))
 
     deserialized_parametrized_model = check_jit_serializable(deserialized_model)
