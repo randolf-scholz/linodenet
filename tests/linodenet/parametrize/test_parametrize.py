@@ -74,7 +74,7 @@ def check_optimization(
 def test_register_parametrization() -> None:
     dim_in, dim_out = 3, 5
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
     assert is_upper_triangular(model.weight)
 
     ps = get_parametrizations(model)
@@ -88,7 +88,7 @@ def test_optimization() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     check_optimization(model, args=(x,), target=y)
 
@@ -105,7 +105,7 @@ def test_optimization_manual() -> None:
     check_jit_scriptable(model)
 
     # create the parametrization
-    param = parametrized(model.weight, UpperTriangular)
+    param = parametrized(model.weight, UpperTriangular())
     assert param.original_parameter is model.weight
     assert param.cached_parameter is not model.weight
 
@@ -159,7 +159,7 @@ def test_optimization_jit() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     scripted_model = check_jit_scriptable(model)
     assert is_upper_triangular(scripted_model.weight)
@@ -178,7 +178,7 @@ def test_optimization_compile() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     compiled_model = torch.compile(model)
     assert isinstance(compiled_model, OptimizedModule)
@@ -195,7 +195,7 @@ def test_optimization_export() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     exported_model = torch.export.export(model, args=(x,)).module()
     check_optimization(exported_model, args=(x,), target=y)
@@ -211,7 +211,7 @@ def test_optimization_missing() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     with torch.no_grad():
         optimizer = SGD(model.parameters(), lr=0.1)
@@ -238,7 +238,7 @@ def test_update_parametrization() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     with torch.no_grad():
         optimizer = SGD(model.parameters(), lr=0.1)
@@ -264,7 +264,7 @@ def test_optimizer_hook() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     with torch.no_grad():
         optimizer = SGD(model.parameters(), lr=0.1)
@@ -291,7 +291,7 @@ def test_optimization_cached() -> None:
     y = torch.randn(batch_size, dim_out)
 
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     with torch.no_grad():
         optimizer = SGD(model.parameters(), lr=0.1)
@@ -412,7 +412,7 @@ def test_jit_preserves_parameters() -> None:
     deserialized_param = deepcopy(tuple(deserialized_model.parameters()))
 
     # apply only a dummy parametrization for this test.
-    register_parametrization(model, "weight", Identity)
+    register_parametrization(model, "weight", Identity())
     parametrized_parameters = deepcopy(tuple(model.parameters()))
 
     deserialized_parametrized_model = check_jit_serializable(deserialized_model)
@@ -446,7 +446,7 @@ def test_jit() -> None:
 
     # check_object(model, input_args=(inputs,))
 
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
 
     assert_model_ok(model, call_args=(inputs,))
 
@@ -456,7 +456,7 @@ def test_jit_attribute() -> None:
     model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
     assert not is_upper_triangular(model.weight)
 
-    register_parametrization(model, "weight", UpperTriangular)
+    register_parametrization(model, "weight", UpperTriangular())
     ps = get_parametrizations(model)
     assert is_upper_triangular(model.weight)
     assert is_parametrization(ps["weight"])
