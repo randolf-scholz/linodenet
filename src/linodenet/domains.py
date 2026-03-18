@@ -10,7 +10,7 @@ Domains should allow:
 __all__ = [
     "Domain",
     "Interval",
-    "UnionOfIntervals",
+    "IntervalUnion",
     "ScalarDomains",
     "VectorDomains",
     "MatrixDomains",
@@ -253,10 +253,10 @@ class Interval(Domain):
         return hash(self) == hash(other_interval)
 
     def __le__(self, other: object, /) -> bool:
-        if isinstance(other, UnionOfIntervals):
+        if isinstance(other, IntervalUnion):
             return any(self <= interval for interval in other.intervals)
         if isinstance(other, str):
-            return self <= UnionOfIntervals.from_string(other)
+            return self <= IntervalUnion.from_string(other)
         if (other_interval := self._coerce_interval(other)) is None:
             return NotImplemented
 
@@ -271,10 +271,10 @@ class Interval(Domain):
         return lower_ok and upper_ok
 
     def __ge__(self, other: object, /) -> bool:
-        if isinstance(other, UnionOfIntervals):
+        if isinstance(other, IntervalUnion):
             return all(interval <= self for interval in other.intervals)
         if isinstance(other, str):
-            return self >= UnionOfIntervals.from_string(other)
+            return self >= IntervalUnion.from_string(other)
         if (other_interval := self._coerce_interval(other)) is None:
             return NotImplemented
         return other_interval <= self
@@ -291,7 +291,7 @@ class Interval(Domain):
 
 
 @dataclass(init=False)
-class UnionOfIntervals(Domain):
+class IntervalUnion(Domain):
     r"""A finite union of intervals with automatic simplification."""
 
     intervals: Final[tuple[Interval, ...]]
@@ -310,14 +310,14 @@ class UnionOfIntervals(Domain):
         return cls(*(Interval.from_string(part) for part in parts))
 
     @staticmethod
-    def _coerce_union(other: object, /) -> UnionOfIntervals | None:
+    def _coerce_union(other: object, /) -> IntervalUnion | None:
         match other:
-            case UnionOfIntervals():
+            case IntervalUnion():
                 return other
             case Interval():
-                return UnionOfIntervals(other)
+                return IntervalUnion(other)
             case str():
-                return UnionOfIntervals.from_string(other)
+                return IntervalUnion.from_string(other)
             case _:
                 return None
 
@@ -332,7 +332,7 @@ class UnionOfIntervals(Domain):
                 continue
 
             current = merged[-1]
-            if not UnionOfIntervals._touch_or_overlap(current, interval):
+            if not IntervalUnion._touch_or_overlap(current, interval):
                 merged.append(interval)
                 continue
 
@@ -393,7 +393,7 @@ class ScalarDomains(_PosetEnum):
     NEGATIVE_REALS = Interval.from_string("(-inf, 0)")
     NONNEGATIVE_REALS = Interval.from_string("[0, inf)")
     NONPOSITIVE_REALS = Interval.from_string("(-inf, 0]")
-    NONZERO = UnionOfIntervals.from_string("(-inf, 0) | (0, inf)")
+    NONZERO = IntervalUnion.from_string("(-inf, 0) | (0, inf)")
 
     UNIT_INTERVAL = Interval.from_string("[0, 1]")
     OPEN_UNIT_INTERVAL = Interval.from_string("(0, 1)")

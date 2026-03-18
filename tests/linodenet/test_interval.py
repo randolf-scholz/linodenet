@@ -1,6 +1,6 @@
 import pytest
 
-from linodenet.domains import Interval, UnionOfIntervals
+from linodenet.domains import Interval, IntervalUnion
 
 
 def test_interval_init_accepts_string() -> None:
@@ -85,7 +85,7 @@ def test_interval_subset_relation_accepts_string_on_right() -> None:
 
 
 def test_interval_subset_relation_accepts_union_on_right() -> None:
-    assert Interval("[0, 1]") <= UnionOfIntervals("[-2, -1]", "[0, 2]")
+    assert Interval("[0, 1]") <= IntervalUnion("[-2, -1]", "[0, 2]")
 
 
 def test_interval_subset_relation_accepts_string_on_left() -> None:
@@ -106,38 +106,38 @@ def test_interval_rejects_unrelated_type_ordering() -> None:
 
 
 def test_union_of_intervals_add_applies_to_each_member() -> None:
-    union = UnionOfIntervals("[-2, -1]", "(1, 2]")
+    union = IntervalUnion("[-2, -1]", "(1, 2]")
 
-    assert union + 2.0 == UnionOfIntervals("[0, 1]", "(3, 4]")
+    assert union + 2.0 == IntervalUnion("[0, 1]", "(3, 4]")
 
 
 def test_union_of_intervals_init_accepts_mixed_interval_and_string_inputs() -> None:
-    union = UnionOfIntervals(Interval("[-2, -1]"), "(1, 2]")
+    union = IntervalUnion(Interval("[-2, -1]"), "(1, 2]")
 
-    assert union == UnionOfIntervals("[-2, -1]", "(1, 2]")
+    assert union == IntervalUnion("[-2, -1]", "(1, 2]")
 
 
 def test_union_of_intervals_sub_negative_infinity() -> None:
-    union = UnionOfIntervals("[-2, -1]", "(1, 2]")
+    union = IntervalUnion("[-2, -1]", "(1, 2]")
 
-    assert union - float("-inf") == UnionOfIntervals("[inf, inf]")
+    assert union - float("-inf") == IntervalUnion("[inf, inf]")
 
 
 def test_union_of_intervals_mul_negative_flips_and_merges() -> None:
-    union = UnionOfIntervals("[-2, -1]", "(1, 2]")
+    union = IntervalUnion("[-2, -1]", "(1, 2]")
 
-    assert union * -2.0 == UnionOfIntervals("[-4, -2)", "[2, 4]")
+    assert union * -2.0 == IntervalUnion("[-4, -2)", "[2, 4]")
 
 
 def test_union_of_intervals_subset_relation() -> None:
-    assert UnionOfIntervals("[0, 1]", "[3, 4]") <= "[-1, 2] | [3, 5]"
-    assert UnionOfIntervals("[0, 1]", "[3, 4]") <= Interval("[-1, 5]")
+    assert IntervalUnion("[0, 1]", "[3, 4]") <= "[-1, 2] | [3, 5]"
+    assert IntervalUnion("[0, 1]", "[3, 4]") <= Interval("[-1, 5]")
 
 
 def test_union_of_intervals_subset_relation_detects_gaps() -> None:
-    assert not UnionOfIntervals("[0, 2]") <= "[0, 1] | [1.5, 2]"
+    assert not IntervalUnion("[0, 2]") <= "[0, 1] | [1.5, 2]"
 
 
 def test_union_of_intervals_rejects_unrelated_type_ordering() -> None:
     with pytest.raises(TypeError):
-        _ = UnionOfIntervals("[0, 1]") <= 1
+        _ = IntervalUnion("[0, 1]") <= 1
