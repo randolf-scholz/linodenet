@@ -93,7 +93,7 @@ class _PosetEnum(Enum):
         return str(self.value)
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Interval(Domain):
     r"""A named tuple representing an interval."""
 
@@ -166,6 +166,73 @@ class Interval(Domain):
             (item <= self.upper) if self.upper_inclusive else (item < self.upper)
         )
         return lower_mask & upper_mask
+
+    def __add__(self, other: float, /) -> Self:
+        return type(self)(
+            self.lower + other,
+            self.upper + other,
+            lower_inclusive=self.lower_inclusive,
+            upper_inclusive=self.upper_inclusive,
+        )
+
+    def __sub__(self, other: float, /) -> Self:
+        return self + (-other)
+
+    def __mul__(self, other: float, /) -> Self:
+        if other == 0:
+            return type(self)(
+                0.0,
+                0.0,
+                lower_inclusive=True,
+                upper_inclusive=True,
+            )
+        if other > 0:
+            return type(self)(
+                self.lower * other,
+                self.upper * other,
+                lower_inclusive=self.lower_inclusive,
+                upper_inclusive=self.upper_inclusive,
+            )
+        return type(self)(
+            self.upper * other,
+            self.lower * other,
+            lower_inclusive=self.upper_inclusive,
+            upper_inclusive=self.lower_inclusive,
+        )
+
+    @staticmethod
+    def _coerce_interval(other: object, /) -> Interval | None:
+        match other:
+            case Interval():
+                return other
+            case str():
+                return Interval.from_string(other)
+            case _:
+                return None
+
+    def __eq__(self, other: object, /) -> bool:
+        if (other_interval := self._coerce_interval(other)) is None:
+            return NotImplemented
+        return hash(self) == hash(other_interval)
+
+    def __le__(self, other: object, /) -> bool:
+        if (other_interval := self._coerce_interval(other)) is None:
+            return NotImplemented
+
+        lower_ok = self.lower > other_interval.lower or (
+            self.lower == other_interval.lower
+            and (other_interval.lower_inclusive or not self.lower_inclusive)
+        )
+        upper_ok = self.upper < other_interval.upper or (
+            self.upper == other_interval.upper
+            and (other_interval.upper_inclusive or not self.upper_inclusive)
+        )
+        return lower_ok and upper_ok
+
+    def __ge__(self, other: object, /) -> bool:
+        if (other_interval := self._coerce_interval(other)) is None:
+            return NotImplemented
+        return other_interval <= self
 
     def __str__(self) -> str:
         lower_bracket = "[" if self.lower_inclusive else "("

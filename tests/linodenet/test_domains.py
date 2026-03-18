@@ -2,7 +2,6 @@ import pytest
 from torch import tensor
 
 from linodenet.domains import (
-    Interval,
     MatrixDomains,
     ScalarDomains,
     UnionOfIntervals,
@@ -55,7 +54,7 @@ def test_scalar_domains_nonzero_membership() -> None:
 
 
 def test_scalar_domains_store_interval_values() -> None:
-    assert isinstance(ScalarDomains.UNIT_INTERVAL.value, Interval)
+    assert str(ScalarDomains.UNIT_INTERVAL.value) == "[0, 1]"
     assert isinstance(ScalarDomains.NONZERO.value, UnionOfIntervals)
 
 
@@ -65,12 +64,7 @@ def test_scalar_domains_reject_cross_type_ordering() -> None:
 
 
 def test_union_of_intervals_merges_overlaps_and_touching_intervals() -> None:
-    domain = UnionOfIntervals(
-        Interval.from_string("[0, 1]"),
-        Interval.from_string("(1, 2)"),
-        Interval.from_string("[3, 4]"),
-        Interval.from_string("[3.5, 5]"),
-    )
+    domain = UnionOfIntervals.from_string("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
     assert str(domain) == "[0, 2) | [3, 5]"
 
 
