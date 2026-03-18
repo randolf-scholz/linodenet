@@ -3,6 +3,7 @@ r"""Checks for testing certain matrix properties (type (1,1)-tensors)."""
 __all__ = [
     # ABCs & Protocols
     "MatrixTest",
+    "MatrixTestWithArgs",
     # is_* checks
     "is_backward_stable",
     "is_banded",
@@ -28,7 +29,8 @@ __all__ = [
     "is_upper_triangular",
 ]
 
-from typing import Protocol
+from collections.abc import Callable
+from typing import Concatenate, Protocol
 
 import torch
 from torch import Tensor
@@ -59,6 +61,9 @@ class MatrixTest(Protocol):
               So they are only used in the protocol.
         """
         ...
+
+
+type MatrixTestWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 
 
 # region is_* checks -------------------------------------------------------------------

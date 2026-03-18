@@ -132,7 +132,8 @@ class ScalarDomains:
 class VectorDomains(StrEnum):
     r"""Enumeration of some vector domains."""
 
-    GENERAL = "general"
+    REAL = "real"
+    COMPLEX = "complex"
     SPARSE = "sparse"
 
     UNIT_SPHERE = "unit_sphere"  # ‖x‖₂ = 1
@@ -169,6 +170,11 @@ class MatrixDomains(StrEnum):
     INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
     POSITIVE_DETERMINANT = "positive_determinant"  # GLₙ⁺(R) (det>0)
     NEGATIVE_DETERMINANT = "negative_determinant"  # GLₙ⁻(R) (det<0)
+
+    CONTRACTION = "contraction"  # ‖A‖₂ < 1
+    SPECTRAL_NORMALIZED = "spectral_normalized"  # ‖A‖₂ = 1
+    LIPSCHITZ_BOUNDED = "lipschitz_bounded"  # ‖A‖₂ ≤ C
+    DIAGONALLY_DOMINANT = "diagonally_dominant"  # |Aᵢᵢ| ≥ ∑_{j≠i} |Aᵢⱼ| for all i
 
     NORMAL = "normal"
     ORTHOGONAL = "orthogonal"  # Oₙ(R)

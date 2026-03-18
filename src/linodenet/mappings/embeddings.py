@@ -34,8 +34,8 @@ class ConcatEmbedding(EmbeddingBase):
         - `linodenet.projections.ConcatProjection`
     """
 
-    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
-    CODOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    DOMAIN: Final[VectorDomains] = VectorDomains.REAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.REAL
 
     # Constants
     input_size: Final[int]
@@ -96,8 +96,8 @@ class LinearEmbedding(EmbeddingBase):
         In the former case, the map is right-invertible, in the latter left-invertible.
     """
 
-    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
-    CODOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    DOMAIN: Final[VectorDomains] = VectorDomains.REAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.REAL
 
     # Constants
     input_size: Final[int]

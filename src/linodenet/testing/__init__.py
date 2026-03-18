@@ -6,9 +6,11 @@ __all__ = [
     "vector_tests",
     "assertions",
     # CONSTANTS
-    "MATRIX_TESTS_WITH_EXTRA_ARG",
+    "MATRIX_TESTS_WITH_ARGS",
+    "VECTOR_TESTS_WITH_ARGS",
     "MATRIX_TESTS",
     "VECTOR_TESTS",
+    "TESTS",
 ]
 
 from linodenet.testing import assertions, matrix_tests, vector_tests
@@ -19,6 +21,16 @@ from linodenet.testing.vector_tests import *
 __all__ += matrix_tests.__all__
 __all__ += vector_tests.__all__
 __all__ += assertions.__all__
+
+VECTOR_TESTS: dict[str, VectorTest] = {
+    "is_positive_vector"   : is_positive_vector,
+    "is_stochastic_vector" : is_stochastic_vector,
+    "is_unit_vector"       : is_unit_vector,
+}  # fmt: skip
+r"""Dictionary of all available vector tests."""
+
+VECTOR_TESTS_WITH_ARGS: dict[str, VectorTestWithArgs] = {}
+r"""Dictionary of all available vector tests."""
 
 MATRIX_TESTS: dict[str, MatrixTest] = {
     "is_contraction"         : is_contraction,
@@ -40,7 +52,7 @@ MATRIX_TESTS: dict[str, MatrixTest] = {
 }  # fmt: skip
 r"""Dictionary of all available matrix tests."""
 
-MATRIX_TESTS_WITH_EXTRA_ARG = {
+MATRIX_TESTS_WITH_ARGS: dict[str, MatrixTestWithArgs] = {
     "is_banded"            : is_banded,
     "is_lipschitz_bounded" : is_lipschitz_bounded,
     "is_low_rank"          : is_low_rank,
@@ -48,9 +60,9 @@ MATRIX_TESTS_WITH_EXTRA_ARG = {
 }  # fmt: skip
 r"""Matrix tests that require an additional argument."""
 
-VECTOR_TESTS: dict[str, VectorTest] = {
-    "is_positive_vector"   : is_positive_vector,
-    "is_stochastic_vector" : is_stochastic_vector,
-    "is_unit_vector"       : is_unit_vector,
-}  # fmt: skip
-r"""Dictionary of all available vector tests."""
+TESTS: dict[str, VectorTest | MatrixTest | VectorTestWithArgs | MatrixTestWithArgs] = {
+    **MATRIX_TESTS,
+    **VECTOR_TESTS,
+    **MATRIX_TESTS_WITH_ARGS,
+    **VECTOR_TESTS_WITH_ARGS,
+}

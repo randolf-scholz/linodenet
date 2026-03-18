@@ -7,7 +7,8 @@ Notes:
 
 __all__ = [
     # ABCs & Protocols
-    "FunctionalProjection",
+    "ProjectionFn",
+    "ProjectionFnWithArgs",
     # matrix Projections
     "banded",
     "contraction",
@@ -34,13 +35,15 @@ __all__ = [
 ]
 
 from collections.abc import Callable
+from typing import Concatenate
 
 import torch
 from torch import Tensor
 
 from signatures import signature
 
-type FunctionalProjection = Callable[[Tensor], Tensor]
+type ProjectionFn = Callable[[Tensor], Tensor]
+type ProjectionFnWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 
 
 # region projections -------------------------------------------------------------------

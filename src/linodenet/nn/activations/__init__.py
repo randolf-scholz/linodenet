@@ -9,9 +9,8 @@ __all__ = [
     # Sub-Modules
     "base",
     # Constants
-    "ALL_ACTIVATIONS",
     "ACTIVATION_FUNCTIONS",
-    "ACTIVATION_CLASSES",
+    "ACTIVATIONS",
     "SPECIAL_ACTIVATIONS",
     "TORCH_ACTIVATION_CLASSES",
     "TORCH_ACTIVATION_FUNCTIONS",
@@ -188,22 +187,12 @@ SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
 r"""Activations that do not match the usual signature of activations."""
 
 
-ACTIVATION_CLASSES: dict[str, type[Activation]] = {
+ACTIVATIONS: dict[str, type[Activation]] = {
     **TORCH_ACTIVATION_CLASSES,
     "GEGLU": GEGLU,
     "ReGLU": ReGLU,
 }  # fmt: skip
 r"""Dictionary containing all available activation classes."""
-
-
-ALL_ACTIVATIONS: dict[str, Activation | type[Activation]] = {
-    **ACTIVATION_FUNCTIONS,
-    **ACTIVATION_CLASSES,
-    **TORCH_ACTIVATION_FUNCTIONS,
-    **TORCH_ACTIVATION_CLASSES,
-}  # fmt: skip
-r"""Dictionary containing all available activations."""
-
 
 # cleanup namespace
 del nn

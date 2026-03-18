@@ -7,7 +7,7 @@ import torch
 
 from linodenet.regularizations import (
     REGULARIZATION_FNS,
-    REGULARIZATION_MODULES,
+    REGULARIZATIONS,
 )
 
 EXTRA_ARGS: defaultdict[str, tuple[tuple, dict]] = defaultdict(
@@ -36,11 +36,11 @@ def test_jit_compatibility_functional(regularization_name: str) -> None:
     assert torch.allclose(result_prior, result_post)
 
 
-@pytest.mark.parametrize("regularization_name", REGULARIZATION_MODULES)
+@pytest.mark.parametrize("regularization_name", REGULARIZATIONS)
 def test_jit_compatibility_modular(regularization_name: str) -> None:
     r"""Test JIT-compatibility of modular projections."""
     x = torch.randn(4, 4)
-    projection_type = REGULARIZATION_MODULES[regularization_name]
+    projection_type = REGULARIZATIONS[regularization_name]
     extra_args, extra_kwargs = EXTRA_ARGS[regularization_name]
     projection = projection_type(*extra_args, **extra_kwargs)
     scripted_projection = torch.jit.script(projection)
@@ -72,11 +72,11 @@ def test_compile_compatibility_functional(regularization_name: str) -> None:
 
 
 @pytest.mark.skip(reason="Slow.")
-@pytest.mark.parametrize("regularization_name", REGULARIZATION_MODULES)
+@pytest.mark.parametrize("regularization_name", REGULARIZATIONS)
 def test_compile_compatibility_modular(regularization_name: str) -> None:
     r"""Test JIT-compatibility of modular projections."""
     x = torch.randn(4, 4)
-    projection_type = REGULARIZATION_MODULES[regularization_name]
+    projection_type = REGULARIZATIONS[regularization_name]
     projection = projection_type()
     scripted_projection = torch.compile(projection)
 

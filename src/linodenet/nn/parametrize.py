@@ -137,7 +137,7 @@ class Surjection[X, Y](Protocol):
     """
 
     @abstractmethod
-    def forward(self, x: X, /) -> Y: ...
+    def __call__(self, x: X, /) -> Y: ...
     @abstractmethod
     def right_inverse(self, y: Y, /) -> X: ...
 
@@ -162,7 +162,7 @@ class Parametrization(Protocol):
     r"""Protocol for parametrizations."""
 
     @abstractmethod
-    def forward(self, arg: Tensor, /) -> Tensor:
+    def __call__(self, arg: Tensor, /) -> Tensor:
         r"""Apply the parametrization to the given tensor."""
         ...
 
@@ -535,7 +535,7 @@ class WrappedParametrization(ParametrizationBase):
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
         r"""Apply the parametrization."""
-        return self.parametrization.forward(x)
+        return self.parametrization(x)
 
     @jit.export
     def right_inverse(self, y: Tensor) -> Tensor | None:

@@ -80,16 +80,30 @@ def get_activation(arg: object, /, **cfg: object) -> Activation:
         # if a name, look up in the dictionary
         case str(name):
             # avoid circular import
-            from linodenet.nn.activations import ALL_ACTIVATIONS  # noqa: PLC0415
+            from linodenet.nn.activations import (  # noqa: PLC0415
+                ACTIVATION_FUNCTIONS,
+                ACTIVATIONS,
+            )
 
-            try:
-                obj = ALL_ACTIVATIONS[name]
-            except KeyError as exc:
-                exc.add_note(
-                    f"Activation {name!r} not found in {list(ALL_ACTIVATIONS)=}"
-                )
-                raise
-            return get_activation(obj, **cfg)
+            match ACTIVATION_FUNCTIONS.get(name):
+                case None:
+                    pass
+                case f if callable(f):
+                    if cfg:
+                        raise ValueError(
+                            f"Cannot pass arguments to an instance: {cfg!r}"
+                        )
+                    return f
+                case _:
+                    raise TypeError(f"Invalid argument: {arg!r}")
+
+            match ACTIVATIONS.get(name):
+                case None:
+                    pass
+                case cls:
+                    return get_activation(cls, **cfg)
+
+            raise KeyError(f"Unknown activation function: {name!r}")
 
         # if a class, try to instantiate it with the given configuration
         case type() as cls:

@@ -26,7 +26,7 @@ __all__ = [
     "VECTOR_PROJECTIONS",
     # functional
     "MATRIX_PROJECTION_FNS",
-    "MATRIX_PROJECTIONS_WITH_EXTRA_ARGS",
+    "MATRIX_PROJECTIONS_WITH_ARGS",
     "VECTOR_PROJECTION_FNS",
     "PROJECTION_FNS",
 ]
@@ -90,46 +90,6 @@ TRANSFORMS: dict[str, type[Transform]] = {
 }  # fmt: skip
 r"""Dictionary containing all available transforms (nn.Module)."""
 
-VECTOR_PROJECTION_FNS: dict[str, FunctionalProjection] = {
-    "unit_vector" : unit_vector
-}  # fmt: skip
-r"""Dictionary containing all available vector projections (function)."""
-
-MATRIX_PROJECTION_FNS: dict[str, FunctionalProjection] = {
-    "diagonal"            : functional.diagonal,
-    "diagonally_dominant" : functional.diagonally_dominant,
-    "hamiltonian"         : functional.hamiltonian,
-    "identity"            : functional.identity,
-    "lower_triangular"    : functional.lower_triangular,
-    "normal"              : functional.normal,
-    "orthogonal"          : functional.orthogonal,
-    "rank_one"            : functional.rank_one,
-    "skew_symmetric"      : functional.skew_symmetric,
-    "spectral_normalized" : functional.spectral_normalized,
-    "symmetric"           : functional.symmetric,
-    "symplectic"          : functional.symplectic,
-    "traceless"           : functional.traceless,
-    "tridiagonal"         : functional.tridiagonal,
-    "upper_triangular"    : functional.upper_triangular,
-}  # fmt: skip
-r"""Dictionary containing all available matrix projections (function)."""
-
-MATRIX_PROJECTIONS_WITH_EXTRA_ARGS = {
-    "banded"            : functional.banded,
-    "low_rank"          : functional.low_rank,
-    "masked"            : functional.masked,
-    "contraction"       : functional.contraction,
-    "lipschitz_bounded" : functional.lipschitz_bounded,
-}  # fmt: skip
-r"""Matrix projections that require additional arguments"""
-
-PROJECTION_FNS = {
-    **VECTOR_PROJECTION_FNS,
-    **MATRIX_PROJECTION_FNS,
-    **MATRIX_PROJECTIONS_WITH_EXTRA_ARGS,
-}  # fmt: skip
-r"""Dictionary containing all available projections (function)."""
-
 VECTOR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "UnitVector" : projections.UnitVector,
 }  # fmt: skip
@@ -159,7 +119,7 @@ MATRIX_PROJECTIONS: dict[str, type[ProjectionBase]] = {
 }  # fmt: skip
 r"""Dictionary containing all available matrix projections (nn.Module)."""
 
-PROJECTIONS = {
+PROJECTIONS: dict[str, type[ProjectionBase]] = {
     **MATRIX_PROJECTIONS,
     **VECTOR_PROJECTIONS,
 }
@@ -173,3 +133,43 @@ SURJECTIONS: dict[str, type[SurjectionBase]] = {
     "StochasticVector" : surjections.StochasticVector,
 }  # fmt: skip
 r"""Dictionary containing all available surjections (nn.Module)."""
+
+VECTOR_PROJECTION_FNS: dict[str, ProjectionFn] = {
+    "unit_vector" : unit_vector
+}  # fmt: skip
+r"""Dictionary containing all available vector projections (function)."""
+
+MATRIX_PROJECTION_FNS: dict[str, ProjectionFn] = {
+    "diagonal"            : functional.diagonal,
+    "diagonally_dominant" : functional.diagonally_dominant,
+    "hamiltonian"         : functional.hamiltonian,
+    "identity"            : functional.identity,
+    "lower_triangular"    : functional.lower_triangular,
+    "normal"              : functional.normal,
+    "orthogonal"          : functional.orthogonal,
+    "rank_one"            : functional.rank_one,
+    "skew_symmetric"      : functional.skew_symmetric,
+    "spectral_normalized" : functional.spectral_normalized,
+    "symmetric"           : functional.symmetric,
+    "symplectic"          : functional.symplectic,
+    "traceless"           : functional.traceless,
+    "tridiagonal"         : functional.tridiagonal,
+    "upper_triangular"    : functional.upper_triangular,
+}  # fmt: skip
+r"""Dictionary containing all available matrix projections (function)."""
+
+MATRIX_PROJECTIONS_WITH_ARGS: dict[str, ProjectionFnWithArgs] = {
+    "banded"            : functional.banded,
+    "low_rank"          : functional.low_rank,
+    "masked"            : functional.masked,
+    "contraction"       : functional.contraction,
+    "lipschitz_bounded" : functional.lipschitz_bounded,
+}  # fmt: skip
+r"""Matrix projections that require additional arguments"""
+
+PROJECTION_FNS: dict[str, ProjectionFnWithArgs] = {
+    **VECTOR_PROJECTION_FNS,
+    **MATRIX_PROJECTION_FNS,
+    **MATRIX_PROJECTIONS_WITH_ARGS,
+}  # fmt: skip
+r"""Dictionary containing all available projections (function)."""

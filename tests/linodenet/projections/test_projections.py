@@ -6,7 +6,7 @@ import torch
 from linodenet.mappings import (
     MATRIX_PROJECTION_FNS,
     MATRIX_PROJECTIONS,
-    MATRIX_PROJECTIONS_WITH_EXTRA_ARGS,
+    MATRIX_PROJECTIONS_WITH_ARGS,
     PROJECTIONS,
     RankOne,
     Tridiagonal,
@@ -15,7 +15,7 @@ from linodenet.mappings import (
     rank_one,
     tridiagonal,
 )
-from linodenet.testing import MATRIX_TESTS, MATRIX_TESTS_WITH_EXTRA_ARG
+from linodenet.testing import MATRIX_TESTS, MATRIX_TESTS_WITH_ARGS
 from tests.testing import camel2snake, snake2camel
 
 
@@ -49,13 +49,11 @@ def test_names_matrix_tests(name: str) -> None:
     assert name == actual_name
 
 
-@pytest.mark.parametrize(
-    "name", MATRIX_PROJECTION_FNS | MATRIX_PROJECTIONS_WITH_EXTRA_ARGS
-)
+@pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS | MATRIX_PROJECTIONS_WITH_ARGS)
 def test_inclusion_functional_has_test(name: str) -> None:
     r"""Test that all projections have tests."""
     if name != "identity":
-        assert f"is_{name}" in MATRIX_TESTS | MATRIX_TESTS_WITH_EXTRA_ARG
+        assert f"is_{name}" in MATRIX_TESTS | MATRIX_TESTS_WITH_ARGS
 
 
 @pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS)

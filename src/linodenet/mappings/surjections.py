@@ -44,8 +44,8 @@ class ConcatProjection(SurjectionBase):
         - `linodenet.embeddings.ConcatEmbedding`
     """
 
-    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
-    CODOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    DOMAIN: Final[VectorDomains] = VectorDomains.REAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.REAL
 
     # Constants
     input_size: Final[int]
@@ -92,7 +92,7 @@ class ConcatProjection(SurjectionBase):
 class PositiveVector(SurjectionBase):
     r"""Map vectors to the positive cone componentwise."""
 
-    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    DOMAIN: Final[VectorDomains] = VectorDomains.REAL
     CODOMAIN: Final[VectorDomains] = VectorDomains.POSITIVE
 
     @signature("(..., n) -> (..., n)")
@@ -107,7 +107,7 @@ class PositiveVector(SurjectionBase):
 class StochasticVector(SurjectionBase):
     r"""Map vectors to the probability simplex."""
 
-    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    DOMAIN: Final[VectorDomains] = VectorDomains.REAL
     CODOMAIN: Final[VectorDomains] = VectorDomains.STOCHASTIC
 
     @signature("(..., n) -> (..., n)")

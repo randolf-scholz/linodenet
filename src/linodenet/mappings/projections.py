@@ -525,7 +525,7 @@ class DiagonallyDominant(ProjectionBase):
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMMETRIC
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.DIAGONALLY_DOMINANT
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:

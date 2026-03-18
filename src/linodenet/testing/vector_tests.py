@@ -3,13 +3,15 @@ r"""Checks for testing certain vector properties (rank-1 tensors)."""
 __all__ = [
     # ABCs & Protocols
     "VectorTest",
+    "VectorTestWithArgs",
     # is_* checks
     "is_positive_vector",
     "is_stochastic_vector",
     "is_unit_vector",
 ]
 
-from typing import Protocol
+from collections.abc import Callable
+from typing import Concatenate, Protocol
 
 import torch
 from torch import Tensor
@@ -31,6 +33,9 @@ class VectorTest(Protocol):
         rtol: float = RTOL,
         atol: float = ATOL,
     ) -> Tensor: ...
+
+
+type VectorTestWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 
 
 @signature("(..., n) -> bool[(...)]")
