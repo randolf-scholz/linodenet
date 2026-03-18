@@ -10,9 +10,16 @@ __all__ = [
     "thomson_initialization",
     "spectral_norm_native",
     "singular_triplet_native",
+    "matrix_sqrt",
+    "matrix_log",
 ]
 from linodenet_special import fallbacks, interfaces, kernels, linalg
-from linodenet_special.fallbacks import singular_triplet_native, spectral_norm_native
+from linodenet_special.fallbacks import (
+    matrix_log,
+    matrix_sqrt,
+    singular_triplet_native,
+    spectral_norm_native,
+)
 from linodenet_special.interfaces import *
 from linodenet_special.kernels import *
 from linodenet_special.linalg import *

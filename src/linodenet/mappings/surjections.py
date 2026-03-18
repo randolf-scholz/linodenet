@@ -19,6 +19,7 @@ from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet.mappings.base import SurjectionBase
 from linodenet.mappings.bijections import CayleyMap
 from linodenet.mappings.functional import skew_symmetric
+from linodenet_special import matrix_log, matrix_sqrt
 from signatures import signature
 
 
@@ -34,11 +35,7 @@ class GramMatrix(SurjectionBase):
 
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
-        r"""This requires the matrix square root, which is not implemented in PyTorch.
-
-        See: https://github.com/pytorch/pytorch/issues/9983
-        """
-        raise NotImplementedError
+        return matrix_sqrt(y).real.to(dtype=y.dtype)
 
 
 class ConcatProjection(SurjectionBase):
@@ -141,12 +138,7 @@ class OrthogonalMatExp(SurjectionBase):
 
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
-        r"""Compute a matrix-log fallback by diagonalizing the orthogonal matrix."""
-        # FIXME: https://github.com/pytorch/pytorch/issues/9983 (matrix_log)
-        eigenvalues, eigenvectors = torch.linalg.eig(y)
-        log_diagonal = torch.diag_embed(eigenvalues.log())
-        log_matrix = eigenvectors @ log_diagonal @ torch.linalg.inv(eigenvectors)
-        return skew_symmetric(log_matrix.real)
+        return skew_symmetric(matrix_log(y).real.to(dtype=y.dtype))
 
 
 class OrthogonalCayley(SurjectionBase):
