@@ -146,11 +146,17 @@ class TestSuite(TestCase):
         if isinstance(model, GraphModule):
             children = dict(model.named_children())
             layer = children["2"]
+            assert isinstance(layer, nn.Linear)
         else:
             assert isinstance(model, nn.Sequential)
             layer = model[2]
             assert isinstance(layer, nn.Linear)
         return layer
+
+    def get_weight_parametrization(self, layer: nn.Linear, /) -> ParametrizationBase:
+        parametrization = get_parametrizations(layer)["weight"]
+        assert isinstance(parametrization, ParametrizationBase)
+        return parametrization
 
     def check_parametrization(self, name: str, model: nn.Module) -> None:
         matrix_test = MATRIX_TESTS[name]
@@ -173,8 +179,7 @@ class TestSuite(TestCase):
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
 
-        parametrization = get_parametrizations(layer)["weight"]
-        assert isinstance(parametrization, ParametrizationBase)
+        parametrization = self.get_weight_parametrization(layer)
         assert layer.weight is parametrization.cached_parameter
         self.assert_stale(parametrization, False)
         self.check_parametrization(name, model)
@@ -187,7 +192,7 @@ class TestSuite(TestCase):
         model, x, _ = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrization = self.get_weight_parametrization(layer)
         self.assert_stale(parametrization, False)
 
         y0 = model(x)
@@ -220,7 +225,7 @@ class TestSuite(TestCase):
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
         optimizer = SGD(model.parameters(), lr=0.1)
         register_optimizer_hook(optimizer, model)
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrization = self.get_weight_parametrization(layer)
         self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
         original_output = model(x).detach().clone()
@@ -256,7 +261,7 @@ class TestSuite(TestCase):
 
         y0 = compiled_model(x)
         compiled_layer = self.get_parametrized_layer(compiled_model)
-        parametrization = get_parametrizations(compiled_layer)["weight"]
+        parametrization = self.get_weight_parametrization(compiled_layer)
         self.assert_stale(parametrization, False)
 
         with torch.no_grad():
@@ -282,7 +287,7 @@ class TestSuite(TestCase):
 
         optimizer = SGD(compiled_model.parameters(), lr=0.1)
         compiled_layer = self.get_parametrized_layer(compiled_model)
-        parametrization = get_parametrizations(compiled_layer)["weight"]
+        parametrization = self.get_weight_parametrization(compiled_layer)
         self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
 
@@ -309,13 +314,13 @@ class TestSuite(TestCase):
         model, x, y = self.make_test_case(shape, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", MATRIX_PARAMETRIZATIONS[name])
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrization = self.get_weight_parametrization(layer)
         self.assert_stale(parametrization, False)
 
         exported_model = torch.export.export(model, args=(x,)).module()
         optimizer = SGD(exported_model.parameters(), lr=0.1)
         exported_layer = self.get_parametrized_layer(exported_model)
-        parametrization = get_parametrizations(exported_layer)["weight"]
+        parametrization = self.get_weight_parametrization(exported_layer)
         self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
 
