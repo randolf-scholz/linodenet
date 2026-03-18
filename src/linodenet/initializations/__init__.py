@@ -22,15 +22,14 @@ from linodenet.initializations.functional import *
 __all__ += functional.__all__
 
 INITIALIZATIONS: dict[str, Initialization] = {
-    "canonical_skew_symmetric" : functional.canonical_skew_symmetric,
-    "canonical_symplectic"     : functional.canonical_symplectic,
-    "diagonally_dominant"      : functional.diagonally_dominant,
-    "gaussian"                 : functional.gaussian,
-    "low_rank"                 : functional.low_rank,
-    "orthogonal"               : functional.orthogonal,
-    "skew_symmetric"           : functional.skew_symmetric,
-    "special_orthogonal"       : functional.special_orthogonal,
-    "symmetric"                : functional.symmetric,
-    "traceless"                : functional.traceless,
+    "symplectic"          : functional.symplectic,
+    "diagonally_dominant" : functional.diagonally_dominant,
+    "gaussian"            : functional.gaussian,
+    "low_rank"            : functional.low_rank,
+    "orthogonal"          : functional.orthogonal,
+    "skew_symmetric"      : functional.skew_symmetric,
+    "special_orthogonal"  : functional.special_orthogonal,
+    "symmetric"           : functional.symmetric,
+    "traceless"           : functional.traceless,
 }  # fmt: skip
 r"""Dictionary containing all available initializations."""

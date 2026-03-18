@@ -11,8 +11,7 @@ __all__ = [
     # ABCs & Protocols
     "Initialization",
     # Deterministic Initializations
-    "canonical_skew_symmetric",
-    "canonical_symplectic",
+    "symplectic",
     # Initializations
     "diagonally_dominant",
     "gaussian",
@@ -237,15 +236,15 @@ def traceless(
 
 
 # region canonical (deterministic) initializations -------------------------------------
-def canonical_skew_symmetric(
+def symplectic(
     size: int | tuple[int, ...],
     *,
     device: Optional[str | Device] = None,
     dtype: Optional[Dtype] = None,
 ) -> Tensor:
-    r"""Return the canonical skew symmetric matrix of size $n=2k$.
+    r"""Return the canonical symplectic matrix of size $n=2k$.
 
-    .. math:: 𝕁_n = 𝕀_n ⊗ \begin{bmatrix}0 & +1 \\ -1 & 0\end{bmatrix}
+    .. math:: 𝕊_n = \begin{bmatrix}0 & 𝕀_k \\ -𝕀_k & 0\end{bmatrix}
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
@@ -263,24 +262,6 @@ def canonical_skew_symmetric(
     # duplicate J for batch-size
     ones = torch.ones(batch, device=device, dtype=dtype)
     return torch.einsum("..., de -> ...de", ones, J)
-
-
-def canonical_symplectic(
-    size: int | tuple[int, ...],
-    *,
-    device: Optional[str | Device] = None,
-    dtype: Optional[Dtype] = None,
-) -> Tensor:
-    r"""Return the canonical symplectic matrix of size $n=2k$.
-
-    .. math:: 𝕊_n = \begin{bmatrix}0 & 𝕀_k \\ -𝕀_k & 0\end{bmatrix}
-
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
-
-    Note:
-        Alias for `canonical_skew_symmetric`.
-    """
-    return canonical_skew_symmetric(size, device=device, dtype=dtype)
 
 
 # endregion canonical (deterministic) initializations ----------------------------------

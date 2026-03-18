@@ -25,6 +25,7 @@ __all__ += modules.__all__
 
 REGULARIZATION_FNS: dict[str, Regularization] = {
     "diagonal"         : functional.diagonal,
+    "diagonally_dominant": functional.diagonally_dominant,
     "hamiltonian"      : functional.hamiltonian,
     "identity"         : functional.identity,
     "log_det_exp"      : functional.log_det_exp,
@@ -39,6 +40,7 @@ REGULARIZATION_FNS: dict[str, Regularization] = {
     "symplectic"       : functional.symplectic,
     "traceless"        : functional.traceless,
     "tridiagonal"      : functional.tridiagonal,
+    "unit_vector"      : functional.unit_vector,
     "upper_triangular" : functional.upper_triangular,
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
@@ -57,6 +59,7 @@ REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Banded"          : modules.Banded,
     "Contraction"     : modules.Contraction,
     "Diagonal"        : modules.Diagonal,
+    "DiagonallyDominant": modules.DiagonallyDominant,
     "Hamiltonian"     : modules.Hamiltonian,
     "Identity"        : modules.Identity,
     "LogDetExp"       : modules.LogDetExp,
@@ -74,6 +77,7 @@ REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Symplectic"      : modules.Symplectic,
     "Traceless"       : modules.Traceless,
     "Tridiagonal"     : modules.Tridiagonal,
+    "UnitVector"      : modules.UnitVector,
     "UpperTriangular" : modules.UpperTriangular,
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""

@@ -19,6 +19,7 @@ __all__ = [
     "SkewSymmetric",
     "SpectralNormalized",
     "Symmetric",
+    "DiagonallyDominant",
     "Symplectic",
     "Traceless",
     "Tridiagonal",
@@ -35,6 +36,7 @@ GramMatrix = surjections.GramMatrix
 Banded = projections.Banded
 Contraction = projections.Contraction
 Diagonal = projections.Diagonal
+DiagonallyDominant = projections.DiagonallyDominant
 Hamiltonian = projections.Hamiltonian
 Identity = projections.Identity
 LipschitzBounded = projections.LipschitzBounded

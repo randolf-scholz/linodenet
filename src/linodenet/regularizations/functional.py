@@ -13,6 +13,7 @@ __all__ = [
     "banded",
     "contraction",
     "diagonal",
+    "diagonally_dominant",
     "hamiltonian",
     "identity",
     "log_det_exp",
@@ -20,7 +21,6 @@ __all__ = [
     "low_rank",
     "lower_triangular",
     "masked",
-    "matrix_norm",
     "normal",
     "orthogonal",
     "rank_one",
@@ -31,6 +31,10 @@ __all__ = [
     "traceless",
     "tridiagonal",
     "upper_triangular",
+    "unit_vector",
+    # helper
+    "vector_norm",
+    "matrix_norm",
 ]
 
 from collections.abc import Callable
@@ -51,7 +55,12 @@ class Regularization(Protocol):
     def __call__(
         self, x: Tensor, /, *, p: int = ..., size_normalize: bool = ...
     ) -> Tensor:
-        r"""Forward pass of the regularization."""
+        r"""Forward pass of the regularization.
+
+        If size_normalize is True, a scaled norm will be used:
+
+        .. math :: (1/n ∑ |xₙ|ᵖ)¹/ᵖ instead of (∑ |xₙ|ᵖ)¹/ᵖ
+        """
         ...
 
 
@@ -77,11 +86,18 @@ def log_det_exp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tenso
 
 @signature("(..., m, n) -> (...)")
 def matrix_norm(r: Tensor, p: str | int = "fro", size_normalize: bool = True) -> Tensor:
-    r"""Return the matrix regularization term."""
-    if isinstance(p, str):
-        s = torch.linalg.matrix_norm(r, ord=p, dim=(-2, -1))
-    else:
-        s = torch.linalg.matrix_norm(r, ord=p, dim=(-2, -1))
+    r"""Return the normalized matrix."""
+    s = torch.linalg.matrix_norm(r, ord=p, dim=(-2, -1))
+
+    if size_normalize:
+        s = s / r.shape[-1]
+    return s
+
+
+@signature("(..., n) -> (...)")
+def vector_norm(r: Tensor, p: float = 2.0, size_normalize: bool = True) -> Tensor:
+    r"""Return the normalized vector."""
+    s = torch.linalg.vector_norm(r, ord=p, dim=-1)
 
     if size_normalize:
         s = s / r.shape[-1]
@@ -219,6 +235,20 @@ def diagonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
     """
     r = x - projections.diagonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
+
+
+@signature("(..., n, n) -> (...)")
+def diagonally_dominant(
+    x: Tensor, p: float = 2.0, size_normalize: bool = False
+) -> Tensor:
+    r"""Bias the matrix towards being diagonally dominant.
+
+    .. math:: A ↦ ‖\max(0, ∑_{j≠i}|Aᵢⱼ| - |Aᵢᵢ|)‖ₚ
+    """
+    diagonal = torch.diagonal(x, dim1=-1, dim2=-2).abs()
+    row_sums = x.abs().sum(dim=-1) - diagonal
+    deficit = torch.relu(row_sums - diagonal)
+    return vector_norm(deficit, p=p, size_normalize=size_normalize)
 
 
 @signature("(..., m, n) -> (...)")
@@ -375,4 +405,18 @@ def spectral_normalized(
 
 
 # endregion other regularizations ------------------------------------------------------
+# region vector groups -----------------------------------------------------------------
+@signature("(..., n) -> (...)")
+def unit_vector(x: Tensor, p: float = 2.0, size_normalize: bool = False) -> Tensor:
+    r"""Bias the vector towards having unit norm.
+
+    .. math:: x ↦ ‖x-Π(x)‖ₚ
+
+    where $Π(x)$ is the closest unit vector to $x$.
+    """
+    r = x - projections.unit_vector(x)
+    return vector_norm(r, p=p, size_normalize=size_normalize)
+
+
+# endregion vector groups --------------------------------------------------------------
 # endregion regularizations ------------------------------------------------------------

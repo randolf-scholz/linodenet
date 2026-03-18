@@ -12,6 +12,7 @@ __all__ = [
     "Banded",
     "Contraction",
     "Diagonal",
+    "DiagonallyDominant",
     "Hamiltonian",
     "Identity",
     "LogDetExp",
@@ -30,6 +31,7 @@ __all__ = [
     "Traceless",
     "Tridiagonal",
     "UpperTriangular",
+    "UnitVector",
 ]
 
 from abc import abstractmethod
@@ -42,6 +44,7 @@ from linodenet.regularizations.functional import (
     banded,
     contraction,
     diagonal,
+    diagonally_dominant,
     hamiltonian,
     identity,
     lipschitz_bounded,
@@ -59,6 +62,7 @@ from linodenet.regularizations.functional import (
     symplectic,
     traceless,
     tridiagonal,
+    unit_vector,
     upper_triangular,
 )
 from linodenet.types import BoolTensor
@@ -141,6 +145,23 @@ class Identity(RegularizationBase):
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards zero matrix."""
         return identity(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class DiagonallyDominant(RegularizationBase):
+    r"""Bias the matrix towards being diagonally dominant."""
+
+    p: Final[float]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: float = 2.0, size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards diagonal dominance."""
+        return diagonally_dominant(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class LowRank(RegularizationBase):
@@ -603,4 +624,23 @@ class SpectralNormalized(RegularizationBase):
 
 
 # endregion other regularizations ------------------------------------------------------
+# region vector groups -----------------------------------------------------------------
+class UnitVector(RegularizationBase):
+    r"""Bias the vector towards having unit norm."""
+
+    p: Final[float]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: float = 2.0, size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n) -> (...)")
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Bias x towards a unit vector."""
+        return unit_vector(x, p=self.p, size_normalize=self.size_normalize)
+
+
+# endregion vector groups --------------------------------------------------------------
 # endregion regularizations ------------------------------------------------------------

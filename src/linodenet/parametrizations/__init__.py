@@ -48,6 +48,7 @@ MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "CayleyMap"            : matrix_parametrizations.CayleyMap,
     "Contraction"          : matrix_parametrizations.Contraction,
     "Diagonal"             : matrix_parametrizations.Diagonal,
+    "DiagonallyDominant"   : matrix_parametrizations.DiagonallyDominant,
     "GramMatrix"           : matrix_parametrizations.GramMatrix,
     "Hamiltonian"          : matrix_parametrizations.Hamiltonian,
     "Identity"             : matrix_parametrizations.Identity,
