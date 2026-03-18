@@ -103,7 +103,7 @@ def get_activation(arg: object, /, **cfg: object) -> Activation:
                 case cls:
                     return get_activation(cls, **cfg)
 
-            raise KeyError(f"Unknown activation function: {name!r}")
+            raise LookupError(f"Unknown activation function: {name!r}")
 
         # if a class, try to instantiate it with the given configuration
         case type() as cls:
