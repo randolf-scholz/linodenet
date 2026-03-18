@@ -10,7 +10,7 @@ from torch import Tensor, nn
 
 from linodenet.flows.continuous import ContinuousFlowBase
 from linodenet.initializations import INITIALIZATIONS, Initialization
-from linodenet.mappings import PROJECTION_FNS
+from linodenet.mappings import MATRIX_PROJECTION_FNS
 from linodenet.types import SelfMap
 from signatures import signature
 
@@ -105,9 +105,9 @@ class LinearFlow(ContinuousFlowBase):
             r"""Dispatch the kernel parametrization."""
             match kernel_parametrization:
                 case None:
-                    return PROJECTION_FNS["identity"]
+                    return MATRIX_PROJECTION_FNS["identity"]
                 case str(key):
-                    return PROJECTION_FNS[key]
+                    return MATRIX_PROJECTION_FNS[key]
                 case Callable() as func:
                     return func
                 case _:

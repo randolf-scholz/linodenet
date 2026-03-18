@@ -3,17 +3,21 @@ r"""Utility functions for testing."""
 
 __all__ = [
     "matrix_tests",
+    "vector_tests",
     "assertions",
     # CONSTANTS
     "MATRIX_TESTS_WITH_EXTRA_ARG",
     "MATRIX_TESTS",
+    "VECTOR_TESTS",
 ]
 
-from linodenet.testing import assertions, matrix_tests
+from linodenet.testing import assertions, matrix_tests, vector_tests
 from linodenet.testing.assertions import *
 from linodenet.testing.matrix_tests import *
+from linodenet.testing.vector_tests import *
 
 __all__ += matrix_tests.__all__
+__all__ += vector_tests.__all__
 __all__ += assertions.__all__
 
 MATRIX_TESTS: dict[str, MatrixTest] = {
@@ -43,3 +47,10 @@ MATRIX_TESTS_WITH_EXTRA_ARG = {
     "is_masked"            : is_masked,
 }  # fmt: skip
 r"""Matrix tests that require an additional argument."""
+
+VECTOR_TESTS: dict[str, VectorTest] = {
+    "is_positive_vector"   : is_positive_vector,
+    "is_stochastic_vector" : is_stochastic_vector,
+    "is_unit_vector"       : is_unit_vector,
+}  # fmt: skip
+r"""Dictionary of all available vector tests."""

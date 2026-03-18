@@ -11,7 +11,7 @@ Notes:
 
 __all__ = [
     # ABCs & Protocols
-    # Classes
+    # Matrix Projections
     "Banded",
     "Diagonal",
     "DiagonallyDominant",
@@ -32,6 +32,8 @@ __all__ = [
     "Traceless",
     "Tridiagonal",
     "UpperTriangular",
+    # Vector Projections
+    "UnitVector",
 ]
 
 from typing import Final, Optional
@@ -41,7 +43,7 @@ from torch import Tensor
 
 import linodenet.mappings.functional as F
 from linodenet.constants import ATOL, RTOL
-from linodenet.domains import MatrixDomains
+from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet.mappings.base import ProjectionBase
 from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
@@ -643,6 +645,17 @@ class Banded(ProjectionBase):
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of banded matrices."""
         return F.banded(x, lower=self.lower, upper=self.upper)
+
+
+class UnitVector(ProjectionBase):
+    r"""Project vectors onto the unit sphere."""
+
+    DOMAIN: Final[VectorDomains] = VectorDomains.NONZERO
+    CODOMAIN: Final[VectorDomains] = VectorDomains.UNIT_SPHERE
+
+    @signature("(..., n) -> (..., n)")
+    def forward(self, x: Tensor) -> Tensor:
+        return F.unit_vector(x)
 
 
 # endregion special --------------------------------------------------------------------

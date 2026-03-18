@@ -4,17 +4,17 @@ import pytest
 import torch
 
 from linodenet.mappings import (
-    PROJECTION_FNS,
-    PROJECTION_MODULES,
+    MATRIX_PROJECTION_FNS,
+    MATRIX_PROJECTIONS,
 )
 from linodenet.testing import MATRIX_TESTS
 
 
-@pytest.mark.parametrize("projection_name", PROJECTION_FNS)
+@pytest.mark.parametrize("projection_name", MATRIX_PROJECTION_FNS)
 def test_jit_compatibility_functional(projection_name: str) -> None:
     r"""Test JIT-compatibility of functional projections."""
     x = torch.randn(4, 4)
-    projection = PROJECTION_FNS[projection_name]
+    projection = MATRIX_PROJECTION_FNS[projection_name]
     scripted_projection = torch.jit.script(projection)
 
     try:
@@ -26,11 +26,11 @@ def test_jit_compatibility_functional(projection_name: str) -> None:
     assert torch.allclose(result_prior, result_post)
 
 
-@pytest.mark.parametrize("projection_name", PROJECTION_MODULES)
+@pytest.mark.parametrize("projection_name", MATRIX_PROJECTIONS)
 def test_jit_compatibility_modular(projection_name: str) -> None:
     r"""Test JIT-compatibility of modular projections."""
     x = torch.randn(4, 4)
-    projection_type = PROJECTION_MODULES[projection_name]
+    projection_type = MATRIX_PROJECTIONS[projection_name]
     projection = projection_type()
     scripted_projection = torch.jit.script(projection)
 
@@ -60,11 +60,11 @@ def test_jit_compatibility(test_name: str) -> None:
 
 
 @pytest.mark.skip(reason="Slow.")
-@pytest.mark.parametrize("projection_name", PROJECTION_FNS)
+@pytest.mark.parametrize("projection_name", MATRIX_PROJECTION_FNS)
 def test_compile_compatibility_functional(projection_name: str) -> None:
     r"""Test JIT-compatibility of functional projections."""
     x = torch.randn(4, 4)
-    projection = PROJECTION_FNS[projection_name]
+    projection = MATRIX_PROJECTION_FNS[projection_name]
     scripted_projection = torch.compile(projection)
 
     try:
@@ -77,11 +77,11 @@ def test_compile_compatibility_functional(projection_name: str) -> None:
 
 
 @pytest.mark.skip(reason="Slow.")
-@pytest.mark.parametrize("projection_name", PROJECTION_MODULES)
+@pytest.mark.parametrize("projection_name", MATRIX_PROJECTIONS)
 def test_compile_compatibility_modular(projection_name: str) -> None:
     r"""Test JIT-compatibility of modular projections."""
     x = torch.randn(4, 4)
-    projection_type = PROJECTION_MODULES[projection_name]
+    projection_type = MATRIX_PROJECTIONS[projection_name]
     projection = projection_type()
     scripted_projection = torch.compile(projection)
 

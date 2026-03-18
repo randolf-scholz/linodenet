@@ -17,14 +17,18 @@ __all__ = [
     "linear",
     "transforms",
     # Constants
-    "PROJECTION_FNS",
-    "PROJECTION_MODULES",
-    "SPECIAL_PROJECTIONS",
-    "PROJECTIONS",
+    "BIJECTIONS",
     "EMBEDDINGS",
+    "PROJECTIONS",
     "SURJECTIONS",
     "TRANSFORMS",
-    "BIJECTIONS",
+    "MATRIX_PROJECTIONS",
+    "VECTOR_PROJECTIONS",
+    # functional
+    "MATRIX_PROJECTION_FNS",
+    "MATRIX_PROJECTIONS_WITH_EXTRA_ARGS",
+    "VECTOR_PROJECTION_FNS",
+    "PROJECTION_FNS",
 ]
 
 from linodenet.mappings import (
@@ -70,19 +74,13 @@ EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
     "ConcatEmbedding"  : embeddings.ConcatEmbedding,
     "LinearEmbedding"  : embeddings.LinearEmbedding,
 }  # fmt: skip
-r"""Dictionary of available embeddings."""
-
-SURJECTIONS: dict[str, type[SurjectionBase]] = {
-    "ConcatProjection": surjections.ConcatProjection,
-    "GramMatrix"      : surjections.GramMatrix,
-}  # fmt: skip
-r"""Dictionary containing all available surjections."""
+r"""Dictionary of available embeddings (nn.Module)."""
 
 BIJECTIONS: dict[str, type[BijectionBase]] = {
     "MatrixExponential" : bijections.MatrixExponential,
     "CayleyMap"         : bijections.CayleyMap,
 }  # fmt: skip
-r"""Dictionary containing all available bijections."""
+r"""Dictionary containing all available bijections (nn.Module)."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
     "ContractiveTransform" : transforms.ContractiveTransform,
@@ -90,9 +88,14 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "LowRankTransform"     : transforms.LowRankTransform,
     "TriangularTransform"  : transforms.TriangularTransform,
 }  # fmt: skip
-r"""Dictionary containing all available bijections."""
+r"""Dictionary containing all available transforms (nn.Module)."""
 
-PROJECTION_FNS: dict[str, FunctionalProjection] = {
+VECTOR_PROJECTION_FNS: dict[str, FunctionalProjection] = {
+    "unit_vector" : unit_vector
+}  # fmt: skip
+r"""Dictionary containing all available vector projections (function)."""
+
+MATRIX_PROJECTION_FNS: dict[str, FunctionalProjection] = {
     "diagonal"            : functional.diagonal,
     "diagonally_dominant" : functional.diagonally_dominant,
     "hamiltonian"         : functional.hamiltonian,
@@ -109,18 +112,30 @@ PROJECTION_FNS: dict[str, FunctionalProjection] = {
     "tridiagonal"         : functional.tridiagonal,
     "upper_triangular"    : functional.upper_triangular,
 }  # fmt: skip
-r"""Dictionary of all available modular metrics."""
+r"""Dictionary containing all available matrix projections (function)."""
 
-SPECIAL_PROJECTIONS = {
+MATRIX_PROJECTIONS_WITH_EXTRA_ARGS = {
     "banded"            : functional.banded,
     "low_rank"          : functional.low_rank,
     "masked"            : functional.masked,
     "contraction"       : functional.contraction,
     "lipschitz_bounded" : functional.lipschitz_bounded,
 }  # fmt: skip
-r"""Projections that require additional arguments"""
+r"""Matrix projections that require additional arguments"""
 
-PROJECTION_MODULES: dict[str, type[ProjectionBase]] = {
+PROJECTION_FNS = {
+    **VECTOR_PROJECTION_FNS,
+    **MATRIX_PROJECTION_FNS,
+    **MATRIX_PROJECTIONS_WITH_EXTRA_ARGS,
+}  # fmt: skip
+r"""Dictionary containing all available projections (function)."""
+
+VECTOR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
+    "UnitVector" : projections.UnitVector,
+}  # fmt: skip
+r"""Dictionary containing all available vector projections (nn.Module)."""
+
+MATRIX_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "Banded"             : projections.Banded,
     "Contraction"        : projections.Contraction,
     "Diagonal"           : projections.Diagonal,
@@ -142,11 +157,19 @@ PROJECTION_MODULES: dict[str, type[ProjectionBase]] = {
     "Tridiagonal"        : projections.Tridiagonal,
     "UpperTriangular"    : projections.UpperTriangular,
 }  # fmt: skip
-r"""Dictionary of all available modular metrics."""
+r"""Dictionary containing all available matrix projections (nn.Module)."""
 
 PROJECTIONS = {
-    **PROJECTION_FNS,
-    **SPECIAL_PROJECTIONS,
-    **PROJECTION_MODULES,
+    **MATRIX_PROJECTIONS,
+    **VECTOR_PROJECTIONS,
 }
 r"""Dictionary containing all available projections."""
+
+SURJECTIONS: dict[str, type[SurjectionBase]] = {
+    **PROJECTIONS,
+    "ConcatProjection" : surjections.ConcatProjection,
+    "GramMatrix"       : surjections.GramMatrix,
+    "PositiveVector"   : surjections.PositiveVector,
+    "StochasticVector" : surjections.StochasticVector,
+}  # fmt: skip
+r"""Dictionary containing all available surjections (nn.Module)."""

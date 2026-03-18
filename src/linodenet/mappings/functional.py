@@ -8,7 +8,7 @@ Notes:
 __all__ = [
     # ABCs & Protocols
     "FunctionalProjection",
-    # Projections
+    # matrix Projections
     "banded",
     "contraction",
     "lipschitz_bounded",
@@ -29,6 +29,8 @@ __all__ = [
     "traceless",
     "tridiagonal",
     "upper_triangular",
+    # vector projections
+    "unit_vector",
 ]
 
 from collections.abc import Callable
@@ -42,6 +44,11 @@ type FunctionalProjection = Callable[[Tensor], Tensor]
 
 
 # region projections -------------------------------------------------------------------
+def unit_vector(x: Tensor) -> Tensor:
+    r"""Return the closest unit vector to X."""
+    return x / torch.linalg.vector_norm(x, dim=-1, keepdim=True)
+
+
 # region matrix groups -----------------------------------------------------------------
 @signature("(...) -> (...)")
 def identity(x: Tensor) -> Tensor:

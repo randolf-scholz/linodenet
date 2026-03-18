@@ -4,6 +4,8 @@ __all__ = [
     # Classes
     "ConcatProjection",
     "GramMatrix",
+    "PositiveVector",
+    "StochasticVector",
 ]
 
 from typing import Final
@@ -85,3 +87,34 @@ class ConcatProjection(SurjectionBase):
         r"""Concatenate the input with the padding."""
         shape = y.shape[:-1] + (self.padding_size,)
         return torch.cat([y, self.padding.expand(shape)], dim=-1)
+
+
+class PositiveVector(SurjectionBase):
+    r"""Map vectors to the positive cone componentwise."""
+
+    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.POSITIVE
+
+    @signature("(..., n) -> (..., n)")
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.nn.functional.softplus(x)
+
+    @signature("(..., n) -> (..., n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        return torch.where(y > 20, y, y + torch.log(-torch.expm1(-y)))
+
+
+class StochasticVector(SurjectionBase):
+    r"""Map vectors to the probability simplex."""
+
+    DOMAIN: Final[VectorDomains] = VectorDomains.GENERAL
+    CODOMAIN: Final[VectorDomains] = VectorDomains.STOCHASTIC
+
+    @signature("(..., n) -> (..., n)")
+    def forward(self, x: Tensor) -> Tensor:
+        return x.softmax(dim=-1)
+
+    @signature("(..., n) -> (..., n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        logits = y.log()
+        return logits - logits.mean(dim=-1, keepdim=True)

@@ -15,8 +15,8 @@ from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import (
     BIJECTIONS,
     EMBEDDINGS,
-    PROJECTION_FNS,
-    PROJECTION_MODULES,
+    MATRIX_PROJECTION_FNS,
+    MATRIX_PROJECTIONS,
     SURJECTIONS,
     TRANSFORMS,
     Bijection,
@@ -66,8 +66,8 @@ CASES: dict[str, Case] = {
     "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS           ),
     "matrix_tests"        : Case(lib.testing          , MatrixTest     , None               , MATRIX_TESTS              ),
     "parametrizations"    : Case(lib.parametrizations, Parametrization, ParametrizationBase, PARAMETRIZATIONS),
-    "projections_cls"     : Case(lib.projections, Projection, ProjectionBase, PROJECTION_MODULES),
-    "projections_fun"     : Case(lib.projections, Projection, None, PROJECTION_FNS),
+    "projections_cls"     : Case(lib.projections, Projection, ProjectionBase, MATRIX_PROJECTIONS),
+    "projections_fun"     : Case(lib.projections, Projection, None, MATRIX_PROJECTION_FNS),
     "regularizations_cls" : Case(lib.regularizations, Regularization, RegularizationBase, REGULARIZATION_MODULES),
     "regularizations_fun" : Case(lib.regularizations, Regularization, None, REGULARIZATION_FNS),
 }  # fmt: skip
