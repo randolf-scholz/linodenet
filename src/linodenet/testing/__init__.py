@@ -37,6 +37,7 @@ MATRIX_TESTS: dict[str, MatrixTest] = {
     "is_diagonal"            : is_diagonal,
     "is_diagonally_dominant" : is_diagonally_dominant,
     "is_hamiltonian"         : is_hamiltonian,
+    "is_identity"            : is_identity,
     "is_lower_triangular"    : is_lower_triangular,
     "is_normal"              : is_normal,
     "is_orthogonal"          : is_orthogonal,

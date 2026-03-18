@@ -14,6 +14,7 @@ __all__ = [
     "is_diagonally_dominant",
     "is_forward_stable",
     "is_hamiltonian",
+    "is_identity",
     "is_low_rank",
     "is_lower_triangular",
     "is_masked",
@@ -116,6 +117,28 @@ def is_square(
         dtype=torch.bool,
         device=x.device,
     )
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_identity(
+    x: Tensor,
+    /,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is the identity."""
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    return torch.isclose(
+        x,
+        torch.eye(x.shape[-1], dtype=x.dtype, device=x.device),
+        rtol=rtol,
+        atol=atol,
+    ).all(dim=(-2, -1))
 
 
 @signature("(..., n, n) -> bool[(...)]")
