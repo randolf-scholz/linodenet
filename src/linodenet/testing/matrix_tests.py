@@ -20,6 +20,7 @@ __all__ = [
     "is_masked",
     "is_normal",
     "is_orthogonal",
+    "is_special_orthogonal",
     "is_rank_one",
     "is_skew_symmetric",
     "is_square",
@@ -193,6 +194,28 @@ def is_orthogonal(
         rtol=rtol,
         atol=atol,
     ).all(dim=dim)
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_special_orthogonal(
+    x: Tensor,
+    /,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is special orthogonal."""
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    return is_orthogonal(x, rtol=rtol, atol=atol) & torch.isclose(
+        torch.linalg.det(x),
+        torch.ones((), dtype=x.dtype, device=x.device),
+        rtol=rtol,
+        atol=atol,
+    )
 
 
 @signature("(..., n, n) -> bool[(...)]")
@@ -474,6 +497,7 @@ def is_lipschitz_bounded(
 def is_contraction(
     x: Tensor,
     /,
+    lipschitz_bound: float = 1.0,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
@@ -488,7 +512,9 @@ def is_contraction(
     .. math:: ‖A‖₂ ≤ (1-rtol)⋅𝟏 - atol
     """
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
-    return sigma <= ((1.0 - rtol) * 1.0 - atol)
+    one = torch.ones_like(sigma)
+    c = torch.full_like(sigma, lipschitz_bound)
+    return sigma <= torch.minimum(one, ((1.0 + rtol) * c + atol))
 
 
 @signature("(..., m, n) -> bool[(...)]")
