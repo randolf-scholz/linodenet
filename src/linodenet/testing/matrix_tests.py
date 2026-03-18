@@ -327,10 +327,9 @@ def is_symplectic(
     r"""Check whether the given tensor is symplectic."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
-    if dim != (-2, -1):
-        raise NotImplementedError("Currently only supports dim=(-2,-1).")
-    m, n = dim
-    dim_x, dim_y = x.shape[m], x.shape[n]
+
+    x = x.movedim(dim, (-2, -1))
+    dim_x, dim_y = x.shape[-2], x.shape[-1]
     if dim_x != dim_y or dim_x % 2 != 0:
         raise ValueError("Expected square matrix of even size, got {x.shape}.")
 
@@ -344,7 +343,7 @@ def is_symplectic(
         J.T @ x @ J,
         rtol=rtol,
         atol=atol,
-    ).all(dim=dim)
+    ).all(dim=(-2, -1))
 
 
 @signature("(..., 2n, 2n) -> bool[(...)]")
@@ -360,10 +359,9 @@ def is_hamiltonian(
     r"""Check whether the given tensor is Hamiltonian."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
-    if dim != (-2, -1):
-        raise NotImplementedError("Currently only supports dim=(-2,-1).")
-    m, n = dim
-    dim_x, dim_y = x.shape[m], x.shape[n]
+
+    x = x.movedim(dim, (-2, -1))
+    dim_x, dim_y = x.shape[-2], x.shape[-1]
     if dim_x != dim_y or dim_x % 2 != 0:
         raise ValueError("Expected square matrix of even size, got {x.shape}.")
 
@@ -373,7 +371,7 @@ def is_hamiltonian(
     J = torch.kron(J1, eye)
 
     # check if J @ x is symmetric
-    return is_symmetric(J @ x, dim=dim, rtol=rtol, atol=atol)
+    return is_symmetric(J @ x, dim=(-2, -1), rtol=rtol, atol=atol)
 
 
 # endregion matrix groups --------------------------------------------------------------
@@ -393,16 +391,15 @@ def is_diagonal(
     r"""Check whether the given tensor is diagonal."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
-    if dim != (-2, -1):
-        raise NotImplementedError("Currently only supports dim=(-2,-1).")
-    m, n = dim
-    mask = torch.eye(x.shape[m], x.shape[n], device=x.device, dtype=x.dtype)
+
+    x = x.movedim(dim, (-2, -1))
+    mask = torch.eye(x.shape[-2], x.shape[-1], device=x.device, dtype=x.dtype)
     return torch.isclose(
         x,
         x * mask,
         rtol=rtol,
         atol=atol,
-    ).all(dim=dim)
+    ).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -419,9 +416,9 @@ def is_lower_triangular(
     r"""Check whether the given tensor is lower triangular."""
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
-    if dim != (-2, -1):
-        raise NotImplementedError("Currently only supports dim=(-2,-1).")
-    return torch.isclose(x, x.tril(lower), rtol=rtol, atol=atol).all(dim=dim)
+
+    x = x.movedim(dim, (-2, -1))
+    return torch.isclose(x, x.tril(lower), rtol=rtol, atol=atol).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -438,14 +435,14 @@ def is_upper_triangular(
     r"""Check whether the given tensor is lower triangular."""
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
-    if dim != (-2, -1):
-        raise NotImplementedError("Currently only supports dim=(-2,-1).")
+
+    x = x.movedim(dim, (-2, -1))
     return torch.isclose(
         x,
         x.triu(upper),
         rtol=rtol,
         atol=atol,
-    ).all(dim=dim)
+    ).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -461,12 +458,14 @@ def is_tridiagonal(
     r"""Check whether the given tensor is tridiagonal."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
     return torch.isclose(
         x,
         x.triu(-1).tril(+1),
         rtol=rtol,
         atol=atol,
-    ).all(dim=dim)
+    ).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -482,19 +481,18 @@ def is_banded(
     atol: float = 0.0,
 ) -> Tensor:
     r"""Check whether the given tensor is banded."""
-    if dim != (-2, -1):
-        raise NotImplementedError("Currently only supports dim=(-2,-1).")
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
     if not (lower <= 0 <= upper):
         raise ValueError("Lower bound must be greater than or equal to upper bound.")
 
+    x = x.movedim(dim, (-2, -1))
     return torch.isclose(
         x,
         x.triu(lower).tril(upper),
         rtol=rtol,
         atol=atol,
-    ).all(dim=dim)
+    ).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
