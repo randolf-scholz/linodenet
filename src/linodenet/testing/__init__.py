@@ -7,6 +7,7 @@ __all__ = [
     "assertions",
     # CONSTANTS
     "MATRIX_DOMAIN_TESTS",
+    "VECTOR_DOMAIN_TESTS",
     "MATRIX_TESTS_WITH_ARGS",
     "VECTOR_TESTS_WITH_ARGS",
     "MATRIX_TESTS",
@@ -14,7 +15,7 @@ __all__ = [
     "TESTS",
 ]
 
-from linodenet.domains import MatrixDomains
+from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet.testing import assertions, matrix_tests, vector_tests
 from linodenet.testing.assertions import *
 from linodenet.testing.matrix_tests import *
@@ -33,6 +34,13 @@ r"""Dictionary of all available vector tests."""
 
 VECTOR_TESTS_WITH_ARGS: dict[str, VectorTestWithArgs] = {}
 r"""Dictionary of all available vector tests."""
+
+VECTOR_DOMAIN_TESTS: dict[VectorDomains, VectorTest | VectorTestWithArgs] = {
+    VectorDomains.POSITIVE   : is_positive_vector,
+    VectorDomains.STOCHASTIC : is_stochastic_vector,
+    VectorDomains.UNIT_VECTOR: is_unit_vector,
+}  # fmt: skip
+r"""Map supported vector domains to their corresponding vector test."""
 
 MATRIX_TESTS: dict[str, MatrixTest] = {
     "is_contraction"         : is_contraction,
@@ -64,7 +72,7 @@ MATRIX_TESTS_WITH_ARGS: dict[str, MatrixTestWithArgs] = {
 }  # fmt: skip
 r"""Matrix tests that require an additional argument."""
 
-MATRIX_DOMAIN_TESTS = {
+MATRIX_DOMAIN_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.SQUARE               : is_square,
     MatrixDomains.LOW_RANK             : is_low_rank,
     MatrixDomains.RANK_ONE             : is_rank_one,
@@ -89,7 +97,7 @@ MATRIX_DOMAIN_TESTS = {
     MatrixDomains.BANDED               : is_banded,
 }  # fmt: skip
 r"""Map supported matrix domains to their corresponding matrix test."""
-del MatrixDomains
+del MatrixDomains, VectorDomains
 
 TESTS: dict[str, VectorTest | MatrixTest | VectorTestWithArgs | MatrixTestWithArgs] = {
     **MATRIX_TESTS,
