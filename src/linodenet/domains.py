@@ -33,6 +33,8 @@ class Domain(Protocol):
 
     def __le__(self, other: Domain, /) -> bool: ...
 
+    def __lt__(self, other: Domain, /) -> bool: ...
+
 
 class _PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
@@ -103,6 +105,11 @@ class _PosetEnum(Enum):
         if not isinstance(other, type(self)):
             return NotImplemented
         return other in type(self)._upward_closure(self)
+
+    def __lt__(self, other: object, /) -> bool:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return self <= other and self != other
 
     def __str__(self) -> str:
         return str(self.value)
@@ -268,31 +275,40 @@ class Interval(Domain):
         return hash(self) == hash(other_interval)
 
     def __le__(self, other: object, /) -> bool:
-        if isinstance(other, IntervalUnion):
-            return any(self <= interval for interval in other.intervals)
-        if isinstance(other, str):
-            return self <= IntervalUnion.from_string(other)
-        if (other_interval := self._coerce_interval(other)) is None:
-            return NotImplemented
+        match other:
+            case IntervalUnion():
+                return any(self <= interval for interval in other.intervals)
+            case str():
+                return self <= IntervalUnion.from_string(other)
+            case _ if (other_interval := self._coerce_interval(other)) is not None:
+                lower_ok = self.lower > other_interval.lower or (
+                    self.lower == other_interval.lower
+                    and (other_interval.lower_inclusive or not self.lower_inclusive)
+                )
+                upper_ok = self.upper < other_interval.upper or (
+                    self.upper == other_interval.upper
+                    and (other_interval.upper_inclusive or not self.upper_inclusive)
+                )
+                return lower_ok and upper_ok
+            case _:
+                return NotImplemented
 
-        lower_ok = self.lower > other_interval.lower or (
-            self.lower == other_interval.lower
-            and (other_interval.lower_inclusive or not self.lower_inclusive)
-        )
-        upper_ok = self.upper < other_interval.upper or (
-            self.upper == other_interval.upper
-            and (other_interval.upper_inclusive or not self.upper_inclusive)
-        )
-        return lower_ok and upper_ok
+    def __lt__(self, other: object, /) -> bool:
+        result = self <= other
+        if result is NotImplemented:
+            return NotImplemented
+        return result and self != other
 
     def __ge__(self, other: object, /) -> bool:
-        if isinstance(other, IntervalUnion):
-            return all(interval <= self for interval in other.intervals)
-        if isinstance(other, str):
-            return self >= IntervalUnion.from_string(other)
-        if (other_interval := self._coerce_interval(other)) is None:
-            return NotImplemented
-        return other_interval <= self
+        match other:
+            case IntervalUnion():
+                return all(interval <= self for interval in other.intervals)
+            case str():
+                return self >= IntervalUnion.from_string(other)
+            case _ if (other_interval := self._coerce_interval(other)) is not None:
+                return other_interval <= self
+            case _:
+                return NotImplemented
 
     def __or__(self, other: object, /) -> IntervalUnion:
         if (other_union := IntervalUnion._coerce_union(other)) is None:
@@ -431,6 +447,12 @@ class IntervalUnion(Domain, Collection[Interval]):
             for interval in self.intervals
         )
 
+    def __lt__(self, other: object, /) -> bool:
+        result = self <= other
+        if result is NotImplemented:
+            return NotImplemented
+        return result and self != other
+
     def __or__(self, other: object, /) -> IntervalUnion:
         if (other_union := self._coerce_union(other)) is None:
             return NotImplemented
@@ -448,7 +470,7 @@ class IntervalUnion(Domain, Collection[Interval]):
         return f"IntervalUnion('{self!s}')"
 
 
-class ScalarDomains(_PosetEnum):
+class ScalarDomains(Enum):
     r"""Enumeration of some scalar domains."""
 
     ZERO = Interval("[0, 0]")
@@ -474,20 +496,24 @@ class ScalarDomains(_PosetEnum):
     def __contains__(self, item: Tensor, /) -> Tensor:
         return self.domain.__contains__(item)
 
+    def __le__(self, other: object, /) -> bool:
+        match other:
+            case ScalarDomains():
+                other_domain = other.domain
+            case Interval() | IntervalUnion():
+                other_domain = other
+            case _:
+                return NotImplemented
+        return self.domain <= other_domain
 
-S = ScalarDomains  # temporary alias
-ScalarDomains.KNOWN_EDGES = MappingProxyType({
-    S.REAL_LINE: frozenset({S.EXTENDED_LINE}),
-    S.UNIT_INTERVAL: frozenset({S.NONNEGATIVE_REALS, S.REAL_LINE}),
-    S.OPEN_UNIT_INTERVAL: frozenset({S.UNIT_INTERVAL, S.POSITIVE_REALS}),
-    S.POSITIVE_REALS: frozenset({S.NONNEGATIVE_REALS, S.NONZERO, S.REAL_LINE}),
-    S.NONNEGATIVE_REALS: frozenset({S.REAL_LINE}),
-    S.NEGATIVE_REALS: frozenset({S.NONPOSITIVE_REALS, S.NONZERO, S.REAL_LINE}),
-    S.NONPOSITIVE_REALS: frozenset({S.REAL_LINE}),
-    S.NONZERO: frozenset({S.REAL_LINE, S.EXTENDED_LINE}),
-})  # fmt: skip
-ScalarDomains.KNOWN_TAGS = MappingProxyType({})  # fmt: skip
-del S  # remove alias
+    def __lt__(self, other: object, /) -> bool:
+        result = self <= other
+        if result is NotImplemented:
+            return NotImplemented
+        return result and self != other
+
+    def __str__(self) -> str:
+        return str(self.value)
 
 
 class VectorDomains(_PosetEnum):
@@ -532,7 +558,7 @@ VectorDomains.KNOWN_EDGES = MappingProxyType({
     V.UNIT_VECTOR: frozenset({V.NONZERO}),
     V.ZERO: frozenset({V.NONPOSITIVE, V.NONNEGATIVE, V.SPARSE, V.BOOLEAN}),
 })  # fmt: skip
-VectorDomains.KNOWN_TAGS = MappingProxyType({})  # fmt: skip
+VectorDomains.KNOWN_TAGS = MappingProxyType({})  # pyright: ignore[reportAttributeAccessIssue]
 del V  # remove alias
 
 

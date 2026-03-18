@@ -2,6 +2,7 @@ import pytest
 from torch import tensor
 
 from linodenet.domains import (
+    Interval,
     IntervalUnion,
     MatrixDomains,
     ScalarDomains,
@@ -12,6 +13,11 @@ from linodenet.domains import (
 class TestScalarDomains:
     def test_partial_order_and_representation(self) -> None:
         assert ScalarDomains.REAL_LINE <= ScalarDomains.REAL_LINE
+        assert ScalarDomains.REAL_LINE < ScalarDomains.EXTENDED_LINE
+        assert ScalarDomains.REAL_LINE <= Interval("(-inf, inf)")
+        assert ScalarDomains.OPEN_UNIT_INTERVAL < Interval("[0, 1]")
+        assert ScalarDomains.NONZERO <= IntervalUnion("(-inf, 0) | (0, inf)")
+        assert ScalarDomains.POSITIVE_REALS < IntervalUnion("(-inf, 0) | (0, inf)")
 
         assert ScalarDomains.OPEN_UNIT_INTERVAL <= ScalarDomains.UNIT_INTERVAL
         assert ScalarDomains.OPEN_UNIT_INTERVAL != ScalarDomains.UNIT_INTERVAL
@@ -32,6 +38,8 @@ class TestScalarDomains:
         assert not ScalarDomains.NEGATIVE_REALS <= ScalarDomains.NONNEGATIVE_REALS
         assert not ScalarDomains.NONZERO <= ScalarDomains.NONNEGATIVE_REALS
         assert not ScalarDomains.NONNEGATIVE_REALS <= ScalarDomains.NONZERO
+        assert not ScalarDomains.EXTENDED_LINE <= Interval("(-inf, inf)")
+        assert not ScalarDomains.NONNEGATIVE_REALS <= Interval("(0, inf)")
 
         assert str(ScalarDomains.OPEN_UNIT_INTERVAL) == "(0, 1)"
         assert str(ScalarDomains.UNIT_INTERVAL.value) == "[0, 1]"
@@ -66,10 +74,29 @@ class TestScalarDomains:
         assert str(domain) == "(-inf, 0) | (0, inf)"
         assert domain.__contains__(values).tolist() == [True, False, True]
 
+    def test_interval_infinity_edges(self) -> None:
+        assert Interval("[-inf, inf]") <= Interval("[-inf, inf]")
+        assert Interval("(-inf, inf)") <= Interval("[-inf, inf]")
+        assert Interval("(-inf, inf)") < Interval("[-inf, inf]")
+        assert not Interval("[-inf, inf]") <= Interval("(-inf, inf)")
+
+        assert Interval("[-inf, 0)") <= Interval("[-inf, 0]")
+        assert Interval("[-inf, 0)") < Interval("[-inf, 0]")
+        assert Interval("(0, inf]") <= Interval("[0, inf]")
+        assert not Interval("[-inf, 0]") <= Interval("(-inf, 0]")
+        assert not Interval("[0, inf]") <= Interval("(0, inf)")
+
+    def test_interval_union_strict_subset(self) -> None:
+        assert IntervalUnion("[0, 1]") < IntervalUnion("[0, 2]")
+        assert IntervalUnion("(-inf, 0) | (0, inf)") < IntervalUnion("[-inf, inf]")
+        assert not IntervalUnion("[-inf, inf]") < IntervalUnion("[-inf, inf]")
+
 
 class TestVectorDomains:
     def test_partial_order_and_representation(self) -> None:
         assert VectorDomains.REAL <= VectorDomains.REAL
+        assert VectorDomains.ONE_HOT < VectorDomains.STOCHASTIC
+        assert not VectorDomains.STOCHASTIC < VectorDomains.STOCHASTIC
 
         assert VectorDomains.ONE_HOT <= VectorDomains.STOCHASTIC
         assert VectorDomains.ONE_HOT != VectorDomains.STOCHASTIC
