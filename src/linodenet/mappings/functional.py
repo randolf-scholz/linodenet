@@ -217,7 +217,7 @@ def diagonal(x: Tensor) -> Tensor:
     return torch.where(eye, x, zero)
 
 
-@signature("(..., m, n) -> (..., m, n)")
+@signature("(..., n, n) -> (..., n, n)")
 def upper_triangular(x: Tensor, upper: int = 0) -> Tensor:
     r"""Return the closest upper triangular matrix to X.
 
@@ -235,7 +235,7 @@ def upper_triangular(x: Tensor, upper: int = 0) -> Tensor:
     return x.triu(diagonal=upper)
 
 
-@signature("(..., m, n) -> (..., m, n)")
+@signature("(..., n, n) -> (..., n, n)")
 def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
     r"""Return the closest lower triangular matrix to X.
 
@@ -253,7 +253,7 @@ def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
     return x.tril(diagonal=lower)
 
 
-@signature("(..., m, n) -> (..., m, n)")
+@signature("(..., n, n) -> (..., n, n)")
 def tridiagonal(x: Tensor) -> Tensor:
     r"""Return the closest tridiagonal matrix to X.
 

@@ -446,7 +446,7 @@ class UpperTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.UPPER_TRIANGULAR
 
     upper: Final[int]
@@ -456,7 +456,7 @@ class UpperTriangular(ProjectionBase):
         super().__init__()
         self.upper = upper
 
-    @signature("(..., m, n) -> (..., m, n)")
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of upper triangular matrices."""
         return F.upper_triangular(x, upper=self.upper)
@@ -477,7 +477,7 @@ class LowerTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
 
     lower: Final[int]
@@ -487,7 +487,7 @@ class LowerTriangular(ProjectionBase):
         super().__init__()
         self.lower = lower
 
-    @signature("(..., m, n) -> (..., m, n)")
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of lower triangular matrices."""
         return F.lower_triangular(x, lower=self.lower)
@@ -502,10 +502,10 @@ class Tridiagonal(ProjectionBase):
     $Y = T⊙X$.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.TRIDIAGONAL
 
-    @signature("(..., m, n) -> (..., m, n)")
+    @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of tridiagonal matrices."""
         return F.tridiagonal(x)
@@ -651,7 +651,7 @@ class UnitVector(ProjectionBase):
     r"""Project vectors onto the unit sphere."""
 
     DOMAIN: Final[VectorDomains] = VectorDomains.NONZERO
-    CODOMAIN: Final[VectorDomains] = VectorDomains.UNIT_SPHERE
+    CODOMAIN: Final[VectorDomains] = VectorDomains.UNIT_VECTOR
 
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
