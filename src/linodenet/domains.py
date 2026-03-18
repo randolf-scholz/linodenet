@@ -16,7 +16,7 @@ __all__ = [
     "MatrixDomains",
 ]
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
@@ -290,8 +290,7 @@ class Interval(Domain):
         return f"Interval('{self!s}')"
 
 
-@dataclass(init=False)
-class IntervalUnion(Domain):
+class IntervalUnion(Domain, Collection[Interval]):
     r"""A finite union of intervals with automatic simplification."""
 
     intervals: Final[tuple[Interval, ...]]
@@ -308,6 +307,21 @@ class IntervalUnion(Domain):
         if any(not part for part in parts):
             raise ValueError(f"Invalid union of intervals string: {s}")
         return cls(*(Interval.from_string(part) for part in parts))
+
+    def __len__(self) -> int:
+        return len(self.intervals)
+
+    def __iter__(self) -> Iterator[Interval]:
+        return iter(self.intervals)
+
+    @overload
+    def __getitem__(self, index: int, /) -> Interval: ...
+    @overload
+    def __getitem__(self, index: slice, /) -> IntervalUnion: ...
+    def __getitem__(self, index: int | slice, /) -> Interval | IntervalUnion:
+        if isinstance(index, slice):
+            return IntervalUnion(*self.intervals[index])
+        return self.intervals[index]
 
     @staticmethod
     def _coerce_union(other: object, /) -> IntervalUnion | None:
@@ -353,11 +367,19 @@ class IntervalUnion(Domain):
             return False
         return left.upper_inclusive or right.lower_inclusive
 
-    def __contains__(self, item: Tensor, /) -> Tensor:
+    def __contains__(self, item: Tensor, /) -> Tensor:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
         mask = self.intervals[0].__contains__(item)
         for interval in self.intervals[1:]:
             mask = mask | interval.__contains__(item)
         return mask
+
+    def __eq__(self, other: object, /) -> bool:
+        if (other_union := self._coerce_union(other)) is None:
+            return NotImplemented
+        return hash(self) == hash(other_union)
+
+    def __hash__(self) -> int:
+        return hash(self.intervals)
 
     def __add__(self, other: float, /) -> Self:
         return type(self)(*(interval + other for interval in self.intervals))
@@ -381,7 +403,7 @@ class IntervalUnion(Domain):
         return " | ".join(str(interval) for interval in self.intervals)
 
     def __repr__(self) -> str:
-        return f"UnionOfIntervals('{self!s}')"
+        return f"IntervalUnion('{self!s}')"
 
 
 class ScalarDomains(_PosetEnum):
