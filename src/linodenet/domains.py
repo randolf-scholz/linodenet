@@ -17,7 +17,7 @@ __all__ = [
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import Enum, StrEnum
+from enum import Enum
 from functools import cache
 from types import MappingProxyType
 from typing import ClassVar, Final, Protocol, Self
@@ -188,7 +188,7 @@ class ScalarDomains:
     NONPOSITIVE_REALS: Final[Interval] = Interval.from_string("(-inf, 0]")
 
 
-class VectorDomains(StrEnum):
+class VectorDomains(_PosetEnum):
     r"""Enumeration of some vector domains."""
 
     REAL = "real"
@@ -200,7 +200,6 @@ class VectorDomains(StrEnum):
 
     ZERO_MEAN = "zero-mean"
     STANDARDIZED = "standardized"  # zero-mean, unit variance
-    NORMALIZED = "normalized"  # min=0, max=1
 
     UNIT_VECTOR = "unit_sphere"  # ‖x‖₂ = 1
     STOCHASTIC = "stochastic"  # sum(x) = 1, x ≥ 0
@@ -300,3 +299,19 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.DOUBLY_STOCHASTIC: frozenset({M.ROW_STOCHASTIC, M.COLUMN_STOCHASTIC, M.SQUARE}),
 })  # fmt: skip
 del M  # remove alias
+
+
+V = VectorDomains  # temporary alias
+VectorDomains.KNOWN_EDGES = MappingProxyType({
+    V.REAL: frozenset({V.COMPLEX}),
+    V.BOOLEAN: frozenset({V.REAL, V.NONNEGATIVE}),
+    V.ONE_HOT: frozenset({V.BOOLEAN, V.STOCHASTIC, V.UNIT_VECTOR, V.SPARSE}),
+    V.STANDARDIZED: frozenset({V.ZERO_MEAN, V.NONZERO}),
+    V.UNIT_VECTOR: frozenset({V.NONZERO}),
+    V.STOCHASTIC: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
+    V.POSITIVE: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
+    V.NEGATIVE: frozenset({V.REAL, V.NONPOSITIVE, V.NONZERO}),
+    V.NONNEGATIVE: frozenset({V.REAL}),
+    V.NONPOSITIVE: frozenset({V.REAL}),
+})  # fmt: skip
+del V  # remove alias

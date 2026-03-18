@@ -1,6 +1,6 @@
 import pytest
 
-from linodenet.domains import MatrixDomains
+from linodenet.domains import MatrixDomains, VectorDomains
 
 
 def test_matrix_domains_reflexive_order() -> None:
@@ -45,3 +45,41 @@ def test_matrix_domains_string_representation() -> None:
 def test_matrix_domains_reject_cross_type_ordering() -> None:
     with pytest.raises(TypeError):
         _ = MatrixDomains.SQUARE <= "square"
+
+
+def test_vector_domains_reflexive_order() -> None:
+    assert VectorDomains.REAL <= VectorDomains.REAL
+
+
+def test_vector_domains_transitive_order() -> None:
+    assert VectorDomains.ONE_HOT <= VectorDomains.STOCHASTIC
+    assert VectorDomains.ONE_HOT != VectorDomains.STOCHASTIC
+    assert VectorDomains.ONE_HOT <= VectorDomains.NONNEGATIVE
+    assert VectorDomains.ONE_HOT != VectorDomains.NONNEGATIVE
+    assert VectorDomains.ONE_HOT <= VectorDomains.REAL
+    assert VectorDomains.ONE_HOT != VectorDomains.REAL
+    assert VectorDomains.ONE_HOT <= VectorDomains.COMPLEX
+    assert VectorDomains.ONE_HOT != VectorDomains.COMPLEX
+
+
+def test_vector_domains_multiple_inheritance_paths() -> None:
+    assert VectorDomains.STANDARDIZED <= VectorDomains.ZERO_MEAN
+    assert VectorDomains.STANDARDIZED != VectorDomains.ZERO_MEAN
+    assert VectorDomains.STANDARDIZED <= VectorDomains.NONZERO
+    assert VectorDomains.STANDARDIZED != VectorDomains.NONZERO
+
+
+def test_vector_domains_incomparable_elements() -> None:
+    assert not VectorDomains.NONNEGATIVE <= VectorDomains.NONPOSITIVE
+    assert not VectorDomains.NONPOSITIVE <= VectorDomains.NONNEGATIVE
+    assert not VectorDomains.STOCHASTIC <= VectorDomains.UNIT_VECTOR
+    assert not VectorDomains.UNIT_VECTOR <= VectorDomains.STOCHASTIC
+
+
+def test_vector_domains_string_representation() -> None:
+    assert str(VectorDomains.STOCHASTIC) == "stochastic"
+
+
+def test_vector_domains_reject_cross_type_ordering() -> None:
+    with pytest.raises(TypeError):
+        _ = VectorDomains.REAL <= "real"
