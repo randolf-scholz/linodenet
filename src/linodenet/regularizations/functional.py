@@ -22,7 +22,7 @@ __all__ = [
     "lower_triangular",
     "masked",
     "normal",
-    "orthogonal",
+    "orthogonal_projection",
     "rank_one",
     "skew_symmetric",
     "spectral_normalized",
@@ -155,14 +155,16 @@ def skew_symmetric(
 
 
 @signature("(..., n, n) -> (...)")
-def orthogonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def orthogonal_projection(
+    x: Tensor, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being orthogonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
 
     where $Π(A) = \argmin_X ½‖X-A‖² s.t. XᵀX = 𝕀$
     """
-    r = x - projections.orthogonal(x)
+    r = x - projections.orthogonal_projection(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

@@ -4,6 +4,8 @@ __all__ = [
     # Classes
     "ConcatProjection",
     "GramMatrix",
+    "OrthogonalCayley",
+    "OrthogonalMatExp",
     "PositiveVector",
     "StochasticVector",
 ]
@@ -15,6 +17,8 @@ from torch import Tensor, nn
 
 from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet.mappings.base import SurjectionBase
+from linodenet.mappings.bijections import CayleyMap
+from linodenet.mappings.functional import skew_symmetric
 from signatures import signature
 
 
@@ -118,3 +122,53 @@ class StochasticVector(SurjectionBase):
     def right_inverse(self, y: Tensor) -> Tensor:
         logits = y.log()
         return logits - logits.mean(dim=-1, keepdim=True)
+
+
+class OrthogonalMatExp(SurjectionBase):
+    r"""Map square matrices to orthogonal matrices via $X ↦ \exp(½(X-Xᵀ))$.
+
+    Note:
+        Over the reals, this construction lands in the determinant-$1$ component of
+        the orthogonal group.
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SPECIAL_ORTHOGONAL
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.matrix_exp(skew_symmetric(x))
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        r"""Compute a matrix-log fallback by diagonalizing the orthogonal matrix."""
+        # FIXME: https://github.com/pytorch/pytorch/issues/9983 (matrix_log)
+        eigenvalues, eigenvectors = torch.linalg.eig(y)
+        log_diagonal = torch.diag_embed(eigenvalues.log())
+        log_matrix = eigenvectors @ log_diagonal @ torch.linalg.inv(eigenvectors)
+        return skew_symmetric(log_matrix.real)
+
+
+class OrthogonalCayley(SurjectionBase):
+    r"""Map square matrices to orthogonal matrices via skew-symmetrization and Cayley.
+
+    Note:
+        This construction is the composition $X ↦ ½(X-Xᵀ) ↦ (𝕀-A)(𝕀+A)^{-1}$.
+        Its image is `MatrixDomains.CAYLEY_ORTHOGONAL`, i.e. the orthogonal matrices
+        without eigenvalue $-1$.
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.CAYLEY_ORTHOGONAL
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.cayley = CayleyMap()
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        return self.cayley(skew_symmetric(x))
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        return self.cayley.inverse(y)

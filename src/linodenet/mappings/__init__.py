@@ -106,7 +106,7 @@ MATRIX_PROJECTIONS: dict[str, type[ProjectionBase]] = {
     "LowerTriangular"    : projections.LowerTriangular,
     "Masked"             : projections.Masked,
     "Normal"             : projections.Normal,
-    "Orthogonal"         : projections.Orthogonal,
+    "Orthogonal"         : projections.OrthogonalProjection,
     "RankOne"            : projections.RankOne,
     "SkewSymmetric"      : projections.SkewSymmetric,
     "SpectralNormalized" : projections.SpectralNormalized,
@@ -128,6 +128,8 @@ SURJECTIONS: dict[str, type[SurjectionBase]] = {
     **PROJECTIONS,
     "ConcatProjection" : surjections.ConcatProjection,
     "GramMatrix"       : surjections.GramMatrix,
+    "OrthogonalCayley" : surjections.OrthogonalCayley,
+    "OrthogonalMatExp" : surjections.OrthogonalMatExp,
     "PositiveVector"   : surjections.PositiveVector,
     "StochasticVector" : surjections.StochasticVector,
 }  # fmt: skip
@@ -139,20 +141,20 @@ VECTOR_PROJECTION_FNS: dict[str, ProjectionFn] = {
 r"""Dictionary containing all available vector projections (function)."""
 
 MATRIX_PROJECTION_FNS: dict[str, ProjectionFn] = {
-    "diagonal"            : functional.diagonal,
-    "diagonally_dominant" : functional.diagonally_dominant,
-    "hamiltonian"         : functional.hamiltonian,
-    "lower_triangular"    : functional.lower_triangular,
-    "normal"              : functional.normal,
-    "orthogonal"          : functional.orthogonal,
-    "rank_one"            : functional.rank_one,
-    "skew_symmetric"      : functional.skew_symmetric,
-    "spectral_normalized" : functional.spectral_normalized,
-    "symmetric"           : functional.symmetric,
-    "symplectic"          : functional.symplectic,
-    "traceless"           : functional.traceless,
-    "tridiagonal"         : functional.tridiagonal,
-    "upper_triangular"    : functional.upper_triangular,
+    "diagonal"              : functional.diagonal,
+    "diagonally_dominant"   : functional.diagonally_dominant,
+    "hamiltonian"           : functional.hamiltonian,
+    "lower_triangular"      : functional.lower_triangular,
+    "normal"                : functional.normal,
+    "orthogonal_projection" : functional.orthogonal_projection,
+    "rank_one"              : functional.rank_one,
+    "skew_symmetric"        : functional.skew_symmetric,
+    "spectral_normalized"   : functional.spectral_normalized,
+    "symmetric"             : functional.symmetric,
+    "symplectic"            : functional.symplectic,
+    "traceless"             : functional.traceless,
+    "tridiagonal"           : functional.tridiagonal,
+    "upper_triangular"      : functional.upper_triangular,
 }  # fmt: skip
 r"""Dictionary containing all available matrix projections (function)."""
 

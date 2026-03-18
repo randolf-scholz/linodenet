@@ -23,7 +23,7 @@ __all__ = [
     "LowRank",
     "Masked",
     "Normal",
-    "Orthogonal",
+    "OrthogonalProjection",
     "RankOne",
     "SkewSymmetric",
     "Symmetric",
@@ -281,7 +281,7 @@ class SkewSymmetric(ProjectionBase):
         return F.skew_symmetric(x)
 
 
-class Orthogonal(ProjectionBase):
+class OrthogonalProjection(ProjectionBase):
     r"""Return the closest orthogonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ Y = 𝕀 = YYᵀ
@@ -299,7 +299,7 @@ class Orthogonal(ProjectionBase):
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Project into space of orthogonal matrices."""
-        return F.orthogonal(x)
+        return F.orthogonal_projection(x)
 
 
 class Traceless(ProjectionBase):

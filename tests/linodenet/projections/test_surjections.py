@@ -4,10 +4,14 @@ import pytest
 import torch
 
 from linodenet.mappings import (
+    OrthogonalCayley,
+    OrthogonalMatExp,
+    OrthogonalProjection,
     PositiveVector,
     StochasticVector,
+    Surjection,
 )
-from linodenet.testing import VECTOR_TESTS
+from linodenet.testing import MATRIX_TESTS, VECTOR_TESTS
 
 SURJECTION_MODULES = {
     "NonNegativeVector": PositiveVector,
@@ -33,3 +37,18 @@ def test_modular_surjections_work(name: str) -> None:
     y = surjection(x)
 
     assert vector_test(y).all()
+
+
+@pytest.mark.parametrize(
+    "surjection_cls", [OrthogonalMatExp, OrthogonalCayley, OrthogonalProjection]
+)
+def test_orthogonal_maps(surjection_cls: type[Surjection]) -> None:
+    surjection = surjection_cls()
+    matrix_test = MATRIX_TESTS["is_orthogonal"]
+
+    x = torch.randn(8, 5, 5)
+    y = surjection(x)
+
+    assert matrix_test(y).all()
+    z = surjection.right_inverse(y)
+    assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)

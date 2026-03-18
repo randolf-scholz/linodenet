@@ -37,7 +37,7 @@ class Embedding[X, Y](Protocol):
 
     @abstractmethod
     @signature("(...) -> (...)")
-    def forward(self, x: X, /) -> Y: ...
+    def __call__(self, x: X, /) -> Y: ...
 
     @abstractmethod
     @signature("(...) -> (...)")
@@ -49,7 +49,7 @@ class Surjection[X, Y](Protocol):
     r"""A protocol for surjections."""
 
     @abstractmethod
-    def forward(self, x: X, /) -> Y: ...
+    def __call__(self, x: X, /) -> Y: ...
     @abstractmethod
     def right_inverse(self, y: Y, /) -> X: ...
 
@@ -59,7 +59,7 @@ class Bijection[X, Y](Surjection[X, Y], Embedding[X, Y], Protocol):
     r"""Protocol for invertible layers."""
 
     @abstractmethod
-    def forward(self, x: X, /) -> Y: ...
+    def __call__(self, x: X, /) -> Y: ...
     @abstractmethod
     def inverse(self, y: Y, /) -> X: ...
 

@@ -60,4 +60,4 @@ class CayleyMap(BijectionBase):
     @signature("(..., n, n) -> (..., n, n)")
     def inverse(self, y: Tensor) -> Tensor:
         I = torch.eye(y.shape[-1], dtype=y.dtype, device=y.device)
-        return torch.linalg.lstsq(I - y, I + y).solution
+        return torch.linalg.lstsq(I + y, I - y).solution

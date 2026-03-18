@@ -13,6 +13,8 @@ __all__ = [
     "Masked",
     "MatrixExponential",
     "Normal",
+    "OrthogonalCayley",
+    "OrthogonalMatExp",
     "OrthogonalProjection",
     "RankOne",
     "SkewSymmetric",
@@ -31,6 +33,8 @@ MatrixExponential = bijections.MatrixExponential
 CayleyMap = bijections.CayleyMap
 
 GramMatrix = surjections.GramMatrix
+OrthogonalCayley = surjections.OrthogonalCayley
+OrthogonalMatExp = surjections.OrthogonalMatExp
 
 Banded = projections.Banded
 Contraction = projections.Contraction
@@ -42,7 +46,7 @@ LowRank = projections.LowRank
 LowerTriangular = projections.LowerTriangular
 Masked = projections.Masked
 Normal = projections.Normal
-OrthogonalProjection = projections.Orthogonal
+OrthogonalProjection = projections.OrthogonalProjection
 RankOne = projections.RankOne
 SkewSymmetric = projections.SkewSymmetric
 SpectralNormalized = projections.SpectralNormalized
