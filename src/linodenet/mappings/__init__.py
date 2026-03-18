@@ -17,8 +17,8 @@ __all__ = [
     "linear",
     "transforms",
     # Constants
-    "FUNCTIONAL_PROJECTIONS",
-    "MODULAR_PROJECTIONS",
+    "PROJECTION_FNS",
+    "PROJECTION_MODULES",
     "SPECIAL_PROJECTIONS",
     "PROJECTIONS",
     "EMBEDDINGS",
@@ -92,7 +92,7 @@ TRANSFORMS: dict[str, type[Transform]] = {
 }  # fmt: skip
 r"""Dictionary containing all available bijections."""
 
-FUNCTIONAL_PROJECTIONS: dict[str, FunctionalProjection] = {
+PROJECTION_FNS: dict[str, FunctionalProjection] = {
     "diagonal"            : functional.diagonal,
     "diagonally_dominant" : functional.diagonally_dominant,
     "hamiltonian"         : functional.hamiltonian,
@@ -120,7 +120,7 @@ SPECIAL_PROJECTIONS = {
 }  # fmt: skip
 r"""Projections that require additional arguments"""
 
-MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
+PROJECTION_MODULES: dict[str, type[ProjectionBase]] = {
     "Banded"             : projections.Banded,
     "Contraction"        : projections.Contraction,
     "Diagonal"           : projections.Diagonal,
@@ -145,8 +145,8 @@ MODULAR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
 r"""Dictionary of all available modular metrics."""
 
 PROJECTIONS = {
-    **FUNCTIONAL_PROJECTIONS,
+    **PROJECTION_FNS,
     **SPECIAL_PROJECTIONS,
-    **MODULAR_PROJECTIONS,
+    **PROJECTION_MODULES,
 }
 r"""Dictionary containing all available projections."""

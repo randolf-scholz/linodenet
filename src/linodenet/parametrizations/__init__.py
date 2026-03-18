@@ -5,7 +5,7 @@ __all__ = [
     # submodules
     "parametrize",
     # Constants
-    "STATIC_PARAMETRIZATIONS",
+    "PARAMETRIZATIONS",
 ]
 
 from linodenet.nn import parametrize
@@ -25,36 +25,39 @@ __all__ += matrix_parametrizations.__all__
 __all__ += tensor_parametrizations.__all__
 
 
-STATIC_PARAMETRIZATIONS: dict[str, Surjection | type[Parametrization]] = {
+PARAMETRIZATIONS: dict[str, Surjection | type[Parametrization]] = {
     # Wrappers
     # "WrappedParametrization": WrappedParametrization,
     # Parametrizations
     "CayleyMap"             : CayleyMap,
-    "GramMatrix"            : GramMatrix,
-    "MatrixExponential"     : MatrixExponential,
     # Learnable parametrizations
     "ReZero"                : ReZero,
-    # linodenet.projections
-    "Hamiltonian"           : Hamiltonian,
-    "Identity"              : Identity,
-    "Normal"                : Normal,
-    "OrthogonalProjection"  : OrthogonalProjection,
-    "RankOne"               : RankOne,
-    "SkewSymmetric"         : SkewSymmetric,
-    "Symmetric"             : Symmetric,
-    "Symplectic"            : Symplectic,
-    "Traceless"             : Traceless,
-    # linodenet.projections masked
-    "Diagonal"              : Diagonal,
-    "LowerTriangular"       : LowerTriangular,
-    "Tridiagonal"           : Tridiagonal,
-    "UpperTriangular"       : UpperTriangular,
+
 }  # fmt: skip
 r"""Dictionary of all available parametrizations."""
 
-SPECIAL_PARAMETRIZATIONS = {
-    "SpectralNorm": SpectralNorm,
-    "Banded": Banded,
-    "Masked": Masked,
-    "LowRank": LowRank,
-}
+CANONICAL_PARAMETRIZATIONS: dict[str, Surjection] = {
+    # linodenet.projections
+    "Hamiltonian"          : Hamiltonian,
+    "Identity"             : Identity,
+    "Normal"               : Normal,
+    "OrthogonalProjection" : OrthogonalProjection,
+    "RankOne"              : RankOne,
+    "SkewSymmetric"        : SkewSymmetric,
+    "Symmetric"            : Symmetric,
+    "Symplectic"           : Symplectic,
+    "Traceless"            : Traceless,
+    "Diagonal"             : Diagonal,
+    "LowerTriangular"      : LowerTriangular,
+    "Tridiagonal"          : Tridiagonal,
+    "UpperTriangular"      : UpperTriangular,
+    "GramMatrix"           : GramMatrix,
+    "MatrixExponential"    : MatrixExponential,
+}  # fmt: skip
+
+SPECIAL_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
+    "SpectralNorm" : SpectralNorm,
+    "Banded"       : Banded,
+    "Masked"       : Masked,
+    "LowRank"      : LowRank,
+}  # fmt: skip

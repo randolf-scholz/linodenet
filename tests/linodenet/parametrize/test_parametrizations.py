@@ -5,16 +5,16 @@ import torch
 from torch import nn
 
 from linodenet.parametrizations import (
-    STATIC_PARAMETRIZATIONS,
+    PARAMETRIZATIONS,
     is_parametrization,
     parametrized,
 )
 
 
-@pytest.mark.parametrize("name", STATIC_PARAMETRIZATIONS)
+@pytest.mark.parametrize("name", PARAMETRIZATIONS)
 def test_parametrization(name: str) -> None:
     r"""Test parametrization."""
-    obj = STATIC_PARAMETRIZATIONS[name]
+    obj = PARAMETRIZATIONS[name]
     tensor = nn.Parameter(torch.randn(3, 3))
 
     try:

@@ -15,8 +15,8 @@ from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import (
     BIJECTIONS,
     EMBEDDINGS,
-    FUNCTIONAL_PROJECTIONS,
-    MODULAR_PROJECTIONS,
+    PROJECTION_FNS,
+    PROJECTION_MODULES,
     SURJECTIONS,
     TRANSFORMS,
     Bijection,
@@ -32,13 +32,13 @@ from linodenet.mappings import (
 )
 from linodenet.nn.activations import ALL_ACTIVATIONS, Activation
 from linodenet.parametrizations import (
-    STATIC_PARAMETRIZATIONS,
+    PARAMETRIZATIONS,
     Parametrization,
     ParametrizationBase,
 )
 from linodenet.regularizations import (
-    FUNCTIONAL_REGULARIZATIONS,
-    MODULAR_REGULARIZATIONS,
+    REGULARIZATION_FNS,
+    REGULARIZATION_MODULES,
     Regularization,
     RegularizationBase,
 )
@@ -65,11 +65,11 @@ CASES: dict[str, Case] = {
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS                  ),
     "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS           ),
     "matrix_tests"        : Case(lib.testing          , MatrixTest     , None               , MATRIX_TESTS              ),
-    "parametrizations"    : Case(lib.parametrizations, Parametrization, ParametrizationBase, STATIC_PARAMETRIZATIONS),
-    "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , MODULAR_PROJECTIONS       ),
-    "projections_fun"     : Case(lib.projections      , Projection     , None               , FUNCTIONAL_PROJECTIONS    ),
-    "regularizations_cls" : Case(lib.regularizations  , Regularization , RegularizationBase , MODULAR_REGULARIZATIONS   ),
-    "regularizations_fun" : Case(lib.regularizations  , Regularization , None               , FUNCTIONAL_REGULARIZATIONS),
+    "parametrizations"    : Case(lib.parametrizations, Parametrization, ParametrizationBase, PARAMETRIZATIONS),
+    "projections_cls"     : Case(lib.projections, Projection, ProjectionBase, PROJECTION_MODULES),
+    "projections_fun"     : Case(lib.projections, Projection, None, PROJECTION_FNS),
+    "regularizations_cls" : Case(lib.regularizations, Regularization, RegularizationBase, REGULARIZATION_MODULES),
+    "regularizations_fun" : Case(lib.regularizations, Regularization, None, REGULARIZATION_FNS),
 }  # fmt: skip
 r"""Dictionary of all available cases."""
 

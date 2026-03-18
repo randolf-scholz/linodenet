@@ -4,8 +4,8 @@ import pytest
 import torch
 
 from linodenet.mappings import (
-    FUNCTIONAL_PROJECTIONS,
-    MODULAR_PROJECTIONS,
+    PROJECTION_FNS,
+    PROJECTION_MODULES,
     PROJECTIONS,
     SPECIAL_PROJECTIONS,
     RankOne,
@@ -25,18 +25,18 @@ def test_functional_modular_both_present(name: str) -> None:
     assert camel2snake(name) in PROJECTIONS
 
 
-@pytest.mark.parametrize("name", FUNCTIONAL_PROJECTIONS)
+@pytest.mark.parametrize("name", PROJECTION_FNS)
 def test_names_functional(name: str) -> None:
     r"""Test that all projections have the correct name."""
-    projection = FUNCTIONAL_PROJECTIONS[name]
+    projection = PROJECTION_FNS[name]
     actual_name = getattr(projection, "__name__", None)
     assert name == actual_name
 
 
-@pytest.mark.parametrize("name", MODULAR_PROJECTIONS)
+@pytest.mark.parametrize("name", PROJECTION_MODULES)
 def test_names_modular(name: str) -> None:
     r"""Test that all modular projections have the correct name."""
-    projection = MODULAR_PROJECTIONS[name]
+    projection = PROJECTION_MODULES[name]
     actual_name = getattr(projection, "__name__", None)
     assert name == actual_name
 
@@ -49,20 +49,20 @@ def test_names_matrix_tests(name: str) -> None:
     assert name == actual_name
 
 
-@pytest.mark.parametrize("name", FUNCTIONAL_PROJECTIONS | SPECIAL_PROJECTIONS)
+@pytest.mark.parametrize("name", PROJECTION_FNS | SPECIAL_PROJECTIONS)
 def test_inclusion_functional_has_test(name: str) -> None:
     r"""Test that all projections have tests."""
     if name != "identity":
         assert f"is_{name}" in MATRIX_TESTS | MATRIX_TESTS_WITH_EXTRA_ARG
 
 
-@pytest.mark.parametrize("name", FUNCTIONAL_PROJECTIONS)
+@pytest.mark.parametrize("name", PROJECTION_FNS)
 def test_projections_work(name: str) -> None:
     r"""Test that all projections work."""
     if name == "identity":
         return
 
-    projection = FUNCTIONAL_PROJECTIONS[name]
+    projection = PROJECTION_FNS[name]
     matrix_test = MATRIX_TESTS[f"is_{name}"]
     x = torch.randn(4, 4)
 

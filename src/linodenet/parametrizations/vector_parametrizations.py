@@ -26,7 +26,7 @@ class NonNegativeVector(WrappedParametrization):
 
 
 class SimplexVector(WrappedParametrization):
-    r"""Parametrization that constrains a vector to lie on the simplex.
+    r"""Parametrization that constrains a vector to lie on the standard simplex.
 
     Args:
         tensor (Tensor): The tensor to be parametrized.

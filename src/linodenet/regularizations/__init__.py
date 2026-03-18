@@ -12,8 +12,8 @@ __all__ = [
     "modules",
     # Constants
     "REGULARIZATIONS",
-    "FUNCTIONAL_REGULARIZATIONS",
-    "MODULAR_REGULARIZATIONS",
+    "REGULARIZATION_FNS",
+    "REGULARIZATION_MODULES",
     "SPECIAL_REGULARIZATIONS",
 ]
 
@@ -24,7 +24,7 @@ from linodenet.regularizations.modules import *
 __all__ += functional.__all__
 __all__ += modules.__all__
 
-FUNCTIONAL_REGULARIZATIONS: dict[str, Regularization] = {
+REGULARIZATION_FNS: dict[str, Regularization] = {
     "diagonal"         : functional.diagonal,
     "hamiltonian"      : functional.hamiltonian,
     "identity"         : functional.identity,
@@ -55,7 +55,7 @@ SPECIAL_REGULARIZATIONS = {
 r"""Regularizations that require additional arguments."""
 
 
-MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
+REGULARIZATION_MODULES: dict[str, type[Regularization]] = {
     "Banded"          : modules.Banded,
     "Contraction"     : modules.Contraction,
     "Diagonal"        : modules.Diagonal,
@@ -81,8 +81,8 @@ MODULAR_REGULARIZATIONS: dict[str, type[Regularization]] = {
 r"""Dictionary of all available modular metrics."""
 
 REGULARIZATIONS = {
-    **FUNCTIONAL_REGULARIZATIONS,
+    **REGULARIZATION_FNS,
     **SPECIAL_REGULARIZATIONS,
-    **MODULAR_REGULARIZATIONS,
+    **REGULARIZATION_MODULES,
 }
 r"""Dictionary containing all available projections."""
