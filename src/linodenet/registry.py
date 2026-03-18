@@ -8,7 +8,7 @@ __all__ = [
     "normalize_registry_name",
 ]
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 
 from linodenet.initializations import INITIALIZATIONS
@@ -16,7 +16,7 @@ from linodenet.mappings import PROJECTION_FNS, PROJECTIONS
 from linodenet.parametrizations import (
     MATRIX_PARAMETRIZATIONS,
     PARAMETRIZATIONS,
-    SPECIAL_PARAMETRIZATIONS,
+    VECTOR_PARAMETRIZATIONS,
 )
 from linodenet.regularizations import (
     REGULARIZATION_FNS,
@@ -32,13 +32,13 @@ class RegistryEntry:
 
     name: str
     domain: object | None = None
-    test: object | None = None
-    projection: object | None = None
-    projection_fn: object | None = None
-    regularization: object | None = None
-    regularization_fn: object | None = None
-    initialization: object | None = None
-    parametrization: object | None = None
+    test: Callable | None = None
+    projection: type | None = None
+    projection_fn: Callable | None = None
+    regularization: type | None = None
+    regularization_fn: Callable | None = None
+    initialization: Callable | None = None
+    parametrization: type | None = None
 
 
 def _camel_to_snake(name: str, /) -> str:
@@ -124,11 +124,11 @@ class Registry(Mapping[str, RegistryEntry]):
         for name, test in tests.items():
             self.register_test(name, test)
 
-    def register_projection(self, name: str, projection: object, /) -> RegistryEntry:
+    def register_projection(self, name: str, projection: type, /) -> RegistryEntry:
         r"""Register a projection module for `name`."""
         return self.register(name, projection=projection)
 
-    def register_projections(self, projections: Mapping[str, object], /) -> None:
+    def register_projections(self, projections: Mapping[str, type], /) -> None:
         r"""Register projection modules from a mapping."""
         for name, projection in projections.items():
             self.register_projection(name, projection)
@@ -145,14 +145,12 @@ class Registry(Mapping[str, RegistryEntry]):
             self.register_projection_fn(name, projection_fn)
 
     def register_regularization(
-        self, name: str, regularization: object, /
+        self, name: str, regularization: type, /
     ) -> RegistryEntry:
         r"""Register a regularization module for `name`."""
         return self.register(name, regularization=regularization)
 
-    def register_regularizations(
-        self, regularizations: Mapping[str, object], /
-    ) -> None:
+    def register_regularizations(self, regularizations: Mapping[str, type], /) -> None:
         r"""Register regularization modules from a mapping."""
         for name, regularization in regularizations.items():
             self.register_regularization(name, regularization)
@@ -184,13 +182,13 @@ class Registry(Mapping[str, RegistryEntry]):
             self.register_initialization(name, initialization)
 
     def register_parametrization(
-        self, name: str, parametrization: object, /
+        self, name: str, parametrization: type, /
     ) -> RegistryEntry:
         r"""Register a parametrization for `name`."""
         return self.register(name, parametrization=parametrization)
 
     def register_parametrizations(
-        self, parametrizations: Mapping[str, object], /
+        self, parametrizations: Mapping[str, type], /
     ) -> None:
         r"""Register parametrizations from a mapping."""
         for name, parametrization in parametrizations.items():
@@ -223,7 +221,7 @@ REGISTRY.register_initializations(INITIALIZATIONS)
 REGISTRY.register_tests(TESTS)
 REGISTRY.register_parametrizations(PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(MATRIX_PARAMETRIZATIONS)
-REGISTRY.register_parametrizations(SPECIAL_PARAMETRIZATIONS)
+REGISTRY.register_parametrizations(VECTOR_PARAMETRIZATIONS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITH_ARGS)
 REGISTRY.register_regularizations(REGULARIZATIONS)

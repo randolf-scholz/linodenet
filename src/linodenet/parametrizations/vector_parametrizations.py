@@ -8,6 +8,6 @@ __all__ = [
 
 from linodenet.mappings import projections, surjections
 
-UnitVector = projections.UnitVector()
-StochasticVector = surjections.StochasticVector()
-PositiveVector = surjections.PositiveVector()
+UnitVector = projections.UnitVector
+StochasticVector = surjections.StochasticVector
+PositiveVector = surjections.PositiveVector

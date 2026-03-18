@@ -8,7 +8,6 @@ __all__ = [
     "PARAMETRIZATIONS",
     "MATRIX_PARAMETRIZATIONS",
     "VECTOR_PARAMETRIZATIONS",
-    "SPECIAL_PARAMETRIZATIONS",
 ]
 
 from linodenet.nn import parametrize
@@ -28,8 +27,7 @@ __all__ += matrix_parametrizations.__all__
 __all__ += tensor_parametrizations.__all__
 
 
-PARAMETRIZATIONS: dict[str, Surjection | type[Parametrization]] = {
-    "CayleyMap"              : matrix_parametrizations.CayleyMap,
+PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
     # Learnable parametrizations
     "ReZero"                 : tensor_parametrizations.ReZero,
     "WrappedParametrization" : parametrize.WrappedParametrization
@@ -37,33 +35,36 @@ PARAMETRIZATIONS: dict[str, Surjection | type[Parametrization]] = {
 }  # fmt: skip
 r"""Dictionary of all available parametrizations."""
 
-MATRIX_PARAMETRIZATIONS: dict[str, Surjection] = {
-    "Hamiltonian"          : matrix_parametrizations.Hamiltonian,
-    "Identity"             : matrix_parametrizations.Identity,
-    "Normal"               : matrix_parametrizations.Normal,
-    "OrthogonalProjection" : matrix_parametrizations.OrthogonalProjection,
-    "RankOne"              : matrix_parametrizations.RankOne,
-    "SkewSymmetric"        : matrix_parametrizations.SkewSymmetric,
-    "Symmetric"            : matrix_parametrizations.Symmetric,
-    "Symplectic"           : matrix_parametrizations.Symplectic,
-    "Traceless"            : matrix_parametrizations.Traceless,
-    "Diagonal"             : matrix_parametrizations.Diagonal,
-    "LowerTriangular"      : matrix_parametrizations.LowerTriangular,
-    "Tridiagonal"          : matrix_parametrizations.Tridiagonal,
-    "UpperTriangular"      : matrix_parametrizations.UpperTriangular,
-    "GramMatrix"           : matrix_parametrizations.GramMatrix,
-    "MatrixExponential"    : matrix_parametrizations.MatrixExponential,
-}  # fmt: skip
 
-VECTOR_PARAMETRIZATIONS: dict[str, Surjection] = {
+VECTOR_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "UnitVector"           : vector_parametrizations.UnitVector,
     "StochasticVector"     : vector_parametrizations.StochasticVector,
     "PositiveVector"       : vector_parametrizations.PositiveVector,
 }  # fmt: skip
 
-SPECIAL_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
-    "SpectralNorm" : matrix_parametrizations.SpectralNorm,
-    "Banded"       : matrix_parametrizations.Banded,
-    "Masked"       : matrix_parametrizations.Masked,
-    "LowRank"      : matrix_parametrizations.LowRank,
+
+MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
+    "Banded"               : matrix_parametrizations.Banded,
+    "CayleyMap"            : matrix_parametrizations.CayleyMap,
+    "Contraction"          : matrix_parametrizations.Contraction,
+    "Diagonal"             : matrix_parametrizations.Diagonal,
+    "GramMatrix"           : matrix_parametrizations.GramMatrix,
+    "Hamiltonian"          : matrix_parametrizations.Hamiltonian,
+    "Identity"             : matrix_parametrizations.Identity,
+    "LipschitzBounded"     : matrix_parametrizations.LipschitzBounded,
+    "LowRank"              : matrix_parametrizations.LowRank,
+    "LowerTriangular"      : matrix_parametrizations.LowerTriangular,
+    "Masked"               : matrix_parametrizations.Masked,
+    "MatrixExponential"    : matrix_parametrizations.MatrixExponential,
+    "Normal"               : matrix_parametrizations.Normal,
+    "OrthogonalProjection" : matrix_parametrizations.OrthogonalProjection,
+    "RankOne"              : matrix_parametrizations.RankOne,
+    "SkewSymmetric"        : matrix_parametrizations.SkewSymmetric,
+    "SpectralNormalized"   : matrix_parametrizations.SpectralNormalized,
+    "Symmetric"            : matrix_parametrizations.Symmetric,
+    "Symplectic"           : matrix_parametrizations.Symplectic,
+    "Traceless"            : matrix_parametrizations.Traceless,
+    "Tridiagonal"          : matrix_parametrizations.Tridiagonal,
+    "UpperTriangular"      : matrix_parametrizations.UpperTriangular,
 }  # fmt: skip
+r"""Dictionary of all available matrix parametrizations."""
