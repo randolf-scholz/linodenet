@@ -24,9 +24,9 @@ class GramMatrix(SurjectionBase):
     DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SEMIDEFINITE
 
-    @signature("(..., n, n) -> (..., n, n)")
+    @signature("(..., m, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
-        return torch.einsum("...kn, ...mk -> ...mn", x, x)
+        return torch.einsum("...km, ...kn -> ...mn", x, x)
 
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
