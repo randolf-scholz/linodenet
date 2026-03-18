@@ -37,12 +37,27 @@ class Domain(Protocol):
 class _PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]
+    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]  # structural
+    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]  # reverse dependencies
+
+    @classmethod
+    @cache
+    def _compiled_edges(cls) -> Mapping[Self, frozenset[Self]]:
+        edges: dict[Self, set[Self]] = {node: set() for node in cls}
+
+        for src, targets in cls.KNOWN_EDGES.items():  # type: ignore[attr-defined]
+            edges[src].update(targets)
+
+        for tag, members in cls.KNOWN_TAGS.items():  # type: ignore[attr-defined]
+            for member in members:
+                edges[member].add(tag)
+
+        return {src: frozenset(targets) for src, targets in edges.items()}
 
     @classmethod
     @cache
     def _validated_edges(cls) -> Mapping[Self, frozenset[Self]]:
-        edges: Mapping[Self, frozenset[Self]] = cls.KNOWN_EDGES  # type: ignore[assignment]
+        edges: Mapping[Self, frozenset[Self]] = cls._compiled_edges()
         members = frozenset(cls)
 
         if bad_keys := {node for node in edges if node not in members}:
@@ -301,12 +316,12 @@ class IntervalUnion(Domain, Collection[Interval]):
         self.intervals = self._merge_intervals(Interval(spec) for spec in intervals)
 
     @classmethod
-    def from_string(cls, s: str, /) -> Self:
+    def from_string(cls, s: str, /) -> IntervalUnion:
         r"""Create a union of intervals from a `|`-separated string."""
         parts = [part.strip() for part in s.split("|")]
         if any(not part for part in parts):
             raise ValueError(f"Invalid union of intervals string: {s}")
-        return cls(*(Interval.from_string(part) for part in parts))
+        return IntervalUnion(*(Interval.from_string(part) for part in parts))
 
     def __len__(self) -> int:
         return len(self.intervals)
@@ -409,16 +424,21 @@ class IntervalUnion(Domain, Collection[Interval]):
 class ScalarDomains(_PosetEnum):
     r"""Enumeration of some scalar domains."""
 
-    EXTENDED_LINE = Interval.from_string("[-inf, inf]")
-    REAL_LINE = Interval.from_string("(-inf, inf)")
-    POSITIVE_REALS = Interval.from_string("(0, inf)")
-    NEGATIVE_REALS = Interval.from_string("(-inf, 0)")
-    NONNEGATIVE_REALS = Interval.from_string("[0, inf)")
-    NONPOSITIVE_REALS = Interval.from_string("(-inf, 0]")
-    NONZERO = IntervalUnion.from_string("(-inf, 0) | (0, inf)")
+    ZERO = Interval("[0, 0]")
+    ONE = Interval("[1, 1]")
+    POS_INF = Interval("[+inf, +inf]")
+    NEG_INF = Interval("[-inf, -inf]")
 
-    UNIT_INTERVAL = Interval.from_string("[0, 1]")
-    OPEN_UNIT_INTERVAL = Interval.from_string("(0, 1)")
+    EXTENDED_LINE = Interval("[-inf, inf]")
+    REAL_LINE = Interval("(-inf, inf)")
+    POSITIVE_REALS = Interval("(0, inf)")
+    NEGATIVE_REALS = Interval("(-inf, 0)")
+    NONNEGATIVE_REALS = Interval("[0, inf)")
+    NONPOSITIVE_REALS = Interval("(-inf, 0]")
+    NONZERO = IntervalUnion.from_string("(-inf, 0) | (0, +inf)")
+
+    UNIT_INTERVAL = Interval("[0, 1]")
+    OPEN_UNIT_INTERVAL = Interval("(0, 1)")
 
     @property
     def domain(self) -> Domain:
@@ -439,6 +459,7 @@ ScalarDomains.KNOWN_EDGES = MappingProxyType({
     S.NONPOSITIVE_REALS: frozenset({S.REAL_LINE}),
     S.NONZERO: frozenset({S.REAL_LINE, S.EXTENDED_LINE}),
 })  # fmt: skip
+ScalarDomains.KNOWN_TAGS = MappingProxyType({})  # fmt: skip
 del S  # remove alias
 
 
@@ -449,14 +470,18 @@ class VectorDomains(_PosetEnum):
     COMPLEX = "complex"
     BOOLEAN = "boolean"
 
+    # specific vectors
+    ZERO = "zero"  # xᵢ=0 for all i
+    ONE = "one"  # xᵢ=1 for all i
+
     SPARSE = "sparse"  # xᵢ=0 for many i
     ONE_HOT = "one-hot"  # xᵢ=1, xⱼ=0 for j≠i
 
     ZERO_MEAN = "zero-mean"
     STANDARDIZED = "standardized"  # zero-mean, unit variance
 
-    UNIT_VECTOR = "unit_sphere"  # ‖x‖₂ = 1
-    STOCHASTIC = "stochastic"  # sum(x) = 1, x ≥ 0
+    UNIT_VECTOR = "unit-vector"  # ‖x‖₂ = 1
+    STOCHASTIC = "stochastic"  # ∑xᵢ = 1, xᵢ ≥ 0
 
     NONZERO = "nonzero"  # x ≠ 0
     POSITIVE = "positive"  # xᵢ > 0
@@ -467,42 +492,67 @@ class VectorDomains(_PosetEnum):
 
 V = VectorDomains  # temporary alias
 VectorDomains.KNOWN_EDGES = MappingProxyType({
-    V.REAL: frozenset({V.COMPLEX}),
     V.BOOLEAN: frozenset({V.REAL, V.NONNEGATIVE}),
-    V.ONE_HOT: frozenset({V.BOOLEAN, V.STOCHASTIC, V.UNIT_VECTOR, V.SPARSE}),
-    V.STANDARDIZED: frozenset({V.ZERO_MEAN, V.NONZERO}),
-    V.UNIT_VECTOR: frozenset({V.NONZERO}),
-    V.STOCHASTIC: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
-    V.POSITIVE: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
     V.NEGATIVE: frozenset({V.REAL, V.NONPOSITIVE, V.NONZERO}),
     V.NONNEGATIVE: frozenset({V.REAL}),
     V.NONPOSITIVE: frozenset({V.REAL}),
+    V.ONE: frozenset({V.BOOLEAN}),
+    V.ONE_HOT: frozenset({V.BOOLEAN, V.STOCHASTIC, V.UNIT_VECTOR, V.SPARSE}),
+    V.POSITIVE: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
+    V.REAL: frozenset({V.COMPLEX}),
+    V.STANDARDIZED: frozenset({V.ZERO_MEAN, V.NONZERO}),
+    V.STOCHASTIC: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
+    V.UNIT_VECTOR: frozenset({V.NONZERO}),
+    V.ZERO: frozenset({V.NONPOSITIVE, V.NONNEGATIVE, V.SPARSE, V.BOOLEAN}),
 })  # fmt: skip
+VectorDomains.KNOWN_TAGS = MappingProxyType({})  # fmt: skip
 del V  # remove alias
 
 
 class MatrixDomains(_PosetEnum):
     r"""Enumeration of some matrix domains."""
 
+    BOOLEAN = "boolean"  # only 0 and 1 entries
+    SPARSE = "sparse"  # many 0 entries
+    MASKED = "masked"  # X⊙M = X for some mask M
+
     RECTANGULAR = "rectangular"  # m × n matrices
     SQUARE = "square"  # n × n matrices
     EVEN_SQUARE = "even_square"  # 2n × 2n matrices
 
-    LOW_RANK = "low_rank"
-    RANK_ONE = "rank_one"
+    # specific matrices
+    ZERO = "zero"  # the zero matrix
+    IDENTITY = "identity"  # the identity matrix
+    STANDARD_SYMPLECTIC = "standard_symplectic"  # [0, 𝕀; -𝕀, 0]
 
-    SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
-    SKEW_SYMMETRIC = "skew_symmetric"
-    POSITIVE_DEFINITE = "positive_definite"  # 𝕊ₙ⁺(ℝ)
-    NEGATIVE_DEFINITE = "negative_definite"  # 𝕊ₙ⁻(ℝ)
-    POSITIVE_SEMIDEFINITE = "positive_semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
-    NEGATIVE_SEMIDEFINITE = "negative_semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
+    # rank
+    LOW_RANK = "low_rank"  # rank small relative to size
+    RANK_ONE = "rank_one"
 
     # determinant-based
     SINGULAR = "singular"  # det=0
     INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
+    UNIT_DETERMINANT = "unit_determinant"  # SLₙ(R) (det=1)
+    GENERAL_LINEAR = "invertible"  # alias
+    SPECIAL_LINEAR = "unit_determinant"  # alias
     POSITIVE_DETERMINANT = "positive_determinant"  # GLₙ⁺(R) (det>0)
     NEGATIVE_DETERMINANT = "negative_determinant"  # GLₙ⁻(R) (det<0)
+
+    # symmetry / entry based
+    SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
+    SKEW_SYMMETRIC = "skew_symmetric"
+    DIAGONAL = "diagonal"
+    TRIDIAGONAL = "tridiagonal"
+    BANDED = "banded"
+    TOEPLITZ = "toeplitz"  # constant along diagonals
+    HANKEL = "hankel"  # constant along anti-diagonals
+    CIRCULANT = "circulant"  # constant along diagonals, wrap around
+
+    # eigenvalues
+    POSITIVE_DEFINITE = "positive_definite"  # 𝕊ₙ⁺(ℝ)
+    NEGATIVE_DEFINITE = "negative_definite"  # 𝕊ₙ⁻(ℝ)
+    POSITIVE_SEMIDEFINITE = "positive_semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
+    NEGATIVE_SEMIDEFINITE = "negative_semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
 
     CONTRACTION = "contraction"  # ‖A‖₂ < 1
     SPECTRAL_NORMALIZED = "spectral_normalized"  # ‖A‖₂ = 1
@@ -516,56 +566,75 @@ class MatrixDomains(_PosetEnum):
     PERMUTATION = "permutation"
 
     TRACELESS = "traceless"
-    SYMPLECTIC = "symplectic"
-    HAMILTONIAN = "hamiltonian"
+    SYMPLECTIC = "symplectic"  # 2n×2n with AᵀJA = J for J=[0, I;-I, 0]
+    HAMILTONIAN = "hamiltonian"  # 2n×2n with (JA)ᵀ = JA for J=[0, I;-I, 0]
 
-    MASKED = "masked"
-    DIAGONAL = "diagonal"
-    TRIDIAGONAL = "tridiagonal"
+    TRIANGULAR = "triangular"  # lower or upper
     UPPER_TRIANGULAR = "upper_triangular"
     LOWER_TRIANGULAR = "lower_triangular"
-    BANDED = "banded"
 
     ROW_STOCHASTIC = "row_stochastic"
     COLUMN_STOCHASTIC = "column_stochastic"
     DOUBLY_STOCHASTIC = "doubly_stochastic"
 
+    IDEMPOTENT = "idempotent"  # Aᵏ = A for some k≥2
+    PROJECTION = "projection"  # A² = A
+    NILPOTENT = "nilpotent"  # Aᵏ = 0 for some k≥2
+
+    EFFICIENTLY_INVERTIBLE = "efficient_invertible"
+
+    HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
+
 
 M = MatrixDomains  # temporary alias
 MatrixDomains.KNOWN_EDGES = MappingProxyType({
-    M.SQUARE: frozenset({M.RECTANGULAR}),
-    M.EVEN_SQUARE: frozenset({M.SQUARE}),
-    M.LOW_RANK: frozenset({M.RECTANGULAR}),
-    M.RANK_ONE: frozenset({M.LOW_RANK}),
-    M.SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
-    M.SKEW_SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
-    M.POSITIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.POSITIVE_SEMIDEFINITE}),
-    M.NEGATIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.NEGATIVE_SEMIDEFINITE}),
-    M.POSITIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
-    M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
-    M.SINGULAR: frozenset({M.SQUARE}),
-    M.INVERTIBLE: frozenset({M.SQUARE}),
-    M.POSITIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
-    M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
+    M.BANDED: frozenset({M.RECTANGULAR}),
+    M.CAYLEY_ORTHOGONAL: frozenset({M.SPECIAL_ORTHOGONAL}),
+    M.COLUMN_STOCHASTIC: frozenset({M.RECTANGULAR}),
     M.CONTRACTION: frozenset({M.RECTANGULAR}),
-    M.SPECTRAL_NORMALIZED: frozenset({M.RECTANGULAR, M.LIPSCHITZ_BOUNDED}),
-    M.LIPSCHITZ_BOUNDED: frozenset({M.RECTANGULAR}),
+    M.DIAGONAL: frozenset({M.SYMMETRIC, M.TRIDIAGONAL, M.UPPER_TRIANGULAR, M.LOWER_TRIANGULAR}),
     M.DIAGONALLY_DOMINANT: frozenset({M.SQUARE}),
+    M.DOUBLY_STOCHASTIC: frozenset({M.ROW_STOCHASTIC, M.COLUMN_STOCHASTIC, M.SQUARE}),
+    M.EVEN_SQUARE: frozenset({M.SQUARE}),
+    M.IDENTITY: frozenset({M.DIAGONAL, M.PERMUTATION, M.SPECIAL_ORTHOGONAL}),
+    M.INVERTIBLE: frozenset({M.SQUARE}),
+    M.LIPSCHITZ_BOUNDED: frozenset({M.RECTANGULAR}),
+    M.LOWER_TRIANGULAR: frozenset({M.SQUARE, M.TRIANGULAR}),
+    M.LOW_RANK: frozenset({M.RECTANGULAR}),
+    M.NEGATIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.NEGATIVE_SEMIDEFINITE}),
+    M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
+    M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.NORMAL: frozenset({M.SQUARE}),
     M.ORTHOGONAL: frozenset({M.SQUARE, M.INVERTIBLE, M.NORMAL, M.SPECTRAL_NORMALIZED}),
-    M.CAYLEY_ORTHOGONAL: frozenset({M.SPECIAL_ORTHOGONAL}),
-    M.SPECIAL_ORTHOGONAL: frozenset({M.ORTHOGONAL, M.POSITIVE_DETERMINANT}),
-    M.PERMUTATION: frozenset({M.ORTHOGONAL, M.DOUBLY_STOCHASTIC}),
-    M.TRACELESS: frozenset({M.SQUARE}),
-    M.SYMPLECTIC: frozenset({M.EVEN_SQUARE, M.INVERTIBLE, M.POSITIVE_DETERMINANT}),
-    M.HAMILTONIAN: frozenset({M.EVEN_SQUARE, M.TRACELESS}),
-    M.DIAGONAL: frozenset({M.SYMMETRIC, M.TRIDIAGONAL, M.UPPER_TRIANGULAR, M.LOWER_TRIANGULAR}),
-    M.TRIDIAGONAL: frozenset({M.BANDED, M.SQUARE}),
-    M.UPPER_TRIANGULAR: frozenset({M.SQUARE}),
-    M.LOWER_TRIANGULAR: frozenset({M.SQUARE}),
-    M.BANDED: frozenset({M.RECTANGULAR}),
+    M.PERMUTATION: frozenset({M.SPARSE, M.ORTHOGONAL, M.DOUBLY_STOCHASTIC}),
+    M.POSITIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.POSITIVE_SEMIDEFINITE}),
+    M.POSITIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
+    M.POSITIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
+    M.RANK_ONE: frozenset({M.LOW_RANK}),
     M.ROW_STOCHASTIC: frozenset({M.RECTANGULAR}),
-    M.COLUMN_STOCHASTIC: frozenset({M.RECTANGULAR}),
-    M.DOUBLY_STOCHASTIC: frozenset({M.ROW_STOCHASTIC, M.COLUMN_STOCHASTIC, M.SQUARE}),
+    M.SINGULAR: frozenset({M.SQUARE}),
+    M.SKEW_SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
+    M.SPARSE: frozenset({M.BOOLEAN}),
+    M.SPECIAL_ORTHOGONAL: frozenset({M.ORTHOGONAL, M.UNIT_DETERMINANT}),
+    M.SPECTRAL_NORMALIZED: frozenset({M.RECTANGULAR, M.LIPSCHITZ_BOUNDED}),
+    M.SQUARE: frozenset({M.RECTANGULAR}),
+    M.SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
+    M.SYMPLECTIC: frozenset({M.EVEN_SQUARE, M.UNIT_DETERMINANT}),
+    M.TRACELESS: frozenset({M.SQUARE}),
+    M.TRIDIAGONAL: frozenset({M.BANDED, M.SQUARE}),
+    M.UPPER_TRIANGULAR: frozenset({M.SQUARE, M.TRIANGULAR}),
+    M.UNIT_DETERMINANT: frozenset({M.POSITIVE_DETERMINANT}),
+    M.ZERO: frozenset({M.SPARSE}),
+    M.TOEPLITZ: frozenset({M.RECTANGULAR}),
+    M.CIRCULANT: frozenset({M.TOEPLITZ, M.SQUARE}),
+    M.HANKEL: frozenset({M.RECTANGULAR}),
+    M.STANDARD_SYMPLECTIC: frozenset({M.SYMPLECTIC, M.SKEW_SYMMETRIC}),
+    M.HAMILTONIAN: frozenset({M.EVEN_SQUARE, M.TRACELESS}),
+})  # fmt: skip
+MatrixDomains.KNOWN_TAGS = MappingProxyType({
+    M.EFFICIENTLY_INVERTIBLE: frozenset({
+        M.SPARSE, M.PERMUTATION, M.ORTHOGONAL,
+        M.TRIANGULAR, M.DIAGONAL, M.TRIDIAGONAL,
+    }),
 })  # fmt: skip
 del M  # remove alias
