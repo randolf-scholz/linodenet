@@ -11,6 +11,7 @@ __all__ = [
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, fields
 
+from linodenet.domains import Domain
 from linodenet.initializations import INITIALIZATIONS
 from linodenet.mappings import BIJECTIONS, PROJECTION_FNS, SURJECTIONS
 from linodenet.parametrizations import (
@@ -31,7 +32,7 @@ class RegistryEntry:
     r"""Connected public objects for a canonical structural name."""
 
     name: str
-    domain: object | None = None
+    domain: Domain | None = None
     test: Callable | None = None
     mapping: type | None = None
     mapping_fn: Callable | None = None
@@ -77,7 +78,7 @@ class Registry(Mapping[str, RegistryEntry]):
         name: str,
         /,
         *,
-        domain: object | None = None,
+        domain: Domain | None = None,
         test: Callable | None = None,
         mapping: type | None = None,
         mapping_fn: Callable | None = None,
@@ -129,7 +130,7 @@ class Registry(Mapping[str, RegistryEntry]):
 
         return entry
 
-    def register_domain(self, name: str, domain: object | None, /) -> RegistryEntry:
+    def register_domain(self, name: str, domain: Domain | None, /) -> RegistryEntry:
         r"""Register a domain for `name`."""
         return self.register(name, domain=domain)
 
