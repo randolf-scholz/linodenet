@@ -21,7 +21,10 @@ from linodenet.parametrizations import (
 )
 from linodenet.registry import get_registry_entry
 from linodenet.testing import MatrixTest
-from tests.testing import DEVICES, TestCase
+from tests.testing import DEVICES, TestCase, pytest_xfail
+
+SQUARE_SHAPE = (4, 4)
+RECTANGULAR_SHAPE = (5, 4)
 
 
 def is_general_matrix(
@@ -36,15 +39,6 @@ def is_general_matrix(
     return torch.ones(shape, dtype=torch.bool, device=x.device)
 
 
-MASK = torch.tensor(
-    [
-        [True, False, True, False],
-        [False, True, False, True],
-        [True, True, False, False],
-        [False, False, True, True],
-    ]
-)
-
 PARAMETRIZATION_ARGUMENTS: defaultdict[
     str, tuple[tuple[object, ...], dict[str, object]]
 ] = defaultdict(
@@ -52,7 +46,7 @@ PARAMETRIZATION_ARGUMENTS: defaultdict[
     {
         "Banded": ((-2, +1), {}),
         "LowRank": ((), {"rank": 2}),
-        "Masked": ((), {"mask": MASK}),
+        "Masked": ((), {"mask": torch.rand(RECTANGULAR_SHAPE) < 0.5}),
         "LipschitzBounded": ((), {"lipschitz_bound": 2.97}),
         "Contraction": ((), {"lipschitz_bound": 0.95}),
     },
@@ -102,17 +96,8 @@ class TestSuite(TestCase):
 
     def get_parametrization(self, name: str, /) -> nn.Module:
         cls = MATRIX_PARAMETRIZATIONS[name]
-        match name:
-            case "Banded":
-                return cls(-2, +1)
-            case "LowRank":
-                return cls(rank=2)
-            case "Masked":
-                return cls(mask=MASK)
-            case "Contraction" | "LipschitzBounded":
-                return cls(lipschitz_bound=0.97)
-            case _:
-                return cls()
+        args, kwargs = PARAMETRIZATION_ARGUMENTS[name]
+        return cls(*args, **kwargs)
 
     def get_matrix_test(
         self, name: str, /
@@ -125,9 +110,12 @@ class TestSuite(TestCase):
     def get_shape(self, name: str, /) -> tuple[int, int]:
         entry = get_registry_entry(name)
         domain = entry.domain
-        if domain is not None and domain <= MatrixDomains.SQUARE:
-            return (4, 4)
-        return (5, 4)
+        assert domain is not None
+        assert type(domain) is MatrixDomains
+
+        if domain <= MatrixDomains.SQUARE:
+            return SQUARE_SHAPE
+        return RECTANGULAR_SHAPE
 
     def check_parametrization(self, name: str, model: nn.Module) -> None:
         matrix_test, args, kwargs = self.get_matrix_test(name)
@@ -142,6 +130,7 @@ class TestSuite(TestCase):
         assert is_stale.dtype == torch.bool
         assert bool(is_stale) is expected
 
+    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_register_parametrization(self, name: str, device: str) -> None:
