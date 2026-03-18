@@ -12,7 +12,8 @@ from linodenet.mappings import (
     StochasticVector,
     Surjection,
 )
-from linodenet.testing import MATRIX_TESTS, VECTOR_TESTS
+from linodenet.registry import get_registry_entry
+from linodenet.testing import is_orthogonal
 from tests.testing import SEEDS_10
 
 SURJECTION_MODULES = {
@@ -20,20 +21,20 @@ SURJECTION_MODULES = {
     "StochasticVector": StochasticVector,
 }
 
-SURJECTION_TESTS = {
-    "unit_vector": VECTOR_TESTS["is_unit_vector"],
-    "positive_vector": VECTOR_TESTS["is_positive_vector"],
-    "stochastic_vector": VECTOR_TESTS["is_stochastic_vector"],
-    "UnitVector": VECTOR_TESTS["is_unit_vector"],
-    "NonNegativeVector": VECTOR_TESTS["is_positive_vector"],
-    "StochasticVector": VECTOR_TESTS["is_stochastic_vector"],
-}
+
+def get_surjection_test(surjection_cls: type[Surjection], /):
+    r"""Return the registered test for a surjection class."""
+    entry = get_registry_entry(surjection_cls.__name__)
+    if callable(entry.test):
+        return entry.test
+
+    raise LookupError(f"No registry test found for {surjection_cls.__name__!r}.")
 
 
 @pytest.mark.parametrize("name", SURJECTION_MODULES)
 def test_modular_surjections_work(name: str) -> None:
     surjection = SURJECTION_MODULES[name]()
-    vector_test = SURJECTION_TESTS[name]
+    vector_test = get_surjection_test(type(surjection))
 
     x = torch.randn(8, 5)
     y = surjection(x)
@@ -54,11 +55,10 @@ def test_modular_surjections_work(name: str) -> None:
 def test_orthogonal_maps(surjection_cls: type[Surjection], seed: int) -> None:
     torch.manual_seed(seed)
     surjection = surjection_cls()
-    matrix_test = MATRIX_TESTS["is_orthogonal"]
 
     x = torch.randn(8, 5, 5)
     y = surjection(x)
 
-    assert matrix_test(y).all()
+    assert is_orthogonal(y).all()
     z = surjection.right_inverse(y)
     assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
