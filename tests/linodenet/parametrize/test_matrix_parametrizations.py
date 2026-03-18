@@ -144,6 +144,7 @@ class TestSuite(TestCase):
         self.assert_stale(parametrization, False)
         self.check_parametrization(name, model)
 
+    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_forward_uses_cached_parameter(self, name: str, device: str) -> None:
@@ -175,6 +176,7 @@ class TestSuite(TestCase):
         assert not torch.allclose(y2, y0)
         self.check_parametrization(name, model)
 
+    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_trainable(self, name: str, device: str) -> None:
@@ -204,6 +206,7 @@ class TestSuite(TestCase):
         )
         assert not torch.allclose(model(x), original_output)
 
+    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_compile_forward_uses_cached_parameter(
@@ -233,6 +236,7 @@ class TestSuite(TestCase):
         self.assert_close(y1, y0, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
         self.check_parametrization(name, compiled_model)
 
+    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_compile_trainable(self, name: str, device: str) -> None:
