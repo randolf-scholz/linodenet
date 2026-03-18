@@ -16,12 +16,12 @@ __all__ = [
     "MatrixDomains",
 ]
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
 from types import MappingProxyType
-from typing import ClassVar, Final, Protocol, Self
+from typing import ClassVar, Final, Protocol, Self, overload
 
 from torch import Tensor
 
@@ -102,6 +102,13 @@ class Interval(Domain):
     lower_inclusive: Final[bool]
     upper_inclusive: Final[bool]
 
+    @overload
+    def __init__(self, s: str, /) -> None: ...
+
+    @overload
+    def __init__(self, interval: Interval, /) -> None: ...
+
+    @overload
     def __init__(
         self,
         lower: float,
@@ -109,11 +116,41 @@ class Interval(Domain):
         *,
         lower_inclusive: bool,
         upper_inclusive: bool,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        lower: str | Interval | float,
+        upper: float | None = None,
+        *,
+        lower_inclusive: bool | None = None,
+        upper_inclusive: bool | None = None,
     ) -> None:
-        self.lower = lower
-        self.upper = upper
-        self.lower_inclusive = lower_inclusive
-        self.upper_inclusive = upper_inclusive
+        if isinstance(lower, str | Interval):
+            if (
+                upper is not None
+                or lower_inclusive is not None
+                or upper_inclusive is not None
+            ):
+                raise TypeError("String interval constructor does not accept bounds.")
+            interval = (
+                lower if isinstance(lower, Interval) else type(self).from_string(lower)
+            )
+            self.lower = interval.lower
+            self.upper = interval.upper
+            self.lower_inclusive = interval.lower_inclusive
+            self.upper_inclusive = interval.upper_inclusive
+
+        else:
+            if upper is None or lower_inclusive is None or upper_inclusive is None:
+                raise TypeError(
+                    "Expected upper and inclusivity flags for numeric bounds."
+                )
+
+            self.lower = lower  # type: ignore[misc]
+            self.upper = upper  # type: ignore[misc]
+            self.lower_inclusive = lower_inclusive  # type: ignore[misc]
+            self.upper_inclusive = upper_inclusive  # type: ignore[misc]
 
     @classmethod
     def from_string(cls, s: str, /) -> Interval:
@@ -219,10 +256,7 @@ class Interval(Domain):
         if isinstance(other, UnionOfIntervals):
             return any(self <= interval for interval in other.intervals)
         if isinstance(other, str):
-            try:
-                other = Interval.from_string(other)
-            except ValueError:
-                return self <= UnionOfIntervals.from_string(other)
+            return self <= UnionOfIntervals.from_string(other)
         if (other_interval := self._coerce_interval(other)) is None:
             return NotImplemented
 
@@ -240,10 +274,7 @@ class Interval(Domain):
         if isinstance(other, UnionOfIntervals):
             return all(interval <= self for interval in other.intervals)
         if isinstance(other, str):
-            try:
-                other = Interval.from_string(other)
-            except ValueError:
-                return self >= UnionOfIntervals.from_string(other)
+            return self >= UnionOfIntervals.from_string(other)
         if (other_interval := self._coerce_interval(other)) is None:
             return NotImplemented
         return other_interval <= self
@@ -265,10 +296,10 @@ class UnionOfIntervals(Domain):
 
     intervals: Final[tuple[Interval, ...]]
 
-    def __init__(self, *intervals: Interval) -> None:
+    def __init__(self, *intervals: Interval | str) -> None:
         if not intervals:
             raise ValueError("Expected at least one interval.")
-        self.intervals = self._merge_intervals(intervals)
+        self.intervals = self._merge_intervals(Interval(spec) for spec in intervals)
 
     @classmethod
     def from_string(cls, s: str, /) -> Self:
@@ -291,9 +322,7 @@ class UnionOfIntervals(Domain):
                 return None
 
     @staticmethod
-    def _merge_intervals(
-        intervals: tuple[Interval, ...] | list[Interval], /
-    ) -> tuple[Interval, ...]:
+    def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
         ordered = sorted(intervals, key=lambda i: (i.lower, not i.lower_inclusive))
 
         merged: list[Interval] = []
