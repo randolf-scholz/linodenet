@@ -15,9 +15,12 @@ __all__ = [
     "MatrixDomains",
 ]
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Final, Protocol
+from enum import Enum, StrEnum
+from functools import cache
+from types import MappingProxyType
+from typing import ClassVar, Final, Protocol, Self
 
 from torch import Tensor
 
@@ -28,9 +31,65 @@ class Domain(Protocol):
     def __contains__(self, item: Tensor, /) -> Tensor: ...
 
     def __le__(self, other: Domain, /) -> bool: ...
-    def __gt__(self, other: Domain, /) -> bool: ...
-    def __ge__(self, other: Domain, /) -> bool: ...
-    def __lt__(self, other: Domain, /) -> bool: ...
+
+
+class _PosetEnum(Enum):
+    r"""Mixin implementing a partial order from immediate-superset edges."""
+
+    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]
+
+    @classmethod
+    @cache
+    def _validated_edges(cls) -> Mapping[Self, frozenset[Self]]:
+        edges: Mapping[Self, frozenset[Self]] = cls.KNOWN_EDGES  # type: ignore[assignment]
+        members = frozenset(cls)
+
+        if bad_keys := {node for node in edges if node not in members}:
+            raise TypeError(f"Expected {cls.__name__} nodes, got {bad_keys!r}.")
+
+        all_targets = frozenset().union(*edges.values())
+        if bad_targets := {target for target in all_targets if target not in members}:
+            raise TypeError(f"Expected {cls.__name__} targets, got {bad_targets!r}.")
+
+        stack: set[Self] = set()
+        visited: set[Self] = set()
+
+        def visit(node: Self, /) -> None:
+            if node in stack:
+                raise ValueError(f"Cycle detected in {cls.__name__} order at {node!r}.")
+            if node in visited:
+                return
+
+            stack.add(node)
+            for target in edges.get(node, frozenset()):
+                visit(target)
+            stack.remove(node)
+            visited.add(node)
+
+        for node in cls:
+            visit(node)
+
+        return edges
+
+    @classmethod
+    @cache
+    def _upward_closure(cls, node: Self, /) -> frozenset[Self]:
+        edges = cls._validated_edges()
+        parents = edges.get(node, frozenset())
+
+        closure = frozenset({node, *parents})
+        for parent in parents:
+            closure = closure | cls._upward_closure(parent)
+
+        return closure
+
+    def __le__(self, other: object, /) -> bool:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        return other in type(self)._upward_closure(self)
+
+    def __str__(self) -> str:
+        return str(self.value)
 
 
 @dataclass
@@ -134,21 +193,26 @@ class VectorDomains(StrEnum):
 
     REAL = "real"
     COMPLEX = "complex"
-    SPARSE = "sparse"
+    BOOLEAN = "boolean"
 
-    UNIT_SPHERE = "unit_sphere"  # ‖x‖₂ = 1
-    NONZERO = "nonzero"  # x ≠ 0
+    SPARSE = "sparse"  # xᵢ=0 for many i
+    ONE_HOT = "one-hot"  # xᵢ=1, xⱼ=0 for j≠i
 
-    NONNEGATIVE = "nonnegative"  # x ≥ 0
-    POSITIVE = "positive"  # x > 0
-    NONPOSITIVE = "nonpositive"  # x ≤ 0
-    NEGATIVE = "negative"  # x < 0
+    ZERO_MEAN = "zero-mean"
+    STANDARDIZED = "standardized"  # zero-mean, unit variance
+    NORMALIZED = "normalized"  # min=0, max=1
 
+    UNIT_VECTOR = "unit_sphere"  # ‖x‖₂ = 1
     STOCHASTIC = "stochastic"  # sum(x) = 1, x ≥ 0
-    PROBABILITY_SIMPLEX = "probability_simplex"  # sum(x) = 1, x ≥ 0
+
+    NONZERO = "nonzero"  # x ≠ 0
+    POSITIVE = "positive"  # xᵢ > 0
+    NEGATIVE = "negative"  # xᵢ < 0
+    NONNEGATIVE = "nonnegative"  # xᵢ ≥ 0
+    NONPOSITIVE = "nonpositive"  # xᵢ ≤ 0
 
 
-class MatrixDomains(StrEnum):
+class MatrixDomains(_PosetEnum):
     r"""Enumeration of some matrix domains."""
 
     RECTANGULAR = "rectangular"  # m × n matrices
@@ -193,5 +257,46 @@ class MatrixDomains(StrEnum):
     LOWER_TRIANGULAR = "lower_triangular"
     BANDED = "banded"
 
-    STOCHASTIC = "stochastic"
+    ROW_STOCHASTIC = "row_stochastic"
+    COLUMN_STOCHASTIC = "column_stochastic"
     DOUBLY_STOCHASTIC = "doubly_stochastic"
+
+
+M = MatrixDomains  # temporary alias
+MatrixDomains.KNOWN_EDGES = MappingProxyType({
+    M.SQUARE: frozenset({M.RECTANGULAR}),
+    M.EVEN_SQUARE: frozenset({M.SQUARE}),
+    M.LOW_RANK: frozenset({M.RECTANGULAR}),
+    M.RANK_ONE: frozenset({M.LOW_RANK}),
+    M.SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
+    M.SKEW_SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
+    M.POSITIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.POSITIVE_SEMIDEFINITE}),
+    M.NEGATIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.NEGATIVE_SEMIDEFINITE}),
+    M.POSITIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
+    M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
+    M.SINGULAR: frozenset({M.SQUARE}),
+    M.INVERTIBLE: frozenset({M.SQUARE}),
+    M.POSITIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
+    M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
+    M.CONTRACTION: frozenset({M.RECTANGULAR}),
+    M.SPECTRAL_NORMALIZED: frozenset({M.RECTANGULAR, M.LIPSCHITZ_BOUNDED}),
+    M.LIPSCHITZ_BOUNDED: frozenset({M.RECTANGULAR}),
+    M.DIAGONALLY_DOMINANT: frozenset({M.SQUARE}),
+    M.NORMAL: frozenset({M.SQUARE}),
+    M.ORTHOGONAL: frozenset({M.SQUARE, M.INVERTIBLE, M.NORMAL, M.SPECTRAL_NORMALIZED}),
+    M.CAYLEY_ORTHOGONAL: frozenset({M.SPECIAL_ORTHOGONAL}),
+    M.SPECIAL_ORTHOGONAL: frozenset({M.ORTHOGONAL, M.POSITIVE_DETERMINANT}),
+    M.PERMUTATION: frozenset({M.ORTHOGONAL, M.DOUBLY_STOCHASTIC}),
+    M.TRACELESS: frozenset({M.SQUARE}),
+    M.SYMPLECTIC: frozenset({M.EVEN_SQUARE, M.INVERTIBLE, M.POSITIVE_DETERMINANT}),
+    M.HAMILTONIAN: frozenset({M.EVEN_SQUARE, M.TRACELESS}),
+    M.DIAGONAL: frozenset({M.SYMMETRIC, M.TRIDIAGONAL, M.UPPER_TRIANGULAR, M.LOWER_TRIANGULAR}),
+    M.TRIDIAGONAL: frozenset({M.BANDED, M.SQUARE}),
+    M.UPPER_TRIANGULAR: frozenset({M.SQUARE}),
+    M.LOWER_TRIANGULAR: frozenset({M.SQUARE}),
+    M.BANDED: frozenset({M.RECTANGULAR}),
+    M.ROW_STOCHASTIC: frozenset({M.RECTANGULAR}),
+    M.COLUMN_STOCHASTIC: frozenset({M.RECTANGULAR}),
+    M.DOUBLY_STOCHASTIC: frozenset({M.ROW_STOCHASTIC, M.COLUMN_STOCHASTIC, M.SQUARE}),
+})  # fmt: skip
+del M  # remove alias
