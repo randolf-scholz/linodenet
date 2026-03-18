@@ -544,7 +544,7 @@ class WrappedParametrization(ParametrizationBase):
 
 def parametrized(
     tensor: Tensor,
-    parametrization: nn.Module | type[Parametrization],
+    parametrization: nn.Module | type[ParametrizationBase],
     *,
     unsafe: bool = False,
 ) -> ParametrizationBase:
@@ -567,7 +567,7 @@ def parametrized(
 # endregion base classes ---------------------------------------------------------------
 
 
-# region torch parametrizations replacements  -----------------------------------------------
+# region torch replacements  -----------------------------------------------------------
 def register_parametrization(
     module: nn.Module,
     tensor_name: str,
@@ -748,7 +748,7 @@ class cached(ContextDecorator, AbstractContextManager):
         return False
 
 
-# endregion torch parametrizations replacements ---------------------------------------------
+# endregion torch replacements ---------------------------------------------------------
 
 
 # region functions for parametrization -------------------------------------------------
