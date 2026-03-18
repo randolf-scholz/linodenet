@@ -12,6 +12,7 @@ from linodenet.mappings import (
     Surjection,
 )
 from linodenet.testing import MATRIX_TESTS, VECTOR_TESTS
+from tests.testing import SEEDS_10
 
 SURJECTION_MODULES = {
     "NonNegativeVector": PositiveVector,
@@ -42,7 +43,9 @@ def test_modular_surjections_work(name: str) -> None:
 @pytest.mark.parametrize(
     "surjection_cls", [OrthogonalMatExp, OrthogonalCayley, OrthogonalProjection]
 )
-def test_orthogonal_maps(surjection_cls: type[Surjection]) -> None:
+@pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
+def test_orthogonal_maps(surjection_cls: type[Surjection], seed: int) -> None:
+    torch.manual_seed(seed)
     surjection = surjection_cls()
     matrix_test = MATRIX_TESTS["is_orthogonal"]
 
