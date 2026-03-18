@@ -35,7 +35,7 @@ __all__ = [
     "UnitVector",
 ]
 
-from typing import Final, Optional
+from typing import ClassVar, Final, Optional
 
 import torch
 from torch import Tensor
@@ -78,8 +78,8 @@ class LipschitzBounded(ProjectionBase):
         - `Contraction` for the special case of $0<‖Y‖₂<1$.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.LIPSCHITZ_BOUNDED
 
     sigma: Tensor | None
     r"""BUFFER: The cached singular value."""
@@ -173,6 +173,9 @@ class SpectralNormalized(LipschitzBounded):
         - `Contraction` for the special case of $0<‖Y‖₂<1$.
     """
 
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SPECTRAL_NORMALIZED
+
     def __init__(
         self, atol: float = ATOL, rtol: float = RTOL, maxiter: Optional[int] = None
     ) -> None:
@@ -224,6 +227,9 @@ class Contraction(LipschitzBounded):
         - `SpectralNormalized` for the special case of $‖Y‖₂=1$.
     """
 
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.CONTRACTION
+
     def __init__(
         self,
         lipschitz_bound: float,
@@ -249,8 +255,8 @@ class Symmetric(ProjectionBase):
     One can show analytically that Y = ½(X + Xᵀ) is the unique minimizer.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMMETRIC
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SYMMETRIC
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -266,8 +272,8 @@ class SkewSymmetric(ProjectionBase):
     One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -287,8 +293,8 @@ class Orthogonal(ProjectionBase):
         https://math.stackexchange.com/q/2215359
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.ORTHOGONAL
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.ORTHOGONAL
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -304,8 +310,8 @@ class Traceless(ProjectionBase):
     One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.TRACELESS
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.TRACELESS
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -336,8 +342,8 @@ class Normal(ProjectionBase):
          \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.NORMAL
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.NORMAL
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -362,8 +368,8 @@ class Hamiltonian(ProjectionBase):
         - The matrix exponential of a Hamiltonian matrix is symplectic.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.EVEN_SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.HAMILTONIAN
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.EVEN_SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.HAMILTONIAN
 
     @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -383,8 +389,8 @@ class Symplectic(ProjectionBase):
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.EVEN_SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.SYMPLECTIC
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.EVEN_SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SYMPLECTIC
 
     @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -411,8 +417,8 @@ class Diagonal(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.DIAGONAL
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.DIAGONAL
 
     @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -435,8 +441,8 @@ class UpperTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.UPPER_TRIANGULAR
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.UPPER_TRIANGULAR
 
     upper: Final[int]
     r"""CONST: The diagonal to consider"""
@@ -466,8 +472,8 @@ class LowerTriangular(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
 
     lower: Final[int]
     r"""CONST: The diagonal to consider"""
@@ -491,8 +497,8 @@ class Tridiagonal(ProjectionBase):
     $Y = T⊙X$.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.TRIDIAGONAL
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.TRIDIAGONAL
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -513,8 +519,8 @@ class DiagonallyDominant(ProjectionBase):
         Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.DIAGONALLY_DOMINANT
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.DIAGONALLY_DOMINANT
 
     @signature("(..., n, n) -> (..., n, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -530,8 +536,8 @@ class RankOne(ProjectionBase):
     This is the special case of `LowRank` with `rank=1`.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.RANK_ONE
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RANK_ONE
 
     @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
@@ -558,8 +564,8 @@ class Masked(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.MASKED
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.MASKED
 
     mask: Tensor
     r"""CONST: Boolean mask to consider"""
@@ -583,8 +589,8 @@ class LowRank(ProjectionBase):
     where X=UΣVᵀ is the SVD of X.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.LOW_RANK
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.LOW_RANK
     rank: Final[int]
 
     def __init__(self, *, rank: int = 1) -> None:
@@ -612,8 +618,8 @@ class Banded(ProjectionBase):
         - `projections.Banded`
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.BANDED
+    DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.BANDED
 
     upper: Final[int]
     r"""CONST: The upper diagonal to consider"""
