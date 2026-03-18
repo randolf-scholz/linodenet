@@ -58,6 +58,7 @@ MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "MatrixExponential"    : matrix_parametrizations.MatrixExponential,
     "Normal"               : matrix_parametrizations.Normal,
     "OrthogonalCayley"     : matrix_parametrizations.OrthogonalCayley,
+    "OrthogonalHouseholder": matrix_parametrizations.OrthogonalHouseholder,
     "OrthogonalMatExp"     : matrix_parametrizations.OrthogonalMatExp,
     "OrthogonalProjection" : matrix_parametrizations.OrthogonalProjection,
     "RankOne"              : matrix_parametrizations.RankOne,

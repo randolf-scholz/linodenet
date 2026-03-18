@@ -129,6 +129,7 @@ SURJECTIONS: dict[str, type[SurjectionBase]] = {
     "ConcatProjection" : surjections.ConcatProjection,
     "GramMatrix"       : surjections.GramMatrix,
     "OrthogonalCayley" : surjections.OrthogonalCayley,
+    "OrthogonalHouseholder" : surjections.OrthogonalHouseholder,
     "OrthogonalMatExp" : surjections.OrthogonalMatExp,
     "PositiveVector"   : surjections.PositiveVector,
     "StochasticVector" : surjections.StochasticVector,

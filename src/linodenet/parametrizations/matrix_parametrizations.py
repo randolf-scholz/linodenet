@@ -14,6 +14,7 @@ __all__ = [
     "MatrixExponential",
     "Normal",
     "OrthogonalCayley",
+    "OrthogonalHouseholder",
     "OrthogonalMatExp",
     "OrthogonalProjection",
     "RankOne",
@@ -34,6 +35,7 @@ CayleyMap = bijections.CayleyMap
 
 GramMatrix = surjections.GramMatrix
 OrthogonalCayley = surjections.OrthogonalCayley
+OrthogonalHouseholder = surjections.OrthogonalHouseholder
 OrthogonalMatExp = surjections.OrthogonalMatExp
 
 Banded = projections.Banded

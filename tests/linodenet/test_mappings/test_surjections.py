@@ -5,6 +5,7 @@ import torch
 
 from linodenet.mappings import (
     OrthogonalCayley,
+    OrthogonalHouseholder,
     OrthogonalMatExp,
     OrthogonalProjection,
     PositiveVector,
@@ -41,7 +42,13 @@ def test_modular_surjections_work(name: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "surjection_cls", [OrthogonalMatExp, OrthogonalCayley, OrthogonalProjection]
+    "surjection_cls",
+    [
+        OrthogonalMatExp,
+        OrthogonalCayley,
+        OrthogonalHouseholder,
+        OrthogonalProjection,
+    ],
 )
 @pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
 def test_orthogonal_maps(surjection_cls: type[Surjection], seed: int) -> None:

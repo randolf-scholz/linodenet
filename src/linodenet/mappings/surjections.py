@@ -5,6 +5,7 @@ __all__ = [
     "ConcatProjection",
     "GramMatrix",
     "OrthogonalCayley",
+    "OrthogonalHouseholder",
     "OrthogonalMatExp",
     "PositiveVector",
     "StochasticVector",
@@ -139,6 +140,36 @@ class OrthogonalMatExp(SurjectionBase):
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
         return skew_symmetric(matrix_log(y).real.to(dtype=y.dtype))
+
+
+class OrthogonalHouseholder(SurjectionBase):
+    r"""Map square matrices to orthogonal matrices via Householder reflections.
+
+    The input columns define a sequence of trailing-block Householder reflectors.
+    This parametrization covers the full orthogonal group $O(n)$ and avoids the
+    SVD used by `OrthogonalProjection`.
+    """
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.ORTHOGONAL
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        a = x.tril(diagonal=-1)  # (..., n, n)
+        tau = 2.0 / (1.0 + (a * a).sum(dim=-2))
+        q = torch.linalg.householder_product(a, tau)
+        diagonal = x.diagonal(dim1=-2, dim2=-1).detach()
+        signs = torch.where(
+            diagonal < 0, -torch.ones_like(diagonal), torch.ones_like(diagonal)
+        )
+        return q * signs.unsqueeze(-2)
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        a, tau = torch.geqrf(y)
+        signs = a.diagonal(dim1=-2, dim2=-1).sign()
+        signs = torch.where(tau == 0, -signs, signs)
+        return a.tril(diagonal=-1) + torch.diag_embed(signs)
 
 
 class OrthogonalCayley(SurjectionBase):

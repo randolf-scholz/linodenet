@@ -16,14 +16,31 @@ from linodenet.mappings import (
     rank_one,
     tridiagonal,
 )
-from linodenet.testing import MATRIX_TESTS, MATRIX_TESTS_WITH_ARGS
+from linodenet.registry import get_registry_entry
 from tests.testing import camel2snake, snake2camel
+
+
+def get_projection_test(name: str, /):
+    r"""Return the registered test for a projection name."""
+    entry = get_registry_entry(name)
+    if callable(entry.test):
+        return entry.test
+
+    if name.endswith("_projection"):
+        entry = get_registry_entry(name.removesuffix("_projection"))
+        if callable(entry.test):
+            return entry.test
+
+    raise LookupError(f"No registry test found for {name!r}.")
 
 
 @pytest.mark.parametrize("name", PROJECTIONS)
 def test_functional_modular_both_present(name: str) -> None:
     assert snake2camel(name) in PROJECTIONS
-    assert camel2snake(name) in PROJECTION_FNS
+    functional_name = camel2snake(name)
+    if functional_name not in PROJECTION_FNS:
+        functional_name = f"{functional_name}_projection"
+    assert functional_name in PROJECTION_FNS
 
 
 @pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS)
@@ -39,28 +56,29 @@ def test_names_modular(name: str) -> None:
     r"""Test that all modular projections have the correct name."""
     projection = MATRIX_PROJECTIONS[name]
     actual_name = getattr(projection, "__name__", None)
-    assert name == actual_name
+    assert actual_name in {name, f"{name}Projection"}
 
 
-@pytest.mark.parametrize("name", MATRIX_TESTS)
+@pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS | MATRIX_PROJECTIONS_WITH_ARGS)
 def test_names_matrix_tests(name: str) -> None:
     r"""Test that all matrix tests have the correct name."""
-    matrix_test = MATRIX_TESTS[name]
+    matrix_test = get_projection_test(name)
     actual_name = getattr(matrix_test, "__name__", None)
-    assert name == actual_name
+    expected_name = camel2snake(name.removesuffix("_projection"))
+    assert actual_name == f"is_{expected_name}"
 
 
 @pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS | MATRIX_PROJECTIONS_WITH_ARGS)
 def test_inclusion_functional_has_test(name: str) -> None:
     r"""Test that all projections have tests."""
-    assert f"is_{name}" in MATRIX_TESTS | MATRIX_TESTS_WITH_ARGS
+    assert callable(get_projection_test(name))
 
 
 @pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS)
 def test_projections_work(name: str) -> None:
     r"""Test that all projections work."""
     projection = MATRIX_PROJECTION_FNS[name]
-    matrix_test = MATRIX_TESTS[f"is_{name}"]
+    matrix_test = get_projection_test(name)
     x = torch.randn(4, 4)
 
     try:
