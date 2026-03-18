@@ -12,6 +12,7 @@ __all__ = [
     "modules",
     # Constants
     "REGULARIZATION_FNS_WITH_ARGS",
+    "REGULARIZATION_FNS_WITHOUT_ARGS",
     "REGULARIZATION_FNS",
     "REGULARIZATIONS",
 ]
@@ -23,7 +24,7 @@ from linodenet.regularizations.modules import *
 __all__ += functional.__all__
 __all__ += modules.__all__
 
-REGULARIZATION_FNS: dict[str, Regularization] = {
+REGULARIZATION_FNS_WITHOUT_ARGS: dict[str, Regularization] = {
     "diagonal"           : functional.diagonal,
     "diagonally_dominant": functional.diagonally_dominant,
     "hamiltonian"        : functional.hamiltonian,
@@ -44,7 +45,7 @@ REGULARIZATION_FNS: dict[str, Regularization] = {
     "upper_triangular"   : functional.upper_triangular,
     "vector_norm"        : functional.vector_norm,
 }  # fmt: skip
-r"""Dictionary of all available modular metrics."""
+r"""Dictionary of all available regularizations (function)."""
 
 REGULARIZATION_FNS_WITH_ARGS: dict[str, RegularizationWithArgs] = {
     "banded"           : functional.banded,
@@ -53,8 +54,13 @@ REGULARIZATION_FNS_WITH_ARGS: dict[str, RegularizationWithArgs] = {
     "low_rank"         : functional.low_rank,
     "masked"           : functional.masked,
 }  # fmt: skip
-r"""Regularizations that require additional arguments."""
+r"""Dictionary of all available regularizations (function)."""
 
+REGULARIZATION_FNS: dict[str, Regularization | RegularizationWithArgs] = {
+    **REGULARIZATION_FNS_WITHOUT_ARGS,
+    **REGULARIZATION_FNS_WITH_ARGS,
+}
+r"""Dictionary of all available regularizations (function)."""
 
 REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Banded"          : modules.Banded,
@@ -81,4 +87,4 @@ REGULARIZATIONS: dict[str, type[Regularization]] = {
     "UnitVector"      : modules.UnitVector,
     "UpperTriangular" : modules.UpperTriangular,
 }  # fmt: skip
-r"""Dictionary of all available modular metrics."""
+r"""Dictionary of all available regularizations (nn.Module)."""

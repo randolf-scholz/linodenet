@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from linodenet.regularizations import (
-    REGULARIZATION_FNS,
+    REGULARIZATION_FNS_WITHOUT_ARGS,
     REGULARIZATIONS,
 )
 
@@ -20,11 +20,11 @@ EXTRA_ARGS: defaultdict[str, tuple[tuple, dict]] = defaultdict(
 )
 
 
-@pytest.mark.parametrize("regularization_name", REGULARIZATION_FNS)
+@pytest.mark.parametrize("regularization_name", REGULARIZATION_FNS_WITHOUT_ARGS)
 def test_jit_compatibility_functional(regularization_name: str) -> None:
     r"""Test JIT-compatibility of functional projections."""
     x = torch.randn(4, 4)
-    projection = REGULARIZATION_FNS[regularization_name]
+    projection = REGULARIZATION_FNS_WITHOUT_ARGS[regularization_name]
     scripted_projection = torch.jit.script(projection)
 
     try:
@@ -55,11 +55,11 @@ def test_jit_compatibility_modular(regularization_name: str) -> None:
 
 
 @pytest.mark.skip(reason="Slow.")
-@pytest.mark.parametrize("regularization_name", REGULARIZATION_FNS)
+@pytest.mark.parametrize("regularization_name", REGULARIZATION_FNS_WITHOUT_ARGS)
 def test_compile_compatibility_functional(regularization_name: str) -> None:
     r"""Test JIT-compatibility of functional projections."""
     x = torch.randn(4, 4)
-    projection = REGULARIZATION_FNS[regularization_name]
+    projection = REGULARIZATION_FNS_WITHOUT_ARGS[regularization_name]
     scripted_projection = torch.compile(projection)
 
     try:

@@ -7,6 +7,7 @@ from linodenet.mappings import (
     MATRIX_PROJECTION_FNS,
     MATRIX_PROJECTIONS,
     MATRIX_PROJECTIONS_WITH_ARGS,
+    PROJECTION_FNS,
     PROJECTIONS,
     RankOne,
     Tridiagonal,
@@ -22,7 +23,7 @@ from tests.testing import camel2snake, snake2camel
 @pytest.mark.parametrize("name", PROJECTIONS)
 def test_functional_modular_both_present(name: str) -> None:
     assert snake2camel(name) in PROJECTIONS
-    assert camel2snake(name) in PROJECTIONS
+    assert camel2snake(name) in PROJECTION_FNS
 
 
 @pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS)

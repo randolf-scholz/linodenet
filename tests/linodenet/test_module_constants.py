@@ -55,21 +55,21 @@ class Case(NamedTuple):
 
 
 CASES: dict[str, Case] = {
-    "activations"         : Case(lib.nn.activations   , Activation     , None               , ACTIVATIONS            ),
-    "transforms"          : Case(lib.transforms       , Transform      , TransformBase      , TRANSFORMS             ),
-    "bijections"          : Case(lib.bijections       , Bijection      , BijectionBase      , BIJECTIONS             ),
-    "distributions"       : Case(lib.distributions    , Distribution   , DistributionBase   , DISTRIBUTIONS          ),
-    "embeddings"          : Case(lib.embeddings       , Embedding      , EmbeddingBase      , EMBEDDINGS             ),
-    "surjections"         : Case(lib.surjections      , Surjection     , SurjectionBase     , SURJECTIONS            ),
-    "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS                  ),
-    "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS               ),
-    "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS        ),
-    "matrix_tests"        : Case(lib.testing          , MatrixTest     , None               , MATRIX_TESTS           ),
-    "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS       ),
-    "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS            ),
-    "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS         ),
-    "regularizations_cls" : Case(lib.regularizations  , Regularization , RegularizationBase , REGULARIZATIONS        ),
-    "regularizations_fun" : Case(lib.regularizations  , Regularization , None               , REGULARIZATION_FNS     ),
+    "activations"         : Case(lib.nn.activations   , Activation     , None               , ACTIVATIONS        ),
+    "transforms"          : Case(lib.transforms       , Transform      , TransformBase      , TRANSFORMS         ),
+    "bijections"          : Case(lib.bijections       , Bijection      , BijectionBase      , BIJECTIONS         ),
+    "distributions"       : Case(lib.distributions    , Distribution   , DistributionBase   , DISTRIBUTIONS      ),
+    "embeddings"          : Case(lib.embeddings       , Embedding      , EmbeddingBase      , EMBEDDINGS         ),
+    "surjections"         : Case(lib.surjections      , Surjection     , SurjectionBase     , SURJECTIONS        ),
+    "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS              ),
+    "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
+    "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS    ),
+    "matrix_tests"        : Case(lib.testing          , MatrixTest     , None               , MATRIX_TESTS       ),
+    "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
+    "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS        ),
+    "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS     ),
+    "regularizations_cls" : Case(lib.regularizations  , Regularization , RegularizationBase , REGULARIZATIONS    ),
+    "regularizations_fun" : Case(lib.regularizations  , Regularization , None               , REGULARIZATION_FNS ),
 }  # fmt: skip
 r"""Dictionary of all available cases."""
 

@@ -20,8 +20,8 @@ from linodenet.parametrizations import (
     VECTOR_PARAMETRIZATIONS,
 )
 from linodenet.regularizations import (
-    REGULARIZATION_FNS,
     REGULARIZATION_FNS_WITH_ARGS,
+    REGULARIZATION_FNS_WITHOUT_ARGS,
     REGULARIZATIONS,
 )
 from linodenet.testing import MATRIX_DOMAIN_TESTS, VECTOR_DOMAIN_TESTS
@@ -240,7 +240,7 @@ REGISTRY.register_initializations(INITIALIZATIONS)
 REGISTRY.register_parametrizations(PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(MATRIX_PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(VECTOR_PARAMETRIZATIONS)
-REGISTRY.register_regularization_fns(REGULARIZATION_FNS)
+REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITHOUT_ARGS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITH_ARGS)
 REGISTRY.register_regularizations(REGULARIZATIONS)
 REGISTRY.register_tests_on_domain(MATRIX_DOMAIN_TESTS)  # must be registered last
