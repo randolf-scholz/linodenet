@@ -88,8 +88,9 @@ class Registry(Mapping[str, RegistryEntry]):
     ) -> RegistryEntry:
         r"""Register one or more objects under a canonical name."""
         entry = self._entry_for(name)
+        canonical_name = normalize_registry_name(name)
         candidate = RegistryEntry(
-            name=normalize_registry_name(name),
+            name=canonical_name,
             domain=domain,
             test=test,
             mapping=mapping,
@@ -100,13 +101,27 @@ class Registry(Mapping[str, RegistryEntry]):
             parametrization=parametrization,
         )
 
+        inferred_domain = (
+            getattr(mapping, "DOMAIN", None) if mapping is not None else None
+        )
+        if inferred_domain is not None:
+            current_domain = (
+                candidate.domain if candidate.domain is not None else entry.domain
+            )
+            if current_domain is None:
+                candidate.domain = inferred_domain
+            elif current_domain != inferred_domain:
+                raise ValueError(
+                    f"Registry entry {canonical_name!r} has inconsistent 'domain': "
+                    f"{current_domain!r} != {inferred_domain!r}."
+                )
+
         for field in fields(RegistryEntry):
             if field.name == "name":
                 continue
             if (value := getattr(candidate, field.name)) is None:
                 continue
             if getattr(entry, field.name) is not None:
-                canonical_name = normalize_registry_name(name)
                 raise ValueError(
                     f"Registry entry {canonical_name!r} already has {field.name!r} set."
                 )
