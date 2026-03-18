@@ -43,7 +43,7 @@ REGULARIZATION_FNS: dict[str, Regularization] = {
 }  # fmt: skip
 r"""Dictionary of all available modular metrics."""
 
-REGULARIZATION_FNS_WITH_ARGS = {
+REGULARIZATION_FNS_WITH_ARGS: dict[str, RegularizationWithArgs] = {
     "banded"           : functional.banded,
     "contraction"      : functional.contraction,
     "lipschitz_bounded": functional.lipschitz_bounded,

@@ -8,6 +8,7 @@ Notes:
 __all__ = [
     # ABCs & Protocols
     "Regularization",
+    "RegularizationWithArgs",
     # Functions
     "banded",
     "contraction",
@@ -32,7 +33,8 @@ __all__ = [
     "upper_triangular",
 ]
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Concatenate, Protocol, runtime_checkable
 
 import torch
 from torch import Tensor
@@ -51,6 +53,9 @@ class Regularization(Protocol):
     ) -> Tensor:
         r"""Forward pass of the regularization."""
         ...
+
+
+type RegularizationWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 
 
 # region regularizations ---------------------------------------------------------------
