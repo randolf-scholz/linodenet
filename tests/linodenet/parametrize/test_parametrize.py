@@ -11,14 +11,14 @@ from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
 from linodenet.mappings.projections import LipschitzBounded, Symmetric
-from linodenet.parametrize import (
+from linodenet.parametrizations import (
     Identity,
     UpperTriangular,
     WrappedParametrization,
     cached,
     get_parametrizations,
     is_parametrization,
-    parametrize,
+    parametrized,
     register_optimizer_hook,
     register_parametrization,
     update_parametrizations,
@@ -105,7 +105,7 @@ def test_optimization_manual() -> None:
     check_jit_scriptable(model)
 
     # create the parametrization
-    param = parametrize(model.weight, UpperTriangular)
+    param = parametrized(model.weight, UpperTriangular)
     assert param.original_parameter is model.weight
     assert param.cached_parameter is not model.weight
 
@@ -223,10 +223,12 @@ def test_optimization_missing() -> None:
         loss = mse_loss(model(x), y)
         loss.backward()
         assert loss.isfinite()
+        assert model.weight.isnan().all()  # cache poisoned after backward
         optimizer.step()
-        assert is_upper_triangular(model.weight)
+        update_parametrizations(model)
+        assert is_upper_triangular(model.weight)  # cache restored
 
-    assert loss == original_loss
+    assert loss < original_loss
 
 
 def test_update_parametrization() -> None:
@@ -314,7 +316,7 @@ def test_surgery() -> None:
     m, n = 3, 3
     inputs = torch.randn(2, 3)
     model = nn.Linear(m, n)
-    spec = LipschitzBounded(model.weight)
+    spec = parametrized(model.weight, LipschitzBounded(0.95))
     # cloned_model = deepcopy(model)
 
     # register the parametrization
@@ -353,14 +355,14 @@ def test_surgery_extended() -> None:
         model.weight.copy_(weight)
         assert matrix_norm(model.weight, ord=2) > 1
 
-    spec = parametrize(model.weight, LipschitzBounded)
+    spec = parametrized(model.weight, LipschitzBounded(0.95))
     spec.update_parametrization()
     assert matrix_norm(spec.cached_parameter, ord=2) <= 1.0
     spec.original_parameter.norm().backward()
     spec.zero_grad(set_to_none=True)
 
 
-def test_parametrize() -> None:
+def test_parametrized() -> None:
     torch.manual_seed(42)
     batch_size, dim_in, dim_out = 4, 3, 3
 
@@ -387,9 +389,9 @@ def test_parametrize() -> None:
         test_jit=True,
     )
 
-    # now, parametrize
+    # now, parametrizations
     weight = model.weight
-    param = parametrize(weight, symmetric)
+    param = parametrized(weight, symmetric)
     param.zero_grad(set_to_none=True)
     model.weight = param.original_parameter
     model.param = param

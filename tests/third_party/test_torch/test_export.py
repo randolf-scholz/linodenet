@@ -1,4 +1,4 @@
-r"""Test whether export is compatible with parametrize."""
+r"""Test whether export is compatible with parametrizations."""
 
 from tempfile import TemporaryFile
 

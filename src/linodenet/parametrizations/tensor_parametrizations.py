@@ -7,7 +7,7 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, nn
 
-from linodenet.parametrize.base import ParametrizationBase
+from linodenet.nn.parametrize import ParametrizationBase
 from signatures import signature
 
 

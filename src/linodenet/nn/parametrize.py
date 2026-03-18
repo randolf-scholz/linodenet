@@ -16,9 +16,9 @@ Content
 - `Parametrization`: Protocol class for parametrizations.
 - `ParametrizationBase`: Parametrization of a single tensor
 - `ParametrizationDict`: Parametrization of multiple tensors
-- `parametrize`: plug-in replacement for `torch.nn.utils.parametrize`
+- `parametrizations`: plug-in replacement for `torch.nn.utils.parametrizations`
     wraps a function Tensor -> Tensor into a parametrization.
-- `cached`: (quasi) plug-in replacement for `torch.nn.utils.parametrize.cached`
+- `cached`: (quasi) plug-in replacement for `torch.nn.utils.parametrizations.cached`
     context manager which refreshes parametrization cache on exit.
 - `get_parametrizations`: recursively returns all parametrizations in a module
 - `register_parametrization`: adds a parametrization to a specific tensor
@@ -31,7 +31,7 @@ Differences
   This means that the parametrization is not recomputed automatically when the original tensor changes.
   Instead, the parametrization needs to be recomputed manually by calling `update_parametrization()`.
 - register_parametrization is intended as a drop-in replacement for
-  `torch.nn.utils.parametrize.register_parametrization`.
+  `torch.nn.utils.parametrizations.register_parametrization`.
   However, it is not equivalent. In particular, it does not support replacing a tensor with
   other tensors. For example, a rank-one parametrization is realized by projecting onto the
   low rank manifold in the forward pass and projecting back to the full rank manifold when
@@ -62,7 +62,7 @@ Classes
 
 - `ParametrizationProto`: Protocol for all parametrizations.
 - `Parametrization`: Base class for parametrizations that maintain a single cached tensor.
-    - `parametrize`: wraps a function Tensor -> Tensor into a parametrization.
+    - `parametrizations`: wraps a function Tensor -> Tensor into a parametrization.
     - `ParametrizationCache`: Base class for parametrization with multiple cached tensors.
 - `ParametrizationDict`: Base class for complex parametrization with multiple parametrized and cached tensors.
 """
@@ -77,8 +77,8 @@ __all__ = [
     "ParametrizationBase",
     "WrappedParametrization",
     "ParametrizationList",
-    # torch.nn.utils.parametrize replacements
-    "parametrize",
+    # torch.nn.utils.parametrizations replacements
+    "parametrized",
     "is_parametrized",
     "register_parametrization",
     "remove_parametrizations",
@@ -90,6 +90,7 @@ __all__ = [
     "get_parametrizations",
     "iter_parametrizations",
     "is_parametrization",
+    "is_surjection",
     "register_optimizer_hook",
     # "update_caches",
     # "update_originals",
@@ -114,6 +115,7 @@ from typing import (
     TypeIs,
     cast,
     get_protocol_members,
+    overload,
     runtime_checkable,
 )
 from warnings import deprecated
@@ -122,7 +124,7 @@ import torch
 from torch import Tensor, jit, nn
 from torch.optim import Optimizer
 
-from linodenet.nn import ModuleSequence
+from linodenet.nn.containers import ModuleSequence
 
 
 @runtime_checkable
@@ -138,6 +140,21 @@ class Surjection[X, Y](Protocol):
     def forward(self, x: X, /) -> Y: ...
     @abstractmethod
     def right_inverse(self, y: Y, /) -> X: ...
+
+
+@overload
+def is_surjection(obj: type, /) -> TypeIs[type[Surjection]]: ...
+@overload
+def is_surjection(obj: object, /) -> TypeIs[Surjection]: ...
+def is_surjection(obj: object, /) -> bool:
+    r"""Check if the object is a Surjection.
+
+    This method is needed because standard isinstance checks do not work with jit.ScriptModule.
+    This is because Protocol used getattr_static, rather than proper getattr/hasattr.
+    """
+    return all(
+        callable(getattr(obj, name, None)) for name in get_protocol_members(Surjection)
+    )
 
 
 @runtime_checkable
@@ -158,6 +175,22 @@ class Parametrization(Protocol):
     def update_parametrization(self) -> None:
         r"""Update both the cached and the original tensors."""
         ...
+
+
+@overload
+def is_parametrization(obj: type, /) -> TypeIs[type[Parametrization]]: ...
+@overload
+def is_parametrization(obj: object, /) -> TypeIs[Parametrization]: ...
+def is_parametrization(obj: object, /) -> bool:
+    r"""Check if the object is a Parametrization.
+
+    This method is needed because standard isinstance checks do not work with jit.ScriptModule.
+    This is because Protocol used getattr_static, rather than proper getattr/hasattr.
+    """
+    return all(
+        callable(getattr(obj, name, None))
+        for name in get_protocol_members(Parametrization)
+    )
 
 
 class WithoutRightInverse(nn.Module):
@@ -199,7 +232,7 @@ class BoundParametrization(Protocol):
         r"""Initialize the parametrization.
 
         Args:
-            tensor: The tensor to parametrize.
+            tensor: The tensor to parametrizations.
         """
         ...
 
@@ -304,14 +337,6 @@ class BoundParametrization(Protocol):
             self.update_cache()
 
 
-def is_parametrization(obj: Any, /) -> TypeIs[Parametrization]:
-    r"""Check if the object is a Parametrization.
-
-    This method is needed because standard isinstance checks do not work with jit.ScriptModule.
-    """
-    return all(hasattr(obj, member) for member in get_protocol_members(Parametrization))
-
-
 # region base classes ------------------------------------------------------------------
 class _WithPostInitMeta(type):
     @staticmethod
@@ -359,7 +384,7 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         if not isinstance(tensor, nn.Parameter):
             raise TypeError("tensor must be a nn.Parameter")
 
-        # get the tensor to parametrize
+        # get the tensor to parametrizations
         self.register_parameter("original_parameter", tensor)
         self.register_buffer("cached_parameter", tensor.clone().detach())
         self.register_buffer("is_stale", torch.tensor(True), persistent=True)
@@ -496,6 +521,13 @@ class WrappedParametrization(ParametrizationBase):
                 isinstance(parametrization, nn.Module)
                 and isinstance(parametrization, Surjection)
             )
+
+        if getattr(parametrization, "DOMAIN", None) is not None:
+            self.DOMAIN: Final = parametrization.DOMAIN
+
+        if getattr(parametrization, "CODOMAIN", None) is not None:
+            self.CODOMAIN: Final = parametrization.CODOMAIN
+
         self.parametrization: Surjection = parametrization.to(
             device=tensor.device, dtype=tensor.dtype
         )
@@ -510,25 +542,32 @@ class WrappedParametrization(ParametrizationBase):
         return self.parametrization.right_inverse(y)
 
 
-def parametrize(
+def parametrized(
     tensor: Tensor,
-    parametrization: nn.Module | type[ParametrizationBase],
+    parametrization: nn.Module | type[Parametrization],
     *,
     unsafe: bool = False,
 ) -> ParametrizationBase:
-    if isinstance(parametrization, nn.Module):
-        return WrappedParametrization(tensor, parametrization, unsafe=unsafe)
-    if isinstance(parametrization, type):
-        return parametrization(tensor)
-    raise TypeError(
-        "parametrization must be either a nn.Module or a Parametrization class"
-    )
+    match parametrization:
+        case type() as cls:
+            if not is_parametrization(cls):
+                raise TypeError(
+                    f"Expected a Parametrization type, but got {type(parametrization)}"
+                    f"\nMaybe you wanted to pass a transform and forgot to instantiate it?"
+                )
+            return cls(tensor)
+        case nn.Module() as transform:
+            return WrappedParametrization(tensor, transform, unsafe=unsafe)
+        case _:
+            raise TypeError(
+                f"Expected a Parametrization or nn.Module, but got {type(parametrization)}"
+            )
 
 
 # endregion base classes ---------------------------------------------------------------
 
 
-# region torch parametrize replacements  -----------------------------------------------
+# region torch parametrizations replacements  -----------------------------------------------
 def register_parametrization(
     module: nn.Module,
     tensor_name: str,
@@ -536,7 +575,7 @@ def register_parametrization(
     *,
     unsafe: bool = False,
 ) -> None:
-    r"""Drop-in replacement for nn.utils.parametrize.register_parametrization."""
+    r"""Drop-in replacement for nn.utils.parametrizations.register_parametrization."""
     tensor = getattr(module, tensor_name)
     if not isinstance(tensor, nn.Parameter):
         raise TypeError(f"{tensor_name} is not a parameter!")
@@ -544,7 +583,7 @@ def register_parametrization(
     if tensor_name in getattr(module, "parametrizations", {}):
         raise NameError(f"{tensor_name} already parametrized!")
 
-    wrapper = parametrize(tensor, parametrization, unsafe=unsafe)
+    wrapper = parametrized(tensor, parametrization, unsafe=unsafe)
 
     if not isinstance(wrapper, nn.Module) or not is_parametrization(wrapper):
         raise TypeError(f"{parametrization} does not produce a valid parametrization!")
@@ -709,7 +748,7 @@ class cached(ContextDecorator, AbstractContextManager):
         return False
 
 
-# endregion torch parametrize replacements ---------------------------------------------
+# endregion torch parametrizations replacements ---------------------------------------------
 
 
 # region functions for parametrization -------------------------------------------------

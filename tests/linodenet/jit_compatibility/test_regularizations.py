@@ -1,11 +1,22 @@
 r"""Test JIT-compatibility of `linodenet.projections.testing`."""
 
+from collections import defaultdict
+
 import pytest
 import torch
 
 from linodenet.regularizations import (
     FUNCTIONAL_REGULARIZATIONS,
     MODULAR_REGULARIZATIONS,
+)
+
+EXTRA_ARGS: defaultdict[str, tuple[tuple, dict]] = defaultdict(
+    lambda: ((), {}),
+    Banded=((), {"lower": -2, "upper": +1}),
+    Contraction=((), {"lipschitz_bound": 0.7}),
+    LipschitzBounded=((), {"lipschitz_bound": 1.2}),
+    LowRank=((), {"rank": 1}),
+    Masked=((), {"mask": torch.randint(0, 2, (4,), dtype=torch.bool)}),
 )
 
 
@@ -30,7 +41,8 @@ def test_jit_compatibility_modular(regularization_name: str) -> None:
     r"""Test JIT-compatibility of modular projections."""
     x = torch.randn(4, 4)
     projection_type = MODULAR_REGULARIZATIONS[regularization_name]
-    projection = projection_type()
+    extra_args, extra_kwargs = EXTRA_ARGS[regularization_name]
+    projection = projection_type(*extra_args, **extra_kwargs)
     scripted_projection = torch.jit.script(projection)
 
     try:

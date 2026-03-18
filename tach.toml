@@ -11,7 +11,7 @@ source_roots = [ "src",
 
 [[modules ]]
 path = "linodenet.nn"
-depends_on = [ "linodenet.nn.activations", "linodenet_special", "linodenet.mappings"]
+depends_on = [ "linodenet_special"]
 
 [[modules ]]
 path = "linodenet.utils"
@@ -53,14 +53,6 @@ path = "linodenet.testing"
 depends_on = []
 
 [[modules ]]
-path = "linodenet.bijections"
-depends_on = []
-
-[[modules ]]
-path = "linodenet.parametrize"
-depends_on = [ "linodenet.nn", "linodenet.mappings"]
-
-[[modules ]]
 path = "linodenet.domains"
 depends_on = []
 utility = true
@@ -79,12 +71,8 @@ path = "linodenet.flows"
 depends_on = [ "linodenet.initializations", "linodenet.mappings"]
 
 [[modules ]]
-path = "linodenet.nn.activations"
-depends_on = ["linodenet_special"]
-
-[[modules ]]
 path = "linodenet"
-depends_on = ["linodenet_special", "linodenet.testing", "linodenet.distributions", "linodenet.filters", "linodenet.flows", "linodenet.imputation", "linodenet.parametrize", "linodenet.forecasting", "linodenet.initializations", "linodenet.regularizations", "linodenet.mappings", "linodenet.nn"]
+depends_on = [ "linodenet.testing", "linodenet.distributions", "linodenet.filters", "linodenet.flows", "linodenet.imputation", "linodenet.forecasting", "linodenet.initializations", "linodenet.regularizations", "linodenet.mappings", "linodenet.nn", "linodenet.parametrizations", "linodenet_special"]
 
 [[modules ]]
 path = "signatures"
@@ -93,40 +81,34 @@ utility = true
 
 [[modules ]]
 path = "linodenet_special"
-depends_on = ["linodenet_special.fallbacks", "linodenet_special.linalg", "linodenet_special.interfaces", "linodenet_special.thomson_initialization", "linodenet_special.kernels"]
-
-[[modules ]]
-path = "linodenet_special.transport"
-depends_on = ["linodenet_special.fallbacks"]
+depends_on = ["linodenet_special.fallbacks", "linodenet_special.kernels"]
 
 [[modules ]]
 path = "linodenet_special.linalg"
 depends_on = []
+utility = true
 
 [[modules ]]
 path = "linodenet_special.fallbacks"
 depends_on = []
 
 [[modules ]]
-path = "linodenet_special.marchenko_pastur"
-depends_on = []
-
-[[modules ]]
-path = "linodenet_special.thomson_initialization"
-depends_on = []
-
-[[modules ]]
 path = "linodenet_special.interfaces"
 depends_on = []
+utility = true
 
 [[modules ]]
 path = "linodenet_special.kernels"
-depends_on = ["linodenet_special.interfaces", "linodenet_special.fallbacks", "linodenet_special.compiled"]
+depends_on = [ "linodenet_special.fallbacks", "linodenet_special.compiled"]
 
 [[modules ]]
 path = "linodenet_special.compiled"
-depends_on = ["linodenet_special.interfaces"]
+depends_on = []
 
 [[modules ]]
 path = "linodenet.mappings"
-depends_on = ["linodenet_special.fallbacks", "linodenet.nn.activations", "linodenet.nn"]
+depends_on = ["linodenet_special.fallbacks", "linodenet.nn", "linodenet_special"]
+
+[[modules ]]
+path = "linodenet.parametrizations"
+depends_on = ["linodenet.nn", "linodenet.mappings"]

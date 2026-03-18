@@ -14,10 +14,12 @@ from typing import Any, Final
 import torch
 from torch import Tensor, nn
 
-from linodenet.nn import LinearContraction, ModuleSequence, ReZero
+from linodenet.nn import ModuleSequence, ReZero
 from linodenet.nn.activations import get_activation
 from linodenet.utils import deep_dict_update
 from signatures import signature
+
+from ..linear import LinearContraction
 
 
 class iResNetLayer(nn.Module):
@@ -166,7 +168,7 @@ class iResNetBlock(nn.Module):
             "rtol": rtol,
             "maxiter": maxiter,
             "activation": activation,
-            "activation_config": activation_config or {"inplace": False},
+            "activation_config": {"inplace": False},
             "bias": bias,
             "rezero": rezero,
         }

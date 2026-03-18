@@ -19,7 +19,7 @@ class pytest_xfail(AbstractContextManager):
 
     Usage:  (as decorator)
         ```python
-        @pytest.mark.parametrize("x", [1, 2, 3, 4, 5])
+        @pytest.mark.parametrizations("x", [1, 2, 3, 4, 5])
         @pytest_xfail("reason for xfail", condition=lambda x: x > 3)
         def test_function(x: int) -> None:
             assert x <= 3

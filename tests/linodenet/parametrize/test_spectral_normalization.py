@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 from linodenet.mappings.projections import LipschitzBounded
-from linodenet.parametrize import register_parametrization
+from linodenet.parametrizations import register_parametrization
 from linodenet.testing import is_contraction
 
 

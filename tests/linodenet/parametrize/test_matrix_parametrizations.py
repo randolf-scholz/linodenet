@@ -9,7 +9,7 @@ from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
 from linodenet.mappings.projections import LipschitzBounded
-from linodenet.parametrize import (
+from linodenet.parametrizations import (
     Banded,
     Diagonal,
     Identity,

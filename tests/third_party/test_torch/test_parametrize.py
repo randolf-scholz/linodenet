@@ -1,4 +1,4 @@
-r"""Tests for torch.parametrize module."""
+r"""Tests for torch.parametrizations module."""
 
 import pytest
 import torch

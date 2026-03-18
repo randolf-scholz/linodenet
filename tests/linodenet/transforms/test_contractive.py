@@ -1,8 +1,8 @@
 import pytest
 import torch
 
+from linodenet.mappings.linear import LinearContraction
 from linodenet.mappings.transforms import ContractiveTransform
-from linodenet.nn import LinearContraction
 from tests.testing import SEEDS_10, TestCase
 
 

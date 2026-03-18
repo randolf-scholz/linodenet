@@ -149,7 +149,7 @@ repos:
     hooks:
       - id: pyright-concise
         files: '^src/|^tests/'
-        # exclude: 'src/linodenet/parametrize/'
+        # exclude: 'src/linodenet/parametrizations/'
   # mypy
   - repo: local
     hooks:
@@ -159,7 +159,7 @@ repos:
         require_serial: true
         types_or: [python, pyi]
         files: '^src/|^tests/'
-        # exclude: '/parametrize/'
+        # exclude: '/parametrizations/'
         entry: mypy
         args:
           - "--hide-error-context"

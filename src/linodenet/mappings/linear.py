@@ -38,6 +38,8 @@ from torch import Tensor, nn
 from torch.linalg import matrix_norm
 from torch.nn import functional
 
+from linodenet.mappings.projections import LipschitzBounded
+from linodenet.nn.parametrize import register_parametrization
 from linodenet_special import singular_triplet
 from signatures import signature
 
@@ -47,20 +49,6 @@ class LinearContraction(nn.Module):
 
     This is achieved by normalizing the weight matrix by
     $A' = A⋅\min(\tfrac{c}{‖A‖₂}, 1)$, where $c<1$ is a hyperparameter.
-
-    Attributes:
-        input_size:  int
-            The dimensionality of the input space.
-        output_size: int
-            The dimensionality of the output space.
-        c: Tensor
-            The regularization hyperparameter.
-        spectral_norm: Tensor
-            BUFFER: The value of `‖W‖₂`
-        weight: Tensor
-            The weight matrix.
-        bias: Tensor or None
-            The bias Tensor if present, else None.
     """
 
     input_size: Final[int]
@@ -90,17 +78,13 @@ class LinearContraction(nn.Module):
         self.output_size = output_size
 
         self.weight = nn.Parameter(Tensor(output_size, input_size))
-        if bias:
-            self.bias = nn.Parameter(Tensor(output_size))
-        else:
-            self.register_parameter("bias", None)
+
+        self.register_parameter(
+            "bias", nn.Parameter(Tensor(output_size)) if bias else None
+        )
         self.reset_parameters()
 
-        self.register_buffer("one", torch.tensor(1.0), persistent=True)
-        self.register_buffer("c", torch.tensor(float(c)), persistent=True)
-        self.register_buffer(
-            "spectral_norm", matrix_norm(self.weight, ord=2), persistent=False
-        )
+        register_parametrization(self, "weight", LipschitzBounded(lipschitz_bound=c))
 
     def reset_parameters(self) -> None:
         r"""Reset both weight matrix and bias vector."""
@@ -109,20 +93,9 @@ class LinearContraction(nn.Module):
             bound = 1 / sqrt(self.input_size)
             nn.init.uniform_(self.bias, -bound, bound)
 
-    # def extra_repr(self) -> str:
-    #     return "input_size={}, output_size={}, bias={}".format(
-    #         self.input_size, self.output_size, self.bias is not None
-    #     )
-
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor) -> Tensor:
-        # σ_max, _ = torch.lobpcg(self.weight.T @ self.weight, largest=True)
-        # σ_max = torch.linalg.norm(self.weight, ord=2)
-        # self.spectral_norm = spectral_norm(self.weight)
-        # σ_max = torch.linalg.svdvals(self.weight)[0]
-        self.spectral_norm = matrix_norm(self.weight, ord=2)
-        gamma = torch.minimum(self.c / self.spectral_norm, self.one)
-        return functional.linear(x, gamma * self.weight, self.bias)
+        return functional.linear(x, self.weight, self.bias)
 
 
 class AltLinearContraction(nn.Module):

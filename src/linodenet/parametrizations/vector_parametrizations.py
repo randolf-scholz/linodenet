@@ -6,7 +6,7 @@ __all__ = [
     "SimplexVector",
 ]
 
-from linodenet.parametrize.base import WrappedParametrization
+from linodenet.nn.parametrize import WrappedParametrization
 
 
 class UnitVector(WrappedParametrization):

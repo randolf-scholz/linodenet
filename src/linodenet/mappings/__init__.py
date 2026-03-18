@@ -14,6 +14,7 @@ __all__ = [
     "surjections",
     "functional",
     "bijections",
+    "linear",
     "transforms",
     # Constants
     "FUNCTIONAL_PROJECTIONS",
@@ -31,6 +32,7 @@ from linodenet.mappings import (
     bijections,
     embeddings,
     functional,
+    linear,
     projections,
     surjections,
     transforms,

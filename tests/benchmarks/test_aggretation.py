@@ -57,8 +57,8 @@ class TestAggregation:
 
 
 #
-# @pytest.mark.parametrize("size", [10, 100, 1000, 10000])
-# @pytest.mark.parametrize("name", aggregations)
+# @pytest.mark.parametrizations("size", [10, 100, 1000, 10000])
+# @pytest.mark.parametrizations("name", aggregations)
 # @pytest.mark.benchmark(group_by="name")
 # def test_speed(benchmark, name: str, size: int) -> None:
 #     r"""Compare speed of different aggregation algorithms."""

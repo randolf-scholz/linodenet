@@ -32,7 +32,7 @@ from torch import Tensor
 
 from linodenet.domains import MatrixDomains
 from linodenet.mappings import bijections, projections, surjections
-from linodenet.parametrize.base import ParametrizationBase
+from linodenet.nn.parametrize import ParametrizationBase
 from signatures import signature
 
 # Fixed projection modules are wrapped lazily by `register_parametrization`.

@@ -15,14 +15,14 @@ Note:
     In essence, this means we need to be able to find a mapping $w → w'$ such that the
     following diagram commutes::
 
-            parametrize
+            parametrizations
         w ──────────────► θ
         │                 │
         │                 │m
         │φ                │a
         │                 │r
         │                 │
-        ▼   parametrize   ▼
+        ▼   parametrizations   ▼
         w'──────────────► θ'
 
     I.e. we need to find a mapping $φ$ on the unconstrained parameters such that
