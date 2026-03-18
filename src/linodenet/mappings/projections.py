@@ -346,15 +346,20 @@ class Normal(ProjectionBase):
 
 
 class Hamiltonian(ProjectionBase):
-    r"""Return the closest symplectic matrix to X.
+    r"""Return the closest hamiltonian matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   (JY)ᵀ = JA   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
 
     Alternatively, the above is equivalent to
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J= 𝔻₊₁-𝔻₋₁
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   Yᵀ J Y = J   where   J= 𝔻₊₁-𝔻₋₁
 
     where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
+
+    Note:
+        The Hamiltonian matrices are the skew-symmetric matrices
+        with respect to the symplectic inner product.
+        - The matrix exponential of a Hamiltonian matrix is symplectic.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.EVEN_SQUARE
