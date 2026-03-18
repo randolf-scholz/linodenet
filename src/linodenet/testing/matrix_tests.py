@@ -41,6 +41,30 @@ from linodenet.constants import ATOL, RTOL
 from signatures import signature
 
 
+def _matrix_batch_shape(x: Tensor, dim: tuple[int, int], /) -> tuple[int, ...]:
+    r"""Return the batch shape after removing the matrix dimensions."""
+    m, n = (axis % x.ndim for axis in dim)
+    return tuple(size for axis, size in enumerate(x.shape) if axis not in {m, n})
+
+
+def _full_false(x: Tensor, dim: tuple[int, int], /) -> Tensor:
+    r"""Return a boolean tensor filled with `False` over the batch shape."""
+    return torch.full(
+        _matrix_batch_shape(x, dim), False, dtype=torch.bool, device=x.device
+    )
+
+
+def _has_shape(x: Tensor, shape: tuple[int, int], dim: tuple[int, int], /) -> bool:
+    r"""Return whether the selected matrix dimensions match `shape`."""
+    m, n = dim
+    return x.shape[m] == shape[0] and x.shape[n] == shape[1]
+
+
+def _has_size(x: Tensor, size: int, dim: tuple[int, int], /) -> bool:
+    r"""Return whether the selected matrix dimensions equal `(size, size)`."""
+    return _has_shape(x, (size, size), dim)
+
+
 class MatrixTest(Protocol):
     r"""Protocol for testing certain matrix property."""
 
@@ -75,12 +99,15 @@ def is_low_rank(
     x: Tensor,
     /,
     rank: int,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is low-rank."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     # move target dims to -1 and -2
     x = x.movedim(dim, (-2, -1))
     ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
@@ -91,12 +118,15 @@ def is_low_rank(
 def is_rank_one(
     x: Tensor,
     /,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is rank-1."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     # move target dims to -1 and -2
     x = x.movedim(dim, (-2, -1))
     ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
@@ -107,12 +137,15 @@ def is_rank_one(
 def is_square(
     x: Tensor,
     /,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,  # noqa: ARG001
     atol: float = 0.0,  # noqa: ARG001
 ) -> Tensor:
     r"""Check whether the given tensor is square along the given dimensions."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     return torch.tensor(
         x.shape[dim[0]] == x.shape[dim[1]],
         dtype=torch.bool,
@@ -124,12 +157,15 @@ def is_square(
 def is_identity(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is the identity."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     x = x.movedim(dim, (-2, -1))
     if x.shape[-2] != x.shape[-1]:
         return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
@@ -146,12 +182,15 @@ def is_identity(
 def is_symmetric(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is symmetric."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     return torch.isclose(
         x,
         x.swapaxes(*dim),
@@ -164,12 +203,15 @@ def is_symmetric(
 def is_skew_symmetric(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is skew-symmetric."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     return torch.isclose(
         x,
         -x.swapaxes(*dim),
@@ -182,12 +224,15 @@ def is_skew_symmetric(
 def is_orthogonal(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is orthogonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     return torch.isclose(
         x @ x.swapaxes(*dim),
         torch.eye(x.shape[dim[-1]], device=x.device),
@@ -200,16 +245,18 @@ def is_orthogonal(
 def is_special_orthogonal(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is special orthogonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     x = x.movedim(dim, (-2, -1))
     if x.shape[-2] != x.shape[-1]:
         return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
-
     return is_orthogonal(x, rtol=rtol, atol=atol) & torch.isclose(
         torch.linalg.det(x),
         torch.ones((), dtype=x.dtype, device=x.device),
@@ -222,6 +269,7 @@ def is_special_orthogonal(
 def is_traceless(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
@@ -235,6 +283,8 @@ def is_traceless(
         - In particular a complex matrix is traceless if and only if it is expressible as a commutator:
           tr(A) = 0 ⟺ ∑λᵢ = 0 ⟺ A = PQ-QP for some P,Q.
     """
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     return torch.isclose(
         torch.diagonal(x, dim1=dim[-1], dim2=dim[-2]).sum(dim=-1),
         torch.zeros((), dtype=x.dtype, device=x.device),
@@ -247,12 +297,15 @@ def is_traceless(
 def is_normal(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is normal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     return torch.isclose(
         x @ x.swapaxes(*dim),
         x.swapaxes(*dim) @ x,
@@ -265,15 +318,17 @@ def is_normal(
 def is_symplectic(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is symplectic."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
-
     m, n = dim
     dim_x, dim_y = x.shape[m], x.shape[n]
     if dim_x != dim_y or dim_x % 2 != 0:
@@ -296,15 +351,17 @@ def is_symplectic(
 def is_hamiltonian(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
     r"""Check whether the given tensor is Hamiltonian."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
-
     m, n = dim
     dim_x, dim_y = x.shape[m], x.shape[n]
     if dim_x != dim_y or dim_x % 2 != 0:
@@ -327,15 +384,17 @@ def is_hamiltonian(
 def is_diagonal(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
     r"""Check whether the given tensor is diagonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
-
     m, n = dim
     mask = torch.eye(x.shape[m], x.shape[n], device=x.device, dtype=x.dtype)
     return torch.isclose(
@@ -351,15 +410,17 @@ def is_lower_triangular(
     x: Tensor,
     /,
     lower: int = 0,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
     r"""Check whether the given tensor is lower triangular."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
-
     return torch.isclose(x, x.tril(lower), rtol=rtol, atol=atol).all(dim=dim)
 
 
@@ -368,15 +429,17 @@ def is_upper_triangular(
     x: Tensor,
     /,
     upper: int = 0,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
     r"""Check whether the given tensor is lower triangular."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
-
     return torch.isclose(
         x,
         x.triu(upper),
@@ -389,12 +452,15 @@ def is_upper_triangular(
 def is_tridiagonal(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
     r"""Check whether the given tensor is tridiagonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
     return torch.isclose(
         x,
         x.triu(-1).tril(+1),
@@ -409,6 +475,7 @@ def is_banded(
     /,
     lower: int,
     upper: int,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
@@ -417,6 +484,8 @@ def is_banded(
     r"""Check whether the given tensor is banded."""
     if dim != (-2, -1):
         raise NotImplementedError("Currently only supports dim=(-2,-1).")
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     if not (lower <= 0 <= upper):
         raise ValueError("Lower bound must be greater than or equal to upper bound.")
 
@@ -433,12 +502,15 @@ def is_masked(
     x: Tensor,
     /,
     mask: Tensor,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
     r"""Check whether the given tensor is masked."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     mask_ = torch.as_tensor(mask, dtype=x.dtype, device=x.device)
     return torch.isclose(
         x,
@@ -456,6 +528,7 @@ def is_masked(
 def is_spectral_normalized(
     x: Tensor,
     /,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
@@ -467,6 +540,8 @@ def is_spectral_normalized(
 
     This is done by checking whether the spectral norm is less than or equal to L.
     """
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     # TODO: compute spectral norm with given tolerance
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
     return (sigma - 1.0) <= (1.0 + rtol) * 1.0 + atol
@@ -477,6 +552,7 @@ def is_lipschitz_bounded(
     x: Tensor,
     /,
     lipschitz_bound: float,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = 0.0,
@@ -488,6 +564,8 @@ def is_lipschitz_bounded(
 
     This is done by checking whether the spectral norm is less than or equal to L.
     """
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     # TODO: compute spectral norm with given tolerance
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
     return sigma <= (1 + rtol) * lipschitz_bound + atol
@@ -498,6 +576,7 @@ def is_contraction(
     x: Tensor,
     /,
     lipschitz_bound: float = 1.0,
+    shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
     rtol: float = RTOL,
@@ -511,6 +590,8 @@ def is_contraction(
 
     .. math:: ‖A‖₂ ≤ (1-rtol)⋅𝟏 - atol
     """
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
     one = torch.ones_like(sigma)
     c = torch.full_like(sigma, lipschitz_bound)
@@ -521,6 +602,7 @@ def is_contraction(
 def is_diagonally_dominant(
     x: Tensor,
     /,
+    size: int | None = None,
     *,
     strict: bool = False,
     dim: tuple[int, int] = (-2, -1),
@@ -540,8 +622,10 @@ def is_diagonally_dominant(
 
     In this case, the matrix is guaranteed to be invertible
     """
-    m, n = dim
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
 
+    m, n = dim
     if x.shape[m] != x.shape[n]:
         raise ValueError("Expected square matrix")
 
