@@ -70,17 +70,17 @@ __all__ += bijections.__all__
 __all__ += transforms.__all__
 
 
-EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
-    "ConcatEmbedding"  : embeddings.ConcatEmbedding,
-    "LinearEmbedding"  : embeddings.LinearEmbedding,
-}  # fmt: skip
-r"""Dictionary of available embeddings (nn.Module)."""
-
 BIJECTIONS: dict[str, type[BijectionBase]] = {
     "MatrixExponential" : bijections.MatrixExponential,
     "CayleyMap"         : bijections.CayleyMap,
 }  # fmt: skip
 r"""Dictionary containing all available bijections (nn.Module)."""
+
+EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
+    "ConcatEmbedding"  : embeddings.ConcatEmbedding,
+    "LinearEmbedding"  : embeddings.LinearEmbedding,
+}  # fmt: skip
+r"""Dictionary of available embeddings (nn.Module)."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
     "ContractiveTransform" : transforms.ContractiveTransform,
