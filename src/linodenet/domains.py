@@ -10,6 +10,7 @@ Domains should allow:
 __all__ = [
     "Domain",
     "Interval",
+    "UnionOfIntervals",
     "ScalarDomains",
     "VectorDomains",
     "MatrixDomains",
@@ -169,23 +170,114 @@ class Interval(Domain):
     def __str__(self) -> str:
         lower_bracket = "[" if self.lower_inclusive else "("
         upper_bracket = "]" if self.upper_inclusive else ")"
-        return f"{lower_bracket}{self.lower}, {self.upper}{upper_bracket}"
+        lower = format(self.lower, "g")
+        upper = format(self.upper, "g")
+        return f"{lower_bracket}{lower}, {upper}{upper_bracket}"
 
     def __repr__(self) -> str:
         return f"Interval('{self!s}')"
 
 
-class ScalarDomains:
-    r"""Some scalar domains."""
+@dataclass(init=False)
+class UnionOfIntervals(Domain):
+    r"""A finite union of intervals with automatic simplification."""
 
-    REAL_LINE: Final[Interval] = Interval.from_string("(-inf, inf)")
-    EXTENDED_LINE: Final[Interval] = Interval.from_string("[-inf, inf]")
-    UNIT_INTERVAL: Final[Interval] = Interval.from_string("[0, 1]")
-    OPEN_UNIT_INTERVAL: Final[Interval] = Interval.from_string("(0, 1)")
-    POSITIVE_REALS: Final[Interval] = Interval.from_string("(0, inf)")
-    NONNEGATIVE_REALS: Final[Interval] = Interval.from_string("[0, inf)")
-    NEGATIVE_REALS: Final[Interval] = Interval.from_string("(-inf, 0)")
-    NONPOSITIVE_REALS: Final[Interval] = Interval.from_string("(-inf, 0]")
+    intervals: Final[tuple[Interval, ...]]
+
+    def __init__(self, *intervals: Interval) -> None:
+        if not intervals:
+            raise ValueError("Expected at least one interval.")
+        self.intervals = self._merge_intervals(intervals)
+
+    @classmethod
+    def from_string(cls, s: str, /) -> Self:
+        r"""Create a union of intervals from a `|`-separated string."""
+        parts = [part.strip() for part in s.split("|")]
+        if any(not part for part in parts):
+            raise ValueError(f"Invalid union of intervals string: {s}")
+        return cls(*(Interval.from_string(part) for part in parts))
+
+    @staticmethod
+    def _merge_intervals(
+        intervals: tuple[Interval, ...] | list[Interval], /
+    ) -> tuple[Interval, ...]:
+        ordered = sorted(intervals, key=lambda i: (i.lower, not i.lower_inclusive))
+
+        merged: list[Interval] = []
+        for interval in ordered:
+            if not merged:
+                merged.append(interval)
+                continue
+
+            current = merged[-1]
+            if not UnionOfIntervals._touch_or_overlap(current, interval):
+                merged.append(interval)
+                continue
+
+            merged[-1] = Interval(
+                current.lower,
+                interval.upper,
+                lower_inclusive=current.lower_inclusive,
+                upper_inclusive=interval.upper_inclusive,
+            )
+
+        return tuple(merged)
+
+    @staticmethod
+    def _touch_or_overlap(left: Interval, right: Interval, /) -> bool:
+        if right.lower < left.upper:
+            return True
+        if right.lower > left.upper:
+            return False
+        return left.upper_inclusive or right.lower_inclusive
+
+    def __contains__(self, item: Tensor, /) -> Tensor:
+        mask = self.intervals[0].__contains__(item)
+        for interval in self.intervals[1:]:
+            mask = mask | interval.__contains__(item)
+        return mask
+
+    def __str__(self) -> str:
+        return " | ".join(str(interval) for interval in self.intervals)
+
+    def __repr__(self) -> str:
+        return f"UnionOfIntervals('{self!s}')"
+
+
+class ScalarDomains(_PosetEnum):
+    r"""Enumeration of some scalar domains."""
+
+    EXTENDED_LINE = Interval.from_string("[-inf, inf]")
+    REAL_LINE = Interval.from_string("(-inf, inf)")
+    POSITIVE_REALS = Interval.from_string("(0, inf)")
+    NEGATIVE_REALS = Interval.from_string("(-inf, 0)")
+    NONNEGATIVE_REALS = Interval.from_string("[0, inf)")
+    NONPOSITIVE_REALS = Interval.from_string("(-inf, 0]")
+    NONZERO = UnionOfIntervals.from_string("(-inf, 0) | (0, inf)")
+
+    UNIT_INTERVAL = Interval.from_string("[0, 1]")
+    OPEN_UNIT_INTERVAL = Interval.from_string("(0, 1)")
+
+    @property
+    def domain(self) -> Domain:
+        return self.value
+
+    def __contains__(self, item: Tensor, /) -> Tensor:
+        return self.domain.__contains__(item)
+
+
+S = ScalarDomains  # temporary alias
+ScalarDomains.KNOWN_EDGES = MappingProxyType({
+    S.REAL_LINE: frozenset({S.EXTENDED_LINE}),
+    S.UNIT_INTERVAL: frozenset({S.NONNEGATIVE_REALS, S.REAL_LINE}),
+    S.OPEN_UNIT_INTERVAL: frozenset({S.UNIT_INTERVAL, S.POSITIVE_REALS}),
+    S.POSITIVE_REALS: frozenset({S.NONNEGATIVE_REALS, S.NONZERO, S.REAL_LINE}),
+    S.NONNEGATIVE_REALS: frozenset({S.REAL_LINE}),
+    S.NEGATIVE_REALS: frozenset({S.NONPOSITIVE_REALS, S.NONZERO, S.REAL_LINE}),
+    S.NONPOSITIVE_REALS: frozenset({S.REAL_LINE}),
+    S.NONZERO: frozenset({S.REAL_LINE, S.EXTENDED_LINE}),
+})  # fmt: skip
+del S  # remove alias
 
 
 class VectorDomains(_PosetEnum):
@@ -209,6 +301,22 @@ class VectorDomains(_PosetEnum):
     NEGATIVE = "negative"  # xᵢ < 0
     NONNEGATIVE = "nonnegative"  # xᵢ ≥ 0
     NONPOSITIVE = "nonpositive"  # xᵢ ≤ 0
+
+
+V = VectorDomains  # temporary alias
+VectorDomains.KNOWN_EDGES = MappingProxyType({
+    V.REAL: frozenset({V.COMPLEX}),
+    V.BOOLEAN: frozenset({V.REAL, V.NONNEGATIVE}),
+    V.ONE_HOT: frozenset({V.BOOLEAN, V.STOCHASTIC, V.UNIT_VECTOR, V.SPARSE}),
+    V.STANDARDIZED: frozenset({V.ZERO_MEAN, V.NONZERO}),
+    V.UNIT_VECTOR: frozenset({V.NONZERO}),
+    V.STOCHASTIC: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
+    V.POSITIVE: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
+    V.NEGATIVE: frozenset({V.REAL, V.NONPOSITIVE, V.NONZERO}),
+    V.NONNEGATIVE: frozenset({V.REAL}),
+    V.NONPOSITIVE: frozenset({V.REAL}),
+})  # fmt: skip
+del V  # remove alias
 
 
 class MatrixDomains(_PosetEnum):
@@ -299,19 +407,3 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.DOUBLY_STOCHASTIC: frozenset({M.ROW_STOCHASTIC, M.COLUMN_STOCHASTIC, M.SQUARE}),
 })  # fmt: skip
 del M  # remove alias
-
-
-V = VectorDomains  # temporary alias
-VectorDomains.KNOWN_EDGES = MappingProxyType({
-    V.REAL: frozenset({V.COMPLEX}),
-    V.BOOLEAN: frozenset({V.REAL, V.NONNEGATIVE}),
-    V.ONE_HOT: frozenset({V.BOOLEAN, V.STOCHASTIC, V.UNIT_VECTOR, V.SPARSE}),
-    V.STANDARDIZED: frozenset({V.ZERO_MEAN, V.NONZERO}),
-    V.UNIT_VECTOR: frozenset({V.NONZERO}),
-    V.STOCHASTIC: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
-    V.POSITIVE: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
-    V.NEGATIVE: frozenset({V.REAL, V.NONPOSITIVE, V.NONZERO}),
-    V.NONNEGATIVE: frozenset({V.REAL}),
-    V.NONPOSITIVE: frozenset({V.REAL}),
-})  # fmt: skip
-del V  # remove alias
