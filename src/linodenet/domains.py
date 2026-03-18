@@ -216,6 +216,13 @@ class Interval(Domain):
         return hash(self) == hash(other_interval)
 
     def __le__(self, other: object, /) -> bool:
+        if isinstance(other, UnionOfIntervals):
+            return any(self <= interval for interval in other.intervals)
+        if isinstance(other, str):
+            try:
+                other = Interval.from_string(other)
+            except ValueError:
+                return self <= UnionOfIntervals.from_string(other)
         if (other_interval := self._coerce_interval(other)) is None:
             return NotImplemented
 
@@ -230,6 +237,13 @@ class Interval(Domain):
         return lower_ok and upper_ok
 
     def __ge__(self, other: object, /) -> bool:
+        if isinstance(other, UnionOfIntervals):
+            return all(interval <= self for interval in other.intervals)
+        if isinstance(other, str):
+            try:
+                other = Interval.from_string(other)
+            except ValueError:
+                return self >= UnionOfIntervals.from_string(other)
         if (other_interval := self._coerce_interval(other)) is None:
             return NotImplemented
         return other_interval <= self
@@ -263,6 +277,18 @@ class UnionOfIntervals(Domain):
         if any(not part for part in parts):
             raise ValueError(f"Invalid union of intervals string: {s}")
         return cls(*(Interval.from_string(part) for part in parts))
+
+    @staticmethod
+    def _coerce_union(other: object, /) -> UnionOfIntervals | None:
+        match other:
+            case UnionOfIntervals():
+                return other
+            case Interval():
+                return UnionOfIntervals(other)
+            case str():
+                return UnionOfIntervals.from_string(other)
+            case _:
+                return None
 
     @staticmethod
     def _merge_intervals(
@@ -303,6 +329,24 @@ class UnionOfIntervals(Domain):
         for interval in self.intervals[1:]:
             mask = mask | interval.__contains__(item)
         return mask
+
+    def __add__(self, other: float, /) -> Self:
+        return type(self)(*(interval + other for interval in self.intervals))
+
+    def __sub__(self, other: float, /) -> Self:
+        return self + (-other)
+
+    def __mul__(self, other: float, /) -> Self:
+        return type(self)(*(interval * other for interval in self.intervals))
+
+    def __le__(self, other: object, /) -> bool:
+        if (other_union := self._coerce_union(other)) is None:
+            return NotImplemented
+
+        return all(
+            any(interval <= other_interval for other_interval in other_union.intervals)
+            for interval in self.intervals
+        )
 
     def __str__(self) -> str:
         return " | ".join(str(interval) for interval in self.intervals)
