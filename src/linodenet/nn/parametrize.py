@@ -71,7 +71,6 @@ __all__ = [
     # Protocol
     "Surjection",
     "Parametrization",
-    "BoundParametrization",
     # Classes
     "WithoutRightInverse",
     "ParametrizationBase",
@@ -118,7 +117,6 @@ from typing import (
     overload,
     runtime_checkable,
 )
-from warnings import deprecated
 
 import torch
 from torch import Tensor, jit, nn
@@ -210,131 +208,6 @@ class WithoutRightInverse(nn.Module):
     @jit.export
     def right_inverse(self, _: Tensor) -> Tensor | None:
         return None
-
-
-class ParametrizationList(ModuleSequence):
-    r"""TODO: implement ParametrizationList."""
-
-
-@deprecated("do not use")
-class BoundParametrization(Protocol):
-    r"""Protocol for parametrizations that wrap a single tensor.
-
-    Note:
-        To work with JIT, the listed methods must be annotated with @jit.export.
-        - "wrapped tensor" refers to the tensor that is wrapped by the parametrization.
-        - "cached tensor" refers to the tensor that is used to cache the parametrization.
-        - We do not add attributes to the parametrization to avoid making a Data Protocol.
-    """
-
-    @abstractmethod
-    def __init__(self, tensor: Tensor, /) -> None:
-        r"""Initialize the parametrization.
-
-        Args:
-            tensor: The tensor to parametrizations.
-        """
-        ...
-
-    @abstractmethod
-    def forward(self, arg: Tensor, /) -> Tensor:
-        r"""Apply the parametrization to the given tensor."""
-        ...
-
-    cached_parameter: Tensor
-    r"""BUFFER: Holds cached version of the parametrized tensor."""
-    original_parameter: nn.Parameter
-    r"""PARAM: Holds parametrized tensors."""
-
-    @abstractmethod
-    def apply_parametrization(self) -> Any: ...
-    @abstractmethod
-    def get_original_tensor(self) -> Tensor: ...
-    @abstractmethod
-    def get_cached_tensor(self) -> Tensor: ...
-
-    # mixin  methods
-    @jit.export
-    def right_inverse(self, y: Tensor, /) -> Tensor | None:
-        r"""Compute the right inverse of the parametrization.
-
-        Returns:
-            Tensor | None: The pullback of the original tensor, or None if not implemented.
-
-        The right inverse is such that `parametrization(right_inverse(y)) == y`.
-        I.e. starting from an already parametrized tensor, the right inverse
-        will return the original tensor. This is needed when the original tensor
-        already has a parametrization applied to it and hence belongs to some
-        constraint set.
-
-        Here, we default to the identity function, which is correct for projections,
-        since projections are idempotent. ($y = f(x) ⟹ f(id(y)) = f(y) = f(f(x)) = f(x) = y$)
-        """
-        return y
-
-    @jit.export
-    def detach_cache(self) -> None:
-        r"""Detach the cached tensors from the autograd engine.
-
-        This method should be called after `update_original()` to avoid
-        "Trying to backward through the graph a second time" error.
-        """
-        self.get_cached_tensor().detach_()
-
-    @jit.export
-    def update_cache(self) -> None:
-        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
-
-        Note:
-            This method should use inplace `copy_` operations to update the cached tensors.
-        """
-        new_tensor = self.apply_parametrization()
-        self.get_cached_tensor().copy_(new_tensor)
-
-    @jit.export
-    @torch.no_grad()
-    def update_original(self) -> None:
-        r"""Update the original tensors based on the cached tensors.
-
-        Note:
-            This method should use inplace `copy_` operations to update the original tensors.
-            This method should always be called with `torch.no_grad()`.
-        """
-        # Call `right_inverse` to get the pullback of the original tensor.
-        pullback = self.right_inverse(self.get_cached_tensor())
-        if pullback is not None:
-            # Use inplace `copy_` operations to update the original tensors.
-            self.get_original_tensor().copy_(pullback)
-
-    @jit.export
-    @torch.no_grad()
-    def update_parametrization(self) -> None:
-        r"""Update both the cached and the original tensors.
-
-        This function needs to be called after each `optimizer.step()` call.
-        Internally, it should perform the following steps:
-
-        1. Call `update_cache()` **without gradients**
-            to get the new parametrization given the modified parameters.
-        2. Call `update_original()` **without gradients**
-            to update the original parameters based on the new parametrization.
-        3. Call `detach_cache()` to detach the cached tensors from the autograd engine.
-        4. Call `update_cache()` a second time **with gradients** to re-enable the autograd engine.
-        """
-        # ①. recompute the parametrization given the modified parameters
-        self.update_cache()
-
-        # ②. update the original parameters based on the new parametrization
-        self.update_original()
-
-        # ③. detach the cached tensors from the autograd engine
-        # This method should be called after `update_original()` to avoid
-        #         "Trying to backward through the graph a second time" error.
-        self.detach_cache()
-
-        # ④. re-enable the autograd engine
-        with torch.enable_grad():
-            self.update_cache()
 
 
 # region base classes ------------------------------------------------------------------
@@ -496,6 +369,10 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         self.set_fresh()
 
 
+class ParametrizationList(ModuleSequence):
+    r"""TODO: implement ParametrizationList."""
+
+
 class WrappedParametrization(ParametrizationBase):
     r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
@@ -639,7 +516,7 @@ def is_parametrized(module: nn.Module, tensor_name: Optional[str] = None) -> boo
 
 
 def assert_is_safe_parametrization(
-    parametrization: BoundParametrization, tensor: Tensor
+    parametrization: ParametrizationBase, tensor: Tensor
 ) -> None:
     r"""Check if the parametrization is safe to apply to the tensor."""
     Y = tensor
