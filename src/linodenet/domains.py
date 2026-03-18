@@ -294,6 +294,16 @@ class Interval(Domain):
             return NotImplemented
         return other_interval <= self
 
+    def __or__(self, other: object, /) -> IntervalUnion:
+        if (other_union := IntervalUnion._coerce_union(other)) is None:
+            return NotImplemented
+        return IntervalUnion(self, *other_union.intervals)
+
+    def __ror__(self, other: object, /) -> IntervalUnion:
+        if (other_union := IntervalUnion._coerce_union(other)) is None:
+            return NotImplemented
+        return IntervalUnion(*other_union.intervals, self)
+
     def __str__(self) -> str:
         lower_bracket = "[" if self.lower_inclusive else "("
         upper_bracket = "]" if self.upper_inclusive else ")"
@@ -311,9 +321,16 @@ class IntervalUnion(Domain, Collection[Interval]):
     intervals: Final[tuple[Interval, ...]]
 
     def __init__(self, *intervals: Interval | str) -> None:
-        if not intervals:
-            raise ValueError("Expected at least one interval.")
-        self.intervals = self._merge_intervals(Interval(spec) for spec in intervals)
+        match intervals:
+            case []:
+                raise ValueError("Expected at least one interval.")
+            case [str(spec)]:
+                union = IntervalUnion.from_string(spec)
+                intervals = union.intervals
+            case _:
+                intervals = self._merge_intervals(Interval(spec) for spec in intervals)
+
+        self.intervals = intervals
 
     @classmethod
     def from_string(cls, s: str, /) -> IntervalUnion:
@@ -396,14 +413,14 @@ class IntervalUnion(Domain, Collection[Interval]):
     def __hash__(self) -> int:
         return hash(self.intervals)
 
-    def __add__(self, other: float, /) -> Self:
-        return type(self)(*(interval + other for interval in self.intervals))
+    def __add__(self, other: float, /) -> IntervalUnion:
+        return IntervalUnion(*(interval + other for interval in self.intervals))
 
-    def __sub__(self, other: float, /) -> Self:
+    def __sub__(self, other: float, /) -> IntervalUnion:
         return self + (-other)
 
-    def __mul__(self, other: float, /) -> Self:
-        return type(self)(*(interval * other for interval in self.intervals))
+    def __mul__(self, other: float, /) -> IntervalUnion:
+        return IntervalUnion(*(interval * other for interval in self.intervals))
 
     def __le__(self, other: object, /) -> bool:
         if (other_union := self._coerce_union(other)) is None:
@@ -413,6 +430,16 @@ class IntervalUnion(Domain, Collection[Interval]):
             any(interval <= other_interval for other_interval in other_union.intervals)
             for interval in self.intervals
         )
+
+    def __or__(self, other: object, /) -> IntervalUnion:
+        if (other_union := self._coerce_union(other)) is None:
+            return NotImplemented
+        return IntervalUnion(*self.intervals, *other_union.intervals)
+
+    def __ror__(self, other: object, /) -> IntervalUnion:
+        if (other_union := self._coerce_union(other)) is None:
+            return NotImplemented
+        return IntervalUnion(*other_union.intervals, *self.intervals)
 
     def __str__(self) -> str:
         return " | ".join(str(interval) for interval in self.intervals)

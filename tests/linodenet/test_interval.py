@@ -42,12 +42,30 @@ class TestInterval:
         with pytest.raises(TypeError):
             _ = Interval("[0, 1]") <= 1
 
+    def test_union_operator(self) -> None:
+        interval = Interval("[0, 1]")
+
+        assert interval | Interval("(1, 2]") == IntervalUnion("[0, 2]")
+        assert interval | "[-2, -1] | (2, 3]" == IntervalUnion(
+            "[-2, -1]",
+            "[0, 1]",
+            "(2, 3]",
+        )
+        assert "[-2, -1]" | interval == IntervalUnion("[-2, -1]", "[0, 1]")
+
+        with pytest.raises(TypeError):
+            _ = interval | 1
+
 
 class TestIntervalUnion:
     def test_init(self) -> None:
         union = IntervalUnion(Interval("[-2, -1]"), "(1, 2]")
 
         assert union == IntervalUnion("[-2, -1]", "(1, 2]")
+        assert IntervalUnion("(-inf, 0) | (0, +inf)") == IntervalUnion(
+            "(-inf, 0)",
+            "(0, +inf)",
+        )
 
     def test_arithmetic(self) -> None:
         union = IntervalUnion("[-2, -1]", "(1, 2]")
@@ -63,3 +81,13 @@ class TestIntervalUnion:
 
         with pytest.raises(TypeError):
             _ = IntervalUnion("[0, 1]") <= 1
+
+    def test_union_operator(self) -> None:
+        union = IntervalUnion("[-2, -1]", "(1, 2]")
+
+        assert union | Interval("[-1, 1]") == IntervalUnion("[-2, 2]")
+        assert union | "[3, 4]" == IntervalUnion("[-2, -1]", "(1, 2]", "[3, 4]")
+        assert "[-4, -3]" | union == IntervalUnion("[-4, -3]", "[-2, -1]", "(1, 2]")
+
+        with pytest.raises(TypeError):
+            _ = union | 1
