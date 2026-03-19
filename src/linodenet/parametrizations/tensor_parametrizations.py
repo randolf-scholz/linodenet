@@ -39,5 +39,5 @@ class ReZero(ParametrizationBase):
         return self.scalar * x
 
     @signature("(...) -> (...)")
-    def right_inverse(self, y: Tensor, /) -> Tensor:
-        return y / self.scalar
+    def right_inverse(self, y: Tensor, /) -> None:  # noqa: ARG002
+        return None
