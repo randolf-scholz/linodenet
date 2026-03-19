@@ -8,7 +8,6 @@ from typing import Any, Final, NamedTuple
 
 import torch
 from torch import Tensor
-from torch.autograd.function import once_differentiable
 
 _DEFAULT_MAXITER: Final[int] = 256
 
@@ -35,10 +34,10 @@ def _fixed_point_iteration(
     initial_guess: Tensor,
     /,
     *params: Tensor,
-    maxiter: int | Tensor,
-    atol: float | Tensor,
-    rtol: float | Tensor,
-) -> tuple[Tensor, bool]:
+    maxiter: Tensor,
+    atol: Tensor,
+    rtol: Tensor,
+) -> tuple[Tensor, Tensor]:
     r"""Solve $x = f(x, θ)$ by fixed point iteration."""
 
     def body_fn(state: FixpointState, /) -> FixpointState:
@@ -50,41 +49,39 @@ def _fixed_point_iteration(
     r0 = torch.full_like(initial_guess, torch.inf)
     initial_state = FixpointState(maxiter, initial_guess, r0, atol, rtol)
     final_state = torch.while_loop(fixpoint_cond, body_fn, (initial_state,))
-    budget, x, residual, _, _ = final_state  # pyright: ignore[reportGeneralTypeIssues]
-    tolerance = rtol * torch.abs(x) + atol
-    converged = bool(torch.all(residual <= tolerance))
-    return x, converged or bool(budget > 0)
+    budget, x, _, _, _ = final_state  # pyright: ignore[reportGeneralTypeIssues]
+    converged = budget > 0
+    return x, converged
 
 
 @torch.no_grad()
 def _implicit_vjp(
     vjp_fn: Callable[..., Tensor],
-    x_star: Tensor,
     grad_output: Tensor,
     /,
-    *params: Tensor,
     maxiter: Tensor,
     atol: Tensor,
     rtol: Tensor,
-) -> tuple[Tensor, tuple[Tensor | None, ...], bool]:
-    r"""Solve $u = g + (∂f/∂x)ᵀu$ and compute parameter VJPs."""
+) -> tuple[Tensor, Tensor]:
+    r"""Solve $u = g + (∂f/∂x)ᵀu$ using the `while cond(state): state = body(state)` schema."""
 
     def body_fn(state: FixpointState, /) -> FixpointState:
         budget, u, _, atol, rtol = state
         (vjp_x,) = vjp_fn(u)
         u_next = grad_output + vjp_x
-        return FixpointState(
-            budget - 1, u_next - u, residual, atol.clone(), rtol.clone()
-        )
+        residual = torch.abs(u_next - u)
+        return FixpointState(budget - 1, u_next, residual, atol.clone(), rtol.clone())
 
-    r0 = torch.full_like(x_star, torch.inf)
-    initial_state = FixpointState(maxiter, grad_output, r0, atol, rtol)
-    final_state = torch.while_loop(fixpoint_cond, body_fn, (initial_state,))
-    budget, u, residual, _, _ = final_state  # pyright: ignore[reportGeneralTypeIssues]
-    tolerance = rtol * torch.abs(u) + atol
-    converged = bool(torch.all(residual <= tolerance)) or bool(budget > 0)
+    # FIXME: torch.while_loop with VJP raises UncapturedHigherOrderOpError
+    r0 = torch.full_like(grad_output, torch.inf)
+    state = FixpointState(maxiter, grad_output, r0, atol, rtol)
+    while fixpoint_cond(state):
+        state = body_fn(state)
 
-    return u, (), converged
+    budget, u, _, _, _ = state
+    converged = budget > 0
+
+    return u, converged
 
 
 class FixpointSolve(torch.autograd.Function):
@@ -147,18 +144,30 @@ class FixpointSolve(torch.autograd.Function):
         if grad_output is None:
             grad_output = torch.zeros_like(x_star)
 
-        x = x_star.detach().requires_grad_(True)
-        fx, vjp_fn = torch.func.vjp(ctx.fn, x, *params)
+        with torch.enable_grad():
+            x = x_star.detach().requires_grad_(True)
+            differentiable_params = tuple(
+                param.detach().requires_grad_(True) for param in params
+            )
+            fx, vjp_fn = torch.func.vjp(
+                lambda z: ctx.fn(z, *differentiable_params),
+                x,
+            )
 
-        _, grad_params, converged = _implicit_vjp(
-            vjp_fn,
-            x_star,
-            grad_output,
-            *params,
-            maxiter=ctx.maxiter,
-            atol=ctx.atol,
-            rtol=ctx.rtol,
-        )
+            u, converged = _implicit_vjp(
+                vjp_fn,
+                grad_output,
+                maxiter=ctx.maxiter,
+                atol=ctx.atol,
+                rtol=ctx.rtol,
+            )
+            grad_params = torch.autograd.grad(
+                fx,
+                differentiable_params,
+                grad_outputs=u,
+                allow_unused=True,
+            )
+
         if not converged:
             warnings.warn(
                 f"No backward convergence in {ctx.maxiter} iterations.",
