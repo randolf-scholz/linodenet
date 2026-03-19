@@ -141,7 +141,7 @@ class Registry(Mapping[str, RegistryEntry]):
                 raise ValueError(
                     f"Registry entry {entry.name!r} already has 'test' set."
                 )
-            entry.test = test
+            self.register(entry.name, test=test)
 
         test_name = test.__name__
         assert test_name.startswith("is_")
