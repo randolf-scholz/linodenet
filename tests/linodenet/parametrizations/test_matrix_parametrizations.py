@@ -62,6 +62,7 @@ class TestParametrization(TestCase):
     def make_test_case(
         self, shape: tuple[int, int], /, *, device: str
     ) -> tuple[nn.Sequential, Tensor, Tensor]:
+        torch.manual_seed(0)
         out_features, in_features = shape
         model = nn.Sequential(
             nn.Linear(in_features, in_features, bias=False),
