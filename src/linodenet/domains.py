@@ -511,6 +511,7 @@ class ScalarDomains(Enum):
 
     UNIT_INTERVAL = Interval("[0, 1]")
     OPEN_UNIT_INTERVAL = Interval("(0, 1)")
+    HALF_OPEN_UNIT_INTERVAL = Interval("[0, 1)")
 
     @property
     def domain(self) -> Domain:
