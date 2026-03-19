@@ -12,6 +12,7 @@ __all__ = [
     "Interval",
     "IntervalUnion",
     "ScalarDomains",
+    "TensorDomains",
     "VectorDomains",
     "MatrixDomains",
 ]
@@ -43,6 +44,20 @@ class _PosetEnum(Enum):
     KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]  # reverse dependencies
 
     @classmethod
+    def _top_node(cls) -> Self | None:
+        for name in ("TOP", "ANY"):
+            if name in cls.__members__:
+                return cls.__members__[name]
+        return None
+
+    @classmethod
+    def _bottom_node(cls) -> Self | None:
+        for name in ("BOTTOM", "NONE"):
+            if name in cls.__members__:
+                return cls.__members__[name]
+        return None
+
+    @classmethod
     @cache
     def _compiled_edges(cls) -> Mapping[Self, frozenset[Self]]:
         edges: dict[Self, set[Self]] = {node: set() for node in cls}
@@ -53,6 +68,14 @@ class _PosetEnum(Enum):
         for tag, members in cls.KNOWN_TAGS.items():  # type: ignore[attr-defined]
             for member in members:
                 edges[member].add(tag)
+
+        if (top := cls._top_node()) is not None:
+            for node in cls:
+                if node is not top:
+                    edges[node].add(top)
+
+        if (bottom := cls._bottom_node()) is not None:
+            edges[bottom].update(node for node in cls if node is not bottom)
 
         return {src: frozenset(targets) for src, targets in edges.items()}
 
@@ -519,6 +542,9 @@ class ScalarDomains(Enum):
 class VectorDomains(_PosetEnum):
     r"""Enumeration of some vector domains."""
 
+    ANY = "any"  # top node
+    NONE = "none"  # bottom node
+
     REAL = "real"
     COMPLEX = "complex"
     BOOLEAN = "boolean"
@@ -567,6 +593,9 @@ del V  # remove alias
 
 class MatrixDomains(_PosetEnum):
     r"""Enumeration of some matrix domains."""
+
+    ANY = "any"  # top node
+    NONE = "none"  # bottom node
 
     BOOLEAN = "boolean"  # only 0 and 1 entries
     SPARSE = "sparse"  # many 0 entries
@@ -697,3 +726,34 @@ MatrixDomains.KNOWN_TAGS = MappingProxyType({
     }),
 })  # fmt: skip
 del M  # remove alias
+
+
+class TensorDomains(_PosetEnum):
+    r"""Enumeration of some tensor domains for tensors of arbitrary rank."""
+
+    ANY = "any"  # top node
+    NONE = "none"  # bottom node
+
+    REAL = "real"
+    COMPLEX = "complex"
+    BOOLEAN = "boolean"
+
+    SPARSE = "sparse"
+
+    ZERO = "zero"  # xᵢ...ⱼ = 0 for all entries
+    ONE = "one"  # xᵢ...ⱼ = 1 for all entries
+    NONZERO = "nonzero"  # x ≠ 0
+
+    def __contains__(self, item: Tensor, /) -> Tensor:
+        raise NotImplementedError
+
+
+T = TensorDomains  # temporary alias
+TensorDomains.KNOWN_EDGES = MappingProxyType({
+    T.BOOLEAN: frozenset({T.REAL}),
+    T.ONE: frozenset({T.BOOLEAN, T.NONZERO}),
+    T.REAL: frozenset({T.COMPLEX}),
+    T.ZERO: frozenset({T.BOOLEAN, T.SPARSE}),
+})  # fmt: skip
+TensorDomains.KNOWN_TAGS = MappingProxyType({})  # pyright: ignore[reportAttributeAccessIssue]
+del T  # remove alias

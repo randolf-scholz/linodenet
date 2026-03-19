@@ -6,6 +6,7 @@ from linodenet.domains import (
     IntervalUnion,
     MatrixDomains,
     ScalarDomains,
+    TensorDomains,
     VectorDomains,
 )
 
@@ -121,6 +122,36 @@ class TestVectorDomains:
 
         with pytest.raises(TypeError):
             _ = VectorDomains.REAL <= "real"
+
+
+class TestTensorDomains:
+    def test_partial_order_and_representation(self) -> None:
+        assert TensorDomains.NONE < TensorDomains.ANY
+        assert TensorDomains.NONE <= TensorDomains.ZERO
+        assert TensorDomains.NONE <= TensorDomains.COMPLEX
+        assert TensorDomains.ANY <= TensorDomains.ANY
+
+        assert TensorDomains.BOOLEAN <= TensorDomains.REAL
+        assert TensorDomains.BOOLEAN != TensorDomains.REAL
+        assert TensorDomains.BOOLEAN <= TensorDomains.COMPLEX
+        assert TensorDomains.BOOLEAN != TensorDomains.COMPLEX
+        assert TensorDomains.BOOLEAN <= TensorDomains.ANY
+        assert TensorDomains.BOOLEAN != TensorDomains.ANY
+
+        assert TensorDomains.ZERO <= TensorDomains.SPARSE
+        assert TensorDomains.ZERO != TensorDomains.SPARSE
+        assert TensorDomains.ZERO <= TensorDomains.BOOLEAN
+        assert TensorDomains.ZERO != TensorDomains.BOOLEAN
+        assert TensorDomains.ONE <= TensorDomains.NONZERO
+        assert TensorDomains.ONE != TensorDomains.NONZERO
+
+        assert not TensorDomains.SPARSE <= TensorDomains.COMPLEX
+        assert not TensorDomains.NONZERO <= TensorDomains.SPARSE
+
+        assert str(TensorDomains.NONZERO) == "nonzero"
+
+        with pytest.raises(TypeError):
+            _ = TensorDomains.ANY <= "any"
 
 
 class TestMatrixDomains:
