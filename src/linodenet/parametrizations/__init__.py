@@ -28,10 +28,7 @@ __all__ += tensor_parametrizations.__all__
 
 
 PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
-    # Learnable parametrizations
     "ReZero"                 : tensor_parametrizations.ReZero,
-    "WrappedParametrization" : parametrize.WrappedParametrization
-
 }  # fmt: skip
 r"""Dictionary of all available parametrizations."""
 
@@ -41,7 +38,6 @@ VECTOR_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "StochasticVector"     : vector_parametrizations.StochasticVector,
     "PositiveVector"       : vector_parametrizations.PositiveVector,
 }  # fmt: skip
-
 
 MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "Banded"               : matrix_parametrizations.Banded,
