@@ -1,10 +1,12 @@
 r"""Check that the linodenet.parametrizations module is compatible with torch.nn.utils.parametrizations."""
 
+import inspect
+from collections.abc import Callable
+
 import pytest
 from torch.nn.utils import parametrize as torch_parametrize
 
 import linodenet
-from linodenet.testing import assert_signatures_compatible
 
 FNS = [
     "register_parametrization",
@@ -27,6 +29,22 @@ TORCH_INTERFACE = [
     "type_before_parametrizations",
 ]
 r"""List of all functions and classes in torch.nn.utils.parametrizations."""
+
+
+def assert_signatures_compatible(func: Callable, reference: Callable) -> None:
+    r"""Assert that functions signature is wider than reference."""
+    fun_sig = inspect.signature(func)
+    ref_sig = inspect.signature(reference)
+
+    for param in ref_sig.parameters:
+        if param not in fun_sig.parameters:
+            raise AssertionError(f"Parameter {param} not in function signature!")
+        ref_kind = ref_sig.parameters[param].kind
+        param_kind = fun_sig.parameters[param].kind
+        if param_kind != ref_kind:
+            raise AssertionError(
+                f"Parameter {param} has different kind! (expected {ref_kind}, got {param_kind})"
+            )
 
 
 def test_interface_complete() -> None:
