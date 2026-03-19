@@ -40,6 +40,9 @@ def _assert_matches_reference(values: torch.Tensor, actual: torch.Tensor) -> Non
     assert torch.allclose(actual[finite], reference[finite], atol=ATOL, rtol=RTOL)
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", IMPLS, ids=str)
 class TestCorrectness(TestCase):
     N = 256
     RANGES = [
@@ -48,9 +51,6 @@ class TestCorrectness(TestCase):
         (_UPPER_CUTOFF + 1e-6, -1e-6),
     ]
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    @pytest.mark.parametrize("name", IMPLS, ids=str)
     def test_special_values(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
 
@@ -75,9 +75,6 @@ class TestCorrectness(TestCase):
         pt_result = impl(pt_args)
         assert torch.allclose(pt_result, pt_expected)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    @pytest.mark.parametrize("name", IMPLS, ids=str)
     def test_domain(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
         # ndtri_exp_py is defined for log_p <= 0
@@ -102,12 +99,9 @@ class TestCorrectness(TestCase):
         assert (result_neg.isfinite() | result_neg.isneginf()).all()
         assert result_zero.isposinf().item()
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     @pytest.mark.parametrize(
         ("lower", "upper"), RANGES, ids=["small", "medium", "large"]
     )
-    @pytest.mark.parametrize("name", IMPLS, ids=str)
     def test_correctness(
         self,
         name: str,
@@ -120,9 +114,6 @@ class TestCorrectness(TestCase):
         log_p = torch.linspace(lower, upper, steps=self.N, dtype=dtype, device=device)
         _assert_matches_reference(log_p, impl(log_p))
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    @pytest.mark.parametrize("name", IMPLS, ids=str)
     def test_reversible(
         self,
         name: str,
@@ -157,9 +148,6 @@ class TestCorrectness(TestCase):
         self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
         self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    @pytest.mark.parametrize("name", IMPLS, ids=str)
     def test_gradcheck(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
         log_p = torch.linspace(
@@ -181,10 +169,10 @@ class TestCorrectness(TestCase):
         gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol)
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", IMPLS, ids=str)
 class TestPerformance:
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    @pytest.mark.parametrize("name", IMPLS, ids=str)
     @pytest.mark.parametrize(
         ("lower", "upper"),
         [

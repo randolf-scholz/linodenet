@@ -53,6 +53,8 @@ PARAMETRIZATION_ARGUMENTS: defaultdict[
 )
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
 class TestParametrization(TestCase):
     BATCH_SIZE = 8
     VALUE_ATOL = 1e-6
@@ -132,8 +134,6 @@ class TestParametrization(TestCase):
         assert bool(is_stale) is expected
 
     @pytest_xfail(raises=NotImplementedError, strict=False)
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_register_parametrization(self, name: str, device: str) -> None:
         shape = self.get_shape(name)
         model, _, _ = self.make_test_case(shape, device=device)
@@ -146,8 +146,6 @@ class TestParametrization(TestCase):
         self.check_parametrization(name, model)
 
     @pytest_xfail(raises=NotImplementedError, strict=False)
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_forward_uses_cached_parameter(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
@@ -178,8 +176,6 @@ class TestParametrization(TestCase):
         self.check_parametrization(name, model)
 
     @pytest_xfail(raises=NotImplementedError, strict=False)
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
@@ -208,8 +204,6 @@ class TestParametrization(TestCase):
         assert not torch.allclose(model(x), original_output)
 
     @pytest_xfail(raises=NotImplementedError, strict=False)
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_compile_forward_uses_cached_parameter(
         self, name: str, device: str
     ) -> None:
@@ -238,8 +232,6 @@ class TestParametrization(TestCase):
         self.check_parametrization(name, compiled_model)
 
     @pytest_xfail(raises=NotImplementedError, strict=False)
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_compile_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
@@ -271,8 +263,6 @@ class TestParametrization(TestCase):
         )
 
     @pytest.mark.xfail
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
     def test_exported_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)

@@ -17,6 +17,8 @@ from linodenet_special.compiled import gaussian_to_mixture as gaussian_to_mixtur
 from tests.testing import DEVICES, DTYPES, TestCase
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 class TestBimodalToGaussian(TestCase):
     X_MIN = -20
     X_MAX = 20
@@ -35,10 +37,8 @@ class TestBimodalToGaussian(TestCase):
         lam = math.exp(-0.5 * (mean / stdv) ** 2) / stdv
         return mean * min(1.0, abs(1 / (1 - lam * stdv)))
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_hard_contract_approximation(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -63,10 +63,8 @@ class TestBimodalToGaussian(TestCase):
         )
         self.assert_upper_bounded(y - y_approx, μ / σ)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_bimodal_to_gaussian_forward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -105,10 +103,8 @@ class TestBimodalToGaussian(TestCase):
         self.assert_close(y1, tail1)
         self.assert_close(y2, tail2)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_bimodal_to_gaussian_backward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -165,10 +161,8 @@ class TestBimodalToGaussian(TestCase):
         assert tail.grad.isfinite().all()
         self.assert_close(tail.grad, upper_grad_bound, rtol=0.5)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_bimodal_to_gaussian_gradcheck(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -194,10 +188,8 @@ class TestBimodalToGaussian(TestCase):
 
         gradcheck(bimodal_to_gaussian, (x_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
     @pytest.mark.parametrize("mean", [0.1, 0.5, 1, 2], ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_reversible(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -222,6 +214,8 @@ class TestBimodalToGaussian(TestCase):
         self.assert_close(x.grad, 1.0, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 class TestGaussianToBimodal(TestCase):
     X_MIN = -20
     X_MAX = 20
@@ -239,10 +233,8 @@ class TestGaussianToBimodal(TestCase):
         lam = stdv * math.exp(0.5 * (mean / stdv) ** 2)
         return abs(mean / (lam - stdv))
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_hard_expand_approximation(
         self, dtype: torch.dtype, mean, stdv, device: str
     ) -> None:
@@ -266,10 +258,8 @@ class TestGaussianToBimodal(TestCase):
         )
         self.assert_upper_bounded(x - x_approx, μ * σ, atol=1e-1, rtol=1e-1)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_gaussian_to_bimodal_forward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -308,10 +298,8 @@ class TestGaussianToBimodal(TestCase):
         self.assert_close(x1, tail1, rtol=1e-3)
         self.assert_close(x2, tail2, rtol=1e-3)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_gaussian_to_bimodal_backward(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -368,10 +356,8 @@ class TestGaussianToBimodal(TestCase):
         # FIXME: huge rtol needed?!
         self.assert_close(tail.grad, σ, atol=1e-3, rtol=1e-1)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_gaussian_to_bimodal_gradcheck(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -397,10 +383,8 @@ class TestGaussianToBimodal(TestCase):
 
         gradcheck(gaussian_to_bimodal, (y_narrow, μ, σ), atol=atol, rtol=rtol, eps=eps)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
     @pytest.mark.parametrize("mean", [0.1, 0.5, 1, 2], ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_reversible(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -422,10 +406,8 @@ class TestGaussianToBimodal(TestCase):
         self.assert_close(y_inv, y, rtol=1e-4, atol=1e-4)
         self.assert_close(y.grad, 1.0, rtol=1e-4, atol=1e-4)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_negative_mu_matches_positive_mu(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -449,28 +431,28 @@ class TestGaussianToBimodal(TestCase):
         )
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize(
+    ("weights", "means", "stdvs"),
+    [
+        pytest.param(
+            [0.4, 0.25, 0.35],
+            [-1.0, 0.5, 1.5],
+            [0.8, 1.1, 0.9],
+            id="asymmetric",
+        ),
+        pytest.param(
+            [0.2, 0.5, 0.3],
+            [-1.5, -0.5, 1.0],
+            [1.0, 0.8, 1.2],
+            id="shifted",
+        ),
+    ],
+)
 class TestMixtureToGaussian(TestCase):
     N = 64
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    @pytest.mark.parametrize(
-        ("weights", "means", "stdvs"),
-        [
-            pytest.param(
-                [0.4, 0.25, 0.35],
-                [-1.0, 0.5, 1.5],
-                [0.8, 1.1, 0.9],
-                id="asymmetric",
-            ),
-            pytest.param(
-                [0.2, 0.5, 0.3],
-                [-1.5, -0.5, 1.0],
-                [1.0, 0.8, 1.2],
-                id="shifted",
-            ),
-        ],
-    )
     def test_reversible(
         self,
         dtype: torch.dtype,
@@ -500,25 +482,6 @@ class TestMixtureToGaussian(TestCase):
         self.assert_close(x_inv, x, rtol=1e-4, atol=1e-4)
         self.assert_close(x.grad, 1.0, rtol=1e-4, atol=1e-4)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
-    @pytest.mark.parametrize(
-        ("weights", "means", "stdvs"),
-        [
-            pytest.param(
-                [0.4, 0.25, 0.35],
-                [-1.0, 0.5, 1.5],
-                [0.8, 1.1, 0.9],
-                id="asymmetric",
-            ),
-            pytest.param(
-                [0.2, 0.5, 0.3],
-                [-1.5, -0.5, 1.0],
-                [1.0, 0.8, 1.2],
-                id="shifted",
-            ),
-        ],
-    )
     @pytest.mark.parametrize(
         "values",
         [
@@ -560,11 +523,11 @@ class TestMixtureToGaussian(TestCase):
         )
 
 
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 class TestGaussianToMixture(TestCase):
     N = 64
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     @pytest.mark.parametrize(
         ("weights", "means", "stdvs"),
         [
@@ -609,8 +572,6 @@ class TestGaussianToMixture(TestCase):
         self.assert_close(y_inv, y, rtol=1e-4, atol=1e-4)
         self.assert_close(y.grad, 1.0, rtol=1e-4, atol=1e-4)
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     @pytest.mark.parametrize(
         ("weights", "means", "stdvs"),
         [
@@ -668,8 +629,6 @@ class TestGaussianToMixture(TestCase):
             rtol=rtol,
         )
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
-    @pytest.mark.parametrize("dtype", DTYPES, ids=str)
     def test_compiled_scalar_backward_shapes(
         self,
         device: str,

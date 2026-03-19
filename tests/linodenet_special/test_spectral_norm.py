@@ -132,6 +132,43 @@ def compute_spectral_norm_impl(
     return err_value, err_grads
 
 
+CORRECTNESS_SPECTRAL_NORMS = {
+    "py+compiled": torch.compile(spectral_norm_py),
+    "cpp+compile": torch.compile(spectral_norm_cpp),
+    "py": spectral_norm_py,
+    "cpp": spectral_norm_cpp,
+    "native": spectral_norm_native,
+}
+CORRECTNESS_SHAPES: list[tuple[int, int]] = [
+    (1, 1),
+    (2, 2),
+    (4, 4),
+    (16, 16),
+    (64, 64),
+    (128, 128),
+    (16, 64),
+    (128, 64),
+    (64, 16),
+    (64, 128),
+    (1, 2),
+    (1, 4),
+    (1, 16),
+    (1, 64),
+    (1, 128),
+    (2, 1),
+    (4, 1),
+    (16, 1),
+    (64, 1),
+    (128, 1),
+]
+PERFORMANCE_SPECTRAL_NORMS = {
+    "py+compiled": torch.compile(spectral_norm_py),
+    "cpp+compile": torch.compile(spectral_norm_cpp),
+    "svd+compile": torch.compile(spectral_norm_native),
+}
+PERFORMANCE_SHAPES = [(64, 64), (128, 64), (64, 128)]
+
+
 class BasicTest:
     SHAPES = [
         # m > n
@@ -227,40 +264,13 @@ class BasicTest:
         print("All tests passed.")
 
 
+@pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
+@pytest.mark.parametrize("shape", CORRECTNESS_SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("method", CORRECTNESS_SPECTRAL_NORMS)
 class TestCorrectness(TestCase):
-    SPECTRAL_NORMS = {
-        "py+compiled": torch.compile(spectral_norm_py),
-        "cpp+compile": torch.compile(spectral_norm_cpp),
-        "py": spectral_norm_py,
-        "cpp": spectral_norm_cpp,
-        "native": spectral_norm_native,
-    }
-    SHAPES: list[tuple[int, int]] = [
-        # scalar
-        (1, 1),
-        # square matrices
-        (2, 2),
-        (4, 4),
-        (16, 16),
-        (64, 64),
-        (128, 128),
-        # rectangular matrices
-        (16, 64),
-        (128, 64),
-        (64, 16),
-        (64, 128),
-        # rank-1 matrices
-        (1, 2),
-        (1, 4),
-        (1, 16),
-        (1, 64),
-        (1, 128),
-        (2, 1),
-        (4, 1),
-        (16, 1),
-        (64, 1),
-        (128, 1),
-    ]
+    SPECTRAL_NORMS = CORRECTNESS_SPECTRAL_NORMS
+    SHAPES = CORRECTNESS_SHAPES
     ATOL = 1e-3
     RTOL = 1e-5
 
@@ -315,10 +325,6 @@ class TestCorrectness(TestCase):
         self.assert_close(grad, analytical_grad, atol=atol, rtol=rtol)
 
     @pytest.mark.flaky(reruns=3)
-    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-    @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
     def test_rank_one(
         self,
         method: str,
@@ -343,10 +349,6 @@ class TestCorrectness(TestCase):
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
     @pytest.mark.flaky(reruns=3)
-    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-    @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
     def test_diagonal(
         self,
         method: str,
@@ -370,10 +372,6 @@ class TestCorrectness(TestCase):
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
     @pytest.mark.flaky(reruns=3)
-    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-    @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
     def test_quasi_gaussian(
         self,
         method: str,
@@ -394,10 +392,6 @@ class TestCorrectness(TestCase):
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
-    @pytest.mark.parametrize("seed", SEEDS, ids="seed={}".format)
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-    @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize("method", SPECTRAL_NORMS)
     def test_repeated_singular_values(
         self,
         method: str,
@@ -422,22 +416,17 @@ class TestCorrectness(TestCase):
         self.check_backward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
 
 
+@pytest.mark.parametrize("shape", PERFORMANCE_SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("name", PERFORMANCE_SPECTRAL_NORMS)
 class TestPerformance(TestCase):
-    SPECTRAL_NORMS = {
-        "py+compiled": torch.compile(spectral_norm_py),
-        "cpp+compile": torch.compile(spectral_norm_cpp),
-        "svd+compile": torch.compile(spectral_norm_native),
-    }
-    SHAPES = [
-        (64, 64),
-        (128, 64),
-        (64, 128),
-    ]
+    SPECTRAL_NORMS = PERFORMANCE_SPECTRAL_NORMS
+    SHAPES = PERFORMANCE_SHAPES
     ROUNDS = 64
     WARMUP_ROUNDS = 16
 
-    @staticmethod
     def make_test_case(
+        self,
         shape: tuple[int, int],
         *,
         device: str | torch.device,
@@ -450,10 +439,6 @@ class TestPerformance(TestCase):
         )
         return nn.Parameter(A)
 
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-    @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize("name", SPECTRAL_NORMS)
-    @pytest.mark.benchmark(group="spectral_norm_forward")
     def test_spectral_norm_forward(
         self,
         benchmark: BenchmarkFixture,
@@ -481,10 +466,6 @@ class TestPerformance(TestCase):
                 warmup_rounds=self.WARMUP_ROUNDS,
             )
 
-    @pytest.mark.parametrize("shape", SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
-    @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize("name", SPECTRAL_NORMS)
-    @pytest.mark.benchmark(group="spectral_norm_backward")
     def test_spectral_norm_backward(
         self,
         benchmark: BenchmarkFixture,
