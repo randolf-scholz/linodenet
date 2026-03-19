@@ -4,11 +4,12 @@ import pytest
 import torch
 
 from linodenet.mappings import (
-    Cholesky,
+    NegativeDefinite,
     Orthogonal,
     OrthogonalCayley,
     OrthogonalHouseholder,
     OrthogonalMatExp,
+    PositiveDefinite,
     PositiveVector,
     StochasticVector,
     Surjection,
@@ -70,8 +71,9 @@ def test_orthogonal_maps(surjection_cls: type[Surjection], seed: int) -> None:
     assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
 
 
-def test_cholesky_surjection() -> None:
-    surjection = Cholesky()
+@pytest.mark.parametrize("surjection_cls", [PositiveDefinite, NegativeDefinite])
+def test_cholesky_surjection(surjection_cls: type[Surjection]) -> None:
+    surjection = surjection_cls()
     matrix_test = get_surjection_test(type(surjection))
 
     x = torch.randn(8, 5, 5).tril()
@@ -89,8 +91,11 @@ def test_cholesky_surjection() -> None:
     assert torch.all(lower.diagonal(dim1=-2, dim2=-1) > 0)
 
 
-def test_cholesky_surjection_right_inverse() -> None:
-    surjection = Cholesky()
+@pytest.mark.parametrize("surjection_cls", [PositiveDefinite, NegativeDefinite])
+def test_cholesky_surjection_right_inverse(
+    surjection_cls: type[Surjection],
+) -> None:
+    surjection = surjection_cls()
     factor = torch.tensor([[2.0, 0.0, 0.0], [1.0, 3.0, 0.0], [-3.0, 2.0, 1.0]])
     y = surjection(factor)
 
@@ -100,9 +105,23 @@ def test_cholesky_surjection_right_inverse() -> None:
     assert torch.allclose(surjection(z), y, atol=1e-6, rtol=1e-6)
 
 
-def test_cholesky_surjection_right_inverse_singular_psd_raises() -> None:
-    surjection = Cholesky()
-    y = torch.tensor([[4.0, 2.0, -6.0], [2.0, 1.0, -3.0], [-6.0, -3.0, 9.0]])
+@pytest.mark.parametrize(
+    ("surjection_cls", "y"),
+    [
+        (
+            PositiveDefinite,
+            torch.tensor([[4.0, 2.0, -6.0], [2.0, 1.0, -3.0], [-6.0, -3.0, 9.0]]),
+        ),
+        (
+            NegativeDefinite,
+            -torch.tensor([[4.0, 2.0, -6.0], [2.0, 1.0, -3.0], [-6.0, -3.0, 9.0]]),
+        ),
+    ],
+)
+def test_cholesky_surjection_right_inverse_singular_psd_raises(
+    surjection_cls: type[Surjection], y: torch.Tensor
+) -> None:
+    surjection = surjection_cls()
 
     with pytest.raises(RuntimeError):
         surjection.right_inverse(y)

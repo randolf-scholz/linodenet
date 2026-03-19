@@ -2,7 +2,8 @@ r"""Surjections are a weaker form of projections."""
 
 __all__ = [
     # Classes
-    "Cholesky",
+    "NegativeDefinite",
+    "PositiveDefinite",
     "ConcatProjection",
     "GramMatrix",
     "OrthogonalCayley",
@@ -40,7 +41,7 @@ class GramMatrix(SurjectionBase):
         return matrix_sqrt(y).real.to(dtype=y.dtype)
 
 
-class Cholesky(SurjectionBase):
+class PositiveDefinite(SurjectionBase):
     r"""Parametrize PD matrices via a lower-triangular factor with log-diagonal."""
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
@@ -56,6 +57,27 @@ class Cholesky(SurjectionBase):
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
         lower = torch.linalg.cholesky(y)
+        return lower.tril(diagonal=-1) + torch.diag_embed(
+            torch.log(lower.diagonal(dim1=-2, dim2=-1))
+        )
+
+
+class NegativeDefinite(SurjectionBase):
+    r"""Parametrize ND matrices via a lower-triangular factor with log-diagonal."""
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.NEGATIVE_DEFINITE
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        lower = x.tril(diagonal=-1) + torch.diag_embed(
+            torch.exp(x.diagonal(dim1=-2, dim2=-1))
+        )
+        return -torch.einsum("...ik, ...jk -> ...ij", lower, lower)
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        lower = torch.linalg.cholesky(-y)
         return lower.tril(diagonal=-1) + torch.diag_embed(
             torch.log(lower.diagonal(dim1=-2, dim2=-1))
         )
@@ -161,6 +183,7 @@ class OrthogonalMatExp(SurjectionBase):
 
     @signature("(..., n, n) -> (..., n, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
+        # FIXME: https://github.com/pytorch/pytorch/issues/9983 (matrix_log)
         return skew_symmetric(matrix_log(y).real.to(dtype=y.dtype))
 
 
