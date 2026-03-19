@@ -151,3 +151,37 @@ class TestCase:
                 f"\n\tmedian rel error={median_rel_err:8.2e}  (expected {rtol})"
             )
             raise AssertionError(msg)
+
+    def assert_not_close(
+        self,
+        value: Tensor | float,
+        expected: Tensor | float,
+        atol: float = ATOL,
+        rtol: float = RTOL,
+    ) -> None:
+        r"""Checks that |value - expected| > rtol|expected| + atol."""
+        __tracebackhide__ = True
+
+        value = torch.as_tensor(value)
+        expected = torch.as_tensor(expected)
+        residual = (value - expected).abs()
+        magnitude = expected.abs()
+        ok = residual > rtol * magnitude + atol
+
+        if not ok.all():
+            max_abs_err = residual.max().item()
+            mean_abs_err = residual.mean().item()
+            median_abs_err = residual.median().item()
+            max_rel_err = (residual / magnitude).max().item()
+            mean_rel_err = (residual / magnitude).nanmean().item()
+            median_rel_err = (residual / magnitude).nanmedian().item()
+            msg = (
+                f"Values unexpectedly close! "
+                f"\n\tmax    abs error={max_abs_err:8.2e}  (expected > {atol})"
+                f"\n\tmean   abs error={mean_abs_err:8.2e}  (expected > {atol})"
+                f"\n\tmedian abs error={median_abs_err:8.2e}  (expected > {atol})"
+                f"\n\tmax    rel error={max_rel_err:8.2e}  (expected > {rtol})"
+                f"\n\tmean   rel error={mean_rel_err:8.2e}  (expected > {rtol})"
+                f"\n\tmedian rel error={median_rel_err:8.2e}  (expected > {rtol})"
+            )
+            raise AssertionError(msg)
