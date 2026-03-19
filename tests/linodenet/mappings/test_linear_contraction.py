@@ -40,7 +40,9 @@ class TestLinearContraction(TestCase):
         cached_weight = layer.weight.detach().clone()
         assert isinstance(parametrization.original_parameter, Tensor)
         with torch.no_grad():
-            parametrization.original_parameter.mul_(10)
+            parametrization.original_parameter.add_(
+                torch.ones_like(parametrization.original_parameter)
+            )
 
         update_parametrizations(layer)
 
@@ -78,7 +80,9 @@ class TestLinearContraction(TestCase):
         cached_weight = layer.weight.detach().clone()
         assert isinstance(parametrization.original_parameter, Tensor)
         with torch.no_grad():
-            parametrization.original_parameter.mul_(10)
+            parametrization.original_parameter.add_(
+                torch.ones_like(parametrization.original_parameter)
+            )
 
         self.assert_close(
             layer.weight, cached_weight, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL
