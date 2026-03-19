@@ -24,7 +24,7 @@ from linodenet.regularizations import (
     REGULARIZATION_FNS_WITHOUT_ARGS,
     REGULARIZATIONS,
 )
-from linodenet.testing import MATRIX_TESTS, VECTOR_TESTS
+from linodenet.testing import MATRIX_TESTS, VECTOR_TESTS, is_orthogonal
 
 
 @dataclass(slots=True)
@@ -62,10 +62,8 @@ def normalize_registry_name(name: str, /) -> str:
 class Registry(Mapping[str, RegistryEntry]):
     r"""Mutable registry keyed by canonical lowercase kebab-case names."""
 
-    _entries: dict[str, RegistryEntry]
-
     def __init__(self) -> None:
-        self._entries = {}
+        self._entries: dict[str, RegistryEntry] = {}
 
     def _entry_for(self, name: str, /) -> RegistryEntry:
         canonical_name = normalize_registry_name(name)
@@ -127,6 +125,37 @@ class Registry(Mapping[str, RegistryEntry]):
                     f"Registry entry {canonical_name!r} already has {field.name!r} set."
                 )
             setattr(entry, field.name, value)
+
+    def update_existing(
+        self,
+        name: str,
+        /,
+        *,
+        domain: Domain | None = None,
+        test: Fn | None = None,
+        mapping: type | None = None,
+        mapping_fn: Fn | None = None,
+        regularization: type | None = None,
+        regularization_fn: Fn | None = None,
+        initialization: Fn | None = None,
+        parametrization: type | None = None,
+    ) -> None:
+        r"""Register objects on an existing canonical name."""
+        canonical_name = normalize_registry_name(name)
+        if canonical_name not in self._entries:
+            raise KeyError(f"Registry entry {canonical_name!r} does not exist.")
+
+        self.register(
+            canonical_name,
+            domain=domain,
+            test=test,
+            mapping=mapping,
+            mapping_fn=mapping_fn,
+            regularization=regularization,
+            regularization_fn=regularization_fn,
+            initialization=initialization,
+            parametrization=parametrization,
+        )
 
     def register_test_on_domain(self, domain: Domain, test: Fn, /) -> None:
         r"""Register a test for `domain`."""
@@ -214,3 +243,7 @@ REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITH_ARGS)
 REGISTRY.register_regularizations(REGULARIZATIONS)
 REGISTRY.register_tests_on_domain(MATRIX_TESTS)  # must be registered last
 REGISTRY.register_tests_on_domain(VECTOR_TESTS)  # must be registered last
+
+# overrides
+REGISTRY.update_existing("orthogonal-cayley", test=is_orthogonal)
+REGISTRY.update_existing("cayley-map", test=is_orthogonal)
