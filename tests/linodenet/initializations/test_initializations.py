@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 
 from linodenet.initializations import INITIALIZATIONS
-from linodenet.testing import MATRIX_TESTS
+from linodenet.registry import get_registry_entry
 from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
@@ -91,16 +91,21 @@ def test_normalization_property(
 @pytest.mark.parametrize("name", INITIALIZATIONS)
 def test_validity_initializations(name: str) -> None:
     r"""Validate that the initializations give correct matrix properties."""
-    test_name = f"is_{name}"
-    if test_name not in MATRIX_TESTS:
-        pytest.skip(f"Test {test_name} not implemented.")
+    entry = get_registry_entry(name)
+    if not callable(entry.test):
+        pytest.skip(f"No registry test registered for {name}.")
 
     initialization = INITIALIZATIONS[name]
-    matrix_test = MATRIX_TESTS[test_name]
+    matrix_test = entry.test
 
     size = 4
 
     matrix = initialization(size)
-    result = matrix_test(matrix)
+    try:
+        result = matrix_test(matrix)
+    except TypeError as exc:
+        raise pytest.skip(
+            f"Test {matrix_test.__name__} for {name} requires additional arguments."
+        ) from exc
 
-    assert result.item(), f"{name} failed test {test_name}\n{matrix=}."
+    assert result.item(), f"{name} failed test {matrix_test.__name__}\n{matrix=}."

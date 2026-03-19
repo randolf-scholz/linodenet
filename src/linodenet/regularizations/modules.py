@@ -22,7 +22,7 @@ __all__ = [
     "Masked",
     "MatrixNorm",
     "Normal",
-    "OrthogonalProjection",
+    "Orthogonal",
     "RankOne",
     "SkewSymmetric",
     "SpectralNormalized",
@@ -54,7 +54,7 @@ from linodenet.regularizations.functional import (
     masked,
     matrix_norm,
     normal,
-    orthogonal_projection,
+    orthogonal,
     rank_one,
     skew_symmetric,
     spectral_normalized,
@@ -252,7 +252,7 @@ class SkewSymmetric(RegularizationBase):
         return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class OrthogonalProjection(RegularizationBase):
+class Orthogonal(RegularizationBase):
     r"""Bias the matrix towards being orthogonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -271,7 +271,7 @@ class OrthogonalProjection(RegularizationBase):
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor) -> Tensor:
         r"""Bias x towards orthogonal matrix."""
-        return orthogonal_projection(x, p=self.p, size_normalize=self.size_normalize)
+        return orthogonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Traceless(RegularizationBase):

@@ -4,10 +4,10 @@ import pytest
 import torch
 
 from linodenet.mappings import (
+    Orthogonal,
     OrthogonalCayley,
     OrthogonalHouseholder,
     OrthogonalMatExp,
-    OrthogonalProjection,
     PositiveVector,
     StochasticVector,
     Surjection,
@@ -48,7 +48,7 @@ def test_modular_surjections_work(name: str) -> None:
         OrthogonalMatExp,
         OrthogonalCayley,
         OrthogonalHouseholder,
-        OrthogonalProjection,
+        Orthogonal,
     ],
 )
 @pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)

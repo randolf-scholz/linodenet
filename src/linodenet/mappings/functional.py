@@ -22,7 +22,7 @@ __all__ = [
     "lower_triangular",
     "masked",
     "normal",
-    "orthogonal_projection",
+    "orthogonal",
     "rank_one",
     "skew_symmetric",
     "symmetric",
@@ -96,7 +96,7 @@ def rank_one(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def orthogonal_projection(x: Tensor) -> Tensor:
+def orthogonal(x: Tensor) -> Tensor:
     r"""Return the closest orthogonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   Yᵀ Y = 𝕀 = YYᵀ

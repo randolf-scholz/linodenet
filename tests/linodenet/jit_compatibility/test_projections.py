@@ -3,11 +3,8 @@ r"""Test JIT-compatibility of `linodenet.projections.testing`."""
 import pytest
 import torch
 
-from linodenet.mappings import (
-    MATRIX_PROJECTION_FNS,
-    MATRIX_PROJECTIONS,
-)
-from linodenet.testing import MATRIX_TESTS
+from linodenet.mappings import MATRIX_PROJECTION_FNS, MATRIX_PROJECTIONS
+from linodenet.testing import MATRIX_DOMAIN_TESTS
 
 
 @pytest.mark.parametrize("projection_name", MATRIX_PROJECTION_FNS)
@@ -43,11 +40,11 @@ def test_jit_compatibility_modular(projection_name: str) -> None:
     assert torch.allclose(result_prior, result_post)
 
 
-@pytest.mark.parametrize("test_name", MATRIX_TESTS)
+@pytest.mark.parametrize("test_name", MATRIX_DOMAIN_TESTS)
 def test_jit_compatibility(test_name: str) -> None:
     r"""Test JIT-compatibility of matrix tests."""
     x = torch.randn(4, 4)
-    matrix_test = MATRIX_TESTS[test_name]
+    matrix_test = MATRIX_DOMAIN_TESTS[test_name]
     scripted_test = torch.jit.script(matrix_test)
 
     try:
@@ -95,11 +92,11 @@ def test_compile_compatibility_modular(projection_name: str) -> None:
 
 
 @pytest.mark.skip(reason="Slow.")
-@pytest.mark.parametrize("test_name", MATRIX_TESTS)
+@pytest.mark.parametrize("test_name", MATRIX_DOMAIN_TESTS)
 def test_compile_compatibility(test_name: str) -> None:
     r"""Test JIT-compatibility of matrix tests."""
     x = torch.randn(4, 4)
-    matrix_test = MATRIX_TESTS[test_name]
+    matrix_test = MATRIX_DOMAIN_TESTS[test_name]
     scripted_test = torch.compile(matrix_test)
 
     try:

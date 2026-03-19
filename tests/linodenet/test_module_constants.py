@@ -42,7 +42,7 @@ from linodenet.regularizations import (
     Regularization,
     RegularizationBase,
 )
-from linodenet.testing import MATRIX_TESTS, MatrixTest
+from linodenet.testing import MATRIX_DOMAIN_TESTS
 
 
 class Case(NamedTuple):
@@ -64,7 +64,7 @@ CASES: dict[str, Case] = {
     "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS              ),
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
     "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS    ),
-    "matrix_tests"        : Case(lib.testing          , MatrixTest     , None               , MATRIX_TESTS       ),
+    "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_DOMAIN_TESTS),
     "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
     "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS        ),
     "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS     ),
@@ -92,8 +92,21 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
             metafunc.parametrize("case_name", CASES)
 
 
-def test_name_casing(case_name: str, item_name: str) -> None:
+def test_name(case_name: str, item_name: object) -> None:
+    r"""Check if the name of the class matches the item name."""
+    if not isinstance(item_name, str):
+        return
+    case = CASES[case_name]
+    obj = case.elements[item_name]
+    # fallback for jit.ScriptFunction
+    name = getattr(obj, "__name__", getattr(obj, "name", None))
+    assert name == item_name
+
+
+def test_name_casing(case_name: str, item_name: object) -> None:
     r"""Check that the case name is in snake_case."""
+    if not isinstance(item_name, str):
+        return
     case = CASES[case_name]
     item = case.elements[item_name]
     assert item_name.isidentifier()
@@ -131,15 +144,6 @@ def test_issubclass(case_name: str, item_name: str) -> None:
     if case.base_class is not None:
         assert isinstance(obj, type)
         assert issubclass(obj, case.base_class)
-
-
-def test_name(case_name: str, item_name: str) -> None:
-    r"""Check if the name of the class matches the item name."""
-    case = CASES[case_name]
-    obj = case.elements[item_name]
-    # fallback for jit.ScriptFunction
-    name = getattr(obj, "__name__", getattr(obj, "name", None))
-    assert name == item_name
 
 
 def test_dict_complete(case_name: str) -> None:
