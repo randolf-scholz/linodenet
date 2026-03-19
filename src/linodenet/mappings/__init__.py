@@ -29,6 +29,8 @@ __all__ = [
     "MATRIX_PROJECTIONS_WITH_ARGS",
     "VECTOR_PROJECTION_FNS",
     "PROJECTION_FNS",
+    # other
+    "LinearContraction",
 ]
 
 from linodenet.mappings import (
@@ -45,6 +47,7 @@ from linodenet.mappings.base import *
 from linodenet.mappings.bijections import *
 from linodenet.mappings.embeddings import *
 from linodenet.mappings.functional import *
+from linodenet.mappings.linear import LinearContraction
 from linodenet.mappings.projections import *
 from linodenet.mappings.surjections import *
 from linodenet.mappings.transforms import *
