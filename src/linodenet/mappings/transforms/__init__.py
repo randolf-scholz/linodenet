@@ -57,11 +57,13 @@ __all__ = [
     "LowRankTransform",
     "SplineTransform",
     "TriangularTransform",
+    "ContractiveFP",
     "ContractiveNew",
     "ContractiveTransform",
 ]
 
 from linodenet.mappings.transforms.contractive import (
+    ContractiveFP,
     ContractiveNew,
     ContractiveTransform,
 )

@@ -1,6 +1,6 @@
 r"""ContractiveFlow implementation (iResNet-block)."""
 
-__all__ = ["ContractiveNew", "ContractiveTransform"]
+__all__ = ["ContractiveFP", "ContractiveNew", "ContractiveTransform"]
 
 import warnings
 
@@ -8,6 +8,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.mappings.base import TransformBase
+from linodenet_special import fixpoint_solve
 
 
 class ContractiveTransform(TransformBase):
@@ -73,6 +74,52 @@ class ContractiveTransform(TransformBase):
             stacklevel=2,
         )
         return x
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        raise NotImplementedError
+
+
+class ContractiveFP(TransformBase):
+    r"""A residual flow based on a contraction layer.
+
+    Forward: y ← x + g(x)
+    Inverse: via fix-point iteration with implicit differentiation.
+    """
+
+    def __init__(
+        self,
+        contraction: nn.Module,
+        maxiter: int = 256,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
+    ) -> None:
+        super().__init__()
+        self.contraction = contraction
+        self.maxiter = maxiter
+        self.atol = atol
+        self.rtol = rtol
+
+    def encode(self, x: Tensor) -> Tensor:
+        return x + self.contraction(x)
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        raise NotImplementedError
+
+    def fix_point(self, x, y):
+        return y - self.contraction(x)
+
+    def decode(self, y: Tensor) -> Tensor:
+        r"""Compute the inverse through fixed point iteration."""
+
+        # solve x = y - g(x) = f(x, y)
+        return fixpoint_solve(
+            self.fix_point,
+            y.clone(),
+            y,
+            maxiter=self.maxiter,
+            atol=self.atol,
+            rtol=self.rtol,
+        )
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         raise NotImplementedError
