@@ -76,7 +76,11 @@ class TestContractiveFlow(TestCase):
             bias=True,
         ).to(device)
         flow = flow_cls(layer)
-        compiled_decode = torch.compile(flow.decode)
+        compiled_decode = torch.compile(
+            flow.decode,
+            fullgraph=flow_cls is ContractiveNew,
+        )
+
         # trigger compile
         y_demo = torch.randn(self.BATCH_SIZE, self.PERF_INPUT_SIZE, device=device)
         compiled_decode(y_demo)
