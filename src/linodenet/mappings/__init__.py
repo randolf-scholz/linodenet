@@ -126,15 +126,15 @@ r"""Dictionary containing all available projections."""
 
 SURJECTIONS: dict[str, type[SurjectionBase]] = {
     **PROJECTIONS,
-    "NegativeDefinite" : surjections.NegativeDefinite,
-    "PositiveDefinite" : surjections.PositiveDefinite,
-    "ConcatProjection" : surjections.ConcatProjection,
-    "GramMatrix"       : surjections.GramMatrix,
-    "OrthogonalCayley" : surjections.OrthogonalCayley,
-    "OrthogonalHouseholder" : surjections.OrthogonalHouseholder,
-    "OrthogonalMatExp" : surjections.OrthogonalMatExp,
-    "PositiveVector"   : surjections.PositiveVector,
-    "StochasticVector" : surjections.StochasticVector,
+    "ConcatProjection"     : surjections.ConcatProjection,
+    "NegativeDefinite"     : surjections.NegativeDefinite,
+    "OrthogonalCayley"     : surjections.OrthogonalCayley,
+    "OrthogonalHouseholder": surjections.OrthogonalHouseholder,
+    "PositiveDefinite"     : surjections.PositiveDefinite,
+    "PositiveSemiDefinite" : surjections.PositiveSemiDefinite,
+    "PositiveVector"       : surjections.PositiveVector,
+    "SpecialOrthogonal"    : surjections.SpecialOrthogonal,
+    "StochasticVector"     : surjections.StochasticVector,
 }  # fmt: skip
 r"""Dictionary containing all available surjections (nn.Module)."""
 

@@ -2,23 +2,20 @@ r"""Parametrizations for matrices (rank-2 tensors)."""
 
 __all__ = [
     "Banded",
-    "CayleyMap",
     "NegativeDefinite",
     "PositiveDefinite",
     "Contraction",
     "Diagonal",
-    "GramMatrix",
+    "PositiveSemiDefinite",
     "Hamiltonian",
     "LipschitzBounded",
     "LowRank",
     "LowerTriangular",
     "Masked",
-    "MatrixExponential",
     "Normal",
     "OrthogonalCayley",
     "OrthogonalHouseholder",
-    "OrthogonalMatExp",
-    "Orthogonal",
+    "SpecialOrthogonal",
     "RankOne",
     "SkewSymmetric",
     "SpectralNormalized",
@@ -30,19 +27,15 @@ __all__ = [
     "UpperTriangular",
 ]
 
-from linodenet.mappings import bijections, projections, surjections
-
-MatrixExponential = bijections.MatrixExponential
-CayleyMap = bijections.CayleyMap
+from linodenet.mappings import projections, surjections
 
 PositiveDefinite = surjections.PositiveDefinite
 NegativeDefinite = surjections.NegativeDefinite
-GramMatrix = surjections.GramMatrix
+PositiveSemiDefinite = surjections.PositiveSemiDefinite
 
-Orthogonal = projections.Orthogonal
 OrthogonalCayley = surjections.OrthogonalCayley
 OrthogonalHouseholder = surjections.OrthogonalHouseholder
-OrthogonalMatExp = surjections.OrthogonalMatExp
+SpecialOrthogonal = surjections.SpecialOrthogonal
 
 Banded = projections.Banded
 Contraction = projections.Contraction

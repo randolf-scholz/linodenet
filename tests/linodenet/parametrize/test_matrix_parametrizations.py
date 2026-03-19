@@ -53,7 +53,7 @@ PARAMETRIZATION_ARGUMENTS: defaultdict[
 )
 
 
-class TestSuite(TestCase):
+class TestParametrization(TestCase):
     BATCH_SIZE = 8
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
@@ -97,6 +97,7 @@ class TestSuite(TestCase):
     def get_parametrization(self, name: str, /) -> nn.Module:
         cls = MATRIX_PARAMETRIZATIONS[name]
         args, kwargs = PARAMETRIZATION_ARGUMENTS[name]
+        assert issubclass(cls, nn.Module)
         return cls(*args, **kwargs)
 
     def get_matrix_test(
@@ -121,7 +122,7 @@ class TestSuite(TestCase):
         matrix_test, args, kwargs = self.get_matrix_test(name)
         weight = self.get_parametrized_layer(model).weight
         assert isinstance(weight, Tensor)
-        assert matrix_test(weight, *args, **kwargs)
+        assert matrix_test(weight, *args, **kwargs)  # type: ignore[arg-type]
 
     def assert_stale(self, parametrization: nn.Module, expected: bool) -> None:
         is_stale = getattr(parametrization, "is_stale", None)

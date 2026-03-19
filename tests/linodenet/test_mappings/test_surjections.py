@@ -8,9 +8,9 @@ from linodenet.mappings import (
     Orthogonal,
     OrthogonalCayley,
     OrthogonalHouseholder,
-    OrthogonalMatExp,
     PositiveDefinite,
     PositiveVector,
+    SpecialOrthogonal,
     StochasticVector,
     Surjection,
 )
@@ -52,7 +52,7 @@ def test_modular_surjections_work(name: str, seed: int) -> None:
 @pytest.mark.parametrize(
     "surjection_cls",
     [
-        OrthogonalMatExp,
+        SpecialOrthogonal,
         OrthogonalCayley,
         OrthogonalHouseholder,
         Orthogonal,

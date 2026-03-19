@@ -2,14 +2,14 @@ r"""Surjections are a weaker form of projections."""
 
 __all__ = [
     # Classes
-    "NegativeDefinite",
-    "PositiveDefinite",
     "ConcatProjection",
-    "GramMatrix",
+    "NegativeDefinite",
     "OrthogonalCayley",
     "OrthogonalHouseholder",
-    "OrthogonalMatExp",
+    "PositiveDefinite",
+    "PositiveSemiDefinite",
     "PositiveVector",
+    "SpecialOrthogonal",
     "StochasticVector",
 ]
 
@@ -26,7 +26,7 @@ from linodenet_special import matrix_log, matrix_sqrt
 from signatures import signature
 
 
-class GramMatrix(SurjectionBase):
+class PositiveSemiDefinite(SurjectionBase):
     r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
@@ -166,8 +166,8 @@ class StochasticVector(SurjectionBase):
         return logits - logits.mean(dim=-1, keepdim=True)
 
 
-class OrthogonalMatExp(SurjectionBase):
-    r"""Map square matrices to orthogonal matrices via $X ↦ \exp(½(X-Xᵀ))$.
+class SpecialOrthogonal(SurjectionBase):
+    r"""Map square matrices to special orthogonal matrices via $X ↦ \exp(½(X-Xᵀ))$.
 
     Note:
         Over the reals, this construction lands in the determinant-$1$ component of
