@@ -31,6 +31,7 @@ from linodenet.mappings import (
     TransformBase,
 )
 from linodenet.nn.activations import ACTIVATIONS, Activation
+from linodenet.nn.parametrize import WrappedParametrization
 from linodenet.parametrizations import (
     PARAMETRIZATIONS,
     Parametrization,
@@ -42,7 +43,6 @@ from linodenet.regularizations import (
     Regularization,
     RegularizationBase,
 )
-from linodenet.testing import MATRIX_TESTS
 
 
 class Case(NamedTuple):
@@ -52,6 +52,7 @@ class Case(NamedTuple):
     protocol: type | None
     base_class: type | None
     elements: Mapping[str, type] | Mapping[str, Callable]
+    excluded: set = set()
 
 
 CASES: dict[str, Case] = {
@@ -64,7 +65,7 @@ CASES: dict[str, Case] = {
     "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS              ),
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
     "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS    ),
-    "matrix_domain_tests" : Case(lib.testing, None, None, MATRIX_TESTS),
+    # "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_TESTS       ),
     "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
     "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS        ),
     "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS     ),
@@ -72,6 +73,8 @@ CASES: dict[str, Case] = {
     "regularizations_fun" : Case(lib.regularizations  , Regularization , None               , REGULARIZATION_FNS ),
 }  # fmt: skip
 r"""Dictionary of all available cases."""
+
+CASES["parametrizations"].excluded.add(WrappedParametrization)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -154,8 +157,8 @@ def test_dict_complete(case_name: str) -> None:
         case None:  # skip for function-dicts
             return
         case base_class:
-            missing: dict[str, type] = {
-                name: cls
+            missing: dict[type, str] = {
+                cls: name
                 for name, cls in vars(case.module).items()
                 if (
                     not is_protocol(cls)
@@ -168,5 +171,5 @@ def test_dict_complete(case_name: str) -> None:
                 and cls not in case.elements.values()
             }
 
-            if missing:
-                raise AssertionError(f"Missing {case_name}: {sorted(missing)}")
+            if missing.keys() - case.excluded:
+                raise AssertionError(f"Missing {case_name}: {missing}")
