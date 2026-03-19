@@ -648,10 +648,30 @@ def iter_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
             yield m
 
 
+def _heal_parametrization_connections(module: nn.Module, /) -> None:
+    r"""Rebind parametrized module buffers to the wrapper caches.
+
+    This restores aliasing after operations such as ``module.to(...)`` that rewrite
+    buffers in each submodule independently.
+    """
+    for submodule in module.modules():
+        match getattr(submodule, "parametrizations", None):
+            case nn.ModuleDict() as parametrizations:
+                for tensor_name, parametrization in parametrizations.items():
+                    if not isinstance(parametrization, ParametrizationBase):
+                        continue
+                    setattr(submodule, tensor_name, parametrization.get_cached_tensor())
+            case None:
+                continue
+            case _:
+                raise TypeError("Expected parametrizations to be a nn.ModuleDict")
+
+
 def update_parametrizations(module: nn.Module, /) -> None:
     r"""Update all parametrizations in a module."""
     for parametrization in iter_parametrizations(module):
         parametrization.update_parametrization()
+    _heal_parametrization_connections(module)
 
 
 #

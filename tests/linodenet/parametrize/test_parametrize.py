@@ -102,3 +102,27 @@ def test_parametrized_model_training_requires_explicit_refresh() -> None:
 
     assert is_upper_triangular(model.weight)
     assert_update_refreshes_parametrized_weight(model)
+
+
+def test_update_parametrizations_heals_connections_after_to() -> None:
+    model = nn.Linear(in_features=5, out_features=4, bias=False)
+    register_parametrization(model, "weight", UpperTriangular())
+
+    assert isinstance(model.parametrizations, nn.ModuleDict)
+    parametrization = model.parametrizations["weight"]
+    assert isinstance(parametrization, nn.Module)
+    assert isinstance(model.weight, Tensor)
+    assert model.weight is parametrization.cached_parameter
+
+    model = model.to(dtype=torch.float64)
+    assert isinstance(model.parametrizations, nn.ModuleDict)
+    parametrization = model.parametrizations["weight"]
+    assert isinstance(parametrization, nn.Module)
+    assert isinstance(model.weight, Tensor)
+    assert model.weight is not parametrization.cached_parameter
+
+    update_parametrizations(model)
+
+    assert model.weight is parametrization.cached_parameter
+    assert model.weight.dtype == torch.float64
+    assert is_upper_triangular(model.weight)
