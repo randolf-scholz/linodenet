@@ -128,10 +128,6 @@ class Registry(Mapping[str, RegistryEntry]):
                 )
             setattr(entry, field.name, value)
 
-    def register_domain(self, name: str, domain: Domain, /) -> None:
-        r"""Register a domain for `name`."""
-        self.register(name, domain=domain)
-
     def register_test_on_domain(self, domain: Domain, test: Fn, /) -> None:
         r"""Register a test for `domain`."""
         for entry in self._entries.values():
@@ -156,65 +152,32 @@ class Registry(Mapping[str, RegistryEntry]):
                 self.register(name, test=test)
 
     def register_tests_on_domain[D: Domain](self, tests: Mapping[D, Fn], /) -> None:
-        r"""Register tests from a domain-to-test mapping."""
         for domain, test in tests.items():
             self.register_test_on_domain(domain, test)
 
-    def register_projection(self, name: str, projection: type, /) -> None:
-        r"""Register a projection module for `name`."""
-        self.register(name, mapping=projection)
-
-    def register_mappings(self, projections: Mapping[str, type], /) -> None:
-        r"""Register projection modules from a mapping."""
-        for name, projection in projections.items():
-            self.register_projection(name, projection)
-
-    def register_projection_fn(self, name: str, fn: Fn, /) -> None:
-        r"""Register a projection function for `name`."""
-        self.register(name, mapping_fn=fn)
+    def register_mappings(self, mappings: Mapping[str, type], /) -> None:
+        for name, projection in mappings.items():
+            self.register(name, mapping=projection)
 
     def register_mapping_fns(self, fns: Mapping[str, Fn], /) -> None:
-        r"""Register projection functions from a mapping."""
-        for name, projection_fn in fns.items():
-            self.register_projection_fn(name, projection_fn)
-
-    def register_regularization(self, name: str, typ: type, /) -> None:
-        r"""Register a regularization module for `name`."""
-        self.register(name, regularization=typ)
+        for name, fn in fns.items():
+            self.register(name, mapping_fn=fn)
 
     def register_regularizations(self, typs: Mapping[str, type], /) -> None:
-        r"""Register regularization modules from a mapping."""
         for name, regularization in typs.items():
-            self.register_regularization(name, regularization)
-
-    def register_regularization_fn(self, name: str, fn: Fn, /) -> None:
-        r"""Register a regularization function for `name`."""
-        self.register(name, regularization_fn=fn)
+            self.register(name, regularization=regularization)
 
     def register_regularization_fns(self, fns: Mapping[str, Fn], /) -> None:
-        r"""Register regularization functions from a mapping."""
-        for name, regularization_fn in fns.items():
-            self.register_regularization_fn(name, regularization_fn)
-
-    def register_initialization(self, name: str, fn: Fn, /) -> None:
-        r"""Register an initialization for `name`."""
-        self.register(name, initialization=fn)
+        for name, fn in fns.items():
+            self.register(name, regularization_fn=fn)
 
     def register_initializations(self, fns: Mapping[str, Fn], /) -> None:
-        r"""Register initializations from a mapping."""
         for name, initialization in fns.items():
-            self.register_initialization(name, initialization)
+            self.register(name, initialization=initialization)
 
-    def register_parametrization(self, name: str, parametrization: type, /) -> None:
-        r"""Register a parametrization for `name`."""
-        self.register(name, parametrization=parametrization)
-
-    def register_parametrizations(
-        self, parametrizations: Mapping[str, type], /
-    ) -> None:
-        r"""Register parametrizations from a mapping."""
-        for name, parametrization in parametrizations.items():
-            self.register_parametrization(name, parametrization)
+    def register_parametrizations(self, typs: Mapping[str, type], /) -> None:
+        for name, parametrization in typs.items():
+            self.register(name, parametrization=parametrization)
 
     def __getitem__(self, key: str) -> RegistryEntry:
         return self._entries[normalize_registry_name(key)]

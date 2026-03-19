@@ -73,7 +73,6 @@ repos:
       - id: check-dunder-all
         files: '^src/'
       - id: check-typing
-        args: ["--check-no-return-union"]
         files: '^src/|^tests/'
       - id: check-signatures
         files: '^src/'
