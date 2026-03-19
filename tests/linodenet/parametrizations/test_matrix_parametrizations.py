@@ -101,9 +101,7 @@ class TestParametrization(TestCase):
         assert issubclass(cls, nn.Module)
         return cls(*args, **kwargs)
 
-    def get_matrix_test(
-        self, name: str, /
-    ) -> tuple[MatrixTest, tuple[object, ...], dict[str, object]]:
+    def get_matrix_test(self, name: str, /) -> tuple[MatrixTest, tuple, dict]:
         entry = get_registry_entry(name)
         assert callable(entry.test)
         args, kwargs = PARAMETRIZATION_ARGUMENTS[name]

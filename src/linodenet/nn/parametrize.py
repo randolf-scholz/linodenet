@@ -419,12 +419,21 @@ class WrappedParametrization(ParametrizationBase):
         return self.parametrization.right_inverse(y)
 
 
+@overload
+def parametrized[P: Parametrization](
+    x: Tensor, param: type[P], /, *, unsafe: bool = ...
+) -> P: ...
+@overload
 def parametrized(
+    x: Tensor, param: nn.Module, /, *, unsafe: bool = ...
+) -> WrappedParametrization: ...
+def parametrized[P: Parametrization](
     tensor: Tensor,
-    parametrization: nn.Module | type[ParametrizationBase],
+    parametrization: nn.Module | type[P],
+    /,
     *,
     unsafe: bool = False,
-) -> ParametrizationBase:
+) -> P | WrappedParametrization:
     match parametrization:
         case type() as cls:
             if not is_parametrization(cls):
@@ -432,7 +441,11 @@ def parametrized(
                     f"Expected a Parametrization type, but got {type(parametrization)}"
                     f"\nMaybe you wanted to pass a transform and forgot to instantiate it?"
                 )
-            return cls(tensor)
+            try:
+                return cls(tensor)  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue]
+            except Exception as exc:
+                exc.add_note("Could not instantiate parametrization")
+                raise
         case nn.Module() as transform:
             return WrappedParametrization(tensor, transform, unsafe=unsafe)
         case _:
@@ -516,11 +529,11 @@ def is_parametrized(module: nn.Module, tensor_name: Optional[str] = None) -> boo
 
 
 def assert_is_safe_parametrization(
-    parametrization: ParametrizationBase, tensor: Tensor
+    parametrization: Parametrization, tensor: Tensor
 ) -> None:
     r"""Check if the parametrization is safe to apply to the tensor."""
     Y = tensor
-    X = parametrization.forward(Y)
+    X = parametrization(Y)
     if not isinstance(X, Tensor):
         raise TypeError(
             f"A parametrization must return a tensor. Got {type(X).__name__}."
