@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from linodenet.mappings import (
+    Cholesky,
     Orthogonal,
     OrthogonalCayley,
     OrthogonalHouseholder,
@@ -32,14 +33,19 @@ def get_surjection_test(surjection_cls: type[Surjection], /):
 
 
 @pytest.mark.parametrize("name", SURJECTION_MODULES)
-def test_modular_surjections_work(name: str) -> None:
+@pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
+def test_modular_surjections_work(name: str, seed: int) -> None:
+    torch.manual_seed(seed)
     surjection = SURJECTION_MODULES[name]()
     vector_test = get_surjection_test(type(surjection))
 
-    x = torch.randn(8, 5)
-    y = surjection(x)
+    x_single = torch.randn(5)
+    y_single = surjection(x_single)
+    assert vector_test(y_single).all()
 
-    assert vector_test(y).all()
+    x_batch = torch.randn(8, 5)
+    y_batch = surjection(x_batch)
+    assert vector_test(y_batch).all()
 
 
 @pytest.mark.parametrize(
@@ -62,3 +68,41 @@ def test_orthogonal_maps(surjection_cls: type[Surjection], seed: int) -> None:
     assert is_orthogonal(y).all()
     z = surjection.right_inverse(y)
     assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
+
+
+def test_cholesky_surjection() -> None:
+    surjection = Cholesky()
+    matrix_test = get_surjection_test(type(surjection))
+
+    x = torch.randn(8, 5, 5).tril()
+    y = surjection(x)
+
+    assert matrix_test(y).all()
+
+    z = surjection.right_inverse(y)
+    assert torch.allclose(z, z.tril())
+    assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
+
+    lower = z.tril(diagonal=-1) + torch.diag_embed(
+        torch.exp(z.diagonal(dim1=-2, dim2=-1))
+    )
+    assert torch.all(lower.diagonal(dim1=-2, dim2=-1) > 0)
+
+
+def test_cholesky_surjection_right_inverse() -> None:
+    surjection = Cholesky()
+    factor = torch.tensor([[2.0, 0.0, 0.0], [1.0, 3.0, 0.0], [-3.0, 2.0, 1.0]])
+    y = surjection(factor)
+
+    z = surjection.right_inverse(y)
+
+    assert torch.allclose(z, z.tril())
+    assert torch.allclose(surjection(z), y, atol=1e-6, rtol=1e-6)
+
+
+def test_cholesky_surjection_right_inverse_singular_psd_raises() -> None:
+    surjection = Cholesky()
+    y = torch.tensor([[4.0, 2.0, -6.0], [2.0, 1.0, -3.0], [-6.0, -3.0, 9.0]])
+
+    with pytest.raises(RuntimeError):
+        surjection.right_inverse(y)
