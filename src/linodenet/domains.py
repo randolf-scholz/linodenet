@@ -513,6 +513,9 @@ class ScalarDomains(Enum):
     OPEN_UNIT_INTERVAL = Interval("(0, 1)")
     HALF_OPEN_UNIT_INTERVAL = Interval("[0, 1)")
 
+    UNIT_BALL = Interval("[-1, 1]")
+    OPEN_UNIT_BALL = Interval("(-1, 1)")
+
     @property
     def domain(self) -> Domain:
         return self.value
@@ -561,7 +564,12 @@ class VectorDomains(_PosetEnum):
     STANDARDIZED = "standardized"  # zero-mean, unit variance
 
     UNIT_VECTOR = "unit-vector"  # ‖x‖₂ = 1
+    UNIT_SPHERE = "unit-vector"  # alias
+    UNIT_BALL = "unit-ball"  # ‖x‖₂ ≤ 1
+    UNIT_CUBE = "unit-cube"  # ‖x‖_∞ ≤ 1
+    UNIT_L1BALL = "unit-l1ball"  # ‖x‖₁ ≤ 1
     STOCHASTIC = "stochastic"  # ∑xᵢ = 1, xᵢ ≥ 0
+    SIMPLEX = "stochastic"  # alias
 
     NONZERO = "nonzero"  # x ≠ 0
     POSITIVE = "positive"  # xᵢ > 0
@@ -584,8 +592,10 @@ VectorDomains.KNOWN_EDGES = MappingProxyType({
     V.POSITIVE: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
     V.REAL: frozenset({V.COMPLEX}),
     V.STANDARDIZED: frozenset({V.ZERO_MEAN, V.NONZERO}),
-    V.STOCHASTIC: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
-    V.UNIT_VECTOR: frozenset({V.NONZERO}),
+    V.STOCHASTIC: frozenset({V.NONNEGATIVE, V.NONZERO, V.UNIT_L1BALL}),
+    V.UNIT_VECTOR: frozenset({V.NONZERO, V.UNIT_BALL}),
+    V.UNIT_BALL: frozenset({V.UNIT_CUBE}),
+    V.UNIT_L1BALL: frozenset({V.UNIT_BALL}),
     V.ZERO: frozenset({V.NONPOSITIVE, V.NONNEGATIVE, V.SPARSE, V.BOOLEAN}),
 })  # fmt: skip
 VectorDomains.KNOWN_TAGS = MappingProxyType({})  # pyright: ignore[reportAttributeAccessIssue]
