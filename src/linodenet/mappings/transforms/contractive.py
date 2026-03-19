@@ -1,13 +1,14 @@
 r"""ContractiveFlow implementation (iResNet-block)."""
 
-__all__ = ["ContractiveTransform"]
+__all__ = ["ContractiveNew", "ContractiveTransform"]
 
 import warnings
+from typing import NamedTuple
 
 import torch
 from torch import Tensor, nn
 
-from ..base import TransformBase
+from linodenet.mappings.base import TransformBase
 
 
 class ContractiveTransform(TransformBase):
@@ -72,6 +73,110 @@ class ContractiveTransform(TransformBase):
             f"No convergence in {self.maxiter} iterations. ",
             stacklevel=2,
         )
+        return x
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        raise NotImplementedError
+
+
+class _State(NamedTuple):
+    r"""The fixed-point iteration state for the inverse pass."""
+
+    budget: Tensor
+    x: Tensor
+    r: Tensor  # residual
+    # y: Tensor
+    # atol: Tensor
+    # rtol: Tensor
+
+
+class ContractiveNew(TransformBase):
+    r"""A residual flow based on a contraction layer.
+
+    Forward: y ← x + g(x)
+    Inverse: via fix-point iteration implemented with `torch.while_loop`.
+
+    The jacobian determinant of the forward transformation is:
+
+    .. math:: \log\det(∂y/∂x) = \log\det(𝕀 + ∂g/∂x) = \tr\log(𝕀 + ∂g/∂x)
+
+    Using the power series, this is
+
+    .. math:: ∑_k (-1)ᵏ⁺¹ \tr((∂g/∂x)ᵏ)/k
+
+    References:
+        - | Invertible Residual Networks
+          | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
+          | International Conference on Machine Learning 2019
+          | https://proceedings.mlr.press/v97/behrmann19a.html
+        - https://github.com/jhjacobsen/invertible-resnet
+    """
+
+    maxiter: Tensor
+    rtol: Tensor
+    atol: Tensor
+    y_buffer: Tensor
+
+    def __init__(
+        self,
+        contraction: nn.Module,
+        maxiter: int = 256,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
+    ) -> None:
+        super().__init__()
+        self.contraction = contraction
+        self.register_buffer("maxiter", torch.as_tensor(maxiter, dtype=torch.int32))
+        self.register_buffer("atol", torch.as_tensor(atol))
+        self.register_buffer("rtol", torch.as_tensor(rtol))
+        self.register_buffer("y_buffer", None)
+
+    def encode(self, x: Tensor) -> Tensor:
+        return x + self.contraction(x)
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        raise NotImplementedError
+
+    def cond_fn(self, state: _State, /) -> Tensor:
+        budget, x, residual = state
+        tolerance = self.rtol * x.abs() + self.atol
+        return (budget > 0) & (residual > tolerance).any()
+
+    def body_fn(self, state: _State, /) -> _State:
+        budget, x, _ = state
+
+        # PERF: unroll 8 iterations (convergence check expensive)
+        x = self.y_buffer - self.contraction(x)
+        x = self.y_buffer - self.contraction(x)
+        x = self.y_buffer - self.contraction(x)
+        x = self.y_buffer - self.contraction(x)
+        x = self.y_buffer - self.contraction(x)
+        x = self.y_buffer - self.contraction(x)
+        x = self.y_buffer - self.contraction(x)
+        x_new = self.y_buffer - self.contraction(x)
+
+        return _State(budget - 1, x_new, (x_new - x).abs())
+
+    def decode(self, y: Tensor) -> Tensor:
+        r"""Compute the inverse through fixed point iteration.
+
+        Terminates once ``maxiter`` or the elementwise tolerance threshold
+        $|x'-x| ≤ \text{rtol}⋅|x| + \text{atol}$ is reached.
+        """
+        x0 = y.clone()
+        r0 = torch.full_like(x0, torch.inf)
+        self.y_buffer = y
+
+        initial_state = _State(self.maxiter, x0, r0)
+        final_state = torch.while_loop(self.cond_fn, self.body_fn, (initial_state,))
+
+        _, x, residual = final_state  # pyright: ignore[reportGeneralTypeIssues]
+
+        if (residual > self.rtol * torch.abs(x) + self.atol).any():
+            warnings.warn(
+                f"No convergence in {self.maxiter} iterations. ",
+                stacklevel=2,
+            )
         return x
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
