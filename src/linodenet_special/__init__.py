@@ -7,15 +7,17 @@ __all__ = [
     "fallbacks",
     "interfaces",
     # Special
-    "thomson_initialization",
-    "spectral_norm_native",
-    "singular_triplet_native",
+    "fixpoint_solve",
     "inverse_softplus",
-    "matrix_sqrt",
     "matrix_log",
+    "matrix_sqrt",
+    "singular_triplet_native",
+    "spectral_norm_native",
+    "thomson_initialization",
 ]
 from linodenet_special import fallbacks, interfaces, kernels, linalg
 from linodenet_special.fallbacks import (
+    fixpoint_solve,
     inverse_softplus,
     matrix_log,
     matrix_sqrt,
