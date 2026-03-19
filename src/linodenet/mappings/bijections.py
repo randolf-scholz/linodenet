@@ -11,6 +11,7 @@ import torch
 from torch import Tensor
 
 from linodenet.domains import MatrixDomains
+from linodenet_special import matrix_log
 from signatures import signature
 
 from .base import BijectionBase
@@ -34,11 +35,8 @@ class MatrixExponential(BijectionBase):
 
     @signature("(..., n, n) -> (..., n, n)")
     def inverse(self, y: Tensor) -> Tensor:
-        r"""This requires the matrix logarithm, which is not implemented in PyTorch.
-
-        See: https://github.com/pytorch/pytorch/issues/9983
-        """
-        raise NotImplementedError
+        # FIXME: https://github.com/pytorch/pytorch/issues/9983 (matrix_log)
+        return matrix_log(y).real.to(dtype=y.dtype)
 
 
 class CayleyMap(BijectionBase):
