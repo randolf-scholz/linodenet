@@ -12,7 +12,6 @@ __all__ = [
     "assert_all_close",
     "assert_is_trainable",
     "assert_jit_compatible",
-    "assert_signatures_compatible",
     "assert_model_ok",
     # check functions
     "check_backward",
@@ -25,14 +24,9 @@ __all__ = [
     "all_finite",
 ]
 
-import inspect
 import logging
 import tempfile
-from collections.abc import (
-    Callable,
-    Mapping,
-    Sequence,
-)
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from typing import Any, Optional, overload
 
@@ -55,22 +49,6 @@ from linodenet.types import Nested, Scalar
 
 type Tree = Nested[Tensor | Scalar]
 type Func = Callable[..., Nested[Tensor]]
-
-
-def assert_signatures_compatible(func: Callable, reference: Callable) -> None:
-    r"""Assert that functions signature is wider than reference."""
-    fun_sig = inspect.signature(func)
-    ref_sig = inspect.signature(reference)
-
-    for param in ref_sig.parameters:
-        if param not in fun_sig.parameters:
-            raise AssertionError(f"Parameter {param} not in function signature!")
-        ref_kind = ref_sig.parameters[param].kind
-        param_kind = fun_sig.parameters[param].kind
-        if param_kind != ref_kind:
-            raise AssertionError(
-                f"Parameter {param} has different kind! (expected {ref_kind}, got {param_kind})"
-            )
 
 
 def assert_all_close(
