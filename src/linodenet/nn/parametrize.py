@@ -97,7 +97,6 @@ __all__ = [
 ]
 
 import copy
-import warnings
 from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, ContextDecorator
@@ -112,7 +111,6 @@ from typing import (
     Protocol,
     Self,
     TypeIs,
-    cast,
     get_protocol_members,
     overload,
     runtime_checkable,
@@ -586,20 +584,12 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
         case None:
             return nn.ModuleDict()
 
-        case nn.ModuleDict() as parametrizations:
-            return parametrizations
+        case nn.Module() as ps:
+            if isinstance(ps, nn.ModuleDict):
+                return ps
 
-        case jit.RecursiveScriptModule() as parametrizations:  # type: ignore[attr-defined]  # pyright: ignore[reportPrivateImportUsage]
-            warnings.warn(
-                "Scripted module! Not all functionality may be available.", stacklevel=2
-            )
-            return cast("nn.ModuleDict", parametrizations)
+            return nn.ModuleDict(dict(ps.named_children()))
 
-        # torch.export case
-        case nn.Module():
-            if (ps := getattr(module, "parametrizations", None)) is not None:
-                return nn.ModuleDict(ps.named_children())
-            raise TypeError("This does not look like a parametrization module")
         case _:
             raise TypeError(f"Expected a nn.ModuleDict, but got {type(ps)}!")
 
@@ -656,13 +646,18 @@ def _heal_parametrization_connections(module: nn.Module, /) -> None:
     """
     for submodule in module.modules():
         match getattr(submodule, "parametrizations", None):
-            case nn.ModuleDict() as parametrizations:
-                for tensor_name, parametrization in parametrizations.items():
+            case None:
+                continue
+
+            case nn.Module() as ps:
+                if not isinstance(ps, nn.ModuleDict):
+                    ps = nn.ModuleDict(dict(ps.named_children()))
+
+                for tensor_name, parametrization in ps.items():
                     if not isinstance(parametrization, ParametrizationBase):
                         continue
                     setattr(submodule, tensor_name, parametrization.get_cached_tensor())
-            case None:
-                continue
+
             case _:
                 raise TypeError("Expected parametrizations to be a nn.ModuleDict")
 
