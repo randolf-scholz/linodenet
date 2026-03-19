@@ -8,6 +8,8 @@ __all__ = [
     "bimodal_to_gaussian",
     "gaussian_to_bimodal",
     "gaussian_to_mixture",
+    "FixpointSolve",
+    "fixpoint_solve",
     "hard_bend",
     "hard_contract",
     "hard_expand",
@@ -23,6 +25,7 @@ __all__ = [
     "spectral_norm_native",
 ]
 
+from .fixpoint_iteration import FixpointSolve, fixpoint_solve
 from .gaussian_transport import (
     bimodal_to_gaussian,
     gaussian_to_bimodal,
