@@ -99,7 +99,7 @@ def rank_one(x: Tensor) -> Tensor:
 def orthogonal(x: Tensor) -> Tensor:
     r"""Return the closest orthogonal matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   Yᵀ Y = 𝕀 = YYᵀ
+    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀY = 𝕀 = YYᵀ
 
     One can show analytically that $Y = UVᵀ$ is the unique minimizer,
     where $X=UΣVᵀ$ is the SVD of $X$.
