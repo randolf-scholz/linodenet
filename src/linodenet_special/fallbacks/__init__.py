@@ -11,6 +11,7 @@ __all__ = [
     "hard_bend",
     "hard_contract",
     "hard_expand",
+    "inverse_softplus",
     "matrix_log",
     "matrix_sqrt",
     "mixture_to_gaussian",
@@ -29,6 +30,7 @@ from .gaussian_transport import (
     mixture_to_gaussian,
 )
 from .hard_bend import hard_bend, hard_contract, hard_expand
+from .inverse_softplus import inverse_softplus
 from .matrix_functions import matrix_log, matrix_sqrt
 from .ndtri_exp import ndtri_exp, ndtri_exp_naive
 from .singular_triplet import singular_triplet, singular_triplet_native
