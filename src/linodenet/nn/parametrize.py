@@ -594,7 +594,6 @@ def get_parametrizations(module: nn.Module, /) -> nn.ModuleDict:
 def remove_parametrizations(
     module: nn.Module,
     tensor_name: str,
-    *,
     leave_parametrized: bool = True,
 ) -> nn.Module:
     r"""Remove the parametrizations on a tensor in a module."""
