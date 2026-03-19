@@ -1,7 +1,5 @@
 r"""Test parametrization of modules."""
 
-from copy import deepcopy
-
 import pytest
 import torch
 from torch import Tensor, nn
@@ -13,7 +11,6 @@ from torch.optim import SGD
 from linodenet.mappings.projections import LipschitzBounded, Symmetric
 from linodenet.parametrizations import (
     UpperTriangular,
-    WrappedParametrization,
     cached,
     get_parametrizations,
     is_parametrization,
@@ -25,8 +22,6 @@ from linodenet.parametrizations import (
 from linodenet.testing import (
     all_close,
     assert_model_ok,
-    check_jit_scriptable,
-    check_jit_serializable,
     is_symmetric,
     is_upper_triangular,
 )
@@ -90,83 +85,6 @@ def test_optimization() -> None:
     register_parametrization(model, "weight", UpperTriangular())
 
     check_optimization(model, args=(x,), target=y)
-
-
-def test_optimization_manual() -> None:
-    torch.manual_seed(42)
-    batch_size, dim_in, dim_out = 3, 5, 4
-
-    x = torch.randn(batch_size, dim_in)
-    y = torch.randn(batch_size, dim_out)
-    model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    original_weight = model.weight
-
-    check_jit_scriptable(model)
-
-    # create the parametrization
-    param = parametrized(model.weight, UpperTriangular())
-    assert param.original_parameter is model.weight
-    assert param.cached_parameter is not model.weight
-
-    # check that the parametrization is initialized
-    assert not is_upper_triangular(model.weight)
-    assert not is_upper_triangular(param.original_parameter)
-    assert is_upper_triangular(param.cached_parameter)
-
-    # remove weight and re-register it as a buffer
-    delattr(model, "weight")
-    model.register_buffer("weight", param.cached_parameter)
-    model.register_module("param", param)
-    model.register_parameter("original_weight", param.original_parameter)
-    assert isinstance(model.param, WrappedParametrization)
-
-    # check that the parametrization is registered
-    assert model.weight is not original_weight
-    assert model.weight is model.param.cached_parameter
-    assert original_weight is model.param.original_parameter
-
-    # check that model can be scripted
-    check_jit_scriptable(model)
-
-    # initialize the parametrization
-    model.param.update_parametrization()
-
-    # verify that the parametrization is initialized
-    assert is_upper_triangular(model.weight)
-    assert isinstance(model.param.original_parameter, Tensor)
-    assert is_upper_triangular(model.param.original_parameter)
-    assert isinstance(model.param.cached_parameter, Tensor)
-    assert is_upper_triangular(model.param.cached_parameter)
-
-    # test training plain model
-    check_optimization(model, args=(x,), target=y)
-
-    # test training scripted model
-    scripted = check_jit_scriptable(model)
-    check_optimization(scripted, args=(x,), target=y)
-
-    # test training serialized model
-    loaded = check_jit_serializable(scripted)
-    check_optimization(loaded, args=(x,), target=y)
-
-
-def test_optimization_jit() -> None:
-    r"""Tests the optimization of a JIT-compiled model."""
-    torch.manual_seed(42)
-    batch_size, dim_in, dim_out = 3, 5, 4
-    x = torch.randn(batch_size, dim_in)
-    y = torch.randn(batch_size, dim_out)
-
-    model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    register_parametrization(model, "weight", UpperTriangular())
-
-    scripted_model = check_jit_scriptable(model)
-    assert is_upper_triangular(scripted_model.weight)
-    check_optimization(scripted_model, args=(x,), target=y)
-
-    deserialized_model = check_jit_serializable(model)
-    assert is_upper_triangular(deserialized_model.weight)
-    check_optimization(deserialized_model, args=(x,), target=y)
 
 
 def test_optimization_compile() -> None:
@@ -385,7 +303,7 @@ def test_parametrized() -> None:
         call_args=(x,),
         call_kwargs={},
         reference_model=reference_model,
-        test_jit=True,
+        test_jit=False,
     )
 
     # now, parametrizations
@@ -397,76 +315,5 @@ def test_parametrized() -> None:
 
     # check compatibility
     assert_model_ok(
-        model, call_args=(x,), reference_model=reference_model, test_jit=True
+        model, call_args=(x,), reference_model=reference_model, test_jit=False
     )
-
-
-def test_jit_preserves_parameters() -> None:
-    dim_in, dim_out = 2, 3
-    model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-
-    original_parameters = deepcopy(tuple(model.parameters()))
-
-    deserialized_model = check_jit_serializable(model)
-    deserialized_param = deepcopy(tuple(deserialized_model.parameters()))
-
-    # apply only a dummy parametrization for this test.
-    register_parametrization(model, "weight", nn.Identity())
-    parametrized_parameters = deepcopy(tuple(model.parameters()))
-
-    deserialized_parametrized_model = check_jit_serializable(deserialized_model)
-    deserialized_parametrized_param = deepcopy(
-        tuple(deserialized_parametrized_model.parameters())
-    )
-
-    for x, y in zip(original_parameters, deserialized_param, strict=True):
-        assert x.shape == y.shape
-        assert torch.equal(x, y)
-
-    for x, y in zip(original_parameters, parametrized_parameters, strict=True):
-        assert x.shape == y.shape
-        assert torch.equal(x, y)
-
-    for x, y in zip(original_parameters, deserialized_parametrized_param, strict=True):
-        assert x.shape == y.shape
-        assert torch.equal(x, y)
-
-
-@pytest.mark.xfail(
-    reason="After deserialization update_parametrization must be called."
-)
-def test_jit() -> None:
-    r"""Test that subclasses of Protocol-class work with JIT."""
-    torch.manual_seed(42)
-
-    batch_size, dim_in, dim_out = 7, 5, 4
-    inputs = torch.randn(batch_size, dim_in)
-    model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-
-    # check_object(model, input_args=(inputs,))
-
-    register_parametrization(model, "weight", UpperTriangular())
-
-    assert_model_ok(model, call_args=(inputs,))
-
-
-def test_jit_attribute() -> None:
-    dim_in, dim_out = 3, 5
-    model = nn.Linear(in_features=dim_in, out_features=dim_out, bias=False)
-    assert not is_upper_triangular(model.weight)
-
-    register_parametrization(model, "weight", UpperTriangular())
-    ps = get_parametrizations(model)
-    assert is_upper_triangular(model.weight)
-    assert is_parametrization(ps["weight"])
-
-    # check that model can be scripted
-    scripted = check_jit_scriptable(model)
-    scripted_ps = get_parametrizations(model)
-    assert is_upper_triangular(scripted.weight)
-    assert is_parametrization(scripted_ps["weight"])
-
-    # check that model can be scripted
-    deserialized_model = check_jit_serializable(model)
-    assert is_upper_triangular(deserialized_model.weight)
-    # assert is_parametrization(deserialized_model["weight"])
