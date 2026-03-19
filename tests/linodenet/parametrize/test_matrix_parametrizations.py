@@ -57,6 +57,7 @@ class TestParametrization(TestCase):
     BATCH_SIZE = 8
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
+    NUM_ITERATIONS = 3
 
     def make_test_case(
         self, shape: tuple[int, int], /, *, device: str
@@ -122,7 +123,7 @@ class TestParametrization(TestCase):
         matrix_test, args, kwargs = self.get_matrix_test(name)
         weight = self.get_parametrized_layer(model).weight
         assert isinstance(weight, Tensor)
-        assert matrix_test(weight, *args, **kwargs)  # type: ignore[arg-type]
+        assert matrix_test(weight, *args, **kwargs)
 
     def assert_stale(self, parametrization: nn.Module, expected: bool) -> None:
         is_stale = getattr(parametrization, "is_stale", None)
@@ -193,7 +194,7 @@ class TestParametrization(TestCase):
         original_parameter = parametrization.original_parameter.detach().clone()
         original_output = model(x).detach().clone()
 
-        for _ in range(3):
+        for _ in range(self.NUM_ITERATIONS):
             model.zero_grad(set_to_none=True)
             loss = mse_loss(model(x), y)
             loss.backward()
@@ -256,7 +257,7 @@ class TestParametrization(TestCase):
         self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
 
-        for _ in range(3):
+        for _ in range(self.NUM_ITERATIONS):
             compiled_model.zero_grad(set_to_none=True)
             loss = mse_loss(compiled_model(x), y)
             loss.backward()
@@ -289,7 +290,7 @@ class TestParametrization(TestCase):
         self.assert_stale(parametrization, False)
         original_parameter = parametrization.original_parameter.detach().clone()
 
-        for _ in range(3):
+        for _ in range(self.NUM_ITERATIONS):
             exported_model.zero_grad(set_to_none=True)
             loss = mse_loss(exported_model(x), y)
             loss.backward()
