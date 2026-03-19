@@ -20,7 +20,6 @@ __all__ += matrix_tests.__all__
 __all__ += vector_tests.__all__
 __all__ += assertions.__all__
 
-
 VECTOR_TESTS: dict[VectorDomains, VectorTest | VectorTestWithArgs] = {
     VectorDomains.POSITIVE   : is_positive_vector,
     VectorDomains.STOCHASTIC : is_stochastic_vector,
@@ -38,8 +37,12 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.SPECTRAL_NORMALIZED  : is_spectral_normalized,
     MatrixDomains.LIPSCHITZ_BOUNDED    : is_lipschitz_bounded,
     MatrixDomains.DIAGONALLY_DOMINANT  : is_diagonally_dominant,
+    MatrixDomains.NEGATIVE_DEFINITE    : is_negative_definite,
+    MatrixDomains.NEGATIVE_SEMIDEFINITE: is_negative_semidefinite,
     MatrixDomains.NORMAL               : is_normal,
     MatrixDomains.ORTHOGONAL           : is_orthogonal,
+    MatrixDomains.POSITIVE_DEFINITE    : is_positive_definite,
+    MatrixDomains.POSITIVE_SEMIDEFINITE: is_positive_semidefinite,
     MatrixDomains.SPECIAL_ORTHOGONAL   : is_special_orthogonal,
     MatrixDomains.TRACELESS            : is_traceless,
     MatrixDomains.SYMPLECTIC           : is_symplectic,

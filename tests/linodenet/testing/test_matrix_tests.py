@@ -6,6 +6,10 @@ from linodenet.testing.matrix_tests import (
     is_banded,
     is_diagonal,
     is_low_rank,
+    is_negative_definite,
+    is_negative_semidefinite,
+    is_positive_definite,
+    is_positive_semidefinite,
     is_square,
     is_symmetric,
     is_upper_triangular,
@@ -46,3 +50,45 @@ def test_matrix_tests_support_non_default_matrix_dims() -> None:
 
     symmetric = torch.eye(4).expand(2, -1, -1).movedim((-2, -1), (0, 2))
     assert is_symmetric(symmetric, size=4, dim=(0, 2)).all()
+
+
+class TestDefiniteness:
+    def test_assumes_symmetry(self) -> None:
+        positive = torch.tensor([[1.0, 2.0], [0.0, 1.0]])
+        negative = -positive
+
+        assert not is_positive_definite(positive).item()
+        assert not is_positive_semidefinite(positive).item()
+        assert not is_negative_definite(negative).item()
+        assert not is_negative_semidefinite(negative).item()
+
+    def test_definite(self) -> None:
+        matrices = torch.tensor([
+            [[2.0, 0.0], [0.0, 1.0]],
+            [[1.0, 0.0], [0.0, 0.0]],
+            [[1.0, 0.0], [0.0, -1.0]],
+        ])  # fmt: skip
+
+        assert torch.equal(
+            is_positive_definite(matrices),
+            torch.tensor([True, False, False]),
+        )
+        assert torch.equal(
+            is_negative_definite(-matrices),
+            torch.tensor([True, False, False]),
+        )
+
+    def test_semidefinite(self) -> None:
+        matrices = torch.tensor([
+            [[2.0, 0.0], [0.0, 1.0]],
+            [[1.0, 0.0], [0.0, 0.0]],
+            [[1.0, 0.0], [0.0, -1.0]],
+        ])  # fmt: skip
+        assert torch.equal(
+            is_positive_semidefinite(matrices),
+            torch.tensor([True, True, False]),
+        )
+        assert torch.equal(
+            is_negative_semidefinite(-matrices),
+            torch.tensor([True, True, False]),
+        )

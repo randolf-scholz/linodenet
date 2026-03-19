@@ -46,6 +46,7 @@ VECTOR_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
 MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "Banded"               : matrix_parametrizations.Banded,
     "CayleyMap"            : matrix_parametrizations.CayleyMap,
+    "Cholesky"             : matrix_parametrizations.Cholesky,
     "Contraction"          : matrix_parametrizations.Contraction,
     "Diagonal"             : matrix_parametrizations.Diagonal,
     "DiagonallyDominant"   : matrix_parametrizations.DiagonallyDominant,

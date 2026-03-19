@@ -3,6 +3,7 @@ r"""Parametrizations for matrices (rank-2 tensors)."""
 __all__ = [
     "Banded",
     "CayleyMap",
+    "Cholesky",
     "Contraction",
     "Diagonal",
     "GramMatrix",
@@ -33,6 +34,7 @@ from linodenet.mappings import bijections, projections, surjections
 MatrixExponential = bijections.MatrixExponential
 CayleyMap = bijections.CayleyMap
 
+Cholesky = surjections.Cholesky
 GramMatrix = surjections.GramMatrix
 OrthogonalCayley = surjections.OrthogonalCayley
 OrthogonalHouseholder = surjections.OrthogonalHouseholder

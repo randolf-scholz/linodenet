@@ -18,8 +18,12 @@ __all__ = [
     "is_low_rank",
     "is_lower_triangular",
     "is_masked",
+    "is_negative_definite",
+    "is_negative_semidefinite",
     "is_normal",
     "is_orthogonal",
+    "is_positive_definite",
+    "is_positive_semidefinite",
     "is_special_orthogonal",
     "is_rank_one",
     "is_skew_symmetric",
@@ -263,6 +267,98 @@ def is_special_orthogonal(
         rtol=rtol,
         atol=atol,
     )
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_positive_definite(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is symmetric positive definite."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    symmetric = is_symmetric(x, dim=(-2, -1), rtol=rtol, atol=atol)
+    eigenvalues = torch.linalg.eigvalsh(x)
+    return symmetric & (eigenvalues > atol).all(dim=-1)
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_positive_semidefinite(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is symmetric positive semidefinite."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    symmetric = is_symmetric(x, dim=(-2, -1), rtol=rtol, atol=atol)
+    eigenvalues = torch.linalg.eigvalsh(x)
+    return symmetric & (eigenvalues >= 0).all(dim=-1)
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_negative_definite(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is symmetric negative definite."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    symmetric = is_symmetric(x, dim=(-2, -1), rtol=rtol, atol=atol)
+    eigenvalues = torch.linalg.eigvalsh(x)
+    return symmetric & (eigenvalues < -atol).all(dim=-1)
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_negative_semidefinite(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is symmetric negative semidefinite."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    symmetric = is_symmetric(x, dim=(-2, -1), rtol=rtol, atol=atol)
+    eigenvalues = torch.linalg.eigvalsh(x)
+    return symmetric & (eigenvalues <= 0).all(dim=-1)
 
 
 @signature("(..., n, n) -> bool[(...)]")
