@@ -42,7 +42,7 @@ from linodenet.regularizations import (
     Regularization,
     RegularizationBase,
 )
-from linodenet.testing import MATRIX_DOMAIN_TESTS
+from linodenet.testing import MATRIX_TESTS
 
 
 class Case(NamedTuple):
@@ -64,7 +64,7 @@ CASES: dict[str, Case] = {
     "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS              ),
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
     "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS    ),
-    "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_DOMAIN_TESTS),
+    "matrix_domain_tests" : Case(lib.testing, None, None, MATRIX_TESTS),
     "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
     "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS        ),
     "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS     ),

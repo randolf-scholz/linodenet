@@ -24,7 +24,7 @@ from linodenet.regularizations import (
     REGULARIZATION_FNS_WITHOUT_ARGS,
     REGULARIZATIONS,
 )
-from linodenet.testing import MATRIX_DOMAIN_TESTS, VECTOR_DOMAIN_TESTS
+from linodenet.testing import MATRIX_TESTS, VECTOR_TESTS
 
 
 @dataclass(slots=True)
@@ -249,5 +249,5 @@ REGISTRY.register_parametrizations(VECTOR_PARAMETRIZATIONS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITHOUT_ARGS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITH_ARGS)
 REGISTRY.register_regularizations(REGULARIZATIONS)
-REGISTRY.register_tests_on_domain(MATRIX_DOMAIN_TESTS)  # must be registered last
-REGISTRY.register_tests_on_domain(VECTOR_DOMAIN_TESTS)  # must be registered last
+REGISTRY.register_tests_on_domain(MATRIX_TESTS)  # must be registered last
+REGISTRY.register_tests_on_domain(VECTOR_TESTS)  # must be registered last
