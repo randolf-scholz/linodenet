@@ -76,6 +76,8 @@ __all__ += transforms.__all__
 BIJECTIONS: dict[str, type[BijectionBase]] = {
     "MatrixExponential" : bijections.MatrixExponential,
     "CayleyMap"         : bijections.CayleyMap,
+    "SmoothSoftsign"    : bijections.SmoothSoftsign,
+    "TanhMap"           : bijections.TanhMap,
 }  # fmt: skip
 r"""Dictionary containing all available bijections (nn.Module)."""
 
