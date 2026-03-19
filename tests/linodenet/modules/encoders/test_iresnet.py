@@ -15,7 +15,6 @@ import torch
 from torch import Tensor
 
 from linodenet.mappings.linear import LinearContraction
-from linodenet.mappings.transforms import iResNetBlock
 from linodenet_special import scaled_norm
 from tests.testing import PROJECT, visualize_distribution
 

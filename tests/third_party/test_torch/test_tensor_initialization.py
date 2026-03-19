@@ -178,4 +178,4 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         case _:
             raise NotImplementedError
 
-    benchmark(meth)
+    benchmark.pedantic(meth, rounds=250)

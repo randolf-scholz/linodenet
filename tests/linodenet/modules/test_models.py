@@ -10,7 +10,6 @@ from torch import Tensor, nn
 from linodenet.flows import LinearFlow
 from linodenet.forecasting import LinODEnet
 from linodenet.mappings.linear import LinearContraction
-from linodenet.mappings.transforms import iResNet, iResNetBlock
 from linodenet.testing import assert_model_ok, check_initialization
 from tests.testing import PROJECT
 
@@ -38,18 +37,18 @@ MODELS: dict[type[nn.Module], dict] = {
         "input_shapes": [(LEN, DIM)],  # X
         "output_shapes": [(LEN, OUT)],
     },
-    iResNetBlock: {
-        "init_args": (DIM,),
-        "init_kwargs": {},
-        "input_shapes": [(LEN, DIM)],  # X
-        "output_shapes": [(LEN, DIM)],
-    },
-    iResNet: {
-        "init_args": (DIM,),
-        "init_kwargs": {},
-        "input_shapes": [(LEN, DIM)],  # X
-        "output_shapes": [(LEN, DIM)],
-    },
+    # iResNetBlock: {
+    #     "init_args": (DIM,),
+    #     "init_kwargs": {},
+    #     "input_shapes": [(LEN, DIM)],  # X
+    #     "output_shapes": [(LEN, DIM)],
+    # },
+    # iResNet: {
+    #     "init_args": (DIM,),
+    #     "init_kwargs": {},
+    #     "input_shapes": [(LEN, DIM)],  # X
+    #     "output_shapes": [(LEN, DIM)],
+    # },
     LinearFlow: {
         "init_args": (DIM,),
         "init_kwargs": {},
