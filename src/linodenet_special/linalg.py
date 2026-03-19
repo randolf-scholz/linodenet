@@ -9,22 +9,24 @@ __all__ = [
 from typing import Optional
 
 import torch
-from torch import Tensor, jit
+from torch import Tensor
 
 from signatures import signature
 
 
-@jit.script
+@signature("(..., n) -> (..., n+k)")
 def pad(
     x: Tensor,
+    /,
     value: float,
-    pad_width: int,
+    padding_size: int,
+    *,
     dim: int = -1,
     prepend: bool = False,
 ) -> Tensor:
     r"""Pad a tensor with a constant value along a given dimension."""
     shape = list(x.shape)
-    shape[dim] = pad_width
+    shape[dim] = padding_size
     z = torch.full(shape, value, dtype=x.dtype, device=x.device)
 
     if prepend:
@@ -32,10 +34,11 @@ def pad(
     return torch.cat((x, z), dim=dim)
 
 
-@jit.script
 @signature("(..., n) -> (...)")
 def geometric_mean(
     x: Tensor,
+    /,
+    *,
     axis: Optional[int | list[int]] = None,
     keepdim: bool = False,
 ) -> Tensor:
@@ -50,10 +53,11 @@ def geometric_mean(
     return x.log().nanmean(dim=dim, keepdim=keepdim).exp()
 
 
-@jit.script
 @signature("(..., n) -> (...)")
 def scaled_norm(
     x: Tensor,
+    /,
+    *,
     p: float = 2.0,
     axis: Optional[int | list[int]] = None,
     keepdim: bool = False,
