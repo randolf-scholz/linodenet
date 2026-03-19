@@ -102,7 +102,14 @@ def _body_fn(state: State, /) -> State:
     # fmt: on
 
     return State(
-        budget - 1, u, v, grad_u, grad_v, A.clone(), atol.clone(), rtol.clone()
+        budget - 1,
+        u,
+        v,
+        grad_u,
+        grad_v,
+        A.clone(),
+        atol.clone(),
+        rtol.clone(),
     )
 
 
