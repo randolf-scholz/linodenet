@@ -136,7 +136,7 @@ class TestIResNetInvertibility(TestCase):
     LEARNING_RATE = 1.0
     QUANTILES = torch.tensor([0.5, 0.68, 0.95, 0.997])
     ERROR_TARGETS = {
-        torch.float32: torch.tensor([2e-6, 3e-6, 3e-5, 1e-4]),
+        torch.float32: torch.tensor([1e-6, 2e-6, 1e-5, 1e-4]),
         torch.float64: torch.tensor([1e-9, 1e-8, 1e-7, 5e-7]),
     }
     FLOW_TOL = {
