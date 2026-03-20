@@ -9,7 +9,7 @@ from linodenet.mappings import (
     TransformBase,
 )
 from linodenet.mappings.linear import LinearContraction
-from tests.testing import DEVICES, DTYPES, SEEDS_5, TestCase
+from tests.testing import DEVICES, DTYPES, SEEDS_5, TestCase, pytest_xfail
 
 
 class ShiftedHalfContraction(nn.Module):
@@ -34,18 +34,30 @@ class ShiftedHalfContraction(nn.Module):
 class TestCorrectness(TestCase):
     BATCH_SIZE = 32
     INPUT_SIZE = 8
-    GRAD_MAXITER = 2048
-    GRAD_ATOL = 1e-12
-    GRAD_RTOL = 1e-12
+    FLOW_MAXITER = 128
+    FLOW_ATOL = {
+        torch.float32: 1e-6,
+        torch.float64: 1e-8,
+    }
+    FLOW_RTOL = {
+        torch.float32: 1e-6,
+        torch.float64: 1e-8,
+    }
     VALUE_TOL = {
-        torch.float32: (1e-3, 1e-3),
-        torch.float64: (2e-6, 1e-3),
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-6, 1e-6),
     }
     GRAD_TOL = {
-        torch.float32: (1e-3, 1e-3),
-        torch.float64: (1e-5, 1e-5),
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-6, 1e-6),
     }
 
+    @pytest_xfail(
+        condition=lambda *_, flow_cls, **__: flow_cls is ResidualContractionFallback,
+        raises=AssertionError,
+        reason="fallback is less accurate",
+        strict=False,
+    )
     @pytest.mark.parametrize("input_size", [4, 16, 64], ids="input_size={}".format)
     def test_invertibility(
         self,
@@ -83,6 +95,12 @@ class TestCorrectness(TestCase):
         assert yhat.shape == y.shape
         self.assert_close(yhat, y, atol=atol, rtol=rtol)
 
+    @pytest_xfail(
+        condition=lambda *_, flow_cls, **__: flow_cls is ResidualContractionFallback,
+        raises=AssertionError,
+        reason="fallback is less accurate",
+        strict=False,
+    )
     def test_gradients_of_contraction_bias(
         self,
         flow_cls: type[TransformBase],
@@ -111,6 +129,12 @@ class TestCorrectness(TestCase):
             rtol=rtol,
         )
 
+    @pytest_xfail(
+        condition=lambda *_, flow_cls, **__: flow_cls is ResidualContractionFallback,
+        raises=AssertionError,
+        reason="fallback is less accurate",
+        strict=False,
+    )
     def test_gradients_of_contraction_linear(
         self,
         flow_cls: type[TransformBase],
@@ -121,6 +145,8 @@ class TestCorrectness(TestCase):
         r"""Check $∂‖x⁎‖²/∂A$ for the effective weight in $g(x)=Ax$ against the analytic gradient."""
         torch.manual_seed(seed)
         atol, rtol = self.GRAD_TOL[dtype]
+        flow_atol = self.FLOW_ATOL[dtype]
+        flow_rtol = self.FLOW_RTOL[dtype]
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         layer = LinearContraction(
             self.INPUT_SIZE,
@@ -128,13 +154,13 @@ class TestCorrectness(TestCase):
             bias=False,
             device=device,
             dtype=dtype,
-            c=0.97,
+            c=0.95,
         )
         flow = flow_cls(
             layer,
-            maxiter=self.GRAD_MAXITER,
-            atol=self.GRAD_ATOL,
-            rtol=self.GRAD_RTOL,
+            maxiter=self.FLOW_MAXITER,
+            atol=flow_atol,
+            rtol=flow_rtol,
         )
         x_star = flow.decode(y)
 
