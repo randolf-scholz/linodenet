@@ -249,6 +249,7 @@ def fixpoint_solve(
 
         with torch.no_grad():
             # FIXME: vjp_fn doesn't compose with while_loop when compiling.
+            #  raises UncapturedHigherOrderOpError
             return _fallback_solve_impl(
                 lambda u: g + vjp_fn(u)[0],
                 g,
