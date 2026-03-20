@@ -23,7 +23,15 @@ from ..linear import LinearContraction
 
 
 class iResNetLayer(nn.Module):
-    r"""A single layer of an iResNet."""
+    r"""A single layer of an iResNet.
+
+    References:
+    - | Invertible Residual Networks
+      | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
+      | International Conference on Machine Learning 2019
+      | http://proceedings.mlr.press/v97/behrmann19a.html
+    - https://github.com/jhjacobsen/invertible-resnet
+    """
 
     maxiter: Final[int]
     r"""CONST: Maximum number of steps in power-iteration"""
@@ -193,7 +201,7 @@ class iResNetBlock(nn.Module):
         ]
 
         self.use_rezero = HP["rezero"]
-        self.rezero = ReZero() if self.use_rezero else None
+        self.rezero = ReZero(nn.Identity()) if self.use_rezero else None
         if self.use_rezero:
             assert self.rezero is not None
             layers.append(self.rezero)
