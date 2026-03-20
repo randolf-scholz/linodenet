@@ -28,6 +28,8 @@ class TestContractiveFlow(TestCase):
     VALUE_ATOL = 1e-3
     VALUE_RTOL = 1e-3
     BATCH_SIZE = 32
+    INPUT_SIZE = 8
+
     PERF_SEED = 0
     PERF_INPUT_SIZE = 256
     PERF_ROUNDS = 10
@@ -71,10 +73,9 @@ class TestContractiveFlow(TestCase):
 
     def test_gradients_of_contraction_bias(self) -> None:
         r"""Check $∂‖x⁎‖²/∂b$ for $g(x)=½x+b$ against the analytic gradient."""
-        y = torch.tensor([[0.7, -0.2], [0.1, 0.3]], dtype=torch.float64)
-        contraction = ShiftedHalfContraction(
-            torch.tensor([0.1, -0.2], dtype=torch.float64)
-        )
+        y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, dtype=torch.float64)
+        bias = torch.randn(self.INPUT_SIZE, dtype=torch.float64)
+        contraction = ShiftedHalfContraction(bias)
         flow = ContractiveFP(contraction)
 
         x_star = flow.decode(y)
@@ -92,30 +93,39 @@ class TestContractiveFlow(TestCase):
 
     def test_gradients_of_contraction_linear(self) -> None:
         r"""Check $∂‖x⁎‖²/∂A$ for $g(x)=Ax$ against the analytic gradient."""
-        y = torch.tensor([[0.7, -0.2], [0.1, 0.3]], dtype=torch.float64)
-        layer = LinearContraction(2, 2, bias=False, dtype=torch.float64, c=0.97)
-        original_parameter = layer.parametrizations.weight.original_parameter
-        expected_weight = torch.tensor(
-            [[0.2, 0.05], [-0.03, 0.1]],
+        y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, dtype=torch.float64)
+        layer = LinearContraction(
+            self.INPUT_SIZE,
+            self.INPUT_SIZE,
+            bias=False,
             dtype=torch.float64,
+            c=0.97,
         )
-
-        with torch.no_grad():
-            original_parameter.copy_(expected_weight)
-        effective_weight = layer.weight.detach().clone()
-
         flow = ContractiveFP(layer)
         x_star = flow.decode(y)
+
+        with torch.no_grad():
+            # Note: with `nn.Linear`, g(X) = XAᵀ, so
+            #   X⁎ = Y - X⁎Aᵀ  ⟺  X⁎(I + Aᵀ) = Y.
+            # Let M = I + Aᵀ. Then X⁎ = YM⁻¹ and
+            #   ∆X⁎ = -YM⁻¹(∆A)ᵀM⁻¹ = -X⁎(∆A)ᵀM⁻¹.
+            # For L = ‖X⁎‖² = tr(X⁎ᵀX⁎),
+            #   ∆L = 2 tr(X⁎ᵀ∆X⁎)
+            #      = -2 tr(M⁻¹X⁎ᵀX⁎(∆A)ᵀ)
+            #      = -2 tr((M⁻¹X⁎ᵀX⁎)ᵀ∆A),
+            # hence
+            #   ∂L/∂A = -2M⁻¹X⁎ᵀX⁎ = -2(X⁎(I + A)⁻¹)ᵀX⁎.
+            eye = torch.eye(layer.in_features, dtype=torch.float64)
+            solve_term = torch.linalg.solve(eye + layer.weight, x_star, left=False)
+            expected_grad = -2 * solve_term.T @ x_star
+
         loss = x_star.square().sum()
         loss.backward()
-
-        eye = torch.eye(layer.in_features, dtype=torch.float64)
-        solve_term = torch.linalg.solve(eye + effective_weight, x_star.detach().T).T
-        grad_expected = -2 * x_star.detach().T @ solve_term
+        assert layer.weight_parameter.grad is not None
 
         self.assert_close(
-            original_parameter.grad,
-            grad_expected,
+            layer.weight_parameter.grad,
+            expected_grad,
             atol=1e-10,
             rtol=1e-10,
         )
