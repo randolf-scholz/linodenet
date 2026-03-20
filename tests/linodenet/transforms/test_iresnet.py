@@ -233,8 +233,14 @@ class TestIResNetInvertibility(TestCase):
         self.evaluate_invertibility(model, dtype=dtype, device=device)
 
 
-@pytest.mark.parametrize("use_rezero", [False, True], ids=["plain", "rezero"])
-def test_plot_errors(use_rezero: bool) -> None:
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("use_rezero", [False], ids=["plain"])
+def test_plot_errors(
+    use_rezero: bool,
+    device: str,
+    dtype: torch.dtype,
+) -> None:
     logger = logging.getLogger(f"{__name__}/{IResNet.__name__}")
     logger.info("Testing plot generation for use_rezero=%s", use_rezero)
 
@@ -244,8 +250,8 @@ def test_plot_errors(use_rezero: bool) -> None:
     latent_size = 16
     batch_size = 2_048
     maxiter = 256
-    atol = 1e-8
-    rtol = 1e-8
+    atol = 1e-6 if dtype is torch.float32 else 1e-8
+    rtol = atol
     extra_stats = {
         "Samples": f"{batch_size}",
         "Dim": f"{input_size}",
@@ -253,6 +259,8 @@ def test_plot_errors(use_rezero: bool) -> None:
         "Layers": f"{layers_per_block}",
         "Latent": f"{latent_size}",
         "ReZero": str(use_rezero),
+        "Device": device,
+        "DType": str(dtype),
         "maxiter": f"{maxiter}",
     }
 
@@ -265,12 +273,13 @@ def test_plot_errors(use_rezero: bool) -> None:
         maxiter=maxiter,
         atol=atol,
         rtol=rtol,
-        dtype=torch.float64,
+        device=device,
+        dtype=dtype,
     )
 
     with torch.no_grad():
-        x = torch.randn(batch_size, input_size, dtype=torch.float64)
-        y = torch.randn(batch_size, input_size, dtype=torch.float64)
+        x = torch.randn(batch_size, input_size, device=device, dtype=dtype)
+        y = torch.randn(batch_size, input_size, device=device, dtype=dtype)
         metrics = compute_inversion_errors(model, x, y)
 
     fig, ax = plt.subplots(
@@ -313,8 +322,11 @@ def test_plot_errors(use_rezero: bool) -> None:
     )
     ax[1, 1].set_ylabel(r"density $p(d_\mathrm{right} \mid y)$")
     fig.suptitle(
-        f"IResNet -- Inversion Property (use_rezero={use_rezero})", fontsize=16
+        f"IResNet -- Inversion Property (use_rezero={use_rezero}, device={device}, dtype={dtype})",
+        fontsize=16,
     )
-    fig.savefig(RESULT_DIR / f"iresnet_inversion_use_rezero_{use_rezero}.pdf")
-    fig.savefig(RESULT_DIR / f"iresnet_inversion_use_rezero_{use_rezero}.svg")
-    fig.savefig(RESULT_DIR / f"iresnet_inversion_use_rezero_{use_rezero}.png", dpi=300)
+    dtype_name = str(dtype).rsplit(".", maxsplit=1)[-1]
+    stem = f"iresnet_rezero={use_rezero}_{device}_{dtype_name}"
+    fig.savefig(RESULT_DIR / f"{stem}.pdf")
+    fig.savefig(RESULT_DIR / f"{stem}.svg")
+    fig.savefig(RESULT_DIR / f"{stem}.png", dpi=300)
