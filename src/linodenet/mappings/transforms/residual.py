@@ -14,6 +14,7 @@ from torch import Tensor, nn
 
 from linodenet.mappings.base import TransformBase
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
+from linodenet.nn import ReZero
 from linodenet_special import fixpoint_solve
 
 
@@ -36,7 +37,7 @@ class ResidualContraction(TransformBase):
         rtol: float = 1e-6,
     ) -> None:
         super().__init__()
-        self.contraction = contraction
+        self.contraction: nn.Module = contraction
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
@@ -62,58 +63,44 @@ class ResidualContraction(TransformBase):
         raise NotImplementedError
 
 
-class ReZeroContraction(TransformBase):
+class ReZeroContraction[M: nn.Module](ResidualContraction):
     r"""A residual flow based on a scaled contraction layer.
 
     Forward: $y ← x + φ(ε)⋅g(x)$ with $φ(ε) ∈ (-1, 1)$.
     Inverse: via fixed point iteration with implicit differentiation.
     """
 
+    contraction: ReZero[M]
     scalar: Tensor
-    r"""The unconstrained learnable scalar."""
+    scalar_map: nn.Module
 
     def __init__(
         self,
-        contraction: nn.Module,
+        contraction: M,
         *,
         scalar_map: nn.Module | Literal["smooth-softsign", "tanh"] = "smooth-softsign",
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
     ) -> None:
-        super().__init__()
-        initial_value = torch.as_tensor(0.0)
-        self.scalar = nn.Parameter(initial_value, requires_grad=True)
-        self.scalar_map: nn.Module
+        scalar_map_module: nn.Module
         match scalar_map:
             case "smooth-softsign":
-                self.scalar_map = SmoothSoftsign()
+                scalar_map_module = SmoothSoftsign()
             case "tanh":
-                self.scalar_map = TanhMap()
+                scalar_map_module = TanhMap()
             case _:
-                self.scalar_map = scalar_map
-        self.contraction = contraction
-        self.maxiter = maxiter
-        self.atol = atol
-        self.rtol = rtol
-
-    def encode(self, x: Tensor) -> Tensor:
-        alpha = self.scalar_map(self.scalar)
-        return x + alpha * self.contraction(x)
-
-    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
-
-    def decode(self, y: Tensor) -> Tensor:
-        r"""Compute the inverse through fixed point iteration."""
-        alpha = self.scalar_map(self.scalar)
-        return fixpoint_solve(
-            lambda x: y - alpha * self.contraction(x),  # type: ignore[misc]
-            y.clone(),
-            maxiter=self.maxiter,
-            atol=self.atol,
-            rtol=self.rtol,
+                scalar_map_module = scalar_map
+        rezero = ReZero(contraction, scalar_map=scalar_map_module)
+        super().__init__(
+            rezero,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
         )
+        self.contraction: ReZero[M]  # pyright: ignore[reportIncompatibleVariableOverride]
+        self.scalar = self.contraction.scalar
+        self.scalar_map = self.contraction.scalar_map
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         raise NotImplementedError
