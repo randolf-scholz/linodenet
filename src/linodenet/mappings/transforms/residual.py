@@ -7,7 +7,7 @@ __all__ = [
 ]
 
 import warnings
-from typing import Literal
+from typing import Final, Literal
 
 import torch
 from torch import Tensor, nn
@@ -23,6 +23,10 @@ class ResidualContraction(TransformBase):
     Forward: y ← x + g(x)
     Inverse: via fix-point iteration with implicit differentiation.
     """
+
+    maxiter: Final[int]
+    atol: Final[float]
+    rtol: Final[float]
 
     def __init__(
         self,
@@ -61,7 +65,7 @@ class ResidualContraction(TransformBase):
 class ReZeroContraction(TransformBase):
     r"""A residual flow based on a scaled contraction layer.
 
-    Forward: $y ← x + α⋅g(x)$ with $α ∈ (-1, 1)$.
+    Forward: $y ← x + φ(ε)⋅g(x)$ with $φ(ε) ∈ (-1, 1)$.
     Inverse: via fixed point iteration with implicit differentiation.
     """
 
