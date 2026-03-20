@@ -51,10 +51,10 @@ __all__ = [
     # constants
     # protocols & base classes
     # classes
-    "iResNet",
+    "iResNet_OLD",
     "IResNet",
-    "iResNetBlock",
-    "iResNetLayer",
+    "iResNetBlock_OLD",
+    "iResNetLayer_OLD",
     "LowRankTransform",
     "SplineTransform",
     "TriangularTransform",
@@ -65,9 +65,9 @@ __all__ = [
 
 from linodenet.mappings.transforms.iresnet import IResNet
 from linodenet.mappings.transforms.iresnet_old import (
-    iResNet,
-    iResNetBlock,
-    iResNetLayer,
+    iResNet_OLD,
+    iResNetBlock_OLD,
+    iResNetLayer_OLD,
 )
 from linodenet.mappings.transforms.linear_rational_spline import SplineTransform
 from linodenet.mappings.transforms.low_rank import LowRankTransform

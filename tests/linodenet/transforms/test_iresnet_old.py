@@ -15,7 +15,7 @@ import torch
 from torch import Tensor
 
 from linodenet.mappings.linear import LinearContraction
-from linodenet.mappings.transforms.iresnet_old import iResNetBlock
+from linodenet.mappings.transforms.iresnet_old import iResNetBlock_OLD
 from linodenet_special import scaled_norm
 from tests.testing import PROJECT, visualize_distribution
 
@@ -106,7 +106,7 @@ def test_invertible_resnet_block(
         quantiles: The quantiles of the error distribution
         targets: The target values for the quantiles of the error distribution
     """
-    logger = logging.getLogger(f"{__name__}/{iResNetBlock.__name__}")
+    logger = logging.getLogger(f"{__name__}/{iResNetBlock_OLD.__name__}")
     logger.info("Testing...")
     n_samples = num_sample or random.choice([1000 * k for k in range(1, 11)])
     d_inputs = dim_inputs or random.choice([2**k for k in range(2, 8)])
@@ -125,7 +125,7 @@ def test_invertible_resnet_block(
     logger.info("TARGETS  : %s", TARGETS)
 
     with torch.no_grad():
-        model = iResNetBlock(d_inputs, hidden_size=d_output, maxiter=maxiter)
+        model = iResNetBlock_OLD(d_inputs, hidden_size=d_output, maxiter=maxiter)
         # first encode then decode
         x = torch.randn(n_samples, d_inputs)
         fx = model.encode(x)

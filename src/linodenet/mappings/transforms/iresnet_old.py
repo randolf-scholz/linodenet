@@ -2,9 +2,9 @@ r"""Implementation of invertible ResNets."""
 
 __all__ = [
     # Classes
-    "iResNet",
-    "iResNetBlock",
-    "iResNetLayer",
+    "iResNet_OLD",
+    "iResNetBlock_OLD",
+    "iResNetLayer_OLD",
 ]
 
 import warnings
@@ -21,7 +21,7 @@ from linodenet.utils import deep_dict_update
 from signatures import signature
 
 
-class iResNetLayer(nn.Module):
+class iResNetLayer_OLD(nn.Module):
     r"""A single layer of an iResNet.
 
     References:
@@ -85,7 +85,7 @@ class iResNetLayer(nn.Module):
         return x
 
 
-class iResNetBlock(nn.Module):
+class iResNetBlock_OLD(nn.Module):
     r"""Invertible ResNet-Block of the form $g(x)=ϕ(W_1⋅W_2⋅x)$.
 
     By default, $W_1⋅W_2$ is a low rank factorization.
@@ -237,7 +237,7 @@ class iResNetBlock(nn.Module):
         return x
 
 
-class iResNet(nn.Module):
+class iResNet_OLD(nn.Module):
     r"""Invertible ResNet consists of a stack of `iResNetBlock` modules.
 
     Attributes:
@@ -301,7 +301,7 @@ class iResNet(nn.Module):
         blocks = []
 
         for _ in range(self.nblocks):
-            blocks += [iResNetBlock(**HP["iResNetBlock"])]
+            blocks += [iResNetBlock_OLD(**HP["iResNetBlock"])]
 
         self.blocks = ModuleSequence(blocks)
 
