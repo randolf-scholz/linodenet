@@ -26,6 +26,11 @@ class ShiftedHalfContraction(nn.Module):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize(
+    "flow_cls",
+    [ContractiveTransform, ContractiveFP, ContractiveNew],
+    ids=["loop", "fixpoint_solve", "while_loop"],
+)
 class TestCorrectness(TestCase):
     BATCH_SIZE = 32
     INPUT_SIZE = 8
@@ -38,20 +43,15 @@ class TestCorrectness(TestCase):
         torch.float64: (1e-5, 1e-5),
     }
 
-    @pytest.mark.parametrize(
-        "flow_cls",
-        [ContractiveTransform, ContractiveFP, ContractiveNew],
-        ids=["loop", "fixpoint_solve", "while_loop"],
-    )
     @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
     @pytest.mark.parametrize("input_size", [4, 16, 64], ids="input_size={}".format)
     def test_invertibility(
         self,
-        device: str,
-        dtype: torch.dtype,
         flow_cls: type[TransformBase],
-        seed: int,
         input_size: int,
+        dtype: torch.dtype,
+        device: str,
+        seed: int,
     ) -> None:
         r"""Check forward/inverse round trips; does not test logabsdet (not implemented yet)."""
         atol, rtol = self.VALUE_TOL[dtype]
@@ -82,14 +82,20 @@ class TestCorrectness(TestCase):
         self.assert_close(yhat, y, atol=atol, rtol=rtol)
 
     def test_gradients_of_contraction_bias(
-        self, device: str, dtype: torch.dtype
+        self,
+        flow_cls: type[TransformBase],
+        dtype: torch.dtype,
+        device: str,
     ) -> None:
         r"""Check $∂‖x⁎‖²/∂b$ for $g(x)=½x+b$ against the analytic gradient."""
+        if flow_cls is not ContractiveFP:
+            pytest.xfail("analytic gradient check only applies to ContractiveFP")
+
         atol, rtol = self.GRAD_TOL[dtype]
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         bias = torch.randn(self.INPUT_SIZE, device=device, dtype=dtype)
         contraction = ShiftedHalfContraction(bias)
-        flow = ContractiveFP(contraction)
+        flow = flow_cls(contraction)
 
         x_star = flow.decode(y)
         loss = x_star.square().sum()
@@ -105,9 +111,15 @@ class TestCorrectness(TestCase):
         )
 
     def test_gradients_of_contraction_linear(
-        self, device: str, dtype: torch.dtype
+        self,
+        flow_cls: type[TransformBase],
+        dtype: torch.dtype,
+        device: str,
     ) -> None:
         r"""Check $∂‖x⁎‖²/∂A$ for $g(x)=Ax$ against the analytic gradient."""
+        if flow_cls is not ContractiveFP:
+            pytest.xfail("analytic gradient check only applies to ContractiveFP")
+
         atol, rtol = self.GRAD_TOL[dtype]
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         layer = LinearContraction(
@@ -118,7 +130,7 @@ class TestCorrectness(TestCase):
             dtype=dtype,
             c=0.97,
         )
-        flow = ContractiveFP(layer)
+        flow = flow_cls(layer)
         x_star = flow.decode(y)
 
         with torch.no_grad():
@@ -150,6 +162,11 @@ class TestCorrectness(TestCase):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize(
+    "flow_cls",
+    [ContractiveTransform, ContractiveFP, ContractiveNew],
+    ids=["loop", "fixpoint_solve", "while_loop"],
+)
 class TestPerformance(TestCase):
     BATCH_SIZE = 32
     PERF_SEED = 0
@@ -157,17 +174,12 @@ class TestPerformance(TestCase):
     PERF_ROUNDS = 10
     PERF_WARMUP_ROUNDS = 1
 
-    @pytest.mark.parametrize(
-        "flow_cls",
-        [ContractiveTransform, ContractiveFP, ContractiveNew],
-        ids=["loop", "fixpoint_solve", "while_loop"],
-    )
     def test_decode_performance(
         self,
         benchmark: BenchmarkFixture,
-        device: str,
-        dtype: torch.dtype,
         flow_cls: type[TransformBase],
+        dtype: torch.dtype,
+        device: str,
     ) -> None:
         r"""Benchmark the compiled inverse pass on a representative large input."""
         benchmark.group = (
