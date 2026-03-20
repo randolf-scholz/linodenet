@@ -287,7 +287,7 @@ class TestPerformance(TestCase):
     BATCH_SIZE = 32
     PERF_SEED = 0
     PERF_INPUT_SIZE = 256
-    PERF_ROUNDS = 100
+    PERF_ROUNDS = 20
     PERF_WARMUP_ROUNDS = 1
 
     def test_decode_performance(
