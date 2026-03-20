@@ -10,7 +10,7 @@ from linodenet.mappings import (
     TransformBase,
 )
 from linodenet.mappings.linear import LinearContraction
-from tests.testing import DEVICES, SEEDS_5, TestCase
+from tests.testing import DEVICES, DTYPES, SEEDS_5, TestCase
 
 
 class ShiftedHalfContraction(nn.Module):
@@ -24,57 +24,70 @@ class ShiftedHalfContraction(nn.Module):
         return 0.5 * x + self.bias
 
 
-class TestContractiveFlow(TestCase):
-    VALUE_ATOL = 1e-3
-    VALUE_RTOL = 1e-3
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
+class TestCorrectness(TestCase):
     BATCH_SIZE = 32
     INPUT_SIZE = 8
-
-    PERF_SEED = 0
-    PERF_INPUT_SIZE = 256
-    PERF_ROUNDS = 10
-    PERF_WARMUP_ROUNDS = 1
+    VALUE_TOL = {
+        torch.float32: (1e-3, 1e-3),
+        torch.float64: (2e-6, 1e-3),
+    }
+    GRAD_TOL = {
+        torch.float32: (1e-3, 1e-3),
+        torch.float64: (1e-5, 1e-5),
+    }
 
     @pytest.mark.parametrize(
         "flow_cls",
         [ContractiveTransform, ContractiveFP, ContractiveNew],
         ids=["loop", "fixpoint_solve", "while_loop"],
     )
-    @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
     @pytest.mark.parametrize("input_size", [4, 16, 64], ids="input_size={}".format)
     def test_invertibility(
         self,
-        flow_cls: type[TransformBase],
         device: str,
+        dtype: torch.dtype,
+        flow_cls: type[TransformBase],
         seed: int,
         input_size: int,
     ) -> None:
         r"""Check forward/inverse round trips; does not test logabsdet (not implemented yet)."""
+        atol, rtol = self.VALUE_TOL[dtype]
         torch.manual_seed(seed)
-        layer = LinearContraction(input_size, input_size, bias=True).to(device)
+        layer = LinearContraction(
+            input_size,
+            input_size,
+            bias=True,
+            device=device,
+            dtype=dtype,
+        )
         flow = flow_cls(layer)
 
-        x = torch.randn(self.BATCH_SIZE, input_size, device=device)
+        x = torch.randn(self.BATCH_SIZE, input_size, device=device, dtype=dtype)
         y = flow.encode(x)
         xhat = flow.decode(y)
 
         assert y.shape == x.shape
         assert xhat.shape == x.shape
-        self.assert_close(xhat, x, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
+        self.assert_close(xhat, x, atol=atol, rtol=rtol)
 
-        y = torch.randn(self.BATCH_SIZE, input_size, device=device)
+        y = torch.randn(self.BATCH_SIZE, input_size, device=device, dtype=dtype)
         x = flow.decode(y)
         yhat = flow.encode(x)
 
         assert x.shape == y.shape
         assert yhat.shape == y.shape
-        self.assert_close(yhat, y, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
+        self.assert_close(yhat, y, atol=atol, rtol=rtol)
 
-    def test_gradients_of_contraction_bias(self) -> None:
+    def test_gradients_of_contraction_bias(
+        self, device: str, dtype: torch.dtype
+    ) -> None:
         r"""Check $∂‖x⁎‖²/∂b$ for $g(x)=½x+b$ against the analytic gradient."""
-        y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, dtype=torch.float64)
-        bias = torch.randn(self.INPUT_SIZE, dtype=torch.float64)
+        atol, rtol = self.GRAD_TOL[dtype]
+        y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
+        bias = torch.randn(self.INPUT_SIZE, device=device, dtype=dtype)
         contraction = ShiftedHalfContraction(bias)
         flow = ContractiveFP(contraction)
 
@@ -87,18 +100,22 @@ class TestContractiveFlow(TestCase):
         self.assert_close(
             contraction.bias.grad,
             grad_expected,
-            atol=1e-10,
-            rtol=1e-10,
+            atol=atol,
+            rtol=rtol,
         )
 
-    def test_gradients_of_contraction_linear(self) -> None:
+    def test_gradients_of_contraction_linear(
+        self, device: str, dtype: torch.dtype
+    ) -> None:
         r"""Check $∂‖x⁎‖²/∂A$ for $g(x)=Ax$ against the analytic gradient."""
-        y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, dtype=torch.float64)
+        atol, rtol = self.GRAD_TOL[dtype]
+        y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         layer = LinearContraction(
             self.INPUT_SIZE,
             self.INPUT_SIZE,
             bias=False,
-            dtype=torch.float64,
+            device=device,
+            dtype=dtype,
             c=0.97,
         )
         flow = ContractiveFP(layer)
@@ -115,7 +132,7 @@ class TestContractiveFlow(TestCase):
             #      = -2 tr((M⁻¹X⁎ᵀX⁎)ᵀ∆A),
             # hence
             #   ∂L/∂A = -2M⁻¹X⁎ᵀX⁎ = -2(X⁎(I + A)⁻¹)ᵀX⁎.
-            eye = torch.eye(layer.in_features, dtype=torch.float64)
+            eye = torch.eye(layer.in_features, device=device, dtype=dtype)
             solve_term = torch.linalg.solve(eye + layer.weight, x_star, left=False)
             expected_grad = -2 * solve_term.T @ x_star
 
@@ -126,25 +143,35 @@ class TestContractiveFlow(TestCase):
         self.assert_close(
             layer.weight_parameter.grad,
             expected_grad,
-            atol=1e-10,
-            rtol=1e-10,
+            atol=atol,
+            rtol=rtol,
         )
+
+
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
+class TestPerformance(TestCase):
+    BATCH_SIZE = 32
+    PERF_SEED = 0
+    PERF_INPUT_SIZE = 256
+    PERF_ROUNDS = 10
+    PERF_WARMUP_ROUNDS = 1
 
     @pytest.mark.parametrize(
         "flow_cls",
         [ContractiveTransform, ContractiveFP, ContractiveNew],
         ids=["loop", "fixpoint_solve", "while_loop"],
     )
-    @pytest.mark.parametrize("device", DEVICES)
     def test_decode_performance(
         self,
         benchmark: BenchmarkFixture,
-        flow_cls: type[TransformBase],
         device: str,
+        dtype: torch.dtype,
+        flow_cls: type[TransformBase],
     ) -> None:
         r"""Benchmark the compiled inverse pass on a representative large input."""
         benchmark.group = (
-            f"contractive_decode/{device}/seed={self.PERF_SEED}/"
+            f"contractive_decode/{device}/{dtype}/seed={self.PERF_SEED}/"
             f"input_size={self.PERF_INPUT_SIZE}"
         )
         torch.manual_seed(self.PERF_SEED)
@@ -152,7 +179,9 @@ class TestContractiveFlow(TestCase):
             self.PERF_INPUT_SIZE,
             self.PERF_INPUT_SIZE,
             bias=True,
-        ).to(device)
+            device=device,
+            dtype=dtype,
+        )
         flow = flow_cls(layer)
         compiled_decode = torch.compile(
             flow.decode,
@@ -160,11 +189,21 @@ class TestContractiveFlow(TestCase):
         )
 
         # trigger compile
-        y_demo = torch.randn(self.BATCH_SIZE, self.PERF_INPUT_SIZE, device=device)
+        y_demo = torch.randn(
+            self.BATCH_SIZE,
+            self.PERF_INPUT_SIZE,
+            device=device,
+            dtype=dtype,
+        )
         compiled_decode(y_demo)
 
         def setup() -> tuple[tuple, dict]:
-            y = torch.randn(self.BATCH_SIZE, self.PERF_INPUT_SIZE, device=device)
+            y = torch.randn(
+                self.BATCH_SIZE,
+                self.PERF_INPUT_SIZE,
+                device=device,
+                dtype=dtype,
+            )
             return (y,), {}
 
         benchmark.pedantic(
