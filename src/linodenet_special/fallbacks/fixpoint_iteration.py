@@ -268,7 +268,10 @@ def fixpoint_solve(
     f_ref = fn(x_ref, *args)
 
     @torch.no_grad()
-    def backward_hook(grad: Tensor, /) -> Tensor:
+    def backward_hook(grad: Tensor | None, /) -> Tensor | None:
+        if grad is None:
+            return None
+
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
         # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
         return _fallback_solve_impl(
