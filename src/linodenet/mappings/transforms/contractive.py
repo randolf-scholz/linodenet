@@ -105,17 +105,12 @@ class ContractiveFP(TransformBase):
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         raise NotImplementedError
 
-    def fix_point(self, x, y):
-        return y - self.contraction(x)
-
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration."""
-
-        # solve x = y - g(x) = f(x, y)
+        # note: solve x = y - g(x) = f(x, y)
         return fixpoint_solve(
-            self.fix_point,
+            lambda x: y - self.contraction(x),  # type: ignore[misc]
             y.clone(),
-            y,
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,
