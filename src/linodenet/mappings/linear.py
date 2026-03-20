@@ -28,7 +28,7 @@ from typing import Final, override
 
 from torch import nn
 
-from linodenet.mappings.projections import LipschitzBounded
+from linodenet.mappings.projections import Contraction
 from linodenet.nn.parametrize import register_parametrization
 
 
@@ -59,7 +59,7 @@ class LinearContraction(nn.Linear):
         self.input_size = self.in_features
         self.output_size = self.out_features
 
-        register_parametrization(self, "weight", LipschitzBounded(lipschitz_bound=c))
+        register_parametrization(self, "weight", Contraction(lipschitz_bound=c))
         self.parametrizations: nn.ModuleDict
         assert isinstance(self.parametrizations.weight, nn.Module)
         param = self.parametrizations.weight.original_parameter
