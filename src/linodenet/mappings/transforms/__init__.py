@@ -62,12 +62,12 @@ __all__ = [
     "ResidualContractionFallback",
 ]
 
-from linodenet.mappings.transforms.contractive import (
+from linodenet.mappings.transforms.iresnet import iResNet, iResNetBlock, iResNetLayer
+from linodenet.mappings.transforms.linear_rational_spline import SplineTransform
+from linodenet.mappings.transforms.low_rank import LowRankTransform
+from linodenet.mappings.transforms.residual import (
     ResidualContraction,
     ResidualContractionFallback,
     ReZeroContraction,
 )
-from linodenet.mappings.transforms.iresnet import iResNet, iResNetBlock, iResNetLayer
-from linodenet.mappings.transforms.linear_rational_spline import SplineTransform
-from linodenet.mappings.transforms.low_rank import LowRankTransform
 from linodenet.mappings.transforms.triangular import TriangularTransform
