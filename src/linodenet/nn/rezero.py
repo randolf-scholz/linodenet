@@ -21,7 +21,7 @@ from torch import Tensor, nn
 from signatures import signature
 
 
-class ReZero(nn.Module):
+class ReZero[M: nn.Module](nn.Module):
     r"""ReZero module.
 
     Simply multiplies the inputs by a scalar initialized to zero.
@@ -38,22 +38,18 @@ class ReZero(nn.Module):
             "module": self.module,
             "scalar": self.scalar,
             "scalar_map": self.scalar_map,
-            "learnable": self.learnable,
         }
 
     def __init__(
         self,
-        module: nn.Module,
+        module: M,
         *,
         scalar_map: Optional[nn.Module] = None,
-        learnable: bool = True,
     ) -> None:
         super().__init__()
-        initial_value = torch.as_tensor(0.0)
-        self.learnable = learnable
-        self.scalar = nn.Parameter(initial_value, requires_grad=self.learnable)
-        self.scalar_map = nn.Identity() if scalar_map is None else scalar_map
-        self.module = module
+        self.scalar = nn.Parameter(torch.tensor(0.0))
+        self.scalar_map: nn.Module = nn.Identity() if scalar_map is None else scalar_map
+        self.module: M = module
 
     @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
