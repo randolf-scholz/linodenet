@@ -8,6 +8,7 @@ __all__ = [
     "interfaces",
     # Special
     "fixpoint_solve",
+    "fixpoint_solve_functional",
     "inverse_softplus",
     "matrix_log",
     "matrix_sqrt",
@@ -18,6 +19,7 @@ __all__ = [
 from linodenet_special import fallbacks, interfaces, kernels, linalg
 from linodenet_special.fallbacks import (
     fixpoint_solve,
+    fixpoint_solve_functional,
     inverse_softplus,
     matrix_log,
     matrix_sqrt,
