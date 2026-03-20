@@ -188,6 +188,10 @@ class TestPerformance(TestCase):
             dtype=dtype,
         )
         flow = flow_cls(layer)
+
+        # NOTE: required for fullgraph=True
+        # REF: https://docs.pytorch.org/tutorials/intermediate/compiled_autograd_tutorial.html
+        torch._dynamo.config.compiled_autograd = True  # noqa: SLF001
         compiled_decode = torch.compile(
             flow.decode,
             fullgraph=flow_cls is ContractiveFP,
