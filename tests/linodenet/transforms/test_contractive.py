@@ -5,7 +5,6 @@ from torch import Tensor, nn
 
 from linodenet.mappings import (
     ContractiveFP,
-    ContractiveNew,
     ContractiveTransform,
     TransformBase,
 )
@@ -28,8 +27,8 @@ class ShiftedHalfContraction(nn.Module):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
-    [ContractiveTransform, ContractiveFP, ContractiveNew],
-    ids=["loop", "fixpoint_solve", "while_loop"],
+    [ContractiveTransform, ContractiveFP],
+    ids=["loop", "fixpoint_solve"],
 )
 class TestCorrectness(TestCase):
     BATCH_SIZE = 32
@@ -88,9 +87,6 @@ class TestCorrectness(TestCase):
         device: str,
     ) -> None:
         r"""Check $∂‖x⁎‖²/∂b$ for $g(x)=½x+b$ against the analytic gradient."""
-        if flow_cls is not ContractiveFP:
-            pytest.xfail("analytic gradient check only applies to ContractiveFP")
-
         atol, rtol = self.GRAD_TOL[dtype]
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         bias = torch.randn(self.INPUT_SIZE, device=device, dtype=dtype)
@@ -117,9 +113,6 @@ class TestCorrectness(TestCase):
         device: str,
     ) -> None:
         r"""Check $∂‖x⁎‖²/∂A$ for $g(x)=Ax$ against the analytic gradient."""
-        if flow_cls is not ContractiveFP:
-            pytest.xfail("analytic gradient check only applies to ContractiveFP")
-
         atol, rtol = self.GRAD_TOL[dtype]
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         layer = LinearContraction(
@@ -164,8 +157,8 @@ class TestCorrectness(TestCase):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
-    [ContractiveTransform, ContractiveFP, ContractiveNew],
-    ids=["loop", "fixpoint_solve", "while_loop"],
+    [ContractiveTransform, ContractiveFP],
+    ids=["loop", "fixpoint_solve"],
 )
 class TestPerformance(TestCase):
     BATCH_SIZE = 32
@@ -197,7 +190,7 @@ class TestPerformance(TestCase):
         flow = flow_cls(layer)
         compiled_decode = torch.compile(
             flow.decode,
-            fullgraph=flow_cls is ContractiveNew,
+            fullgraph=flow_cls is ContractiveFP,
         )
 
         # trigger compile

@@ -58,13 +58,11 @@ __all__ = [
     "SplineTransform",
     "TriangularTransform",
     "ContractiveFP",
-    "ContractiveNew",
     "ContractiveTransform",
 ]
 
 from linodenet.mappings.transforms.contractive import (
     ContractiveFP,
-    ContractiveNew,
     ContractiveTransform,
 )
 from linodenet.mappings.transforms.iresnet import iResNet, iResNetBlock, iResNetLayer
