@@ -1,8 +1,7 @@
 r"""Fixed point iteration with implicit differentiation."""
 
 __all__ = [
-    "FixpointSolve",
-    "FixpointState",
+    "FixpointSolution",
     "fixpoint_solve",
     "fixpoint_solve_functional",
 ]
@@ -16,20 +15,32 @@ from torch import Tensor, nn
 _DEFAULT_MAXITER: Final[int] = 256
 
 
-class FixpointState(NamedTuple):
-    r"""Loop state for forward fixed-point iteration."""
+class FixpointSolution(NamedTuple):
+    r"""Fixed point solution."""
 
-    budget: Tensor
     x: Tensor
     residual: Tensor
+    budget: int
+
+    maxiter: int
+    atol: float
+    rtol: float
+
+
+class _LoopState(NamedTuple):
+    r"""Loop state for forward fixed-point iteration."""
+
+    x: Tensor
+    residual: Tensor
+    budget: Tensor
 
 
 def _python_while_loop(
-    cond_fn: Callable[[FixpointState], Tensor | bool],
-    body_fn: Callable[[FixpointState], FixpointState],
-    state: FixpointState,
+    cond_fn: Callable[[_LoopState], Tensor | bool],
+    body_fn: Callable[[_LoopState], _LoopState],
+    state: _LoopState,
     /,
-) -> FixpointState:
+) -> _LoopState:
     while cond_fn(state):
         state = body_fn(state)
     return state
@@ -43,20 +54,20 @@ def _fixpoint_solve_impl(
     maxiter: Tensor,
     atol: Tensor,
     rtol: Tensor,
-) -> FixpointState:
-    def cond_fn(state: FixpointState, /) -> Tensor:
-        budget, x, residual = state
+) -> _LoopState:
+    def cond_fn(state: _LoopState, /) -> Tensor:
+        x, residual, budget = state
         tolerance = rtol * x.abs() + atol
         return (budget > 0) & (residual > tolerance).any()
 
-    def body_fn(state: FixpointState, /) -> FixpointState:
-        budget, x_prev, _ = state
+    def body_fn(state: _LoopState, /) -> _LoopState:
+        x_prev, _, budget = state
         x = fn(x_prev)
         r = (x - x_prev).abs()
-        return FixpointState(budget - 1, x, r)
+        return _LoopState(x, r, budget - 1)
 
     r0 = torch.full_like(x0, torch.inf)
-    initial_state = FixpointState(maxiter, x0, r0)
+    initial_state = _LoopState(x0, r0, maxiter)
 
     return torch.while_loop(cond_fn, body_fn, (initial_state,))  # pyright: ignore[reportReturnType]
 
@@ -70,21 +81,21 @@ def _fallback_solve_impl(
     maxiter: Tensor,
     atol: Tensor,
     rtol: Tensor,
-) -> FixpointState:
-    def cond_fn(state: FixpointState, /) -> Tensor:
-        budget, x, residual = state
+) -> _LoopState:
+    def cond_fn(state: _LoopState, /) -> Tensor:
+        x, residual, budget = state
         tolerance = rtol * x.abs() + atol
         return (budget > 0) & (residual > tolerance).any()
 
-    def body_fn(state: FixpointState, /) -> FixpointState:
-        budget, x_prev, _ = state
+    def body_fn(state: _LoopState, /) -> _LoopState:
+        x_prev, _, budget = state
         x = fn(x_prev)
         r = (x - x_prev).abs()
-        return FixpointState(budget - 1, x, r)
+        return _LoopState(x, r, budget - 1)
 
     r0 = torch.full_like(x0, torch.inf)
-    initial_state = FixpointState(maxiter, x0, r0)
-    final_state: FixpointState = _python_while_loop(
+    initial_state = _LoopState(x0, r0, maxiter)
+    final_state: _LoopState = _python_while_loop(
         cond_fn,
         body_fn,
         initial_state,
@@ -92,7 +103,7 @@ def _fallback_solve_impl(
     return final_state
 
 
-class FixpointSolve(torch.autograd.Function):
+class _FixpointSolve_Impl(torch.autograd.Function):
     r"""Solve a fixed point equation with implicit differentiation.
 
     The forward pass solves $x = f(x, θ)$ for the fixed point $x$ by iteration.
@@ -186,7 +197,7 @@ def fixpoint_solve_functional(
         atol: Absolute tolerance for convergence.
         rtol: Relative tolerance for convergence.
     """
-    return FixpointSolve.apply(fn, x0, maxiter, atol, rtol, *args)  # pyright: ignore[reportReturnType]
+    return _FixpointSolve_Impl.apply(fn, x0, maxiter, atol, rtol, *args)  # pyright: ignore[reportReturnType]
 
 
 def fixpoint_solve(
@@ -198,7 +209,19 @@ def fixpoint_solve(
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
-    r"""Solve $x = f(x, *ys)$ by fixed point iteration."""
+    r"""Solve $x = f(x, *ys)$ by fixed point iteration.
+
+    Args:
+        fn: Mapping defining the fixed point equation $x = f(x, θ)$.
+            The callable must accept `x` as its first argument and any tensor
+            parameters passed through `*params` afterwards.
+        x0: Starting point of the iteration.
+        args: Tensor parameters passed through to `fn`.
+        maxiter: Maximum number of fixed point iterations used in both forward
+            and backward solves.
+        atol: Absolute tolerance for convergence.
+        rtol: Relative tolerance for convergence.
+    """
     t_maxiter = torch.as_tensor(maxiter, dtype=torch.int32, device=x0.device)
     t_atol = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
     t_rtol = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
