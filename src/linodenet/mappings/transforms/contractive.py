@@ -7,12 +7,13 @@ __all__ = [
 ]
 
 import warnings
+from typing import Literal
 
 import torch
 from torch import Tensor, nn
 
 from linodenet.mappings.base import TransformBase
-from linodenet.mappings.bijections import SmoothSoftsign
+from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet_special import fixpoint_solve
 
 
@@ -71,23 +72,29 @@ class ReZeroContraction(TransformBase):
         self,
         contraction: nn.Module,
         *,
-        scalar: Tensor | None = None,
-        restrict: nn.Module | None = None,
+        scalar_map: nn.Module | Literal["smooth-softsign", "tanh"] = "smooth-softsign",
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
     ) -> None:
         super().__init__()
-        initial_value = torch.as_tensor(0.0 if scalar is None else scalar)
+        initial_value = torch.as_tensor(0.0)
         self.scalar = nn.Parameter(initial_value, requires_grad=True)
-        self.restrict = SmoothSoftsign() if restrict is None else restrict
+        self.scalar_map: nn.Module
+        match scalar_map:
+            case "smooth-softsign":
+                self.scalar_map = SmoothSoftsign()
+            case "tanh":
+                self.scalar_map = TanhMap()
+            case _:
+                self.scalar_map = scalar_map
         self.contraction = contraction
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
 
     def encode(self, x: Tensor) -> Tensor:
-        alpha = self.restrict(self.scalar)
+        alpha = self.scalar_map(self.scalar)
         return x + alpha * self.contraction(x)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -95,7 +102,7 @@ class ReZeroContraction(TransformBase):
 
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration."""
-        alpha = self.restrict(self.scalar)
+        alpha = self.scalar_map(self.scalar)
         return fixpoint_solve(
             lambda x: y - alpha * self.contraction(x),  # type: ignore[misc]
             y.clone(),
