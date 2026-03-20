@@ -12,6 +12,12 @@ from linodenet_special.fallbacks.fixpoint_iteration import (
 from tests.testing import DEVICES, DTYPES, TestCase
 
 
+def compile_fresh(fn, /):
+    r"""Compile `fn` after clearing Dynamo state from earlier test cases."""
+    torch._dynamo.reset()  # noqa: SLF001
+    return torch.compile(fn)
+
+
 class ShiftedHalfMap(nn.Module):
     r"""Simple affine contraction $f(x) = ½x + b$ with learnable bias."""
 
@@ -65,7 +71,7 @@ class LinearFixpointModel(nn.Module):
         return fixpoint_solve(
             self.layer,
             x0,
-            self.bias,
+            args=(self.bias,),
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,
@@ -100,7 +106,9 @@ class TestFixPointIteration(TestCase):
 
         shift = torch.zeros((), requires_grad=True)
         x0 = torch.zeros((), dtype=torch.float64)
-        x = fixpoint_solve_functional(fn, x0, shift, maxiter=128, atol=1e-10, rtol=0.0)
+        x = fixpoint_solve_functional(
+            fn, x0, args=(shift,), maxiter=128, atol=1e-10, rtol=0.0
+        )
         loss = x.square()
         loss.backward()
 
@@ -126,7 +134,7 @@ class TestFixPointIteration(TestCase):
 
         def solve(shift: Tensor) -> Tensor:
             return fixpoint_solve_functional(
-                fn, x0, shift, maxiter=128, atol=1e-10, rtol=0.0
+                fn, x0, args=(shift,), maxiter=128, atol=1e-10, rtol=0.0
             )
 
         eager_shift = torch.tensor(0.1, dtype=torch.float64, requires_grad=True)
@@ -134,7 +142,7 @@ class TestFixPointIteration(TestCase):
         eager_x.square().backward()
 
         compiled_shift = torch.tensor(0.1, dtype=torch.float64, requires_grad=True)
-        compiled_solve = torch.compile(solve)
+        compiled_solve = compile_fresh(solve)
         compiled_x = compiled_solve(compiled_shift)
         compiled_x.square().backward()
 
@@ -229,10 +237,10 @@ class TestFixPointIteration(TestCase):
 
         def solve(A: Tensor, b: Tensor) -> Tensor:
             return fixpoint_solve_functional(
-                fn, x0, A, b, maxiter=256, atol=1e-5, rtol=1e-5
+                fn, x0, args=(A, b), maxiter=256, atol=1e-5, rtol=1e-5
             )
 
-        impl = solve if eager else torch.compile(solve)
+        impl = solve if eager else compile_fresh(solve)
         test_weight = weight.detach().clone().requires_grad_()
         test_bias = bias.detach().clone().requires_grad_()
         x = impl(test_weight, test_bias)
@@ -292,7 +300,7 @@ class TestCorrectness(TestCase):
             atol=atol,
             rtol=rtol,
         )
-        impl = model if eager else torch.compile(model)
+        impl = model if eager else compile_fresh(model)
         x_star = impl(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
         loss = x_star.square().sum()
         loss.backward()
@@ -351,14 +359,13 @@ class TestCorrectness(TestCase):
             return fixpoint_solve(
                 lambda x, W, c: x @ W.mT + c,  # type: ignore[misc]
                 x0,
-                A,
-                b,
+                args=(A, b),
                 maxiter=self.MAXITER,
                 atol=atol,
                 rtol=rtol,
             )
 
-        impl = func if eager else torch.compile(func)
+        impl = func if eager else compile_fresh(func)
         assert torch.autograd.gradcheck(
             impl,
             (y, weight, bias),
