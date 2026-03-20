@@ -172,6 +172,23 @@ class TestFixPointIteration(TestCase):
             rtol=1e-10,
         )
 
+    def test_fixpoint_solve_constant_map_without_grad_dependencies(self) -> None:
+        r"""Check a constant map fixed point with no differentiable dependencies."""
+
+        def fn(x: Tensor, /) -> Tensor:
+            return torch.full_like(x, 0.25)
+
+        x0 = torch.zeros(3, dtype=torch.float64)
+        x_star = fixpoint_solve(fn, x0, maxiter=32, atol=1e-12, rtol=0.0)
+
+        self.assert_close(
+            x_star,
+            torch.full_like(x0, 0.25),
+            atol=1e-12,
+            rtol=0.0,
+        )
+        assert not x_star.requires_grad
+
     def test_fixpoint_solve_functional_module_parameter_gradient_regression(
         self,
     ) -> None:

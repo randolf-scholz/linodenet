@@ -78,6 +78,61 @@ def fallback_iteration(
     return _python_while_loop(fixpoint_condition, body_fn, initial_state)
 
 
+def _warn_if_not_converged(
+    budget: Tensor,
+    residual: Tensor,
+    maxiter: Tensor,
+    atol: Tensor,
+    /,
+) -> None:
+    if budget <= 0:
+        warnings.warn(
+            f"No convergence in {maxiter} iterations."
+            f"Final residual: {residual.max()} > {atol}.",
+            stacklevel=3,
+        )
+
+
+def _fixpoint_solve_impl(
+    fn: Callable[Concatenate[Tensor, ...], Tensor],
+    x0: Tensor,
+    /,
+    *params,
+    maxiter: int,
+    atol: float,
+    rtol: float,
+) -> Tensor:
+    maxiter_tensor = torch.as_tensor(maxiter, dtype=torch.int32, device=x0.device)
+    atol_tensor = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
+    rtol_tensor = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
+    r0 = torch.full_like(x0, torch.inf)
+    initial_state = FixpointState(maxiter_tensor, x0, r0, atol_tensor, rtol_tensor)
+    budget, x_star, residual, _, _ = fixpoint_iteration(
+        lambda z: fn(z, *params), initial_state
+    )
+    _warn_if_not_converged(budget, residual, maxiter_tensor, atol_tensor)
+    return x_star
+
+
+def _fallback_solve_impl(
+    fn: Callable[[Tensor], Tensor],
+    x0: Tensor,
+    /,
+    *,
+    maxiter: int,
+    atol: float,
+    rtol: float,
+) -> Tensor:
+    maxiter_tensor = torch.as_tensor(maxiter, dtype=torch.int32, device=x0.device)
+    atol_tensor = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
+    rtol_tensor = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
+    r0 = torch.full_like(x0, torch.inf)
+    initial_state = FixpointState(maxiter_tensor, x0, r0, atol_tensor, rtol_tensor)
+    budget, x_star, residual, _, _ = fallback_iteration(fn, initial_state)
+    _warn_if_not_converged(budget, residual, maxiter_tensor, atol_tensor)
+    return x_star
+
+
 class FixpointSolve(torch.autograd.Function):
     r"""Solve a fixed point equation with implicit differentiation.
 
@@ -184,61 +239,6 @@ def fixpoint_solve_functional(
     return FixpointSolve.apply(fn, x0, maxiter, atol, rtol, *args)  # pyright: ignore[reportReturnType]
 
 
-def _warn_if_not_converged(
-    budget: Tensor,
-    residual: Tensor,
-    maxiter: Tensor,
-    atol: Tensor,
-    /,
-) -> None:
-    if budget <= 0:
-        warnings.warn(
-            f"No convergence in {maxiter} iterations."
-            f"Final residual: {residual.max()} > {atol}.",
-            stacklevel=3,
-        )
-
-
-def _fixpoint_solve_impl(
-    fn: Callable[Concatenate[Tensor, ...], Tensor],
-    x0: Tensor,
-    /,
-    *params,
-    maxiter: int,
-    atol: float,
-    rtol: float,
-) -> Tensor:
-    maxiter_tensor = torch.as_tensor(maxiter, dtype=torch.int32, device=x0.device)
-    atol_tensor = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
-    rtol_tensor = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
-    r0 = torch.full_like(x0, torch.inf)
-    initial_state = FixpointState(maxiter_tensor, x0, r0, atol_tensor, rtol_tensor)
-    budget, x_star, residual, _, _ = fixpoint_iteration(
-        lambda z: fn(z, *params), initial_state
-    )
-    _warn_if_not_converged(budget, residual, maxiter_tensor, atol_tensor)
-    return x_star
-
-
-def _fallback_solve_impl(
-    fn: Callable[[Tensor], Tensor],
-    x0: Tensor,
-    /,
-    *,
-    maxiter: int,
-    atol: float,
-    rtol: float,
-) -> Tensor:
-    maxiter_tensor = torch.as_tensor(maxiter, dtype=torch.int32, device=x0.device)
-    atol_tensor = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
-    rtol_tensor = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
-    r0 = torch.full_like(x0, torch.inf)
-    initial_state = FixpointState(maxiter_tensor, x0, r0, atol_tensor, rtol_tensor)
-    budget, x_star, residual, _, _ = fallback_iteration(fn, initial_state)
-    _warn_if_not_converged(budget, residual, maxiter_tensor, atol_tensor)
-    return x_star
-
-
 def fixpoint_solve(
     fn: Callable[Concatenate[Tensor, ...], Tensor] | nn.Module,
     x0: Tensor,
@@ -254,33 +254,29 @@ def fixpoint_solve(
             fn, x0, *args, maxiter=maxiter, atol=atol, rtol=rtol
         )
 
-    if not torch.is_grad_enabled():
-        return x_star
-
-    # re-engage gradients coming from fn itself at the fixed point.
-    x_star = fn(x_star, *args)
+    x_star = fn(x_star.requires_grad_(True), *args)
     if not x_star.requires_grad:
         return x_star
 
-    # set up the backward hook.
-
-    x_ref = x_star.detach().clone().requires_grad_(True)
-    f_ref = fn(x_ref, *args)
-
-    @torch.no_grad()
-    def backward_hook(grad: Tensor | None, /) -> Tensor | None:
-        if grad is None:
-            return None
-
+    def backward_hook(g: Tensor | None, /) -> Tensor | None:
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
         # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
-        return _fallback_solve_impl(
-            lambda u: grad + torch.autograd.grad(f_ref, x_ref, u, retain_graph=True)[0],
-            grad,
-            maxiter=maxiter,
-            atol=atol,
-            rtol=rtol,
+        if g is None:
+            return None
+
+        _, vjp_fn = torch.func.vjp(  # pyright: ignore[reportAssignmentType]
+            lambda z: fn(z, *args),
+            x_star,
         )
+
+        with torch.no_grad():
+            return _fallback_solve_impl(
+                lambda u: g + vjp_fn(u)[0],
+                g,
+                maxiter=maxiter,
+                atol=atol,
+                rtol=rtol,
+            )
 
     x_star.register_hook(backward_hook)
     return x_star
