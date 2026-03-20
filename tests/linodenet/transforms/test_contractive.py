@@ -38,7 +38,7 @@ class TestContractiveFlow(TestCase):
         [ContractiveTransform, ContractiveFP, ContractiveNew],
         ids=["loop", "fixpoint_solve", "while_loop"],
     )
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
     @pytest.mark.parametrize("input_size", [4, 16, 64], ids="input_size={}".format)
     def test_invertibility(
@@ -82,7 +82,7 @@ class TestContractiveFlow(TestCase):
         loss.backward()
 
         grad_expected = (-4.0 / 3.0) * x_star.detach().sum(dim=0)
-
+        assert contraction.bias.grad is not None
         self.assert_close(
             contraction.bias.grad,
             grad_expected,
@@ -125,7 +125,7 @@ class TestContractiveFlow(TestCase):
         [ContractiveTransform, ContractiveFP, ContractiveNew],
         ids=["loop", "fixpoint_solve", "while_loop"],
     )
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("device", DEVICES)
     def test_decode_performance(
         self,
         benchmark: BenchmarkFixture,

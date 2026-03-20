@@ -24,7 +24,7 @@ from tests.testing import DEVICES, TestCase, pytest_xfail
 VECTOR_SIZE = 4
 
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("name", VECTOR_PARAMETRIZATIONS)
 class TestParametrization(TestCase):
     BATCH_SIZE = 8

@@ -32,7 +32,7 @@ class TestReZero(TestCase):
     TARGET_SIZE = 2
     BATCH_SIZE = 8
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("device", DEVICES)
     def test_trainable(self, device: str) -> None:
         torch.manual_seed(0)
         model = ResidualModel(self.VECTOR_SIZE, self.TARGET_SIZE).to(device=device)

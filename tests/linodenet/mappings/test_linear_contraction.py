@@ -51,7 +51,7 @@ class TestLinearContraction(TestCase):
             layer.weight, cached_weight, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL
         )
 
-    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @pytest.mark.parametrize("device", DEVICES)
     def test_weight_parametrization(self, device: str) -> None:
         torch.manual_seed(0)
         c = 0.73

@@ -53,7 +53,7 @@ PARAMETRIZATION_ARGUMENTS: defaultdict[
 )
 
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
 class TestParametrization(TestCase):
     BATCH_SIZE = 8
