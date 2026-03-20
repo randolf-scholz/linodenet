@@ -23,6 +23,7 @@ class ShiftedHalfContraction(nn.Module):
         return 0.5 * x + self.bias
 
 
+@pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
@@ -33,6 +34,9 @@ class ShiftedHalfContraction(nn.Module):
 class TestCorrectness(TestCase):
     BATCH_SIZE = 32
     INPUT_SIZE = 8
+    GRAD_MAXITER = 2048
+    GRAD_ATOL = 1e-12
+    GRAD_RTOL = 1e-12
     VALUE_TOL = {
         torch.float32: (1e-3, 1e-3),
         torch.float64: (2e-6, 1e-3),
@@ -42,7 +46,6 @@ class TestCorrectness(TestCase):
         torch.float64: (1e-5, 1e-5),
     }
 
-    @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
     @pytest.mark.parametrize("input_size", [4, 16, 64], ids="input_size={}".format)
     def test_invertibility(
         self,
@@ -53,8 +56,8 @@ class TestCorrectness(TestCase):
         seed: int,
     ) -> None:
         r"""Check forward/inverse round trips; does not test logabsdet (not implemented yet)."""
-        atol, rtol = self.VALUE_TOL[dtype]
         torch.manual_seed(seed)
+        atol, rtol = self.VALUE_TOL[dtype]
         layer = LinearContraction(
             input_size,
             input_size,
@@ -85,8 +88,10 @@ class TestCorrectness(TestCase):
         flow_cls: type[TransformBase],
         dtype: torch.dtype,
         device: str,
+        seed: int,
     ) -> None:
         r"""Check $∂‖x⁎‖²/∂b$ for $g(x)=½x+b$ against the analytic gradient."""
+        torch.manual_seed(seed)
         atol, rtol = self.GRAD_TOL[dtype]
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         bias = torch.randn(self.INPUT_SIZE, device=device, dtype=dtype)
@@ -111,8 +116,10 @@ class TestCorrectness(TestCase):
         flow_cls: type[TransformBase],
         dtype: torch.dtype,
         device: str,
+        seed: int,
     ) -> None:
-        r"""Check $∂‖x⁎‖²/∂A$ for $g(x)=Ax$ against the analytic gradient."""
+        r"""Check $∂‖x⁎‖²/∂A$ for the effective weight in $g(x)=Ax$ against the analytic gradient."""
+        torch.manual_seed(seed)
         atol, rtol = self.GRAD_TOL[dtype]
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         layer = LinearContraction(
@@ -123,7 +130,12 @@ class TestCorrectness(TestCase):
             dtype=dtype,
             c=0.97,
         )
-        flow = flow_cls(layer)
+        flow = flow_cls(
+            layer,
+            maxiter=self.GRAD_MAXITER,
+            atol=self.GRAD_ATOL,
+            rtol=self.GRAD_RTOL,
+        )
         x_star = flow.decode(y)
 
         with torch.no_grad():
@@ -142,11 +154,10 @@ class TestCorrectness(TestCase):
             expected_grad = -2 * solve_term.T @ x_star
 
         loss = x_star.square().sum()
-        loss.backward()
-        assert layer.weight_parameter.grad is not None
+        (actual_grad,) = torch.autograd.grad(loss, layer.weight)
 
         self.assert_close(
-            layer.weight_parameter.grad,
+            actual_grad,
             expected_grad,
             atol=atol,
             rtol=rtol,
