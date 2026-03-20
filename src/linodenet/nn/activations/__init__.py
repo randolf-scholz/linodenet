@@ -9,13 +9,9 @@ __all__ = [
     # Sub-Modules
     "base",
     # Constants
-    "ACTIVATION_FUNCTIONS",
     "ACTIVATIONS",
-    "SPECIAL_ACTIVATIONS",
-    "TORCH_ACTIVATION_CLASSES",
-    "TORCH_ACTIVATION_FUNCTIONS",
-    "TORCH_INPLACE_ACTIVATIONS",
-    "TORCH_SPECIAL_ACTIVATIONS",
+    "ACTIVATION_FNS",
+    "ACTIVATION_FNS_WITH_ARGS",
     # ABCs & Protocols
     "Activation",
     "ActivationBase",
@@ -35,7 +31,7 @@ __all__ = [
     "get_activation",
 ]
 
-from torch import nn
+from torch import nn as _nn
 
 from linodenet.nn.activations import base
 from linodenet.nn.activations.base import (
@@ -49,144 +45,67 @@ from linodenet.nn.activations.geglu import GEGLU, geglu
 from linodenet.nn.activations.reglu import ReGLU, reglu
 from linodenet_special import bimodal_to_gaussian, gaussian_to_bimodal, hard_bend
 
-TORCH_ACTIVATION_FUNCTIONS: dict[str, Activation] = {
-    "relu": nn.functional.relu,
-    # Applies the rectified linear unit function element-wise.
-    "hardtanh": nn.functional.hardtanh,
-    # Applies the HardTanh function element-wise.
-    "hardswish": nn.functional.hardswish,
-    # Applies the hardswish function, element-wise, as described in the paper:
-    "relu6": nn.functional.relu6,
-    # Applies the element-wise function `ReLU6(x)=\min(\max(0,x),6)`.
-    "elu": nn.functional.elu,
-    # Applies element-wise, `ELU(x)=\max(0,x)+\min(0,α⋅(\exp(x)−1))`.
-    "selu": nn.functional.selu,
-    # Applies element-wise, `SELU(x)=β⋅(\max(0,x)+\min(0,α⋅(eˣ−1)))` with `α≈1.677` and `β≈1.05`.
-    "celu": nn.functional.celu,
-    # Applies element-wise, `CELU(x)= \max(0,x)+\min(0,α⋅(\exp(x/α)−1)`.
-    "leaky_relu": nn.functional.leaky_relu,
-    # Applies element-wise, `LeakyReLU(x)=\max(0,x)+negative_slope⋅\min(0,x)`.
-    "rrelu": nn.functional.rrelu,
-    # Randomized leaky ReLU.
-    "gelu": nn.functional.gelu,
-    # Applies element-wise the function `GELU(x)=x⋅Φ(x)`.
-    "log_sigmoid": nn.functional.logsigmoid,  # FIXME: name is different for some reason.
-    # Applies element-wise `LogSigmoid(x_i)=\log(1/(1+\exp(−x_i)))`.
-    "hardshrink": nn.functional.hardshrink,
-    # Applies the hard shrinkage function element-wise.
-    "tanhshrink": nn.functional.tanhshrink,
-    # Applies element-wise, `Tanhshrink(x)=x−\tanh(x)`.
-    "softsign": nn.functional.softsign,
-    # Applies element-wise, the function `SoftSign(x)=x/(1+∣x∣)`.
-    "softplus": nn.functional.softplus,
-    # Applies element-wise, the function `Softplus(x)=1/β⋅\log(1+\exp(β⋅x))`.
-    "softshrink": nn.functional.softshrink,
-    # Applies the soft shrinkage function elementwise
-    "tanh": nn.functional.tanh,
-    # Applies element-wise, `\tanh(x)=(\exp(x)−\exp(−x))/(\exp(x)+\exp(−x))`.
-    "sigmoid": nn.functional.sigmoid,
-    # Applies the element-wise function `Sigmoid(x)=1/(1+\exp(−x))`.
-    "hardsigmoid": nn.functional.hardsigmoid,
-    # Applies the hardsigmoid function element-wise.
-    "silu": nn.functional.silu,
-    # Applies the Sigmoid Linear Unit (SiLU) function, element-wise.
-    "mish": nn.functional.mish,
-    # Applies the Mish function, element-wise.
-}
-r"""Dictionary containing all available functional activations in torch."""
-
-
-TORCH_INPLACE_ACTIVATIONS: dict[str, Activation] = {
-    "relu_": nn.functional.relu_,
-    # In-place version of relu().
-    "hardtanh_": nn.functional.hardtanh_,
-    # In-place version of hardtanh().
-    "elu_": nn.functional.elu_,
-    # In-place version of elu().
-    "leaky_relu_": nn.functional.leaky_relu_,
-    # In-place version of leaky_relu().
-    "rrelu_": nn.functional.rrelu_,
-    # In-place version of rrelu().
-}
-r"""Dictionary containing all available in-place functional activations in torch."""
-
-
-TORCH_SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
-    "threshold": nn.functional.threshold,
-    # Thresholds each element of the input Tensor.
-    "glu": nn.functional.glu,
-    # The gated linear unit.
-    "normalize": nn.functional.normalize,
-    # Performs Lp normalization of inputs over specified dimension.
-    "prelu": nn.functional.prelu,
-    # `PReLU(x)=\max(0,x)+ω⋅\min(0,x)` where ω is a learnable parameter.
-    "batch_norm": nn.functional.batch_norm,
-    # Applies Batch Normalization for each channel across a batch of data.
-    "group_norm": nn.functional.group_norm,
-    # Applies Group Normalization for last certain number of dimensions.
-    "layer_norm": nn.functional.layer_norm,
-    # Applies Layer Normalization for last certain number of dimensions.
-    "local_response_norm": nn.functional.local_response_norm,
-    # Applies local response normalization over an input signal composed of several input planes.
-    "softmin": nn.functional.softmin,  # NOTE: requires dim argument!
-    # Applies a softmin function.
-    "softmax": nn.functional.softmax,  # NOTE: requires dim argument!
-    # Applies a softmax function.
-    "log_softmax": nn.functional.log_softmax,  # NOTE: requires dim argument!
-    # Applies a softmax followed by a logarithm.
-    "gumbel_softmax": nn.functional.gumbel_softmax,  # NOTE: requires dim argument!
-    # Samples from the Gumbel-Softmax distribution and optionally discretizes.
-}
-r"""Special activations that do not represent usual activation functions."""
-
-
-TORCH_ACTIVATION_CLASSES: dict[str, type[Activation]] = {
-    "CELU"        : nn.CELU,
-    "ELU"         : nn.ELU,
-    "GELU"        : nn.GELU,
-    "GLU"         : nn.GLU,
-    "Hardshrink"  : nn.Hardshrink,
-    "Hardsigmoid" : nn.Hardsigmoid,
-    "Hardswish"   : nn.Hardswish,
-    "Hardtanh"    : nn.Hardtanh,
-    "Identity"    : nn.Identity,
-    "LeakyReLU"   : nn.LeakyReLU,
-    "LogSigmoid"  : nn.LogSigmoid,
-    "Mish"        : nn.Mish,
-    "PReLU"       : nn.PReLU,
-    "RReLU"       : nn.RReLU,
-    "ReLU"        : nn.ReLU,
-    "ReLU6"       : nn.ReLU6,
-    "SELU"        : nn.SELU,
-    "SiLU"        : nn.SiLU,
-    "Sigmoid"     : nn.Sigmoid,
-    "Softplus"    : nn.Softplus,
-    "Softshrink"  : nn.Softshrink,
-    "Softsign"    : nn.Softsign,
-    "Tanh"        : nn.Tanh,
-    "Tanhshrink"  : nn.Tanhshrink,
+ACTIVATIONS: dict[str, type[_nn.Module]] = {
+    # torch imports
+    "CELU"        : _nn.CELU,
+    "ELU"         : _nn.ELU,
+    "GELU"        : _nn.GELU,
+    "GLU"         : _nn.GLU,
+    "Hardshrink"  : _nn.Hardshrink,
+    "Hardsigmoid" : _nn.Hardsigmoid,
+    "Hardswish"   : _nn.Hardswish,
+    "Hardtanh"    : _nn.Hardtanh,
+    "Identity"    : _nn.Identity,
+    "LeakyReLU"   : _nn.LeakyReLU,
+    "LogSigmoid"  : _nn.LogSigmoid,
+    "Mish"        : _nn.Mish,
+    "PReLU"       : _nn.PReLU,
+    "RReLU"       : _nn.RReLU,
+    "ReLU"        : _nn.ReLU,
+    "ReLU6"       : _nn.ReLU6,
+    "SELU"        : _nn.SELU,
+    "SiLU"        : _nn.SiLU,
+    "Sigmoid"     : _nn.Sigmoid,
+    "Softplus"    : _nn.Softplus,
+    "Softshrink"  : _nn.Softshrink,
+    "Softsign"    : _nn.Softsign,
+    "Tanh"        : _nn.Tanh,
+    "Tanhshrink"  : _nn.Tanhshrink,
 }  # fmt: skip
-r"""Dictionary containing all available activations in torch."""
+r"""Dictionary containing all available activation classes."""
 
 
-ACTIVATION_FUNCTIONS: dict[str, Activation] = {
-    **TORCH_ACTIVATION_FUNCTIONS,
+ACTIVATION_FNS: dict[str, Activation] = {
     "hard_bend": hard_bend,
+    # torch imports
+    "celu"        : _nn.functional.celu,
+    "elu"         : _nn.functional.elu,
+    "gelu"        : _nn.functional.gelu,
+    "hardshrink"  : _nn.functional.hardshrink,
+    "hardsigmoid" : _nn.functional.hardsigmoid,
+    "hardswish"   : _nn.functional.hardswish,
+    "hardtanh"    : _nn.functional.hardtanh,
+    "leaky_relu"  : _nn.functional.leaky_relu,
+    "log_sigmoid" : _nn.functional.logsigmoid,
+    "mish"        : _nn.functional.mish,
+    "relu"        : _nn.functional.relu,
+    "relu6"       : _nn.functional.relu6,
+    "rrelu"       : _nn.functional.rrelu,
+    "selu"        : _nn.functional.selu,
+    "sigmoid"     : _nn.functional.sigmoid,
+    "silu"        : _nn.functional.silu,
+    "softplus"    : _nn.functional.softplus,
+    "softshrink"  : _nn.functional.softshrink,
+    "softsign"    : _nn.functional.softsign,
+    "tanh"        : _nn.functional.tanh,
+    "tanhshrink"  : _nn.functional.tanhshrink,
 }  # fmt: skip
 r"""Dictionary containing all available activation functions."""
 
-SPECIAL_ACTIVATIONS: dict[str, GenericActivation] = {
+
+ACTIVATION_FNS_WITH_ARGS: dict[str, GenericActivation] = {
     "reglu": reglu,
     "geglu": geglu,
     "crelu": crelu,
 }  # fmt: skip
 r"""Activations that do not match the usual signature of activations."""
-
-
-ACTIVATIONS: dict[str, type[Activation]] = {
-    **TORCH_ACTIVATION_CLASSES,
-}  # fmt: skip
-r"""Dictionary containing all available activation classes."""
-
-# cleanup namespace
-del nn

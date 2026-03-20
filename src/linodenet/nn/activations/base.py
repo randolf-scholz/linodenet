@@ -62,10 +62,10 @@ class ActivationBase(nn.Module):
 
 
 @overload
-def get_activation[T: Activation](arg: Makes[T], /, **cfg: object) -> T: ...
+def get_activation[T: nn.Module](arg: Makes[T], /, **cfg: object) -> T: ...
 @overload
-def get_activation(arg: str | dict, /, **cfg: object) -> Activation: ...
-def get_activation(arg: object, /, **cfg: object) -> Activation:
+def get_activation(arg: str | dict, /, **cfg: object) -> nn.Module: ...
+def get_activation(arg: object, /, **cfg: object) -> nn.Module:
     r"""Get an activation function by name.
 
     Args:
@@ -80,22 +80,7 @@ def get_activation(arg: object, /, **cfg: object) -> Activation:
         # if a name, look up in the dictionary
         case str(name):
             # avoid circular import
-            from linodenet.nn.activations import (  # noqa: PLC0415
-                ACTIVATION_FUNCTIONS,
-                ACTIVATIONS,
-            )
-
-            match ACTIVATION_FUNCTIONS.get(name):
-                case None:
-                    pass
-                case f if callable(f):
-                    if cfg:
-                        raise ValueError(
-                            f"Cannot pass arguments to an instance: {cfg!r}"
-                        )
-                    return f
-                case _:
-                    raise TypeError(f"Invalid argument: {arg!r}")
+            from linodenet.nn.activations import ACTIVATIONS  # noqa: PLC0415
 
             match ACTIVATIONS.get(name):
                 case None:
@@ -116,11 +101,11 @@ def get_activation(arg: object, /, **cfg: object) -> Activation:
         # if a config, use the blueprint system to initialize it
         case dict(spec):
             result = initialize(spec)
-            assert isinstance(result, Activation)
+            assert isinstance(result, nn.Module)
             return result
 
         # if an instance, return as-is
-        case Activation() as instance:
+        case nn.Module() as instance:
             if cfg:
                 raise ValueError(f"Cannot pass arguments to an instance: {cfg!r}")
             return instance

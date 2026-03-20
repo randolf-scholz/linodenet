@@ -8,7 +8,7 @@ import torch
 from matplotlib.axes import Axes
 from torch import Tensor
 
-from linodenet.nn.activations import ACTIVATION_FUNCTIONS
+from linodenet.nn.activations import ACTIVATION_FNS
 from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
@@ -49,13 +49,13 @@ class TestActivationGallery:
         ax.set_yticks(self.yticks, [])
 
     def compute_activation(self, name: str) -> Tensor:
-        activation = ACTIVATION_FUNCTIONS[name]
+        activation = ACTIVATION_FNS[name]
         torch.manual_seed(0)
         y = activation(self.x)
         assert y.shape == self.x.shape
         return y
 
-    @pytest.mark.parametrize("name", ACTIVATION_FUNCTIONS)
+    @pytest.mark.parametrize("name", ACTIVATION_FNS)
     def test_activation_gallery(
         self,
         name: str,
@@ -68,7 +68,7 @@ class TestActivationGallery:
         plt.close(fig)
 
     def test_all_jointly(self) -> None:
-        num_activations = len(ACTIVATION_FUNCTIONS)
+        num_activations = len(ACTIVATION_FNS)
         cols = 3
         rows = (num_activations + cols - 1) // cols
         fig, axes = plt.subplots(
@@ -81,7 +81,7 @@ class TestActivationGallery:
         )
         for ax in axes.flatten():
             self.fmt_axes(ax)
-        for ax, name in zip(axes.flatten(), ACTIVATION_FUNCTIONS, strict=False):
+        for ax, name in zip(axes.flatten(), ACTIVATION_FNS, strict=False):
             try:
                 self.plot(ax, name)
             except Exception:
