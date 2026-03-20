@@ -9,7 +9,7 @@ from linodenet_special.fallbacks.fixpoint_iteration import (
     fixpoint_solve,
     fixpoint_solve_functional,
 )
-from tests.testing import DEVICES, TestCase
+from tests.testing import DEVICES, DTYPES, TestCase
 
 
 class ShiftedHalfMap(nn.Module):
@@ -234,32 +234,39 @@ class TestFixPointIteration(TestCase):
         assert torch.isfinite(test_bias.grad).all()
 
 
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
-@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
 class TestCorrectness(TestCase):
     BATCH_SIZE = 5
     INPUT_SIZE = 2
     MAXITER = 100
-    TOL = {
+    SOLVER_TOL = {
         torch.float32: (1e-6, 1e-6),
         torch.float64: (1e-8, 1e-8),
+    }
+    GRADCHECK_TOL = {
+        torch.float32: (1e-3, 1e-3, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
     W0 = [[0.2, -0.1], [0.05, 0.15]]
     b0 = [0.3, -0.2]
 
-    def _solver_tolerances(self, dtype: torch.dtype, /) -> tuple[float, float]:
-        return self.TOL[dtype]
-
     def test_linear_module_and_input_gradients_match_closed_form(
         self, eager: bool, device: str, dtype: torch.dtype
     ) -> None:
         r"""Check gradients for internal $A$ and input $b$ against the exact solve."""
-        atol, rtol = self._solver_tolerances(dtype)
+        atol, rtol = self.SOLVER_TOL[dtype]
         weight = torch.tensor(self.W0, dtype=dtype, device=device)
         bias = torch.tensor(self.b0, dtype=dtype, device=device)
-        y = torch.tensor([0.7, -0.4], dtype=dtype, device=device)
+        y = torch.randn(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
 
         model = LinearFixpointModel(
             weight,
@@ -269,23 +276,26 @@ class TestCorrectness(TestCase):
             rtol=rtol,
         )
         impl = model if eager else torch.compile(model)
-        x = impl(y)
-        loss = x.square().sum()
+        x_star = impl(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
+        loss = x_star.square().sum()
         loss.backward()
 
         assert model.layer.A.grad is not None
         assert model.bias.grad is not None
+        assert y.grad is None
 
+        # SEC: compute reference gradient, using X⁎ = X⁎Aᵀ + 𝟏bᵀ  ⟺  (𝕀-A)X⁎ = 𝟏bᵀ
         reference_weight = weight.clone().requires_grad_()
         reference_bias = bias.clone().requires_grad_()
         eye = torch.eye(model.input_size, dtype=dtype, device=device)
         reference_x = torch.linalg.solve(eye - reference_weight, reference_bias)
+        reference_x = reference_x.expand(self.BATCH_SIZE, -1)
         reference_loss = reference_x.square().sum()
         reference_loss.backward()
 
         assert reference_weight.grad is not None
         assert reference_bias.grad is not None
-        self.assert_close(x, reference_x.detach(), atol=atol, rtol=rtol)
+        self.assert_close(x_star, reference_x.detach(), atol=atol, rtol=rtol)
         self.assert_close(
             model.layer.A.grad,
             reference_weight.grad,
@@ -303,10 +313,8 @@ class TestCorrectness(TestCase):
         self, eager: bool, device: str, dtype: torch.dtype
     ) -> None:
         r"""Check `fixpoint_solve` gradients for internal $A$ and input $b$."""
-        if dtype is not torch.float64:
-            pytest.skip("gradcheck requires float64 for reliable finite differences")
-
-        atol, rtol = self._solver_tolerances(dtype)
+        atol, rtol = self.SOLVER_TOL[dtype]
+        eps, grad_atol, grad_rtol = self.GRADCHECK_TOL[dtype]
         weight = torch.tensor(
             self.W0,
             dtype=dtype,
@@ -324,7 +332,7 @@ class TestCorrectness(TestCase):
         def func(z, A: Tensor, b: Tensor) -> Tensor:
             x0 = z.clone()
             return fixpoint_solve(
-                lambda x, W, c: x @ W.T + c,
+                lambda x, W, c: x @ W.mT + c,  # type: ignore[misc]
                 x0,
                 A,
                 b,
@@ -337,7 +345,7 @@ class TestCorrectness(TestCase):
         assert torch.autograd.gradcheck(
             impl,
             (y, weight, bias),
-            eps=1e-6,
-            atol=1e-5,
-            rtol=1e-5,
+            eps=eps,
+            atol=grad_atol,
+            rtol=grad_rtol,
         )
