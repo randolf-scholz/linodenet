@@ -4,8 +4,8 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from torch import Tensor, nn
 
 from linodenet.mappings import (
-    ContractiveFP,
-    ContractiveTransform,
+    ResidualContraction,
+    ResidualContractionFallback,
     TransformBase,
 )
 from linodenet.mappings.linear import LinearContraction
@@ -27,7 +27,7 @@ class ShiftedHalfContraction(nn.Module):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
-    [ContractiveTransform, ContractiveFP],
+    [ResidualContractionFallback, ResidualContraction],
     ids=["loop", "fixpoint_solve"],
 )
 class TestCorrectness(TestCase):
@@ -157,7 +157,7 @@ class TestCorrectness(TestCase):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
-    [ContractiveTransform, ContractiveFP],
+    [ResidualContractionFallback, ResidualContraction],
     ids=["loop", "fixpoint_solve"],
 )
 class TestPerformance(TestCase):
@@ -194,7 +194,7 @@ class TestPerformance(TestCase):
         torch._dynamo.config.compiled_autograd = True  # noqa: SLF001
         compiled_decode = torch.compile(
             flow.decode,
-            fullgraph=flow_cls is ContractiveFP,
+            fullgraph=flow_cls is ResidualContraction,
         )
 
         # trigger compile
