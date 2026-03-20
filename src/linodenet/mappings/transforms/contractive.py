@@ -1,6 +1,10 @@
 r"""ContractiveFlow implementation (iResNet-block)."""
 
-__all__ = ["ResidualContraction", "ResidualContractionFallback"]
+__all__ = [
+    "ResidualContraction",
+    "ReZeroContraction",
+    "ResidualContractionFallback",
+]
 
 import warnings
 
@@ -8,6 +12,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.mappings.base import TransformBase
+from linodenet.mappings.bijections import SmoothSoftsign
 from linodenet_special import fixpoint_solve
 
 
@@ -42,6 +47,57 @@ class ResidualContraction(TransformBase):
         # note: solve x = y - g(x) = f(x, y)
         return fixpoint_solve(
             lambda x: y - self.contraction(x),  # type: ignore[misc]
+            y.clone(),
+            maxiter=self.maxiter,
+            atol=self.atol,
+            rtol=self.rtol,
+        )
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        raise NotImplementedError
+
+
+class ReZeroContraction(TransformBase):
+    r"""A residual flow based on a scaled contraction layer.
+
+    Forward: $y ← x + α⋅g(x)$ with $α ∈ (-1, 1)$.
+    Inverse: via fixed point iteration with implicit differentiation.
+    """
+
+    scalar: Tensor
+    r"""The unconstrained learnable scalar."""
+
+    def __init__(
+        self,
+        contraction: nn.Module,
+        *,
+        scalar: Tensor | None = None,
+        restrict: nn.Module | None = None,
+        maxiter: int = 256,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
+    ) -> None:
+        super().__init__()
+        initial_value = torch.as_tensor(0.0 if scalar is None else scalar)
+        self.scalar = nn.Parameter(initial_value, requires_grad=True)
+        self.restrict = SmoothSoftsign() if restrict is None else restrict
+        self.contraction = contraction
+        self.maxiter = maxiter
+        self.atol = atol
+        self.rtol = rtol
+
+    def encode(self, x: Tensor) -> Tensor:
+        alpha = self.restrict(self.scalar)
+        return x + alpha * self.contraction(x)
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        raise NotImplementedError
+
+    def decode(self, y: Tensor) -> Tensor:
+        r"""Compute the inverse through fixed point iteration."""
+        alpha = self.restrict(self.scalar)
+        return fixpoint_solve(
+            lambda x: y - alpha * self.contraction(x),  # type: ignore[misc]
             y.clone(),
             maxiter=self.maxiter,
             atol=self.atol,

@@ -2,13 +2,16 @@ import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
 from torch import Tensor, nn
+from torch.nn.functional import mse_loss
 
 from linodenet.mappings import (
     ResidualContraction,
     ResidualContractionFallback,
+    ReZeroContraction,
     TransformBase,
 )
 from linodenet.mappings.linear import LinearContraction
+from linodenet.nn.parametrize import update_parametrizations
 from tests.testing import DEVICES, DTYPES, SEEDS_5, TestCase, pytest_xfail
 
 
@@ -21,6 +24,89 @@ class ShiftedHalfContraction(nn.Module):
 
     def forward(self, x: Tensor, /) -> Tensor:
         return 0.5 * x + self.bias
+
+
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
+class TestReZero(TestCase):
+    BATCH_SIZE = 32
+    INPUT_SIZE = 8
+    TRAIN_STEPS = 5
+    LEARNING_RATE = 0.5
+    TARGET_SCALE = 0.35
+
+    def make_model(self, /, *, device: str, dtype: torch.dtype) -> ReZeroContraction:
+        contraction = nn.Sequential(
+            LinearContraction(self.INPUT_SIZE, 2 * self.INPUT_SIZE, bias=True),
+            nn.ReLU(),
+            LinearContraction(2 * self.INPUT_SIZE, self.INPUT_SIZE),
+        )
+        module = ReZeroContraction(contraction)
+        module = module.to(dtype=dtype, device=device)
+        update_parametrizations(module)  # Important after .to()
+        return module
+
+    def make_test_case(self, device: str, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
+        x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
+        target = x**2 - 1
+        return x, target
+
+    def test_initialization_is_identity(
+        self,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        flow = self.make_model(device=device, dtype=dtype)
+        x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
+        y = flow.encode(x)
+        self.assert_close(y, x, atol=0.0, rtol=0.0)
+
+    def test_can_train(
+        self,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(0)
+        flow = self.make_model(device=device, dtype=dtype)
+        x, target = self.make_test_case(device=device, dtype=dtype)
+
+        with torch.no_grad():
+            initial_loss = mse_loss(flow.encode(x), target)
+
+        optimizer = torch.optim.SGD([flow.scalar], lr=self.LEARNING_RATE)
+
+        for _ in range(self.TRAIN_STEPS):
+            optimizer.zero_grad()
+            loss = mse_loss(flow.encode(x), target)
+            loss.backward()
+            optimizer.step()
+            update_parametrizations(flow)
+
+        final_loss = mse_loss(flow.encode(x), target)
+
+        assert final_loss < initial_loss
+
+    def test_after_training_is_no_longer_identity(
+        self,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(0)
+        flow = self.make_model(device=device, dtype=dtype)
+        x, target = self.make_test_case(device=device, dtype=dtype)
+
+        optimizer = torch.optim.SGD([flow.scalar], lr=self.LEARNING_RATE)
+
+        for _ in range(self.TRAIN_STEPS):
+            optimizer.zero_grad()
+            loss = mse_loss(flow.encode(x), target)
+            loss.backward()
+            optimizer.step()
+            update_parametrizations(flow)
+
+        y = flow.encode(x)
+
+        self.assert_not_close(y, x, atol=1e-6, rtol=1e-6)
 
 
 @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)

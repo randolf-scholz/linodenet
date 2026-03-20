@@ -89,6 +89,7 @@ r"""Dictionary of available embeddings (nn.Module)."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
     "ContractiveFP"        : transforms.ResidualContraction,
+    "ReZeroContraction"    : transforms.ReZeroContraction,
     "ContractiveTransform" : transforms.ResidualContractionFallback,
     "SplineTransform"      : transforms.SplineTransform,
     "LowRankTransform"     : transforms.LowRankTransform,
