@@ -60,3 +60,8 @@ class LinearContraction(nn.Linear):
         self.output_size = self.out_features
 
         register_parametrization(self, "weight", LipschitzBounded(lipschitz_bound=c))
+        self.parametrizations: nn.ModuleDict
+        assert isinstance(self.parametrizations.weight, nn.Module)
+        param = self.parametrizations.weight.original_parameter
+        assert isinstance(param, nn.Parameter)
+        self.weight_parameter: nn.Parameter = param
