@@ -141,34 +141,30 @@ r"""Special activations that do not represent usual activation functions."""
 
 
 TORCH_ACTIVATION_CLASSES: dict[str, type[Activation]] = {
-    "AdaptiveLogSoftmaxWithLoss" : nn.AdaptiveLogSoftmaxWithLoss,
-    "ELU"                        : nn.ELU,
-    "Hardshrink"                 : nn.Hardshrink,
-    "Hardsigmoid"                : nn.Hardsigmoid,
-    "Hardtanh"                   : nn.Hardtanh,
-    "Hardswish"                  : nn.Hardswish,
-    "Identity"                   : nn.Identity,
-    "LeakyReLU"                  : nn.LeakyReLU,
-    "LogSigmoid"                 : nn.LogSigmoid,
-    "LogSoftmax"                 : nn.LogSoftmax,
-    "MultiheadAttention"         : nn.MultiheadAttention,
-    "PReLU"                      : nn.PReLU,
-    "ReLU"                       : nn.ReLU,
-    "ReLU6"                      : nn.ReLU6,
-    "RReLU"                      : nn.RReLU,
-    "SELU"                       : nn.SELU,
-    "CELU"                       : nn.CELU,
-    "GELU"                       : nn.GELU,
-    "Sigmoid"                    : nn.Sigmoid,
-    "SiLU"                       : nn.SiLU,
-    "Softmax"                    : nn.Softmax,
-    "Softmax2d"                  : nn.Softmax2d,
-    "Softplus"                   : nn.Softplus,
-    "Softshrink"                 : nn.Softshrink,
-    "Softsign"                   : nn.Softsign,
-    "Tanh"                       : nn.Tanh,
-    "Tanhshrink"                 : nn.Tanhshrink,
-    "Threshold"                  : nn.Threshold,
+    "CELU"        : nn.CELU,
+    "ELU"         : nn.ELU,
+    "GELU"        : nn.GELU,
+    "GLU"         : nn.GLU,
+    "Hardshrink"  : nn.Hardshrink,
+    "Hardsigmoid" : nn.Hardsigmoid,
+    "Hardswish"   : nn.Hardswish,
+    "Hardtanh"    : nn.Hardtanh,
+    "Identity"    : nn.Identity,
+    "LeakyReLU"   : nn.LeakyReLU,
+    "LogSigmoid"  : nn.LogSigmoid,
+    "Mish"        : nn.Mish,
+    "PReLU"       : nn.PReLU,
+    "RReLU"       : nn.RReLU,
+    "ReLU"        : nn.ReLU,
+    "ReLU6"       : nn.ReLU6,
+    "SELU"        : nn.SELU,
+    "SiLU"        : nn.SiLU,
+    "Sigmoid"     : nn.Sigmoid,
+    "Softplus"    : nn.Softplus,
+    "Softshrink"  : nn.Softshrink,
+    "Softsign"    : nn.Softsign,
+    "Tanh"        : nn.Tanh,
+    "Tanhshrink"  : nn.Tanhshrink,
 }  # fmt: skip
 r"""Dictionary containing all available activations in torch."""
 
@@ -189,8 +185,6 @@ r"""Activations that do not match the usual signature of activations."""
 
 ACTIVATIONS: dict[str, type[Activation]] = {
     **TORCH_ACTIVATION_CLASSES,
-    "GEGLU": GEGLU,
-    "ReGLU": ReGLU,
 }  # fmt: skip
 r"""Dictionary containing all available activation classes."""
 
