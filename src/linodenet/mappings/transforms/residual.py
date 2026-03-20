@@ -7,7 +7,7 @@ __all__ = [
 ]
 
 import warnings
-from typing import Final, Literal
+from typing import Final
 
 import torch
 from torch import Tensor, nn
@@ -78,17 +78,19 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
         self,
         contraction: M,
         *,
-        scalar_map: nn.Module | Literal["smooth-softsign", "tanh"] = "smooth-softsign",
+        scalar_map: nn.Module | str | None = "smooth-softsign",
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
     ) -> None:
         scalar_map_module: nn.Module
         match scalar_map:
-            case "smooth-softsign":
+            case None | "smooth-softsign":
                 scalar_map_module = SmoothSoftsign()
             case "tanh":
                 scalar_map_module = TanhMap()
+            case str(other):
+                raise ValueError(f"Unknown scalar map {other}")
             case _:
                 scalar_map_module = scalar_map
         rezero = ReZero(contraction, scalar_map=scalar_map_module)

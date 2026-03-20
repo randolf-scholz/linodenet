@@ -2,7 +2,7 @@ r"""Simple i-ResNet built from residual contraction blocks."""
 
 __all__ = ["IResNet"]
 
-from typing import Final
+from typing import Final, Optional
 
 from torch import nn
 
@@ -16,7 +16,15 @@ from linodenet.nn.activations import get_activation
 
 
 class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
-    r"""Invertible residual network built from contractive residual blocks."""
+    r"""Invertible residual network built from contractive residual blocks.
+
+    References:
+        - | Invertible Residual Networks
+          | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
+          | International Conference on Machine Learning 2019
+          | http://proceedings.mlr.press/v97/behrmann19a.html
+        - https://github.com/jhjacobsen/invertible-resnet
+    """
 
     input_size: Final[int]
     r"""CONST: Input and output dimensionality."""
@@ -38,6 +46,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
         latent_size: int | None = None,
         activation: str | nn.Module = "ReLU",
         use_rezero: bool = False,
+        scalar_map: Optional[nn.Module | str] = None,
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
@@ -52,6 +61,8 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
             raise ValueError(
                 "latent_size must equal input_size when layers_per_block <= 1"
             )
+        if scalar_map is not None and not self.use_rezero:
+            raise ValueError("scalar_map requires use_rezero=True")
 
         blocks = [
             self._make_block(
@@ -60,6 +71,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
                 latent_size=self.latent_size,
                 activation=activation,
                 use_rezero=self.use_rezero,
+                scalar_map=scalar_map,
                 maxiter=maxiter,
                 atol=atol,
                 rtol=rtol,
@@ -76,46 +88,32 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
         latent_size: int,
         activation: str | nn.Module,
         use_rezero: bool,
+        scalar_map: nn.Module | str | None,
         maxiter: int,
         atol: float,
         rtol: float,
     ) -> ResidualContraction | ReZeroContraction:
         layers: list[nn.Module] = []
+        act = get_activation(activation)
+        assert isinstance(act, nn.Module)
         if layers_per_block < 1:
             raise ValueError("layers_per_block must be at least 1")
-        elif layers_per_block == 1:
-            layers.extend(
-                [
-                    LinearContraction(input_size, input_size),
-                    get_activation(activation),
-                ]
-            )
+        if layers_per_block == 1:
+            layers.extend([LinearContraction(input_size, input_size), act])
         else:
-            layers.extend(
-                [
-                    LinearContraction(input_size, latent_size),
-                    get_activation(activation),
-                ]
-            )
+            layers.extend([LinearContraction(input_size, latent_size), act])
             layers.extend(
                 module
                 for _ in range(layers_per_block - 2)
-                for module in (
-                    LinearContraction(latent_size, latent_size),
-                    get_activation(activation),
-                )
+                for module in (LinearContraction(latent_size, latent_size), act)
             )
-            layers.extend(
-                [
-                    LinearContraction(latent_size, input_size),
-                    get_activation(activation),
-                ]
-            )
+            layers.extend([LinearContraction(latent_size, input_size), act])
 
         contraction = nn.Sequential(*layers)
         if use_rezero:
             return ReZeroContraction(
                 contraction,
+                scalar_map=scalar_map,
                 maxiter=maxiter,
                 atol=atol,
                 rtol=rtol,
