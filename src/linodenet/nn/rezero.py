@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 from collections.abc import Iterable
-from typing import Final, Optional
+from typing import Optional
 
 import torch
 from torch import Tensor, nn
@@ -27,40 +27,37 @@ class ReZero(nn.Module):
     Simply multiplies the inputs by a scalar initialized to zero.
     """
 
-    # CONSTANTS
-    learnable: Final[bool]
-    r"""CONST: Whether the scalar is learnable."""
-
-    # PARAMETERS
     scalar: Tensor
-    r"""The scalar to multiply the inputs by."""
+    r"""PARAM: The scalar to multiply the inputs by."""
+    scalar_map: nn.Module
+    r"""MODULE: Map applied to the scalar before scaling the input."""
 
     @property
     def config(self) -> dict:
         return {
             "module": self.module,
             "scalar": self.scalar,
+            "scalar_map": self.scalar_map,
             "learnable": self.learnable,
         }
 
     def __init__(
         self,
-        module: Optional[nn.Module] = None,
+        module: nn.Module,
         *,
-        scalar: Optional[Tensor] = None,
+        scalar_map: Optional[nn.Module] = None,
         learnable: bool = True,
     ) -> None:
         super().__init__()
-        initial_value = torch.as_tensor(0.0 if scalar is None else scalar)
-        self.scalar = nn.Parameter(initial_value) if self.learnable else initial_value
+        initial_value = torch.as_tensor(0.0)
         self.learnable = learnable
+        self.scalar = nn.Parameter(initial_value, requires_grad=self.learnable)
+        self.scalar_map = nn.Identity() if scalar_map is None else scalar_map
         self.module = module
 
     @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
-        if self.module is None:
-            return self.scalar * x
-        return self.scalar * self.module(x)
+        return self.scalar_map(self.scalar) * self.module(x)
 
 
 class ReZeroResNet(nn.ModuleList):
