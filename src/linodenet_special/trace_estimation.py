@@ -9,6 +9,7 @@ __all__ = [
     "hutchinson_estimator",
     "xtrace_estimator",
     "xtrace_estimator_corrected",
+    "xtrace_bilinear_estimator_experimental",
     "naive_estimator",
 ]
 
@@ -29,6 +30,21 @@ def _normalize_columns(matrix: Tensor) -> Tensor:
 def _diag_prod(lhs: Tensor, rhs: Tensor) -> Tensor:
     r"""Return diag(lhsᴴ rhs) for batched matrices with matching shape."""
     return torch.einsum("...dm, ...dm -> ...m", lhs.conj(), rhs)
+
+
+def _project_onto_columns(basis: Tensor, vector: Tensor) -> Tensor:
+    r"""Project a batched vector onto the column span of a batched basis.
+
+    Args:
+        basis: Batched orthonormal basis with shape `(..., d, k)`.
+        vector: Batched vector with shape `(..., d)`.
+
+    Returns:
+        Tensor with shape `(..., d)` containing the orthogonal projection of
+        `vector` onto `span(basis)`.
+    """
+    coeffs = torch.einsum("...dk, ...d -> ...k", basis.conj(), vector)
+    return torch.einsum("...dk, ...k -> ...d", basis, coeffs)
 
 
 @signature("(..., n, d) -> (...)")
@@ -68,6 +84,13 @@ def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
 
     Returns:
         Tensor: The estimated trace.
+
+
+    core idea:
+
+        samples: [v₁, ..., vₖ]
+        compute Qᵢ = orth(AV₋ᵢ)
+        compute: trᵢ = tr(QᵢᴴAQᵢ) + vᵢᴴ(I-QᵢQᵢᴴ) A (I-QᵢQᵢᴴ)vᵢ
 
     Algorithm:
         1: Draw Ω ∼ Unif{±1}^{N×m/2}
@@ -208,3 +231,89 @@ def xtrace_estimator_corrected(
 
     # MATLAB: t = mean(ests)
     return ests.mean(dim=-1)
+
+
+def xtrace_bilinear_estimator_experimental(
+    fn: Callable[[Tensor], Tensor],
+    adj_fn: Callable[[Tensor], Tensor],
+    left_samples: Tensor,
+    right_samples: Tensor,
+) -> Tensor:
+    r"""Experimental two-sided XTrace-style estimator for nonsymmetric operators.
+
+    This estimator uses separate left and right probe families. It is based on
+    the leave-one-out construction
+
+    .. math::
+
+       \hat tᵢ = \tr(Pᵢᴴ A Qᵢ) + uᵢᴴ(I - PᵢPᵢᴴ) A (I - QᵢQᵢᴴ) vᵢ,
+
+    where:
+        - $Qᵢ$ spans the columns of $A V_{-i}$,
+        - $Pᵢ$ spans the columns of $Aᴴ U_{-i}$,
+        - $vᵢ$ and $uᵢ$ are the held-out right and left probe vectors.
+
+    The final trace estimate is the average of the leave-one-out estimates.
+    This is an experimental implementation intended for moment-estimation
+    experiments where left and right probe ladders are available explicitly.
+
+    Args:
+        fn: Right action of the operator, $x ↦ A x$, applied row-wise to a
+            tensor with shape `(..., n, d)`.
+        adj_fn: Left action of the adjoint, $x ↦ Aᴴ x$, applied row-wise to a
+            tensor with shape `(..., n, d)`.
+        left_samples: Left probe vectors `(..., n, d)`.
+        right_samples: Right probe vectors `(..., n, d)`.
+
+    Returns:
+        Tensor with shape `(...)` containing the experimental trace estimate.
+    """
+    if left_samples.shape != right_samples.shape:
+        raise ValueError("left_samples and right_samples must have matching shapes.")
+
+    *_, num_samples, _ = right_samples.shape
+    if num_samples == 0:
+        raise ValueError("xtrace_bilinear_estimator_experimental requires samples.")
+
+    av = fn(right_samples)  # (..., n, d), rows are A vᵢ
+    ahu = adj_fn(left_samples)  # (..., n, d), rows are Aᴴ uᵢ
+    estimates: list[Tensor] = []
+
+    for i in range(num_samples):
+        av_except_i = torch.cat((av[..., :i, :], av[..., i + 1 :, :]), dim=-2)
+        ahu_except_i = torch.cat((ahu[..., :i, :], ahu[..., i + 1 :, :]), dim=-2)
+
+        if num_samples == 1:
+            q = right_samples.new_zeros(
+                *right_samples.shape[:-2], right_samples.shape[-1], 0
+            )
+            p = left_samples.new_zeros(
+                *left_samples.shape[:-2], left_samples.shape[-1], 0
+            )
+            projected_trace = right_samples.new_zeros(right_samples.shape[:-2])
+        else:
+            # Qᵢ = orth(A V_{-i}), shape (..., d, n-1)
+            q, _ = qr(av_except_i.mT, mode="reduced")
+            # Pᵢ = orth(Aᴴ U_{-i}), shape (..., d, n-1)
+            p, _ = qr(ahu_except_i.mT, mode="reduced")
+
+            # tr(Pᵢᴴ A Qᵢ), where AQᵢ is obtained by applying A to the basis columns.
+            aq = fn(q.mT).mT  # (..., d, n-1)
+            projected = torch.einsum("...dp, ...dq -> ...pq", p.conj(), aq)
+            projected_trace = projected.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
+
+        # vᵢ, uᵢ: held-out probe vectors, shape (..., d)
+        v_i = right_samples[..., i, :]
+        u_i = left_samples[..., i, :]
+
+        # Right residual: (I - QᵢQᵢᴴ) vᵢ, shape (..., d)
+        right_residual = v_i - _project_onto_columns(q, v_i)
+        # Left residual: (I - PᵢPᵢᴴ) uᵢ, shape (..., d)
+        left_residual = u_i - _project_onto_columns(p, u_i)
+
+        # Residual correction uᵢᴴ(I - PᵢPᵢᴴ) A (I - QᵢQᵢᴴ) vᵢ
+        residual_action = fn(right_residual.unsqueeze(-2)).squeeze(-2)
+        residual_trace = vecdot(left_residual, residual_action, dim=-1)
+        estimates.append(projected_trace + residual_trace)
+
+    return torch.stack(estimates, dim=-1).mean(dim=-1)
