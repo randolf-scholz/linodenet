@@ -48,13 +48,8 @@ Note that `torch.distributions.Transform` has some differences:
 """
 
 __all__ = [
-    # constants
-    # protocols & base classes
     # classes
-    "iResNet_OLD",
     "IResNet",
-    "iResNetBlock_OLD",
-    "iResNetLayer_OLD",
     "LowRankTransform",
     "SplineTransform",
     "TriangularTransform",
@@ -63,17 +58,12 @@ __all__ = [
     "ResidualContractionFallback",
 ]
 
-from linodenet.mappings.transforms.iresnet import IResNet
-from linodenet.mappings.transforms.iresnet_old import (
-    iResNet_OLD,
-    iResNetBlock_OLD,
-    iResNetLayer_OLD,
-)
-from linodenet.mappings.transforms.linear_rational_spline import SplineTransform
-from linodenet.mappings.transforms.low_rank import LowRankTransform
-from linodenet.mappings.transforms.residual import (
+from .iresnet import IResNet
+from .linear_rational_spline import SplineTransform
+from .low_rank import LowRankTransform
+from .residual import (
     ResidualContraction,
     ResidualContractionFallback,
     ReZeroContraction,
 )
-from linodenet.mappings.transforms.triangular import TriangularTransform
+from .triangular import TriangularTransform
