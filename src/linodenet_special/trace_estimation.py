@@ -50,9 +50,9 @@ def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     Y = fn(V.mT).mT  # (..., d, n)
     Q, R = qr(Y, mode="reduced")  # (..., d, k), (..., k, n)
     Z = fn(Q.mT).mT  # (..., d, k)
-    H = torch.einsum("...kd, ...dk -> ...kk", Q.mH, Z)  # (..., k, k)
-    W = torch.einsum("...kd, ...nd -> ...kn", Q.mH, V)  # (..., k, n)
-    T = torch.einsum("...kd, ...dn -> ...kn", Z.mH, V)  # (..., k, n)
+    H = torch.einsum("...kd, ...dj -> ...kj", Q.mH, Z)  # (..., k, k)
+    W = torch.einsum("...kd, ...dn -> ...nk", Q.mH, V)  # (..., n, k)
+    T = torch.einsum("...kd, ...dn -> ...nk", Z.mH, V)  # (..., n, k)
 
     # Note: compute S=R⁻¹ ⟺ S R = Iₖ  (or: R S = Iₙ)
     I = torch.eye(k, dtype=samples.dtype, device=samples.device)
@@ -60,16 +60,16 @@ def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     S = S / vector_norm(S, dim=-2, keepdim=True)  # (..., n, k)
 
     # compute xᵢ = wᵢ - ⟨sᵢ∣wᵢ⟩ sᵢ
-    X = W - torch.einsum("...jn, ...jn, ...nk -> ...nk", S.mH, W, S)  # (..., n, k)
+    X = W - torch.einsum("...nk, ...nk, ...nl -> ...nl", S.conj(), W, S)  # (..., n, k)
     # compute tr_i = ⟨xᵢ|H|xᵢ⟩ - ⟨sᵢ|H|sᵢ⟩ + ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ⟩ - ⟨tᵢ∣xᵢ⟩
     TRS = (
-        torch.einsum("...kn, ...kk, ...nk -> ...n", X.mH, H, X)  # ⟨xᵢ|H|xᵢ⟩
-        - torch.einsum("...kn, ...kk, ...nk -> ...n", S.mH, H, S)  # - ⟨sᵢ|H|sᵢ⟩
-        - torch.einsum("...kn, ...nk -> ...n", T, X)  # - ⟨tᵢ∣xᵢ⟩
+        torch.einsum("...nk, ...kl, ...nl -> ...n", X.conj(), H, X)  # ⟨xᵢ|H|xᵢ⟩
+        - torch.einsum("...nk, ...kl, ...nl -> ...n", S.conj(), H, S)  # - ⟨sᵢ|H|sᵢ⟩
+        - torch.einsum("...nk, ...nk -> ...n", T.conj(), X)  # - ⟨tᵢ∣xᵢ⟩
         + (
-            torch.einsum("...nk, ...nk -> ...n", W.mH, S)
-            * torch.einsum("...kn, ...nk -> ...n", S.mH, R)
+            torch.einsum("...nk, ...nk -> ...n", W.conj(), S)  # ⟨wᵢ∣sᵢ⟩
+            * torch.einsum("...nk, ...kn -> ...n", S.conj(), R)  # ⟨sᵢ∣rᵢ⟩
         )
     )
     # compute tr = tr(H) + mean(tr_i)
-    return torch.trace(H) + TRS.mean(dim=-1)
+    return H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + TRS.mean(dim=-1)
