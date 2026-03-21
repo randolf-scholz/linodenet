@@ -4,7 +4,7 @@ __all__ = [
     "ResidualContraction",
     "ReZeroContraction",
     "ResidualContractionFallback",
-    "vector_logabsdet_estimator",
+    "vector_logabsdet_hutchinson_estimator",
 ]
 
 import warnings
@@ -23,7 +23,7 @@ from signatures import signature
 
 
 @signature("(..., d) -> [(..., d), (...)]")
-def vector_logabsdet_estimator(
+def vector_logabsdet_hutchinson_estimator(
     fn: Callable[[Tensor], Tensor],
     x: Tensor,
     num_terms: int,
@@ -132,7 +132,7 @@ class ResidualContraction(TransformBase):
         return x + self.contraction(x)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        fx, logabsdet = vector_logabsdet_estimator(
+        fx, logabsdet = vector_logabsdet_hutchinson_estimator(
             self.contraction,
             x,
             self.num_series_terms,

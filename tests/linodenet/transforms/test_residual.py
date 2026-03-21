@@ -285,8 +285,8 @@ class TestLogAbsDet(TestCase):
     SEED = 0
     VALUE_TOL = 0.0
     LOGABSDET_TOL = 2e-2
-    NUM_TRACE_SAMPLES = 128
-    NUM_SERIES_TERMS = 4
+    NUM_TRACE_SAMPLES = 256
+    NUM_SERIES_TERMS = 10
 
     class ScaledContraction(nn.Module):
         r"""Simple contraction $g(x) = αx$ with scalar $|α| < 1$."""
