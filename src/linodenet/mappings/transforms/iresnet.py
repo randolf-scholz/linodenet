@@ -99,15 +99,15 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
         if layers_per_block < 1:
             raise ValueError("layers_per_block must be at least 1")
         if layers_per_block == 1:
-            layers.extend([LinearContraction(input_size, input_size), act])
+            layers.extend([act, LinearContraction(input_size, input_size)])
         else:
-            layers.extend([LinearContraction(input_size, latent_size), act])
+            layers.extend([act, LinearContraction(input_size, latent_size)])
             layers.extend(
                 module
                 for _ in range(layers_per_block - 2)
-                for module in (LinearContraction(latent_size, latent_size), act)
+                for module in (act, LinearContraction(latent_size, latent_size))
             )
-            layers.extend([LinearContraction(latent_size, input_size), act])
+            layers.extend([act, LinearContraction(latent_size, input_size)])
 
         contraction = nn.Sequential(*layers)
         if use_rezero:
