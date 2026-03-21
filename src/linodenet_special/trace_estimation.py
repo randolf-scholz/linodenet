@@ -5,7 +5,12 @@ Notes:
     then: tr(A²ᵏ) = E[uₖᵀvₖ],  tr(A²ᵏ⁺¹) = E[uₖᵀAvₖ]
 """
 
-__all__ = ["hutchinson_estimator", "xtrace_estimator", "naive_estimator"]
+__all__ = [
+    "hutchinson_estimator",
+    "xtrace_estimator",
+    "xtrace_estimator_corrected",
+    "naive_estimator",
+]
 
 from collections.abc import Callable
 
@@ -14,6 +19,16 @@ from torch import Tensor
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
+
+
+def _normalize_columns(matrix: Tensor) -> Tensor:
+    r"""Normalize the columns of a batched matrix."""
+    return matrix / vector_norm(matrix, dim=-2, keepdim=True)
+
+
+def _diag_prod(lhs: Tensor, rhs: Tensor) -> Tensor:
+    r"""Return diag(lhsᴴ rhs) for batched matrices with matching shape."""
+    return torch.einsum("...dm, ...dm -> ...m", lhs.conj(), rhs)
 
 
 @signature("(..., n, d) -> (...)")
@@ -83,3 +98,101 @@ def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     )
     # compute tr = tr(H) + mean(tr_i)
     return H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + TRS.mean(dim=-1)
+
+
+@signature("(..., n, d) -> (...)")
+def xtrace_estimator_corrected(
+    fn: Callable[[Tensor], Tensor], samples: Tensor
+) -> Tensor:
+    r"""Estimate the trace of a matrix using the original XTrace MATLAB algorithm.
+
+    This is a direct Torch transcription of the reference MATLAB code. The input
+    `samples` stores row-wise probe vectors with shape `(..., n, d)`. The
+    original MATLAB algorithm is written for a column-wise probe matrix
+    $Ω ∈ ℝᵈˣᵐ$, so we transpose into column form internally and mirror the
+    MATLAB algebra closely.
+
+    Notes:
+        The MATLAB reference takes a matvec budget `m_budget` and internally
+        uses `m = floor(m_budget / 2)` probe vectors. This function instead
+        follows the local API convention that `samples` already contains the
+        probe vectors, so all `n` rows are consumed directly.
+    """
+    *_, m, d = samples.shape
+    if m == 0:
+        raise ValueError("xtrace_estimator_corrected requires at least one sample.")
+
+    # MATLAB: Om = sqrt(N) * cnormc(randn(N, m))
+    # Here we reuse the provided probes as the m columns of Ω.
+    # Omega: (..., d, m)
+    omega = d**0.5 * _normalize_columns(samples.mT)
+
+    # MATLAB: Y = A * Om
+    # Y: (..., d, m)
+    y = fn(omega.mT).mT
+    # MATLAB: [Q, R] = qr(Y, 0)
+    # Q: (..., d, m), R: (..., m, m)
+    q, r = qr(y, mode="reduced")
+
+    # MATLAB: W = Q' * Om
+    # W: (..., m, m)
+    w = torch.einsum("...dm, ...dn -> ...mn", q.conj(), omega)
+
+    # MATLAB: S = cnormc(inv(R)')
+    # S: (..., m, m), columns of (R^{-1})ᴴ normalized to unit norm.
+    identity = torch.eye(m, dtype=samples.dtype, device=samples.device)
+    s = solve_triangular(r.mH, identity, upper=False)
+    s = _normalize_columns(s)
+
+    # MATLAB:
+    # scale = (N - m + 1) ./ (N - ||w_i||² + |<s_i, w_i> ||s_i|| |²)
+    # column norms / diagonal products: (..., m)
+    w_norm_sq = vector_norm(w, dim=-2).square()
+    s_norm = vector_norm(s, dim=-2)
+    d_sw = _diag_prod(s, w)
+    scale = (d - m + 1) / (d - w_norm_sq + (d_sw * s_norm).abs().square())
+
+    # MATLAB: Z = A * Q
+    # Z: (..., d, m)
+    z = fn(q.mT).mT
+    # MATLAB: H = Q' * Z
+    # H: (..., m, m)
+    h = torch.einsum("...dm, ...dn -> ...mn", q.conj(), z)
+    # MATLAB: HW = H * W
+    # HW: (..., m, m)
+    hw = h @ w
+    # MATLAB: T = Z' * Om
+    # T: (..., m, m)
+    t = torch.einsum("...dm, ...dn -> ...mn", z.conj(), omega)
+
+    # Column-wise diagonal contractions used by the estimator correction terms.
+    # All shapes below are (..., m).
+    d_shs = _diag_prod(s, h @ s)
+    d_tw = _diag_prod(t, w)
+    d_whw = _diag_prod(w, hw)
+    d_s_r_minus_hw = _diag_prod(s, r - hw)
+    d_t_minus_hhw_s = _diag_prod(t - h.mH @ w, s)
+
+    # MATLAB:
+    # ests_i = tr(H)
+    #        - <s_i, H s_i>
+    #        + ( <w_i, H w_i> - <t_i, w_i>
+    #            + <t_i - H' w_i, s_i><s_i, w_i>
+    #            + |<s_i, w_i>|² <s_i, H s_i>
+    #            + conj(<s_i, w_i>) <s_i, r_i - H w_i> ) * scale_i
+    trace_h = h.diagonal(dim1=-2, dim2=-1).sum(dim=-1, keepdim=True)
+    ests = (
+        trace_h
+        - d_shs
+        + (
+            d_whw
+            - d_tw
+            + d_t_minus_hhw_s * d_sw
+            + d_sw.abs().square() * d_shs
+            + d_sw.conj() * d_s_r_minus_hw
+        )
+        * scale
+    )
+
+    # MATLAB: t = mean(ests)
+    return ests.mean(dim=-1)

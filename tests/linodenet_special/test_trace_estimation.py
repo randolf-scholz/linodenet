@@ -5,7 +5,11 @@ import torch
 from torch import Tensor
 from torch.linalg import matrix_norm
 
-from linodenet_special.trace_estimation import hutchinson_estimator, xtrace_estimator
+from linodenet_special.trace_estimation import (
+    hutchinson_estimator,
+    xtrace_estimator,
+    xtrace_estimator_corrected,
+)
 from tests.testing import DEVICES, TestCase
 
 
@@ -192,3 +196,31 @@ def test_calibration(matrix_kind: str, method: str) -> None:
             device="cuda" if torch.cuda.is_available() else "cpu",
             debug=True,
         )
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+def test_xtrace_estimator_corrected_single_and_batched(device: str) -> None:
+    size = 4
+    samples = torch.eye(size, device=device)
+
+    matrix = torch.diag(torch.tensor([1.0, 2.0, 3.0, 4.0], device=device))
+    trace = torch.trace(matrix)
+    estimate = xtrace_estimator_corrected(
+        lambda x: torch.einsum("...nd, ...md -> ...nm", x, matrix),
+        samples,
+    )
+    torch.testing.assert_close(estimate, trace)
+
+    batched_matrix = torch.stack(
+        [
+            matrix,
+            torch.diag(torch.tensor([0.5, 1.5, 2.5, 3.5], device=device)),
+        ]
+    )
+    batched_samples = samples.expand(len(batched_matrix), -1, -1)
+    batched_trace = torch.einsum("...kk -> ...", batched_matrix)
+    batched_estimate = xtrace_estimator_corrected(
+        lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix),
+        batched_samples,
+    )
+    torch.testing.assert_close(batched_estimate, batched_trace)
