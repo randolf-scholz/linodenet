@@ -19,7 +19,7 @@ from signatures import signature
 @signature("(..., n, d) -> (...)")
 def naive_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matric, realizing the full matrix."""
-    I = torch.eye(samples.shape[-2], dtype=samples.dtype, device=samples.device)
+    I = torch.eye(samples.shape[-1], dtype=samples.dtype, device=samples.device)
     A = fn(I)
     return torch.einsum("...dd -> ...", A)
 
