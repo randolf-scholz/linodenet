@@ -15,6 +15,7 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 from torch.func import linearize, vmap
+from torch.linalg import qr, vecdot
 
 from linodenet.mappings.base import TransformBase
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
@@ -60,7 +61,7 @@ def vector_logabsdet_hutchinson_estimator(
     for k in range(1, num_terms + 1):
         v = batched_jvp_fn(v)  # Aᵏv
         coef = 1.0 / k if k % 2 else -1.0 / k
-        logabsdet = logabsdet + coef * torch.linalg.vecdot(v, v0).mean(dim=0)
+        logabsdet = logabsdet + coef * vecdot(v, v0).mean(dim=0)
 
     return y, logabsdet
 
@@ -73,17 +74,21 @@ def vector_logabsdet_xtrace_estimator(
     num_samples: int,
 ) -> tuple[Tensor, Tensor]:
     r"""Estimate log|det(𝕀 + ∂f/∂x)| using the power series expansion and the XTrace estimator."""
+    V = (
+        2
+        * torch.rand(  # samples ~ Uniform[-1, +1]
+            num_samples,
+            *x.shape,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        - 1
+    )
     y, jvp_fn = linearize(fn, x)
     batched_jvp_fn = vmap(jvp_fn)
-
-    v0 = torch.randn(
-        num_samples,
-        *x.shape,
-        device=x.device,
-        dtype=x.dtype,
-    )
-    v = v0.clone()
     logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+
+    v = V.clone()
 
     for k in range(1, num_terms + 1):
         v = batched_jvp_fn(v)  # Aᵏv
@@ -95,16 +100,14 @@ def vector_logabsdet_xtrace_estimator(
             if num_samples == 1:
                 q_i = v.new_zeros(*x.shape, 0)
             else:
-                q_i, _ = torch.linalg.qr(y_without_i.movedim(0, -1), mode="reduced")
+                q_i, _ = qr(y_without_i.movedim(0, -1), mode="reduced")
 
             if q_i.shape[-1] == 0:
-                residual = v0[i]
+                residual = V[i]
                 projected_av = residual
                 for _ in range(k):
                     projected_av = jvp_fn(projected_av)
-                trace_estimate = trace_estimate + torch.linalg.vecdot(
-                    residual, projected_av
-                )
+                trace_estimate = trace_estimate + vecdot(residual, projected_av)
                 continue
 
             aq_i = q_i.movedim(-1, 0)
@@ -113,8 +116,8 @@ def vector_logabsdet_xtrace_estimator(
             aq_i = aq_i.movedim(0, -1)
             qaq = torch.einsum("...dk,...dk->...", q_i, aq_i)
 
-            coeffs = torch.einsum("...dk,...d->...k", q_i, v0[i])
-            residual = v0[i] - torch.einsum("...dk,...k->...d", q_i, coeffs)
+            coeffs = torch.einsum("...dk,...d->...k", q_i, V[i])
+            residual = V[i] - torch.einsum("...dk,...k->...d", q_i, coeffs)
             a_residual = residual
             for _ in range(k):
                 a_residual = jvp_fn(a_residual)
@@ -123,7 +126,7 @@ def vector_logabsdet_xtrace_estimator(
                 q_i,
                 torch.einsum("...dk,...d->...k", q_i, a_residual),
             )
-            correction = torch.linalg.vecdot(residual, projected_a_residual)
+            correction = vecdot(residual, projected_a_residual)
             trace_estimate = trace_estimate + qaq + correction
 
         logabsdet = logabsdet + coef * trace_estimate / num_samples
