@@ -10,6 +10,7 @@ __all__ = [
     "xtrace_estimator",
     "xtrace_estimator_corrected",
     "xtrace_bilinear_estimator_experimental",
+    "xtrace_bilinear_estimator_efficient_experimental",
     "naive_estimator",
 ]
 
@@ -45,6 +46,17 @@ def _project_onto_columns(basis: Tensor, vector: Tensor) -> Tensor:
     """
     coeffs = torch.einsum("...dk, ...d -> ...k", basis.conj(), vector)
     return torch.einsum("...dk, ...k -> ...d", basis, coeffs)
+
+
+def _normalized_inverse_h_columns(r_factor: Tensor) -> Tensor:
+    r"""Return normalized columns of $(R^{-1})ᴴ$ for a square QR factor."""
+    *_, rows, cols = r_factor.shape
+    if rows != cols:
+        raise ValueError("Efficient XTrace updates require a square R factor.")
+
+    identity = torch.eye(cols, dtype=r_factor.dtype, device=r_factor.device)
+    inverse_h = solve_triangular(r_factor.mH, identity, upper=False)
+    return _normalize_columns(inverse_h)
 
 
 @signature("(..., n, d) -> (...)")
@@ -317,3 +329,113 @@ def xtrace_bilinear_estimator_experimental(
         estimates.append(projected_trace + residual_trace)
 
     return torch.stack(estimates, dim=-1).mean(dim=-1)
+
+
+def xtrace_bilinear_estimator_efficient_experimental(
+    fn: Callable[[Tensor], Tensor],
+    adj_fn: Callable[[Tensor], Tensor],
+    left_samples: Tensor,
+    right_samples: Tensor,
+) -> Tensor:
+    r"""Experimental efficient two-sided XTrace-style estimator.
+
+    This function implements the same experimental two-sided estimator as
+    `xtrace_bilinear_estimator_experimental`, but avoids recomputing leave-one-out
+    QR factorizations. Instead, it uses the XTrace rank-one update identity on
+    both sides:
+
+    .. math::
+
+       QᵢQᵢᴴ = Q(I - sᵢsᵢᴴ)Qᴴ, \qquad PᵢPᵢᴴ = P(I - tᵢtᵢᴴ)Pᴴ,
+
+    where the columns `sᵢ` and `tᵢ` are obtained from the normalized columns of
+    `(R_Q^{-1})ᴴ` and `(R_P^{-1})ᴴ`, respectively.
+
+    The implemented estimator uses the projector form
+
+    .. math::
+
+       \hat tᵢ = \tr(Πᴸᵢ A Πᴿᵢ)
+              + uᵢᴴ(I - Πᴸᵢ) A (I - Πᴿᵢ) vᵢ,
+
+    with `Πᴿᵢ = QᵢQᵢᴴ` and `Πᴸᵢ = PᵢPᵢᴴ`.
+
+    Notes:
+        This remains an experimental generalization. It is intended as an
+        efficient implementation vehicle for further moment-estimation work.
+    """
+    if left_samples.shape != right_samples.shape:
+        raise ValueError("left_samples and right_samples must have matching shapes.")
+
+    *_, num_samples, dim = right_samples.shape
+    if num_samples == 0:
+        raise ValueError(
+            "xtrace_bilinear_estimator_efficient_experimental requires samples."
+        )
+    if num_samples > dim:
+        raise ValueError(
+            "Efficient bilinear XTrace currently requires num_samples <= dimension."
+        )
+
+    # Right sketch: V columns are the probe vectors, Y = A V.
+    # v_cols, av_cols: (..., d, n)
+    v_cols = right_samples.mT
+    av_cols = fn(right_samples).mT
+    # Q: (..., d, n), R_q: (..., n, n)
+    q, r_q = qr(av_cols, mode="reduced")
+    # S columns are the normalized null-space update vectors sᵢ.
+    # s: (..., n, n)
+    s = _normalized_inverse_h_columns(r_q)
+
+    # Left sketch: U columns are the probe vectors, AᴴU drives the left basis.
+    # u_cols, ahu_cols: (..., d, n)
+    u_cols = left_samples.mT
+    ahu_cols = adj_fn(left_samples).mT
+    # P: (..., d, n), R_p: (..., n, n)
+    p, r_p = qr(ahu_cols, mode="reduced")
+    # T columns are the normalized update vectors tᵢ for the left basis.
+    # t: (..., n, n)
+    t = _normalized_inverse_h_columns(r_p)
+
+    # H = Pᴴ A Q, C = Qᴴ P. Shapes: (..., n, n)
+    aq = fn(q.mT).mT
+    h = torch.einsum("...dp, ...dq -> ...pq", p.conj(), aq)
+    c = torch.einsum("...dq, ...dp -> ...qp", q.conj(), p)
+
+    # Projected trace term:
+    # tr(Πᴸᵢ A Πᴿᵢ) = tr((I - tᵢtᵢᴴ) H (I - sᵢsᵢᴴ) C)
+    #               = tr(HC) - tᵢᴴHC tᵢ - sᵢᴴCH sᵢ + (tᵢᴴHsᵢ)(sᵢᴴCtᵢ)
+    hc = h @ c
+    ch = c @ h
+    trace_hc = hc.diagonal(dim1=-2, dim2=-1).sum(dim=-1, keepdim=True)
+    s_cols = s.mT  # (..., n, n), row i contains sᵢᴴ data as a vector
+    t_cols = t.mT  # (..., n, n), row i contains tᵢᴴ data as a vector
+    d_t_hc_t = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), hc, t_cols)
+    d_s_ch_s = torch.einsum("...ni, ...ij, ...nj -> ...n", s_cols.conj(), ch, s_cols)
+    d_t_h_s = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), h, s_cols)
+    d_s_c_t = torch.einsum("...ni, ...ij, ...nj -> ...n", s_cols.conj(), c, t_cols)
+    projected_trace = trace_hc - d_t_hc_t - d_s_ch_s + d_t_h_s * d_s_c_t
+
+    # W = QᴴV and Z = PᴴU collect probe coordinates in the full left/right bases.
+    # Shapes: (..., n, n)
+    w = torch.einsum("...dq, ...dn -> ...qn", q.conj(), v_cols)
+    z = torch.einsum("...dp, ...dn -> ...pn", p.conj(), u_cols)
+    w_rows = w.mT  # (..., n, n), row i is wᵢ
+    z_rows = z.mT  # (..., n, n), row i is zᵢ
+
+    # xᵢ = wᵢ - <sᵢ, wᵢ> sᵢ,  yᵢ = zᵢ - <tᵢ, zᵢ> tᵢ
+    alpha = vecdot(s_cols, w_rows, dim=-1)
+    beta = vecdot(t_cols, z_rows, dim=-1)
+    x = w_rows - alpha.unsqueeze(-1) * s_cols
+    y = z_rows - beta.unsqueeze(-1) * t_cols
+
+    # Residual vectors:
+    # (I - Πᴿᵢ) vᵢ = vᵢ - Q xᵢ,   (I - Πᴸᵢ) uᵢ = uᵢ - P yᵢ
+    right_residuals = right_samples - torch.einsum("...dq, ...nq -> ...nd", q, x)
+    left_residuals = left_samples - torch.einsum("...dp, ...np -> ...nd", p, y)
+
+    # Residual correction uᵢᴴ(I - Πᴸᵢ) A (I - Πᴿᵢ) vᵢ, all samples at once.
+    residual_actions = fn(right_residuals)
+    residual_trace = vecdot(left_residuals, residual_actions, dim=-1)
+
+    return (projected_trace + residual_trace).mean(dim=-1)

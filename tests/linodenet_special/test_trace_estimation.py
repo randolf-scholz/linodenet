@@ -7,6 +7,7 @@ from torch.linalg import matrix_norm
 
 from linodenet_special.trace_estimation import (
     hutchinson_estimator,
+    xtrace_bilinear_estimator_efficient_experimental,
     xtrace_bilinear_estimator_experimental,
     xtrace_estimator,
     xtrace_estimator_corrected,
@@ -254,6 +255,40 @@ def test_xtrace_bilinear_estimator_experimental_single_and_batched(
     batched_samples = samples.expand(len(batched_matrix), -1, -1)
     batched_trace = torch.einsum("...kk -> ...", batched_matrix)
     batched_estimate = xtrace_bilinear_estimator_experimental(
+        lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix),
+        lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix.mT),
+        batched_samples,
+        batched_samples,
+    )
+    torch.testing.assert_close(batched_estimate, batched_trace)
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+def test_xtrace_bilinear_estimator_efficient_experimental_single_and_batched(
+    device: str,
+) -> None:
+    size = 4
+    samples = torch.eye(size, device=device)
+
+    matrix = torch.diag(torch.tensor([1.0, 2.0, 3.0, 4.0], device=device))
+    trace = torch.trace(matrix)
+    estimate = xtrace_bilinear_estimator_efficient_experimental(
+        lambda x: torch.einsum("...nd, ...md -> ...nm", x, matrix),
+        lambda x: torch.einsum("...nd, ...md -> ...nm", x, matrix.mT),
+        samples,
+        samples,
+    )
+    torch.testing.assert_close(estimate, trace)
+
+    batched_matrix = torch.stack(
+        [
+            matrix,
+            torch.diag(torch.tensor([0.5, 1.5, 2.5, 3.5], device=device)),
+        ]
+    )
+    batched_samples = samples.expand(len(batched_matrix), -1, -1)
+    batched_trace = torch.einsum("...kk -> ...", batched_matrix)
+    batched_estimate = xtrace_bilinear_estimator_efficient_experimental(
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix),
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix.mT),
         batched_samples,
