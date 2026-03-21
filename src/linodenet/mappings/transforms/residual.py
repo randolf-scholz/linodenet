@@ -22,7 +22,28 @@ class ResidualContraction(TransformBase):
     r"""A residual flow based on a contraction layer.
 
     Forward: y ← x + g(x)
-    Inverse: via fix-point iteration with implicit differentiation.
+    Inverse: via fix-point iteration.
+
+    The jacobian determinant of the forward transformation is:
+
+    .. math:: \log\det(∂y/∂x) = \log\det(𝕀 + ∂g/∂x) = \tr\log(𝕀 + ∂g/∂x)
+
+    Using the power series, this is
+
+    .. math:: ∑_k (-1)ᵏ⁺¹ \tr((∂g/∂x)ᵏ)/k
+
+    References:
+        - | Invertible Residual Networks
+          | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
+          | International Conference on Machine Learning 2019
+          | https://proceedings.mlr.press/v97/behrmann19a.html
+        - https://github.com/jhjacobsen/invertible-resnet
+
+    See Also:
+        - `ReZeroContraction`: adds a learnable scalar ε and parametrization
+            to the contraction layer:. $y ← x + φ(ε)⋅g(x)$ with $φ(ε) ∈ (-1, 1)$.
+            ε is initialized to 0, so that the initial transformation is the identity.
+        - `ResidualContractionFallback`: Uses a plain python loop rather than `torch.while_loop`.
     """
 
     maxiter: Final[int]
@@ -66,8 +87,13 @@ class ResidualContraction(TransformBase):
 class ReZeroContraction[M: nn.Module](ResidualContraction):
     r"""A residual flow based on a scaled contraction layer.
 
-    Forward: $y ← x + φ(ε)⋅g(x)$ with $φ(ε) ∈ (-1, 1)$.
-    Inverse: via fixed point iteration with implicit differentiation.
+    .. math:: y ← x + φ(ε)⋅g(x)  \qquad  φ(ε) ∈ (-1, 1), φ(0)=0
+
+    ε is initialized to 0, so that the initial transformation is the identity.
+
+    See Also:
+        - `ResidualContraction`
+        - `ResidualContractionFallback`
     """
 
     contraction: ReZero[M]
@@ -104,30 +130,13 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
         self.scalar = self.contraction.scalar
         self.scalar_map = self.contraction.scalar_map
 
-    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
 
+class ResidualContractionFallback(ResidualContraction):
+    r"""Fallback implementation of ResidualContraction that uses a plain python loop.
 
-class ResidualContractionFallback(TransformBase):
-    r"""A residual flow based on a contraction layer.
-
-    Forward: y ← x + g(x)
-    Inverse: via fix-point iteration.
-
-    The jacobian determinant of the forward transformation is:
-
-    .. math:: \log\det(∂y/∂x) = \log\det(𝕀 + ∂g/∂x) = \tr\log(𝕀 + ∂g/∂x)
-
-    Using the power series, this is
-
-    .. math:: ∑_k (-1)ᵏ⁺¹ \tr((∂g/∂x)ᵏ)/k
-
-    References:
-        - | Invertible Residual Networks
-          | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
-          | International Conference on Machine Learning 2019
-          | https://proceedings.mlr.press/v97/behrmann19a.html
-        - https://github.com/jhjacobsen/invertible-resnet
+    See Also:
+        - `ResidualContraction`
+        - `ReZeroContraction`
     """
 
     def __init__(
@@ -137,24 +146,9 @@ class ResidualContractionFallback(TransformBase):
         atol: float = 1e-6,
         rtol: float = 1e-6,
     ) -> None:
-        super().__init__()
-        self.contraction = contraction
-        self.maxiter = maxiter
-        self.atol = atol
-        self.rtol = rtol
-
-    def encode(self, x: Tensor) -> Tensor:
-        return x + self.contraction(x)
-
-    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
+        super().__init__(contraction=contraction, maxiter=maxiter, atol=atol, rtol=rtol)
 
     def decode(self, y: Tensor) -> Tensor:
-        r"""Compute the inverse through fixed point iteration.
-
-        Terminates once ``maxiter`` or the elementwise tolerance threshold
-        $|x'-x| ≤ \text{rtol}⋅|x| + \text{atol}$ is reached.
-        """
         x = y.clone()
 
         for _ in range(self.maxiter):
