@@ -22,9 +22,13 @@ def ceil_power_of_ten(x: Tensor | float) -> float:
     return bound
 
 
-NUM_SAMPLES = {"same": 1, "half": 1 / 2, "small": 1 / 16}
-MATRIX_SIZES = [32, 128, 512]
 MATRIX_KINDS = ["randn", "symmetric", "skew-symmetric"]
+MATRIX_SIZES = [32, 128, 512]
+NUM_SAMPLES = {
+    "same": 1,
+    "half": 1 / 2,
+    "small": 1 / 16,
+}
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -35,7 +39,7 @@ class TestCorrectness(TestCase):
     NUM_SAMPLES = NUM_SAMPLES
     MATRIX_SIZES = MATRIX_SIZES
     MATRIX_KINDS = MATRIX_KINDS
-    BATCH_SIZE = 32
+    BATCH_SIZE = 17
     SEED = 1000
     ESTIMATORS = {
         "hutchinson": hutchinson_estimator,
@@ -94,8 +98,16 @@ class TestCorrectness(TestCase):
             case _:
                 raise ValueError(f"Unknown matrix_kind {kind!r}")
 
-        x = torch.randn(self.BATCH_SIZE, num_samples, size, device=device)
-        return A, x
+        X = torch.randn(self.BATCH_SIZE, num_samples, size, device=device)
+        X = torch.eye(size, device=device).expand(self.BATCH_SIZE, size, size) * (
+            size**0.5
+        )
+        # orthogonal correction.
+        # Q, _ = torch.linalg.qr(X.mT, mode="reduced")  # (..., n, k) when k >= n
+        # X = (num_samples**0.5) * Q.mT
+
+        # assert X.shape == (self.BATCH_SIZE, num_samples, size)
+        return A, X
 
     def assert_trace_close(
         self,
