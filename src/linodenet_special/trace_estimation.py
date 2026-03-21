@@ -5,7 +5,7 @@ Notes:
     then: tr(A²ᵏ) = E[uₖᵀvₖ],  tr(A²ᵏ⁺¹) = E[uₖᵀAvₖ]
 """
 
-__all__ = ["hutchinson_estimator", "xtrace_estimator"]
+__all__ = ["hutchinson_estimator", "xtrace_estimator", "naive_estimator"]
 
 from collections.abc import Callable
 
@@ -14,6 +14,14 @@ from torch import Tensor
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
+
+
+@signature("(..., n, d) -> (...)")
+def naive_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
+    r"""Estimate the trace of a matric, realizing the full matrix."""
+    I = torch.eye(samples.shape[-2], dtype=samples.dtype, device=samples.device)
+    A = fn(I)
+    return torch.einsum("...dd -> ...", A)
 
 
 @signature("(..., n, d) -> (...)")
