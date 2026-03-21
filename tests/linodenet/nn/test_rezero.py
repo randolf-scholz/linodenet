@@ -17,8 +17,9 @@ class TestReZero(TestCase):
         assert isinstance(module.scalar_map, nn.Identity)
 
     def test_scalar_map_is_applied_to_scalar(self) -> None:
-        module = ReZero(nn.Identity(), scalar_map=ShiftScalar(), learnable=False)
-        module.scalar.copy_(torch.tensor(2.0))
+        module = ReZero(nn.Identity(), scalar_map=ShiftScalar())
+        with torch.no_grad():
+            module.scalar.copy_(torch.tensor(2.0))
         x = torch.tensor([1.0, -2.0, 3.0])
 
         y = module(x)
