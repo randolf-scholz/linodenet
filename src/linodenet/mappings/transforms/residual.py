@@ -22,9 +22,9 @@ from linodenet_special import fixpoint_solve
 from signatures import signature
 
 
-@signature("(..., d) -> (...)")
+@signature("(..., d) -> [(..., d), (...)]")
 def vector_logabsdet_estimator(
-    fx: Callable[[Tensor], Tensor],
+    fn: Callable[[Tensor], Tensor],
     x: Tensor,
     num_terms: int,
     num_samples: int,
@@ -32,7 +32,7 @@ def vector_logabsdet_estimator(
     r"""Estimate log|det(𝕀 + ∂f/∂x)| using the power series expansion and Hutchinson's trace estimator.
 
     Args:
-        fx: The function for which to compute the Jacobian determinant.
+        fn: The function for which to compute the Jacobian determinant.
         x: The point at which to evaluate the Jacobian determinant.
            Assumed to be of shape [..., d]
         # event_shape: the shape of the event samples.
@@ -40,9 +40,10 @@ def vector_logabsdet_estimator(
         num_samples: The number of random samples.
 
     Returns:
-        Approximation of log|det(𝕀 + ∂f/∂x)|
+        y: fn(x)
+        logabsdet: Approximation of log|det(𝕀 + ∂f/∂x)|
     """
-    y, jvp_fn = linearize(fx, x)
+    y, jvp_fn = linearize(fn, x)
     # note: or None fixes event_shape=() case.
     batched_jvp_fn = vmap(jvp_fn)  # support num_samples
 
@@ -58,7 +59,7 @@ def vector_logabsdet_estimator(
     for k in range(1, num_terms + 1):
         v = batched_jvp_fn(v)  # Aᵏv
         coef = 1.0 / k if k % 2 else -1.0 / k
-        logabsdet = logabsdet + coef * torch.inner(v, v0)
+        logabsdet = logabsdet + coef * torch.linalg.vecdot(v, v0).mean(dim=0)
 
     return y, logabsdet
 
