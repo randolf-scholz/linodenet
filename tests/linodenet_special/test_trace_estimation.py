@@ -6,8 +6,8 @@ from torch import Tensor
 from torch.linalg import matrix_norm
 
 from linodenet_special.trace_estimation import (
+    btrace_estimator,
     hutchinson_estimator,
-    xtrace_bilinear_estimator_efficient_experimental,
     xtrace_bilinear_estimator_experimental,
     xtrace_estimator,
     xtrace_estimator_corrected,
@@ -35,23 +35,26 @@ NUM_SAMPLES = {
     "half": 1 / 2,
     "small": 1 / 16,
 }
+ESTIMATORS = {
+    "hutch": hutchinson_estimator,
+    "xtrace": xtrace_estimator,
+    "btrace": btrace_estimator,
+    "xtrace+correction": xtrace_estimator_corrected,
+}
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("samples", NUM_SAMPLES, ids="samples={}".format)
 @pytest.mark.parametrize("size", MATRIX_SIZES, ids="size={}".format)
-@pytest.mark.parametrize("method", ["hutchinson", "xtrace"])
+@pytest.mark.parametrize("method", ESTIMATORS)
 class TestCorrectness(TestCase):
     NUM_SAMPLES = NUM_SAMPLES
     MATRIX_SIZES = MATRIX_SIZES
     MATRIX_KINDS = MATRIX_KINDS
+    ESTIMATORS = ESTIMATORS
+
     BATCH_SIZE = 17
     SEED = 1000
-    ESTIMATORS = {
-        "hutchinson": hutchinson_estimator,
-        "xtrace": xtrace_estimator,
-        "correct": xtrace_estimator_corrected,
-    }
     # indexed by kind, num_samples
     HUTCH_TOL = {
         ("randn", "same"):           1e-1,
@@ -116,6 +119,34 @@ class TestCorrectness(TestCase):
         # assert X.shape == (self.BATCH_SIZE, num_samples, size)
         return A, X
 
+    def compute_estimate(self, method: str, A: Tensor, x: Tensor) -> Tensor:
+        match method:
+            case "hutch":
+                assert ESTIMATORS[method] is hutchinson_estimator
+                return hutchinson_estimator(
+                    lambda v: torch.einsum("...nd, ...md -> ...nm", v, A), x
+                )
+            case "xtrace":
+                assert ESTIMATORS[method] is xtrace_estimator
+                return xtrace_estimator(
+                    lambda v: torch.einsum("...nd, ...md -> ...nm", v, A), x
+                )
+            case "xtrace+correction":
+                assert ESTIMATORS[method] is xtrace_estimator_corrected
+                return xtrace_estimator_corrected(
+                    lambda v: torch.einsum("...nd, ...md -> ...nm", v, A), x
+                )
+            case "btrace":
+                assert ESTIMATORS[method] is btrace_estimator
+                return btrace_estimator(
+                    lambda v: torch.einsum("...nd, ...md -> ...nm", v, A),
+                    lambda v: torch.einsum("...nd, ...md -> ...nm", v, A.mT),
+                    x,
+                    x,
+                )
+            case _:
+                raise ValueError(f"Unknown estimation method {method!r}")
+
     def assert_trace_close(
         self,
         *,
@@ -127,11 +158,7 @@ class TestCorrectness(TestCase):
         debug: bool = False,
     ) -> None:
         A, z = self.make_problem(kind, size, samples=samples, device=device)
-        estimator = self.ESTIMATORS[method]
-        estimate = estimator(
-            lambda x: torch.einsum("...nd, ...md -> ...nm", x, A),
-            z,
-        )
+        estimate = self.compute_estimate(method, A, z)
         truth = torch.einsum("...kk -> ...", A)  # batched trace
         errors = estimate - truth
 
@@ -272,7 +299,7 @@ def test_xtrace_bilinear_estimator_efficient_experimental_single_and_batched(
 
     matrix = torch.diag(torch.tensor([1.0, 2.0, 3.0, 4.0], device=device))
     trace = torch.trace(matrix)
-    estimate = xtrace_bilinear_estimator_efficient_experimental(
+    estimate = btrace_estimator(
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, matrix),
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, matrix.mT),
         samples,
@@ -288,7 +315,7 @@ def test_xtrace_bilinear_estimator_efficient_experimental_single_and_batched(
     )
     batched_samples = samples.expand(len(batched_matrix), -1, -1)
     batched_trace = torch.einsum("...kk -> ...", batched_matrix)
-    batched_estimate = xtrace_bilinear_estimator_efficient_experimental(
+    batched_estimate = btrace_estimator(
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix),
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix.mT),
         batched_samples,

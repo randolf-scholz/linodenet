@@ -10,7 +10,7 @@ __all__ = [
     "xtrace_estimator",
     "xtrace_estimator_corrected",
     "xtrace_bilinear_estimator_experimental",
-    "xtrace_bilinear_estimator_efficient_experimental",
+    "btrace_estimator",
     "naive_estimator",
 ]
 
@@ -331,7 +331,7 @@ def xtrace_bilinear_estimator_experimental(
     return torch.stack(estimates, dim=-1).mean(dim=-1)
 
 
-def xtrace_bilinear_estimator_efficient_experimental(
+def btrace_estimator(
     fn: Callable[[Tensor], Tensor],
     adj_fn: Callable[[Tensor], Tensor],
     left_samples: Tensor,
