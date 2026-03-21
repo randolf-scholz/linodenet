@@ -5,6 +5,7 @@ __all__ = [
     "ReZeroContraction",
     "ResidualContractionFallback",
     "vector_logabsdet_hutchinson_estimator",
+    "vector_logabsdet_xtrace_estimator",
 ]
 
 import warnings
@@ -64,6 +65,72 @@ def vector_logabsdet_hutchinson_estimator(
     return y, logabsdet
 
 
+@signature("(..., d) -> [(..., d), (...)]")
+def vector_logabsdet_xtrace_estimator(
+    fn: Callable[[Tensor], Tensor],
+    x: Tensor,
+    num_terms: int,
+    num_samples: int,
+) -> tuple[Tensor, Tensor]:
+    r"""Estimate log|det(𝕀 + ∂f/∂x)| using the power series expansion and the XTrace estimator."""
+    y, jvp_fn = linearize(fn, x)
+    batched_jvp_fn = vmap(jvp_fn)
+
+    v0 = torch.randn(
+        num_samples,
+        *x.shape,
+        device=x.device,
+        dtype=x.dtype,
+    )
+    v = v0.clone()
+    logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+
+    for k in range(1, num_terms + 1):
+        v = batched_jvp_fn(v)  # Aᵏv
+        coef = 1.0 / k if k % 2 else -1.0 / k
+        trace_estimate = torch.zeros_like(logabsdet)
+
+        for i in range(num_samples):
+            y_without_i = torch.cat((v[:i], v[i + 1 :]), dim=0)
+            if num_samples == 1:
+                q_i = v.new_zeros(*x.shape, 0)
+            else:
+                q_i, _ = torch.linalg.qr(y_without_i.movedim(0, -1), mode="reduced")
+
+            if q_i.shape[-1] == 0:
+                residual = v0[i]
+                projected_av = residual
+                for _ in range(k):
+                    projected_av = jvp_fn(projected_av)
+                trace_estimate = trace_estimate + torch.linalg.vecdot(
+                    residual, projected_av
+                )
+                continue
+
+            aq_i = q_i.movedim(-1, 0)
+            for _ in range(k):
+                aq_i = batched_jvp_fn(aq_i)
+            aq_i = aq_i.movedim(0, -1)
+            qaq = torch.einsum("...dk,...dk->...", q_i, aq_i)
+
+            coeffs = torch.einsum("...dk,...d->...k", q_i, v0[i])
+            residual = v0[i] - torch.einsum("...dk,...k->...d", q_i, coeffs)
+            a_residual = residual
+            for _ in range(k):
+                a_residual = jvp_fn(a_residual)
+            projected_a_residual = a_residual - torch.einsum(
+                "...dk,...k->...d",
+                q_i,
+                torch.einsum("...dk,...d->...k", q_i, a_residual),
+            )
+            correction = torch.linalg.vecdot(residual, projected_a_residual)
+            trace_estimate = trace_estimate + qaq + correction
+
+        logabsdet = logabsdet + coef * trace_estimate / num_samples
+
+    return y, logabsdet
+
+
 class ResidualContraction(TransformBase):
     r"""A residual flow based on a contraction layer.
 
@@ -105,6 +172,7 @@ class ResidualContraction(TransformBase):
     rtol: Final[float]
     num_trace_samples: Final[int]
     num_series_terms: Final[int]
+    trace_estimator: Final[str]
 
     def __init__(
         self,
@@ -115,29 +183,46 @@ class ResidualContraction(TransformBase):
         *,
         num_trace_samples: int = 1,
         num_series_terms: int = 8,
+        trace_estimator: str = "hutchinson",
     ) -> None:
         super().__init__()
         if num_trace_samples < 1:
             raise ValueError("num_trace_samples must be at least 1")
         if num_series_terms < 1:
             raise ValueError("num_series_terms must be at least 1")
+        if trace_estimator not in {"hutchinson", "xtrace"}:
+            raise ValueError(
+                f"trace_estimator must be 'hutchinson' or 'xtrace', got {trace_estimator!r}"
+            )
         self.contraction: nn.Module = contraction
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
         self.num_trace_samples = num_trace_samples
         self.num_series_terms = num_series_terms
+        self.trace_estimator = trace_estimator
 
     def encode(self, x: Tensor) -> Tensor:
         return x + self.contraction(x)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        fx, logabsdet = vector_logabsdet_hutchinson_estimator(
-            self.contraction,
-            x,
-            self.num_series_terms,
-            self.num_trace_samples,
-        )
+        match self.trace_estimator:
+            case "hutchinson":
+                fx, logabsdet = vector_logabsdet_hutchinson_estimator(
+                    self.contraction,
+                    x,
+                    self.num_series_terms,
+                    self.num_trace_samples,
+                )
+            case "xtrace":
+                fx, logabsdet = vector_logabsdet_xtrace_estimator(
+                    self.contraction,
+                    x,
+                    self.num_series_terms,
+                    self.num_trace_samples,
+                )
+            case _:
+                raise ValueError(f"Unknown trace_estimator {self.trace_estimator!r}")
         return x + fx, logabsdet
 
     def decode(self, y: Tensor) -> Tensor:
@@ -181,6 +266,7 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
         rtol: float = 1e-6,
         num_trace_samples: int = 1,
         num_series_terms: int = 8,
+        trace_estimator: str = "hutchinson",
     ) -> None:
         scalar_map_module: nn.Module
         match scalar_map:
@@ -200,6 +286,7 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
             rtol=rtol,
             num_trace_samples=num_trace_samples,
             num_series_terms=num_series_terms,
+            trace_estimator=trace_estimator,
         )
         self.contraction: ReZero[M]  # pyright: ignore[reportIncompatibleVariableOverride]
         self.scalar = self.contraction.scalar
@@ -223,6 +310,7 @@ class ResidualContractionFallback(ResidualContraction):
         *,
         num_trace_samples: int = 1,
         num_series_terms: int = 8,
+        trace_estimator: str = "hutchinson",
     ) -> None:
         super().__init__(
             contraction=contraction,
@@ -231,6 +319,7 @@ class ResidualContractionFallback(ResidualContraction):
             rtol=rtol,
             num_trace_samples=num_trace_samples,
             num_series_terms=num_series_terms,
+            trace_estimator=trace_estimator,
         )
 
     def decode(self, y: Tensor) -> Tensor:

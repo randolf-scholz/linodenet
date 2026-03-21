@@ -50,6 +50,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
+        trace_estimator: str = "hutchinson",
     ) -> None:
         self.input_size = input_size
         self.num_blocks = num_blocks
@@ -75,6 +76,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
                 maxiter=maxiter,
                 atol=atol,
                 rtol=rtol,
+                trace_estimator=trace_estimator,
             )
             for _ in range(self.num_blocks)
         ]
@@ -92,6 +94,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
         maxiter: int,
         atol: float,
         rtol: float,
+        trace_estimator: str,
     ) -> ResidualContraction | ReZeroContraction:
         layers: list[nn.Module] = []
         act = get_activation(activation)
@@ -117,10 +120,12 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
                 maxiter=maxiter,
                 atol=atol,
                 rtol=rtol,
+                trace_estimator=trace_estimator,
             )
         return ResidualContraction(
             contraction,
             maxiter=maxiter,
             atol=atol,
             rtol=rtol,
+            trace_estimator=trace_estimator,
         )
