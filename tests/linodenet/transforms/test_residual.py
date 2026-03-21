@@ -312,6 +312,8 @@ class TestLogAbsDet(TestCase):
         x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
 
         y, logabsdet = flow.encode_and_logabsdet(x)
+        assert y.shape == (self.BATCH_SIZE, self.INPUT_SIZE)
+        assert logabsdet.shape == (self.BATCH_SIZE,)
 
         expected_y = (1 + self.SCALE) * x
         expected_logabsdet = torch.full(
