@@ -20,16 +20,18 @@ from signatures import signature
 def hutchinson_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matrix with Hutchinson's estimator.
 
+    .. math:: tr(A) = E[vᵀAv], where E[v]=0 and Cov[v]= 𝕀
+
     Args:
         fn: Matrix-vector product function, i.e. $x ↦ Ax$ (batched).
         samples: Random samples to use for the estimator.
-            Shape: `(n, ..., d)`, with `...` batch size, `n` number of samples,
+            Shape: `(..., n, d)`, with `...` batch size, `n` number of samples,
             and `d` dimension.
 
     Returns:
         Tensor: The estimated trace.
     """
-    return vecdot(fn(samples), samples).mean(dim=0)
+    return vecdot(samples, fn(samples), dim=-1).mean(dim=-1)
 
 
 @signature("(..., n, d) -> (...)")
