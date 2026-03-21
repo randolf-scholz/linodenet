@@ -278,6 +278,59 @@ class TestCorrectness(TestCase):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
+class TestLogAbsDet(TestCase):
+    BATCH_SIZE = 8
+    INPUT_SIZE = 4
+    SCALE = 0.125
+    SEED = 0
+    VALUE_TOL = 0.0
+    LOGABSDET_TOL = 2e-2
+    NUM_TRACE_SAMPLES = 128
+    NUM_SERIES_TERMS = 4
+
+    class ScaledContraction(nn.Module):
+        r"""Simple contraction $g(x) = αx$ with scalar $|α| < 1$."""
+
+        def __init__(self, scale: float, /) -> None:
+            super().__init__()
+            self.scale = scale
+
+        def forward(self, x: Tensor, /) -> Tensor:
+            return self.scale * x
+
+    def test_scaled_contraction_matches_closed_form(
+        self,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        flow = ResidualContraction(
+            self.ScaledContraction(self.SCALE),
+            num_trace_samples=self.NUM_TRACE_SAMPLES,
+            num_series_terms=self.NUM_SERIES_TERMS,
+        ).to(device=device, dtype=dtype)
+        x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
+
+        y, logabsdet = flow.encode_and_logabsdet(x)
+
+        expected_y = (1 + self.SCALE) * x
+        expected_logabsdet = torch.full(
+            (self.BATCH_SIZE,),
+            self.INPUT_SIZE * torch.log1p(torch.tensor(self.SCALE, dtype=dtype)).item(),
+            device=device,
+            dtype=dtype,
+        )
+        self.assert_close(y, expected_y, atol=self.VALUE_TOL, rtol=0.0)
+        self.assert_close(
+            logabsdet,
+            expected_logabsdet,
+            atol=self.LOGABSDET_TOL,
+            rtol=0.0,
+        )
+
+
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
     [ResidualContractionFallback, ResidualContraction],

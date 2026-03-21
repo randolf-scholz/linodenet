@@ -4,18 +4,63 @@ __all__ = [
     "ResidualContraction",
     "ReZeroContraction",
     "ResidualContractionFallback",
+    "vector_logabsdet_estimator",
 ]
 
 import warnings
+from collections.abc import Callable
 from typing import Final
 
 import torch
 from torch import Tensor, nn
+from torch.func import linearize, vmap
 
 from linodenet.mappings.base import TransformBase
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet.nn import ReZero
 from linodenet_special import fixpoint_solve
+from signatures import signature
+
+
+@signature("(..., d) -> (...)")
+def vector_logabsdet_estimator(
+    fx: Callable[[Tensor], Tensor],
+    x: Tensor,
+    num_terms: int,
+    num_samples: int,
+) -> tuple[Tensor, Tensor]:
+    r"""Estimate log|det(𝕀 + ∂f/∂x)| using the power series expansion and Hutchinson's trace estimator.
+
+    Args:
+        fx: The function for which to compute the Jacobian determinant.
+        x: The point at which to evaluate the Jacobian determinant.
+           Assumed to be of shape [..., d]
+        # event_shape: the shape of the event samples.
+        num_terms: The order of the series expansion.
+        num_samples: The number of random samples.
+
+    Returns:
+        Approximation of log|det(𝕀 + ∂f/∂x)|
+    """
+    y, jvp_fn = linearize(fx, x)
+    # note: or None fixes event_shape=() case.
+    batched_jvp_fn = vmap(jvp_fn)  # support num_samples
+
+    v0 = torch.randn(
+        num_samples,
+        *x.shape,
+        device=x.device,
+        dtype=x.dtype,
+    )
+    v = v0.clone()
+    logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+
+    for k in range(1, num_terms + 1):
+        v = batched_jvp_fn(v)  # Aᵏv
+        coef = 1.0 / k if k % 2 else -1.0 / k
+        logabsdet = logabsdet + coef * torch.inner(v, v0)
+
+    return y, logabsdet
 
 
 class ResidualContraction(TransformBase):
@@ -32,12 +77,20 @@ class ResidualContraction(TransformBase):
 
     .. math:: ∑_k (-1)ᵏ⁺¹ \tr((∂g/∂x)ᵏ)/k
 
+    The trace of A can be estimated with the Hutchinson trace estimator:
+
+    .. math:: \tr(A) = 𝐄[vᵀAv] \qquad 𝐄[v]=0, \Cov[v]=𝕀
+
     References:
+        - https://github.com/jhjacobsen/invertible-resnet
         - | Invertible Residual Networks
           | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
           | International Conference on Machine Learning 2019
           | https://proceedings.mlr.press/v97/behrmann19a.html
-        - https://github.com/jhjacobsen/invertible-resnet
+        - | A stochastic estimator of the trace of the influence matrix for laplacian smoothing splines
+          | M.F. Hutchinson
+          | Communications in Statistics - Simulation and Computation 1990
+          | https://doi.org/10.1080/03610919008812866
 
     See Also:
         - `ReZeroContraction`: adds a learnable scalar ε and parametrization
@@ -49,6 +102,8 @@ class ResidualContraction(TransformBase):
     maxiter: Final[int]
     atol: Final[float]
     rtol: Final[float]
+    num_trace_samples: Final[int]
+    num_series_terms: Final[int]
 
     def __init__(
         self,
@@ -56,18 +111,33 @@ class ResidualContraction(TransformBase):
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
+        *,
+        num_trace_samples: int = 1,
+        num_series_terms: int = 8,
     ) -> None:
         super().__init__()
+        if num_trace_samples < 1:
+            raise ValueError("num_trace_samples must be at least 1")
+        if num_series_terms < 1:
+            raise ValueError("num_series_terms must be at least 1")
         self.contraction: nn.Module = contraction
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
+        self.num_trace_samples = num_trace_samples
+        self.num_series_terms = num_series_terms
 
     def encode(self, x: Tensor) -> Tensor:
         return x + self.contraction(x)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
+        fx, logabsdet = vector_logabsdet_estimator(
+            self.contraction,
+            x,
+            self.num_series_terms,
+            self.num_trace_samples,
+        )
+        return x + fx, logabsdet
 
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration."""
@@ -108,6 +178,8 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
+        num_trace_samples: int = 1,
+        num_series_terms: int = 8,
     ) -> None:
         scalar_map_module: nn.Module
         match scalar_map:
@@ -125,6 +197,8 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
             maxiter=maxiter,
             atol=atol,
             rtol=rtol,
+            num_trace_samples=num_trace_samples,
+            num_series_terms=num_series_terms,
         )
         self.contraction: ReZero[M]  # pyright: ignore[reportIncompatibleVariableOverride]
         self.scalar = self.contraction.scalar
@@ -145,8 +219,18 @@ class ResidualContractionFallback(ResidualContraction):
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
+        *,
+        num_trace_samples: int = 1,
+        num_series_terms: int = 8,
     ) -> None:
-        super().__init__(contraction=contraction, maxiter=maxiter, atol=atol, rtol=rtol)
+        super().__init__(
+            contraction=contraction,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
+            num_trace_samples=num_trace_samples,
+            num_series_terms=num_series_terms,
+        )
 
     def decode(self, y: Tensor) -> Tensor:
         x = y.clone()
