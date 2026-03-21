@@ -20,7 +20,6 @@ __all__ = [
     # classes
     "MLP",
     "ResNet",
-    "ResNetBlock",
     "ReZero",
     "ReZeroResNet",
     "ReverseDense",
@@ -29,7 +28,7 @@ __all__ = [
 from linodenet.nn import activations, containers, parametrize
 from linodenet.nn.containers import ModuleMapping, ModuleSequence
 from linodenet.nn.mlp import MLP
-from linodenet.nn.resnet import ResNet, ResNetBlock
+from linodenet.nn.resnet import ResNet
 from linodenet.nn.reverse_dense import ReverseDense
 from linodenet.nn.rezero import ReZero, ReZeroResNet
 
