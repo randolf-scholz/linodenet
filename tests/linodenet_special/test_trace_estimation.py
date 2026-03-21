@@ -48,6 +48,7 @@ class TestCorrectness(TestCase):
     ESTIMATORS = {
         "hutchinson": hutchinson_estimator,
         "xtrace": xtrace_estimator,
+        "correct": xtrace_estimator_corrected,
     }
     # indexed by kind, num_samples
     HUTCH_TOL = {
@@ -103,9 +104,9 @@ class TestCorrectness(TestCase):
                 raise ValueError(f"Unknown matrix_kind {kind!r}")
 
         X = torch.randn(self.BATCH_SIZE, num_samples, size, device=device)
-        X = torch.eye(size, device=device).expand(self.BATCH_SIZE, size, size) * (
-            size**0.5
-        )
+        # X = torch.eye(size, device=device).expand(self.BATCH_SIZE, size, size) * (
+        #     size**0.5
+        # )
         # orthogonal correction.
         # Q, _ = torch.linalg.qr(X.mT, mode="reduced")  # (..., n, k) when k >= n
         # X = (num_samples**0.5) * Q.mT

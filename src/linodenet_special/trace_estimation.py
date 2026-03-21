@@ -133,8 +133,6 @@ def xtrace_estimator_corrected(
         probe vectors, so all `n` rows are consumed directly.
     """
     *_, m, d = samples.shape
-    if m == 0:
-        raise ValueError("xtrace_estimator_corrected requires at least one sample.")
 
     # MATLAB: Om = sqrt(N) * cnormc(randn(N, m))
     # Here we reuse the provided probes as the m columns of Ω.
