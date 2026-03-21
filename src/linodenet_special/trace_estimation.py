@@ -68,6 +68,20 @@ def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
 
     Returns:
         Tensor: The estimated trace.
+
+    Algorithm:
+        1: Draw Ω ∼ Unif{±1}^{N×m/2}
+        2: Y ← AΩ
+        3: (Q, R) ← qr(Y, ’econ’)
+        4: Z ← AQ
+        5: H ← QᴴZ, W ← QᴴΩ, T ← ZᴴΩ
+        6: S ← R⁻ᴴ
+        7: S ← S · diag(∥sᵢ∥: i=1…m/2)
+        8: for i = 1 … m/2 do
+        9:     xᵢ ← wᵢ − ⟨sᵢ∣wᵢ⟩·sᵢ
+        10:    trᵢ ← tr(H) − ⟨sᵢ|H sᵢ⟩ + ⟨wᵢ∣sᵢ⟩·⟨sᵢ∣rᵢ⟩ − ⟨tᵢ|xᵢ⟩ + ⟨xᵢ|Hxᵢ⟩
+        11: end for
+        12: tr ← mean(trᵢ: i=1…m/2)
     """
     V = samples.mT  # (..., d, n)
     *_, d, n = V.shape
