@@ -9,7 +9,7 @@ __all__ = [
     "hutchinson_estimator",
     "xtrace_estimator",
     "xtrace_estimator_corrected",
-    "xtrace_bilinear_estimator_experimental",
+    "btrace_estimator_naive",
     "btrace_estimator",
     "naive_estimator",
 ]
@@ -245,7 +245,7 @@ def xtrace_estimator_corrected(
     return ests.mean(dim=-1)
 
 
-def xtrace_bilinear_estimator_experimental(
+def btrace_estimator_naive(
     fn: Callable[[Tensor], Tensor],
     adj_fn: Callable[[Tensor], Tensor],
     left_samples: Tensor,

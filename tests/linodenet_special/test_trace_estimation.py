@@ -7,8 +7,8 @@ from torch.linalg import matrix_norm
 
 from linodenet_special.trace_estimation import (
     btrace_estimator,
+    btrace_estimator_naive,
     hutchinson_estimator,
-    xtrace_bilinear_estimator_experimental,
     xtrace_estimator,
     xtrace_estimator_corrected,
 )
@@ -39,7 +39,8 @@ ESTIMATORS = {
     "hutch": hutchinson_estimator,
     "xtrace": xtrace_estimator,
     "btrace": btrace_estimator,
-    "xtrace+correction": xtrace_estimator_corrected,
+    "xtrace-correction": xtrace_estimator_corrected,
+    "btrace-naive": btrace_estimator_naive,
 }
 
 
@@ -131,7 +132,7 @@ class TestCorrectness(TestCase):
                 return xtrace_estimator(
                     lambda v: torch.einsum("...nd, ...md -> ...nm", v, A), x
                 )
-            case "xtrace+correction":
+            case "xtrace-correction":
                 assert ESTIMATORS[method] is xtrace_estimator_corrected
                 return xtrace_estimator_corrected(
                     lambda v: torch.einsum("...nd, ...md -> ...nm", v, A), x
@@ -139,6 +140,14 @@ class TestCorrectness(TestCase):
             case "btrace":
                 assert ESTIMATORS[method] is btrace_estimator
                 return btrace_estimator(
+                    lambda v: torch.einsum("...nd, ...md -> ...nm", v, A),
+                    lambda v: torch.einsum("...nd, ...md -> ...nm", v, A.mT),
+                    x,
+                    x,
+                )
+            case "btrace-naive":
+                assert ESTIMATORS[method] is btrace_estimator_naive
+                return btrace_estimator_naive(
                     lambda v: torch.einsum("...nd, ...md -> ...nm", v, A),
                     lambda v: torch.einsum("...nd, ...md -> ...nm", v, A.mT),
                     x,
@@ -165,18 +174,15 @@ class TestCorrectness(TestCase):
         # scaling: see XTrace paper.
         # Var[tr] = E[|tr - tr(A)|²] ≤ η‖A‖⁎² ⇝ scaled_rmse ≤ η
         # reminder: ‖A‖⁎ = nuclear norm = sum of singular values.
-        rmse = errors.square().mean().sqrt()
         norms = matrix_norm(A, ord="nuc")
         scaled_rmse = (errors / norms).square().mean().sqrt()
 
         if debug:
-            rmse_upper = ceil_power_of_ten(rmse)
             scaled_upper = ceil_power_of_ten(scaled_rmse)
             print(
-                f"{method=}, {kind=}, {size=:2d}, {samples=}, "
-                f"{rmse=:.4f} (<{rmse_upper:.0e}), "
-                f"{scaled_rmse=:.4f} (<{scaled_upper:.0e}), ‖A‖⁎≈{norms.mean():.2f}, "
-                f"{device=}"
+                f"{method}, {kind=}, {size=:2d}, {samples=}, "
+                f"{scaled_rmse=:.4f} (<{scaled_upper:.0e}), "
+                f"‖A‖⁎≈{norms.mean():.2f}"
             )
             return
 
@@ -265,7 +271,7 @@ def test_xtrace_bilinear_estimator_experimental_single_and_batched(
 
     matrix = torch.diag(torch.tensor([1.0, 2.0, 3.0, 4.0], device=device))
     trace = torch.trace(matrix)
-    estimate = xtrace_bilinear_estimator_experimental(
+    estimate = btrace_estimator_naive(
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, matrix),
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, matrix.mT),
         samples,
@@ -281,7 +287,7 @@ def test_xtrace_bilinear_estimator_experimental_single_and_batched(
     )
     batched_samples = samples.expand(len(batched_matrix), -1, -1)
     batched_trace = torch.einsum("...kk -> ...", batched_matrix)
-    batched_estimate = xtrace_bilinear_estimator_experimental(
+    batched_estimate = btrace_estimator_naive(
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix),
         lambda x: torch.einsum("...nd, ...md -> ...nm", x, batched_matrix.mT),
         batched_samples,
