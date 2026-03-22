@@ -493,10 +493,6 @@ class RealDomain(Domain, Collection[Interval]):
                 raise ValueError("RealDomain intervals must be pairwise disjoint.")
             if left.upper > right.lower:
                 raise ValueError("RealDomain intervals must be sorted by lower bound.")
-            if left.upper == right.lower and (
-                left.upper_inclusive or right.lower_inclusive
-            ):
-                raise ValueError("Touching intervals must exclude the shared boundary.")
 
     @staticmethod
     def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
@@ -512,26 +508,30 @@ class RealDomain(Domain, Collection[Interval]):
                 continue
 
             current = merged[-1]
-            if not RealDomain._touch_or_overlap(current, interval):
+            if current.is_disjoint(interval) and not (
+                current >= interval or interval >= current
+            ):
                 merged.append(interval)
                 continue
 
+            if current.upper > interval.upper:
+                upper = current.upper
+                upper_inclusive = current.upper_inclusive
+            elif current.upper < interval.upper:
+                upper = interval.upper
+                upper_inclusive = interval.upper_inclusive
+            else:
+                upper = current.upper
+                upper_inclusive = current.upper_inclusive or interval.upper_inclusive
+
             merged[-1] = Interval(
                 current.lower,
-                interval.upper,
+                upper,
                 lower_inclusive=current.lower_inclusive,
-                upper_inclusive=interval.upper_inclusive,
+                upper_inclusive=upper_inclusive,
             )
 
         return tuple(merged)
-
-    @staticmethod
-    def _touch_or_overlap(left: Interval, right: Interval, /) -> bool:
-        if right.lower < left.upper:
-            return True
-        if right.lower > left.upper:
-            return False
-        return left.upper_inclusive or right.lower_inclusive
 
     def __contains__(self, item: Tensor, /) -> Tensor:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
         mask = self.intervals[0].__contains__(item)
@@ -612,12 +612,49 @@ class RealDomain(Domain, Collection[Interval]):
     def __or__(self, other: object, /) -> RealDomain:
         if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
-        return RealDomain(*self.intervals, *other_union.intervals)
+
+        ordered = sorted(
+            (*self.intervals, *other_union.intervals),
+            key=lambda i: (i.lower, not i.lower_inclusive),
+        )
+
+        merged: list[Interval] = []
+        for interval in ordered:
+            if not merged:
+                merged.append(interval)
+                continue
+
+            current = merged[-1]
+            if current.upper < interval.lower or (
+                current.upper == interval.lower
+                and not (current.upper_inclusive or interval.lower_inclusive)
+            ):
+                merged.append(interval)
+                continue
+
+            if current.upper > interval.upper:
+                upper = current.upper
+                upper_inclusive = current.upper_inclusive
+            elif current.upper < interval.upper:
+                upper = interval.upper
+                upper_inclusive = interval.upper_inclusive
+            else:
+                upper = current.upper
+                upper_inclusive = current.upper_inclusive or interval.upper_inclusive
+
+            merged[-1] = Interval(
+                current.lower,
+                upper,
+                lower_inclusive=current.lower_inclusive,
+                upper_inclusive=upper_inclusive,
+            )
+
+        return RealDomain(*merged)
 
     def __ror__(self, other: object, /) -> RealDomain:
         if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
-        return RealDomain(*other_union.intervals, *self.intervals)
+        return other_union | self
 
     def __str__(self) -> str:
         return " | ".join(str(interval) for interval in self.intervals)
