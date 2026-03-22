@@ -23,55 +23,18 @@ class Interval(Domain):
     lower_inclusive: Final[bool]
     upper_inclusive: Final[bool]
 
-    @overload
-    def __init__(self, s: str, /) -> None: ...
-
-    @overload
-    def __init__(self, interval: Interval, /) -> None: ...
-
-    @overload
-    def __init__(
-        self,
-        lower: float,
-        upper: float,
-        *,
-        lower_inclusive: bool,
-        upper_inclusive: bool,
-    ) -> None: ...
-
-    def __init__(
-        self,
-        lower: str | Interval | float,
-        upper: float | None = None,
-        *,
-        lower_inclusive: bool | None = None,
-        upper_inclusive: bool | None = None,
-    ) -> None:
-        if isinstance(lower, str | Interval):
-            if (
-                upper is not None
-                or lower_inclusive is not None
-                or upper_inclusive is not None
-            ):
-                raise TypeError("String interval constructor does not accept bounds.")
-            interval = (
-                lower if isinstance(lower, Interval) else Interval.from_string(lower)
-            )
-            self.lower = interval.lower
-            self.upper = interval.upper
-            self.lower_inclusive = interval.lower_inclusive
-            self.upper_inclusive = interval.upper_inclusive
-
-        else:
-            if upper is None or lower_inclusive is None or upper_inclusive is None:
-                raise TypeError(
-                    "Expected upper and inclusivity flags for numeric bounds."
-                )
-
-            self.lower = lower  # type: ignore[misc]
-            self.upper = upper  # type: ignore[misc]
-            self.lower_inclusive = lower_inclusive  # type: ignore[misc]
-            self.upper_inclusive = upper_inclusive  # type: ignore[misc]
+    @staticmethod
+    def parse(arg: object, /) -> Interval | None:
+        match arg:
+            case Interval():
+                return arg
+            case str():
+                try:
+                    return Interval.from_string(arg)
+                except ValueError:
+                    return None
+            case _:
+                return None
 
     @classmethod
     def from_string(cls, s: str, /) -> Interval:
@@ -109,12 +72,57 @@ class Interval(Domain):
         lower = float(lower_str.strip())
         upper = float(upper_str.strip())
 
-        return cls(
+        return Interval(
             lower,
             upper,
             lower_inclusive=lower_inclusive,
             upper_inclusive=upper_inclusive,
         )
+
+    @overload
+    def __init__(self, s: str | Interval, /) -> None: ...
+    @overload
+    def __init__(
+        self,
+        lower: float,
+        upper: float,
+        *,
+        lower_inclusive: bool,
+        upper_inclusive: bool,
+    ) -> None: ...
+    def __init__(
+        self,
+        lower: str | Interval | float,
+        upper: float | None = None,
+        *,
+        lower_inclusive: bool | None = None,
+        upper_inclusive: bool | None = None,
+    ) -> None:
+        if isinstance(lower, str | Interval):
+            if (
+                upper is not None
+                or lower_inclusive is not None
+                or upper_inclusive is not None
+            ):
+                raise TypeError("String interval constructor does not accept bounds.")
+            interval = (
+                lower if isinstance(lower, Interval) else Interval.from_string(lower)
+            )
+            self.lower = interval.lower
+            self.upper = interval.upper
+            self.lower_inclusive = interval.lower_inclusive
+            self.upper_inclusive = interval.upper_inclusive
+
+        else:
+            if upper is None or lower_inclusive is None or upper_inclusive is None:
+                raise TypeError(
+                    "Expected upper and inclusivity flags for numeric bounds."
+                )
+
+            self.lower = lower  # type: ignore[misc]
+            self.upper = upper  # type: ignore[misc]
+            self.lower_inclusive = lower_inclusive  # type: ignore[misc]
+            self.upper_inclusive = upper_inclusive  # type: ignore[misc]
 
     def __contains__(self, item: Tensor, /) -> Tensor:
         lower_mask = (
@@ -213,18 +221,8 @@ class Interval(Domain):
             return not (other.upper_inclusive and self.lower_inclusive)
         return False
 
-    @staticmethod
-    def _coerce_interval(other: object, /) -> Interval | None:
-        match other:
-            case Interval():
-                return other
-            case str():
-                return Interval.from_string(other)
-            case _:
-                return None
-
     def __eq__(self, other: object, /) -> bool:
-        if (other_interval := self._coerce_interval(other)) is None:
+        if (other_interval := self.parse(other)) is None:
             return NotImplemented
 
         if (
@@ -251,7 +249,7 @@ class Interval(Domain):
                 return any(self <= interval for interval in other.intervals)
             case str():
                 return self <= RealDomain.from_string(other)
-            case _ if (other_interval := self._coerce_interval(other)) is not None:
+            case _ if (other_interval := self.parse(other)) is not None:
                 lower_ok = self.lower > other_interval.lower or (
                     self.lower == other_interval.lower
                     and (other_interval.lower_inclusive or not self.lower_inclusive)
@@ -276,7 +274,7 @@ class Interval(Domain):
                 return all(interval <= self for interval in other.intervals)
             case str():
                 return self >= RealDomain.from_string(other)
-            case _ if (other_interval := self._coerce_interval(other)) is not None:
+            case _ if (other_interval := self.parse(other)) is not None:
                 return other_interval <= self
             case _:
                 return NotImplemented
