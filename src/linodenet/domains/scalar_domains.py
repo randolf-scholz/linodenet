@@ -522,43 +522,40 @@ class RealDomain(Domain, Collection[Interval]):
             mask = mask | interval.__contains__(item)
         return mask
 
-    def __eq__(self, other: object, /) -> bool:
-        if (other_union := RealDomain.parse(other)) is None:
+    def __eq__(self, rhs: object, /) -> bool:
+        if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
-        return self.intervals == other_union.intervals
+        return hash(self) == hash(other)
 
     def __hash__(self) -> int:
         return hash(self.intervals)
 
-    def __le__(self, other: object, /) -> bool:
-        if (other_union := RealDomain.parse(other)) is None:
+    def __le__(self, rhs: object, /) -> bool:
+        if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
 
         return all(
-            any(interval <= other_interval for other_interval in other_union.intervals)
+            any(interval <= other_interval for other_interval in other.intervals)
             for interval in self.intervals
         )
 
-    def __lt__(self, other: object, /) -> bool:
-        result = self <= other
-        if result is NotImplemented:
+    def __lt__(self, rhs: object, /) -> bool:
+        if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
-        return result and self != other
+        return self <= other and self != other
 
-    def __ge__(self, other: object, /) -> bool:
-        if (other_union := RealDomain.parse(other)) is None:
+    def __ge__(self, rhs: object, /) -> bool:
+        if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
-
         return all(
             any(interval <= self_interval for self_interval in self.intervals)
-            for interval in other_union.intervals
+            for interval in other.intervals
         )
 
-    def __gt__(self, other: object, /) -> bool:
-        result = self >= other
-        if result is NotImplemented:
+    def __gt__(self, rhs: object, /) -> bool:
+        if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
-        return result and self != other
+        return self >= other and self != other
 
     def __add__(self, other: float, /) -> RealDomain:
         return RealDomain(*(interval + other for interval in self.intervals))
