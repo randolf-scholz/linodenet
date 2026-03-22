@@ -56,6 +56,60 @@ class TestInterval:
         with pytest.raises(TypeError):
             _ = interval | 1
 
+    @pytest.mark.parametrize(
+        ("left", "right", "expected"),
+        [
+            ("[0, 2]", "[1, 3]", "[1, 2]"),
+            ("[0, 2]", "(1, 3]", "(1, 2]"),
+            ("[0, 2]", "[1, 3)", "[1, 2]"),
+            ("[0, 2]", "(1, 3)", "(1, 2]"),
+            ("[0, 2)", "[1, 3]", "[1, 2)"),
+            ("[0, 2)", "(1, 3]", "(1, 2)"),
+            ("[0, 2)", "[1, 3)", "[1, 2)"),
+            ("[0, 2)", "(1, 3)", "(1, 2)"),
+            ("(0, 2]", "[1, 3]", "[1, 2]"),
+            ("(0, 2]", "(1, 3]", "(1, 2]"),
+            ("(0, 2]", "[1, 3)", "[1, 2]"),
+            ("(0, 2]", "(1, 3)", "(1, 2]"),
+            ("(0, 2)", "[1, 3]", "[1, 2)"),
+            ("(0, 2)", "(1, 3]", "(1, 2)"),
+            ("(0, 2)", "[1, 3)", "[1, 2)"),
+            ("(0, 2)", "(1, 3)", "(1, 2)"),
+        ],
+    )
+    def test_intersection_operator_overlapping_cases(
+        self,
+        left: str,
+        right: str,
+        expected: str,
+    ) -> None:
+        assert Interval(left) & Interval(right) == Interval(expected)
+        assert Interval(right) & Interval(left) == Interval(expected)
+
+    @pytest.mark.parametrize(
+        ("left", "right", "expected"),
+        [
+            ("[0, 1]", "[1, 2]", "[1, 1]"),
+            ("[0, 1)", "[1, 2]", "(NAN, NAN)"),
+            ("[0, 1]", "(1, 2]", "(NAN, NAN)"),
+            ("[0, 1)", "(1, 2]", "(NAN, NAN)"),
+            ("[0, 1]", "[2, 3]", "(NAN, NAN)"),
+            ("(0, 1)", "[-2, 0)", "(NAN, NAN)"),
+        ],
+    )
+    def test_intersection_operator_boundary_and_disjoint_cases(
+        self,
+        left: str,
+        right: str,
+        expected: str,
+    ) -> None:
+        assert Interval(left) & Interval(right) == Interval(expected)
+        assert Interval(right) & Interval(left) == Interval(expected)
+
+    def test_intersection_operator_rejects_non_intervals(self) -> None:
+        with pytest.raises(TypeError):
+            _ = Interval("[0, 1]") & 1
+
 
 class TestRealDomain:
     def test_init(self) -> None:

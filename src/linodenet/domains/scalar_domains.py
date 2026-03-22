@@ -6,6 +6,7 @@ __all__ = ["Interval", "RealDomain", "ScalarDomains"]
 from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
+from math import isnan
 from typing import Final, Self, overload
 
 from torch import Tensor
@@ -157,6 +158,47 @@ class Interval(Domain):
             upper_inclusive=self.lower_inclusive,
         )
 
+    def __and__(self, other: object, /) -> Self:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+
+        if self.lower > other.lower:
+            lower = self.lower
+            lower_inclusive = self.lower_inclusive
+        elif self.lower < other.lower:
+            lower = other.lower
+            lower_inclusive = other.lower_inclusive
+        else:
+            lower = self.lower
+            lower_inclusive = self.lower_inclusive and other.lower_inclusive
+
+        if self.upper < other.upper:
+            upper = self.upper
+            upper_inclusive = self.upper_inclusive
+        elif self.upper > other.upper:
+            upper = other.upper
+            upper_inclusive = other.upper_inclusive
+        else:
+            upper = self.upper
+            upper_inclusive = self.upper_inclusive and other.upper_inclusive
+
+        if lower > upper or (
+            lower == upper and not (lower_inclusive and upper_inclusive)
+        ):
+            return type(self)(
+                float("nan"),
+                float("nan"),
+                lower_inclusive=False,
+                upper_inclusive=False,
+            )
+
+        return type(self)(
+            lower,
+            upper,
+            lower_inclusive=lower_inclusive,
+            upper_inclusive=upper_inclusive,
+        )
+
     @staticmethod
     def _coerce_interval(other: object, /) -> Interval | None:
         match other:
@@ -170,7 +212,24 @@ class Interval(Domain):
     def __eq__(self, other: object, /) -> bool:
         if (other_interval := self._coerce_interval(other)) is None:
             return NotImplemented
-        return hash(self) == hash(other_interval)
+
+        if (
+            isnan(self.lower)
+            and isnan(self.upper)
+            and isnan(other_interval.lower)
+            and isnan(other_interval.upper)
+        ):
+            return (
+                self.lower_inclusive == other_interval.lower_inclusive
+                and self.upper_inclusive == other_interval.upper_inclusive
+            )
+
+        return (
+            self.lower == other_interval.lower
+            and self.upper == other_interval.upper
+            and self.lower_inclusive == other_interval.lower_inclusive
+            and self.upper_inclusive == other_interval.upper_inclusive
+        )
 
     def __le__(self, other: object, /) -> bool:
         match other:
