@@ -40,6 +40,7 @@ Project conventions for automated agents contributing to `linodenet`.
 - For project-local Python commands, set `PYTHONPATH=src` by default unless there is a specific reason not to.
   This applies to `python`, `pytest`, `pyright`, `mypy`, ad-hoc scripts, and one-off import checks.
 - Docstrings follow Google style; document invariants and edge cases.
+- Prefer raw docstrings (`r"""..."""`) by default.
 - Use Unicode characters in latex formulas in docstrings to improve readability.
   so $ℝ$ rather than $\mathbb{R}$, $ϕ$ rather that $\phi$, $∑$ rather than $\sum$, etc.
   This includes super- and subscripts, e.g. $xᵢⱼ$ rather than $x_{ij}$ and $f⁻¹$ rather than $f^{-1}$.
