@@ -185,45 +185,6 @@ class Interval(Domain):
             upper_inclusive=self.lower_inclusive,
         )
 
-    def __and__(self, rhs: object, /) -> Interval:
-        if (other := Interval.parse(rhs)) is None:
-            return NotImplemented
-
-        if self.isdisjoint(other):
-            return Interval(
-                float("nan"),
-                float("nan"),
-                lower_inclusive=False,
-                upper_inclusive=False,
-            )
-
-        if self.lower > other.lower:
-            lower = self.lower
-            lower_inclusive = self.lower_inclusive
-        elif self.lower < other.lower:
-            lower = other.lower
-            lower_inclusive = other.lower_inclusive
-        else:
-            lower = self.lower
-            lower_inclusive = self.lower_inclusive and other.lower_inclusive
-
-        if self.upper < other.upper:
-            upper = self.upper
-            upper_inclusive = self.upper_inclusive
-        elif self.upper > other.upper:
-            upper = other.upper
-            upper_inclusive = other.upper_inclusive
-        else:
-            upper = self.upper
-            upper_inclusive = self.upper_inclusive and other.upper_inclusive
-
-        return Interval(
-            lower,
-            upper,
-            lower_inclusive=lower_inclusive,
-            upper_inclusive=upper_inclusive,
-        )
-
     def __eq__(self, rhs: object, /) -> bool:
         if (other := self.parse(rhs)) is None:
             return NotImplemented
@@ -285,42 +246,79 @@ class Interval(Domain):
             case never:
                 assert_never(never)
 
-    def __or__(self, other: object, /) -> Interval | RealDomain:
-        if isinstance(other, Interval) and not self.isdisjoint(other):
-            lower = self.lower
-            lower_inclusive = self.lower_inclusive
-            if other.lower < lower or (
-                other.lower == lower and other.lower_inclusive and not lower_inclusive
-            ):
-                lower = other.lower
-                lower_inclusive = other.lower_inclusive
+    def __and__(self, rhs: object, /) -> Interval:
+        if (other := Interval.parse(rhs)) is None:
+            return NotImplemented
 
-            upper = self.upper
-            upper_inclusive = self.upper_inclusive
-            if other.upper > upper or (
-                other.upper == upper and other.upper_inclusive and not upper_inclusive
-            ):
-                upper = other.upper
-                upper_inclusive = other.upper_inclusive
-
+        if self.isdisjoint(other):
             return Interval(
-                lower,
-                upper,
-                lower_inclusive=lower_inclusive,
-                upper_inclusive=upper_inclusive,
+                float("nan"),
+                float("nan"),
+                lower_inclusive=False,
+                upper_inclusive=False,
             )
 
-        if (other_union := RealDomain.parse(other)) is None:
-            return NotImplemented
-        return RealDomain(self, *other_union.intervals)
+        if self.lower > other.lower:
+            lower = self.lower
+            lower_inclusive = self.lower_inclusive
+        elif self.lower < other.lower:
+            lower = other.lower
+            lower_inclusive = other.lower_inclusive
+        else:
+            lower = self.lower
+            lower_inclusive = self.lower_inclusive and other.lower_inclusive
 
-    def __ror__(self, other: object, /) -> Interval | RealDomain:
-        if isinstance(other, Interval) and not self.isdisjoint(other):
-            return other | self
+        if self.upper < other.upper:
+            upper = self.upper
+            upper_inclusive = self.upper_inclusive
+        elif self.upper > other.upper:
+            upper = other.upper
+            upper_inclusive = other.upper_inclusive
+        else:
+            upper = self.upper
+            upper_inclusive = self.upper_inclusive and other.upper_inclusive
 
-        if (other_union := RealDomain.parse(other)) is None:
+        return Interval(
+            lower,
+            upper,
+            lower_inclusive=lower_inclusive,
+            upper_inclusive=upper_inclusive,
+        )
+
+    def __or__(self, rhs: object, /) -> Interval | RealDomain:
+        if (other := Interval.parse(rhs)) is None:
             return NotImplemented
-        return RealDomain(*other_union.intervals, self)
+
+        if self.isdisjoint(other):
+            return RealDomain(self, other)
+
+        lower = self.lower
+        lower_inclusive = self.lower_inclusive
+        if other.lower < lower or (
+            other.lower == lower and other.lower_inclusive and not lower_inclusive
+        ):
+            lower = other.lower
+            lower_inclusive = other.lower_inclusive
+
+        upper = self.upper
+        upper_inclusive = self.upper_inclusive
+        if other.upper > upper or (
+            other.upper == upper and other.upper_inclusive and not upper_inclusive
+        ):
+            upper = other.upper
+            upper_inclusive = other.upper_inclusive
+
+        return Interval(
+            lower,
+            upper,
+            lower_inclusive=lower_inclusive,
+            upper_inclusive=upper_inclusive,
+        )
+
+    def __ror__(self, lhs: object, /) -> Interval | RealDomain:
+        if (other := Interval.parse(lhs)) is None:
+            return NotImplemented
+        return other | self
 
     def __str__(self) -> str:
         lower_bracket = "[" if self.lower_inclusive else "("
