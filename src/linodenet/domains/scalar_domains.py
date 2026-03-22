@@ -184,14 +184,14 @@ class Interval(Domain):
         assert non_empty ^ is_empty_sentinel  # safety check.
         return is_empty_sentinel
 
-    def __contains__(self, item: Tensor, /) -> Tensor:
+    def __contains__(self, item: Tensor, /) -> bool:
         lower_mask = (
             (item >= self.lower) if self.lower_inclusive else (item > self.lower)
         )
         upper_mask = (
             (item <= self.upper) if self.upper_inclusive else (item < self.upper)
         )
-        return lower_mask & upper_mask
+        return bool((lower_mask & upper_mask).item())
 
     def __add__(self, other: float, /) -> Interval:
         return Interval(
@@ -445,7 +445,7 @@ class RealDomain(Domain, Collection[Interval]):
         return self.intervals[index]
 
     def is_empty(self) -> bool:
-        all_empty = all(interval.is_empty() for interval in self.intervals)
+        all_empty = all(interval.is_empty() for interval in self)
         uses_empty_sentinel = self.intervals == (Interval.EMPTY,)
         assert all_empty == uses_empty_sentinel
         return uses_empty_sentinel
@@ -459,10 +459,8 @@ class RealDomain(Domain, Collection[Interval]):
 
         left_index = 0
         right_index = 0
-        while left_index < len(self.intervals) and right_index < len(
-            other_union.intervals
-        ):
-            left = self.intervals[left_index]
+        while left_index < len(self) and right_index < len(other_union.intervals):
+            left = self[left_index]
             right = other_union.intervals[right_index]
 
             if not left.is_disjoint(right):
@@ -482,7 +480,7 @@ class RealDomain(Domain, Collection[Interval]):
         if self.is_empty():
             return
 
-        for interval in self.intervals:
+        for interval in self:
             if interval.is_empty():
                 raise ValueError("Non-empty domains cannot contain empty intervals.")
             if interval.lower > interval.upper:
@@ -504,6 +502,7 @@ class RealDomain(Domain, Collection[Interval]):
 
         current = ordered[0]
         for interval in ordered[1:]:
+            # Emit the current interval once there is a strict gap.
             if current.upper < interval.lower or (
                 current.upper == interval.lower
                 and not (current.upper_inclusive or interval.lower_inclusive)
@@ -512,9 +511,11 @@ class RealDomain(Domain, Collection[Interval]):
                 current = interval
                 continue
 
+            # The new interval is already covered by the current hull.
             if current.upper > interval.upper:
                 continue
             if current.upper < interval.upper:
+                # Extend the current hull to the right.
                 current = Interval(
                     current.lower,
                     interval.upper,
@@ -523,6 +524,7 @@ class RealDomain(Domain, Collection[Interval]):
                 )
                 continue
 
+            # Equal upper bounds merge inclusivity at the shared endpoint.
             current = Interval(
                 current.lower,
                 current.upper,
@@ -532,10 +534,10 @@ class RealDomain(Domain, Collection[Interval]):
 
         yield current
 
-    def __contains__(self, item: Tensor, /) -> Tensor:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
-        mask = self.intervals[0].__contains__(item)
-        for interval in self.intervals[1:]:
-            mask = mask | interval.__contains__(item)
+    def __contains__(self, item: Tensor, /) -> bool:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
+        mask = item in self[0]
+        for interval in self[1:]:
+            mask = mask | (item in interval)
         return mask
 
     def __eq__(self, rhs: object, /) -> bool:
@@ -552,7 +554,7 @@ class RealDomain(Domain, Collection[Interval]):
 
         right_intervals = iter(other.intervals)
         right = next(right_intervals, None)
-        for left in self.intervals:
+        for left in self:
             while (
                 right is not None
                 and right.upper <= left.lower
@@ -581,13 +583,13 @@ class RealDomain(Domain, Collection[Interval]):
         return self >= other and self != other
 
     def __add__(self, other: float, /) -> RealDomain:
-        return RealDomain(*(interval + other for interval in self.intervals))
+        return RealDomain(*(interval + other for interval in self))
 
     def __sub__(self, other: float, /) -> RealDomain:
         return self + (-other)
 
     def __mul__(self, other: float, /) -> RealDomain:
-        return RealDomain(*(interval * other for interval in self.intervals))
+        return RealDomain(*(interval * other for interval in self))
 
     def __and__(self, other: object, /) -> RealDomain:
         if (other_union := RealDomain.parse(other)) is None:
@@ -595,7 +597,7 @@ class RealDomain(Domain, Collection[Interval]):
 
         intersections = [
             left & right
-            for left in self.intervals
+            for left in self
             for right in other_union.intervals
             if not (left & right).is_empty()
         ]
@@ -608,12 +610,10 @@ class RealDomain(Domain, Collection[Interval]):
             return NotImplemented
         return other_union & self
 
-    def __or__(self, other: object, /) -> RealDomain:
-        if (other_union := RealDomain.parse(other)) is None:
+    def __or__(self, rhs: object, /) -> RealDomain:
+        if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
-        return RealDomain(
-            *self._merge_intervals((*self.intervals, *other_union.intervals))
-        )
+        return RealDomain(*self._merge_intervals((*self, *other)))
 
     def __ror__(self, other: object, /) -> RealDomain:
         if (other_union := RealDomain.parse(other)) is None:
@@ -621,7 +621,7 @@ class RealDomain(Domain, Collection[Interval]):
         return other_union | self
 
     def __str__(self) -> str:
-        return " | ".join(str(interval) for interval in self.intervals)
+        return " | ".join(str(interval) for interval in self)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}('{self!s}')"
@@ -654,8 +654,8 @@ class ScalarDomains(Enum):
     def domain(self) -> Domain:
         return self.value
 
-    def __contains__(self, item: Tensor, /) -> Tensor:
-        return self.domain.__contains__(item)
+    def __contains__(self, item: Tensor, /) -> bool:
+        return item in self.domain
 
     def __le__(self, other: object, /) -> bool:
         match other:
