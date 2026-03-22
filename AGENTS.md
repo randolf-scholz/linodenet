@@ -20,6 +20,7 @@ Project conventions for automated agents contributing to `linodenet`.
 - Exception: local function definitions are acceptable for decorators or when a callback/closure is clearly the most readable option.
 - Use f-strings for formatting.
 - Prefer comprehensions over `for`-loops and `map`/`filter`.
+- Avoid nested loops inside comprehensions; use an explicit loop when flattening or combining iterables.
 - Use context managers for resources.
 
 ## Typing
