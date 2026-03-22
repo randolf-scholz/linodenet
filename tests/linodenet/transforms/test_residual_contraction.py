@@ -278,7 +278,7 @@ class TestCorrectness(TestCase):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("trace_estimator", ["hutchinson", "xtrace"])
+@pytest.mark.parametrize("trace_estimator", ["hutch", "xtrace"])
 class TestLogAbsDet(TestCase):
     BATCH_SIZE = 8
     INPUT_SIZE = 4
@@ -332,6 +332,47 @@ class TestLogAbsDet(TestCase):
             atol=self.LOGABSDET_TOL,
             rtol=0.0,
         )
+
+
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES)
+class TestLogAbsDetExact(TestCase):
+    BATCH_SIZE = TestLogAbsDet.BATCH_SIZE
+    INPUT_SIZE = TestLogAbsDet.INPUT_SIZE
+    SCALE = TestLogAbsDet.SCALE
+    SEED = TestLogAbsDet.SEED
+    VALUE_TOL = TestLogAbsDet.VALUE_TOL
+    NUM_TRACE_SAMPLES = TestLogAbsDet.NUM_TRACE_SAMPLES
+    NUM_SERIES_TERMS = TestLogAbsDet.NUM_SERIES_TERMS
+    ScaledContraction = TestLogAbsDet.ScaledContraction
+
+    def test_scaled_contraction_matches_closed_form_exact(
+        self,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        flow = ResidualContraction(
+            self.ScaledContraction(self.SCALE),
+            num_trace_samples=self.NUM_TRACE_SAMPLES,
+            num_series_terms=self.NUM_SERIES_TERMS,
+            trace_estimator="exact",
+        ).to(device=device, dtype=dtype)
+        x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
+
+        y, logabsdet = flow.encode_and_logabsdet(x)
+        assert y.shape == (self.BATCH_SIZE, self.INPUT_SIZE)
+        assert logabsdet.shape == (self.BATCH_SIZE,)
+
+        expected_y = (1 + self.SCALE) * x
+        expected_logabsdet = torch.full(
+            (self.BATCH_SIZE,),
+            self.INPUT_SIZE * torch.log1p(torch.tensor(self.SCALE, dtype=dtype)).item(),
+            device=device,
+            dtype=dtype,
+        )
+        self.assert_close(y, expected_y, atol=self.VALUE_TOL, rtol=0.0)
+        self.assert_close(logabsdet, expected_logabsdet, atol=1e-6, rtol=0.0)
 
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)

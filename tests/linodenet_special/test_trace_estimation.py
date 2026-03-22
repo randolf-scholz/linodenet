@@ -6,6 +6,7 @@ from torch import Tensor
 from torch.linalg import matrix_norm
 
 from linodenet_special.trace_estimation import (
+    LogAbsDetEstimator,
     btrace_estimator,
     btrace_estimator_naive,
     btrace_estimator_new,
@@ -326,3 +327,49 @@ def test_btrace() -> None:
         batched_samples,
     )
     torch.testing.assert_close(batched_estimate, batched_trace)
+
+
+class ScaledMap(torch.nn.Module):
+    def __init__(self, scale: float, /) -> None:
+        super().__init__()
+        self.scale = scale
+
+    def forward(self, x: Tensor, /) -> Tensor:
+        return self.scale * x
+
+
+class TestLogAbsDetEstimator(TestCase):
+    @pytest.mark.parametrize(
+        ("method", "num_samples", "num_series_terms", "expected_method"),
+        [
+            ("exact", None, None, "compute_exact"),
+            ("hutch", 8, 4, "compute_hutch"),
+            ("xtrace", 8, 4, "compute_xtrace"),
+        ],
+    )
+    def test_logabsdet_estimator_dispatch(
+        self,
+        method: str,
+        num_samples: int | None,
+        num_series_terms: int | None,
+        expected_method: str,
+    ) -> None:
+        estimator = LogAbsDetEstimator(method, num_samples, num_series_terms)
+        assert estimator.method.__name__ == expected_method
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    def test_logabsdet_estimator_exact_matches_closed_form(self, device: str) -> None:
+        estimator = LogAbsDetEstimator("exact", None, None).to(device=device)
+        fn = ScaledMap(0.125).to(device=device)
+        x = torch.randn(7, 4, device=device)
+
+        y, logabsdet = estimator(fn, x)
+
+        expected_y = 0.125 * x
+        expected_logabsdet = torch.full(
+            (7,),
+            4 * torch.log1p(torch.tensor(0.125, device=device)).item(),
+            device=device,
+        )
+        assert torch.allclose(y, expected_y)
+        assert torch.allclose(logabsdet, expected_logabsdet, atol=1e-6, rtol=0.0)

@@ -6,18 +6,21 @@ Notes:
 """
 
 __all__ = [
+    "LogAbsDetEstimator",
+    # functions
+    "btrace_estimator",
+    "btrace_estimator_naive",
     "hutchinson_estimator",
+    "naive_estimator",
     "xtrace_estimator",
     "xtrace_estimator_corrected",
-    "btrace_estimator_naive",
-    "btrace_estimator",
-    "naive_estimator",
 ]
 
 from collections.abc import Callable
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn, vmap
+from torch._functorch.eager_transforms import jacrev, linearize
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
@@ -630,3 +633,150 @@ def btrace_estimator_new(
     residual_trace = vecdot(left_residuals, residual_actions, dim=-1)
 
     return (projected_trace + residual_trace).mean(dim=-1)
+
+
+class LogAbsDetEstimator(nn.Module):
+    r"""Estimate log|det(𝕀 + ∂f/∂x)| using the power series expansion and a trace estimator.
+
+    Args:
+        method: str in {"exact", "hutch", "xtrace"} specifying the estimation method to use.
+        num_samples: Number of random samples to use for the Hutchinson or XTrace estimator.
+        num_series_terms: Number of terms to use in the power series expansion.
+
+    Returns:
+        y: fn(x)
+        logabsdet: Approximation of log|det(𝕀 + ∂f/∂x)|
+    """
+
+    num_samples: int | None
+    num_series_terms: int | None
+    method: Callable[[Callable[[Tensor], Tensor], Tensor], tuple[Tensor, Tensor]]
+
+    def __init__(
+        self,
+        method: str,
+        num_samples: int | None,
+        num_series_terms: int | None,
+    ) -> None:
+        super().__init__()
+
+        if num_samples is not None and num_samples < 1:
+            raise ValueError("num_samples must be at least 1 when provided")
+        if num_series_terms is not None and num_series_terms < 1:
+            raise ValueError("num_series_terms must be at least 1 when provided")
+
+        self.num_samples = num_samples
+        self.num_series_terms = num_series_terms
+
+        match method:
+            case "exact":
+                self.method = self.compute_exact
+            case "hutch" | "hutchinson":
+                if num_samples is None:
+                    raise ValueError("num_samples is required for method='hutch'")
+                if num_series_terms is None:
+                    raise ValueError("num_series_terms is required for method='hutch'")
+                self.method = self.compute_hutch
+            case "xtrace":
+                if num_samples is None:
+                    raise ValueError("num_samples is required for method='xtrace'")
+                if num_series_terms is None:
+                    raise ValueError("num_series_terms is required for method='xtrace'")
+                self.method = self.compute_xtrace
+            case _:
+                raise ValueError(f"Unknown logabsdet estimation method {method!r}")
+
+    @signature("(..., d) -> (...)")
+    def compute_exact(
+        self, fn: Callable[[Tensor], Tensor], x: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        r"""Compute the exact log-absolute-determinant via the full Jacobian spectrum."""
+
+        def sample_fn(xi: Tensor, /) -> tuple[Tensor, Tensor]:
+            yi = fn(xi)
+            return yi, yi
+
+        jacobian_fn = jacrev(sample_fn, has_aux=True)
+        jacobian, y = vmap(jacobian_fn)(x.reshape(-1, x.shape[-1]))
+        eigenvalues, _ = torch.linalg.eig(jacobian)
+        logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
+        return y.reshape_as(x), logabsdet.reshape(x.shape[:-1]).to(dtype=x.dtype)
+
+    @signature("(..., d) -> (...)")
+    def compute_hutch(
+        self, fn: Callable[[Tensor], Tensor], x: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        r"""Estimate the log-absolute-determinant using a power series and Hutchinson."""
+        assert self.num_samples is not None
+        assert self.num_series_terms is not None
+
+        y, jvp_fn = linearize(fn, x)
+        samples = torch.randn(
+            *x.shape[:-1],
+            self.num_samples,
+            x.shape[-1],
+            device=x.device,
+            dtype=x.dtype,
+        )
+        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+
+        for k in range(1, self.num_series_terms + 1):
+            coef = 1.0 / k if k % 2 else -1.0 / k
+            logabsdet = logabsdet + coef * hutchinson_estimator(
+                self._make_power_operator(jvp_fn, k),
+                samples,
+            )
+
+        return y, logabsdet
+
+    @signature("(..., d) -> (...)")
+    def compute_xtrace(
+        self, fn: Callable[[Tensor], Tensor], x: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        r"""Estimate the log-absolute-determinant using a power series and XTrace."""
+        assert self.num_samples is not None
+        assert self.num_series_terms is not None
+
+        y, jvp_fn = linearize(fn, x)
+        samples = (
+            2
+            * torch.rand(
+                *x.shape[:-1],
+                self.num_samples,
+                x.shape[-1],
+                device=x.device,
+                dtype=x.dtype,
+            )
+            - 1
+        )
+        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+
+        for k in range(1, self.num_series_terms + 1):
+            coef = 1.0 / k if k % 2 else -1.0 / k
+            logabsdet = logabsdet + coef * xtrace_estimator(
+                self._make_power_operator(jvp_fn, k),
+                samples,
+            )
+
+        return y, logabsdet
+
+    def forward(
+        self,
+        fn: Callable[[Tensor], Tensor],
+        x: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        return self.method(fn, x)
+
+    @staticmethod
+    def _make_power_operator(
+        jvp_fn: Callable[[Tensor], Tensor], num_powers: int
+    ) -> Callable[[Tensor], Tensor]:
+        batched_jvp_fn = vmap(jvp_fn)
+
+        def apply(samples: Tensor, /) -> Tensor:
+            result = samples.movedim(-2, 0)
+            for _ in range(num_powers):
+                result = batched_jvp_fn(result)
+            return result.movedim(0, -2)
+
+        return apply
