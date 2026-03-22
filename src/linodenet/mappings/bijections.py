@@ -23,7 +23,8 @@ class MatrixExponential(BijectionBase):
     r"""Parametrize a matrix via matrix exponential.
 
     Note: The following restrictions hold:
-        Mₙ(ℝ)  --exp-->  GLₙ(ℝ)
+        Mₙ(ℝ)  --exp-->  GLₙ(ℝ)∩{A ∣ A=B² for some B∈Mₙ(ℝ)}
+        Mₙ(ℂ)  --exp-->  GLₙ(ℂ)
         𝕊ₙ(ℝ)  --exp-->  𝕊ₙ⁺(ℝ)
         𝔸ₙ(ℝ)  --exp-->  Oₙ(ℝ)
     """
