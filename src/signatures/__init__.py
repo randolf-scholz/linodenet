@@ -11,7 +11,6 @@ Dimension types:
     Variadic: A bundle of named axes fixed per call, like `*xs`.
     Dynamic: A named axis size that may vary across calls, like `$n`.
     Affine: A linear combination of static/dynamic dims, like `2n+1` or `u+v`.
-    Unknown: An axis whose kind/size is unknown, written as `?`.
 
 
 Each dimension can occur both in the input and output shapes, and the same name implies equality.
@@ -79,7 +78,6 @@ __all__ = [
     "ConstantDim",
     "StaticDim",
     "VariadicDim",
-    "UnknownDim",
     # Functions
     "is_identifier",
     "tokenize",
@@ -102,7 +100,6 @@ from signatures.signatures import (
     StaticDim,
     Token,
     TokenKind,
-    UnknownDim,
     VariadicDim,
     is_identifier,
     signature,

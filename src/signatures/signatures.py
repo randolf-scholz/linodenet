@@ -27,7 +27,6 @@ __all__ = [
     "AffineDim",
     "VariadicDim",
     "DynamicDim",
-    "UnknownDim",
     # Functions
     "is_identifier",
     "tokenize",
@@ -42,9 +41,7 @@ from types import EllipsisType
 from typing import ClassVar, Literal, TypeIs, overload
 
 type ShapeType = tuple[DimType, ...] | tuple[EllipsisType, *tuple[DimType, ...]]
-type DimType = (
-    ConstantDim | StaticDim | VariadicDim | AffineDim | UnknownDim | DynamicDim
-)
+type DimType = ConstantDim | StaticDim | VariadicDim | AffineDim | DynamicDim
 type ArgType = ShapeType | Identifier | GenericType | FnType
 type ArgList = list[Arg]
 type QMARK = Literal["?"]
@@ -120,7 +117,6 @@ class DimKind(StrEnum):
     VARIADIC = "variadic"  # '*n' static shape / bundle of axes
     DYNAMIC = "dynamic"  # '$n' variable sized axis
     AFFINE = "affine"  # "2n", "3n+1", "u+v"
-    UNKNOWN = "unknown"  # for future use
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,18 +187,6 @@ class DynamicDim(Dim):
 
     def __str__(self) -> str:
         return f"${self.value!s}"
-
-
-@dataclass(frozen=True, slots=True)
-class UnknownDim(Dim):
-    r"""Class for representing unknown dimensions."""
-
-    kind: ClassVar[Literal[DimKind.UNKNOWN]] = DimKind.UNKNOWN
-
-    value: Literal["?"] = "?"
-
-    def __str__(self) -> str:
-        return "?"
 
 
 class Sign(IntEnum):
@@ -550,12 +534,23 @@ class Parser:
     def _parse_arglist(self) -> ArgList:
         self.consume(TokenKind.LBRACKET)
         args: ArgList = []
+        seen_optional = False
 
         if self.current.kind is not TokenKind.RBRACKET:
-            args.append(self._parse_arg())
+            arg = self._parse_arg()
+            args.append(arg)
+            seen_optional = arg.optional
             while self.current.kind is TokenKind.COMMA:
                 self.consume(TokenKind.COMMA)
-                args.append(self._parse_arg())
+                arg_pos = self.current.pos
+                arg = self._parse_arg()
+                if seen_optional and not arg.optional:
+                    raise SyntaxError(
+                        f"Non-optional argument at position {arg_pos} "
+                        "cannot follow an optional argument"
+                    )
+                args.append(arg)
+                seen_optional = seen_optional or arg.optional
 
         self.consume(TokenKind.RBRACKET)
         return args
@@ -627,7 +622,7 @@ class Parser:
         self.consume(TokenKind.RPAREN)
         return (Ellipsis, *dims) if with_ellipsis else tuple(dims)  # type: ignore[arg-type]
 
-    # DimType ::= "?" | Number | ("*"? IdentifierType)
+    # DimType ::= Number | ("*"? IdentifierType)
     def _parse_dim_type(self) -> DimType:
         match (tok := self.current).kind:
             case TokenKind.ELLIPSIS:
@@ -640,10 +635,6 @@ class Parser:
                 self.consume(TokenKind.STAR)
                 ident = self._parse_identifier()
                 return VariadicDim(ident)
-
-            case TokenKind.QMARK:
-                self.consume(TokenKind.QMARK)
-                return UnknownDim()
 
             case _:
                 try:

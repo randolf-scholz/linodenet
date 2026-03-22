@@ -8,7 +8,7 @@ FnBody ::= (ArgList | ArgType) "->" (ArgList | ArgType);
 
 // e.g. '[T, U, Tensor[(N, 3)]]'
 ArgList ::= "["  (Arg ("," Arg)*)?  (KeyArg ("," KeyArg)*)?  "]"
-Arg ::= ArgType
+Arg ::= ArgType "?"?
 KeyArg ::= IdentifierType "?"? "=" ArgType
 
 // e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]', '{T -> U}'
@@ -18,9 +18,7 @@ ArgType ::= ShapeType | IdentifierType | GenericType | FnType
 ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
 
 // Dimension types
-DimType ::= UnknownDim | VariadicDim | ConstantDim | StaticDim | CompoundDim | DynamicDim
-// a single unknown dimension (could be one of Constant, Static or Dynamic)
-UnknownDim ::= "?"
+DimType ::= ConstantDim | StaticDim | CompoundDim | DynamicDim | VariadicDim
 // multiple unknown dimensions (could be one of Constant, Static or Dynamic)
 //  "*?"
 // e.g. '3': a fixed size dimension
@@ -30,7 +28,7 @@ StaticDim ::= IdentifierType
 // e.g. '*Xs': a bundle of axes (x₁, ..., xₙ) whose shape will be fixed at runtime
 VariadicDim ::= "*" IdentifierType
 // e.g. '$n' a single axes whose size is variable at runtime
-DynamicDim ::= "$n"
+DynamicDim ::= "$" IdentifierType
 
 // e.g. "2n", "3n+3", "n+2", "2u + 3v", "2a + 2b + 2c + 1", "2n - 1"
 // affine combination of Static Dims

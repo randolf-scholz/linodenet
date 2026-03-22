@@ -2,7 +2,7 @@ r"""Test Signature utility."""
 
 import pytest
 
-from signatures import Parser
+from signatures import GenericType, Identifier, Parser
 
 
 @pytest.mark.parametrize(
@@ -11,6 +11,10 @@ from signatures import Parser
         ("(m, n) -> (n, m)", "{(m, n) -> (n, m)}"),
         ("{(m, n) -> (n, m)}", "{(m, n) -> (n, m)}"),
         ("[(m, n), {(n) -> (m)}] -> (m, n)", "{[(m, n), {(n) -> (m)}] -> (m, n)}"),
+        (
+            "[Tensor[(m, n)]?, Label?] -> Output?",
+            "{[Tensor[(m, n)]?, Label?] -> Output?}",
+        ),
     ],
 )
 def test_signature(argument: str, expected: str) -> None:
@@ -24,12 +28,51 @@ def test_signature(argument: str, expected: str) -> None:
     [
         "A -> B -> C",
         "{A -> B -> C}",
+        "(?) -> ()",
     ],
 )
 def test_reject_chained_signature(argument: str) -> None:
-    r"""Chained signatures must use explicit braces for nested function types."""
+    r"""Invalid signatures should be rejected."""
     with pytest.raises(RuntimeError):
         Parser.parse_signature(argument)
+
+
+def test_parse_optional_args() -> None:
+    r"""Optional args should round-trip through the parser."""
+    arglist = Parser.parse_arglist("[Tensor[(m, n)]?, Label?]")
+
+    assert arglist[0].optional is True
+    assert isinstance(arglist[0].value, GenericType)
+    assert arglist[0].value.id == Identifier("Tensor")
+    assert arglist[1].optional is True
+    assert arglist[1].value == Identifier("Label")
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected_optional"),
+    [
+        ("[Label]", [False]),
+        ("[Label?]", [True]),
+        ("[Tensor[(m, n)]?, Label?]", [True, True]),
+    ],
+)
+def test_parse_arg_optional_flags(argument: str, expected_optional: list[bool]) -> None:
+    r"""Optional markers should populate `Arg.optional`."""
+    arglist = Parser.parse_arglist(argument)
+    assert [arg.optional for arg in arglist] == expected_optional
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "[Label?, Tensor[(m, n)]]",
+        "[Label?, Output]",
+    ],
+)
+def test_reject_required_arg_after_optional_arg(argument: str) -> None:
+    r"""Required args cannot follow optional args in an arglist."""
+    with pytest.raises(SyntaxError, match="cannot follow an optional argument"):
+        Parser.parse_arglist(argument)
 
 
 def test() -> None:
