@@ -23,42 +23,6 @@ from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 from signatures import signature
 
 
-def _normalize_columns(matrix: Tensor) -> Tensor:
-    r"""Normalize the columns of a batched matrix."""
-    return matrix / vector_norm(matrix, dim=-2, keepdim=True)
-
-
-def _diag_prod(lhs: Tensor, rhs: Tensor) -> Tensor:
-    r"""Return diag(lhsᴴ rhs) for batched matrices with matching shape."""
-    return torch.einsum("...dm, ...dm -> ...m", lhs.conj(), rhs)
-
-
-def _project_onto_columns(basis: Tensor, vector: Tensor) -> Tensor:
-    r"""Project a batched vector onto the column span of a batched basis.
-
-    Args:
-        basis: Batched orthonormal basis with shape `(..., d, k)`.
-        vector: Batched vector with shape `(..., d)`.
-
-    Returns:
-        Tensor with shape `(..., d)` containing the orthogonal projection of
-        `vector` onto `span(basis)`.
-    """
-    coeffs = torch.einsum("...dk, ...d -> ...k", basis.conj(), vector)
-    return torch.einsum("...dk, ...k -> ...d", basis, coeffs)
-
-
-def _normalized_inverse_h_columns(r_factor: Tensor) -> Tensor:
-    r"""Return normalized columns of $(R^{-1})ᴴ$ for a square QR factor."""
-    *_, rows, cols = r_factor.shape
-    if rows != cols:
-        raise ValueError("Efficient XTrace updates require a square R factor.")
-
-    identity = torch.eye(cols, dtype=r_factor.dtype, device=r_factor.device)
-    inverse_h = solve_triangular(r_factor.mH, identity, upper=False)
-    return _normalize_columns(inverse_h)
-
-
 @signature("(..., n, d) -> (...)")
 def naive_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matric, realizing the full matrix."""
@@ -71,7 +35,7 @@ def naive_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
 def hutchinson_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matrix with Hutchinson's estimator.
 
-    .. math:: tr(A) = E[vᵀAv], where E[v]=0 and Cov[v]= 𝕀
+    .. math:: \tr(A) = E[vᵀAv], where E[v]=0 and Cov[v]= 𝕀
 
     Args:
         fn: Matrix-vector product function, i.e. $x ↦ Ax$ (batched).
@@ -97,12 +61,11 @@ def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     Returns:
         Tensor: The estimated trace.
 
-
     core idea:
-
-        samples: [v₁, ..., vₖ]
-        compute Qᵢ = orth(AV₋ᵢ)
-        compute: trᵢ = tr(QᵢᴴAQᵢ) + vᵢᴴ(I-QᵢQᵢᴴ) A (I-QᵢQᵢᴴ)vᵢ
+        samples: [w₁, ..., wₖ]
+        compute Qᵢ = orth(AW₋ᵢ)
+        compute: trᵢ = tr(QᵢᴴAQᵢ) + wᵢᴴ(I-QᵢQᵢᴴ) A (I-QᵢQᵢᴴ)wᵢ
+        trick rank-1 update: QᵢQᵢᴴ = Q(I − sᵢ sᵢᴴ)Qᴴ
 
     Algorithm:
         1: Draw Ω ∼ Unif{±1}^{N×m/2}
@@ -172,7 +135,7 @@ def xtrace_estimator_corrected(
     # MATLAB: Om = sqrt(N) * cnormc(randn(N, m))
     # Here we reuse the provided probes as the m columns of Ω.
     # Omega: (..., d, m)
-    omega = d**0.5 * _normalize_columns(samples.mT)
+    omega = d**0.5 * samples.mT / vector_norm(samples.mT, dim=-2, keepdim=True)
 
     # MATLAB: Y = A * Om
     # Y: (..., d, m)
@@ -189,14 +152,14 @@ def xtrace_estimator_corrected(
     # S: (..., m, m), columns of (R^{-1})ᴴ normalized to unit norm.
     identity = torch.eye(m, dtype=samples.dtype, device=samples.device)
     s = solve_triangular(r.mH, identity, upper=False)
-    s = _normalize_columns(s)
+    s = s / vector_norm(s, dim=-2, keepdim=True)
 
     # MATLAB:
     # scale = (N - m + 1) ./ (N - ||w_i||² + |<s_i, w_i> ||s_i|| |²)
     # column norms / diagonal products: (..., m)
     w_norm_sq = vector_norm(w, dim=-2).square()
     s_norm = vector_norm(s, dim=-2)
-    d_sw = _diag_prod(s, w)
+    d_sw = torch.einsum("...dm, ...dm -> ...m", s.conj(), w)
     scale = (d - m + 1) / (d - w_norm_sq + (d_sw * s_norm).abs().square())
 
     # MATLAB: Z = A * Q
@@ -214,11 +177,11 @@ def xtrace_estimator_corrected(
 
     # Column-wise diagonal contractions used by the estimator correction terms.
     # All shapes below are (..., m).
-    d_shs = _diag_prod(s, h @ s)
-    d_tw = _diag_prod(t, w)
-    d_whw = _diag_prod(w, hw)
-    d_s_r_minus_hw = _diag_prod(s, r - hw)
-    d_t_minus_hhw_s = _diag_prod(t - h.mH @ w, s)
+    d_shs = torch.einsum("...dm, ...dm -> ...m", s.conj(), h @ s)
+    d_tw = torch.einsum("...dm, ...dm -> ...m", t.conj(), w)
+    d_whw = torch.einsum("...dm, ...dm -> ...m", w.conj(), hw)
+    d_s_r_minus_hw = torch.einsum("...dm, ...dm -> ...m", s.conj(), r - hw)
+    d_t_minus_hhw_s = torch.einsum("...dm, ...dm -> ...m", (t - h.mH @ w).conj(), s)
 
     # MATLAB:
     # ests_i = tr(H)
@@ -243,6 +206,116 @@ def xtrace_estimator_corrected(
 
     # MATLAB: t = mean(ests)
     return ests.mean(dim=-1)
+
+
+def _normalized_inverse_h_columns(r_factor: Tensor) -> Tensor:
+    r"""Return normalized columns of $(R^{-1})ᴴ$ for a square QR factor."""
+    *_, rows, cols = r_factor.shape
+    identity = torch.eye(cols, dtype=r_factor.dtype, device=r_factor.device)
+    inverse_h = solve_triangular(r_factor.mH, identity, upper=False)
+    return inverse_h / vector_norm(inverse_h, dim=-2, keepdim=True)
+
+
+def btrace_estimator(
+    fn: Callable[[Tensor], Tensor],
+    adj_fn: Callable[[Tensor], Tensor],
+    left_samples: Tensor,
+    right_samples: Tensor,
+) -> Tensor:
+    r"""Experimental efficient two-sided XTrace-style estimator.
+
+    This function implements the same experimental two-sided estimator as
+    `xtrace_bilinear_estimator_experimental`, but avoids recomputing leave-one-out
+    QR factorizations. Instead, it uses the XTrace rank-one update identity on
+    both sides:
+
+    .. math::
+
+       QᵢQᵢᴴ = Q(I - sᵢsᵢᴴ)Qᴴ, \qquad PᵢPᵢᴴ = P(I - tᵢtᵢᴴ)Pᴴ,
+
+    where the columns `sᵢ` and `tᵢ` are obtained from the normalized columns of
+    `(R_Q^{-1})ᴴ` and `(R_P^{-1})ᴴ`, respectively.
+
+    The implemented estimator uses the projector form
+
+    .. math::
+
+       \hat tᵢ = \tr(Πᴸᵢ A Πᴿᵢ)
+              + uᵢᴴ(I - Πᴸᵢ) A (I - Πᴿᵢ) vᵢ,
+
+    with `Πᴿᵢ = QᵢQᵢᴴ` and `Πᴸᵢ = PᵢPᵢᴴ`.
+
+    Notes:
+        This remains an experimental generalization. It is intended as an
+        efficient implementation vehicle for further moment-estimation work.
+    """
+    if left_samples.shape != right_samples.shape:
+        raise ValueError("left_samples and right_samples must have matching shapes.")
+
+    *_, num_samples, dim = right_samples.shape
+
+    # Right sketch: V columns are the probe vectors, Y = A V.
+    # v_cols, av_cols: (..., d, n)
+    v_cols = right_samples.mT
+    av_cols = fn(right_samples).mT
+    # Q: (..., d, n), R_q: (..., n, n)
+    q, r_q = qr(av_cols, mode="reduced")
+    # S columns are the normalized null-space update vectors sᵢ.
+    # s: (..., n, n)
+    s = _normalized_inverse_h_columns(r_q)
+
+    # Left sketch: U columns are the probe vectors, AᴴU drives the left basis.
+    # u_cols, ahu_cols: (..., d, n)
+    u_cols = left_samples.mT
+    ahu_cols = adj_fn(left_samples).mT
+    # P: (..., d, n), R_p: (..., n, n)
+    p, r_p = qr(ahu_cols, mode="reduced")
+    # T columns are the normalized update vectors tᵢ for the left basis.
+    # t: (..., n, n)
+    t = _normalized_inverse_h_columns(r_p)
+
+    # H = Pᴴ A Q, C = Qᴴ P. Shapes: (..., n, n)
+    aq = fn(q.mT).mT
+    h = torch.einsum("...dp, ...dq -> ...pq", p.conj(), aq)
+    c = torch.einsum("...dq, ...dp -> ...qp", q.conj(), p)
+
+    # Projected trace term:
+    # tr(Πᴸᵢ A Πᴿᵢ) = tr((I - tᵢtᵢᴴ) H (I - sᵢsᵢᴴ) C)
+    #               = tr(HC) - tᵢᴴHC tᵢ - sᵢᴴCH sᵢ + (tᵢᴴHsᵢ)(sᵢᴴCtᵢ)
+    hc = h @ c
+    ch = c @ h
+    trace_hc = hc.diagonal(dim1=-2, dim2=-1).sum(dim=-1, keepdim=True)
+    s_cols = s.mT  # (..., n, n), row i contains sᵢᴴ data as a vector
+    t_cols = t.mT  # (..., n, n), row i contains tᵢᴴ data as a vector
+    d_t_hc_t = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), hc, t_cols)
+    d_s_ch_s = torch.einsum("...ni, ...ij, ...nj -> ...n", s_cols.conj(), ch, s_cols)
+    d_t_h_s = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), h, s_cols)
+    d_s_c_t = torch.einsum("...ni, ...ij, ...nj -> ...n", s_cols.conj(), c, t_cols)
+    projected_trace = trace_hc - d_t_hc_t - d_s_ch_s + d_t_h_s * d_s_c_t
+
+    # W = QᴴV and Z = PᴴU collect probe coordinates in the full left/right bases.
+    # Shapes: (..., n, n)
+    w = torch.einsum("...dq, ...dn -> ...qn", q.conj(), v_cols)
+    z = torch.einsum("...dp, ...dn -> ...pn", p.conj(), u_cols)
+    w_rows = w.mT  # (..., n, n), row i is wᵢ
+    z_rows = z.mT  # (..., n, n), row i is zᵢ
+
+    # xᵢ = wᵢ - <sᵢ, wᵢ> sᵢ,  yᵢ = zᵢ - <tᵢ, zᵢ> tᵢ
+    alpha = vecdot(s_cols, w_rows, dim=-1)
+    beta = vecdot(t_cols, z_rows, dim=-1)
+    x = w_rows - alpha.unsqueeze(-1) * s_cols
+    y = z_rows - beta.unsqueeze(-1) * t_cols
+
+    # Residual vectors:
+    # (I - Πᴿᵢ) vᵢ = vᵢ - Q xᵢ,   (I - Πᴸᵢ) uᵢ = uᵢ - P yᵢ
+    right_residuals = right_samples - torch.einsum("...dq, ...nq -> ...nd", q, x)
+    left_residuals = left_samples - torch.einsum("...dp, ...np -> ...nd", p, y)
+
+    # Residual correction uᵢᴴ(I - Πᴸᵢ) A (I - Πᴿᵢ) vᵢ, all samples at once.
+    residual_actions = fn(right_residuals)
+    residual_trace = vecdot(left_residuals, residual_actions, dim=-1)
+
+    return (projected_trace + residual_trace).mean(dim=-1)
 
 
 def btrace_estimator_naive(
@@ -331,110 +404,228 @@ def btrace_estimator_naive(
     return torch.stack(estimates, dim=-1).mean(dim=-1)
 
 
-def btrace_estimator(
+def _project_onto_columns(basis: Tensor, vector: Tensor) -> Tensor:
+    r"""Project a batched vector onto the column span of a batched basis.
+
+    Args:
+        basis: Batched orthonormal basis with shape `(..., d, k)`.
+        vector: Batched vector with shape `(..., d)`.
+
+    Returns:
+        Tensor with shape `(..., d)` containing the orthogonal projection of
+        `vector` onto `span(basis)`.
+    """
+    coeffs = torch.einsum("...dk, ...d -> ...k", basis.conj(), vector)
+    return torch.einsum("...dk, ...k -> ...d", basis, coeffs)
+
+
+def _balanced_biorthogonal_factors(
+    cross: Tensor, rtol: float | None = None
+) -> tuple[Tensor, Tensor]:
+    r"""Return balanced right/left factors for a small cross-pairing matrix.
+
+    Given the singular value decomposition
+
+    .. math::
+
+       \text{cross} = U \Sigma Vᴴ,
+
+    this returns the factors
+
+    .. math::
+
+       S = V \Sigma^{\dagger/2}, \qquad T = U \Sigma^{\dagger/2},
+
+    where :math:`\Sigma^{\dagger/2}` is the square root of the Moore--Penrose
+    pseudoinverse of :math:`\Sigma`. The transformed bases satisfy
+
+    .. math::
+
+       Tᴴ \, \text{cross} \, S = J,
+
+    where :math:`J` is the diagonal projector onto the numerically nondegenerate
+    singular subspace. In particular, full-rank directions are normalized to one,
+    while singular or numerically tiny directions are mapped to zero instead of
+    being inverted.
+
+    Args:
+        cross: Batched square cross-pairing matrix of shape ``(..., n, n)``.
+        rtol: Relative singular-value cutoff. If omitted, a dtype-based default is
+            used.
+
+    Returns:
+        A pair ``(S, T)`` with shapes ``(..., n, n)``.
+    """
+    u_svd, sigma, vh = torch.linalg.svd(cross, full_matrices=False)
+
+    if rtol is None:
+        rtol = max(cross.shape[-2], cross.shape[-1]) * torch.finfo(sigma.dtype).eps
+
+    tol = rtol * sigma.amax(dim=-1, keepdim=True)
+    keep = sigma > tol
+    safe_sigma = torch.where(keep, sigma, torch.ones_like(sigma))
+    sigma_inv_sqrt = torch.where(keep, safe_sigma.rsqrt(), torch.zeros_like(sigma))
+
+    d = torch.diag_embed(sigma_inv_sqrt).to(dtype=cross.dtype)
+    s = vh.mH @ d
+    t = u_svd @ d
+    return s, t
+
+
+def btrace_estimator_new(
     fn: Callable[[Tensor], Tensor],
     adj_fn: Callable[[Tensor], Tensor],
     left_samples: Tensor,
     right_samples: Tensor,
 ) -> Tensor:
-    r"""Experimental efficient two-sided XTrace-style estimator.
+    r"""Experimental efficient two-sided estimator with balanced A-biorthogonal sketches.
 
-    This function implements the same experimental two-sided estimator as
-    `xtrace_bilinear_estimator_experimental`, but avoids recomputing leave-one-out
-    QR factorizations. Instead, it uses the XTrace rank-one update identity on
-    both sides:
+    This function builds orthonormal sketch bases from the right and left probe
+    actions,
 
     .. math::
 
-       QᵢQᵢᴴ = Q(I - sᵢsᵢᴴ)Qᴴ, \qquad PᵢPᵢᴴ = P(I - tᵢtᵢᴴ)Pᴴ,
+       Y = A V, \qquad Z = Aᴴ U,
 
-    where the columns `sᵢ` and `tᵢ` are obtained from the normalized columns of
-    `(R_Q^{-1})ᴴ` and `(R_P^{-1})ᴴ`, respectively.
-
-    The implemented estimator uses the projector form
+    via reduced QR factorizations
 
     .. math::
 
-       \hat tᵢ = \tr(Πᴸᵢ A Πᴿᵢ)
-              + uᵢᴴ(I - Πᴸᵢ) A (I - Πᴿᵢ) vᵢ,
+       Y = Q R_Q, \qquad Z = P R_P.
 
-    with `Πᴿᵢ = QᵢQᵢᴴ` and `Πᴸᵢ = PᵢPᵢᴴ`.
+    It then forms the small cross matrix
+
+    .. math::
+
+       H = Pᴴ A Q,
+
+    and replaces the separate QR-side normalizations by a balanced
+    pseudoinverse-square-root biorthogonalization
+
+    .. math::
+
+       H = U_H \Sigma_H V_Hᴴ, \qquad
+       S = V_H \Sigma_H^{\dagger/2}, \qquad
+       T = U_H \Sigma_H^{\dagger/2},
+
+    yielding transformed sketch bases
+
+    .. math::
+
+       \widetilde Q = Q S, \qquad \widetilde P = P T,
+
+    such that
+
+    .. math::
+
+       \widetilde Pᴴ A \widetilde Q = J,
+
+    where :math:`J` is the diagonal projector onto the numerically nondegenerate
+    paired subspace. If :math:`H` is full rank, then :math:`J = I`. If :math:`H`
+    is rank-deficient (including the case :math:`A = 0`), degenerate directions
+    are zeroed rather than inverted.
+
+    The estimator uses the leave-one-out oblique projector pair
+
+    .. math::
+
+       \Pi_i^R = \widetilde Q (I - e_i e_iᴴ) \widetilde Pᴴ A,
+       \qquad
+       \Pi_i^L = \widetilde P (I - e_i e_iᴴ) \widetilde Qᴴ Aᴴ,
+
+    and computes
+
+    .. math::
+
+       \hat t_i
+       = \operatorname{tr}(\Pi_i^L A \Pi_i^R)
+       + u_iᴴ (I - \Pi_i^L) A (I - \Pi_i^R) v_i.
 
     Notes:
-        This remains an experimental generalization. It is intended as an
-        efficient implementation vehicle for further moment-estimation work.
+        This no longer uses the orthogonal XTrace rank-one identities based on the
+        normalized columns of ``(R^{-1})ᴴ``. Instead, it uses a balanced
+        A-biorthogonal / oblique projector construction derived from the small
+        cross-pairing matrix ``Pᴴ A Q``. The construction is defined uniformly even
+        when that cross matrix is singular, although exact identity biorthogonality
+        is then impossible.
     """
     if left_samples.shape != right_samples.shape:
         raise ValueError("left_samples and right_samples must have matching shapes.")
 
-    *_, num_samples, dim = right_samples.shape
-    if num_samples == 0:
-        raise ValueError(
-            "xtrace_bilinear_estimator_efficient_experimental requires samples."
-        )
-    if num_samples > dim:
-        raise ValueError(
-            "Efficient bilinear XTrace currently requires num_samples <= dimension."
-        )
-
-    # Right sketch: V columns are the probe vectors, Y = A V.
-    # v_cols, av_cols: (..., d, n)
-    v_cols = right_samples.mT
-    av_cols = fn(right_samples).mT
-    # Q: (..., d, n), R_q: (..., n, n)
-    q, r_q = qr(av_cols, mode="reduced")
-    # S columns are the normalized null-space update vectors sᵢ.
-    # s: (..., n, n)
-    s = _normalized_inverse_h_columns(r_q)
-
-    # Left sketch: U columns are the probe vectors, AᴴU drives the left basis.
-    # u_cols, ahu_cols: (..., d, n)
+    # Probe matrices with columns as sample vectors.
+    # U, V: (..., d, n)
     u_cols = left_samples.mT
+    v_cols = right_samples.mT
+
+    # Right sketch: Y = A V = Q R_Q with Q orthonormal.
+    # av_cols, q: (..., d, n)
+    av_cols = fn(right_samples).mT
+    q, _ = qr(av_cols, mode="reduced")
+
+    # Left sketch: Z = Aᴴ U = P R_P with P orthonormal.
+    # ahu_cols, p: (..., d, n)
     ahu_cols = adj_fn(left_samples).mT
-    # P: (..., d, n), R_p: (..., n, n)
-    p, r_p = qr(ahu_cols, mode="reduced")
-    # T columns are the normalized update vectors tᵢ for the left basis.
-    # t: (..., n, n)
-    t = _normalized_inverse_h_columns(r_p)
+    p, _ = qr(ahu_cols, mode="reduced")
 
-    # H = Pᴴ A Q, C = Qᴴ P. Shapes: (..., n, n)
+    # Small cross-pairing matrix H = Pᴴ A Q.
+    # aq, h: (..., d, n), (..., n, n)
     aq = fn(q.mT).mT
-    h = torch.einsum("...dp, ...dq -> ...pq", p.conj(), aq)
-    c = torch.einsum("...dq, ...dp -> ...qp", q.conj(), p)
+    h = p.mH @ aq
 
-    # Projected trace term:
-    # tr(Πᴸᵢ A Πᴿᵢ) = tr((I - tᵢtᵢᴴ) H (I - sᵢsᵢᴴ) C)
-    #               = tr(HC) - tᵢᴴHC tᵢ - sᵢᴴCH sᵢ + (tᵢᴴHsᵢ)(sᵢᴴCtᵢ)
-    hc = h @ c
-    ch = c @ h
-    trace_hc = hc.diagonal(dim1=-2, dim2=-1).sum(dim=-1, keepdim=True)
-    s_cols = s.mT  # (..., n, n), row i contains sᵢᴴ data as a vector
-    t_cols = t.mT  # (..., n, n), row i contains tᵢᴴ data as a vector
-    d_t_hc_t = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), hc, t_cols)
-    d_s_ch_s = torch.einsum("...ni, ...ij, ...nj -> ...n", s_cols.conj(), ch, s_cols)
-    d_t_h_s = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), h, s_cols)
-    d_s_c_t = torch.einsum("...ni, ...ij, ...nj -> ...n", s_cols.conj(), c, t_cols)
-    projected_trace = trace_hc - d_t_hc_t - d_s_ch_s + d_t_h_s * d_s_c_t
+    # Balanced A-biorthogonalization on the small cross matrix:
+    #   q_b = Q S,  p_b = P T,  with  p_bᴴ A q_b = J.
+    s, t = _balanced_biorthogonal_factors(h)
+    q_b = q @ s
+    p_b = p @ t
 
-    # W = QᴴV and Z = PᴴU collect probe coordinates in the full left/right bases.
-    # Shapes: (..., n, n)
-    w = torch.einsum("...dq, ...dn -> ...qn", q.conj(), v_cols)
-    z = torch.einsum("...dp, ...dn -> ...pn", p.conj(), u_cols)
-    w_rows = w.mT  # (..., n, n), row i is wᵢ
-    z_rows = z.mT  # (..., n, n), row i is zᵢ
+    # Reuse A Q = aq to obtain A q_b = (A Q) S.
+    aq_b = aq @ s
 
-    # xᵢ = wᵢ - <sᵢ, wᵢ> sᵢ,  yᵢ = zᵢ - <tᵢ, zᵢ> tᵢ
-    alpha = vecdot(s_cols, w_rows, dim=-1)
-    beta = vecdot(t_cols, z_rows, dim=-1)
-    x = w_rows - alpha.unsqueeze(-1) * s_cols
-    y = z_rows - beta.unsqueeze(-1) * t_cols
+    # Oblique projected trace term:
+    #
+    #   tr(Π_i^L A Π_i^R)
+    #     = tr((I - E_i) G (I - E_i) F),
+    #
+    # where
+    #   G = q_bᴴ Aᴴ A q_b = (A q_b)ᴴ (A q_b),
+    #   F = p_bᴴ A p_b.
+    #
+    # Expanding with E_i = e_i e_iᴴ gives
+    #   tr(GF) - (GF)_{ii} - (FG)_{ii} + G_{ii} F_{ii}.
+    g = aq_b.mH @ aq_b
+
+    # Compute F = p_bᴴ A p_b via the untransformed left basis and then apply T.
+    ap = fn(p.mT).mT
+    f = t.mH @ (p.mH @ ap) @ t
+
+    gf = g @ f
+    fg = f @ g
+    trace_gf = gf.diagonal(dim1=-2, dim2=-1).sum(dim=-1, keepdim=True)
+    diag_gf = gf.diagonal(dim1=-2, dim2=-1)
+    diag_fg = fg.diagonal(dim1=-2, dim2=-1)
+    diag_g = g.diagonal(dim1=-2, dim2=-1)
+    diag_f = f.diagonal(dim1=-2, dim2=-1)
+    projected_trace = trace_gf - diag_gf - diag_fg + diag_g * diag_f
+
+    # Coefficients of each probe against the full biorthogonal sketch pair:
+    #   w_i = p_bᴴ A v_i,
+    #   z_i = q_bᴴ Aᴴ u_i.
+    #
+    # Leaving out column i amounts to zeroing the i-th coefficient.
+    w = p_b.mH @ av_cols
+    z = q_b.mH @ ahu_cols
+    w_rows = w.mT
+    z_rows = z.mT
+    x = w_rows - torch.diag_embed(w.diagonal(dim1=-2, dim2=-1))
+    y = z_rows - torch.diag_embed(z.diagonal(dim1=-2, dim2=-1))
 
     # Residual vectors:
-    # (I - Πᴿᵢ) vᵢ = vᵢ - Q xᵢ,   (I - Πᴸᵢ) uᵢ = uᵢ - P yᵢ
-    right_residuals = right_samples - torch.einsum("...dq, ...nq -> ...nd", q, x)
-    left_residuals = left_samples - torch.einsum("...dp, ...np -> ...nd", p, y)
+    #   (I - Π_i^R) v_i = v_i - q_b x_i,
+    #   (I - Π_i^L) u_i = u_i - p_b y_i.
+    right_residuals = right_samples - torch.einsum("...dk, ...nk -> ...nd", q_b, x)
+    left_residuals = left_samples - torch.einsum("...dk, ...nk -> ...nd", p_b, y)
 
-    # Residual correction uᵢᴴ(I - Πᴸᵢ) A (I - Πᴿᵢ) vᵢ, all samples at once.
+    # Residual correction u_iᴴ (I - Π_i^L) A (I - Π_i^R) v_i.
     residual_actions = fn(right_residuals)
     residual_trace = vecdot(left_residuals, residual_actions, dim=-1)
 
