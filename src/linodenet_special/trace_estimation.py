@@ -711,6 +711,7 @@ class LogAbsDetEstimator(nn.Module):
         assert self.num_series_terms is not None
 
         y, jvp_fn = linearize(fn, x)
+        batched_jvp_fn = vmap(jvp_fn)
         samples = torch.randn(
             *x.shape[:-1],
             self.num_samples,
@@ -722,8 +723,11 @@ class LogAbsDetEstimator(nn.Module):
 
         for k in range(1, self.num_series_terms + 1):
             coef = 1.0 / k if k % 2 else -1.0 / k
+            result = samples.movedim(-2, 0)
+            for _ in range(k):
+                result = batched_jvp_fn(result)
             logabsdet = logabsdet + coef * hutchinson_estimator(
-                self._make_power_operator(jvp_fn, k),
+                lambda values, result=result: result.movedim(0, -2),
                 samples,
             )
 
@@ -737,26 +741,20 @@ class LogAbsDetEstimator(nn.Module):
         assert self.num_samples is not None
         assert self.num_series_terms is not None
 
-        y, jvp_fn = linearize(fn, x)
-        samples = (
-            2
-            * torch.rand(
-                *x.shape[:-1],
-                self.num_samples,
-                x.shape[-1],
-                device=x.device,
-                dtype=x.dtype,
-            )
-            - 1
+        y, jvp_fn = linearize(fn, x)  # (..., d)  -> (..., d)
+        batched_jvp_fn = vmap(jvp_fn, out_dims=-1)  # (..., d, n) -> (..., d, n)
+        samples = torch.randn(  # (..., d, n)
+            (self.num_samples, *x.shape),
+            device=x.device,
+            dtype=x.dtype,
         )
         logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
 
         for k in range(1, self.num_series_terms + 1):
             coef = 1.0 / k if k % 2 else -1.0 / k
-            logabsdet = logabsdet + coef * xtrace_estimator(
-                self._make_power_operator(jvp_fn, k),
-                samples,
-            )
+            samples = batched_jvp_fn(samples)
+            tr_k_power = xtrace_estimator(batched_jvp_fn, samples)
+            logabsdet = logabsdet + coef * tr_k_power
 
         return y, logabsdet
 
@@ -766,17 +764,3 @@ class LogAbsDetEstimator(nn.Module):
         x: Tensor,
     ) -> tuple[Tensor, Tensor]:
         return self.method(fn, x)
-
-    @staticmethod
-    def _make_power_operator(
-        jvp_fn: Callable[[Tensor], Tensor], num_powers: int
-    ) -> Callable[[Tensor], Tensor]:
-        batched_jvp_fn = vmap(jvp_fn)
-
-        def apply(samples: Tensor, /) -> Tensor:
-            result = samples.movedim(-2, 0)
-            for _ in range(num_powers):
-                result = batched_jvp_fn(result)
-            return result.movedim(0, -2)
-
-        return apply

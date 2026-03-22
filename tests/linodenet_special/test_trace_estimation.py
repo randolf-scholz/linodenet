@@ -339,6 +339,9 @@ class ScaledMap(torch.nn.Module):
 
 
 class TestLogAbsDetEstimator(TestCase):
+    BATCH_SIZE = 16
+    INPUT_SIZE = 4
+
     @pytest.mark.parametrize(
         ("method", "num_samples", "num_series_terms", "expected_method"),
         [
@@ -357,11 +360,15 @@ class TestLogAbsDetEstimator(TestCase):
         estimator = LogAbsDetEstimator(method, num_samples, num_series_terms)
         assert estimator.method.__name__ == expected_method
 
+        fn = ScaledMap(0.125)
+        x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE)
+        y, logabsdet = estimator(fn, x)
+
     @pytest.mark.parametrize("device", DEVICES, ids=str)
-    def test_logabsdet_estimator_exact_matches_closed_form(self, device: str) -> None:
+    def test_exact_estimator_matches_closed_form(self, device: str) -> None:
         estimator = LogAbsDetEstimator("exact", None, None).to(device=device)
         fn = ScaledMap(0.125).to(device=device)
-        x = torch.randn(7, 4, device=device)
+        x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
 
         y, logabsdet = estimator(fn, x)
 
