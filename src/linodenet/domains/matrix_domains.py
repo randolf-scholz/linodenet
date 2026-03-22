@@ -1,12 +1,91 @@
-r"""Matrix-specific domain labels and their partial-order relations."""
+r"""Matrix-specific domain primitives and partial-order labels."""
 
-__all__ = ["MatrixDomains"]
+__all__ = ["Difference", "Intersection", "MatrixDomain", "MatrixDomains", "Union"]
 
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field
 from types import MappingProxyType
 
 from torch import Tensor
 
-from .base import PosetEnum
+from .base import Domain, PosetEnum
+
+
+class MatrixDomain(Domain):
+    r"""Stub base class for matrix domains."""
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: MatrixDomain, /) -> bool:
+        return NotImplemented
+
+    def __lt__(self, other: MatrixDomain, /) -> bool:
+        raise NotImplementedError
+
+    def __gt__(self, other: MatrixDomain, /) -> bool:
+        return NotImplemented
+
+    def __ge__(self, other: MatrixDomain, /) -> bool:
+        return NotImplemented
+
+    def __or__(self, other: MatrixDomain, /) -> Union:
+        return Union({self, other})
+
+    def __and__(self, other: MatrixDomain, /) -> Intersection:
+        return Intersection({self, other})
+
+    def __sub__(self, other: MatrixDomain, /) -> Difference:
+        return Difference(self, other)
+
+
+@dataclass(frozen=True)
+class Difference(MatrixDomain):
+    r"""Structural set difference of matrix domains."""
+
+    lhs: MatrixDomain
+    rhs: MatrixDomain
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return item in self.lhs and item not in self.rhs
+
+
+@dataclass(frozen=True)
+class Intersection(MatrixDomain):
+    r"""Structural intersection of matrix domains."""
+
+    domains: frozenset[MatrixDomain] = field(default_factory=frozenset)
+
+    def __init__(self, domains: Iterable[MatrixDomain] = (), /) -> None:
+        object.__setattr__(self, "domains", frozenset(domains))
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return all(item in domain for domain in self.domains)
+
+    def __iter__(self) -> Iterator[MatrixDomain]:
+        return iter(self.domains)
+
+    def __len__(self) -> int:
+        return len(self.domains)
+
+
+@dataclass(frozen=True)
+class Union(MatrixDomain):
+    r"""Structural union of matrix domains."""
+
+    domains: frozenset[MatrixDomain] = field(default_factory=frozenset)
+
+    def __init__(self, domains: Iterable[MatrixDomain] = (), /) -> None:
+        object.__setattr__(self, "domains", frozenset(domains))
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return any(item in domain for domain in self.domains)
+
+    def __iter__(self) -> Iterator[MatrixDomain]:
+        return iter(self.domains)
+
+    def __len__(self) -> int:
+        return len(self.domains)
 
 
 class MatrixDomains(PosetEnum):
