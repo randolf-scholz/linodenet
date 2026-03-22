@@ -166,6 +166,17 @@ class Interval(Domain):
             return not (other.upper_inclusive and self.lower_inclusive)
         return False
 
+    def touches(self, other: Interval | str, /) -> bool:
+        r"""Return whether two intervals meet at an included shared endpoint."""
+        other = Interval(other)
+        if self.is_empty() or other.is_empty():
+            return False
+        return (
+            self.upper == other.lower and self.upper_inclusive and other.lower_inclusive
+        ) or (
+            other.upper == self.lower and other.upper_inclusive and self.lower_inclusive
+        )
+
     def is_empty(self) -> bool:
         r"""Return whether the interval represents the empty set."""
         non_empty = not (isnan(self.lower) or isnan(self.upper))
@@ -534,10 +545,20 @@ class RealDomain(Domain, Collection[Interval]):
         if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
 
-        return all(
-            any(interval <= other_interval for other_interval in other.intervals)
-            for interval in self.intervals
-        )
+        right_intervals = iter(other.intervals)
+        right = next(right_intervals, None)
+        for left in self.intervals:
+            while (
+                right is not None
+                and right.upper <= left.lower
+                and not right.touches(left)
+            ):
+                right = next(right_intervals, None)
+
+            if right is None or not (left <= right):
+                return False
+
+        return True
 
     def __lt__(self, rhs: object, /) -> bool:
         if (other := RealDomain.parse(rhs)) is None:
@@ -547,10 +568,7 @@ class RealDomain(Domain, Collection[Interval]):
     def __ge__(self, rhs: object, /) -> bool:
         if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
-        return all(
-            any(interval <= self_interval for self_interval in self.intervals)
-            for interval in other.intervals
-        )
+        return other <= self
 
     def __gt__(self, rhs: object, /) -> bool:
         if (other := RealDomain.parse(rhs)) is None:
