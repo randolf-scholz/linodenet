@@ -42,19 +42,45 @@ class TestInterval:
         with pytest.raises(TypeError):
             _ = Interval("[0, 1]") <= 1
 
-    def test_union_operator(self) -> None:
-        interval = Interval("[0, 1]")
+    @pytest.mark.parametrize(
+        ("left", "right", "expected"),
+        [
+            ("[0, 1]", "[1, 2]", "[0, 2]"),
+            ("(0, 1]", "[1, 2)", "(0, 2)"),
+            ("[0, 2]", "[1, 3]", "[0, 3]"),
+            ("[0, 2)", "(1, 3]", "[0, 3]"),
+        ],
+    )
+    def test_union_operator_overlapping_cases(
+        self,
+        left: str,
+        right: str,
+        expected: str,
+    ) -> None:
+        assert Interval(left) | Interval(right) == Interval(expected)
+        assert Interval(right) | Interval(left) == Interval(expected)
 
-        assert interval | Interval("(1, 2]") == RealDomain("[0, 2]")
-        assert interval | "[-2, -1] | (2, 3]" == RealDomain(
-            "[-2, -1]",
-            "[0, 1]",
-            "(2, 3]",
-        )
-        assert "[-2, -1]" | interval == RealDomain("[-2, -1]", "[0, 1]")
+    @pytest.mark.parametrize(
+        ("left", "right", "expected"),
+        [
+            ("[0, 1]", "(1, 2]", "[0, 1] | (1, 2]"),
+            ("[0, 1]", "[2, 3]", "[0, 1] | [2, 3]"),
+            ("[-2, -1]", "[0, 1]", "[-2, -1] | [0, 1]"),
+            ("[0, 1]", "[-2, -1] | (2, 3]", "[-2, -1] | [0, 1] | (2, 3]"),
+        ],
+    )
+    def test_union_operator_disjoint_cases(
+        self,
+        left: str,
+        right: str,
+        expected: str,
+    ) -> None:
+        assert Interval(left) | right == RealDomain(expected)
+        assert right | Interval(left) == RealDomain(expected)
 
+    def test_union_operator_rejects_non_intervals(self) -> None:
         with pytest.raises(TypeError):
-            _ = interval | 1
+            _ = Interval("[0, 1]") | 1
 
     @pytest.mark.parametrize(
         ("left", "right", "expected"),

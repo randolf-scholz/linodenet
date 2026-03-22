@@ -281,12 +281,39 @@ class Interval(Domain):
             case _:
                 return NotImplemented
 
-    def __or__(self, other: object, /) -> RealDomain:
+    def __or__(self, other: object, /) -> Interval | RealDomain:
+        if isinstance(other, Interval) and not self.isdisjoint(other):
+            lower = self.lower
+            lower_inclusive = self.lower_inclusive
+            if other.lower < lower or (
+                other.lower == lower and other.lower_inclusive and not lower_inclusive
+            ):
+                lower = other.lower
+                lower_inclusive = other.lower_inclusive
+
+            upper = self.upper
+            upper_inclusive = self.upper_inclusive
+            if other.upper > upper or (
+                other.upper == upper and other.upper_inclusive and not upper_inclusive
+            ):
+                upper = other.upper
+                upper_inclusive = other.upper_inclusive
+
+            return Interval(
+                lower,
+                upper,
+                lower_inclusive=lower_inclusive,
+                upper_inclusive=upper_inclusive,
+            )
+
         if (other_union := RealDomain._coerce_union(other)) is None:
             return NotImplemented
         return RealDomain(self, *other_union.intervals)
 
-    def __ror__(self, other: object, /) -> RealDomain:
+    def __ror__(self, other: object, /) -> Interval | RealDomain:
+        if isinstance(other, Interval) and not self.isdisjoint(other):
+            return other | self
+
         if (other_union := RealDomain._coerce_union(other)) is None:
             return NotImplemented
         return RealDomain(*other_union.intervals, self)
