@@ -23,8 +23,8 @@ class Interval(Domain):
     lower_inclusive: Final[bool]
     upper_inclusive: Final[bool]
 
-    @staticmethod
-    def parse(arg: object, /) -> Interval | None:
+    @classmethod
+    def parse(cls, arg: object, /) -> Interval | None:
         match arg:
             case Interval():
                 return arg
@@ -344,8 +344,8 @@ class RealDomain(Domain, Collection[Interval]):
 
     intervals: Final[tuple[Interval, ...]]
 
-    @staticmethod
-    def parse(other: object, /) -> RealDomain | None:
+    @classmethod
+    def parse(cls, other: object, /) -> RealDomain | None:
         match other:
             case RealDomain():
                 return other
@@ -433,7 +433,7 @@ class RealDomain(Domain, Collection[Interval]):
         return mask
 
     def __eq__(self, other: object, /) -> bool:
-        if (other_union := self.parse(other)) is None:
+        if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
         return hash(self) == hash(other_union)
 
@@ -450,7 +450,7 @@ class RealDomain(Domain, Collection[Interval]):
         return RealDomain(*(interval * other for interval in self.intervals))
 
     def __le__(self, other: object, /) -> bool:
-        if (other_union := self.parse(other)) is None:
+        if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
 
         return all(
@@ -465,7 +465,7 @@ class RealDomain(Domain, Collection[Interval]):
         return result and self != other
 
     def __ge__(self, other: object, /) -> bool:
-        if (other_union := self.parse(other)) is None:
+        if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
 
         return all(
