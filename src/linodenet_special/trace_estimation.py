@@ -20,7 +20,7 @@ from collections.abc import Callable
 
 import torch
 from torch import Tensor, nn, vmap
-from torch._functorch.eager_transforms import jacrev, linearize
+from torch.func import linearize
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
@@ -638,6 +638,9 @@ def btrace_estimator_new(
 class LogAbsDetEstimator(nn.Module):
     r"""Estimate log|det(𝕀 + ∂f/∂x)| using the power series expansion and a trace estimator.
 
+    - \log|\det A| = \Re(\tr(\log A)) for any A in the image of the matrix exponential
+    - \log|\det A| = ½\tr(\log AᴴA) for any A. (-∞ if A is singular)
+
     Args:
         method: str in {"exact", "hutch", "xtrace"} specifying the estimation method to use.
         num_samples: Number of random samples to use for the Hutchinson or XTrace estimator.
@@ -703,7 +706,7 @@ class LogAbsDetEstimator(nn.Module):
         logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
         return y, logabsdet
 
-    @signature("(..., d) -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def compute_hutch(
         self, fn: Callable[[Tensor], Tensor], x: Tensor
     ) -> tuple[Tensor, Tensor]:
@@ -734,7 +737,7 @@ class LogAbsDetEstimator(nn.Module):
 
         return y, logabsdet
 
-    @signature("(..., d) -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def compute_xtrace(
         self, fn: Callable[[Tensor], Tensor], x: Tensor
     ) -> tuple[Tensor, Tensor]:
@@ -750,12 +753,13 @@ class LogAbsDetEstimator(nn.Module):
             dtype=x.dtype,
         )
         logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
-
+        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
         for k in range(1, self.num_series_terms + 1):
-            coef = 1.0 / k if k % 2 else -1.0 / k
+            # log|det(I+A)| =
+            sign = sign.neg()
             samples = batched_jvp_fn(samples)
             tr_k_power = xtrace_estimator(batched_jvp_fn, samples)
-            logabsdet = logabsdet + coef * tr_k_power
+            logabsdet = logabsdet + (sign / k) * tr_k_power
 
         return y, logabsdet
 
