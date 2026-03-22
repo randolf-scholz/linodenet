@@ -397,17 +397,24 @@ class RealDomain(Domain, Collection[Interval]):
             raise ValueError(f"Invalid union of intervals string: {s}")
         return RealDomain(*(Interval(part) for part in parts))
 
-    def __init__(self, *intervals: Interval | str) -> None:
-        match intervals:
-            case []:
-                raise ValueError("Expected at least one interval.")
-            case [str(spec)]:
-                union = RealDomain.from_string(spec)
-                intervals = union.intervals
-            case _:
-                intervals = self._merge_intervals(Interval(spec) for spec in intervals)
+    def __init__(self, *intervals: Interval | str | RealDomain) -> None:
+        if not intervals:
+            raise ValueError("Expected at least one interval.")
 
-        self.intervals = intervals
+        flat_intervals: list[Interval] = []
+        for item in intervals:
+            match item:
+                case RealDomain() as domain:
+                    flat_intervals.extend(domain.intervals)
+                case str(spec):
+                    parsed = RealDomain.from_string(spec)
+                    flat_intervals.extend(parsed.intervals)
+                case Interval() as interval:
+                    flat_intervals.append(interval)
+                case _:
+                    raise TypeError(f"Invalid interval: {item}")
+
+        self.intervals = self._merge_intervals(flat_intervals)
 
     def __len__(self) -> int:
         return len(self.intervals)
