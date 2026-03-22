@@ -1,7 +1,19 @@
 r"""Matrix-specific domain primitives and partial-order labels."""
 
-__all__ = ["MatrixDomain", "MatrixDomains"]
+__all__ = [
+    "MatrixDomain",
+    "MatrixDomains",
+    # Classes
+    "Square",
+    "Rectangular",
+    "Symmetric",
+    "SkewSymmetric",
+    "LowRank",
+    "Fallback",
+]
 
+from abc import abstractmethod
+from dataclasses import KW_ONLY, dataclass
 from types import MappingProxyType
 
 from torch import Tensor
@@ -9,9 +21,15 @@ from torch import Tensor
 from .base import Domain, Intersection, Inverse, PosetEnum, Union
 
 
+@dataclass(frozen=True)
 class MatrixDomain(Domain):
     r"""Stub base class for matrix domains."""
 
+    @property
+    def shape(self) -> tuple[int, int] | None:
+        raise NotImplementedError
+
+    @abstractmethod
     def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
 
@@ -19,7 +37,7 @@ class MatrixDomain(Domain):
         return NotImplemented
 
     def __lt__(self, other: MatrixDomain, /) -> bool:
-        raise NotImplementedError
+        return NotImplemented
 
     def __gt__(self, other: MatrixDomain, /) -> bool:
         return NotImplemented
@@ -35,6 +53,101 @@ class MatrixDomain(Domain):
 
     def __and__(self, other: MatrixDomain, /) -> Intersection[MatrixDomain]:
         return Intersection({self, other})
+
+
+@dataclass(frozen=True)
+class Fallback(MatrixDomain):
+    name: str
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class Rectangular(MatrixDomain):
+    rows: int | None = None
+    cols: int | None = None
+
+    def __post_init__(self):
+        if (self.rows is None) ^ (self.cols is not None):
+            raise ValueError("Must specify both rows and cols, or neither.")
+
+    @property
+    def shape(self) -> tuple[int, int] | None:
+        if self.rows is None or self.cols is None:
+            return None
+        return self.rows, self.cols
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        if self.shape is None:
+            return True
+        return item.shape[-2:] == self.shape
+
+    def __call__(self, rows: int | None = None, cols: int | None = None) -> Rectangular:
+        return Rectangular(rows, cols)
+
+
+@dataclass(frozen=True)
+class LowRank(Rectangular):
+    rows: int | None = None
+    cols: int | None = None
+
+    _: KW_ONLY
+
+    rank: int | None = None
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        *,
+        rank: int | None = None,
+    ) -> LowRank:
+        return LowRank(rows, cols, rank=rank)
+
+
+@dataclass(frozen=True)
+class Square(MatrixDomain):
+    size: int | None = None
+
+    @property
+    def shape(self) -> tuple[int, int] | None:
+        if self.size is None:
+            return None
+        return self.size, self.size
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        if self.size is None:
+            return item.shape[-1] == item.shape[-2]
+        return item.shape[-1] == item.shape[-2] == self.size
+
+    def __call__(self, size: int) -> Square:
+        return Square(size)
+
+
+@dataclass(frozen=True)
+class Symmetric(Square):
+    size: int | None = None
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return super().__contains__(item) and item.transpose(-2, -1).equal(item)
+
+    def __call__(self, size: int) -> Symmetric:
+        return Symmetric(size)
+
+
+@dataclass(frozen=True)
+class SkewSymmetric(Square):
+    size: int | None = None
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return super().__contains__(item) and item.transpose(-2, -1).equal(-item)
+
+    def __call__(self, size: int) -> SkewSymmetric:
+        return SkewSymmetric(size)
 
 
 class MatrixDomains(PosetEnum):
