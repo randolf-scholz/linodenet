@@ -426,7 +426,7 @@ class RealDomain(Domain, Collection[Interval]):
                 case _:
                     raise TypeError(f"Invalid interval: {item}")
 
-        self.intervals = self._merge_intervals(flat_intervals)
+        self.intervals = tuple(self._merge_intervals(flat_intervals))
         self._validate()
 
     def __len__(self) -> int:
@@ -495,43 +495,42 @@ class RealDomain(Domain, Collection[Interval]):
                 raise ValueError("RealDomain intervals must be sorted by lower bound.")
 
     @staticmethod
-    def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
+    def _merge_intervals(intervals: Iterable[Interval], /) -> Iterator[Interval]:
         if not (intervals := [i for i in intervals if not i.is_empty()]):
-            return (Interval("(NAN, NAN)"),)
+            yield Interval.EMPTY
+            return
 
         ordered = sorted(intervals, key=lambda i: (i.lower, not i.lower_inclusive))
 
-        merged: list[Interval] = []
-        for interval in ordered:
-            if not merged:
-                merged.append(interval)
-                continue
-
-            current = merged[-1]
-            if current.is_disjoint(interval) and not (
-                current >= interval or interval >= current
+        current = ordered[0]
+        for interval in ordered[1:]:
+            if current.upper < interval.lower or (
+                current.upper == interval.lower
+                and not (current.upper_inclusive or interval.lower_inclusive)
             ):
-                merged.append(interval)
+                yield current
+                current = interval
                 continue
 
             if current.upper > interval.upper:
-                upper = current.upper
-                upper_inclusive = current.upper_inclusive
-            elif current.upper < interval.upper:
-                upper = interval.upper
-                upper_inclusive = interval.upper_inclusive
-            else:
-                upper = current.upper
-                upper_inclusive = current.upper_inclusive or interval.upper_inclusive
+                continue
+            if current.upper < interval.upper:
+                current = Interval(
+                    current.lower,
+                    interval.upper,
+                    lower_inclusive=current.lower_inclusive,
+                    upper_inclusive=interval.upper_inclusive,
+                )
+                continue
 
-            merged[-1] = Interval(
+            current = Interval(
                 current.lower,
-                upper,
+                current.upper,
                 lower_inclusive=current.lower_inclusive,
-                upper_inclusive=upper_inclusive,
+                upper_inclusive=current.upper_inclusive or interval.upper_inclusive,
             )
 
-        return tuple(merged)
+        yield current
 
     def __contains__(self, item: Tensor, /) -> Tensor:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
         mask = self.intervals[0].__contains__(item)
@@ -612,44 +611,9 @@ class RealDomain(Domain, Collection[Interval]):
     def __or__(self, other: object, /) -> RealDomain:
         if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
-
-        ordered = sorted(
-            (*self.intervals, *other_union.intervals),
-            key=lambda i: (i.lower, not i.lower_inclusive),
+        return RealDomain(
+            *self._merge_intervals((*self.intervals, *other_union.intervals))
         )
-
-        merged: list[Interval] = []
-        for interval in ordered:
-            if not merged:
-                merged.append(interval)
-                continue
-
-            current = merged[-1]
-            if current.upper < interval.lower or (
-                current.upper == interval.lower
-                and not (current.upper_inclusive or interval.lower_inclusive)
-            ):
-                merged.append(interval)
-                continue
-
-            if current.upper > interval.upper:
-                upper = current.upper
-                upper_inclusive = current.upper_inclusive
-            elif current.upper < interval.upper:
-                upper = interval.upper
-                upper_inclusive = interval.upper_inclusive
-            else:
-                upper = current.upper
-                upper_inclusive = current.upper_inclusive or interval.upper_inclusive
-
-            merged[-1] = Interval(
-                current.lower,
-                upper,
-                lower_inclusive=current.lower_inclusive,
-                upper_inclusive=upper_inclusive,
-            )
-
-        return RealDomain(*merged)
 
     def __ror__(self, other: object, /) -> RealDomain:
         if (other_union := RealDomain.parse(other)) is None:
