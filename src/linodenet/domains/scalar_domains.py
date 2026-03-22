@@ -218,18 +218,10 @@ class Interval(Domain):
                 return NotImplemented
             return union == self
 
-        if self.isempty() and other.isempty():
-            return (
-                self.lower_inclusive == other.lower_inclusive
-                and self.upper_inclusive == other.upper_inclusive
-            )
-
-        return (
-            self.lower == other.lower
-            and self.upper == other.upper
-            and self.lower_inclusive == other.lower_inclusive
-            and self.upper_inclusive == other.upper_inclusive
-        )
+        # Note: safe, because NAN always use math.nan
+        #    there are many different binary representations of float(nan)
+        #    but Interval.__new__ returns the same Interval.EMPTY instance for any of them
+        return hash(self) == hash(other)
 
     def __le__(self, rhs: object, /) -> bool:
         if (other := Interval.parse(rhs)) is None:
