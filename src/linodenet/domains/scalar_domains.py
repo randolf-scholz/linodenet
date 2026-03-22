@@ -7,23 +7,100 @@ from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from math import isnan, nan
-from typing import ClassVar, Final, overload
+from typing import ClassVar, Final, Self, overload
 
 from torch import Tensor
 
 from .base import Domain
 
 
-@dataclass(unsafe_hash=True)
+@dataclass(unsafe_hash=True, init=False)
 class Interval(Domain):
     r"""A named tuple representing an interval."""
 
-    EMPTY: ClassVar[Final[Interval]] = ...
+    EMPTY: ClassVar[Final[Interval]] = ...  # pyright: ignore[reportAssignmentType]
 
-    lower: Final[float]
-    upper: Final[float]
-    lower_inclusive: Final[bool]
-    upper_inclusive: Final[bool]
+    lower: Final[float]  # type: ignore[misc]
+    upper: Final[float]  # type: ignore[misc]
+    lower_inclusive: Final[bool]  # type: ignore[misc]
+    upper_inclusive: Final[bool]  # type: ignore[misc]
+
+    @overload
+    def __new__(cls, s: str | Interval, /) -> Interval: ...
+    @overload
+    def __new__(
+        cls,
+        /,
+        lower: float,
+        upper: float,
+        *,
+        lower_inclusive: bool,
+        upper_inclusive: bool,
+    ) -> Interval: ...
+    def __new__(  # type: ignore[misc]  # pyright: ignore[reportInconsistentOverload]
+        cls,
+        lower_or_interval: str | Interval | float | None = None,
+        /,
+        lower: float | None = None,
+        upper: float | None = None,
+        *,
+        lower_inclusive: bool | None = None,
+        upper_inclusive: bool | None = None,
+    ) -> Self | Interval:
+        if isinstance(lower_or_interval, Interval | str) and (
+            lower is not None
+            or upper is not None
+            or lower_inclusive is not None
+            or upper_inclusive is not None
+        ):
+            raise TypeError("String interval constructor does not accept bounds.")
+
+        match lower_or_interval:
+            case str(s):
+                spec = Interval._parse_string(s)
+                lower = spec["lower"]
+                upper = spec["upper"]
+                lower_inclusive = spec["lower_inclusive"]
+                upper_inclusive = spec["upper_inclusive"]
+
+            case Interval() as interval:
+                lower = interval.lower
+                upper = interval.upper
+                lower_inclusive = interval.lower_inclusive
+                upper_inclusive = interval.upper_inclusive
+
+            case float(value):
+                if upper is None and lower is None:
+                    raise TypeError("Missing upper bound")
+                if upper is None:  # lower.upper given positionally
+                    upper = lower
+                lower = value
+
+            case None:
+                if (
+                    lower is None
+                    or upper is None
+                    or lower_inclusive is None
+                    or upper_inclusive is None
+                ):
+                    raise TypeError("Expected either a string/interval or bounds.")
+            case _:
+                raise TypeError(f"Unexpected type: {type(lower_or_interval)}")
+
+        assert lower is not None
+        assert upper is not None
+        assert lower_inclusive is not None
+        assert upper_inclusive is not None
+
+        if (isnan(lower) or isnan(upper)) and Interval.EMPTY is not Ellipsis:
+            return Interval.EMPTY
+
+        self = super().__new__(cls)
+        object.__setattr__(self, "lower", lower)
+        object.__setattr__(self, "upper", upper)
+        object.__setattr__(self, "lower_inclusive", lower_inclusive)
+        object.__setattr__(self, "upper_inclusive", upper_inclusive)
+        return self
 
     @classmethod
     def parse(cls, arg: object, /) -> Interval | None:
@@ -73,59 +150,6 @@ class Interval(Domain):
             "lower_inclusive": lower_inclusive,
             "upper_inclusive": upper_inclusive,
         }
-
-    @overload
-    def __init__(self, s: str | Interval, /) -> None: ...
-    @overload
-    def __init__(
-        self,
-        lower: float,
-        upper: float,
-        *,
-        lower_inclusive: bool,
-        upper_inclusive: bool,
-    ) -> None: ...
-    def __init__(
-        self,
-        lower: str | Interval | float,
-        upper: float | None = None,
-        *,
-        lower_inclusive: bool | None = None,
-        upper_inclusive: bool | None = None,
-    ) -> None:
-        if isinstance(lower, Interval | str) and (
-            upper is not None
-            or lower_inclusive is not None
-            or upper_inclusive is not None
-        ):
-            raise TypeError("String interval constructor does not accept bounds.")
-
-        match lower:
-            case str():
-                spec = Interval._parse_string(lower)
-                lower = spec["lower"]
-                upper = spec["upper"]
-                lower_inclusive = spec["lower_inclusive"]
-                upper_inclusive = spec["upper_inclusive"]
-            case Interval() as interval:
-                lower = interval.lower
-                upper = interval.upper
-                lower_inclusive = interval.lower_inclusive
-                upper_inclusive = interval.upper_inclusive
-
-        if upper is None or lower_inclusive is None or upper_inclusive is None:
-            raise TypeError("Expected upper and inclusivity flags for numeric bounds.")
-
-        if isnan(lower) or isnan(upper):
-            lower = nan
-            upper = nan
-            lower_inclusive = False
-            upper_inclusive = False
-
-        self.lower = lower
-        self.upper = upper
-        self.lower_inclusive = lower_inclusive
-        self.upper_inclusive = upper_inclusive
 
     def isdisjoint(self, other: Interval | str, /) -> bool:
         r"""Return whether two intervals have empty intersection."""
@@ -337,7 +361,12 @@ class Interval(Domain):
         return f"{self.__class__.__name__}('{self!s}')"
 
 
-Interval.EMPTY = Interval(nan, nan, lower_inclusive=False, upper_inclusive=False)
+Interval.EMPTY = Interval(  # pyright: ignore[reportAttributeAccessIssue]
+    nan,
+    nan,
+    lower_inclusive=False,
+    upper_inclusive=False,
+)
 
 
 class RealDomain(Domain, Collection[Interval]):
