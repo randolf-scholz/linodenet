@@ -8,7 +8,7 @@ from torch import nn
 
 from linodenet.mappings.base import TransformSequence
 from linodenet.mappings.linear import LinearContraction
-from linodenet.mappings.transforms.residual import (
+from linodenet.mappings.transforms.residual_contraction import (
     ResidualContraction,
     ReZeroContraction,
 )

@@ -8,7 +8,7 @@ from torch.nn.functional import mse_loss
 from torchinfo import summary
 
 from linodenet.mappings.transforms.iresnet import IResNet
-from linodenet.mappings.transforms.residual import (
+from linodenet.mappings.transforms.residual_contraction import (
     ResidualContraction,
     ReZeroContraction,
 )
