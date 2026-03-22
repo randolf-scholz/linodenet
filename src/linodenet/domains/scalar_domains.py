@@ -394,8 +394,20 @@ class RealDomain(Domain, Collection[Interval]):
             return RealDomain(*self.intervals[index])
         return self.intervals[index]
 
+    def isempty(self) -> bool:
+        return all(interval.isempty() for interval in self.intervals)
+
     @staticmethod
     def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
+        if not (intervals := [i for i in intervals if not i.isempty()]):
+            empty_interval = Interval(
+                float("nan"),
+                float("nan"),
+                lower_inclusive=False,
+                upper_inclusive=False,
+            )
+            return RealDomain(empty_interval)
+
         ordered = sorted(intervals, key=lambda i: (i.lower, not i.lower_inclusive))
 
         merged: list[Interval] = []
