@@ -1,6 +1,6 @@
 r"""Scalar domain primitives, including intervals and scalar domain labels."""
 
-__all__ = ["Interval", "IntervalUnion", "ScalarDomains"]
+__all__ = ["Interval", "RealDomain", "ScalarDomains"]
 
 
 from collections.abc import Collection, Iterable, Iterator
@@ -174,10 +174,10 @@ class Interval(Domain):
 
     def __le__(self, other: object, /) -> bool:
         match other:
-            case IntervalUnion():
+            case RealDomain():
                 return any(self <= interval for interval in other.intervals)
             case str():
-                return self <= IntervalUnion.from_string(other)
+                return self <= RealDomain.from_string(other)
             case _ if (other_interval := self._coerce_interval(other)) is not None:
                 lower_ok = self.lower > other_interval.lower or (
                     self.lower == other_interval.lower
@@ -199,24 +199,24 @@ class Interval(Domain):
 
     def __ge__(self, other: object, /) -> bool:
         match other:
-            case IntervalUnion():
+            case RealDomain():
                 return all(interval <= self for interval in other.intervals)
             case str():
-                return self >= IntervalUnion.from_string(other)
+                return self >= RealDomain.from_string(other)
             case _ if (other_interval := self._coerce_interval(other)) is not None:
                 return other_interval <= self
             case _:
                 return NotImplemented
 
-    def __or__(self, other: object, /) -> IntervalUnion:
-        if (other_union := IntervalUnion._coerce_union(other)) is None:
+    def __or__(self, other: object, /) -> RealDomain:
+        if (other_union := RealDomain._coerce_union(other)) is None:
             return NotImplemented
-        return IntervalUnion(self, *other_union.intervals)
+        return RealDomain(self, *other_union.intervals)
 
-    def __ror__(self, other: object, /) -> IntervalUnion:
-        if (other_union := IntervalUnion._coerce_union(other)) is None:
+    def __ror__(self, other: object, /) -> RealDomain:
+        if (other_union := RealDomain._coerce_union(other)) is None:
             return NotImplemented
-        return IntervalUnion(*other_union.intervals, self)
+        return RealDomain(*other_union.intervals, self)
 
     def __str__(self) -> str:
         lower_bracket = "[" if self.lower_inclusive else "("
@@ -229,8 +229,8 @@ class Interval(Domain):
         return f"Interval('{self!s}')"
 
 
-class IntervalUnion(Domain, Collection[Interval]):
-    r"""A finite union of intervals with automatic simplification."""
+class RealDomain(Domain, Collection[Interval]):
+    r"""We model domains on the extended real line by a finite union of intervals."""
 
     intervals: Final[tuple[Interval, ...]]
 
@@ -239,7 +239,7 @@ class IntervalUnion(Domain, Collection[Interval]):
             case []:
                 raise ValueError("Expected at least one interval.")
             case [str(spec)]:
-                union = IntervalUnion.from_string(spec)
+                union = RealDomain.from_string(spec)
                 intervals = union.intervals
             case _:
                 intervals = self._merge_intervals(Interval(spec) for spec in intervals)
@@ -247,12 +247,12 @@ class IntervalUnion(Domain, Collection[Interval]):
         self.intervals = intervals
 
     @classmethod
-    def from_string(cls, s: str, /) -> IntervalUnion:
+    def from_string(cls, s: str, /) -> RealDomain:
         r"""Create a union of intervals from a `|`-separated string."""
         parts = [part.strip() for part in s.split("|")]
         if any(not part for part in parts):
             raise ValueError(f"Invalid union of intervals string: {s}")
-        return IntervalUnion(*(Interval.from_string(part) for part in parts))
+        return RealDomain(*(Interval.from_string(part) for part in parts))
 
     def __len__(self) -> int:
         return len(self.intervals)
@@ -263,21 +263,21 @@ class IntervalUnion(Domain, Collection[Interval]):
     @overload
     def __getitem__(self, index: int, /) -> Interval: ...
     @overload
-    def __getitem__(self, index: slice, /) -> IntervalUnion: ...
-    def __getitem__(self, index: int | slice, /) -> Interval | IntervalUnion:
+    def __getitem__(self, index: slice, /) -> RealDomain: ...
+    def __getitem__(self, index: int | slice, /) -> Interval | RealDomain:
         if isinstance(index, slice):
-            return IntervalUnion(*self.intervals[index])
+            return RealDomain(*self.intervals[index])
         return self.intervals[index]
 
     @staticmethod
-    def _coerce_union(other: object, /) -> IntervalUnion | None:
+    def _coerce_union(other: object, /) -> RealDomain | None:
         match other:
-            case IntervalUnion():
+            case RealDomain():
                 return other
             case Interval():
-                return IntervalUnion(other)
+                return RealDomain(other)
             case str():
-                return IntervalUnion.from_string(other)
+                return RealDomain.from_string(other)
             case _:
                 return None
 
@@ -292,7 +292,7 @@ class IntervalUnion(Domain, Collection[Interval]):
                 continue
 
             current = merged[-1]
-            if not IntervalUnion._touch_or_overlap(current, interval):
+            if not RealDomain._touch_or_overlap(current, interval):
                 merged.append(interval)
                 continue
 
@@ -327,14 +327,14 @@ class IntervalUnion(Domain, Collection[Interval]):
     def __hash__(self) -> int:
         return hash(self.intervals)
 
-    def __add__(self, other: float, /) -> IntervalUnion:
-        return IntervalUnion(*(interval + other for interval in self.intervals))
+    def __add__(self, other: float, /) -> RealDomain:
+        return RealDomain(*(interval + other for interval in self.intervals))
 
-    def __sub__(self, other: float, /) -> IntervalUnion:
+    def __sub__(self, other: float, /) -> RealDomain:
         return self + (-other)
 
-    def __mul__(self, other: float, /) -> IntervalUnion:
-        return IntervalUnion(*(interval * other for interval in self.intervals))
+    def __mul__(self, other: float, /) -> RealDomain:
+        return RealDomain(*(interval * other for interval in self.intervals))
 
     def __le__(self, other: object, /) -> bool:
         if (other_union := self._coerce_union(other)) is None:
@@ -351,21 +351,22 @@ class IntervalUnion(Domain, Collection[Interval]):
             return NotImplemented
         return result and self != other
 
-    def __or__(self, other: object, /) -> IntervalUnion:
+    def __or__(self, other: object, /) -> RealDomain:
         if (other_union := self._coerce_union(other)) is None:
             return NotImplemented
-        return IntervalUnion(*self.intervals, *other_union.intervals)
+        return RealDomain(*self.intervals, *other_union.intervals)
 
-    def __ror__(self, other: object, /) -> IntervalUnion:
+    def __ror__(self, other: object, /) -> RealDomain:
         if (other_union := self._coerce_union(other)) is None:
             return NotImplemented
-        return IntervalUnion(*other_union.intervals, *self.intervals)
+        return RealDomain(*other_union.intervals, *self.intervals)
 
     def __str__(self) -> str:
         return " | ".join(str(interval) for interval in self.intervals)
 
     def __repr__(self) -> str:
-        return f"IntervalUnion('{self!s}')"
+        cls = type(self)
+        return f"{cls.__name__}('{self!s}')"
 
 
 class ScalarDomains(Enum):
@@ -382,7 +383,7 @@ class ScalarDomains(Enum):
     NEGATIVE_REALS = Interval("(-inf, 0)")
     NONNEGATIVE_REALS = Interval("[0, inf)")
     NONPOSITIVE_REALS = Interval("(-inf, 0]")
-    NONZERO = IntervalUnion.from_string("(-inf, 0) | (0, +inf)")
+    NONZERO = RealDomain.from_string("(-inf, 0) | (0, +inf)")
 
     UNIT_INTERVAL = Interval("[0, 1]")
     OPEN_UNIT_INTERVAL = Interval("(0, 1)")
@@ -402,7 +403,7 @@ class ScalarDomains(Enum):
         match other:
             case ScalarDomains():
                 other_domain = other.domain
-            case Interval() | IntervalUnion():
+            case Interval() | RealDomain():
                 other_domain = other
             case _:
                 return NotImplemented

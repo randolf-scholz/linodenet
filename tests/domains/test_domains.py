@@ -3,8 +3,8 @@ from torch import tensor
 
 from linodenet.domains import (
     Interval,
-    IntervalUnion,
     MatrixDomains,
+    RealDomain,
     ScalarDomains,
     TensorDomains,
     VectorDomains,
@@ -17,8 +17,8 @@ class TestScalarDomains:
         assert ScalarDomains.REAL_LINE < ScalarDomains.EXTENDED_LINE
         assert ScalarDomains.REAL_LINE <= Interval("(-inf, inf)")
         assert ScalarDomains.OPEN_UNIT_INTERVAL < Interval("[0, 1]")
-        assert ScalarDomains.NONZERO <= IntervalUnion("(-inf, 0) | (0, inf)")
-        assert ScalarDomains.POSITIVE_REALS < IntervalUnion("(-inf, 0) | (0, inf)")
+        assert ScalarDomains.NONZERO <= RealDomain("(-inf, 0) | (0, inf)")
+        assert ScalarDomains.POSITIVE_REALS < RealDomain("(-inf, 0) | (0, inf)")
 
         assert ScalarDomains.OPEN_UNIT_INTERVAL <= ScalarDomains.UNIT_INTERVAL
         assert ScalarDomains.OPEN_UNIT_INTERVAL != ScalarDomains.UNIT_INTERVAL
@@ -44,7 +44,7 @@ class TestScalarDomains:
 
         assert str(ScalarDomains.OPEN_UNIT_INTERVAL) == "(0, 1)"
         assert str(ScalarDomains.UNIT_INTERVAL.value) == "[0, 1]"
-        assert isinstance(ScalarDomains.NONZERO.value, IntervalUnion)
+        assert isinstance(ScalarDomains.NONZERO.value, RealDomain)
 
         with pytest.raises(TypeError):
             _ = ScalarDomains.REAL_LINE <= "(-inf, inf)"
@@ -67,10 +67,10 @@ class TestScalarDomains:
         ]
 
     def test_interval_union_normalization_and_membership(self) -> None:
-        domain = IntervalUnion.from_string("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
+        domain = RealDomain.from_string("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
         assert str(domain) == "[0, 2) | [3, 5]"
 
-        domain = IntervalUnion.from_string("(-inf, 0) | (0, inf)")
+        domain = RealDomain.from_string("(-inf, 0) | (0, inf)")
         values = tensor([-1.0, 0.0, 1.0])
         assert str(domain) == "(-inf, 0) | (0, inf)"
         assert domain.__contains__(values).tolist() == [True, False, True]
@@ -88,9 +88,9 @@ class TestScalarDomains:
         assert not Interval("[0, inf]") <= Interval("(0, inf)")
 
     def test_interval_union_strict_subset(self) -> None:
-        assert IntervalUnion("[0, 1]") < IntervalUnion("[0, 2]")
-        assert IntervalUnion("(-inf, 0) | (0, inf)") < IntervalUnion("[-inf, inf]")
-        assert not IntervalUnion("[-inf, inf]") < IntervalUnion("[-inf, inf]")
+        assert RealDomain("[0, 1]") < RealDomain("[0, 2]")
+        assert RealDomain("(-inf, 0) | (0, inf)") < RealDomain("[-inf, inf]")
+        assert not RealDomain("[-inf, inf]") < RealDomain("[-inf, inf]")
 
 
 class TestVectorDomains:

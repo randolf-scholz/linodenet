@@ -10,7 +10,7 @@ Domains should allow:
 __all__ = [
     "Domain",
     "Interval",
-    "IntervalUnion",
+    "RealDomain",
     "ScalarDomains",
     "TensorDomains",
     "VectorDomains",
@@ -20,6 +20,6 @@ __all__ = [
 
 from .base import Domain
 from .matrix_domains import MatrixDomains
-from .scalar_domains import Interval, IntervalUnion, ScalarDomains
+from .scalar_domains import Interval, RealDomain, ScalarDomains
 from .tensor_domains import TensorDomains
 from .vector_domains import VectorDomains
