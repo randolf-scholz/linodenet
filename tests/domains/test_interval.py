@@ -110,6 +110,27 @@ class TestInterval:
         with pytest.raises(TypeError):
             _ = Interval("[0, 1]") & 1
 
+    @pytest.mark.parametrize(
+        ("left", "right", "expected"),
+        [
+            ("[0, 2]", "[1, 3]", False),
+            ("[0, 1]", "[1, 2]", False),
+            ("[0, 1)", "[1, 2]", True),
+            ("[0, 1]", "(1, 2]", True),
+            ("[0, 1]", "[2, 3]", True),
+            ("(0, 1)", "[-2, 0)", True),
+            ("(NAN, NAN)", "[0, 1]", True),
+        ],
+    )
+    def test_isdisjoint(
+        self,
+        left: str,
+        right: str,
+        expected: bool,
+    ) -> None:
+        assert Interval(left).isdisjoint(Interval(right)) is expected
+        assert Interval(right).isdisjoint(Interval(left)) is expected
+
 
 class TestRealDomain:
     def test_init(self) -> None:

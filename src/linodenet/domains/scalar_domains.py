@@ -7,7 +7,7 @@ from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from math import isnan
-from typing import Final, Self, overload
+from typing import Final, overload
 
 from torch import Tensor
 
@@ -55,7 +55,7 @@ class Interval(Domain):
             ):
                 raise TypeError("String interval constructor does not accept bounds.")
             interval = (
-                lower if isinstance(lower, Interval) else type(self).from_string(lower)
+                lower if isinstance(lower, Interval) else Interval.from_string(lower)
             )
             self.lower = interval.lower
             self.upper = interval.upper
@@ -125,42 +125,50 @@ class Interval(Domain):
         )
         return lower_mask & upper_mask
 
-    def __add__(self, other: float, /) -> Self:
-        return type(self)(
+    def __add__(self, other: float, /) -> Interval:
+        return Interval(
             self.lower + other,
             self.upper + other,
             lower_inclusive=self.lower_inclusive,
             upper_inclusive=self.upper_inclusive,
         )
 
-    def __sub__(self, other: float, /) -> Self:
+    def __sub__(self, other: float, /) -> Interval:
         return self + (-other)
 
-    def __mul__(self, other: float, /) -> Self:
+    def __mul__(self, other: float, /) -> Interval:
         if other == 0:
-            return type(self)(
+            return Interval(
                 0.0,
                 0.0,
                 lower_inclusive=True,
                 upper_inclusive=True,
             )
         if other > 0:
-            return type(self)(
+            return Interval(
                 self.lower * other,
                 self.upper * other,
                 lower_inclusive=self.lower_inclusive,
                 upper_inclusive=self.upper_inclusive,
             )
-        return type(self)(
+        return Interval(
             self.upper * other,
             self.lower * other,
             lower_inclusive=self.upper_inclusive,
             upper_inclusive=self.lower_inclusive,
         )
 
-    def __and__(self, other: object, /) -> Self:
-        if not isinstance(other, type(self)):
+    def __and__(self, other: object, /) -> Interval:
+        if not isinstance(other, Interval):
             return NotImplemented
+
+        if self.isdisjoint(other):
+            return Interval(
+                float("nan"),
+                float("nan"),
+                lower_inclusive=False,
+                upper_inclusive=False,
+            )
 
         if self.lower > other.lower:
             lower = self.lower
@@ -182,22 +190,28 @@ class Interval(Domain):
             upper = self.upper
             upper_inclusive = self.upper_inclusive and other.upper_inclusive
 
-        if lower > upper or (
-            lower == upper and not (lower_inclusive and upper_inclusive)
-        ):
-            return type(self)(
-                float("nan"),
-                float("nan"),
-                lower_inclusive=False,
-                upper_inclusive=False,
-            )
-
-        return type(self)(
+        return Interval(
             lower,
             upper,
             lower_inclusive=lower_inclusive,
             upper_inclusive=upper_inclusive,
         )
+
+    def isdisjoint(self, other: Interval, /) -> bool:
+        r"""Return whether two intervals have empty intersection."""
+        if (isnan(self.lower) and isnan(self.upper)) or (
+            isnan(other.lower) and isnan(other.upper)
+        ):
+            return True
+        if self.upper < other.lower or other.upper < self.lower:
+            return True
+        if self.upper > other.lower and other.upper > self.lower:
+            return False
+        if self.upper == other.lower:
+            return not (self.upper_inclusive and other.lower_inclusive)
+        if other.upper == self.lower:
+            return not (other.upper_inclusive and self.lower_inclusive)
+        return False
 
     @staticmethod
     def _coerce_interval(other: object, /) -> Interval | None:
@@ -285,7 +299,7 @@ class Interval(Domain):
         return f"{lower_bracket}{lower}, {upper}{upper_bracket}"
 
     def __repr__(self) -> str:
-        return f"Interval('{self!s}')"
+        return f"{self.__class__.__name__}('{self!s}')"
 
 
 class RealDomain(Domain, Collection[Interval]):
@@ -424,8 +438,7 @@ class RealDomain(Domain, Collection[Interval]):
         return " | ".join(str(interval) for interval in self.intervals)
 
     def __repr__(self) -> str:
-        cls = type(self)
-        return f"{cls.__name__}('{self!s}')"
+        return f"{self.__class__.__name__}('{self!s}')"
 
 
 class ScalarDomains(Enum):
