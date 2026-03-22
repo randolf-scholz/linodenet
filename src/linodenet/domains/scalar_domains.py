@@ -417,10 +417,10 @@ class RealDomain(Domain, Collection[Interval]):
         for item in intervals:
             match item:
                 case RealDomain() as domain:
-                    flat_intervals.extend(domain.intervals)
+                    flat_intervals.extend(domain)
                 case str(spec):
                     parsed = RealDomain.from_string(spec)
-                    flat_intervals.extend(parsed.intervals)
+                    flat_intervals.extend(parsed)
                 case Interval() as interval:
                     flat_intervals.append(interval)
                 case _:
@@ -450,18 +450,16 @@ class RealDomain(Domain, Collection[Interval]):
         assert all_empty == uses_empty_sentinel
         return uses_empty_sentinel
 
-    def is_disjoint(self, other: object, /) -> bool:
-        if (other_union := RealDomain.parse(other)) is None:
-            return NotImplemented
-
-        if self.is_empty() or other_union.is_empty():
+    def is_disjoint(self, arg: RealDomain | Interval | str, /) -> bool:
+        other = RealDomain(arg)
+        if self.is_empty() or other.is_empty():
             return True
 
         left_index = 0
         right_index = 0
-        while left_index < len(self) and right_index < len(other_union.intervals):
+        while left_index < len(self) and right_index < len(other):
             left = self[left_index]
-            right = other_union.intervals[right_index]
+            right = other[right_index]
 
             if not left.is_disjoint(right):
                 return False
@@ -552,7 +550,7 @@ class RealDomain(Domain, Collection[Interval]):
         if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
 
-        right_intervals = iter(other.intervals)
+        right_intervals = iter(other)
         right = next(right_intervals, None)
         for left in self:
             while (
@@ -591,14 +589,14 @@ class RealDomain(Domain, Collection[Interval]):
     def __mul__(self, other: float, /) -> RealDomain:
         return RealDomain(*(interval * other for interval in self))
 
-    def __and__(self, other: object, /) -> RealDomain:
-        if (other_union := RealDomain.parse(other)) is None:
+    def __and__(self, rhs: object, /) -> RealDomain:
+        if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
 
         intersections = [
             left & right
             for left in self
-            for right in other_union.intervals
+            for right in other
             if not (left & right).is_empty()
         ]
         if not intersections:
