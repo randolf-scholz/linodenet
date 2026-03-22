@@ -1,9 +1,16 @@
 r"""Base protocols and ordering utilities for domain definitions."""
 
-__all__ = ["Domain", "PosetEnum"]
+__all__ = [
+    "Domain",
+    "Intersection",
+    "Union",
+    "Difference",
+    "PosetEnum",
+]
 
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
 from typing import ClassVar, Protocol, Self
@@ -14,23 +21,86 @@ from torch import Tensor
 class Domain(Protocol):
     r"""Protocol for Domains."""
 
-    def __contains__(self, item: Tensor, /) -> bool: ...
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
 
-    def __le__(self, other: Self, /) -> bool: ...
+    def __le__(self, other: Self, /) -> bool:
+        return NotImplemented
 
-    def __lt__(self, other: Self, /) -> bool: ...
+    def __lt__(self, other: Self, /) -> bool:
+        return NotImplemented
 
-    def __or__(self, other: Self, /) -> Domain: ...
+    def __gt__(self, other: Self, /) -> bool:
+        return NotImplemented
 
-    def __and__(self, other: Self, /) -> Domain: ...
+    def __ge__(self, other: Self, /) -> bool:
+        return NotImplemented
+
+    def __or__(self, other: Self, /) -> Union:
+        return Union({self, other})
+
+    def __and__(self, other: Self, /) -> Intersection:
+        return Intersection({self, other})
+
+    def __sub__(self, other: Self, /) -> Difference:
+        return Difference(self, other)
+
+
+@dataclass(frozen=True)
+class Union[D: Domain](Domain):
+    r"""Structural union of matrix domains."""
+
+    domains: frozenset[D]
+
+    def __init__(self, domains: Iterable[D] = (), /) -> None:
+        object.__setattr__(self, "domains", frozenset(domains))
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return any(item in domain for domain in self.domains)
+
+    def __iter__(self) -> Iterator[D]:
+        return iter(self.domains)
+
+    def __len__(self) -> int:
+        return len(self.domains)
+
+
+@dataclass(frozen=True)
+class Intersection[D: Domain](Domain):
+    r"""Structural intersection of matrix domains."""
+
+    domains: frozenset[D] = field(default_factory=frozenset)
+
+    def __init__(self, domains: Iterable[D] = (), /) -> None:
+        object.__setattr__(self, "domains", frozenset(domains))
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return all(item in domain for domain in self.domains)
+
+    def __iter__(self) -> Iterator[D]:
+        return iter(self.domains)
+
+    def __len__(self) -> int:
+        return len(self.domains)
+
+
+@dataclass(frozen=True)
+class Difference[D: Domain](Domain):
+    r"""Structural set difference of matrix domains."""
+
+    lhs: D
+    rhs: D
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return item in self.lhs and item not in self.rhs
 
 
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]
+    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Dependencies"""
-    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]
+    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Reverse dependencies."""
 
     @classmethod

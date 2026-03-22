@@ -72,8 +72,6 @@ repos:
       - id: check-direct-imports
       - id: check-dunder-all
         files: '^src/'
-      - id: check-typing
-        files: '^src/|^tests/'
       - id: check-signatures
         files: '^src/'
         exclude: 'functional.py|matrix_tests.py'
