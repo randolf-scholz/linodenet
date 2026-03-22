@@ -366,17 +366,16 @@ class TestLogAbsDetEstimator(TestCase):
 
     @pytest.mark.parametrize("device", DEVICES, ids=str)
     def test_exact_estimator_matches_closed_form(self, device: str) -> None:
+        constant = torch.tensor(0.125, device=device)
         estimator = LogAbsDetEstimator("exact", None, None).to(device=device)
-        fn = ScaledMap(0.125).to(device=device)
+        fn = ScaledMap(constant).to(device=device)
         x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
 
         y, logabsdet = estimator(fn, x)
 
         expected_y = 0.125 * x
         expected_logabsdet = torch.full(
-            (7,),
-            4 * torch.log1p(torch.tensor(0.125, device=device)).item(),
-            device=device,
+            (self.BATCH_SIZE,), 4 * torch.log1p(constant), device=device
         )
         assert torch.allclose(y, expected_y)
         assert torch.allclose(logabsdet, expected_logabsdet, atol=1e-6, rtol=0.0)

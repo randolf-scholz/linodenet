@@ -52,7 +52,7 @@ def hutchinson_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Ten
     return vecdot(samples, fn(samples), dim=-1).mean(dim=-1)
 
 
-@signature("(..., n, d) -> (...)")
+@signature("[{(..., n, d) -> (..., n, d)}, (..., n, d)] -> (...)")
 def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matric.
 
@@ -686,21 +686,22 @@ class LogAbsDetEstimator(nn.Module):
             case _:
                 raise ValueError(f"Unknown logabsdet estimation method {method!r}")
 
-    @signature("(..., d) -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def compute_exact(
         self, fn: Callable[[Tensor], Tensor], x: Tensor
     ) -> tuple[Tensor, Tensor]:
         r"""Compute the exact log-absolute-determinant via the full Jacobian spectrum."""
+        y, df = linearize(fn, x)  # (..., d), {(..., d) -> (..., d)}
+        batched_df = vmap(df, in_dims=-1, out_dims=-1)  # {(..., d, n) -> (..., d, n)}
+        dim = y.shape[-1]
+        I = torch.eye(dim, dim, device=y.device).expand(*y.shape[:-1], dim, dim)
 
-        def sample_fn(xi: Tensor, /) -> tuple[Tensor, Tensor]:
-            yi = fn(xi)
-            return yi, yi
-
-        jacobian_fn = jacrev(sample_fn, has_aux=True)
-        jacobian, y = vmap(jacobian_fn)(x.reshape(-1, x.shape[-1]))
-        eigenvalues, _ = torch.linalg.eig(jacobian)
+        # log|det(I+A)| = log|∏(1 + λᵢ)| = ∑log|1 + λᵢ|
+        # where λᵢ are the eigenvalues of A. This holds even for non-diagonalizable A.
+        jacobian = batched_df(I)
+        eigenvalues = torch.linalg.eigvals(jacobian)
         logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
-        return y.reshape_as(x), logabsdet.reshape(x.shape[:-1]).to(dtype=x.dtype)
+        return y, logabsdet
 
     @signature("(..., d) -> (...)")
     def compute_hutch(
