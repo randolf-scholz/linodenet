@@ -6,7 +6,7 @@ from types import MappingProxyType
 
 from torch import Tensor
 
-from .base import Difference, Domain, Intersection, PosetEnum, Union
+from .base import Domain, Intersection, Inverse, PosetEnum, Union
 
 
 class MatrixDomain(Domain):
@@ -27,14 +27,14 @@ class MatrixDomain(Domain):
     def __ge__(self, other: MatrixDomain, /) -> bool:
         return NotImplemented
 
+    def __invert__(self) -> Inverse[MatrixDomain]:
+        return Inverse(self)
+
     def __or__(self, other: MatrixDomain, /) -> Union[MatrixDomain]:
         return Union({self, other})
 
     def __and__(self, other: MatrixDomain, /) -> Intersection[MatrixDomain]:
         return Intersection({self, other})
-
-    def __sub__(self, other: MatrixDomain, /) -> Difference[MatrixDomain]:
-        return Difference(self, other)
 
 
 class MatrixDomains(PosetEnum):

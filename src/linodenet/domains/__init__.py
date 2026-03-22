@@ -8,18 +8,25 @@ Domains should allow:
 """
 
 __all__ = [
+    # Protocols
     "Domain",
+    "Inverse",
+    "Union",
+    "Intersection",
+    # Domains
     "Interval",
+    "MatrixDomain",
     "RealDomain",
+    # Enums
     "ScalarDomains",
-    "TensorDomains",
     "VectorDomains",
     "MatrixDomains",
+    "TensorDomains",
 ]
 
 
-from .base import Domain
-from .matrix_domains import MatrixDomains
+from .base import Domain, Inverse
+from .matrix_domains import Intersection, MatrixDomain, MatrixDomains, Union
 from .scalar_domains import Interval, RealDomain, ScalarDomains
 from .tensor_domains import TensorDomains
 from .vector_domains import VectorDomains

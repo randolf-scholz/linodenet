@@ -4,7 +4,7 @@ __all__ = [
     "Domain",
     "Intersection",
     "Union",
-    "Difference",
+    "Inverse",
     "PosetEnum",
 ]
 
@@ -36,14 +36,14 @@ class Domain(Protocol):
     def __ge__(self, other: Self, /) -> bool:
         return NotImplemented
 
-    def __or__(self, other: Self, /) -> Union:
+    def __invert__(self) -> Domain:
+        return Inverse(self)
+
+    def __or__(self, other: Self, /) -> Domain:
         return Union({self, other})
 
-    def __and__(self, other: Self, /) -> Intersection:
+    def __and__(self, other: Self, /) -> Domain:
         return Intersection({self, other})
-
-    def __sub__(self, other: Self, /) -> Difference:
-        return Difference(self, other)
 
 
 @dataclass(frozen=True)
@@ -85,14 +85,13 @@ class Intersection[D: Domain](Domain):
 
 
 @dataclass(frozen=True)
-class Difference[D: Domain](Domain):
-    r"""Structural set difference of matrix domains."""
+class Inverse[D: Domain](Domain):
+    r"""Structural complement of a domain."""
 
-    lhs: D
-    rhs: D
+    domain: D
 
     def __contains__(self, item: Tensor, /) -> bool:
-        return item in self.lhs and item not in self.rhs
+        return item not in self.domain
 
 
 class PosetEnum(Enum):
