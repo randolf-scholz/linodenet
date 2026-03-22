@@ -124,6 +124,22 @@ class Interval(Domain):
             self.lower_inclusive = lower_inclusive  # type: ignore[misc]
             self.upper_inclusive = upper_inclusive  # type: ignore[misc]
 
+    def isdisjoint(self, other: Interval, /) -> bool:
+        r"""Return whether two intervals have empty intersection."""
+        if (isnan(self.lower) and isnan(self.upper)) or (
+            isnan(other.lower) and isnan(other.upper)
+        ):
+            return True
+        if self.upper < other.lower or other.upper < self.lower:
+            return True
+        if self.upper > other.lower and other.upper > self.lower:
+            return False
+        if self.upper == other.lower:
+            return not (self.upper_inclusive and other.lower_inclusive)
+        if other.upper == self.lower:
+            return not (other.upper_inclusive and self.lower_inclusive)
+        return False
+
     def __contains__(self, item: Tensor, /) -> Tensor:
         lower_mask = (
             (item >= self.lower) if self.lower_inclusive else (item > self.lower)
@@ -166,8 +182,8 @@ class Interval(Domain):
             upper_inclusive=self.lower_inclusive,
         )
 
-    def __and__(self, other: object, /) -> Interval:
-        if not isinstance(other, Interval):
+    def __and__(self, rhs: object, /) -> Interval:
+        if (other := Interval.parse(rhs)) is None:
             return NotImplemented
 
         if self.isdisjoint(other):
@@ -205,42 +221,26 @@ class Interval(Domain):
             upper_inclusive=upper_inclusive,
         )
 
-    def isdisjoint(self, other: Interval, /) -> bool:
-        r"""Return whether two intervals have empty intersection."""
-        if (isnan(self.lower) and isnan(self.upper)) or (
-            isnan(other.lower) and isnan(other.upper)
-        ):
-            return True
-        if self.upper < other.lower or other.upper < self.lower:
-            return True
-        if self.upper > other.lower and other.upper > self.lower:
-            return False
-        if self.upper == other.lower:
-            return not (self.upper_inclusive and other.lower_inclusive)
-        if other.upper == self.lower:
-            return not (other.upper_inclusive and self.lower_inclusive)
-        return False
-
-    def __eq__(self, other: object, /) -> bool:
-        if (other_interval := self.parse(other)) is None:
+    def __eq__(self, rhs: object, /) -> bool:
+        if (other := self.parse(rhs)) is None:
             return NotImplemented
 
         if (
             isnan(self.lower)
             and isnan(self.upper)
-            and isnan(other_interval.lower)
-            and isnan(other_interval.upper)
+            and isnan(other.lower)
+            and isnan(other.upper)
         ):
             return (
-                self.lower_inclusive == other_interval.lower_inclusive
-                and self.upper_inclusive == other_interval.upper_inclusive
+                self.lower_inclusive == other.lower_inclusive
+                and self.upper_inclusive == other.upper_inclusive
             )
 
         return (
-            self.lower == other_interval.lower
-            and self.upper == other_interval.upper
-            and self.lower_inclusive == other_interval.lower_inclusive
-            and self.upper_inclusive == other_interval.upper_inclusive
+            self.lower == other.lower
+            and self.upper == other.upper
+            and self.lower_inclusive == other.lower_inclusive
+            and self.upper_inclusive == other.upper_inclusive
         )
 
     def __le__(self, other: object, /) -> bool:
