@@ -6,8 +6,8 @@ __all__ = ["Interval", "RealDomain", "ScalarDomains"]
 from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
-from math import isnan
-from typing import Final, overload
+from math import isnan, nan
+from typing import ClassVar, Final, overload
 
 from torch import Tensor
 
@@ -17,6 +17,8 @@ from .base import Domain
 @dataclass(unsafe_hash=True)
 class Interval(Domain):
     r"""A named tuple representing an interval."""
+
+    EMPTY: ClassVar[Final[Interval]] = ...
 
     lower: Final[float]
     upper: Final[float]
@@ -30,22 +32,15 @@ class Interval(Domain):
                 return arg
             case str():
                 try:
-                    return Interval.from_string(arg)
+                    spec = Interval._parse_string(arg)
+                    return Interval(**spec)
                 except ValueError:
                     return None
             case _:
                 return None
 
-    @classmethod
-    def from_string(cls, s: str, /) -> Interval:
-        r"""Create an Interval from a string representation.
-
-        Examples:
-            >>> Interval.from_string("[0, 1)")
-            Interval(lower=0.0, upper=1.0, lower_inclusive=True, upper_inclusive=False)
-            >>> Interval.from_string("(-inf, inf)")
-            Interval(lower=-inf, upper=inf, lower_inclusive=False, upper_inclusive=False)
-        """
+    @staticmethod
+    def _parse_string(s: str, /) -> dict:
         s = s.strip()
 
         match s[0]:
@@ -72,12 +67,12 @@ class Interval(Domain):
         lower = float(lower_str.strip())
         upper = float(upper_str.strip())
 
-        return Interval(
-            lower,
-            upper,
-            lower_inclusive=lower_inclusive,
-            upper_inclusive=upper_inclusive,
-        )
+        return {
+            "lower": lower,
+            "upper": upper,
+            "lower_inclusive": lower_inclusive,
+            "upper_inclusive": upper_inclusive,
+        }
 
     @overload
     def __init__(self, s: str | Interval, /) -> None: ...
@@ -98,31 +93,39 @@ class Interval(Domain):
         lower_inclusive: bool | None = None,
         upper_inclusive: bool | None = None,
     ) -> None:
-        if isinstance(lower, str | Interval):
-            if (
-                upper is not None
-                or lower_inclusive is not None
-                or upper_inclusive is not None
-            ):
-                raise TypeError("String interval constructor does not accept bounds.")
-            interval = (
-                lower if isinstance(lower, Interval) else Interval.from_string(lower)
-            )
-            self.lower = interval.lower
-            self.upper = interval.upper
-            self.lower_inclusive = interval.lower_inclusive
-            self.upper_inclusive = interval.upper_inclusive
+        if isinstance(lower, Interval | str) and (
+            upper is not None
+            or lower_inclusive is not None
+            or upper_inclusive is not None
+        ):
+            raise TypeError("String interval constructor does not accept bounds.")
 
-        else:
-            if upper is None or lower_inclusive is None or upper_inclusive is None:
-                raise TypeError(
-                    "Expected upper and inclusivity flags for numeric bounds."
-                )
+        match lower:
+            case str():
+                spec = Interval._parse_string(lower)
+                lower = spec["lower"]
+                upper = spec["upper"]
+                lower_inclusive = spec["lower_inclusive"]
+                upper_inclusive = spec["upper_inclusive"]
+            case Interval() as interval:
+                lower = interval.lower
+                upper = interval.upper
+                lower_inclusive = interval.lower_inclusive
+                upper_inclusive = interval.upper_inclusive
 
-            self.lower = lower  # type: ignore[misc]
-            self.upper = upper  # type: ignore[misc]
-            self.lower_inclusive = lower_inclusive  # type: ignore[misc]
-            self.upper_inclusive = upper_inclusive  # type: ignore[misc]
+        if upper is None or lower_inclusive is None or upper_inclusive is None:
+            raise TypeError("Expected upper and inclusivity flags for numeric bounds.")
+
+        if isnan(lower) or isnan(upper):
+            lower = nan
+            upper = nan
+            lower_inclusive = False
+            upper_inclusive = False
+
+        self.lower = lower
+        self.upper = upper
+        self.lower_inclusive = lower_inclusive
+        self.upper_inclusive = upper_inclusive
 
     def isdisjoint(self, other: Interval | str, /) -> bool:
         r"""Return whether two intervals have empty intersection."""
@@ -241,19 +244,14 @@ class Interval(Domain):
             return union < self
         return self >= other and self != other
 
-    def __and__(self, rhs: object, /) -> Interval:
+    def __and__(self, rhs: object, /) -> Interval | RealDomain:
         if (other := Interval.parse(rhs)) is None:
             if (union := RealDomain.parse(rhs)) is None:
                 return NotImplemented
             return union & self
 
         if self.isdisjoint(other):
-            return Interval(
-                float("nan"),
-                float("nan"),
-                lower_inclusive=False,
-                upper_inclusive=False,
-            )
+            return Interval.EMPTY
 
         if self.lower > other.lower:
             lower = self.lower
@@ -282,7 +280,7 @@ class Interval(Domain):
             upper_inclusive=upper_inclusive,
         )
 
-    def __rand__(self, lhs: object, /) -> Interval:
+    def __rand__(self, lhs: object, /) -> Interval | RealDomain:
         if (other := Interval.parse(lhs)) is None:
             if (union := RealDomain.parse(lhs)) is None:
                 return NotImplemented
@@ -339,6 +337,9 @@ class Interval(Domain):
         return f"{self.__class__.__name__}('{self!s}')"
 
 
+Interval.EMPTY = Interval(nan, nan, lower_inclusive=False, upper_inclusive=False)
+
+
 class RealDomain(Domain, Collection[Interval]):
     r"""We model domains on the extended real line by a finite union of intervals."""
 
@@ -365,7 +366,7 @@ class RealDomain(Domain, Collection[Interval]):
         parts = [part.strip() for part in s.split("|")]
         if any(not part for part in parts):
             raise ValueError(f"Invalid union of intervals string: {s}")
-        return RealDomain(*(Interval.from_string(part) for part in parts))
+        return RealDomain(*(Interval(part) for part in parts))
 
     def __init__(self, *intervals: Interval | str) -> None:
         match intervals:
@@ -400,13 +401,7 @@ class RealDomain(Domain, Collection[Interval]):
     @staticmethod
     def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
         if not (intervals := [i for i in intervals if not i.isempty()]):
-            empty_interval = Interval(
-                float("nan"),
-                float("nan"),
-                lower_inclusive=False,
-                upper_inclusive=False,
-            )
-            return RealDomain(empty_interval)
+            return (Interval("(NAN, NAN)"),)
 
         ordered = sorted(intervals, key=lambda i: (i.lower, not i.lower_inclusive))
 
@@ -447,7 +442,7 @@ class RealDomain(Domain, Collection[Interval]):
     def __eq__(self, other: object, /) -> bool:
         if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
-        return hash(self) == hash(other_union)
+        return self.intervals == other_union.intervals
 
     def __hash__(self) -> int:
         return hash(self.intervals)
@@ -460,6 +455,25 @@ class RealDomain(Domain, Collection[Interval]):
 
     def __mul__(self, other: float, /) -> RealDomain:
         return RealDomain(*(interval * other for interval in self.intervals))
+
+    def __and__(self, other: object, /) -> RealDomain:
+        if (other_union := RealDomain.parse(other)) is None:
+            return NotImplemented
+
+        intersections = [
+            left & right
+            for left in self.intervals
+            for right in other_union.intervals
+            if not (left & right).isempty()
+        ]
+        if not intersections:
+            return RealDomain(Interval("(NAN, NAN)"))
+        return RealDomain(*intersections)
+
+    def __rand__(self, other: object, /) -> RealDomain:
+        if (other_union := RealDomain.parse(other)) is None:
+            return NotImplemented
+        return other_union & self
 
     def __le__(self, other: object, /) -> bool:
         if (other_union := RealDomain.parse(other)) is None:
@@ -522,7 +536,7 @@ class ScalarDomains(Enum):
     NEGATIVE_REALS = Interval("(-inf, 0)")
     NONNEGATIVE_REALS = Interval("[0, inf)")
     NONPOSITIVE_REALS = Interval("(-inf, 0]")
-    NONZERO = RealDomain.from_string("(-inf, 0) | (0, +inf)")
+    NONZERO = RealDomain("(-inf, 0) | (0, +inf)")
 
     UNIT_INTERVAL = Interval("[0, 1]")
     OPEN_UNIT_INTERVAL = Interval("(0, 1)")

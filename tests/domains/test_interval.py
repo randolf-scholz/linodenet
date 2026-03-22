@@ -1,3 +1,5 @@
+from math import nan
+
 import pytest
 
 from linodenet.domains import Interval, RealDomain
@@ -9,6 +11,13 @@ class TestInterval:
 
         assert Interval("[0, 1)") == expected
         assert Interval(Interval("[0, 1)")) == expected
+        assert Interval("(NAN, NAN)") is Interval.EMPTY
+        assert Interval("[NAN, 1]") is Interval.EMPTY
+        assert (
+            Interval(nan, 1.0, lower_inclusive=True, upper_inclusive=True)
+            is Interval.EMPTY
+        )
+        assert Interval(Interval.EMPTY) is Interval.EMPTY
 
         with pytest.raises(TypeError):
             Interval("[0, 1)", 1.0)  # type: ignore[call-overload] # pyright: ignore[reportCallIssue]
@@ -204,3 +213,25 @@ class TestRealDomain:
 
         with pytest.raises(TypeError):
             _ = union | 1
+
+    @pytest.mark.parametrize(
+        ("left", "right", "expected"),
+        [
+            ("[-2, 1] | [3, 5]", "[0, 4]", "[0, 1] | [3, 4]"),
+            ("[-2, -1] | (1, 2]", "[-1, 1]", "[-1, -1]"),
+            ("[-2, -1] | (1, 2]", "[3, 4]", "(NAN, NAN)"),
+            ("[-2, -1] | (1, 2]", "(1.5, 3]", "(1.5, 2]"),
+        ],
+    )
+    def test_intersection_operator(
+        self,
+        left: str,
+        right: str,
+        expected: str,
+    ) -> None:
+        assert RealDomain(left) & right == RealDomain(expected)
+        assert right & RealDomain(left) == RealDomain(expected)
+
+    def test_intersection_operator_rejects_non_domains(self) -> None:
+        with pytest.raises(TypeError):
+            _ = RealDomain("[0, 1]") & 1
