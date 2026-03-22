@@ -455,23 +455,22 @@ class RealDomain(Domain, Collection[Interval]):
         if self.is_empty() or other.is_empty():
             return True
 
-        left_index = 0
-        right_index = 0
-        while left_index < len(self) and right_index < len(other):
-            left = self[left_index]
-            right = other[right_index]
-
+        left_intervals = iter(self)
+        right_intervals = iter(other)
+        left = next(left_intervals, None)
+        right = next(right_intervals, None)
+        while left is not None and right is not None:
             if not left.is_disjoint(right):
                 return False
 
             if left.upper < right.upper:
-                left_index += 1
+                left = next(left_intervals, None)
             elif right.upper < left.upper or (
                 left.upper_inclusive and not right.upper_inclusive
             ):
-                right_index += 1
+                right = next(right_intervals, None)
             else:
-                left_index += 1
+                left = next(left_intervals, None)
         return True
 
     def _validate(self) -> None:
