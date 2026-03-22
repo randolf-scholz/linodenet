@@ -15,6 +15,7 @@ __all__ = [
 from abc import abstractmethod
 from dataclasses import KW_ONLY, dataclass
 from types import MappingProxyType
+from typing import Final
 
 from torch import Tensor
 
@@ -57,6 +58,8 @@ class MatrixDomain(Domain):
 
 @dataclass(frozen=True)
 class Fallback(MatrixDomain):
+    r"""Named placeholder for an otherwise unspecified matrix domain."""
+
     name: str
 
     def __contains__(self, item: Tensor, /) -> bool:
@@ -65,11 +68,13 @@ class Fallback(MatrixDomain):
 
 @dataclass(frozen=True)
 class Rectangular(MatrixDomain):
-    rows: int | None = None
-    cols: int | None = None
+    r"""Domain of rectangular matrices with optional fixed shape."""
 
-    def __post_init__(self):
-        if (self.rows is None) ^ (self.cols is not None):
+    rows: Final[int | None] = None
+    cols: Final[int | None] = None
+
+    def __post_init__(self) -> None:
+        if (self.rows is None) ^ (self.cols is None):
             raise ValueError("Must specify both rows and cols, or neither.")
 
     @property
@@ -88,13 +93,40 @@ class Rectangular(MatrixDomain):
 
 
 @dataclass(frozen=True)
+class Square(MatrixDomain):
+    r"""Domain of square matrices with optional fixed size."""
+
+    size: Final[int | None] = None
+
+    @property
+    def rows(self) -> int | None:
+        return self.size
+
+    @property
+    def cols(self) -> int | None:
+        return self.size
+
+    @property
+    def shape(self) -> tuple[int, int] | None:
+        if self.size is None:
+            return None
+        return self.size, self.size
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        if self.size is None:
+            return item.shape[-1] == item.shape[-2]
+        return item.shape[-2:] == self.shape
+
+    def __call__(self, size: int) -> Square:
+        return Square(size)
+
+
+@dataclass(frozen=True)
 class LowRank(Rectangular):
-    rows: int | None = None
-    cols: int | None = None
+    r"""Domain of rectangular matrices with optional rank bound."""
 
     _: KW_ONLY
-
-    rank: int | None = None
+    rank: Final[int | None] = None
 
     def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
@@ -110,30 +142,11 @@ class LowRank(Rectangular):
 
 
 @dataclass(frozen=True)
-class Square(MatrixDomain):
-    size: int | None = None
-
-    @property
-    def shape(self) -> tuple[int, int] | None:
-        if self.size is None:
-            return None
-        return self.size, self.size
-
-    def __contains__(self, item: Tensor, /) -> bool:
-        if self.size is None:
-            return item.shape[-1] == item.shape[-2]
-        return item.shape[-1] == item.shape[-2] == self.size
-
-    def __call__(self, size: int) -> Square:
-        return Square(size)
-
-
-@dataclass(frozen=True)
 class Symmetric(Square):
-    size: int | None = None
+    r"""Domain of symmetric square matrices."""
 
     def __contains__(self, item: Tensor, /) -> bool:
-        return super().__contains__(item) and item.transpose(-2, -1).equal(item)
+        raise NotImplementedError
 
     def __call__(self, size: int) -> Symmetric:
         return Symmetric(size)
@@ -141,10 +154,10 @@ class Symmetric(Square):
 
 @dataclass(frozen=True)
 class SkewSymmetric(Square):
-    size: int | None = None
+    r"""Domain of skew-symmetric square matrices."""
 
     def __contains__(self, item: Tensor, /) -> bool:
-        return super().__contains__(item) and item.transpose(-2, -1).equal(-item)
+        raise NotImplementedError
 
     def __call__(self, size: int) -> SkewSymmetric:
         return SkewSymmetric(size)
