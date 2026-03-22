@@ -1,15 +1,18 @@
 // BNF grammar for function signatures
 
 // e.g. [T, Tensor[(..., N, 3), 4]] -> Tensor[(..., N, 3), 4]
-SignatureType ::= (ArgList | ArgType) "->" (ArgList | ArgType);
+// top-level signatures may omit the outer braces accepted by FnType
+SignatureType ::= FnType | FnBody;
+FnType ::= "{" FnBody "}";
+FnBody ::= (ArgList | ArgType) "->" (ArgList | ArgType);
 
 // e.g. '[T, U, Tensor[(N, 3)]]'
 ArgList ::= "["  (Arg ("," Arg)*)?  (KeyArg ("," KeyArg)*)?  "]"
 Arg ::= ArgType
 KeyArg ::= IdentifierType "?"? "=" ArgType
 
-// e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]'
-ArgType ::= ShapeType | IdentifierType | GenericType
+// e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]', '{T -> U}'
+ArgType ::= ShapeType | IdentifierType | GenericType | FnType
 
 // e.g. '()', '(1,2,3)', '(..., m, n)'
 ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"

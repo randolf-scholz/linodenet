@@ -60,6 +60,7 @@ Examples:
 
 __all__ = [
     # Types
+    "FnType",
     "SignatureType",
     "ShapeType",
     "Arg",
@@ -92,6 +93,7 @@ from signatures.signatures import (
     Dim,
     DimKind,
     DimType,
+    FnType,
     GenericType,
     Identifier,
     Parser,

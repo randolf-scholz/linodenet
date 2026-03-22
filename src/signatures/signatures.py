@@ -4,6 +4,7 @@ __all__ = [
     # Config
     "LAZY_EVAL",
     # Types
+    "FnType",
     "SignatureType",
     "ShapeType",
     "ArgType",
@@ -44,9 +45,10 @@ type ShapeType = tuple[DimType, ...] | tuple[EllipsisType, *tuple[DimType, ...]]
 type DimType = (
     ConstantDim | StaticDim | VariadicDim | AffineDim | UnknownDim | DynamicDim
 )
-type ArgType = ShapeType | Identifier | GenericType
+type ArgType = ShapeType | Identifier | GenericType | FnType
 type ArgList = list[Arg]
 type QMARK = Literal["?"]
+type SignatureType = FnType
 
 
 def _shape_to_str(shape: ShapeType, /) -> str:
@@ -262,10 +264,10 @@ class AffineDim(Dim):
 
 
 @dataclass(frozen=True, slots=True)
-class SignatureType:
-    r"""Class for representing signatures of functions between vector spaces.
+class FnType:
+    r"""Class for representing function types between vector spaces.
 
-    A signature is of the form:
+    A function type is of the form:
 
     - ``arg1 -> ret1`` for single input single output (SISO)
       - ``[arg1] -> ret1`` is also allowed
@@ -292,13 +294,13 @@ class SignatureType:
     return_types: ArgList
 
     def __str__(self) -> str:
-        r"""Convert the signature to a string."""
+        r"""Convert the function type to its canonical braced string form."""
         arg_strs = list(map(str, self.argument_types))
         ret_strs = list(map(str, self.return_types))
 
         arg_part = arg_strs[0] if len(arg_strs) == 1 else f"[{', '.join(arg_strs)}]"
         ret_part = ret_strs[0] if len(ret_strs) == 1 else f"[{', '.join(ret_strs)}]"
-        return f"{arg_part} -> {ret_part}"
+        return f"{{{arg_part} -> {ret_part}}}"
 
 
 class TokenKind(StrEnum):
@@ -318,6 +320,8 @@ class TokenKind(StrEnum):
     PLUS = "+"
     MINUS = "-"
     DOLLAR = "$"
+    LBRACE = "{"
+    RBRACE = "}"
     EOF = "EOF"
 
 
@@ -367,7 +371,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
 
     Notes:
         - Whitespace is skipped.
-        - Recognizes identifiers, integer literals, punctuation (`[ ] ( ) , * ?`),
+        - Recognizes identifiers, integer literals, punctuation (`[ ] { } ( ) , * ?`),
           the arrow `->`, and the ellipsis `...`.
     """
     i = 0
@@ -393,7 +397,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
             continue
 
         # Single-character punctuation / operators
-        if c in "[](),*+-?$":
+        if c in "[]{}(),*+-?$":
             yield Token(i, TokenKind(c))  # maps "[" -> LBRACKET, etc.
             i += 1
             continue
@@ -432,7 +436,7 @@ class Parser:
         r"""Parse the grammar starting from SignatureType and ensure full consumption."""
         self = Parser(tokenize(arg))
         try:
-            result = self._parse_signature()
+            result = self._parse_signature_type()
             self._check_eof()
         except SyntaxError as parser_error:
             exc = RuntimeError(f"Failed to parse signature {arg!r}")
@@ -508,12 +512,24 @@ class Parser:
                 "expected end of input"
             )
 
-    # SignatureType ::= (ArgList | Arg) "->" (ArgList | Arg)
-    def _parse_signature(self) -> SignatureType:
-        """Parse the grammar starting from SignatureType and ensure full consumption.
+    # SignatureType ::= FnType | FnBody
+    def _parse_signature_type(self) -> SignatureType:
+        r"""Parse a top-level signature, allowing optional outer braces."""
+        if self.current.kind is TokenKind.LBRACE:
+            return self._parse_fn_type()
+        return self._parse_fn_body()
 
-        SignatureType ::= (ArgList | Arg) "->" (ArgList | Arg)
-        """
+    # FnType ::= "{" FnBody "}"
+    def _parse_fn_type(self) -> FnType:
+        r"""Parse a braced function type."""
+        self.consume(TokenKind.LBRACE)
+        fn_type = self._parse_fn_body()
+        self.consume(TokenKind.RBRACE)
+        return fn_type
+
+    # FnBody ::= (ArgList | Arg) "->" (ArgList | Arg)
+    def _parse_fn_body(self) -> FnType:
+        r"""Parse an unbraced function type body."""
         lhs = (
             self._parse_arglist()
             if self.current.kind is TokenKind.LBRACKET
@@ -528,7 +544,7 @@ class Parser:
             else [self._parse_arg()]
         )
 
-        return SignatureType(lhs, rhs)
+        return FnType(lhs, rhs)
 
     # ArgList ::= "[" (Arg ("," Arg)*)? "]"
     def _parse_arglist(self) -> ArgList:
@@ -554,6 +570,9 @@ class Parser:
     def _parse_arg(self) -> Arg:
         value: ArgType
         match (tok := self.current).kind:
+            case TokenKind.LBRACE:
+                value = self._parse_fn_type()
+
             # ShapeType starts with "("
             case TokenKind.LPAREN:
                 value = self._parse_shape_type()

@@ -8,13 +8,28 @@ from signatures import Parser
 @pytest.mark.parametrize(
     ("argument", "expected"),
     [
-        ("(m, n) -> (n, m)", "(m, n) -> (n, m)"),
+        ("(m, n) -> (n, m)", "{(m, n) -> (n, m)}"),
+        ("{(m, n) -> (n, m)}", "{(m, n) -> (n, m)}"),
+        ("[(m, n), {(n) -> (m)}] -> (m, n)", "{[(m, n), {(n) -> (m)}] -> (m, n)}"),
     ],
 )
 def test_signature(argument: str, expected: str) -> None:
     r"""Test Signature utility."""
     sig = Parser.parse_signature(argument)
     assert str(sig) == expected
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "A -> B -> C",
+        "{A -> B -> C}",
+    ],
+)
+def test_reject_chained_signature(argument: str) -> None:
+    r"""Chained signatures must use explicit braces for nested function types."""
+    with pytest.raises(RuntimeError):
+        Parser.parse_signature(argument)
 
 
 def test() -> None:
