@@ -193,6 +193,17 @@ class Interval(Domain):
         )
         return bool((lower_mask & upper_mask).item())
 
+    def __pos__(self) -> Interval:
+        return self
+
+    def __neg__(self) -> Interval:
+        return Interval(
+            -self.upper,
+            -self.lower,
+            lower_inclusive=self.upper_inclusive,
+            upper_inclusive=self.lower_inclusive,
+        )
+
     def __add__(self, other: float, /) -> Interval:
         return Interval(
             self.lower + other,
