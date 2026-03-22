@@ -18,7 +18,7 @@ ArgType ::= ShapeType | IdentifierType | GenericType | FnType
 ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
 
 // Dimension types
-DimType ::= UnknownDim | VariadicDim | ConstantDim | StaticDim | CompoundDim
+DimType ::= UnknownDim | VariadicDim | ConstantDim | StaticDim | CompoundDim | DynamicDim
 // a single unknown dimension (could be one of Constant, Static or Dynamic)
 UnknownDim ::= "?"
 // multiple unknown dimensions (could be one of Constant, Static or Dynamic)
