@@ -274,6 +274,10 @@ class Interval(Domain):
             return union < self
         return self >= other and self != other
 
+    @overload  # type: ignore[override]
+    def __and__(self, rhs: Interval, /) -> Interval: ...
+    @overload
+    def __and__(self, rhs: RealDomain | str, /) -> Interval | RealDomain: ...
     def __and__(self, rhs: object, /) -> Interval | RealDomain:
         if (other := Interval.parse(rhs)) is None:
             if (union := RealDomain.parse(rhs)) is None:
@@ -310,6 +314,10 @@ class Interval(Domain):
             upper_inclusive=upper_inclusive,
         )
 
+    @overload
+    def __rand__(self, rhs: Interval, /) -> Interval: ...
+    @overload
+    def __rand__(self, rhs: RealDomain | str, /) -> Interval | RealDomain: ...
     def __rand__(self, lhs: object, /) -> Interval | RealDomain:
         if (other := Interval.parse(lhs)) is None:
             if (union := RealDomain.parse(lhs)) is None:
@@ -592,14 +600,27 @@ class RealDomain(Domain, Collection[Interval]):
         if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented
 
-        intersections = [
-            left & right
-            for left in self
-            for right in other
-            if not (left & right).is_empty()
-        ]
+        left_intervals = iter(self)
+        right_intervals = iter(other)
+        left = next(left_intervals, None)
+        right = next(right_intervals, None)
+        intersections: list[Interval] = []
+        while left is not None and right is not None:
+            intersection = left & right
+            if not intersection.is_empty():
+                intersections.append(intersection)
+
+            if left.upper < right.upper:
+                left = next(left_intervals, None)
+            elif right.upper < left.upper or (
+                left.upper_inclusive and not right.upper_inclusive
+            ):
+                right = next(right_intervals, None)
+            else:
+                left = next(left_intervals, None)
+
         if not intersections:
-            return RealDomain(Interval("(NAN, NAN)"))
+            return RealDomain(Interval.EMPTY)
         return RealDomain(*intersections)
 
     def __rand__(self, other: object, /) -> RealDomain:
