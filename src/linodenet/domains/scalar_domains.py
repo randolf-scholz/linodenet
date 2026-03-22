@@ -7,7 +7,7 @@ from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from math import isnan
-from typing import Final, overload
+from typing import Final, assert_never, overload
 
 from torch import Tensor
 
@@ -243,30 +243,31 @@ class Interval(Domain):
             and self.upper_inclusive == other.upper_inclusive
         )
 
-    def __le__(self, other: object, /) -> bool:
-        match other:
-            case RealDomain():
-                return any(self <= interval for interval in other.intervals)
-            case str():
-                return self <= RealDomain.from_string(other)
-            case _ if (other_interval := self.parse(other)) is not None:
-                lower_ok = self.lower > other_interval.lower or (
-                    self.lower == other_interval.lower
-                    and (other_interval.lower_inclusive or not self.lower_inclusive)
+    def __le__(self, rhs: object, /) -> bool:
+        match Interval.parse(rhs):
+            case Interval() as other:
+                lower_ok = self.lower > other.lower or (
+                    self.lower == other.lower
+                    and (other.lower_inclusive or not self.lower_inclusive)
                 )
-                upper_ok = self.upper < other_interval.upper or (
-                    self.upper == other_interval.upper
-                    and (other_interval.upper_inclusive or not self.upper_inclusive)
+                upper_ok = self.upper < other.upper or (
+                    self.upper == other.upper
+                    and (other.upper_inclusive or not self.upper_inclusive)
                 )
                 return lower_ok and upper_ok
-            case _:
+            case None:
                 return NotImplemented
+            case never:
+                assert_never(never)
 
-    def __lt__(self, other: object, /) -> bool:
-        result = self <= other
-        if result is NotImplemented:
-            return NotImplemented
-        return result and self != other
+    def __lt__(self, rhs: object, /) -> bool:
+        match Interval.parse(rhs):
+            case Interval() as other_interval:
+                return self <= other_interval and self != other_interval
+            case None:
+                return NotImplemented
+            case never:
+                assert_never(never)
 
     def __ge__(self, other: object, /) -> bool:
         match other:
@@ -445,6 +446,21 @@ class RealDomain(Domain, Collection[Interval]):
 
     def __lt__(self, other: object, /) -> bool:
         result = self <= other
+        if result is NotImplemented:
+            return NotImplemented
+        return result and self != other
+
+    def __ge__(self, other: object, /) -> bool:
+        if (other_union := self._coerce_union(other)) is None:
+            return NotImplemented
+
+        return all(
+            any(interval <= self_interval for self_interval in self.intervals)
+            for interval in other_union.intervals
+        )
+
+    def __gt__(self, other: object, /) -> bool:
+        result = self >= other
         if result is NotImplemented:
             return NotImplemented
         return result and self != other
