@@ -564,6 +564,12 @@ class RealDomain(Domain, Collection[Interval]):
     def __hash__(self) -> int:
         return hash(self.intervals)
 
+    def __pos__(self) -> RealDomain:
+        return self
+
+    def __neg__(self) -> RealDomain:
+        return RealDomain(*(-interval for interval in reversed(self)))
+
     def __le__(self, rhs: object, /) -> bool:
         if (other := RealDomain.parse(rhs)) is None:
             return NotImplemented

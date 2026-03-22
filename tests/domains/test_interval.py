@@ -143,7 +143,7 @@ class TestInterval:
 
     def test_intersection_operator_rejects_non_intervals(self) -> None:
         with pytest.raises(TypeError):
-            _ = Interval("[0, 1]") & 1
+            _ = Interval("[0, 1]") & 1  # type: ignore[operator]  # pyright: ignore[reportOperatorIssue]
 
     @pytest.mark.parametrize(
         ("left", "right", "expected"),
@@ -195,6 +195,12 @@ class TestRealDomain:
         assert union + 2.0 == RealDomain("[0, 1]", "(3, 4]")
         assert union - float("-inf") == RealDomain("[inf, inf]")
         assert union * -2.0 == RealDomain("[-4, -2)", "[2, 4]")
+
+    def test_unary_operators(self) -> None:
+        union = RealDomain("[-2, -1]", "(1, 2]")
+
+        assert +union is union
+        assert -union == RealDomain("[-2, -1)", "[1, 2]")
 
     def test_subset_relations(self) -> None:
         assert RealDomain("[0, 1]", "[3, 4]") <= "[-1, 2] | [3, 5]"
