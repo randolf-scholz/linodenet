@@ -124,11 +124,10 @@ class Interval(Domain):
             self.lower_inclusive = lower_inclusive  # type: ignore[misc]
             self.upper_inclusive = upper_inclusive  # type: ignore[misc]
 
-    def isdisjoint(self, other: Interval, /) -> bool:
+    def isdisjoint(self, other: Interval | str, /) -> bool:
         r"""Return whether two intervals have empty intersection."""
-        if (isnan(self.lower) and isnan(self.upper)) or (
-            isnan(other.lower) and isnan(other.upper)
-        ):
+        other = Interval(other)
+        if self.isempty() or other.isempty():
             return True
         if self.upper < other.lower or other.upper < self.lower:
             return True
@@ -139,6 +138,10 @@ class Interval(Domain):
         if other.upper == self.lower:
             return not (other.upper_inclusive and self.lower_inclusive)
         return False
+
+    def isempty(self) -> bool:
+        r"""Return whether the interval represents the empty set."""
+        return isnan(self.lower) or isnan(self.upper)
 
     def __contains__(self, item: Tensor, /) -> Tensor:
         lower_mask = (
@@ -225,12 +228,7 @@ class Interval(Domain):
         if (other := self.parse(rhs)) is None:
             return NotImplemented
 
-        if (
-            isnan(self.lower)
-            and isnan(self.upper)
-            and isnan(other.lower)
-            and isnan(other.upper)
-        ):
+        if self.isempty() and other.isempty():
             return (
                 self.lower_inclusive == other.lower_inclusive
                 and self.upper_inclusive == other.upper_inclusive
@@ -269,16 +267,23 @@ class Interval(Domain):
             case never:
                 assert_never(never)
 
-    def __ge__(self, other: object, /) -> bool:
-        match other:
-            case RealDomain():
-                return all(interval <= self for interval in other.intervals)
-            case str():
-                return self >= RealDomain.from_string(other)
-            case _ if (other_interval := self.parse(other)) is not None:
+    def __ge__(self, rhs: object, /) -> bool:
+        match Interval.parse(rhs):
+            case Interval() as other_interval:
                 return other_interval <= self
-            case _:
+            case None:
                 return NotImplemented
+            case never:
+                assert_never(never)
+
+    def __gt__(self, rhs: object, /) -> bool:
+        match Interval.parse(rhs):
+            case Interval() as other_interval:
+                return self >= other_interval and self != other_interval
+            case None:
+                return NotImplemented
+            case never:
+                assert_never(never)
 
     def __or__(self, other: object, /) -> Interval | RealDomain:
         if isinstance(other, Interval) and not self.isdisjoint(other):
@@ -305,7 +310,7 @@ class Interval(Domain):
                 upper_inclusive=upper_inclusive,
             )
 
-        if (other_union := RealDomain._coerce_union(other)) is None:
+        if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
         return RealDomain(self, *other_union.intervals)
 
@@ -313,7 +318,7 @@ class Interval(Domain):
         if isinstance(other, Interval) and not self.isdisjoint(other):
             return other | self
 
-        if (other_union := RealDomain._coerce_union(other)) is None:
+        if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
         return RealDomain(*other_union.intervals, self)
 
@@ -333,6 +338,29 @@ class RealDomain(Domain, Collection[Interval]):
 
     intervals: Final[tuple[Interval, ...]]
 
+    @staticmethod
+    def parse(other: object, /) -> RealDomain | None:
+        match other:
+            case RealDomain():
+                return other
+            case Interval():
+                return RealDomain(other)
+            case str():
+                try:
+                    return RealDomain.from_string(other)
+                except ValueError:
+                    return None
+            case _:
+                return None
+
+    @classmethod
+    def from_string(cls, s: str, /) -> RealDomain:
+        r"""Create a union of intervals from a `|`-separated string."""
+        parts = [part.strip() for part in s.split("|")]
+        if any(not part for part in parts):
+            raise ValueError(f"Invalid union of intervals string: {s}")
+        return RealDomain(*(Interval.from_string(part) for part in parts))
+
     def __init__(self, *intervals: Interval | str) -> None:
         match intervals:
             case []:
@@ -344,14 +372,6 @@ class RealDomain(Domain, Collection[Interval]):
                 intervals = self._merge_intervals(Interval(spec) for spec in intervals)
 
         self.intervals = intervals
-
-    @classmethod
-    def from_string(cls, s: str, /) -> RealDomain:
-        r"""Create a union of intervals from a `|`-separated string."""
-        parts = [part.strip() for part in s.split("|")]
-        if any(not part for part in parts):
-            raise ValueError(f"Invalid union of intervals string: {s}")
-        return RealDomain(*(Interval.from_string(part) for part in parts))
 
     def __len__(self) -> int:
         return len(self.intervals)
@@ -367,18 +387,6 @@ class RealDomain(Domain, Collection[Interval]):
         if isinstance(index, slice):
             return RealDomain(*self.intervals[index])
         return self.intervals[index]
-
-    @staticmethod
-    def _coerce_union(other: object, /) -> RealDomain | None:
-        match other:
-            case RealDomain():
-                return other
-            case Interval():
-                return RealDomain(other)
-            case str():
-                return RealDomain.from_string(other)
-            case _:
-                return None
 
     @staticmethod
     def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
@@ -419,7 +427,7 @@ class RealDomain(Domain, Collection[Interval]):
         return mask
 
     def __eq__(self, other: object, /) -> bool:
-        if (other_union := self._coerce_union(other)) is None:
+        if (other_union := self.parse(other)) is None:
             return NotImplemented
         return hash(self) == hash(other_union)
 
@@ -436,7 +444,7 @@ class RealDomain(Domain, Collection[Interval]):
         return RealDomain(*(interval * other for interval in self.intervals))
 
     def __le__(self, other: object, /) -> bool:
-        if (other_union := self._coerce_union(other)) is None:
+        if (other_union := self.parse(other)) is None:
             return NotImplemented
 
         return all(
@@ -451,7 +459,7 @@ class RealDomain(Domain, Collection[Interval]):
         return result and self != other
 
     def __ge__(self, other: object, /) -> bool:
-        if (other_union := self._coerce_union(other)) is None:
+        if (other_union := self.parse(other)) is None:
             return NotImplemented
 
         return all(
@@ -466,12 +474,12 @@ class RealDomain(Domain, Collection[Interval]):
         return result and self != other
 
     def __or__(self, other: object, /) -> RealDomain:
-        if (other_union := self._coerce_union(other)) is None:
+        if (other_union := self.parse(other)) is None:
             return NotImplemented
         return RealDomain(*self.intervals, *other_union.intervals)
 
     def __ror__(self, other: object, /) -> RealDomain:
-        if (other_union := self._coerce_union(other)) is None:
+        if (other_union := self.parse(other)) is None:
             return NotImplemented
         return RealDomain(*other_union.intervals, *self.intervals)
 
