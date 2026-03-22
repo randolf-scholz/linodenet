@@ -376,7 +376,13 @@ Interval.EMPTY = Interval(  # pyright: ignore[reportAttributeAccessIssue]
 
 
 class RealDomain(Domain, Collection[Interval]):
-    r"""We model domains on the extended real line by a finite union of intervals."""
+    r"""A finite union of sorted, simplified intervals on the extended real line.
+
+    Invariants:
+        The empty domain is represented canonically as ``(Interval.EMPTY,)``.
+        Non-empty domains store pairwise disjoint intervals sorted by lower bound.
+        Adjacent intervals may share a boundary point only if both exclude it.
+    """
 
     intervals: Final[tuple[Interval, ...]]
 
