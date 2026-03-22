@@ -530,34 +530,6 @@ class RealDomain(Domain, Collection[Interval]):
     def __hash__(self) -> int:
         return hash(self.intervals)
 
-    def __add__(self, other: float, /) -> RealDomain:
-        return RealDomain(*(interval + other for interval in self.intervals))
-
-    def __sub__(self, other: float, /) -> RealDomain:
-        return self + (-other)
-
-    def __mul__(self, other: float, /) -> RealDomain:
-        return RealDomain(*(interval * other for interval in self.intervals))
-
-    def __and__(self, other: object, /) -> RealDomain:
-        if (other_union := RealDomain.parse(other)) is None:
-            return NotImplemented
-
-        intersections = [
-            left & right
-            for left in self.intervals
-            for right in other_union.intervals
-            if not (left & right).is_empty()
-        ]
-        if not intersections:
-            return RealDomain(Interval("(NAN, NAN)"))
-        return RealDomain(*intersections)
-
-    def __rand__(self, other: object, /) -> RealDomain:
-        if (other_union := RealDomain.parse(other)) is None:
-            return NotImplemented
-        return other_union & self
-
     def __le__(self, other: object, /) -> bool:
         if (other_union := RealDomain.parse(other)) is None:
             return NotImplemented
@@ -587,6 +559,34 @@ class RealDomain(Domain, Collection[Interval]):
         if result is NotImplemented:
             return NotImplemented
         return result and self != other
+
+    def __add__(self, other: float, /) -> RealDomain:
+        return RealDomain(*(interval + other for interval in self.intervals))
+
+    def __sub__(self, other: float, /) -> RealDomain:
+        return self + (-other)
+
+    def __mul__(self, other: float, /) -> RealDomain:
+        return RealDomain(*(interval * other for interval in self.intervals))
+
+    def __and__(self, other: object, /) -> RealDomain:
+        if (other_union := RealDomain.parse(other)) is None:
+            return NotImplemented
+
+        intersections = [
+            left & right
+            for left in self.intervals
+            for right in other_union.intervals
+            if not (left & right).is_empty()
+        ]
+        if not intersections:
+            return RealDomain(Interval("(NAN, NAN)"))
+        return RealDomain(*intersections)
+
+    def __rand__(self, other: object, /) -> RealDomain:
+        if (other_union := RealDomain.parse(other)) is None:
+            return NotImplemented
+        return other_union & self
 
     def __or__(self, other: object, /) -> RealDomain:
         if (other_union := RealDomain.parse(other)) is None:
