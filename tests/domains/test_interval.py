@@ -163,8 +163,8 @@ class TestInterval:
         right: str,
         expected: bool,
     ) -> None:
-        assert Interval(left).isdisjoint(Interval(right)) is expected
-        assert Interval(right).isdisjoint(Interval(left)) is expected
+        assert Interval(left).is_disjoint(Interval(right)) is expected
+        assert Interval(right).is_disjoint(Interval(left)) is expected
 
     @pytest.mark.parametrize(
         ("interval", "expected"),
@@ -176,7 +176,7 @@ class TestInterval:
         ],
     )
     def test_isempty(self, interval: str, expected: bool) -> None:
-        assert Interval(interval).isempty() is expected
+        assert Interval(interval).is_empty() is expected
 
 
 class TestRealDomain:

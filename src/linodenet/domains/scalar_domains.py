@@ -151,10 +151,10 @@ class Interval(Domain):
             "upper_inclusive": upper_inclusive,
         }
 
-    def isdisjoint(self, other: Interval | str, /) -> bool:
+    def is_disjoint(self, other: Interval | str, /) -> bool:
         r"""Return whether two intervals have empty intersection."""
         other = Interval(other)
-        if self.isempty() or other.isempty():
+        if self.is_empty() or other.is_empty():
             return True
         if self.upper < other.lower or other.upper < self.lower:
             return True
@@ -166,9 +166,12 @@ class Interval(Domain):
             return not (other.upper_inclusive and self.lower_inclusive)
         return False
 
-    def isempty(self) -> bool:
+    def is_empty(self) -> bool:
         r"""Return whether the interval represents the empty set."""
-        return isnan(self.lower) or isnan(self.upper)
+        non_empty = not (isnan(self.lower) or isnan(self.upper))
+        is_empty_sentinel = self is Interval.EMPTY
+        assert non_empty ^ is_empty_sentinel  # safety check.
+        return is_empty_sentinel
 
     def __contains__(self, item: Tensor, /) -> Tensor:
         lower_mask = (
@@ -266,7 +269,7 @@ class Interval(Domain):
                 return NotImplemented
             return union & self
 
-        if self.isdisjoint(other):
+        if self.is_disjoint(other):
             return Interval.EMPTY
 
         if self.lower > other.lower:
@@ -309,7 +312,7 @@ class Interval(Domain):
                 return NotImplemented
             return union | self
 
-        if self.isdisjoint(other):
+        if self.is_disjoint(other):
             return RealDomain(self, other)
 
         lower = self.lower
@@ -423,12 +426,12 @@ class RealDomain(Domain, Collection[Interval]):
             return RealDomain(*self.intervals[index])
         return self.intervals[index]
 
-    def isempty(self) -> bool:
-        return all(interval.isempty() for interval in self.intervals)
+    def is_empty(self) -> bool:
+        return all(interval.is_empty() for interval in self.intervals)
 
     @staticmethod
     def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
-        if not (intervals := [i for i in intervals if not i.isempty()]):
+        if not (intervals := [i for i in intervals if not i.is_empty()]):
             return (Interval("(NAN, NAN)"),)
 
         ordered = sorted(intervals, key=lambda i: (i.lower, not i.lower_inclusive))
@@ -492,7 +495,7 @@ class RealDomain(Domain, Collection[Interval]):
             left & right
             for left in self.intervals
             for right in other_union.intervals
-            if not (left & right).isempty()
+            if not (left & right).is_empty()
         ]
         if not intersections:
             return RealDomain(Interval("(NAN, NAN)"))
