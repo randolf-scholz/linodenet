@@ -20,13 +20,17 @@ class Domain(Protocol):
 
     def __lt__(self, other: Self, /) -> bool: ...
 
+    def __or__(self, other: Self, /) -> Self: ...
+
+    def __and__(self, other: Self, /) -> Self: ...
+
 
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]
     r"""Dependencies"""
-    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]
     r"""Reverse dependencies."""
 
     @classmethod
