@@ -410,6 +410,7 @@ class RealDomain(Domain, Collection[Interval]):
                     raise TypeError(f"Invalid interval: {item}")
 
         self.intervals = self._merge_intervals(flat_intervals)
+        self._validate()
 
     def __len__(self) -> int:
         return len(self.intervals)
@@ -427,7 +428,58 @@ class RealDomain(Domain, Collection[Interval]):
         return self.intervals[index]
 
     def is_empty(self) -> bool:
-        return all(interval.is_empty() for interval in self.intervals)
+        all_empty = all(interval.is_empty() for interval in self.intervals)
+        uses_empty_sentinel = self.intervals == (Interval.EMPTY,)
+        assert all_empty == uses_empty_sentinel
+        return uses_empty_sentinel
+
+    def is_disjoint(self, other: object, /) -> bool:
+        if (other_union := RealDomain.parse(other)) is None:
+            return NotImplemented
+
+        if self.is_empty() or other_union.is_empty():
+            return True
+
+        left_index = 0
+        right_index = 0
+        while left_index < len(self.intervals) and right_index < len(
+            other_union.intervals
+        ):
+            left = self.intervals[left_index]
+            right = other_union.intervals[right_index]
+
+            if not left.is_disjoint(right):
+                return False
+
+            if left.upper < right.upper:
+                left_index += 1
+            elif right.upper < left.upper or (
+                left.upper_inclusive and not right.upper_inclusive
+            ):
+                right_index += 1
+            else:
+                left_index += 1
+        return True
+
+    def _validate(self) -> None:
+        if self.is_empty():
+            return
+
+        for interval in self.intervals:
+            if interval.is_empty():
+                raise ValueError("Non-empty domains cannot contain empty intervals.")
+            if interval.lower > interval.upper:
+                raise ValueError("Intervals must satisfy lower <= upper.")
+
+        for left, right in zip(self.intervals, self.intervals[1:], strict=False):
+            if not left.is_disjoint(right):
+                raise ValueError("RealDomain intervals must be pairwise disjoint.")
+            if left.upper > right.lower:
+                raise ValueError("RealDomain intervals must be sorted by lower bound.")
+            if left.upper == right.lower and (
+                left.upper_inclusive or right.lower_inclusive
+            ):
+                raise ValueError("Touching intervals must exclude the shared boundary.")
 
     @staticmethod
     def _merge_intervals(intervals: Iterable[Interval], /) -> tuple[Interval, ...]:
