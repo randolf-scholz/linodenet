@@ -16,44 +16,52 @@ __all__ = [
     "xtrace_estimator_corrected",
 ]
 
-from collections.abc import Callable
+from collections.abc import Callable as Fn
 
 import torch
 from torch import Tensor, nn, vmap
-from torch.func import linearize
+from torch.func import jvp, linearize, vjp
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
 
 
 @signature("(..., n, d) -> (...)")
-def naive_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
+def naive_estimator(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matric, realizing the full matrix."""
     I = torch.eye(samples.shape[-1], dtype=samples.dtype, device=samples.device)
     A = fn(I)
     return torch.einsum("...dd -> ...", A)
 
 
-@signature("(..., n, d) -> (...)")
-def hutchinson_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
+@signature("[{(..., n, d) -> (...)}, (..., n, d), (..., n, d)?] -> (...)")
+def hutchinson_estimator(
+    fn: Fn[[Tensor], Tensor],
+    samples: Tensor,
+    *,
+    left_samples: Tensor | None = None,
+) -> Tensor:
     r"""Estimate the trace of a matrix with Hutchinson's estimator.
 
-    .. math:: \tr(A) = E[vᵀAv], where E[v]=0 and Cov[v]= 𝕀
+    .. math:: \tr(A) = E[vᵀAv], where E[vvᵀ] = 𝕀
+    .. math:: \tr(A) = E[uᵀAv], where E[uvᵀ] = 𝕀
 
     Args:
         fn: Matrix-vector product function, i.e. $x ↦ Ax$ (batched).
         samples: Random samples to use for the estimator.
             Shape: `(..., n, d)`, with `...` batch size, `n` number of samples,
             and `d` dimension.
+        left_samples: Optional random samples for the left probe vectors in the bilinear estimator.
 
     Returns:
         Tensor: The estimated trace.
     """
-    return vecdot(samples, fn(samples), dim=-1).mean(dim=-1)
+    left_samples = samples if left_samples is None else left_samples
+    return vecdot(left_samples, fn(samples), dim=-1).mean(dim=-1)
 
 
 @signature("[{(..., n, d) -> (..., n, d)}, (..., n, d)] -> (...)")
-def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
+def xtrace_estimator(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matric.
 
     Args:
@@ -116,9 +124,7 @@ def xtrace_estimator(fn: Callable[[Tensor], Tensor], samples: Tensor) -> Tensor:
 
 
 @signature("(..., n, d) -> (...)")
-def xtrace_estimator_corrected(
-    fn: Callable[[Tensor], Tensor], samples: Tensor
-) -> Tensor:
+def xtrace_estimator_corrected(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Tensor:
     r"""Estimate the trace of a matrix using the original XTrace MATLAB algorithm.
 
     This is a direct Torch transcription of the reference MATLAB code. The input
@@ -220,8 +226,8 @@ def _normalized_inverse_h_columns(r_factor: Tensor) -> Tensor:
 
 
 def btrace_estimator(
-    fn: Callable[[Tensor], Tensor],
-    adj_fn: Callable[[Tensor], Tensor],
+    fn: Fn[[Tensor], Tensor],
+    adj_fn: Fn[[Tensor], Tensor],
     left_samples: Tensor,
     right_samples: Tensor,
 ) -> Tensor:
@@ -322,8 +328,8 @@ def btrace_estimator(
 
 
 def btrace_estimator_naive(
-    fn: Callable[[Tensor], Tensor],
-    adj_fn: Callable[[Tensor], Tensor],
+    fn: Fn[[Tensor], Tensor],
+    adj_fn: Fn[[Tensor], Tensor],
     left_samples: Tensor,
     right_samples: Tensor,
 ) -> Tensor:
@@ -476,8 +482,8 @@ def _balanced_biorthogonal_factors(
 
 
 def btrace_estimator_new(
-    fn: Callable[[Tensor], Tensor],
-    adj_fn: Callable[[Tensor], Tensor],
+    fn: Fn[[Tensor], Tensor],
+    adj_fn: Fn[[Tensor], Tensor],
     left_samples: Tensor,
     right_samples: Tensor,
 ) -> Tensor:
@@ -653,7 +659,7 @@ class LogAbsDetEstimator(nn.Module):
 
     num_samples: int | None
     num_series_terms: int | None
-    method: Callable[[Callable[[Tensor], Tensor], Tensor], tuple[Tensor, Tensor]]
+    method: Fn[[Fn[[Tensor], Tensor], Tensor], tuple[Tensor, Tensor]]
 
     def __init__(
         self,
@@ -691,11 +697,11 @@ class LogAbsDetEstimator(nn.Module):
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def compute_exact(
-        self, fn: Callable[[Tensor], Tensor], x: Tensor
+        self, fn: Fn[[Tensor], Tensor], x: Tensor
     ) -> tuple[Tensor, Tensor]:
         r"""Compute the exact log-absolute-determinant via the full Jacobian spectrum."""
-        y, df = linearize(fn, x)  # (..., d), {(..., d) -> (..., d)}
-        batched_df = vmap(df, in_dims=-1, out_dims=-1)  # {(..., d, n) -> (..., d, n)}
+        y, df = linearize(fn, x)  # (...d), {(...d) -> (...d)}
+        batched_df = vmap(df, in_dims=-2, out_dims=-2)  # {(...nd) -> (...nd)}
         dim = y.shape[-1]
         I = torch.eye(dim, dim, device=y.device).expand(*y.shape[:-1], dim, dim)
 
@@ -708,54 +714,91 @@ class LogAbsDetEstimator(nn.Module):
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def compute_hutch(
-        self, fn: Callable[[Tensor], Tensor], x: Tensor
+        self, fn: Fn[[Tensor], Tensor], x: Tensor
     ) -> tuple[Tensor, Tensor]:
         r"""Estimate the log-absolute-determinant using a power series and Hutchinson."""
         assert self.num_samples is not None
         assert self.num_series_terms is not None
 
-        y, jvp_fn = linearize(fn, x)
-        batched_jvp_fn = vmap(jvp_fn)
-        samples = torch.randn(
-            *x.shape[:-1],
-            self.num_samples,
-            x.shape[-1],
+        y, jvp_fn = jvp(fn, x)
+        y, vjp_fn = vjp(fn, x)
+        batched_jvp_fn = vmap(jvp_fn, in_dims=-2, out_dims=-2)  # (...nd) -> (...nd)
+        right_samples = torch.randn(  # (...dn)
+            (*x.shape, self.num_samples),
             device=x.device,
             dtype=x.dtype,
         )
-        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+        left_samples = right_samples.clone()
 
+        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
         for k in range(1, self.num_series_terms + 1):
-            coef = 1.0 / k if k % 2 else -1.0 / k
-            result = samples.movedim(-2, 0)
-            for _ in range(k):
-                result = batched_jvp_fn(result)
-            logabsdet = logabsdet + coef * hutchinson_estimator(
-                lambda values, result=result: result.movedim(0, -2),
-                samples,
-            )
+            # log|det(I+A)| = Re(tr(log I+A)) = Re(∑_{k≥1} (-1)ᵏ⁺¹/k tr(Aᵏ))
+            sign = sign.neg()
+
+            # hutch impl, using tr(Aᵏ⁺¹) = E[v₀Avₖ], vₖ=Avₖ₋₁
+            right_samples = batched_jvp_fn(right_samples)
+            tr_k_power = vecdot(left_samples, right_samples, dim=-1).mean(dim=-1)
+
+            logabsdet = logabsdet + (sign / k) * tr_k_power
+
+        return y, logabsdet
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def compute_hutch_twosided(
+        self, fn: Fn[[Tensor], Tensor], x: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        r"""Estimate the log-absolute-determinant using a power series and Hutchinson."""
+        assert self.num_samples is not None
+        assert self.num_series_terms is not None
+
+        y, jvp_fn = jvp(fn, x)
+        y, vjp_fn = vjp(fn, x)
+        batched_jvp_fn = vmap(jvp_fn, in_dims=-2, out_dims=-2)  # (...nd) -> (...nd)
+        batched_vjp_fn = vmap(jvp_fn, in_dims=-2, out_dims=-2)  # (...nd) -> (...nd)
+        right_samples = torch.randn(  # (...dn)
+            (*x.shape, self.num_samples),
+            device=x.device,
+            dtype=x.dtype,
+        )
+        left_samples = right_samples.clone()
+
+        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+        for k in range(1, self.num_series_terms + 1, 2):
+            # log|det(I+A)| = Re(tr(log I+A)) = Re(∑_{k≥1} (-1)ᵏ⁺¹/k tr(Aᵏ))
+
+            # tr(A²ᵏ⁻¹) = E[u₀ᵀA²ᵏ⁻¹v₀] = E[uₖ₋₁ᵀvₖ], vₖ=Aᵏv₀, uₖ=(Aᵀ)ᵏu₀
+            right_samples = batched_jvp_fn(right_samples)  # vₖ₊₁ = A vₖ
+            tr_odd_power = vecdot(left_samples, right_samples, dim=-1).mean(dim=-1)
+
+            # tr(A²ᵏ) = E[u₀ᵀA²ᵏv₀] = E[uₖᵀvₖ],  vₖ=Aᵏv₀, uₖ=(Aᵀ)ᵏu₀
+            left_samples = batched_vjp_fn(left_samples)  # uₖ₊₁ = Aᵀvₖ
+            tr_even_power = vecdot(left_samples, right_samples, dim=-1).mean(dim=-1)
+
+            logabsdet = logabsdet + tr_odd_power / k
+            logabsdet = logabsdet - tr_even_power / (k + 1)
 
         return y, logabsdet
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def compute_xtrace(
-        self, fn: Callable[[Tensor], Tensor], x: Tensor
+        self, fn: Fn[[Tensor], Tensor], x: Tensor
     ) -> tuple[Tensor, Tensor]:
         r"""Estimate the log-absolute-determinant using a power series and XTrace."""
         assert self.num_samples is not None
         assert self.num_series_terms is not None
 
-        y, jvp_fn = linearize(fn, x)  # (..., d)  -> (..., d)
-        batched_jvp_fn = vmap(jvp_fn, out_dims=-1)  # (..., d, n) -> (..., d, n)
-        samples = torch.randn(  # (..., d, n)
-            (self.num_samples, *x.shape),
+        y, jvp_fn = linearize(fn, x)  # (...d)  -> (...d)
+        batched_jvp_fn = vmap(jvp_fn, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+        samples = torch.randn(  # (...dn)
+            (*x.shape, self.num_samples),
             device=x.device,
             dtype=x.dtype,
         )
         logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
         sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
         for k in range(1, self.num_series_terms + 1):
-            # log|det(I+A)| =
+            # log|det(I+A)| = Re(tr(log I+A)) = Re(∑_{k≥1} (-1)ᵏ⁺¹/k tr(Aᵏ))
             sign = sign.neg()
             samples = batched_jvp_fn(samples)
             tr_k_power = xtrace_estimator(batched_jvp_fn, samples)
@@ -763,9 +806,6 @@ class LogAbsDetEstimator(nn.Module):
 
         return y, logabsdet
 
-    def forward(
-        self,
-        fn: Callable[[Tensor], Tensor],
-        x: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def forward(self, fn: Fn[[Tensor], Tensor], x: Tensor) -> tuple[Tensor, Tensor]:
         return self.method(fn, x)
