@@ -10,6 +10,7 @@ __all__ = [
     "HutchPlusPlusEstimator",
     "HutchinsonEstimator",
     "LogAbsDetEstimator",
+    "XTraceEstimator",
     # functions
     "btrace_estimator",
     "btrace_estimator_naive",
@@ -430,30 +431,126 @@ class HutchPlusPlusEstimator(nn.Module):
 
         raise AssertionError("unreachable")
 
-    def _estimate_from_operator(
-        self, op: Fn[[Tensor], Tensor], /, *, shape: tuple[int, ...]
-    ) -> Tensor:
-        sketch_size = self.num_matvecs // 3
-        if sketch_size < 1:
-            raise ValueError("num_samples must be at least 3")
 
-        samples = self._make_samples(shape=shape, num_samples=2 * sketch_size)
-        x1 = samples[..., :sketch_size]
-        x2 = samples[..., sketch_size:]
+class XTraceEstimator(nn.Module):
+    r"""Estimate traces with the XTrace estimator.
 
-        y = self._apply_along_samples(op, x1)
-        q, _ = qr(y, mode="reduced")
+    Cost: mN^2 + O(m^3)
+        m is the number of matvecs (=2x`num_samples`),
+        N is the dimension of the operator
+    """
 
-        g = x2 - q @ (q.mH @ x2)
-        aq = self._apply_along_samples(op, q)
-        ag = self._apply_along_samples(op, g)
+    num_matvecs: Final[int]
+    num_samples: Final[int]
 
-        low_rank_trace = torch.einsum("...dm, ...dm -> ...", q.conj(), aq)
-        residual_trace = torch.einsum("...dm, ...dm -> ...", g.conj(), ag) / sketch_size
-        trace_estimate = low_rank_trace + residual_trace
-        return (
-            trace_estimate.real if not trace_estimate.is_complex() else trace_estimate
+    @overload
+    def __init__(self, num_samples: int) -> None: ...
+    @overload
+    def __init__(self, *, num_matvecs: int) -> None: ...
+    def __init__(
+        self,
+        num_samples: int | None = None,
+        *,
+        num_matvecs: int | None = None,
+    ) -> None:
+        super().__init__()
+
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("either num_samples or num_matvecs must be provided")
+            case n, None:
+                self.num_matvecs = 2 * n
+                self.num_samples = n
+            case None, n:
+                if n < 2:
+                    raise ValueError("num_matvecs must be at least 2")
+                self.num_matvecs = n
+                self.num_samples = n // 2
+            case _, _:
+                raise ValueError(
+                    "Only one of num_samples or num_matvecs should be provided, but got both."
+                )
+
+        self.register_buffer("_anchor", torch.empty(0), persistent=False)
+
+    @signature("[shape[(..., d)], n] -> (..., d, n)")
+    def _make_samples(self, num_samples: int, /, *, shape: tuple[int, ...]) -> Tensor:
+        if not shape:
+            raise ValueError("shape must be non-empty")
+
+        return torch.randn(
+            (*shape, num_samples),
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
         )
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Returns an estimate of $\tr(A)$."""
+        return next(self.estimate_powers(op, adj_op, 1, shape=shape))
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        max_power: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Iterator[Tensor]:
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+        if max_power > 1:
+            raise NotImplementedError("XTraceEstimator currently only supports k=1")
+        if op is None and adj_op is None:
+            raise ValueError("at least one of op or adj_op must be provided")
+
+        if op is not None and adj_op is not None:
+            raise NotImplementedError
+
+        if op is not None:
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+
+            samples = self._make_samples(self.num_samples, shape=shape)
+            y = batched_op(samples)
+            q, r = qr(y, mode="reduced")
+            z = batched_op(q)
+            h = torch.einsum("...dk, ...dl -> ...kl", q.conj(), z)
+            w = torch.einsum("...dk, ...dn -> ...nk", q.conj(), samples)
+            t = torch.einsum("...dk, ...dn -> ...nk", z.conj(), samples)
+
+            k = q.shape[-1]
+            identity = torch.eye(k, dtype=samples.dtype, device=samples.device)
+            s = solve_triangular(identity, r.mH, upper=True, left=False)
+            s = s / vector_norm(s, dim=-2, keepdim=True)
+
+            x = w - torch.einsum("...nk, ...nk, ...nl -> ...nl", s.conj(), w, s)
+            trs = (
+                torch.einsum("...nk, ...kl, ...nl -> ...n", x.conj(), h, x)
+                - torch.einsum("...nk, ...kl, ...nl -> ...n", s.conj(), h, s)
+                - torch.einsum("...nk, ...nk -> ...n", t.conj(), x)
+                + (
+                    torch.einsum("...nk, ...nk -> ...n", w.conj(), s)
+                    * torch.einsum("...nk, ...kn -> ...n", s.conj(), r)
+                )
+            )
+
+            estimate = h.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
+            yield estimate.real if not estimate.is_complex() else estimate
+            return
+
+        if adj_op is not None:
+            raise NotImplementedError
+
+        raise AssertionError("unreachable")
 
 
 @signature("(..., n, d) -> (...)")
