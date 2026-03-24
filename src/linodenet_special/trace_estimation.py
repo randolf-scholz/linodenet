@@ -749,7 +749,7 @@ def btrace_estimator_new(
     #   w_i = p_bᴴ A v_i,
     #   z_i = q_bᴴ Aᴴ u_i.
     #
-    # Leaving out column i amounts to zeroing the i-th coefficient.
+    # Leaving out i-th column amounts to zeroing the i-th coefficient.
     w = p_b.mH @ av_cols
     z = q_b.mH @ ahu_cols
     w_rows = w.mT
