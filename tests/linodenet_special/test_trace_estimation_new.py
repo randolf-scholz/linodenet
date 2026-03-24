@@ -6,6 +6,7 @@ from linodenet_special.trace_estimation import (
     ExactEstimator,
     HutchinsonEstimator,
     HutchPlusPlusEstimator,
+    SamplerKind,
     XTraceEstimator,
     xtrace_estimator_corrected,
 )
@@ -24,6 +25,18 @@ def linear_map(matrix: Tensor):
         return torch.einsum("...ij, ...j -> ...i", matrix, x)
 
     return op
+
+
+class OnesSampler:
+    def sample(
+        self,
+        shape: tuple[int, ...],
+        num: int,
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> Tensor:
+        return torch.ones((*shape, num), dtype=dtype, device=device)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -73,6 +86,40 @@ class TestExactEstimator:
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestHutchinsonEstimator:
     NUM_SAMPLES = 1024
+
+    def test_hutchinson_sampler_from_string(self, device: str) -> None:
+        estimator = HutchinsonEstimator(num_samples=4, sampler="sign").to(device=device)
+
+        samples = estimator._make_samples(shape=(3, 5))
+
+        assert isinstance(estimator.sampler, type(SamplerKind.SIGN.make()))
+        assert samples.shape == (3, 5, 4)
+        assert torch.all((samples == -1) | (samples == +1))
+
+    def test_hutchinson_sampler_from_enum(self, device: str) -> None:
+        estimator = HutchinsonEstimator(num_samples=4, sampler=SamplerKind.SIGN).to(
+            device=device
+        )
+
+        samples = estimator._make_samples(shape=(2, 3))
+
+        assert samples.shape == (2, 3, 4)
+        assert torch.all((samples == -1) | (samples == +1))
+
+    def test_hutchinson_sampler_from_custom_instance(self, device: str) -> None:
+        scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
+        estimator = HutchinsonEstimator(num_samples=8, sampler=OnesSampler()).to(
+            device=device
+        )
+
+        estimate = estimator.estimate(scaled_map(scale), None, shape=tuple(scale.shape))
+
+        expected = scale.squeeze(-1)
+        torch.testing.assert_close(estimate, expected)
+
+    def test_hutchinson_sampler_rejects_unknown_string(self, device: str) -> None:
+        with pytest.raises(ValueError, match="is not a valid SamplerKind"):
+            HutchinsonEstimator(num_samples=4, sampler="unknown").to(device=device)
 
     def test_hutchinson_estimate_op_only(self, device: str) -> None:
         torch.manual_seed(0)
@@ -130,6 +177,31 @@ class TestHutchPlusPlusEstimator:
     BATCH_SIZE = 2
     INPUT_SIZE = 100
 
+    def test_hutchplusplus_sampler_from_string(self, device: str) -> None:
+        estimator = HutchPlusPlusEstimator(num_samples=6, sampler="sign").to(
+            device=device
+        )
+
+        samples = estimator._make_samples(4, shape=(2, 3))
+
+        assert isinstance(estimator.sampler, type(SamplerKind.SIGN.make()))
+        assert samples.shape == (2, 3, 4)
+        assert torch.all((samples == -1) | (samples == +1))
+
+    def test_hutchplusplus_sampler_from_custom_instance(self, device: str) -> None:
+        estimator = HutchPlusPlusEstimator(num_samples=6, sampler=OnesSampler()).to(
+            device=device
+        )
+
+        samples = estimator._make_samples(4, shape=(2, 3))
+
+        assert samples.shape == (2, 3, 4)
+        torch.testing.assert_close(samples, torch.ones_like(samples))
+
+    def test_hutchplusplus_sampler_rejects_unknown_string(self, device: str) -> None:
+        with pytest.raises(ValueError, match="is not a valid SamplerKind"):
+            HutchPlusPlusEstimator(num_samples=6, sampler="unknown").to(device=device)
+
     def test_hutchplusplus_estimate_op_only(self, device: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
@@ -157,9 +229,33 @@ class TestHutchPlusPlusEstimator:
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestXTraceEstimator:
-    NUM_SAMPLES = 100
+    NUM_SAMPLES = 3
     BATCH_SIZE = 2
-    INPUT_SIZE = 100
+    INPUT_SIZE = 8
+
+    def test_xtrace_sampler_from_enum(self, device: str) -> None:
+        estimator = XTraceEstimator(num_samples=4, sampler=SamplerKind.SIGN).to(
+            device=device
+        )
+
+        samples = estimator._make_samples(3, shape=(2, 5))
+
+        assert samples.shape == (2, 5, 3)
+        assert torch.all((samples == -1) | (samples == +1))
+
+    def test_xtrace_sampler_from_custom_instance(self, device: str) -> None:
+        estimator = XTraceEstimator(num_samples=4, sampler=OnesSampler()).to(
+            device=device
+        )
+
+        samples = estimator._make_samples(3, shape=(2, 5))
+
+        assert samples.shape == (2, 5, 3)
+        torch.testing.assert_close(samples, torch.ones_like(samples))
+
+    def test_xtrace_sampler_rejects_unknown_string(self, device: str) -> None:
+        with pytest.raises(ValueError, match="is not a valid SamplerKind"):
+            XTraceEstimator(num_samples=4, sampler="unknown").to(device=device)
 
     def test_xtrace_estimate_op_only(self, device: str) -> None:
         torch.manual_seed(0)

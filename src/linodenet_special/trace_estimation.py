@@ -10,6 +10,7 @@ __all__ = [
     "HutchPlusPlusEstimator",
     "HutchinsonEstimator",
     "LogAbsDetEstimator",
+    "SamplerKind",
     "XTraceEstimator",
     # functions
     "btrace_estimator",
@@ -22,6 +23,7 @@ __all__ = [
 
 import math
 from collections.abc import Callable as Fn, Iterator
+from enum import StrEnum
 from typing import Final, Protocol, overload
 
 import torch
@@ -33,7 +35,35 @@ from signatures import signature
 
 
 class Sampler(Protocol):
-    def sample(self) -> Tensor: ...
+    def sample(
+        self,
+        shape: tuple[int, ...],
+        num: int,
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> Tensor: ...
+
+
+class SamplerKind(StrEnum):
+    r"""Built-in probe vector samplers for stochastic trace estimators."""
+
+    GAUSSIAN = "gaussian"
+    SIGN = "sign"
+    SPHERE = "sphere"
+    ORTH = "orth"
+
+    def make(self, *args: object, **kwargs: object) -> Sampler:
+        r"""Instantiate the sampler implementation for this built-in sampler."""
+        match self:
+            case self.GAUSSIAN:
+                return GaussianSampler(*args, **kwargs)
+            case self.SIGN:
+                return SignSampler(*args, **kwargs)
+            case self.SPHERE:
+                return SphereSampler(*args, **kwargs)
+            case self.ORTH:
+                return OrthSampler(*args, **kwargs)
 
 
 class GaussianSampler(nn.Module):
@@ -211,16 +241,22 @@ class HutchinsonEstimator(nn.Module):
 
     num_matvecs: Final[int]
     num_samples: Final[int]
+    sampler: Sampler
 
     @overload
-    def __init__(self, num_samples: int) -> None: ...
+    def __init__(
+        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "gaussian"
+    ) -> None: ...
     @overload
-    def __init__(self, *, num_matvecs: int) -> None: ...
+    def __init__(
+        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "gaussian"
+    ) -> None: ...
     def __init__(
         self,
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
+        sampler: str | SamplerKind | Sampler = SamplerKind.GAUSSIAN,
     ) -> None:
         super().__init__()
 
@@ -238,14 +274,18 @@ class HutchinsonEstimator(nn.Module):
                     "Only one of num_samples or num_matvecs should be provided, but got both."
                 )
 
+        self.sampler = (
+            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
+        )
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
     def _make_samples(self, /, *, shape: tuple[int, ...]) -> Tensor:
         if not shape:
             raise ValueError("shape must be non-empty")
 
-        return torch.randn(
-            (*shape, self.num_samples),
+        return self.sampler.sample(
+            shape,
+            self.num_samples,
             device=self._anchor.device,
             dtype=self._anchor.dtype,
         )
@@ -329,16 +369,22 @@ class HutchPlusPlusEstimator(nn.Module):
 
     num_matvecs: Final[int]
     num_samples: Final[int]
+    sampler: Sampler
 
     @overload
-    def __init__(self, num_samples: int) -> None: ...
+    def __init__(
+        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "gaussian"
+    ) -> None: ...
     @overload
-    def __init__(self, *, num_matvecs: int) -> None: ...
+    def __init__(
+        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "gaussian"
+    ) -> None: ...
     def __init__(
         self,
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
+        sampler: str | SamplerKind | Sampler = SamplerKind.GAUSSIAN,
     ) -> None:
         super().__init__()
 
@@ -358,6 +404,9 @@ class HutchPlusPlusEstimator(nn.Module):
                     "Only one of num_samples or num_matvecs should be provided, but got both."
                 )
 
+        self.sampler = (
+            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
+        )
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
     @signature("[shape[(..., d)], n] -> (..., d, n)")
@@ -365,8 +414,9 @@ class HutchPlusPlusEstimator(nn.Module):
         if not shape:
             raise ValueError("shape must be non-empty")
 
-        return torch.randn(  # (...dn)
-            (*shape, num_samples),
+        return self.sampler.sample(
+            shape,
+            num_samples,
             device=self._anchor.device,
             dtype=self._anchor.dtype,
         )
@@ -510,16 +560,22 @@ class XTraceEstimator(nn.Module):
 
     num_matvecs: Final[int]
     num_samples: Final[int]
+    sampler: Sampler
 
     @overload
-    def __init__(self, num_samples: int) -> None: ...
+    def __init__(
+        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "gaussian"
+    ) -> None: ...
     @overload
-    def __init__(self, *, num_matvecs: int) -> None: ...
+    def __init__(
+        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "gaussian"
+    ) -> None: ...
     def __init__(
         self,
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
+        sampler: str | SamplerKind | Sampler = SamplerKind.GAUSSIAN,
     ) -> None:
         super().__init__()
 
@@ -539,6 +595,9 @@ class XTraceEstimator(nn.Module):
                     "Only one of num_samples or num_matvecs should be provided, but got both."
                 )
 
+        self.sampler = (
+            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
+        )
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
     @signature("[shape[(..., d)], n] -> (..., d, n)")
@@ -546,8 +605,9 @@ class XTraceEstimator(nn.Module):
         if not shape:
             raise ValueError("shape must be non-empty")
 
-        return torch.randn(
-            (*shape, num_samples),
+        return self.sampler.sample(
+            shape,
+            num_samples,
             device=self._anchor.device,
             dtype=self._anchor.dtype,
         )
