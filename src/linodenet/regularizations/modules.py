@@ -73,7 +73,7 @@ class RegularizationBase(nn.Module):
     r"""Abstract Base Class for Regularization components."""
 
     @abstractmethod
-    @signature("(..., ?) -> (...)")
+    @signature("(..., *ds) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Forward pass of the regularization.
 
