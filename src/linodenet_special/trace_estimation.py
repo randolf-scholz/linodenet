@@ -20,6 +20,7 @@ __all__ = [
     "xtrace_estimator_corrected",
 ]
 
+import math
 from collections.abc import Callable as Fn, Iterator
 from typing import Final, Protocol, overload
 
@@ -29,6 +30,73 @@ from torch.func import jvp, linearize, vjp
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
+
+
+class Sampler(Protocol):
+    def sample(self) -> Tensor: ...
+
+
+class GaussianSampler(nn.Module):
+    def sample(
+        self,
+        shape: tuple[int, ...],
+        num: int,
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> Tensor:
+        r"""Sample $vᵢ∼𝓝(0,𝕀ₙ)."""
+        return torch.randn((*shape, num), device=device, dtype=dtype)
+
+
+class SignSampler(nn.Module):
+    r"""Sample $vᵢ∼Unif\{±1\}ⁿ$."""
+
+    def sample(
+        self,
+        shape: tuple[int, ...],
+        num: int,
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> Tensor:
+        values = torch.tensor([-1, +1], device=device, dtype=dtype)
+        indices = torch.randint(0, 2, (*shape, num), device=device)
+        return values[indices]
+
+
+class SphereSampler(nn.Module):
+    r"""Sample uniformly on sphere with radius $√n$."""
+
+    def sample(
+        self,
+        shape: tuple[int, ...],
+        num: int,
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> Tensor:
+        n = shape[-1]
+        v = torch.randn((*shape, num), device=device, dtype=dtype)
+        v = v * (math.sqrt(n) / vector_norm(v, dim=-1, keepdim=True))
+        return v
+
+
+class OrthSampler(nn.Module):
+    r"""Sample orthogonal with norm $n$."""
+
+    def sample(
+        self,
+        shape: tuple[int, ...],
+        num: int,
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> Tensor:
+        n = shape[-1]
+        v = torch.randn((*shape, num), device=device, dtype=dtype)
+        q, _ = qr(v, mode="reduced")
+        return math.sqrt(n) * q
 
 
 class AbstractTraceEstimator(Protocol):
@@ -513,22 +581,36 @@ class XTraceEstimator(nn.Module):
         if op is None and adj_op is None:
             raise ValueError("at least one of op or adj_op must be provided")
 
-        k = min(shape[-1], self.num_samples)
+        *batch, N = shape
+        m = self.num_samples
+        k = min(N, self.num_samples)
         samples = self._make_samples(k, shape=shape)
+        # samples = math.sqrt(N) * samples / vector_norm(samples, dim=-2, keepdim=True)
 
         if op is not None and adj_op is not None:
             raise NotImplementedError
 
         if op is not None:
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dk) -> (...dk)
-            Y = batched_op(samples)  # (...dk)
-            Q, R = qr(Y, mode="reduced")  # (...dk), (...kk)
-            Z = batched_op(Q)  # (...dk)
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+            Y = batched_op(samples)  # (...Nm)
+
+            mus = []
+            for i in range(self.num_samples):
+                col_indices = torch.arange(self.num_samples, device=Y.device)
+                Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+                ω_i = samples[..., [i]]
+                μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
+                mus.append(μ_i)
+            μ = torch.cat(mus, dim=-1)
+
+            # Q has normalized cols <-> Q.norm(dim=-2) = 1
+            Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
+            Z = batched_op(Q)  # (...Nk)
             H = Q.mH @ Z  # (...kk)
             W = Q.mH @ samples  # (...kk)
             T = Z.mH @ samples  # (...kk)
 
-            # solve R^* S = Iₘ
+            # solve R^* S = Iₖ
             I = torch.eye(k, dtype=samples.dtype, device=samples.device)
             S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
             # normalize COLS
@@ -542,6 +624,19 @@ class XTraceEstimator(nn.Module):
             XHX = torch.einsum("...ik, ...kl, ...il -> ...i", X.conj(), H, X)
             SHS = torch.einsum("...ik, ...kl, ...il -> ...i", S.conj(), H, S)
 
+            mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
+            mu_norm_sq_b = (
+                vecdot(samples, samples, dim=-2)
+                - vecdot(W, W, dim=-2)
+                + SW.abs().square()
+            )
+
+            scale = (N - k + 1) / (  #
+                vecdot(samples, samples, dim=-2)
+                - vecdot(W, W, dim=-2)
+                + SW.abs().square()
+            )
+
             trs = XHX - SHS + WS * SR - TX
 
             estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
@@ -552,6 +647,29 @@ class XTraceEstimator(nn.Module):
             raise NotImplementedError
 
         raise AssertionError("unreachable")
+
+
+def trace_naive_estimator(
+    fn: Fn[[Tensor], Tensor],
+    samples: Tensor,
+) -> Tensor:
+    r"""Naive implementation of XTrace (useful for debugging)."""
+    batched_fn = vmap(fn, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+    Y = batched_fn(samples)  # (...Nm)
+    *batch_size, N, m = Y.shape
+    tr = torch.zeros(batch_size, device=Y.device, dtype=Y.dtype)
+    col_indices = torch.arange(m, device=Y.device)
+    for i in range(m):
+        Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+        ω_i = samples[..., i]
+        μ_i = ω_i - Q_i @ Q_i.mH @ ω_i
+        tr = (
+            tr
+            + torch.einsum("...mm -> ...", Q_i.mh @ fn(Q_i))
+            + vecdot(μ_i, fn(μ_i), dim=-1)
+        )
+    tr = tr / m
+    return tr.real if not tr.is_complex() else tr.conj()
 
 
 @signature("(..., n, d) -> (...)")
@@ -952,8 +1070,8 @@ def _project_onto_columns(basis: Tensor, vector: Tensor) -> Tensor:
         Tensor with shape `(..., d)` containing the orthogonal projection of
         `vector` onto `span(basis)`.
     """
-    coeffs = torch.einsum("...dk, ...d -> ...k", basis.conj(), vector)
-    return torch.einsum("...dk, ...k -> ...d", basis, coeffs)
+    coeffs = torch.einsum("...Nk, ...d -> ...k", basis.conj(), vector)
+    return torch.einsum("...Nk, ...k -> ...d", basis, coeffs)
 
 
 def _balanced_biorthogonal_factors(
@@ -1159,8 +1277,8 @@ def btrace_estimator_new(
     # Residual vectors:
     #   (I - Π_i^R) v_i = v_i - q_b x_i,
     #   (I - Π_i^L) u_i = u_i - p_b y_i.
-    right_residuals = right_samples - torch.einsum("...dk, ...nk -> ...nd", q_b, x)
-    left_residuals = left_samples - torch.einsum("...dk, ...nk -> ...nd", p_b, y)
+    right_residuals = right_samples - torch.einsum("...Nk, ...nk -> ...nd", q_b, x)
+    left_residuals = left_samples - torch.einsum("...Nk, ...nk -> ...nd", p_b, y)
 
     # Residual correction u_iᴴ (I - Π_i^L) A (I - Π_i^R) v_i.
     residual_actions = fn(right_residuals)
