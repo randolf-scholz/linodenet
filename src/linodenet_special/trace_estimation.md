@@ -61,11 +61,16 @@ $$\begin{aligned}
     QᵢQᵢᴴ &= Q(𝕀-sᵢsᵢᴴ)Qᴴ
     \qquad\text{where}\qquad
     R₋ᵢᴴsᵢ = 0, ‖sᵢ‖=1, AV = QR
-\\  ⇝ \tr(QᵢᴴAQᵢ) &= \tr(AQᵢQᵢᴴ) = \tr(AQ(𝕀-sᵢsᵢᴴ)Qᴴ)
-\\      &= \tr(QᴴAQ(𝕀-sᵢsᵢᴴ)) = \tr(QᴴAQ) - sᵢᴴQᴴAQsᵢ
-\\  ⇝ vᵢᴴ(𝕀 - QᵢQᵢᴴ)A(I-QᵢQᵢᴴ)vᵢ
-\\        &= vᵢᴴ(𝕀 - Q(𝕀-sᵢsᵢᴴ)Qᴴ)ᴴA(I-Q(𝕀-sᵢsᵢᴴ)Qᴴ)vᵢ
-\\        &= vᵢᴴ(𝕀 - QQᴴ + QsᵢsᵢᴴQᴴ)A(𝕀 - QQᴴ + QsᵢsᵢᴴQᴴ)vᵢ
+\end{aligned}$$
+
+So, the first term can be computed as:
+
+$$ \tr(QᵢᴴAQᵢ) = \tr(AQᵢQᵢᴴ) = \tr(AQ(𝕀-sᵢsᵢᴴ)Qᴴ) = \tr(QᴴAQ) - sᵢᴴ(QᴴAQ)sᵢ $$
+
+And the second term is
+
+$$\begin{aligned}
+vᵢᴴ(𝕀 - QᵢQᵢᴴ)A(I-QᵢQᵢᴴ)vᵢ = vᵢᴴ(𝕀 - QQᴴ + QsᵢsᵢᴴQᴴ)A(𝕀 - QQᴴ + QsᵢsᵢᴴQᴴ)vᵢ
 \end{aligned}$$
 
 expanding the last line, we get 9 terms:
@@ -101,7 +106,7 @@ $$ \begin{aligned}
 
 So, the terms combine to, which is formula SM3.3 in the paper:
 
-$$ xᵢᴴHxᵢ - ⟨tᵢ∣xᵢ⟩ + ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ⟩ $$
+$$ \tr(H) -sᵢᴴHsᵢ + xᵢᴴHxᵢ - ⟨tᵢ∣xᵢ⟩ + ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ⟩ $$
 
 Alternatively, we can aggregate the terms differently:
 
@@ -111,16 +116,20 @@ $$\begin{array}{lll}
 \\  +⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ⟩ & -⟨wᵢ∣sᵢ⟩sᵢᴴHwᵢ  & +⟨wᵢ∣sᵢ⟩sᵢᴴHsᵢ⟨sᵢ∣wᵢ⟩
 \end{array}$$
 
-combining (1,3) and (2,3) we get: $⟨sᵢ∣wᵢ⟩⟨tᵢ - Hᴴwᵢ∣sᵢ⟩$
-combining (3,1) and (3,2) we get: $⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩$
-combining (1,2) and (2,2) we get: $-⟨tᵢ - Hᴴwᵢ∣wᵢ⟩$
 simplifying (3,3) we get: $|⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩$
+combining (1,3) and (2,3) we get: $⟨sᵢ∣wᵢ⟩⟨tᵢ-Hᴴwᵢ∣sᵢ⟩$
+combining (3,1) and (3,2) we get: $⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩$
+combining (1,2) and (2,2) we get: $-⟨tᵢ-Hᴴwᵢ∣wᵢ⟩$
 
 which gives in total the following, which is how the paper actually implements the XTrace estimator:
 
 $$\begin{aligned}
-|⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩ + \overline{⟨sᵢ∣wᵢ⟩}⟨sᵢ∣rᵢ - Hwᵢ⟩ - ⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
+|⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩ + ⟨sᵢ∣wᵢ⟩⟨tᵢ-Hᴴwᵢ∣sᵢ⟩ + ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ-Hwᵢ⟩ - ⟨tᵢ-Hᴴwᵢ∣wᵢ⟩
 \end{aligned}$$
+
+We can further combine
+
+$$ |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩ + ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ-Hwᵢ⟩ - ⟨tᵢ-Hᴴwᵢ∣xᵢ⟩ $$
 
 ### "Improved version"
 
@@ -150,7 +159,3 @@ since $\tilde{μ}ᵢᴴA\tilde{μ}ᵢ=$
 We need to compute:
 
 $$ \tr(QᵢᴴAQᵢ) + vᵢᴴ(𝕀 - QᵢQᵢᴴ)ᴴA(I-QᵢQᵢᴴ)vᵢ $$
-
-The first term can be computed as:
-
-$$ \tr(QᵢᴴAQᵢ) = \tr(AQᵢQᵢᴴ) = \tr(AQ(𝕀-sᵢsᵢᴴ)Qᴴ) = \tr(QᴴAQ) - sᵢᴴQᴴAQsᵢ $$
