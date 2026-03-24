@@ -20,7 +20,7 @@ __all__ = [
 ]
 
 from collections.abc import Callable as Fn, Iterator
-from typing import Protocol
+from typing import Final, Protocol, overload
 
 import torch
 from torch import Tensor, nn, vmap
@@ -64,7 +64,11 @@ class AbstractTraceEstimator(Protocol):
 
 
 class ExactEstimator(nn.Module):
-    r"""Estimate traces by explicitly materializing the operator matrix."""
+    r"""Estimate traces by explicitly materializing the operator matrix.
+
+    Cost: N³
+        N is the dimension of the operator
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -131,18 +135,40 @@ class ExactEstimator(nn.Module):
 class HutchinsonEstimator(nn.Module):
     r"""Estimate traces with Hutchinson's estimator.
 
-    This estimator draws probe vectors internally from the requested input shape
-    and supports right-action, left-action, and two-sided power-trace estimates.
+    Cost: mN² + O(m²N + m³)
+        m is the number of matvecs (=`num_samples`),
+        N is the dimension of the operator
     """
 
-    num_samples: int
+    num_matvecs: Final[int]
+    num_samples: Final[int]
 
-    def __init__(self, num_samples: int) -> None:
+    @overload
+    def __init__(self, num_samples: int) -> None: ...
+    @overload
+    def __init__(self, *, num_matvecs: int) -> None: ...
+    def __init__(
+        self,
+        num_samples: int | None = None,
+        *,
+        num_matvecs: int | None = None,
+    ) -> None:
         super().__init__()
-        if num_samples < 1:
-            raise ValueError("num_samples must be at least 1")
 
-        self.num_samples = num_samples
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("either num_samples or num_matvecs must be provided")
+            case n, None:
+                self.num_matvecs = n
+                self.num_samples = n
+            case None, n:
+                self.num_matvecs = n
+                self.num_samples = n
+            case _, _:
+                raise ValueError(
+                    "Only one of num_samples or num_matvecs should be provided, but got both."
+                )
+
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
     def _make_samples(self, /, *, shape: tuple[int, ...]) -> Tensor:
@@ -181,7 +207,7 @@ class HutchinsonEstimator(nn.Module):
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
         if op is None and adj_op is None:
-            raise ValueError("op or adj_op must be provided")
+            raise ValueError("at least one of op or adj_op must be provided")
 
         right_samples = self._make_samples(shape=shape)
         left_samples = right_samples.clone()
@@ -225,20 +251,48 @@ class HutchinsonEstimator(nn.Module):
 
 
 class HutchPlusPlusEstimator(nn.Module):
-    r"""Estimate traces with the Hutch++ variance-reduced estimator."""
+    r"""Estimate traces with the Hutch++ variance-reduced estimator.
 
-    num_samples: int
+    Cost: mN² + O(m²N + m³)
+        m is the number of matvecs (=3×`num_samples`),
+        N is the dimension of the operator
+    """
 
-    def __init__(self, num_samples: int) -> None:
+    num_matvecs: Final[int]
+    num_samples: Final[int]
+
+    @overload
+    def __init__(self, num_samples: int) -> None: ...
+    @overload
+    def __init__(self, *, num_matvecs: int) -> None: ...
+    def __init__(
+        self,
+        num_samples: int | None = None,
+        *,
+        num_matvecs: int | None = None,
+    ) -> None:
         super().__init__()
-        if num_samples < 3:
-            raise ValueError("num_samples must be at least 3")
 
-        self.num_samples = num_samples
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("either num_samples or num_matvecs must be provided")
+            case n, None:
+                self.num_matvecs = 3 * n
+                self.num_samples = n
+            case None, n:
+                if num_matvecs < 3:
+                    raise ValueError("num_matvecs must be at least 3")
+                self.num_matvecs = n
+                self.num_samples = n // 3
+            case _, _:
+                raise ValueError(
+                    "Only one of num_samples or num_matvecs should be provided, but got both."
+                )
+
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
     @signature("[shape[(..., d)], n] -> (..., d, n)")
-    def _make_samples(self, /, *, shape: tuple[int, ...], num_samples: int) -> Tensor:
+    def _make_samples(self, num_samples: int, /, *, shape: tuple[int, ...]) -> Tensor:
         if not shape:
             raise ValueError("shape must be non-empty")
 
@@ -260,17 +314,6 @@ class HutchPlusPlusEstimator(nn.Module):
         r"""Returns an estimate of $\tr(A)$."""
         return next(self.estimate_powers(op, adj_op, 1, shape=shape))
 
-    def _split_num_samples(self) -> tuple[int, int]:
-        num_sketch = max(1, self.num_samples // 3)
-        num_residual = self.num_samples - num_sketch
-        return num_sketch, num_residual
-
-    @staticmethod
-    @signature("[shape[(..., d, r)], shape[(..., d, n)]] -> (..., d, n)")
-    def _project_out(basis: Tensor, samples: Tensor, /) -> Tensor:
-        r"""Projects samples onto the orthogonal complement of span(basis)."""
-        return samples - basis @ (basis.transpose(-2, -1) @ samples)
-
     @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate_powers(
         self,
@@ -284,11 +327,12 @@ class HutchPlusPlusEstimator(nn.Module):
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
         if op is None and adj_op is None:
-            raise ValueError("op or adj_op must be provided")
+            raise ValueError("at least one of op or adj_op must be provided")
 
-        num_sketch, num_residual = self._split_num_samples()
-        samples = self._make_samples(shape=shape, num_samples=num_sketch)
-        residual_samples = self._make_samples(shape=shape, num_samples=num_residual)
+        num_samples = self.num_matvecs // 3
+        num_residuals = self.num_matvecs // 3
+        samples = self._make_samples(num_samples, shape=shape)
+        residual_samples = self._make_samples(num_residuals, shape=shape)
 
         if op is not None and adj_op is not None:
             # Two-sided power estimator:
@@ -298,16 +342,17 @@ class HutchPlusPlusEstimator(nn.Module):
             # Hutch++ uses a fixed projector P = QQᵀ and the exact split
             #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
             #
-            # We build Q from a shared two-sided sketch [AΩ, AᵀΩ] and run the
-            # stochastic recurrence on probes projected into ker(Qᵀ).
             batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
             batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
 
-            sketch = torch.cat([batched_op(samples), batched_adj(samples)], dim=-1)
+            # We build Q from a shared two-sided sketch [AΩ, AᵀΩ]
+            left_sketch = batched_adj(samples[..., : num_samples // 2])
+            right_sketch = batched_adj(samples[..., num_samples // 2 :])
+            sketch = torch.cat([left_sketch, right_sketch], dim=-1)
             Q, _ = qr(sketch, mode="reduced")  # (...dr)
-
             projected_samples = Q
-            residual_samples = self._project_out(Q, residual_samples)
+            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+
             residual_l = residual_samples.clone()
             residual_r = residual_samples.clone()
             projected_l = projected_samples.clone()
@@ -340,10 +385,11 @@ class HutchPlusPlusEstimator(nn.Module):
             # One-sided right-action estimator for tr(Aᵏ):
             #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + E[g_perpᵀ Aᵏ g_perp].
             batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            Q, _ = qr(batched_op(samples), mode="reduced")  # (...dr)
-
+            sketch = batched_op(samples)
+            Q, _ = qr(sketch, mode="reduced")  # (...dr)
             projected_samples = Q
-            residual_samples = self._project_out(Q, residual_samples)
+            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+
             residual_l = residual_samples.clone()
             residual_r = residual_samples.clone()
             projected_l = projected_samples.clone()
@@ -363,10 +409,11 @@ class HutchPlusPlusEstimator(nn.Module):
             # One-sided left-action estimator, equivalently applied to Aᵀ:
             #   tr((Aᵀ)ᵏ) = tr(Aᵏ).
             batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            Q, _ = qr(batched_adj(samples), mode="reduced")  # (...dr)
-
+            sketch = batched_adj(samples)
+            Q, _ = qr(sketch, mode="reduced")  # (...dr)
             projected_samples = Q
-            residual_samples = self._project_out(Q, residual_samples)
+            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+
             residual_l = residual_samples.clone()
             residual_r = residual_samples.clone()
             projected_l = projected_samples.clone()
@@ -386,7 +433,7 @@ class HutchPlusPlusEstimator(nn.Module):
     def _estimate_from_operator(
         self, op: Fn[[Tensor], Tensor], /, *, shape: tuple[int, ...]
     ) -> Tensor:
-        sketch_size = self.num_samples // 3
+        sketch_size = self.num_matvecs // 3
         if sketch_size < 1:
             raise ValueError("num_samples must be at least 3")
 
