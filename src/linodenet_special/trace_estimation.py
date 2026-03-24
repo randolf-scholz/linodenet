@@ -108,7 +108,7 @@ class SphereSampler(nn.Module):
     ) -> Tensor:
         n = shape[-1]
         v = torch.randn((*shape, num), device=device, dtype=dtype)
-        v = v * (math.sqrt(n) / vector_norm(v, dim=-1, keepdim=True))
+        v = v * (math.sqrt(n) / vector_norm(v, dim=-2, keepdim=True))
         return v
 
 
