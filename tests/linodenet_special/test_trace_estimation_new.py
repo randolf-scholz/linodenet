@@ -28,7 +28,7 @@ def linear_map(matrix: Tensor):
 
 
 class OnesSampler:
-    def sample(
+    def __call__(
         self,
         shape: tuple[int, ...],
         num: int,
@@ -90,9 +90,7 @@ class TestHutchinsonEstimator:
     def test_hutchinson_sampler_from_string(self, device: str) -> None:
         estimator = HutchinsonEstimator(num_samples=4, sampler="sign").to(device=device)
 
-        samples = estimator.sampler.sample(
-            (3, 5), 4, dtype=torch.float32, device=device
-        )
+        samples = estimator.sampler((3, 5), 4, dtype=torch.float32, device=device)
 
         assert isinstance(estimator.sampler, type(SamplerKind.SIGN.make()))
         assert samples.shape == (3, 5, 4)
@@ -103,9 +101,7 @@ class TestHutchinsonEstimator:
             device=device
         )
 
-        samples = estimator.sampler.sample(
-            (2, 3), 4, dtype=torch.float32, device=device
-        )
+        samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
         assert samples.shape == (2, 3, 4)
         assert torch.all((samples == -1) | (samples == +1))
@@ -186,9 +182,7 @@ class TestHutchPlusPlusEstimator:
             device=device
         )
 
-        samples = estimator.sampler.sample(
-            (2, 3), 4, dtype=torch.float32, device=device
-        )
+        samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
         assert isinstance(estimator.sampler, type(SamplerKind.SIGN.make()))
         assert samples.shape == (2, 3, 4)
@@ -199,9 +193,7 @@ class TestHutchPlusPlusEstimator:
             device=device
         )
 
-        samples = estimator.sampler.sample(
-            (2, 3), 4, dtype=torch.float32, device=device
-        )
+        samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
         assert samples.shape == (2, 3, 4)
         torch.testing.assert_close(samples, torch.ones_like(samples))
@@ -246,9 +238,7 @@ class TestXTraceEstimator:
             device=device
         )
 
-        samples = estimator.sampler.sample(
-            (2, 5), 3, dtype=torch.float32, device=device
-        )
+        samples = estimator.sampler((2, 5), 3, dtype=torch.float32, device=device)
 
         assert samples.shape == (2, 5, 3)
         assert torch.all((samples == -1) | (samples == +1))
@@ -258,9 +248,7 @@ class TestXTraceEstimator:
             device=device
         )
 
-        samples = estimator.sampler.sample(
-            (2, 5), 3, dtype=torch.float32, device=device
-        )
+        samples = estimator.sampler((2, 5), 3, dtype=torch.float32, device=device)
 
         assert samples.shape == (2, 5, 3)
         torch.testing.assert_close(samples, torch.ones_like(samples))

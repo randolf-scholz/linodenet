@@ -35,7 +35,7 @@ from signatures import signature
 
 
 class Sampler(Protocol):
-    def sample(
+    def __call__(
         self,
         shape: tuple[int, ...],
         num: int,
@@ -67,7 +67,7 @@ class SamplerKind(StrEnum):
 
 
 class GaussianSampler(nn.Module):
-    def sample(
+    def forward(
         self,
         shape: tuple[int, ...],
         num: int,
@@ -82,7 +82,7 @@ class GaussianSampler(nn.Module):
 class SignSampler(nn.Module):
     r"""Sample $vᵢ∼Unif\{±1\}ⁿ$."""
 
-    def sample(
+    def forward(
         self,
         shape: tuple[int, ...],
         num: int,
@@ -98,7 +98,7 @@ class SignSampler(nn.Module):
 class SphereSampler(nn.Module):
     r"""Sample uniformly on sphere with radius $√n$."""
 
-    def sample(
+    def forward(
         self,
         shape: tuple[int, ...],
         num: int,
@@ -115,7 +115,7 @@ class SphereSampler(nn.Module):
 class OrthSampler(nn.Module):
     r"""Sample orthogonal with norm $n$."""
 
-    def sample(
+    def forward(
         self,
         shape: tuple[int, ...],
         num: int,
@@ -309,7 +309,7 @@ class HutchinsonEstimator(nn.Module):
         if not shape:
             raise ValueError("shape must be non-empty")
 
-        right_samples = self.sampler.sample(
+        right_samples = self.sampler(
             shape,
             self.num_samples,
             device=self._anchor.device,
@@ -436,13 +436,13 @@ class HutchPlusPlusEstimator(nn.Module):
 
         num_samples = self.num_matvecs // 3
         num_residuals = self.num_matvecs // 3
-        samples = self.sampler.sample(
+        samples = self.sampler(
             shape,
             num_samples,
             device=self._anchor.device,
             dtype=self._anchor.dtype,
         )
-        residual_samples = self.sampler.sample(
+        residual_samples = self.sampler(
             shape,
             num_residuals,
             device=self._anchor.device,
@@ -630,7 +630,7 @@ class XTraceEstimator(nn.Module):
         *batch, N = shape
         m = self.num_samples
         k = min(N, self.num_samples)
-        samples = self.sampler.sample(
+        samples = self.sampler(
             shape,
             k,
             device=self._anchor.device,
