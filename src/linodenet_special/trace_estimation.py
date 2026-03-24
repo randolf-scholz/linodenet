@@ -6,6 +6,7 @@ Notes:
 """
 
 __all__ = [
+    "HutchinsonEstimator",
     "LogAbsDetEstimator",
     # functions
     "btrace_estimator",
@@ -16,7 +17,8 @@ __all__ = [
     "xtrace_estimator_corrected",
 ]
 
-from collections.abc import Callable as Fn
+from collections.abc import Callable as Fn, Iterator
+from typing import Protocol
 
 import torch
 from torch import Tensor, nn, vmap
@@ -24,6 +26,85 @@ from torch.func import jvp, linearize, vjp
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
+
+
+class AbstractTraceEstimator(Protocol):
+    @signature("[{(..., *ds) -> (..., *ds)}?, {(..., *ds) -> (..., *ds)}?] -> (...)")
+    def estimate(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Returns an estimate of $\tr(A)$.
+
+        Args:
+            op: Linear Operator encoding x ↦ Ax
+            adj_op: Linear Operator encode x ↦ Aᵀx
+            shape: Shape of `x` the linear operator accepts (may include batch dimension)
+        """
+        ...
+
+    @signature("[{(..., *ds) -> (..., *ds)}?, {(..., *ds) -> (..., *ds)}?] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        max_power: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Iterator[Tensor]:
+        r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
+        ...
+
+
+class HutchinsonEstimator(nn.Module):
+    r"""Estimate traces with Hutchinson's estimator.
+
+    This module wraps the functional `hutchinson_estimator` interface and exposes
+    an additional method that returns both the trace estimate and the evaluated
+    matrix-vector products `fn(samples)`.
+    """
+
+    @signature("[{(..., n, d) -> (..., n, d)}, (..., n, d), (..., n, d)?] -> (...)")
+    def estimate(
+        self,
+        fn: Fn[[Tensor], Tensor],
+        samples: Tensor,
+        *,
+        left_samples: Tensor | None = None,
+    ) -> Tensor:
+        r"""Estimate the trace of a linear map from probe vectors."""
+        return self.estimate_and_apply(fn, samples, left_samples=left_samples)[0]
+
+    @signature(
+        "[{(..., n, d) -> (..., n, d)}, (..., n, d), (..., n, d)?] -> [(...), (..., n, d)]"
+    )
+    def estimate_and_apply(
+        self,
+        fn: Fn[[Tensor], Tensor],
+        samples: Tensor,
+        *,
+        left_samples: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Estimate the trace and return the corresponding `fn(samples)` values."""
+        left_samples = samples if left_samples is None else left_samples
+        transformed_samples = fn(samples)
+        trace_estimate = vecdot(left_samples, transformed_samples, dim=-1).mean(dim=-1)
+        return trace_estimate, transformed_samples
+
+    @signature("[{(..., n, d) -> (..., n, d)}, (..., n, d), (..., n, d)?] -> (...)")
+    def forward(
+        self,
+        fn: Fn[[Tensor], Tensor],
+        samples: Tensor,
+        *,
+        left_samples: Tensor | None = None,
+    ) -> Tensor:
+        return self.estimate(fn, samples, left_samples=left_samples)
 
 
 @signature("(..., n, d) -> (...)")
@@ -194,11 +275,11 @@ def xtrace_estimator_corrected(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Ten
 
     # MATLAB:
     # ests_i = tr(H)
-    #        - <s_i, H s_i>
-    #        + ( <w_i, H w_i> - <t_i, w_i>
-    #            + <t_i - H' w_i, s_i><s_i, w_i>
-    #            + |<s_i, w_i>|² <s_i, H s_i>
-    #            + conj(<s_i, w_i>) <s_i, r_i - H w_i> ) * scale_i
+    #        - <sᵢ, H sᵢ>
+    #        + ( <wᵢ, H wᵢ> - <tᵢ, wᵢ>
+    #            + <tᵢ - H' wᵢ, sᵢ><sᵢ, wᵢ>
+    #            + |<sᵢ, wᵢ>|² <sᵢ, H sᵢ>
+    #            + conj(<sᵢ, wᵢ>) <sᵢ, rᵢ - H wᵢ> ) * scaleᵢ
     trace_h = h.diagonal(dim1=-2, dim2=-1).sum(dim=-1, keepdim=True)
     ests = (
         trace_h
@@ -736,7 +817,7 @@ class LogAbsDetEstimator(nn.Module):
             # log|det(I+A)| = Re(tr(log I+A)) = Re(∑_{k≥1} (-1)ᵏ⁺¹/k tr(Aᵏ))
             sign = sign.neg()
 
-            # hutch impl, using tr(Aᵏ⁺¹) = E[v₀Avₖ], vₖ=Avₖ₋₁
+            # hutch impl, using tr(Aᵏ⁺¹) = E[v₀ᵀAvₖ], vₖ=Avₖ₋₁
             right_samples = batched_jvp_fn(right_samples)
             tr_k_power = vecdot(left_samples, right_samples, dim=-1).mean(dim=-1)
 
