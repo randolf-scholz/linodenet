@@ -245,18 +245,18 @@ class HutchinsonEstimator(nn.Module):
 
     @overload
     def __init__(
-        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "gaussian"
+        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "sphere"
     ) -> None: ...
     @overload
     def __init__(
-        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "gaussian"
+        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "sphere"
     ) -> None: ...
     def __init__(
         self,
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.GAUSSIAN,
+        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
     ) -> None:
         super().__init__()
 
@@ -369,18 +369,18 @@ class HutchPlusPlusEstimator(nn.Module):
 
     @overload
     def __init__(
-        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "gaussian"
+        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "sphere"
     ) -> None: ...
     @overload
     def __init__(
-        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "gaussian"
+        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "sphere"
     ) -> None: ...
     def __init__(
         self,
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.GAUSSIAN,
+        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
     ) -> None:
         super().__init__()
 
@@ -556,22 +556,26 @@ class XTraceEstimator(nn.Module):
 
     num_matvecs: Final[int]
     num_samples: Final[int]
+    renormalize: Final[bool]
+    r"""Whether to apply renormalization from paper section 2.3"""
+
     sampler: Sampler
 
     @overload
     def __init__(
-        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "gaussian"
+        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "sphere"
     ) -> None: ...
     @overload
     def __init__(
-        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "gaussian"
+        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "sphere"
     ) -> None: ...
     def __init__(
         self,
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.GAUSSIAN,
+        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        renormalize: bool = True,
     ) -> None:
         super().__init__()
 
@@ -591,6 +595,7 @@ class XTraceEstimator(nn.Module):
                     "Only one of num_samples or num_matvecs should be provided, but got both."
                 )
 
+        self.renormalize = bool(renormalize)
         self.sampler = (
             SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
         )
@@ -628,7 +633,6 @@ class XTraceEstimator(nn.Module):
             raise ValueError("shape must be non-empty")
 
         *batch, N = shape
-        m = self.num_samples
         k = min(N, self.num_samples)
         samples = self.sampler(
             shape,
@@ -636,7 +640,6 @@ class XTraceEstimator(nn.Module):
             device=self._anchor.device,
             dtype=self._anchor.dtype,
         )
-        # samples = math.sqrt(N) * samples / vector_norm(samples, dim=-2, keepdim=True)
 
         if op is not None and adj_op is not None:
             raise NotImplementedError
@@ -644,15 +647,6 @@ class XTraceEstimator(nn.Module):
         if op is not None:
             batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
             Y = batched_op(samples)  # (...Nm)
-
-            mus = []
-            for i in range(self.num_samples):
-                col_indices = torch.arange(self.num_samples, device=Y.device)
-                Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
-                ω_i = samples[..., [i]]
-                μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
-                mus.append(μ_i)
-            μ = torch.cat(mus, dim=-1)
 
             # Q has normalized cols <-> Q.norm(dim=-2) = 1
             Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
@@ -675,20 +669,32 @@ class XTraceEstimator(nn.Module):
             XHX = torch.einsum("...ik, ...kl, ...il -> ...i", X.conj(), H, X)
             SHS = torch.einsum("...ik, ...kl, ...il -> ...i", S.conj(), H, S)
 
-            mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
-            mu_norm_sq_b = (
-                vecdot(samples, samples, dim=-2)
-                - vecdot(W, W, dim=-2)
-                + SW.abs().square()
-            )
+            if False:
+                mus = []
+                for i in range(self.num_samples):
+                    col_indices = torch.arange(self.num_samples, device=Y.device)
+                    Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+                    ω_i = samples[..., [i]]
+                    μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
+                    mus.append(μ_i)
+                μ = torch.cat(mus, dim=-1)
+                mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
+                mu_norm_sq_b = (
+                    vecdot(samples, samples, dim=-2)
+                    - vecdot(W, W, dim=-2)
+                    + SW.abs().square()
+                )
 
-            scale = (N - k + 1) / (  #
-                vecdot(samples, samples, dim=-2)
-                - vecdot(W, W, dim=-2)
-                + SW.abs().square()
-            )
+            if self.renormalize:
+                scale = (N - k + 1) / (  #
+                    vecdot(samples, samples, dim=-2)
+                    - vecdot(W, W, dim=-2)
+                    + SW.abs().square()
+                )
+            else:
+                scale = 1.0
 
-            trs = XHX - SHS + WS * SR - TX
+            trs = scale * (XHX - SHS + WS * SR - TX)
 
             estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
             yield estimate.real if not estimate.is_complex() else estimate
