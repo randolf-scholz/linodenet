@@ -6,16 +6,22 @@
       <w>Marchenko</w>
       <w>Pastur</w>
       <w>arglist</w>
+      <w>coeffs</w>
       <w>crelu</w>
+      <w>diag</w>
       <w>erfinv</w>
+      <w>fullgraph</w>
       <w>logabsdets</w>
       <w>logsumexp</w>
       <w>marchenko</w>
+      <w>matvecs</w>
       <w>ndtr</w>
       <w>ndtri</w>
       <w>pastur</w>
       <w>pred</w>
       <w>qquad</w>
+      <w>twosided</w>
+      <w>widetilde</w>
     </words>
   </dictionary>
 </component>
