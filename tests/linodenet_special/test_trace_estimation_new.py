@@ -2,7 +2,11 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet_special.trace_estimation import ExactEstimator, HutchinsonEstimator
+from linodenet_special.trace_estimation import (
+    ExactEstimator,
+    HutchinsonEstimator,
+    HutchPlusPlusEstimator,
+)
 from tests.testing import DEVICES
 
 
@@ -116,3 +120,37 @@ class TestHutchinsonEstimator:
 
         with pytest.raises(ValueError, match="at least one of op or adj_op"):
             next(estimator.estimate_powers(None, None, 1, shape=(2, 1)))
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+class TestHutchPlusPlusEstimator:
+    NUM_SAMPLES = 12
+
+    def test_hutchplusplus_estimate_op_only(self, device: str) -> None:
+        torch.manual_seed(0)
+        scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
+        estimator = HutchPlusPlusEstimator(num_samples=self.NUM_SAMPLES).to(
+            device=device
+        )
+
+        estimate = estimator.estimate(scaled_map(scale), None, shape=tuple(scale.shape))
+
+        expected = scale.squeeze(-1)
+        torch.testing.assert_close(estimate, expected, atol=1e-6, rtol=0.0)
+
+    def test_hutchplusplus_estimate_powers_adj_only(self, device: str) -> None:
+        torch.manual_seed(0)
+        scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
+        estimator = HutchPlusPlusEstimator(num_samples=self.NUM_SAMPLES).to(
+            device=device
+        )
+
+        estimates = list(
+            estimator.estimate_powers(
+                None, scaled_map(scale), 4, shape=tuple(scale.shape)
+            )
+        )
+
+        expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
+        for estimate, truth in zip(estimates, expected, strict=True):
+            torch.testing.assert_close(estimate, truth, atol=1e-6, rtol=0.0)

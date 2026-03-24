@@ -7,6 +7,7 @@ Notes:
 
 __all__ = [
     "ExactEstimator",
+    "HutchPlusPlusEstimator",
     "HutchinsonEstimator",
     "LogAbsDetEstimator",
     # functions
@@ -179,6 +180,8 @@ class HutchinsonEstimator(nn.Module):
         r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
+        if op is None and adj_op is None:
+            raise ValueError("op or adj_op must be provided")
 
         right_samples = self._make_samples(shape=shape)
         left_samples = right_samples.clone()
@@ -218,7 +221,192 @@ class HutchinsonEstimator(nn.Module):
                 yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
             return
 
-        raise ValueError("at least one of op or adj_op must be provided")
+        raise AssertionError("unreachable")
+
+
+class HutchPlusPlusEstimator(nn.Module):
+    r"""Estimate traces with the Hutch++ variance-reduced estimator."""
+
+    num_samples: int
+
+    def __init__(self, num_samples: int) -> None:
+        super().__init__()
+        if num_samples < 3:
+            raise ValueError("num_samples must be at least 3")
+
+        self.num_samples = num_samples
+        self.register_buffer("_anchor", torch.empty(0), persistent=False)
+
+    @signature("[shape[(..., d)], n] -> (..., d, n)")
+    def _make_samples(self, /, *, shape: tuple[int, ...], num_samples: int) -> Tensor:
+        if not shape:
+            raise ValueError("shape must be non-empty")
+
+        return torch.randn(  # (...dn)
+            (*shape, num_samples),
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Returns an estimate of $\tr(A)$."""
+        return next(self.estimate_powers(op, adj_op, 1, shape=shape))
+
+    def _split_num_samples(self) -> tuple[int, int]:
+        num_sketch = max(1, self.num_samples // 3)
+        num_residual = self.num_samples - num_sketch
+        return num_sketch, num_residual
+
+    @staticmethod
+    @signature("[shape[(..., d, r)], shape[(..., d, n)]] -> (..., d, n)")
+    def _project_out(basis: Tensor, samples: Tensor, /) -> Tensor:
+        r"""Projects samples onto the orthogonal complement of span(basis)."""
+        return samples - basis @ (basis.transpose(-2, -1) @ samples)
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        max_power: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Iterator[Tensor]:
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+        if op is None and adj_op is None:
+            raise ValueError("op or adj_op must be provided")
+
+        num_sketch, num_residual = self._split_num_samples()
+        samples = self._make_samples(shape=shape, num_samples=num_sketch)
+        residual_samples = self._make_samples(shape=shape, num_samples=num_residual)
+
+        if op is not None and adj_op is not None:
+            # Two-sided power estimator:
+            #   tr(A^(2t-1)) = E[uₜ₋₁ᵀ vₜ]
+            #   tr(A^(2t))   = E[uₜᵀ vₜ]
+            #
+            # Hutch++ uses a fixed projector P = QQᵀ and the exact split
+            #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
+            #
+            # We build Q from a shared two-sided sketch [AΩ, AᵀΩ] and run the
+            # stochastic recurrence on probes projected into ker(Qᵀ).
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+
+            sketch = torch.cat([batched_op(samples), batched_adj(samples)], dim=-1)
+            Q, _ = qr(sketch, mode="reduced")  # (...dr)
+
+            projected_samples = Q
+            residual_samples = self._project_out(Q, residual_samples)
+            residual_l = residual_samples.clone()
+            residual_r = residual_samples.clone()
+            projected_l = projected_samples.clone()
+            projected_r = projected_samples.clone()
+
+            power = 0
+            while power < max_power:
+                projected_r = batched_op(projected_r)
+                residual_r = batched_op(residual_r)
+                power += 1
+
+                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                yield low_rank + residual
+
+                if power == max_power:
+                    return
+
+                projected_l = batched_adj(projected_l)
+                residual_l = batched_adj(residual_l)
+                power += 1
+
+                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                yield low_rank + residual
+
+            return
+
+        if op is not None:
+            # One-sided right-action estimator for tr(Aᵏ):
+            #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + E[g_perpᵀ Aᵏ g_perp].
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            Q, _ = qr(batched_op(samples), mode="reduced")  # (...dr)
+
+            projected_samples = Q
+            residual_samples = self._project_out(Q, residual_samples)
+            residual_l = residual_samples.clone()
+            residual_r = residual_samples.clone()
+            projected_l = projected_samples.clone()
+            projected_r = projected_samples.clone()
+
+            for _ in range(max_power):
+                projected_r = batched_op(projected_r)
+                residual_r = batched_op(residual_r)
+
+                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                yield low_rank + residual
+
+            return
+
+        if adj_op is not None:
+            # One-sided left-action estimator, equivalently applied to Aᵀ:
+            #   tr((Aᵀ)ᵏ) = tr(Aᵏ).
+            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            Q, _ = qr(batched_adj(samples), mode="reduced")  # (...dr)
+
+            projected_samples = Q
+            residual_samples = self._project_out(Q, residual_samples)
+            residual_l = residual_samples.clone()
+            residual_r = residual_samples.clone()
+            projected_l = projected_samples.clone()
+            projected_r = projected_samples.clone()
+
+            for _ in range(max_power):
+                projected_l = batched_adj(projected_l)
+                residual_l = batched_adj(residual_l)
+
+                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                yield low_rank + residual
+            return
+
+        raise AssertionError("unreachable")
+
+    def _estimate_from_operator(
+        self, op: Fn[[Tensor], Tensor], /, *, shape: tuple[int, ...]
+    ) -> Tensor:
+        sketch_size = self.num_samples // 3
+        if sketch_size < 1:
+            raise ValueError("num_samples must be at least 3")
+
+        samples = self._make_samples(shape=shape, num_samples=2 * sketch_size)
+        x1 = samples[..., :sketch_size]
+        x2 = samples[..., sketch_size:]
+
+        y = self._apply_along_samples(op, x1)
+        q, _ = qr(y, mode="reduced")
+
+        g = x2 - q @ (q.mH @ x2)
+        aq = self._apply_along_samples(op, q)
+        ag = self._apply_along_samples(op, g)
+
+        low_rank_trace = torch.einsum("...dm, ...dm -> ...", q.conj(), aq)
+        residual_trace = torch.einsum("...dm, ...dm -> ...", g.conj(), ag) / sketch_size
+        trace_estimate = low_rank_trace + residual_trace
+        return (
+            trace_estimate.real if not trace_estimate.is_complex() else trace_estimate
+        )
 
 
 @signature("(..., n, d) -> (...)")
