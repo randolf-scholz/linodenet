@@ -26,10 +26,13 @@ which is based on the formula
 
 $$ \tr(A) = \tr(QQ^*AQQ^*) + \tr((I-QQ^*)A(I-QQ^*)) $$
 
+Algorithm:
+
 $$ \begin{aligned}
     V &= [v₁, ..., vₘ] ∈ ℝ^{n×m}
-\\  Q &= \orth(AV)   \qquad\text{economical QR, so $Q$ has $m$ columns}
-\\  \tr &≈ \tr(QᴴAQ) + \frac{1}{m} \sum_{i=1}^m vᵢᴴ(𝕀 - QQᴴ)ᴴA(𝕀 - QQᴴ)vᵢ
+\\  Q, R &= \orth(AV)   \qquad\text{economical QR, so $Q$ has $m$ columns}
+\\  G &= (𝕀 - QQᴴ)ᴴA(𝕀 - QQᴴ)
+\\  \tr &≈ \tr(QᴴAQ) + hutchinson(G, m) \qquad\text{using independent samples}
 \end{aligned} $$
 
 Here $QᴴAQ$ is the trace of the $m×m$ low-rank approximation,
