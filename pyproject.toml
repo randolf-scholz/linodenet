@@ -363,9 +363,7 @@ show_error_context = true
 [[tool.mypy.overrides]]
 module = [
     "pandas.*",
-    "pyarrow.*",
     "pytest_benchmark.*",
-    "sklearn.*",
     "torchdiffeq.*",
 ]
 ignore_missing_imports = true
