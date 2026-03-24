@@ -671,11 +671,10 @@ class XTraceEstimator(nn.Module):
 
             SW = vecdot(S, W, dim=-2)  # (...i)
             SR = vecdot(S, R, dim=-2)  # (...i)
-            X = W - SW.unsqueeze(-2) * S
-            WS = SW.conj()  # (...i)
+            X = W - SW.unsqueeze(-2) * S  # (...kk)
             TX = vecdot(T, X, dim=-2)  # (...i)
-            XHX = torch.einsum("...ik, ...kl, ...il -> ...i", X.conj(), H, X)
-            SHS = torch.einsum("...ik, ...kl, ...il -> ...i", S.conj(), H, S)
+            XHX = torch.einsum("...ki, ...kl, ...li -> ...i", X.conj(), H, X)
+            SHS = torch.einsum("...ki, ...kl, ...li -> ...i", S.conj(), H, S)
 
             if False:
                 mus = []
@@ -702,7 +701,14 @@ class XTraceEstimator(nn.Module):
             else:
                 scale = 1.0
 
-            trs = scale * (XHX - SHS + WS * SR - TX)
+            WS = SW.conj()  # (...i)
+            trs = -SHS + scale * (XHX + WS * SR - TX)
+
+            HW = H @ W
+            term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
+            term2 = SW.conj() * vecdot(S, R - HW, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
+            term3 = -vecdot(T - H.mT @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
+            trs = -SHS + scale * (term1 + term2 + term3)
 
             estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
             yield estimate.real if not estimate.is_complex() else estimate
@@ -766,7 +772,13 @@ class XTraceEstimator(nn.Module):
         else:
             scale = 1.0
 
-        trs = scale * (XHX - SHS + WS * SR - TX)
+        trs = -SHS + scale * (XHX + WS * SR - TX)
+
+        HW = H @ W
+        term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
+        term2 = vecdot(S, R - HW, dim=-2) * SW.conj()  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
+        term3 = vecdot(T - H.mT @ W, X)  #  -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
+        trs = -SHS + scale * (term1 + term2 + term3)
 
         return H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
 
