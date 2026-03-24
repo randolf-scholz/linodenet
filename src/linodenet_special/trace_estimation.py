@@ -6,6 +6,7 @@ Notes:
 """
 
 __all__ = [
+    "ExactEstimator",
     "HutchinsonEstimator",
     "LogAbsDetEstimator",
     # functions
@@ -29,7 +30,7 @@ from signatures import signature
 
 
 class AbstractTraceEstimator(Protocol):
-    @signature("[{(..., *ds) -> (..., *ds)}?, {(..., *ds) -> (..., *ds)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate(
         self,
         op: Fn[[Tensor], Tensor] | None,
@@ -47,7 +48,7 @@ class AbstractTraceEstimator(Protocol):
         """
         ...
 
-    @signature("[{(..., *ds) -> (..., *ds)}?, {(..., *ds) -> (..., *ds)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate_powers(
         self,
         op: Fn[[Tensor], Tensor] | None,
@@ -59,6 +60,71 @@ class AbstractTraceEstimator(Protocol):
     ) -> Iterator[Tensor]:
         r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
         ...
+
+
+class ExactEstimator(nn.Module):
+    r"""Estimate traces by explicitly materializing the operator matrix."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("_anchor", torch.empty(0), persistent=False)
+
+    def _materialize(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        if not shape:
+            raise ValueError("shape must be non-empty")
+
+        dim = shape[-1]
+        identity = torch.eye(
+            dim, device=self._anchor.device, dtype=self._anchor.dtype
+        ).expand(*shape[:-1], dim, dim)
+
+        if op is not None:
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            return batched_op(identity)
+
+        if adj_op is not None:
+            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            return batched_adj(identity)
+
+        raise ValueError("at least one of op or adj_op must be provided")
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        matrix = self._materialize(op, adj_op, shape=shape)
+        return torch.einsum("...ii -> ...", matrix)
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        max_power: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Iterator[Tensor]:
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+
+        matrix = self._materialize(op, adj_op, shape=shape)
+        eigenvalues = torch.linalg.eigvals(matrix)
+        for power in range(1, max_power + 1):
+            trace_power = eigenvalues.pow(power).sum(dim=-1)
+            yield trace_power.real if not matrix.is_complex() else trace_power
 
 
 class HutchinsonEstimator(nn.Module):
