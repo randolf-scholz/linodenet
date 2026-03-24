@@ -122,6 +122,29 @@ $$\begin{aligned}
 |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩ + \overline{⟨sᵢ∣wᵢ⟩}⟨sᵢ∣rᵢ - Hwᵢ⟩ - ⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
 \end{aligned}$$
 
+### "Improved version"
+
+The paper proposed the following rescaling:
+
+$$\begin{aligned}
+μᵢ = (I-QᵢQᵢᴴ)vᵢ
+\qquad
+\tilde{μ}ᵢ = \sqrt{N - \rank(Qᵢ)}\frac{μᵢ}{‖μᵢ‖₂}
+\end{aligned}$$
+
+using $\tilde{μ}ᵢ$ as the residual probe vector instead of $μᵢ$, with scale
+
+$$\begin{aligned}
+‖μᵢ‖²
+    &= ‖(I-QᵢQᵢᴴ)vᵢ‖²
+\\	&= ‖vᵢ‖² - ‖QᵢQᵢᴴvᵢ‖²
+\\	&= ‖vᵢ‖² - ‖Qᵢ(𝕀-sᵢsᵢᴴ)Qᵢᴴvᵢ‖²
+\\	&= ‖vᵢ‖² - ‖ωᵢ-⟨sᵢ∣ωᵢ⟩sᵢ‖²
+\\	&= ‖vᵢ‖² - ‖ωᵢ‖² + |⟨sᵢ∣ωᵢ⟩|²
+\end{aligned}$$
+
+since $\tilde{μ}ᵢᴴA\tilde{μ}ᵢ=$
+
 ## BiHutch++
 
 We extend Hutch++ to the bilinear case, which we call BHutch++.
