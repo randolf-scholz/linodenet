@@ -513,37 +513,38 @@ class XTraceEstimator(nn.Module):
         if op is None and adj_op is None:
             raise ValueError("at least one of op or adj_op must be provided")
 
+        k = min(shape[-1], self.num_samples)
+        samples = self._make_samples(k, shape=shape)
+
         if op is not None and adj_op is not None:
             raise NotImplementedError
 
         if op is not None:
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dk) -> (...dk)
+            Y = batched_op(samples)  # (...dk)
+            Q, R = qr(Y, mode="reduced")  # (...dk), (...kk)
+            Z = batched_op(Q)  # (...dk)
+            H = Q.mH @ Z  # (...kk)
+            W = Q.mH @ samples  # (...kk)
+            T = Z.mH @ samples  # (...kk)
 
-            samples = self._make_samples(self.num_samples, shape=shape)
-            y = batched_op(samples)
-            q, r = qr(y, mode="reduced")
-            z = batched_op(q)
-            h = torch.einsum("...dk, ...dl -> ...kl", q.conj(), z)
-            w = torch.einsum("...dk, ...dn -> ...nk", q.conj(), samples)
-            t = torch.einsum("...dk, ...dn -> ...nk", z.conj(), samples)
+            # solve R^* S = Iₘ
+            I = torch.eye(k, dtype=samples.dtype, device=samples.device)
+            S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
+            # normalize COLS
+            S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
 
-            k = q.shape[-1]
-            identity = torch.eye(k, dtype=samples.dtype, device=samples.device)
-            s = solve_triangular(identity, r.mH, upper=True, left=False)
-            s = s / vector_norm(s, dim=-2, keepdim=True)
+            SW = vecdot(S, W, dim=-2)  # (...i)
+            SR = vecdot(S, R, dim=-2)  # (...i)
+            X = W - SW.unsqueeze(-2) * S
+            WS = SW.conj()  # (...i)
+            TX = vecdot(T, X, dim=-2)  # (...i)
+            XHX = torch.einsum("...ik, ...kl, ...il -> ...i", X.conj(), H, X)
+            SHS = torch.einsum("...ik, ...kl, ...il -> ...i", S.conj(), H, S)
 
-            x = w - torch.einsum("...nk, ...nk, ...nl -> ...nl", s.conj(), w, s)
-            trs = (
-                torch.einsum("...nk, ...kl, ...nl -> ...n", x.conj(), h, x)
-                - torch.einsum("...nk, ...kl, ...nl -> ...n", s.conj(), h, s)
-                - torch.einsum("...nk, ...nk -> ...n", t.conj(), x)
-                + (
-                    torch.einsum("...nk, ...nk -> ...n", w.conj(), s)
-                    * torch.einsum("...nk, ...kn -> ...n", s.conj(), r)
-                )
-            )
+            trs = XHX - SHS + WS * SR - TX
 
-            estimate = h.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
+            estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
             yield estimate.real if not estimate.is_complex() else estimate
             return
 

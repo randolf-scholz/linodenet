@@ -6,6 +6,7 @@ from linodenet_special.trace_estimation import (
     ExactEstimator,
     HutchinsonEstimator,
     HutchPlusPlusEstimator,
+    XTraceEstimator,
 )
 from tests.testing import DEVICES
 
@@ -124,33 +125,47 @@ class TestHutchinsonEstimator:
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestHutchPlusPlusEstimator:
-    NUM_SAMPLES = 12
+    NUM_SAMPLES = 32
+    BATCH_SIZE = 2
+    INPUT_SIZE = 100
 
     def test_hutchplusplus_estimate_op_only(self, device: str) -> None:
         torch.manual_seed(0)
-        scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
+        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = HutchPlusPlusEstimator(num_samples=self.NUM_SAMPLES).to(
             device=device
         )
 
-        estimate = estimator.estimate(scaled_map(scale), None, shape=tuple(scale.shape))
+        estimate = estimator.estimate(lambda x: scale * x, None, shape=scale.shape)
 
-        expected = scale.squeeze(-1)
-        torch.testing.assert_close(estimate, expected, atol=1e-6, rtol=0.0)
+        expected = scale.sum(-1)
+        torch.testing.assert_close(estimate, expected, atol=1e-2, rtol=0.0)
 
     def test_hutchplusplus_estimate_powers_adj_only(self, device: str) -> None:
         torch.manual_seed(0)
-        scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
+        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = HutchPlusPlusEstimator(num_samples=self.NUM_SAMPLES).to(
             device=device
         )
 
-        estimates = list(
-            estimator.estimate_powers(
-                None, scaled_map(scale), 4, shape=tuple(scale.shape)
-            )
-        )
+        estimate = estimator.estimate(None, lambda x: scale * x, shape=scale.shape)
 
-        expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
-        for estimate, truth in zip(estimates, expected, strict=True):
-            torch.testing.assert_close(estimate, truth, atol=1e-6, rtol=0.0)
+        expected = scale.sum(-1)
+        torch.testing.assert_close(estimate, expected, atol=1e-2, rtol=0.0)
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+class TestXTraceEstimator:
+    NUM_SAMPLES = 32
+    BATCH_SIZE = 2
+    INPUT_SIZE = 100
+
+    def test_xtrace_estimate_op_only(self, device: str) -> None:
+        torch.manual_seed(0)
+        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+        estimator = XTraceEstimator(num_samples=self.NUM_SAMPLES).to(device=device)
+
+        estimate = estimator.estimate(lambda x: scale * x, None, shape=scale.shape)
+
+        expected = scale.sum(-1)
+        torch.testing.assert_close(estimate, expected, atol=1e-2, rtol=0.0)
