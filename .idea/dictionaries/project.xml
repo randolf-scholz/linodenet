@@ -13,6 +13,7 @@
       <w>fullgraph</w>
       <w>logabsdets</w>
       <w>logsumexp</w>
+      <w>lsamples</w>
       <w>marchenko</w>
       <w>matvecs</w>
       <w>ndtr</w>
@@ -20,6 +21,7 @@
       <w>pastur</w>
       <w>pred</w>
       <w>qquad</w>
+      <w>rsamples</w>
       <w>twosided</w>
       <w>widetilde</w>
     </words>
