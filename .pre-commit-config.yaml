@@ -133,6 +133,7 @@ repos:
           - "--disable" # disable rules
           - "MD013"     # Line length
           - "MD033"     # Inline HTML
+          - "MD010"     # Hard tabs
           - "--"        # otherwise files are interpreted as args
   # shellcheck
   - repo: https://github.com/shellcheck-py/shellcheck-py
