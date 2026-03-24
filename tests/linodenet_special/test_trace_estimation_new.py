@@ -7,6 +7,7 @@ from linodenet_special.trace_estimation import (
     HutchinsonEstimator,
     HutchPlusPlusEstimator,
     XTraceEstimator,
+    xtrace_estimator_corrected,
 )
 from tests.testing import DEVICES
 
@@ -117,7 +118,7 @@ class TestHutchinsonEstimator:
             torch.testing.assert_close(estimate, truth, atol=0.08, rtol=0.0)
 
     def test_hutchinson_estimator_requires_operator(self, device: str) -> None:
-        estimator = HutchinsonEstimator(num_samples=4)
+        estimator = HutchinsonEstimator(num_samples=4).to(device=device)
 
         with pytest.raises(ValueError, match="at least one of op or adj_op"):
             next(estimator.estimate_powers(None, None, 1, shape=(2, 1)))
@@ -156,7 +157,7 @@ class TestHutchPlusPlusEstimator:
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestXTraceEstimator:
-    NUM_SAMPLES = 32
+    NUM_SAMPLES = 100
     BATCH_SIZE = 2
     INPUT_SIZE = 100
 
@@ -169,3 +170,18 @@ class TestXTraceEstimator:
 
         expected = scale.sum(-1)
         torch.testing.assert_close(estimate, expected, atol=1e-2, rtol=0.0)
+
+    def test_xtrace_corrected(self, device: str) -> None:
+
+        torch.manual_seed(0)
+        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+
+        samples = torch.randn(
+            self.BATCH_SIZE, self.NUM_SAMPLES, self.INPUT_SIZE, device=device
+        )
+        estimate = xtrace_estimator_corrected(
+            torch.func.vmap(lambda x: scale * x, -2, -2), samples
+        )
+
+        expected = scale.sum(-1)
+        torch.testing.assert_close(estimate, expected, atol=1e-6, rtol=0.0)
