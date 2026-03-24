@@ -64,47 +64,95 @@ class AbstractTraceEstimator(Protocol):
 class HutchinsonEstimator(nn.Module):
     r"""Estimate traces with Hutchinson's estimator.
 
-    This module wraps the functional `hutchinson_estimator` interface and exposes
-    an additional method that returns both the trace estimate and the evaluated
-    matrix-vector products `fn(samples)`.
+    This estimator draws probe vectors internally from the requested input shape
+    and supports right-action, left-action, and two-sided power-trace estimates.
     """
 
-    @signature("[{(..., n, d) -> (..., n, d)}, (..., n, d), (..., n, d)?] -> (...)")
+    num_samples: int
+
+    def __init__(self, num_samples: int) -> None:
+        super().__init__()
+        if num_samples < 1:
+            raise ValueError("num_samples must be at least 1")
+
+        self.num_samples = num_samples
+        self.register_buffer("_anchor", torch.empty(0), persistent=False)
+
+    def _make_samples(self, /, *, shape: tuple[int, ...]) -> Tensor:
+        if not shape:
+            raise ValueError("shape must be non-empty")
+
+        return torch.randn(
+            (*shape, self.num_samples),
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate(
         self,
-        fn: Fn[[Tensor], Tensor],
-        samples: Tensor,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
         *,
-        left_samples: Tensor | None = None,
+        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Estimate the trace of a linear map from probe vectors."""
-        return self.estimate_and_apply(fn, samples, left_samples=left_samples)[0]
+        r"""Returns an estimate of $\tr(A)$."""
+        return next(self.estimate_powers(op, adj_op, 1, shape=shape))
 
-    @signature(
-        "[{(..., n, d) -> (..., n, d)}, (..., n, d), (..., n, d)?] -> [(...), (..., n, d)]"
-    )
-    def estimate_and_apply(
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_powers(
         self,
-        fn: Fn[[Tensor], Tensor],
-        samples: Tensor,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        max_power: int,
         *,
-        left_samples: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Estimate the trace and return the corresponding `fn(samples)` values."""
-        left_samples = samples if left_samples is None else left_samples
-        transformed_samples = fn(samples)
-        trace_estimate = vecdot(left_samples, transformed_samples, dim=-1).mean(dim=-1)
-        return trace_estimate, transformed_samples
+        shape: tuple[int, ...],
+    ) -> Iterator[Tensor]:
+        r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
 
-    @signature("[{(..., n, d) -> (..., n, d)}, (..., n, d), (..., n, d)?] -> (...)")
-    def forward(
-        self,
-        fn: Fn[[Tensor], Tensor],
-        samples: Tensor,
-        *,
-        left_samples: Tensor | None = None,
-    ) -> Tensor:
-        return self.estimate(fn, samples, left_samples=left_samples)
+        right_samples = self._make_samples(shape=shape)
+        left_samples = right_samples.clone()
+
+        if op is not None and adj_op is not None:
+            # alternate between op and adj_op.
+            # this is good for forward sensitivity,
+            # which grows exponentially in the number of matvecs.
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+
+            power = 0
+            while power < max_power:
+                right_samples = batched_op(right_samples)
+                power += 1
+                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+
+                if power == max_power:
+                    return
+
+                left_samples = batched_adj(left_samples)
+                power += 1
+                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+            return
+
+        if op is not None:
+            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            for _ in range(max_power):
+                right_samples = batched_op(right_samples)
+                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+            return
+
+        if adj_op is not None:
+            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+            for _ in range(max_power):
+                left_samples = batched_adj(left_samples)
+                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+            return
+
+        raise ValueError("at least one of op or adj_op must be provided")
 
 
 @signature("(..., n, d) -> (...)")
