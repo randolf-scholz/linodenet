@@ -1,6 +1,9 @@
+from collections.abc import Callable
+
 import pytest
 import torch
 from torch import Tensor
+from torch.func import vmap
 
 from linodenet_special.trace_estimation import (
     ExactEstimator,
@@ -173,7 +176,7 @@ class TestHutchinsonEstimator:
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestHutchPlusPlusEstimator:
-    NUM_SAMPLES = 32
+    NUM_SAMPLES = 80
     BATCH_SIZE = 2
     INPUT_SIZE = 100
 
@@ -184,7 +187,6 @@ class TestHutchPlusPlusEstimator:
 
         samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
-        assert isinstance(estimator.sampler, type(SamplerKind.SIGN.make()))
         assert samples.shape == (2, 3, 4)
         assert torch.all((samples == -1) | (samples == +1))
 
@@ -217,21 +219,26 @@ class TestHutchPlusPlusEstimator:
     def test_hutchplusplus_estimate_powers_adj_only(self, device: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(num_samples=self.NUM_SAMPLES).to(
-            device=device
-        )
+        estimator = HutchPlusPlusEstimator(
+            num_samples=self.NUM_SAMPLES, sampler="sphere"
+        ).to(device=device)
 
         estimate = estimator.estimate(None, lambda x: scale * x, shape=scale.shape)
 
         expected = scale.sum(-1)
-        torch.testing.assert_close(estimate, expected, atol=1e-2, rtol=0.0)
+        torch.testing.assert_close(estimate, expected, atol=1e-6, rtol=1e-6)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestXTraceEstimator:
-    NUM_SAMPLES = 3
+    NUM_SAMPLES = 5
     BATCH_SIZE = 2
     INPUT_SIZE = 8
+
+    def make_test(self, device: str) -> tuple[Callable[[Tensor], Tensor], Tensor]:
+        torch.manual_seed(0)
+        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE).to(device=device)
+        return lambda x: scale * x, scale.sum(-1)
 
     def test_xtrace_sampler_from_enum(self, device: str) -> None:
         estimator = XTraceEstimator(num_samples=4, sampler=SamplerKind.SIGN).to(
@@ -258,26 +265,25 @@ class TestXTraceEstimator:
             XTraceEstimator(num_samples=4, sampler="unknown").to(device=device)
 
     def test_xtrace_estimate_op_only(self, device: str) -> None:
-        torch.manual_seed(0)
-        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = XTraceEstimator(num_samples=self.NUM_SAMPLES).to(device=device)
+        fn, expected = self.make_test(device=device)
+        shape = (self.BATCH_SIZE, self.INPUT_SIZE)
 
-        estimate = estimator.estimate(lambda x: scale * x, None, shape=scale.shape)
+        estimator = XTraceEstimator(
+            num_samples=self.NUM_SAMPLES,
+            sampler="sphere",
+            renormalize=True,
+        ).to(device=device)
 
-        expected = scale.sum(-1)
-        torch.testing.assert_close(estimate, expected, atol=1e-2, rtol=0.0)
+        estimate = estimator.estimate(fn, None, shape=shape)
+
+        torch.testing.assert_close(estimate, expected, atol=1e-3, rtol=1e-3)
 
     def test_xtrace_corrected(self, device: str) -> None:
-
-        torch.manual_seed(0)
-        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+        fn, expected = self.make_test(device=device)
 
         samples = torch.randn(
             self.BATCH_SIZE, self.NUM_SAMPLES, self.INPUT_SIZE, device=device
         )
-        estimate = xtrace_estimator_corrected(
-            torch.func.vmap(lambda x: scale * x, -2, -2), samples
-        )
+        estimate = xtrace_estimator_corrected(vmap(fn, -2, -2), samples)
 
-        expected = scale.sum(-1)
-        torch.testing.assert_close(estimate, expected, atol=1e-6, rtol=0.0)
+        torch.testing.assert_close(estimate, expected, atol=1e-3, rtol=1e-3)

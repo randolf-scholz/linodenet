@@ -498,7 +498,7 @@ class HutchPlusPlusEstimator(nn.Module):
 
         if op is not None:
             # One-sided right-action estimator for tr(Aᵏ):
-            #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + E[g_perpᵀ Aᵏ g_perp].
+            #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + E[g_⟂ᵀ Aᵏ g_⟂].
             batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
             sketch = batched_op(samples)
             Q, _ = qr(sketch, mode="reduced")  # (...dr)
@@ -563,11 +563,19 @@ class XTraceEstimator(nn.Module):
 
     @overload
     def __init__(
-        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "sphere"
+        self,
+        num_samples: int,
+        *,
+        sampler: str | SamplerKind | Sampler = ...,
+        renormalize: bool = ...,
     ) -> None: ...
     @overload
     def __init__(
-        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "sphere"
+        self,
+        *,
+        num_matvecs: int,
+        sampler: str | SamplerKind | Sampler = ...,
+        renormalize: bool = ...,
     ) -> None: ...
     def __init__(
         self,
@@ -704,6 +712,63 @@ class XTraceEstimator(nn.Module):
             raise NotImplementedError
 
         raise AssertionError("unreachable")
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_alt(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Returns an estimate of $\tr(A)$."""
+        assert op is not None
+
+        *batch, N = shape
+        k = min(N, self.num_samples)
+        samples = self.sampler(
+            shape,
+            k,
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
+        batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+        Y = batched_op(samples)  # (...Nm)
+
+        # Q has normalized cols <-> Q.norm(dim=-2) = 1
+        Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
+        Z = batched_op(Q)  # (...Nk)
+        H = Q.mH @ Z  # (...kk)
+        W = Q.mH @ samples  # (...kk)
+        T = Z.mH @ samples  # (...kk)
+
+        # solve R^* S = Iₖ
+        I = torch.eye(k, dtype=samples.dtype, device=samples.device)
+        S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
+        # normalize COLS
+        S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
+
+        SW = vecdot(S, W, dim=-2)  # (...i)
+        SR = vecdot(S, R, dim=-2)  # (...i)
+        X = W - SW.unsqueeze(-2) * S
+        WS = SW.conj()  # (...i)
+        TX = vecdot(T, X, dim=-2)  # (...i)
+        XHX = torch.einsum("...ik, ...kl, ...il -> ...i", X.conj(), H, X)
+        SHS = torch.einsum("...ik, ...kl, ...il -> ...i", S.conj(), H, S)
+
+        if self.renormalize:
+            scale = (N - k + 1) / (  #
+                vecdot(samples, samples, dim=-2)
+                - vecdot(W, W, dim=-2)
+                + SW.abs().square()
+            )
+        else:
+            scale = 1.0
+
+        trs = scale * (XHX - SHS + WS * SR - TX)
+
+        return H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
 
 
 def trace_naive_estimator(
