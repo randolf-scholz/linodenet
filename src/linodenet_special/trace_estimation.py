@@ -279,17 +279,6 @@ class HutchinsonEstimator(nn.Module):
         )
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
-    def _make_samples(self, /, *, shape: tuple[int, ...]) -> Tensor:
-        if not shape:
-            raise ValueError("shape must be non-empty")
-
-        return self.sampler.sample(
-            shape,
-            self.num_samples,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
-        )
-
     @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate(
         self,
@@ -317,8 +306,15 @@ class HutchinsonEstimator(nn.Module):
             raise ValueError("max_power must be at least 1")
         if op is None and adj_op is None:
             raise ValueError("at least one of op or adj_op must be provided")
+        if not shape:
+            raise ValueError("shape must be non-empty")
 
-        right_samples = self._make_samples(shape=shape)
+        right_samples = self.sampler.sample(
+            shape,
+            self.num_samples,
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
         left_samples = right_samples.clone()
 
         if op is not None and adj_op is not None:
@@ -409,18 +405,6 @@ class HutchPlusPlusEstimator(nn.Module):
         )
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
-    @signature("[shape[(..., d)], n] -> (..., d, n)")
-    def _make_samples(self, num_samples: int, /, *, shape: tuple[int, ...]) -> Tensor:
-        if not shape:
-            raise ValueError("shape must be non-empty")
-
-        return self.sampler.sample(
-            shape,
-            num_samples,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
-        )
-
     @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate(
         self,
@@ -447,11 +431,23 @@ class HutchPlusPlusEstimator(nn.Module):
             raise ValueError("max_power must be at least 1")
         if op is None and adj_op is None:
             raise ValueError("at least one of op or adj_op must be provided")
+        if not shape:
+            raise ValueError("shape must be non-empty")
 
         num_samples = self.num_matvecs // 3
         num_residuals = self.num_matvecs // 3
-        samples = self._make_samples(num_samples, shape=shape)
-        residual_samples = self._make_samples(num_residuals, shape=shape)
+        samples = self.sampler.sample(
+            shape,
+            num_samples,
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
+        residual_samples = self.sampler.sample(
+            shape,
+            num_residuals,
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
 
         if op is not None and adj_op is not None:
             # Two-sided power estimator:
@@ -600,18 +596,6 @@ class XTraceEstimator(nn.Module):
         )
         self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
-    @signature("[shape[(..., d)], n] -> (..., d, n)")
-    def _make_samples(self, num_samples: int, /, *, shape: tuple[int, ...]) -> Tensor:
-        if not shape:
-            raise ValueError("shape must be non-empty")
-
-        return self.sampler.sample(
-            shape,
-            num_samples,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
-        )
-
     @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate(
         self,
@@ -640,11 +624,18 @@ class XTraceEstimator(nn.Module):
             raise NotImplementedError("XTraceEstimator currently only supports k=1")
         if op is None and adj_op is None:
             raise ValueError("at least one of op or adj_op must be provided")
+        if not shape:
+            raise ValueError("shape must be non-empty")
 
         *batch, N = shape
         m = self.num_samples
         k = min(N, self.num_samples)
-        samples = self._make_samples(k, shape=shape)
+        samples = self.sampler.sample(
+            shape,
+            k,
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
         # samples = math.sqrt(N) * samples / vector_norm(samples, dim=-2, keepdim=True)
 
         if op is not None and adj_op is not None:
