@@ -145,30 +145,12 @@ $$\begin{aligned}
 
 since $\tilde{μ}ᵢᴴA\tilde{μ}ᵢ=$
 
-## BiHutch++
+## Alternative XTrace formulation
 
-We extend Hutch++ to the bilinear case, which we call BHutch++.
-The basic idea is again to use a low-rank approximation: $\tr(PᴴAQ)$
+We need to compute:
 
-$$\begin{aligned}
-    U  &= [u₁, ..., uₘ] ∈ ℝ^{n×m}
-\\  V  &= [v₁, ..., vₘ] ∈ ℝ^{n×m}
-\\  P &= \orth(AᴴU)   \qquad\text{economical QR, so $P$ has $m$ columns}
-\\  Q &= \orth(AV)    \qquad\text{economical QR, so $Q$ has $m$ columns}
-\\  \tr &≈ \tr(PᴴAQ) + \frac{1}{m} \sum_{i=1}^m uᵢᴴ(𝕀 - PPᴴ)A(𝕀 - QQᴴ)vᵢ
-\end{aligned}$$
+$$ \tr(QᵢᴴAQᵢ) + vᵢᴴ(𝕀 - QᵢQᵢᴴ)ᴴA(I-QᵢQᵢᴴ)vᵢ $$
 
-### Bi-Orthogonal Variant
+The first term can be computed as:
 
-Instead of separately orthogonalizing $U$ and $V$, we can use bi-orthogonalization:
-
-$$\begin{aligned}
-    U &= [u₁, ..., uₘ] ∈ ℝ^{n×m}
-\\  V &= [v₁, ..., vₘ] ∈ ℝ^{n×m}
-\\  EΣFᴴ &= SVD(UᴴAV)   \qquad\text{so $E$ has $m$ columns, and $F$ has $m$ columns}
-\\  P &= UEΣ⁻¹ᐟ²   \qquad\text{so $P$ has $m$ columns}
-\\  Q &= VFΣ⁻¹ᐟ²   \qquad\text{so $Q$ has $m$ columns}
-\\  \tr &≈ \tr(PᴴAQ) + \frac{1}{m} \sum_{i=1}^m uᵢᴴ(𝕀 - PPᴴ)A(𝕀 - QQᴴ)vᵢ
-\end{aligned}$$
-
-⟨B∣I⟩
+$$ \tr(QᵢᴴAQᵢ) = \tr(AQᵢQᵢᴴ) = \tr(AQ(𝕀-sᵢsᵢᴴ)Qᴴ) = \tr(QᴴAQ) - sᵢᴴQᴴAQsᵢ $$
