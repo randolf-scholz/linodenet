@@ -172,6 +172,7 @@ class TestMatrixDomains:
         assert MatrixDomains.UPPER_INVERTIBLE <= MatrixDomains.UPPER_TRIANGULAR
         assert MatrixDomains.UPPER_INVERTIBLE <= MatrixDomains.INVERTIBLE
         assert MatrixDomains.CHOLESKY_FACTOR <= MatrixDomains.LOWER_INVERTIBLE
+        assert MatrixDomains.CHOLESKY_FACTOR <= MatrixDomains.POSITIVE_DIAGONAL_ENTRIES
         assert MatrixDomains.LEFT_INVERTIBLE <= MatrixDomains.TALL
         assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.WIDE
         assert MatrixDomains.RIGHT_INVERTIBLE <= MatrixDomains.WIDE
@@ -193,6 +194,11 @@ class TestMatrixDomains:
         assert MatrixDomains.DIAGONAL != MatrixDomains.SQUARE
         assert MatrixDomains.DIAGONAL <= MatrixDomains.RECTANGULAR
         assert MatrixDomains.DIAGONAL != MatrixDomains.RECTANGULAR
+        assert MatrixDomains.POSITIVE_DIAGONAL_ENTRIES <= MatrixDomains.RECTANGULAR
+        assert MatrixDomains.NEGATIVE_DIAGONAL_ENTRIES <= MatrixDomains.RECTANGULAR
+        assert MatrixDomains.ZERO_DIAGONAL <= MatrixDomains.RECTANGULAR
+        assert MatrixDomains.SKEW_SYMMETRIC <= MatrixDomains.ZERO_DIAGONAL
+        assert not MatrixDomains.ZERO_DIAGONAL <= MatrixDomains.DIAGONAL
         assert MatrixDomains.RANK_ONE <= MatrixDomains.LOW_RANK
         assert MatrixDomains.RANK_ONE != MatrixDomains.LOW_RANK
         assert MatrixDomains.RANK_ONE <= MatrixDomains.RECTANGULAR
