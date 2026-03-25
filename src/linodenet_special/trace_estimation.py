@@ -653,9 +653,9 @@ class XTraceEstimator(nn.Module):
         if op is not None:
             batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
             Y = batched_op(samples)  # (...Nm)
-
-            # Q has normalized cols <-> Q.norm(dim=-2) = 1
             Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
+            # Q has normalized cols <-> Q.norm(dim=-2) = 1
+
             Z = batched_op(Q)  # (...Nk)
             H = Q.mH @ Z  # (...kk)
             W = Q.mH @ samples  # (...kk)
@@ -716,69 +716,6 @@ class XTraceEstimator(nn.Module):
             raise NotImplementedError
 
         raise AssertionError("unreachable")
-
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
-    def estimate_alt(
-        self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
-        /,
-        *,
-        shape: tuple[int, ...],
-    ) -> Tensor:
-        r"""Returns an estimate of $\tr(A)$."""
-        assert op is not None
-
-        *batch, N = shape
-        k = min(N, self.num_samples)
-        samples = self.sampler(
-            shape,
-            k,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
-        )
-        batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
-        Y = batched_op(samples)  # (...Nm)
-
-        # Q has normalized cols <-> Q.norm(dim=-2) = 1
-        Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
-        Z = batched_op(Q)  # (...Nk)
-        H = Q.mH @ Z  # (...kk)
-        W = Q.mH @ samples  # (...kk)
-        T = Z.mH @ samples  # (...kk)
-
-        # solve R^* S = Iₖ
-        I = torch.eye(k, dtype=samples.dtype, device=samples.device)
-        S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
-        # normalize COLS
-        S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
-
-        SW = vecdot(S, W, dim=-2)  # (...i)
-        SR = vecdot(S, R, dim=-2)  # (...i)
-        X = W - SW.unsqueeze(-2) * S
-        WS = SW.conj()  # (...i)
-        TX = vecdot(T, X, dim=-2)  # (...i)
-        XHX = torch.einsum("...ik, ...kl, ...il -> ...i", X.conj(), H, X)
-        SHS = torch.einsum("...ik, ...kl, ...il -> ...i", S.conj(), H, S)
-
-        if self.renormalize:
-            scale = (N - k + 1) / (  #
-                vecdot(samples, samples, dim=-2)
-                - vecdot(W, W, dim=-2)
-                + SW.abs().square()
-            )
-        else:
-            scale = 1.0
-
-        trs = -SHS + scale * (XHX + WS * SR - TX)
-
-        HW = H @ W
-        term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
-        term2 = vecdot(S, R - HW, dim=-2) * SW.conj()  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
-        term3 = vecdot(T - H.mH @ W, X)  #  -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
-        trs = -SHS + scale * (term1 + term2 + term3)
-
-        return H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
 
 
 def trace_naive_estimator(
