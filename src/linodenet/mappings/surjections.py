@@ -17,6 +17,7 @@ from typing import Final
 
 import torch
 from torch import Tensor, nn
+from torch.linalg import vecdot
 
 from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet.mappings.base import SurjectionBase
@@ -195,26 +196,27 @@ class OrthogonalHouseholder(SurjectionBase):
     SVD used by `OrthogonalProjection`.
     """
 
-    DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
-    CODOMAIN: Final[MatrixDomains] = MatrixDomains.ORTHOGONAL
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.TALL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.COLUMN_ORTHOGONAL
 
-    @signature("(..., n, n) -> (..., n, n)")
+    @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor) -> Tensor:
-        a = x.tril(diagonal=-1)  # (..., n, n)
-        tau = 2.0 / (1.0 + (a * a).sum(dim=-2))
+        a = x.tril(diagonal=-1)  # (..., m, n)
+        tau = 2.0 / (1.0 + vecdot(a, a, dim=-2))  # (...n)
         q = torch.linalg.householder_product(a, tau)
+        # normalize the sign
         diagonal = x.diagonal(dim1=-2, dim2=-1).detach()
-        signs = torch.where(
-            diagonal < 0, -torch.ones_like(diagonal), torch.ones_like(diagonal)
-        )
+        ones = torch.ones_like(diagonal)
+        signs = torch.where(diagonal < 0, -ones, ones)
         return q * signs.unsqueeze(-2)
 
-    @signature("(..., n, n) -> (..., n, n)")
+    @signature("(..., m, n) -> (..., m, n)")
     def right_inverse(self, y: Tensor) -> Tensor:
-        a, tau = torch.geqrf(y)
-        signs = a.diagonal(dim1=-2, dim2=-1).sign()
-        signs = torch.where(tau == 0, -signs, signs)
-        return a.tril(diagonal=-1) + torch.diag_embed(signs)
+        # note: geqrf low level reduced QR decomposition
+        a, tau = torch.geqrf(y)  # (...mn), (...n)
+        signs = a.diagonal(dim1=-2, dim2=-1).sign()  # (...n)
+        signs = torch.where(tau == 0, -signs, signs)  # (...n)
+        return a.tril(diagonal=-1).diagonal_scatter(signs, dim1=-2, dim2=-1)
 
 
 class OrthogonalCayley(SurjectionBase):
