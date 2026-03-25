@@ -33,7 +33,7 @@ import math
 from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from enum import StrEnum
-from typing import Final, Protocol, overload
+from typing import Any, Final, Protocol, overload
 
 import torch
 from torch import Tensor, nn, vmap
@@ -57,10 +57,7 @@ class Sampler(Protocol):
 class AbstractTraceEstimator(Protocol):
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def __call__(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
+        self, op: Fn[[Tensor], Tensor], x: Tensor, /, *args: Any, **kwargs: Any
     ) -> Tensor:
         r"""Returns an estimate of $\tr(Df(x))$.
 
@@ -180,12 +177,20 @@ def xtrace_naive_estimator(
     return tr.real if not tr.is_complex() else tr.conj()
 
 
-@signature("(..., n, d) -> (...)")
-def naive_estimator(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Tensor:
-    r"""Estimate the trace of a matric, realizing the full matrix."""
-    I = torch.eye(samples.shape[-1], dtype=samples.dtype, device=samples.device)
-    A = fn(I)
-    return torch.einsum("...dd -> ...", A)
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def naive_estimator(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
+    r"""Estimate $\tr(Df(x))$ by explicitly materializing the Jacobian."""
+    if x.ndim == 0:
+        raise ValueError("x must be at least one-dimensional")
+
+    _, jvp_fn = linearize(op, x)
+    dim = x.shape[-1]
+    identity = torch.eye(dim, device=x.device, dtype=x.dtype).expand(
+        *x.shape[:-1], dim, dim
+    )
+    matrix = vmap(jvp_fn, -1, -1)(identity)
+    trace = torch.einsum("...ii -> ...", matrix)
+    return trace.real if not matrix.is_complex() else trace
 
 
 @signature("[{(..., n, d) -> (...)}, (..., n, d), (..., n, d)?] -> (...)")

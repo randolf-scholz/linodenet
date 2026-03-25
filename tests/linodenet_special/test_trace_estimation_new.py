@@ -86,7 +86,7 @@ class SequenceSampler:
 
 
 class AnalyticEstimator(BaseEstimator):
-    def estimate(
+    def forward(
         self,
         op: Callable[[Tensor], Tensor],
         x: Tensor,
@@ -525,25 +525,17 @@ class TestVisualization:
                 xtrace = torch.full((), torch.nan, device=device, dtype=dtype)
             else:
                 probe_columns = full_probe_columns[..., :xtrace_num_samples]
-                xtrace = (
-                    XTraceEstimator(
-                        num_matvecs=num_matvecs,
-                        sampler=FixedSampler(probe_columns),
-                        renormalize=True,
-                    )
-                    .to(device=device, dtype=dtype)
-                    (fn, x)
-                )
+                xtrace = XTraceEstimator(
+                    num_matvecs=num_matvecs,
+                    sampler=FixedSampler(probe_columns),
+                    renormalize=True,
+                ).to(device=device, dtype=dtype)(fn, x)
 
             hutch_columns = hutch_full_probe_columns[..., :num_matvecs]
-            hutch = (
-                HutchinsonEstimator(
-                    num_matvecs=num_matvecs,
-                    sampler=FixedSampler(hutch_columns),
-                )
-                .to(device=device, dtype=dtype)
-                (fn, x)
-            )
+            hutch = HutchinsonEstimator(
+                num_matvecs=num_matvecs,
+                sampler=FixedSampler(hutch_columns),
+            ).to(device=device, dtype=dtype)(fn, x)
 
             hpp_num_samples = num_matvecs // 3
             if hpp_num_samples == 0:
@@ -552,14 +544,10 @@ class TestVisualization:
                 hpp_samples = hpp_full_probe_columns[..., :hpp_num_samples]
                 hpp_residuals = hpp_full_residual_columns[..., :hpp_num_samples]
                 hutchpp_sampler = SequenceSampler([hpp_samples, hpp_residuals])
-                hutchpp = (
-                    HutchPlusPlusEstimator(
-                        num_matvecs=num_matvecs,
-                        sampler=hutchpp_sampler,
-                    )
-                    .to(device=device, dtype=dtype)
-                    (fn, x)
-                )
+                hutchpp = HutchPlusPlusEstimator(
+                    num_matvecs=num_matvecs,
+                    sampler=hutchpp_sampler,
+                ).to(device=device, dtype=dtype)(fn, x)
             curves["xtrace"].append(((xtrace - expected).abs() / denom).mean())
             curves["hutch"].append(((hutch - expected).abs() / denom).mean())
             curves["hutch++"].append(((hutchpp - expected).abs() / denom).mean())
