@@ -22,7 +22,7 @@ References:
     .. [1] https://pytorch.org/docs/stable/_modules/torch/nn/utils/spectral_norm.html#spectral_norm
 """
 
-__all__ = ["LinearContraction", "RankOneContraction"]
+__all__ = ["LinearContraction", "RankOneContraction", "LowRankContraction"]
 
 import math
 from typing import Final, override
@@ -31,6 +31,7 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.mappings.projections import Contraction, UnitVector
+from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
 
 
@@ -138,11 +139,9 @@ class RankOneContraction(nn.Module):
     def reset_parameters(self) -> None:
         nn.init.kaiming_uniform_(self.weight_u.unsqueeze(-1), a=math.sqrt(5))
         nn.init.kaiming_uniform_(self.weight_v.unsqueeze(0), a=math.sqrt(5))
-        if self.bias is None:
-            return
-
-        bound = 1 / math.sqrt(self.in_features) if self.in_features > 0 else 0.0
-        nn.init.uniform_(self.bias, -bound, bound)
+        if self.bias is not None:
+            bound = 1 / math.sqrt(self.in_features) if self.in_features > 0 else 0.0
+            nn.init.uniform_(self.bias, -bound, bound)
         update_parametrizations(self)
 
     @property
@@ -152,6 +151,107 @@ class RankOneContraction(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         projection = x.matmul(self.weight_v)
         y = torch.einsum("..., o -> ...o", projection, self.gamma * self.weight_u)
+        if self.bias is not None:
+            y = y + self.bias
+        return y
+
+
+class LowRankContraction(nn.Module):
+    r"""A low-rank linear layer $f(x) = UΣVᵀx + b$ with contraction constant at most $c$.
+
+    The factors $U∈ℝ^{m×r}$ and $V∈ℝ^{n×r}$ are parametrized to have orthonormal
+    columns, and the diagonal entries of $Σ$ are constrained to lie in $(0, c)$.
+    Hence $‖UΣVᵀ‖₂ = ‖Σ‖₂ ≤ c$.
+    """
+
+    in_features: Final[int]
+    out_features: Final[int]
+    input_size: Final[int]
+    output_size: Final[int]
+    rank: Final[int]
+    gamma: Tensor
+    weight_u: Tensor
+    weight_v: Tensor
+    singular_values: nn.Parameter
+    bias: nn.Parameter | None
+
+    @override
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        *,
+        rank: int,
+        bias: bool = True,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+        c: float = 0.97,
+    ) -> None:
+        super().__init__()
+        if not 0 < c < 1:
+            raise ValueError("c must be between 0 and 1")
+        if not 1 <= rank <= min(in_features, out_features):
+            raise ValueError("rank must be between 1 and min(dim_in, dim_out)")
+
+        self.in_features = in_features
+        self.out_features = out_features
+        self.input_size = in_features
+        self.output_size = out_features
+        self.rank = rank
+        self.register_buffer(
+            "gamma", torch.tensor(float(c), device=device, dtype=dtype)
+        )
+
+        self.weight_u = nn.Parameter(
+            torch.empty(out_features, rank, device=device, dtype=dtype)
+        )
+        self.weight_v = nn.Parameter(
+            torch.empty(in_features, rank, device=device, dtype=dtype)
+        )
+        self.singular_values = nn.Parameter(
+            torch.empty(rank, device=device, dtype=dtype)
+        )
+        if bias:
+            self.bias = nn.Parameter(
+                torch.empty(out_features, device=device, dtype=dtype)
+            )
+        else:
+            self.register_parameter("bias", None)
+
+        self.reset_parameters()
+        register_parametrization(self, "weight_u", OrthogonalHouseholder())
+        register_parametrization(self, "weight_v", OrthogonalHouseholder())
+        self.parametrizations: nn.ModuleDict
+        assert isinstance(self.parametrizations.weight_u, nn.Module)
+        assert isinstance(self.parametrizations.weight_v, nn.Module)
+        u_param = self.parametrizations.weight_u.original_parameter
+        v_param = self.parametrizations.weight_v.original_parameter
+        assert isinstance(u_param, nn.Parameter)
+        assert isinstance(v_param, nn.Parameter)
+        self.weight_u_parameter: nn.Parameter = u_param
+        self.weight_v_parameter: nn.Parameter = v_param
+
+    def reset_parameters(self) -> None:
+        nn.init.kaiming_uniform_(self.weight_u, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.weight_v, a=math.sqrt(5))
+        nn.init.normal_(self.singular_values)
+        if self.bias is not None:
+            bound = 1 / math.sqrt(self.in_features) if self.in_features > 0 else 0.0
+            nn.init.uniform_(self.bias, -bound, bound)
+        update_parametrizations(self)
+
+    @property
+    def sigma(self) -> Tensor:
+        return self.gamma * torch.sigmoid(self.singular_values)
+
+    @property
+    def weight(self) -> Tensor:
+        return (self.weight_u * self.sigma).matmul(self.weight_v.mT)
+
+    def forward(self, x: Tensor) -> Tensor:
+        projection = x.matmul(self.weight_v)
+        scaled = projection * self.sigma
+        y = scaled.matmul(self.weight_u.mT)
         if self.bias is not None:
             y = y + self.bias
         return y
