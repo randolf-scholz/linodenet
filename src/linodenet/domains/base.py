@@ -9,7 +9,7 @@ __all__ = [
 ]
 
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
@@ -101,6 +101,8 @@ class PosetEnum(Enum):
     r"""Dependencies"""
     KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Reverse dependencies."""
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, frozenset[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
+    r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
 
     @classmethod
     def _top_node(cls) -> Self | None:
@@ -123,6 +125,9 @@ class PosetEnum(Enum):
 
         for src, targets in cls.KNOWN_EDGES.items():  # type: ignore[attr-defined]
             edges[src].update(targets)
+
+        for meet, factors in getattr(cls, "KNOWN_MEETS", ()):
+            edges[meet].update(factors)
 
         for tag, members in cls.KNOWN_TAGS.items():  # type: ignore[attr-defined]
             for member in members:
@@ -173,15 +178,46 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
+    def _validated_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
+        meets = tuple(getattr(cls, "KNOWN_MEETS", ()))
+        members = frozenset(cls)
+
+        if bad_keys := {node for node, _ in meets if node not in members}:
+            raise TypeError(f"Expected {cls.__name__} meet nodes, got {bad_keys!r}.")
+
+        all_factors = frozenset().union(*(factors for _, factors in meets))
+        if bad_factors := {factor for factor in all_factors if factor not in members}:
+            raise TypeError(
+                f"Expected {cls.__name__} meet factors, got {bad_factors!r}."
+            )
+
+        if empty_meets := {node for node, factors in meets if not factors}:
+            raise ValueError(f"Expected non-empty meet factors, got {empty_meets!r}.")
+
+        return meets
+
+    @classmethod
+    @cache
     def _upward_closure(cls, node: Self, /) -> frozenset[Self]:
         edges = cls._validated_edges()
-        parents = edges.get(node, frozenset())
+        meets = cls._validated_meets()
 
-        closure = frozenset({node, *parents})
-        for parent in parents:
-            closure = closure | cls._upward_closure(parent)
+        closure: set[Self] = set()
+        stack = [node]
 
-        return closure
+        while stack:
+            current = stack.pop()
+            if current in closure:
+                continue
+
+            closure.add(current)
+            stack.extend(edges.get(current, frozenset()))
+
+            for meet, factors in meets:
+                if meet not in closure and factors <= closure:
+                    stack.append(meet)
+
+        return frozenset(closure)
 
     def __le__(self, other: object, /) -> bool:
         if not isinstance(other, type(self)):

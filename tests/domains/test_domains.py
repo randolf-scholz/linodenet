@@ -160,11 +160,13 @@ class TestMatrixDomains:
         assert MatrixDomains.SQUARE <= MatrixDomains.WIDE
         assert MatrixDomains.ORTHOGONAL <= MatrixDomains.COLUMN_ORTHOGONAL
         assert MatrixDomains.ORTHOGONAL <= MatrixDomains.ROW_ORTHOGONAL
+        assert MatrixDomains.ORTHOGONAL <= MatrixDomains.SQUARE
         assert MatrixDomains.COLUMN_ORTHOGONAL <= MatrixDomains.TALL
         assert MatrixDomains.COLUMN_ORTHOGONAL <= MatrixDomains.LEFT_INVERTIBLE
         assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.RIGHT_INVERTIBLE
         assert MatrixDomains.INVERTIBLE <= MatrixDomains.LEFT_INVERTIBLE
         assert MatrixDomains.INVERTIBLE <= MatrixDomains.RIGHT_INVERTIBLE
+        assert MatrixDomains.INVERTIBLE <= MatrixDomains.SQUARE
         assert MatrixDomains.LEFT_INVERTIBLE <= MatrixDomains.TALL
         assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.WIDE
         assert MatrixDomains.RIGHT_INVERTIBLE <= MatrixDomains.WIDE
@@ -192,8 +194,13 @@ class TestMatrixDomains:
         assert MatrixDomains.SPECIAL_ORTHOGONAL != MatrixDomains.ORTHOGONAL
         assert MatrixDomains.SPECIAL_ORTHOGONAL <= MatrixDomains.INVERTIBLE
         assert MatrixDomains.SPECIAL_ORTHOGONAL != MatrixDomains.INVERTIBLE
+        assert MatrixDomains.IDENTITY <= MatrixDomains.DIAGONAL
+        assert MatrixDomains.IDENTITY <= MatrixDomains.PERMUTATION
         assert MatrixDomains.PERMUTATION <= MatrixDomains.ROW_STOCHASTIC
         assert MatrixDomains.PERMUTATION != MatrixDomains.ROW_STOCHASTIC
+        assert MatrixDomains.PERMUTATION <= MatrixDomains.DOUBLY_STOCHASTIC
+        assert MatrixDomains.PERMUTATION <= MatrixDomains.SPARSE
+        assert MatrixDomains.DOUBLY_STOCHASTIC <= MatrixDomains.SQUARE
         assert MatrixDomains.PERMUTATION <= MatrixDomains.SQUARE
         assert MatrixDomains.PERMUTATION != MatrixDomains.SQUARE
 
