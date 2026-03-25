@@ -25,8 +25,8 @@ __all__ = [
 ]
 
 
-from .base import Domain, Inverse
-from .matrix_domains import Intersection, MatrixDomain, MatrixDomains, Union
+from .base import Domain, Intersection, Inverse, Union
+from .matrix_domains import MatrixDomain, MatrixDomains
 from .scalar_domains import Interval, RealDomain, ScalarDomains
 from .tensor_domains import TensorDomains
 from .vector_domains import VectorDomains
