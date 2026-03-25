@@ -49,21 +49,30 @@ class VectorDomains(PosetEnum):
 
 
 V = VectorDomains  # temporary alias
+VectorDomains.KNOWN_MEETS = (
+    (V.NONE, V.NEGATIVE & V.NONNEGATIVE),
+    (V.NONE, V.NONZERO & V.ZERO),
+    (V.NONE, V.POSITIVE & V.NONPOSITIVE),
+    (V.NONE, V.POSITIVE & V.NEGATIVE),
+    (V.ONE_HOT, V.BOOLEAN & V.STOCHASTIC),
+    (V.ONE_HOT, V.STOCHASTIC & V.UNIT_VECTOR),
+    (V.ZERO, V.NONNEGATIVE & V.NONPOSITIVE),
+)
 VectorDomains.KNOWN_EDGES = MappingProxyType({
-    V.BOOLEAN: frozenset({V.REAL, V.NONNEGATIVE}),
-    V.NEGATIVE: frozenset({V.REAL, V.NONPOSITIVE, V.NONZERO}),
+    V.BOOLEAN: frozenset({V.REAL & V.NONNEGATIVE}),
+    V.NEGATIVE: frozenset({V.REAL & V.NONPOSITIVE & V.NONZERO}),
     V.NONNEGATIVE: frozenset({V.REAL}),
     V.NONPOSITIVE: frozenset({V.REAL}),
     V.ONE: frozenset({V.BOOLEAN}),
-    V.ONE_HOT: frozenset({V.BOOLEAN, V.STOCHASTIC, V.UNIT_VECTOR, V.SPARSE}),
-    V.POSITIVE: frozenset({V.REAL, V.NONNEGATIVE, V.NONZERO}),
+    V.ONE_HOT: frozenset({V.SPARSE}),
+    V.POSITIVE: frozenset({V.REAL & V.NONNEGATIVE & V.NONZERO}),
     V.REAL: frozenset({V.COMPLEX}),
-    V.STANDARDIZED: frozenset({V.ZERO_MEAN, V.NONZERO}),
-    V.STOCHASTIC: frozenset({V.NONNEGATIVE, V.NONZERO, V.UNIT_L1BALL}),
-    V.UNIT_VECTOR: frozenset({V.NONZERO, V.UNIT_BALL}),
+    V.STANDARDIZED: frozenset({V.ZERO_MEAN & V.NONZERO}),
+    V.STOCHASTIC: frozenset({V.NONNEGATIVE & V.NONZERO & V.UNIT_L1BALL}),
+    V.UNIT_VECTOR: frozenset({V.NONZERO & V.UNIT_BALL}),
     V.UNIT_BALL: frozenset({V.UNIT_CUBE}),
     V.UNIT_L1BALL: frozenset({V.UNIT_BALL}),
-    V.ZERO: frozenset({V.NONPOSITIVE, V.NONNEGATIVE, V.SPARSE, V.BOOLEAN}),
+    V.ZERO: frozenset({V.SPARSE, V.BOOLEAN}),
 })  # fmt: skip
 VectorDomains.KNOWN_TAGS = MappingProxyType({})
 del V  # remove alias

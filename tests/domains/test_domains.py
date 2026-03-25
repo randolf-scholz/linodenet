@@ -93,6 +93,29 @@ class TestScalarDomains:
 
 
 class TestVectorDomains:
+    def test_none_factorizations(self) -> None:
+        assert VectorDomains.NONE.factorizations == frozenset(
+            {
+                VectorDomains.NEGATIVE & VectorDomains.NONNEGATIVE,
+                VectorDomains.NONZERO & VectorDomains.ZERO,
+                VectorDomains.POSITIVE & VectorDomains.NONPOSITIVE,
+                VectorDomains.POSITIVE & VectorDomains.NEGATIVE,
+            }
+        )
+
+    def test_factorizations(self) -> None:
+        assert VectorDomains.ONE_HOT.factorizations == frozenset(
+            {
+                VectorDomains.BOOLEAN & VectorDomains.STOCHASTIC,
+                VectorDomains.STOCHASTIC & VectorDomains.UNIT_VECTOR,
+            }
+        )
+        assert VectorDomains.ZERO.factorizations == frozenset(
+            {
+                VectorDomains.NONNEGATIVE & VectorDomains.NONPOSITIVE,
+            }
+        )
+
     def test_partial_order_and_representation(self) -> None:
         assert VectorDomains.REAL <= VectorDomains.REAL
         assert VectorDomains.ONE_HOT < VectorDomains.STOCHASTIC

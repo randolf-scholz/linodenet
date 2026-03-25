@@ -211,44 +211,20 @@ class PosetEnum(Enum):
                 raise TypeError(
                     f"Expected {cls.__name__} or Meet targets, got {bad_targets!r}."
                 )
-            plain_targets = frozenset(
-                target for target in targets if isinstance(target, cls)
+            expanded_targets = frozenset(
+                factor
+                for target in targets
+                for factor in (target if isinstance(target, Meet) else (target,))
             )
             if bad_targets := {
-                target for target in plain_targets if target not in members
+                target for target in expanded_targets if target not in members
             }:
                 raise TypeError(
                     f"Expected {cls.__name__} targets, got {bad_targets!r}."
                 )
-            edges[src] = plain_targets
+            edges[src] = expanded_targets
 
         return edges
-
-    @classmethod
-    @cache
-    def _validated_edge_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
-        raw_edges = cls.KNOWN_EDGES
-        members = frozenset(cls)
-
-        edge_meets: tuple[tuple[Self, frozenset[Self]], ...] = tuple(
-            (src, frozenset(target))
-            for src, targets in raw_edges.items()
-            for target in targets
-            if isinstance(target, Meet)
-        )
-
-        all_factors = frozenset().union(*(factors for _, factors in edge_meets))
-        if bad_factors := {factor for factor in all_factors if factor not in members}:
-            raise TypeError(
-                f"Expected {cls.__name__} edge-meet factors, got {bad_factors!r}."
-            )
-
-        if empty_meets := {node for node, factors in edge_meets if not factors}:
-            raise ValueError(
-                f"Expected non-empty edge-meet factors, got {empty_meets!r}."
-            )
-
-        return edge_meets
 
     @classmethod
     @cache
@@ -309,7 +285,7 @@ class PosetEnum(Enum):
     @cache
     def _closure_from(cls, nodes: frozenset[Self], /) -> frozenset[Self]:
         edges = cls._validated_edges()
-        meets = (*cls._validated_meets(), *cls._validated_edge_meets())
+        meets = cls._validated_meets()
 
         closure: set[Self] = set()
         stack = list(nodes)
