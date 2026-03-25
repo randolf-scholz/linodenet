@@ -346,9 +346,9 @@ class TestXTraceEstimator:
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestVisualization:
     BATCH_SIZE = 32
-    INPUT_SIZE = 128
+    INPUT_SIZE = 256
     DTYPE = torch.float32
-    NUM_SAMPLES_GRID = (1, 2, 4, 8, 16, 32, 64, 128)
+    NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
 
     def compute_curves(
         self,
@@ -392,51 +392,52 @@ class TestVisualization:
         )
 
         curves: dict[str, list[Tensor]] = {
-            "xtrace_corrected": [],
             "xtrace": [],
             "hutch": [],
             "hutch++": [],
         }
 
-        for num_samples in self.NUM_SAMPLES_GRID:
-            probe_columns = full_probe_columns[..., :num_samples]
-            rowwise_samples = probe_columns.mT
-            corrected = xtrace_estimator_corrected(vmap(fn, -2, -2), rowwise_samples)
-            xtrace = (
-                XTraceEstimator(
-                    num_samples=num_samples,
-                    sampler=FixedSampler(probe_columns),
-                    renormalize=True,
+        for num_matvecs in self.NUM_MATVECS_GRID:
+            xtrace_num_samples = num_matvecs // 2
+            if xtrace_num_samples == 0:
+                xtrace = torch.full((), torch.nan, device=device, dtype=dtype)
+            else:
+                probe_columns = full_probe_columns[..., :xtrace_num_samples]
+                xtrace = (
+                    XTraceEstimator(
+                        num_matvecs=num_matvecs,
+                        sampler=FixedSampler(probe_columns),
+                        renormalize=True,
+                    )
+                    .to(device=device, dtype=dtype)
+                    .estimate(fn, None, shape=(batch_size, input_size))
                 )
-                .to(device=device, dtype=dtype)
-                .estimate(fn, None, shape=(batch_size, input_size))
-            )
 
-            hutch_columns = hutch_full_probe_columns[..., :num_samples]
+            hutch_columns = hutch_full_probe_columns[..., :num_matvecs]
             hutch = (
                 HutchinsonEstimator(
-                    num_samples=num_samples,
+                    num_matvecs=num_matvecs,
                     sampler=FixedSampler(hutch_columns),
                 )
                 .to(device=device, dtype=dtype)
                 .estimate(fn, None, shape=(batch_size, input_size))
             )
 
-            hpp_samples = hpp_full_probe_columns[..., :num_samples]
-            hpp_residuals = hpp_full_residual_columns[..., :num_samples]
-            hutchpp_sampler = SequenceSampler([hpp_samples, hpp_residuals])
-            hutchpp = (
-                HutchPlusPlusEstimator(
-                    num_samples=num_samples,
-                    sampler=hutchpp_sampler,
+            hpp_num_samples = num_matvecs // 3
+            if hpp_num_samples == 0:
+                hutchpp = torch.full((), torch.nan, device=device, dtype=dtype)
+            else:
+                hpp_samples = hpp_full_probe_columns[..., :hpp_num_samples]
+                hpp_residuals = hpp_full_residual_columns[..., :hpp_num_samples]
+                hutchpp_sampler = SequenceSampler([hpp_samples, hpp_residuals])
+                hutchpp = (
+                    HutchPlusPlusEstimator(
+                        num_matvecs=num_matvecs,
+                        sampler=hutchpp_sampler,
+                    )
+                    .to(device=device, dtype=dtype)
+                    .estimate(fn, None, shape=(batch_size, input_size))
                 )
-                .to(device=device, dtype=dtype)
-                .estimate(fn, None, shape=(batch_size, input_size))
-            )
-
-            curves["xtrace_corrected"].append(
-                ((corrected - expected).abs() / denom).mean()
-            )
             curves["xtrace"].append(((xtrace - expected).abs() / denom).mean())
             curves["hutch"].append(((hutch - expected).abs() / denom).mean())
             curves["hutch++"].append(((hutchpp - expected).abs() / denom).mean())
@@ -455,18 +456,23 @@ class TestVisualization:
         result_dir.mkdir(exist_ok=True)
         fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
         markers = {
-            "xtrace_corrected": "o",
             "xtrace": "s",
             "hutch": "^",
             "hutch++": "D",
         }
         for name, curve in curves.items():
-            ax.plot(self.NUM_SAMPLES_GRID, curve, marker=markers[name], label=name)
-            assert torch.isfinite(curve).all()
+            finite = torch.isfinite(curve)
+            ax.plot(
+                np.asarray(self.NUM_MATVECS_GRID)[finite.numpy()],
+                curve[finite],
+                marker=markers[name],
+                label=name,
+            )
+            assert finite.any()
 
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
-        ax.set_xlabel("num_samples")
+        ax.set_xlabel("num_matvecs")
         ax.set_ylabel("mean relative error")
         ax.set_title(title)
         ax.legend()
