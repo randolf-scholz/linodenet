@@ -16,7 +16,7 @@ from linodenet.mappings.base import TransformBase
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet.nn import ReZero
 from linodenet_special import fixpoint_solve
-from linodenet_special.trace_estimation import LogAbsDetEstimator
+from linodenet_special.trace_estimation import LogabsdetSeriesEstimator
 
 
 class ResidualContraction(TransformBase):
@@ -61,7 +61,7 @@ class ResidualContraction(TransformBase):
     num_trace_samples: Final[int]
     num_series_terms: Final[int]
     trace_estimator: Final[str]
-    logabsdet_estimator: LogAbsDetEstimator
+    logabsdet_estimator: LogabsdetSeriesEstimator
 
     def __init__(
         self,
@@ -90,7 +90,7 @@ class ResidualContraction(TransformBase):
         self.num_trace_samples = num_trace_samples
         self.num_series_terms = num_series_terms
         self.trace_estimator = trace_estimator
-        self.logabsdet_estimator = LogAbsDetEstimator(
+        self.logabsdet_estimator = LogabsdetSeriesEstimator(
             trace_estimator,
             num_trace_samples,
             num_series_terms,
