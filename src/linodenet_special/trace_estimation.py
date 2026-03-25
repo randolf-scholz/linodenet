@@ -1204,7 +1204,7 @@ class LogAbsDetEstimator(nn.Module):
         assert self.num_series_terms is not None
 
         y, jvp_fn = jvp(fn, x)
-        y, vjp_fn = vjp(fn, x)
+        y, vjp_fn, *_ = vjp(fn, x)
         batched_jvp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
         right_samples = torch.randn(  # (...dn)
             (*x.shape, self.num_samples),
@@ -1236,7 +1236,7 @@ class LogAbsDetEstimator(nn.Module):
         assert self.num_series_terms is not None
 
         y, jvp_fn = jvp(fn, x)
-        y, vjp_fn = vjp(fn, x)
+        y, vjp_fn, *_ = vjp(fn, x)
         batched_jvp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
         batched_vjp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
         right_samples = torch.randn(  # (...dn)
