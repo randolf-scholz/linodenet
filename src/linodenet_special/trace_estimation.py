@@ -65,6 +65,8 @@ class SamplerKind(StrEnum):
 
 
 class GaussianSampler(nn.Module):
+    r"""Sample $vᵢ∼𝓝(0,𝕀)$."""
+
     def forward(
         self,
         shape: tuple[int, ...],
