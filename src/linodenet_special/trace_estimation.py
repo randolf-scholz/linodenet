@@ -707,7 +707,7 @@ class XTraceEstimator(nn.Module):
             HW = H @ W
             term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
             term2 = SW.conj() * vecdot(S, R - HW, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
-            term3 = -vecdot(T - H.mT @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
+            term3 = -vecdot(T - H.mH @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
             trs = -SHS + scale * (term1 + term2 + term3)
 
             estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
@@ -777,7 +777,7 @@ class XTraceEstimator(nn.Module):
         HW = H @ W
         term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
         term2 = vecdot(S, R - HW, dim=-2) * SW.conj()  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
-        term3 = vecdot(T - H.mT @ W, X)  #  -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
+        term3 = vecdot(T - H.mH @ W, X)  #  -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
         trs = -SHS + scale * (term1 + term2 + term3)
 
         return H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
@@ -872,12 +872,12 @@ def xtrace_estimator(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Tensor:
         11: end for
         12: tr ← mean(trᵢ: i=1…m/2)
     """
-    V = samples.mT  # (..., d, n)
+    V = samples.mH  # (..., d, n)
     *_, d, n = V.shape
     k = min(n, d)
-    Y = fn(V.mT).mT  # (..., d, n)
+    Y = fn(V.mH).mH  # (..., d, n)
     Q, R = qr(Y, mode="reduced")  # (..., d, k), (..., k, n)
-    Z = fn(Q.mT).mT  # (..., d, k)
+    Z = fn(Q.mH).mH  # (..., d, k)
     H = torch.einsum("...kd, ...dj -> ...kj", Q.mH, Z)  # (..., k, k)
     W = torch.einsum("...kd, ...dn -> ...nk", Q.mH, V)  # (..., n, k)
     T = torch.einsum("...kd, ...dn -> ...nk", Z.mH, V)  # (..., n, k)
@@ -924,11 +924,11 @@ def xtrace_estimator_corrected(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Ten
     # MATLAB: Om = sqrt(N) * cnormc(randn(N, m))
     # Here we reuse the provided probes as the m columns of Ω.
     # Omega: (..., d, m)
-    omega = d**0.5 * samples.mT / vector_norm(samples.mT, dim=-2, keepdim=True)
+    omega = d**0.5 * samples.mH / vector_norm(samples.mH, dim=-2, keepdim=True)
 
     # MATLAB: Y = A * Om
     # Y: (..., d, m)
-    y = fn(omega.mT).mT
+    y = fn(omega.mH).mH
     # MATLAB: [Q, R] = qr(Y, 0)
     # Q: (..., d, m), R: (..., m, m)
     q, r = qr(y, mode="reduced")
@@ -953,7 +953,7 @@ def xtrace_estimator_corrected(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Ten
 
     # MATLAB: Z = A * Q
     # Z: (..., d, m)
-    z = fn(q.mT).mT
+    z = fn(q.mH).mH
     # MATLAB: H = Q' * Z
     # H: (..., m, m)
     h = torch.einsum("...dm, ...dn -> ...mn", q.conj(), z)
@@ -1045,8 +1045,8 @@ def btrace_estimator(
 
     # Right sketch: V columns are the probe vectors, Y = A V.
     # v_cols, av_cols: (..., d, n)
-    v_cols = right_samples.mT
-    av_cols = fn(right_samples).mT
+    v_cols = right_samples.mH
+    av_cols = fn(right_samples).mH
     # Q: (..., d, n), R_q: (..., n, n)
     q, r_q = qr(av_cols, mode="reduced")
     # S columns are the normalized null-space update vectors sᵢ.
@@ -1055,8 +1055,8 @@ def btrace_estimator(
 
     # Left sketch: U columns are the probe vectors, AᴴU drives the left basis.
     # u_cols, ahu_cols: (..., d, n)
-    u_cols = left_samples.mT
-    ahu_cols = adj_fn(left_samples).mT
+    u_cols = left_samples.mH
+    ahu_cols = adj_fn(left_samples).mH
     # P: (..., d, n), R_p: (..., n, n)
     p, r_p = qr(ahu_cols, mode="reduced")
     # T columns are the normalized update vectors tᵢ for the left basis.
@@ -1064,7 +1064,7 @@ def btrace_estimator(
     t = _normalized_inverse_h_columns(r_p)
 
     # H = Pᴴ A Q, C = Qᴴ P. Shapes: (..., n, n)
-    aq = fn(q.mT).mT
+    aq = fn(q.mH).mH
     h = torch.einsum("...dp, ...dq -> ...pq", p.conj(), aq)
     c = torch.einsum("...dq, ...dp -> ...qp", q.conj(), p)
 
@@ -1074,8 +1074,8 @@ def btrace_estimator(
     hc = h @ c
     ch = c @ h
     trace_hc = hc.diagonal(dim1=-2, dim2=-1).sum(dim=-1, keepdim=True)
-    s_cols = s.mT  # (..., n, n), row i contains sᵢᴴ data as a vector
-    t_cols = t.mT  # (..., n, n), row i contains tᵢᴴ data as a vector
+    s_cols = s.mH  # (..., n, n), row i contains sᵢᴴ data as a vector
+    t_cols = t.mH  # (..., n, n), row i contains tᵢᴴ data as a vector
     d_t_hc_t = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), hc, t_cols)
     d_s_ch_s = torch.einsum("...ni, ...ij, ...nj -> ...n", s_cols.conj(), ch, s_cols)
     d_t_h_s = torch.einsum("...ni, ...ij, ...nj -> ...n", t_cols.conj(), h, s_cols)
@@ -1086,8 +1086,8 @@ def btrace_estimator(
     # Shapes: (..., n, n)
     w = torch.einsum("...dq, ...dn -> ...qn", q.conj(), v_cols)
     z = torch.einsum("...dp, ...dn -> ...pn", p.conj(), u_cols)
-    w_rows = w.mT  # (..., n, n), row i is wᵢ
-    z_rows = z.mT  # (..., n, n), row i is zᵢ
+    w_rows = w.mH  # (..., n, n), row i is wᵢ
+    z_rows = z.mH  # (..., n, n), row i is zᵢ
 
     # xᵢ = wᵢ - <sᵢ, wᵢ> sᵢ,  yᵢ = zᵢ - <tᵢ, zᵢ> tᵢ
     alpha = vecdot(s_cols, w_rows, dim=-1)
@@ -1167,12 +1167,12 @@ def btrace_estimator_naive(
             projected_trace = right_samples.new_zeros(right_samples.shape[:-2])
         else:
             # Qᵢ = orth(A V_{-i}), shape (..., d, n-1)
-            q, _ = qr(av_except_i.mT, mode="reduced")
+            q, _ = qr(av_except_i.mH, mode="reduced")
             # Pᵢ = orth(Aᴴ U_{-i}), shape (..., d, n-1)
-            p, _ = qr(ahu_except_i.mT, mode="reduced")
+            p, _ = qr(ahu_except_i.mH, mode="reduced")
 
             # tr(Pᵢᴴ A Qᵢ), where AQᵢ is obtained by applying A to the basis columns.
-            aq = fn(q.mT).mT  # (..., d, n-1)
+            aq = fn(q.mH).mH  # (..., d, n-1)
             projected = torch.einsum("...dp, ...dq -> ...pq", p.conj(), aq)
             projected_trace = projected.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
 
@@ -1343,22 +1343,22 @@ def btrace_estimator_new(
 
     # Probe matrices with columns as sample vectors.
     # U, V: (..., d, n)
-    u_cols = left_samples.mT
-    v_cols = right_samples.mT
+    u_cols = left_samples.mH
+    v_cols = right_samples.mH
 
     # Right sketch: Y = A V = Q R_Q with Q orthonormal.
     # av_cols, q: (..., d, n)
-    av_cols = fn(right_samples).mT
+    av_cols = fn(right_samples).mH
     q, _ = qr(av_cols, mode="reduced")
 
     # Left sketch: Z = Aᴴ U = P R_P with P orthonormal.
     # ahu_cols, p: (..., d, n)
-    ahu_cols = adj_fn(left_samples).mT
+    ahu_cols = adj_fn(left_samples).mH
     p, _ = qr(ahu_cols, mode="reduced")
 
     # Small cross-pairing matrix H = Pᴴ A Q.
     # aq, h: (..., d, n), (..., n, n)
-    aq = fn(q.mT).mT
+    aq = fn(q.mH).mH
     h = p.mH @ aq
 
     # Balanced A-biorthogonalization on the small cross matrix:
@@ -1384,7 +1384,7 @@ def btrace_estimator_new(
     g = aq_b.mH @ aq_b
 
     # Compute F = p_bᴴ A p_b via the untransformed left basis and then apply T.
-    ap = fn(p.mT).mT
+    ap = fn(p.mH).mH
     f = t.mH @ (p.mH @ ap) @ t
 
     gf = g @ f
@@ -1403,8 +1403,8 @@ def btrace_estimator_new(
     # Leaving out i-th column amounts to zeroing the i-th coefficient.
     w = p_b.mH @ av_cols
     z = q_b.mH @ ahu_cols
-    w_rows = w.mT
-    z_rows = z.mT
+    w_rows = w.mH
+    z_rows = z.mH
     x = w_rows - torch.diag_embed(w.diagonal(dim1=-2, dim2=-1))
     y = z_rows - torch.diag_embed(z.diagonal(dim1=-2, dim2=-1))
 
