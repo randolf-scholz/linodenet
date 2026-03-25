@@ -38,6 +38,8 @@ Project conventions for automated agents contributing to `linodenet`.
 ## Tooling and docs
 
 - Follow formatting and linting configured in `pyproject.toml`.
+- Run shell commands with an explicit timeout; use `30s` by default unless a different limit is justified.
+  For example, prefer `timeout 30s <command>`.
 - For project-local Python commands, set `PYTHONPATH=src` by default unless there is a specific reason not to.
   This applies to `python`, `pytest`, `pyright`, `mypy`, ad-hoc scripts, and one-off import checks.
 - Docstrings follow Google style; document invariants and edge cases.
