@@ -178,72 +178,78 @@ class AbstractTraceEstimator(Protocol):
 
 
 class BaseEstimator(nn.Module):
-    r"""Base class for trace estimators."""
+    r"""Base class for Jacobian trace estimators.
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    Concrete estimators operate on a function `f` together with an evaluation point `x`.
+    In the common case, `f` is a nonlinear map and the estimator approximates trace-like
+    quantities of its Jacobian $Df(x)$. Linear operators fit this API as a special case:
+    when $f(z) = Az$, the Jacobian is constant and equal to $A$.
+
+    Subclasses must implement `estimate`, which returns an estimate of $\tr(Df(x))$.
+    The default `estimate_powers` and `estimate_logabsdet` implementations build on top of
+    `estimate`; concrete estimators may override them with more efficient algorithms.
+    """
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     @abstractmethod
     def estimate(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Returns an estimate of $\tr(A)$."""
+        r"""Return an estimate of $\tr(Df(x))$.
+
+        Args:
+            op: Function $f$ whose Jacobian trace should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+        """
         raise NotImplementedError
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_powers(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         max_power: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Iterator[Tensor]:
-        r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
+        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
+
+        The default implementation repeatedly composes $f$ with itself and delegates to
+        `estimate`. This is mainly a compatibility fallback; specialized estimators can
+        usually implement this more efficiently and more accurately.
+        """
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
-        if op is None and adj_op is None:
-            raise ValueError("at least one of op or adj_op must be provided")
-
-        def compose(
-            left: Fn[[Tensor], Tensor] | None,
-            right: Fn[[Tensor], Tensor] | None,
-        ) -> Fn[[Tensor], Tensor] | None:
-            if left is None or right is None:
-                return None
-            return lambda x: left(right(x))
 
         power_op = op
-        power_adj_op = adj_op
         for _ in range(max_power):
-            yield self.estimate(power_op, power_adj_op, shape=shape)
-            power_op = compose(op, power_op)
-            power_adj_op = compose(power_adj_op, adj_op)
+            yield self.estimate(power_op, x)
+            previous_op = power_op
+            power_op = lambda z, prev=previous_op: op(prev(z))
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_logabsdet(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         num_series_terms: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Estimate $\log|\det(𝕀 + A)|$ using a truncated power series."""
+        r"""Estimate $\log |\det(𝕀 + Df(x))|$ using a truncated power series.
+
+        The default implementation uses
+
+        .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
+
+        truncated after `num_series_terms` terms and replaces each trace power with the
+        corresponding value from `estimate_powers`.
+        """
         if num_series_terms < 1:
             raise ValueError("num_series_terms must be at least 1")
 
-        trace_powers = self.estimate_powers(
-            op,
-            adj_op,
-            num_series_terms,
-            shape=shape,
-        )
+        trace_powers = self.estimate_powers(op, x, num_series_terms)
         first_power = next(trace_powers)
         logabsdet = first_power.clone()
         sign = -1.0
