@@ -31,6 +31,7 @@ __all__ = [
     "PROJECTION_FNS",
     # other
     "LinearContraction",
+    "RankOneContraction",
 ]
 
 from linodenet.mappings import (
@@ -47,7 +48,7 @@ from linodenet.mappings.base import *
 from linodenet.mappings.bijections import *
 from linodenet.mappings.embeddings import *
 from linodenet.mappings.functional import *
-from linodenet.mappings.linear import LinearContraction
+from linodenet.mappings.linear import LinearContraction, RankOneContraction
 from linodenet.mappings.projections import *
 from linodenet.mappings.surjections import *
 from linodenet.mappings.transforms import *
