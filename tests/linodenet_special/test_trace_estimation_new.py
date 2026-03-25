@@ -6,10 +6,11 @@ import numpy as np
 import pytest
 import torch
 from scipy.stats import ortho_group
-from torch import Tensor
+from torch import Tensor, nn
 from torch.func import vmap
 
 from linodenet_special.trace_estimation import (
+    BaseEstimator,
     ExactEstimator,
     HutchinsonEstimator,
     HutchPlusPlusEstimator,
@@ -83,6 +84,31 @@ class SequenceSampler:
         return sample.to(device=device, dtype=dtype)
 
 
+class AnalyticEstimator(BaseEstimator):
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("_anchor", torch.empty(0), persistent=False)
+
+    def estimate(
+        self,
+        op: Callable[[Tensor], Tensor] | None,
+        adj_op: Callable[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        fn = op if op is not None else adj_op
+        assert fn is not None
+
+        eye = torch.eye(
+            shape[-1],
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        ).expand(*shape[:-1], shape[-1], shape[-1])
+        matrix = vmap(fn, in_dims=-1, out_dims=-1)(eye)
+        return torch.einsum("...ii -> ...", matrix)
+
+
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestExactEstimator:
     def test_exact_estimate_op_only(self, device: str) -> None:
@@ -125,6 +151,61 @@ class TestExactEstimator:
         ]
         for estimate, truth in zip(estimates, expected, strict=True):
             torch.testing.assert_close(estimate, truth)
+
+    def test_exact_estimate_logabsdet_matches_closed_form(self, device: str) -> None:
+        matrix = torch.tensor(
+            [
+                [[0.25, 0.0], [0.0, -0.125]],
+                [[-0.5, 0.0], [0.0, 0.75]],
+            ],
+            device=device,
+        )
+        estimator = ExactEstimator().to(device=device)
+
+        estimate = estimator.estimate_logabsdet(
+            linear_map(matrix),
+            None,
+            3,
+            shape=matrix.shape[:-1],
+        )
+
+        eigenvalues = torch.linalg.eigvals(matrix)
+        expected = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
+        torch.testing.assert_close(estimate, expected)
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+class TestBaseEstimator:
+    def test_estimate_powers_defaults_to_repeated_estimate(self, device: str) -> None:
+        scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
+        estimator = AnalyticEstimator().to(device=device)
+
+        estimates = list(
+            estimator.estimate_powers(
+                scaled_map(scale), None, 4, shape=tuple(scale.shape)
+            )
+        )
+
+        expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
+        for estimate, truth in zip(estimates, expected, strict=True):
+            torch.testing.assert_close(estimate, truth)
+
+    def test_estimate_logabsdet_uses_power_series(self, device: str) -> None:
+        scale = torch.tensor([[0.125], [-0.2], [0.3]], device=device)
+        estimator = AnalyticEstimator().to(device=device)
+
+        estimate = estimator.estimate_logabsdet(
+            scaled_map(scale),
+            None,
+            6,
+            shape=tuple(scale.shape),
+        )
+
+        expected = sum(
+            ((-1) ** (power + 1) / power) * scale.squeeze(-1).pow(power)
+            for power in range(1, 7)
+        )
+        torch.testing.assert_close(estimate, expected)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -535,8 +616,8 @@ class TestVisualization:
         )
         u = torch.from_numpy(u_numpy).to(device=device, dtype=self.DTYPE)
         v = torch.from_numpy(v_numpy).to(device=device, dtype=self.DTYPE)
-        spectrum = torch.arange(
-            self.INPUT_SIZE, device=device, dtype=self.DTYPE
+        spectrum = torch.linspace(
+            0, 2, self.INPUT_SIZE, device=device, dtype=self.DTYPE
         ).expand(self.BATCH_SIZE, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
         fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
@@ -565,7 +646,13 @@ class TestVisualization:
         u = torch.from_numpy(u_numpy).to(device=device, dtype=self.DTYPE)
         v = torch.from_numpy(v_numpy).to(device=device, dtype=self.DTYPE)
         spectrum = (
-            1.1 ** torch.arange(self.INPUT_SIZE, device=device, dtype=self.DTYPE)
+            1.25
+            ** torch.arange(
+                -(self.INPUT_SIZE // 2),
+                (self.INPUT_SIZE + 1) // 2,
+                device=device,
+                dtype=self.DTYPE,
+            )
         ).expand(self.BATCH_SIZE, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
         fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)

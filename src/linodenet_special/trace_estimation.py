@@ -6,6 +6,7 @@ Notes:
 """
 
 __all__ = [
+    "BaseEstimator",
     "ExactEstimator",
     "HutchPlusPlusEstimator",
     "HutchinsonEstimator",
@@ -20,6 +21,7 @@ __all__ = [
 ]
 
 import math
+from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from enum import StrEnum
 from typing import Final, Protocol, overload
@@ -161,8 +163,97 @@ class AbstractTraceEstimator(Protocol):
         r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
         ...
 
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        num_series_terms: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Returns an estimate of $\log|\det(𝕀 + A)|$."""
+        ...
 
-class ExactEstimator(nn.Module):
+
+class BaseEstimator(nn.Module):
+    r"""Base class for trace estimators."""
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @abstractmethod
+    def estimate(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Returns an estimate of $\tr(A)$."""
+        raise NotImplementedError
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        max_power: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Iterator[Tensor]:
+        r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+        if op is None and adj_op is None:
+            raise ValueError("at least one of op or adj_op must be provided")
+
+        def compose(
+            left: Fn[[Tensor], Tensor] | None,
+            right: Fn[[Tensor], Tensor] | None,
+        ) -> Fn[[Tensor], Tensor] | None:
+            if left is None or right is None:
+                return None
+            return lambda x: left(right(x))
+
+        power_op = op
+        power_adj_op = adj_op
+        for _ in range(max_power):
+            yield self.estimate(power_op, power_adj_op, shape=shape)
+            power_op = compose(op, power_op)
+            power_adj_op = compose(power_adj_op, adj_op)
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        num_series_terms: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Estimate $\log|\det(𝕀 + A)|$ using a truncated power series."""
+        if num_series_terms < 1:
+            raise ValueError("num_series_terms must be at least 1")
+
+        trace_powers = self.estimate_powers(
+            op,
+            adj_op,
+            num_series_terms,
+            shape=shape,
+        )
+        first_power = next(trace_powers)
+        logabsdet = first_power.clone()
+        sign = -1.0
+        for k, trace_power in enumerate(trace_powers, start=2):
+            logabsdet = logabsdet + (sign / k) * trace_power
+            sign = -sign
+        return logabsdet.real if not logabsdet.is_complex() else logabsdet
+
+
+class ExactEstimator(BaseEstimator):
     r"""Estimate traces by explicitly materializing the operator matrix.
 
     Cost: N³
@@ -230,8 +321,24 @@ class ExactEstimator(nn.Module):
             trace_power = eigenvalues.pow(power).sum(dim=-1)
             yield trace_power.real if not matrix.is_complex() else trace_power
 
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        adj_op: Fn[[Tensor], Tensor] | None,
+        /,
+        num_series_terms: int,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        del num_series_terms
+        matrix = self._materialize(op, adj_op, shape=shape)
+        eigenvalues = torch.linalg.eigvals(matrix)
+        logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
+        return logabsdet.real if not matrix.is_complex() else logabsdet
 
-class HutchinsonEstimator(nn.Module):
+
+class HutchinsonEstimator(BaseEstimator):
     r"""Estimate traces with Hutchinson's estimator.
 
     Cost: mN² + O(m²N + m³)
@@ -355,7 +462,7 @@ class HutchinsonEstimator(nn.Module):
         raise AssertionError("unreachable")
 
 
-class HutchPlusPlusEstimator(nn.Module):
+class HutchPlusPlusEstimator(BaseEstimator):
     r"""Estimate traces with the Hutch++ variance-reduced estimator.
 
     Cost: mN² + O(m²N + m³)
@@ -544,7 +651,7 @@ class HutchPlusPlusEstimator(nn.Module):
         raise AssertionError("unreachable")
 
 
-class XTraceEstimator(nn.Module):
+class XTraceEstimator(BaseEstimator):
     r"""Estimate traces with the XTrace estimator.
 
     Cost: mN^2 + O(m^3)
@@ -618,6 +725,40 @@ class XTraceEstimator(nn.Module):
     ) -> Tensor:
         r"""Returns an estimate of $\tr(A)$."""
         return next(self.estimate_powers(op, adj_op, 1, shape=shape))
+
+    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    def estimate_naive(
+        self,
+        op: Fn[[Tensor], Tensor] | None,
+        *,
+        shape: tuple[int, ...],
+    ) -> Tensor:
+        r"""Use the naive implementation to estimate $\tr(A)$."""
+        *batch, N = shape
+        k = min(N, self.num_samples)
+        samples = self.sampler(
+            shape,
+            k,
+            device=self._anchor.device,
+            dtype=self._anchor.dtype,
+        )
+        tr = torch.zeros(batch, dtype=self._anchor.dtype, device=self._anchor.device)
+        batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+        Y = batched_op(samples)  # (...Nm)
+
+        mus = []
+        for i in range(self.num_samples):
+            col_indices = torch.arange(self.num_samples, device=Y.device)
+            Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+            ω_i = samples[..., [i]]
+            μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
+            mus.append(μ_i)
+            tr = tr + vecdot(Q_i, batched_op(Q_i), dim=-2).sum(dim=-1)
+        μ = torch.cat(mus, dim=-1)
+        scale = 1.0 - (1.0 - (N - k + 1) / vecdot(μ, μ, dim=-2)) * self.renormalize
+        μ = μ * scale
+        residual = vecdot(μ, batched_op(μ), dim=-2).mean(dim=-1)
+        return tr / k + residual
 
     @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
     def estimate_powers(
