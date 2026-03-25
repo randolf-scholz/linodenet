@@ -9,6 +9,7 @@ from linodenet.domains import (
     TensorDomains,
     VectorDomains,
 )
+from linodenet.domains.matrix_domains import Tall, Wide
 
 
 class TestScalarDomains:
@@ -51,29 +52,26 @@ class TestScalarDomains:
 
     def test_membership(self) -> None:
         values = tensor([-0.5, 0.0, 0.5, 1.0, 1.5])
-        assert ScalarDomains.UNIT_INTERVAL.__contains__(values).tolist() == [
-            False,
-            True,
-            True,
-            True,
-            False,
-        ]
+        result = [v in ScalarDomains.UNIT_INTERVAL for v in values]
+        expected = [False, True, True, True, False]
+        assert result == expected
 
-        values = tensor([-1.0, 0.0, 1.0])
-        assert ScalarDomains.NONZERO.__contains__(values).tolist() == [
-            True,
-            False,
-            True,
-        ]
+        values = tensor([-1.0, -0.0, 0.0, 1.0])
+        result = [v in ScalarDomains.NONZERO for v in values]
+        expected = [True, False, False, True]
+        assert result == expected
 
     def test_interval_union_normalization_and_membership(self) -> None:
         domain = RealDomain.from_string("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
         assert str(domain) == "[0, 2) | [3, 5]"
 
         domain = RealDomain.from_string("(-inf, 0) | (0, inf)")
-        values = tensor([-1.0, 0.0, 1.0])
         assert str(domain) == "(-inf, 0) | (0, inf)"
-        assert domain.__contains__(values).tolist() == [True, False, True]
+
+        values = tensor([-1.0, 0.0, 1.0])
+        result = [v in domain for v in values]
+        expected = [True, False, True]
+        assert result == expected
 
     def test_interval_infinity_edges(self) -> None:
         assert Interval("[-inf, inf]") <= Interval("[-inf, inf]")
@@ -157,6 +155,12 @@ class TestTensorDomains:
 class TestMatrixDomains:
     def test_partial_order_and_representation(self) -> None:
         assert MatrixDomains.SQUARE <= MatrixDomains.SQUARE
+        assert MatrixDomains.SQUARE <= MatrixDomains.TALL
+        assert MatrixDomains.SQUARE <= MatrixDomains.WIDE
+        assert MatrixDomains.TALL <= MatrixDomains.RECTANGULAR
+        assert MatrixDomains.WIDE <= MatrixDomains.RECTANGULAR
+        assert MatrixDomains.TALL != MatrixDomains.RECTANGULAR
+        assert MatrixDomains.WIDE != MatrixDomains.RECTANGULAR
 
         assert MatrixDomains.DIAGONAL <= MatrixDomains.SYMMETRIC
         assert MatrixDomains.DIAGONAL != MatrixDomains.SYMMETRIC
@@ -187,3 +191,28 @@ class TestMatrixDomains:
 
         with pytest.raises(TypeError):
             _ = MatrixDomains.SQUARE <= "square"
+
+    def test_tall_and_wide_membership(self) -> None:
+        tall = tensor([[1.0], [2.0]])
+        wide = tensor([[1.0, 2.0]])
+        square = tensor([[1.0, 2.0], [3.0, 4.0]])
+
+        assert tall in Tall()
+        assert tall not in Wide()
+
+        assert wide in Wide()
+        assert wide not in Tall()
+
+        assert square in Tall()
+        assert square in Wide()
+
+        assert tall in Tall(2, 1)
+        assert tall not in Tall(3, 1)
+        assert wide in Wide(1, 2)
+        assert wide not in Wide(1, 3)
+
+        with pytest.raises(ValueError, match="Tall matrices"):
+            Tall(1, 2)
+
+        with pytest.raises(ValueError, match="Wide matrices"):
+            Wide(2, 1)

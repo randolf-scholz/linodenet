@@ -6,6 +6,8 @@ __all__ = [
     # Classes
     "Square",
     "Rectangular",
+    "Tall",
+    "Wide",
     "Symmetric",
     "SkewSymmetric",
     "LowRank",
@@ -93,6 +95,38 @@ class Rectangular(MatrixDomain):
 
 
 @dataclass(frozen=True)
+class Tall(Rectangular):
+    r"""Domain of matrices with at least as many rows as columns."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.rows is not None and self.cols is not None and self.rows < self.cols:
+            raise ValueError("Tall matrices must satisfy rows >= cols.")
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return super().__contains__(item) and item.shape[-2] >= item.shape[-1]
+
+    def __call__(self, rows: int | None = None, cols: int | None = None) -> Tall:
+        return Tall(rows, cols)
+
+
+@dataclass(frozen=True)
+class Wide(Rectangular):
+    r"""Domain of matrices with at least as many columns as rows."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.rows is not None and self.cols is not None and self.cols < self.rows:
+            raise ValueError("Wide matrices must satisfy cols >= rows.")
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return super().__contains__(item) and item.shape[-1] >= item.shape[-2]
+
+    def __call__(self, rows: int | None = None, cols: int | None = None) -> Wide:
+        return Wide(rows, cols)
+
+
+@dataclass(frozen=True)
 class Square(MatrixDomain):
     r"""Domain of square matrices with optional fixed size."""
 
@@ -174,6 +208,8 @@ class MatrixDomains(PosetEnum):
     MASKED = "masked"  # X⊙M = X for some mask M
 
     RECTANGULAR = "rectangular"  # m × n matrices
+    TALL = "tall"  # m × n matrices with m ≥ n
+    WIDE = "wide"  # m × n matrices with m ≤ n
     SQUARE = "square"  # n × n matrices
     EVEN_SQUARE = "even_square"  # 2n × 2n matrices
 
@@ -277,13 +313,15 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.SPARSE: frozenset({M.BOOLEAN}),
     M.SPECIAL_ORTHOGONAL: frozenset({M.ORTHOGONAL, M.UNIT_DETERMINANT}),
     M.SPECTRAL_NORMALIZED: frozenset({M.RECTANGULAR, M.LIPSCHITZ_BOUNDED}),
-    M.SQUARE: frozenset({M.RECTANGULAR}),
+    M.SQUARE: frozenset({M.RECTANGULAR, M.TALL, M.WIDE}),
     M.SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
     M.SYMPLECTIC: frozenset({M.EVEN_SQUARE, M.UNIT_DETERMINANT}),
+    M.TALL: frozenset({M.RECTANGULAR}),
     M.TRACELESS: frozenset({M.SQUARE}),
     M.TRIDIAGONAL: frozenset({M.BANDED, M.SQUARE}),
     M.UPPER_TRIANGULAR: frozenset({M.SQUARE, M.TRIANGULAR}),
     M.UNIT_DETERMINANT: frozenset({M.POSITIVE_DETERMINANT}),
+    M.WIDE: frozenset({M.RECTANGULAR}),
     M.ZERO: frozenset({M.SPARSE}),
     M.TOEPLITZ: frozenset({M.RECTANGULAR}),
     M.CIRCULANT: frozenset({M.TOEPLITZ, M.SQUARE}),
