@@ -362,7 +362,7 @@ MatrixDomains.KNOWN_MEETS = (
     (M.SQUARE, M.TALL & M.WIDE),
     (M.UPPER_INVERTIBLE, M.UPPER_TRIANGULAR & M.INVERTIBLE),
 )
-MatrixDomains.KNOWN_EDGES = MappingProxyType({
+MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.BANDED: frozenset({M.RECTANGULAR}),
     M.CAYLEY_ORTHOGONAL: frozenset({M.SPECIAL_ORTHOGONAL}),
     M.CIRCULANT: frozenset({M.TOEPLITZ, M.SQUARE}),

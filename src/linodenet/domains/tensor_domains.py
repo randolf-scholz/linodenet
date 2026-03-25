@@ -30,7 +30,7 @@ class TensorDomains(PosetEnum):
 
 
 T = TensorDomains  # temporary alias
-TensorDomains.KNOWN_EDGES = MappingProxyType({
+TensorDomains.KNOWN_SUPERTYPES = MappingProxyType({
     T.BOOLEAN: frozenset({T.REAL}),
     T.ONE: frozenset({T.BOOLEAN, T.NONZERO}),
     T.REAL: frozenset({T.COMPLEX}),

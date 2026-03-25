@@ -58,7 +58,7 @@ VectorDomains.KNOWN_MEETS = (
     (V.ONE_HOT, V.STOCHASTIC & V.UNIT_VECTOR),
     (V.ZERO, V.NONNEGATIVE & V.NONPOSITIVE),
 )
-VectorDomains.KNOWN_EDGES = MappingProxyType({
+VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({
     V.BOOLEAN: frozenset({V.REAL & V.NONNEGATIVE}),
     V.NEGATIVE: frozenset({V.REAL & V.NONPOSITIVE & V.NONZERO}),
     V.NONNEGATIVE: frozenset({V.REAL}),

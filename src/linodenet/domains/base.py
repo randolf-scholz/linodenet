@@ -146,7 +146,7 @@ class Meet:
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self | Meet]]]
+    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet]]]
     r"""Dependencies"""
     KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]
     r"""Reverse dependencies."""
@@ -195,7 +195,7 @@ class PosetEnum(Enum):
     @classmethod
     @cache
     def _validated_edgespecs(cls) -> Mapping[Self, frozenset[Self]]:
-        raw_edges = cls.KNOWN_EDGES
+        raw_edges = cls.KNOWN_SUPERTYPES
         members = frozenset(cls)
 
         if bad_keys := {node for node in raw_edges if node not in members}:
@@ -333,6 +333,6 @@ class PosetEnum(Enum):
         return str(self.value)
 
 
-PosetEnum.KNOWN_EDGES = MappingProxyType({})
+PosetEnum.KNOWN_SUPERTYPES = MappingProxyType({})
 PosetEnum.KNOWN_TAGS = MappingProxyType({})
 PosetEnum.KNOWN_MEETS = ()
