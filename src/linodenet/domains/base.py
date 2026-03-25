@@ -169,43 +169,19 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _compiled_edges(cls) -> Mapping[Self, frozenset[Self]]:
-        edges: dict[Self, set[Self]] = {node: set() for node in cls}
-
-        for src, targets in cls._validated_edgespecs().items():
-            edges[src].update(targets)
-
-        for meet, factors in cls._validated_meets():
-            edges[meet].update(factors)
-
-        for tag, members in cls.KNOWN_SUBTYPES.items():  # type: ignore[attr-defined]
-            for member in members:
-                edges[member].add(tag)
-
-        if (top := cls._top_node()) is not None:
-            for node in cls:
-                if node is not top:
-                    edges[node].add(top)
-
-        if (bottom := cls._bottom_node()) is not None:
-            edges[bottom].update(node for node in cls if node is not bottom)
-
-        return {src: frozenset(targets) for src, targets in edges.items()}
-
-    @classmethod
-    @cache
-    def _validated_edgespecs(cls) -> Mapping[Self, frozenset[Self]]:
-        raw_edges = cls.KNOWN_SUPERTYPES
+    def _parsed_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
+        r"""Inspects and parsed the cls.KNOWN_SUPERTYPES mapping."""
+        raw_supertypes = cls.KNOWN_SUPERTYPES
         members = frozenset(cls)
 
-        if bad_keys := {node for node in raw_edges if node not in members}:
+        if bad_keys := {node for node in raw_supertypes if node not in members}:
             raise TypeError(f"Expected {cls.__name__} nodes, got {bad_keys!r}.")
 
-        edges: dict[Self, frozenset[Self]] = {}
-        for src, targets in raw_edges.items():
+        supertypes: dict[Self, frozenset[Self]] = {}
+        for node, supers in raw_supertypes.items():
             if bad_targets := {
                 target
-                for target in targets
+                for target in supers
                 if not isinstance(target, cls) and not isinstance(target, Meet)
             }:
                 raise TypeError(
@@ -213,7 +189,7 @@ class PosetEnum(Enum):
                 )
             expanded_targets = frozenset(
                 factor
-                for target in targets
+                for target in supers
                 for factor in (target if isinstance(target, Meet) else (target,))
             )
             if bad_targets := {
@@ -222,14 +198,39 @@ class PosetEnum(Enum):
                 raise TypeError(
                     f"Expected {cls.__name__} targets, got {bad_targets!r}."
                 )
-            edges[src] = expanded_targets
+            supertypes[node] = expanded_targets
 
-        return edges
+        return supertypes
+
+    @classmethod
+    @cache
+    def _compiled_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
+        supertypes: dict[Self, set[Self]] = {node: set() for node in cls}
+
+        for node, supers in cls._parsed_supertypes().items():
+            supertypes[node].update(supers)
+
+        for meet, factors in cls._validated_meets():
+            supertypes[meet].update(factors)
+
+        for node, subtypes in cls.KNOWN_SUBTYPES.items():  # type: ignore[attr-defined]
+            for subtype in subtypes:
+                supertypes[subtype].add(node)
+
+        if (top := cls._top_node()) is not None:
+            for node in cls:
+                if node is not top:
+                    supertypes[node].add(top)
+
+        if (bottom := cls._bottom_node()) is not None:
+            supertypes[bottom].update(node for node in cls if node is not bottom)
+
+        return {src: frozenset(targets) for src, targets in supertypes.items()}
 
     @classmethod
     @cache
     def _validated_edges(cls) -> Mapping[Self, frozenset[Self]]:
-        edges = cls._compiled_edges()
+        edges = cls._compiled_supertypes()
         members = frozenset(cls)
 
         if bad_keys := {node for node in edges if node not in members}:
