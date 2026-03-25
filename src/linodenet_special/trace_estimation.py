@@ -173,30 +173,39 @@ def exact_trace_estimator(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
     return trace.real if not matrix.is_complex() else trace
 
 
-@signature("[{(..., n, d) -> (...)}, (..., n, d), (..., n, d)?] -> (...)")
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def hutchinson_estimator(
-    fn: Fn[[Tensor], Tensor],
-    samples: Tensor,
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    num_samples: int,
     *,
-    left_samples: Tensor | None = None,
+    sampler: str | AbstractSampler = "sphere",
 ) -> Tensor:
-    r"""Estimate the trace of a matrix with Hutchinson's estimator.
+    r"""Estimate $\tr(Df(x))$ with Hutchinson's estimator.
 
-    .. math:: \tr(A) = E[vᵀAv], where E[vvᵀ] = 𝕀
     .. math:: \tr(A) = E[uᵀAv], where E[uvᵀ] = 𝕀
 
     Args:
-        fn: Matrix-vector product function, i.e. $x ↦ Ax$ (batched).
-        samples: Random samples to use for the estimator.
-            Shape: `(..., n, d)`, with `...` batch size, `n` number of samples,
-            and `d` dimension.
-        left_samples: Optional random samples for the left probe vectors in the bilinear estimator.
+        op: Function $f$ whose Jacobian trace should be estimated at $x$.
+        x: Evaluation point. Its shape, dtype, and device define the domain.
+        num_samples: Number of probe vectors to average over.
+        sampler: Probe sampler, either a built-in sampler name or a custom callable.
 
     Returns:
-        Tensor: The estimated trace.
+        A Hutchinson estimate of $\tr(Df(x))$.
     """
-    left_samples = samples if left_samples is None else left_samples
-    return vecdot(left_samples, fn(samples), dim=-1).mean(dim=-1)
+    if x.ndim == 0:
+        raise ValueError("x must be at least one-dimensional")
+    if num_samples < 1:
+        raise ValueError("num_samples must be at least 1")
+
+    sampler = Sampler.new(sampler)
+    probes = sampler(x.shape, num_samples, dtype=x.dtype, device=x.device)
+    _, jvp_fn = linearize(op, x)
+    batched_jvp_fn = vmap(jvp_fn, -1, -1)
+    estimate = vecdot(probes, batched_jvp_fn(probes), dim=-2).mean(dim=-1)
+    return estimate.real if not estimate.is_complex() else estimate
 
 
 def xtrace_naive_estimator(
