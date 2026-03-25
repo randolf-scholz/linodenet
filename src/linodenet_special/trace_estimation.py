@@ -584,7 +584,7 @@ class HutchinsonEstimator(BaseEstimator):
         self,
         num_samples: int,
         *,
-        sampler: str | Sampler | AbstractSampler = "sphere",
+        sampler: str | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     @overload
@@ -592,7 +592,7 @@ class HutchinsonEstimator(BaseEstimator):
         self,
         *,
         num_matvecs: int,
-        sampler: str | Sampler | AbstractSampler = "sphere",
+        sampler: str | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     def __init__(
@@ -600,7 +600,7 @@ class HutchinsonEstimator(BaseEstimator):
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | Sampler | AbstractSampler = Sampler.SPHERE,
+        sampler: str | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
         super().__init__()
@@ -761,7 +761,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
         self,
         num_samples: int,
         *,
-        sampler: str | Sampler | AbstractSampler = "sphere",
+        sampler: str | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     @overload
@@ -769,7 +769,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
         self,
         *,
         num_matvecs: int,
-        sampler: str | Sampler | AbstractSampler = "sphere",
+        sampler: str | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     def __init__(
@@ -777,7 +777,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | Sampler | AbstractSampler = Sampler.SPHERE,
+        sampler: str | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
         super().__init__()
@@ -994,7 +994,7 @@ class XTraceEstimator(BaseEstimator):
         self,
         num_samples: int,
         *,
-        sampler: str | Sampler | AbstractSampler = ...,
+        sampler: str | AbstractSampler = ...,
         renormalize: bool = ...,
         mode: str = ...,
     ) -> None: ...
@@ -1003,7 +1003,7 @@ class XTraceEstimator(BaseEstimator):
         self,
         *,
         num_matvecs: int,
-        sampler: str | Sampler | AbstractSampler = ...,
+        sampler: str | AbstractSampler = ...,
         renormalize: bool = ...,
         mode: str = ...,
     ) -> None: ...
@@ -1012,7 +1012,7 @@ class XTraceEstimator(BaseEstimator):
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | Sampler | AbstractSampler = Sampler.SPHERE,
+        sampler: str | AbstractSampler = Sampler.SPHERE,
         renormalize: bool = True,
         mode: str = "forward",
     ) -> None:
