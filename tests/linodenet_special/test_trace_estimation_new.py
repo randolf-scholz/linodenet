@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import torch
 from scipy.stats import ortho_group
-from torch import Tensor, nn
+from torch import Tensor
 from torch.func import vmap
 
 from linodenet_special.trace_estimation import (
@@ -484,6 +484,7 @@ class TestVisualization:
         input_size = self.INPUT_SIZE
         dtype = self.DTYPE
         denom = expected.abs().clamp_min(torch.finfo(dtype).eps)
+        x = torch.zeros(batch_size, input_size, device=device, dtype=dtype)
 
         base_sampler = SamplerKind.ORTH.make()
         full_probe_columns = base_sampler(
@@ -530,7 +531,7 @@ class TestVisualization:
                         renormalize=True,
                     )
                     .to(device=device, dtype=dtype)
-                    .estimate(fn, None, shape=(batch_size, input_size))
+                    .estimate(fn, x)
                 )
 
             hutch_columns = hutch_full_probe_columns[..., :num_matvecs]
@@ -540,7 +541,7 @@ class TestVisualization:
                     sampler=FixedSampler(hutch_columns),
                 )
                 .to(device=device, dtype=dtype)
-                .estimate(fn, None, shape=(batch_size, input_size))
+                .estimate(fn, x)
             )
 
             hpp_num_samples = num_matvecs // 3
@@ -556,7 +557,7 @@ class TestVisualization:
                         sampler=hutchpp_sampler,
                     )
                     .to(device=device, dtype=dtype)
-                    .estimate(fn, None, shape=(batch_size, input_size))
+                    .estimate(fn, x)
                 )
             curves["xtrace"].append(((xtrace - expected).abs() / denom).mean())
             curves["hutch"].append(((hutch - expected).abs() / denom).mean())
@@ -630,9 +631,11 @@ class TestVisualization:
             device=device,
             dtype=self.DTYPE,
         ) / (self.INPUT_SIZE**0.5)
-        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
-        expected = torch.einsum("...ii -> ...", matrix)
-        curves = self.compute_curves(fn, expected, device=device)
+        curves = self.compute_curves(
+            lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x),
+            expected=torch.einsum("...ii -> ...", matrix),
+            device=device,
+        )
         self.assert_and_plot_curves(
             curves,
             device=device,
@@ -659,9 +662,11 @@ class TestVisualization:
             0, 2, self.INPUT_SIZE, device=device, dtype=self.DTYPE
         ).expand(self.BATCH_SIZE, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
-        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
-        expected = torch.einsum("...ii -> ...", matrix)
-        curves = self.compute_curves(fn, expected, device=device)
+        curves = self.compute_curves(
+            lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x),
+            expected=torch.einsum("...ii -> ...", matrix),
+            device=device,
+        )
         self.assert_and_plot_curves(
             curves,
             device=device,
@@ -694,9 +699,11 @@ class TestVisualization:
             )
         ).expand(self.BATCH_SIZE, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
-        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
-        expected = torch.einsum("...ii -> ...", matrix)
-        curves = self.compute_curves(fn, expected, device=device)
+        curves = self.compute_curves(
+            lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x),
+            expected=torch.einsum("...ii -> ...", matrix),
+            device=device,
+        )
         self.assert_and_plot_curves(
             curves,
             device=device,
@@ -727,9 +734,11 @@ class TestVisualization:
             ]
         ).expand(self.BATCH_SIZE, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
-        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
-        expected = torch.einsum("...ii -> ...", matrix)
-        curves = self.compute_curves(fn, expected, device=device)
+        curves = self.compute_curves(
+            lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x),
+            expected=torch.einsum("...ii -> ...", matrix),
+            device=device,
+        )
         self.assert_and_plot_curves(
             curves,
             device=device,
