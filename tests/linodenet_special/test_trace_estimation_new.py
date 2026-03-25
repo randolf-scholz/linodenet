@@ -256,7 +256,7 @@ class TestHutchinsonEstimator:
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestHutchPlusPlusEstimator:
-    NUM_SAMPLES = 80
+    NUM_MATVECS = 250
     BATCH_SIZE = 2
     INPUT_SIZE = 100
 
@@ -288,7 +288,7 @@ class TestHutchPlusPlusEstimator:
     def test_hutchplusplus_estimate(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(self.NUM_SAMPLES, mode=mode)
+        estimator = HutchPlusPlusEstimator(self.NUM_MATVECS, mode=mode)
 
         estimate = estimator(lambda x: scale * x, scale)
 
@@ -299,7 +299,7 @@ class TestHutchPlusPlusEstimator:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = HutchPlusPlusEstimator(
-            self.NUM_SAMPLES, sampler="sphere", mode="adjoint"
+            self.NUM_MATVECS, sampler="sphere", mode="adjoint"
         )
 
         estimate = estimator(lambda x: scale * x, scale)
@@ -311,7 +311,7 @@ class TestHutchPlusPlusEstimator:
     def test_hutchplusplus_estimate_powers(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(self.NUM_SAMPLES, mode=mode)
+        estimator = HutchPlusPlusEstimator(self.NUM_MATVECS, mode=mode)
 
         estimates = list(estimator.estimate_powers(lambda x: scale * x, scale, 3))
 
