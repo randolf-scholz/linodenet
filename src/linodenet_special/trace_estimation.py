@@ -17,7 +17,7 @@ __all__ = [
     # functions
     "hutchinson_estimator",
     "logabsdet",
-    "naive_estimator",
+    "exact_trace_estimator",
     "xtrace_estimator",
     "xtrace_estimator_corrected",
     "xtrace_naive_estimator",
@@ -157,31 +157,8 @@ class OrthSampler(nn.Module):
         return math.sqrt(n) * q
 
 
-def xtrace_naive_estimator(
-    fn: Fn[[Tensor], Tensor],
-    samples: Tensor,
-) -> Tensor:
-    r"""Naive implementation of XTrace (useful for debugging)."""
-    batched_fn = vmap(fn, -1, -1)  # (...Nm) -> (...Nm)
-    Y = batched_fn(samples)  # (...Nm)
-    *batch_size, N, m = Y.shape
-    tr = torch.zeros(batch_size, device=Y.device, dtype=Y.dtype)
-    col_indices = torch.arange(m, device=Y.device)
-    for i in range(m):
-        Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
-        ω_i = samples[..., i]
-        μ_i = ω_i - Q_i @ Q_i.mH @ ω_i
-        tr = (
-            tr
-            + torch.einsum("...mm -> ...", Q_i.mh @ fn(Q_i))
-            + vecdot(μ_i, fn(μ_i), dim=-1)
-        )
-    tr = tr / m
-    return tr.real if not tr.is_complex() else tr.conj()
-
-
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def naive_estimator(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
+def exact_trace_estimator(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
     r"""Estimate $\tr(Df(x))$ by explicitly materializing the Jacobian."""
     if x.ndim == 0:
         raise ValueError("x must be at least one-dimensional")
@@ -220,6 +197,29 @@ def hutchinson_estimator(
     """
     left_samples = samples if left_samples is None else left_samples
     return vecdot(left_samples, fn(samples), dim=-1).mean(dim=-1)
+
+
+def xtrace_naive_estimator(
+    fn: Fn[[Tensor], Tensor],
+    samples: Tensor,
+) -> Tensor:
+    r"""Naive implementation of XTrace (useful for debugging)."""
+    batched_fn = vmap(fn, -1, -1)  # (...Nm) -> (...Nm)
+    Y = batched_fn(samples)  # (...Nm)
+    *batch_size, N, m = Y.shape
+    tr = torch.zeros(batch_size, device=Y.device, dtype=Y.dtype)
+    col_indices = torch.arange(m, device=Y.device)
+    for i in range(m):
+        Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+        ω_i = samples[..., i]
+        μ_i = ω_i - Q_i @ Q_i.mH @ ω_i
+        tr = (
+            tr
+            + torch.einsum("...mm -> ...", Q_i.mh @ fn(Q_i))
+            + vecdot(μ_i, fn(μ_i), dim=-1)
+        )
+    tr = tr / m
+    return tr.real if not tr.is_complex() else tr.conj()
 
 
 @signature("[{(..., n, d) -> (..., n, d)}, (..., n, d)] -> (...)")
