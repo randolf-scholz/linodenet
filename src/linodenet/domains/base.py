@@ -2,7 +2,9 @@ r"""Base protocols and ordering utilities for domain definitions."""
 
 __all__ = [
     "Domain",
+    "DomainMapping",
     "Intersection",
+    "Join",
     "Meet",
     "Union",
     "Inverse",
@@ -97,6 +99,70 @@ class Inverse[D: Domain](Domain):
 
 
 @dataclass(frozen=True)
+class DomainMapping[D: Domain](Mapping[D, D]):
+    r"""Immutable monotone mapping between domains.
+
+    Lookups first try the exact key. If the key is absent, the mapping falls
+    back to the unique least stored upper bound of the requested key.
+    """
+
+    domains: Mapping[D, D]
+
+    def __init__(self, domains: Mapping[D, D], /) -> None:
+        backend = dict(domains)
+        self._validate(backend)
+        object.__setattr__(self, "domains", MappingProxyType(backend))
+
+    @staticmethod
+    def _validate(domains: Mapping[D, D], /) -> None:
+        items = tuple(domains.items())
+        for domain, codomain in items:
+            if type(domain) is not type(codomain):
+                raise TypeError(
+                    "Expected domain and codomain to have the same type, got "
+                    f"{type(domain)!r} and {type(codomain)!r}."
+                )
+
+        for left_domain, left_codomain in items:
+            for right_domain, right_codomain in items:
+                if left_domain <= right_domain and not left_codomain <= right_codomain:
+                    raise ValueError(
+                        "Expected a monotone domain mapping, but "
+                        f"{left_domain!r} <= {right_domain!r} while "
+                        f"{left_codomain!r} ≰ {right_codomain!r}."
+                    )
+
+    def __getitem__(self, key: D, /) -> D | Join:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
+        if key in self.domains:
+            return self.domains[key]
+
+        upper_bounds = {candidate for candidate in self.domains if key <= candidate}
+        if not upper_bounds:
+            raise KeyError(key)
+
+        least_upper_bounds = {
+            candidate
+            for candidate in upper_bounds
+            if all(
+                other == candidate or not other <= candidate for other in upper_bounds
+            )
+        }
+        if not least_upper_bounds:
+            raise KeyError(key)
+        if len(least_upper_bounds) != 1:
+            return Join(self.domains[candidate] for candidate in least_upper_bounds)
+
+        lub = next(iter(least_upper_bounds))
+        return self.domains[lub]
+
+    def __iter__(self) -> Iterator[D]:
+        return iter(self.domains)
+
+    def __len__(self) -> int:
+        return len(self.domains)
+
+
+@dataclass(frozen=True)
 class Meet:
     r"""Structural meet expression for poset labels."""
 
@@ -141,6 +207,60 @@ class Meet:
         if not isinstance(other, PosetEnum):
             return NotImplemented
         return other <= self
+
+
+@dataclass(frozen=True)
+class Join:
+    r"""Structural join expression for poset labels."""
+
+    terms: frozenset[PosetEnum]
+
+    def __init__(self, terms: Iterable[PosetEnum] = (), /) -> None:
+        nodes: set[PosetEnum] = set()
+        for term in terms:
+            match term:
+                case Join(terms=subterms):
+                    nodes.update(subterms)
+                case PosetEnum():
+                    nodes.add(term)
+                case _:
+                    raise TypeError(f"Expected PosetEnum term, got {term!r}.")
+        object.__setattr__(self, "terms", frozenset(nodes))
+
+    def __or__(self, other: PosetEnum | Join, /) -> Join:
+        return Join({*self.terms, other})
+
+    def __iter__(self) -> Iterator[PosetEnum]:
+        return iter(self.terms)
+
+    def __len__(self) -> int:
+        return len(self.terms)
+
+    def __le__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        types = {type(term) for term in self.terms}
+        if len(types) != 1 or type(other) not in types:
+            return NotImplemented
+        return all(term <= other for term in self.terms)
+
+    def __lt__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        return self <= other and other not in self.terms
+
+    def __ge__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        types = {type(term) for term in self.terms}
+        if len(types) != 1 or type(other) not in types:
+            return NotImplemented
+        return all(other <= term for term in self.terms)
+
+    def __gt__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        return self >= other and other not in self.terms
 
 
 class PosetEnum(Enum):
@@ -405,6 +525,8 @@ class PosetEnum(Enum):
     def __le__(self, other: object, /) -> bool:
         if isinstance(other, Meet):
             return all(self <= factor for factor in other)
+        if isinstance(other, Join):
+            return all(self <= term for term in other)
         if not isinstance(other, type(self)):
             return NotImplemented
         return other in self.supertypes
@@ -426,6 +548,9 @@ class PosetEnum(Enum):
 
     def __and__(self, other: Self | Meet, /) -> Meet:
         return Meet({self, other})
+
+    def __or__(self, other: Self | Join, /) -> Join:
+        return Join({self, other})
 
     def __str__(self) -> str:
         return str(self.value)

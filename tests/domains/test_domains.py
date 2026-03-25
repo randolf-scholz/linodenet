@@ -2,7 +2,9 @@ import pytest
 from torch import tensor
 
 from linodenet.domains import (
+    DomainMapping,
     Interval,
+    Join,
     MatrixDomains as M,
     RealDomain,
     ScalarDomains,
@@ -177,6 +179,40 @@ class TestTensorDomains:
 
 
 class TestMatrixDomains:
+    def test_domain_mapping_exact_and_lub_lookup(self) -> None:
+        mapping = DomainMapping(
+            {
+                M.RECTANGULAR: M.RECTANGULAR,
+                M.SQUARE: M.SQUARE,
+                M.SYMMETRIC: M.POSITIVE_DEFINITE,
+            }
+        )
+
+        assert mapping[M.SYMMETRIC] is M.POSITIVE_DEFINITE
+        assert mapping[M.SKEW_SYMMETRIC] is M.SQUARE
+        assert mapping[M.TALL] is M.RECTANGULAR
+
+    def test_domain_mapping_rejects_non_monotone_mapping(self) -> None:
+        with pytest.raises(ValueError, match="monotone domain mapping"):
+            DomainMapping(
+                {
+                    M.SQUARE: M.INVERTIBLE,
+                    M.SYMMETRIC: M.RECTANGULAR,
+                }
+            )
+
+    def test_domain_mapping_returns_join_for_ambiguous_lub_lookup(self) -> None:
+        mapping = DomainMapping(
+            {
+                M.TALL: M.LEFT_INVERTIBLE,
+                M.WIDE: M.RIGHT_INVERTIBLE,
+            }
+        )
+
+        codomain = mapping[M.SQUARE]
+        assert isinstance(codomain, Join)
+        assert codomain.terms == frozenset({M.LEFT_INVERTIBLE, M.RIGHT_INVERTIBLE})
+
     def test_poset_meet_expression(self) -> None:
         meet = M.TALL & M.WIDE & M.SQUARE
         assert len(meet) == 3
@@ -188,6 +224,17 @@ class TestMatrixDomains:
         assert M.SQUARE.factorizations == frozenset({M.TALL & M.WIDE})
         assert M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC <= M.SQUARE
         assert M.DOUBLY_STOCHASTIC <= M.SQUARE
+
+    def test_poset_join_expression(self) -> None:
+        join = M.TALL | M.WIDE | M.SQUARE
+        assert len(join) == 3
+        assert set(join) == {
+            M.TALL,
+            M.WIDE,
+            M.SQUARE,
+        }
+        assert M.SQUARE <= join
+        assert join <= M.RECTANGULAR
 
     def test_partial_order_and_representation(self) -> None:
         assert M.SQUARE <= M.SQUARE

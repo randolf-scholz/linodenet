@@ -10,9 +10,11 @@ Domains should allow:
 __all__ = [
     # Protocols
     "Domain",
+    "DomainMapping",
     "Inverse",
     "Union",
     "Intersection",
+    "Join",
     # Domains
     "Interval",
     "MatrixDomain",
@@ -25,7 +27,7 @@ __all__ = [
 ]
 
 
-from .base import Domain, Intersection, Inverse, Union
+from .base import Domain, DomainMapping, Intersection, Inverse, Join, Union
 from .matrix_domains import MatrixDomain, MatrixDomains
 from .scalar_domains import Interval, RealDomain, ScalarDomains
 from .tensor_domains import TensorDomains
