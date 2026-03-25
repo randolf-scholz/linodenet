@@ -16,6 +16,7 @@ from linodenet_special.trace_estimation import (
     HutchPlusPlusEstimator,
     SamplerKind,
     XTraceEstimator,
+    logabsdet,
     xtrace_estimator_corrected,
 )
 from tests.testing import DEVICES, PROJECT
@@ -114,7 +115,7 @@ class TestExactEstimator:
         x = torch.zeros(matrix.shape[:-1], device=device)
         estimator = ExactEstimator(mode=mode).to(device=device)
 
-        estimate = estimator.estimate(linear_map(matrix), x)
+        estimate = estimator(linear_map(matrix), x)
 
         expected = torch.einsum("...ii -> ...", matrix)
         torch.testing.assert_close(estimate, expected)
@@ -154,7 +155,7 @@ class TestExactEstimator:
         x = torch.zeros(matrix.shape[:-1], device=device)
         estimator = ExactEstimator(mode=mode).to(device=device)
 
-        estimate = estimator.estimate_logabsdet(linear_map(matrix), x, 3)
+        estimate = estimator.estimate_logabsdet(linear_map(matrix), x)
 
         eigenvalues = torch.linalg.eigvals(matrix)
         expected = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
@@ -181,7 +182,7 @@ class TestBaseEstimator:
         scale = torch.tensor([[0.125], [-0.2], [0.3]], device=device)
         estimator = AnalyticEstimator().to(device=device)
 
-        estimate = estimator.estimate_logabsdet(scaled_map(scale), scale, 6)
+        estimate = logabsdet(estimator, scaled_map(scale), scale, 6)
 
         expected = sum(
             ((-1) ** (power + 1) / power) * scale.squeeze(-1).pow(power)
@@ -219,7 +220,7 @@ class TestHutchinsonEstimator:
             device=device
         )
 
-        estimate = estimator.estimate(scaled_map(scale), scale)
+        estimate = estimator(scaled_map(scale), scale)
 
         expected = scale.squeeze(-1)
         torch.testing.assert_close(estimate, expected)
@@ -242,7 +243,7 @@ class TestHutchinsonEstimator:
             device=device
         )
 
-        estimate = estimator.estimate(scaled_map(scale), scale)
+        estimate = estimator(scaled_map(scale), scale)
 
         expected = scale.squeeze(-1)
         torch.testing.assert_close(estimate, expected, atol=0.08, rtol=0.0)
@@ -318,7 +319,7 @@ class TestHutchPlusPlusEstimator:
             mode=mode,
         ).to(device=device)
 
-        estimate = estimator.estimate(lambda x: scale * x, scale)
+        estimate = estimator(lambda x: scale * x, scale)
 
         expected = scale.sum(-1)
         torch.testing.assert_close(estimate, expected, atol=0.15, rtol=0.0)
@@ -332,7 +333,7 @@ class TestHutchPlusPlusEstimator:
             mode="adjoint",
         ).to(device=device)
 
-        estimate = estimator.estimate(lambda x: scale * x, scale)
+        estimate = estimator(lambda x: scale * x, scale)
 
         expected = scale.sum(-1)
         torch.testing.assert_close(estimate, expected, atol=0.15, rtol=0.0)
@@ -418,7 +419,7 @@ class TestXTraceEstimator:
             renormalize=True,
         ).to(device=device)
 
-        estimate = estimator.estimate(fn, x)
+        estimate = estimator(fn, x)
 
         torch.testing.assert_close(estimate, expected, atol=4.0, rtol=0.0)
 
@@ -450,7 +451,7 @@ class TestXTraceEstimator:
             NotImplementedError,
             match=f"XTraceEstimator only supports mode='forward', got '{mode}'",
         ):
-            estimator.estimate(fn, x)
+            estimator(fn, x)
 
     def test_xtrace_corrected(self, device: str) -> None:
         fn, expected = self.make_test(device=device)
@@ -531,7 +532,7 @@ class TestVisualization:
                         renormalize=True,
                     )
                     .to(device=device, dtype=dtype)
-                    .estimate(fn, x)
+                    (fn, x)
                 )
 
             hutch_columns = hutch_full_probe_columns[..., :num_matvecs]
@@ -541,7 +542,7 @@ class TestVisualization:
                     sampler=FixedSampler(hutch_columns),
                 )
                 .to(device=device, dtype=dtype)
-                .estimate(fn, x)
+                (fn, x)
             )
 
             hpp_num_samples = num_matvecs // 3
@@ -557,7 +558,7 @@ class TestVisualization:
                         sampler=hutchpp_sampler,
                     )
                     .to(device=device, dtype=dtype)
-                    .estimate(fn, x)
+                    (fn, x)
                 )
             curves["xtrace"].append(((xtrace - expected).abs() / denom).mean())
             curves["hutch"].append(((hutch - expected).abs() / denom).mean())

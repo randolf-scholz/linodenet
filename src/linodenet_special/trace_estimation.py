@@ -37,7 +37,7 @@ from typing import Final, Protocol, overload
 
 import torch
 from torch import Tensor, nn, vmap
-from torch.func import jvp, linearize, vjp
+from torch.func import linearize, vjp
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
@@ -52,6 +52,23 @@ class Sampler(Protocol):
         dtype: torch.dtype,
         device: str | torch.device,
     ) -> Tensor: ...
+
+
+class AbstractTraceEstimator(Protocol):
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def __call__(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        r"""Returns an estimate of $\tr(Df(x))$.
+
+        Args:
+            op: Function $f$ whose Jacobian trace should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+        """
+        ...
 
 
 class SamplerKind(StrEnum):
@@ -138,788 +155,6 @@ class OrthSampler(nn.Module):
         v = torch.randn((*shape, num), device=device, dtype=dtype)
         q, _ = qr(v, mode="reduced")
         return math.sqrt(n) * q
-
-
-class AbstractTraceEstimator(Protocol):
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        r"""Returns an estimate of $\tr(Df(x))$.
-
-        Args:
-            op: Function $f$ whose Jacobian trace should be estimated at $x$.
-            x: Evaluation point. Its shape, dtype, and device define the domain.
-        """
-        ...
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        max_power: int,
-    ) -> Iterator[Tensor]:
-        r"""Yields $\tr(Df(x)), \tr(Df(x)²), …, \tr(Df(x)ᵏ)$ for $k=1..max_power$."""
-        ...
-
-
-class BaseEstimator(nn.Module):
-    r"""Base class for Jacobian trace estimators.
-
-    Concrete estimators operate on a function `f` together with an evaluation point `x`.
-    In the common case, `f` is a nonlinear map and the estimator approximates trace-like
-    quantities of its Jacobian $Df(x)$. Linear operators fit this API as a special case:
-    when $f(z) = Az$, the Jacobian is constant and equal to $A$.
-
-    Subclasses must implement `estimate`, which returns an estimate of $\tr(Df(x))$.
-    The default `estimate_powers` implementation builds on top of `estimate`; concrete
-    estimators may override it with more efficient algorithms.
-    """
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    @abstractmethod
-    def estimate(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$.
-
-        Args:
-            op: Function $f$ whose Jacobian trace should be estimated at $x$.
-            x: Evaluation point. Its shape, dtype, and device define the domain.
-        """
-        raise NotImplementedError
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        max_power: int,
-    ) -> Iterator[Tensor]:
-        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
-
-        The default implementation repeatedly composes $f$ with itself and delegates to
-        `estimate`. This is mainly a compatibility fallback; specialized estimators can
-        usually implement this more efficiently and more accurately.
-        """
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-
-        power_op = op
-        for _ in range(max_power):
-            yield self.estimate(power_op, x)
-            previous_op = power_op
-            power_op = lambda z, prev=previous_op: op(prev(z))
-
-
-@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def logabsdet(
-    estimator: AbstractTraceEstimator,
-    op: Fn[[Tensor], Tensor],
-    x: Tensor,
-    /,
-    num_series_terms: int,
-) -> Tensor:
-    r"""Estimate $\log |\det(𝕀 + Df(x))|$ via a truncated power series.
-
-    The helper uses
-
-    .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
-
-    truncated after `num_series_terms` terms and replaces each trace power with the
-    corresponding value from `estimator.estimate_powers`.
-    """
-    if num_series_terms < 1:
-        raise ValueError("num_series_terms must be at least 1")
-
-    trace_powers = estimator.estimate_powers(op, x, num_series_terms)
-    first_power = next(trace_powers)
-    result = first_power.clone()
-    sign = -1.0
-    for k, trace_power in enumerate(trace_powers, start=2):
-        result = result + (sign / k) * trace_power
-        sign = -sign
-    return result.real if not result.is_complex() else result
-
-
-class ExactEstimator(BaseEstimator):
-    r"""Estimate traces by explicitly materializing the operator matrix.
-
-    Cost: N³
-        N is the dimension of the operator
-
-    Args:
-        mode: Whether to materialize the Jacobian from forward Jacobian-vector products
-            or adjoint vector-Jacobian products.
-    """
-
-    mode: Final[str]
-
-    def __init__(self, mode: str = "forward") -> None:
-        super().__init__()
-        if mode not in {"forward", "adjoint"}:
-            raise ValueError(f"mode must be 'forward' or 'adjoint', got {mode!r}")
-        self.mode = mode
-
-    def _materialize(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-
-        dim = x.shape[-1]
-        identity = torch.eye(dim, device=x.device, dtype=x.dtype).expand(
-            *x.shape[:-1], dim, dim
-        )
-
-        match self.mode:
-            case "forward":
-                _, jvp_fn = linearize(op, x)
-                batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-                return batched_op(identity)
-
-            case "adjoint":
-                _, vjp_fn, *_ = vjp(op, x)
-                batched_adj = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
-                (matrix,) = batched_adj(identity)
-                return matrix
-
-            case _:
-                raise AssertionError("unreachable")
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        matrix = self._materialize(op, x)
-        return torch.einsum("...ii -> ...", matrix)
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        max_power: int,
-    ) -> Iterator[Tensor]:
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-
-        matrix = self._materialize(op, x)
-        eigenvalues = torch.linalg.eigvals(matrix)
-        for power in range(1, max_power + 1):
-            trace_power = eigenvalues.pow(power).sum(dim=-1)
-            yield trace_power.real if not matrix.is_complex() else trace_power
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        matrix = self._materialize(op, x)
-        eigenvalues = torch.linalg.eigvals(matrix)
-        logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
-        return logabsdet.real if not matrix.is_complex() else logabsdet
-
-
-class HutchinsonEstimator(BaseEstimator):
-    r"""Estimate traces with Hutchinson's estimator.
-
-    Cost: mN² + O(m²N + m³)
-        m is the number of matvecs (=`num_samples`),
-        N is the dimension of the operator
-
-    Args:
-        num_samples: Number of probe vectors.
-        num_matvecs: Alias for `num_samples`.
-        sampler: Probe vector sampler.
-        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
-            products, or a symmetric alternating scheme.
-    """
-
-    num_matvecs: Final[int]
-    num_samples: Final[int]
-    mode: Final[str]
-    sampler: Sampler
-
-    @overload
-    def __init__(
-        self,
-        num_samples: int,
-        *,
-        sampler: str | SamplerKind | Sampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        *,
-        num_matvecs: int,
-        sampler: str | SamplerKind | Sampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    def __init__(
-        self,
-        num_samples: int | None = None,
-        *,
-        num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
-        mode: str = "symmetric",
-    ) -> None:
-        super().__init__()
-
-        match num_samples, num_matvecs:
-            case None, None:
-                raise ValueError("either num_samples or num_matvecs must be provided")
-            case n, None:
-                self.num_matvecs = n
-                self.num_samples = n
-            case None, n:
-                self.num_matvecs = n
-                self.num_samples = n
-            case _, _:
-                raise ValueError(
-                    "Only one of num_samples or num_matvecs should be provided, but got both."
-                )
-
-        if mode not in {"forward", "adjoint", "symmetric"}:
-            raise ValueError(
-                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
-            )
-
-        self.mode = mode
-        self.sampler = (
-            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
-        )
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$."""
-        return next(self.estimate_powers(op, x, 1))
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        max_power: int,
-    ) -> Iterator[Tensor]:
-        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-
-        right_samples = self.sampler(
-            x.shape,
-            self.num_samples,
-            device=x.device,
-            dtype=x.dtype,
-        )
-        left_samples = right_samples.clone()
-
-        match self.mode:
-            case "forward":
-                # use x ↦ Ax only
-                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-
-                for _ in range(max_power):
-                    right_samples = batched_jvp_fn(right_samples)
-                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
-
-            case "adjoint":
-                # use x ↦ Aᵀx only
-                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
-
-                for _ in range(max_power):
-                    (left_samples,) = batched_vjp_fn(left_samples)
-                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
-
-            case "symmetric":
-                # alternate between Ax and Aᵀx, which is good for forward sensitivity.
-                # as it grows exponentially in the number of matvecs.
-                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
-                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
-
-                power = 0
-                while power < max_power:
-                    right_samples = batched_jvp_fn(right_samples)
-                    power += 1
-                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
-
-                    if power == max_power:
-                        break
-
-                    (left_samples,) = batched_vjp_fn(left_samples)
-                    power += 1
-                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
-            case _:
-                raise ValueError(f"invalid mode {self.mode!r}")
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        num_series_terms: int,
-    ) -> Tensor:
-        return logabsdet(self, op, x, num_series_terms)
-
-
-class HutchPlusPlusEstimator(BaseEstimator):
-    r"""Estimate traces with the Hutch++ variance-reduced estimator.
-
-    Cost: mN² + O(m²N + m³)
-        m is the number of matvecs (=3×`num_samples`),
-        N is the dimension of the operator
-
-    Args:
-        num_samples: Number of probe vectors.
-        num_matvecs: Alias for the total matvec budget.
-        sampler: Probe vector sampler.
-        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
-            products, or a symmetric alternating scheme.
-    """
-
-    num_matvecs: Final[int]
-    num_samples: Final[int]
-    mode: Final[str]
-    sampler: Sampler
-
-    @overload
-    def __init__(
-        self,
-        num_samples: int,
-        *,
-        sampler: str | SamplerKind | Sampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        *,
-        num_matvecs: int,
-        sampler: str | SamplerKind | Sampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    def __init__(
-        self,
-        num_samples: int | None = None,
-        *,
-        num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
-        mode: str = "symmetric",
-    ) -> None:
-        super().__init__()
-
-        match num_samples, num_matvecs:
-            case None, None:
-                raise ValueError("either num_samples or num_matvecs must be provided")
-            case n, None:
-                self.num_matvecs = 3 * n
-                self.num_samples = n
-            case None, n:
-                if num_matvecs < 3:
-                    raise ValueError("num_matvecs must be at least 3")
-                self.num_matvecs = n
-                self.num_samples = n // 3
-            case _, _:
-                raise ValueError(
-                    "Only one of num_samples or num_matvecs should be provided, but got both."
-                )
-
-        if mode not in {"forward", "adjoint", "symmetric"}:
-            raise ValueError(
-                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
-            )
-
-        self.mode = mode
-        self.sampler = (
-            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
-        )
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$."""
-        return next(self.estimate_powers(op, x, 1))
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        max_power: int,
-    ) -> Iterator[Tensor]:
-        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-
-        samples = self.sampler(
-            x.shape,
-            self.num_samples,
-            device=x.device,
-            dtype=x.dtype,
-        )
-        residual_samples = self.sampler(
-            x.shape,
-            self.num_samples,
-            device=x.device,
-            dtype=x.dtype,
-        )
-
-        match self.mode:
-            case "forward":
-                _, jvp_fn = linearize(op, x)
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-                sketch = batched_jvp_fn(samples)
-                Q, _ = qr(sketch, mode="reduced")  # (...dr)
-
-                projected_samples = Q
-                projected_l = projected_samples.clone()
-                projected_r = projected_samples.clone()
-                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
-                residual_l = residual_samples.clone()
-                residual_r = residual_samples.clone()
-
-                for _ in range(max_power):
-                    projected_r = batched_jvp_fn(projected_r)
-                    residual_r = batched_jvp_fn(residual_r)
-
-                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                    yield low_rank + residual
-
-            case "adjoint":
-                _, vjp_fn, *_ = vjp(op, x)
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
-                (sketch,) = batched_vjp_fn(samples)
-                Q, _ = qr(sketch, mode="reduced")  # (...dr)
-
-                projected_samples = Q
-                projected_l = projected_samples.clone()
-                projected_r = projected_samples.clone()
-                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
-                residual_l = residual_samples.clone()
-                residual_r = residual_samples.clone()
-
-                for _ in range(max_power):
-                    (projected_l,) = batched_vjp_fn(projected_l)
-                    (residual_l,) = batched_vjp_fn(residual_l)
-
-                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                    yield low_rank + residual
-
-            case "symmetric":
-                _, jvp_fn = linearize(op, x)
-                _, vjp_fn, *_ = vjp(op, x)
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
-
-                # Hutch++ uses a fixed projector P = QQᵀ and the exact split
-                #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
-                left_sketch, right_sketch = torch.tensor_split(samples, 2, dim=-1)
-                (left_sketch,) = batched_vjp_fn(left_sketch)
-                right_sketch = batched_jvp_fn(right_sketch)
-                sketch = torch.cat([left_sketch, right_sketch], dim=-1)
-                Q, _ = qr(sketch, mode="reduced")  # (...dr)
-
-                projected_samples = Q
-                projected_l = projected_samples.clone()
-                projected_r = projected_samples.clone()
-                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
-                residual_l = residual_samples.clone()
-                residual_r = residual_samples.clone()
-
-                power = 0
-                while power < max_power:
-                    projected_r = batched_jvp_fn(projected_r)
-                    residual_r = batched_jvp_fn(residual_r)
-                    power += 1
-
-                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                    yield low_rank + residual
-
-                    if power == max_power:
-                        break
-
-                    (projected_l,) = batched_vjp_fn(projected_l)
-                    (residual_l,) = batched_vjp_fn(residual_l)
-                    power += 1
-
-                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                    yield low_rank + residual
-
-            case _:
-                raise ValueError(f"invalid mode {self.mode!r}")
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        num_series_terms: int,
-    ) -> Tensor:
-        return logabsdet(self, op, x, num_series_terms)
-
-
-class XTraceEstimator(BaseEstimator):
-    r"""Estimate traces with the XTrace estimator.
-
-    Cost: mN^2 + O(m^3)
-        m is the number of matvecs (=2x`num_samples`),
-        N is the dimension of the operator
-
-    Args:
-        num_samples: Number of probe vectors.
-        num_matvecs: Alias for the total matvec budget.
-        sampler: Probe vector sampler.
-        renormalize: Whether to apply the paper's renormalization.
-        mode: Jacobian action mode. Only `"forward"` is currently implemented.
-    """
-
-    num_matvecs: Final[int]
-    num_samples: Final[int]
-    renormalize: Final[bool]
-    mode: Final[str]
-    r"""Whether to apply renormalization from paper section 2.3"""
-
-    sampler: Sampler
-
-    @overload
-    def __init__(
-        self,
-        num_samples: int,
-        *,
-        sampler: str | SamplerKind | Sampler = ...,
-        renormalize: bool = ...,
-        mode: str = ...,
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        *,
-        num_matvecs: int,
-        sampler: str | SamplerKind | Sampler = ...,
-        renormalize: bool = ...,
-        mode: str = ...,
-    ) -> None: ...
-    def __init__(
-        self,
-        num_samples: int | None = None,
-        *,
-        num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
-        renormalize: bool = True,
-        mode: str = "forward",
-    ) -> None:
-        super().__init__()
-
-        match num_samples, num_matvecs:
-            case None, None:
-                raise ValueError("either num_samples or num_matvecs must be provided")
-            case n, None:
-                self.num_matvecs = 2 * n
-                self.num_samples = n
-            case None, n:
-                if n < 2:
-                    raise ValueError("num_matvecs must be at least 2")
-                self.num_matvecs = n
-                self.num_samples = n // 2
-            case _, _:
-                raise ValueError(
-                    "Only one of num_samples or num_matvecs should be provided, but got both."
-                )
-
-        if mode not in {"forward", "adjoint", "symmetric"}:
-            raise ValueError(
-                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
-            )
-
-        self.renormalize = bool(renormalize)
-        self.mode = mode
-        self.sampler = (
-            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
-        )
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$."""
-        return next(self.estimate_powers(op, x, 1))
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_naive(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-    ) -> Tensor:
-        r"""Use the naive implementation to estimate $\tr(Df(x))$."""
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-        if self.mode != "forward":
-            raise NotImplementedError(
-                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
-            )
-
-        *batch, N = x.shape
-        k = min(N, self.num_samples)
-        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
-        tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
-        _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
-        Y = batched_op(samples)  # (...Nm)
-
-        mus = []
-        for i in range(self.num_samples):
-            col_indices = torch.arange(self.num_samples, device=Y.device)
-            Q_i, _ = qr(Y[..., i != col_indices], mode="reduced")
-            ω_i = samples[..., [i]]
-            μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
-            mus.append(μ_i)
-            tr = tr + vecdot(Q_i, batched_op(Q_i), dim=-2).sum(dim=-1)
-        μ = torch.cat(mus, dim=-1)
-        scale = 1.0 - (1.0 - (N - k + 1) / vecdot(μ, μ, dim=-2)) * self.renormalize
-        μ = μ * scale.unsqueeze(-2)
-        residual = vecdot(μ, batched_op(μ), dim=-2).mean(dim=-1)
-        return tr / k + residual
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        max_power: int,
-    ) -> Iterator[Tensor]:
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-        if max_power > 1:
-            raise NotImplementedError("XTraceEstimator currently only supports k=1")
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-        if self.mode != "forward":
-            raise NotImplementedError(
-                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
-            )
-
-        *batch, N = x.shape
-        k = min(N, self.num_samples)
-        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
-        _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
-        Y = batched_op(samples)  # (...Nm)
-        Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
-        # Q has normalized cols <-> Q.norm(dim=-2) = 1
-
-        Z = batched_op(Q)  # (...Nk)
-        H = Q.mH @ Z  # (...kk)
-        W = Q.mH @ samples  # (...kk)
-        T = Z.mH @ samples  # (...kk)
-
-        # solve R^* S = Iₖ
-        I = torch.eye(k, dtype=samples.dtype, device=samples.device)
-        S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
-        # normalize COLS
-        S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
-
-        SW = vecdot(S, W, dim=-2)  # (...i)
-        SR = vecdot(S, R, dim=-2)  # (...i)
-        X = W - SW.unsqueeze(-2) * S  # (...kk)
-        TX = vecdot(T, X, dim=-2)  # (...i)
-        XHX = torch.einsum("...ki, ...kl, ...li -> ...i", X.conj(), H, X)
-        SHS = torch.einsum("...ki, ...kl, ...li -> ...i", S.conj(), H, S)
-
-        if False:
-            mus = []
-            for i in range(self.num_samples):
-                col_indices = torch.arange(self.num_samples, device=Y.device)
-                Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
-                ω_i = samples[..., [i]]
-                μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
-                mus.append(μ_i)
-            μ = torch.cat(mus, dim=-1)
-            mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
-            mu_norm_sq_b = (
-                vecdot(samples, samples, dim=-2)
-                - vecdot(W, W, dim=-2)
-                + SW.abs().square()
-            )
-
-        if self.renormalize:
-            scale = (N - k + 1) / (  #
-                vecdot(samples, samples, dim=-2)
-                - vecdot(W, W, dim=-2)
-                + SW.abs().square()
-            )
-        else:
-            scale = 1.0
-
-        WS = SW.conj()  # (...i)
-        trs = -SHS + scale * (XHX + WS * SR - TX)
-
-        HW = H @ W
-        term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
-        term2 = SW.conj() * vecdot(S, R - HW, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
-        term3 = -vecdot(T - H.mH @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
-        trs = -SHS + scale * (term1 + term2 + term3)
-
-        estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
-        yield estimate.real if not estimate.is_complex() else estimate
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        num_series_terms: int,
-    ) -> Tensor:
-        return logabsdet(self, op, x, num_series_terms)
 
 
 def xtrace_naive_estimator(
@@ -1136,29 +371,857 @@ def xtrace_estimator_corrected(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Ten
     return ests.mean(dim=-1)
 
 
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def logabsdet(
+    estimator: AbstractTraceEstimator,
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    num_series_terms: int,
+) -> Tensor:
+    r"""Estimate $\log |\det(𝕀 + Df(x))|$ via a truncated power series.
+
+    The helper uses
+
+    .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
+
+    truncated after `num_series_terms` terms and replaces each trace power with the
+    corresponding value from `estimator.estimate_powers`.
+    """
+    if num_series_terms < 1:
+        raise ValueError("num_series_terms must be at least 1")
+
+    trace_powers = estimator.estimate_powers(op, x, num_series_terms)
+    first_power = next(trace_powers)
+    result = first_power.clone()
+    sign = -1.0
+    for k, trace_power in enumerate(trace_powers, start=2):
+        result = result + (sign / k) * trace_power
+        sign = -sign
+    return result.real if not result.is_complex() else result
+
+
+class BaseEstimator(nn.Module):
+    r"""Base class for Jacobian trace estimators.
+
+    Concrete estimators operate on a function `f` together with an evaluation point `x`.
+    In the common case, `f` is a nonlinear map and the estimator approximates trace-like
+    quantities of its Jacobian $Df(x)$. Linear operators fit this API as a special case:
+    when $f(z) = Az$, the Jacobian is constant and equal to $A$.
+
+    Subclasses must implement `estimate`, which returns an estimate of $\tr(Df(x))$.
+    The default `estimate_powers` implementation builds on top of `estimate`; concrete
+    estimators may override it with more efficient algorithms.
+    """
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    @abstractmethod
+    def forward(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        r"""Return an estimate of $\tr(Df(x))$.
+
+        Args:
+            op: Function $f$ whose Jacobian trace should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+        """
+        raise NotImplementedError
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        max_power: int,
+    ) -> Iterator[Tensor]:
+        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
+
+        The default implementation repeatedly composes $f$ with itself and delegates to
+        `estimate`. This is mainly a compatibility fallback; specialized estimators can
+        usually implement this more efficiently and more accurately.
+        """
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+
+        power_op = op
+        for _ in range(max_power):
+            yield self(power_op, x)
+            previous_op = power_op
+            power_op = lambda z, prev=previous_op: op(prev(z))
+
+
+class ExactEstimator(BaseEstimator):
+    r"""Estimate traces by explicitly materializing the operator matrix.
+
+    Cost: N³
+        N is the dimension of the operator
+
+    Args:
+        mode: Whether to materialize the Jacobian from forward Jacobian-vector products
+            or adjoint vector-Jacobian products.
+    """
+
+    mode: Final[str]
+
+    def __init__(self, mode: str = "forward") -> None:
+        super().__init__()
+        if mode not in {"forward", "adjoint"}:
+            raise ValueError(f"mode must be 'forward' or 'adjoint', got {mode!r}")
+        self.mode = mode
+
+    def _materialize(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+
+        dim = x.shape[-1]
+        identity = torch.eye(dim, device=x.device, dtype=x.dtype).expand(
+            *x.shape[:-1], dim, dim
+        )
+
+        match self.mode:
+            case "forward":
+                _, jvp_fn = linearize(op, x)
+                batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                return batched_op(identity)
+
+            case "adjoint":
+                _, vjp_fn, *_ = vjp(op, x)
+                batched_adj = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+                (matrix,) = batched_adj(identity)
+                return matrix
+
+            case _:
+                raise AssertionError("unreachable")
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def forward(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        matrix = self._materialize(op, x)
+        return torch.einsum("...ii -> ...", matrix)
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        max_power: int,
+    ) -> Iterator[Tensor]:
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+
+        matrix = self._materialize(op, x)
+        eigenvalues = torch.linalg.eigvals(matrix)
+        for power in range(1, max_power + 1):
+            trace_power = eigenvalues.pow(power).sum(dim=-1)
+            yield trace_power.real if not matrix.is_complex() else trace_power
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        matrix = self._materialize(op, x)
+        eigenvalues = torch.linalg.eigvals(matrix)
+        logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
+        return logabsdet.real if not matrix.is_complex() else logabsdet
+
+
+class HutchinsonEstimator(BaseEstimator):
+    r"""Estimate traces with Hutchinson's estimator.
+
+    Cost: mN² + O(m²N + m³)
+        m is the number of matvecs (=`num_samples`),
+        N is the dimension of the operator
+
+    Args:
+        num_samples: Number of probe vectors.
+        num_matvecs: Alias for `num_samples`.
+        sampler: Probe vector sampler.
+        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
+            products, or a symmetric alternating scheme.
+    """
+
+    num_matvecs: Final[int]
+    num_samples: Final[int]
+    mode: Final[str]
+    sampler: Sampler
+
+    @overload
+    def __init__(
+        self,
+        num_samples: int,
+        *,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        num_matvecs: int,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
+    ) -> None: ...
+    def __init__(
+        self,
+        num_samples: int | None = None,
+        *,
+        num_matvecs: int | None = None,
+        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        mode: str = "symmetric",
+    ) -> None:
+        super().__init__()
+
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("either num_samples or num_matvecs must be provided")
+            case n, None:
+                self.num_matvecs = n
+                self.num_samples = n
+            case None, n:
+                self.num_matvecs = n
+                self.num_samples = n
+            case _, _:
+                raise ValueError(
+                    "Only one of num_samples or num_matvecs should be provided, but got both."
+                )
+
+        if mode not in {"forward", "adjoint", "symmetric"}:
+            raise ValueError(
+                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
+            )
+
+        self.mode = mode
+        self.sampler = (
+            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
+        )
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def forward(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        r"""Return an estimate of $\tr(Df(x))$."""
+        return next(self.estimate_powers(op, x, 1))
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        max_power: int,
+    ) -> Iterator[Tensor]:
+        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+
+        right_samples = self.sampler(
+            x.shape,
+            self.num_samples,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        left_samples = right_samples.clone()
+
+        match self.mode:
+            case "forward":
+                # use x ↦ Ax only
+                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+
+                for _ in range(max_power):
+                    right_samples = batched_jvp_fn(right_samples)
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+
+            case "adjoint":
+                # use x ↦ Aᵀx only
+                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+
+                for _ in range(max_power):
+                    (left_samples,) = batched_vjp_fn(left_samples)
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+
+            case "symmetric":
+                # alternate between Ax and Aᵀx, which is good for forward sensitivity.
+                # as it grows exponentially in the number of matvecs.
+                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
+                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+
+                power = 0
+                while power < max_power:
+                    right_samples = batched_jvp_fn(right_samples)
+                    power += 1
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+
+                    if power == max_power:
+                        break
+
+                    (left_samples,) = batched_vjp_fn(left_samples)
+                    power += 1
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+            case _:
+                raise ValueError(f"invalid mode {self.mode!r}")
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        num_series_terms: int,
+    ) -> Tensor:
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+        if self.mode != "forward":
+            raise NotImplementedError(
+                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
+            )
+        if num_series_terms < 1:
+            raise ValueError("num_series_terms must be at least 1")
+
+        _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
+        batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+        samples = self.sampler(
+            x.shape,
+            self.num_samples,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        result = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
+        for k in range(1, num_series_terms + 1):
+            sign = sign.neg()
+            samples = batched_jvp_fn(samples)
+            trace_power = xtrace_estimator(batched_jvp_fn, samples)
+            result = result + (sign / k) * trace_power
+        return result.real if not result.is_complex() else result
+
+
+class HutchPlusPlusEstimator(BaseEstimator):
+    r"""Estimate traces with the Hutch++ variance-reduced estimator.
+
+    Cost: mN² + O(m²N + m³)
+        m is the number of matvecs (=3×`num_samples`),
+        N is the dimension of the operator
+
+    Args:
+        num_samples: Number of probe vectors.
+        num_matvecs: Alias for the total matvec budget.
+        sampler: Probe vector sampler.
+        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
+            products, or a symmetric alternating scheme.
+    """
+
+    num_matvecs: Final[int]
+    num_samples: Final[int]
+    mode: Final[str]
+    sampler: Sampler
+
+    @overload
+    def __init__(
+        self,
+        num_samples: int,
+        *,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        num_matvecs: int,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
+    ) -> None: ...
+    def __init__(
+        self,
+        num_samples: int | None = None,
+        *,
+        num_matvecs: int | None = None,
+        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        mode: str = "symmetric",
+    ) -> None:
+        super().__init__()
+
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("either num_samples or num_matvecs must be provided")
+            case n, None:
+                self.num_matvecs = 3 * n
+                self.num_samples = n
+            case None, n:
+                if num_matvecs < 3:
+                    raise ValueError("num_matvecs must be at least 3")
+                self.num_matvecs = n
+                self.num_samples = n // 3
+            case _, _:
+                raise ValueError(
+                    "Only one of num_samples or num_matvecs should be provided, but got both."
+                )
+
+        if mode not in {"forward", "adjoint", "symmetric"}:
+            raise ValueError(
+                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
+            )
+
+        self.mode = mode
+        self.sampler = (
+            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
+        )
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def forward(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        r"""Return an estimate of $\tr(Df(x))$."""
+        return next(self.estimate_powers(op, x, 1))
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        max_power: int,
+    ) -> Iterator[Tensor]:
+        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+
+        samples = self.sampler(
+            x.shape,
+            self.num_samples,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        residual_samples = self.sampler(
+            x.shape,
+            self.num_samples,
+            device=x.device,
+            dtype=x.dtype,
+        )
+
+        match self.mode:
+            case "forward":
+                _, jvp_fn = linearize(op, x)
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                sketch = batched_jvp_fn(samples)
+                Q, _ = qr(sketch, mode="reduced")  # (...dr)
+
+                projected_samples = Q
+                projected_l = projected_samples.clone()
+                projected_r = projected_samples.clone()
+                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+                residual_l = residual_samples.clone()
+                residual_r = residual_samples.clone()
+
+                for _ in range(max_power):
+                    projected_r = batched_jvp_fn(projected_r)
+                    residual_r = batched_jvp_fn(residual_r)
+
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
+
+            case "adjoint":
+                _, vjp_fn, *_ = vjp(op, x)
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+                (sketch,) = batched_vjp_fn(samples)
+                Q, _ = qr(sketch, mode="reduced")  # (...dr)
+
+                projected_samples = Q
+                projected_l = projected_samples.clone()
+                projected_r = projected_samples.clone()
+                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+                residual_l = residual_samples.clone()
+                residual_r = residual_samples.clone()
+
+                for _ in range(max_power):
+                    (projected_l,) = batched_vjp_fn(projected_l)
+                    (residual_l,) = batched_vjp_fn(residual_l)
+
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
+
+            case "symmetric":
+                _, jvp_fn = linearize(op, x)
+                _, vjp_fn, *_ = vjp(op, x)
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+
+                # Hutch++ uses a fixed projector P = QQᵀ and the exact split
+                #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
+                left_sketch, right_sketch = torch.tensor_split(samples, 2, dim=-1)
+                (left_sketch,) = batched_vjp_fn(left_sketch)
+                right_sketch = batched_jvp_fn(right_sketch)
+                sketch = torch.cat([left_sketch, right_sketch], dim=-1)
+                Q, _ = qr(sketch, mode="reduced")  # (...dr)
+
+                projected_samples = Q
+                projected_l = projected_samples.clone()
+                projected_r = projected_samples.clone()
+                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+                residual_l = residual_samples.clone()
+                residual_r = residual_samples.clone()
+
+                power = 0
+                while power < max_power:
+                    projected_r = batched_jvp_fn(projected_r)
+                    residual_r = batched_jvp_fn(residual_r)
+                    power += 1
+
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
+
+                    if power == max_power:
+                        break
+
+                    (projected_l,) = batched_vjp_fn(projected_l)
+                    (residual_l,) = batched_vjp_fn(residual_l)
+                    power += 1
+
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
+
+            case _:
+                raise ValueError(f"invalid mode {self.mode!r}")
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        num_series_terms: int,
+    ) -> Tensor:
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+        if self.mode != "forward":
+            raise NotImplementedError(
+                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
+            )
+        if num_series_terms < 1:
+            raise ValueError("num_series_terms must be at least 1")
+
+        _, jvp_fn = linearize(op, x)
+        batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+        samples = self.sampler(
+            x.shape,
+            self.num_samples,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        result = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
+        for k in range(1, num_series_terms + 1):
+            sign = sign.neg()
+            samples = batched_jvp_fn(samples)
+            trace_power = xtrace_estimator(batched_jvp_fn, samples)
+            result = result + (sign / k) * trace_power
+        return result.real if not result.is_complex() else result
+
+
+class XTraceEstimator(BaseEstimator):
+    r"""Estimate traces with the XTrace estimator.
+
+    Cost: mN^2 + O(m^3)
+        m is the number of matvecs (=2x`num_samples`),
+        N is the dimension of the operator
+
+    Args:
+        num_samples: Number of probe vectors.
+        num_matvecs: Alias for the total matvec budget.
+        sampler: Probe vector sampler.
+        renormalize: Whether to apply the paper's renormalization.
+        mode: Jacobian action mode. Only `"forward"` is currently implemented.
+    """
+
+    num_matvecs: Final[int]
+    num_samples: Final[int]
+    renormalize: Final[bool]
+    mode: Final[str]
+    r"""Whether to apply renormalization from paper section 2.3"""
+
+    sampler: Sampler
+
+    @overload
+    def __init__(
+        self,
+        num_samples: int,
+        *,
+        sampler: str | SamplerKind | Sampler = ...,
+        renormalize: bool = ...,
+        mode: str = ...,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        num_matvecs: int,
+        sampler: str | SamplerKind | Sampler = ...,
+        renormalize: bool = ...,
+        mode: str = ...,
+    ) -> None: ...
+    def __init__(
+        self,
+        num_samples: int | None = None,
+        *,
+        num_matvecs: int | None = None,
+        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        renormalize: bool = True,
+        mode: str = "forward",
+    ) -> None:
+        super().__init__()
+
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("either num_samples or num_matvecs must be provided")
+            case n, None:
+                self.num_matvecs = 2 * n
+                self.num_samples = n
+            case None, n:
+                if n < 2:
+                    raise ValueError("num_matvecs must be at least 2")
+                self.num_matvecs = n
+                self.num_samples = n // 2
+            case _, _:
+                raise ValueError(
+                    "Only one of num_samples or num_matvecs should be provided, but got both."
+                )
+
+        if mode not in {"forward", "adjoint", "symmetric"}:
+            raise ValueError(
+                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
+            )
+
+        self.renormalize = bool(renormalize)
+        self.mode = mode
+        self.sampler = (
+            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
+        )
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def forward(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        r"""Return an estimate of $\tr(Df(x))$."""
+        return next(self.estimate_powers(op, x, 1))
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_naive(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+    ) -> Tensor:
+        r"""Use the naive implementation to estimate $\tr(Df(x))$."""
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+        if self.mode != "forward":
+            raise NotImplementedError(
+                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
+            )
+
+        *batch, N = x.shape
+        k = min(N, self.num_samples)
+        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
+        tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
+        _, jvp_fn = linearize(op, x)
+        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
+        Y = batched_op(samples)  # (...Nm)
+
+        mus = []
+        for i in range(self.num_samples):
+            col_indices = torch.arange(self.num_samples, device=Y.device)
+            Q_i, _ = qr(Y[..., i != col_indices], mode="reduced")
+            ω_i = samples[..., [i]]
+            μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
+            mus.append(μ_i)
+            tr = tr + vecdot(Q_i, batched_op(Q_i), dim=-2).sum(dim=-1)
+        μ = torch.cat(mus, dim=-1)
+        scale = 1.0 - (1.0 - (N - k + 1) / vecdot(μ, μ, dim=-2)) * self.renormalize
+        μ = μ * scale.unsqueeze(-2)
+        residual = vecdot(μ, batched_op(μ), dim=-2).mean(dim=-1)
+        return tr / k + residual
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_powers(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        max_power: int,
+    ) -> Iterator[Tensor]:
+        if max_power < 1:
+            raise ValueError("max_power must be at least 1")
+        if max_power > 1:
+            raise NotImplementedError("XTraceEstimator currently only supports k=1")
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+        if self.mode != "forward":
+            raise NotImplementedError(
+                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
+            )
+
+        *batch, N = x.shape
+        k = min(N, self.num_samples)
+        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
+        _, jvp_fn = linearize(op, x)
+        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
+        Y = batched_op(samples)  # (...Nm)
+        Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
+        # Q has normalized cols <-> Q.norm(dim=-2) = 1
+
+        Z = batched_op(Q)  # (...Nk)
+        H = Q.mH @ Z  # (...kk)
+        W = Q.mH @ samples  # (...kk)
+        T = Z.mH @ samples  # (...kk)
+
+        # solve R^* S = Iₖ
+        I = torch.eye(k, dtype=samples.dtype, device=samples.device)
+        S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
+        # normalize COLS
+        S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
+
+        SW = vecdot(S, W, dim=-2)  # (...i)
+        SR = vecdot(S, R, dim=-2)  # (...i)
+        X = W - SW.unsqueeze(-2) * S  # (...kk)
+        TX = vecdot(T, X, dim=-2)  # (...i)
+        XHX = torch.einsum("...ki, ...kl, ...li -> ...i", X.conj(), H, X)
+        SHS = torch.einsum("...ki, ...kl, ...li -> ...i", S.conj(), H, S)
+
+        if False:
+            mus = []
+            for i in range(self.num_samples):
+                col_indices = torch.arange(self.num_samples, device=Y.device)
+                Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+                ω_i = samples[..., [i]]
+                μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
+                mus.append(μ_i)
+            μ = torch.cat(mus, dim=-1)
+            mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
+            mu_norm_sq_b = (
+                vecdot(samples, samples, dim=-2)
+                - vecdot(W, W, dim=-2)
+                + SW.abs().square()
+            )
+
+        if self.renormalize:
+            scale = (N - k + 1) / (  #
+                vecdot(samples, samples, dim=-2)
+                - vecdot(W, W, dim=-2)
+                + SW.abs().square()
+            )
+        else:
+            scale = 1.0
+
+        WS = SW.conj()  # (...i)
+        trs = -SHS + scale * (XHX + WS * SR - TX)
+
+        HW = H @ W
+        term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
+        term2 = SW.conj() * vecdot(S, R - HW, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
+        term3 = -vecdot(T - H.mH @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
+        trs = -SHS + scale * (term1 + term2 + term3)
+
+        estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
+        yield estimate.real if not estimate.is_complex() else estimate
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        num_series_terms: int,
+    ) -> Tensor:
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+        if self.mode != "forward":
+            raise NotImplementedError(
+                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
+            )
+        if num_series_terms < 1:
+            raise ValueError("num_series_terms must be at least 1")
+
+        _, jvp_fn = linearize(op, x)
+        batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+        samples = self.sampler(
+            x.shape,
+            self.num_samples,
+            device=x.device,
+            dtype=x.dtype,
+        )
+        result = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
+        for k in range(1, num_series_terms + 1):
+            sign = sign.neg()
+            samples = batched_jvp_fn(samples)
+            trace_power = xtrace_estimator(batched_jvp_fn, samples)
+            result = result + (sign / k) * trace_power
+        return result.real if not result.is_complex() else result
+
+
 class LogAbsDetEstimator(nn.Module):
-    r"""Estimate log|det(𝕀 + ∂f/∂x)| using the power series expansion and a trace estimator.
+    r"""Estimate $\log|\det(𝕀 + Df(x))|$ with a trace-estimator backend.
 
     - \log|\det A| = \Re(\tr(\log A)) for any A in the image of the matrix exponential
     - \log|\det A| = ½\tr(\log AᴴA) for any A. (-∞ if A is singular)
 
     Args:
-        method: str in {"exact", "hutch", "xtrace"} specifying the estimation method to use.
-        num_samples: Number of random samples to use for the Hutchinson or XTrace estimator.
-        num_series_terms: Number of terms to use in the power series expansion.
+        estimator: Trace-estimator backend, or a string in {"exact", "hutch", "xtrace"}
+            used to construct one.
+        num_samples: Number of probe vectors for stochastic estimators when `estimator`
+            is given as a string.
+        num_series_terms: Number of power-series terms for stochastic estimators.
 
     Returns:
-        y: fn(x)
-        logabsdet: Approximation of log|det(𝕀 + ∂f/∂x)|
+        y: $f(x)$
+        logabsdet: Approximation of $\log|\det(𝕀 + Df(x))|$
     """
 
+    estimator: ExactEstimator | AbstractTraceEstimator
     num_samples: int | None
     num_series_terms: int | None
-    method: Fn[[Fn[[Tensor], Tensor], Tensor], tuple[Tensor, Tensor]]
 
     def __init__(
         self,
-        method: str,
+        estimator: str | AbstractTraceEstimator,
         num_samples: int | None,
         num_series_terms: int | None,
     ) -> None:
@@ -1172,135 +1235,57 @@ class LogAbsDetEstimator(nn.Module):
         self.num_samples = num_samples
         self.num_series_terms = num_series_terms
 
-        match method:
+        match estimator:
             case "exact":
-                self.method = self.compute_exact
+                self.estimator = ExactEstimator()
             case "hutch" | "hutchinson":
                 if num_samples is None:
-                    raise ValueError("num_samples is required for method='hutch'")
+                    raise ValueError("num_samples is required for estimator='hutch'")
                 if num_series_terms is None:
-                    raise ValueError("num_series_terms is required for method='hutch'")
-                self.method = self.compute_hutch
+                    raise ValueError(
+                        "num_series_terms is required for estimator='hutch'"
+                    )
+                self.estimator = HutchinsonEstimator(num_samples=num_samples)
+            case "hutch++" | "hutchplusplus":
+                if num_samples is None:
+                    raise ValueError("num_samples is required for estimator='hutch++'")
+                if num_series_terms is None:
+                    raise ValueError(
+                        "num_series_terms is required for estimator='hutch++'"
+                    )
+                self.estimator = HutchPlusPlusEstimator(num_samples=num_samples)
             case "xtrace":
                 if num_samples is None:
-                    raise ValueError("num_samples is required for method='xtrace'")
+                    raise ValueError("num_samples is required for estimator='xtrace'")
                 if num_series_terms is None:
-                    raise ValueError("num_series_terms is required for method='xtrace'")
-                self.method = self.compute_xtrace
+                    raise ValueError(
+                        "num_series_terms is required for estimator='xtrace'"
+                    )
+                self.estimator = XTraceEstimator(num_samples=num_samples)
+            case _ if hasattr(estimator, "estimate") and hasattr(
+                estimator, "estimate_powers"
+            ):
+                self.estimator = estimator
             case _:
-                raise ValueError(f"Unknown logabsdet estimation method {method!r}")
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def compute_exact(
-        self, fn: Fn[[Tensor], Tensor], x: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Compute the exact log-absolute-determinant via the full Jacobian spectrum."""
-        y, df = linearize(fn, x)  # (...d), {(...d) -> (...d)}
-        batched_df = vmap(df, -2, -2)  # {(...nd) -> (...nd)}
-        dim = y.shape[-1]
-        I = torch.eye(dim, dim, device=y.device).expand(*y.shape[:-1], dim, dim)
-
-        # log|det(I+A)| = log|∏(1 + λᵢ)| = ∑log|1 + λᵢ|
-        # where λᵢ are the eigenvalues of A. This holds even for non-diagonalizable A.
-        jacobian = batched_df(I)
-        eigenvalues = torch.linalg.eigvals(jacobian)
-        logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
-        return y, logabsdet
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def compute_hutch(
-        self, fn: Fn[[Tensor], Tensor], x: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Estimate the log-absolute-determinant using a power series and Hutchinson."""
-        assert self.num_samples is not None
-        assert self.num_series_terms is not None
-
-        y, jvp_fn = jvp(fn, x)
-        y, vjp_fn, *_ = vjp(fn, x)
-        batched_jvp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
-        right_samples = torch.randn(  # (...dn)
-            (*x.shape, self.num_samples),
-            device=x.device,
-            dtype=x.dtype,
-        )
-        left_samples = right_samples.clone()
-
-        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
-        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
-        for k in range(1, self.num_series_terms + 1):
-            # log|det(I+A)| = Re(tr(log I+A)) = Re(∑_{k≥1} (-1)ᵏ⁺¹/k tr(Aᵏ))
-            sign = sign.neg()
-
-            # hutch impl, using tr(Aᵏ⁺¹) = E[v₀ᵀAvₖ], vₖ=Avₖ₋₁
-            right_samples = batched_jvp_fn(right_samples)
-            tr_k_power = vecdot(left_samples, right_samples, dim=-1).mean(dim=-1)
-
-            logabsdet = logabsdet + (sign / k) * tr_k_power
-
-        return y, logabsdet
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def compute_hutch_twosided(
-        self, fn: Fn[[Tensor], Tensor], x: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Estimate the log-absolute-determinant using a power series and Hutchinson."""
-        assert self.num_samples is not None
-        assert self.num_series_terms is not None
-
-        y, jvp_fn = jvp(fn, x)
-        y, vjp_fn, *_ = vjp(fn, x)
-        batched_jvp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
-        batched_vjp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
-        right_samples = torch.randn(  # (...dn)
-            (*x.shape, self.num_samples),
-            device=x.device,
-            dtype=x.dtype,
-        )
-        left_samples = right_samples.clone()
-
-        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
-        for k in range(1, self.num_series_terms + 1, 2):
-            # log|det(I+A)| = Re(tr(log I+A)) = Re(∑_{k≥1} (-1)ᵏ⁺¹/k tr(Aᵏ))
-
-            # tr(A²ᵏ⁻¹) = E[u₀ᵀA²ᵏ⁻¹v₀] = E[uₖ₋₁ᵀvₖ], vₖ=Aᵏv₀, uₖ=(Aᵀ)ᵏu₀
-            right_samples = batched_jvp_fn(right_samples)  # vₖ₊₁ = A vₖ
-            tr_odd_power = vecdot(left_samples, right_samples, dim=-1).mean(dim=-1)
-
-            # tr(A²ᵏ) = E[u₀ᵀA²ᵏv₀] = E[uₖᵀvₖ],  vₖ=Aᵏv₀, uₖ=(Aᵀ)ᵏu₀
-            left_samples = batched_vjp_fn(left_samples)  # uₖ₊₁ = Aᵀvₖ
-            tr_even_power = vecdot(left_samples, right_samples, dim=-1).mean(dim=-1)
-
-            logabsdet = logabsdet + tr_odd_power / k
-            logabsdet = logabsdet - tr_even_power / (k + 1)
-
-        return y, logabsdet
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def compute_xtrace(
-        self, fn: Fn[[Tensor], Tensor], x: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Estimate the log-absolute-determinant using a power series and XTrace."""
-        assert self.num_samples is not None
-        assert self.num_series_terms is not None
-
-        y, jvp_fn = linearize(fn, x)  # (...d)  -> (...d)
-        batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-        samples = torch.randn(  # (...dn)
-            (*x.shape, self.num_samples),
-            device=x.device,
-            dtype=x.dtype,
-        )
-        logabsdet = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
-        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
-        for k in range(1, self.num_series_terms + 1):
-            # log|det(I+A)| = Re(tr(log I+A)) = Re(∑_{k≥1} (-1)ᵏ⁺¹/k tr(Aᵏ))
-            sign = sign.neg()
-            samples = batched_jvp_fn(samples)
-            tr_k_power = xtrace_estimator(batched_jvp_fn, samples)
-            logabsdet = logabsdet + (sign / k) * tr_k_power
-
-        return y, logabsdet
+                raise TypeError(f"Unknown logabsdet estimator {estimator!r}")
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(self, fn: Fn[[Tensor], Tensor], x: Tensor) -> tuple[Tensor, Tensor]:
-        return self.method(fn, x)
+        y = fn(x)
+        match self.estimator:
+            case ExactEstimator():
+                return y, self.estimator.estimate_logabsdet(fn, x)
+            case XTraceEstimator():
+                if self.num_series_terms is None:
+                    raise ValueError(
+                        "num_series_terms is required for stochastic logabsdet estimation"
+                    )
+                return y, self.estimator.estimate_logabsdet(
+                    fn, x, self.num_series_terms
+                )
+            case _:
+                if self.num_series_terms is None:
+                    raise ValueError(
+                        "num_series_terms is required for stochastic logabsdet estimation"
+                    )
+                return y, logabsdet(self.estimator, fn, x, self.num_series_terms)
