@@ -8,6 +8,7 @@ __all__ = [
     "is_backward_stable",
     "is_banded",
     "is_contraction",
+    "is_column_orthogonal",
     "is_spectral_normalized",
     "is_lipschitz_bounded",
     "is_diagonal",
@@ -24,6 +25,7 @@ __all__ = [
     "is_orthogonal",
     "is_positive_definite",
     "is_positive_semidefinite",
+    "is_row_orthogonal",
     "is_special_orthogonal",
     "is_rank_one",
     "is_skew_symmetric",
@@ -243,6 +245,52 @@ def is_orthogonal(
         rtol=rtol,
         atol=atol,
     ).all(dim=dim)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_column_orthogonal(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor has orthonormal columns."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] < x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    gram = x.mT @ x
+    eye = torch.eye(x.shape[-1], dtype=x.dtype, device=x.device)
+    return torch.isclose(gram, eye, rtol=rtol, atol=atol).all(dim=(-2, -1))
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_row_orthogonal(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor has orthonormal rows."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] > x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    gram = x @ x.mT
+    eye = torch.eye(x.shape[-2], dtype=x.dtype, device=x.device)
+    return torch.isclose(gram, eye, rtol=rtol, atol=atol).all(dim=(-2, -1))
 
 
 @signature("(..., n, n) -> bool[(...)]")

@@ -9,7 +9,7 @@ from linodenet.domains import (
     TensorDomains,
     VectorDomains,
 )
-from linodenet.domains.matrix_domains import Tall, Wide
+from linodenet.domains.matrix_domains import ColumnOrthogonal, RowOrthogonal, Tall, Wide
 
 
 class TestScalarDomains:
@@ -157,10 +157,16 @@ class TestMatrixDomains:
         assert MatrixDomains.SQUARE <= MatrixDomains.SQUARE
         assert MatrixDomains.SQUARE <= MatrixDomains.TALL
         assert MatrixDomains.SQUARE <= MatrixDomains.WIDE
+        assert MatrixDomains.ORTHOGONAL <= MatrixDomains.COLUMN_ORTHOGONAL
+        assert MatrixDomains.ORTHOGONAL <= MatrixDomains.ROW_ORTHOGONAL
+        assert MatrixDomains.COLUMN_ORTHOGONAL <= MatrixDomains.TALL
+        assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.WIDE
         assert MatrixDomains.TALL <= MatrixDomains.RECTANGULAR
         assert MatrixDomains.WIDE <= MatrixDomains.RECTANGULAR
         assert MatrixDomains.TALL != MatrixDomains.RECTANGULAR
         assert MatrixDomains.WIDE != MatrixDomains.RECTANGULAR
+        assert MatrixDomains.COLUMN_ORTHOGONAL != MatrixDomains.TALL
+        assert MatrixDomains.ROW_ORTHOGONAL != MatrixDomains.WIDE
 
         assert MatrixDomains.DIAGONAL <= MatrixDomains.SYMMETRIC
         assert MatrixDomains.DIAGONAL != MatrixDomains.SYMMETRIC
@@ -216,3 +222,26 @@ class TestMatrixDomains:
 
         with pytest.raises(ValueError, match="Wide matrices"):
             Wide(2, 1)
+
+    def test_column_and_row_orthogonal_membership(self) -> None:
+        column_orthogonal = tensor([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+        row_orthogonal = tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        square_orthogonal = tensor([[0.0, 1.0], [1.0, 0.0]])
+        non_orthogonal = tensor([[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]])
+
+        assert column_orthogonal in ColumnOrthogonal()
+        assert column_orthogonal not in RowOrthogonal()
+
+        assert row_orthogonal in RowOrthogonal()
+        assert row_orthogonal not in ColumnOrthogonal()
+
+        assert square_orthogonal in ColumnOrthogonal()
+        assert square_orthogonal in RowOrthogonal()
+
+        assert non_orthogonal not in ColumnOrthogonal()
+        assert non_orthogonal not in RowOrthogonal()
+
+        assert column_orthogonal in ColumnOrthogonal(3, 2)
+        assert column_orthogonal not in ColumnOrthogonal(2, 2)
+        assert row_orthogonal in RowOrthogonal(2, 3)
+        assert row_orthogonal not in RowOrthogonal(2, 2)

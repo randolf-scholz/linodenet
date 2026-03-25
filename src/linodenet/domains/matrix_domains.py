@@ -8,6 +8,8 @@ __all__ = [
     "Rectangular",
     "Tall",
     "Wide",
+    "ColumnOrthogonal",
+    "RowOrthogonal",
     "Symmetric",
     "SkewSymmetric",
     "LowRank",
@@ -19,6 +21,7 @@ from dataclasses import KW_ONLY, dataclass
 from types import MappingProxyType
 from typing import Final
 
+import torch
 from torch import Tensor
 
 from .base import Domain, Intersection, Inverse, PosetEnum, Union
@@ -127,6 +130,42 @@ class Wide(Rectangular):
 
 
 @dataclass(frozen=True)
+class ColumnOrthogonal(Tall):
+    r"""Domain of tall matrices with orthonormal columns."""
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        if not super().__contains__(item):
+            return False
+        cols = item.shape[-1]
+        gram = item.mT @ item
+        eye = torch.eye(cols, dtype=item.dtype, device=item.device)
+        return bool(torch.allclose(gram, eye))
+
+    def __call__(
+        self, rows: int | None = None, cols: int | None = None
+    ) -> ColumnOrthogonal:
+        return ColumnOrthogonal(rows, cols)
+
+
+@dataclass(frozen=True)
+class RowOrthogonal(Wide):
+    r"""Domain of wide matrices with orthonormal rows."""
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        if not super().__contains__(item):
+            return False
+        rows = item.shape[-2]
+        gram = item @ item.mT
+        eye = torch.eye(rows, dtype=item.dtype, device=item.device)
+        return bool(torch.allclose(gram, eye))
+
+    def __call__(
+        self, rows: int | None = None, cols: int | None = None
+    ) -> RowOrthogonal:
+        return RowOrthogonal(rows, cols)
+
+
+@dataclass(frozen=True)
 class Square(MatrixDomain):
     r"""Domain of square matrices with optional fixed size."""
 
@@ -210,6 +249,8 @@ class MatrixDomains(PosetEnum):
     RECTANGULAR = "rectangular"  # m × n matrices
     TALL = "tall"  # m × n matrices with m ≥ n
     WIDE = "wide"  # m × n matrices with m ≤ n
+    COLUMN_ORTHOGONAL = "column_orthogonal"  # m × n matrices with QᵀQ = 𝕀ₙ
+    ROW_ORTHOGONAL = "row_orthogonal"  # m × n matrices with QQᵀ = 𝕀ₘ
     SQUARE = "square"  # n × n matrices
     EVEN_SQUARE = "even_square"  # 2n × 2n matrices
 
@@ -286,6 +327,7 @@ M = MatrixDomains  # temporary alias
 MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.BANDED: frozenset({M.RECTANGULAR}),
     M.CAYLEY_ORTHOGONAL: frozenset({M.SPECIAL_ORTHOGONAL}),
+    M.COLUMN_ORTHOGONAL: frozenset({M.TALL, M.SPECTRAL_NORMALIZED}),
     M.COLUMN_STOCHASTIC: frozenset({M.RECTANGULAR}),
     M.CONTRACTION: frozenset({M.RECTANGULAR}),
     M.DIAGONAL: frozenset({M.SYMMETRIC, M.TRIDIAGONAL, M.UPPER_TRIANGULAR, M.LOWER_TRIANGULAR}),
@@ -301,12 +343,16 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.NORMAL: frozenset({M.SQUARE}),
-    M.ORTHOGONAL: frozenset({M.SQUARE, M.INVERTIBLE, M.NORMAL, M.SPECTRAL_NORMALIZED}),
+    M.ORTHOGONAL: frozenset({
+        M.SQUARE, M.COLUMN_ORTHOGONAL, M.ROW_ORTHOGONAL,
+        M.INVERTIBLE, M.NORMAL, M.SPECTRAL_NORMALIZED,
+    }),
     M.PERMUTATION: frozenset({M.SPARSE, M.ORTHOGONAL, M.DOUBLY_STOCHASTIC}),
     M.POSITIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.POSITIVE_SEMIDEFINITE}),
     M.POSITIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.POSITIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.RANK_ONE: frozenset({M.LOW_RANK}),
+    M.ROW_ORTHOGONAL: frozenset({M.WIDE, M.SPECTRAL_NORMALIZED}),
     M.ROW_STOCHASTIC: frozenset({M.RECTANGULAR}),
     M.SINGULAR: frozenset({M.SQUARE}),
     M.SKEW_SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
