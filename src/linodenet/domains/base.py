@@ -3,6 +3,7 @@ r"""Base protocols and ordering utilities for domain definitions."""
 __all__ = [
     "Domain",
     "Intersection",
+    "Meet",
     "Union",
     "Inverse",
     "PosetEnum",
@@ -13,6 +14,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
+from types import MappingProxyType
 from typing import ClassVar, Protocol, Self
 
 from torch import Tensor
@@ -94,14 +96,42 @@ class Inverse[D: Domain](Domain):
         return item not in self.domain
 
 
+@dataclass(frozen=True)
+class Meet:
+    r"""Structural meet expression for poset labels."""
+
+    factors: frozenset[PosetEnum]
+
+    def __init__(self, factors: Iterable[PosetEnum] = (), /) -> None:
+        nodes: set[PosetEnum] = set()
+        for factor in factors:
+            match factor:
+                case Meet(factors=subfactors):
+                    nodes.update(subfactors)
+                case PosetEnum():
+                    nodes.add(factor)
+                case _:
+                    raise TypeError(f"Expected PosetEnum factor, got {factor!r}.")
+        object.__setattr__(self, "factors", frozenset(nodes))
+
+    def __and__(self, other: PosetEnum | Meet, /) -> Meet:
+        return Meet({*self.factors, other})
+
+    def __iter__(self) -> Iterator[PosetEnum]:
+        return iter(self.factors)
+
+    def __len__(self) -> int:
+        return len(self.factors)
+
+
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self | Meet]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Dependencies"""
     KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Reverse dependencies."""
-    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, frozenset[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
 
     @classmethod
@@ -123,10 +153,10 @@ class PosetEnum(Enum):
     def _compiled_edges(cls) -> Mapping[Self, frozenset[Self]]:
         edges: dict[Self, set[Self]] = {node: set() for node in cls}
 
-        for src, targets in cls.KNOWN_EDGES.items():  # type: ignore[attr-defined]
+        for src, targets in cls._validated_edgespecs().items():
             edges[src].update(targets)
 
-        for meet, factors in getattr(cls, "KNOWN_MEETS", ()):
+        for meet, factors in cls._validated_meets():
             edges[meet].update(factors)
 
         for tag, members in cls.KNOWN_TAGS.items():  # type: ignore[attr-defined]
@@ -145,8 +175,66 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
+    def _validated_edgespecs(cls) -> Mapping[Self, frozenset[Self]]:
+        raw_edges = cls.KNOWN_EDGES
+        members = frozenset(cls)
+
+        if bad_keys := {node for node in raw_edges if node not in members}:
+            raise TypeError(f"Expected {cls.__name__} nodes, got {bad_keys!r}.")
+
+        edges: dict[Self, frozenset[Self]] = {}
+        for src, targets in raw_edges.items():
+            if bad_targets := {
+                target
+                for target in targets
+                if not isinstance(target, cls) and not isinstance(target, Meet)
+            }:
+                raise TypeError(
+                    f"Expected {cls.__name__} or Meet targets, got {bad_targets!r}."
+                )
+            plain_targets = frozenset(
+                target for target in targets if isinstance(target, cls)
+            )
+            if bad_targets := {
+                target for target in plain_targets if target not in members
+            }:
+                raise TypeError(
+                    f"Expected {cls.__name__} targets, got {bad_targets!r}."
+                )
+            edges[src] = plain_targets
+
+        return edges
+
+    @classmethod
+    @cache
+    def _validated_edge_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
+        raw_edges = cls.KNOWN_EDGES
+        members = frozenset(cls)
+
+        edge_meets: tuple[tuple[Self, frozenset[Self]], ...] = tuple(
+            (src, frozenset(target))
+            for src, targets in raw_edges.items()
+            for target in targets
+            if isinstance(target, Meet)
+        )
+
+        all_factors = frozenset().union(*(factors for _, factors in edge_meets))
+        if bad_factors := {factor for factor in all_factors if factor not in members}:
+            raise TypeError(
+                f"Expected {cls.__name__} edge-meet factors, got {bad_factors!r}."
+            )
+
+        if empty_meets := {node for node, factors in edge_meets if not factors}:
+            raise ValueError(
+                f"Expected non-empty edge-meet factors, got {empty_meets!r}."
+            )
+
+        return edge_meets
+
+    @classmethod
+    @cache
     def _validated_edges(cls) -> Mapping[Self, frozenset[Self]]:
-        edges: Mapping[Self, frozenset[Self]] = cls._compiled_edges()
+        edges = cls._compiled_edges()
         members = frozenset(cls)
 
         if bad_keys := {node for node in edges if node not in members}:
@@ -179,11 +267,13 @@ class PosetEnum(Enum):
     @classmethod
     @cache
     def _validated_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
-        meets = tuple(getattr(cls, "KNOWN_MEETS", ()))
+        raw_meets = cls.KNOWN_MEETS
         members = frozenset(cls)
 
-        if bad_keys := {node for node, _ in meets if node not in members}:
+        if bad_keys := {node for node, _ in raw_meets if node not in members}:
             raise TypeError(f"Expected {cls.__name__} meet nodes, got {bad_keys!r}.")
+
+        meets = tuple((node, frozenset(factors)) for node, factors in raw_meets)
 
         all_factors = frozenset().union(*(factors for _, factors in meets))
         if bad_factors := {factor for factor in all_factors if factor not in members}:
@@ -200,7 +290,7 @@ class PosetEnum(Enum):
     @cache
     def _upward_closure(cls, node: Self, /) -> frozenset[Self]:
         edges = cls._validated_edges()
-        meets = cls._validated_meets()
+        meets = (*cls._validated_meets(), *cls._validated_edge_meets())
 
         closure: set[Self] = set()
         stack = [node]
@@ -213,9 +303,9 @@ class PosetEnum(Enum):
             closure.add(current)
             stack.extend(edges.get(current, frozenset()))
 
-            for meet, factors in meets:
-                if meet not in closure and factors <= closure:
-                    stack.append(meet)
+            for consequent, factors in meets:
+                if consequent not in closure and factors <= closure:
+                    stack.append(consequent)
 
         return frozenset(closure)
 
@@ -229,5 +319,23 @@ class PosetEnum(Enum):
             return NotImplemented
         return self <= other and self != other
 
+    @property
+    def supertypes(self) -> frozenset[Self]:
+        return self._upward_closure(self)
+
+    @property
+    def factorizations(self) -> frozenset[Meet]:
+        return frozenset(
+            Meet(factors) for node, factors in self._validated_meets() if node is self
+        )
+
+    def __and__(self, other: Self | Meet, /) -> Meet:
+        return Meet({self, other})
+
     def __str__(self) -> str:
         return str(self.value)
+
+
+PosetEnum.KNOWN_EDGES = MappingProxyType({})
+PosetEnum.KNOWN_TAGS = MappingProxyType({})
+PosetEnum.KNOWN_MEETS = ()

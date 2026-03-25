@@ -3,7 +3,7 @@ from torch import tensor
 
 from linodenet.domains import (
     Interval,
-    MatrixDomains,
+    MatrixDomains as M,
     RealDomain,
     ScalarDomains,
     TensorDomains,
@@ -154,146 +154,115 @@ class TestTensorDomains:
 
 
 class TestMatrixDomains:
+    def test_poset_meet_expression(self) -> None:
+        meet = M.TALL & M.WIDE & M.SQUARE
+        assert len(meet) == 3
+        assert set(meet) == {
+            M.TALL,
+            M.WIDE,
+            M.SQUARE,
+        }
+        assert M.SQUARE.factorizations == frozenset({M.TALL & M.WIDE})
+        assert M.SQUARE <= M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC
+        assert M.DOUBLY_STOCHASTIC <= M.SQUARE
+
     def test_partial_order_and_representation(self) -> None:
-        assert MatrixDomains.SQUARE <= MatrixDomains.SQUARE
-        assert MatrixDomains.SQUARE <= MatrixDomains.TALL
-        assert MatrixDomains.SQUARE <= MatrixDomains.WIDE
-        assert MatrixDomains.ORTHOGONAL <= MatrixDomains.COLUMN_ORTHOGONAL
-        assert MatrixDomains.ORTHOGONAL <= MatrixDomains.ROW_ORTHOGONAL
-        assert MatrixDomains.ORTHOGONAL <= MatrixDomains.SQUARE
-        assert MatrixDomains.COLUMN_ORTHOGONAL <= MatrixDomains.TALL
-        assert MatrixDomains.COLUMN_ORTHOGONAL <= MatrixDomains.LEFT_INVERTIBLE
-        assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.RIGHT_INVERTIBLE
-        assert MatrixDomains.INVERTIBLE <= MatrixDomains.LEFT_INVERTIBLE
-        assert MatrixDomains.INVERTIBLE <= MatrixDomains.RIGHT_INVERTIBLE
-        assert MatrixDomains.INVERTIBLE <= MatrixDomains.SQUARE
-        assert MatrixDomains.LOWER_INVERTIBLE <= MatrixDomains.LOWER_TRIANGULAR
-        assert MatrixDomains.LOWER_INVERTIBLE <= MatrixDomains.INVERTIBLE
-        assert MatrixDomains.UPPER_INVERTIBLE <= MatrixDomains.UPPER_TRIANGULAR
-        assert MatrixDomains.UPPER_INVERTIBLE <= MatrixDomains.INVERTIBLE
-        assert MatrixDomains.CHOLESKY_FACTOR <= MatrixDomains.LOWER_INVERTIBLE
-        assert MatrixDomains.CHOLESKY_FACTOR <= MatrixDomains.POSITIVE_DIAGONAL_ENTRIES
-        assert MatrixDomains.LEFT_INVERTIBLE <= MatrixDomains.TALL
-        assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.WIDE
-        assert MatrixDomains.RIGHT_INVERTIBLE <= MatrixDomains.WIDE
-        assert MatrixDomains.TALL <= MatrixDomains.RECTANGULAR
-        assert MatrixDomains.WIDE <= MatrixDomains.RECTANGULAR
-        assert MatrixDomains.TALL != MatrixDomains.RECTANGULAR
-        assert MatrixDomains.WIDE != MatrixDomains.RECTANGULAR
-        assert MatrixDomains.LEFT_INVERTIBLE != MatrixDomains.TALL
-        assert MatrixDomains.RIGHT_INVERTIBLE != MatrixDomains.WIDE
-        assert MatrixDomains.COLUMN_ORTHOGONAL != MatrixDomains.TALL
-        assert MatrixDomains.ROW_ORTHOGONAL != MatrixDomains.WIDE
-        assert MatrixDomains.LOWER_INVERTIBLE != MatrixDomains.LOWER_TRIANGULAR
-        assert MatrixDomains.UPPER_INVERTIBLE != MatrixDomains.UPPER_TRIANGULAR
-        assert MatrixDomains.CHOLESKY_FACTOR != MatrixDomains.LOWER_INVERTIBLE
+        assert M.SQUARE <= M.SQUARE
+        assert M.SQUARE <= M.TALL
+        assert M.SQUARE <= M.WIDE
+        assert M.ORTHOGONAL <= M.COLUMN_ORTHOGONAL
+        assert M.ORTHOGONAL <= M.ROW_ORTHOGONAL
+        assert M.ORTHOGONAL <= M.SQUARE
+        assert M.COLUMN_ORTHOGONAL <= M.TALL
+        assert M.COLUMN_ORTHOGONAL <= M.LEFT_INVERTIBLE
+        assert M.ROW_ORTHOGONAL <= M.RIGHT_INVERTIBLE
+        assert M.INVERTIBLE <= M.LEFT_INVERTIBLE
+        assert M.INVERTIBLE <= M.RIGHT_INVERTIBLE
+        assert M.INVERTIBLE <= M.SQUARE
+        assert M.LOWER_INVERTIBLE <= M.LOWER_TRIANGULAR
+        assert M.LOWER_INVERTIBLE <= M.INVERTIBLE
+        assert M.UPPER_INVERTIBLE <= M.UPPER_TRIANGULAR
+        assert M.UPPER_INVERTIBLE <= M.INVERTIBLE
+        assert M.CHOLESKY_FACTOR <= M.LOWER_INVERTIBLE
+        assert M.CHOLESKY_FACTOR <= M.POSITIVE_DIAGONAL_ENTRIES
+        assert M.LEFT_INVERTIBLE <= M.TALL
+        assert M.ROW_ORTHOGONAL <= M.WIDE
+        assert M.RIGHT_INVERTIBLE <= M.WIDE
+        assert M.TALL <= M.RECTANGULAR
+        assert M.WIDE <= M.RECTANGULAR
+        assert M.TALL != M.RECTANGULAR
+        assert M.WIDE != M.RECTANGULAR
+        assert M.LEFT_INVERTIBLE != M.TALL
+        assert M.RIGHT_INVERTIBLE != M.WIDE
+        assert M.COLUMN_ORTHOGONAL != M.TALL
+        assert M.ROW_ORTHOGONAL != M.WIDE
+        assert M.LOWER_INVERTIBLE != M.LOWER_TRIANGULAR
+        assert M.UPPER_INVERTIBLE != M.UPPER_TRIANGULAR
+        assert M.CHOLESKY_FACTOR != M.LOWER_INVERTIBLE
 
-        assert MatrixDomains.DIAGONAL <= MatrixDomains.SYMMETRIC
-        assert MatrixDomains.DIAGONAL != MatrixDomains.SYMMETRIC
-        assert MatrixDomains.DIAGONAL <= MatrixDomains.SQUARE
-        assert MatrixDomains.DIAGONAL != MatrixDomains.SQUARE
-        assert MatrixDomains.DIAGONAL <= MatrixDomains.RECTANGULAR
-        assert MatrixDomains.DIAGONAL != MatrixDomains.RECTANGULAR
-        assert MatrixDomains.POSITIVE_DIAGONAL_ENTRIES <= MatrixDomains.RECTANGULAR
-        assert MatrixDomains.NEGATIVE_DIAGONAL_ENTRIES <= MatrixDomains.RECTANGULAR
-        assert MatrixDomains.ZERO_DIAGONAL <= MatrixDomains.RECTANGULAR
-        assert MatrixDomains.SKEW_SYMMETRIC <= MatrixDomains.ZERO_DIAGONAL
-        assert not MatrixDomains.ZERO_DIAGONAL <= MatrixDomains.DIAGONAL
-        assert MatrixDomains.RANK_ONE <= MatrixDomains.LOW_RANK
-        assert MatrixDomains.RANK_ONE != MatrixDomains.LOW_RANK
-        assert MatrixDomains.RANK_ONE <= MatrixDomains.RECTANGULAR
-        assert MatrixDomains.RANK_ONE != MatrixDomains.RECTANGULAR
+        assert M.DIAGONAL <= M.SYMMETRIC
+        assert M.DIAGONAL != M.SYMMETRIC
+        assert M.DIAGONAL <= M.SQUARE
+        assert M.DIAGONAL != M.SQUARE
+        assert M.DIAGONAL <= M.RECTANGULAR
+        assert M.DIAGONAL != M.RECTANGULAR
+        assert M.POSITIVE_DIAGONAL_ENTRIES <= M.RECTANGULAR
+        assert M.NEGATIVE_DIAGONAL_ENTRIES <= M.RECTANGULAR
+        assert M.ZERO_DIAGONAL <= M.RECTANGULAR
+        assert M.SKEW_SYMMETRIC <= M.ZERO_DIAGONAL
+        assert not M.ZERO_DIAGONAL <= M.DIAGONAL
+        assert M.RANK_ONE <= M.LOW_RANK
+        assert M.RANK_ONE != M.LOW_RANK
+        assert M.RANK_ONE <= M.RECTANGULAR
+        assert M.RANK_ONE != M.RECTANGULAR
 
-        assert MatrixDomains.SPECIAL_ORTHOGONAL <= MatrixDomains.ORTHOGONAL
-        assert MatrixDomains.SPECIAL_ORTHOGONAL != MatrixDomains.ORTHOGONAL
-        assert MatrixDomains.SPECIAL_ORTHOGONAL <= MatrixDomains.INVERTIBLE
-        assert MatrixDomains.SPECIAL_ORTHOGONAL != MatrixDomains.INVERTIBLE
-        assert MatrixDomains.IDENTITY <= MatrixDomains.DIAGONAL
-        assert MatrixDomains.IDENTITY <= MatrixDomains.PERMUTATION
-        assert MatrixDomains.PERMUTATION <= MatrixDomains.ROW_STOCHASTIC
-        assert MatrixDomains.PERMUTATION != MatrixDomains.ROW_STOCHASTIC
-        assert MatrixDomains.PERMUTATION <= MatrixDomains.DOUBLY_STOCHASTIC
-        assert MatrixDomains.PERMUTATION <= MatrixDomains.SPARSE
-        assert MatrixDomains.DOUBLY_STOCHASTIC <= MatrixDomains.SQUARE
-        assert MatrixDomains.PERMUTATION <= MatrixDomains.SQUARE
-        assert MatrixDomains.PERMUTATION != MatrixDomains.SQUARE
-        assert MatrixDomains.NONE <= MatrixDomains.CONTRACTION
-        assert MatrixDomains.NONE <= MatrixDomains.SPECTRAL_NORMALIZED
-        assert MatrixDomains.NONE <= MatrixDomains.POSITIVE_DEFINITE
-        assert MatrixDomains.NONE <= MatrixDomains.NEGATIVE_DEFINITE
+        assert M.SPECIAL_ORTHOGONAL <= M.ORTHOGONAL
+        assert M.SPECIAL_ORTHOGONAL != M.ORTHOGONAL
+        assert M.SPECIAL_ORTHOGONAL <= M.INVERTIBLE
+        assert M.SPECIAL_ORTHOGONAL != M.INVERTIBLE
+        assert M.IDENTITY <= M.DIAGONAL
+        assert M.IDENTITY <= M.PERMUTATION
+        assert M.PERMUTATION <= M.ROW_STOCHASTIC
+        assert M.PERMUTATION != M.ROW_STOCHASTIC
+        assert M.PERMUTATION <= M.DOUBLY_STOCHASTIC
+        assert M.PERMUTATION <= M.SPARSE
+        assert M.DOUBLY_STOCHASTIC <= M.SQUARE
+        assert M.PERMUTATION <= M.SQUARE
+        assert M.PERMUTATION != M.SQUARE
+        assert M.NONE <= M.CONTRACTION
+        assert M.NONE <= M.SPECTRAL_NORMALIZED
+        assert M.NONE <= M.POSITIVE_DEFINITE
+        assert M.NONE <= M.NEGATIVE_DEFINITE
 
-        assert not MatrixDomains.SYMMETRIC <= MatrixDomains.ORTHOGONAL
-        assert not MatrixDomains.ORTHOGONAL <= MatrixDomains.SYMMETRIC
-        assert not MatrixDomains.LOW_RANK <= MatrixDomains.BANDED
-        assert not MatrixDomains.BANDED <= MatrixDomains.LOW_RANK
-        assert not MatrixDomains.POSITIVE_DEFINITE <= MatrixDomains.NEGATIVE_DEFINITE
-        assert not MatrixDomains.NEGATIVE_DEFINITE <= MatrixDomains.POSITIVE_DEFINITE
+        assert not M.SYMMETRIC <= M.ORTHOGONAL
+        assert not M.ORTHOGONAL <= M.SYMMETRIC
+        assert not M.LOW_RANK <= M.BANDED
+        assert not M.BANDED <= M.LOW_RANK
+        assert not M.POSITIVE_DEFINITE <= M.NEGATIVE_DEFINITE
+        assert not M.NEGATIVE_DEFINITE <= M.POSITIVE_DEFINITE
 
-        assert MatrixDomains.EYE is MatrixDomains.IDENTITY
-        assert str(MatrixDomains.SQUARE) == "square"
+        assert M.EYE is M.IDENTITY
+        assert str(M.SQUARE) == "square"
 
         with pytest.raises(TypeError):
-            _ = MatrixDomains.SQUARE <= "square"
+            _ = M.SQUARE <= "square"
 
     def test_none_meet_rules(self) -> None:
-        none_meets = {
-            factors
-            for meet, factors in MatrixDomains._validated_meets()
-            if meet is MatrixDomains.NONE
-        }
-        assert (
-            frozenset({MatrixDomains.CONTRACTION, MatrixDomains.SPECTRAL_NORMALIZED})
-            in none_meets
-        )
-        assert (
-            frozenset({MatrixDomains.INVERTIBLE, MatrixDomains.SINGULAR}) in none_meets
-        )
-        assert (
-            frozenset(
-                {MatrixDomains.NEGATIVE_DEFINITE, MatrixDomains.POSITIVE_DEFINITE}
-            )
-            in none_meets
-        )
+        none_meets = M.NONE.factorizations
+        assert M.CONTRACTION & M.SPECTRAL_NORMALIZED in none_meets
+        assert M.INVERTIBLE & M.SINGULAR in none_meets
+        assert M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE in none_meets
 
     def test_zero_and_eye_meet_rules(self) -> None:
-        zero_meets = {
-            factors
-            for meet, factors in MatrixDomains._validated_meets()
-            if meet is MatrixDomains.ZERO
-        }
-        eye_meets = {
-            factors
-            for meet, factors in MatrixDomains._validated_meets()
-            if meet is MatrixDomains.EYE
-        }
+        zero_meets = M.ZERO.factorizations
+        eye_meets = M.EYE.factorizations
 
-        assert (
-            frozenset({MatrixDomains.SYMMETRIC, MatrixDomains.SKEW_SYMMETRIC})
-            in zero_meets
-        )
-        assert (
-            frozenset({MatrixDomains.DIAGONAL, MatrixDomains.SKEW_SYMMETRIC})
-            in zero_meets
-        )
-        assert (
-            frozenset(
-                {
-                    MatrixDomains.POSITIVE_SEMIDEFINITE,
-                    MatrixDomains.NEGATIVE_SEMIDEFINITE,
-                }
-            )
-            in zero_meets
-        )
-        assert (
-            frozenset(
-                {MatrixDomains.POSITIVE_SEMIDEFINITE, MatrixDomains.SKEW_SYMMETRIC}
-            )
-            in zero_meets
-        )
-        assert (
-            frozenset({MatrixDomains.POSITIVE_DEFINITE, MatrixDomains.ORTHOGONAL})
-            in eye_meets
-        )
+        assert M.SYMMETRIC & M.SKEW_SYMMETRIC in zero_meets
+        assert M.DIAGONAL, M.ZERO_DIAGONAL in zero_meets
+        assert M.POSITIVE_SEMIDEFINITE & M.NEGATIVE_SEMIDEFINITE in zero_meets
+        assert M.POSITIVE_SEMIDEFINITE & M.SKEW_SYMMETRIC in zero_meets
+        assert M.POSITIVE_DEFINITE & M.ORTHOGONAL in eye_meets
+        assert M.DIAGONAL & M.PERMUTATION in eye_meets
 
     def test_tall_and_wide_membership(self) -> None:
         tall = tensor([[1.0], [2.0]])
