@@ -123,15 +123,34 @@ class Meet:
     def __len__(self) -> int:
         return len(self.factors)
 
+    def __le__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        types = {type(factor) for factor in self.factors}
+        if len(types) != 1 or type(other) not in types:
+            return NotImplemented
+        cls = type(other)
+        return other in cls._closure_from(self.factors)
+
+    def __lt__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        return self <= other and other not in self.factors
+
+    def __ge__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        return other <= self
+
 
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self | Meet]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_EDGES: ClassVar[Mapping[Self, frozenset[Self | Meet]]]
     r"""Dependencies"""
-    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]
     r"""Reverse dependencies."""
-    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet]]]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
 
     @classmethod
@@ -288,12 +307,12 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _upward_closure(cls, node: Self, /) -> frozenset[Self]:
+    def _closure_from(cls, nodes: frozenset[Self], /) -> frozenset[Self]:
         edges = cls._validated_edges()
         meets = (*cls._validated_meets(), *cls._validated_edge_meets())
 
         closure: set[Self] = set()
-        stack = [node]
+        stack = list(nodes)
 
         while stack:
             current = stack.pop()
@@ -310,9 +329,11 @@ class PosetEnum(Enum):
         return frozenset(closure)
 
     def __le__(self, other: object, /) -> bool:
+        if isinstance(other, Meet):
+            return all(self <= factor for factor in other)
         if not isinstance(other, type(self)):
             return NotImplemented
-        return other in type(self)._upward_closure(self)
+        return other in self.supertypes
 
     def __lt__(self, other: object, /) -> bool:
         if not isinstance(other, type(self)):
@@ -321,7 +342,7 @@ class PosetEnum(Enum):
 
     @property
     def supertypes(self) -> frozenset[Self]:
-        return self._upward_closure(self)
+        return self._closure_from(frozenset({self}))
 
     @property
     def factorizations(self) -> frozenset[Meet]:
