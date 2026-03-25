@@ -257,6 +257,7 @@ class MatrixDomains(PosetEnum):
     # specific matrices
     ZERO = "zero"  # the zero matrix
     IDENTITY = "identity"  # the identity matrix
+    EYE = "identity"  # alias
     STANDARD_SYMPLECTIC = "standard_symplectic"  # [0, 𝕀; -𝕀, 0]
 
     # rank
@@ -268,6 +269,9 @@ class MatrixDomains(PosetEnum):
     LEFT_INVERTIBLE = "left_invertible"  # full column rank, admits L with LA = 𝕀
     RIGHT_INVERTIBLE = "right_invertible"  # full row rank, admits R with AR = 𝕀
     INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
+    LOWER_INVERTIBLE = "lower_invertible"
+    UPPER_INVERTIBLE = "upper_invertible"
+    CHOLESKY_FACTOR = "cholesky_factor"
     UNIT_DETERMINANT = "unit_determinant"  # SLₙ(R) (det=1)
     GENERAL_LINEAR = "invertible"  # alias
     SPECIAL_LINEAR = "unit_determinant"  # alias
@@ -334,18 +338,24 @@ MatrixDomains.KNOWN_MEETS = (
     (M.NONE, frozenset({M.NEGATIVE_DETERMINANT, M.POSITIVE_DETERMINANT})),
     (M.NONE, frozenset({M.NEGATIVE_DETERMINANT, M.UNIT_DETERMINANT})),
     (M.NONE, frozenset({M.NEGATIVE_SEMIDEFINITE, M.POSITIVE_DEFINITE})),
+    (M.ZERO, frozenset({M.DIAGONAL, M.SKEW_SYMMETRIC})),
+    (M.ZERO, frozenset({M.NEGATIVE_SEMIDEFINITE, M.POSITIVE_SEMIDEFINITE})),
+    (M.ZERO, frozenset({M.NEGATIVE_SEMIDEFINITE, M.SKEW_SYMMETRIC})),
+    (M.ZERO, frozenset({M.POSITIVE_SEMIDEFINITE, M.SKEW_SYMMETRIC})),
     (M.ZERO, frozenset({M.SYMMETRIC, M.SKEW_SYMMETRIC})),
-    (M.ZERO, frozenset({M.POSITIVE_SEMIDEFINITE, M.NEGATIVE_SEMIDEFINITE})),
+    (M.EYE, frozenset({M.POSITIVE_DEFINITE, M.ORTHOGONAL})),
     (M.DIAGONAL, frozenset({M.LOWER_TRIANGULAR, M.UPPER_TRIANGULAR})),
     (M.DOUBLY_STOCHASTIC, frozenset({M.SQUARE, M.ROW_STOCHASTIC, M.COLUMN_STOCHASTIC})),
     (M.IDENTITY, frozenset({M.DIAGONAL, M.PERMUTATION})),
     (M.INVERTIBLE, frozenset({M.LEFT_INVERTIBLE, M.RIGHT_INVERTIBLE})),
+    (M.LOWER_INVERTIBLE, frozenset({M.LOWER_TRIANGULAR, M.INVERTIBLE})),
     (M.NEGATIVE_DEFINITE, frozenset({M.NEGATIVE_SEMIDEFINITE, M.INVERTIBLE})),
     (M.ORTHOGONAL, frozenset({M.COLUMN_ORTHOGONAL, M.ROW_ORTHOGONAL})),
     (M.PERMUTATION, frozenset({M.ORTHOGONAL, M.DOUBLY_STOCHASTIC})),
     (M.POSITIVE_DEFINITE, frozenset({M.POSITIVE_SEMIDEFINITE, M.INVERTIBLE})),
     (M.SPECIAL_ORTHOGONAL, frozenset({M.ORTHOGONAL, M.UNIT_DETERMINANT})),
     (M.SQUARE, frozenset({M.TALL, M.WIDE})),
+    (M.UPPER_INVERTIBLE, frozenset({M.UPPER_TRIANGULAR, M.INVERTIBLE})),
 )
 MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.BANDED: frozenset({M.RECTANGULAR}),
@@ -355,21 +365,17 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.CONTRACTION: frozenset({M.LIPSCHITZ_BOUNDED}),
     M.DIAGONAL: frozenset({M.SYMMETRIC, M.TRIDIAGONAL}),
     M.DIAGONALLY_DOMINANT: frozenset({M.SQUARE}),
-    M.DOUBLY_STOCHASTIC: frozenset(),
     M.EVEN_SQUARE: frozenset({M.SQUARE}),
-    M.INVERTIBLE: frozenset(),
     M.IDENTITY: frozenset({M.SPECIAL_ORTHOGONAL}),
     M.LEFT_INVERTIBLE: frozenset({M.TALL}),
     M.LIPSCHITZ_BOUNDED: frozenset({M.RECTANGULAR}),
     M.LOWER_TRIANGULAR: frozenset({M.SQUARE, M.TRIANGULAR}),
     M.LOW_RANK: frozenset({M.RECTANGULAR}),
-    M.NEGATIVE_DEFINITE: frozenset(),
     M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.NORMAL: frozenset({M.SQUARE}),
     M.ORTHOGONAL: frozenset({M.NORMAL}),
     M.PERMUTATION: frozenset({M.SPARSE}),
-    M.POSITIVE_DEFINITE: frozenset(),
     M.POSITIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.POSITIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.RANK_ONE: frozenset({M.LOW_RANK}),
@@ -379,9 +385,7 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.SINGULAR: frozenset({M.SQUARE}),
     M.SKEW_SYMMETRIC: frozenset({M.SQUARE, M.NORMAL, M.TRACELESS}),
     M.SPARSE: frozenset({M.BOOLEAN}),
-    M.SPECIAL_ORTHOGONAL: frozenset(),
     M.SPECTRAL_NORMALIZED: frozenset({M.RECTANGULAR, M.LIPSCHITZ_BOUNDED}),
-    M.SQUARE: frozenset(),
     M.SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
     M.SYMPLECTIC: frozenset({M.EVEN_SQUARE, M.UNIT_DETERMINANT}),
     M.TALL: frozenset({M.RECTANGULAR}),
@@ -393,6 +397,7 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.ZERO: frozenset({M.SPARSE}),
     M.TOEPLITZ: frozenset({M.RECTANGULAR}),
     M.CIRCULANT: frozenset({M.TOEPLITZ, M.SQUARE}),
+    M.CHOLESKY_FACTOR: frozenset({M.LOWER_INVERTIBLE}),
     M.HANKEL: frozenset({M.RECTANGULAR}),
     M.STANDARD_SYMPLECTIC: frozenset({M.SYMPLECTIC, M.SKEW_SYMMETRIC}),
     M.HAMILTONIAN: frozenset({M.EVEN_SQUARE, M.TRACELESS}),

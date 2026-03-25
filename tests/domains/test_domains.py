@@ -167,6 +167,11 @@ class TestMatrixDomains:
         assert MatrixDomains.INVERTIBLE <= MatrixDomains.LEFT_INVERTIBLE
         assert MatrixDomains.INVERTIBLE <= MatrixDomains.RIGHT_INVERTIBLE
         assert MatrixDomains.INVERTIBLE <= MatrixDomains.SQUARE
+        assert MatrixDomains.LOWER_INVERTIBLE <= MatrixDomains.LOWER_TRIANGULAR
+        assert MatrixDomains.LOWER_INVERTIBLE <= MatrixDomains.INVERTIBLE
+        assert MatrixDomains.UPPER_INVERTIBLE <= MatrixDomains.UPPER_TRIANGULAR
+        assert MatrixDomains.UPPER_INVERTIBLE <= MatrixDomains.INVERTIBLE
+        assert MatrixDomains.CHOLESKY_FACTOR <= MatrixDomains.LOWER_INVERTIBLE
         assert MatrixDomains.LEFT_INVERTIBLE <= MatrixDomains.TALL
         assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.WIDE
         assert MatrixDomains.RIGHT_INVERTIBLE <= MatrixDomains.WIDE
@@ -178,6 +183,9 @@ class TestMatrixDomains:
         assert MatrixDomains.RIGHT_INVERTIBLE != MatrixDomains.WIDE
         assert MatrixDomains.COLUMN_ORTHOGONAL != MatrixDomains.TALL
         assert MatrixDomains.ROW_ORTHOGONAL != MatrixDomains.WIDE
+        assert MatrixDomains.LOWER_INVERTIBLE != MatrixDomains.LOWER_TRIANGULAR
+        assert MatrixDomains.UPPER_INVERTIBLE != MatrixDomains.UPPER_TRIANGULAR
+        assert MatrixDomains.CHOLESKY_FACTOR != MatrixDomains.LOWER_INVERTIBLE
 
         assert MatrixDomains.DIAGONAL <= MatrixDomains.SYMMETRIC
         assert MatrixDomains.DIAGONAL != MatrixDomains.SYMMETRIC
@@ -215,6 +223,7 @@ class TestMatrixDomains:
         assert not MatrixDomains.POSITIVE_DEFINITE <= MatrixDomains.NEGATIVE_DEFINITE
         assert not MatrixDomains.NEGATIVE_DEFINITE <= MatrixDomains.POSITIVE_DEFINITE
 
+        assert MatrixDomains.EYE is MatrixDomains.IDENTITY
         assert str(MatrixDomains.SQUARE) == "square"
 
         with pytest.raises(TypeError):
@@ -238,6 +247,46 @@ class TestMatrixDomains:
                 {MatrixDomains.NEGATIVE_DEFINITE, MatrixDomains.POSITIVE_DEFINITE}
             )
             in none_meets
+        )
+
+    def test_zero_and_eye_meet_rules(self) -> None:
+        zero_meets = {
+            factors
+            for meet, factors in MatrixDomains._validated_meets()
+            if meet is MatrixDomains.ZERO
+        }
+        eye_meets = {
+            factors
+            for meet, factors in MatrixDomains._validated_meets()
+            if meet is MatrixDomains.EYE
+        }
+
+        assert (
+            frozenset({MatrixDomains.SYMMETRIC, MatrixDomains.SKEW_SYMMETRIC})
+            in zero_meets
+        )
+        assert (
+            frozenset({MatrixDomains.DIAGONAL, MatrixDomains.SKEW_SYMMETRIC})
+            in zero_meets
+        )
+        assert (
+            frozenset(
+                {
+                    MatrixDomains.POSITIVE_SEMIDEFINITE,
+                    MatrixDomains.NEGATIVE_SEMIDEFINITE,
+                }
+            )
+            in zero_meets
+        )
+        assert (
+            frozenset(
+                {MatrixDomains.POSITIVE_SEMIDEFINITE, MatrixDomains.SKEW_SYMMETRIC}
+            )
+            in zero_meets
+        )
+        assert (
+            frozenset({MatrixDomains.POSITIVE_DEFINITE, MatrixDomains.ORTHOGONAL})
+            in eye_meets
         )
 
     def test_tall_and_wide_membership(self) -> None:
