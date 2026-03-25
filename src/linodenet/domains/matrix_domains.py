@@ -408,7 +408,7 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.ZERO: frozenset({M.SPARSE}),
     M.ZERO_DIAGONAL: frozenset({M.TRACELESS}),
 })  # fmt: skip
-MatrixDomains.KNOWN_TAGS = MappingProxyType({
+MatrixDomains.KNOWN_SUBTYPES = MappingProxyType({
     M.EFFICIENTLY_INVERTIBLE: frozenset({
         M.SPARSE, M.PERMUTATION, M.ORTHOGONAL,
         M.TRIANGULAR, M.DIAGONAL, M.TRIDIAGONAL,

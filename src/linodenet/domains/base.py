@@ -148,7 +148,7 @@ class PosetEnum(Enum):
 
     KNOWN_SUPERTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet]]]
     r"""Dependencies"""
-    KNOWN_TAGS: ClassVar[Mapping[Self, frozenset[Self]]]
+    KNOWN_SUBTYPES: ClassVar[Mapping[Self, frozenset[Self]]]
     r"""Reverse dependencies."""
     KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet]]]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
@@ -178,7 +178,7 @@ class PosetEnum(Enum):
         for meet, factors in cls._validated_meets():
             edges[meet].update(factors)
 
-        for tag, members in cls.KNOWN_TAGS.items():  # type: ignore[attr-defined]
+        for tag, members in cls.KNOWN_SUBTYPES.items():  # type: ignore[attr-defined]
             for member in members:
                 edges[member].add(tag)
 
@@ -334,5 +334,5 @@ class PosetEnum(Enum):
 
 
 PosetEnum.KNOWN_SUPERTYPES = MappingProxyType({})
-PosetEnum.KNOWN_TAGS = MappingProxyType({})
+PosetEnum.KNOWN_SUBTYPES = MappingProxyType({})
 PosetEnum.KNOWN_MEETS = ()

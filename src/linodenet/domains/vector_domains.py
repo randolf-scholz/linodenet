@@ -74,5 +74,5 @@ VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({
     V.UNIT_L1BALL: frozenset({V.UNIT_BALL}),
     V.ZERO: frozenset({V.SPARSE, V.BOOLEAN}),
 })  # fmt: skip
-VectorDomains.KNOWN_TAGS = MappingProxyType({})
+VectorDomains.KNOWN_SUBTYPES = MappingProxyType({})
 del V  # remove alias

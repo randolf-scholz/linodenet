@@ -36,5 +36,5 @@ TensorDomains.KNOWN_SUPERTYPES = MappingProxyType({
     T.REAL: frozenset({T.COMPLEX}),
     T.ZERO: frozenset({T.BOOLEAN, T.SPARSE}),
 })  # fmt: skip
-TensorDomains.KNOWN_TAGS = MappingProxyType({})
+TensorDomains.KNOWN_SUBTYPES = MappingProxyType({})
 del T  # remove alias
