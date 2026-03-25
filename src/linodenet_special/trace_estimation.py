@@ -434,17 +434,15 @@ class HutchPlusPlusEstimator(nn.Module):
         if not shape:
             raise ValueError("shape must be non-empty")
 
-        num_samples = self.num_matvecs // 3
-        num_residuals = self.num_matvecs // 3
         samples = self.sampler(
             shape,
-            num_samples,
+            self.num_samples,
             device=self._anchor.device,
             dtype=self._anchor.dtype,
         )
         residual_samples = self.sampler(
             shape,
-            num_residuals,
+            self.num_samples,
             device=self._anchor.device,
             dtype=self._anchor.dtype,
         )
@@ -461,8 +459,8 @@ class HutchPlusPlusEstimator(nn.Module):
             batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
 
             # We build Q from a shared two-sided sketch [AΩ, AᵀΩ]
-            left_sketch = batched_adj(samples[..., : num_samples // 2])
-            right_sketch = batched_adj(samples[..., num_samples // 2 :])
+            left_sketch = batched_adj(samples[..., : self.num_samples // 2])
+            right_sketch = batched_adj(samples[..., self.num_samples // 2 :])
             sketch = torch.cat([left_sketch, right_sketch], dim=-1)
             Q, _ = qr(sketch, mode="reduced")  # (...dr)
             projected_samples = Q
