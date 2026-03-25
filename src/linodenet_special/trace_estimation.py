@@ -306,22 +306,30 @@ def xtrace_estimator(
     return estimate
 
 
-@signature("(..., n, d) -> (...)")
-def xtrace_estimator_corrected(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Tensor:
+@signature("[{(..., d) -> (..., d)}, (..., d), int] -> (...)")
+def xtrace_estimator_corrected(
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    num_matvecs: int,
+    *,
+    sampler: str | AbstractSampler = "sphere",
+    renormalize: bool = False,
+) -> Tensor:
     r"""Estimate the trace of a matrix using the original XTrace MATLAB algorithm.
 
-    This is a direct Torch transcription of the reference MATLAB code. The input
-    `samples` stores row-wise probe vectors with shape `(..., n, d)`. The
-    original MATLAB algorithm is written for a column-wise probe matrix
-    $Ω ∈ ℝᵈˣᵐ$, so we transpose into column form internally and mirror the
-    MATLAB algebra closely.
-
-    Notes:
-        The MATLAB reference takes a matvec budget `m_budget` and internally
-        uses `m = floor(m_budget / 2)` probe vectors. This function instead
-        follows the local API convention that `samples` already contains the
-        probe vectors, so all `n` rows are consumed directly.
+    This is a direct Torch transcription of the reference MATLAB code.
     """
+    if x.ndim == 0:
+        raise ValueError("x must be at least one-dimensional")
+    if num_matvecs < 2:
+        raise ValueError("num_matvecs must be at least 2")
+
+    sampler = Sampler.new(sampler)
+    samples = sampler(x.shape, num_matvecs // 2, dtype=x.dtype, device=x.device)
+    _, jvp_fn = linearize(op, x)
+    fn = vmap(jvp_fn, -1, -1)
+
     *_, m, d = samples.shape
 
     # MATLAB: Om = sqrt(N) * cnormc(randn(N, m))
@@ -353,6 +361,7 @@ def xtrace_estimator_corrected(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Ten
     s_norm = vector_norm(s, dim=-2)
     d_sw = torch.einsum("...dm, ...dm -> ...m", s.conj(), w)
     scale = (d - m + 1) / (d - w_norm_sq + (d_sw * s_norm).abs().square())
+    scale = scale if renormalize else 1.0
 
     # MATLAB: Z = A * Q
     # Z: (..., d, m)
