@@ -10,6 +10,7 @@ from linodenet.domains import (
     VectorDomains,
 )
 from linodenet.domains.matrix_domains import ColumnOrthogonal, RowOrthogonal, Tall, Wide
+from linodenet.testing import is_left_invertible, is_right_invertible
 
 
 class TestScalarDomains:
@@ -160,11 +161,19 @@ class TestMatrixDomains:
         assert MatrixDomains.ORTHOGONAL <= MatrixDomains.COLUMN_ORTHOGONAL
         assert MatrixDomains.ORTHOGONAL <= MatrixDomains.ROW_ORTHOGONAL
         assert MatrixDomains.COLUMN_ORTHOGONAL <= MatrixDomains.TALL
+        assert MatrixDomains.COLUMN_ORTHOGONAL <= MatrixDomains.LEFT_INVERTIBLE
+        assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.RIGHT_INVERTIBLE
+        assert MatrixDomains.INVERTIBLE <= MatrixDomains.LEFT_INVERTIBLE
+        assert MatrixDomains.INVERTIBLE <= MatrixDomains.RIGHT_INVERTIBLE
+        assert MatrixDomains.LEFT_INVERTIBLE <= MatrixDomains.TALL
         assert MatrixDomains.ROW_ORTHOGONAL <= MatrixDomains.WIDE
+        assert MatrixDomains.RIGHT_INVERTIBLE <= MatrixDomains.WIDE
         assert MatrixDomains.TALL <= MatrixDomains.RECTANGULAR
         assert MatrixDomains.WIDE <= MatrixDomains.RECTANGULAR
         assert MatrixDomains.TALL != MatrixDomains.RECTANGULAR
         assert MatrixDomains.WIDE != MatrixDomains.RECTANGULAR
+        assert MatrixDomains.LEFT_INVERTIBLE != MatrixDomains.TALL
+        assert MatrixDomains.RIGHT_INVERTIBLE != MatrixDomains.WIDE
         assert MatrixDomains.COLUMN_ORTHOGONAL != MatrixDomains.TALL
         assert MatrixDomains.ROW_ORTHOGONAL != MatrixDomains.WIDE
 
@@ -245,3 +254,22 @@ class TestMatrixDomains:
         assert column_orthogonal not in ColumnOrthogonal(2, 2)
         assert row_orthogonal in RowOrthogonal(2, 3)
         assert row_orthogonal not in RowOrthogonal(2, 2)
+
+    def test_left_and_right_invertible_membership(self) -> None:
+        left_invertible = tensor([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])
+        right_invertible = tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        invertible = tensor([[1.0, 0.0], [0.0, 1.0]])
+        rank_deficient_tall = tensor([[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]])
+        rank_deficient_wide = tensor([[1.0, 1.0, 0.0], [0.0, 0.0, 0.0]])
+
+        assert is_left_invertible(left_invertible)
+        assert not is_right_invertible(left_invertible)
+
+        assert is_right_invertible(right_invertible)
+        assert not is_left_invertible(right_invertible)
+
+        assert is_left_invertible(invertible)
+        assert is_right_invertible(invertible)
+
+        assert not is_left_invertible(rank_deficient_tall)
+        assert not is_right_invertible(rank_deficient_wide)

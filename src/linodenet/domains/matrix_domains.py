@@ -265,6 +265,8 @@ class MatrixDomains(PosetEnum):
 
     # determinant-based
     SINGULAR = "singular"  # det=0
+    LEFT_INVERTIBLE = "left_invertible"  # full column rank, admits L with LA = 𝕀
+    RIGHT_INVERTIBLE = "right_invertible"  # full row rank, admits R with AR = 𝕀
     INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
     UNIT_DETERMINANT = "unit_determinant"  # SLₙ(R) (det=1)
     GENERAL_LINEAR = "invertible"  # alias
@@ -327,15 +329,16 @@ M = MatrixDomains  # temporary alias
 MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.BANDED: frozenset({M.RECTANGULAR}),
     M.CAYLEY_ORTHOGONAL: frozenset({M.SPECIAL_ORTHOGONAL}),
-    M.COLUMN_ORTHOGONAL: frozenset({M.TALL, M.SPECTRAL_NORMALIZED}),
+    M.COLUMN_ORTHOGONAL: frozenset({M.LEFT_INVERTIBLE, M.SPECTRAL_NORMALIZED}),
     M.COLUMN_STOCHASTIC: frozenset({M.RECTANGULAR}),
     M.CONTRACTION: frozenset({M.RECTANGULAR}),
     M.DIAGONAL: frozenset({M.SYMMETRIC, M.TRIDIAGONAL, M.UPPER_TRIANGULAR, M.LOWER_TRIANGULAR}),
     M.DIAGONALLY_DOMINANT: frozenset({M.SQUARE}),
     M.DOUBLY_STOCHASTIC: frozenset({M.ROW_STOCHASTIC, M.COLUMN_STOCHASTIC, M.SQUARE}),
     M.EVEN_SQUARE: frozenset({M.SQUARE}),
+    M.INVERTIBLE: frozenset({M.SQUARE, M.LEFT_INVERTIBLE, M.RIGHT_INVERTIBLE}),
     M.IDENTITY: frozenset({M.DIAGONAL, M.PERMUTATION, M.SPECIAL_ORTHOGONAL}),
-    M.INVERTIBLE: frozenset({M.SQUARE}),
+    M.LEFT_INVERTIBLE: frozenset({M.TALL}),
     M.LIPSCHITZ_BOUNDED: frozenset({M.RECTANGULAR}),
     M.LOWER_TRIANGULAR: frozenset({M.SQUARE, M.TRIANGULAR}),
     M.LOW_RANK: frozenset({M.RECTANGULAR}),
@@ -343,23 +346,21 @@ MatrixDomains.KNOWN_EDGES = MappingProxyType({
     M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.NORMAL: frozenset({M.SQUARE}),
-    M.ORTHOGONAL: frozenset({
-        M.SQUARE, M.COLUMN_ORTHOGONAL, M.ROW_ORTHOGONAL,
-        M.INVERTIBLE, M.NORMAL, M.SPECTRAL_NORMALIZED,
-    }),
+    M.ORTHOGONAL: frozenset({M.NORMAL, M.COLUMN_ORTHOGONAL, M.ROW_ORTHOGONAL, M.INVERTIBLE}),
     M.PERMUTATION: frozenset({M.SPARSE, M.ORTHOGONAL, M.DOUBLY_STOCHASTIC}),
     M.POSITIVE_DEFINITE: frozenset({M.SYMMETRIC, M.INVERTIBLE, M.POSITIVE_SEMIDEFINITE}),
     M.POSITIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.POSITIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.RANK_ONE: frozenset({M.LOW_RANK}),
-    M.ROW_ORTHOGONAL: frozenset({M.WIDE, M.SPECTRAL_NORMALIZED}),
+    M.RIGHT_INVERTIBLE: frozenset({M.WIDE}),
+    M.ROW_ORTHOGONAL: frozenset({M.RIGHT_INVERTIBLE, M.SPECTRAL_NORMALIZED}),
     M.ROW_STOCHASTIC: frozenset({M.RECTANGULAR}),
     M.SINGULAR: frozenset({M.SQUARE}),
     M.SKEW_SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
     M.SPARSE: frozenset({M.BOOLEAN}),
     M.SPECIAL_ORTHOGONAL: frozenset({M.ORTHOGONAL, M.UNIT_DETERMINANT}),
     M.SPECTRAL_NORMALIZED: frozenset({M.RECTANGULAR, M.LIPSCHITZ_BOUNDED}),
-    M.SQUARE: frozenset({M.RECTANGULAR, M.TALL, M.WIDE}),
+    M.SQUARE: frozenset({M.TALL, M.WIDE}),
     M.SYMMETRIC: frozenset({M.SQUARE, M.NORMAL}),
     M.SYMPLECTIC: frozenset({M.EVEN_SQUARE, M.UNIT_DETERMINANT}),
     M.TALL: frozenset({M.RECTANGULAR}),

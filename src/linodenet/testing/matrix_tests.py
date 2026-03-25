@@ -11,6 +11,7 @@ __all__ = [
     "is_column_orthogonal",
     "is_spectral_normalized",
     "is_lipschitz_bounded",
+    "is_left_invertible",
     "is_diagonal",
     "is_diagonally_dominant",
     "is_forward_stable",
@@ -25,6 +26,7 @@ __all__ = [
     "is_orthogonal",
     "is_positive_definite",
     "is_positive_semidefinite",
+    "is_right_invertible",
     "is_row_orthogonal",
     "is_special_orthogonal",
     "is_rank_one",
@@ -291,6 +293,50 @@ def is_row_orthogonal(
     gram = x @ x.mT
     eye = torch.eye(x.shape[-2], dtype=x.dtype, device=x.device)
     return torch.isclose(gram, eye, rtol=rtol, atol=atol).all(dim=(-2, -1))
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_left_invertible(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor has full column rank."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] < x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
+    return ranks == x.shape[-1]
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_right_invertible(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor has full row rank."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] > x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
+    return ranks == x.shape[-2]
 
 
 @signature("(..., n, n) -> bool[(...)]")
