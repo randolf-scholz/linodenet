@@ -170,7 +170,12 @@ class PosetEnum(Enum):
     @classmethod
     @cache
     def _parsed_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
-        r"""Inspects and parsed the cls.KNOWN_SUPERTYPES mapping."""
+        r"""Parse declared supertypes into direct supertype relations.
+
+        `KNOWN_SUPERTYPES` may contain plain nodes or meet expressions. A meet
+        target `A & B` denotes the stronger statement `x ≤ A ∧ B`, so this
+        parser expands it to the implied direct supertypes `A` and `B`.
+        """
         raw_supertypes = cls.KNOWN_SUPERTYPES
         members = frozenset(cls)
 
@@ -205,6 +210,15 @@ class PosetEnum(Enum):
     @classmethod
     @cache
     def _compiled_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
+        r"""Compile all declared supertype information into one direct map.
+
+        This combines parsed `KNOWN_SUPERTYPES`, reverse declarations from
+        `KNOWN_SUBTYPES`, structural supertype relations induced by
+        `KNOWN_MEETS`, and the implicit top/bottom node conventions.
+
+        The result still contains only direct supertype edges. Transitive
+        closure is computed separately by `_closure_from`.
+        """
         supertypes: dict[Self, set[Self]] = {node: set() for node in cls}
 
         for node, supers in cls._parsed_supertypes().items():
@@ -229,14 +243,21 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _validated_edges(cls) -> Mapping[Self, frozenset[Self]]:
-        edges = cls._compiled_supertypes()
+    def _validated_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
+        r"""Validate compiled supertypes and reject cycles in the order.
+
+        After compilation, every referenced node must still be a member of the
+        enum and the resulting direct-supertype graph must be acyclic. The
+        returned mapping is the validated adjacency relation used for closure
+        computation.
+        """
+        supertypes = cls._compiled_supertypes()
         members = frozenset(cls)
 
-        if bad_keys := {node for node in edges if node not in members}:
+        if bad_keys := {node for node in supertypes if node not in members}:
             raise TypeError(f"Expected {cls.__name__} nodes, got {bad_keys!r}.")
 
-        all_targets = frozenset().union(*edges.values())
+        all_targets = frozenset().union(*supertypes.values())
         if bad_targets := {target for target in all_targets if target not in members}:
             raise TypeError(f"Expected {cls.__name__} targets, got {bad_targets!r}.")
 
@@ -250,7 +271,7 @@ class PosetEnum(Enum):
                 return
 
             stack.add(node)
-            for target in edges.get(node, frozenset()):
+            for target in supertypes.get(node, frozenset()):
                 visit(target)
             stack.remove(node)
             visited.add(node)
@@ -258,7 +279,7 @@ class PosetEnum(Enum):
         for node in cls:
             visit(node)
 
-        return edges
+        return supertypes
 
     @classmethod
     @cache
@@ -285,7 +306,7 @@ class PosetEnum(Enum):
     @classmethod
     @cache
     def _closure_from(cls, nodes: frozenset[Self], /) -> frozenset[Self]:
-        edges = cls._validated_edges()
+        supertypes = cls._validated_supertypes()
         meets = cls._validated_meets()
 
         closure: set[Self] = set()
@@ -297,7 +318,7 @@ class PosetEnum(Enum):
                 continue
 
             closure.add(current)
-            stack.extend(edges.get(current, frozenset()))
+            stack.extend(supertypes.get(current, frozenset()))
 
             for consequent, factors in meets:
                 if consequent not in closure and factors <= closure:
