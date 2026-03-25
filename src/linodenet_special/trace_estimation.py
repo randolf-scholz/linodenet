@@ -206,7 +206,7 @@ def hutchinson_estimator(
     _, jvp_fn = linearize(op, x)
     batched_jvp_fn = vmap(jvp_fn, -1, -1)
     estimate = vecdot(probes, batched_jvp_fn(probes), dim=-2).mean(dim=-1)
-    return estimate.real if not estimate.is_complex() else estimate
+    return estimate
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -214,8 +214,8 @@ def xtrace_naive_estimator(
     op: Fn[[Tensor], Tensor],
     x: Tensor,
     /,
-    *,
     num_matvecs: int,
+    *,
     sampler: str | AbstractSampler = "sphere",
     renormalize: bool = False,
 ) -> Tensor:
@@ -250,67 +250,60 @@ def xtrace_naive_estimator(
     return tr / k + residual
 
 
-@signature("[{(..., n, d) -> (..., n, d)}, (..., n, d)] -> (...)")
-def xtrace_estimator(fn: Fn[[Tensor], Tensor], samples: Tensor) -> Tensor:
-    r"""Estimate the trace of a matric.
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def xtrace_estimator(
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    num_matvecs: int,
+    *,
+    sampler: str | AbstractSampler = "sphere",
+    renormalize: bool = False,
+) -> Tensor:
+    r"""Estimate $\tr(Df(x))$ with the fast XTrace estimator."""
+    if x.ndim == 0:
+        raise ValueError("x must be at least one-dimensional")
+    if num_matvecs < 2:
+        raise ValueError("num_matvecs must be at least 2")
 
-    Args:
-        fn: matrix-vector product function, i.e. x ↦ Ax (batched)
-        samples: random samples to use for the estimator.
-            shape: (..., n, d), with `...` batch size, n: num_samples, d: dimension.
+    *_, N = x.shape
+    num_samples = num_matvecs // 2
+    k = min(N, num_samples)
 
-    Returns:
-        Tensor: The estimated trace.
+    sampler = Sampler.new(sampler)
+    samples = sampler(x.shape, k, device=x.device, dtype=x.dtype)
+    _, jvp_fn = linearize(op, x)
+    batched_op = vmap(jvp_fn, -1, -1)  # (...dk) -> (...dk)
 
-    core idea:
-        samples: [w₁, ..., wₖ]
-        compute Qᵢ = orth(AW₋ᵢ)
-        compute: trᵢ = tr(QᵢᴴAQᵢ) + wᵢᴴ(I-QᵢQᵢᴴ) A (I-QᵢQᵢᴴ)wᵢ
-        trick rank-1 update: QᵢQᵢᴴ = Q(I − sᵢ sᵢᴴ)Qᴴ
+    Y = batched_op(samples)  # (...dk)
+    Q, R = qr(Y, mode="reduced")  # (...dk), (...kk)
+    Z = batched_op(Q)  # (...dk)
+    H = Q.mH @ Z  # (...kk)
+    W = Q.mH @ samples  # (...kk)
+    T = Z.mH @ samples  # (...kk)
 
-    Algorithm:
-        1: Draw Ω ∼ Unif{±1}^{N×m/2}
-        2: Y ← AΩ
-        3: (Q, R) ← qr(Y, ’econ’)
-        4: Z ← AQ
-        5: H ← QᴴZ, W ← QᴴΩ, T ← ZᴴΩ
-        6: S ← R⁻ᴴ
-        7: S ← S · diag(∥sᵢ∥: i=1…m/2)
-        8: for i = 1 … m/2 do
-        9:     xᵢ ← wᵢ − ⟨sᵢ∣wᵢ⟩·sᵢ
-        10:    trᵢ ← tr(H) − ⟨sᵢ|H sᵢ⟩ + ⟨wᵢ∣sᵢ⟩·⟨sᵢ∣rᵢ⟩ − ⟨tᵢ|xᵢ⟩ + ⟨xᵢ|Hxᵢ⟩
-        11: end for
-        12: tr ← mean(trᵢ: i=1…m/2)
-    """
-    V = samples.mH  # (..., d, n)
-    *_, d, n = V.shape
-    k = min(n, d)
-    Y = fn(V.mH).mH  # (..., d, n)
-    Q, R = qr(Y, mode="reduced")  # (..., d, k), (..., k, n)
-    Z = fn(Q.mH).mH  # (..., d, k)
-    H = torch.einsum("...kd, ...dj -> ...kj", Q.mH, Z)  # (..., k, k)
-    W = torch.einsum("...kd, ...dn -> ...nk", Q.mH, V)  # (..., n, k)
-    T = torch.einsum("...kd, ...dn -> ...nk", Z.mH, V)  # (..., n, k)
+    identity = torch.eye(k, dtype=samples.dtype, device=samples.device)
+    S = solve_triangular(R.mH, identity, upper=False, left=True)  # (...kk)
+    S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
 
-    # Note: compute S=R⁻¹ ⟺ S R = Iₖ  (or: R S = Iₙ)
-    I = torch.eye(k, dtype=samples.dtype, device=samples.device)
-    S = solve_triangular(I, R.mH, upper=True, left=False)  # (..., n, k)
-    S = S / vector_norm(S, dim=-2, keepdim=True)  # (..., n, k)
-
-    # compute xᵢ = wᵢ - ⟨sᵢ∣wᵢ⟩ sᵢ
-    X = W - torch.einsum("...nk, ...nk, ...nl -> ...nl", S.conj(), W, S)  # (..., n, k)
-    # compute tr_i = ⟨xᵢ|H|xᵢ⟩ - ⟨sᵢ|H|sᵢ⟩ + ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ⟩ - ⟨tᵢ∣xᵢ⟩
-    TRS = (
-        torch.einsum("...nk, ...kl, ...nl -> ...n", X.conj(), H, X)  # ⟨xᵢ|H|xᵢ⟩
-        - torch.einsum("...nk, ...kl, ...nl -> ...n", S.conj(), H, S)  # - ⟨sᵢ|H|sᵢ⟩
-        - torch.einsum("...nk, ...nk -> ...n", T.conj(), X)  # - ⟨tᵢ∣xᵢ⟩
-        + (
-            torch.einsum("...nk, ...nk -> ...n", W.conj(), S)  # ⟨wᵢ∣sᵢ⟩
-            * torch.einsum("...nk, ...kn -> ...n", S.conj(), R)  # ⟨sᵢ∣rᵢ⟩
+    sw = vecdot(S, W, dim=-2)  # (...k)
+    if renormalize:
+        scale = (N - k + 1) / (
+            vecdot(samples, samples, dim=-2) - vecdot(W, W, dim=-2) + sw.abs().square()
         )
-    )
-    # compute tr = tr(H) + mean(tr_i)
-    return H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + TRS.mean(dim=-1)
+    else:
+        scale = 1.0
+
+    shs = torch.einsum("...ik, ...kl, ...li -> ...i", S.mH, H, S)
+    hw = H @ W
+    term1 = sw.abs().square() * shs
+    term2 = sw.conj() * vecdot(S, R - hw, dim=-2)
+    x_term = W - sw.unsqueeze(-2) * S
+    term3 = -vecdot(T - H.mH @ W, x_term, dim=-2)
+    trs = -shs + scale * (term1 + term2 + term3)
+
+    estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
+    return estimate
 
 
 @signature("(..., n, d) -> (...)")
@@ -1190,7 +1183,7 @@ class XTraceEstimator(BaseEstimator):
         trs = -SHS + scale * (term1 + term2 + term3)
 
         estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
-        yield estimate.real if not estimate.is_complex() else estimate
+        yield estimate
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_logabsdet(
