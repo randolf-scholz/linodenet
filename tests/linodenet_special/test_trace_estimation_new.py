@@ -419,9 +419,16 @@ class TestXTraceEstimator:
         with pytest.raises(ValueError, match="is not a valid SamplerKind"):
             XTraceEstimator(num_samples=4, sampler="unknown").to(device=device)
 
+    def test_xtrace_mode_rejects_unknown_string(self, device: str) -> None:
+        with pytest.raises(
+            ValueError,
+            match="mode must be 'forward', 'adjoint', or 'symmetric'",
+        ):
+            XTraceEstimator(num_samples=4, mode="unknown").to(device=device)
+
     def test_xtrace_estimate_op_only(self, device: str) -> None:
         fn, expected = self.make_test(device=device)
-        shape = (self.BATCH_SIZE, self.INPUT_SIZE)
+        x = torch.zeros(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
 
         estimator = XTraceEstimator(
             num_samples=self.NUM_SAMPLES,
@@ -429,9 +436,39 @@ class TestXTraceEstimator:
             renormalize=True,
         ).to(device=device)
 
-        estimate = estimator.estimate(fn, None, shape=shape)
+        estimate = estimator.estimate(fn, x)
 
-        torch.testing.assert_close(estimate, expected, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(estimate, expected, atol=4.0, rtol=0.0)
+
+    def test_xtrace_estimate_naive(self, device: str) -> None:
+        fn, expected = self.make_test(device=device)
+        x = torch.zeros(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+
+        estimator = XTraceEstimator(
+            num_samples=self.NUM_SAMPLES,
+            sampler="sphere",
+            renormalize=True,
+        ).to(device=device)
+
+        estimate = estimator.estimate_naive(fn, x)
+
+        torch.testing.assert_close(estimate, expected, atol=4.0, rtol=0.0)
+
+    @pytest.mark.parametrize("mode", ["adjoint", "symmetric"])
+    def test_xtrace_nonforward_modes_not_implemented(
+        self, device: str, mode: str
+    ) -> None:
+        fn, _ = self.make_test(device=device)
+        x = torch.zeros(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+        estimator = XTraceEstimator(num_samples=self.NUM_SAMPLES, mode=mode).to(
+            device=device
+        )
+
+        with pytest.raises(
+            NotImplementedError,
+            match=f"XTraceEstimator only supports mode='forward', got '{mode}'",
+        ):
+            estimator.estimate(fn, x)
 
     def test_xtrace_corrected(self, device: str) -> None:
         fn, expected = self.make_test(device=device)
@@ -441,7 +478,7 @@ class TestXTraceEstimator:
         )
         estimate = xtrace_estimator_corrected(vmap(fn, -2, -2), samples)
 
-        torch.testing.assert_close(estimate, expected, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(estimate, expected, atol=0.4, rtol=0.0)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)

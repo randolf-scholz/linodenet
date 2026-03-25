@@ -693,11 +693,19 @@ class XTraceEstimator(BaseEstimator):
     Cost: mN^2 + O(m^3)
         m is the number of matvecs (=2x`num_samples`),
         N is the dimension of the operator
+
+    Args:
+        num_samples: Number of probe vectors.
+        num_matvecs: Alias for the total matvec budget.
+        sampler: Probe vector sampler.
+        renormalize: Whether to apply the paper's renormalization.
+        mode: Jacobian action mode. Only `"forward"` is currently implemented.
     """
 
     num_matvecs: Final[int]
     num_samples: Final[int]
     renormalize: Final[bool]
+    mode: Final[str]
     r"""Whether to apply renormalization from paper section 2.3"""
 
     sampler: Sampler
@@ -709,6 +717,7 @@ class XTraceEstimator(BaseEstimator):
         *,
         sampler: str | SamplerKind | Sampler = ...,
         renormalize: bool = ...,
+        mode: str = ...,
     ) -> None: ...
     @overload
     def __init__(
@@ -717,6 +726,7 @@ class XTraceEstimator(BaseEstimator):
         num_matvecs: int,
         sampler: str | SamplerKind | Sampler = ...,
         renormalize: bool = ...,
+        mode: str = ...,
     ) -> None: ...
     def __init__(
         self,
@@ -725,6 +735,7 @@ class XTraceEstimator(BaseEstimator):
         num_matvecs: int | None = None,
         sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
         renormalize: bool = True,
+        mode: str = "forward",
     ) -> None:
         super().__init__()
 
@@ -744,42 +755,48 @@ class XTraceEstimator(BaseEstimator):
                     "Only one of num_samples or num_matvecs should be provided, but got both."
                 )
 
+        if mode not in {"forward", "adjoint", "symmetric"}:
+            raise ValueError(
+                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
+            )
+
         self.renormalize = bool(renormalize)
+        self.mode = mode
         self.sampler = (
             SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
         )
-        self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Returns an estimate of $\tr(A)$."""
-        return next(self.estimate_powers(op, adj_op, 1, shape=shape))
+        r"""Return an estimate of $\tr(Df(x))$."""
+        return next(self.estimate_powers(op, x, 1))
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_naive(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        *,
-        shape: tuple[int, ...],
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
     ) -> Tensor:
-        r"""Use the naive implementation to estimate $\tr(A)$."""
-        *batch, N = shape
+        r"""Use the naive implementation to estimate $\tr(Df(x))$."""
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+        if self.mode != "forward":
+            raise NotImplementedError(
+                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
+            )
+
+        *batch, N = x.shape
         k = min(N, self.num_samples)
-        samples = self.sampler(
-            shape,
-            k,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
-        )
-        tr = torch.zeros(batch, dtype=self._anchor.dtype, device=self._anchor.device)
-        batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
+        tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
+        _, jvp_fn = linearize(op, x)
+        batched_op = vmap(jvp_fn, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
         Y = batched_op(samples)  # (...Nm)
 
         mus = []
@@ -792,107 +809,92 @@ class XTraceEstimator(BaseEstimator):
             tr = tr + vecdot(Q_i, batched_op(Q_i), dim=-2).sum(dim=-1)
         μ = torch.cat(mus, dim=-1)
         scale = 1.0 - (1.0 - (N - k + 1) / vecdot(μ, μ, dim=-2)) * self.renormalize
-        μ = μ * scale
+        μ = μ * scale.unsqueeze(-2)
         residual = vecdot(μ, batched_op(μ), dim=-2).mean(dim=-1)
         return tr / k + residual
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_powers(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         max_power: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Iterator[Tensor]:
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
         if max_power > 1:
             raise NotImplementedError("XTraceEstimator currently only supports k=1")
-        if op is None and adj_op is None:
-            raise ValueError("at least one of op or adj_op must be provided")
-        if not shape:
-            raise ValueError("shape must be non-empty")
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
+        if self.mode != "forward":
+            raise NotImplementedError(
+                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
+            )
 
-        *batch, N = shape
+        *batch, N = x.shape
         k = min(N, self.num_samples)
-        samples = self.sampler(
-            shape,
-            k,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
-        )
+        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
+        _, jvp_fn = linearize(op, x)
+        batched_op = vmap(jvp_fn, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+        Y = batched_op(samples)  # (...Nm)
+        Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
+        # Q has normalized cols <-> Q.norm(dim=-2) = 1
 
-        if op is not None and adj_op is not None:
-            raise NotImplementedError
+        Z = batched_op(Q)  # (...Nk)
+        H = Q.mH @ Z  # (...kk)
+        W = Q.mH @ samples  # (...kk)
+        T = Z.mH @ samples  # (...kk)
 
-        if op is not None:
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
-            Y = batched_op(samples)  # (...Nm)
-            Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
-            # Q has normalized cols <-> Q.norm(dim=-2) = 1
+        # solve R^* S = Iₖ
+        I = torch.eye(k, dtype=samples.dtype, device=samples.device)
+        S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
+        # normalize COLS
+        S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
 
-            Z = batched_op(Q)  # (...Nk)
-            H = Q.mH @ Z  # (...kk)
-            W = Q.mH @ samples  # (...kk)
-            T = Z.mH @ samples  # (...kk)
+        SW = vecdot(S, W, dim=-2)  # (...i)
+        SR = vecdot(S, R, dim=-2)  # (...i)
+        X = W - SW.unsqueeze(-2) * S  # (...kk)
+        TX = vecdot(T, X, dim=-2)  # (...i)
+        XHX = torch.einsum("...ki, ...kl, ...li -> ...i", X.conj(), H, X)
+        SHS = torch.einsum("...ki, ...kl, ...li -> ...i", S.conj(), H, S)
 
-            # solve R^* S = Iₖ
-            I = torch.eye(k, dtype=samples.dtype, device=samples.device)
-            S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
-            # normalize COLS
-            S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
+        if False:
+            mus = []
+            for i in range(self.num_samples):
+                col_indices = torch.arange(self.num_samples, device=Y.device)
+                Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+                ω_i = samples[..., [i]]
+                μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
+                mus.append(μ_i)
+            μ = torch.cat(mus, dim=-1)
+            mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
+            mu_norm_sq_b = (
+                vecdot(samples, samples, dim=-2)
+                - vecdot(W, W, dim=-2)
+                + SW.abs().square()
+            )
 
-            SW = vecdot(S, W, dim=-2)  # (...i)
-            SR = vecdot(S, R, dim=-2)  # (...i)
-            X = W - SW.unsqueeze(-2) * S  # (...kk)
-            TX = vecdot(T, X, dim=-2)  # (...i)
-            XHX = torch.einsum("...ki, ...kl, ...li -> ...i", X.conj(), H, X)
-            SHS = torch.einsum("...ki, ...kl, ...li -> ...i", S.conj(), H, S)
+        if self.renormalize:
+            scale = (N - k + 1) / (  #
+                vecdot(samples, samples, dim=-2)
+                - vecdot(W, W, dim=-2)
+                + SW.abs().square()
+            )
+        else:
+            scale = 1.0
 
-            if False:
-                mus = []
-                for i in range(self.num_samples):
-                    col_indices = torch.arange(self.num_samples, device=Y.device)
-                    Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
-                    ω_i = samples[..., [i]]
-                    μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
-                    mus.append(μ_i)
-                μ = torch.cat(mus, dim=-1)
-                mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
-                mu_norm_sq_b = (
-                    vecdot(samples, samples, dim=-2)
-                    - vecdot(W, W, dim=-2)
-                    + SW.abs().square()
-                )
+        WS = SW.conj()  # (...i)
+        trs = -SHS + scale * (XHX + WS * SR - TX)
 
-            if self.renormalize:
-                scale = (N - k + 1) / (  #
-                    vecdot(samples, samples, dim=-2)
-                    - vecdot(W, W, dim=-2)
-                    + SW.abs().square()
-                )
-            else:
-                scale = 1.0
+        HW = H @ W
+        term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
+        term2 = SW.conj() * vecdot(S, R - HW, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
+        term3 = -vecdot(T - H.mH @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
+        trs = -SHS + scale * (term1 + term2 + term3)
 
-            WS = SW.conj()  # (...i)
-            trs = -SHS + scale * (XHX + WS * SR - TX)
-
-            HW = H @ W
-            term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
-            term2 = SW.conj() * vecdot(S, R - HW, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
-            term3 = -vecdot(T - H.mH @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
-            trs = -SHS + scale * (term1 + term2 + term3)
-
-            estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
-            yield estimate.real if not estimate.is_complex() else estimate
-            return
-
-        if adj_op is not None:
-            raise NotImplementedError
-
-        raise AssertionError("unreachable")
+        estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
+        yield estimate.real if not estimate.is_complex() else estimate
 
 
 def trace_naive_estimator(
