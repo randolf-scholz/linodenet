@@ -6,6 +6,7 @@ Notes:
 """
 
 __all__ = [
+    "AbstractTraceEstimator",
     "BaseEstimator",
     "ExactEstimator",
     "HutchPlusPlusEstimator",
@@ -18,6 +19,13 @@ __all__ = [
     "naive_estimator",
     "xtrace_estimator",
     "xtrace_estimator_corrected",
+    "xtrace_naive_estimator",
+    # samplers
+    "GaussianSampler",
+    "OrthSampler",
+    "Sampler",
+    "SignSampler",
+    "SphereSampler",
 ]
 
 import math
@@ -807,7 +815,7 @@ class XTraceEstimator(BaseEstimator):
         mus = []
         for i in range(self.num_samples):
             col_indices = torch.arange(self.num_samples, device=Y.device)
-            Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
+            Q_i, _ = qr(Y[..., i != col_indices], mode="reduced")
             ω_i = samples[..., [i]]
             μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
             mus.append(μ_i)
@@ -902,7 +910,7 @@ class XTraceEstimator(BaseEstimator):
         yield estimate.real if not estimate.is_complex() else estimate
 
 
-def trace_naive_estimator(
+def xtrace_naive_estimator(
     fn: Fn[[Tensor], Tensor],
     samples: Tensor,
 ) -> Tensor:
