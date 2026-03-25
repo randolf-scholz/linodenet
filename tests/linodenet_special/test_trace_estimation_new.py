@@ -85,33 +85,25 @@ class SequenceSampler:
 
 
 class AnalyticEstimator(BaseEstimator):
-    def __init__(self) -> None:
-        super().__init__()
-        self.register_buffer("_anchor", torch.empty(0), persistent=False)
-
     def estimate(
         self,
-        op: Callable[[Tensor], Tensor] | None,
-        adj_op: Callable[[Tensor], Tensor] | None,
+        op: Callable[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        fn = op if op is not None else adj_op
-        assert fn is not None
-
         eye = torch.eye(
-            shape[-1],
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
-        ).expand(*shape[:-1], shape[-1], shape[-1])
-        matrix = vmap(fn, in_dims=-1, out_dims=-1)(eye)
+            x.shape[-1],
+            device=x.device,
+            dtype=x.dtype,
+        ).expand(*x.shape[:-1], x.shape[-1], x.shape[-1])
+        matrix = vmap(op, in_dims=-1, out_dims=-1)(eye)
         return torch.einsum("...ii -> ...", matrix)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestExactEstimator:
-    def test_exact_estimate_op_only(self, device: str) -> None:
+    @pytest.mark.parametrize("mode", ["forward", "adjoint"])
+    def test_exact_estimate(self, device: str, mode: str) -> None:
         matrix = torch.tensor(
             [
                 [[2.0, 0.0], [0.0, 3.0]],
@@ -119,14 +111,16 @@ class TestExactEstimator:
             ],
             device=device,
         )
-        estimator = ExactEstimator().to(device=device)
+        x = torch.zeros(matrix.shape[:-1], device=device)
+        estimator = ExactEstimator(mode=mode).to(device=device)
 
-        estimate = estimator.estimate(linear_map(matrix), None, shape=matrix.shape[:-1])
+        estimate = estimator.estimate(linear_map(matrix), x)
 
         expected = torch.einsum("...ii -> ...", matrix)
         torch.testing.assert_close(estimate, expected)
 
-    def test_exact_estimate_powers_adj_only(self, device: str) -> None:
+    @pytest.mark.parametrize("mode", ["forward", "adjoint"])
+    def test_exact_estimate_powers(self, device: str, mode: str) -> None:
         matrix = torch.tensor(
             [
                 [[2.0, 0.0], [0.0, 3.0]],
@@ -134,16 +128,10 @@ class TestExactEstimator:
             ],
             device=device,
         )
-        estimator = ExactEstimator().to(device=device)
+        x = torch.zeros(matrix.shape[:-1], device=device)
+        estimator = ExactEstimator(mode=mode).to(device=device)
 
-        estimates = list(
-            estimator.estimate_powers(
-                None,
-                linear_map(matrix.mT),
-                3,
-                shape=matrix.shape[:-1],
-            )
-        )
+        estimates = list(estimator.estimate_powers(linear_map(matrix), x, 3))
 
         expected = [
             torch.einsum("...ii -> ...", torch.linalg.matrix_power(matrix, power))
@@ -152,7 +140,10 @@ class TestExactEstimator:
         for estimate, truth in zip(estimates, expected, strict=True):
             torch.testing.assert_close(estimate, truth)
 
-    def test_exact_estimate_logabsdet_matches_closed_form(self, device: str) -> None:
+    @pytest.mark.parametrize("mode", ["forward", "adjoint"])
+    def test_exact_estimate_logabsdet_matches_closed_form(
+        self, device: str, mode: str
+    ) -> None:
         matrix = torch.tensor(
             [
                 [[0.25, 0.0], [0.0, -0.125]],
@@ -160,18 +151,18 @@ class TestExactEstimator:
             ],
             device=device,
         )
-        estimator = ExactEstimator().to(device=device)
+        x = torch.zeros(matrix.shape[:-1], device=device)
+        estimator = ExactEstimator(mode=mode).to(device=device)
 
-        estimate = estimator.estimate_logabsdet(
-            linear_map(matrix),
-            None,
-            3,
-            shape=matrix.shape[:-1],
-        )
+        estimate = estimator.estimate_logabsdet(linear_map(matrix), x, 3)
 
         eigenvalues = torch.linalg.eigvals(matrix)
         expected = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
         torch.testing.assert_close(estimate, expected)
+
+    def test_exact_mode_rejects_unknown_string(self, device: str) -> None:
+        with pytest.raises(ValueError, match="mode must be 'forward' or 'adjoint'"):
+            ExactEstimator(mode="symmetric").to(device=device)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -180,11 +171,7 @@ class TestBaseEstimator:
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
         estimator = AnalyticEstimator().to(device=device)
 
-        estimates = list(
-            estimator.estimate_powers(
-                scaled_map(scale), None, 4, shape=tuple(scale.shape)
-            )
-        )
+        estimates = list(estimator.estimate_powers(scaled_map(scale), scale, 4))
 
         expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
         for estimate, truth in zip(estimates, expected, strict=True):
@@ -194,12 +181,7 @@ class TestBaseEstimator:
         scale = torch.tensor([[0.125], [-0.2], [0.3]], device=device)
         estimator = AnalyticEstimator().to(device=device)
 
-        estimate = estimator.estimate_logabsdet(
-            scaled_map(scale),
-            None,
-            6,
-            shape=tuple(scale.shape),
-        )
+        estimate = estimator.estimate_logabsdet(scaled_map(scale), scale, 6)
 
         expected = sum(
             ((-1) ** (power + 1) / power) * scale.squeeze(-1).pow(power)

@@ -264,81 +264,86 @@ class ExactEstimator(BaseEstimator):
 
     Cost: N³
         N is the dimension of the operator
+
+    Args:
+        mode: Whether to materialize the Jacobian from forward Jacobian-vector products
+            or adjoint vector-Jacobian products.
     """
 
-    def __init__(self) -> None:
+    mode: Final[str]
+
+    def __init__(self, mode: str = "forward") -> None:
         super().__init__()
-        self.register_buffer("_anchor", torch.empty(0), persistent=False)
+        if mode not in {"forward", "adjoint"}:
+            raise ValueError(f"mode must be 'forward' or 'adjoint', got {mode!r}")
+        self.mode = mode
 
     def _materialize(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        if not shape:
-            raise ValueError("shape must be non-empty")
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
 
-        dim = shape[-1]
-        identity = torch.eye(
-            dim, device=self._anchor.device, dtype=self._anchor.dtype
-        ).expand(*shape[:-1], dim, dim)
+        dim = x.shape[-1]
+        identity = torch.eye(dim, device=x.device, dtype=x.dtype).expand(
+            *x.shape[:-1], dim, dim
+        )
 
-        if op is not None:
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            return batched_op(identity)
+        match self.mode:
+            case "forward":
+                _, jvp_fn = linearize(op, x)
+                batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                return batched_op(identity)
 
-        if adj_op is not None:
-            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            return batched_adj(identity)
+            case "adjoint":
+                _, vjp_fn = vjp(op, x)
+                batched_adj = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+                (matrix,) = batched_adj(identity)
+                return matrix
 
-        raise ValueError("at least one of op or adj_op must be provided")
+            case _:
+                raise AssertionError("unreachable")
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        matrix = self._materialize(op, adj_op, shape=shape)
+        matrix = self._materialize(op, x)
         return torch.einsum("...ii -> ...", matrix)
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_powers(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         max_power: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Iterator[Tensor]:
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
 
-        matrix = self._materialize(op, adj_op, shape=shape)
+        matrix = self._materialize(op, x)
         eigenvalues = torch.linalg.eigvals(matrix)
         for power in range(1, max_power + 1):
             trace_power = eigenvalues.pow(power).sum(dim=-1)
             yield trace_power.real if not matrix.is_complex() else trace_power
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_logabsdet(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         num_series_terms: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
         del num_series_terms
-        matrix = self._materialize(op, adj_op, shape=shape)
+        matrix = self._materialize(op, x)
         eigenvalues = torch.linalg.eigvals(matrix)
         logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
         return logabsdet.real if not matrix.is_complex() else logabsdet
