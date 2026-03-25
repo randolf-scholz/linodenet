@@ -413,5 +413,6 @@ MatrixDomains.KNOWN_SUBTYPES = MappingProxyType({
         M.SPARSE, M.PERMUTATION, M.ORTHOGONAL,
         M.TRIANGULAR, M.DIAGONAL, M.TRIDIAGONAL,
     }),
+    M.SQUARE: frozenset({M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC}),
 })  # fmt: skip
 del M  # remove alias
