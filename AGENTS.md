@@ -47,6 +47,7 @@ Project conventions for automated agents contributing to `linodenet`.
 - Use Unicode characters in latex formulas in docstrings to improve readability.
   so $ℝ$ rather than $\mathbb{R}$, $ϕ$ rather that $\phi$, $∑$ rather than $\sum$, etc.
   This includes super- and subscripts, e.g. $xᵢⱼ$ rather than $x_{ij}$ and $f⁻¹$ rather than $f^{-1}$.
+- In chat responses, prefer plain Unicode math and symbols over LaTeX/MathJax markup because this console does not render MathJax.
 - We use `sphinx-dollarmath`, so prefer `$...$` inline math over `:math:` for better readability.
   Use `.. math::` for display math.
 - Matplotlib supports CPU torch tensors directly; prefer passing CPU tensors rather than converting to NumPy.
