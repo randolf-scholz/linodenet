@@ -178,7 +178,7 @@ def hutchinson_estimator(
     op: Fn[[Tensor], Tensor],
     x: Tensor,
     /,
-    num_samples: int,
+    num_matvecs: int,
     *,
     sampler: str | AbstractSampler = "sphere",
 ) -> Tensor:
@@ -189,7 +189,8 @@ def hutchinson_estimator(
     Args:
         op: Function $f$ whose Jacobian trace should be estimated at $x$.
         x: Evaluation point. Its shape, dtype, and device define the domain.
-        num_samples: Number of probe vectors to average over.
+        num_matvecs: number of matrix-vector products to use for the estimator.
+            This is equivalent to the number of probe vectors.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
 
     Returns:
@@ -197,38 +198,56 @@ def hutchinson_estimator(
     """
     if x.ndim == 0:
         raise ValueError("x must be at least one-dimensional")
-    if num_samples < 1:
+    if num_matvecs < 1:
         raise ValueError("num_samples must be at least 1")
 
     sampler = Sampler.new(sampler)
-    probes = sampler(x.shape, num_samples, dtype=x.dtype, device=x.device)
+    probes = sampler(x.shape, num_matvecs, dtype=x.dtype, device=x.device)
     _, jvp_fn = linearize(op, x)
     batched_jvp_fn = vmap(jvp_fn, -1, -1)
     estimate = vecdot(probes, batched_jvp_fn(probes), dim=-2).mean(dim=-1)
     return estimate.real if not estimate.is_complex() else estimate
 
 
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def xtrace_naive_estimator(
-    fn: Fn[[Tensor], Tensor],
-    samples: Tensor,
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    *,
+    num_matvecs: int,
+    sampler: str | AbstractSampler = "sphere",
+    renormalize: bool = False,
 ) -> Tensor:
-    r"""Naive implementation of XTrace (useful for debugging)."""
-    batched_fn = vmap(fn, -1, -1)  # (...Nm) -> (...Nm)
-    Y = batched_fn(samples)  # (...Nm)
-    *batch_size, N, m = Y.shape
-    tr = torch.zeros(batch_size, device=Y.device, dtype=Y.dtype)
-    col_indices = torch.arange(m, device=Y.device)
-    for i in range(m):
-        Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
-        ω_i = samples[..., i]
-        μ_i = ω_i - Q_i @ Q_i.mH @ ω_i
-        tr = (
-            tr
-            + torch.einsum("...mm -> ...", Q_i.mh @ fn(Q_i))
-            + vecdot(μ_i, fn(μ_i), dim=-1)
-        )
-    tr = tr / m
-    return tr.real if not tr.is_complex() else tr.conj()
+    r"""Naive XTrace estimate of $\tr(Df(x))$ for debugging."""
+    if num_matvecs < 2:
+        raise ValueError("num_matvecs must be at least 2")
+
+    num_samples = num_matvecs // 2
+    *batch, N = x.shape
+    k = min(N, num_samples)
+
+    _, jvp_fn = linearize(op, x)
+    batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
+    tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
+
+    sampler = Sampler.new(sampler)
+    samples = sampler(x.shape, k, device=x.device, dtype=x.dtype)
+    Y = batched_op(samples)  # (...Nm)
+
+    mus = []
+    for i in range(num_samples):
+        col_indices = torch.arange(num_samples, device=Y.device)
+        Q_i, _ = qr(Y[..., i != col_indices], mode="reduced")
+        ω_i = samples[..., [i]]
+        μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
+        mus.append(μ_i)
+        tr = tr + vecdot(Q_i, batched_op(Q_i), dim=-2).sum(dim=-1)
+    μ = torch.cat(mus, dim=-1)
+    scale = 1.0 - renormalize * (1.0 - (N - k + 1) / vecdot(μ, μ, dim=-2, keepdim=True))
+    μ = μ * scale
+    residual = vecdot(μ, batched_op(μ), dim=-2).mean(dim=-1)
+    return tr / k + residual
 
 
 @signature("[{(..., n, d) -> (..., n, d)}, (..., n, d)] -> (...)")
