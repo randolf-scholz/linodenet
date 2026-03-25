@@ -525,14 +525,6 @@ class ExactEstimator(TraceEstimator):
             or adjoint vector-Jacobian products.
     """
 
-    mode: Final[str]
-
-    def __init__(self, mode: str = "forward") -> None:
-        super().__init__()
-        if mode not in {"forward", "adjoint"}:
-            raise ValueError(f"mode must be 'forward' or 'adjoint', got {mode!r}")
-        self.mode = mode
-
     def _materialize(
         self,
         op: Fn[[Tensor], Tensor],
@@ -543,24 +535,11 @@ class ExactEstimator(TraceEstimator):
             raise ValueError("x must be at least one-dimensional")
 
         dim = x.shape[-1]
-        identity = torch.eye(dim, device=x.device, dtype=x.dtype).expand(
-            *x.shape[:-1], dim, dim
-        )
+        eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
 
-        match self.mode:
-            case "forward":
-                _, jvp_fn = linearize(op, x)
-                batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-                return batched_op(identity)
-
-            case "adjoint":
-                _, vjp_fn, *_ = vjp(op, x)
-                batched_adj = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
-                (matrix,) = batched_adj(identity)
-                return matrix
-
-            case _:
-                raise AssertionError("unreachable")
+        _, jvp_fn = linearize(op, x)
+        batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+        return batched_op(eye)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(
@@ -610,63 +589,32 @@ class HutchinsonEstimator(TraceEstimator):
         N is the dimension of the operator
 
     Args:
-        num_samples: Number of probe vectors.
-        num_matvecs: Alias for `num_samples`.
+        num_matvecs: Number of matvecs.
         sampler: Probe vector sampler.
         mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
             products, or a symmetric alternating scheme.
     """
 
+    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
+
     num_matvecs: Final[int]
     num_samples: Final[int]
     mode: Final[str]
-    sampler: AbstractSampler
+    sampler: Final[AbstractSampler]
 
-    @overload
     def __init__(
         self,
-        num_samples: int,
-        *,
-        sampler: str | AbstractSampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        *,
         num_matvecs: int,
-        sampler: str | AbstractSampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    def __init__(
-        self,
-        num_samples: int | None = None,
         *,
-        num_matvecs: int | None = None,
         sampler: str | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
+        if mode not in self.MODES:
+            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
+
         super().__init__()
-
-        match num_samples, num_matvecs:
-            case None, None:
-                raise ValueError("either num_samples or num_matvecs must be provided")
-            case n, None:
-                self.num_matvecs = n
-                self.num_samples = n
-            case None, n:
-                self.num_matvecs = n
-                self.num_samples = n
-            case _, _:
-                raise ValueError(
-                    "Only one of num_samples or num_matvecs should be provided, but got both."
-                )
-
-        if mode not in {"forward", "adjoint", "symmetric"}:
-            raise ValueError(
-                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
-            )
-
+        self.num_matvecs = num_matvecs
+        self.num_samples = num_matvecs
         self.mode = mode
         self.sampler = Sampler.new(sampler)
 
@@ -744,40 +692,6 @@ class HutchinsonEstimator(TraceEstimator):
             case _:
                 raise ValueError(f"invalid mode {self.mode!r}")
 
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        num_series_terms: int,
-    ) -> Tensor:
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-        if self.mode != "forward":
-            raise NotImplementedError(
-                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
-            )
-        if num_series_terms < 1:
-            raise ValueError("num_series_terms must be at least 1")
-
-        _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
-        batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-        samples = self.sampler(
-            x.shape,
-            self.num_samples,
-            device=x.device,
-            dtype=x.dtype,
-        )
-        result = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
-        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
-        for k in range(1, num_series_terms + 1):
-            sign = sign.neg()
-            samples = batched_jvp_fn(samples)
-            trace_power = xtrace_estimator(batched_jvp_fn, samples)
-            result = result + (sign / k) * trace_power
-        return result.real if not result.is_complex() else result
-
 
 class HutchPlusPlusEstimator(TraceEstimator):
     r"""Estimate traces with the Hutch++ variance-reduced estimator.
@@ -794,58 +708,28 @@ class HutchPlusPlusEstimator(TraceEstimator):
             products, or a symmetric alternating scheme.
     """
 
+    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
+
     num_matvecs: Final[int]
     num_samples: Final[int]
     mode: Final[str]
-    sampler: AbstractSampler
+    sampler: Final[AbstractSampler]
 
-    @overload
     def __init__(
         self,
-        num_samples: int,
-        *,
-        sampler: str | AbstractSampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        *,
         num_matvecs: int,
-        sampler: str | AbstractSampler = "sphere",
-        mode: str = "symmetric",
-    ) -> None: ...
-    def __init__(
-        self,
-        num_samples: int | None = None,
         *,
-        num_matvecs: int | None = None,
         sampler: str | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
+        if mode not in self.MODES:
+            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
+        if num_matvecs < 3:
+            raise ValueError("num_matvecs must be at least 3")
+
         super().__init__()
-
-        match num_samples, num_matvecs:
-            case None, None:
-                raise ValueError("either num_samples or num_matvecs must be provided")
-            case n, None:
-                self.num_matvecs = 3 * n
-                self.num_samples = n
-            case None, n:
-                if num_matvecs < 3:
-                    raise ValueError("num_matvecs must be at least 3")
-                self.num_matvecs = n
-                self.num_samples = n // 3
-            case _, _:
-                raise ValueError(
-                    "Only one of num_samples or num_matvecs should be provided, but got both."
-                )
-
-        if mode not in {"forward", "adjoint", "symmetric"}:
-            raise ValueError(
-                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
-            )
-
+        self.num_matvecs = num_matvecs
+        self.num_samples = num_matvecs // 3
         self.mode = mode
         self.sampler = Sampler.new(sampler)
 
@@ -974,40 +858,6 @@ class HutchPlusPlusEstimator(TraceEstimator):
             case _:
                 raise ValueError(f"invalid mode {self.mode!r}")
 
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        num_series_terms: int,
-    ) -> Tensor:
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-        if self.mode != "forward":
-            raise NotImplementedError(
-                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
-            )
-        if num_series_terms < 1:
-            raise ValueError("num_series_terms must be at least 1")
-
-        _, jvp_fn = linearize(op, x)
-        batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-        samples = self.sampler(
-            x.shape,
-            self.num_samples,
-            device=x.device,
-            dtype=x.dtype,
-        )
-        result = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
-        sign = torch.tensor(-1.0, device=x.device, dtype=x.dtype)
-        for k in range(1, num_series_terms + 1):
-            sign = sign.neg()
-            samples = batched_jvp_fn(samples)
-            trace_power = xtrace_estimator(batched_jvp_fn, samples)
-            result = result + (sign / k) * trace_power
-        return result.real if not result.is_complex() else result
-
 
 class XTraceEstimator(TraceEstimator):
     r"""Estimate traces with the XTrace estimator.
@@ -1017,12 +867,13 @@ class XTraceEstimator(TraceEstimator):
         N is the dimension of the operator
 
     Args:
-        num_samples: Number of probe vectors.
-        num_matvecs: Alias for the total matvec budget.
+        num_matvecs: total matvec budget.
         sampler: Probe vector sampler.
         renormalize: Whether to apply the paper's renormalization.
         mode: Jacobian action mode. Only `"forward"` is currently implemented.
     """
+
+    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
 
     num_matvecs: Final[int]
     num_samples: Final[int]
@@ -1030,58 +881,24 @@ class XTraceEstimator(TraceEstimator):
     mode: Final[str]
     r"""Whether to apply renormalization from paper section 2.3"""
 
-    sampler: AbstractSampler
+    sampler: Final[AbstractSampler]
 
-    @overload
     def __init__(
         self,
-        num_samples: int,
-        *,
-        sampler: str | AbstractSampler = ...,
-        renormalize: bool = ...,
-        mode: str = ...,
-    ) -> None: ...
-    @overload
-    def __init__(
-        self,
-        *,
         num_matvecs: int,
-        sampler: str | AbstractSampler = ...,
-        renormalize: bool = ...,
-        mode: str = ...,
-    ) -> None: ...
-    def __init__(
-        self,
-        num_samples: int | None = None,
         *,
-        num_matvecs: int | None = None,
         sampler: str | AbstractSampler = Sampler.SPHERE,
         renormalize: bool = True,
         mode: str = "forward",
     ) -> None:
+        if mode not in self.MODES:
+            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
+        if num_matvecs < 2:
+            raise ValueError("num_matvecs must be at least 2")
+
         super().__init__()
-
-        match num_samples, num_matvecs:
-            case None, None:
-                raise ValueError("either num_samples or num_matvecs must be provided")
-            case n, None:
-                self.num_matvecs = 2 * n
-                self.num_samples = n
-            case None, n:
-                if n < 2:
-                    raise ValueError("num_matvecs must be at least 2")
-                self.num_matvecs = n
-                self.num_samples = n // 2
-            case _, _:
-                raise ValueError(
-                    "Only one of num_samples or num_matvecs should be provided, but got both."
-                )
-
-        if mode not in {"forward", "adjoint", "symmetric"}:
-            raise ValueError(
-                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
-            )
-
+        self.num_matvecs = num_matvecs
+        self.num_samples = num_matvecs // 2
         self.renormalize = bool(renormalize)
         self.mode = mode
         self.sampler = Sampler.new(sampler)
