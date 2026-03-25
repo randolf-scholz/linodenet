@@ -16,6 +16,7 @@ __all__ = [
     "XTraceEstimator",
     # functions
     "hutchinson_estimator",
+    "logabsdet",
     "naive_estimator",
     "xtrace_estimator",
     "xtrace_estimator_corrected",
@@ -166,17 +167,6 @@ class AbstractTraceEstimator(Protocol):
         r"""Yields $\tr(Df(x)), \tr(Df(x)²), …, \tr(Df(x)ᵏ)$ for $k=1..max_power$."""
         ...
 
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        num_series_terms: int,
-    ) -> Tensor:
-        r"""Returns an estimate of $\log|\det(𝕀 + Df(x))|$."""
-        ...
-
 
 class BaseEstimator(nn.Module):
     r"""Base class for Jacobian trace estimators.
@@ -187,8 +177,8 @@ class BaseEstimator(nn.Module):
     when $f(z) = Az$, the Jacobian is constant and equal to $A$.
 
     Subclasses must implement `estimate`, which returns an estimate of $\tr(Df(x))$.
-    The default `estimate_powers` and `estimate_logabsdet` implementations build on top of
-    `estimate`; concrete estimators may override them with more efficient algorithms.
+    The default `estimate_powers` implementation builds on top of `estimate`; concrete
+    estimators may override it with more efficient algorithms.
     """
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -230,34 +220,35 @@ class BaseEstimator(nn.Module):
             previous_op = power_op
             power_op = lambda z, prev=previous_op: op(prev(z))
 
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_logabsdet(
-        self,
-        op: Fn[[Tensor], Tensor],
-        x: Tensor,
-        /,
-        num_series_terms: int,
-    ) -> Tensor:
-        r"""Estimate $\log |\det(𝕀 + Df(x))|$ using a truncated power series.
 
-        The default implementation uses
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def logabsdet(
+    estimator: AbstractTraceEstimator,
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    num_series_terms: int,
+) -> Tensor:
+    r"""Estimate $\log |\det(𝕀 + Df(x))|$ via a truncated power series.
 
-        .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
+    The helper uses
 
-        truncated after `num_series_terms` terms and replaces each trace power with the
-        corresponding value from `estimate_powers`.
-        """
-        if num_series_terms < 1:
-            raise ValueError("num_series_terms must be at least 1")
+    .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
 
-        trace_powers = self.estimate_powers(op, x, num_series_terms)
-        first_power = next(trace_powers)
-        logabsdet = first_power.clone()
-        sign = -1.0
-        for k, trace_power in enumerate(trace_powers, start=2):
-            logabsdet = logabsdet + (sign / k) * trace_power
-            sign = -sign
-        return logabsdet.real if not logabsdet.is_complex() else logabsdet
+    truncated after `num_series_terms` terms and replaces each trace power with the
+    corresponding value from `estimator.estimate_powers`.
+    """
+    if num_series_terms < 1:
+        raise ValueError("num_series_terms must be at least 1")
+
+    trace_powers = estimator.estimate_powers(op, x, num_series_terms)
+    first_power = next(trace_powers)
+    result = first_power.clone()
+    sign = -1.0
+    for k, trace_power in enumerate(trace_powers, start=2):
+        result = result + (sign / k) * trace_power
+        sign = -sign
+    return result.real if not result.is_complex() else result
 
 
 class ExactEstimator(BaseEstimator):
@@ -341,9 +332,7 @@ class ExactEstimator(BaseEstimator):
         op: Fn[[Tensor], Tensor],
         x: Tensor,
         /,
-        num_series_terms: int,
     ) -> Tensor:
-        del num_series_terms
         matrix = self._materialize(op, x)
         eigenvalues = torch.linalg.eigvals(matrix)
         logabsdet = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
@@ -493,6 +482,16 @@ class HutchinsonEstimator(BaseEstimator):
                     yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
             case _:
                 raise ValueError(f"invalid mode {self.mode!r}")
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        num_series_terms: int,
+    ) -> Tensor:
+        return logabsdet(self, op, x, num_series_terms)
 
 
 class HutchPlusPlusEstimator(BaseEstimator):
@@ -691,6 +690,16 @@ class HutchPlusPlusEstimator(BaseEstimator):
 
             case _:
                 raise ValueError(f"invalid mode {self.mode!r}")
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        num_series_terms: int,
+    ) -> Tensor:
+        return logabsdet(self, op, x, num_series_terms)
 
 
 class XTraceEstimator(BaseEstimator):
@@ -901,6 +910,16 @@ class XTraceEstimator(BaseEstimator):
 
         estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
         yield estimate.real if not estimate.is_complex() else estimate
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def estimate_logabsdet(
+        self,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
+        /,
+        num_series_terms: int,
+    ) -> Tensor:
+        return logabsdet(self, op, x, num_series_terms)
 
 
 def xtrace_naive_estimator(
