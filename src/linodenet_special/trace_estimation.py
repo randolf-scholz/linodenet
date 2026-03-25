@@ -463,13 +463,13 @@ class HutchPlusPlusEstimator(nn.Module):
             right_sketch = batched_adj(samples[..., self.num_samples // 2 :])
             sketch = torch.cat([left_sketch, right_sketch], dim=-1)
             Q, _ = qr(sketch, mode="reduced")  # (...dr)
-            projected_samples = Q
-            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
 
-            residual_l = residual_samples.clone()
-            residual_r = residual_samples.clone()
+            projected_samples = Q
             projected_l = projected_samples.clone()
             projected_r = projected_samples.clone()
+            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+            residual_l = residual_samples.clone()
+            residual_r = residual_samples.clone()
 
             power = 0
             while power < max_power:
@@ -500,13 +500,13 @@ class HutchPlusPlusEstimator(nn.Module):
             batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
             sketch = batched_op(samples)
             Q, _ = qr(sketch, mode="reduced")  # (...dr)
-            projected_samples = Q
-            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
 
-            residual_l = residual_samples.clone()
-            residual_r = residual_samples.clone()
+            projected_samples = Q
             projected_l = projected_samples.clone()
             projected_r = projected_samples.clone()
+            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+            residual_l = residual_samples.clone()
+            residual_r = residual_samples.clone()
 
             for _ in range(max_power):
                 projected_r = batched_op(projected_r)
@@ -524,13 +524,13 @@ class HutchPlusPlusEstimator(nn.Module):
             batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
             sketch = batched_adj(samples)
             Q, _ = qr(sketch, mode="reduced")  # (...dr)
-            projected_samples = Q
-            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
 
-            residual_l = residual_samples.clone()
-            residual_r = residual_samples.clone()
+            projected_samples = Q
             projected_l = projected_samples.clone()
             projected_r = projected_samples.clone()
+            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+            residual_l = residual_samples.clone()
+            residual_r = residual_samples.clone()
 
             for _ in range(max_power):
                 projected_l = batched_adj(projected_l)
