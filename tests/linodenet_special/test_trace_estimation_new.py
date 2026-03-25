@@ -14,7 +14,7 @@ from linodenet_special.trace_estimation import (
     ExactEstimator,
     HutchinsonEstimator,
     HutchPlusPlusEstimator,
-    SamplerKind,
+    Sampler,
     XTraceEstimator,
     logabsdet,
     xtrace_estimator_corrected,
@@ -200,12 +200,12 @@ class TestHutchinsonEstimator:
 
         samples = estimator.sampler((3, 5), 4, dtype=torch.float32, device=device)
 
-        assert isinstance(estimator.sampler, type(SamplerKind.SIGN.make()))
+        assert isinstance(estimator.sampler, type(Sampler.new(Sampler.SIGN)))
         assert samples.shape == (3, 5, 4)
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_hutchinson_sampler_from_enum(self, device: str) -> None:
-        estimator = HutchinsonEstimator(num_samples=4, sampler=SamplerKind.SIGN).to(
+        estimator = HutchinsonEstimator(num_samples=4, sampler=Sampler.SIGN).to(
             device=device
         )
 
@@ -366,7 +366,7 @@ class TestXTraceEstimator:
         return lambda x: scale * x, scale.sum(-1)
 
     def test_xtrace_sampler_from_enum(self, device: str) -> None:
-        estimator = XTraceEstimator(num_samples=4, sampler=SamplerKind.SIGN).to(
+        estimator = XTraceEstimator(num_samples=4, sampler=Sampler.SIGN).to(
             device=device
         )
 
@@ -376,7 +376,7 @@ class TestXTraceEstimator:
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_xtrace_sphere_sampler_normalizes_columns(self, device: str) -> None:
-        estimator = XTraceEstimator(num_samples=4, sampler=SamplerKind.SPHERE).to(
+        estimator = XTraceEstimator(num_samples=4, sampler=Sampler.SPHERE).to(
             device=device
         )
 
@@ -487,7 +487,7 @@ class TestVisualization:
         denom = expected.abs().clamp_min(torch.finfo(dtype).eps)
         x = torch.zeros(batch_size, input_size, device=device, dtype=dtype)
 
-        base_sampler = SamplerKind.ORTH.make()
+        base_sampler = Sampler.new(Sampler.ORTH)
         full_probe_columns = base_sampler(
             (batch_size, input_size),
             input_size,

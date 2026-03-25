@@ -12,7 +12,7 @@ __all__ = [
     "HutchPlusPlusEstimator",
     "HutchinsonEstimator",
     "LogAbsDetEstimator",
-    "SamplerKind",
+    "Sampler",
     "XTraceEstimator",
     # functions
     "hutchinson_estimator",
@@ -24,7 +24,7 @@ __all__ = [
     # samplers
     "GaussianSampler",
     "OrthSampler",
-    "Sampler",
+    "AbstractSampler",
     "SignSampler",
     "SphereSampler",
 ]
@@ -43,7 +43,7 @@ from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 from signatures import signature
 
 
-class Sampler(Protocol):
+class AbstractSampler(Protocol):
     def __call__(
         self,
         shape: tuple[int, ...],
@@ -68,7 +68,7 @@ class AbstractTraceEstimator(Protocol):
         ...
 
 
-class SamplerKind(StrEnum):
+class Sampler(StrEnum):
     r"""Built-in probe vector samplers for stochastic trace estimators."""
 
     GAUSSIAN = "gaussian"
@@ -76,17 +76,20 @@ class SamplerKind(StrEnum):
     SPHERE = "sphere"
     ORTH = "orth"
 
-    def make(self, *args: object, **kwargs: object) -> Sampler:
-        r"""Instantiate the sampler implementation for this built-in sampler."""
-        match self:
-            case self.GAUSSIAN:
-                return GaussianSampler(*args, **kwargs)
-            case self.SIGN:
-                return SignSampler(*args, **kwargs)
-            case self.SPHERE:
-                return SphereSampler(*args, **kwargs)
-            case self.ORTH:
-                return OrthSampler(*args, **kwargs)
+    @classmethod
+    def new(cls, sampler: str | AbstractSampler, /) -> AbstractSampler:
+        r"""Construct a built-in sampler or forward a custom sampler as-is."""
+        if callable(sampler):
+            return sampler
+        match cls(sampler):
+            case cls.GAUSSIAN:
+                return GaussianSampler()
+            case cls.SIGN:
+                return SignSampler()
+            case cls.SPHERE:
+                return SphereSampler()
+            case cls.ORTH:
+                return OrthSampler()
 
 
 class GaussianSampler(nn.Module):
@@ -565,14 +568,14 @@ class HutchinsonEstimator(BaseEstimator):
     num_matvecs: Final[int]
     num_samples: Final[int]
     mode: Final[str]
-    sampler: Sampler
+    sampler: AbstractSampler
 
     @overload
     def __init__(
         self,
         num_samples: int,
         *,
-        sampler: str | SamplerKind | Sampler = "sphere",
+        sampler: str | Sampler | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     @overload
@@ -580,7 +583,7 @@ class HutchinsonEstimator(BaseEstimator):
         self,
         *,
         num_matvecs: int,
-        sampler: str | SamplerKind | Sampler = "sphere",
+        sampler: str | Sampler | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     def __init__(
@@ -588,7 +591,7 @@ class HutchinsonEstimator(BaseEstimator):
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        sampler: str | Sampler | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
         super().__init__()
@@ -613,9 +616,7 @@ class HutchinsonEstimator(BaseEstimator):
             )
 
         self.mode = mode
-        self.sampler = (
-            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
-        )
+        self.sampler = Sampler.new(sampler)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(
@@ -744,14 +745,14 @@ class HutchPlusPlusEstimator(BaseEstimator):
     num_matvecs: Final[int]
     num_samples: Final[int]
     mode: Final[str]
-    sampler: Sampler
+    sampler: AbstractSampler
 
     @overload
     def __init__(
         self,
         num_samples: int,
         *,
-        sampler: str | SamplerKind | Sampler = "sphere",
+        sampler: str | Sampler | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     @overload
@@ -759,7 +760,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
         self,
         *,
         num_matvecs: int,
-        sampler: str | SamplerKind | Sampler = "sphere",
+        sampler: str | Sampler | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> None: ...
     def __init__(
@@ -767,7 +768,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        sampler: str | Sampler | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
         super().__init__()
@@ -794,9 +795,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
             )
 
         self.mode = mode
-        self.sampler = (
-            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
-        )
+        self.sampler = Sampler.new(sampler)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(
@@ -979,14 +978,14 @@ class XTraceEstimator(BaseEstimator):
     mode: Final[str]
     r"""Whether to apply renormalization from paper section 2.3"""
 
-    sampler: Sampler
+    sampler: AbstractSampler
 
     @overload
     def __init__(
         self,
         num_samples: int,
         *,
-        sampler: str | SamplerKind | Sampler = ...,
+        sampler: str | Sampler | AbstractSampler = ...,
         renormalize: bool = ...,
         mode: str = ...,
     ) -> None: ...
@@ -995,7 +994,7 @@ class XTraceEstimator(BaseEstimator):
         self,
         *,
         num_matvecs: int,
-        sampler: str | SamplerKind | Sampler = ...,
+        sampler: str | Sampler | AbstractSampler = ...,
         renormalize: bool = ...,
         mode: str = ...,
     ) -> None: ...
@@ -1004,7 +1003,7 @@ class XTraceEstimator(BaseEstimator):
         num_samples: int | None = None,
         *,
         num_matvecs: int | None = None,
-        sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        sampler: str | Sampler | AbstractSampler = Sampler.SPHERE,
         renormalize: bool = True,
         mode: str = "forward",
     ) -> None:
@@ -1033,9 +1032,7 @@ class XTraceEstimator(BaseEstimator):
 
         self.renormalize = bool(renormalize)
         self.mode = mode
-        self.sampler = (
-            SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
-        )
+        self.sampler = Sampler.new(sampler)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(
