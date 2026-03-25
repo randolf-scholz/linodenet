@@ -11,6 +11,7 @@
       <w>diag</w>
       <w>erfinv</w>
       <w>fullgraph</w>
+      <w>hutchplusplus</w>
       <w>logabsdets</w>
       <w>logsumexp</w>
       <w>lsamples</w>
