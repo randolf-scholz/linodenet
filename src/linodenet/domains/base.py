@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
 from types import MappingProxyType
-from typing import ClassVar, Protocol, Self
+from typing import Any, ClassVar, Protocol, Self, overload
 
 from torch import Tensor
 
@@ -162,38 +162,73 @@ class DomainMapping[D: Domain](Mapping[D, D]):
         return len(self.domains)
 
 
+class _SupportsAndOr(Protocol):
+    def __and__(self, other: Any, /) -> Any: ...
+    def __or__(self, other: Any, /) -> Any: ...
+
+
 @dataclass(frozen=True)
-class Meet:
+class Meet[D: _SupportsAndOr]:
     r"""Structural meet expression for poset labels."""
 
-    factors: frozenset[PosetEnum]
+    factors: frozenset[D]
 
-    def __init__(self, factors: Iterable[PosetEnum] = (), /) -> None:
-        nodes: set[PosetEnum] = set()
+    def __init__(self, factors: Iterable[D] = (), /) -> None:
+        nodes: set[D] = set()
         for factor in factors:
             match factor:
                 case Meet(factors=subfactors):
                     nodes.update(subfactors)
-                case PosetEnum():
-                    nodes.add(factor)
                 case _:
-                    raise TypeError(f"Expected PosetEnum factor, got {factor!r}.")
+                    nodes.add(factor)
+
         object.__setattr__(self, "factors", frozenset(nodes))
 
-    def __and__(self, other: PosetEnum | Meet, /) -> Meet:
-        return Meet({*self.factors, other})
-
-    def __iter__(self) -> Iterator[PosetEnum]:
+    def __iter__(self) -> Iterator[D]:
         return iter(self.factors)
 
     def __len__(self) -> int:
         return len(self.factors)
 
+    def __contains__(self, other: object, /) -> bool:
+        return other in self.factors
+
+    @overload
+    def __and__(self, other: D | Meet[D], /) -> Meet[D]: ...
+    @overload
+    def __and__(self, other: Join[D], /) -> Join[Meet[D]]: ...
+    def __and__(self, other: D | Meet[D] | Join[D], /) -> Meet[D] | Join[Meet[D]]:
+        match other:
+            case Join():
+                # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∨ … ∨ Bₙ)
+                # ≡ (A₁ ∧ … ∧ Aₙ ∧ B₁) ∨ … ∨ (A₁ ∧ … ∧ Aₙ ∧ Bₙ)
+                return Join({self & y for y in other})
+            case Meet():
+                # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∧ … ∧ Bₙ)
+                # ≡ (A₁ ∧ … ∧ Aₙ ∧ B₁ ∧ … ∧ Bₙ)
+                return Meet({*self, *other})
+            case _:
+                # (A₁ ∧ … ∧ Aₙ) ∧ B ≡ (A₁ ∧ … ∧ Aₙ ∧ B)
+                return Meet({*self, other})
+
+    def __or__(self, other: D | Meet[D] | Join[D], /) -> Meet[Join[D]]:
+        match other:
+            case Meet():
+                # (A₁ ∧ … ∧ Aₙ) ∨ (B₁ ∧ … ∧ Bₙ)
+                # ≡ (A₁ ∨ B) ∧ … ∧ (Aₙ ∨ B)
+                # ≡ (A₁ ∨ B₁) ∧ … ∧ (A₁ ∨ Bₙ) ∧ … ∧ (Aₙ ∨ B₁) ∧ … ∧ (Aₙ ∨ Bₙ)
+                return Meet({x | y for x in self for y in other})
+            case Join():
+                # (A₁ ∧ … ∧ Aₙ) ∨ (B₁ ∨ … ∨ Bₙ)
+                # ≡ (A₁ ∨ B) ∧ … ∧ (Aₙ ∨ B)
+                # ≡ (A₁ ∨ B₁ ∨ … ∨ Bₙ) ∧ … ∧ (Aₙ ∨ B₁ ∨ … ∨ Bₙ)
+                return Meet({m | other for m in self})
+            case _:
+                # (A₁ ∧ … ∧ Aₙ) ∨ B ≡ (A₁ ∨ B) ∧ … ∧ (Aₙ ∨ B)
+                return Meet({m | other for m in self})
+
     def __le__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
-            return NotImplemented
-        types = {type(factor) for factor in self.factors}
-        if len(types) != 1 or type(other) not in types:
             return NotImplemented
         cls = type(other)
         return other in cls._closure_from(self.factors)
@@ -201,66 +236,96 @@ class Meet:
     def __lt__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
             return NotImplemented
-        return self <= other and other not in self.factors
+        return self <= other and other not in self
 
     def __ge__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
             return NotImplemented
         return other <= self
 
+    def __gt__(self, other: object, /) -> bool:
+        if not isinstance(other, PosetEnum):
+            return NotImplemented
+        return self >= other and other not in self
+
 
 @dataclass(frozen=True)
-class Join:
+class Join[D: _SupportsAndOr]:
     r"""Structural join expression for poset labels."""
 
-    terms: frozenset[PosetEnum]
+    members: frozenset[D]
 
-    def __init__(self, terms: Iterable[PosetEnum] = (), /) -> None:
-        nodes: set[PosetEnum] = set()
-        for term in terms:
-            match term:
-                case Join(terms=subterms):
+    def __init__(self, members: Iterable[D] = (), /) -> None:
+        nodes: set[D] = set()
+        for member in members:
+            match member:
+                case Join(members=subterms):
                     nodes.update(subterms)
-                case PosetEnum():
-                    nodes.add(term)
                 case _:
-                    raise TypeError(f"Expected PosetEnum term, got {term!r}.")
-        object.__setattr__(self, "terms", frozenset(nodes))
+                    nodes.add(member)
 
-    def __or__(self, other: PosetEnum | Join, /) -> Join:
-        return Join({*self.terms, other})
+        object.__setattr__(self, "members", frozenset(nodes))
 
-    def __iter__(self) -> Iterator[PosetEnum]:
-        return iter(self.terms)
+    def __iter__(self) -> Iterator[D]:
+        return iter(self.members)
 
     def __len__(self) -> int:
-        return len(self.terms)
+        return len(self.members)
+
+    def __contains__(self, other: object, /) -> bool:
+        return other in self.members
+
+    def __and__(self, other: D | Join[D] | Meet[D], /) -> Join[Meet[D]]:
+        match other:
+            case Join():
+                # (A₁ ∨ … ∨ Aₙ) ∧ (B₁ ∨ … ∨ Bₙ)
+                # ≡ (A₁ ∧ B₁) ∨ … ∨ (A₁ ∧ Bₙ) ∨ … ∨ (Aₙ ∧ B₁) ∨ … ∨ (Aₙ ∧ Bₙ)
+                return Join({x & y for x in self for y in other})
+            case Meet():
+                # (A₁ ∨ … ∨ Aₙ) ∧ (B₁ ∧ … ∧ Bₙ)
+                # ≡ (A₁ ∧ B₁ ∧ … ∧ Bₙ) ∨ … ∨ (Aₙ ∧ V₁ ∧ … ∧ Bₙ)
+                return Join({x & other for x in self})
+            case _:
+                # (A₁ ∨ … ∨ Aₙ) ∧ B
+                # ≡ (A₁ ∧ B) ∨ … ∨ (Aₙ ∧ B)
+                return Join({x & other for x in self})
+
+    @overload
+    def __or__(self, other: D | Join[D], /) -> Join[D]: ...
+    @overload
+    def __or__(self, other: Meet[D], /) -> Meet[Join[D]]: ...
+    def __or__(self, other: D | Join[D] | Meet[D], /) -> Join[D] | Meet[Join[D]]:
+        match other:
+            case Join():
+                # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∨ … ∨ Bₙ) ≡ (A₁ ∨ … ∨ Aₙ ∨ B₁ ∨ … ∨ Bₙ)
+                return Join({*self, *other})
+            case Meet():
+                # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∧ … ∧ Bₙ)
+                # (A₁ ∨ … ∨ Aₙ ∨ B₁) ∧ … ∧ (A₁ ∨ … ∨ Aₙ ∨ Bₙ)
+                return Meet({self | y for y in other})
+            case _:
+                # (A₁ ∨ … ∨ Aₙ) ∨ B ≡ (A₁ ∨ … ∨ Aₙ ∨ B)
+                return Join({*self, other})
 
     def __le__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
             return NotImplemented
-        types = {type(term) for term in self.terms}
-        if len(types) != 1 or type(other) not in types:
-            return NotImplemented
-        return all(term <= other for term in self.terms)
+        return all(member <= other for member in self)
 
     def __lt__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
             return NotImplemented
-        return self <= other and other not in self.terms
+        return self <= other and other not in self
 
     def __ge__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
             return NotImplemented
-        types = {type(term) for term in self.terms}
-        if len(types) != 1 or type(other) not in types:
-            return NotImplemented
-        return all(other <= term for term in self.terms)
+        return all(other <= member for member in self)
 
     def __gt__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
             return NotImplemented
-        return self >= other and other not in self.terms
+        return self >= other and other not in self
 
 
 class PosetEnum(Enum):

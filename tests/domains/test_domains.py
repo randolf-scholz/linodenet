@@ -211,7 +211,7 @@ class TestMatrixDomains:
 
         codomain = mapping[M.SQUARE]
         assert isinstance(codomain, Join)
-        assert codomain.terms == frozenset({M.LEFT_INVERTIBLE, M.RIGHT_INVERTIBLE})
+        assert codomain.members == frozenset({M.LEFT_INVERTIBLE, M.RIGHT_INVERTIBLE})
 
     def test_poset_meet_expression(self) -> None:
         meet = M.TALL & M.WIDE & M.SQUARE
