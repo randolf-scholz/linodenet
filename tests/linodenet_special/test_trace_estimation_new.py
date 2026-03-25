@@ -103,8 +103,7 @@ class AnalyticEstimator(TraceEstimator):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestExactEstimator:
-    @pytest.mark.parametrize("mode", ["forward", "adjoint"])
-    def test_exact_estimate(self, device: str, mode: str) -> None:
+    def test_exact_estimate(self, device: str) -> None:
         matrix = torch.tensor(
             [
                 [[2.0, 0.0], [0.0, 3.0]],
@@ -113,15 +112,14 @@ class TestExactEstimator:
             device=device,
         )
         x = torch.zeros(matrix.shape[:-1], device=device)
-        estimator = ExactEstimator(mode=mode).to(device=device)
+        estimator = ExactEstimator()
 
         estimate = estimator(linear_map(matrix), x)
 
         expected = torch.einsum("...ii -> ...", matrix)
         torch.testing.assert_close(estimate, expected)
 
-    @pytest.mark.parametrize("mode", ["forward", "adjoint"])
-    def test_exact_estimate_powers(self, device: str, mode: str) -> None:
+    def test_exact_estimate_powers(self, device: str) -> None:
         matrix = torch.tensor(
             [
                 [[2.0, 0.0], [0.0, 3.0]],
@@ -130,7 +128,7 @@ class TestExactEstimator:
             device=device,
         )
         x = torch.zeros(matrix.shape[:-1], device=device)
-        estimator = ExactEstimator(mode=mode).to(device=device)
+        estimator = ExactEstimator()
 
         estimates = list(estimator.estimate_powers(linear_map(matrix), x, 3))
 
@@ -141,10 +139,7 @@ class TestExactEstimator:
         for estimate, truth in zip(estimates, expected, strict=True):
             torch.testing.assert_close(estimate, truth)
 
-    @pytest.mark.parametrize("mode", ["forward", "adjoint"])
-    def test_exact_estimate_logabsdet_matches_closed_form(
-        self, device: str, mode: str
-    ) -> None:
+    def test_exact_estimate_logabsdet_matches_closed_form(self, device: str) -> None:
         matrix = torch.tensor(
             [
                 [[0.25, 0.0], [0.0, -0.125]],
@@ -153,7 +148,7 @@ class TestExactEstimator:
             device=device,
         )
         x = torch.zeros(matrix.shape[:-1], device=device)
-        estimator = ExactEstimator(mode=mode).to(device=device)
+        estimator = ExactEstimator()
 
         estimate = estimator.estimate_logabsdet(linear_map(matrix), x)
 
@@ -161,16 +156,12 @@ class TestExactEstimator:
         expected = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
         torch.testing.assert_close(estimate, expected)
 
-    def test_exact_mode_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="mode must be 'forward' or 'adjoint'"):
-            ExactEstimator(mode="symmetric").to(device=device)
-
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestBaseEstimator:
     def test_estimate_powers_defaults_to_repeated_estimate(self, device: str) -> None:
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
-        estimator = AnalyticEstimator().to(device=device)
+        estimator = AnalyticEstimator()
 
         estimates = list(estimator.estimate_powers(scaled_map(scale), scale, 4))
 
@@ -180,7 +171,7 @@ class TestBaseEstimator:
 
     def test_estimate_logabsdet_uses_power_series(self, device: str) -> None:
         scale = torch.tensor([[0.125], [-0.2], [0.3]], device=device)
-        estimator = AnalyticEstimator().to(device=device)
+        estimator = AnalyticEstimator()
 
         estimate = logabsdet_series(estimator, scaled_map(scale), scale, 6)
 
@@ -196,7 +187,7 @@ class TestHutchinsonEstimator:
     NUM_SAMPLES = 1024
 
     def test_hutchinson_sampler_from_string(self, device: str) -> None:
-        estimator = HutchinsonEstimator(num_samples=4, sampler="sign").to(device=device)
+        estimator = HutchinsonEstimator(4, sampler="sign")
 
         samples = estimator.sampler((3, 5), 4, dtype=torch.float32, device=device)
 
@@ -205,9 +196,7 @@ class TestHutchinsonEstimator:
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_hutchinson_sampler_from_enum(self, device: str) -> None:
-        estimator = HutchinsonEstimator(num_samples=4, sampler=Sampler.SIGN).to(
-            device=device
-        )
+        estimator = HutchinsonEstimator(4, sampler=Sampler.SIGN)
 
         samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
@@ -216,9 +205,7 @@ class TestHutchinsonEstimator:
 
     def test_hutchinson_sampler_from_custom_instance(self, device: str) -> None:
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
-        estimator = HutchinsonEstimator(num_samples=8, sampler=OnesSampler()).to(
-            device=device
-        )
+        estimator = HutchinsonEstimator(8, sampler=OnesSampler())
 
         estimate = estimator(scaled_map(scale), scale)
 
@@ -226,35 +213,29 @@ class TestHutchinsonEstimator:
         torch.testing.assert_close(estimate, expected)
 
     def test_hutchinson_sampler_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="is not a valid SamplerKind"):
-            HutchinsonEstimator(num_samples=4, sampler="unknown").to(device=device)
+        with pytest.raises(ValueError, match="is not a valid Sampler"):
+            HutchinsonEstimator(4, sampler="unknown")
 
     def test_hutchinson_mode_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(
-            ValueError, match="mode must be 'forward', 'adjoint', or 'symmetric'"
-        ):
-            HutchinsonEstimator(num_samples=4, mode="unknown").to(device=device)
+        with pytest.raises(ValueError, match="mode must be one of"):
+            HutchinsonEstimator(4, mode="unknown")
 
-    @pytest.mark.parametrize("mode", ["forward", "adjoint", "symmetric"])
+    @pytest.mark.parametrize("mode", HutchinsonEstimator.MODES)
     def test_hutchinson_estimate(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
-        estimator = HutchinsonEstimator(num_samples=self.NUM_SAMPLES, mode=mode).to(
-            device=device
-        )
+        estimator = HutchinsonEstimator(self.NUM_SAMPLES, mode=mode)
 
         estimate = estimator(scaled_map(scale), scale)
 
         expected = scale.squeeze(-1)
         torch.testing.assert_close(estimate, expected, atol=0.08, rtol=0.0)
 
-    @pytest.mark.parametrize("mode", ["forward", "adjoint", "symmetric"])
+    @pytest.mark.parametrize("mode", HutchinsonEstimator.MODES)
     def test_hutchinson_estimate_powers(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
-        estimator = HutchinsonEstimator(num_samples=self.NUM_SAMPLES, mode=mode).to(
-            device=device
-        )
+        estimator = HutchinsonEstimator(self.NUM_SAMPLES, mode=mode)
 
         estimates = list(estimator.estimate_powers(scaled_map(scale), scale, 4))
 
@@ -263,7 +244,7 @@ class TestHutchinsonEstimator:
             torch.testing.assert_close(estimate, truth, atol=0.08, rtol=0.0)
 
     def test_hutchinson_estimator_requires_vector_input(self, device: str) -> None:
-        estimator = HutchinsonEstimator(num_samples=4).to(device=device)
+        estimator = HutchinsonEstimator(4)
 
         with pytest.raises(ValueError, match="x must be at least one-dimensional"):
             next(
@@ -280,9 +261,7 @@ class TestHutchPlusPlusEstimator:
     INPUT_SIZE = 100
 
     def test_hutchplusplus_sampler_from_string(self, device: str) -> None:
-        estimator = HutchPlusPlusEstimator(num_samples=6, sampler="sign").to(
-            device=device
-        )
+        estimator = HutchPlusPlusEstimator(6, sampler="sign")
 
         samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
@@ -290,9 +269,7 @@ class TestHutchPlusPlusEstimator:
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_hutchplusplus_sampler_from_custom_instance(self, device: str) -> None:
-        estimator = HutchPlusPlusEstimator(num_samples=6, sampler=OnesSampler()).to(
-            device=device
-        )
+        estimator = HutchPlusPlusEstimator(6, sampler=OnesSampler())
 
         samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
@@ -300,24 +277,18 @@ class TestHutchPlusPlusEstimator:
         torch.testing.assert_close(samples, torch.ones_like(samples))
 
     def test_hutchplusplus_sampler_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="is not a valid SamplerKind"):
-            HutchPlusPlusEstimator(num_samples=6, sampler="unknown").to(device=device)
+        with pytest.raises(ValueError, match="is not a valid Sampler"):
+            HutchPlusPlusEstimator(6, sampler="unknown")
 
     def test_hutchplusplus_mode_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(
-            ValueError,
-            match="mode must be 'forward', 'adjoint', or 'symmetric'",
-        ):
-            HutchPlusPlusEstimator(num_samples=6, mode="unknown").to(device=device)
+        with pytest.raises(ValueError, match="mode must be one of"):
+            HutchPlusPlusEstimator(6, mode="unknown")
 
-    @pytest.mark.parametrize("mode", ["forward", "symmetric"])
+    @pytest.mark.parametrize("mode", HutchPlusPlusEstimator.MODES)
     def test_hutchplusplus_estimate(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(
-            num_samples=self.NUM_SAMPLES,
-            mode=mode,
-        ).to(device=device)
+        estimator = HutchPlusPlusEstimator(self.NUM_SAMPLES, mode=mode)
 
         estimate = estimator(lambda x: scale * x, scale)
 
@@ -328,24 +299,19 @@ class TestHutchPlusPlusEstimator:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = HutchPlusPlusEstimator(
-            num_samples=self.NUM_SAMPLES,
-            sampler="sphere",
-            mode="adjoint",
-        ).to(device=device)
+            self.NUM_SAMPLES, sampler="sphere", mode="adjoint"
+        )
 
         estimate = estimator(lambda x: scale * x, scale)
 
         expected = scale.sum(-1)
         torch.testing.assert_close(estimate, expected, atol=0.15, rtol=0.0)
 
-    @pytest.mark.parametrize("mode", ["forward", "adjoint", "symmetric"])
+    @pytest.mark.parametrize("mode", HutchPlusPlusEstimator.MODES)
     def test_hutchplusplus_estimate_powers(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(
-            num_samples=self.NUM_SAMPLES,
-            mode=mode,
-        ).to(device=device)
+        estimator = HutchPlusPlusEstimator(self.NUM_SAMPLES, mode=mode)
 
         estimates = list(estimator.estimate_powers(lambda x: scale * x, scale, 3))
 
@@ -366,9 +332,7 @@ class TestXTraceEstimator:
         return lambda x: scale * x, scale.sum(-1)
 
     def test_xtrace_sampler_from_enum(self, device: str) -> None:
-        estimator = XTraceEstimator(num_samples=4, sampler=Sampler.SIGN).to(
-            device=device
-        )
+        estimator = XTraceEstimator(4, sampler=Sampler.SIGN)
 
         samples = estimator.sampler((2, 5), 3, dtype=torch.float32, device=device)
 
@@ -376,9 +340,7 @@ class TestXTraceEstimator:
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_xtrace_sphere_sampler_normalizes_columns(self, device: str) -> None:
-        estimator = XTraceEstimator(num_samples=4, sampler=Sampler.SPHERE).to(
-            device=device
-        )
+        estimator = XTraceEstimator(4, sampler=Sampler.SPHERE)
 
         samples = estimator.sampler((2, 5), 3, dtype=torch.float64, device=device)
 
@@ -389,9 +351,7 @@ class TestXTraceEstimator:
         )
 
     def test_xtrace_sampler_from_custom_instance(self, device: str) -> None:
-        estimator = XTraceEstimator(num_samples=4, sampler=OnesSampler()).to(
-            device=device
-        )
+        estimator = XTraceEstimator(4, sampler=OnesSampler())
 
         samples = estimator.sampler((2, 5), 3, dtype=torch.float32, device=device)
 
@@ -399,25 +359,20 @@ class TestXTraceEstimator:
         torch.testing.assert_close(samples, torch.ones_like(samples))
 
     def test_xtrace_sampler_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="is not a valid SamplerKind"):
-            XTraceEstimator(num_samples=4, sampler="unknown").to(device=device)
+        with pytest.raises(ValueError, match="is not a valid Sampler"):
+            XTraceEstimator(4, sampler="unknown")
 
     def test_xtrace_mode_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(
-            ValueError,
-            match="mode must be 'forward', 'adjoint', or 'symmetric'",
-        ):
-            XTraceEstimator(num_samples=4, mode="unknown").to(device=device)
+        with pytest.raises(ValueError, match="mode must be one of"):
+            XTraceEstimator(4, mode="unknown")
 
     def test_xtrace_estimate_op_only(self, device: str) -> None:
         fn, expected = self.make_test(device=device)
         x = torch.zeros(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
 
         estimator = XTraceEstimator(
-            num_samples=self.NUM_SAMPLES,
-            sampler="sphere",
-            renormalize=True,
-        ).to(device=device)
+            self.NUM_SAMPLES, sampler="sphere", renormalize=True
+        )
 
         estimate = estimator(fn, x)
 
@@ -428,24 +383,20 @@ class TestXTraceEstimator:
         x = torch.zeros(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
 
         estimator = XTraceEstimator(
-            num_samples=self.NUM_SAMPLES,
-            sampler="sphere",
-            renormalize=True,
-        ).to(device=device)
+            self.NUM_SAMPLES, sampler="sphere", renormalize=True
+        )
 
         estimate = estimator.estimate_naive(fn, x)
 
         torch.testing.assert_close(estimate, expected, atol=4.0, rtol=0.0)
 
-    @pytest.mark.parametrize("mode", ["adjoint", "symmetric"])
+    @pytest.mark.parametrize("mode", XTraceEstimator.MODES)
     def test_xtrace_nonforward_modes_not_implemented(
         self, device: str, mode: str
     ) -> None:
         fn, _ = self.make_test(device=device)
         x = torch.zeros(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = XTraceEstimator(num_samples=self.NUM_SAMPLES, mode=mode).to(
-            device=device
-        )
+        estimator = XTraceEstimator(self.NUM_SAMPLES, mode=mode)
 
         with pytest.raises(
             NotImplementedError,
@@ -456,10 +407,8 @@ class TestXTraceEstimator:
     def test_xtrace_corrected(self, device: str) -> None:
         fn, expected = self.make_test(device=device)
 
-        samples = torch.randn(
-            self.BATCH_SIZE, self.NUM_SAMPLES, self.INPUT_SIZE, device=device
-        )
-        estimate = xtrace_estimator_matlab(vmap(fn, -2, -2), samples)
+        x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+        estimate = xtrace_estimator_matlab(vmap(fn, -2, -2), x, self.NUM_SAMPLES)
 
         torch.testing.assert_close(estimate, expected, atol=0.4, rtol=0.0)
 
