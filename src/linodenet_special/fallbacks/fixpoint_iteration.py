@@ -69,7 +69,7 @@ def _fixpoint_solve_impl(
     r0 = torch.full_like(x0, torch.inf)
     initial_state = _LoopState(x0, r0, maxiter)
 
-    return torch.while_loop(cond_fn, body_fn, (initial_state,))  # pyright: ignore[reportReturnType]
+    return torch.while_loop(cond_fn, body_fn, (initial_state,))
 
 
 @torch.no_grad()
@@ -159,7 +159,7 @@ class _FixpointSolve_Impl(torch.autograd.Function):
             grad_output = torch.zeros_like(x_star)
 
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
-        _, vjp_fn = torch.func.vjp(lambda x: ctx.fn(x, *params), x_star)  # pyright: ignore[reportAssignmentType]
+        _, vjp_fn, *_ = torch.func.vjp(lambda x: ctx.fn(x, *params), x_star)
         sol = _fallback_solve_impl(
             lambda u: grad_output + vjp_fn(u)[0],
             grad_output,
@@ -169,7 +169,7 @@ class _FixpointSolve_Impl(torch.autograd.Function):
         )
 
         # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
-        _, params_vjp_fn = torch.func.vjp(lambda *θ: ctx.fn(x_star, *θ), *params)  # pyright: ignore[reportAssignmentType]
+        _, params_vjp_fn, *_ = torch.func.vjp(lambda *θ: ctx.fn(x_star, *θ), *params)
         grad_params = params_vjp_fn(sol.x)
 
         return None, torch.zeros_like(x_star), None, None, None, *grad_params
@@ -197,7 +197,7 @@ def fixpoint_solve_functional(
         atol: Absolute tolerance for convergence.
         rtol: Relative tolerance for convergence.
     """
-    return _FixpointSolve_Impl.apply(fn, x0, maxiter, atol, rtol, *args)  # pyright: ignore[reportReturnType]
+    return _FixpointSolve_Impl.apply(fn, x0, maxiter, atol, rtol, *args)
 
 
 def fixpoint_solve(
@@ -247,7 +247,7 @@ def fixpoint_solve(
         if g is None:
             return None
 
-        _, vjp_fn = torch.func.vjp(  # pyright: ignore[reportAssignmentType]
+        _, vjp_fn, *_ = torch.func.vjp(
             lambda z: fn(z, *args),
             x_star,
         )
