@@ -47,6 +47,8 @@ from signatures import signature
 
 
 class AbstractSampler(Protocol):
+    r"""Abstract probe vector sampler for stochastic trace estimators."""
+
     def __call__(
         self,
         shape: tuple[int, ...],
@@ -58,6 +60,8 @@ class AbstractSampler(Protocol):
 
 
 class AbstractTraceEstimator(Protocol):
+    r"""Abstract trace estimator for Jacobian trace estimation."""
+
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def __call__(
         self, op: Fn[[Tensor], Tensor], x: Tensor, /, *args: Any, **kwargs: Any
