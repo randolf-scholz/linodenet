@@ -10,11 +10,11 @@ from torch import Tensor
 from torch.func import vmap
 
 from linodenet_special.trace_estimation import (
-    BaseEstimator,
     ExactEstimator,
     HutchinsonEstimator,
     HutchPlusPlusEstimator,
     Sampler,
+    TraceEstimator,
     XTraceEstimator,
     logabsdet_series,
     xtrace_estimator_matlab,
@@ -85,7 +85,7 @@ class SequenceSampler:
         return sample.to(device=device, dtype=dtype)
 
 
-class AnalyticEstimator(BaseEstimator):
+class AnalyticEstimator(TraceEstimator):
     def forward(
         self,
         op: Callable[[Tensor], Tensor],

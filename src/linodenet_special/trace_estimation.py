@@ -14,7 +14,7 @@ __all__ = [
     "SphereSampler",
     # estimators
     "AbstractTraceEstimator",
-    "BaseEstimator",
+    "TraceEstimator",
     "ExactEstimator",
     "HutchPlusPlusEstimator",
     "HutchinsonEstimator",
@@ -67,6 +67,8 @@ class AbstractTraceEstimator(Protocol):
         Args:
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
             x: Evaluation point. Its shape, dtype, and device define the domain.
+            *args: partial signature, implementation may require extra arguments.
+            **kwargs: extra arguments, implementation may require extra arguments.
         """
         ...
 
@@ -455,37 +457,7 @@ def xtrace_estimator_matlab(
     return ests.mean(dim=-1)
 
 
-@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def logabsdet_series(
-    estimator: AbstractTraceEstimator,
-    op: Fn[[Tensor], Tensor],
-    x: Tensor,
-    /,
-    num_series_terms: int,
-) -> Tensor:
-    r"""Estimate $\log |\det(𝕀 + Df(x))|$ via a truncated power series.
-
-    The helper uses
-
-    .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
-
-    truncated after `num_series_terms` terms and replaces each trace power with the
-    corresponding value from `estimator.estimate_powers`.
-    """
-    if num_series_terms < 1:
-        raise ValueError("num_series_terms must be at least 1")
-
-    trace_powers = estimator.estimate_powers(op, x, num_series_terms)
-    first_power = next(trace_powers)
-    result = first_power.clone()
-    sign = -1.0
-    for k, trace_power in enumerate(trace_powers, start=2):
-        result = result + (sign / k) * trace_power
-        sign = -sign
-    return result.real if not result.is_complex() else result
-
-
-class BaseEstimator(nn.Module):
+class TraceEstimator(nn.Module):
     r"""Base class for Jacobian trace estimators.
 
     Concrete estimators operate on a function `f` together with an evaluation point `x`.
@@ -538,7 +510,7 @@ class BaseEstimator(nn.Module):
             power_op = lambda z, prev=previous_op: op(prev(z))
 
 
-class ExactEstimator(BaseEstimator):
+class ExactEstimator(TraceEstimator):
     r"""Estimate traces by explicitly materializing the operator matrix.
 
     Cost: N³
@@ -626,7 +598,7 @@ class ExactEstimator(BaseEstimator):
         return logabsdet.real if not matrix.is_complex() else logabsdet
 
 
-class HutchinsonEstimator(BaseEstimator):
+class HutchinsonEstimator(TraceEstimator):
     r"""Estimate traces with Hutchinson's estimator.
 
     Cost: mN² + O(m²N + m³)
@@ -803,7 +775,7 @@ class HutchinsonEstimator(BaseEstimator):
         return result.real if not result.is_complex() else result
 
 
-class HutchPlusPlusEstimator(BaseEstimator):
+class HutchPlusPlusEstimator(TraceEstimator):
     r"""Estimate traces with the Hutch++ variance-reduced estimator.
 
     Cost: mN² + O(m²N + m³)
@@ -1033,7 +1005,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
         return result.real if not result.is_complex() else result
 
 
-class XTraceEstimator(BaseEstimator):
+class XTraceEstimator(TraceEstimator):
     r"""Estimate traces with the XTrace estimator.
 
     Cost: mN^2 + O(m^3)
@@ -1273,6 +1245,36 @@ class XTraceEstimator(BaseEstimator):
             trace_power = xtrace_estimator(batched_jvp_fn, samples)
             result = result + (sign / k) * trace_power
         return result.real if not result.is_complex() else result
+
+
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def logabsdet_series(
+    estimator: TraceEstimator,
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    num_series_terms: int,
+) -> Tensor:
+    r"""Estimate $\log |\det(𝕀 + Df(x))|$ via a truncated power series.
+
+    The helper uses
+
+    .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
+
+    truncated after `num_series_terms` terms and replaces each trace power with the
+    corresponding value from `estimator.estimate_powers`.
+    """
+    if num_series_terms < 1:
+        raise ValueError("num_series_terms must be at least 1")
+
+    trace_powers = estimator.estimate_powers(op, x, num_series_terms)
+    first_power = next(trace_powers)
+    result = first_power.clone()
+    sign = -1.0
+    for k, trace_power in enumerate(trace_powers, start=2):
+        result = result + (sign / k) * trace_power
+        sign = -sign
+    return result.real if not result.is_complex() else result
 
 
 class LogabsdetSeriesEstimator(nn.Module):
