@@ -140,48 +140,41 @@ class OrthSampler(nn.Module):
 
 
 class AbstractTraceEstimator(Protocol):
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Returns an estimate of $\tr(A)$.
+        r"""Returns an estimate of $\tr(Df(x))$.
 
         Args:
-            op: Linear Operator encoding x ↦ Ax
-            adj_op: Linear Operator encode x ↦ Aᵀx
-            shape: Shape of `x` the linear operator accepts (may include batch dimension)
+            op: Function $f$ whose Jacobian trace should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
         """
         ...
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_powers(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         max_power: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Iterator[Tensor]:
-        r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
+        r"""Yields $\tr(Df(x)), \tr(Df(x)²), …, \tr(Df(x)ᵏ)$ for $k=1..max_power$."""
         ...
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_logabsdet(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         num_series_terms: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Returns an estimate of $\log|\det(𝕀 + A)|$."""
+        r"""Returns an estimate of $\log|\det(𝕀 + Df(x))|$."""
         ...
 
 
