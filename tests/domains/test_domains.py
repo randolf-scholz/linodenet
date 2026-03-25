@@ -163,7 +163,7 @@ class TestMatrixDomains:
             M.SQUARE,
         }
         assert M.SQUARE.factorizations == frozenset({M.TALL & M.WIDE})
-        assert M.SQUARE <= M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC
+        assert M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC <= M.SQUARE
         assert M.DOUBLY_STOCHASTIC <= M.SQUARE
 
     def test_partial_order_and_representation(self) -> None:
