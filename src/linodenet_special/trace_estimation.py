@@ -350,19 +350,35 @@ class HutchinsonEstimator(BaseEstimator):
     Cost: mN² + O(m²N + m³)
         m is the number of matvecs (=`num_samples`),
         N is the dimension of the operator
+
+    Args:
+        num_samples: Number of probe vectors.
+        num_matvecs: Alias for `num_samples`.
+        sampler: Probe vector sampler.
+        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
+            products, or a symmetric alternating scheme.
     """
 
     num_matvecs: Final[int]
     num_samples: Final[int]
+    mode: Final[str]
     sampler: Sampler
 
     @overload
     def __init__(
-        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "sphere"
+        self,
+        num_samples: int,
+        *,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
     ) -> None: ...
     @overload
     def __init__(
-        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "sphere"
+        self,
+        *,
+        num_matvecs: int,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
     ) -> None: ...
     def __init__(
         self,
@@ -370,6 +386,7 @@ class HutchinsonEstimator(BaseEstimator):
         *,
         num_matvecs: int | None = None,
         sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        mode: str = "symmetric",
     ) -> None:
         super().__init__()
 
@@ -387,85 +404,89 @@ class HutchinsonEstimator(BaseEstimator):
                     "Only one of num_samples or num_matvecs should be provided, but got both."
                 )
 
+        if mode not in {"forward", "adjoint", "symmetric"}:
+            raise ValueError(
+                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
+            )
+
+        self.mode = mode
         self.sampler = (
             SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
         )
-        self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Returns an estimate of $\tr(A)$."""
-        return next(self.estimate_powers(op, adj_op, 1, shape=shape))
+        r"""Return an estimate of $\tr(Df(x))$."""
+        return next(self.estimate_powers(op, x, 1))
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_powers(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         max_power: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Iterator[Tensor]:
-        r"""Yields $\tr(A), \tr(A²), …, \tr(Aᵏ)$ for $k=1..max_power$."""
+        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
-        if op is None and adj_op is None:
-            raise ValueError("at least one of op or adj_op must be provided")
-        if not shape:
-            raise ValueError("shape must be non-empty")
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
 
         right_samples = self.sampler(
-            shape,
+            x.shape,
             self.num_samples,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
+            device=x.device,
+            dtype=x.dtype,
         )
         left_samples = right_samples.clone()
 
-        if op is not None and adj_op is not None:
-            # alternate between op and adj_op.
-            # this is good for forward sensitivity,
-            # which grows exponentially in the number of matvecs.
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+        match self.mode:
+            case "forward":
+                # use x ↦ Ax only
+                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
 
-            power = 0
-            while power < max_power:
-                right_samples = batched_op(right_samples)
-                power += 1
-                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+                for _ in range(max_power):
+                    right_samples = batched_jvp_fn(right_samples)
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
 
-                if power == max_power:
-                    return
+            case "adjoint":
+                # use x ↦ Aᵀx only
+                _, vjp_fn = vjp(op, x)  # (...d) -> tuple[(...d)]
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
 
-                left_samples = batched_adj(left_samples)
-                power += 1
-                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
-            return
+                for _ in range(max_power):
+                    (left_samples,) = batched_vjp_fn(left_samples)
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
 
-        if op is not None:
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            for _ in range(max_power):
-                right_samples = batched_op(right_samples)
-                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
-            return
+            case "symmetric":
+                # alternate between Ax and Aᵀx, which is good for forward sensitivity.
+                # as it grows exponentially in the number of matvecs.
+                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
+                _, vjp_fn = vjp(op, x)  # (...d) -> tuple[(...d)]
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
 
-        if adj_op is not None:
-            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            for _ in range(max_power):
-                left_samples = batched_adj(left_samples)
-                yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
-            return
+                power = 0
+                while power < max_power:
+                    right_samples = batched_jvp_fn(right_samples)
+                    power += 1
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
 
-        raise AssertionError("unreachable")
+                    if power == max_power:
+                        break
+
+                    (left_samples,) = batched_vjp_fn(left_samples)
+                    power += 1
+                    yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
+            case _:
+                raise ValueError(f"invalid mode {self.mode!r}")
 
 
 class HutchPlusPlusEstimator(BaseEstimator):

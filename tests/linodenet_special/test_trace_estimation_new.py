@@ -237,7 +237,7 @@ class TestHutchinsonEstimator:
             device=device
         )
 
-        estimate = estimator.estimate(scaled_map(scale), None, shape=tuple(scale.shape))
+        estimate = estimator.estimate(scaled_map(scale), scale)
 
         expected = scale.squeeze(-1)
         torch.testing.assert_close(estimate, expected)
@@ -246,54 +246,48 @@ class TestHutchinsonEstimator:
         with pytest.raises(ValueError, match="is not a valid SamplerKind"):
             HutchinsonEstimator(num_samples=4, sampler="unknown").to(device=device)
 
-    def test_hutchinson_estimate_op_only(self, device: str) -> None:
+    def test_hutchinson_mode_rejects_unknown_string(self, device: str) -> None:
+        with pytest.raises(
+            ValueError, match="mode must be 'forward', 'adjoint', or 'symmetric'"
+        ):
+            HutchinsonEstimator(num_samples=4, mode="unknown").to(device=device)
+
+    @pytest.mark.parametrize("mode", ["forward", "adjoint", "symmetric"])
+    def test_hutchinson_estimate(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
-        estimator = HutchinsonEstimator(num_samples=self.NUM_SAMPLES).to(device=device)
+        estimator = HutchinsonEstimator(num_samples=self.NUM_SAMPLES, mode=mode).to(
+            device=device
+        )
 
-        estimate = estimator.estimate(scaled_map(scale), None, shape=tuple(scale.shape))
+        estimate = estimator.estimate(scaled_map(scale), scale)
 
         expected = scale.squeeze(-1)
         torch.testing.assert_close(estimate, expected, atol=0.08, rtol=0.0)
 
-    def test_hutchinson_estimate_powers_adj_only(self, device: str) -> None:
+    @pytest.mark.parametrize("mode", ["forward", "adjoint", "symmetric"])
+    def test_hutchinson_estimate_powers(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
-        estimator = HutchinsonEstimator(num_samples=self.NUM_SAMPLES).to(device=device)
-
-        estimates = list(
-            estimator.estimate_powers(
-                None, scaled_map(scale), 4, shape=tuple(scale.shape)
-            )
+        estimator = HutchinsonEstimator(num_samples=self.NUM_SAMPLES, mode=mode).to(
+            device=device
         )
+
+        estimates = list(estimator.estimate_powers(scaled_map(scale), scale, 4))
 
         expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
         for estimate, truth in zip(estimates, expected, strict=True):
             torch.testing.assert_close(estimate, truth, atol=0.08, rtol=0.0)
 
-    def test_hutchinson_estimate_powers_two_sided(self, device: str) -> None:
-        torch.manual_seed(0)
-        scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
-        estimator = HutchinsonEstimator(num_samples=self.NUM_SAMPLES).to(device=device)
-
-        estimates = list(
-            estimator.estimate_powers(
-                lambda x: scale * x,
-                lambda x: scale * x,
-                4,
-                shape=tuple(scale.shape),
-            )
-        )
-
-        expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
-        for estimate, truth in zip(estimates, expected, strict=True):
-            torch.testing.assert_close(estimate, truth, atol=0.08, rtol=0.0)
-
-    def test_hutchinson_estimator_requires_operator(self, device: str) -> None:
+    def test_hutchinson_estimator_requires_vector_input(self, device: str) -> None:
         estimator = HutchinsonEstimator(num_samples=4).to(device=device)
 
-        with pytest.raises(ValueError, match="at least one of op or adj_op"):
-            next(estimator.estimate_powers(None, None, 1, shape=(2, 1)))
+        with pytest.raises(ValueError, match="x must be at least one-dimensional"):
+            next(
+                estimator.estimate_powers(
+                    lambda x: x, torch.tensor(1.0, device=device), 1
+                )
+            )
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
