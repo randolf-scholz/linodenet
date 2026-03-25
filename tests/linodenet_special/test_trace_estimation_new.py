@@ -16,8 +16,8 @@ from linodenet_special.trace_estimation import (
     HutchPlusPlusEstimator,
     Sampler,
     XTraceEstimator,
-    logabsdet,
-    xtrace_estimator_corrected,
+    logabsdet_series,
+    xtrace_estimator_matlab,
 )
 from tests.testing import DEVICES, PROJECT
 
@@ -182,7 +182,7 @@ class TestBaseEstimator:
         scale = torch.tensor([[0.125], [-0.2], [0.3]], device=device)
         estimator = AnalyticEstimator().to(device=device)
 
-        estimate = logabsdet(estimator, scaled_map(scale), scale, 6)
+        estimate = logabsdet_series(estimator, scaled_map(scale), scale, 6)
 
         expected = sum(
             ((-1) ** (power + 1) / power) * scale.squeeze(-1).pow(power)
@@ -459,7 +459,7 @@ class TestXTraceEstimator:
         samples = torch.randn(
             self.BATCH_SIZE, self.NUM_SAMPLES, self.INPUT_SIZE, device=device
         )
-        estimate = xtrace_estimator_corrected(vmap(fn, -2, -2), samples)
+        estimate = xtrace_estimator_matlab(vmap(fn, -2, -2), samples)
 
         torch.testing.assert_close(estimate, expected, atol=0.4, rtol=0.0)
 

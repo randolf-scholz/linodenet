@@ -6,28 +6,31 @@ Notes:
 """
 
 __all__ = [
-    "AbstractTraceEstimator",
-    "BaseEstimator",
-    "ExactEstimator",
-    "HutchPlusPlusEstimator",
-    "HutchinsonEstimator",
-    "LogAbsDetEstimator",
-    "Sampler",
-    "XTraceEstimator",
-    # functions
-    "hutchinson_estimator",
-    "logabsdet",
-    "exact_trace_estimator",
-    "xtrace_estimator",
-    "xtrace_estimator_corrected",
-    "xtrace_naive_estimator",
     # samplers
     "GaussianSampler",
     "OrthSampler",
     "AbstractSampler",
     "SignSampler",
     "SphereSampler",
+    # estimators
+    "AbstractTraceEstimator",
+    "BaseEstimator",
+    "ExactEstimator",
+    "HutchPlusPlusEstimator",
+    "HutchinsonEstimator",
+    "LogabsdetSeriesEstimator",
+    "Sampler",
+    "XTraceEstimator",
+    # functional api
+    "exact_trace_estimator",
+    "hutchinson_estimator",
+    "hutchplusplus_estimator",
+    "logabsdet_series",
+    "xtrace_estimator",
+    "xtrace_estimator_matlab",
+    "xtrace_naive_estimator",
 ]
+
 
 import math
 from abc import abstractmethod
@@ -210,6 +213,49 @@ def hutchinson_estimator(
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def hutchplusplus_estimator(
+    op: Fn[[Tensor], Tensor],
+    x: Tensor,
+    /,
+    num_matvecs: int,
+    *,
+    sampler: str | AbstractSampler = "sphere",
+) -> Tensor:
+    r"""Estimate $\tr(Df(x))$ with Hutch++.
+
+    .. math:: \tr(A) = \tr(QᵀAQ) + 𝐄[vᵀ(𝕀-QQᵀ)A(𝕀-QQᵀ)v]
+
+    Args:
+        op: Function $f$ whose Jacobian trace should be estimated at $x$.
+        x: Evaluation point. Its shape, dtype, and device define the domain.
+        num_matvecs: Total matrix-vector product budget.
+        sampler: Probe sampler, either a built-in sampler name or a custom callable.
+    """
+    if x.ndim == 0:
+        raise ValueError("x must be at least one-dimensional")
+    if num_matvecs < 3:
+        raise ValueError("num_matvecs must be at least 3")
+
+    num_samples = num_matvecs // 3
+    sampler = Sampler.new(sampler)
+    samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
+    residual_samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
+
+    _, jvp_fn = linearize(op, x)
+    batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+    sketch = batched_jvp_fn(samples)
+    q, _ = qr(sketch, mode="reduced")  # (...dr)
+
+    residual_samples = residual_samples - q @ (q.mH @ residual_samples)
+    low_rank = vecdot(q, batched_jvp_fn(q), dim=-2).sum(dim=-1)
+    residual = vecdot(residual_samples, batched_jvp_fn(residual_samples), dim=-2).mean(
+        dim=-1
+    )
+    estimate = low_rank + residual
+    return estimate.real if not estimate.is_complex() else estimate
+
+
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def xtrace_naive_estimator(
     op: Fn[[Tensor], Tensor],
     x: Tensor,
@@ -307,7 +353,7 @@ def xtrace_estimator(
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d), int] -> (...)")
-def xtrace_estimator_corrected(
+def xtrace_estimator_matlab(
     op: Fn[[Tensor], Tensor],
     x: Tensor,
     /,
@@ -410,7 +456,7 @@ def xtrace_estimator_corrected(
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def logabsdet(
+def logabsdet_series(
     estimator: AbstractTraceEstimator,
     op: Fn[[Tensor], Tensor],
     x: Tensor,
@@ -1229,7 +1275,7 @@ class XTraceEstimator(BaseEstimator):
         return result.real if not result.is_complex() else result
 
 
-class LogAbsDetEstimator(nn.Module):
+class LogabsdetSeriesEstimator(nn.Module):
     r"""Estimate $\log|\det(𝕀 + Df(x))|$ with a trace-estimator backend.
 
     - \log|\det A| = \Re(\tr(\log A)) for any A in the image of the matrix exponential
@@ -1320,4 +1366,4 @@ class LogAbsDetEstimator(nn.Module):
                     raise ValueError(
                         "num_series_terms is required for stochastic logabsdet estimation"
                     )
-                return y, logabsdet(self.estimator, fn, x, self.num_series_terms)
+                return y, logabsdet_series(self.estimator, fn, x, self.num_series_terms)
