@@ -299,7 +299,7 @@ class ExactEstimator(BaseEstimator):
                 return batched_op(identity)
 
             case "adjoint":
-                _, vjp_fn = vjp(op, x)
+                _, vjp_fn, *_ = vjp(op, x)
                 batched_adj = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
                 (matrix,) = batched_adj(identity)
                 return matrix
@@ -463,7 +463,7 @@ class HutchinsonEstimator(BaseEstimator):
 
             case "adjoint":
                 # use x ↦ Aᵀx only
-                _, vjp_fn = vjp(op, x)  # (...d) -> tuple[(...d)]
+                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
                 batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
 
                 for _ in range(max_power):
@@ -474,7 +474,7 @@ class HutchinsonEstimator(BaseEstimator):
                 # alternate between Ax and Aᵀx, which is good for forward sensitivity.
                 # as it grows exponentially in the number of matvecs.
                 _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
-                _, vjp_fn = vjp(op, x)  # (...d) -> tuple[(...d)]
+                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
                 batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
                 batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
 
@@ -626,7 +626,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
                     yield low_rank + residual
 
             case "adjoint":
-                _, vjp_fn = vjp(op, x)
+                _, vjp_fn, *_ = vjp(op, x)
                 batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
                 (sketch,) = batched_vjp_fn(samples)
                 Q, _ = qr(sketch, mode="reduced")  # (...dr)
@@ -648,7 +648,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
 
             case "symmetric":
                 _, jvp_fn = linearize(op, x)
-                _, vjp_fn = vjp(op, x)
+                _, vjp_fn, *_ = vjp(op, x)
                 batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
                 batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
 
@@ -801,7 +801,7 @@ class XTraceEstimator(BaseEstimator):
         samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
         tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
         _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
         Y = batched_op(samples)  # (...Nm)
 
         mus = []
@@ -841,7 +841,7 @@ class XTraceEstimator(BaseEstimator):
         k = min(N, self.num_samples)
         samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
         _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
         Y = batched_op(samples)  # (...Nm)
         Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
         # Q has normalized cols <-> Q.norm(dim=-2) = 1
@@ -907,7 +907,7 @@ def trace_naive_estimator(
     samples: Tensor,
 ) -> Tensor:
     r"""Naive implementation of XTrace (useful for debugging)."""
-    batched_fn = vmap(fn, in_dims=-1, out_dims=-1)  # (...Nm) -> (...Nm)
+    batched_fn = vmap(fn, -1, -1)  # (...Nm) -> (...Nm)
     Y = batched_fn(samples)  # (...Nm)
     *batch_size, N, m = Y.shape
     tr = torch.zeros(batch_size, device=Y.device, dtype=Y.dtype)
@@ -1176,7 +1176,7 @@ class LogAbsDetEstimator(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         r"""Compute the exact log-absolute-determinant via the full Jacobian spectrum."""
         y, df = linearize(fn, x)  # (...d), {(...d) -> (...d)}
-        batched_df = vmap(df, in_dims=-2, out_dims=-2)  # {(...nd) -> (...nd)}
+        batched_df = vmap(df, -2, -2)  # {(...nd) -> (...nd)}
         dim = y.shape[-1]
         I = torch.eye(dim, dim, device=y.device).expand(*y.shape[:-1], dim, dim)
 
@@ -1197,7 +1197,7 @@ class LogAbsDetEstimator(nn.Module):
 
         y, jvp_fn = jvp(fn, x)
         y, vjp_fn = vjp(fn, x)
-        batched_jvp_fn = vmap(jvp_fn, in_dims=-2, out_dims=-2)  # (...nd) -> (...nd)
+        batched_jvp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
         right_samples = torch.randn(  # (...dn)
             (*x.shape, self.num_samples),
             device=x.device,
@@ -1229,8 +1229,8 @@ class LogAbsDetEstimator(nn.Module):
 
         y, jvp_fn = jvp(fn, x)
         y, vjp_fn = vjp(fn, x)
-        batched_jvp_fn = vmap(jvp_fn, in_dims=-2, out_dims=-2)  # (...nd) -> (...nd)
-        batched_vjp_fn = vmap(jvp_fn, in_dims=-2, out_dims=-2)  # (...nd) -> (...nd)
+        batched_jvp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
+        batched_vjp_fn = vmap(jvp_fn, -2, -2)  # (...nd) -> (...nd)
         right_samples = torch.randn(  # (...dn)
             (*x.shape, self.num_samples),
             device=x.device,
@@ -1264,7 +1264,7 @@ class LogAbsDetEstimator(nn.Module):
         assert self.num_series_terms is not None
 
         y, jvp_fn = linearize(fn, x)  # (...d)  -> (...d)
-        batched_jvp_fn = vmap(jvp_fn, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+        batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
         samples = torch.randn(  # (...dn)
             (*x.shape, self.num_samples),
             device=x.device,
