@@ -2,8 +2,10 @@ from collections.abc import Callable
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 import torch
+from scipy.stats import ortho_group
 from torch import Tensor
 from torch.func import vmap
 
@@ -60,6 +62,25 @@ class FixedSampler:
     ) -> Tensor:
         assert self.samples.shape == (*shape, num)
         return self.samples.to(device=device, dtype=dtype)
+
+
+class SequenceSampler:
+    def __init__(self, samples: list[Tensor], /) -> None:
+        self.samples = samples
+        self.index = 0
+
+    def __call__(
+        self,
+        shape: tuple[int, ...],
+        num: int,
+        *,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> Tensor:
+        sample = self.samples[self.index]
+        self.index += 1
+        assert sample.shape == (*shape, num)
+        return sample.to(device=device, dtype=dtype)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -321,65 +342,268 @@ class TestXTraceEstimator:
 
         torch.testing.assert_close(estimate, expected, atol=1e-3, rtol=1e-3)
 
-    def test_xtrace_relative_error_plot(self, device: str) -> None:
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+class TestVisualization:
+    BATCH_SIZE = 32
+    INPUT_SIZE = 128
+    DTYPE = torch.float32
+    NUM_SAMPLES_GRID = (1, 2, 4, 8, 16, 32, 64, 128)
+
+    def compute_curves(
+        self,
+        fn: Callable[[Tensor], Tensor],
+        expected: Tensor,
+        *,
+        device: str,
+    ) -> dict[str, Tensor]:
         mpl.use("Agg")
         torch.manual_seed(0)
 
-        batch_size = 128
-        input_size = 256
-        dtype = torch.float32
-        num_samples_grid = (1, 2, 4, 8, 16, 32, 64, 128, 256)
+        batch_size = self.BATCH_SIZE
+        input_size = self.INPUT_SIZE
+        dtype = self.DTYPE
+        denom = expected.abs().clamp_min(torch.finfo(dtype).eps)
+
+        base_sampler = SamplerKind.ORTH.make()
+        full_probe_columns = base_sampler(
+            (batch_size, input_size),
+            input_size,
+            dtype=dtype,
+            device=device,
+        )
+        hutch_full_probe_columns = base_sampler(
+            (batch_size, input_size),
+            input_size,
+            dtype=dtype,
+            device=device,
+        )
+        hpp_full_probe_columns = base_sampler(
+            (batch_size, input_size),
+            input_size,
+            dtype=dtype,
+            device=device,
+        )
+        hpp_full_residual_columns = base_sampler(
+            (batch_size, input_size),
+            input_size,
+            dtype=dtype,
+            device=device,
+        )
+
+        curves: dict[str, list[Tensor]] = {
+            "xtrace_corrected": [],
+            "xtrace": [],
+            "hutch": [],
+            "hutch++": [],
+        }
+
+        for num_samples in self.NUM_SAMPLES_GRID:
+            probe_columns = full_probe_columns[..., :num_samples]
+            rowwise_samples = probe_columns.mT
+            corrected = xtrace_estimator_corrected(vmap(fn, -2, -2), rowwise_samples)
+            xtrace = (
+                XTraceEstimator(
+                    num_samples=num_samples,
+                    sampler=FixedSampler(probe_columns),
+                    renormalize=True,
+                )
+                .to(device=device, dtype=dtype)
+                .estimate(fn, None, shape=(batch_size, input_size))
+            )
+
+            hutch_columns = hutch_full_probe_columns[..., :num_samples]
+            hutch = (
+                HutchinsonEstimator(
+                    num_samples=num_samples,
+                    sampler=FixedSampler(hutch_columns),
+                )
+                .to(device=device, dtype=dtype)
+                .estimate(fn, None, shape=(batch_size, input_size))
+            )
+
+            hpp_samples = hpp_full_probe_columns[..., :num_samples]
+            hpp_residuals = hpp_full_residual_columns[..., :num_samples]
+            hutchpp_sampler = SequenceSampler([hpp_samples, hpp_residuals])
+            hutchpp = (
+                HutchPlusPlusEstimator(
+                    num_samples=num_samples,
+                    sampler=hutchpp_sampler,
+                )
+                .to(device=device, dtype=dtype)
+                .estimate(fn, None, shape=(batch_size, input_size))
+            )
+
+            curves["xtrace_corrected"].append(
+                ((corrected - expected).abs() / denom).mean()
+            )
+            curves["xtrace"].append(((xtrace - expected).abs() / denom).mean())
+            curves["hutch"].append(((hutch - expected).abs() / denom).mean())
+            curves["hutch++"].append(((hutchpp - expected).abs() / denom).mean())
+
+        return {name: torch.stack(values).cpu() for name, values in curves.items()}
+
+    def assert_and_plot_curves(
+        self,
+        curves: dict[str, Tensor],
+        *,
+        device: str,
+        title: str,
+        stem: str,
+    ) -> None:
         result_dir = RESULT_DIR
         result_dir.mkdir(exist_ok=True)
+        fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+        markers = {
+            "xtrace_corrected": "o",
+            "xtrace": "s",
+            "hutch": "^",
+            "hutch++": "D",
+        }
+        for name, curve in curves.items():
+            ax.plot(self.NUM_SAMPLES_GRID, curve, marker=markers[name], label=name)
+            assert torch.isfinite(curve).all()
 
-        scale = 0.5 + torch.rand(batch_size, input_size, device=device, dtype=dtype)
-        fn = lambda x: scale * x
-        expected = scale.sum(-1)
-
-        corrected_errors: list[Tensor] = []
-        estimator_errors: list[Tensor] = []
-        base_sampler = SamplerKind.SPHERE.make()
-
-        for num_samples in num_samples_grid:
-            probe_columns = base_sampler(
-                (batch_size, input_size),
-                num_samples,
-                dtype=dtype,
-                device=device,
-            )
-            rowwise_samples = probe_columns.mT
-
-            corrected = xtrace_estimator_corrected(vmap(fn, -2, -2), rowwise_samples)
-            estimator = XTraceEstimator(
-                num_samples=num_samples,
-                sampler=FixedSampler(probe_columns),
-                renormalize=True,
-            ).to(device=device, dtype=dtype)
-            estimate = estimator.estimate(fn, None, shape=(batch_size, input_size))
-
-            denom = expected.abs().clamp_min(torch.finfo(dtype).eps)
-            corrected_errors.append(((corrected - expected).abs() / denom).mean())
-            estimator_errors.append(((estimate - expected).abs() / denom).mean())
-
-        corrected_curve = torch.stack(corrected_errors).cpu()
-        estimator_curve = torch.stack(estimator_errors).cpu()
-
-        fig, ax = plt.subplots(figsize=(6, 4), constrained_layout=True)
-        ax.plot(num_samples_grid, corrected_curve, marker="o", label="corrected")
-        ax.plot(num_samples_grid, estimator_curve, marker="s", label="module")
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
         ax.set_xlabel("num_samples")
         ax.set_ylabel("mean relative error")
-        ax.set_title(
-            f"XTrace relative error ({device}, batch={batch_size}, input={input_size})"
-        )
+        ax.set_title(title)
         ax.legend()
 
-        out = result_dir / f"xtrace_relative_error_comparison_{device}.png"
+        out = result_dir / f"{stem}_{device}.png"
         fig.savefig(out, dpi=200, bbox_inches="tight")
         plt.close(fig)
 
         assert out.exists()
-        assert torch.isfinite(corrected_curve).all()
-        assert torch.isfinite(estimator_curve).all()
+
+    @torch.no_grad()
+    def test_diagonal(self, device: str) -> None:
+        torch.manual_seed(0)
+        scale = 0.5 + torch.rand(
+            self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=self.DTYPE
+        )
+        curves = self.compute_curves(lambda x: scale * x, scale.sum(-1), device=device)
+        self.assert_and_plot_curves(
+            curves,
+            device=device,
+            title=(
+                f"Diagonal trace estimation "
+                f"({device}, batch={self.BATCH_SIZE}, input={self.INPUT_SIZE})"
+            ),
+            stem="trace_estimation_diagonal",
+        )
+
+    @torch.no_grad()
+    def test_gaussian(self, device: str) -> None:
+        torch.manual_seed(0)
+        matrix = torch.randn(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=self.DTYPE,
+        ) / (self.INPUT_SIZE**0.5)
+        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
+        expected = torch.einsum("...ii -> ...", matrix)
+        curves = self.compute_curves(fn, expected, device=device)
+        self.assert_and_plot_curves(
+            curves,
+            device=device,
+            title=(
+                f"Gaussian trace estimation "
+                f"({device}, batch={self.BATCH_SIZE}, input={self.INPUT_SIZE})"
+            ),
+            stem="trace_estimation_gaussian",
+        )
+
+    @torch.no_grad()
+    def test_linear_spectrum(self, device: str) -> None:
+        torch.manual_seed(0)
+        rng = np.random.default_rng(0)
+        u_numpy = ortho_group(self.INPUT_SIZE).rvs(
+            size=self.BATCH_SIZE, random_state=rng
+        )
+        v_numpy = ortho_group(self.INPUT_SIZE).rvs(
+            size=self.BATCH_SIZE, random_state=rng
+        )
+        u = torch.from_numpy(u_numpy).to(device=device, dtype=self.DTYPE)
+        v = torch.from_numpy(v_numpy).to(device=device, dtype=self.DTYPE)
+        spectrum = torch.arange(
+            self.INPUT_SIZE, device=device, dtype=self.DTYPE
+        ).expand(self.BATCH_SIZE, -1)
+        matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
+        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
+        expected = torch.einsum("...ii -> ...", matrix)
+        curves = self.compute_curves(fn, expected, device=device)
+        self.assert_and_plot_curves(
+            curves,
+            device=device,
+            title=(
+                f"Linear-spectrum trace estimation "
+                f"({device}, batch={self.BATCH_SIZE}, input={self.INPUT_SIZE})"
+            ),
+            stem="trace_estimation_linear_spectrum",
+        )
+
+    @torch.no_grad()
+    def test_exponential_spectrum(self, device: str) -> None:
+        torch.manual_seed(0)
+        rng = np.random.default_rng(0)
+        u_numpy = ortho_group(self.INPUT_SIZE).rvs(
+            size=self.BATCH_SIZE, random_state=rng
+        )
+        v_numpy = ortho_group(self.INPUT_SIZE).rvs(
+            size=self.BATCH_SIZE, random_state=rng
+        )
+        u = torch.from_numpy(u_numpy).to(device=device, dtype=self.DTYPE)
+        v = torch.from_numpy(v_numpy).to(device=device, dtype=self.DTYPE)
+        spectrum = (
+            1.1 ** torch.arange(self.INPUT_SIZE, device=device, dtype=self.DTYPE)
+        ).expand(self.BATCH_SIZE, -1)
+        matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
+        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
+        expected = torch.einsum("...ii -> ...", matrix)
+        curves = self.compute_curves(fn, expected, device=device)
+        self.assert_and_plot_curves(
+            curves,
+            device=device,
+            title=(
+                f"Exponential-spectrum trace estimation "
+                f"({device}, batch={self.BATCH_SIZE}, input={self.INPUT_SIZE})"
+            ),
+            stem="trace_estimation_exponential_spectrum",
+        )
+
+    @torch.no_grad()
+    def test_low_rank(self, device: str) -> None:
+        torch.manual_seed(0)
+        rng = np.random.default_rng(0)
+        u_numpy = ortho_group(self.INPUT_SIZE).rvs(
+            size=self.BATCH_SIZE, random_state=rng
+        )
+        v_numpy = ortho_group(self.INPUT_SIZE).rvs(
+            size=self.BATCH_SIZE, random_state=rng
+        )
+        u = torch.from_numpy(u_numpy).to(device=device, dtype=self.DTYPE)
+        v = torch.from_numpy(v_numpy).to(device=device, dtype=self.DTYPE)
+        rank = self.INPUT_SIZE // 16
+        spectrum = torch.cat(
+            [
+                torch.ones(rank, device=device, dtype=self.DTYPE),
+                torch.zeros(self.INPUT_SIZE - rank, device=device, dtype=self.DTYPE),
+            ]
+        ).expand(self.BATCH_SIZE, -1)
+        matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", u, spectrum, v)
+        fn = lambda x: torch.einsum("...ij, ...j -> ...i", matrix, x)
+        expected = torch.einsum("...ii -> ...", matrix)
+        curves = self.compute_curves(fn, expected, device=device)
+        self.assert_and_plot_curves(
+            curves,
+            device=device,
+            title=(
+                f"Low-rank trace estimation "
+                f"({device}, batch={self.BATCH_SIZE}, input={self.INPUT_SIZE})"
+            ),
+            stem="trace_estimation_low_rank",
+        )
