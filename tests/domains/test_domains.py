@@ -203,16 +203,42 @@ class TestMatrixDomains:
         assert MatrixDomains.DOUBLY_STOCHASTIC <= MatrixDomains.SQUARE
         assert MatrixDomains.PERMUTATION <= MatrixDomains.SQUARE
         assert MatrixDomains.PERMUTATION != MatrixDomains.SQUARE
+        assert MatrixDomains.NONE <= MatrixDomains.CONTRACTION
+        assert MatrixDomains.NONE <= MatrixDomains.SPECTRAL_NORMALIZED
+        assert MatrixDomains.NONE <= MatrixDomains.POSITIVE_DEFINITE
+        assert MatrixDomains.NONE <= MatrixDomains.NEGATIVE_DEFINITE
 
         assert not MatrixDomains.SYMMETRIC <= MatrixDomains.ORTHOGONAL
         assert not MatrixDomains.ORTHOGONAL <= MatrixDomains.SYMMETRIC
         assert not MatrixDomains.LOW_RANK <= MatrixDomains.BANDED
         assert not MatrixDomains.BANDED <= MatrixDomains.LOW_RANK
+        assert not MatrixDomains.POSITIVE_DEFINITE <= MatrixDomains.NEGATIVE_DEFINITE
+        assert not MatrixDomains.NEGATIVE_DEFINITE <= MatrixDomains.POSITIVE_DEFINITE
 
         assert str(MatrixDomains.SQUARE) == "square"
 
         with pytest.raises(TypeError):
             _ = MatrixDomains.SQUARE <= "square"
+
+    def test_none_meet_rules(self) -> None:
+        none_meets = {
+            factors
+            for meet, factors in MatrixDomains._validated_meets()
+            if meet is MatrixDomains.NONE
+        }
+        assert (
+            frozenset({MatrixDomains.CONTRACTION, MatrixDomains.SPECTRAL_NORMALIZED})
+            in none_meets
+        )
+        assert (
+            frozenset({MatrixDomains.INVERTIBLE, MatrixDomains.SINGULAR}) in none_meets
+        )
+        assert (
+            frozenset(
+                {MatrixDomains.NEGATIVE_DEFINITE, MatrixDomains.POSITIVE_DEFINITE}
+            )
+            in none_meets
+        )
 
     def test_tall_and_wide_membership(self) -> None:
         tall = tensor([[1.0], [2.0]])
