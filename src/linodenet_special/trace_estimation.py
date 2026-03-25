@@ -495,19 +495,35 @@ class HutchPlusPlusEstimator(BaseEstimator):
     Cost: mN² + O(m²N + m³)
         m is the number of matvecs (=3×`num_samples`),
         N is the dimension of the operator
+
+    Args:
+        num_samples: Number of probe vectors.
+        num_matvecs: Alias for the total matvec budget.
+        sampler: Probe vector sampler.
+        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
+            products, or a symmetric alternating scheme.
     """
 
     num_matvecs: Final[int]
     num_samples: Final[int]
+    mode: Final[str]
     sampler: Sampler
 
     @overload
     def __init__(
-        self, num_samples: int, *, sampler: str | SamplerKind | Sampler = "sphere"
+        self,
+        num_samples: int,
+        *,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
     ) -> None: ...
     @overload
     def __init__(
-        self, *, num_matvecs: int, sampler: str | SamplerKind | Sampler = "sphere"
+        self,
+        *,
+        num_matvecs: int,
+        sampler: str | SamplerKind | Sampler = "sphere",
+        mode: str = "symmetric",
     ) -> None: ...
     def __init__(
         self,
@@ -515,6 +531,7 @@ class HutchPlusPlusEstimator(BaseEstimator):
         *,
         num_matvecs: int | None = None,
         sampler: str | SamplerKind | Sampler = SamplerKind.SPHERE,
+        mode: str = "symmetric",
     ) -> None:
         super().__init__()
 
@@ -534,148 +551,140 @@ class HutchPlusPlusEstimator(BaseEstimator):
                     "Only one of num_samples or num_matvecs should be provided, but got both."
                 )
 
+        if mode not in {"forward", "adjoint", "symmetric"}:
+            raise ValueError(
+                f"mode must be 'forward', 'adjoint', or 'symmetric', got {mode!r}"
+            )
+
+        self.mode = mode
         self.sampler = (
             SamplerKind(sampler).make() if isinstance(sampler, str) else sampler
         )
-        self.register_buffer("_anchor", torch.empty(0), persistent=False)
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
-        *,
-        shape: tuple[int, ...],
     ) -> Tensor:
-        r"""Returns an estimate of $\tr(A)$."""
-        return next(self.estimate_powers(op, adj_op, 1, shape=shape))
+        r"""Return an estimate of $\tr(Df(x))$."""
+        return next(self.estimate_powers(op, x, 1))
 
-    @signature("[{(..., d) -> (..., d)}?, {(..., d) -> (..., d)}?] -> (...)")
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_powers(
         self,
-        op: Fn[[Tensor], Tensor] | None,
-        adj_op: Fn[[Tensor], Tensor] | None,
+        op: Fn[[Tensor], Tensor],
+        x: Tensor,
         /,
         max_power: int,
-        *,
-        shape: tuple[int, ...],
     ) -> Iterator[Tensor]:
+        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
-        if op is None and adj_op is None:
-            raise ValueError("at least one of op or adj_op must be provided")
-        if not shape:
-            raise ValueError("shape must be non-empty")
+        if x.ndim == 0:
+            raise ValueError("x must be at least one-dimensional")
 
         samples = self.sampler(
-            shape,
+            x.shape,
             self.num_samples,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
+            device=x.device,
+            dtype=x.dtype,
         )
         residual_samples = self.sampler(
-            shape,
+            x.shape,
             self.num_samples,
-            device=self._anchor.device,
-            dtype=self._anchor.dtype,
+            device=x.device,
+            dtype=x.dtype,
         )
 
-        if op is not None and adj_op is not None:
-            # Two-sided power estimator:
-            #   tr(A^(2t-1)) = E[uₜ₋₁ᵀ vₜ]
-            #   tr(A^(2t))   = E[uₜᵀ vₜ]
-            #
-            # Hutch++ uses a fixed projector P = QQᵀ and the exact split
-            #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
-            #
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
+        match self.mode:
+            case "forward":
+                _, jvp_fn = linearize(op, x)
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                sketch = batched_jvp_fn(samples)
+                Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
-            # We build Q from a shared two-sided sketch [AΩ, AᵀΩ]
-            left_sketch = batched_adj(samples[..., : self.num_samples // 2])
-            right_sketch = batched_adj(samples[..., self.num_samples // 2 :])
-            sketch = torch.cat([left_sketch, right_sketch], dim=-1)
-            Q, _ = qr(sketch, mode="reduced")  # (...dr)
+                projected_samples = Q
+                projected_l = projected_samples.clone()
+                projected_r = projected_samples.clone()
+                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+                residual_l = residual_samples.clone()
+                residual_r = residual_samples.clone()
 
-            projected_samples = Q
-            projected_l = projected_samples.clone()
-            projected_r = projected_samples.clone()
-            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
-            residual_l = residual_samples.clone()
-            residual_r = residual_samples.clone()
+                for _ in range(max_power):
+                    projected_r = batched_jvp_fn(projected_r)
+                    residual_r = batched_jvp_fn(residual_r)
 
-            power = 0
-            while power < max_power:
-                projected_r = batched_op(projected_r)
-                residual_r = batched_op(residual_r)
-                power += 1
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
 
-                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                yield low_rank + residual
+            case "adjoint":
+                _, vjp_fn = vjp(op, x)
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+                (sketch,) = batched_vjp_fn(samples)
+                Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
-                if power == max_power:
-                    return
+                projected_samples = Q
+                projected_l = projected_samples.clone()
+                projected_r = projected_samples.clone()
+                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+                residual_l = residual_samples.clone()
+                residual_r = residual_samples.clone()
 
-                projected_l = batched_adj(projected_l)
-                residual_l = batched_adj(residual_l)
-                power += 1
+                for _ in range(max_power):
+                    (projected_l,) = batched_vjp_fn(projected_l)
+                    (residual_l,) = batched_vjp_fn(residual_l)
 
-                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                yield low_rank + residual
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
 
-            return
+            case "symmetric":
+                _, jvp_fn = linearize(op, x)
+                _, vjp_fn = vjp(op, x)
+                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
 
-        if op is not None:
-            # One-sided right-action estimator for tr(Aᵏ):
-            #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + E[g_⟂ᵀ Aᵏ g_⟂].
-            batched_op = vmap(op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            sketch = batched_op(samples)
-            Q, _ = qr(sketch, mode="reduced")  # (...dr)
+                # Hutch++ uses a fixed projector P = QQᵀ and the exact split
+                #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
+                left_sketch, right_sketch = torch.tensor_split(samples, 2, dim=-1)
+                (left_sketch,) = batched_vjp_fn(left_sketch)
+                right_sketch = batched_jvp_fn(right_sketch)
+                sketch = torch.cat([left_sketch, right_sketch], dim=-1)
+                Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
-            projected_samples = Q
-            projected_l = projected_samples.clone()
-            projected_r = projected_samples.clone()
-            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
-            residual_l = residual_samples.clone()
-            residual_r = residual_samples.clone()
+                projected_samples = Q
+                projected_l = projected_samples.clone()
+                projected_r = projected_samples.clone()
+                residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
+                residual_l = residual_samples.clone()
+                residual_r = residual_samples.clone()
 
-            for _ in range(max_power):
-                projected_r = batched_op(projected_r)
-                residual_r = batched_op(residual_r)
+                power = 0
+                while power < max_power:
+                    projected_r = batched_jvp_fn(projected_r)
+                    residual_r = batched_jvp_fn(residual_r)
+                    power += 1
 
-                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                yield low_rank + residual
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
 
-            return
+                    if power == max_power:
+                        break
 
-        if adj_op is not None:
-            # One-sided left-action estimator, equivalently applied to Aᵀ:
-            #   tr((Aᵀ)ᵏ) = tr(Aᵏ).
-            batched_adj = vmap(adj_op, in_dims=-1, out_dims=-1)  # (...dn) -> (...dn)
-            sketch = batched_adj(samples)
-            Q, _ = qr(sketch, mode="reduced")  # (...dr)
+                    (projected_l,) = batched_vjp_fn(projected_l)
+                    (residual_l,) = batched_vjp_fn(residual_l)
+                    power += 1
 
-            projected_samples = Q
-            projected_l = projected_samples.clone()
-            projected_r = projected_samples.clone()
-            residual_samples = residual_samples - Q @ (Q.mH @ residual_samples)
-            residual_l = residual_samples.clone()
-            residual_r = residual_samples.clone()
+                    low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
+                    residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
+                    yield low_rank + residual
 
-            for _ in range(max_power):
-                projected_l = batched_adj(projected_l)
-                residual_l = batched_adj(residual_l)
-
-                low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
-                residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
-                yield low_rank + residual
-            return
-
-        raise AssertionError("unreachable")
+            case _:
+                raise ValueError(f"invalid mode {self.mode!r}")
 
 
 class XTraceEstimator(BaseEstimator):

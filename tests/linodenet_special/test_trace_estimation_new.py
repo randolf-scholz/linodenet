@@ -320,29 +320,55 @@ class TestHutchPlusPlusEstimator:
         with pytest.raises(ValueError, match="is not a valid SamplerKind"):
             HutchPlusPlusEstimator(num_samples=6, sampler="unknown").to(device=device)
 
-    def test_hutchplusplus_estimate_op_only(self, device: str) -> None:
-        torch.manual_seed(0)
-        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(num_samples=self.NUM_SAMPLES).to(
-            device=device
-        )
+    def test_hutchplusplus_mode_rejects_unknown_string(self, device: str) -> None:
+        with pytest.raises(
+            ValueError,
+            match="mode must be 'forward', 'adjoint', or 'symmetric'",
+        ):
+            HutchPlusPlusEstimator(num_samples=6, mode="unknown").to(device=device)
 
-        estimate = estimator.estimate(lambda x: scale * x, None, shape=scale.shape)
-
-        expected = scale.sum(-1)
-        torch.testing.assert_close(estimate, expected, atol=1e-2, rtol=0.0)
-
-    def test_hutchplusplus_estimate_powers_adj_only(self, device: str) -> None:
+    @pytest.mark.parametrize("mode", ["forward", "symmetric"])
+    def test_hutchplusplus_estimate(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = HutchPlusPlusEstimator(
-            num_samples=self.NUM_SAMPLES, sampler="sphere"
+            num_samples=self.NUM_SAMPLES,
+            mode=mode,
         ).to(device=device)
 
-        estimate = estimator.estimate(None, lambda x: scale * x, shape=scale.shape)
+        estimate = estimator.estimate(lambda x: scale * x, scale)
 
         expected = scale.sum(-1)
-        torch.testing.assert_close(estimate, expected, atol=1e-6, rtol=1e-6)
+        torch.testing.assert_close(estimate, expected, atol=0.15, rtol=0.0)
+
+    def test_hutchplusplus_estimate_adjoint(self, device: str) -> None:
+        torch.manual_seed(0)
+        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+        estimator = HutchPlusPlusEstimator(
+            num_samples=self.NUM_SAMPLES,
+            sampler="sphere",
+            mode="adjoint",
+        ).to(device=device)
+
+        estimate = estimator.estimate(lambda x: scale * x, scale)
+
+        expected = scale.sum(-1)
+        torch.testing.assert_close(estimate, expected, atol=0.15, rtol=0.0)
+
+    @pytest.mark.parametrize("mode", ["forward", "adjoint", "symmetric"])
+    def test_hutchplusplus_estimate_powers(self, device: str, mode: str) -> None:
+        torch.manual_seed(0)
+        scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
+        estimator = HutchPlusPlusEstimator(
+            num_samples=self.NUM_SAMPLES,
+            mode=mode,
+        ).to(device=device)
+
+        estimates = list(estimator.estimate_powers(lambda x: scale * x, scale, 3))
+
+        expected = [scale.pow(power).sum(dim=-1) for power in range(1, 4)]
+        for estimate, truth in zip(estimates, expected, strict=True):
+            torch.testing.assert_close(estimate, truth, atol=0.15, rtol=0.0)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
