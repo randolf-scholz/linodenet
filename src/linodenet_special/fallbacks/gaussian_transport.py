@@ -426,7 +426,7 @@ def gaussian_to_bimodal(
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    return _GaussianToBimodalImpl.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
+    return _GaussianToBimodalImpl.apply(y, mu, sigma)
 
 
 def bimodal_to_gaussian(
@@ -435,18 +435,18 @@ def bimodal_to_gaussian(
     r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
     mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
     sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
-    return _BimodalToGaussianImpl.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
+    return _BimodalToGaussianImpl.apply(x, mu, sigma)
 
 
 def gaussian_to_mixture(
     y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
-    return _GaussianToMixture.apply(y, weights, mus, sigmas)  # pyright: ignore[reportReturnType]
+    return _GaussianToMixture.apply(y, weights, mus, sigmas)
 
 
 def mixture_to_gaussian(
     x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
     r"""Optimal Transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$."""
-    return _MixtureToGaussian.apply(x, weights, mus, sigmas)  # pyright: ignore[reportReturnType]
+    return _MixtureToGaussian.apply(x, weights, mus, sigmas)

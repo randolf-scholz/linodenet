@@ -55,11 +55,11 @@ def test_compile_torch_while() -> None:
         body_fn=body_fn,
         carried_inputs=(state,),
     )
-    assert not cond_fn(state)  # pyright: ignore[reportArgumentType]
+    assert not cond_fn(state)
 
     @torch.compile
     def loop_body(st: State) -> State:
-        return torch.while_loop(  # pyright: ignore[reportReturnType]
+        return torch.while_loop(
             cond_fn=cond_fn,
             body_fn=body_fn,
             carried_inputs=(st,),

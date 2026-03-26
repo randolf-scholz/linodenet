@@ -37,7 +37,7 @@ class TestSimpleVariants:
                 )
                 return g * y_prime
 
-        gradcheck(F.apply, (x,), eps=1e-6, atol=1e-4)  # pyright: ignore[reportArgumentType]
+        gradcheck(F.apply, (x,), eps=1e-6, atol=1e-4)
 
     def test_gradcheck_with_parameters(self) -> None:
         class F(Function):
@@ -67,7 +67,7 @@ class TestSimpleVariants:
         mu = torch.tensor(1.0, dtype=torch.double, requires_grad=True)
         sigma = torch.tensor(0.5, dtype=torch.double, requires_grad=True)
         x = torch.linspace(-2.0, 2.0, steps=6, dtype=torch.double, requires_grad=True)
-        gradcheck(F.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)  # pyright: ignore[reportArgumentType]
+        gradcheck(F.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)
 
     def test_gradcheck_simplified(self) -> None:
         class Psi(Function):
@@ -96,7 +96,7 @@ class TestSimpleVariants:
         x = torch.linspace(
             -2.0, 2.0, steps=1000, dtype=torch.double, requires_grad=True
         )
-        gradcheck(Psi.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)  # pyright: ignore[reportArgumentType]
+        gradcheck(Psi.apply, (x, mu, sigma), eps=1e-6, atol=1e-4)
 
 
 MAXITER = 10
@@ -158,7 +158,7 @@ class TestImplementation:
             return (g * d_x), (g * d_mu), (g * d_sigma)
 
     def psi(self, x: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
-        return self.Psi.apply(x, mu, sigma)  # pyright: ignore[reportReturnType]
+        return self.Psi.apply(x, mu, sigma)
 
     class InvPsi(Function):
         @staticmethod
@@ -306,7 +306,7 @@ class TestImplementation:
             return dy, dmu, dsigma
 
     def invpsi(self, y: Tensor, mu: Tensor, sigma: Tensor) -> Tensor:
-        return self.InvPsi.apply(y, mu, sigma)  # pyright: ignore[reportReturnType]
+        return self.InvPsi.apply(y, mu, sigma)
 
     @pytest.mark.parametrize("sigma", [0.01, 0.1, 1, 10], ids=lambda x: f"s={x}")
     @pytest.mark.parametrize("mu", [0.1, 0.5, 1, 2, 10], ids=lambda x: f"mu={x}")

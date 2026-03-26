@@ -83,7 +83,7 @@ def singular_triplet(
     rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute the dominant singular triplet of a matrix."""
-    return _SingularTripletImpl.apply(A, u0, v0, maxiter, atol, rtol)  # pyright: ignore[reportReturnType]
+    return _SingularTripletImpl.apply(A, u0, v0, maxiter, atol, rtol)
 
 
 def singular_triplet_native(

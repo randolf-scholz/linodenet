@@ -136,7 +136,7 @@ def _spectral_norm_forward_impl(
     initial_state = State(maxiter, u0, v0, grad_u, grad_v, A, atol, rtol)
     final_state = torch.while_loop(_cond_fn, _body_fn, (initial_state,))
 
-    _, u, v, _, _, _, _, _ = final_state  # pyright: ignore[reportGeneralTypeIssues]
+    _, u, v, _, _, _, _, _ = final_state
     sigma: Tensor = torch.einsum("ij, i, j ->", A, u, v)
 
     return sigma, u, v
@@ -198,7 +198,7 @@ def spectral_norm(
     rtol: float = 1e-6,
 ) -> Tensor:
     r"""Compute the spectral norm of a matrix."""
-    return _SpectralNormImpl.apply(A, u0, v0, maxiter, atol, rtol)  # pyright: ignore[reportReturnType]
+    return _SpectralNormImpl.apply(A, u0, v0, maxiter, atol, rtol)
 
 
 def spectral_norm_native(
