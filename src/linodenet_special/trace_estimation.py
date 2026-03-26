@@ -493,7 +493,7 @@ class TraceEstimator(nn.Module):
     when $f(z) = Az$, the Jacobian is constant and equal to $A$.
 
     Subclasses must implement `estimate`, which returns an estimate of $\tr(Df(x))$.
-    The default `estimate_powers` implementation builds on top of `estimate`; concrete
+    The default `powers` implementation builds on top of `estimate`; concrete
     estimators may override it with more efficient algorithms.
     """
 
@@ -514,7 +514,7 @@ class TraceEstimator(nn.Module):
         raise NotImplementedError
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
+    def powers(
         self,
         op: Fn[[Tensor], Tensor],
         x: Tensor,
@@ -543,7 +543,7 @@ class ExactEstimator(TraceEstimator):
         N is the dimension of the operator.
 
     This `nn.Module` wrapper implements the same estimator as
-    `exact_trace_estimator`, but also exposes `estimate_powers` and
+    `exact_trace_estimator`, but also exposes `powers` and
     `estimate_logabsdet` helpers derived from the exact Jacobian.
     """
 
@@ -574,7 +574,7 @@ class ExactEstimator(TraceEstimator):
         return torch.einsum("...ii -> ...", matrix)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
+    def powers(
         self,
         op: Fn[[Tensor], Tensor],
         x: Tensor,
@@ -611,7 +611,7 @@ class HutchinsonEstimator(TraceEstimator):
         N is the dimension of the operator.
 
     This module wraps the same trace estimator as `hutchinson_estimator`.
-    The `forward` method estimates $\tr(Df(x))$ and `estimate_powers` extends the
+    The `forward` method estimates $\tr(Df(x))$ and `powers` extends the
     same sampling scheme to powers of the Jacobian by repeatedly applying Jacobian
     or adjoint actions according to `mode`.
 
@@ -659,10 +659,10 @@ class HutchinsonEstimator(TraceEstimator):
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
             x: Evaluation point. Its shape, dtype, and device define the domain.
         """
-        return next(self.estimate_powers(op, x, 1))
+        return next(self.powers(op, x, 1))
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
+    def powers(
         self,
         op: Fn[[Tensor], Tensor],
         x: Tensor,
@@ -740,7 +740,7 @@ class HutchPlusPlusEstimator(TraceEstimator):
         N is the dimension of the operator.
 
     This module wraps the same trace estimator as `hutchplusplus_estimator`.
-    The `forward` method estimates $\tr(Df(x))$ and `estimate_powers` reuses the
+    The `forward` method estimates $\tr(Df(x))$ and `powers` reuses the
     same low-rank-plus-residual decomposition for powers of the Jacobian.
 
     Args:
@@ -796,10 +796,10 @@ class HutchPlusPlusEstimator(TraceEstimator):
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
             x: Evaluation point. Its shape, dtype, and device define the domain.
         """
-        return next(self.estimate_powers(op, x, 1))
+        return next(self.powers(op, x, 1))
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
+    def powers(
         self,
         op: Fn[[Tensor], Tensor],
         x: Tensor,
@@ -925,7 +925,7 @@ class XTraceEstimator(TraceEstimator):
 
     This module wraps the same trace estimator as `xtrace_estimator`. The current
     implementation only supports `mode="forward"` and only implements the first
-    Jacobian power, so `estimate_powers(..., max_power=1)` matches `forward`.
+    Jacobian power, so `powers(..., max_power=1)` matches `forward`.
 
     Args:
         num_matvecs: Total matrix-vector product budget. XTrace uses
@@ -1008,7 +1008,7 @@ class XTraceEstimator(TraceEstimator):
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
             x: Evaluation point. Its shape, dtype, and device define the domain.
         """
-        return next(self.estimate_powers(op, x, 1))
+        return next(self.powers(op, x, 1))
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_naive(
@@ -1020,7 +1020,7 @@ class XTraceEstimator(TraceEstimator):
         r"""Estimate $\tr(Df(x))$ with the naive XTrace formulation.
 
         This method is mainly useful for debugging against the optimized
-        implementation in `forward` and `estimate_powers`.
+        implementation in `forward` and `powers`.
         """
         if x.ndim == 0:
             raise ValueError("x must be at least one-dimensional")
@@ -1052,7 +1052,7 @@ class XTraceEstimator(TraceEstimator):
         return tr / k + residual
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def estimate_powers(
+    def powers(
         self,
         op: Fn[[Tensor], Tensor],
         x: Tensor,
@@ -1183,17 +1183,16 @@ def logabsdet_series(
     .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
 
     truncated after `num_series_terms` terms and replaces each trace power with the
-    corresponding value from `estimator.estimate_powers`.
+    corresponding value from `estimator.powers`.
     """
     if num_series_terms < 1:
         raise ValueError("num_series_terms must be at least 1")
 
-    trace_powers = estimator.estimate_powers(op, x, num_series_terms)
-    first_power = next(trace_powers)
-    result = first_power.clone()
-    sign = -1.0
-    for k, trace_power in enumerate(trace_powers, start=2):
-        result = result + (sign / k) * trace_power
+    result = torch.zeros_like(x.shape[:-1], device=x.device, dtype=x.dtype)
+    sign = 1.0
+    for k, tr_k in enumerate(estimator.powers(op, x, num_series_terms), start=1):
+        # log(1 + x) = x - ½x² + ⅓x³ - ¼x⁴ + …
+        result = result + (sign / k) * tr_k
         sign = -sign
     return result.real if not result.is_complex() else result
 
@@ -1260,9 +1259,7 @@ class LogabsdetSeriesEstimator(nn.Module):
                         "num_series_terms is required for estimator='xtrace'"
                     )
                 self.estimator = XTraceEstimator(num_samples=num_samples)
-            case _ if hasattr(estimator, "estimate") and hasattr(
-                estimator, "estimate_powers"
-            ):
+            case _ if hasattr(estimator, "estimate") and hasattr(estimator, "powers"):
                 self.estimator = estimator
             case _:
                 raise TypeError(f"Unknown logabsdet estimator {estimator!r}")

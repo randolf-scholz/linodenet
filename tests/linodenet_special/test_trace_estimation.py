@@ -130,7 +130,7 @@ class TestExactEstimator:
         x = torch.zeros(matrix.shape[:-1], device=device)
         estimator = ExactEstimator()
 
-        estimates = list(estimator.estimate_powers(linear_map(matrix), x, 3))
+        estimates = list(estimator.powers(linear_map(matrix), x, 3))
 
         expected = [
             torch.einsum("...ii -> ...", torch.linalg.matrix_power(matrix, power))
@@ -163,7 +163,7 @@ class TestBaseEstimator:
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
         estimator = AnalyticEstimator()
 
-        estimates = list(estimator.estimate_powers(scaled_map(scale), scale, 4))
+        estimates = list(estimator.powers(scaled_map(scale), scale, 4))
 
         expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
         for estimate, truth in zip(estimates, expected, strict=True):
@@ -237,7 +237,7 @@ class TestHutchinsonEstimator:
         scale = torch.tensor([[0.25], [-0.5], [0.75]], device=device)
         estimator = HutchinsonEstimator(self.NUM_SAMPLES, mode=mode)
 
-        estimates = list(estimator.estimate_powers(scaled_map(scale), scale, 4))
+        estimates = list(estimator.powers(scaled_map(scale), scale, 4))
 
         expected = [scale.squeeze(-1).pow(power) for power in range(1, 5)]
         for estimate, truth in zip(estimates, expected, strict=True):
@@ -247,11 +247,7 @@ class TestHutchinsonEstimator:
         estimator = HutchinsonEstimator(4)
 
         with pytest.raises(ValueError, match="x must be at least one-dimensional"):
-            next(
-                estimator.estimate_powers(
-                    lambda x: x, torch.tensor(1.0, device=device), 1
-                )
-            )
+            next(estimator.powers(lambda x: x, torch.tensor(1.0, device=device), 1))
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -313,7 +309,7 @@ class TestHutchPlusPlusEstimator:
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = HutchPlusPlusEstimator(self.NUM_MATVECS, mode=mode)
 
-        estimates = list(estimator.estimate_powers(lambda x: scale * x, scale, 3))
+        estimates = list(estimator.powers(lambda x: scale * x, scale, 3))
 
         expected = [scale.pow(power).sum(dim=-1) for power in range(1, 4)]
         for estimate, truth in zip(estimates, expected, strict=True):
