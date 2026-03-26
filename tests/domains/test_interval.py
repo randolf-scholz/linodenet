@@ -22,6 +22,17 @@ class TestInterval:
         with pytest.raises(TypeError):
             Interval("[0, 1)", 1.0)  # type: ignore[call-overload] # pyright: ignore[reportCallIssue]
 
+    def test_init_logs_debug_on_invalid_string(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with (
+            caplog.at_level("DEBUG"),
+            pytest.raises(ValueError, match=r"Invalid interval string: \[0, 1"),
+        ):
+            Interval("[0, 1")
+
+        assert "Failed to parse interval string" in caplog.text
+
     def test_arithmetic(self) -> None:
         shifted = Interval("(0, 1]")
         scaled = Interval("(1, 2]")
@@ -177,6 +188,18 @@ class TestInterval:
     )
     def test_isempty(self, interval: str, expected: bool) -> None:
         assert Interval(interval).is_empty() is expected
+
+    def test_parse(self) -> None:
+        assert Interval.parse("[0, 1]") == Interval("[0, 1]")
+        assert Interval.parse("[0, 1") is None
+
+    def test_parse_logs_debug_on_invalid_string(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level("DEBUG"):
+            assert Interval.parse("[0, 1") is None
+
+        assert "Failed to parse interval string" in caplog.text
 
 
 class TestRealDomain:

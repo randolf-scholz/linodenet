@@ -3,15 +3,18 @@ r"""Scalar domain primitives, including intervals and scalar domain labels."""
 __all__ = ["Interval", "RealDomain", "ScalarDomains"]
 
 
+import logging
 from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from math import isnan, nan
-from typing import ClassVar, Final, Self, overload
+from typing import Any, ClassVar, Final, Self, overload
 
 from torch import Tensor
 
 from .base import Domain
+
+__logger__ = logging.getLogger(__name__)
 
 
 @dataclass(unsafe_hash=True, init=False)
@@ -58,6 +61,9 @@ class Interval(Domain):
         match lower_or_interval:
             case str(s):
                 spec = Interval._parse_string(s)
+                if spec is None:
+                    __logger__.debug("Failed to parse interval string %r", s)
+                    raise ValueError(f"Invalid interval string: {s}")
                 lower = spec["lower"]
                 upper = spec["upper"]
                 lower_inclusive = spec["lower_inclusive"]
@@ -108,17 +114,17 @@ class Interval(Domain):
             case Interval():
                 return arg
             case str():
-                try:
-                    spec = Interval._parse_string(arg)
-                    return Interval(**spec)
-                except ValueError:
+                if (spec := Interval._parse_string(arg)) is None:
                     return None
+                return Interval(**spec)
             case _:
                 return None
 
     @staticmethod
-    def _parse_string(s: str, /) -> dict:
-        s = s.strip()
+    def _parse_string(s: str, /) -> dict[str, Any] | None:
+        if not (s := s.strip()):
+            __logger__.debug("Failed to parse interval string %r: empty string", s)
+            return None
 
         match s[0]:
             case "[":
@@ -126,7 +132,10 @@ class Interval(Domain):
             case "(":
                 lower_inclusive = False
             case _:
-                raise ValueError(f"Invalid interval string: {s}")
+                __logger__.debug(
+                    "Failed to parse interval string %r: invalid lower bracket", s
+                )
+                return None
 
         match s[-1]:
             case "]":
@@ -134,15 +143,26 @@ class Interval(Domain):
             case ")":
                 upper_inclusive = False
             case _:
-                raise ValueError(f"Invalid interval string: {s}")
+                __logger__.debug(
+                    "Failed to parse interval string %r: invalid upper bracket", s
+                )
+                return None
 
-        bounds = s[1:-1].split(",")
-        if len(bounds) != 2:
-            raise ValueError(f"Invalid interval string: {s}")
-
-        lower_str, upper_str = bounds
-        lower = float(lower_str.strip())
-        upper = float(upper_str.strip())
+        match s[1:-1].split(","):
+            case left, right:
+                try:
+                    lower = float(left.strip())
+                    upper = float(right.strip())
+                except ValueError:
+                    __logger__.debug(
+                        "Failed to parse interval string %r: invalid bounds", s
+                    )
+                    return None
+            case _:
+                __logger__.debug(
+                    "Failed to parse interval string %r: expected two bounds", s
+                )
+                return None
 
         return {
             "lower": lower,
