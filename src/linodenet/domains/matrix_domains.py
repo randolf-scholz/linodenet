@@ -1,7 +1,6 @@
 r"""Matrix-specific domain primitives and partial-order labels."""
 
 __all__ = [
-    "MatrixDomain",
     "MatrixDomains",
     # Classes
     "Square",
@@ -16,7 +15,6 @@ __all__ = [
     "Fallback",
 ]
 
-from abc import abstractmethod
 from dataclasses import KW_ONLY, dataclass
 from types import MappingProxyType
 from typing import Final
@@ -24,41 +22,7 @@ from typing import Final
 import torch
 from torch import Tensor
 
-from .base import Domain, Intersection, Inverse, PosetEnum, Union
-
-
-@dataclass(frozen=True)
-class MatrixDomain(Domain):
-    r"""Stub base class for matrix domains."""
-
-    @property
-    def shape(self) -> tuple[int, int] | None:
-        raise NotImplementedError
-
-    @abstractmethod
-    def __contains__(self, item: Tensor, /) -> bool:
-        raise NotImplementedError
-
-    def __le__(self, other: MatrixDomain, /) -> bool:
-        return NotImplemented
-
-    def __lt__(self, other: MatrixDomain, /) -> bool:
-        return NotImplemented
-
-    def __gt__(self, other: MatrixDomain, /) -> bool:
-        return NotImplemented
-
-    def __ge__(self, other: MatrixDomain, /) -> bool:
-        return NotImplemented
-
-    def __invert__(self) -> Inverse[MatrixDomain]:
-        return Inverse(self)
-
-    def __or__(self, other: MatrixDomain, /) -> Union[MatrixDomain]:
-        return Union({self, other})
-
-    def __and__(self, other: MatrixDomain, /) -> Intersection[MatrixDomain]:
-        return Intersection({self, other})
+from .base import MatrixDomain, PosetEnum
 
 
 @dataclass(frozen=True)

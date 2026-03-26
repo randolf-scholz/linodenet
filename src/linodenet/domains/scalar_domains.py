@@ -1,6 +1,6 @@
 r"""Scalar domain primitives, including intervals and scalar domain labels."""
 
-__all__ = ["ScalarDomain", "Interval", "RealDomain", "ScalarDomains"]
+__all__ = ["Interval", "RealDomain", "ScalarDomains"]
 
 
 import logging
@@ -12,13 +12,9 @@ from typing import ClassVar, Final, Self, overload
 
 from torch import Tensor
 
-from .base import Domain
+from .base import ScalarDomain
 
 __logger__ = logging.getLogger(__name__)
-
-
-class ScalarDomain(Domain):
-    r"""Base class for scalar domains."""
 
 
 @dataclass(unsafe_hash=True, init=False)

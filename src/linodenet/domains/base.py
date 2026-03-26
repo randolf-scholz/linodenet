@@ -9,9 +9,13 @@ __all__ = [
     "Union",
     "Inverse",
     "PosetEnum",
+    "ScalarDomain",
+    "VectorDomain",
+    "MatrixDomain",
+    "TensorDomain",
 ]
 
-
+from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,45 +32,26 @@ class Domain(Protocol):
     def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
 
-    def __le__(self, other: Self, /) -> bool:
+    def __le__(self, other: Any, /) -> bool:
         return NotImplemented
 
-    def __lt__(self, other: Self, /) -> bool:
+    def __lt__(self, other: Any, /) -> bool:
         return NotImplemented
 
-    def __gt__(self, other: Self, /) -> bool:
+    def __gt__(self, other: Any, /) -> bool:
         return NotImplemented
 
-    def __ge__(self, other: Self, /) -> bool:
+    def __ge__(self, other: Any, /) -> bool:
         return NotImplemented
 
-    def __invert__(self) -> Domain:
+    def __invert__(self) -> Domain | Inverse[Domain]:
         return Inverse(self)
 
-    def __or__(self, other: Self, /) -> Domain:
-        return Union({self, other})
-
-    def __and__(self, other: Self, /) -> Domain:
+    def __and__(self, other: Any, /) -> Domain | Intersection[Domain]:
         return Intersection({self, other})
 
-
-@dataclass(frozen=True)
-class Union[D: Domain](Domain):
-    r"""Structural union of matrix domains."""
-
-    domains: frozenset[D]
-
-    def __init__(self, domains: Iterable[D] = (), /) -> None:
-        object.__setattr__(self, "domains", frozenset(domains))
-
-    def __contains__(self, item: Tensor, /) -> bool:
-        return any(item in domain for domain in self.domains)
-
-    def __iter__(self) -> Iterator[D]:
-        return iter(self.domains)
-
-    def __len__(self) -> int:
-        return len(self.domains)
+    def __or__(self, other: Any, /) -> Domain | Union[Domain]:
+        return Union({self, other})
 
 
 @dataclass(frozen=True)
@@ -87,6 +72,59 @@ class Intersection[D: Domain](Domain):
     def __len__(self) -> int:
         return len(self.domains)
 
+    def __le__(self, other: Any, /) -> bool:
+        # (A₁ ∧ … ∧ Aₙ) ⊆ B
+        # sufficient condition: A₁ ⊆ B ∨ … ∨ Aₙ ⊆ B
+        if any(domain <= other for domain in self.domains):
+            return True
+        return NotImplemented
+
+    def __lt__(self, other: Any, /) -> bool:
+        return self <= other and self != other
+
+    def __ge__(self, other: Any, /) -> bool:
+        # B ⊆ (A₁ ∧ … ∧ Aₙ) ⟺ B ⊆ A₁ ∧ … ∧ B ⊆ Aₙ
+        return all(other <= domain for domain in self)
+
+    def __gt__(self, other: Any, /) -> bool:
+        return self >= other and self != other
+
+
+@dataclass(frozen=True)
+class Union[D: Domain](Domain):
+    r"""Structural union of matrix domains."""
+
+    domains: frozenset[D]
+
+    def __init__(self, domains: Iterable[D] = (), /) -> None:
+        object.__setattr__(self, "domains", frozenset(domains))
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return any(item in domain for domain in self.domains)
+
+    def __iter__(self) -> Iterator[D]:
+        return iter(self.domains)
+
+    def __len__(self) -> int:
+        return len(self.domains)
+
+    def __le__(self, other: Any, /) -> bool:
+        # (A₁ ∨ … ∨ Aₙ) ⊆ B ⟺ A₁ ⊆ B ∧ … ∧ Aₙ ⊆ B
+        return all(member <= other for member in self)
+
+    def __lt__(self, other: Any, /) -> bool:
+        return self <= other and self != other
+
+    def __ge__(self, other: Any, /) -> bool:
+        # B ⊆ (A₁ ∨ … ∨ Aₙ)
+        # sufficient cond: B ⊆ A₁ ∨ … ∨ B ⊆ Aₙ
+        if any(other <= member for member in self):
+            return True
+        return NotImplemented
+
+    def __gt__(self, other: Any, /) -> bool:
+        return self >= other and self != other
+
 
 @dataclass(frozen=True)
 class Inverse[D: Domain](Domain):
@@ -96,6 +134,30 @@ class Inverse[D: Domain](Domain):
 
     def __contains__(self, item: Tensor, /) -> bool:
         return item not in self.domain
+
+    def __invert__(self) -> D:
+        # (Aᶜ)ᶜ ≡ A
+        return self.domain
+
+    def __and__(self, other: Any, /) -> D:
+        # Aᶜ ∧ B ≡ (Ω-A) ∧ B ≡ (Ω∧B) - (A∧B) ≡ B - (A∧B) ≡ B ∧ (A∧B)ᶜ
+        return other & ~(self.domain & other)
+
+    def __or__(self, other: Any, /) -> D:
+        # Aᶜ ∨ B ≡ (Ω-A) ∨ B ≡ (Ω∨B) - (A∨B) ≡ Ω - (A∨B) ≡ (A∨B)ᶜ
+        return ~(self.domain | other)
+
+    def __le__(self, other: Any, /) -> bool:
+        raise NotImplementedError
+
+    def __lt__(self, other: Any, /) -> bool:
+        raise NotImplementedError
+
+    def __ge__(self, other: Any, /) -> bool:
+        raise NotImplementedError
+
+    def __gt__(self, other: Any, /) -> bool:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -310,6 +372,7 @@ class Join[D: _SupportsAndOr]:
     def __le__(self, other: object, /) -> bool:
         if not isinstance(other, PosetEnum):
             return NotImplemented
+        # (A₁ ∨ … ∨ Aₙ) ⊆ B ⟺ A₁ ⊆ B ∧ … ∧ Aₙ ⊆ B
         return all(member <= other for member in self)
 
     def __lt__(self, other: object, /) -> bool:
@@ -624,3 +687,150 @@ class PosetEnum(Enum):
 PosetEnum.KNOWN_SUPERTYPES = MappingProxyType({})
 PosetEnum.KNOWN_SUBTYPES = MappingProxyType({})
 PosetEnum.KNOWN_MEETS = ()
+
+
+class ScalarDomain(Domain, Protocol):
+    r"""Base class for scalar domains."""
+
+    @property
+    def shape(self) -> tuple[()]:
+        return ()
+
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: ScalarDomain, /) -> bool:
+        return NotImplemented
+
+    def __lt__(self, other: ScalarDomain, /) -> bool:
+        return NotImplemented
+
+    def __gt__(self, other: ScalarDomain, /) -> bool:
+        return NotImplemented
+
+    def __ge__(self, other: ScalarDomain, /) -> bool:
+        return NotImplemented
+
+    def __invert__(self) -> ScalarDomain:
+        return Inverse(self)
+
+    def __or__(self, other: ScalarDomain, /) -> ScalarDomain:
+        return Union({self, other})
+
+    def __and__(self, other: ScalarDomain, /) -> ScalarDomain:
+        return Intersection({self, other})
+
+
+class VectorDomain(Domain, Protocol):
+    r"""Base class for vector domains."""
+
+    @property
+    def size(self) -> int | None:
+        raise NotImplementedError
+
+    @property
+    def shape(self) -> tuple[int] | None:
+        return None if self.size is None else (self.size,)
+
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: VectorDomain, /) -> bool:
+        return NotImplemented
+
+    def __lt__(self, other: VectorDomain, /) -> bool:
+        return NotImplemented
+
+    def __gt__(self, other: VectorDomain, /) -> bool:
+        return NotImplemented
+
+    def __ge__(self, other: VectorDomain, /) -> bool:
+        return NotImplemented
+
+    def __invert__(self) -> VectorDomain:
+        return Inverse(self)
+
+    def __or__(self, other: VectorDomain, /) -> VectorDomain:
+        return Union({self, other})
+
+    def __and__(self, other: VectorDomain, /) -> VectorDomain:
+        return Intersection({self, other})
+
+
+@dataclass(frozen=True)
+class MatrixDomain(Domain, Protocol):
+    r"""Stub base class for matrix domains."""
+
+    @property
+    def rows(self) -> int | None:
+        raise NotImplementedError
+
+    @property
+    def cols(self) -> int | None:
+        raise NotImplementedError
+
+    @property
+    def shape(self) -> tuple[int, int] | None:
+        if self.rows is not None and self.cols is not None:
+            return self.rows, self.cols
+        return None
+
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: MatrixDomain, /) -> bool:
+        return NotImplemented
+
+    def __lt__(self, other: MatrixDomain, /) -> bool:
+        return NotImplemented
+
+    def __gt__(self, other: MatrixDomain, /) -> bool:
+        return NotImplemented
+
+    def __ge__(self, other: MatrixDomain, /) -> bool:
+        return NotImplemented
+
+    def __invert__(self) -> MatrixDomain:
+        return Inverse(self)
+
+    def __or__(self, other: MatrixDomain, /) -> MatrixDomain:
+        return Union({self, other})
+
+    def __and__(self, other: MatrixDomain, /) -> MatrixDomain:
+        return Intersection({self, other})
+
+
+class TensorDomain(Domain, Protocol):
+    r"""Base class for tensor domains."""
+
+    @property
+    def shape(self) -> tuple[int, ...] | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: TensorDomain, /) -> bool:
+        return NotImplemented
+
+    def __lt__(self, other: TensorDomain, /) -> bool:
+        return NotImplemented
+
+    def __gt__(self, other: TensorDomain, /) -> bool:
+        return NotImplemented
+
+    def __ge__(self, other: TensorDomain, /) -> bool:
+        return NotImplemented
+
+    def __invert__(self) -> TensorDomain:
+        return Inverse(self)
+
+    def __or__(self, other: TensorDomain, /) -> TensorDomain:
+        return Union({self, other})
+
+    def __and__(self, other: TensorDomain, /) -> TensorDomain:
+        return Intersection({self, other})

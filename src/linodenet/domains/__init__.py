@@ -20,6 +20,8 @@ __all__ = [
     "MatrixDomain",
     "RealDomain",
     "ScalarDomain",
+    "VectorDomain",
+    "TensorDomain",
     # Enums
     "ScalarDomains",
     "VectorDomains",
@@ -28,8 +30,19 @@ __all__ = [
 ]
 
 
-from .base import Domain, DomainMapping, Intersection, Inverse, Join, Union
-from .matrix_domains import MatrixDomain, MatrixDomains
-from .scalar_domains import Interval, RealDomain, ScalarDomain, ScalarDomains
+from .base import (
+    Domain,
+    DomainMapping,
+    Intersection,
+    Inverse,
+    Join,
+    MatrixDomain,
+    ScalarDomain,
+    TensorDomain,
+    Union,
+    VectorDomain,
+)
+from .matrix_domains import MatrixDomains
+from .scalar_domains import Interval, RealDomain, ScalarDomains
 from .tensor_domains import TensorDomains
 from .vector_domains import VectorDomains
