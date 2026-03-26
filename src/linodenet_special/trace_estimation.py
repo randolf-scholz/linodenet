@@ -36,7 +36,7 @@ import math
 from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from enum import StrEnum
-from typing import Any, Final, Protocol, overload
+from typing import Any, Final, Protocol
 
 import torch
 from torch import Tensor, nn, vmap
@@ -507,11 +507,10 @@ class TraceEstimator(nn.Module):
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
 
-        power_op = op
+        power_op: Fn[[Tensor], Tensor] = lambda z: z  # noqa: E731
         for _ in range(max_power):
+            power_op = lambda z, g=power_op, /: op(g(z))  # type: ignore[misc]  # noqa: E731
             yield self(power_op, x)
-            previous_op = power_op
-            power_op = lambda z, prev=previous_op: op(prev(z))
 
 
 class ExactEstimator(TraceEstimator):
@@ -1030,8 +1029,7 @@ class XTraceEstimator(TraceEstimator):
         term3 = -vecdot(T - H.mH @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
         trs = -SHS + scale * (term1 + term2 + term3)
 
-        estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
-        yield estimate
+        yield H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_logabsdet(
