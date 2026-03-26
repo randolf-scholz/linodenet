@@ -10,10 +10,10 @@ from torch import Tensor
 from torch.func import vmap
 
 from linodenet_special.trace_estimation import (
-    ExactEstimator,
+    ExactTrace,
     HutchinsonEstimator,
-    HutchPlusPlusEstimator,
-    Sampler,
+    HutchPP_Estimator,
+    Samplers,
     TraceEstimator,
     XTraceEstimator,
     logabsdet_series,
@@ -112,7 +112,7 @@ class TestExactEstimator:
             device=device,
         )
         x = torch.zeros(matrix.shape[:-1], device=device)
-        estimator = ExactEstimator()
+        estimator = ExactTrace()
 
         estimate = estimator(linear_map(matrix), x)
 
@@ -128,7 +128,7 @@ class TestExactEstimator:
             device=device,
         )
         x = torch.zeros(matrix.shape[:-1], device=device)
-        estimator = ExactEstimator()
+        estimator = ExactTrace()
 
         estimates = list(estimator.powers(linear_map(matrix), x, 3))
 
@@ -148,7 +148,7 @@ class TestExactEstimator:
             device=device,
         )
         x = torch.zeros(matrix.shape[:-1], device=device)
-        estimator = ExactEstimator()
+        estimator = ExactTrace()
 
         estimate = estimator.estimate_logabsdet(linear_map(matrix), x)
 
@@ -173,7 +173,7 @@ class TestBaseEstimator:
         scale = torch.tensor([[0.125], [-0.2], [0.3]], device=device)
         estimator = AnalyticEstimator()
 
-        estimate = logabsdet_series(estimator, scaled_map(scale), scale, 6)
+        estimate = logabsdet_series(scaled_map(scale), scale, 6, estimator=estimator)
 
         expected = sum(
             ((-1) ** (power + 1) / power) * scale.squeeze(-1).pow(power)
@@ -191,12 +191,12 @@ class TestHutchinsonEstimator:
 
         samples = estimator.sampler((3, 5), 4, dtype=torch.float32, device=device)
 
-        assert isinstance(estimator.sampler, type(Sampler.new(Sampler.SIGN)))
+        assert isinstance(estimator.sampler, type(Samplers.new(Samplers.SIGN)))
         assert samples.shape == (3, 5, 4)
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_hutchinson_sampler_from_enum(self, device: str) -> None:
-        estimator = HutchinsonEstimator(4, sampler=Sampler.SIGN)
+        estimator = HutchinsonEstimator(4, sampler=Samplers.SIGN)
 
         samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
@@ -257,7 +257,7 @@ class TestHutchPlusPlusEstimator:
     INPUT_SIZE = 100
 
     def test_hutchplusplus_sampler_from_string(self, device: str) -> None:
-        estimator = HutchPlusPlusEstimator(6, sampler="sign")
+        estimator = HutchPP_Estimator(6, sampler="sign")
 
         samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
@@ -265,7 +265,7 @@ class TestHutchPlusPlusEstimator:
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_hutchplusplus_sampler_from_custom_instance(self, device: str) -> None:
-        estimator = HutchPlusPlusEstimator(6, sampler=OnesSampler())
+        estimator = HutchPP_Estimator(6, sampler=OnesSampler())
 
         samples = estimator.sampler((2, 3), 4, dtype=torch.float32, device=device)
 
@@ -274,17 +274,17 @@ class TestHutchPlusPlusEstimator:
 
     def test_hutchplusplus_sampler_rejects_unknown_string(self, device: str) -> None:
         with pytest.raises(ValueError, match="is not a valid Sampler"):
-            HutchPlusPlusEstimator(6, sampler="unknown")
+            HutchPP_Estimator(6, sampler="unknown")
 
     def test_hutchplusplus_mode_rejects_unknown_string(self, device: str) -> None:
         with pytest.raises(ValueError, match="mode must be one of"):
-            HutchPlusPlusEstimator(6, mode="unknown")
+            HutchPP_Estimator(6, mode="unknown")
 
-    @pytest.mark.parametrize("mode", HutchPlusPlusEstimator.MODES)
+    @pytest.mark.parametrize("mode", HutchPP_Estimator.MODES)
     def test_hutchplusplus_estimate(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(self.NUM_MATVECS, mode=mode)
+        estimator = HutchPP_Estimator(self.NUM_MATVECS, mode=mode)
 
         estimate = estimator(lambda x: scale * x, scale)
 
@@ -294,7 +294,7 @@ class TestHutchPlusPlusEstimator:
     def test_hutchplusplus_estimate_adjoint(self, device: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(
+        estimator = HutchPP_Estimator(
             self.NUM_MATVECS, sampler="sphere", mode="adjoint"
         )
 
@@ -303,11 +303,11 @@ class TestHutchPlusPlusEstimator:
         expected = scale.sum(-1)
         torch.testing.assert_close(estimate, expected, atol=0.15, rtol=0.0)
 
-    @pytest.mark.parametrize("mode", HutchPlusPlusEstimator.MODES)
+    @pytest.mark.parametrize("mode", HutchPP_Estimator.MODES)
     def test_hutchplusplus_estimate_powers(self, device: str, mode: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimator = HutchPlusPlusEstimator(self.NUM_MATVECS, mode=mode)
+        estimator = HutchPP_Estimator(self.NUM_MATVECS, mode=mode)
 
         estimates = list(estimator.powers(lambda x: scale * x, scale, 3))
 
@@ -328,7 +328,7 @@ class TestXTraceEstimator:
         return lambda x: scale * x, scale.sum(-1)
 
     def test_xtrace_sampler_from_enum(self, device: str) -> None:
-        estimator = XTraceEstimator(4, sampler=Sampler.SIGN)
+        estimator = XTraceEstimator(4, sampler=Samplers.SIGN)
 
         samples = estimator.sampler((2, 5), 3, dtype=torch.float32, device=device)
 
@@ -336,7 +336,7 @@ class TestXTraceEstimator:
         assert torch.all((samples == -1) | (samples == +1))
 
     def test_xtrace_sphere_sampler_normalizes_columns(self, device: str) -> None:
-        estimator = XTraceEstimator(4, sampler=Sampler.SPHERE)
+        estimator = XTraceEstimator(4, sampler=Samplers.SPHERE)
 
         samples = estimator.sampler((2, 5), 3, dtype=torch.float64, device=device)
 
@@ -432,7 +432,7 @@ class TestVisualization:
         denom = expected.abs().clamp_min(torch.finfo(dtype).eps)
         x = torch.zeros(batch_size, input_size, device=device, dtype=dtype)
 
-        base_sampler = Sampler.new(Sampler.ORTH)
+        base_sampler = Samplers.new(Samplers.ORTH)
         full_probe_columns = base_sampler(
             (batch_size, input_size),
             input_size,
@@ -489,7 +489,7 @@ class TestVisualization:
                 hpp_samples = hpp_full_probe_columns[..., :hpp_num_samples]
                 hpp_residuals = hpp_full_residual_columns[..., :hpp_num_samples]
                 hutchpp_sampler = SequenceSampler([hpp_samples, hpp_residuals])
-                hutchpp = HutchPlusPlusEstimator(
+                hutchpp = HutchPP_Estimator(
                     num_matvecs=num_matvecs,
                     sampler=hutchpp_sampler,
                 ).to(device=device, dtype=dtype)(fn, x)
