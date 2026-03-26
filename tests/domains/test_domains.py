@@ -11,6 +11,7 @@ from linodenet.domains import (
     TensorDomains,
     VectorDomains,
 )
+from linodenet.domains.base import Meet
 from linodenet.domains.matrix_domains import ColumnOrthogonal, RowOrthogonal, Tall, Wide
 from linodenet.testing import is_left_invertible, is_right_invertible
 
@@ -222,7 +223,7 @@ class TestMatrixDomains:
             M.SQUARE,
         }
         assert M.SQUARE.factorizations == frozenset({M.TALL & M.WIDE})
-        assert M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC <= M.SQUARE
+        assert M.SQUARE & M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC <= M.SQUARE
         assert M.DOUBLY_STOCHASTIC <= M.SQUARE
 
     def test_poset_join_expression(self) -> None:
@@ -235,6 +236,32 @@ class TestMatrixDomains:
         }
         assert M.SQUARE <= join
         assert join <= M.RECTANGULAR
+        assert not M.RECTANGULAR <= join
+
+    def test_meet_and_join_inequalities(self) -> None:
+        meet = M.TALL & M.WIDE
+        join = M.TALL | M.WIDE
+
+        assert M.SQUARE <= meet
+        assert meet <= M.SQUARE
+        assert meet <= M.RECTANGULAR
+        assert not meet <= M.INVERTIBLE
+        assert not M.RECTANGULAR <= meet
+
+        assert join <= M.RECTANGULAR
+        assert M.SQUARE <= join
+        assert join >= M.SQUARE
+        assert not join <= M.SQUARE
+
+        assert meet <= join
+        assert join >= meet
+
+    def test_meet_and_join_sufficient_rules_return_notimplemented(self) -> None:
+        meet = M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC
+        join = M.TALL | M.WIDE
+
+        assert Meet.__le__(meet, M.SQUARE) is NotImplemented
+        assert Join.__ge__(join, M.RECTANGULAR) is NotImplemented
 
     def test_partial_order_and_representation(self) -> None:
         assert M.SQUARE <= M.SQUARE

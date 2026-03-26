@@ -20,10 +20,46 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
-from types import MappingProxyType
+from types import MappingProxyType, NotImplementedType
 from typing import Any, ClassVar, Protocol, Self, overload
 
 from torch import Tensor
+
+
+def _gt(a, b, /) -> bool | NotImplementedType:
+    try:
+        result = a > b
+    except TypeError:
+        return NotImplemented
+    assert result is NotImplemented or result is True or result is False
+    return result
+
+
+def _lt(a, b, /) -> bool | NotImplementedType:
+    try:
+        result = a < b
+    except TypeError:
+        return NotImplemented
+    assert result is NotImplemented or result is True or result is False
+    return result
+
+
+def _ge(a, b, /) -> bool | NotImplementedType:
+    try:
+        result = a >= b
+    except TypeError:
+        return NotImplemented
+    assert result is NotImplemented or result is True or result is False
+    return result
+
+
+def _le(a, b, /) -> bool | NotImplementedType:
+    try:
+        result = a <= b
+    except TypeError:
+        return NotImplemented
+    assert result is NotImplemented or result is True or result is False
+    return result
 
 
 class Domain(Protocol):
@@ -231,7 +267,13 @@ class _SupportsAndOr(Protocol):
 
 @dataclass(frozen=True)
 class Meet[D: _SupportsAndOr]:
-    r"""Structural meet expression for poset labels."""
+    r"""Formal meet expression for the generated lattice.
+
+    When the exact meet is named in the base poset via `KNOWN_MEETS`, order
+    comparisons reduce to that node. Otherwise comparisons use structural meet
+    rules only, which keeps results stable when new nodes are added to the
+    base poset.
+    """
 
     factors: frozenset[D]
 
@@ -290,30 +332,40 @@ class Meet[D: _SupportsAndOr]:
                 return Meet({m | other for m in self})
 
     def __le__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        cls = type(other)
-        return other in cls._closure_from(self.factors)
+        # (A₁ ∧ … ∧ Aₙ) ≤ B ⇐ Aᵢ ≤ B for some i (sufficient condition)
+        if any(_le(member, other) is True for member in self):
+            return True
+        return NotImplemented
 
     def __lt__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        return self <= other and other not in self
+        # (A₁ ∧ … ∧ Aₙ) < B ⇐ Aᵢ < B for some i (sufficient condition)
+        if any(_lt(member, other) is True for member in self):
+            return True
+        return NotImplemented
 
     def __ge__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        return other <= self
+        # B ≤ (A₁ ∧ … ∧ Aₙ) ⟺ B ≤ A₁ and … and B ≤ Aₙ
+        for factor in self:
+            match _le(other, factor):
+                case False:
+                    return False
+                case True:
+                    continue
+                case _:
+                    return NotImplemented
+        return True
 
     def __gt__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        return self >= other and other not in self
+        return self >= other and self != other
 
 
 @dataclass(frozen=True)
 class Join[D: _SupportsAndOr]:
-    r"""Structural join expression for poset labels."""
+    r"""Formal join expression for the generated lattice.
+
+    Order comparisons use structural join rules only. This keeps results stable
+    when new nodes are added to the base poset.
+    """
 
     members: frozenset[D]
 
@@ -370,25 +422,31 @@ class Join[D: _SupportsAndOr]:
                 return Join({*self, other})
 
     def __le__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        # (A₁ ∨ … ∨ Aₙ) ⊆ B ⟺ A₁ ⊆ B ∧ … ∧ Aₙ ⊆ B
-        return all(member <= other for member in self)
+        # (A₁ ∨ … ∨ Aₙ) ≤ B ⟺ A₁ ≤ B ∧ … ∧ Aₙ ≤ B
+        for member in self:
+            match _le(member, other):
+                case False:
+                    return False
+                case True:
+                    continue
+                case _:
+                    return NotImplemented
+        return True
 
     def __lt__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        return self <= other and other not in self
+        return self <= other and self != other
 
     def __ge__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        return all(other <= member for member in self)
+        # B ≤ (A₁ ∨ … ∨ Aₙ) ⇐ B ≤ Aᵢ for some i (sufficient condition)
+        if any(_ge(member, other) is True for member in self):
+            return True
+        return NotImplemented
 
     def __gt__(self, other: object, /) -> bool:
-        if not isinstance(other, PosetEnum):
-            return NotImplemented
-        return self >= other and other not in self
+        # B < (A₁ ∨ … ∨ Aₙ) ⇐ B < Aᵢ for some i (sufficient condition)
+        if any(_gt(member, other) is True for member in self):
+            return True
+        return NotImplemented
 
 
 class PosetEnum(Enum):
@@ -651,18 +709,24 @@ class PosetEnum(Enum):
         return frozenset(closure)
 
     def __le__(self, other: object, /) -> bool:
-        if isinstance(other, Meet):
-            return all(self <= factor for factor in other)
-        if isinstance(other, Join):
-            return all(self <= term for term in other)
-        if not isinstance(other, type(self)):
-            return NotImplemented
-        return other in self.supertypes
+        if isinstance(other, type(self)):
+            return other in self.supertypes
+        return NotImplemented
 
     def __lt__(self, other: object, /) -> bool:
-        if not isinstance(other, type(self)):
-            return NotImplemented
-        return self <= other and self != other
+        if isinstance(other, type(self)):
+            return self <= other and self != other
+        return NotImplemented
+
+    def __ge__(self, other: object, /) -> bool:
+        if isinstance(other, type(self)):
+            return self in other.supertypes
+        return NotImplemented
+
+    def __gt__(self, other: object, /) -> bool:
+        if isinstance(other, type(self)):
+            return self >= other and self != other
+        return NotImplemented
 
     @property
     def supertypes(self) -> frozenset[Self]:
