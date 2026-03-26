@@ -168,7 +168,15 @@ class OrthSampler(nn.Module):
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def exact_trace_estimator(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
-    r"""Estimate $\tr(Df(x))$ by explicitly materializing the Jacobian."""
+    r"""Estimate $\tr(Df(x))$ by explicitly materializing the Jacobian.
+
+    Args:
+        op: Function $f$ whose Jacobian trace should be estimated at $x$.
+        x: Evaluation point. Its shape, dtype, and device define the domain.
+
+    Returns:
+        The exact trace $\tr(Df(x))$, computed from the full Jacobian.
+    """
     if x.ndim == 0:
         raise ValueError("x must be at least one-dimensional")
 
@@ -236,6 +244,9 @@ def hutchplusplus_estimator(
         x: Evaluation point. Its shape, dtype, and device define the domain.
         num_matvecs: Total matrix-vector product budget.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
+
+    Returns:
+        A Hutch++ estimate of $\tr(Df(x))$.
     """
     if x.ndim == 0:
         raise ValueError("x must be at least one-dimensional")
@@ -312,7 +323,19 @@ def xtrace_estimator(
     sampler: str | AbstractSampler = "sphere",
     renormalize: bool = False,
 ) -> Tensor:
-    r"""Estimate $\tr(Df(x))$ with the fast XTrace estimator."""
+    r"""Estimate $\tr(Df(x))$ with the fast XTrace estimator.
+
+    Args:
+        op: Function $f$ whose Jacobian trace should be estimated at $x$.
+        x: Evaluation point. Its shape, dtype, and device define the domain.
+        num_matvecs: Total matrix-vector product budget. XTrace uses
+            `num_matvecs // 2` probe vectors internally.
+        sampler: Probe sampler, either a built-in sampler name or a custom callable.
+        renormalize: Whether to apply the XTrace renormalization correction.
+
+    Returns:
+        An XTrace estimate of $\tr(Df(x))$.
+    """
     if x.ndim == 0:
         raise ValueError("x must be at least one-dimensional")
     if num_matvecs < 2:
@@ -514,14 +537,14 @@ class TraceEstimator(nn.Module):
 
 
 class ExactEstimator(TraceEstimator):
-    r"""Estimate traces by explicitly materializing the operator matrix.
+    r"""Estimate traces by explicitly materializing the Jacobian.
 
-    Cost: N³
-        N is the dimension of the operator
+    Cost: $N³$
+        N is the dimension of the operator.
 
-    Args:
-        mode: Whether to materialize the Jacobian from forward Jacobian-vector products
-            or adjoint vector-Jacobian products.
+    This `nn.Module` wrapper implements the same estimator as
+    `exact_trace_estimator`, but also exposes `estimate_powers` and
+    `estimate_logabsdet` helpers derived from the exact Jacobian.
     """
 
     def _materialize(
@@ -583,13 +606,19 @@ class ExactEstimator(TraceEstimator):
 class HutchinsonEstimator(TraceEstimator):
     r"""Estimate traces with Hutchinson's estimator.
 
-    Cost: mN² + O(m²N + m³)
+    Cost: $mN² + O(m²N + m³)$
         m is the number of matvecs (=`num_samples`),
-        N is the dimension of the operator
+        N is the dimension of the operator.
+
+    This module wraps the same trace estimator as `hutchinson_estimator`.
+    The `forward` method estimates $\tr(Df(x))$ and `estimate_powers` extends the
+    same sampling scheme to powers of the Jacobian by repeatedly applying Jacobian
+    or adjoint actions according to `mode`.
 
     Args:
-        num_matvecs: Number of matvecs.
-        sampler: Probe vector sampler.
+        num_matvecs: Number of matrix-vector products, equal to the number of probe
+            vectors used per estimate.
+        sampler: Probe sampler, either a built-in sampler name or a custom callable.
         mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
             products, or a symmetric alternating scheme.
     """
@@ -624,7 +653,12 @@ class HutchinsonEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$."""
+        r"""Return a Hutchinson estimate of $\tr(Df(x))$.
+
+        Args:
+            op: Function $f$ whose Jacobian trace should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+        """
         return next(self.estimate_powers(op, x, 1))
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -635,7 +669,13 @@ class HutchinsonEstimator(TraceEstimator):
         /,
         max_power: int,
     ) -> Iterator[Tensor]:
-        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
+        r"""Yield Hutchinson estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
+
+        Args:
+            op: Function $f$ whose Jacobian power traces should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+            max_power: Largest Jacobian power to estimate.
+        """
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
         if x.ndim == 0:
@@ -695,16 +735,27 @@ class HutchinsonEstimator(TraceEstimator):
 class HutchPlusPlusEstimator(TraceEstimator):
     r"""Estimate traces with the Hutch++ variance-reduced estimator.
 
-    Cost: mN² + O(m²N + m³)
+    Cost: $mN² + O(m²N + m³)$
         m is the number of matvecs (=3×`num_samples`),
-        N is the dimension of the operator
+        N is the dimension of the operator.
+
+    This module wraps the same trace estimator as `hutchplusplus_estimator`.
+    The `forward` method estimates $\tr(Df(x))$ and `estimate_powers` reuses the
+    same low-rank-plus-residual decomposition for powers of the Jacobian.
 
     Args:
-        num_samples: Number of probe vectors.
-        num_matvecs: Alias for the total matvec budget.
-        sampler: Probe vector sampler.
+        num_matvecs: Total matrix-vector product budget. The estimator uses
+            `num_matvecs // 3` probe vectors for the sketch and the same number for
+            the residual term.
+        sampler: Probe sampler, either a built-in sampler name or a custom callable.
         mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
             products, or a symmetric alternating scheme.
+
+    References:
+        - | Hutch++: Optimal Stochastic Trace Estimation
+          | Meyer, Raphael A. and Musco, Cameron and Musco, Christopher and Woodruff, David P.
+          | 2021 Symposium on Simplicity in Algorithms (SOSA)
+          | DOI: 10.1137/1.9781611976496.16
     """
 
     MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
@@ -739,7 +790,12 @@ class HutchPlusPlusEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$."""
+        r"""Return a Hutch++ estimate of $\tr(Df(x))$.
+
+        Args:
+            op: Function $f$ whose Jacobian trace should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+        """
         return next(self.estimate_powers(op, x, 1))
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -750,7 +806,13 @@ class HutchPlusPlusEstimator(TraceEstimator):
         /,
         max_power: int,
     ) -> Iterator[Tensor]:
-        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
+        r"""Yield Hutch++ estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
+
+        Args:
+            op: Function $f$ whose Jacobian power traces should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+            max_power: Largest Jacobian power to estimate.
+        """
         if max_power < 1:
             raise ValueError("max_power must be at least 1")
         if x.ndim == 0:
@@ -861,15 +923,46 @@ class HutchPlusPlusEstimator(TraceEstimator):
 class XTraceEstimator(TraceEstimator):
     r"""Estimate traces with the XTrace estimator.
 
-    Cost: mN^2 + O(m^3)
-        m is the number of matvecs (=2x`num_samples`),
-        N is the dimension of the operator
+    This module wraps the same trace estimator as `xtrace_estimator`. The current
+    implementation only supports `mode="forward"` and only implements the first
+    Jacobian power, so `estimate_powers(..., max_power=1)` matches `forward`.
 
     Args:
-        num_matvecs: total matvec budget.
-        sampler: Probe vector sampler.
+        num_matvecs: Total matrix-vector product budget. XTrace uses
+            `num_matvecs // 2` probe vectors internally.
+        sampler: Probe sampler, either a built-in sampler name or a custom callable.
         renormalize: Whether to apply the paper's renormalization.
         mode: Jacobian action mode. Only `"forward"` is currently implemented.
+
+    Cost: $mN² + O(m³)$
+        m is the number of matvecs (=2x`num_samples`),
+        N is the dimension of the operator.
+
+    References:
+        - | XTrace: Making the Most of Every Sample in Stochastic Trace Estimation
+          | Ethan N. Epperly, Joel A. Tropp, and Robert J. Webber
+          | SIAM Journal on Matrix Analysis and Applications 2024
+          | DOI: 10.1137/23M1548323
+
+    core idea:
+        samples: [w₁, ..., wₖ]
+        compute Qᵢ = orth(AW₋ᵢ)
+        compute: trᵢ = tr(QᵢᴴAQᵢ) + wᵢᴴ(I-QᵢQᵢᴴ) A (I-QᵢQᵢᴴ)wᵢ
+        trick rank-1 update: QᵢQᵢᴴ = Q(I − sᵢ sᵢᴴ)Qᴴ
+
+    Algorithm:
+        1: Draw Ω ∼ Unif{±1}^{N×m/2}
+        2: Y ← AΩ
+        3: (Q, R) ← qr(Y, ’econ’)
+        4: Z ← AQ
+        5: H ← QᴴZ, W ← QᴴΩ, T ← ZᴴΩ
+        6: S ← R⁻ᴴ
+        7: S ← S · diag(∥sᵢ∥: i=1…m/2)
+        8: for i = 1 … m/2 do
+        9:     xᵢ ← wᵢ − ⟨sᵢ∣wᵢ⟩·sᵢ
+        10:    trᵢ ← tr(H) − ⟨sᵢ|H sᵢ⟩ + ⟨wᵢ∣sᵢ⟩·⟨sᵢ∣rᵢ⟩ − ⟨tᵢ|xᵢ⟩ + ⟨xᵢ|Hxᵢ⟩
+        11: end for
+        12: tr ← mean(trᵢ: i=1…m/2)
     """
 
     MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
@@ -909,7 +1002,12 @@ class XTraceEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$."""
+        r"""Return an XTrace estimate of $\tr(Df(x))$.
+
+        Args:
+            op: Function $f$ whose Jacobian trace should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+        """
         return next(self.estimate_powers(op, x, 1))
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -919,7 +1017,11 @@ class XTraceEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Use the naive implementation to estimate $\tr(Df(x))$."""
+        r"""Estimate $\tr(Df(x))$ with the naive XTrace formulation.
+
+        This method is mainly useful for debugging against the optimized
+        implementation in `forward` and `estimate_powers`.
+        """
         if x.ndim == 0:
             raise ValueError("x must be at least one-dimensional")
         if self.mode != "forward":
@@ -1012,7 +1114,7 @@ class XTraceEstimator(TraceEstimator):
             )
 
         if self.renormalize:
-            scale = (N - k + 1) / (  #
+            scale = (N - k + 1) / (
                 vecdot(samples, samples, dim=-2)
                 - vecdot(W, W, dim=-2)
                 + SW.abs().square()
@@ -1106,12 +1208,9 @@ class LogabsdetSeriesEstimator(nn.Module):
         estimator: Trace-estimator backend, or a string in {"exact", "hutch", "xtrace"}
             used to construct one.
         num_samples: Number of probe vectors for stochastic estimators when `estimator`
-            is given as a string.
+            is given as a string. The exact interpretation depends on the backend's
+            constructor.
         num_series_terms: Number of power-series terms for stochastic estimators.
-
-    Returns:
-        y: $f(x)$
-        logabsdet: Approximation of $\log|\det(𝕀 + Df(x))|$
     """
 
     estimator: ExactEstimator | AbstractTraceEstimator
@@ -1170,6 +1269,17 @@ class LogabsdetSeriesEstimator(nn.Module):
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(self, fn: Fn[[Tensor], Tensor], x: Tensor) -> tuple[Tensor, Tensor]:
+        r"""Return `fn(x)` together with an estimate of $\log|\det(𝕀 + Df(x))|$.
+
+        Args:
+            fn: Function $f$ whose Jacobian log-absolute-determinant should be
+                estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+
+        Returns:
+            A pair `(y, logabsdet)` with `y = fn(x)` and the corresponding
+            log-absolute-determinant estimate.
+        """
         y = fn(x)
         match self.estimator:
             case ExactEstimator():
