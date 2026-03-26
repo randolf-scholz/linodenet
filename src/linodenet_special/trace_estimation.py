@@ -22,7 +22,8 @@ __all__ = [
     "Sampler",
     "XTraceEstimator",
     # functional api
-    "exact_trace_estimator",
+    "exact_trace",
+    "exact_logabsdet",
     "hutchinson_estimator",
     "hutchplusplus_estimator",
     "logabsdet_series",
@@ -36,7 +37,7 @@ import math
 from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from enum import StrEnum
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, overload
 
 import torch
 from torch import Tensor, nn, vmap
@@ -66,7 +67,7 @@ class AbstractTraceEstimator(Protocol):
     def __call__(
         self, op: Fn[[Tensor], Tensor], x: Tensor, /, *args: Any, **kwargs: Any
     ) -> Tensor:
-        r"""Returns an estimate of $\tr(Df(x))$.
+        r"""Returns an estimate of $\tr(𝐃f(x))$.
 
         Args:
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
@@ -167,25 +168,25 @@ class OrthSampler(nn.Module):
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def exact_trace_estimator(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
-    r"""Estimate $\tr(Df(x))$ by explicitly materializing the Jacobian.
+def exact_trace(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
+    r"""Estimate $\tr(𝐃f(x))$ by explicitly materializing the Jacobian.
 
     Args:
         op: Function $f$ whose Jacobian trace should be estimated at $x$.
         x: Evaluation point. Its shape, dtype, and device define the domain.
 
     Returns:
-        The exact trace $\tr(Df(x))$, computed from the full Jacobian.
+        The exact trace $\tr(𝐃f(x))$, computed from the full Jacobian.
     """
-    if x.ndim == 0:
-        raise ValueError("x must be at least one-dimensional")
-
-    _, jvp_fn = linearize(op, x)
     dim = x.shape[-1]
-    identity = torch.eye(dim, device=x.device, dtype=x.dtype).expand(
-        *x.shape[:-1], dim, dim
-    )
-    matrix = vmap(jvp_fn, -1, -1)(identity)
+    identity = torch.eye(
+        dim,
+        device=x.device,
+        dtype=x.dtype,
+    ).expand(*x.shape[:-1], dim, dim)
+    _, jvp_fn = linearize(op, x)
+    batched_jvp_fn = vmap(jvp_fn, -1, -1)
+    matrix = batched_jvp_fn(identity)
     trace = torch.einsum("...ii -> ...", matrix)
     return trace.real if not matrix.is_complex() else trace
 
@@ -199,7 +200,7 @@ def hutchinson_estimator(
     *,
     sampler: str | AbstractSampler = "sphere",
 ) -> Tensor:
-    r"""Estimate $\tr(Df(x))$ with Hutchinson's estimator.
+    r"""Estimate $\tr(𝐃f(x))$ with Hutchinson's estimator.
 
     .. math:: \tr(A) = E[uᵀAv], where E[uvᵀ] = 𝕀
 
@@ -211,10 +212,8 @@ def hutchinson_estimator(
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
 
     Returns:
-        A Hutchinson estimate of $\tr(Df(x))$.
+        A Hutchinson estimate of $\tr(𝐃f(x))$.
     """
-    if x.ndim == 0:
-        raise ValueError("x must be at least one-dimensional")
     if num_matvecs < 1:
         raise ValueError("num_samples must be at least 1")
 
@@ -235,7 +234,7 @@ def hutchplusplus_estimator(
     *,
     sampler: str | AbstractSampler = "sphere",
 ) -> Tensor:
-    r"""Estimate $\tr(Df(x))$ with Hutch++.
+    r"""Estimate $\tr(𝐃f(x))$ with Hutch++.
 
     .. math:: \tr(A) = \tr(QᵀAQ) + 𝐄[vᵀ(𝕀-QQᵀ)A(𝕀-QQᵀ)v]
 
@@ -246,10 +245,8 @@ def hutchplusplus_estimator(
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
 
     Returns:
-        A Hutch++ estimate of $\tr(Df(x))$.
+        A Hutch++ estimate of $\tr(𝐃f(x))$.
     """
-    if x.ndim == 0:
-        raise ValueError("x must be at least one-dimensional")
     if num_matvecs < 3:
         raise ValueError("num_matvecs must be at least 3")
 
@@ -282,7 +279,7 @@ def xtrace_naive_estimator(
     sampler: str | AbstractSampler = "sphere",
     renormalize: bool = False,
 ) -> Tensor:
-    r"""Naive XTrace estimate of $\tr(Df(x))$ for debugging."""
+    r"""Naive XTrace estimate of $\tr(𝐃f(x))$ for debugging."""
     if num_matvecs < 2:
         raise ValueError("num_matvecs must be at least 2")
 
@@ -323,7 +320,7 @@ def xtrace_estimator(
     sampler: str | AbstractSampler = "sphere",
     renormalize: bool = False,
 ) -> Tensor:
-    r"""Estimate $\tr(Df(x))$ with the fast XTrace estimator.
+    r"""Estimate $\tr(𝐃f(x))$ with the fast XTrace estimator.
 
     Args:
         op: Function $f$ whose Jacobian trace should be estimated at $x$.
@@ -334,10 +331,8 @@ def xtrace_estimator(
         renormalize: Whether to apply the XTrace renormalization correction.
 
     Returns:
-        An XTrace estimate of $\tr(Df(x))$.
+        An XTrace estimate of $\tr(𝐃f(x))$.
     """
-    if x.ndim == 0:
-        raise ValueError("x must be at least one-dimensional")
     if num_matvecs < 2:
         raise ValueError("num_matvecs must be at least 2")
 
@@ -395,8 +390,6 @@ def xtrace_estimator_matlab(
 
     This is a direct Torch transcription of the reference MATLAB code.
     """
-    if x.ndim == 0:
-        raise ValueError("x must be at least one-dimensional")
     if num_matvecs < 2:
         raise ValueError("num_matvecs must be at least 2")
 
@@ -489,10 +482,10 @@ class TraceEstimator(nn.Module):
 
     Concrete estimators operate on a function `f` together with an evaluation point `x`.
     In the common case, `f` is a nonlinear map and the estimator approximates trace-like
-    quantities of its Jacobian $Df(x)$. Linear operators fit this API as a special case:
+    quantities of its Jacobian $𝐃f(x)$. Linear operators fit this API as a special case:
     when $f(z) = Az$, the Jacobian is constant and equal to $A$.
 
-    Subclasses must implement `estimate`, which returns an estimate of $\tr(Df(x))$.
+    Subclasses must implement `estimate`, which returns an estimate of $\tr(𝐃f(x))$.
     The default `powers` implementation builds on top of `estimate`; concrete
     estimators may override it with more efficient algorithms.
     """
@@ -505,7 +498,7 @@ class TraceEstimator(nn.Module):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Return an estimate of $\tr(Df(x))$.
+        r"""Return an estimate of $\tr(𝐃f(x))$.
 
         Args:
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
@@ -521,15 +514,12 @@ class TraceEstimator(nn.Module):
         /,
         max_power: int,
     ) -> Iterator[Tensor]:
-        r"""Yield estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
+        r"""Yield estimates of $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
 
         The default implementation repeatedly composes $f$ with itself and delegates to
         `estimate`. This is mainly a compatibility fallback; specialized estimators can
         usually implement this more efficiently and more accurately.
         """
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-
         power_op: Fn[[Tensor], Tensor] = lambda z: z  # noqa: E731
         for _ in range(max_power):
             power_op = lambda z, g=power_op, /: op(g(z))  # type: ignore[misc]  # noqa: E731
@@ -553,9 +543,6 @@ class ExactEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-
         dim = x.shape[-1]
         eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
 
@@ -581,9 +568,6 @@ class ExactEstimator(TraceEstimator):
         /,
         max_power: int,
     ) -> Iterator[Tensor]:
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-
         matrix = self._materialize(op, x)
         eigenvalues = torch.linalg.eigvals(matrix)
         for power in range(1, max_power + 1):
@@ -606,12 +590,12 @@ class ExactEstimator(TraceEstimator):
 class HutchinsonEstimator(TraceEstimator):
     r"""Estimate traces with Hutchinson's estimator.
 
-    Cost: $mN² + O(m²N + m³)$
+    Cost: $mN² + 𝓞(m²N + m³)$
         m is the number of matvecs (=`num_samples`),
         N is the dimension of the operator.
 
     This module wraps the same trace estimator as `hutchinson_estimator`.
-    The `forward` method estimates $\tr(Df(x))$ and `powers` extends the
+    The `forward` method estimates $\tr(𝐃f(x))$ and `powers` extends the
     same sampling scheme to powers of the Jacobian by repeatedly applying Jacobian
     or adjoint actions according to `mode`.
 
@@ -630,19 +614,39 @@ class HutchinsonEstimator(TraceEstimator):
     mode: Final[str]
     sampler: Final[AbstractSampler]
 
+    @overload
+    def __init__(
+        self, num_matvecs: int, *, sampler: str | AbstractSampler = ..., mode: str = ...
+    ) -> None: ...
+    @overload
+    def __init__(
+        self, *, num_samples: int, sampler: str | AbstractSampler = ..., mode: str = ...
+    ) -> None: ...
     def __init__(
         self,
-        num_matvecs: int,
+        num_matvecs: int | None = None,
         *,
+        num_samples: int | None = None,
         sampler: str | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("Expected one of num_samples or num_matvecs")
+            case int(m), None:
+                num_matvecs = m
+                num_samples = m
+            case None, int(n):
+                num_matvecs = n
+                num_samples = n
+            case _:
+                raise ValueError("Expected one of num_samples or num_matvecs")
         if mode not in self.MODES:
             raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
 
         super().__init__()
         self.num_matvecs = num_matvecs
-        self.num_samples = num_matvecs
+        self.num_samples = num_samples
         self.mode = mode
         self.sampler = Sampler.new(sampler)
 
@@ -653,7 +657,7 @@ class HutchinsonEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Return a Hutchinson estimate of $\tr(Df(x))$.
+        r"""Return a Hutchinson estimate of $\tr(𝐃f(x))$.
 
         Args:
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
@@ -669,18 +673,13 @@ class HutchinsonEstimator(TraceEstimator):
         /,
         max_power: int,
     ) -> Iterator[Tensor]:
-        r"""Yield Hutchinson estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
+        r"""Yield Hutchinson estimates of $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
 
         Args:
             op: Function $f$ whose Jacobian power traces should be estimated at $x$.
             x: Evaluation point. Its shape, dtype, and device define the domain.
             max_power: Largest Jacobian power to estimate.
         """
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-
         right_samples = self.sampler(
             x.shape,
             self.num_samples,
@@ -735,12 +734,12 @@ class HutchinsonEstimator(TraceEstimator):
 class HutchPlusPlusEstimator(TraceEstimator):
     r"""Estimate traces with the Hutch++ variance-reduced estimator.
 
-    Cost: $mN² + O(m²N + m³)$
+    Cost: $mN² + 𝓞(m²N + m³)$
         m is the number of matvecs (=3×`num_samples`),
         N is the dimension of the operator.
 
     This module wraps the same trace estimator as `hutchplusplus_estimator`.
-    The `forward` method estimates $\tr(Df(x))$ and `powers` reuses the
+    The `forward` method estimates $\tr(𝐃f(x))$ and `powers` reuses the
     same low-rank-plus-residual decomposition for powers of the Jacobian.
 
     Args:
@@ -765,21 +764,41 @@ class HutchPlusPlusEstimator(TraceEstimator):
     mode: Final[str]
     sampler: Final[AbstractSampler]
 
+    @overload
+    def __init__(
+        self, num_matvecs: int, *, sampler: str | AbstractSampler = ..., mode: str = ...
+    ) -> None: ...
+    @overload
+    def __init__(
+        self, *, num_samples: int, sampler: str | AbstractSampler = ..., mode: str = ...
+    ) -> None: ...
     def __init__(
         self,
-        num_matvecs: int,
+        num_matvecs: int | None = None,
         *,
+        num_samples: int | None = None,
         sampler: str | AbstractSampler = Sampler.SPHERE,
         mode: str = "symmetric",
     ) -> None:
-        if mode not in self.MODES:
-            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("Expected one of num_samples or num_matvecs")
+            case int(m), None:
+                num_matvecs = m * 3
+                num_samples = m
+            case None, int(n):
+                num_matvecs = n
+                num_samples = n // 3
+            case _:
+                raise ValueError("Expected one of num_samples or num_matvecs")
         if num_matvecs < 3:
             raise ValueError("num_matvecs must be at least 3")
+        if mode not in self.MODES:
+            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
 
         super().__init__()
         self.num_matvecs = num_matvecs
-        self.num_samples = num_matvecs // 3
+        self.num_samples = num_samples
         self.mode = mode
         self.sampler = Sampler.new(sampler)
 
@@ -790,7 +809,7 @@ class HutchPlusPlusEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Return a Hutch++ estimate of $\tr(Df(x))$.
+        r"""Return a Hutch++ estimate of $\tr(𝐃f(x))$.
 
         Args:
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
@@ -806,18 +825,13 @@ class HutchPlusPlusEstimator(TraceEstimator):
         /,
         max_power: int,
     ) -> Iterator[Tensor]:
-        r"""Yield Hutch++ estimates of $\tr(Df(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
+        r"""Yield Hutch++ estimates of $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$.
 
         Args:
             op: Function $f$ whose Jacobian power traces should be estimated at $x$.
             x: Evaluation point. Its shape, dtype, and device define the domain.
             max_power: Largest Jacobian power to estimate.
         """
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
-
         samples = self.sampler(
             x.shape,
             self.num_samples,
@@ -934,7 +948,7 @@ class XTraceEstimator(TraceEstimator):
         renormalize: Whether to apply the paper's renormalization.
         mode: Jacobian action mode. Only `"forward"` is currently implemented.
 
-    Cost: $mN² + O(m³)$
+    Cost: $mN² + 𝓞(m³)$
         m is the number of matvecs (=2x`num_samples`),
         N is the dimension of the operator.
 
@@ -975,22 +989,52 @@ class XTraceEstimator(TraceEstimator):
 
     sampler: Final[AbstractSampler]
 
+    @overload
     def __init__(
         self,
         num_matvecs: int,
         *,
+        sampler: str | AbstractSampler = ...,
+        mode: str = ...,
+        renormalize: bool = ...,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        *,
+        num_samples: int,
+        sampler: str | AbstractSampler = ...,
+        mode: str = ...,
+        renormalize: bool = ...,
+    ) -> None: ...
+    def __init__(
+        self,
+        num_matvecs: int | None = None,
+        *,
+        num_samples: int | None = None,
         sampler: str | AbstractSampler = Sampler.SPHERE,
+        mode: str = "symmetric",
         renormalize: bool = True,
-        mode: str = "forward",
     ) -> None:
-        if mode not in self.MODES:
-            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
+        match num_samples, num_matvecs:
+            case None, None:
+                raise ValueError("Expected one of num_samples or num_matvecs")
+            case int(m), None:
+                num_matvecs = m * 2
+                num_samples = m
+            case None, int(n):
+                num_matvecs = n
+                num_samples = n // 2
+            case _:
+                raise ValueError("Expected one of num_samples or num_matvecs")
         if num_matvecs < 2:
             raise ValueError("num_matvecs must be at least 2")
+        if mode not in self.MODES:
+            raise ValueError(f"mode must be one of {self.MODES}, got {mode!r}")
 
         super().__init__()
         self.num_matvecs = num_matvecs
-        self.num_samples = num_matvecs // 2
+        self.num_samples = num_samples
         self.renormalize = bool(renormalize)
         self.mode = mode
         self.sampler = Sampler.new(sampler)
@@ -1002,7 +1046,7 @@ class XTraceEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Return an XTrace estimate of $\tr(Df(x))$.
+        r"""Return an XTrace estimate of $\tr(𝐃f(x))$.
 
         Args:
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
@@ -1017,13 +1061,11 @@ class XTraceEstimator(TraceEstimator):
         x: Tensor,
         /,
     ) -> Tensor:
-        r"""Estimate $\tr(Df(x))$ with the naive XTrace formulation.
+        r"""Estimate $\tr(𝐃f(x))$ with the naive XTrace formulation.
 
         This method is mainly useful for debugging against the optimized
         implementation in `forward` and `powers`.
         """
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
         if self.mode != "forward":
             raise NotImplementedError(
                 f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
@@ -1059,12 +1101,8 @@ class XTraceEstimator(TraceEstimator):
         /,
         max_power: int,
     ) -> Iterator[Tensor]:
-        if max_power < 1:
-            raise ValueError("max_power must be at least 1")
         if max_power > 1:
             raise NotImplementedError("XTraceEstimator currently only supports k=1")
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
         if self.mode != "forward":
             raise NotImplementedError(
                 f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
@@ -1141,8 +1179,6 @@ class XTraceEstimator(TraceEstimator):
         /,
         num_series_terms: int,
     ) -> Tensor:
-        if x.ndim == 0:
-            raise ValueError("x must be at least one-dimensional")
         if self.mode != "forward":
             raise NotImplementedError(
                 f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
@@ -1169,46 +1205,85 @@ class XTraceEstimator(TraceEstimator):
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def exact_logabsdet(op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Tensor]:
+    r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
+
+    .. math:: \log|\det(𝕀 + A)| = ∑ᵢ\log|1+λᵢ| for eigenvalues λᵢ of A.
+
+    Note:
+        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
+
+    Cost: $𝓞(N³)$ where N is the dimension of the operator.
+
+    Args:
+        op:
+        x:
+
+    Returns:
+        y: $f(x)$
+        s: $\log|\det(𝕀 + 𝐃f(x))|$
+    """
+    dim = x.shape[-1]
+    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
+
+    y, jvp_fn = linearize(op, x)
+    batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+    matrix = batched_op(eye)
+    eigenvalues = torch.linalg.eigvals(matrix)
+
+    return y, (1 + eigenvalues).abs().sum(dim=-1).log()
+
+
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def logabsdet_series(
-    estimator: TraceEstimator,
     op: Fn[[Tensor], Tensor],
     x: Tensor,
     /,
+    estimator: TraceEstimator,
     num_series_terms: int,
-) -> Tensor:
-    r"""Estimate $\log |\det(𝕀 + Df(x))|$ via a truncated power series.
+) -> tuple[Tensor, Tensor]:
+    r"""Estimate $\log|\det(𝕀 + 𝐃f(x))|$ via a truncated power series.
 
-    The helper uses
+    .. math::  \log|\det(𝕀 + A)| = Re( ∑ₖ(-1)ᵏ⁺¹/k \tr(Aᵏ) )
 
-    .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k\tr(Aᵏ)
-
-    truncated after `num_series_terms` terms and replaces each trace power with the
+    Truncated after `num_series_terms` terms and replaces each trace power with the
     corresponding value from `estimator.powers`.
+
+    Note:
+        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
+
+    Cost: $𝓞(kmN²)$
+       N is the dimension of the operator,
+       k is `num_series_terms`,
+       m is the number of matvecs per power from the trace estimator.
     """
-    if num_series_terms < 1:
-        raise ValueError("num_series_terms must be at least 1")
+    y, jvp_fn = linearize(op, x)
 
     result = torch.zeros_like(x.shape[:-1], device=x.device, dtype=x.dtype)
     sign = 1.0
-    for k, tr_k in enumerate(estimator.powers(op, x, num_series_terms), start=1):
+    for k, tr_k in enumerate(estimator.powers(jvp_fn, x, num_series_terms), start=1):
         # log(1 + x) = x - ½x² + ⅓x³ - ¼x⁴ + …
         result = result + (sign / k) * tr_k
         sign = -sign
-    return result.real if not result.is_complex() else result
+
+    return y, result.real
 
 
 class LogabsdetSeriesEstimator(nn.Module):
-    r"""Estimate $\log|\det(𝕀 + Df(x))|$ with a trace-estimator backend.
+    r"""Estimate $\log|\det(𝕀 + 𝐃f(x))|$ with a trace-estimator backend
 
-    - \log|\det A| = \Re(\tr(\log A)) for any A in the image of the matrix exponential
-    - \log|\det A| = ½\tr(\log AᴴA) for any A. (-∞ if A is singular)
+    .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k \tr(Aᵏ)
+
+    Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
+
+    Note:
+        - \log|\det A| = \Re(\tr(\log A)) for any A in the image of the matrix exponential
+        - \log|\det A| = ½\tr(\log AᴴA) for any A. (-∞ if A is singular)
 
     Args:
         estimator: Trace-estimator backend, or a string in {"exact", "hutch", "xtrace"}
             used to construct one.
-        num_samples: Number of probe vectors for stochastic estimators when `estimator`
-            is given as a string. The exact interpretation depends on the backend's
-            constructor.
+        num_matvecs: Budget of matrix-vector multiplications per series term.
         num_series_terms: Number of power-series terms for stochastic estimators.
     """
 
@@ -1219,46 +1294,46 @@ class LogabsdetSeriesEstimator(nn.Module):
     def __init__(
         self,
         estimator: str | AbstractTraceEstimator,
-        num_samples: int | None,
+        num_matvecs: int | None,
         num_series_terms: int | None,
     ) -> None:
         super().__init__()
 
-        if num_samples is not None and num_samples < 1:
+        if num_matvecs is not None and num_matvecs < 1:
             raise ValueError("num_samples must be at least 1 when provided")
         if num_series_terms is not None and num_series_terms < 1:
             raise ValueError("num_series_terms must be at least 1 when provided")
 
-        self.num_samples = num_samples
+        self.num_samples = num_matvecs
         self.num_series_terms = num_series_terms
 
         match estimator:
             case "exact":
                 self.estimator = ExactEstimator()
             case "hutch" | "hutchinson":
-                if num_samples is None:
+                if num_matvecs is None:
                     raise ValueError("num_samples is required for estimator='hutch'")
                 if num_series_terms is None:
                     raise ValueError(
                         "num_series_terms is required for estimator='hutch'"
                     )
-                self.estimator = HutchinsonEstimator(num_samples=num_samples)
+                self.estimator = HutchinsonEstimator(num_samples=num_matvecs)
             case "hutch++" | "hutchplusplus":
-                if num_samples is None:
+                if num_matvecs is None:
                     raise ValueError("num_samples is required for estimator='hutch++'")
                 if num_series_terms is None:
                     raise ValueError(
                         "num_series_terms is required for estimator='hutch++'"
                     )
-                self.estimator = HutchPlusPlusEstimator(num_samples=num_samples)
+                self.estimator = HutchPlusPlusEstimator(num_samples=num_matvecs)
             case "xtrace":
-                if num_samples is None:
+                if num_matvecs is None:
                     raise ValueError("num_samples is required for estimator='xtrace'")
                 if num_series_terms is None:
                     raise ValueError(
                         "num_series_terms is required for estimator='xtrace'"
                     )
-                self.estimator = XTraceEstimator(num_samples=num_samples)
+                self.estimator = XTraceEstimator(num_samples=num_matvecs)
             case _ if hasattr(estimator, "estimate") and hasattr(estimator, "powers"):
                 self.estimator = estimator
             case _:
@@ -1266,7 +1341,7 @@ class LogabsdetSeriesEstimator(nn.Module):
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(self, fn: Fn[[Tensor], Tensor], x: Tensor) -> tuple[Tensor, Tensor]:
-        r"""Return `fn(x)` together with an estimate of $\log|\det(𝕀 + Df(x))|$.
+        r"""Return `fn(x)` together with an estimate of $\log|\det(𝕀 + 𝐃f(x))|$.
 
         Args:
             fn: Function $f$ whose Jacobian log-absolute-determinant should be
