@@ -2,10 +2,14 @@ from math import nan
 
 import pytest
 
-from linodenet.domains import Interval, RealDomain
+from linodenet.domains import Interval, RealDomain, ScalarDomain
 
 
 class TestInterval:
+    def test_scalar_domain_inheritance(self) -> None:
+        assert issubclass(Interval, ScalarDomain)
+        assert issubclass(RealDomain, ScalarDomain)
+
     def test_init(self) -> None:
         expected = Interval("[0, 1)")
 

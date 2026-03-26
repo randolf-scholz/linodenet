@@ -1,6 +1,6 @@
 r"""Scalar domain primitives, including intervals and scalar domain labels."""
 
-__all__ = ["Interval", "RealDomain", "ScalarDomains"]
+__all__ = ["ScalarDomain", "Interval", "RealDomain", "ScalarDomains"]
 
 
 import logging
@@ -8,7 +8,7 @@ from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from math import isnan, nan
-from typing import Any, ClassVar, Final, Self, overload
+from typing import ClassVar, Final, Self, overload
 
 from torch import Tensor
 
@@ -17,8 +17,12 @@ from .base import Domain
 __logger__ = logging.getLogger(__name__)
 
 
+class ScalarDomain(Domain):
+    r"""Base class for scalar domains."""
+
+
 @dataclass(unsafe_hash=True, init=False)
-class Interval(Domain):
+class Interval(ScalarDomain):
     r"""A named tuple representing an interval."""
 
     EMPTY: ClassVar[Final[Interval]] = ...  # pyright: ignore[reportAssignmentType]
@@ -408,7 +412,7 @@ Interval.EMPTY = Interval(  # pyright: ignore[reportAttributeAccessIssue]
 )
 
 
-class RealDomain(Domain, Collection[Interval]):
+class RealDomain(ScalarDomain, Collection[Interval]):
     r"""A finite union of sorted, simplified intervals on the extended real line.
 
     Invariants:
@@ -701,7 +705,7 @@ class ScalarDomains(Enum):
     OPEN_UNIT_BALL = Interval("(-1, 1)")
 
     @property
-    def domain(self) -> Domain:
+    def domain(self) -> ScalarDomain:
         return self.value
 
     def __contains__(self, item: Tensor, /) -> bool:
