@@ -60,14 +60,10 @@ class Interval(Domain):
 
         match lower_or_interval:
             case str(s):
-                spec = Interval._parse_string(s)
-                if spec is None:
+                if (interval := Interval.parse(s)) is None:
                     __logger__.debug("Failed to parse interval string %r", s)
                     raise ValueError(f"Invalid interval string: {s}")
-                lower = spec["lower"]
-                upper = spec["upper"]
-                lower_inclusive = spec["lower_inclusive"]
-                upper_inclusive = spec["upper_inclusive"]
+                return interval
 
             case Interval() as interval:
                 lower = interval.lower
@@ -114,14 +110,12 @@ class Interval(Domain):
             case Interval():
                 return arg
             case str():
-                if (spec := Interval._parse_string(arg)) is None:
-                    return None
-                return Interval(**spec)
+                return Interval._parse_string(arg)
             case _:
                 return None
 
     @staticmethod
-    def _parse_string(s: str, /) -> dict[str, Any] | None:
+    def _parse_string(s: str, /) -> Interval | None:
         if not (s := s.strip()):
             __logger__.debug("Failed to parse interval string %r: empty string", s)
             return None
@@ -164,12 +158,12 @@ class Interval(Domain):
                 )
                 return None
 
-        return {
-            "lower": lower,
-            "upper": upper,
-            "lower_inclusive": lower_inclusive,
-            "upper_inclusive": upper_inclusive,
-        }
+        return Interval(
+            lower=lower,
+            upper=upper,
+            lower_inclusive=lower_inclusive,
+            upper_inclusive=upper_inclusive,
+        )
 
     def is_disjoint(self, other: Interval | str, /) -> bool:
         r"""Return whether two intervals have empty intersection."""
