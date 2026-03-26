@@ -1,6 +1,8 @@
 r"""Constants used throughout the library."""
 
 __all__ = [
+    # version
+    "__version__",
     # Enums
     "FLOAT",
     # Constants
@@ -26,6 +28,7 @@ __all__ = [
 import math
 from collections.abc import Callable, Mapping
 from enum import Enum
+from importlib import metadata
 from types import MappingProxyType
 from typing import Any, Final, Never
 
@@ -33,6 +36,13 @@ import numpy as np
 import torch
 from numpy.random import Generator
 from torch import Tensor
+
+try:  # single-source version
+    __version__ = metadata.version(__package__ or __name__)
+    r"""The version number of the `tsdm` package."""
+except metadata.PackageNotFoundError:
+    __version__ = "unknown"
+    r"""The version number of the `tsdm` package."""
 
 
 class FLOAT(float, Enum):
