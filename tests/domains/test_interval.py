@@ -188,6 +188,17 @@ class TestRealDomain:
             "(-inf, 0)",
             "(0, +inf)",
         )
+        assert RealDomain("[-2, -1] | (1, 2]") == RealDomain(
+            "[-2, -1]",
+            "(1, 2]",
+        )
+
+    def test_parse(self) -> None:
+        assert RealDomain.parse("[-2, -1] | (1, 2]") == RealDomain(
+            "[-2, -1]",
+            "(1, 2]",
+        )
+        assert RealDomain.parse("[0, 1] | ") is None
 
     def test_arithmetic(self) -> None:
         union = RealDomain("[-2, -1]", "(1, 2]")

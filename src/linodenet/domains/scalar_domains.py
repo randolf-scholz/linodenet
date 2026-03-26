@@ -414,19 +414,19 @@ class RealDomain(Domain, Collection[Interval]):
                 return RealDomain(other)
             case str():
                 try:
-                    return RealDomain.from_string(other)
+                    intervals = RealDomain._parse_string(other)
                 except ValueError:
                     return None
+                return RealDomain(*intervals)
             case _:
                 return None
 
-    @classmethod
-    def from_string(cls, s: str, /) -> RealDomain:
-        r"""Create a union of intervals from a `|`-separated string."""
+    @staticmethod
+    def _parse_string(s: str, /) -> tuple[Interval, ...]:
         parts = [part.strip() for part in s.split("|")]
         if any(not part for part in parts):
             raise ValueError(f"Invalid union of intervals string: {s}")
-        return RealDomain(*(Interval(part) for part in parts))
+        return tuple(Interval(part) for part in parts)
 
     def __init__(self, *intervals: Interval | str | RealDomain) -> None:
         if not intervals:
@@ -438,8 +438,7 @@ class RealDomain(Domain, Collection[Interval]):
                 case RealDomain() as domain:
                     flat_intervals.extend(domain)
                 case str(spec):
-                    parsed = RealDomain.from_string(spec)
-                    flat_intervals.extend(parsed)
+                    flat_intervals.extend(self._parse_string(spec))
                 case Interval() as interval:
                     flat_intervals.append(interval)
                 case _:

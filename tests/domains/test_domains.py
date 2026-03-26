@@ -65,10 +65,10 @@ class TestScalarDomains:
         assert result == expected
 
     def test_interval_union_normalization_and_membership(self) -> None:
-        domain = RealDomain.from_string("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
+        domain = RealDomain("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
         assert str(domain) == "[0, 2) | [3, 5]"
 
-        domain = RealDomain.from_string("(-inf, 0) | (0, inf)")
+        domain = RealDomain("(-inf, 0) | (0, inf)")
         assert str(domain) == "(-inf, 0) | (0, inf)"
 
         values = tensor([-1.0, 0.0, 1.0])
