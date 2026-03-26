@@ -15,7 +15,7 @@ from torch import Tensor, nn
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet.nn import ReZero
 from linodenet_special import fixpoint_solve
-from linodenet_special.trace_estimation import LogabsdetSeriesEstimator
+from linodenet_special.trace_estimation import LogAbsDetEstimators
 
 from .base import TransformBase
 
@@ -62,7 +62,6 @@ class ResidualContraction(TransformBase):
     num_trace_samples: Final[int]
     num_series_terms: Final[int]
     trace_estimator: Final[str]
-    logabsdet_estimator: LogabsdetSeriesEstimator
 
     def __init__(
         self,
@@ -72,37 +71,32 @@ class ResidualContraction(TransformBase):
         rtol: float = 1e-6,
         *,
         trace_estimator: str = "hutch",
-        num_trace_samples: int = 1,
+        trace_matvecs: int = 3,
         num_series_terms: int = 8,
+        trace_probe_sampler: str = "sphere",
+        trace_mode: str = "symmetric",
     ) -> None:
         super().__init__()
-        if num_trace_samples < 1:
-            raise ValueError("num_trace_samples must be at least 1")
-        if num_series_terms < 1:
-            raise ValueError("num_series_terms must be at least 1")
-        if trace_estimator not in {"exact", "hutch", "xtrace"}:
-            raise ValueError(
-                f"trace_estimator must be 'exact', 'hutch', or 'xtrace', got {trace_estimator!r}"
-            )
         self.contraction: nn.Module = contraction
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
-        self.num_trace_samples = num_trace_samples
+        self.num_trace_samples = trace_matvecs
         self.num_series_terms = num_series_terms
         self.trace_estimator = trace_estimator
-        self.logabsdet_estimator = LogabsdetSeriesEstimator(
+        self.logabsdet_estimator = LogAbsDetEstimators.new(
             trace_estimator,
-            num_trace_samples,
-            num_series_terms,
+            num_matvecs=trace_matvecs,
+            num_terms=num_series_terms,
+            sampler=trace_probe_sampler,
+            mode=trace_mode,
         )
 
     def encode(self, x: Tensor) -> Tensor:
         return x + self.contraction(x)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        fx, logabsdet = self.logabsdet_estimator(self.contraction, x)
-        return x + fx, logabsdet
+        return self.logabsdet_estimator(self.contraction, x)
 
     def decode(self, y: Tensor) -> Tensor:
         r"""Compute the inverse through fixed point iteration."""
@@ -143,7 +137,7 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        num_trace_samples: int = 1,
+        trace_matvecs: int = 1,
         num_series_terms: int = 8,
         trace_estimator: str = "hutch",
     ) -> None:
@@ -163,7 +157,7 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
             maxiter=maxiter,
             atol=atol,
             rtol=rtol,
-            num_trace_samples=num_trace_samples,
+            trace_matvecs=trace_matvecs,
             num_series_terms=num_series_terms,
             trace_estimator=trace_estimator,
         )
@@ -187,7 +181,7 @@ class ResidualContractionFallback(ResidualContraction):
         atol: float = 1e-6,
         rtol: float = 1e-6,
         *,
-        num_trace_samples: int = 1,
+        trace_matvecs: int = 1,
         num_series_terms: int = 8,
         trace_estimator: str = "hutch",
     ) -> None:
@@ -196,7 +190,7 @@ class ResidualContractionFallback(ResidualContraction):
             maxiter=maxiter,
             atol=atol,
             rtol=rtol,
-            num_trace_samples=num_trace_samples,
+            trace_matvecs=trace_matvecs,
             num_series_terms=num_series_terms,
             trace_estimator=trace_estimator,
         )

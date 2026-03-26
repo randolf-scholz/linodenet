@@ -24,6 +24,7 @@ __all__ = [
     "XTraceEstimator",
     # functional api
     "exact_logabsdet",
+    "exact_powers",
     "exact_trace",
     "hutch_pp_estimator",
     "hutchinson_estimator",
@@ -83,15 +84,12 @@ class TraceEstimators(StrEnum):
     @classmethod
     def new(
         cls,
-        estimator: str | AbstractTraceEstimator,
+        estimator: str,
         /,
         num_matvecs: int,
         mode: str,
         sampler: str | AbstractSampler,
-    ) -> AbstractTraceEstimator:
-        if callable(estimator):
-            warn("Estimator was given, ignoring passed args")
-            return estimator
+    ) -> TraceEstimator:
         match cls(estimator):
             case cls.EXACT:
                 warn("Estimator 'exact' was chosen, ignoring passed args")
@@ -115,16 +113,13 @@ class LogAbsDetEstimators(StrEnum):
     @classmethod
     def new(
         cls,
-        estimator: str | AbstractLogAbsDetEstimator,
+        estimator: str,
         *,
         num_matvecs: int,
         num_terms: int,
-        sampler: str | AbstractSampler,
-        mode: str,
-    ) -> AbstractLogAbsDetEstimator:
-        if callable(estimator):
-            warn("Estimator was given, ignoring passed args")
-            return estimator
+        sampler: str | AbstractSampler = "sphere",
+        mode: str = "symmetric",
+    ) -> ExactLogabsdet | LogabsdetSeriesEstimator:
         match e := cls(estimator):
             case cls.EXACT:
                 warn("Estimator 'exact' was chosen, ignoring passed args")
@@ -257,16 +252,86 @@ def exact_trace(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
         The exact trace $\tr(𝐃f(x))$, computed from the full Jacobian.
     """
     dim = x.shape[-1]
-    identity = torch.eye(
-        dim,
-        device=x.device,
-        dtype=x.dtype,
-    ).expand(*x.shape[:-1], dim, dim)
+    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape[:-1], dim, dim)
     _, jvp_fn = linearize(op, x)
     batched_jvp_fn = vmap(jvp_fn, -1, -1)
-    matrix = batched_jvp_fn(identity)
-    trace = torch.einsum("...ii -> ...", matrix)
-    return trace.real if not matrix.is_complex() else trace
+    matrix = batched_jvp_fn(eye)
+    return torch.einsum("...ii -> ...", matrix)
+
+
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def exact_powers(
+    op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int
+) -> Iterator[Tensor]:
+    r"""Yield $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
+    dim = x.shape[-1]
+    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape[:-1], dim, dim)
+    _, jvp_fn = linearize(op, x)
+    batched_jvp_fn = vmap(jvp_fn, -1, -1)
+    matrix = batched_jvp_fn(eye)
+    eigenvalues = torch.linalg.eigvals(matrix)
+    for power in range(1, max_power + 1):
+        trace_power = eigenvalues.pow(power).sum(dim=-1)
+        yield trace_power.real if not matrix.is_complex() else trace_power
+
+
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def exact_logabsdet(op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Tensor]:
+    r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
+
+    .. math:: \log|\det(𝕀 + A)| = ∑ᵢ\log|1+λᵢ| for eigenvalues λᵢ of A.
+
+    Note:
+        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
+
+    Cost: $𝓞(N³)$ where N is the dimension of the operator.
+
+    Args:
+        op:
+        x:
+
+    Returns:
+        y: $f(x)$
+        s: $\log|\det(𝕀 + 𝐃f(x))|$
+    """
+    dim = x.shape[-1]
+    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
+    _, jvp_fn = linearize(op, x)
+    batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+    matrix = eye + batched_op(eye)
+    _, value = torch.linalg.slogdet(matrix)
+    return value
+
+
+@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+def logabsdet_series(
+    op: Fn[[Tensor], Tensor], x: Tensor, /, num_terms: int, *, estimator: TraceEstimator
+) -> tuple[Tensor, Tensor]:
+    r"""Estimate $\log|\det(𝕀 + 𝐃f(x))|$ via a truncated power series.
+
+    .. math::  \log|\det(𝕀 + A)| = Re( ∑ₖ(-1)ᵏ⁺¹/k \tr(Aᵏ) )
+
+    Truncated after `num_series_terms` terms and replaces each trace power with the
+    corresponding value from `estimator.powers`.
+
+    Note:
+        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
+
+    Cost: $𝓞(kmN²)$
+       N is the dimension of the operator,
+       k is `num_series_terms`,
+       m is the number of matvecs per power from the trace estimator.
+    """
+    y, jvp_fn = linearize(op, x)
+
+    result = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
+    sign = 1.0
+    for k, tr_k in enumerate(estimator.powers(jvp_fn, x, num_terms), start=1):
+        # log(1 + x) = x - ½x² + ⅓x³ - ¼x⁴ + …
+        result = result + (sign / k) * tr_k
+        sign = -sign
+
+    return y, result.real
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -276,7 +341,7 @@ def hutchinson_estimator(
     /,
     num_matvecs: int,
     *,
-    sampler: str | AbstractSampler = "sphere",
+    sampler: AbstractSampler,
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with Hutchinson's estimator.
 
@@ -295,7 +360,6 @@ def hutchinson_estimator(
     if num_matvecs < 1:
         raise ValueError("num_samples must be at least 1")
 
-    sampler = Samplers.new(sampler)
     probes = sampler(x.shape, num_matvecs, dtype=x.dtype, device=x.device)
     _, jvp_fn = linearize(op, x)
     batched_jvp_fn = vmap(jvp_fn, -1, -1)
@@ -310,7 +374,7 @@ def hutch_pp_estimator(
     /,
     num_matvecs: int,
     *,
-    sampler: str | AbstractSampler = "sphere",
+    sampler: AbstractSampler,
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with Hutch++.
 
@@ -329,7 +393,6 @@ def hutch_pp_estimator(
         raise ValueError("num_matvecs must be at least 3")
 
     num_samples = num_matvecs // 3
-    sampler = Samplers.new(sampler)
     samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
     residual_samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
 
@@ -354,7 +417,7 @@ def xtrace_naive_estimator(
     /,
     num_matvecs: int,
     *,
-    sampler: str | AbstractSampler = "sphere",
+    sampler: AbstractSampler,
     renormalize: bool = False,
 ) -> Tensor:
     r"""Naive XTrace estimate of $\tr(𝐃f(x))$ for debugging."""
@@ -369,7 +432,6 @@ def xtrace_naive_estimator(
     batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
     tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
 
-    sampler = Samplers.new(sampler)
     samples = sampler(x.shape, k, device=x.device, dtype=x.dtype)
     Y = batched_op(samples)  # (...Nm)
 
@@ -395,7 +457,7 @@ def xtrace_estimator(
     /,
     num_matvecs: int,
     *,
-    sampler: str | AbstractSampler = "sphere",
+    sampler: AbstractSampler,
     renormalize: bool = False,
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with the fast XTrace estimator.
@@ -418,7 +480,6 @@ def xtrace_estimator(
     num_samples = num_matvecs // 2
     k = min(N, num_samples)
 
-    sampler = Samplers.new(sampler)
     samples = sampler(x.shape, k, device=x.device, dtype=x.dtype)
     _, jvp_fn = linearize(op, x)
     batched_op = vmap(jvp_fn, -1, -1)  # (...dk) -> (...dk)
@@ -461,7 +522,7 @@ def xtrace_estimator_matlab(
     /,
     num_matvecs: int,
     *,
-    sampler: str | AbstractSampler = "sphere",
+    sampler: AbstractSampler,
     renormalize: bool = False,
 ) -> Tensor:
     r"""Estimate the trace of a matrix using the original XTrace MATLAB algorithm.
@@ -471,7 +532,6 @@ def xtrace_estimator_matlab(
     if num_matvecs < 2:
         raise ValueError("num_matvecs must be at least 2")
 
-    sampler = Samplers.new(sampler)
     samples = sampler(x.shape, num_matvecs // 2, dtype=x.dtype, device=x.device)
     _, jvp_fn = linearize(op, x)
     fn = vmap(jvp_fn, -1, -1)
@@ -606,39 +666,22 @@ class ExactTrace(TraceEstimator):
     `estimate_logabsdet` helpers derived from the exact Jacobian.
     """
 
-    @staticmethod
-    def _materialize(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
-        dim = x.shape[-1]
-        eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
-        _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-        return batched_op(eye)
-
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(self, op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
-        matrix = self._materialize(op, x)
-        return torch.einsum("...ii -> ...", matrix)
+        return exact_trace(op, x)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def powers(
         self, op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int
     ) -> Iterator[Tensor]:
-        matrix = self._materialize(op, x)
-        eigenvalues = torch.linalg.eigvals(matrix)
-        for power in range(1, max_power + 1):
-            trace_power = eigenvalues.pow(power).sum(dim=-1)
-            yield trace_power.real if not matrix.is_complex() else trace_power
+        yield from exact_powers(op, x, max_power)
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> [(..., d), (...)]")
-    def logabsdet(self, op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
-        r"""Computes \log|\det(𝕀+𝐃f(x))| from the materialized Jacobian."""
-        dim = x.shape[-1]
-        eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
-        _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-        matrix = eye + batched_op(eye)
-        _, value = torch.linalg.slogdet(matrix)
-        return value
+    def logabsdet(
+        self, op: Fn[[Tensor], Tensor], x: Tensor, /
+    ) -> tuple[Tensor, Tensor]:
+        r"""Computes $f(x)$ and $\log|\det(𝕀+𝐃f(x))|$ from the materialized Jacobian."""
+        return exact_logabsdet(op, x)
 
 
 class HutchinsonEstimator(TraceEstimator):
@@ -1194,65 +1237,6 @@ class XTraceEstimator(TraceEstimator):
         yield H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
 
 
-@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def exact_logabsdet(op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Tensor]:
-    r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
-
-    .. math:: \log|\det(𝕀 + A)| = ∑ᵢ\log|1+λᵢ| for eigenvalues λᵢ of A.
-
-    Note:
-        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
-
-    Cost: $𝓞(N³)$ where N is the dimension of the operator.
-
-    Args:
-        op:
-        x:
-
-    Returns:
-        y: $f(x)$
-        s: $\log|\det(𝕀 + 𝐃f(x))|$
-    """
-    dim = x.shape[-1]
-    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
-    _, jvp_fn = linearize(op, x)
-    batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-    matrix = eye + batched_op(eye)
-    _, value = torch.linalg.slogdet(matrix)
-    return value
-
-
-@signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def logabsdet_series(
-    op: Fn[[Tensor], Tensor], x: Tensor, /, num_terms: int, *, estimator: TraceEstimator
-) -> tuple[Tensor, Tensor]:
-    r"""Estimate $\log|\det(𝕀 + 𝐃f(x))|$ via a truncated power series.
-
-    .. math::  \log|\det(𝕀 + A)| = Re( ∑ₖ(-1)ᵏ⁺¹/k \tr(Aᵏ) )
-
-    Truncated after `num_series_terms` terms and replaces each trace power with the
-    corresponding value from `estimator.powers`.
-
-    Note:
-        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
-
-    Cost: $𝓞(kmN²)$
-       N is the dimension of the operator,
-       k is `num_series_terms`,
-       m is the number of matvecs per power from the trace estimator.
-    """
-    y, jvp_fn = linearize(op, x)
-
-    result = torch.zeros(x.shape[:-1], device=x.device, dtype=x.dtype)
-    sign = 1.0
-    for k, tr_k in enumerate(estimator.powers(jvp_fn, x, num_terms), start=1):
-        # log(1 + x) = x - ½x² + ⅓x³ - ¼x⁴ + …
-        result = result + (sign / k) * tr_k
-        sign = -sign
-
-    return y, result.real
-
-
 class ExactLogabsdet(nn.Module):
     r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
 
@@ -1287,13 +1271,13 @@ class LogabsdetSeriesEstimator(nn.Module):
         num_terms: Number of power-series terms for stochastic estimators.
     """
 
-    estimator: Final[ExactTrace | AbstractTraceEstimator]
+    estimator: Final[TraceEstimator]
     num_matvecs: int
     num_terms: int
 
     def __init__(
         self,
-        estimator: str | AbstractTraceEstimator,
+        estimator: str,
         *,
         num_matvecs: int,
         num_terms: int,

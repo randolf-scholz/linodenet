@@ -308,7 +308,7 @@ class TestLogAbsDet(TestCase):
         torch.manual_seed(self.SEED)
         flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
-            num_trace_samples=self.NUM_TRACE_SAMPLES,
+            trace_matvecs=self.NUM_TRACE_SAMPLES,
             num_series_terms=self.NUM_SERIES_TERMS,
             trace_estimator=trace_estimator,
         ).to(device=device, dtype=dtype)
@@ -354,7 +354,7 @@ class TestLogAbsDetExact(TestCase):
         torch.manual_seed(self.SEED)
         flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
-            num_trace_samples=self.NUM_TRACE_SAMPLES,
+            trace_matvecs=self.NUM_TRACE_SAMPLES,
             num_series_terms=self.NUM_SERIES_TERMS,
             trace_estimator="exact",
         ).to(device=device, dtype=dtype)
