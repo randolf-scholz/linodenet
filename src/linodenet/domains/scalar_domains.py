@@ -432,21 +432,21 @@ class RealDomain(Domain, Collection[Interval]):
                 return other
             case Interval():
                 return RealDomain(other)
-            case str():
-                try:
-                    intervals = RealDomain._parse_string(other)
-                except ValueError:
-                    return None
+            case str(string):
+                intervals: list[Interval] = []
+                for part in string.split("|"):
+                    if (interval := Interval.parse(part)) is None:
+                        __logger__.debug(
+                            "Failed to parse real domain string %r: invalid interval %r",
+                            string,
+                            part,
+                        )
+                        return None
+                    intervals.append(interval)
                 return RealDomain(*intervals)
             case _:
+                __logger__.debug("Failed to unknown type %r", type(other))
                 return None
-
-    @staticmethod
-    def _parse_string(s: str, /) -> tuple[Interval, ...]:
-        parts = [part.strip() for part in s.split("|")]
-        if any(not part for part in parts):
-            raise ValueError(f"Invalid union of intervals string: {s}")
-        return tuple(Interval(part) for part in parts)
 
     def __init__(self, *intervals: Interval | str | RealDomain) -> None:
         if not intervals:
@@ -458,7 +458,9 @@ class RealDomain(Domain, Collection[Interval]):
                 case RealDomain() as domain:
                     flat_intervals.extend(domain)
                 case str(spec):
-                    flat_intervals.extend(self._parse_string(spec))
+                    if (parsed := self.parse(spec)) is None:
+                        raise ValueError(f"Invalid union of intervals string: {spec}")
+                    flat_intervals.extend(parsed)
                 case Interval() as interval:
                     flat_intervals.append(interval)
                 case _:
