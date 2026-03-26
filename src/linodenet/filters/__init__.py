@@ -46,25 +46,25 @@ __all__ = [
 
 from torch.nn import GRUCell, LSTMCell, RNNCell
 
-from linodenet.filters import probabilistic
-from linodenet.filters.base import (
+from . import probabilistic
+from .base import (
     Cell,
     CellBase,
     Filter,
     FilterBase,
     get_filter,
 )
-from linodenet.filters.containers import CellList, CellSequence, ResidualCellSequence
-from linodenet.filters.deprecated import PseudoKalmanCell, ReZeroFilter
-from linodenet.filters.kalman_cell import (
+from .containers import CellList, CellSequence, ResidualCellSequence
+from .deprecated import PseudoKalmanCell, ReZeroFilter
+from .kalman_cell import (
     NonLinearCell,
     NonLinearKalmanCell,
 )
-from linodenet.filters.linear import (
+from .linear import (
     LinearCell,
     LinearResidualCell,
 )
-from linodenet.filters.missing_value_filter import MissingValueCell
+from .missing_value_filter import MissingValueCell
 
 CELLS: dict[str, type[Cell]]  = {
     # torch cells

@@ -34,7 +34,7 @@ from linodenet.nn.rezero import ReZero, ReZeroResNet
 
 pass  # noqa: PIE790
 
-from linodenet.nn.activations import *
+from .activations import *
 
 __all__ += activations.__all__
 

@@ -33,17 +33,18 @@ __all__ = [
 
 from torch import nn as _nn
 
-from linodenet.nn.activations import base
-from linodenet.nn.activations.base import (
+from linodenet_special import bimodal_to_gaussian, gaussian_to_bimodal, hard_bend
+
+from . import base
+from .base import (
     Activation,
     ActivationBase,
     GenericActivation,
     get_activation,
 )
-from linodenet.nn.activations.crelu import CReLU, crelu
-from linodenet.nn.activations.geglu import GEGLU, geglu
-from linodenet.nn.activations.reglu import ReGLU, reglu
-from linodenet_special import bimodal_to_gaussian, gaussian_to_bimodal, hard_bend
+from .crelu import CReLU, crelu
+from .geglu import GEGLU, geglu
+from .reglu import ReGLU, reglu
 
 ACTIVATIONS: dict[str, type[_nn.Module]] = {
     # torch imports

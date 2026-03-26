@@ -17,9 +17,9 @@ __all__ = [
     "REGULARIZATIONS",
 ]
 
-from linodenet.regularizations import functional, modules
-from linodenet.regularizations.functional import *
-from linodenet.regularizations.modules import *
+from . import functional, modules
+from .functional import *
+from .modules import *
 
 __all__ += functional.__all__
 __all__ += modules.__all__

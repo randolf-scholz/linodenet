@@ -12,19 +12,22 @@ __all__ = [
 
 from linodenet.nn import parametrize
 from linodenet.nn.parametrize import *
-from linodenet.parametrizations import (
+
+from . import (
     matrix_parametrizations,
+    scalar_parametrizations,
     tensor_parametrizations,
     vector_parametrizations,
 )
-from linodenet.parametrizations.matrix_parametrizations import *
-from linodenet.parametrizations.tensor_parametrizations import *
-from linodenet.parametrizations.vector_parametrizations import *
+from .matrix_parametrizations import *
+from .tensor_parametrizations import *
+from .vector_parametrizations import *
 
 __all__ += parametrize.__all__
-__all__ += vector_parametrizations.__all__
 __all__ += matrix_parametrizations.__all__
+__all__ += scalar_parametrizations.__all__
 __all__ += tensor_parametrizations.__all__
+__all__ += vector_parametrizations.__all__
 
 
 PARAMETRIZATIONS: dict[str, type[Parametrization]] = {

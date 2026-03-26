@@ -13,14 +13,11 @@ __all__ = [
     "DiscreteKalmanFilter",
 ]
 
-from linodenet.forecasting.base import (
-    PointForecastingModel,
-    ProbabilisticForecastingModel,
-)
-from linodenet.forecasting.continuous_kalman_filter import ContinuousKalmanFilter
-from linodenet.forecasting.discrete_kalman_filter import DiscreteKalmanFilter
-from linodenet.forecasting.linodenet import LinODEnet
-from linodenet.forecasting.lssm import LatentStateSpaceModel
+from .base import PointForecastingModel, ProbabilisticForecastingModel
+from .continuous_kalman_filter import ContinuousKalmanFilter
+from .discrete_kalman_filter import DiscreteKalmanFilter
+from .linodenet import LinODEnet
+from .lssm import LatentStateSpaceModel
 
 FORECASTING_MODELS: dict[str, type[PointForecastingModel]] = {}
 r"""Dictionary containing all available forecasting models."""

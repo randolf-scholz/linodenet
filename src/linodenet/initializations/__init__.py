@@ -16,8 +16,8 @@ __all__ = [
     "INITIALIZATIONS",
 ]
 
-from linodenet.initializations import functional, modules
-from linodenet.initializations.functional import *
+from . import functional, modules
+from .functional import *
 
 __all__ += functional.__all__
 

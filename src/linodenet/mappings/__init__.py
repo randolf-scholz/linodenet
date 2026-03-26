@@ -14,6 +14,7 @@ __all__ = [
     "surjections",
     "functional",
     "bijections",
+    "nonlinear_contractions",
     "linear",
     "transforms",
     # Constants
@@ -29,55 +30,49 @@ __all__ = [
     "MATRIX_PROJECTIONS_WITH_ARGS",
     "VECTOR_PROJECTION_FNS",
     "PROJECTION_FNS",
-    # other
-    "LinearContraction",
-    "LowRankContraction",
-    "RankOneContraction",
 ]
 
-from linodenet.mappings import (
+from . import (
     base,
     bijections,
     embeddings,
     functional,
     linear,
+    nonlinear_contractions,
     projections,
     surjections,
     transforms,
 )
-from linodenet.mappings.base import *
-from linodenet.mappings.bijections import *
-from linodenet.mappings.embeddings import *
-from linodenet.mappings.functional import *
-from linodenet.mappings.linear import (
-    LinearContraction,
-    LowRankContraction,
-    RankOneContraction,
-)
-from linodenet.mappings.projections import *
-from linodenet.mappings.surjections import *
-from linodenet.mappings.transforms import *
+from .base import *
+from .bijections import *
+from .embeddings import *
+from .functional import *
+from .linear import *
+from .projections import *
+from .surjections import *
+from .transforms import *
 
 assert len(
     _combined := (
         base.__all__
-        + embeddings.__all__
-        + surjections.__all__
-        + projections.__all__
-        + functional.__all__
         + bijections.__all__
+        + embeddings.__all__
+        + functional.__all__
+        + linear.__all__
+        + projections.__all__
+        + surjections.__all__
         + transforms.__all__
     )
 ) == len(set(_combined)), "duplicate names in __all__"
 
 __all__ += base.__all__
-__all__ += embeddings.__all__
-__all__ += surjections.__all__
-__all__ += projections.__all__
-__all__ += functional.__all__
 __all__ += bijections.__all__
+__all__ += embeddings.__all__
+__all__ += functional.__all__
+__all__ += linear.__all__
+__all__ += projections.__all__
+__all__ += surjections.__all__
 __all__ += transforms.__all__
-
 
 BIJECTIONS: dict[str, type[BijectionBase]] = {
     "MatrixExponential" : bijections.MatrixExponential,

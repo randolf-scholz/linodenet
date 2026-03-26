@@ -11,10 +11,11 @@ __all__ = [
 ]
 
 from linodenet.domains import MatrixDomains, VectorDomains
-from linodenet.testing import assertions, matrix_tests, vector_tests
-from linodenet.testing.assertions import *
-from linodenet.testing.matrix_tests import *
-from linodenet.testing.vector_tests import *
+
+from . import assertions, matrix_tests, vector_tests
+from .assertions import *
+from .matrix_tests import *
+from .vector_tests import *
 
 __all__ += matrix_tests.__all__
 __all__ += vector_tests.__all__

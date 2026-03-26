@@ -15,7 +15,7 @@ __all__ = [
     "zero_impute",
 ]
 
-from linodenet.imputation.base import (
+from .base import (
     ConstantImputer,
     ImputationStrategy,
     ImputerProtocol,

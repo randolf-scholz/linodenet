@@ -15,8 +15,8 @@ __all__ = [
     "spectral_norm_native",
     "thomson_initialization",
 ]
-from linodenet_special import fallbacks, interfaces, kernels, linalg
-from linodenet_special.fallbacks import (
+from . import fallbacks, interfaces, kernels, linalg
+from .fallbacks import (
     fixpoint_solve,
     inverse_softplus,
     matrix_log,
@@ -24,10 +24,10 @@ from linodenet_special.fallbacks import (
     singular_triplet_native,
     spectral_norm_native,
 )
-from linodenet_special.interfaces import *
-from linodenet_special.kernels import *
-from linodenet_special.linalg import *
-from linodenet_special.thomson_initialization import thomson_initialization
+from .interfaces import *
+from .kernels import *
+from .linalg import *
+from .thomson_initialization import thomson_initialization
 
 __all__ += kernels.__all__
 __all__ += interfaces.__all__

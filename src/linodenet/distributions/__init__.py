@@ -73,11 +73,11 @@ __all__ = [
     "MixtureSameFamily",
 ]
 
-from linodenet.distributions.base import Distribution, DistributionBase
-from linodenet.distributions.categorical import Categorical
-from linodenet.distributions.empirical import Dirac, Empirical
-from linodenet.distributions.gaussian import MultiHeadGaussian, MultivariateNormal
-from linodenet.distributions.mixture import Mixture, MixtureSameFamily
+from .base import Distribution, DistributionBase
+from .categorical import Categorical
+from .empirical import Dirac, Empirical
+from .gaussian import MultiHeadGaussian, MultivariateNormal
+from .mixture import Mixture, MixtureSameFamily
 
 DISTRIBUTIONS: dict[str, type[Distribution]] = {
     "Dirac"              : Dirac,
