@@ -11,8 +11,9 @@ from typing import Optional
 import torch
 from torch import Tensor, nn
 
-from linodenet.filters.base import CellBase
 from signatures import signature
+
+from .base import CellBase
 
 
 class LinearCell(CellBase):

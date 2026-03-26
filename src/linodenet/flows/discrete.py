@@ -10,8 +10,9 @@ from typing import Protocol
 
 from torch import Tensor
 
-from linodenet.flows.base import Flow, FlowBase
 from signatures import signature
+
+from .base import Flow, FlowBase
 
 
 class DiscreteFlow(Flow, Protocol):

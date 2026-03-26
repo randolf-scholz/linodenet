@@ -12,9 +12,10 @@ from collections.abc import Iterable
 import torch
 from torch import Tensor, nn
 
-from linodenet.filters.base import Cell, CellBase
 from linodenet.nn import ModuleSequence
 from signatures import signature
+
+from .base import Cell, CellBase
 
 
 class CellList[C: CellBase](CellBase, ModuleSequence[C]):

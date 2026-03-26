@@ -83,7 +83,7 @@ __all__ = [
     "tokenize",
     "signature",
 ]
-from signatures.signatures import (
+from .signatures import (
     Arg,
     ArgList,
     ArgType,

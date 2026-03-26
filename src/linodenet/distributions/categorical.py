@@ -8,7 +8,7 @@ from typing import Optional, override
 import torch
 from torch import Tensor
 
-from linodenet.distributions.base import DistributionBase
+from .base import DistributionBase
 
 
 class Categorical(DistributionBase):

@@ -20,11 +20,12 @@ from torch import Tensor, nn
 from torch.linalg import vecdot
 
 from linodenet.domains import MatrixDomains, VectorDomains
-from linodenet.mappings.base import SurjectionBase
-from linodenet.mappings.bijections import CayleyMap
-from linodenet.mappings.functional import skew_symmetric
 from linodenet_special import matrix_log, matrix_sqrt
 from signatures import signature
+
+from .base import SurjectionBase
+from .bijections import CayleyMap
+from .functional import skew_symmetric
 
 
 class PositiveSemiDefinite(SurjectionBase):

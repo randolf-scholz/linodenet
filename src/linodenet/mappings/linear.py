@@ -30,9 +30,10 @@ from typing import Final, override
 import torch
 from torch import Tensor, nn
 
-from linodenet.mappings.projections import Contraction, UnitVector
-from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
+
+from .projections import Contraction, UnitVector
+from .surjections import OrthogonalHouseholder
 
 
 class LinearContraction(nn.Linear):

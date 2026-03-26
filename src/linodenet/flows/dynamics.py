@@ -10,7 +10,7 @@ __all__ = [
     "LinearFlow",
 ]
 
-from linodenet.flows.base import Flow, FlowBase
-from linodenet.flows.continuous import ContinuousFlow, ContinuousFlowBase
-from linodenet.flows.discrete import DiscreteFlow, DiscreteFlowBase
-from linodenet.flows.linear import LinearFlow
+from .base import Flow, FlowBase
+from .continuous import ContinuousFlow, ContinuousFlowBase
+from .discrete import DiscreteFlow, DiscreteFlowBase
+from .linear import LinearFlow

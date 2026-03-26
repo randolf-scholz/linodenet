@@ -39,7 +39,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, distributions as dist, nn
 
-from linodenet.distributions.base import DistributionBase
+from .base import DistributionBase
 
 
 class MultivariateNormal(dist.MultivariateNormal):

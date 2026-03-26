@@ -6,10 +6,11 @@ from typing import Final, Optional
 
 from torch import Tensor, nn
 
-from linodenet.nn.containers import ModuleSequence
-from linodenet.nn.reverse_dense import ReverseDense
-from linodenet.nn.rezero import ReZero
 from signatures import signature
+
+from .containers import ModuleSequence
+from .reverse_dense import ReverseDense
+from .rezero import ReZero
 
 
 class ResNet(ModuleSequence[nn.Module]):

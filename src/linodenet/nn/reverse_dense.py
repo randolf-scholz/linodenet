@@ -8,8 +8,9 @@ from typing import Final, Optional
 
 from torch import Tensor, nn
 
-from linodenet.nn.activations import Activation, get_activation
 from signatures import signature
+
+from .activations import Activation, get_activation
 
 
 class ReverseDense(nn.Module):

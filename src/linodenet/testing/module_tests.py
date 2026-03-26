@@ -18,7 +18,8 @@ import torch
 from torch import Tensor, nn
 
 from linodenet.constants import ATOL, RTOL
-from linodenet.testing.statistics import is_standardized
+
+from .statistics import is_standardized
 
 
 class ModuleTest(Protocol):

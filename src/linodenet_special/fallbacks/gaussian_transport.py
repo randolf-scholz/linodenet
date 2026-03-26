@@ -16,8 +16,8 @@ from torch import Tensor
 from torch.autograd import Function
 from torch.special import log_ndtr
 
-from linodenet_special.fallbacks.hard_bend import hard_bend
-from linodenet_special.fallbacks.ndtri_exp import ndtri_exp
+from .hard_bend import hard_bend
+from .ndtri_exp import ndtri_exp
 
 
 def _bimodal_to_gaussian_forward(

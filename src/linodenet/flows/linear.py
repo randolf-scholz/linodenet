@@ -8,12 +8,13 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, nn
 
-from linodenet.flows.continuous import ContinuousFlowBase
 from linodenet.initializations import INITIALIZATIONS, Initialization
 from linodenet.mappings import MATRIX_PROJECTION_FNS
 from linodenet.mappings.functional import identity as identity_map
 from linodenet.types import SelfMap
 from signatures import signature
+
+from .continuous import ContinuousFlowBase
 
 
 class LinearFlow(ContinuousFlowBase):

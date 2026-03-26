@@ -37,7 +37,7 @@ __all__ = [
     "blueprint_to_json",
 ]
 
-from blueprint.config import (
+from .config import (
     SupportsConfig,
     SupportsDefaultConfig,
     SupportsFromConfig,
@@ -45,7 +45,7 @@ from blueprint.config import (
     has_default_config,
     is_config,
 )
-from blueprint.core import (
+from .core import (
     BLUEPRINT_REGISTRY,
     INFER_ARGS_REGISTRY,
     JSON,
@@ -61,7 +61,7 @@ from blueprint.core import (
     is_blueprint,
     validate_blueprint,
 )
-from blueprint.torch import (
+from .torch import (
     ModelBlueprint,
     TensorBlueprint,
     is_model_blueprint,

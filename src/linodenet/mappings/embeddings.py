@@ -21,8 +21,9 @@ from torch import Tensor, nn
 from torch.nn import functional
 
 from linodenet.domains import VectorDomains
-from linodenet.mappings.base import EmbeddingBase
 from signatures import signature
+
+from .base import EmbeddingBase
 
 
 class ConcatEmbedding(EmbeddingBase):

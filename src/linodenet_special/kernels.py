@@ -22,9 +22,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Final
 
-from linodenet_special import compiled, fallbacks
-from linodenet_special.compiled import WRAPPED_KERNELS
-from linodenet_special.interfaces import (
+from . import compiled, fallbacks
+from .compiled import WRAPPED_KERNELS
+from .interfaces import (
     BimodalToGaussian,
     GaussianToBimodal,
     GaussianToMixture,

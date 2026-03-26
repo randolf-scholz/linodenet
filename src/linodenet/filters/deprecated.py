@@ -15,10 +15,11 @@ from collections.abc import Iterable
 import torch
 from torch import Tensor, nn
 
-from linodenet.filters.base import CellBase, FilterBase
-from linodenet.filters.kalman_cell import _Alpha
 from linodenet.nn import ModuleSequence
 from signatures import signature
+
+from .base import CellBase, FilterBase
+from .kalman_cell import _Alpha
 
 
 class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):

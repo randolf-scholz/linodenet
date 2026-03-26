@@ -39,8 +39,9 @@ from typing import Optional, SupportsFloat
 import torch
 from torch import Tensor, nn
 
-from linodenet.filters.base import CellBase
 from signatures import signature
+
+from .base import CellBase
 
 
 class _Alpha(float, Enum):

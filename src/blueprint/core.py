@@ -44,7 +44,7 @@ from typing import (
 
 from typing_extensions import TypedDict
 
-from blueprint.config import SupportsFromConfig, has_config, is_config
+from .config import SupportsFromConfig, has_config, is_config
 
 type Makes[T] = T | type[T] | Blueprint[T]
 type FilePath = str | os.PathLike[str]

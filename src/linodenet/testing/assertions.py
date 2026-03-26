@@ -35,7 +35,9 @@ from torch import Tensor, jit
 from torch.nn import Module
 
 from linodenet.constants import EMPTY_MAP
-from linodenet.testing.utils import (
+from linodenet.types import Nested, Scalar
+
+from .utils import (
     get_device,
     get_grads,
     get_norm,
@@ -45,7 +47,6 @@ from linodenet.testing.utils import (
     to_device,
     zero_grad,
 )
-from linodenet.types import Nested, Scalar
 
 type Tree = Nested[Tensor | Scalar]
 type Func = Callable[..., Nested[Tensor]]

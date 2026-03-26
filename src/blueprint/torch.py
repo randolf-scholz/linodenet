@@ -21,7 +21,7 @@ from typing import Any, NotRequired, ReadOnly, TypeGuard
 from torch import Tensor, nn
 from torch.export import ExportedProgram
 
-from blueprint.core import (
+from .core import (
     BLUEPRINT_REGISTRY,
     INFER_ARGS_REGISTRY,
     JSON,

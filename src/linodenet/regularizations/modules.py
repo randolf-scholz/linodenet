@@ -40,7 +40,10 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 
-from linodenet.regularizations.functional import (
+from linodenet.types import BoolTensor
+from signatures import signature
+
+from .functional import (
     banded,
     contraction,
     diagonal,
@@ -65,8 +68,6 @@ from linodenet.regularizations.functional import (
     unit_vector,
     upper_triangular,
 )
-from linodenet.types import BoolTensor
-from signatures import signature
 
 
 class RegularizationBase(nn.Module):

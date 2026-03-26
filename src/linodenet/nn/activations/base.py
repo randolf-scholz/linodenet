@@ -80,7 +80,7 @@ def get_activation(arg: object, /, **cfg: object) -> nn.Module:
         # if a name, look up in the dictionary
         case str(name):
             # avoid circular import
-            from linodenet.nn.activations import ACTIVATIONS  # noqa: PLC0415
+            from . import ACTIVATIONS  # noqa: PLC0415
 
             match ACTIVATIONS.get(name):
                 case None:

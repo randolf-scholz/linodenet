@@ -10,8 +10,9 @@ from typing import Final, Optional
 import torch
 from torch import Tensor
 
-from linodenet.distributions.base import DistributionBase
 from signatures import signature
+
+from .base import DistributionBase
 
 
 class Empirical(DistributionBase):

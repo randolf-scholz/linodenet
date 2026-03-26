@@ -11,20 +11,20 @@ __all__ = [
 from collections.abc import Callable as Fn, Iterator, Mapping
 from dataclasses import dataclass, fields
 
-from linodenet.domains import Domain
-from linodenet.initializations import INITIALIZATIONS
-from linodenet.mappings import BIJECTIONS, PROJECTION_FNS, SURJECTIONS
-from linodenet.parametrizations import (
+from .domains import Domain
+from .initializations import INITIALIZATIONS
+from .mappings import BIJECTIONS, PROJECTION_FNS, SURJECTIONS
+from .parametrizations import (
     MATRIX_PARAMETRIZATIONS,
     PARAMETRIZATIONS,
     VECTOR_PARAMETRIZATIONS,
 )
-from linodenet.regularizations import (
+from .regularizations import (
     REGULARIZATION_FNS_WITH_ARGS,
     REGULARIZATION_FNS_WITHOUT_ARGS,
     REGULARIZATIONS,
 )
-from linodenet.testing import MATRIX_TESTS, VECTOR_TESTS, is_orthogonal
+from .testing import MATRIX_TESTS, VECTOR_TESTS, is_orthogonal
 
 
 @dataclass(slots=True)

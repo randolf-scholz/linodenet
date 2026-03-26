@@ -43,9 +43,10 @@ from torch import Tensor
 import linodenet.mappings.functional as F
 from linodenet.constants import ATOL, RTOL
 from linodenet.domains import MatrixDomains, VectorDomains
-from linodenet.mappings.base import ProjectionBase
 from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
+
+from .base import ProjectionBase
 
 
 class LipschitzBounded(ProjectionBase):

@@ -224,7 +224,7 @@ def get_filter(arg: object, /, **cfg: object) -> Filter:
     match arg:
         # if a name, look up in the dictionary
         case str(name):
-            from linodenet.filters import FILTERS  # noqa: PLC0415
+            from . import FILTERS  # noqa: PLC0415
 
             try:
                 obj = FILTERS[name]

@@ -11,7 +11,7 @@ __all__ = [
 import torch
 from torch import Tensor, nn
 
-from linodenet_special.fallbacks import (
+from .fallbacks import (
     bimodal_to_gaussian,
     gaussian_to_bimodal,
     gaussian_to_mixture,

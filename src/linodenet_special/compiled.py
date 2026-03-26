@@ -25,7 +25,7 @@ from typing import Any, Final, Optional
 import torch
 from torch import Tensor
 
-from linodenet_special.interfaces import (
+from .interfaces import (
     BimodalToGaussian,
     GaussianToBimodal,
     GaussianToMixture,
