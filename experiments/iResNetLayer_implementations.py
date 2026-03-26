@@ -17,11 +17,10 @@ from typing import Final, Optional
 import numpy as np
 import torch
 from scipy.spatial import distance_matrix
+from tests.testing import timer
 from torch import Tensor, jit, nn
 from torch.linalg import matrix_norm
 from torch.nn import functional
-
-from utils.timer import timer
 
 
 class NaiveContraction(nn.Module):
