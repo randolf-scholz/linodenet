@@ -48,6 +48,11 @@ Note that `torch.distributions.Transform` has some differences:
 """
 
 __all__ = [
+    # ABCs and Protocols
+    "Transform",
+    "TransformBase",
+    "InverseTransform",
+    "TransformSequence",
     # classes
     "IResNet",
     "LowRankTransform",
@@ -58,6 +63,7 @@ __all__ = [
     "ResidualContractionFallback",
 ]
 
+from .base import InverseTransform, Transform, TransformBase, TransformSequence
 from .iresnet import IResNet
 from .linear_rational_spline import SplineTransform
 from .low_rank import LowRankTransform

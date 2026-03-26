@@ -10,7 +10,7 @@ from torch import Tensor, nn
 
 from signatures import signature
 
-from ..base import TransformBase
+from .base import TransformBase
 
 
 class TriangularTransform(TransformBase):

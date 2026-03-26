@@ -6,13 +6,14 @@ from typing import Final, Optional
 
 from torch import nn
 
-from linodenet.mappings.base import TransformSequence
 from linodenet.mappings.linear import LinearContraction
-from linodenet.mappings.transforms.residual_contraction import (
+from linodenet.nn.activations import get_activation
+
+from .base import TransformSequence
+from .residual_contraction import (
     ResidualContraction,
     ReZeroContraction,
 )
-from linodenet.nn.activations import get_activation
 
 
 class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):

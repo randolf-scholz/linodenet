@@ -5,12 +5,12 @@ from torch import Tensor, nn
 from torch.nn.functional import mse_loss
 
 from linodenet.mappings import (
+    LinearContraction,
     ResidualContraction,
     ResidualContractionFallback,
     ReZeroContraction,
     TransformBase,
 )
-from linodenet.mappings.linear import LinearContraction
 from linodenet.nn.parametrize import update_parametrizations
 from tests.testing import DEVICES, DTYPES, SEEDS_5, TestCase, pytest_xfail
 

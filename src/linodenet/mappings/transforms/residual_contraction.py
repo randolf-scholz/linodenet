@@ -12,11 +12,12 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 
-from linodenet.mappings.base import TransformBase
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet.nn import ReZero
 from linodenet_special import fixpoint_solve
 from linodenet_special.trace_estimation import LogabsdetSeriesEstimator
+
+from .base import TransformBase
 
 
 class ResidualContraction(TransformBase):
