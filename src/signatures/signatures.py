@@ -324,11 +324,11 @@ class Token:
     @overload
     def __init__(self, pos: int, kind: TokenKind) -> None: ...
     def __init__(self, pos: int, kind: TokenKind, value: str | None = None) -> None:
-        if kind in (TokenKind.IDENT, TokenKind.NUMBER) and value is None:
+        if kind in {TokenKind.IDENT, TokenKind.NUMBER} and value is None:
             raise AssertionError("IDENT and INT tokens require a value")
-        if kind not in (TokenKind.IDENT, TokenKind.NUMBER) and value is not None:
+        if kind not in {TokenKind.IDENT, TokenKind.NUMBER} and value is not None:
             raise AssertionError("Only IDENT and INT tokens may carry custom values")
-        if kind not in (TokenKind.IDENT, TokenKind.NUMBER):
+        if kind not in {TokenKind.IDENT, TokenKind.NUMBER}:
             assert value is None
             value = kind.value
 
