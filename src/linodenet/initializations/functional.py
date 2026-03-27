@@ -28,8 +28,7 @@ from math import prod, sqrt
 from typing import Optional, Protocol, runtime_checkable
 
 import torch
-from scipy import stats
-from torch import Tensor, device as Device, dtype as Dtype
+from torch import Tensor
 
 
 @runtime_checkable
@@ -43,8 +42,8 @@ class Initialization(Protocol):
         *,
         # TODO: Add `generator` argument to all initializations.
         # generator: Optional[Generator] = None,
-        dtype: Optional[Dtype] = None,
-        device: Optional[str | Device] = None,
+        dtype: Optional[torch.dtype] = None,
+        device: Optional[str | torch.device] = None,
     ) -> Tensor:
         r"""Create a random matrix of shape `n`."""
         ...
@@ -56,8 +55,8 @@ def gaussian(
     loc: float = 0.0,
     scale: float = 1.0,
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
 
@@ -75,8 +74,8 @@ def gaussian(
 def diagonally_dominant(
     size: int | tuple[int, ...],
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a random diagonally dominant matrix.
 
@@ -101,8 +100,8 @@ def diagonally_dominant(
 def symmetric(
     size: int | tuple[int, ...],
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a symmetric matrix, i.e. $Aᵀ = A$.
 
@@ -127,8 +126,8 @@ def symmetric(
 def skew_symmetric(
     size: int | tuple[int, ...],
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a random skew-symmetric matrix, i.e. $Aᵀ = -A$.
 
@@ -146,30 +145,37 @@ def skew_symmetric(
 def orthogonal(
     size: int | tuple[int, ...],
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a random orthogonal matrix, i.e. $Aᵀ = A$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+
+    We sample a Gaussian matrix and take its QR factorization, then fix the signs
+    using the diagonal of $R$ so the result matches the standard Haar sampler.
     """
     # convert to tuple
     tup = (size,) if isinstance(size, int) else tuple(size)
     batch, dim = tup[:-1], tup[-1]
-    num = prod(batch)
-    shape = (*batch, dim, dim)
 
-    A = stats.ortho_group.rvs(dim=dim, size=num).reshape(shape)
-    if dtype is None:
-        dtype = torch.float32
-    return torch.from_numpy(A).to(dtype=dtype, device=device)
+    shape = (*batch, dim, dim)
+    A = torch.randn(shape, dtype=dtype, device=device)
+    # QR of a Gaussian matrix gives an orthogonal factor with the correct law
+    # up to independent sign flips encoded in diag(R).
+    Q, R = torch.linalg.qr(A)
+    d = torch.diagonal(R, dim1=-2, dim2=-1)
+    # Flip the columns of Q so diag(R) is positive, matching SciPy's construction.
+    one = torch.ones_like(d)
+    signs = torch.where(d == 0, one, -one)
+    return Q * signs.unsqueeze(-2)
 
 
 def special_orthogonal(
     size: int | tuple[int, ...],
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a random special orthogonal matrix, i.e. $Aᵀ = A⁻¹$ with $\det(A)=1$.
 
@@ -181,6 +187,8 @@ def special_orthogonal(
     num = prod(batch)
     shape = (*batch, dim, dim)
 
+    from scipy import stats
+
     A = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
     if dtype is None:
         dtype = torch.float32
@@ -191,8 +199,8 @@ def low_rank(
     size: int | tuple[int, ...],
     rank: int = 1,
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a random low-rank m×n matrix, i.e. $A = UVᵀ$.
 
@@ -220,8 +228,8 @@ def low_rank(
 def traceless(
     size: int | tuple[int, ...],
     *,
-    dtype: Optional[Dtype] = None,
-    device: Optional[str | Device] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
 ) -> Tensor:
     r"""Sample a random traceless matrix, i.e. $\tr(A)=0$.
 
@@ -239,8 +247,8 @@ def traceless(
 def symplectic(
     size: int | tuple[int, ...],
     *,
-    device: Optional[str | Device] = None,
-    dtype: Optional[Dtype] = None,
+    device: Optional[str | torch.device] = None,
+    dtype: Optional[torch.dtype] = None,
 ) -> Tensor:
     r"""Return the canonical symplectic matrix of size $n=2k$.
 
