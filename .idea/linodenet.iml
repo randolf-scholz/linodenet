@@ -239,7 +239,6 @@
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet_special/reports" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet_special/tests/.benchmarks" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet_special/tests/reports" />
-      <excludeFolder url="file://$MODULE_DIR$/tests/.results" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
     <orderEntry type="jdk" jdkName="uv (linodenet)" jdkType="Python SDK" />
