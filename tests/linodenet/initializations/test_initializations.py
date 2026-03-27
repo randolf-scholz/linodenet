@@ -99,6 +99,36 @@ class TestCorrectness(TestCase):
         result = matrix_test(matrix, **KWARGS[name])
         assert torch.all(result).item()
 
+    @pytest.mark.parametrize(
+        ("batch_shape", "expected_batch_shape"),
+        [
+            pytest.param(3, (3,), id="int"),
+            pytest.param((), (), id="empty-tuple"),
+            pytest.param((3,), (3,), id="1d-tuple"),
+            pytest.param((3, 5), (3, 5), id="2d-tuple"),
+            pytest.param((3, 5, 7), (3, 5, 7), id="3d-tuple"),
+        ],
+    )
+    def test_shapes(
+        self,
+        *,
+        name: str,
+        batch_shape: int | tuple[int, ...],
+        expected_batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Validate that initializations accept different batch-shape formats."""
+        torch.manual_seed(self.SEED)
+        SIZE = 4
+        if name == "thomson":
+            pytest.skip("Thomson initialization samples sphere points, not matrices.")
+
+        kwargs = defaultdict(dict)
+        kwargs["low_rank"] = {"rank": 2}
+        initialization = INITIALIZATION_FNS[name]
+
+        matrix = initialization(batch_shape, (SIZE, SIZE), **kwargs[name])
+        assert matrix.shape == (*expected_batch_shape, SIZE, SIZE)
+
 
 class TestVisualization(TestCase):
     r"""Exercise visualization-only branches for initialization diagnostics."""
