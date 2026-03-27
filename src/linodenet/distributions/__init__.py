@@ -71,19 +71,22 @@ __all__ = [
     "MultiHeadGaussian",
     "Categorical",
     "MixtureSameFamily",
+    "MarchenkoPastur",
 ]
 
 from .base import Distribution, DistributionBase
 from .categorical import Categorical
 from .empirical import Dirac, Empirical
 from .gaussian import MultiHeadGaussian, MultivariateNormal
+from .marchenko_pastur import MarchenkoPastur
 from .mixture import Mixture, MixtureSameFamily
 
 DISTRIBUTIONS: dict[str, type[Distribution]] = {
-    "Dirac"              : Dirac,
-    "Empirical"          : Empirical,
-    "Categorical"        : Categorical,
-    "MultiHeadGaussian"  : MultiHeadGaussian,
-    "MixtureSameFamily"  : MixtureSameFamily,
+    "Dirac"             : Dirac,
+    "Empirical"         : Empirical,
+    "Categorical"       : Categorical,
+    "MultiHeadGaussian" : MultiHeadGaussian,
+    "MixtureSameFamily" : MixtureSameFamily,
+    "MarchenkoPastur"   : MarchenkoPastur,
 }  # fmt: skip
 r"""Dictionary of all available distributions."""

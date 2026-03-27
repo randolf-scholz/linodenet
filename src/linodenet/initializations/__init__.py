@@ -18,6 +18,7 @@ __all__ = [
 
 from . import functional, modules
 from .functional import *
+from .thomson_initialization import thomson_initialization
 
 __all__ += functional.__all__
 
@@ -31,5 +32,6 @@ INITIALIZATIONS: dict[str, Initialization] = {
     "special_orthogonal"  : functional.special_orthogonal,
     "symmetric"           : functional.symmetric,
     "traceless"           : functional.traceless,
+    "thomson"             : thomson_initialization,
 }  # fmt: skip
 r"""Dictionary containing all available initializations."""

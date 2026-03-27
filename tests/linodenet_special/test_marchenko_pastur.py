@@ -7,7 +7,7 @@ import pytest
 import torch
 from scipy.stats import ortho_group
 
-from linodenet_special.marchenko_pastur import MarchenkoPastur
+from linodenet.distributions import MarchenkoPastur
 from tests.testing import DTYPES, PROJECT, SEED
 
 

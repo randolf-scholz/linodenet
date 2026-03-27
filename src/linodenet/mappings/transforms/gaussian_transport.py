@@ -1,17 +1,15 @@
-r"""Learnable transport maps between special distributions."""
-
 __all__ = [
     "GaussianToMixture",
-    "GaussianToTwin",
     "MixtureToGaussian",
-    "TwinToGaussian",
+    "GaussianToBimodal",
+    "BimodalToGaussian",
 ]
 
 
 import torch
 from torch import Tensor, nn
 
-from .fallbacks import (
+from linodenet_special import (
     bimodal_to_gaussian,
     gaussian_to_bimodal,
     gaussian_to_mixture,
@@ -73,7 +71,7 @@ class MixtureToGaussian(nn.Module):
         return gaussian_to_mixture(x, w, mu, sigma)
 
 
-class GaussianToTwin(nn.Module):
+class GaussianToBimodal(nn.Module):
     r"""Learnable transport map from a Gaussian distribution to a bimodal distribution."""
 
     def __init__(self) -> None:
@@ -96,7 +94,7 @@ class GaussianToTwin(nn.Module):
         return bimodal_to_gaussian(x, mu, sigma)
 
 
-class TwinToGaussian(nn.Module):
+class BimodalToGaussian(nn.Module):
     r"""Learnable transport map from a bimodal distribution to a Gaussian distribution."""
 
     def __init__(self) -> None:

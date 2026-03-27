@@ -11,7 +11,7 @@ from numpy.random import default_rng
 from scipy.stats import ortho_group
 from torch import Tensor, nn
 
-from linodenet_special.marchenko_pastur import MarchenkoPastur
+from linodenet.distributions import MarchenkoPastur
 
 
 class ExampleWithKnownSVD(NamedTuple):

@@ -1,6 +1,6 @@
 import pytest
 
-from linodenet_special.thomson_initialization import (
+from linodenet.initializations.thomson_initialization import (
     OptimizerStatus,
     thomson_initialization,
 )
