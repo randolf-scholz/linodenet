@@ -8,7 +8,7 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, nn
 
-from linodenet.initializations import INITIALIZATIONS, Initialization
+from linodenet.initializations import INITIALIZATION_FNS, Initialization
 from linodenet.mappings import MATRIX_PROJECTION_FNS
 from linodenet.mappings.functional import identity as identity_map
 from linodenet.types import SelfMap
@@ -78,7 +78,7 @@ class LinearFlow(ContinuousFlowBase):
             r"""Dispatch the kernel initialization."""
             match kernel_initialization:
                 case str(key):
-                    init = INITIALIZATIONS[key.replace("-", "_")]
+                    init = INITIALIZATION_FNS[key.replace("-", "_")]
                     return lambda: init(input_size)
                 case Callable() as func:
                     tensor = Tensor(func(input_size))
