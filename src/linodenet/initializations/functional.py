@@ -8,8 +8,6 @@ Notes:
 """
 
 __all__ = [
-    # ABCs & Protocols
-    "Initialization",
     # Deterministic Initializations
     "symplectic",
     # Initializations
@@ -23,56 +21,60 @@ __all__ = [
     "traceless",
 ]
 
-from collections.abc import Sequence
 from math import sqrt
-from typing import Optional, Protocol, runtime_checkable
+from typing import Optional
 
 import torch
 from torch import Tensor
 
 
-@runtime_checkable
-class Initialization(Protocol):
-    r"""Protocol for Initializations."""
+def _normalize_sample_shape(size: int | tuple[int, ...], /) -> tuple[int, ...]:
+    r"""Normalize sample shape arguments."""
+    return (size,) if isinstance(size, int) else tuple(size)
 
-    def __call__(
-        self,
-        size: int | tuple[int, ...],
-        /,
-        *,
-        # TODO: Add `generator` argument to all initializations.
-        # generator: Optional[Generator] = None,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
-    ) -> Tensor:
-        r"""Create a random matrix of shape `n`."""
-        ...
+
+def _normalize_matrix_dim(dim: int | tuple[int, int], /) -> tuple[int, int]:
+    r"""Normalize matrix dimensions."""
+    shape = (dim, dim) if isinstance(dim, int) else tuple(dim)
+    if len(shape) != 2:
+        raise ValueError(f"Expected a matrix shape, got {shape}.")
+    return shape
+
+
+def _normalize_square_dim(dim: int | tuple[int, int], /) -> int:
+    r"""Normalize square matrix dimensions."""
+    m, n = _normalize_matrix_dim(dim)
+    if m != n:
+        raise ValueError(f"Expected a square matrix shape, got {(m, n)}.")
+    return m
 
 
 # region initializations ---------------------------------------------------------------
 def gaussian(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, ...] = (),
+    *,
     loc: float = 0.0,
     scale: float = 1.0,
-    *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
-    r"""Sample a random gaussian matrix, i.e. $A_{ij}∼𝓝(0,1/n)$.
+    r"""Sample a random Gaussian tensor.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$ if $σ=1$.
-
-    If n is `tuple`, the last axis is interpreted as dimension and the others as batch.
+    `size` is interpreted as sample shape and `dim` as the event shape.
+    The standard deviation is normalized by the last event axis when present.
     """
-    tup = (size,) if isinstance(size, int) else tuple(size)
-    batch, dim = tup[:-1], tup[-1]
-    shape = (*batch, dim, dim)
+    batch = _normalize_sample_shape(size)
+    event = (dim,) if isinstance(dim, int) else tuple(dim)
+    shape = (*batch, *event)
+    std = scale if len(event) == 0 else scale / sqrt(event[-1])
     mean = torch.full(shape, loc, dtype=dtype, device=device)
-    return torch.normal(mean=mean, std=scale / sqrt(dim))
+    return torch.normal(mean=mean, std=std)
 
 
 def diagonally_dominant(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 1,
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -87,18 +89,19 @@ def diagonally_dominant(
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
-    If n is `tuple`, the last axis is interpreted as dimension and the others as batch.
+    `size` is interpreted as sample shape and `dim` as the matrix dimension.
     """
-    dim = size[-1] if isinstance(size, tuple) else size
-    B = traceless(size, dtype=dtype, device=device)
+    n = _normalize_square_dim(dim)
+    B = traceless(size, dim=n, dtype=dtype, device=device)
     # calculate 1-norm of B
-    eye = torch.eye(dim, dtype=dtype, device=device)
+    eye = torch.eye(n, dtype=dtype, device=device)
     # for diagonal dominance, we need to multiply
     return eye + B / B.abs().sum(dim=(-2, -1), keepdim=True)
 
 
 def symmetric(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 1,
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -114,17 +117,17 @@ def symmetric(
        The variance of off-diagonal elements is then $2σ²/4$, so we need to scale by $√2$.
        The variance of diagonal elements is $4σ²/4$, so we don't need to scale.
     """
-    # convert to tuple
-    tup = (size,) if isinstance(size, int) else tuple(size)
-    batch, dim = tup[:-1], tup[-1]
-    shape = (*batch, dim, dim)
+    batch = _normalize_sample_shape(size)
+    n = _normalize_square_dim(dim)
+    shape = (*batch, n, n)
     mean = torch.zeros(shape, dtype=dtype, device=device)
-    A = torch.normal(mean=mean, std=1 / sqrt(dim))
+    A = torch.normal(mean=mean, std=1 / sqrt(n))
     return A.triu() + A.triu(1).swapaxes(-2, -1)
 
 
 def skew_symmetric(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 1,
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -133,33 +136,34 @@ def skew_symmetric(
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
-    # convert to tuple
-    tup = (size,) if isinstance(size, int) else tuple(size)
-    batch, dim = tup[:-1], tup[-1]
-    shape = (*batch, dim, dim)
+    batch = _normalize_sample_shape(size)
+    n = _normalize_square_dim(dim)
+    shape = (*batch, n, n)
     mean = torch.zeros(shape, dtype=dtype, device=device)
-    A = torch.normal(mean=mean, std=1 / sqrt(dim))
+    A = torch.normal(mean=mean, std=1 / sqrt(n))
     return A.triu() - A.triu().swapaxes(-2, -1)
 
 
 def orthogonal(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 1,
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
-    r"""Sample a random orthogonal matrix, i.e. $Aᵀ = A$.
+    r"""Sample a random matrix with orthonormal columns.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
     We sample a Gaussian matrix and take its QR factorization, then fix the signs
     using the diagonal of $R$ so the result matches the standard Haar sampler.
     """
-    # convert to tuple
-    tup = (size,) if isinstance(size, int) else tuple(size)
-    batch, dim = tup[:-1], tup[-1]
+    batch = _normalize_sample_shape(size)
+    m, n = _normalize_matrix_dim(dim)
+    if m < n:
+        raise ValueError(f"Expected a tall matrix shape with m >= n, got {(m, n)}.")
 
-    shape = (*batch, dim, dim)
+    shape = (*batch, m, n)
     A = torch.randn(shape, dtype=dtype, device=device)
     # QR of a Gaussian matrix gives an orthogonal factor with the correct law
     # up to independent sign flips encoded in diag(R).
@@ -171,7 +175,8 @@ def orthogonal(
 
 
 def special_orthogonal(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 1,
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -183,9 +188,9 @@ def special_orthogonal(
     We first sample from O(n) with the QR-based Haar sampler above, then flip the
     first col when the determinant is negative to project the sample into SO(n).
     """
-    Q = orthogonal(size, dtype=dtype, device=device)
-    dim = Q.shape[-1]
-    if dim == 0:
+    n = _normalize_square_dim(dim)
+    Q = orthogonal(size, dim=n, dtype=dtype, device=device)
+    if n == 0:
         return Q
 
     # Orthogonal matrices have determinant close to ±1. Flipping one column when
@@ -197,9 +202,10 @@ def special_orthogonal(
 
 
 def low_rank(
-    size: int | tuple[int, ...],
-    rank: int = 1,
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 1,
     *,
+    rank: int = 1,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
@@ -207,13 +213,9 @@ def low_rank(
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
-    if isinstance(size, int):
-        shape: tuple[int, ...] = (size, size)
-    elif isinstance(size, Sequence) and len(size) == 1:
-        shape = (size[0], size[0])
-    else:
-        shape = size
-
+    batch = _normalize_sample_shape(size)
+    m, n = _normalize_matrix_dim(dim)
+    shape = (*batch, m, n)
     *batch, m, n = shape
 
     if rank > min(m, n):
@@ -227,7 +229,8 @@ def low_rank(
 
 
 def traceless(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 1,
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -236,17 +239,17 @@ def traceless(
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
-    # convert to tuple
-    tup = (size,) if isinstance(size, int) else tuple(size)
-    A = gaussian(size, dtype=dtype, device=device)
+    n = _normalize_square_dim(dim)
+    A = gaussian(size, dim=(n, n), dtype=dtype, device=device)
     # FIXME: add normalization correction.
-    eye = torch.eye(tup[-1], dtype=dtype, device=device)
+    eye = torch.eye(n, dtype=dtype, device=device)
     return A - torch.einsum("...ij, ij -> ...ij", A, eye)
 
 
 # region canonical (deterministic) initializations -------------------------------------
 def symplectic(
-    size: int | tuple[int, ...],
+    size: int | tuple[int, ...] = (),
+    dim: int | tuple[int, int] = 2,
     *,
     device: Optional[str | torch.device] = None,
     dtype: Optional[torch.dtype] = None,
@@ -257,15 +260,14 @@ def symplectic(
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
     """
-    # convert to tuple
-    tup = (size,) if isinstance(size, int) else tuple(size)
-    batch, dim = tup[:-1], tup[-1]
-    if dim % 2 != 0:
+    batch = _normalize_sample_shape(size)
+    n = _normalize_square_dim(dim)
+    if n % 2 != 0:
         raise ValueError("The dimension must be divisible by 2!")
 
     # create J matrix
     J1 = torch.tensor([[0, 1], [-1, 0]], device=device, dtype=dtype)
-    eye = torch.eye(dim // 2, device=device, dtype=dtype)
+    eye = torch.eye(n // 2, device=device, dtype=dtype)
     J = torch.kron(J1, eye)
 
     # duplicate J for batch-size

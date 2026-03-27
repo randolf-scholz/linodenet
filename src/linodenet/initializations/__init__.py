@@ -13,16 +13,22 @@ __all__ = [
     "functional",
     "modules",
     # Constants
+    "INITIALIZATION_FNS",
     "INITIALIZATIONS",
+    # protocols
+    "InitializationFn",
+    "Initialization",
 ]
 
 from . import functional, modules
+from .base import Initialization, InitializationFn
 from .functional import *
+from .modules import *
 from .thomson_initialization import thomson_initialization
 
-__all__ += functional.__all__
+__all__ += functional.__all__ + modules.__all__
 
-INITIALIZATIONS: dict[str, Initialization] = {
+INITIALIZATION_FNS: dict[str, InitializationFn] = {
     "symplectic"          : functional.symplectic,
     "diagonally_dominant" : functional.diagonally_dominant,
     "gaussian"            : functional.gaussian,
@@ -34,4 +40,18 @@ INITIALIZATIONS: dict[str, Initialization] = {
     "traceless"           : functional.traceless,
     "thomson"             : thomson_initialization,
 }  # fmt: skip
-r"""Dictionary containing all available initializations."""
+r"""Dictionary containing all available initializations (functions)."""
+
+
+INITIALIZATIONS = {
+    "DiagonallyDominant" : modules.DiagonallyDominant,
+    "Gaussian"           : modules.Gaussian,
+    "LowRank"            : modules.LowRank,
+    "Orthogonal"         : modules.Orthogonal,
+    "SkewSymmetric"      : modules.SkewSymmetric,
+    "SpecialOrthogonal"  : modules.SpecialOrthogonal,
+    "Symmetric"          : modules.Symmetric,
+    "Symplectic"         : modules.Symplectic,
+    "Traceless"          : modules.Traceless,
+}  # fmt: skip
+r"""Dictionary containing all available initializations (nn.Modules)"""

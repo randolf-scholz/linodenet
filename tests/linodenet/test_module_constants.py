@@ -11,7 +11,8 @@ import linodenet as lib
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
 from linodenet.flows import FLOWS, Flow, FlowBase
 from linodenet.imputation import IMPUTERS, ImputerProtocol
-from linodenet.initializations import INITIALIZATIONS, Initialization
+from linodenet.initializations import INITIALIZATION_FNS
+from linodenet.initializations.base import Initialization
 from linodenet.mappings import (
     BIJECTIONS,
     EMBEDDINGS,
@@ -64,7 +65,7 @@ CASES: dict[str, Case] = {
     "surjections"         : Case(lib.surjections      , Surjection     , SurjectionBase     , SURJECTIONS        ),
     "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS              ),
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
-    "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATIONS    ),
+    "initializations"     : Case(lib.initializations, Initialization, None, INITIALIZATION_FNS),
     # "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_TESTS       ),
     "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
     "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS        ),
