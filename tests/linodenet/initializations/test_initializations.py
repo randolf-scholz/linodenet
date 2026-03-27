@@ -11,16 +11,17 @@ import torch
 
 from linodenet.initializations import INITIALIZATION_FNS
 from linodenet.registry import get_registry_entry
-from tests.testing import PROJECT
+from tests.testing import PROJECT, TestCase
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
 @pytest.mark.parametrize("name", INITIALIZATION_FNS)
-class TestCorrectness:
+class TestCorrectness(TestCase):
     r"""Validate correctness properties of initialization functions."""
 
     BATCH_SIZE = 10
+    SEED = 0
 
     @pytest.mark.parametrize("dim", [128], ids=lambda dim: f"{dim}x{dim}")
     @pytest.mark.parametrize("num_samples", [1024], ids=lambda size: f"{size=}")
@@ -34,6 +35,7 @@ class TestCorrectness:
         num_samples: int,
     ) -> None:
         r"""Test normalization property empirically for all initializations."""
+        torch.manual_seed(self.SEED)
         logger = logging.getLogger(name)
         logger.info("Testing...")
         if name == "thomson":
@@ -42,7 +44,7 @@ class TestCorrectness:
             warnings.warn("Requires up to 16GiB of RAM", UserWarning, stacklevel=2)
 
         KWARGS = defaultdict(dict)
-        KWARGS["low_rank"] = {"rank": 2}
+        KWARGS["low_rank"] = {"rank": dim // 4}
 
         matrix_dim: int | tuple[int, int] = dim
         if name == "gaussian":
@@ -80,6 +82,7 @@ class TestCorrectness:
         self, name: str, size: int, batch_size: int
     ) -> None:
         r"""Validate that the initializations give correct matrix properties."""
+        torch.manual_seed(self.SEED)
         if name == "thomson":
             pytest.skip("Thomson initialization samples sphere points, not matrices.")
         entry = get_registry_entry(name)
@@ -97,7 +100,7 @@ class TestCorrectness:
         assert torch.all(result).item()
 
 
-class TestVisualization:
+class TestVisualization(TestCase):
     r"""Exercise visualization-only branches for initialization diagnostics."""
 
     BATCH_SIZE = 256
