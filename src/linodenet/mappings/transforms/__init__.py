@@ -54,16 +54,26 @@ __all__ = [
     "InverseTransform",
     "TransformSequence",
     # classes
+    "BimodalToGaussian",
+    "GaussianToBimodal",
+    "GaussianToMixture",
     "IResNet",
     "LowRankTransform",
+    "MixtureToGaussian",
+    "ReZeroContraction",
+    "ResidualContraction",
+    "ResidualContractionFallback",
     "SplineTransform",
     "TriangularTransform",
-    "ResidualContraction",
-    "ReZeroContraction",
-    "ResidualContractionFallback",
 ]
 
 from .base import InverseTransform, Transform, TransformBase, TransformSequence
+from .gaussian_transport import (
+    BimodalToGaussian,
+    GaussianToBimodal,
+    GaussianToMixture,
+    MixtureToGaussian,
+)
 from .iresnet import IResNet
 from .linear_rational_spline import SplineTransform
 from .low_rank import LowRankTransform

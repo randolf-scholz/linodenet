@@ -1,3 +1,5 @@
+r"""Optimal transport maps from a Gaussian to a mixture of Gaussians."""
+
 __all__ = [
     "GaussianToMixture",
     "MixtureToGaussian",
