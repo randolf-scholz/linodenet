@@ -12,7 +12,7 @@ from collections.abc import Callable as Fn, Iterator, Mapping
 from dataclasses import dataclass, fields
 
 from .domains import Domain
-from .initializations import INITIALIZATIONS
+from .initializations import INITIALIZATION_FNS
 from .mappings import BIJECTIONS, PROJECTION_FNS, SURJECTIONS
 from .parametrizations import (
     MATRIX_PARAMETRIZATIONS,
@@ -234,7 +234,7 @@ def get_registry_entry(name: str, /) -> RegistryEntry:
 REGISTRY.register_mappings(SURJECTIONS)
 REGISTRY.register_mappings(BIJECTIONS)
 REGISTRY.register_mapping_fns(PROJECTION_FNS)
-REGISTRY.register_initializations(INITIALIZATIONS)
+REGISTRY.register_initializations(INITIALIZATION_FNS)
 REGISTRY.register_parametrizations(PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(MATRIX_PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(VECTOR_PARAMETRIZATIONS)
