@@ -36,7 +36,7 @@ from typing import Any, Optional
 import numpy as np
 import torch
 from numpy.random import Generator, default_rng
-from scipy.stats import ortho_group  # Haar-random orthogonal matrix
+from scipy.stats import ortho_group
 from torch import Tensor
 
 
@@ -450,6 +450,8 @@ def thomson_initialization(
     atol: float = 1e-5,
     rtol: float = 1e-5,
     patience: int = 5,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
     seed: Optional[int | Generator] = None,
 ) -> OptimizerResult:
     r"""Thomson initialization for sampling n points on the surface of a d-dimensional sphere.
@@ -470,24 +472,30 @@ def thomson_initialization(
         atol: absolute tolerance for convergence and constraint violation.
         rtol: relative tolerance for convergence and constraint violation.
         patience: number of iterations to look back for convergence check.
+        dtype: torch dtype of the returned points and optimization state.
+        device: torch device of the returned points and optimization state.
         seed: random seed for initialization.
 
     Returns:
         OptimizerResult
     """
-    x = torch.as_tensor(wide_angle_sphere_init(num, dim, seed=seed))
+    if dtype is None:
+        dtype = torch.float32
+
+    init_dtype = np.float64 if dtype is torch.float64 else np.float32
+    x_init = wide_angle_sphere_init(num, dim, dtype=init_dtype, seed=seed)
+    x = torch.as_tensor(
+        x_init,
+        dtype=dtype,
+        device=device,
+    )
     if num == 1 or dim == 1:
         return OptimizerResult(
             x=x,
             fun=0.0,
             jac=torch.zeros_like(x),
             success=True,
-            options={
-                "beta": beta,
-                "atol": atol,
-                "rtol": rtol,
-                "maxiter": maxiter,
-            },
+            options={"beta": beta, "atol": atol, "rtol": rtol, "maxiter": maxiter},
         )
 
     loss_fn = partial(loss_sep, beta=beta)
@@ -570,12 +578,7 @@ def thomson_initialization(
         loss_hist=loss_hist,
         grad_hist=grad_hist,
         maxcv=maxcv,
-        options={
-            "beta": beta,
-            "atol": atol,
-            "rtol": rtol,
-            "maxiter": maxiter,
-        },
+        options={"beta": beta, "atol": atol, "rtol": rtol, "maxiter": maxiter},
     )
 
     return result
