@@ -51,8 +51,8 @@ def _normalize_square_dim(dim: int | tuple[int, int], /) -> int:
 
 # region initializations ---------------------------------------------------------------
 def gaussian(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, ...] = (),
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, ...],
     *,
     loc: float = 0.0,
     scale: float = 1.0,
@@ -73,8 +73,8 @@ def gaussian(
 
 
 def diagonally_dominant(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 1,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -100,8 +100,8 @@ def diagonally_dominant(
 
 
 def symmetric(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 1,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -126,8 +126,8 @@ def symmetric(
 
 
 def skew_symmetric(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 1,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -145,8 +145,8 @@ def skew_symmetric(
 
 
 def orthogonal(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 1,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -175,8 +175,8 @@ def orthogonal(
 
 
 def special_orthogonal(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 1,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -202,8 +202,8 @@ def special_orthogonal(
 
 
 def low_rank(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 1,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     rank: int = 1,
     dtype: Optional[torch.dtype] = None,
@@ -229,8 +229,8 @@ def low_rank(
 
 
 def traceless(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 1,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
@@ -248,8 +248,8 @@ def traceless(
 
 # region canonical (deterministic) initializations -------------------------------------
 def symplectic(
-    size: int | tuple[int, ...] = (),
-    dim: int | tuple[int, int] = 2,
+    size: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     device: Optional[str | torch.device] = None,
     dtype: Optional[torch.dtype] = None,
