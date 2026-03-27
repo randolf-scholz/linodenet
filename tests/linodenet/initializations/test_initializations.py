@@ -62,6 +62,7 @@ def test_normalization_property(
 
     initialization = INITIALIZATIONS[name]
     matrices = initialization((num_runs, dim), **kwargs)  # (n_runs, dim, dim)
+    assert matrices.shape == (num_runs, dim, dim)
 
     # Batch compute A⋅x for num_samples of x and num_runs many samples of A
     x = torch.randn(num_runs, num_samples, dim)
