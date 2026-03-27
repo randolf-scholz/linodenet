@@ -49,19 +49,15 @@ class TestCorrectness:
             matrix_dim = (dim, dim)
 
         initialization = INITIALIZATION_FNS[name]
-        matrices = initialization(
-            (num_runs,), matrix_dim, **KWARGS[name]
-        )  # (n_runs, dim, dim)
+        matrices = initialization((num_runs,), matrix_dim, **KWARGS[name])  # (B, D, D)
         assert matrices.shape == (num_runs, dim, dim)
 
         # Batch compute A⋅x for num_samples of x and num_runs many samples of A
         x = torch.randn(num_runs, num_samples, dim)
-        y = torch.einsum(
-            "...kl, ...nl -> ...nk", matrices, x
-        )  # (n_runs, n_samples, dim)
-        y = y.flatten(start_dim=1)  # (n_runs, n_samples * dim)
-        means = torch.mean(y, dim=-1)  # (n_runs, )
-        stdvs = torch.std(y, dim=-1)  # (n_runs, )
+        y = torch.einsum("...kl, ...nl -> ...nk", matrices, x)  # (B, N, D)
+        y = y.flatten(start_dim=1)  # (B, N * D)
+        means = torch.mean(y, dim=-1)  # (B, )
+        stdvs = torch.std(y, dim=-1)  # (B, )
 
         # check if 𝐄[A⋅x] ≈ 0
         zeros = torch.zeros_like(means)
