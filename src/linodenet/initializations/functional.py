@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 from collections.abc import Sequence
-from math import prod, sqrt
+from math import sqrt
 from typing import Optional, Protocol, runtime_checkable
 
 import torch
@@ -166,8 +166,7 @@ def orthogonal(
     Q, R = torch.linalg.qr(A)
     d = torch.diagonal(R, dim1=-2, dim2=-1)
     # Flip the columns of Q so diag(R) is positive, matching SciPy's construction.
-    one = torch.ones_like(d)
-    signs = torch.where(d == 0, one, -one)
+    signs = torch.where(d == 0, torch.ones_like(d), d.sign())
     return Q * signs.unsqueeze(-2)
 
 
@@ -180,19 +179,21 @@ def special_orthogonal(
     r"""Sample a random special orthogonal matrix, i.e. $Aᵀ = A⁻¹$ with $\det(A)=1$.
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+
+    We first sample from O(n) with the QR-based Haar sampler above, then flip the
+    first col when the determinant is negative to project the sample into SO(n).
     """
-    # convert to tuple
-    tup = (size,) if isinstance(size, int) else tuple(size)
-    batch, dim = tup[:-1], tup[-1]
-    num = prod(batch)
-    shape = (*batch, dim, dim)
+    Q = orthogonal(size, dtype=dtype, device=device)
+    dim = Q.shape[-1]
+    if dim == 0:
+        return Q
 
-    from scipy import stats
-
-    A = stats.special_ortho_group.rvs(dim=dim, size=num).reshape(shape)
-    if dtype is None:
-        dtype = torch.float32
-    return torch.from_numpy(A).to(dtype=dtype, device=device)
+    # Orthogonal matrices have determinant close to ±1. Flipping one column when
+    # det(Q) is negative preserves orthogonality and forces the determinant to +1.
+    dets = torch.linalg.det(Q).unsqueeze(-1)  # (..., 1)
+    q = Q[..., 0]  # (..., d)
+    q = torch.where(dets > 0, q, -q)
+    return torch.cat([q.unsqueeze(-1), Q[..., 1:]], dim=-1)
 
 
 def low_rank(
