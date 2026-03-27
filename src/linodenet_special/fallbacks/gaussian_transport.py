@@ -429,6 +429,11 @@ def gaussian_to_bimodal(
 
     .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
 
+    The inverse map is not available in closed form and is computed with a
+    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
+    and `ndtri_exp`.
+
     so the returned value is the unique $x$ whose bimodal CDF equals $Φ(y)$.
     """
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
@@ -442,6 +447,9 @@ def bimodal_to_gaussian(
     r"""Map the symmetric mixture $½N(-μ,σ²) + ½N(μ,σ²)$ to $N(0,1)$.
 
     .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+
+    The transport is evaluated with numerically stable lower-tail and upper-tail
+    formulas based on `log_ndtr` and `ndtri_exp`.
     """
     mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
     sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
@@ -457,6 +465,11 @@ def gaussian_to_mixture(
 
     .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
 
+    The inverse map is not available in closed form and is computed with a
+    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
+    and `ndtri_exp`.
+
     so the returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
     """
     return _GaussianToMixture.apply(y, weights, mus, sigmas)
@@ -468,5 +481,8 @@ def mixture_to_gaussian(
     r"""Map the mixture $∑ₖ ωₖ N(μₖ,σₖ²)$ to $N(0,1)$.
 
     .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+
+    The transport is evaluated with numerically stable lower-tail and upper-tail
+    formulas based on `log_ndtr` and `ndtri_exp`.
     """
     return _MixtureToGaussian.apply(x, weights, mus, sigmas)

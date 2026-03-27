@@ -28,6 +28,9 @@ class BimodalToGaussian(TransformBase):
 
     with `inverse` evaluating the corresponding Gaussian-to-bimodal map.
 
+    The transport is evaluated with numerically stable lower-tail and upper-tail
+    formulas based on `log_ndtr` and `ndtri_exp`.
+
     Properties:
         - strictly increasing
         - smooth for $σ > 0$
@@ -65,6 +68,10 @@ class GaussianToBimodal(TransformBase):
     .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
 
     so `forward` returns the unique $x$ whose bimodal CDF matches $Φ(y)$.
+    The inverse map is not available in closed form and is computed with a
+    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
+    and `ndtri_exp`.
 
     Properties:
         - strictly increasing
@@ -101,6 +108,8 @@ class MixtureToGaussian(TransformBase):
     .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
 
     where $Φ$ is the standard normal CDF.
+    The transport is evaluated with numerically stable lower-tail and upper-tail
+    formulas based on `log_ndtr` and `ndtri_exp`.
 
     Properties:
         - strictly increasing in $x$
@@ -143,6 +152,10 @@ class GaussianToMixture(TransformBase):
     .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
 
     hence `forward` returns the unique $x$ with mixture CDF equal to $Φ(y)$.
+    The inverse map is not available in closed form and is computed with a
+    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
+    and `ndtri_exp`.
 
     Properties:
         - strictly increasing, since it is the inverse of a monotone CDF transport
