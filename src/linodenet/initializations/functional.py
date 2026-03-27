@@ -205,7 +205,7 @@ def low_rank(
     size: int | tuple[int, ...],
     dim: int | tuple[int, int],
     *,
-    rank: int = 1,
+    rank: int,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
@@ -215,8 +215,6 @@ def low_rank(
     """
     batch = _normalize_sample_shape(size)
     m, n = _normalize_matrix_dim(dim)
-    shape = (*batch, m, n)
-    *batch, m, n = shape
 
     if rank > min(m, n):
         raise ValueError("Rank must be smaller than min(m,n)")
