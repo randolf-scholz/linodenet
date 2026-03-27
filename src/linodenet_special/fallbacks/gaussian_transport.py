@@ -423,7 +423,14 @@ class _GaussianToMixture(Function):
 def gaussian_to_bimodal(
     y: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
 ) -> Tensor:
-    r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
+    r"""Map $N(0,1)$ to the symmetric mixture $½N(-μ,σ²) + ½N(μ,σ²)$.
+
+    This is the inverse of
+
+    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+
+    so the returned value is the unique $x$ whose bimodal CDF equals $Φ(y)$.
+    """
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
     return _GaussianToBimodalImpl.apply(y, mu, sigma)
@@ -432,7 +439,10 @@ def gaussian_to_bimodal(
 def bimodal_to_gaussian(
     x: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
 ) -> Tensor:
-    r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
+    r"""Map the symmetric mixture $½N(-μ,σ²) + ½N(μ,σ²)$ to $N(0,1)$.
+
+    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+    """
     mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
     sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
     return _BimodalToGaussianImpl.apply(x, mu, sigma)
@@ -441,12 +451,22 @@ def bimodal_to_gaussian(
 def gaussian_to_mixture(
     y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
-    r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
+    r"""Map $N(0,1)$ to the mixture $∑ₖ ωₖ N(μₖ,σₖ²)$.
+
+    This is the inverse of
+
+    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+
+    so the returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
+    """
     return _GaussianToMixture.apply(y, weights, mus, sigmas)
 
 
 def mixture_to_gaussian(
     x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
-    r"""Optimal Transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$."""
+    r"""Map the mixture $∑ₖ ωₖ N(μₖ,σₖ²)$ to $N(0,1)$.
+
+    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+    """
     return _MixtureToGaussian.apply(x, weights, mus, sigmas)
