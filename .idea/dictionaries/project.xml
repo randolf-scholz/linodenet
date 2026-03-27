@@ -8,6 +8,7 @@
       <w>arglist</w>
       <w>coeffs</w>
       <w>crelu</w>
+      <w>dets</w>
       <w>diag</w>
       <w>erfinv</w>
       <w>fullgraph</w>
