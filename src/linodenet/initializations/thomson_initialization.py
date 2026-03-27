@@ -33,11 +33,9 @@ from enum import IntEnum
 from functools import partial
 from typing import Any, Optional
 
-import numpy as np
 import torch
-from numpy.random import Generator, default_rng
-from scipy.stats import ortho_group
 from torch import Tensor
+from torch.linalg import vector_norm
 
 
 def _sample_unique_sequences(
@@ -45,64 +43,77 @@ def _sample_unique_sequences(
     seq_length: int,
     num_samples: int,
     *,
-    rng: Optional[int | Generator] = None,
+    device: Optional[str | torch.device] = None,
     batch_size: int = 4096,
-) -> np.ndarray:
+) -> Tensor:
     r"""Sample num_samples unique sequences of length seq_length from a set of items."""
     if num_samples > size**seq_length:
         raise ValueError("num_samples must be less than or equal to size^seq_length.")
+    if size > 2**63 - 1:
+        raise ValueError("size must be less than or equal to 2^63 - 1.")
 
-    dtype: type[np.unsignedinteger]
-    if size < np.iinfo(np.uint8).max:
-        dtype = np.uint8
-    elif size < np.iinfo(np.uint16).max:
-        dtype = np.uint16
-    elif size < np.iinfo(np.uint32).max:
-        dtype = np.uint32
-    elif size < np.iinfo(np.uint64).max:
-        dtype = np.uint64
-    else:
-        raise ValueError("size must be less than or equal to 2^64.")
-
-    # Output indices into A; map to A at the end
-    out_idx = np.empty((num_samples, seq_length), dtype=dtype)
-    seen: set[bytes] = set()
+    out_idx = torch.empty((num_samples, seq_length), dtype=torch.int64, device=device)
+    seen: set[tuple[int, ...]] = set()
     filled = 0
-    rng = default_rng(rng)
 
     while filled < num_samples:
         m = min(batch_size, num_samples - filled)
+        cand = torch.randint(0, size, (m, seq_length), device=device)
+        cand = torch.unique(cand, dim=-2)
 
-        # Sample candidate index rows uniformly from {0, ..., k-1}^d
-        cand = rng.integers(0, size, (m, seq_length), dtype=dtype)
-
-        # remove duplicates from the batch
-        cand = np.unique(cand, axis=0)
-
-        mask = np.array([row.tobytes() in seen for row in cand])
-        cand_new = cand[~mask]
-        new = len(cand_new)
-        out_idx[filled : filled + new] = cand_new
-        filled += new
+        for row in cand:
+            key = tuple(row.tolist())
+            if key in seen:
+                continue
+            seen.add(key)
+            out_idx[filled] = row
+            filled += 1
+            if filled == num_samples:
+                break
 
     return out_idx
 
 
-def _randomize_orientation(points: np.ndarray, rng: Generator) -> np.ndarray:
+def _random_orthogonal_matrix(
+    dim: int,
+    /,
+    *,
+    dtype: torch.dtype,
+    device: Optional[str | torch.device] = None,
+) -> Tensor:
+    r"""Sample a Haar-distributed orthogonal matrix via QR."""
+    A = torch.randn(dim, dim, dtype=dtype, device=device)
+    Q, R = torch.linalg.qr(A)
+    d = torch.diagonal(R)
+    signs = torch.where(d == 0, torch.ones_like(d), d.sign())
+    return Q * signs.unsqueeze(0)
+
+
+def _randomize_orientation(
+    points: Tensor,
+    /,
+) -> Tensor:
     r"""Apply a random rotation to the points to avoid axis-alignment."""
-    d = points.shape[-1]
-    U = ortho_group.rvs(d, random_state=rng)
-    return points @ U
+    U = _random_orthogonal_matrix(
+        points.shape[-1],
+        dtype=points.dtype,
+        device=points.device,
+    )
+    points = points @ U
+    # renormalize (should be close to 1 still, but just to be safe)
+    points = points / vector_norm(points, dim=-1, keepdim=True)
+    return points
 
 
 def wide_angle_sphere_init(
     num: int,
     dim: int,
     *,
-    dtype=np.float32,
-    seed: Optional[int | Generator] = None,
+    dtype: Optional[torch.dtype] = None,
+    device: Optional[str | torch.device] = None,
+    seed: Optional[int] = None,
     uniform_grid: bool = False,
-) -> np.ndarray:
+) -> Tensor:
     """Initialize n points on Sᵈ⁻¹ with some guaranteed separation.
 
     We wrap the hypersphere into a hypercube.
@@ -122,75 +133,76 @@ def wide_angle_sphere_init(
     So even with r=1, we expect only a constant number of rejections.
     We pick r=2 to be safe, which gives k⁎=⌈(n²/d)^(1/(d-1))⌉ and p≥2n².
     """
-    rng = default_rng(seed)
-    del seed  # avoid accidentally using the seed as a random state later on
-
-    if num <= 0 or dim <= 0:
-        raise ValueError("n and d must be positive integers.")
+    if seed is not None:
+        torch.manual_seed(seed)
+    if dim < 1:
+        raise ValueError("dim must be >=1")
     if num < 1:
-        raise ValueError("n must be >= 1.")
+        raise ValueError("num must be >= 1.")
     if dim == 1:
         # sample from {-1, +1} with equal probability, which is optimal for d=1
-        points = rng.choice([-1, 1], size=(num, 1))
-        return points.astype(dtype)
-
+        points = 2 * torch.randint(0, 2, (num, 1), device=device) - 1
+        return points.to(dtype=dtype)
     if num == 1:
         # for n=1, we can just return any point on the sphere, e.g. the north-pole
-        p = np.eye(1, dim, dtype=dtype)
-        return _randomize_orientation(p, rng=rng)
+        p = torch.randn(1, dim, device=device, dtype=dtype)
+        return p / vector_norm(p, dim=-1)
 
-    if dim == 2:
-        # for d=2, we can just put the points uniformly on the circle, which is optimal
-        angles = np.linspace(0, 2 * math.pi, num, endpoint=False, dtype=dtype)
-        p = np.stack([np.cos(angles), np.sin(angles)], axis=-1)
-        return _randomize_orientation(p, rng=rng)
-
+    # step 1: set up the 1-d grid on each face, excluding the end points to avoid duplicates across faces
     λ = num
     k = math.ceil((λ * num / dim) ** (1 / (dim - 1)))
-    n_faces = 2 * dim
-    # step 1: assign points to faces of the hypercube
-    face = np.array(rng.choice(n_faces, num))
-    points_per_face = np.bincount(face, minlength=n_faces)
-    # points_per_face = np.full(n_faces, n // n_faces, dtype=np.int32)
-    # points_per_face[-1] += n % n_faces
-    # face = np.repeat(np.arange(n_faces), points_per_face)
-
-    # step 2: set up the 1-d grid on each face, excluding the end points to avoid duplicates across faces
+    grid = torch.arange(k, dtype=dtype, device=device)
     if uniform_grid:
         # (a) uniform grid in [-1, +1], excluding endpoints:
         #     k=0: {0}
         #     k=1: {-½, +½}
         #     k=2: {-⅓, 0, +⅓}
         #     k=3: {-¾, -¼, +¼, +¾}
-        L = 2 * ((np.arange(k) - 1) / (k + 1)) - 1  # (k_star,)
+        grid = 2 * ((grid - 1) / (k + 1)) - 1
     else:
         # (b) non-linear grid that is denser near the center
-        L = (2 * np.arange(k) + 1 - k) / k
-        L = np.tan(L * np.pi / 4)
+        grid = (2 * grid + 1 - k) / k
+        grid = torch.tan(grid * math.pi / 4)
 
-    # step 0: pre-allocate the output array
-    result = np.empty((num, dim), dtype=dtype)
+    # step 2: assign points to faces of the hypercube
+    n_faces = 2 * dim
+    face = torch.randint(0, n_faces, (num,))
+    points_per_face = torch.bincount(face, minlength=n_faces)
 
     # step 3: for each face, sample points from the grid and insert ±1 at the appropriate position
-    for i, n_face in enumerate(points_per_face):
+    # pre-allocate the output array
+    result = torch.empty((num, dim), dtype=dtype, device=device)
+
+    for i, n_face in enumerate(points_per_face.tolist()):
+        if n_face == 0:
+            continue
         # step 3a: sample codes of length d-1 without replacement from the grid L
-        codes = _sample_unique_sequences(k, dim - 1, n_face, rng=rng)
-        values = L[codes]  # (n_face, d-1)
+        codes = _sample_unique_sequences(k, dim - 1, n_face, device=device)
+        values = grid[codes]  # (n_face, d-1)
         # step 3b: insert ±1 at the i-th position to get points on the face (even: +1, odd: -1)
         sign = 1 - 2 * (i % 2)  # +1 for even faces, -1 for odd faces
         pos = i // 2  # dimension of the face normal
-        values = np.insert(values, pos, sign, axis=1)
-        result[face == i] = values
+        values = torch.cat(
+            [
+                values[:, :pos],
+                torch.full((n_face, 1), sign, dtype=dtype, device=device),
+                values[:, pos:],
+            ],
+            dim=1,
+        )
+        result[face.to(device=device) == i] = values
 
-    # step 4: center and radially project the points onto the sphere
-    result = result - np.mean(result, axis=0, keepdims=True)  # safe with n≥2 points.
-    result /= np.linalg.norm(result, axis=1, keepdims=True)
+    # step 4: radially project the points onto the sphere
+    result = result / vector_norm(result, dim=-1, keepdim=True)
 
     # ensure points are on the sphere
-    assert np.allclose(np.linalg.norm(result, axis=1), 1.0)
+    assert torch.allclose(
+        torch.linalg.norm(result, dim=-1),
+        torch.ones(num, dtype=dtype, device=device),
+    )
 
     # finally, apply a random rotation to avoid axis-alignment
-    return _randomize_orientation(result, rng=rng)
+    return _randomize_orientation(result)
 
 
 def logmeanexp(x: Tensor, /) -> Tensor:
@@ -415,15 +427,20 @@ class OptimizerResult:
     r"""Result of the optimization."""
 
     x: Tensor
+    status: OptimizerStatus
     fun: Tensor | float
     jac: Tensor
-    success: bool
+
+    msg: str = ""
     nit: int | None = None
-    maxcv: Tensor | float | None = None
-    status: OptimizerStatus = OptimizerStatus.UNKNOWN
+    max_cv: Tensor | float | None = None
     loss_hist: list[float] = field(default_factory=list)
     grad_hist: list[float] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def success(self):
+        return self.status is OptimizerStatus.SUCCESS
 
 
 def scaled_norm(x: Tensor, axis: None | int | tuple[int, ...] = None) -> Tensor:
@@ -452,7 +469,7 @@ def thomson_initialization(
     patience: int = 5,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
-    seed: Optional[int | Generator] = None,
+    seed: Optional[int] = None,
 ) -> OptimizerResult:
     r"""Thomson initialization for sampling n points on the surface of a d-dimensional sphere.
 
@@ -479,29 +496,59 @@ def thomson_initialization(
     Returns:
         OptimizerResult
     """
-    if dtype is None:
-        dtype = torch.float32
-
-    init_dtype = np.float64 if dtype is torch.float64 else np.float32
-    x_init = wide_angle_sphere_init(num, dim, dtype=init_dtype, seed=seed)
-    x = torch.as_tensor(
-        x_init,
-        dtype=dtype,
-        device=device,
-    )
-    if num == 1 or dim == 1:
-        return OptimizerResult(
-            x=x,
-            fun=0.0,
-            jac=torch.zeros_like(x),
-            success=True,
-            options={"beta": beta, "atol": atol, "rtol": rtol, "maxiter": maxiter},
-        )
-
     loss_fn = partial(loss_sep, beta=beta)
     grad_fn = torch.func.grad(loss_fn)
     grad_and_value_fn = torch.func.grad_and_value(loss_fn)
+    options = {"beta": beta, "atol": atol, "rtol": rtol, "maxiter": maxiter}
 
+    # special case dim≤2 and num≤2
+    if dim == 1:
+        # sample from {-1, +1} with equal probability, which is optimal for d=1
+        points = 2 * torch.randint(0, 2, (num, 1), device=device) - 1
+        points = points.to(dtype=dtype)
+        grad, loss = grad_and_value_fn(points)
+        return OptimizerResult(
+            points, fun=loss, jac=grad, status=OptimizerStatus.SUCCESS, options=options
+        )
+
+    if dim == 2:
+        # for d=2, we can just put the points uniformly on the circle, which is optimal
+        angles = torch.linspace(
+            0,
+            2 * math.pi,
+            num + 1,
+            dtype=dtype,
+            device=device,
+        )[:-1]
+        random_phase = 2 * math.pi * torch.rand((), dtype=dtype, device=device)
+        angles = angles + random_phase
+        points = torch.stack([torch.cos(angles), torch.sin(angles)], dim=-1)
+        grad, loss = grad_and_value_fn(points)
+        return OptimizerResult(
+            points, fun=loss, jac=grad, status=OptimizerStatus.SUCCESS, options=options
+        )
+
+    if num == 1:
+        # sample a random point on the sphere, which is optimal
+        points = torch.randn(1, dim, dtype=dtype, device=device)
+        points = points / vector_norm(points, dim=-1, keepdim=True)
+        grad, loss = grad_and_value_fn(points)
+        return OptimizerResult(
+            points, fun=loss, jac=grad, status=OptimizerStatus.SUCCESS, options=options
+        )
+
+    if num == 2:
+        # sample a random point and the antipodal point
+        points = torch.randn(1, dim, dtype=dtype, device=device)
+        points = points / vector_norm(points, dim=-1, keepdim=True)
+        points = torch.cat([points, -points], dim=0)
+        grad, loss = grad_and_value_fn(points)
+        return OptimizerResult(
+            points, fun=loss, jac=grad, status=OptimizerStatus.SUCCESS, options=options
+        )
+
+    # general case.
+    x = wide_angle_sphere_init(num, dim, dtype=dtype, device=device, seed=seed)
     grad, loss = grad_and_value_fn(x)
     grad = sphere_gradient(x, grad_euclidean=grad)
     grad_norm = scaled_norm(grad, axis=-1).sum()
@@ -524,7 +571,7 @@ def thomson_initialization(
         grad_hist.append(grad_norm_value)
 
         if not torch.isfinite(loss).item() or not torch.isfinite(grad_norm).item():
-            print(
+            msg = (
                 f"Warning: Non-finite value encountered at iteration {it}."
                 f" loss={loss_value:.6f}, grad_norm={grad_norm_value:.6f}"
             )
@@ -538,7 +585,7 @@ def thomson_initialization(
             rtol=rtol,
         ):
             max_deviation = torch.abs(torch.linalg.norm(x, dim=-1) - 1).max().item()
-            print(
+            msg = (
                 f"Warning: Constraint violation at iteration {it}."
                 f" Points not on the sphere: {max_deviation=:.6f}"
             )
@@ -547,7 +594,7 @@ def thomson_initialization(
 
         m = -min(patience + 1, it + 2)  # look back at most p iterations
         if (grad_hist[m] - grad_norm_value) < rtol * grad_hist[m] + atol:
-            print(
+            msg = (
                 f"Converged after {it} iterations."
                 f" Final loss: {loss_value:.6f}"
                 f" Final (per particle) grad norm: {grad_norm_value:.6f}"
@@ -555,30 +602,30 @@ def thomson_initialization(
             status = OptimizerStatus.SUCCESS
             break
 
-        assert loss_value < loss_hist[-1] + atol, (
-            f"{it=} Loss did not decrease: {loss_value:.6f} >= {loss_hist[-1]:.6f}"
-        )
+        if loss_value >= loss_hist[-1] + atol:
+            raise RuntimeError(
+                f"{it=} Loss did not decrease: {loss_value:.6f} >= {loss_hist[-1]:.6f}"
+            )
     else:
         status = OptimizerStatus.NO_CONVERGENCE
-        print(
+        msg = (
             f"Warning: Did not converge after {maxiter} iterations."
             f" Final loss: {loss_value:.6f}"
             f" Final (per particle) grad norm: {grad_norm_value:.6f}"
         )
 
-    maxcv = torch.abs(torch.linalg.norm(x, dim=-1) - 1).max()
-
+    max_constraint_violation = (vector_norm(x, dim=-1) - 1).abs().max()
     result = OptimizerResult(
         x=x,
         fun=loss,
         jac=grad,
-        success=status is OptimizerStatus.SUCCESS,
         status=status,
+        msg=msg,
         nit=it,
         loss_hist=loss_hist,
         grad_hist=grad_hist,
-        maxcv=maxcv,
-        options={"beta": beta, "atol": atol, "rtol": rtol, "maxiter": maxiter},
+        max_cv=max_constraint_violation,
+        options=options,
     )
 
     return result
