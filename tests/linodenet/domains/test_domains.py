@@ -7,9 +7,9 @@ from linodenet.domains import (
     Join,
     MatrixDomains as M,
     RealDomain,
-    ScalarDomains,
-    TensorDomains,
-    VectorDomains,
+    ScalarDomains as S,
+    TensorDomains as T,
+    VectorDomains as V,
 )
 from linodenet.domains.matrix_domains import ColumnOrthogonal, RowOrthogonal, Tall, Wide
 from linodenet.testing import is_left_invertible, is_right_invertible
@@ -17,50 +17,50 @@ from linodenet.testing import is_left_invertible, is_right_invertible
 
 class TestScalarDomains:
     def test_partial_order_and_representation(self) -> None:
-        assert ScalarDomains.REAL_LINE <= ScalarDomains.REAL_LINE
-        assert ScalarDomains.REAL_LINE < ScalarDomains.EXTENDED_LINE
-        assert ScalarDomains.REAL_LINE <= Interval("(-inf, inf)")
-        assert ScalarDomains.OPEN_UNIT_INTERVAL < Interval("[0, 1]")
-        assert ScalarDomains.NONZERO <= RealDomain("(-inf, 0) | (0, inf)")
-        assert ScalarDomains.POSITIVE_REALS < RealDomain("(-inf, 0) | (0, inf)")
+        assert S.REAL_LINE <= S.REAL_LINE
+        assert S.REAL_LINE < S.EXTENDED_LINE
+        assert S.REAL_LINE <= Interval("(-inf, inf)")
+        assert S.OPEN_UNIT_INTERVAL < Interval("[0, 1]")
+        assert S.NONZERO <= RealDomain("(-inf, 0) | (0, inf)")
+        assert S.POSITIVE_REALS < RealDomain("(-inf, 0) | (0, inf)")
 
-        assert ScalarDomains.OPEN_UNIT_INTERVAL <= ScalarDomains.UNIT_INTERVAL
-        assert ScalarDomains.OPEN_UNIT_INTERVAL != ScalarDomains.UNIT_INTERVAL
-        assert ScalarDomains.OPEN_UNIT_INTERVAL <= ScalarDomains.NONNEGATIVE_REALS
-        assert ScalarDomains.OPEN_UNIT_INTERVAL != ScalarDomains.NONNEGATIVE_REALS
-        assert ScalarDomains.OPEN_UNIT_INTERVAL <= ScalarDomains.REAL_LINE
-        assert ScalarDomains.OPEN_UNIT_INTERVAL != ScalarDomains.REAL_LINE
-        assert ScalarDomains.OPEN_UNIT_INTERVAL <= ScalarDomains.EXTENDED_LINE
-        assert ScalarDomains.OPEN_UNIT_INTERVAL != ScalarDomains.EXTENDED_LINE
-        assert ScalarDomains.POSITIVE_REALS <= ScalarDomains.NONZERO
-        assert ScalarDomains.POSITIVE_REALS != ScalarDomains.NONZERO
-        assert ScalarDomains.NONZERO <= ScalarDomains.EXTENDED_LINE
-        assert ScalarDomains.NONZERO != ScalarDomains.EXTENDED_LINE
+        assert S.OPEN_UNIT_INTERVAL <= S.UNIT_INTERVAL
+        assert S.OPEN_UNIT_INTERVAL != S.UNIT_INTERVAL
+        assert S.OPEN_UNIT_INTERVAL <= S.NONNEGATIVE_REALS
+        assert S.OPEN_UNIT_INTERVAL != S.NONNEGATIVE_REALS
+        assert S.OPEN_UNIT_INTERVAL <= S.REAL_LINE
+        assert S.OPEN_UNIT_INTERVAL != S.REAL_LINE
+        assert S.OPEN_UNIT_INTERVAL <= S.EXTENDED_LINE
+        assert S.OPEN_UNIT_INTERVAL != S.EXTENDED_LINE
+        assert S.POSITIVE_REALS <= S.NONZERO
+        assert S.POSITIVE_REALS != S.NONZERO
+        assert S.NONZERO <= S.EXTENDED_LINE
+        assert S.NONZERO != S.EXTENDED_LINE
 
-        assert not ScalarDomains.NONNEGATIVE_REALS <= ScalarDomains.NONPOSITIVE_REALS
-        assert not ScalarDomains.NONPOSITIVE_REALS <= ScalarDomains.NONNEGATIVE_REALS
-        assert not ScalarDomains.UNIT_INTERVAL <= ScalarDomains.NONPOSITIVE_REALS
-        assert not ScalarDomains.NEGATIVE_REALS <= ScalarDomains.NONNEGATIVE_REALS
-        assert not ScalarDomains.NONZERO <= ScalarDomains.NONNEGATIVE_REALS
-        assert not ScalarDomains.NONNEGATIVE_REALS <= ScalarDomains.NONZERO
-        assert not ScalarDomains.EXTENDED_LINE <= Interval("(-inf, inf)")
-        assert not ScalarDomains.NONNEGATIVE_REALS <= Interval("(0, inf)")
+        assert not S.NONNEGATIVE_REALS <= S.NONPOSITIVE_REALS
+        assert not S.NONPOSITIVE_REALS <= S.NONNEGATIVE_REALS
+        assert not S.UNIT_INTERVAL <= S.NONPOSITIVE_REALS
+        assert not S.NEGATIVE_REALS <= S.NONNEGATIVE_REALS
+        assert not S.NONZERO <= S.NONNEGATIVE_REALS
+        assert not S.NONNEGATIVE_REALS <= S.NONZERO
+        assert not S.EXTENDED_LINE <= Interval("(-inf, inf)")
+        assert not S.NONNEGATIVE_REALS <= Interval("(0, inf)")
 
-        assert str(ScalarDomains.OPEN_UNIT_INTERVAL) == "(0, 1)"
-        assert str(ScalarDomains.UNIT_INTERVAL.value) == "[0, 1]"
-        assert isinstance(ScalarDomains.NONZERO.value, RealDomain)
+        assert str(S.OPEN_UNIT_INTERVAL) == "(0, 1)"
+        assert str(S.UNIT_INTERVAL.value) == "[0, 1]"
+        assert isinstance(S.NONZERO.value, RealDomain)
 
         with pytest.raises(TypeError):
-            _ = ScalarDomains.REAL_LINE <= "(-inf, inf)"
+            _ = S.REAL_LINE <= "(-inf, inf)"
 
     def test_membership(self) -> None:
         values = tensor([-0.5, 0.0, 0.5, 1.0, 1.5])
-        result = [v in ScalarDomains.UNIT_INTERVAL for v in values]
+        result = [v in S.UNIT_INTERVAL for v in values]
         expected = [False, True, True, True, False]
         assert result == expected
 
         values = tensor([-1.0, -0.0, 0.0, 1.0])
-        result = [v in ScalarDomains.NONZERO for v in values]
+        result = [v in S.NONZERO for v in values]
         expected = [True, False, False, True]
         assert result == expected
 
@@ -96,86 +96,86 @@ class TestScalarDomains:
 
 class TestVectorDomains:
     def test_none_factorizations(self) -> None:
-        assert VectorDomains.NONE.factorizations == frozenset(
+        assert V.NONE.factorizations == frozenset(
             {
-                VectorDomains.NEGATIVE & VectorDomains.NONNEGATIVE,
-                VectorDomains.NONZERO & VectorDomains.ZERO,
-                VectorDomains.POSITIVE & VectorDomains.NONPOSITIVE,
-                VectorDomains.POSITIVE & VectorDomains.NEGATIVE,
+                V.NEGATIVE & V.NONNEGATIVE,
+                V.NONZERO & V.ZERO,
+                V.POSITIVE & V.NONPOSITIVE,
+                V.POSITIVE & V.NEGATIVE,
             }
         )
 
     def test_factorizations(self) -> None:
-        assert VectorDomains.ONE_HOT.factorizations == frozenset(
+        assert V.ONE_HOT.factorizations == frozenset(
             {
-                VectorDomains.BOOLEAN & VectorDomains.STOCHASTIC,
-                VectorDomains.STOCHASTIC & VectorDomains.UNIT_VECTOR,
+                V.BOOLEAN & V.STOCHASTIC,
+                V.STOCHASTIC & V.UNIT_VECTOR,
             }
         )
-        assert VectorDomains.ZERO.factorizations == frozenset(
+        assert V.ZERO.factorizations == frozenset(
             {
-                VectorDomains.NONNEGATIVE & VectorDomains.NONPOSITIVE,
+                V.NONNEGATIVE & V.NONPOSITIVE,
             }
         )
 
     def test_partial_order_and_representation(self) -> None:
-        assert VectorDomains.REAL <= VectorDomains.REAL
-        assert VectorDomains.ONE_HOT < VectorDomains.STOCHASTIC
-        assert not VectorDomains.STOCHASTIC < VectorDomains.STOCHASTIC
+        assert V.REAL <= V.REAL
+        assert V.ONE_HOT < V.STOCHASTIC
+        assert not V.STOCHASTIC < V.STOCHASTIC
 
-        assert VectorDomains.ONE_HOT <= VectorDomains.STOCHASTIC
-        assert VectorDomains.ONE_HOT != VectorDomains.STOCHASTIC
-        assert VectorDomains.ONE_HOT <= VectorDomains.NONNEGATIVE
-        assert VectorDomains.ONE_HOT != VectorDomains.NONNEGATIVE
-        assert VectorDomains.ONE_HOT <= VectorDomains.REAL
-        assert VectorDomains.ONE_HOT != VectorDomains.REAL
-        assert VectorDomains.ONE_HOT <= VectorDomains.COMPLEX
-        assert VectorDomains.ONE_HOT != VectorDomains.COMPLEX
+        assert V.ONE_HOT <= V.STOCHASTIC
+        assert V.ONE_HOT != V.STOCHASTIC
+        assert V.ONE_HOT <= V.NONNEGATIVE
+        assert V.ONE_HOT != V.NONNEGATIVE
+        assert V.ONE_HOT <= V.REAL
+        assert V.ONE_HOT != V.REAL
+        assert V.ONE_HOT <= V.COMPLEX
+        assert V.ONE_HOT != V.COMPLEX
 
-        assert VectorDomains.STANDARDIZED <= VectorDomains.ZERO_MEAN
-        assert VectorDomains.STANDARDIZED != VectorDomains.ZERO_MEAN
-        assert VectorDomains.STANDARDIZED <= VectorDomains.NONZERO
-        assert VectorDomains.STANDARDIZED != VectorDomains.NONZERO
+        assert V.STANDARDIZED <= V.ZERO_MEAN
+        assert V.STANDARDIZED != V.ZERO_MEAN
+        assert V.STANDARDIZED <= V.NONZERO
+        assert V.STANDARDIZED != V.NONZERO
 
-        assert not VectorDomains.NONNEGATIVE <= VectorDomains.NONPOSITIVE
-        assert not VectorDomains.NONPOSITIVE <= VectorDomains.NONNEGATIVE
-        assert not VectorDomains.STOCHASTIC <= VectorDomains.UNIT_VECTOR
-        assert not VectorDomains.UNIT_VECTOR <= VectorDomains.STOCHASTIC
+        assert not V.NONNEGATIVE <= V.NONPOSITIVE
+        assert not V.NONPOSITIVE <= V.NONNEGATIVE
+        assert not V.STOCHASTIC <= V.UNIT_VECTOR
+        assert not V.UNIT_VECTOR <= V.STOCHASTIC
 
-        assert str(VectorDomains.STOCHASTIC) == "stochastic"
+        assert str(V.STOCHASTIC) == "stochastic"
 
         with pytest.raises(TypeError):
-            _ = VectorDomains.REAL <= "real"
+            _ = V.REAL <= "real"
 
 
 class TestTensorDomains:
     def test_partial_order_and_representation(self) -> None:
-        assert TensorDomains.NONE < TensorDomains.ANY
-        assert TensorDomains.NONE <= TensorDomains.ZERO
-        assert TensorDomains.NONE <= TensorDomains.COMPLEX
-        assert TensorDomains.ANY <= TensorDomains.ANY
+        assert T.NONE < T.ANY
+        assert T.NONE <= T.ZERO
+        assert T.NONE <= T.COMPLEX
+        assert T.ANY <= T.ANY
 
-        assert TensorDomains.BOOLEAN <= TensorDomains.REAL
-        assert TensorDomains.BOOLEAN != TensorDomains.REAL
-        assert TensorDomains.BOOLEAN <= TensorDomains.COMPLEX
-        assert TensorDomains.BOOLEAN != TensorDomains.COMPLEX
-        assert TensorDomains.BOOLEAN <= TensorDomains.ANY
-        assert TensorDomains.BOOLEAN != TensorDomains.ANY
+        assert T.BOOLEAN <= T.REAL
+        assert T.BOOLEAN != T.REAL
+        assert T.BOOLEAN <= T.COMPLEX
+        assert T.BOOLEAN != T.COMPLEX
+        assert T.BOOLEAN <= T.ANY
+        assert T.BOOLEAN != T.ANY
 
-        assert TensorDomains.ZERO <= TensorDomains.SPARSE
-        assert TensorDomains.ZERO != TensorDomains.SPARSE
-        assert TensorDomains.ZERO <= TensorDomains.BOOLEAN
-        assert TensorDomains.ZERO != TensorDomains.BOOLEAN
-        assert TensorDomains.ONE <= TensorDomains.NONZERO
-        assert TensorDomains.ONE != TensorDomains.NONZERO
+        assert T.ZERO <= T.SPARSE
+        assert T.ZERO != T.SPARSE
+        assert T.ZERO <= T.BOOLEAN
+        assert T.ZERO != T.BOOLEAN
+        assert T.ONE <= T.NONZERO
+        assert T.ONE != T.NONZERO
 
-        assert not TensorDomains.SPARSE <= TensorDomains.COMPLEX
-        assert not TensorDomains.NONZERO <= TensorDomains.SPARSE
+        assert not T.SPARSE <= T.COMPLEX
+        assert not T.NONZERO <= T.SPARSE
 
-        assert str(TensorDomains.NONZERO) == "nonzero"
+        assert str(T.NONZERO) == "nonzero"
 
         with pytest.raises(TypeError):
-            _ = TensorDomains.ANY <= "any"
+            _ = T.ANY <= "any"
 
 
 class TestMatrixDomains:
