@@ -270,7 +270,7 @@ def _mixture_to_gaussian_derivatives2(
     """
 
 
-class _BimodalToGaussianImpl(Function):
+class _BimodalToGaussian(Function):
     r"""Optimal Transport from mixture $p = ½N(-μ, σ²) + ½N(μ, σ²)$ to $q = N(0, 1)$.
 
     If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the optimal transport map is given by
@@ -335,7 +335,7 @@ class _BimodalToGaussianImpl(Function):
         return (g * d_x), (g * d_mu), (g * d_sigma)
 
 
-class _BimodalToGaussianValueAndJacImpl(Function):
+class _BimodalToGaussianValueAndJac(Function):
     r"""Return the bimodal-to-Gaussian transport and its $x$-derivative."""
 
     @staticmethod
@@ -359,7 +359,7 @@ class _BimodalToGaussianValueAndJacImpl(Function):
         )
 
 
-class _GaussianToBimodalImpl(Function):
+class _GaussianToBimodal(Function):
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
 
     @staticmethod
@@ -588,7 +588,7 @@ def gaussian_to_bimodal(
     """
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    return _GaussianToBimodalImpl.apply(y, mu, sigma)
+    return _GaussianToBimodal.apply(y, mu, sigma)
 
 
 def bimodal_to_gaussian(
@@ -603,7 +603,7 @@ def bimodal_to_gaussian(
     """
     mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
     sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
-    return _BimodalToGaussianImpl.apply(x, mu, sigma)
+    return _BimodalToGaussian.apply(x, mu, sigma)
 
 
 def bimodal_to_gaussian_value_and_jac(
@@ -612,7 +612,7 @@ def bimodal_to_gaussian_value_and_jac(
     r"""Map the symmetric mixture to $N(0,1)$ and return $(f(x), ∂f/∂x)$."""
     mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
     sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
-    return _BimodalToGaussianValueAndJacImpl.apply(x, mu, sigma)
+    return _BimodalToGaussianValueAndJac.apply(x, mu, sigma)
 
 
 def gaussian_to_mixture(
