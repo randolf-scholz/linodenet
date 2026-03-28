@@ -349,15 +349,15 @@ class _MixtureToGaussian(Function):
         ∂y/∂μₖ &= -(ωₖ/σₖ) Eₖ     \\
         ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) Eₖ
 
-    Note that in the case of ∂y/∂ωₖ, we include the projection on the tangent space of ∆ⁿ.
+    Note that in the case of ∂y/∂ωₖ, we include the projection on the tangent space of ∆ⁿ⁻¹.
 
     And the derivatives of $g(x) = ∂y/∂x$ are
 
     .. math::
-        ∂g/∂x  &= ∑ₖ (ωₖ/σₖ²) Eₖ(y zₖ - 1), \\
-        ∂g/∂ωₖ &= \sqrt{2π} ℯ^{½y²} Φ(zₖ) / σₖ, \\
-        ∂g/∂μₖ &= ∑ₖ (ωₖ/σₖ²) Eₖ(y zₖ - 1), \\
-        ∂g/∂σₖ &= ∑ₖ (ωₖ/σₖ³) Eₖ(y zₖ - 1 + zₖ²).
+        ∂g/∂x  &= y⋅g⋅(∂y/∂x)  - ∑ₖ(ωₖ/σₖ²)zₖEₖ         \\
+        ∂g/∂ωₖ &= y⋅g⋅(∂y/∂ωₖ) + Eₖ/σₖ - (1/n)∑ⱼEⱼ/σⱼ   \\
+        ∂g/∂μₖ &= y⋅g⋅(∂y/∂μₖ) + (ωₖ/σₖ²)zₖEₖ           \\
+        ∂g/∂σₖ &= y⋅g⋅(∂y/∂σₖ) + (ωₖ/σₖ²)(zₖ²-1)Eₖ
     """
 
     @staticmethod
