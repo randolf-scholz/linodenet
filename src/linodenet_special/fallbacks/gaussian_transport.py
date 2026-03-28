@@ -318,13 +318,13 @@ class _BimodalToGaussianValueAndJacImpl(Function):
     @torch.no_grad()
     def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor, /) -> tuple[Tensor, Tensor]:
         y, d_x = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
-        ctx.save_for_backward(x, mu, sigma, y, d_x)
+        ctx.save_for_backward(x, mu, sigma, y)
         return y, d_x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         grad_y, grad_dy = outer
-        x, mu, sigma, y, _ = ctx.saved_tensors
+        x, mu, sigma, y = ctx.saved_tensors
         d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma = _bimodal_to_gaussian_derivatives2(
             x, mu, sigma, y
         )
