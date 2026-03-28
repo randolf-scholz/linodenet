@@ -19,10 +19,10 @@ class TestScalarDomains:
     def test_partial_order_and_representation(self) -> None:
         assert S.REAL_LINE <= S.REAL_LINE
         assert S.REAL_LINE < S.EXTENDED_LINE
-        assert S.REAL_LINE <= Interval("(-inf, inf)")
-        assert S.OPEN_UNIT_INTERVAL < Interval("[0, 1]")
-        assert S.NONZERO <= RealDomain("(-inf, 0) | (0, inf)")
-        assert S.POSITIVE_REALS < RealDomain("(-inf, 0) | (0, inf)")
+        assert S.REAL_LINE <= "(-inf, inf)"
+        assert S.OPEN_UNIT_INTERVAL < "[0, 1]"
+        assert S.NONZERO <= "(-inf, 0) | (0, inf)"
+        assert S.POSITIVE_REALS < "(-inf, 0) | (0, inf)"
 
         assert S.OPEN_UNIT_INTERVAL <= S.UNIT_INTERVAL
         assert S.OPEN_UNIT_INTERVAL != S.UNIT_INTERVAL
@@ -43,15 +43,12 @@ class TestScalarDomains:
         assert not S.NEGATIVE_REALS <= S.NONNEGATIVE_REALS
         assert not S.NONZERO <= S.NONNEGATIVE_REALS
         assert not S.NONNEGATIVE_REALS <= S.NONZERO
-        assert not S.EXTENDED_LINE <= Interval("(-inf, inf)")
-        assert not S.NONNEGATIVE_REALS <= Interval("(0, inf)")
+        assert not S.EXTENDED_LINE <= "(-inf, inf)"
+        assert not S.NONNEGATIVE_REALS <= "(0, inf)"
 
         assert str(S.OPEN_UNIT_INTERVAL) == "(0, 1)"
         assert str(S.UNIT_INTERVAL.value) == "[0, 1]"
         assert isinstance(S.NONZERO.value, RealDomain)
-
-        with pytest.raises(TypeError):
-            _ = S.REAL_LINE <= "(-inf, inf)"
 
     def test_membership(self) -> None:
         values = tensor([-0.5, 0.0, 0.5, 1.0, 1.5])

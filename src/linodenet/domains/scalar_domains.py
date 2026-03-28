@@ -12,7 +12,7 @@ from typing import ClassVar, Final, Self, overload
 
 from torch import Tensor
 
-from .base import ScalarDomain
+from .base import Indeterminate, ScalarDomain
 
 __logger__ = logging.getLogger(__name__)
 
@@ -677,7 +677,7 @@ class RealDomain(ScalarDomain, Collection[Interval]):
         return f"{self.__class__.__name__}('{self!s}')"
 
 
-class ScalarDomains(Enum):
+class ScalarDomains(ScalarDomain, Enum):
     r"""Enumeration of some scalar domains."""
 
     ZERO = Interval("[0, 0]")
@@ -707,17 +707,12 @@ class ScalarDomains(Enum):
     def __contains__(self, item: Tensor, /) -> bool:
         return item in self.domain
 
-    def __le__(self, other: object, /) -> bool:
-        match other:
-            case ScalarDomains():
-                other_domain = other.domain
-            case Interval() | RealDomain():
-                other_domain = other
-            case _:
-                return NotImplemented
-        return self.domain <= other_domain
+    def __le__(self, other: object, /) -> bool | Indeterminate:
+        if isinstance(other, ScalarDomains):
+            return self.domain <= other.domain
+        return self.domain <= other
 
-    def __lt__(self, other: object, /) -> bool:
+    def __lt__(self, other: object, /) -> bool | Indeterminate:
         result = self <= other
         if result is NotImplemented:
             return NotImplemented

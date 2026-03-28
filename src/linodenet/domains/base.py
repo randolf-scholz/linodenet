@@ -741,12 +741,28 @@ PosetEnum.KNOWN_SUBTYPES = MappingProxyType({})  # pyright: ignore[reportAttribu
 PosetEnum.KNOWN_MEETS = ()
 
 
-class ScalarDomain(Domain):
+class ScalarDomain:
     r"""Base class for scalar domains."""
 
     @property
     def shape(self) -> tuple[()]:
         return ()
+
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
 
     def __or__(self, other: ScalarDomain, /) -> ScalarDomain | Join[ScalarDomain]:
         return Join({self, other})
@@ -755,7 +771,7 @@ class ScalarDomain(Domain):
         return Meet({self, other})
 
 
-class VectorDomain(Domain):
+class VectorDomain:
     r"""Base class for vector domains."""
 
     @property
@@ -766,6 +782,22 @@ class VectorDomain(Domain):
     def shape(self) -> tuple[int] | None:
         return None if self.size is None else (self.size,)
 
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
     def __or__(self, other: VectorDomain, /) -> VectorDomain | Join[VectorDomain]:
         return Join({self, other})
 
@@ -773,8 +805,7 @@ class VectorDomain(Domain):
         return Meet({self, other})
 
 
-@dataclass(frozen=True)
-class MatrixDomain(Domain):
+class MatrixDomain:
     r"""Stub base class for matrix domains."""
 
     @property
@@ -791,6 +822,22 @@ class MatrixDomain(Domain):
             return self.rows, self.cols
         return None
 
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
     def __or__(self, other: MatrixDomain, /) -> MatrixDomain | Join[MatrixDomain]:
         return Join({self, other})
 
@@ -798,12 +845,28 @@ class MatrixDomain(Domain):
         return Meet({self, other})
 
 
-class TensorDomain(Domain):
+class TensorDomain:
     r"""Base class for tensor domains."""
 
     @property
     @abstractmethod
     def shape(self) -> tuple[int, ...] | None: ...
+
+    @abstractmethod
+    def __contains__(self, item: Tensor, /) -> bool:
+        raise NotImplementedError
+
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
 
     def __or__(self, other: TensorDomain, /) -> TensorDomain | Join[TensorDomain]:
         return Join({self, other})
