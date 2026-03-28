@@ -12,8 +12,6 @@ __all__ = [
     "Domain",
     "DomainMapping",
     "Inverse",
-    "Union",
-    "Intersection",
     "Join",
     # Domains
     "Interval",
@@ -33,13 +31,11 @@ __all__ = [
 from .base import (
     Domain,
     DomainMapping,
-    Intersection,
     Inverse,
     Join,
     MatrixDomain,
     ScalarDomain,
     TensorDomain,
-    Union,
     VectorDomain,
 )
 from .matrix_domains import MatrixDomains
