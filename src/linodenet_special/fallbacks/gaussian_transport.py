@@ -39,7 +39,7 @@ def _bimodal_to_gaussian_forward(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Ten
 
 
 def _bimodal_to_gaussian_value_and_jac(
-    x: Tensor, mu: Tensor, sigma: Tensor
+    x: Tensor, mu: Tensor, sigma: Tensor, /
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bimodal transport and its $x$-derivative in one pass."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
@@ -66,7 +66,7 @@ def _bimodal_to_gaussian_value_and_jac(
 
 
 def _bimodal_to_gaussian_total_derivative(
-    x: Tensor, mu: Tensor, sigma: Tensor, y: Tensor
+    x: Tensor, mu: Tensor, sigma: Tensor, y: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
@@ -95,7 +95,7 @@ def _bimodal_to_gaussian_total_derivative(
     return d_x, d_mu, d_sigma_exact
 
 
-def _gaussian_to_bimodal_guess(x, mu, sigma):
+def _gaussian_to_bimodal_guess(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
     r"""Approximate $Ψ⁻¹(x, μ, σ)$ by the matching `hard_bend` inverse.
 
     Here $λ = Ψ'(0, μ, σ) = σ⁻¹ℯ^{-½(μ/σ)²}$ is the slope at the origin.
@@ -127,7 +127,7 @@ def _mixture_to_gaussian_forward(
 
 
 def _mixture_to_gaussian_value_and_jac(
-    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor
+    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the mixture transport and its $x$-derivative in one pass."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
@@ -146,7 +146,7 @@ def _mixture_to_gaussian_value_and_jac(
 
 
 def _mixture_to_gaussian_total_derivative(
-    y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
+    z: Tensor, weights: Tensor, sigmas: Tensor, y: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the mixture-to-Gaussian transport."""
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
@@ -424,7 +424,7 @@ class _MixtureToGaussian(Function):
         (g,) = outer
         z, y, weights, sigmas = ctx.saved_tensors
         d_values, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_total_derivative(
-            y, z, weights, sigmas
+            z, weights, sigmas, y
         )
 
         grad_values = g * d_values
@@ -501,7 +501,7 @@ class _GaussianToMixture(Function):
         (g,) = outer
         z, y, weights, _, sigmas = ctx.saved_tensors
         d_x, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_total_derivative(
-            y, z, weights, sigmas
+            z, weights, sigmas, y
         )
         grad_y = g * d_x.reciprocal()
         grad_weights = torch.einsum("..., ...k -> k", grad_y, -d_weights)
