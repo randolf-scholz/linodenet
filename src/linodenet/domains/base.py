@@ -419,7 +419,7 @@ class PosetEnum(Enum):
         target `A & B` denotes the stronger statement `x ≤ A ∧ B`, so this
         parser expands it to the implied direct supertypes `A` and `B`.
         """
-        raw_supers: Mapping[Self, frozenset[Self | Meet[Self]]] = cls.KNOWN_SUPERTYPES
+        raw_supers: Mapping[Self, frozenset[Self | Meet[Self]]] = cls.KNOWN_SUPERTYPES  # type: ignore[assignment]
         members = frozenset(cls)
 
         if bad_keys := {node for node in raw_supers if node not in members}:
@@ -464,7 +464,7 @@ class PosetEnum(Enum):
         separately as implication rules because `A & B ≤ X` cannot be reduced to
         direct subtype declarations.
         """
-        raw_subtypes: Mapping[Self, frozenset[Self | Meet[Self]]] = cls.KNOWN_SUBTYPES
+        raw_subtypes: Mapping[Self, frozenset[Self | Meet[Self]]] = cls.KNOWN_SUBTYPES  # type: ignore[assignment]
         members = frozenset(cls)
 
         if bad_keys := {node for node in raw_subtypes if node not in members}:
@@ -533,7 +533,7 @@ class PosetEnum(Enum):
     @classmethod
     @cache
     def _parse_known_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
-        raw_meets: Sequence[tuple[Self, Meet[Self]]] = cls.KNOWN_MEETS
+        raw_meets: Sequence[tuple[Self, Meet[Self]]] = cls.KNOWN_MEETS  # type: ignore[assignment]
         members = frozenset(cls)
 
         if bad_keys := {node for node, _ in raw_meets if node not in members}:
