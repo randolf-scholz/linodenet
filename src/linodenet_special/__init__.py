@@ -13,14 +13,20 @@ __all__ = [
     "matrix_sqrt",
     "singular_triplet_native",
     "spectral_norm_native",
+    "bimodal_to_gaussian_value_and_jac",
+    "gaussian_to_bimodal_value_and_jac",
+    "mixture_to_gaussian_value_and_jac",
 ]
 
 from . import fallbacks, interfaces, kernels, linalg
 from .fallbacks import (
+    bimodal_to_gaussian_value_and_jac,
     fixpoint_solve,
+    gaussian_to_bimodal_value_and_jac,
     inverse_softplus,
     matrix_log,
     matrix_sqrt,
+    mixture_to_gaussian_value_and_jac,
     singular_triplet_native,
     spectral_norm_native,
 )
