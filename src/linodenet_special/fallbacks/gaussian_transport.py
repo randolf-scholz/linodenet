@@ -9,6 +9,7 @@ __all__ = [
     "mixture_to_gaussian",
 ]
 
+import math
 from typing import Final
 
 import torch
@@ -165,8 +166,19 @@ def _mixture_to_gaussian_total_derivative(
     # ∂y/∂σₖ = -(ωₖ zₖ / σₖ) exp(½(y² - zₖ²))
     d_sigmas = -z * scaled_ratio
 
-    log_pdf_u = -0.5 * (LOG_2PI + y2)
-    d_weights = -torch.exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1))
+    # ∂y/∂ωₖ = √(2π) ℯ^{½y²}⋅(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))
+    # Project weight gradient onto the simplex tangent space.
+    # ∆ⁿ = {x∈ℝⁿ⁺¹ : ∑ₖxₖ = 0, xₖ≥0}
+    # 𝓣ₓ∆ⁿ = {v∈ℝⁿ⁺¹ : ∑ₖvₖ = 0} is the tangent space of the simplex at x.
+    # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
+    log_pdf_u = (0.5 * (LOG_2PI + y2)).unsqueeze(-1)
+    log_phi = log_ndtr(z)  # log Φ(zₖ)
+    log_phi_tangent = (  # log(Φ(zₖ) / (1/n)∑ⱼΦ(zⱼ))
+        log_phi
+        - log_phi.logsumexp(dim=-1, keepdim=True)
+        - math.log(log_phi.shape[-1])  # emulates log_mean_exp
+    )
+    d_weights = torch.logaddexp(log_pdf_u, log_phi_tangent).exp()
 
     return d_x, d_weights, d_mus, d_sigmas
 
@@ -176,20 +188,34 @@ class _BimodalToGaussianImpl(Function):
 
     If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the optimal transport map is given by
 
-    .. math:: y = F_q⁻¹(F_p(x))
+    .. math:: y = F_q⁻¹(Fₚ(x))
 
     Letting Φ be the CDF of $N(0,1)$, then we have
 
     .. math:: y = Φ⁻¹\Bigl( ½Φ((x+μ)/σ) + ½Φ((x-μ)/σ) \Bigr)
-                = √2 \erf⁻¹\Bigl( ½\erf((x+μ)/√2σ) + ½\erf((x-μ)/√2σ) \Bigr)
+                = √2 \erf⁻¹\Bigl(½\erf((x+μ)/√2σ) + ½\erf((x-μ)/√2σ) \Bigr)
 
     Unlike the general mixture case, the two components share the mean $±μ$ and scale $σ$.
-    Writing $z₊ = \frac{x+μ}{σ}$ and $z₋ = \frac{x-μ}{σ}$, then the derivatives are
+
+    Using the shorthands
 
     .. math::
-        \dv{y}{x} &= ½σ⁻¹(ℯ^{½(y²-z₊²)} + ℯ^{½(y²-z₋²)}) \\
-        \dv{y}{μ} &= ½σ⁻¹(ℯ^{½(y²-z₊²)} - ℯ^{½(y²-z₋²)}) \\
-        \dv{y}{σ} &= -½σ⁻¹(z₊ℯ^{½(y²-z₊²)} + z₋ℯ^{½(y²-z₋²)})
+        z₊ &= \frac{x+μ}{σ}     &   z₋ &= \frac{x-μ}{σ} \\
+        E₊ &= ℯ^{½(y²-z₊²)}     &   E₋ &= ℯ^{½(y²-z₋²)}
+
+    The first order derivatives can be written as:
+
+    .. math::
+        ∂y/∂x &=  ½σ⁻¹(E₊ + E₋})    \\
+        ∂y/∂μ &=  ½σ⁻¹(E₊ - E₋})    \\
+        ∂y/∂σ &= -½σ⁻¹(z₊E₊ + z₋E₋)
+
+    And the derivatives of $g(x) = ∂y/∂x$ are
+
+    .. math::
+        ∂g/∂x &=              yg² - ½σ⁻²(z₊E₊ + z₋E₋)      \\
+        ∂g/∂μ &=        yg(∂y/∂μ) - ½σ⁻²(z₊E₊ - z₋E₋)      \\
+        ∂g/∂σ &= -g/σ + yg(∂y/∂σ) + ½σ⁻²(z₊²E₊ + z₋²E₋)
 
     Proof:
 
@@ -233,13 +259,13 @@ class _GaussianToBimodalImpl(Function):
         r"""Solve $y = T(x, μ, σ)$ for $x$ using Newton's method.
 
         Here $T$ is the transport from the symmetric bimodal mixture to $N(0,1)$.
-        Since $T'(0) = σ⁻¹ℯ^{-½|μ|²/σ²}$, the inverse slope at the origin is
+        Since $T'(0) = σ⁻¹ℯ^{-½|μ/σ|²}$, the inverse slope at the origin is
 
-        .. math:: (T⁻¹)'(0) = σℯ^{½|μ|²/σ²}.
+        .. math:: (T⁻¹)'(0) = σℯ^{½|μ/σ|²}.
 
         The transport only depends on $|μ|$. The tails satisfy
-        $T(x, μ, σ) ≈ (x-\operatorname{sign}(x)|μ|)/σ$, so
-        $T⁻¹(y, μ, σ) ≈ σy + \operatorname{sign}(y)|μ|$.
+        $T(x, μ, σ) ≈ σ⁻¹(x-\sign(x)|μ|)$, so
+        $T⁻¹(y, μ, σ) ≈ σy + \sign(y)|μ|$.
         """
         MAXITER: Final[int] = 10
 
@@ -304,22 +330,34 @@ class _GaussianToBimodalImpl(Function):
 class _MixtureToGaussian(Function):
     r"""Optimal transport from $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$.
 
-    If $F_p$ is the CDF of the mixture and $Φ$ is the standard normal CDF, then
+    If $Fₚ$ is the CDF of the mixture and $Φ$ is the standard normal CDF, then
 
-    .. math::
-        y = Φ⁻¹(F_p(x))
-          = Φ⁻¹\left(∑ₖ ωₖ Φ\left((x-μₖ)/σₖ\right)\right).
+    .. math:: y = Φ⁻¹(Fₚ(x)) = Φ⁻¹\Bigl(∑ₖ ωₖ Φ((x-μₖ)/σₖ)\Bigr)
 
     Numerically, we evaluate the mixture CDF in log space and switch between the
     lower-tail and upper-tail representations to avoid cancellation near $0$ and $1$.
 
-    With $zₖ = (x-μₖ)/σₖ$, the derivatives are
+    Using the shorthands
+
+    .. math:: zₖ &= (x-μₖ)/σₖ  &  Eₖ &= ℯ^{½(y²-zₖ²)}
+
+    then the first order derivatives are
 
     .. math::
-        ∂y/∂x &= ∑ₖ (ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
-        ∂y/∂ωₖ &= \sqrt{2π} ℯ^{½y²} Φ(zₖ), \\
-        ∂y/∂μₖ &= -(ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
-        ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) ℯ^{½(y²-zₖ²)}.
+        ∂y/∂x  &= ∑ₖ (ωₖ/σₖ) Eₖ    \\
+        ∂y/∂ωₖ &= √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))    \\
+        ∂y/∂μₖ &= -(ωₖ/σₖ) Eₖ     \\
+        ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) Eₖ
+
+    Note that in the case of ∂y/∂ωₖ, we include the projection on the tangent space of ∆ⁿ.
+
+    And the derivatives of $g(x) = ∂y/∂x$ are
+
+    .. math::
+        ∂g/∂x  &= ∑ₖ (ωₖ/σₖ²) Eₖ(y zₖ - 1), \\
+        ∂g/∂ωₖ &= \sqrt{2π} ℯ^{½y²} Φ(zₖ) / σₖ, \\
+        ∂g/∂μₖ &= ∑ₖ (ωₖ/σₖ²) Eₖ(y zₖ - 1), \\
+        ∂g/∂σₖ &= ∑ₖ (ωₖ/σₖ³) Eₖ(y zₖ - 1 + zₖ²).
     """
 
     @staticmethod
@@ -345,12 +383,6 @@ class _MixtureToGaussian(Function):
         grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
         grad_mus = torch.einsum("..., ...k -> k", g, d_mus)
         grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
-
-        # Project weight gradient onto the simplex tangent space.
-        # ∆ⁿ = {x∈ℝⁿ⁺¹ : ∑ₖxₖ = 0, xₖ≥0}
-        # 𝓣ₓ∆ⁿ = {v∈ℝⁿ⁺¹ : ∑ₖvₖ = 0} is the tangent space of the simplex at x.
-        # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
-        grad_weights = grad_weights - grad_weights.mean(dim=-1, keepdim=True)
 
         return grad_values, grad_weights, grad_mus, grad_sigmas
 
@@ -427,12 +459,6 @@ class _GaussianToMixture(Function):
         grad_weights = torch.einsum("..., ...k -> k", grad_y, -d_weights)
         grad_mus = torch.einsum("..., ...k -> k", grad_y, -d_mus)
         grad_sigmas = torch.einsum("..., ...k -> k", grad_y, -d_sigmas)
-
-        # Project weight gradient onto the simplex tangent space.
-        # ∆ⁿ = {x∈ℝⁿ⁺¹ : ∑ₖxₖ = 0, xₖ≥0}
-        # 𝓣ₓ∆ⁿ = {v∈ℝⁿ⁺¹ : ∑ₖvₖ = 0} is the tangent space of the simplex at x.
-        # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
-        grad_weights = grad_weights - grad_weights.mean(dim=-1, keepdim=True)
 
         return grad_y, grad_weights, grad_mus, grad_sigmas
 
