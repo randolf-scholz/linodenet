@@ -412,7 +412,7 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _parsed_known_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
+    def _parse_known_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
         r"""Parse declared supertypes into direct supertype relations.
 
         `KNOWN_SUPERTYPES` may contain plain nodes or meet expressions. A meet
@@ -452,41 +452,7 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _compiled_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
-        r"""Compile all declared supertype information into one direct map.
-
-        This combines parsed `KNOWN_SUPERTYPES`, reverse declarations from
-        `KNOWN_SUBTYPES`, structural supertype relations induced by
-        `KNOWN_MEETS`, and the implicit top/bottom node conventions.
-
-        The result still contains only direct supertype edges. Transitive
-        closure is computed separately by `_closure_from`.
-        """
-        supertypes: dict[Self, set[Self]] = {node: set() for node in cls}
-
-        for node, supers in cls._parsed_known_supertypes().items():
-            supertypes[node].update(supers)
-
-        for meet, factors in cls._parsed_known_meets():
-            supertypes[meet].update(factors)
-
-        for node, subtypes in cls._parsed_known_subtype_edges().items():
-            for subtype in subtypes:
-                supertypes[subtype].add(node)
-
-        if (top := cls._top_node()) is not None:
-            for node in cls:
-                if node is not top:
-                    supertypes[node].add(top)
-
-        if (bottom := cls._bottom_node()) is not None:
-            supertypes[bottom].update(node for node in cls if node is not bottom)
-
-        return {src: frozenset(targets) for src, targets in supertypes.items()}
-
-    @classmethod
-    @cache
-    def _parsed_known_subtypes(
+    def _parse_known_subtypes(
         cls,
     ) -> tuple[
         Mapping[Self, frozenset[Self]], tuple[tuple[Self, frozenset[Self]], ...]
@@ -548,21 +514,77 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _parsed_known_subtype_edges(cls) -> Mapping[Self, frozenset[Self]]:
+    def _parse_known_subtype_edges(cls) -> Mapping[Self, frozenset[Self]]:
         r"""Parse declared plain subtypes into direct subtype relations."""
-        parsed_subtypes, _ = cls._parsed_known_subtypes()
+        parsed_subtypes, _ = cls._parse_known_subtypes()
         return parsed_subtypes
 
     @classmethod
     @cache
-    def _parsed_known_subtype_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
+    def _parse_known_subtype_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
         r"""Parse declared meet-based subtype implications.
 
         A declaration `X: {A & B}` in `KNOWN_SUBTYPES` denotes the implication
         `A ∧ B ≤ X`, i.e. every node below all meet factors is also below `X`.
         """
-        _, subtype_meets = cls._parsed_known_subtypes()
+        _, subtype_meets = cls._parse_known_subtypes()
         return subtype_meets
+
+    @classmethod
+    @cache
+    def _parse_known_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
+        raw_meets: Sequence[tuple[Self, Meet[Self]]] = cls.KNOWN_MEETS
+        members = frozenset(cls)
+
+        if bad_keys := {node for node, _ in raw_meets if node not in members}:
+            raise TypeError(f"Expected {cls.__name__} meet nodes, got {bad_keys!r}.")
+
+        meets = tuple((node, frozenset(factors)) for node, factors in raw_meets)
+
+        all_factors = frozenset().union(*(factors for _, factors in meets))
+        if bad_factors := {factor for factor in all_factors if factor not in members}:
+            raise TypeError(
+                f"Expected {cls.__name__} meet factors, got {bad_factors!r}."
+            )
+
+        if empty_meets := {node for node, factors in meets if not factors}:
+            raise ValueError(f"Expected non-empty meet factors, got {empty_meets!r}.")
+
+        return meets
+
+    @classmethod
+    @cache
+    def _compiled_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
+        r"""Compile all declared supertype information into one direct map.
+
+        This combines parsed `KNOWN_SUPERTYPES`, reverse declarations from
+        `KNOWN_SUBTYPES`, structural supertype relations induced by
+        `KNOWN_MEETS`, and the implicit top/bottom node conventions.
+
+        The result still contains only direct supertype edges. Transitive
+        closure is computed separately by `_closure_from`.
+        """
+        supertypes: dict[Self, set[Self]] = {node: set() for node in cls}
+
+        for node, supers in cls._parse_known_supertypes().items():
+            supertypes[node].update(supers)
+
+        for meet, factors in cls._parse_known_meets():
+            supertypes[meet].update(factors)
+
+        for node, subtypes in cls._parse_known_subtype_edges().items():
+            for subtype in subtypes:
+                supertypes[subtype].add(node)
+
+        if (top := cls._top_node()) is not None:
+            for node in cls:
+                if node is not top:
+                    supertypes[node].add(top)
+
+        if (bottom := cls._bottom_node()) is not None:
+            supertypes[bottom].update(node for node in cls if node is not bottom)
+
+        return {src: frozenset(targets) for src, targets in supertypes.items()}
 
     @classmethod
     @cache
@@ -606,32 +628,10 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _parsed_known_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
-        raw_meets: Sequence[tuple[Self, Meet[Self]]] = cls.KNOWN_MEETS
-        members = frozenset(cls)
-
-        if bad_keys := {node for node, _ in raw_meets if node not in members}:
-            raise TypeError(f"Expected {cls.__name__} meet nodes, got {bad_keys!r}.")
-
-        meets = tuple((node, frozenset(factors)) for node, factors in raw_meets)
-
-        all_factors = frozenset().union(*(factors for _, factors in meets))
-        if bad_factors := {factor for factor in all_factors if factor not in members}:
-            raise TypeError(
-                f"Expected {cls.__name__} meet factors, got {bad_factors!r}."
-            )
-
-        if empty_meets := {node for node, factors in meets if not factors}:
-            raise ValueError(f"Expected non-empty meet factors, got {empty_meets!r}.")
-
-        return meets
-
-    @classmethod
-    @cache
     def _closure_from(cls, nodes: frozenset[Self], /) -> frozenset[Self]:
         supertypes = cls._validated_supertypes()
-        meets = cls._parsed_known_meets()
-        subtype_meets = cls._parsed_known_subtype_meets()
+        meets = cls._parse_known_meets()
+        subtype_meets = cls._parse_known_subtype_meets()
 
         closure: set[Self] = set()
         stack = list(nodes)
@@ -661,9 +661,7 @@ class PosetEnum(Enum):
     @property
     def factorizations(self) -> frozenset[Meet[Self]]:
         return frozenset(
-            Meet(factors)
-            for node, factors in self._parsed_known_meets()
-            if node is self
+            Meet(factors) for node, factors in self._parse_known_meets() if node is self
         )
 
     def __str__(self) -> str:
