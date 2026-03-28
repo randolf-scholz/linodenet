@@ -4,6 +4,7 @@ r"""Implementation of the optimal transport based activation function."""
 __all__ = [
     # functional interfaces
     "gaussian_to_bimodal",
+    "gaussian_to_bimodal_value_and_jac",
     "bimodal_to_gaussian",
     "bimodal_to_gaussian_value_and_jac",
     "gaussian_to_mixture",
@@ -172,6 +173,34 @@ def _gaussian_to_bimodal_guess(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tenso
     """
     λ = torch.exp(-0.5 * (mu / sigma) ** 2) / sigma
     return hard_bend(x, λ, mu, 1 / sigma)
+
+
+def _gaussian_to_bimodal_value(
+    y: Tensor, mu: Tensor, sigma: Tensor, maxiter: int, /
+) -> tuple[Tensor, Tensor]:
+    r"""Solve the inverse bimodal transport by safeguarded Newton iteration."""
+    m = mu.abs()
+    lower = sigma * y - m
+    upper = sigma * y + m
+    x = _gaussian_to_bimodal_guess(y, mu, sigma)
+
+    for _ in range(maxiter):
+        x = x.clamp(lower, upper)
+        fx, d_fx = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
+        r = fx - y
+        lower = torch.where(r < 0, x, lower)
+        upper = torch.where(r > 0, x, upper)
+        x_newton = x - r / d_fx
+        x_bisect = 0.5 * (lower + upper)
+        x = torch.where(
+            (x_newton >= lower) & (x_newton <= upper),
+            x_newton,
+            x_bisect,
+        )
+
+    x = x.clamp(lower, upper)
+    fx = _bimodal_to_gaussian_value(x, mu, sigma)
+    return x, fx
 
 
 def _mixture_to_gaussian_value(
@@ -395,7 +424,7 @@ class _GaussianToBimodal(Function):
 
     @staticmethod
     @torch.no_grad()
-    def forward(ctx, y: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
+    def forward(ctx, y: Tensor, mu: Tensor, sigma: Tensor, maxiter: int, /) -> Tensor:
         r"""Solve $y = T(x, μ, σ)$ for $x$ using Newton's method.
 
         Here $T$ is the transport from the symmetric bimodal mixture to $N(0,1)$.
@@ -407,30 +436,7 @@ class _GaussianToBimodal(Function):
         $T(x, μ, σ) ≈ σ⁻¹(x-\sign(x)|μ|)$, so
         $T⁻¹(y, μ, σ) ≈ σy + \sign(y)|μ|$.
         """
-        MAXITER: Final[int] = 10
-
-        m = mu.abs()
-        lower = sigma * y - m
-        upper = sigma * y + m
-        x = _gaussian_to_bimodal_guess(y, mu, sigma)
-
-        for _ in range(MAXITER):
-            x = x.clamp(lower, upper)
-            fx, d_fx = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
-            r = fx - y
-            lower = torch.where(r < 0, x, lower)
-            upper = torch.where(r > 0, x, upper)
-            x_newton = x - r / d_fx
-            x_bisect = 0.5 * (lower + upper)
-            x = torch.where(
-                (x_newton >= lower) & (x_newton <= upper),
-                x_newton,
-                x_bisect,
-            )
-
-        x = x.clamp(lower, upper)
-        fx = _bimodal_to_gaussian_value(x, mu, sigma)
-
+        x, fx = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
         ctx.save_for_backward(x, mu, sigma, fx)
         return x
 
@@ -446,6 +452,14 @@ class _GaussianToBimodal(Function):
             ∂x/∂y &= (∂T/∂x)⁻¹ \\
             ∂x/∂μ &= -(∂T/∂x)⁻¹ ∂T/∂μ \\
             ∂x/∂σ &= -(∂T/∂x)⁻¹ ∂T/∂σ
+
+        For the inverse Jacobian $j = ∂x/∂y = (∂T/∂x)⁻¹$, differentiating once
+        more gives
+
+        .. math::
+            ∂j/∂y &= -(∂²T/∂x²)(∂T/∂x)⁻³ \\
+            ∂j/∂μ &= (∂²T/∂x²)(∂T/∂μ)(∂T/∂x)⁻³ - (∂²T/∂x∂μ)(∂T/∂x)⁻² \\
+            ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻².
         """
         (g,) = outer
         x, mu, sigma, fx = ctx.saved_tensors
@@ -463,6 +477,55 @@ class _GaussianToBimodal(Function):
         d_mu = d_mu.clamp(-upper_bound, upper_bound)
 
         return (g * d_y), (g * d_mu), (g * d_sigma)
+
+
+class _GaussianToBimodalValueAndJac(Function):
+    r"""Return the Gaussian-to-bimodal transport and its $y$-derivative."""
+
+    @staticmethod
+    @torch.no_grad()
+    def forward(ctx, y: Tensor, mu: Tensor, sigma: Tensor, /) -> tuple[Tensor, Tensor]:
+        MAXITER: Final[int] = 10
+
+        x, fx = _gaussian_to_bimodal_value(y, mu, sigma, MAXITER)
+
+        d_x, _, _ = _bimodal_to_gaussian_derivatives(x, mu, sigma, fx)
+        d_y = d_x.reciprocal()
+
+        lower_bound = sigma
+        upper_bound = sigma * torch.exp(0.5 * (mu / sigma) ** 2)
+        d_y = d_y.clamp(lower_bound, upper_bound)
+
+        ctx.save_for_backward(x, mu, sigma, fx)
+        return x, d_y
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        grad_x, grad_dx = outer
+        x, mu, sigma, fx = ctx.saved_tensors
+        d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma = _bimodal_to_gaussian_derivatives2(
+            x, mu, sigma, fx
+        )
+        dx_inv = d_x.reciprocal()
+
+        d_y = dx_inv
+        d_mu_inv = -d_mu * dx_inv
+        d_sigma_inv = -d_sigma * dx_inv
+
+        lower_bound = sigma
+        upper_bound = sigma * torch.exp(0.5 * (mu / sigma) ** 2)
+        d_y = d_y.clamp(lower_bound, upper_bound)
+        d_mu_inv = d_mu_inv.clamp(-upper_bound, upper_bound)
+
+        j_y = -d2_x * dx_inv.pow(3)
+        j_mu = d2_x * d_mu * dx_inv.pow(3) - d2_mu * dx_inv.square()
+        j_sigma = d2_x * d_sigma * dx_inv.pow(3) - d2_sigma * dx_inv.square()
+
+        return (
+            grad_x * d_y + grad_dx * j_y,
+            grad_x * d_mu_inv + grad_dx * j_mu,
+            grad_x * d_sigma_inv + grad_dx * j_sigma,
+        )
 
 
 class _MixtureToGaussian(Function):
@@ -655,6 +718,20 @@ def gaussian_to_bimodal(
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
     return _GaussianToBimodal.apply(y, mu, sigma)
+
+
+def gaussian_to_bimodal_value_and_jac(
+    y: Tensor,
+    /,
+    mu: Tensor | float = 2.0,
+    sigma: Tensor | float = 1.0,
+    *,
+    maxiter: int = 10,
+) -> tuple[Tensor, Tensor]:
+    r"""Map $N(0,1)$ to the symmetric mixture and return $(f(y), ∂f/∂y)$."""
+    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
+    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    return _GaussianToBimodalValueAndJac.apply(y, mu, sigma, maxiter)
 
 
 def bimodal_to_gaussian(
