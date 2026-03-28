@@ -3,6 +3,7 @@ r"""Base protocols and ordering utilities for domain definitions."""
 __all__ = [
     "Domain",
     "DomainMapping",
+    "Indeterminate",
     "Join",
     "Meet",
     "Inverse",
@@ -24,39 +25,74 @@ from typing import Any, ClassVar, Final, Protocol, Self, overload, runtime_check
 from torch import Tensor
 
 
-def _gt(a, b, /) -> bool | NotImplementedType:
+@dataclass(frozen=True)
+class Indeterminate:
+    r"""Placeholder for an order statement whose truth cannot be decided."""
+
+    left: object
+    op: str
+    right: object
+
+    def __str__(self) -> str:
+        return f"{self.left!s} {self.op} {self.right!s}"
+
+    def __bool__(self) -> bool:
+        raise TypeError(f"Truth of order statement {self!s} could not be determined.")
+
+
+def _gt(a, b, /) -> bool | Indeterminate | NotImplementedType:
     try:
         result = a > b
     except TypeError:
         return NotImplemented
-    assert result is NotImplemented or result is True or result is False
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
     return result
 
 
-def _lt(a, b, /) -> bool | NotImplementedType:
+def _lt(a, b, /) -> bool | Indeterminate | NotImplementedType:
     try:
         result = a < b
     except TypeError:
         return NotImplemented
-    assert result is NotImplemented or result is True or result is False
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
     return result
 
 
-def _ge(a, b, /) -> bool | NotImplementedType:
+def _ge(a, b, /) -> bool | Indeterminate | NotImplementedType:
     try:
         result = a >= b
     except TypeError:
         return NotImplemented
-    assert result is NotImplemented or result is True or result is False
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
     return result
 
 
-def _le(a, b, /) -> bool | NotImplementedType:
+def _le(a, b, /) -> bool | Indeterminate | NotImplementedType:
     try:
         result = a <= b
     except TypeError:
         return NotImplemented
-    assert result is NotImplemented or result is True or result is False
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
     return result
 
 
@@ -68,16 +104,16 @@ class Domain(Protocol):
     def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
 
-    def __le__(self, other: Any, /) -> bool:
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
-    def __lt__(self, other: Any, /) -> bool:
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
-    def __gt__(self, other: Any, /) -> bool:
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
-    def __ge__(self, other: Any, /) -> bool:
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
     def __and__(self, other: Any, /) -> Domain:
@@ -175,20 +211,26 @@ class Meet[D: Domain](Domain):
                 # (A₁ ∧ … ∧ Aₙ) ∨ B ≡ (A₁ ∨ B) ∧ … ∧ (Aₙ ∨ B)
                 return Meet({m | other for m in self})
 
-    def __le__(self, other: object, /) -> bool:
+    def __le__(self, other: object, /) -> bool | Indeterminate:
         # (A₁ ∧ … ∧ Aₙ) ≤ B ⇐ Aᵢ ≤ B for some i (sufficient condition)
         if any(_le(member, other) is True for member in self):
             return True
+        if isinstance(other, Domain):
+            reversed_result = _ge(other, self)
+            if reversed_result is not NotImplemented:
+                return reversed_result
+            return Indeterminate(self, "<=", other)
         return NotImplemented
 
-    def __lt__(self, other: object, /) -> bool:
+    def __lt__(self, other: object, /) -> bool | Indeterminate:
         # (A₁ ∧ … ∧ Aₙ) < B ⇐ Aᵢ < B for some i (sufficient condition)
         if any(_lt(member, other) is True for member in self):
             return True
         return NotImplemented
 
-    def __ge__(self, other: object, /) -> bool:
+    def __ge__(self, other: object, /) -> bool | Indeterminate:
         # B ≤ (A₁ ∧ … ∧ Aₙ) ⟺ B ≤ A₁ and … and B ≤ Aₙ
+        indeterminate = False
         for factor in self:
             match _le(other, factor):
                 case False:
@@ -196,10 +238,14 @@ class Meet[D: Domain](Domain):
                 case True:
                     continue
                 case _:
-                    return NotImplemented
+                    indeterminate = True
+        if indeterminate:
+            if isinstance(other, Domain):
+                return Indeterminate(other, "<=", self)
+            return NotImplemented
         return True
 
-    def __gt__(self, other: object, /) -> bool:
+    def __gt__(self, other: object, /) -> bool | Indeterminate:
         return self >= other and self != other
 
 
@@ -265,8 +311,9 @@ class Join[D: Domain](Domain):
                 # (A₁ ∨ … ∨ Aₙ) ∨ B ≡ (A₁ ∨ … ∨ Aₙ ∨ B)
                 return Join({*self, other})
 
-    def __le__(self, other: object, /) -> bool:
+    def __le__(self, other: object, /) -> bool | Indeterminate:
         # (A₁ ∨ … ∨ Aₙ) ≤ B ⟺ A₁ ≤ B ∧ … ∧ Aₙ ≤ B
+        indeterminate = False
         for member in self:
             match _le(member, other):
                 case False:
@@ -274,19 +321,25 @@ class Join[D: Domain](Domain):
                 case True:
                     continue
                 case _:
-                    return NotImplemented
+                    indeterminate = True
+        if indeterminate:
+            if isinstance(other, Domain):
+                return Indeterminate(self, "<=", other)
+            return NotImplemented
         return True
 
-    def __lt__(self, other: object, /) -> bool:
+    def __lt__(self, other: object, /) -> bool | Indeterminate:
         return self <= other and self != other
 
-    def __ge__(self, other: object, /) -> bool:
+    def __ge__(self, other: object, /) -> bool | Indeterminate:
         # B ≤ (A₁ ∨ … ∨ Aₙ) ⇐ B ≤ Aᵢ for some i (sufficient condition)
         if any(_ge(member, other) is True for member in self):
             return True
+        if isinstance(other, Domain):
+            return Indeterminate(other, "<=", self)
         return NotImplemented
 
-    def __gt__(self, other: object, /) -> bool:
+    def __gt__(self, other: object, /) -> bool | Indeterminate:
         # B < (A₁ ∨ … ∨ Aₙ) ⇐ B < Aᵢ for some i (sufficient condition)
         if any(_gt(member, other) is True for member in self):
             return True
@@ -370,22 +423,58 @@ class PosetEnum(Enum):
     def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
 
-    def __le__(self, other: object, /) -> bool:
+    def __le__(self, other: object, /) -> bool | Indeterminate:
         if isinstance(other, type(self)):
             return other in self.supertypes
+        if isinstance(other, Meet):
+            indeterminate = False
+            for factor in other:
+                match _le(self, factor):
+                    case False:
+                        return False
+                    case True:
+                        continue
+                    case _:
+                        indeterminate = True
+            if indeterminate:
+                return Indeterminate(self, "<=", other)
+            return True
+        if isinstance(other, Join):
+            if any(_le(self, member) is True for member in other):
+                return True
+            return Indeterminate(self, "<=", other)
         return NotImplemented
 
-    def __lt__(self, other: object, /) -> bool:
+    def __lt__(self, other: object, /) -> bool | Indeterminate:
         if isinstance(other, type(self)):
             return self <= other and self != other
         return NotImplemented
 
-    def __ge__(self, other: object, /) -> bool:
+    def __ge__(self, other: object, /) -> bool | Indeterminate:
         if isinstance(other, type(self)):
             return self in other.supertypes
+        if isinstance(other, Meet):
+            if all(isinstance(factor, type(self)) for factor in other):
+                return self in type(self)._closure_from(frozenset(other))
+            if any(_ge(self, factor) is True for factor in other):
+                return True
+            return Indeterminate(other, "<=", self)
+        if isinstance(other, Join):
+            indeterminate = False
+            for member in other:
+                match _le(member, self):
+                    case False:
+                        return False
+                    case True:
+                        continue
+                    case _:
+                        indeterminate = True
+            if indeterminate:
+                return Indeterminate(other, "<=", self)
+            return True
         return NotImplemented
 
-    def __gt__(self, other: object, /) -> bool:
+    def __gt__(self, other: object, /) -> bool | Indeterminate:
         if isinstance(other, type(self)):
             return self >= other and self != other
         return NotImplemented
