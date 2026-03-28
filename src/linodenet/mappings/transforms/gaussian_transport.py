@@ -77,7 +77,7 @@ class GaussianToBimodal(TransformBase):
         - strictly increasing
         - smooth for $σ > 0$
         - derivative bounded by
-          $σ ≤ ∂x/∂y ≤ σ \exp(½(μ/σ)²)$
+          $σ ≤ ∂x/∂y ≤ σ\exp(½(μ/σ)²)$
         - asymptotically affine in the tails:
           $x ≈ σy + \sign(y)\abs{μ}$
     """
@@ -115,7 +115,7 @@ class MixtureToGaussian(TransformBase):
         - strictly increasing in $x$
         - smooth for positive component scales
         - Jacobian
-          $∂y/∂x = ∑ₖ (ωₖ/σₖ)\exp(\tfrac12(y²-zₖ²))$ is strictly positive
+          $∂y/∂x = ∑ₖ (ωₖ/σₖ)\exp(½(y²-zₖ²))$ is strictly positive
         - in the far tails it approaches the affine transport of the dominant
           component, so $y ≈ (x-μₖ)/σₖ$
     """
@@ -163,7 +163,7 @@ class GaussianToMixture(TransformBase):
         - Jacobian strictly positive, with bounds inherited from the reciprocal
           slope of the mixture-to-Gaussian map
         - asymptotically piecewise affine in the tails, matching the dominant
-          component behavior $x ≈ μₖ + σₖ y$
+          component behavior $x ≈ μₖ + σₖy$
     """
 
     def __init__(self, num_components: int) -> None:
