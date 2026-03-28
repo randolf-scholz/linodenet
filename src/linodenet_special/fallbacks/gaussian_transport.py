@@ -38,21 +38,31 @@ def _bimodal_to_gaussian_forward(
     return y, z_minus, z_plus
 
 
-def _bimodal_to_gaussian_x_derivative(
-    y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
-) -> Tensor:
-    r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport."""
+def _bimodal_to_gaussian_value_and_grad(
+    x: Tensor, mu: Tensor, sigma: Tensor
+) -> tuple[Tensor, Tensor]:
+    r"""Evaluate the bimodal transport and its $x$-derivative in one pass."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+
     m = mu.abs()
-    y2 = y.square()
+    z_plus = (x + m) / sigma
+    z_minus = (x - m) / sigma
+
+    log_p = torch.logaddexp(LOG_HALF + log_ndtr(z_plus), LOG_HALF + log_ndtr(z_minus))
+    log_q = torch.logaddexp(LOG_HALF + log_ndtr(-z_plus), LOG_HALF + log_ndtr(-z_minus))
+    fx = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
+    fx = torch.clamp(fx, z_minus, z_plus)
+
+    y2 = fx.square()
     log_sigma = sigma.log()
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
-    d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
     lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
     upper_bound = 1 / sigma
-    d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
-    return d_x
+    d_fx = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
+    d_fx = torch.clamp(d_fx, lower_bound, upper_bound)
+
+    return fx, d_fx
 
 
 def _bimodal_to_gaussian_derivatives(
@@ -115,14 +125,23 @@ def _mixture_to_gaussian_forward(
     return y, z
 
 
-def _mixture_to_gaussian_x_derivative(
-    y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
-) -> Tensor:
-    r"""Compute $∂T/∂x$ for the mixture-to-Gaussian transport."""
-    y2 = y.square()
-    log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
-    scaled_ratio = torch.exp(log_ratio + torch.log(weights) - torch.log(sigmas))
-    return scaled_ratio.sum(dim=-1)
+def _mixture_to_gaussian_value_and_grad(
+    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor
+) -> tuple[Tensor, Tensor]:
+    r"""Evaluate the mixture transport and its $x$-derivative in one pass."""
+    LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+
+    z = (x.unsqueeze(-1) - mus) / sigmas
+    log_w = torch.log(weights)
+    log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
+    log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
+
+    fx = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
+    fx = torch.clamp(fx, z.min(dim=-1).values, z.max(dim=-1).values)
+
+    log_ratio = 0.5 * (fx.square().unsqueeze(-1) - z.square())
+    d_fx = torch.exp(log_ratio + log_w - torch.log(sigmas)).sum(dim=-1)
+    return fx, d_fx
 
 
 def _mixture_to_gaussian_derivatives(
@@ -231,8 +250,7 @@ class _GaussianToBimodalImpl(Function):
 
         for _ in range(MAXITER):
             x = torch.clamp(x, lower, upper)
-            fx, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
-            d_fx = _bimodal_to_gaussian_x_derivative(fx, z_minus, z_plus, mu, sigma)
+            fx, d_fx = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
             r = fx - y
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
@@ -365,8 +383,7 @@ class _GaussianToMixture(Function):
 
         for _ in range(MAXITER):
             x = torch.clamp(x, lower, upper)
-            fy, z = _mixture_to_gaussian_forward(x, weights, mus, sigmas)
-            d_fy = _mixture_to_gaussian_x_derivative(fy, z, weights, sigmas)
+            fy, d_fy = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
             r = fy - y
             # Since T is monotone, the sign of the residual tells us which side of
             # the bracket still contains the inverse solution.
