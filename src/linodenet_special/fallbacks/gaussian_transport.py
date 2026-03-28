@@ -83,17 +83,20 @@ def _bimodal_to_gaussian_derivatives(
     mu_sign = torch.sign(mu)
     y2 = y.square()
     log_sigma = sigma.log()
+    # Evaluate the two mode contributions in log space to avoid tail underflow.
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
 
     d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
     hi = torch.maximum(log_phi_plus, log_phi_minus)
     lo = torch.minimum(log_phi_plus, log_phi_minus)
+    # Compute φ₊ - φ₋ with a stable log-diff-exp instead of subtracting directly.
     d_m_exact = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
         hi + torch.log1p(-torch.exp(lo - hi))
     )
     d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x_exact + (m / sigma) * d_m_exact)
 
+    # The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
     upper_bound = 1 / sigma
     d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
@@ -122,31 +125,36 @@ def _bimodal_to_gaussian_derivatives2(
     mu_sign = torch.sign(mu)
     y2 = y.square()
     log_sigma = sigma.log()
+    # Evaluate the two mode contributions in log space to avoid tail underflow.
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
 
     d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
     hi = torch.maximum(log_phi_plus, log_phi_minus)
     lo = torch.minimum(log_phi_plus, log_phi_minus)
+    # Compute φ₊ - φ₋ with a stable log-diff-exp instead of subtracting directly.
     d_m_exact = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
         hi + torch.log1p(-torch.exp(lo - hi))
     )
     d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x_exact + (m / sigma) * d_m_exact)
 
+    # The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
     upper_bound = 1 / sigma
     d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
     d_mu = mu_sign * torch.clamp(d_m_exact, -upper_bound, upper_bound)
 
+    # These weighted sums are the repeated pieces in the closed-form ∂g/∂θ formulas.
     phi_plus = log_phi_plus.exp()
     phi_minus = log_phi_minus.exp()
     z_term_sum = (z_plus * phi_plus + z_minus * phi_minus) / sigma
     z_term_diff = (z_plus * phi_plus - z_minus * phi_minus) / sigma
     z2_term_sum = (z_plus.square() * phi_plus + z_minus.square() * phi_minus) / sigma
 
+    # Here g = ∂y/∂x, so these are the second derivatives that feed the Jacobian output.
     d2_x = y * d_x.square() - z_term_sum
     d2_mu = mu_sign * (y * d_x * d_m_exact - z_term_diff)
-    d2_sigma = -d_x / sigma + y * d_x * d_sigma_exact + z2_term_sum
+    d2_sigma = y * d_x * d_sigma_exact - d_x / sigma + z2_term_sum
     return d_x, d_mu, d_sigma_exact, d2_x, d2_mu, d2_sigma
 
 
@@ -316,43 +324,15 @@ class _BimodalToGaussianValueAndJacImpl(Function):
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         grad_y, grad_dy = outer
-        x, mu, sigma, y, d_x = ctx.saved_tensors
-        m = mu.abs()
-        z_plus = (x + m) / sigma
-        z_minus = (x - m) / sigma
-        d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(x, mu, sigma, y)
-
-        grad_x = grad_y * d_x
-        grad_mu = grad_y * d_mu
-        grad_sigma = grad_y * d_sigma
-
-        if not grad_dy.any():
-            return grad_x, grad_mu, grad_sigma
-
-        LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
-
-        mu_sign = torch.sign(mu)
-        y2 = y.square()
-        log_sigma = sigma.log()
-        log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
-        log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
-        phi_plus = log_phi_plus.exp()
-        phi_minus = log_phi_minus.exp()
-        d_m_exact = phi_plus - phi_minus
-        z_term_sum = (z_plus * phi_plus + z_minus * phi_minus) / sigma
-        z_term_diff = (z_plus * phi_plus - z_minus * phi_minus) / sigma
-        z2_term_sum = (
-            z_plus.square() * phi_plus + z_minus.square() * phi_minus
-        ) / sigma
-
-        d2_x = y * d_x.square() - z_term_sum
-        d2_mu = mu_sign * (y * d_x * d_m_exact - z_term_diff)
-        d2_sigma = -d_x / sigma + y * d_x * d_sigma + z2_term_sum
-
-        grad_x = grad_x + grad_dy * d2_x
-        grad_mu = grad_mu + grad_dy * d2_mu
-        grad_sigma = grad_sigma + grad_dy * d2_sigma
-        return grad_x, grad_mu, grad_sigma
+        x, mu, sigma, y, _ = ctx.saved_tensors
+        d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma = _bimodal_to_gaussian_derivatives2(
+            x, mu, sigma, y
+        )
+        return (
+            grad_y * d_x + grad_dy * d2_x,
+            grad_y * d_mu + grad_dy * d2_mu,
+            grad_y * d_sigma + grad_dy * d2_sigma,
+        )
 
 
 class _GaussianToBimodalImpl(Function):
