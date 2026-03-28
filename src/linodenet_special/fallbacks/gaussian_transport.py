@@ -68,7 +68,13 @@ def _bimodal_to_gaussian_value_and_jac(
 def _bimodal_to_gaussian_derivatives(
     x: Tensor, mu: Tensor, sigma: Tensor, y: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor]:
-    r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport."""
+    r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport.
+
+    Returns:
+        ∂y/∂x:  ½σ⁻¹(E₊ + E₋})
+        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋})
+        ∂y/∂σ: -½σ⁻¹(z₊E₊ + z₋E₋)
+    """
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     m = mu.abs()
@@ -93,6 +99,55 @@ def _bimodal_to_gaussian_derivatives(
     d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
     d_mu = mu_sign * torch.clamp(d_m_exact, -upper_bound, upper_bound)
     return d_x, d_mu, d_sigma_exact
+
+
+def _bimodal_to_gaussian_derivatives2(
+    x: Tensor, mu: Tensor, sigma: Tensor, y: Tensor, /
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    r"""Compute first and second derivatives for the bimodal-to-Gaussian transport.
+
+    Returns:
+        ∂y/∂x:  ½σ⁻¹(E₊ + E₋})
+        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋})
+        ∂y/∂σ: -½σ⁻¹(z₊E₊ + z₋E₋)
+        ∂g/∂x: -½σ⁻²(z₊E₊ + z₋E₋)   + yg(∂y/∂x)
+        ∂g/∂μ: -½σ⁻²(z₊E₊ - z₋E₋)   + yg(∂y/∂μ)
+        ∂g/∂σ: +½σ⁻²(z₊²E₊ + z₋²E₋) + yg(∂y/∂σ) -g/σ
+    """
+    LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+
+    m = mu.abs()
+    z_plus = (x + m) / sigma
+    z_minus = (x - m) / sigma
+    mu_sign = torch.sign(mu)
+    y2 = y.square()
+    log_sigma = sigma.log()
+    log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
+    log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
+
+    d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
+    hi = torch.maximum(log_phi_plus, log_phi_minus)
+    lo = torch.minimum(log_phi_plus, log_phi_minus)
+    d_m_exact = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
+        hi + torch.log1p(-torch.exp(lo - hi))
+    )
+    d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x_exact + (m / sigma) * d_m_exact)
+
+    lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
+    upper_bound = 1 / sigma
+    d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
+    d_mu = mu_sign * torch.clamp(d_m_exact, -upper_bound, upper_bound)
+
+    phi_plus = log_phi_plus.exp()
+    phi_minus = log_phi_minus.exp()
+    z_term_sum = (z_plus * phi_plus + z_minus * phi_minus) / sigma
+    z_term_diff = (z_plus * phi_plus - z_minus * phi_minus) / sigma
+    z2_term_sum = (z_plus.square() * phi_plus + z_minus.square() * phi_minus) / sigma
+
+    d2_x = y * d_x.square() - z_term_sum
+    d2_mu = mu_sign * (y * d_x * d_m_exact - z_term_diff)
+    d2_sigma = -d_x / sigma + y * d_x * d_sigma_exact + z2_term_sum
+    return d_x, d_mu, d_sigma_exact, d2_x, d2_mu, d2_sigma
 
 
 def _gaussian_to_bimodal_guess(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
@@ -213,9 +268,9 @@ class _BimodalToGaussianImpl(Function):
     And the derivatives of $g(x) = ∂y/∂x$ are
 
     .. math::
-        ∂g/∂x &=              yg² - ½σ⁻²(z₊E₊ + z₋E₋)      \\
-        ∂g/∂μ &=        yg(∂y/∂μ) - ½σ⁻²(z₊E₊ - z₋E₋)      \\
-        ∂g/∂σ &= -g/σ + yg(∂y/∂σ) + ½σ⁻²(z₊²E₊ + z₋²E₋)
+        ∂g/∂x &= -½σ⁻²(z₊E₊ + z₋E₋)   + yg(∂y/∂x)      \\
+        ∂g/∂μ &= -½σ⁻²(z₊E₊ - z₋E₋)   + yg(∂y/∂μ)      \\
+        ∂g/∂σ &= +½σ⁻²(z₊²E₊ + z₋²E₋) + yg(∂y/∂σ) -g/σ
 
     Proof:
 
@@ -271,7 +326,7 @@ class _BimodalToGaussianValueAndJacImpl(Function):
         grad_mu = grad_y * d_mu
         grad_sigma = grad_y * d_sigma
 
-        if not grad_dy.is_nonzero():
+        if not grad_dy.any():
             return grad_x, grad_mu, grad_sigma
 
         LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
