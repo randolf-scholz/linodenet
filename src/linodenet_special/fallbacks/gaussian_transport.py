@@ -211,7 +211,14 @@ def _mixture_to_gaussian_value_and_jac(
 def _mixture_to_gaussian_derivatives(
     z: Tensor, weights: Tensor, sigmas: Tensor, y: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    r"""Compute stable partial derivatives for the mixture-to-Gaussian transport."""
+    r"""Compute stable partial derivatives for the mixture-to-Gaussian transport.
+
+    Returns:
+        ∂y/∂x  = ∑ₖ(ωₖ/σₖ)Eₖ
+        ∂y/∂ωₖ = √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))
+        ∂y/∂μₖ = -(ωₖ/σₖ)Eₖ
+        ∂y/∂σₖ = -(ωₖ/σₖ)zₖEₖ
+    """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
     y2 = y.square()
@@ -244,6 +251,23 @@ def _mixture_to_gaussian_derivatives(
     d_weights = torch.logaddexp(log_pdf_u, log_phi_tangent).exp()
 
     return d_x, d_weights, d_mus, d_sigmas
+
+
+def _mixture_to_gaussian_derivatives2(
+    z: Tensor, weights: Tensor, sigmas: Tensor, y: Tensor, /
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    r"""Compute first and second derivatives for the mixture-to-Gaussian transport.
+
+    Returns:
+        ∂y/∂x  = ∑ₖ(ωₖ/σₖ)Eₖ
+        ∂y/∂ωₖ = √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))
+        ∂y/∂μₖ = -(ωₖ/σₖ)Eₖ
+        ∂y/∂σₖ = -(ωₖ/σₖ)zₖEₖ
+        ∂g/∂x  = y⋅g⋅(∂y/∂x)  - ∑ₖ(ωₖ/σₖ²)zₖEₖ
+        ∂g/∂ωₖ = y⋅g⋅(∂y/∂ωₖ) + Eₖ/σₖ - (1/n)∑ⱼEⱼ/σⱼ
+        ∂g/∂μₖ = y⋅g⋅(∂y/∂μₖ) + (ωₖ/σₖ²)zₖEₖ
+        ∂g/∂σₖ = y⋅g⋅(∂y/∂σₖ) + (ωₖ/σₖ²)(zₖ²-1)Eₖ
+    """
 
 
 class _BimodalToGaussianImpl(Function):
@@ -427,10 +451,10 @@ class _MixtureToGaussian(Function):
     then the first order derivatives are
 
     .. math::
-        ∂y/∂x  &= ∑ₖ (ωₖ/σₖ) Eₖ    \\
+        ∂y/∂x  &= ∑ₖ(ωₖ/σₖ)Eₖ    \\
         ∂y/∂ωₖ &= √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))    \\
-        ∂y/∂μₖ &= -(ωₖ/σₖ) Eₖ     \\
-        ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) Eₖ
+        ∂y/∂μₖ &= -(ωₖ/σₖ)Eₖ     \\
+        ∂y/∂σₖ &= -(ωₖ/σₖ)zₖEₖ
 
     Note that in the case of ∂y/∂ωₖ, we include the projection on the tangent space of ∆ⁿ⁻¹.
 
