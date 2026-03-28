@@ -195,8 +195,8 @@ class TestBimodalToGaussian(TestCase):
             eps=eps,
         )
 
-    @pytest.mark.parametrize("stdv", [0.5, 2.0], ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", [0.5, 2.0], ids="mean={}".format)
+    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
+    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_value_and_jac_gradcheck(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -443,8 +443,8 @@ class TestGaussianToBimodal(TestCase):
             eps=eps,
         )
 
-    @pytest.mark.parametrize("stdv", [1.0, 2.0], ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", [0.5, 2.0], ids="mean={}".format)
+    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
+    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_value_and_jac_gradcheck(
         self, dtype: torch.dtype, mean: float, stdv: float, device: str
     ) -> None:
@@ -587,6 +587,8 @@ class TestMixtureToGaussian(TestCase):
         [
             pytest.param([[-1.25, -0.5], [0.25, 1.75]], id="batch"),
             pytest.param(0.375, id="scalar"),
+            pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
+            pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
         ],
     )
     def test_value_and_jac_gradcheck(
