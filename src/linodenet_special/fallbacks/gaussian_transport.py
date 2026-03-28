@@ -401,7 +401,7 @@ class _GaussianToBimodal(Function):
         Here $T$ is the transport from the symmetric bimodal mixture to $N(0,1)$.
         Since $T'(0) = σ⁻¹ℯ^{-½|μ/σ|²}$, the inverse slope at the origin is
 
-        .. math:: (T⁻¹)'(0) = σℯ^{½|μ/σ|²}.
+        .. math:: (T⁻¹)'(0) = σℯ^{½|μ/σ|²}
 
         The transport only depends on $|μ|$. The tails satisfy
         $T(x, μ, σ) ≈ σ⁻¹(x-\sign(x)|μ|)$, so
@@ -444,8 +444,8 @@ class _GaussianToBimodal(Function):
 
         .. math::
             ∂x/∂y &= (∂T/∂x)⁻¹ \\
-            ∂x/∂μ &= -(∂T/∂x)⁻¹ ∂T/∂μ, \\
-            ∂x/∂σ &= -(∂T/∂x)⁻¹ ∂T/∂σ.
+            ∂x/∂μ &= -(∂T/∂x)⁻¹ ∂T/∂μ \\
+            ∂x/∂σ &= -(∂T/∂x)⁻¹ ∂T/∂σ
         """
         (g,) = outer
         x, mu, sigma, fx = ctx.saved_tensors
@@ -620,8 +620,8 @@ class _GaussianToMixture(Function):
 
         .. math::
             ∂x/∂y &= (∂T/∂x)⁻¹ \\
-            ∂x/∂θ &= -(∂T/∂x)⁻¹ ∂T/∂θ,
-            \qquad θ∈\{ω, μ, σ\}.
+            ∂x/∂θ &= -(∂T/∂x)⁻¹ ∂T/∂θ
+            \qquad θ∈\{ω, μ, σ\}
         """
         (g,) = outer
         z, y, weights, _, sigmas = ctx.saved_tensors
