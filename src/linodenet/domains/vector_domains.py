@@ -44,7 +44,7 @@ class VectorDomains(PosetEnum):
     NONNEGATIVE = "nonnegative"  # xᵢ ≥ 0
     NONPOSITIVE = "nonpositive"  # xᵢ ≤ 0
 
-    def __contains__(self, item: Tensor, /) -> Tensor:
+    def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
 
 

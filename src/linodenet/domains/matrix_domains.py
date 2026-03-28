@@ -293,7 +293,7 @@ class MatrixDomains(PosetEnum):
 
     HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
 
-    def __contains__(self, item: Tensor, /) -> Tensor:
+    def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
 
 

@@ -25,7 +25,7 @@ class TensorDomains(PosetEnum):
     ONE = "one"  # xᵢ...ⱼ = 1 for all entries
     NONZERO = "nonzero"  # x ≠ 0
 
-    def __contains__(self, item: Tensor, /) -> Tensor:
+    def __contains__(self, item: Tensor, /) -> bool:
         raise NotImplementedError
 
 
