@@ -177,7 +177,7 @@ def _gaussian_to_bimodal_guess(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tenso
 
 def _gaussian_to_bimodal_value(
     y: Tensor, mu: Tensor, sigma: Tensor, maxiter: int, /
-) -> tuple[Tensor, Tensor]:
+) -> Tensor:
     r"""Solve the inverse bimodal transport by safeguarded Newton iteration."""
     m = mu.abs()
     lower = sigma * y - m
@@ -198,9 +198,7 @@ def _gaussian_to_bimodal_value(
             x_bisect,
         )
 
-    x = x.clamp(lower, upper)
-    fx = _bimodal_to_gaussian_value(x, mu, sigma)
-    return x, fx
+    return x.clamp(lower, upper)
 
 
 def _mixture_to_gaussian_value(
@@ -436,8 +434,8 @@ class _GaussianToBimodal(Function):
         $T(x, μ, σ) ≈ σ⁻¹(x-\sign(x)|μ|)$, so
         $T⁻¹(y, μ, σ) ≈ σy + \sign(y)|μ|$.
         """
-        x, fx = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
-        ctx.save_for_backward(x, mu, sigma, fx)
+        x = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
+        ctx.save_for_backward(x, mu, sigma)
         return x
 
     @staticmethod
@@ -462,7 +460,8 @@ class _GaussianToBimodal(Function):
             ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻².
         """
         (g,) = outer
-        x, mu, sigma, fx = ctx.saved_tensors
+        x, mu, sigma = ctx.saved_tensors
+        fx = _bimodal_to_gaussian_value(x, mu, sigma)
         d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(x, mu, sigma, fx)
         dx_inv = d_x.reciprocal()
 
@@ -487,20 +486,14 @@ class _GaussianToBimodalValueAndJac(Function):
     def forward(
         ctx, y: Tensor, mu: Tensor, sigma: Tensor, maxiter, /
     ) -> tuple[Tensor, Tensor]:
-        x, fx = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
-
-        d_x, _, _ = _bimodal_to_gaussian_derivatives(x, mu, sigma, fx)
-        d_y = d_x.reciprocal()
-
-        lower_bound = sigma
-        upper_bound = sigma * torch.exp(0.5 * (mu / sigma) ** 2)
-        d_y = d_y.clamp(lower_bound, upper_bound)
-
+        x = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
+        fx, d_x = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
+        # Note: d_x is already clamped
         ctx.save_for_backward(x, mu, sigma, fx)
-        return x, d_y
+        return x, d_x.reciprocal()
 
     @staticmethod
-    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
         grad_x, grad_dx = outer
         x, mu, sigma, fx = ctx.saved_tensors
         d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma = _bimodal_to_gaussian_derivatives2(
@@ -525,6 +518,7 @@ class _GaussianToBimodalValueAndJac(Function):
             grad_x * d_y + grad_dx * j_y,
             grad_x * d_mu_inv + grad_dx * j_mu,
             grad_x * d_sigma_inv + grad_dx * j_sigma,
+            None,
         )
 
 
