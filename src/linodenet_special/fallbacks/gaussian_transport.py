@@ -35,7 +35,7 @@ def _bimodal_to_gaussian_value(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tenso
     y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
 
     # apply analytical bounds
-    return torch.clamp(y, z_minus, z_plus)
+    return y.clamp(z_minus, z_plus)
 
 
 def _bimodal_to_gaussian_value_and_jac(
@@ -51,7 +51,7 @@ def _bimodal_to_gaussian_value_and_jac(
     log_p = torch.logaddexp(LOG_HALF + log_ndtr(z_plus), LOG_HALF + log_ndtr(z_minus))
     log_q = torch.logaddexp(LOG_HALF + log_ndtr(-z_plus), LOG_HALF + log_ndtr(-z_minus))
     fx = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-    fx = torch.clamp(fx, z_minus, z_plus)
+    fx = fx.clamp(z_minus, z_plus)
 
     y2 = fx.square()
     log_sigma = sigma.log()
@@ -60,7 +60,7 @@ def _bimodal_to_gaussian_value_and_jac(
     lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
     upper_bound = 1 / sigma
     d_fx = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
-    d_fx = torch.clamp(d_fx, lower_bound, upper_bound)
+    d_fx = d_fx.clamp(lower_bound, upper_bound)
 
     return fx, d_fx
 
@@ -87,20 +87,20 @@ def _bimodal_to_gaussian_derivatives(
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
 
-    d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
+    d_x = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
     hi = torch.maximum(log_phi_plus, log_phi_minus)
     lo = torch.minimum(log_phi_plus, log_phi_minus)
     # Compute φ₊ - φ₋ with a stable log-diff-exp instead of subtracting directly.
-    d_m_exact = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
+    d_mu_abs = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
         hi + torch.log1p(-torch.exp(lo - hi))
     )
-    d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x_exact + (m / sigma) * d_m_exact)
+    d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x + (m / sigma) * d_mu_abs)
 
     # The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
     upper_bound = 1 / sigma
-    d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
-    d_mu = mu_sign * torch.clamp(d_m_exact, -upper_bound, upper_bound)
+    d_x = d_x.clamp(lower_bound, upper_bound)
+    d_mu = mu_sign * d_mu_abs.clamp(-upper_bound, upper_bound)
     return d_x, d_mu, d_sigma_exact
 
 
@@ -129,20 +129,20 @@ def _bimodal_to_gaussian_derivatives2(
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
 
-    d_x_exact = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
+    d_x = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
     hi = torch.maximum(log_phi_plus, log_phi_minus)
     lo = torch.minimum(log_phi_plus, log_phi_minus)
     # Compute φ₊ - φ₋ with a stable log-diff-exp instead of subtracting directly.
-    d_m_exact = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
+    d_mu_abs = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
         hi + torch.log1p(-torch.exp(lo - hi))
     )
-    d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x_exact + (m / sigma) * d_m_exact)
+    d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x + (m / sigma) * d_mu_abs)
 
     # The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
     upper_bound = 1 / sigma
-    d_x = torch.clamp(d_x_exact, lower_bound, upper_bound)
-    d_mu = mu_sign * torch.clamp(d_m_exact, -upper_bound, upper_bound)
+    d_x = d_x.clamp(lower_bound, upper_bound)
+    d_mu = mu_sign * d_mu_abs.clamp(-upper_bound, upper_bound)
 
     # These weighted sums are the repeated pieces in the closed-form ∂g/∂θ formulas.
     phi_plus = log_phi_plus.exp()
@@ -153,7 +153,7 @@ def _bimodal_to_gaussian_derivatives2(
 
     # Here g = ∂y/∂x, so these are the second derivatives that feed the Jacobian output.
     d2_x = y * d_x.square() - z_term_sum
-    d2_mu = mu_sign * (y * d_x * d_m_exact - z_term_diff)
+    d2_mu = mu_sign * (y * d_x * d_mu_abs - z_term_diff)
     d2_sigma = y * d_x * d_sigma_exact - d_x / sigma + z2_term_sum
     return d_x, d_mu, d_sigma_exact, d2_x, d2_mu, d2_sigma
 
@@ -185,7 +185,7 @@ def _mixture_to_gaussian_value(
     log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
 
     y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-    y = torch.clamp(y, z.min(dim=-1).values, z.max(dim=-1).values)
+    y = y.clamp(z.amin(dim=-1), z.amax(dim=-1))
     return y, z
 
 
@@ -201,7 +201,7 @@ def _mixture_to_gaussian_value_and_jac(
     log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
 
     fx = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-    fx = torch.clamp(fx, z.min(dim=-1).values, z.max(dim=-1).values)
+    fx = fx.clamp(z.amin(dim=-1), z.amax(dim=-1))
 
     log_ratio = 0.5 * (fx.square().unsqueeze(-1) - z.square())
     d_fx = torch.exp(log_ratio + log_w - torch.log(sigmas)).sum(dim=-1)
@@ -360,7 +360,7 @@ class _GaussianToBimodalImpl(Function):
         x = _gaussian_to_bimodal_guess(y, mu, sigma)
 
         for _ in range(MAXITER):
-            x = torch.clamp(x, lower, upper)
+            x = x.clamp(lower, upper)
             fx, d_fx = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
             r = fx - y
             lower = torch.where(r < 0, x, lower)
@@ -373,7 +373,7 @@ class _GaussianToBimodalImpl(Function):
                 x_bisect,
             )
 
-        x = torch.clamp(x, lower, upper)
+        x = x.clamp(lower, upper)
         fx = _bimodal_to_gaussian_value(x, mu, sigma)
 
         ctx.save_for_backward(x, mu, sigma, fx)
@@ -492,12 +492,12 @@ class _GaussianToMixture(Function):
         # so we use their pointwise min/max as a safe bracket and their weighted mean
         # as a cheap initial guess for the safeguarded Newton iteration.
         lines = mus + sigmas * y.unsqueeze(-1)
-        lower = lines.min(dim=-1).values
-        upper = lines.max(dim=-1).values
+        lower = lines.amin(dim=-1)
+        upper = lines.amax(dim=-1)
         x = torch.einsum("k, ...k -> ...", weights, lines)
 
         for _ in range(MAXITER):
-            x = torch.clamp(x, lower, upper)
+            x = x.clamp(lower, upper)
             fy, d_fy = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
             r = fy - y
             # Since T is monotone, the sign of the residual tells us which side of
@@ -512,7 +512,7 @@ class _GaussianToMixture(Function):
                 x_bisect,
             )
 
-        x = torch.clamp(x, lower, upper)
+        x = x.clamp(lower, upper)
         fy, z = _mixture_to_gaussian_value(x, weights, mus, sigmas)
 
         ctx.save_for_backward(z, fy, weights, mus, sigmas)
