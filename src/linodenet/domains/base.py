@@ -230,7 +230,6 @@ class Meet[D: Domain](Domain):
 
     def __ge__(self, other: object, /) -> bool | Indeterminate:
         # B ≤ (A₁ ∧ … ∧ Aₙ) ⟺ B ≤ A₁ and … and B ≤ Aₙ
-        indeterminate = False
         for factor in self:
             match _le(other, factor):
                 case False:
@@ -238,11 +237,7 @@ class Meet[D: Domain](Domain):
                 case True:
                     continue
                 case _:
-                    indeterminate = True
-        if indeterminate:
-            if isinstance(other, Domain):
-                return Indeterminate(other, "<=", self)
-            return NotImplemented
+                    return Indeterminate(other, "<=", self)
         return True
 
     def __gt__(self, other: object, /) -> bool | Indeterminate:
@@ -313,7 +308,6 @@ class Join[D: Domain](Domain):
 
     def __le__(self, other: object, /) -> bool | Indeterminate:
         # (A₁ ∨ … ∨ Aₙ) ≤ B ⟺ A₁ ≤ B ∧ … ∧ Aₙ ≤ B
-        indeterminate = False
         for member in self:
             match _le(member, other):
                 case False:
@@ -321,11 +315,7 @@ class Join[D: Domain](Domain):
                 case True:
                     continue
                 case _:
-                    indeterminate = True
-        if indeterminate:
-            if isinstance(other, Domain):
-                return Indeterminate(self, "<=", other)
-            return NotImplemented
+                    return Indeterminate(self, "<=", other)
         return True
 
     def __lt__(self, other: object, /) -> bool | Indeterminate:
@@ -427,7 +417,6 @@ class PosetEnum(Enum):
         if isinstance(other, type(self)):
             return other in self.supertypes
         if isinstance(other, Meet):
-            indeterminate = False
             for factor in other:
                 match _le(self, factor):
                     case False:
@@ -435,9 +424,7 @@ class PosetEnum(Enum):
                     case True:
                         continue
                     case _:
-                        indeterminate = True
-            if indeterminate:
-                return Indeterminate(self, "<=", other)
+                        return Indeterminate(self, "<=", other)
             return True
         if isinstance(other, Join):
             if any(_le(self, member) is True for member in other):
@@ -460,7 +447,6 @@ class PosetEnum(Enum):
                 return True
             return Indeterminate(other, "<=", self)
         if isinstance(other, Join):
-            indeterminate = False
             for member in other:
                 match _le(member, self):
                     case False:
@@ -468,9 +454,7 @@ class PosetEnum(Enum):
                     case True:
                         continue
                     case _:
-                        indeterminate = True
-            if indeterminate:
-                return Indeterminate(other, "<=", self)
+                        return Indeterminate(other, "<=", self)
             return True
         return NotImplemented
 

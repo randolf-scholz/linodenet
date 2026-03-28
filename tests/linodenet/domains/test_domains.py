@@ -11,7 +11,6 @@ from linodenet.domains import (
     TensorDomains,
     VectorDomains,
 )
-from linodenet.domains.base import Meet
 from linodenet.domains.matrix_domains import ColumnOrthogonal, RowOrthogonal, Tall, Wide
 from linodenet.testing import is_left_invertible, is_right_invertible
 
@@ -236,7 +235,8 @@ class TestMatrixDomains:
         }
         assert M.SQUARE <= join
         assert join <= M.RECTANGULAR
-        assert not M.RECTANGULAR <= join
+        with pytest.raises(TypeError, match="could not be determined"):
+            assert not M.RECTANGULAR <= join
 
     def test_meet_and_join_inequalities(self) -> None:
         meet = M.TALL & M.WIDE
@@ -246,6 +246,8 @@ class TestMatrixDomains:
         assert meet <= M.SQUARE
         assert meet <= M.RECTANGULAR
         assert not meet <= M.INVERTIBLE
+        with pytest.raises(TypeError, match="could not be determined"):
+            assert not meet <= (M.LEFT_INVERTIBLE | M.RIGHT_INVERTIBLE)
         assert not M.RECTANGULAR <= meet
 
         assert join <= M.RECTANGULAR
@@ -257,11 +259,13 @@ class TestMatrixDomains:
         assert join >= meet
 
     def test_meet_and_join_sufficient_rules_return_notimplemented(self) -> None:
-        meet = M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC
+        meet = M.TALL & M.WIDE
         join = M.TALL | M.WIDE
 
-        assert Meet.__le__(meet, M.SQUARE) is NotImplemented
-        assert Join.__ge__(join, M.RECTANGULAR) is NotImplemented
+        with pytest.raises(TypeError, match="could not be determined"):
+            assert not meet <= (M.LEFT_INVERTIBLE | M.RIGHT_INVERTIBLE)
+        with pytest.raises(TypeError, match="could not be determined"):
+            assert not M.RECTANGULAR <= join
 
     def test_partial_order_and_representation(self) -> None:
         assert M.SQUARE <= M.SQUARE
@@ -339,7 +343,7 @@ class TestMatrixDomains:
         assert not M.NEGATIVE_DEFINITE <= M.POSITIVE_DEFINITE
 
         assert M.EYE is M.IDENTITY
-        assert str(M.SQUARE) == "square"
+        assert str(M.SQUARE) == "square"  # type: ignore[unreachable]
 
         with pytest.raises(TypeError):
             _ = M.SQUARE <= "square"
