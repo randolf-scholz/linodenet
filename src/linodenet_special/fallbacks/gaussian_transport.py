@@ -602,19 +602,12 @@ class _MixtureToGaussianValueAndJac(Function):
         d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas = (
             _mixture_to_gaussian_derivatives2(z, weights, sigmas, y)
         )
-
-        grad_values = grad_y * d_x + grad_dy * d2_x
-        grad_weights = torch.einsum("..., ...k -> k", grad_y, d_weights) + torch.einsum(
-            "..., ...k -> k", grad_dy, d2_weights
+        return (
+            grad_y * d_x + grad_dy * d2_x,
+            grad_y.unsqueeze(-1) * d_weights + grad_dy.unsqueeze(-1) * d2_weights,
+            grad_y.unsqueeze(-1) * d_mus + grad_dy.unsqueeze(-1) * d2_mus,
+            grad_y.unsqueeze(-1) * d_sigmas + grad_dy.unsqueeze(-1) * d2_sigmas,
         )
-        grad_mus = torch.einsum("..., ...k -> k", grad_y, d_mus) + torch.einsum(
-            "..., ...k -> k", grad_dy, d2_mus
-        )
-        grad_sigmas = torch.einsum("..., ...k -> k", grad_y, d_sigmas) + torch.einsum(
-            "..., ...k -> k", grad_dy, d2_sigmas
-        )
-
-        return grad_values, grad_weights, grad_mus, grad_sigmas
 
 
 class _GaussianToMixture(Function):
