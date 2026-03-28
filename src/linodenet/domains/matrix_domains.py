@@ -39,8 +39,8 @@ class Fallback(MatrixDomain):
 class Rectangular(MatrixDomain):
     r"""Domain of rectangular matrices with optional fixed shape."""
 
-    rows: Final[int | None] = None
-    cols: Final[int | None] = None
+    rows: Final[int | None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
+    cols: Final[int | None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
 
     def __post_init__(self) -> None:
         if (self.rows is None) ^ (self.cols is None):
