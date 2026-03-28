@@ -8,6 +8,7 @@ __all__ = [
     "bimodal_to_gaussian_value_and_jac",
     "gaussian_to_mixture",
     "mixture_to_gaussian",
+    "mixture_to_gaussian_value_and_jac",
 ]
 
 import math
@@ -268,6 +269,36 @@ def _mixture_to_gaussian_derivatives2(
         ∂g/∂μₖ = y⋅g⋅(∂y/∂μₖ) + (ωₖ/σₖ²)zₖEₖ
         ∂g/∂σₖ = y⋅g⋅(∂y/∂σₖ) + (ωₖ/σₖ²)(zₖ²-1)Eₖ
     """
+    LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
+
+    y2 = y.square()
+    # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
+    log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
+    log_w = torch.log(weights)
+    log_sigmas = torch.log(sigmas)
+    scaled_ratio = torch.exp(log_ratio + log_w - log_sigmas)
+
+    d_x = scaled_ratio.sum(dim=-1)
+    d_mus = -scaled_ratio
+    d_sigmas = -z * scaled_ratio
+
+    log_pdf_u = (0.5 * (LOG_2PI + y2)).unsqueeze(-1)
+    log_phi = log_ndtr(z)
+    log_phi_tangent = (
+        log_phi - log_phi.logsumexp(dim=-1, keepdim=True) - math.log(log_phi.shape[-1])
+    )
+    d_weights = torch.logaddexp(log_pdf_u, log_phi_tangent).exp()
+
+    e_over_sigma = torch.exp(log_ratio - log_sigmas)
+    d2_x = y * d_x.square() + (d_sigmas / sigmas).sum(dim=-1)
+    d2_weights = y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_weights
+    d2_weights = d2_weights + e_over_sigma - e_over_sigma.mean(dim=-1, keepdim=True)
+    d2_mus = y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_mus - d_sigmas / sigmas
+    d2_sigmas = (
+        y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_sigmas
+        + (z.square() - 1) * scaled_ratio / sigmas
+    )
+    return d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas
 
 
 class _BimodalToGaussian(Function):
@@ -494,6 +525,41 @@ class _MixtureToGaussian(Function):
         return grad_values, grad_weights, grad_mus, grad_sigmas
 
 
+class _MixtureToGaussianValueAndJac(Function):
+    r"""Return the mixture-to-Gaussian transport and its $x$-derivative."""
+
+    @staticmethod
+    @torch.no_grad()
+    def forward(
+        ctx, x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
+    ) -> tuple[Tensor, Tensor]:
+        y, d_x = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
+        z = (x.unsqueeze(-1) - mus) / sigmas
+        ctx.save_for_backward(z, y, weights, sigmas)
+        return y, d_x
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        grad_y, grad_dy = outer
+        z, y, weights, sigmas = ctx.saved_tensors
+        d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas = (
+            _mixture_to_gaussian_derivatives2(z, weights, sigmas, y)
+        )
+
+        grad_values = grad_y * d_x + grad_dy * d2_x
+        grad_weights = torch.einsum("..., ...k -> k", grad_y, d_weights) + torch.einsum(
+            "..., ...k -> k", grad_dy, d2_weights
+        )
+        grad_mus = torch.einsum("..., ...k -> k", grad_y, d_mus) + torch.einsum(
+            "..., ...k -> k", grad_dy, d2_mus
+        )
+        grad_sigmas = torch.einsum("..., ...k -> k", grad_y, d_sigmas) + torch.einsum(
+            "..., ...k -> k", grad_dy, d2_sigmas
+        )
+
+        return grad_values, grad_weights, grad_mus, grad_sigmas
+
+
 class _GaussianToMixture(Function):
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$.
 
@@ -645,3 +711,10 @@ def mixture_to_gaussian(
     formulas based on `log_ndtr` and `ndtri_exp`.
     """
     return _MixtureToGaussian.apply(x, weights, mus, sigmas)
+
+
+def mixture_to_gaussian_value_and_jac(
+    x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+) -> tuple[Tensor, Tensor]:
+    r"""Map the mixture to $N(0,1)$ and return $(f(x), ∂f/∂x)$."""
+    return _MixtureToGaussianValueAndJac.apply(x, weights, mus, sigmas)
