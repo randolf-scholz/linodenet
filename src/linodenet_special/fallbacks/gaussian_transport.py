@@ -494,6 +494,15 @@ class _GaussianToBimodalValueAndJac(Function):
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
+        r"""Use the derivatives of $T$ to differentiate the inverse map.
+
+        .. math::  ∂T(x(y, μ, σ), μ, σ) = y
+
+        .. math::
+            ∂j/∂y &= -(∂²T/∂x²)(∂T/∂x)⁻³ \\
+            ∂j/∂μ &= (∂²T/∂x²)(∂T/∂μ)(∂T/∂x)⁻³ - (∂²T/∂x∂μ)(∂T/∂x)⁻² \\
+            ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻².
+        """
         grad_x, grad_dx = outer
         x, mu, sigma, fx = ctx.saved_tensors
         d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma = _bimodal_to_gaussian_derivatives2(
@@ -511,8 +520,8 @@ class _GaussianToBimodalValueAndJac(Function):
         d_mu_inv = d_mu_inv.clamp(-upper_bound, upper_bound)
 
         j_y = -d2_x * dx_inv.pow(3)
-        j_mu = d2_x * d_mu * dx_inv.pow(3) - d2_mu * dx_inv.square()
-        j_sigma = d2_x * d_sigma * dx_inv.pow(3) - d2_sigma * dx_inv.square()
+        j_mu = (d2_x * d_mu - d2_mu * d_x) * dx_inv.pow(3)
+        j_sigma = (d2_x * d_sigma - d2_sigma * d_x) * dx_inv.pow(3)
 
         return (
             grad_x * d_y + grad_dx * j_y,
