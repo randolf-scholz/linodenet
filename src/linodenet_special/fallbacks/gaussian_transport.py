@@ -5,6 +5,7 @@ __all__ = [
     # functional interfaces
     "gaussian_to_bimodal",
     "bimodal_to_gaussian",
+    "bimodal_to_gaussian_value_and_jac",
     "gaussian_to_mixture",
     "mixture_to_gaussian",
 ]
@@ -21,9 +22,7 @@ from .hard_bend import hard_bend
 from .ndtri_exp import ndtri_exp
 
 
-def _bimodal_to_gaussian_forward(
-    x: Tensor, mu: Tensor, sigma: Tensor
-) -> tuple[Tensor, Tensor, Tensor]:
+def _bimodal_to_gaussian_forward(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
     r"""Evaluate the bimodal-to-Gaussian transport and cache the normalized coordinates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
@@ -34,9 +33,9 @@ def _bimodal_to_gaussian_forward(
     log_p = torch.logaddexp(LOG_HALF + log_ndtr(z_plus), LOG_HALF + log_ndtr(z_minus))
     log_q = torch.logaddexp(LOG_HALF + log_ndtr(-z_plus), LOG_HALF + log_ndtr(-z_minus))
     y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-    y = torch.clamp(y, z_minus, z_plus)
-    assert y.isfinite().all()
-    return y, z_minus, z_plus
+
+    # apply analytical bounds
+    return torch.clamp(y, z_minus, z_plus)
 
 
 def _bimodal_to_gaussian_value_and_jac(
@@ -67,12 +66,14 @@ def _bimodal_to_gaussian_value_and_jac(
 
 
 def _bimodal_to_gaussian_total_derivative(
-    y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
+    x: Tensor, mu: Tensor, sigma: Tensor, y: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     m = mu.abs()
+    z_plus = (x + m) / sigma
+    z_minus = (x - m) / sigma
     mu_sign = torch.sign(mu)
     y2 = y.square()
     log_sigma = sigma.log()
@@ -110,7 +111,7 @@ def _gaussian_to_bimodal_guess(x, mu, sigma):
 
 
 def _mixture_to_gaussian_forward(
-    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor
+    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the mixture-to-Gaussian transport and cache normalized coordinates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
@@ -122,7 +123,6 @@ def _mixture_to_gaussian_forward(
 
     y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
     y = torch.clamp(y, z.min(dim=-1).values, z.max(dim=-1).values)
-    assert y.isfinite().all()
     return y, z
 
 
@@ -236,18 +236,68 @@ class _BimodalToGaussianImpl(Function):
     @staticmethod
     @torch.no_grad()
     def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
-        y, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
-        ctx.save_for_backward(y, z_minus, z_plus, mu, sigma)
+        y = _bimodal_to_gaussian_forward(x, mu, sigma)
+        ctx.save_for_backward(x, mu, sigma, y)
         return y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         (g,) = outer
-        y, z_minus, z_plus, mu, sigma = ctx.saved_tensors
-        d_x, d_mu, d_sigma = _bimodal_to_gaussian_total_derivative(
-            y, z_minus, z_plus, mu, sigma
-        )
+        x, mu, sigma, y = ctx.saved_tensors
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_total_derivative(x, mu, sigma, y)
         return (g * d_x), (g * d_mu), (g * d_sigma)
+
+
+class _BimodalToGaussianValueAndJacImpl(Function):
+    r"""Return the bimodal-to-Gaussian transport and its $x$-derivative."""
+
+    @staticmethod
+    @torch.no_grad()
+    def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor, /) -> tuple[Tensor, Tensor]:
+        y, d_x = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
+        ctx.save_for_backward(x, mu, sigma, y, d_x)
+        return y, d_x
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        grad_y, grad_dy = outer
+        x, mu, sigma, y, d_x = ctx.saved_tensors
+        m = mu.abs()
+        z_plus = (x + m) / sigma
+        z_minus = (x - m) / sigma
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_total_derivative(x, mu, sigma, y)
+
+        grad_x = grad_y * d_x
+        grad_mu = grad_y * d_mu
+        grad_sigma = grad_y * d_sigma
+
+        if not grad_dy.is_nonzero():
+            return grad_x, grad_mu, grad_sigma
+
+        LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
+
+        mu_sign = torch.sign(mu)
+        y2 = y.square()
+        log_sigma = sigma.log()
+        log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
+        log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
+        phi_plus = log_phi_plus.exp()
+        phi_minus = log_phi_minus.exp()
+        d_m_exact = phi_plus - phi_minus
+        z_term_sum = (z_plus * phi_plus + z_minus * phi_minus) / sigma
+        z_term_diff = (z_plus * phi_plus - z_minus * phi_minus) / sigma
+        z2_term_sum = (
+            z_plus.square() * phi_plus + z_minus.square() * phi_minus
+        ) / sigma
+
+        d2_x = y * d_x.square() - z_term_sum
+        d2_mu = mu_sign * (y * d_x * d_m_exact - z_term_diff)
+        d2_sigma = -d_x / sigma + y * d_x * d_sigma + z2_term_sum
+
+        grad_x = grad_x + grad_dy * d2_x
+        grad_mu = grad_mu + grad_dy * d2_mu
+        grad_sigma = grad_sigma + grad_dy * d2_sigma
+        return grad_x, grad_mu, grad_sigma
 
 
 class _GaussianToBimodalImpl(Function):
@@ -289,9 +339,9 @@ class _GaussianToBimodalImpl(Function):
             )
 
         x = torch.clamp(x, lower, upper)
-        fx, z_minus, z_plus = _bimodal_to_gaussian_forward(x, mu, sigma)
+        fx = _bimodal_to_gaussian_forward(x, mu, sigma)
 
-        ctx.save_for_backward(fx, z_minus, z_plus, mu, sigma)
+        ctx.save_for_backward(x, mu, sigma, fx)
         return x
 
     @staticmethod
@@ -308,10 +358,8 @@ class _GaussianToBimodalImpl(Function):
             ∂x/∂σ &= -(∂T/∂x)⁻¹ ∂T/∂σ.
         """
         (g,) = outer
-        fx, z_minus, z_plus, mu, sigma = ctx.saved_tensors
-        d_x, d_mu, d_sigma = _bimodal_to_gaussian_total_derivative(
-            fx, z_minus, z_plus, mu, sigma
-        )
+        x, mu, sigma, fx = ctx.saved_tensors
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_total_derivative(x, mu, sigma, fx)
         dx_inv = d_x.reciprocal()
 
         d_y = dx_inv
@@ -497,6 +545,15 @@ def bimodal_to_gaussian(
     mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
     sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
     return _BimodalToGaussianImpl.apply(x, mu, sigma)
+
+
+def bimodal_to_gaussian_value_and_jac(
+    x: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
+) -> tuple[Tensor, Tensor]:
+    r"""Map the symmetric mixture to $N(0,1)$ and return $(f(x), ∂f/∂x)$."""
+    mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
+    sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
+    return _BimodalToGaussianValueAndJacImpl.apply(x, mu, sigma)
 
 
 def gaussian_to_mixture(
