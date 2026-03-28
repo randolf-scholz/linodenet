@@ -215,17 +215,13 @@ class Meet[D: Domain](Domain):
         # (A₁ ∧ … ∧ Aₙ) ≤ B ⇐ Aᵢ ≤ B for some i (sufficient condition)
         if any(_le(member, other) is True for member in self):
             return True
-        if (reversed_result := _ge(other, self)) is not NotImplemented:
-            return reversed_result
-        return Indeterminate(self, "<=", other)
+        return NotImplemented
 
     def __lt__(self, other: object, /) -> bool | Indeterminate:
         # (A₁ ∧ … ∧ Aₙ) < B ⇐ Aᵢ < B for some i (sufficient condition)
         if any(_lt(member, other) is True for member in self):
             return True
-        if (reversed_result := _gt(other, self)) is not NotImplemented:
-            return reversed_result
-        return Indeterminate(self, "<", other)
+        return NotImplemented
 
     def __ge__(self, other: object, /) -> bool | Indeterminate:
         # B ≤ (A₁ ∧ … ∧ Aₙ) ⟺ B ≤ A₁ and … and B ≤ Aₙ
