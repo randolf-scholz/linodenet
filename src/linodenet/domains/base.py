@@ -215,18 +215,17 @@ class Meet[D: Domain](Domain):
         # (A₁ ∧ … ∧ Aₙ) ≤ B ⇐ Aᵢ ≤ B for some i (sufficient condition)
         if any(_le(member, other) is True for member in self):
             return True
-        if isinstance(other, Domain):
-            reversed_result = _ge(other, self)
-            if reversed_result is not NotImplemented:
-                return reversed_result
-            return Indeterminate(self, "<=", other)
-        return NotImplemented
+        if (reversed_result := _ge(other, self)) is not NotImplemented:
+            return reversed_result
+        return Indeterminate(self, "<=", other)
 
     def __lt__(self, other: object, /) -> bool | Indeterminate:
         # (A₁ ∧ … ∧ Aₙ) < B ⇐ Aᵢ < B for some i (sufficient condition)
         if any(_lt(member, other) is True for member in self):
             return True
-        return NotImplemented
+        if (reversed_result := _gt(other, self)) is not NotImplemented:
+            return reversed_result
+        return Indeterminate(self, "<", other)
 
     def __ge__(self, other: object, /) -> bool | Indeterminate:
         # B ≤ (A₁ ∧ … ∧ Aₙ) ⟺ B ≤ A₁ and … and B ≤ Aₙ
@@ -445,7 +444,7 @@ class PosetEnum(Enum):
                 return self in type(self)._closure_from(frozenset(other))
             if any(_ge(self, factor) is True for factor in other):
                 return True
-            return Indeterminate(other, "<=", self)
+            return Indeterminate(self, ">=", other)
         if isinstance(other, Join):
             for member in other:
                 match _le(member, self):
@@ -454,7 +453,7 @@ class PosetEnum(Enum):
                     case True:
                         continue
                     case _:
-                        return Indeterminate(other, "<=", self)
+                        return Indeterminate(self, ">=", other)
             return True
         return NotImplemented
 
