@@ -484,10 +484,10 @@ class _GaussianToBimodalValueAndJac(Function):
 
     @staticmethod
     @torch.no_grad()
-    def forward(ctx, y: Tensor, mu: Tensor, sigma: Tensor, /) -> tuple[Tensor, Tensor]:
-        MAXITER: Final[int] = 10
-
-        x, fx = _gaussian_to_bimodal_value(y, mu, sigma, MAXITER)
+    def forward(
+        ctx, y: Tensor, mu: Tensor, sigma: Tensor, maxiter, /
+    ) -> tuple[Tensor, Tensor]:
+        x, fx = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
 
         d_x, _, _ = _bimodal_to_gaussian_derivatives(x, mu, sigma, fx)
         d_y = d_x.reciprocal()
