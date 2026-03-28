@@ -38,7 +38,7 @@ def _bimodal_to_gaussian_forward(
     return y, z_minus, z_plus
 
 
-def _bimodal_to_gaussian_value_and_grad(
+def _bimodal_to_gaussian_value_and_jac(
     x: Tensor, mu: Tensor, sigma: Tensor
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bimodal transport and its $x$-derivative in one pass."""
@@ -65,7 +65,7 @@ def _bimodal_to_gaussian_value_and_grad(
     return fx, d_fx
 
 
-def _bimodal_to_gaussian_derivatives(
+def _bimodal_to_gaussian_total_derivative(
     y: Tensor, z_minus: Tensor, z_plus: Tensor, mu: Tensor, sigma: Tensor
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport."""
@@ -125,7 +125,7 @@ def _mixture_to_gaussian_forward(
     return y, z
 
 
-def _mixture_to_gaussian_value_and_grad(
+def _mixture_to_gaussian_value_and_jac(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the mixture transport and its $x$-derivative in one pass."""
@@ -144,7 +144,7 @@ def _mixture_to_gaussian_value_and_grad(
     return fx, d_fx
 
 
-def _mixture_to_gaussian_derivatives(
+def _mixture_to_gaussian_total_derivative(
     y: Tensor, z: Tensor, weights: Tensor, sigmas: Tensor
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the mixture-to-Gaussian transport."""
@@ -218,7 +218,7 @@ class _BimodalToGaussianImpl(Function):
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         (g,) = outer
         y, z_minus, z_plus, mu, sigma = ctx.saved_tensors
-        d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_total_derivative(
             y, z_minus, z_plus, mu, sigma
         )
         return (g * d_x), (g * d_mu), (g * d_sigma)
@@ -250,7 +250,7 @@ class _GaussianToBimodalImpl(Function):
 
         for _ in range(MAXITER):
             x = torch.clamp(x, lower, upper)
-            fx, d_fx = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
+            fx, d_fx = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
             r = fx - y
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
@@ -283,7 +283,7 @@ class _GaussianToBimodalImpl(Function):
         """
         (g,) = outer
         fx, z_minus, z_plus, mu, sigma = ctx.saved_tensors
-        d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_total_derivative(
             fx, z_minus, z_plus, mu, sigma
         )
         dx_inv = d_x.reciprocal()
@@ -337,7 +337,7 @@ class _MixtureToGaussian(Function):
         r"""Differentiate the explicit mixture-to-Gaussian transport map."""
         (g,) = outer
         z, y, weights, sigmas = ctx.saved_tensors
-        d_values, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
+        d_values, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_total_derivative(
             y, z, weights, sigmas
         )
 
@@ -383,7 +383,7 @@ class _GaussianToMixture(Function):
 
         for _ in range(MAXITER):
             x = torch.clamp(x, lower, upper)
-            fy, d_fy = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
+            fy, d_fy = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
             r = fy - y
             # Since T is monotone, the sign of the residual tells us which side of
             # the bracket still contains the inverse solution.
@@ -420,7 +420,7 @@ class _GaussianToMixture(Function):
         """
         (g,) = outer
         z, y, weights, _, sigmas = ctx.saved_tensors
-        d_x, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
+        d_x, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_total_derivative(
             y, z, weights, sigmas
         )
         grad_y = g * d_x.reciprocal()
