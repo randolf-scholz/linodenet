@@ -412,7 +412,7 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _parsed_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
+    def _parsed_known_supertypes(cls) -> Mapping[Self, frozenset[Self]]:
         r"""Parse declared supertypes into direct supertype relations.
 
         `KNOWN_SUPERTYPES` may contain plain nodes or meet expressions. A meet
@@ -464,13 +464,13 @@ class PosetEnum(Enum):
         """
         supertypes: dict[Self, set[Self]] = {node: set() for node in cls}
 
-        for node, supers in cls._parsed_supertypes().items():
+        for node, supers in cls._parsed_known_supertypes().items():
             supertypes[node].update(supers)
 
-        for meet, factors in cls._validated_meets():
+        for meet, factors in cls._parsed_known_meets():
             supertypes[meet].update(factors)
 
-        for node, subtypes in cls._parsed_subtypes().items():
+        for node, subtypes in cls._parsed_known_subtype_edges().items():
             for subtype in subtypes:
                 supertypes[subtype].add(node)
 
@@ -486,8 +486,12 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _parsed_subtypes(cls) -> Mapping[Self, frozenset[Self]]:
-        r"""Parse declared subtypes into direct subtype relations.
+    def _parsed_known_subtypes(
+        cls,
+    ) -> tuple[
+        Mapping[Self, frozenset[Self]], tuple[tuple[Self, frozenset[Self]], ...]
+    ]:
+        r"""Parse declared subtype relations from `KNOWN_SUBTYPES`.
 
         Plain subtype entries `A` in `KNOWN_SUBTYPES[X]` denote `A ≤ X` and are
         compiled into direct supertype edges. Meet entries are handled
@@ -501,6 +505,7 @@ class PosetEnum(Enum):
             raise TypeError(f"Expected {cls.__name__} nodes, got {bad_keys!r}.")
 
         parsed_subtypes: dict[Self, frozenset[Self]] = {}
+        subtype_meets: list[tuple[Self, frozenset[Self]]] = []
         for node, subtypes in raw_subtypes.items():
             if bad_subtypes := {
                 subtype
@@ -521,26 +526,12 @@ class PosetEnum(Enum):
                     f"Expected {cls.__name__} subtype targets, got {bad_subtypes!r}."
                 )
             parsed_subtypes[node] = parsed
-
-        return parsed_subtypes
-
-    @classmethod
-    @cache
-    def _validated_subtype_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
-        r"""Validate meet-based subtype implications.
-
-        A declaration `X: {A & B}` in `KNOWN_SUBTYPES` denotes the implication
-        `A ∧ B ≤ X`, i.e. every node below all meet factors is also below `X`.
-        """
-        raw_subtypes: Mapping[Self, frozenset[Self | Meet[Self]]] = cls.KNOWN_SUBTYPES
-        members = frozenset(cls)
-
-        subtype_meets = tuple(
-            (node, frozenset(subtype))
-            for node, subtypes in raw_subtypes.items()
-            for subtype in subtypes
-            if isinstance(subtype, Meet)
-        )
+            subtype_meets.extend(
+                (node, factors)
+                for subtype in subtypes
+                if isinstance(subtype, Meet)
+                for factors in (frozenset(subtype),)
+            )
 
         all_factors = frozenset().union(*(factors for _, factors in subtype_meets))
         if bad_factors := {factor for factor in all_factors if factor not in members}:
@@ -553,6 +544,24 @@ class PosetEnum(Enum):
                 f"Expected non-empty subtype-meet factors, got {empty_meets!r}."
             )
 
+        return parsed_subtypes, tuple(subtype_meets)
+
+    @classmethod
+    @cache
+    def _parsed_known_subtype_edges(cls) -> Mapping[Self, frozenset[Self]]:
+        r"""Parse declared plain subtypes into direct subtype relations."""
+        parsed_subtypes, _ = cls._parsed_known_subtypes()
+        return parsed_subtypes
+
+    @classmethod
+    @cache
+    def _parsed_known_subtype_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
+        r"""Parse declared meet-based subtype implications.
+
+        A declaration `X: {A & B}` in `KNOWN_SUBTYPES` denotes the implication
+        `A ∧ B ≤ X`, i.e. every node below all meet factors is also below `X`.
+        """
+        _, subtype_meets = cls._parsed_known_subtypes()
         return subtype_meets
 
     @classmethod
@@ -597,7 +606,7 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _validated_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
+    def _parsed_known_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
         raw_meets: Sequence[tuple[Self, Meet[Self]]] = cls.KNOWN_MEETS
         members = frozenset(cls)
 
@@ -621,8 +630,8 @@ class PosetEnum(Enum):
     @cache
     def _closure_from(cls, nodes: frozenset[Self], /) -> frozenset[Self]:
         supertypes = cls._validated_supertypes()
-        meets = cls._validated_meets()
-        subtype_meets = cls._validated_subtype_meets()
+        meets = cls._parsed_known_meets()
+        subtype_meets = cls._parsed_known_subtype_meets()
 
         closure: set[Self] = set()
         stack = list(nodes)
@@ -652,7 +661,9 @@ class PosetEnum(Enum):
     @property
     def factorizations(self) -> frozenset[Meet[Self]]:
         return frozenset(
-            Meet(factors) for node, factors in self._validated_meets() if node is self
+            Meet(factors)
+            for node, factors in self._parsed_known_meets()
+            if node is self
         )
 
     def __str__(self) -> str:
