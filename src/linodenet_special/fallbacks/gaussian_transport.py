@@ -331,6 +331,10 @@ class _BimodalToGaussian(Function):
     .. math:: y = Φ⁻¹\Bigl( ½Φ((x+μ)/σ) + ½Φ((x-μ)/σ) \Bigr)
                 = √2 \erf⁻¹\Bigl(½\erf((x+μ)/√2σ) + ½\erf((x-μ)/√2σ) \Bigr)
 
+    Asymptotic Expansion with $g(x)=\frac{x-\sign(x)|μ|}{σ}$:
+
+    .. math:: y ~ g(x) + \log(2)/g(x) as x → ±∞
+
     Unlike the general mixture case, the two components share the mean $±μ$ and scale $σ$.
 
     Using the shorthands
