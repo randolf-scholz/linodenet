@@ -8,6 +8,7 @@ __all__ = [
     "bimodal_to_gaussian",
     "bimodal_to_gaussian_value_and_jac",
     "gaussian_to_mixture",
+    "gaussian_to_mixture_value_and_jac",
     "mixture_to_gaussian",
     "mixture_to_gaussian_value_and_jac",
 ]
@@ -582,12 +583,12 @@ class _MixtureToGaussian(Function):
             z, weights, sigmas, y
         )
 
-        grad_values = g * d_values
-        grad_weights = torch.einsum("..., ...k -> k", g, d_weights)
-        grad_mus = torch.einsum("..., ...k -> k", g, d_mus)
-        grad_sigmas = torch.einsum("..., ...k -> k", g, d_sigmas)
-
-        return grad_values, grad_weights, grad_mus, grad_sigmas
+        return (
+            g * d_values,
+            g.unsqueeze(-1) * d_weights,
+            g.unsqueeze(-1) * d_mus,
+            g.unsqueeze(-1) * d_sigmas,
+        )
 
 
 class _MixtureToGaussianValueAndJac(Function):
@@ -685,11 +686,83 @@ class _GaussianToMixture(Function):
             z, weights, sigmas, y
         )
         grad_y = g * d_x.reciprocal()
-        grad_weights = torch.einsum("..., ...k -> k", grad_y, -d_weights)
-        grad_mus = torch.einsum("..., ...k -> k", grad_y, -d_mus)
-        grad_sigmas = torch.einsum("..., ...k -> k", grad_y, -d_sigmas)
+        return (
+            grad_y,
+            -grad_y.unsqueeze(-1) * d_weights,
+            -grad_y.unsqueeze(-1) * d_mus,
+            -grad_y.unsqueeze(-1) * d_sigmas,
+            None,
+        )
 
-        return grad_y, grad_weights, grad_mus, grad_sigmas, None
+
+class _GaussianToMixtureValueAndJac(Function):
+    r"""Return the Gaussian-to-mixture transport and its $y$-derivative."""
+
+    @staticmethod
+    @torch.no_grad()
+    def forward(
+        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
+    ) -> tuple[Tensor, Tensor]:
+        assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
+
+        # Match the safeguarded Newton solve used by `_GaussianToMixture`.
+        lines = mus + sigmas * y.unsqueeze(-1)
+        lower = lines.amin(dim=-1)
+        upper = lines.amax(dim=-1)
+        x = torch.einsum("k, ...k -> ...", weights, lines)
+
+        for _ in range(maxiter):
+            x = x.clamp(lower, upper)
+            fy, d_fy = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
+            r = fy - y
+            lower = torch.where(r < 0, x, lower)
+            upper = torch.where(r > 0, x, upper)
+            x_newton = x - r / d_fy
+            x_bisect = 0.5 * (lower + upper)
+            x = torch.where(
+                (x_newton >= lower) & (x_newton <= upper),
+                x_newton,
+                x_bisect,
+            )
+
+        x = x.clamp(lower, upper)
+        fy, z = _mixture_to_gaussian_value(x, weights, mus, sigmas)
+        d_x, *_ = _mixture_to_gaussian_derivatives2(z, weights, sigmas, fy)
+        ctx.save_for_backward(z, fy, weights, sigmas)
+        return x, d_x.reciprocal()
+
+    @staticmethod
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, None]:
+        grad_x, grad_dx = outer
+        z, y, weights, sigmas = ctx.saved_tensors
+        d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas = (
+            _mixture_to_gaussian_derivatives2(z, weights, sigmas, y)
+        )
+        dx_inv = d_x.reciprocal()
+
+        d_y = dx_inv
+        d_weights_inv = -d_weights * dx_inv.unsqueeze(-1)
+        d_mus_inv = -d_mus * dx_inv.unsqueeze(-1)
+        d_sigmas_inv = -d_sigmas * dx_inv.unsqueeze(-1)
+
+        j_y = -d2_x * dx_inv.pow(3)
+        j_weights = (
+            d2_x.unsqueeze(-1) * d_weights - d2_weights * d_x.unsqueeze(-1)
+        ) * (dx_inv.pow(3).unsqueeze(-1))
+        j_mus = (d2_x.unsqueeze(-1) * d_mus - d2_mus * d_x.unsqueeze(-1)) * (
+            dx_inv.pow(3).unsqueeze(-1)
+        )
+        j_sigmas = (
+            d2_x.unsqueeze(-1) * d_sigmas - d2_sigmas * d_x.unsqueeze(-1)
+        ) * dx_inv.pow(3).unsqueeze(-1)
+
+        return (
+            grad_x * d_y + grad_dx * j_y,
+            grad_x.unsqueeze(-1) * d_weights_inv + grad_dx.unsqueeze(-1) * j_weights,
+            grad_x.unsqueeze(-1) * d_mus_inv + grad_dx.unsqueeze(-1) * j_mus,
+            grad_x.unsqueeze(-1) * d_sigmas_inv + grad_dx.unsqueeze(-1) * j_sigmas,
+            None,
+        )
 
 
 def bimodal_to_gaussian(
@@ -802,3 +875,17 @@ def gaussian_to_mixture(
     """
     maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
     return _GaussianToMixture.apply(y, weights, mus, sigmas, maxiter)
+
+
+def gaussian_to_mixture_value_and_jac(
+    y: Tensor,
+    /,
+    weights: Tensor,
+    mus: Tensor,
+    sigmas: Tensor,
+    *,
+    maxiter: int | None = None,
+) -> tuple[Tensor, Tensor]:
+    r"""Map $N(0,1)$ to the mixture and return $(f(y), ∂f/∂y)$."""
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    return _GaussianToMixtureValueAndJac.apply(y, weights, mus, sigmas, maxiter)
