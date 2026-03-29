@@ -30,7 +30,7 @@ from .ndtri_exp import ndtri_exp
 def _bimodal_value_and_stats(
     x: Tensor, mu: Tensor, sigma: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    r"""Compute the shared normalized coordinates and log-space transport terms."""
+    r"""Return the transport value and shared bimodal intermediates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     m = mu.abs()
@@ -66,8 +66,8 @@ def _bimodal_to_gaussian_derivatives(
     r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport.
 
     Returns:
-        ∂y/∂x:  ½σ⁻¹(E₊ + E₋})
-        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋})
+        ∂y/∂x:  ½σ⁻¹(E₊ + E₋)
+        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋)
         ∂y/∂σ: -½σ⁻¹(z₊E₊ + z₋E₋)
     """
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
@@ -100,8 +100,8 @@ def _bimodal_to_gaussian_derivatives2(
     r"""Compute first and second derivatives for the bimodal-to-Gaussian transport.
 
     Returns:
-        ∂y/∂x:  ½σ⁻¹(E₊ + E₋})
-        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋})
+        ∂y/∂x:  ½σ⁻¹(E₊ + E₋)
+        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋)
         ∂y/∂σ: -½σ⁻¹(z₊E₊ + z₋E₋)
         ∂g/∂x: -½σ⁻²(z₊E₊ + z₋E₋)   + yg(∂y/∂x)
         ∂g/∂μ: -½σ⁻²(z₊E₊ - z₋E₋)   + yg(∂y/∂μ)
@@ -188,7 +188,7 @@ def _gaussian_to_bimodal_value(
 def _mixture_value_and_stats(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    r"""Compute the shared normalized coordinates and log-space transport terms."""
+    r"""Return the transport value and shared mixture intermediates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     z = (x.unsqueeze(-1) - mus) / sigmas
@@ -352,8 +352,8 @@ class _BimodalToGaussian(Function):
     The first order derivatives can be written as:
 
     .. math::
-        ∂y/∂x &=  ½σ⁻¹(E₊ + E₋})    \\
-        ∂y/∂μ &=  ½σ⁻¹(E₊ - E₋})    \\
+        ∂y/∂x &=  ½σ⁻¹(E₊ + E₋)    \\
+        ∂y/∂μ &=  ½σ⁻¹(E₊ - E₋)    \\
         ∂y/∂σ &= -½σ⁻¹(z₊E₊ + z₋E₋)
 
     And the derivatives of $g(x) = ∂y/∂x$ are
@@ -623,8 +623,8 @@ class _MixtureToGaussianValueAndGrad(Function):
 class _GaussianToMixture(Function):
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$.
 
-    This transform cannot be expressed in "closed form", so we compute the
-    inverse through newton-iteration / bisection.
+    This inverse map is not available in closed form, so we compute it with a
+    safeguarded Newton iteration.
     """
 
     @staticmethod
@@ -799,7 +799,7 @@ def gaussian_to_bimodal(
     numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
     and `ndtri_exp`.
 
-    so the returned value is the unique $x$ whose bimodal CDF equals $Φ(y)$.
+    The returned value is the unique $x$ whose bimodal CDF equals $Φ(y)$.
     """
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
@@ -842,7 +842,7 @@ def gaussian_to_mixture(
     numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
     and `ndtri_exp`.
 
-    so the returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
+    The returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
     """
     maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
     return _GaussianToMixture.apply(y, weights, mus, sigmas, maxiter)
