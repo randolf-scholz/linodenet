@@ -19,6 +19,8 @@ from torch import Tensor
 from torch.autograd import Function
 from torch.special import log_ndtr
 
+from linodenet_special.interfaces import DEFAULT_NEWTON_MAXITER
+
 from .hard_bend import hard_bend
 from .ndtri_exp import ndtri_exp
 
@@ -740,7 +742,7 @@ def gaussian_to_bimodal(
     mu: Tensor | float = 2.0,
     sigma: Tensor | float = 1.0,
     *,
-    maxiter: int = 10,
+    maxiter: int | None = None,
 ) -> Tensor:
     r"""Map $N(0,1)$ to the symmetric mixture $½N(-μ,σ²) + ½N(μ,σ²)$.
 
@@ -757,6 +759,7 @@ def gaussian_to_bimodal(
     """
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
     return _GaussianToBimodal.apply(y, mu, sigma, maxiter)
 
 
@@ -766,11 +769,12 @@ def gaussian_to_bimodal_value_and_jac(
     mu: Tensor | float = 2.0,
     sigma: Tensor | float = 1.0,
     *,
-    maxiter: int = 10,
+    maxiter: int | None = None,
 ) -> tuple[Tensor, Tensor]:
     r"""Map $N(0,1)$ to the symmetric mixture and return $(f(y), ∂f/∂y)$."""
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
     return _GaussianToBimodalValueAndJac.apply(y, mu, sigma, maxiter)
 
 
@@ -781,7 +785,7 @@ def gaussian_to_mixture(
     mus: Tensor,
     sigmas: Tensor,
     *,
-    maxiter: int = 10,
+    maxiter: int | None = None,
 ) -> Tensor:
     r"""Map $N(0,1)$ to the mixture $∑ₖ ωₖ N(μₖ,σₖ²)$.
 
@@ -796,4 +800,5 @@ def gaussian_to_mixture(
 
     so the returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
     """
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
     return _GaussianToMixture.apply(y, weights, mus, sigmas, maxiter)

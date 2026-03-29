@@ -1,6 +1,8 @@
 r"""Public Interfaces."""
 
 __all__ = [
+    # Constants
+    "DEFAULT_NEWTON_MAXITER",
     # Protocols
     "BimodalToGaussian",
     "GaussianToBimodal",
@@ -15,11 +17,19 @@ __all__ = [
 ]
 
 
-from typing import Optional, Protocol, ReadOnly, TypedDict
+from typing import Final, Optional, Protocol, ReadOnly, TypedDict
 
+import torch
 from torch import Tensor
 
 from signatures import signature
+
+DEFAULT_NEWTON_MAXITER: Final[dict[torch.dtype, int]] = {
+    torch.float16: 10,
+    torch.bfloat16: 10,
+    torch.float32: 10,
+    torch.float64: 15,
+}
 
 
 class GaussianToBimodal(Protocol):
@@ -32,7 +42,7 @@ class GaussianToBimodal(Protocol):
         mu: Tensor = ...,
         sigma: Tensor = ...,
         *,
-        maxiter: int = ...,
+        maxiter: Optional[int] = ...,
     ) -> Tensor: ...
 
 
@@ -55,7 +65,7 @@ class GaussianToMixture(Protocol):
         mus: Tensor,
         sigmas: Tensor,
         *,
-        maxiter: int = ...,
+        maxiter: Optional[int] = ...,
     ) -> Tensor: ...
 
 

@@ -26,6 +26,7 @@ import torch
 from torch import Tensor
 
 from .interfaces import (
+    DEFAULT_NEWTON_MAXITER,
     BimodalToGaussian,
     GaussianToBimodal,
     GaussianToMixture,
@@ -157,10 +158,17 @@ def _compile_liblinodenet() -> KnownFunctions:
 
 
 def gaussian_to_mixture(
-    y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor, *, maxiter: int = 10
+    y: Tensor,
+    /,
+    weights: Tensor,
+    mus: Tensor,
+    sigmas: Tensor,
+    *,
+    maxiter: int | None = None,
 ) -> Tensor:
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
     assert _gaussian_to_mixture is not None, "missing kernel"
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
     return _gaussian_to_mixture(y, weights, mus, sigmas, maxiter=maxiter)
 
 
@@ -178,12 +186,13 @@ def gaussian_to_bimodal(
     mu: Tensor | float = 2.0,
     sigma: Tensor | float = 1.0,
     *,
-    maxiter: int = 10,
+    maxiter: int | None = None,
 ) -> Tensor:
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
     assert _gaussian_to_bimodal is not None, "missing kernel"
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
     return _gaussian_to_bimodal(y, mu, sigma, maxiter=maxiter)
 
 
