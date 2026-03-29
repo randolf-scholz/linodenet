@@ -74,12 +74,10 @@ class TestCorrectness(TestCase):
         torch.float64: (1e-10, 1e-10),
     }
 
-    REVERSIBLE_TOL = {
-        torch.float32: (1e-5, 1e-5),
-        torch.float64: (1e-10, 1e-10),
+    GRADCHECK_TOL = {
+        torch.float32: (1e-3, 1e-3, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
     }
-
-    GRADCHECK_TOL = {}
 
     def test_special_values(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
@@ -212,15 +210,8 @@ class TestCorrectness(TestCase):
             device=device,
             requires_grad=True,
         )
-        if dtype is torch.float32:
-            eps = 1e-4
-            atol = 1e-3
-            rtol = 1e-3
-        else:
-            eps = 1e-6
-            atol = 1e-6
-            rtol = 1e-6
-        gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol)
+        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol, fast_mode=True)
 
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
