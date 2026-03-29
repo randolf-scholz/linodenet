@@ -45,6 +45,7 @@ from typing import Final
 
 import torch
 from torch import Tensor
+from torch.special import ndtri
 
 # constants
 _UPPER_CUTOFF: Final[float] = -0.14541345786885906  # log(1-e⁻²)
@@ -139,12 +140,8 @@ def _ndtri_exp_small(log_p: Tensor) -> Tensor:
     r"""Rational approximation of Φ⁻¹√(-2 log p) when log_p < -2."""
     # cast the coefficients to the same dtype and device as log_p
     p1, q1, p2, q2 = _get_coeffs(log_p.device, log_p.dtype)
-    # Avoid potential overflow in -2*y for absurdly negative y (mirrors SciPy idea)
-    x = torch.where(
-        log_p >= 0.5 * -3.4028234663852886e38,  # float32.min
-        torch.sqrt(-2 * log_p),
-        (1.4142135623730951 * torch.sqrt(-log_p)),  # √2
-    )
+    # Avoid potential overflow in -2*y for absurdly negative y (mirrors SciPy idea).
+    x = _SQRT_2 * torch.sqrt(-log_p)
     z = x.reciprocal()  # 1/x
     x0 = x - z * x.log()  # x - log(x)/x
     x1 = torch.where(
@@ -157,11 +154,14 @@ def _ndtri_exp_small(log_p: Tensor) -> Tensor:
 
 def ndtri_exp_naive(log_p: Tensor) -> Tensor:
     r"""Computes the inverse of `log_ndtr` using the naive implementation."""
-    return torch.special.ndtri(log_p.exp())
+    return ndtri(log_p.exp())
 
 
 def ndtri_exp(log_p: Tensor) -> Tensor:
     r"""Inverse of `log_ndtr`, i.e. the log-quantile function of the standard normal distribution.
+
+    domain: (-∞, 0]   (image of [0,1] under log)
+    codomain: [-∞, +∞]
 
     torch currently does not implement the inverse of `log_ndtr`,
     this is simply a placeholder using the naive implementation.
@@ -169,16 +169,17 @@ def ndtri_exp(log_p: Tensor) -> Tensor:
     References:
         - scipy.special.ndtri_exp
     """
-    return torch.where(
-        log_p < -2.0,  # LOWER_CUTOFF,
-        torch.where(
-            log_p < -3.4028234663852886e38,  # float32.min
-            torch.full_like(log_p, -math.inf),
-            _ndtri_exp_small(log_p),
-        ),
-        torch.where(
-            log_p < -0.14541345786885906,  # log(1-e⁻²)
-            torch.special.ndtri(log_p.exp()),
-            -torch.special.ndtri(-log_p.expm1()),
-        ),
-    )
+    neginf_mask = log_p.isneginf()
+    small_mask = (log_p < _LOWER_CUTOFF) & ~neginf_mask
+    medium_mask = (log_p >= _LOWER_CUTOFF) & (log_p < _UPPER_CUTOFF)
+    large_mask = ~(neginf_mask | small_mask | medium_mask)
+
+    small_input = torch.where(small_mask, log_p, log_p.new_full((), -3.0))
+    medium_input = torch.where(medium_mask, log_p, log_p.new_full((), -1.0))
+    large_input = torch.where(large_mask, log_p, log_p.new_full((), -0.1))
+
+    small = _ndtri_exp_small(small_input)
+    medium = ndtri(medium_input.exp())
+    large = -ndtri(-large_input.expm1())
+    finite = torch.where(small_mask, small, torch.where(medium_mask, medium, large))
+    return torch.where(neginf_mask, log_p.new_full((), -math.inf), finite)
