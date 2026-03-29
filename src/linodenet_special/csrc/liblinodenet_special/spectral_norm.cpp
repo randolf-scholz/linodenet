@@ -238,7 +238,7 @@ struct SpectralNorm: Function<SpectralNorm> {
         const Tensor &u = saved[0];
         const Tensor &v = saved[1];
         const Tensor g_sigma = grad_output[0] * outer(u, v);
-        return { g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor() };
+        return { g_sigma, torch::zeros_like(u), torch::zeros_like(v), Tensor(), Tensor(), Tensor() };
     }
 };
 

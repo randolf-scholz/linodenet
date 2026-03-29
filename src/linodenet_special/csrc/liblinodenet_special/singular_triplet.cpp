@@ -328,7 +328,7 @@ struct SingularTriplet : Function<SingularTriplet> {
         const Tensor &phi = grad_output[1];
         const Tensor &psi = grad_output[2];
         if ( !(phi.any() | psi.any()).item<bool>() ) {
-            return {g_sigma, Tensor(), Tensor(), Tensor(), Tensor(), Tensor()};
+            return {g_sigma, torch::zeros_like(u), torch::zeros_like(v), Tensor(), Tensor(), Tensor()};
         }
 
         // parse the remaining inputs
@@ -364,7 +364,7 @@ struct SingularTriplet : Function<SingularTriplet> {
         // compute the VJP
         const Tensor g_u = outer(p - dot(u, p) * u, v);
         const Tensor g_v = outer(u, q - dot(v, q) * v);
-        return { g_sigma + g_u + g_v, Tensor(), Tensor(), Tensor(), Tensor(), Tensor() };
+        return { g_sigma + g_u + g_v, torch::zeros_like(u), torch::zeros_like(v), Tensor(), Tensor(), Tensor() };
     }
 };
 
