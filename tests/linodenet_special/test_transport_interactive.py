@@ -15,9 +15,9 @@ from torch import Tensor
 
 from linodenet_special.fallbacks import (
     bimodal_to_gaussian,
-    bimodal_to_gaussian_value_and_jac,
+    bimodal_to_gaussian_value_and_grad,
     gaussian_to_bimodal,
-    gaussian_to_bimodal_value_and_jac,
+    gaussian_to_bimodal_value_and_grad,
     hard_bend,
     mixture_to_gaussian,
 )
@@ -412,7 +412,7 @@ class TransportPlotStateBimodal:
         mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
         sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
 
-        y, jac = bimodal_to_gaussian_value_and_jac(self.x, mu, sigma)
+        y, jac = bimodal_to_gaussian_value_and_grad(self.x, mu, sigma)
         twin = make_bimodal_distribution(mu, sigma)
         target = stats.Normal(mu=0.0, sigma=1.0)
         x_samples = torch.tensor(twin.sample(shape=1_000, rng=0), dtype=dtype)
@@ -471,7 +471,7 @@ class TransportPlotStateGaussian:
         mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
         sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
 
-        x, jac = gaussian_to_bimodal_value_and_jac(self.y, mu, sigma)
+        x, jac = gaussian_to_bimodal_value_and_grad(self.y, mu, sigma)
         source = stats.Normal(mu=0.0, sigma=1.0)
         twin = make_bimodal_distribution(mu, sigma)
         y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
@@ -610,7 +610,7 @@ def gaussian_to_bimodal_interactive() -> None:
     mu = torch.tensor(3.0, dtype=dtype)
     sigma = torch.tensor(0.5, dtype=dtype)
 
-    x, jac = gaussian_to_bimodal_value_and_jac(y, mu, sigma)
+    x, jac = gaussian_to_bimodal_value_and_grad(y, mu, sigma)
     source = stats.Normal(mu=0.0, sigma=1.0)
     target = make_bimodal_distribution(mu, sigma)
     y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
@@ -723,7 +723,7 @@ def bimodal_to_gaussian_interactive() -> None:
     mu = torch.tensor(3.0, dtype=dtype)
     sigma = torch.tensor(0.5, dtype=dtype)
 
-    y, jac = bimodal_to_gaussian_value_and_jac(x, mu, sigma)
+    y, jac = bimodal_to_gaussian_value_and_grad(x, mu, sigma)
     source = make_bimodal_distribution(mu, sigma)
     target = stats.Normal(mu=0.0, sigma=1.0)
     x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)

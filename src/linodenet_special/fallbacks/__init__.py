@@ -6,9 +6,9 @@ Used as fallback when C++ extensions are not available.
 __all__ = [
     # functions
     "bimodal_to_gaussian",
-    "bimodal_to_gaussian_value_and_jac",
+    "bimodal_to_gaussian_value_and_grad",
     "gaussian_to_bimodal",
-    "gaussian_to_bimodal_value_and_jac",
+    "gaussian_to_bimodal_value_and_grad",
     "gaussian_to_mixture",
     "fixpoint_solve",
     "hard_bend",
@@ -18,7 +18,7 @@ __all__ = [
     "matrix_log",
     "matrix_sqrt",
     "mixture_to_gaussian",
-    "mixture_to_gaussian_value_and_jac",
+    "mixture_to_gaussian_value_and_grad",
     "ndtri_exp",
     "ndtri_exp_naive",
     "singular_triplet",
@@ -30,12 +30,12 @@ __all__ = [
 from .fixpoint_iteration import fixpoint_solve
 from .gaussian_transport import (
     bimodal_to_gaussian,
-    bimodal_to_gaussian_value_and_jac,
+    bimodal_to_gaussian_value_and_grad,
     gaussian_to_bimodal,
-    gaussian_to_bimodal_value_and_jac,
+    gaussian_to_bimodal_value_and_grad,
     gaussian_to_mixture,
     mixture_to_gaussian,
-    mixture_to_gaussian_value_and_jac,
+    mixture_to_gaussian_value_and_grad,
 )
 from .hard_bend import hard_bend, hard_contract, hard_expand
 from .inverse_softplus import inverse_softplus

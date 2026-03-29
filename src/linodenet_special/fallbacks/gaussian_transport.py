@@ -4,13 +4,13 @@ r"""Implementation of the optimal transport based activation function."""
 __all__ = [
     # functional interfaces
     "gaussian_to_bimodal",
-    "gaussian_to_bimodal_value_and_jac",
+    "gaussian_to_bimodal_value_and_grad",
     "bimodal_to_gaussian",
-    "bimodal_to_gaussian_value_and_jac",
+    "bimodal_to_gaussian_value_and_grad",
     "gaussian_to_mixture",
-    "gaussian_to_mixture_value_and_jac",
+    "gaussian_to_mixture_value_and_grad",
     "mixture_to_gaussian",
-    "mixture_to_gaussian_value_and_jac",
+    "mixture_to_gaussian_value_and_grad",
 ]
 
 from typing import Final
@@ -42,7 +42,7 @@ def _bimodal_to_gaussian_value(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tenso
     return y.clamp(z_minus, z_plus)
 
 
-def _bimodal_to_gaussian_value_and_jac(
+def _bimodal_to_gaussian_value_and_grad(
     x: Tensor, mu: Tensor, sigma: Tensor, /
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bimodal transport and its $x$-derivative in one pass."""
@@ -185,7 +185,7 @@ def _gaussian_to_bimodal_value(
 
     for _ in range(maxiter):
         x = x.clamp(lower, upper)
-        fx, d_fx = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
+        fx, d_fx = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
         r = fx - y
         lower = torch.where(r < 0, x, lower)
         upper = torch.where(r > 0, x, upper)
@@ -216,7 +216,7 @@ def _mixture_to_gaussian_value(
     return y, z
 
 
-def _mixture_to_gaussian_value_and_jac(
+def _mixture_to_gaussian_value_and_grad(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the mixture transport and its $x$-derivative in one pass."""
@@ -391,13 +391,13 @@ class _BimodalToGaussian(Function):
         return (g * d_x), (g * d_mu), (g * d_sigma)
 
 
-class _BimodalToGaussianValueAndJac(Function):
+class _BimodalToGaussianValueAndGrad(Function):
     r"""Return the bimodal-to-Gaussian transport and its $x$-derivative."""
 
     @staticmethod
     @torch.no_grad()
     def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor, /) -> tuple[Tensor, Tensor]:
-        y, d_x = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
+        y, d_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
         ctx.save_for_backward(x, mu, sigma, y)
         return y, d_x
 
@@ -477,7 +477,7 @@ class _GaussianToBimodal(Function):
         return (g * d_y), (g * d_mu), (g * d_sigma), None
 
 
-class _GaussianToBimodalValueAndJac(Function):
+class _GaussianToBimodalValueAndGrad(Function):
     r"""Return the Gaussian-to-bimodal transport and its $y$-derivative."""
 
     @staticmethod
@@ -486,7 +486,7 @@ class _GaussianToBimodalValueAndJac(Function):
         ctx, y: Tensor, mu: Tensor, sigma: Tensor, maxiter, /
     ) -> tuple[Tensor, Tensor]:
         x = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
-        fx, d_x = _bimodal_to_gaussian_value_and_jac(x, mu, sigma)
+        fx, d_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
         # Note: d_x is already clamped
         ctx.save_for_backward(x, mu, sigma, fx)
         return x, d_x.reciprocal()
@@ -590,7 +590,7 @@ class _MixtureToGaussian(Function):
         )
 
 
-class _MixtureToGaussianValueAndJac(Function):
+class _MixtureToGaussianValueAndGrad(Function):
     r"""Return the mixture-to-Gaussian transport and its $x$-derivative."""
 
     @staticmethod
@@ -598,7 +598,7 @@ class _MixtureToGaussianValueAndJac(Function):
     def forward(
         ctx, x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
     ) -> tuple[Tensor, Tensor]:
-        y, d_x = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
+        y, d_x = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
         z = (x.unsqueeze(-1) - mus) / sigmas
         ctx.save_for_backward(z, y, weights, sigmas)
         return y, d_x
@@ -644,7 +644,7 @@ class _GaussianToMixture(Function):
 
         for _ in range(maxiter):
             x = x.clamp(lower, upper)
-            fy, d_fy = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
+            fy, d_fy = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
             r = fy - y
             # Since T is monotone, the sign of the residual tells us which side of
             # the bracket still contains the inverse solution.
@@ -694,7 +694,7 @@ class _GaussianToMixture(Function):
         )
 
 
-class _GaussianToMixtureValueAndJac(Function):
+class _GaussianToMixtureValueAndGrad(Function):
     r"""Return the Gaussian-to-mixture transport and its $y$-derivative.
 
     Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
@@ -731,7 +731,7 @@ class _GaussianToMixtureValueAndJac(Function):
 
         for _ in range(maxiter):
             x = x.clamp(lower, upper)
-            fy, d_fy = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
+            fy, d_fy = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
             r = fy - y
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
@@ -798,13 +798,13 @@ def bimodal_to_gaussian(
     return _BimodalToGaussian.apply(x, mu, sigma)
 
 
-def bimodal_to_gaussian_value_and_jac(
+def bimodal_to_gaussian_value_and_grad(
     x: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
 ) -> tuple[Tensor, Tensor]:
     r"""Map the symmetric mixture to $N(0,1)$ and return $(f(x), ∂f/∂x)$."""
     mu = torch.as_tensor(mu, dtype=x.dtype, device=x.device)
     sigma = torch.as_tensor(sigma, dtype=x.dtype, device=x.device)
-    return _BimodalToGaussianValueAndJac.apply(x, mu, sigma)
+    return _BimodalToGaussianValueAndGrad.apply(x, mu, sigma)
 
 
 def mixture_to_gaussian(
@@ -820,11 +820,11 @@ def mixture_to_gaussian(
     return _MixtureToGaussian.apply(x, weights, mus, sigmas)
 
 
-def mixture_to_gaussian_value_and_jac(
+def mixture_to_gaussian_value_and_grad(
     x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> tuple[Tensor, Tensor]:
     r"""Map the mixture to $N(0,1)$ and return $(f(x), ∂f/∂x)$."""
-    return _MixtureToGaussianValueAndJac.apply(x, weights, mus, sigmas)
+    return _MixtureToGaussianValueAndGrad.apply(x, weights, mus, sigmas)
 
 
 def gaussian_to_bimodal(
@@ -854,7 +854,7 @@ def gaussian_to_bimodal(
     return _GaussianToBimodal.apply(y, mu, sigma, maxiter)
 
 
-def gaussian_to_bimodal_value_and_jac(
+def gaussian_to_bimodal_value_and_grad(
     y: Tensor,
     /,
     mu: Tensor | float = 2.0,
@@ -866,7 +866,7 @@ def gaussian_to_bimodal_value_and_jac(
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
     maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
-    return _GaussianToBimodalValueAndJac.apply(y, mu, sigma, maxiter)
+    return _GaussianToBimodalValueAndGrad.apply(y, mu, sigma, maxiter)
 
 
 def gaussian_to_mixture(
@@ -895,7 +895,7 @@ def gaussian_to_mixture(
     return _GaussianToMixture.apply(y, weights, mus, sigmas, maxiter)
 
 
-def gaussian_to_mixture_value_and_jac(
+def gaussian_to_mixture_value_and_grad(
     y: Tensor,
     /,
     weights: Tensor,
@@ -906,4 +906,4 @@ def gaussian_to_mixture_value_and_jac(
 ) -> tuple[Tensor, Tensor]:
     r"""Map $N(0,1)$ to the mixture and return $(f(y), ∂f/∂y)$."""
     maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
-    return _GaussianToMixtureValueAndJac.apply(y, weights, mus, sigmas, maxiter)
+    return _GaussianToMixtureValueAndGrad.apply(y, weights, mus, sigmas, maxiter)

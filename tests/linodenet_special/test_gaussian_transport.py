@@ -16,12 +16,12 @@ from linodenet_special.compiled import (
 )
 from linodenet_special.fallbacks import (
     bimodal_to_gaussian as bimodal_to_gaussian_py,
-    bimodal_to_gaussian_value_and_jac as bimodal_to_gaussian_value_and_jac_py,
+    bimodal_to_gaussian_value_and_grad as bimodal_to_gaussian_value_and_jac_py,
     gaussian_to_bimodal as gaussian_to_bimodal_py,
-    gaussian_to_bimodal_value_and_jac as gaussian_to_bimodal_value_and_jac_py,
+    gaussian_to_bimodal_value_and_grad as gaussian_to_bimodal_value_and_jac_py,
     gaussian_to_mixture as gaussian_to_mixture_py,
     mixture_to_gaussian as mixture_to_gaussian_py,
-    mixture_to_gaussian_value_and_jac as mixture_to_gaussian_value_and_jac_py,
+    mixture_to_gaussian_value_and_grad as mixture_to_gaussian_value_and_jac_py,
 )
 from linodenet_special.interfaces import (
     BimodalToGaussian,
