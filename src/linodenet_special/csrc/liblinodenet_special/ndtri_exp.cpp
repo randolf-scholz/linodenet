@@ -2,6 +2,8 @@
 
 #include <array>
 #include <limits>
+#include <mutex>
+#include <vector>
 
 namespace linodenet_special {
 namespace {
@@ -53,6 +55,27 @@ constexpr std::array<double, 8> Q2 = {
     6.79019408009981274425e-9,
 };
 
+struct CoeffCacheKey {
+    c10::DeviceType device_type;
+    c10::DeviceIndex device_index;
+    at::ScalarType scalar_type;
+
+    friend bool operator==(const CoeffCacheKey &lhs, const CoeffCacheKey &rhs) {
+        return (
+            lhs.device_type == rhs.device_type &&
+            lhs.device_index == rhs.device_index &&
+            lhs.scalar_type == rhs.scalar_type
+        );
+    }
+};
+
+struct CoeffTensors {
+    Tensor p1;
+    Tensor q1;
+    Tensor p2;
+    Tensor q2;
+};
+
 double finfo_min(const at::ScalarType &scalar_type) {
     return AT_DISPATCH_FLOATING_TYPES_AND2(
         at::kHalf, at::kBFloat16, scalar_type, "finfo_min",
@@ -62,36 +85,82 @@ double finfo_min(const at::ScalarType &scalar_type) {
     );
 }
 
-template <size_t N>
-Tensor polevl(const Tensor &x, const std::array<double, N> &coeffs) {
-    Tensor y = torch::zeros_like(x);
-    for (const double c : coeffs) {
-        y = y * x + c;
+CoeffTensors get_coeffs(const Tensor &x) {
+    static std::mutex cache_mutex;
+    static std::vector<std::pair<CoeffCacheKey, CoeffTensors>> cache;
+
+    const auto device = x.device();
+    const CoeffCacheKey key{device.type(), device.index(), x.scalar_type()};
+
+    {
+        // Fast path: return immediately when this device/dtype combination was
+        // already materialized by an earlier call.
+        const std::lock_guard lock(cache_mutex);
+        for (const auto &[cached_key, coeffs] : cache) {
+            if (cached_key == key) {
+                return coeffs;
+            }
+        }
     }
+
+    // Build the coefficient tensors outside the mutex. Tensor construction can
+    // be relatively expensive, so we do not want unrelated cache lookups to
+    // block on this work.
+    const auto options = x.options();
+    CoeffTensors coeffs{
+        torch::tensor(std::vector(P1.begin(), P1.end()), options),
+        torch::tensor(std::vector(Q1.begin(), Q1.end()), options),
+        torch::tensor(std::vector(P2.begin(), P2.end()), options),
+        torch::tensor(std::vector(Q2.begin(), Q2.end()), options),
+    };
+
+    const std::lock_guard lock(cache_mutex);
+    // Another thread may have inserted the same key while we were constructing
+    // `coeffs`, so re-check before appending a new cache entry.
+    for (const auto &[cached_key, cached_coeffs] : cache) {
+        if (cached_key == key) {
+            return cached_coeffs;
+        }
+    }
+    cache.emplace_back(key, coeffs);
+    return coeffs;
+}
+
+Tensor polyeval8(const Tensor &x, const Tensor &coeffs) {
+    Tensor y = torch::zeros_like(x);
+    y = at::addcmul(coeffs[0], x, y);
+    y = at::addcmul(coeffs[1], x, y);
+    y = at::addcmul(coeffs[2], x, y);
+    y = at::addcmul(coeffs[3], x, y);
+    y = at::addcmul(coeffs[4], x, y);
+    y = at::addcmul(coeffs[5], x, y);
+    y = at::addcmul(coeffs[6], x, y);
+    y = at::addcmul(coeffs[7], x, y);
+    y = at::addcmul(coeffs[8], x, y);
     return y;
 }
 
-template <size_t N>
-Tensor p1evl(const Tensor &x, const std::array<double, N> &coeffs) {
+Tensor poly1eval8(const Tensor &x, const Tensor &coeffs) {
     Tensor y = torch::ones_like(x);
-    for (const double c : coeffs) {
-        y = y * x + c;
-    }
+    y = at::addcmul(coeffs[0], x, y);
+    y = at::addcmul(coeffs[1], x, y);
+    y = at::addcmul(coeffs[2], x, y);
+    y = at::addcmul(coeffs[3], x, y);
+    y = at::addcmul(coeffs[4], x, y);
+    y = at::addcmul(coeffs[5], x, y);
+    y = at::addcmul(coeffs[6], x, y);
+    y = at::addcmul(coeffs[7], x, y);
     return y;
 }
 
 Tensor ndtri_exp_small(const Tensor &log_p) {
-    const double finfo_min_value = finfo_min(log_p.scalar_type());
+    const auto [p1, q1, p2, q2] = get_coeffs(log_p);
 
-    const Tensor x = torch::where(
-        log_p >= 0.5 * finfo_min_value,
-        torch::sqrt(-2.0 * log_p),
-        SQRT_2 * torch::sqrt(-log_p)
-    );
+    const Tensor x = torch::sqrt(-2.0 * log_p);
     const Tensor z = x.reciprocal();
     const Tensor x0 = at::addcmul(x, z, x.log(), -1.0);
-    const Tensor x1_small = z * polevl(z, P1) / p1evl(z, Q1);
-    const Tensor x1_large = z * polevl(z, P2) / p1evl(z, Q2);
+    const Tensor x1_small = z * polyeval8(z, p1) / poly1eval8(z, q1);
+    const Tensor x1_large = z * polyeval8(z, p2) / poly1eval8(z, q2);
     const Tensor x1 = torch::where(x < 8.0, x1_small, x1_large);
     return x1 - x0;
 }
