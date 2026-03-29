@@ -34,10 +34,11 @@ def _slider_positions(
     "a", [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0], ids=lambda a: f"a={a}"
 )
 @pytest.mark.parametrize("c", [-3, -2, -0.5, 0.5, 1.0, 3.0], ids=lambda c: f"c={c}")
-def test_hard_bend_reversible(a: float, c: float) -> None:
-    x = make_test_grid(a, c)
-    y = hard_bend(x, a, c)
-    x_recovered = hard_bend(y, 1 / a, c)
+@pytest.mark.parametrize("m", [0.125, 0.5, 1.0, 2.0], ids=lambda m: f"m={m}")
+def test_hard_bend_reversible(a: float, c: float, m: float) -> None:
+    x = make_test_grid(a, c, m)
+    y = hard_bend(x, a, c, m)
+    x_recovered = hard_bend(y, 1 / a, c / m, 1 / m)
 
     torch.testing.assert_close(x_recovered, x, rtol=1e-14, atol=1e-14)
 
@@ -72,11 +73,11 @@ def bend(x: Tensor, a: Tensor | float, c: Tensor | float) -> Tensor:
     )
 
 
-def make_test_grid(a: float, c: float, /) -> Tensor:
-    if a == 1:
+def make_test_grid(a: float, c: float, m: float = 1.0, /) -> Tensor:
+    if a == m:
         return torch.linspace(-8 * c, 8 * c, steps=257, dtype=torch.float64)
 
-    threshold = c / abs(a - 1)
+    threshold = c / abs(a - m)
     points = torch.tensor(
         [
             -threshold - 2 * c,
