@@ -32,7 +32,7 @@ class TestBimodalToGaussian(TestCase):
     MEANS = [0.1, 0.5, 1, 2, 10]
 
     GRADCHECK_TOL = {
-        torch.float32: (1e-2, 1e-2, 1e-4),
+        torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
@@ -517,7 +517,7 @@ class TestMixtureToGaussian(TestCase):
     N = 64
 
     GRADCHECK_TOL = {
-        torch.float32: (1e-2, 1e-2, 1e-4),
+        torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
