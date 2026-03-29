@@ -55,6 +55,7 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_value_and_stats(
     const Tensor z_minus = (x - mu_abs) / sigma;
     const Tensor log_p = LOG_HALF + at::logaddexp(log_ndtr(z_plus), log_ndtr(z_minus));
     const Tensor log_q = LOG_HALF + at::logaddexp(log_ndtr(-z_plus),log_ndtr(-z_minus));
+    // Switch between lower-tail and upper-tail evaluations to avoid cancellation near 0 and 1.
     Tensor y = torch::where(
         log_p < LOG_HALF,
         linodenet_special::ndtri_exp(log_p),
@@ -93,6 +94,7 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives(
 ) {
     const auto [_, mu_abs, z_plus, z_minus, log_sigma] = bimodal_value_and_stats(x, mu, sigma);
     const Tensor y2 = y.square();
+    // Evaluate the two mode contributions in log space to avoid tail underflow.
     const Tensor log_phi_plus = LOG_HALF + 0.5 * (y2 - z_plus.square()) - log_sigma;
     const Tensor log_phi_minus = LOG_HALF + 0.5 * (y2 - z_minus.square()) - log_sigma ;
     const Tensor hi = maximum(log_phi_plus, log_phi_minus);
@@ -102,6 +104,7 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives(
     Tensor d_mu = sign(log_phi_plus - log_phi_minus) * exp(hi + log1p(-exp(lo - hi)));
     Tensor d_sigma = -(x * d_x + mu_abs * d_mu) / sigma;
 
+    // The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     const Tensor lower_bound = exp(-0.5 * (mu_abs / sigma).square()) / sigma;
     const Tensor upper_bound = sigma.reciprocal();
     d_x = d_x.clamp_(lower_bound, upper_bound);
@@ -130,6 +133,8 @@ Tensor gaussian_to_bimodal_value(
         x = x.clamp_(lower, upper);
         const auto [fx, d_fx] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
         const Tensor residual = fx - y;
+        // Since T is monotone, the sign of the residual tells us which side of the
+        // bracket still contains the inverse solution.
         lower = torch::where(residual < 0, x, lower);
         upper = torch::where(residual > 0, x, upper);
         const Tensor x_newton = x - residual / d_fx;
@@ -153,6 +158,7 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_value_and_stats(
     const Tensor log_q = logsumexp(log_w + log_ndtr(-z), -1);
     const Tensor lower = std::get<0>(z.min(-1));
     const Tensor upper = std::get<0>(z.max(-1));
+    // Switch between lower-tail and upper-tail evaluations to avoid cancellation near 0 and 1.
     Tensor y = where(
         log_p < LOG_HALF,
         linodenet_special::ndtri_exp(log_p),
@@ -177,15 +183,23 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_to_gaussian_derivatives(
 ) {
     const auto [_, z, log_w, log_sigmas] = mixture_value_and_stats(x, weights, mus, sigmas);
     const Tensor y2 = y.square();
+    // exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
     const Tensor log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square());
+    // (ωₖ / σₖ) exp(½(y² - zₖ²)) appears in ∂y/∂x, ∂y/∂μₖ, and ∂y/∂σₖ.
     const Tensor scaled_ratio = exp(log_ratio + log_w - log_sigmas);
 
     const Tensor d_x = scaled_ratio.sum(-1);
     const Tensor d_mus = -scaled_ratio;
     const Tensor d_sigmas = z * -scaled_ratio;
 
-    const Tensor log_pdf_u = -0.5 * (LOG_2PI + y2);
-    const Tensor d_weights = -exp(log_ndtr(-z) - log_pdf_u.unsqueeze(-1));
+    // ∂y/∂ωₖ = √(2π) ℯ^{½y²}⋅(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ)).
+    // Factor out max(log Φ(zₖ)) to keep the centered CDF difference in a stable range.
+    const Tensor log_pdf_u = (-0.5 * (LOG_2PI + y2)).unsqueeze(-1);
+    const Tensor log_phi = log_ndtr(z);
+    const Tensor log_phi_max = std::get<0>(log_phi.max(-1, true));
+    const Tensor scaled_phi = exp(log_phi - log_phi_max);
+    const Tensor centered_scaled_phi = scaled_phi - scaled_phi.mean(-1, true);
+    const Tensor d_weights = exp(log_phi_max - log_pdf_u) * centered_scaled_phi;
 
     return {d_x, d_weights, d_mus, d_sigmas};
 }
@@ -209,6 +223,10 @@ Tensor gaussian_to_mixture_value(
     const Tensor &sigmas,
     const int64_t maxiter
 ) {
+    // Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
+    // must lie between the smallest and largest of these affine tail candidates,
+    // so we use their pointwise min/max as a safe bracket and their weighted mean
+    // as a cheap initial guess for the safeguarded Newton iteration.
     const Tensor lines = mus + sigmas * y.unsqueeze(-1);
     Tensor lower = std::get<0>(lines.min(-1));
     Tensor upper = std::get<0>(lines.max(-1));
@@ -218,6 +236,8 @@ Tensor gaussian_to_mixture_value(
         x = x.clamp_(lower, upper);
         const auto [fx, d_fx] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
         const Tensor residual = fx - y;
+        // Since T is monotone, the sign of the residual tells us which side of the
+        // bracket still contains the inverse solution.
         lower = torch::where(residual < 0, x, lower);
         upper = torch::where(residual > 0, x, upper);
         const Tensor x_newton = x - residual / d_fx;
@@ -330,8 +350,7 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
 
         return {
             grad_values,
-            // Note: project onto tangent plane.
-            grad_weights - grad_weights.mean(-1, true),
+            grad_weights,
             grad_mus,
             grad_sigmas
         };
@@ -377,8 +396,7 @@ struct GaussianToMixture : Function<GaussianToMixture> {
 
         return {
             grad_y,
-            // Note: project onto tangent plane.
-            grad_weights - grad_weights.mean(-1, true),
+            grad_weights,
             grad_mus,
             grad_sigmas,
             Tensor()
