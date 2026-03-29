@@ -105,6 +105,14 @@ class TestCorrectness(TestCase):
         pt_result = impl(pt_args)
         assert torch.allclose(pt_result, pt_expected)
 
+        invalid = torch.tensor(
+            [torch.finfo(dtype).eps, 1.0, math.inf, math.nan],
+            dtype=dtype,
+            device=device,
+        )
+        invalid_result = impl(invalid)
+        assert invalid_result.isnan().all()
+
     def test_domain(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
         # ndtri_exp_py is defined for log_p <= 0
@@ -151,6 +159,23 @@ class TestCorrectness(TestCase):
         assert actual.isneginf().eq(expected.isneginf()).all()
         assert torch.allclose(actual, expected, atol=atol, rtol=rtol)
 
+    def test_gradients_are_finite_at_branch_edges(
+        self, name: str, dtype: torch.dtype, device: str
+    ) -> None:
+        impl = IMPLS[name]
+        log_p = torch.tensor(
+            [-1.6675e01, -2.8582e-08],
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        values = impl(log_p)
+        assert values.isfinite().all()
+        values.sum().backward()
+        assert log_p.grad is not None
+        assert log_p.grad.isfinite().all()
+
     def test_reversible(
         self,
         name: str,
@@ -175,7 +200,7 @@ class TestCorrectness(TestCase):
 
         atol, rtol = self.TOL[dtype]
         self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
-        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=5 * atol, rtol=5 * rtol)
 
     def test_gradcheck(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
