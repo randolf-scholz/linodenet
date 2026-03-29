@@ -12,7 +12,6 @@ echo "SOURCE_DIR: ${SOURCE_DIR}"
 echo "BUILD_DIR: ${BUILD_DIR}"
 echo "LIBTORCH_DIR: ${LIBTORCH_DIR}"
 mkdir -p "$BUILD_DIR"
-mkdir -p "$LIBTORCH_DIR"
 cd "$SOURCE_DIR"
 
 CUDA_VERSION="$(python -c 'import torch; print(torch.version.cuda)')"
@@ -33,23 +32,27 @@ declare -A LIBTORCH_HASHES=(
 
 LIBTORCH_HASH="${LIBTORCH_HASHES[$LIBTORCH_VERSION]:-}"
 
-# check if libtorch folder exists
+# validate any existing libtorch checkout before reusing it
 if [ -d "$LIBTORCH_DIR" ]; then
-	# validate libtorch version
-	echo "Checking libtorch version..."
-	libtorch_version="$(cat "$LIBTORCH_DIR/build-version")"
-	if [ "$libtorch_version" != "$LIBTORCH_VERSION" ]; then
-		echo "Error: libtorch version mismatch!"
-		echo "Expected: $LIBTORCH_VERSION"
-		echo "Found: $libtorch_version"
+	echo "Checking libtorch installation..."
+	if [ ! -f "$LIBTORCH_DIR/build-version" ]; then
+		echo "Existing libtorch directory is incomplete: missing build-version."
+		rm -rf "$LIBTORCH_DIR"
+	else
+		libtorch_version="$(<"$LIBTORCH_DIR/build-version")"
+		if [ "$libtorch_version" != "$LIBTORCH_VERSION" ]; then
+			echo "Error: libtorch version mismatch!"
+			echo "Expected: $LIBTORCH_VERSION"
+			echo "Found: $libtorch_version"
 
-		# ask if libtorch should be re-downloaded (default: yes)
-		read -r -p "Re-download libtorch? [Y/n] " re_download
-		case "${re_download:-Y}" in
-			y|Y) rm -rf "$LIBTORCH_DIR" ;;
-			n|N) echo "Skipping re-download..." ;;
-			*) echo "Invalid input. Skipping re-download..." ;;
-		esac
+			# ask if libtorch should be re-downloaded (default: yes)
+			read -r -p "Re-download libtorch? [Y/n] " re_download
+			case "${re_download:-Y}" in
+				y|Y) rm -rf "$LIBTORCH_DIR" ;;
+				n|N) echo "Skipping re-download..." ;;
+				*) echo "Invalid input. Skipping re-download..." ;;
+			esac
+		fi
 	fi
 fi
 
@@ -81,7 +84,7 @@ if [ ! -d "$LIBTORCH_DIR" ]; then
 	# extract "libtorch" directory from the zip file
 	echo "Extracting libtorch..."
 	rm -rf "$LIBTORCH_DIR"
-	unzip -q "$LIBTORCH_ARCHIVE" "$LIBTORCH_DIR/*"
+	unzip -q "$LIBTORCH_ARCHIVE" "libtorch/*"
 fi
 
 
@@ -121,7 +124,7 @@ echo "-------------------------------------------------------------------------"
 # region tests -------------------------------------------------------------------------
 read -r -p "Run tests? [Y/n] " run_tests
 case "${run_tests:-Y}" in
-	y|Y) pytest "${PROJECT_DIR}/tests/linodenet_special/test_correctness.py" -n 0 --no-cov ;;
+	y|Y) pytest "${PROJECT_DIR}/tests/linodenet_special" -n 0 --no-cov ;;
 	n|N) echo "Skipping tests..." ;;
 	*) echo "Invalid input. Exiting..."; exit 1 ;;
 esac
