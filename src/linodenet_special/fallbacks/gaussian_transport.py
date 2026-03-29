@@ -88,13 +88,11 @@ def _bimodal_to_gaussian_derivatives(
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
 
-    d_x = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
-    hi = torch.maximum(log_phi_plus, log_phi_minus)
-    lo = torch.minimum(log_phi_plus, log_phi_minus)
-    # Compute φ₊ - φ₋ with a stable log-diff-exp instead of subtracting directly.
-    d_mu_abs = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
-        hi + torch.log1p(-torch.exp(lo - hi))
-    )
+    log_norm = torch.logaddexp(log_phi_plus, log_phi_minus)
+    d_x = log_norm.exp()
+    w_plus = torch.exp(log_phi_plus - log_norm)
+    w_minus = torch.exp(log_phi_minus - log_norm)
+    d_mu_abs = d_x * (w_plus - w_minus)
     d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x + (m / sigma) * d_mu_abs)
 
     # The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
@@ -130,13 +128,11 @@ def _bimodal_to_gaussian_derivatives2(
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
 
-    d_x = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
-    hi = torch.maximum(log_phi_plus, log_phi_minus)
-    lo = torch.minimum(log_phi_plus, log_phi_minus)
-    # Compute φ₊ - φ₋ with a stable log-diff-exp instead of subtracting directly.
-    d_mu_abs = torch.sign(log_phi_plus - log_phi_minus) * torch.exp(
-        hi + torch.log1p(-torch.exp(lo - hi))
-    )
+    log_norm = torch.logaddexp(log_phi_plus, log_phi_minus)
+    d_x = log_norm.exp()
+    w_plus = torch.exp(log_phi_plus - log_norm)
+    w_minus = torch.exp(log_phi_minus - log_norm)
+    d_mu_abs = d_x * (w_plus - w_minus)
     d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x + (m / sigma) * d_mu_abs)
 
     # The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
@@ -145,12 +141,13 @@ def _bimodal_to_gaussian_derivatives2(
     d_x = d_x.clamp(lower_bound, upper_bound)
     d_mu = mu_sign * d_mu_abs.clamp(-upper_bound, upper_bound)
 
-    # These weighted sums are the repeated pieces in the closed-form ∂g/∂θ formulas.
-    phi_plus = log_phi_plus.exp()
-    phi_minus = log_phi_minus.exp()
-    z_term_sum = (z_plus * phi_plus + z_minus * phi_minus) / sigma
-    z_term_diff = (z_plus * phi_plus - z_minus * phi_minus) / sigma
-    z2_term_sum = (z_plus.square() * phi_plus + z_minus.square() * phi_minus) / sigma
+    # Reuse d_x as the common scale so only the normalized weights need exponentials.
+    z_avg = z_plus * w_plus + z_minus * w_minus
+    z_diff = z_plus * w_plus - z_minus * w_minus
+    z2_avg = z_plus.square() * w_plus + z_minus.square() * w_minus
+    z_term_sum = d_x * z_avg / sigma
+    z_term_diff = d_x * z_diff / sigma
+    z2_term_sum = d_x * z2_avg / sigma
 
     # Here g = ∂y/∂x, so these are the second derivatives that feed the Jacobian output.
     d2_x = y * d_x.square() - z_term_sum
