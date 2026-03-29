@@ -223,31 +223,21 @@ class TestCorrectness(TestCase):
         gradcheck(impl, (log_p,), eps=eps, atol=atol, rtol=rtol)
 
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("name", IMPLS, ids=str)
 class TestPerformance:
-    @pytest.mark.parametrize(
-        ("lower", "upper"),
-        [
-            (-80.0, _LOWER_CUTOFF - 1e-3),
-            (_LOWER_CUTOFF, _UPPER_CUTOFF),
-            (_UPPER_CUTOFF + 1e-6, -1e-6),
-        ],
-        ids=["small", "medium", "large"],
-    )
     def test_performance(
         self,
         name: str,
         benchmark: BenchmarkFixture,
-        lower: float,
-        upper: float,
         dtype: torch.dtype,
         device: str,
     ) -> None:
         impl = IMPLS[name]
         benchmark.group = f"ndtri_exp/{device}/{dtype}"
-        log_p = torch.linspace(lower, upper, steps=128, dtype=dtype, device=device)
+        log_p = -torch.logspace(2, -6, steps=256, dtype=dtype, device=device)
+        log_p = log_p.unsqueeze(0).repeat(32, 1)
 
         def bench():
             torch.cuda.synchronize()
