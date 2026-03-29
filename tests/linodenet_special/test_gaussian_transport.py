@@ -220,6 +220,33 @@ class BimodalTest(TestCase):
             requires_grad=True,
         )
 
+    def assert_gradcheck(
+        self,
+        impl,
+        mean: float,
+        stdv: float,
+        *,
+        dtype: torch.dtype,
+        device: str,
+        inverse: bool = False,
+    ) -> None:
+        if inverse:
+            x = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
+            atol, rtol, eps = self.INVERSE_GRADCHECK_TOL[dtype]
+        else:
+            x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
+            atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
+        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
+        gradcheck(
+            impl,
+            (x, μ, σ),
+            atol=atol,
+            rtol=rtol,
+            eps=eps,
+            fast_mode=True,
+        )
+
 
 class TestMixture(TestCase):
     SEED = 0
@@ -338,19 +365,7 @@ class TestBimodalToGaussian(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = BIMODAL_TO_GAUSSIAN[name]
-        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
-        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
-
-        atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
-        gradcheck(
-            impl,
-            (x, μ, σ),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
-        )
+        self.assert_gradcheck(impl, mean, stdv, dtype=dtype, device=device)
 
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -424,19 +439,7 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
-        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
-        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
-
-        atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
-        gradcheck(
-            impl,
-            (x, μ, σ),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
-        )
+        self.assert_gradcheck(impl, mean, stdv, dtype=dtype, device=device)
 
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -556,18 +559,8 @@ class TestGaussianToBimodal(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
-        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
-        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        y_narrow = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
-
-        atol, rtol, eps = self.INVERSE_GRADCHECK_TOL[dtype]
-        gradcheck(
-            impl,
-            (y_narrow, μ, σ),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
+        self.assert_gradcheck(
+            impl, mean, stdv, dtype=dtype, device=device, inverse=True
         )
 
     def test_piecewise_linear_approximation(
@@ -650,18 +643,8 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
-        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
-        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
-        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-
-        atol, rtol, eps = self.INVERSE_GRADCHECK_TOL[dtype]
-        gradcheck(
-            impl,
-            (y, μ, σ),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
+        self.assert_gradcheck(
+            impl, mean, stdv, dtype=dtype, device=device, inverse=True
         )
 
     def test_reversible(
