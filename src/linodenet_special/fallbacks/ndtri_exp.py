@@ -171,15 +171,28 @@ def ndtri_exp(log_p: Tensor) -> Tensor:
     """
     neginf_mask = log_p.isneginf()
     small_mask = (log_p < _LOWER_CUTOFF) & ~neginf_mask
-    medium_mask = (log_p >= _LOWER_CUTOFF) & (log_p < _UPPER_CUTOFF)
-    large_mask = ~(neginf_mask | small_mask | medium_mask)
+    medium_mask = (log_p >= _LOWER_CUTOFF) & (log_p <= _UPPER_CUTOFF)
+    large_mask = log_p > _UPPER_CUTOFF
 
-    small_input = torch.where(small_mask, log_p, log_p.new_full((), -3.0))
-    medium_input = torch.where(medium_mask, log_p, log_p.new_full((), -1.0))
-    large_input = torch.where(large_mask, log_p, log_p.new_full((), -0.1))
+    # mask the unused part of the test with constant dummy value.
+    # this prevents propagation of spurious NANs.
+    # XREF: https://github.com/pytorch/pytorch/issues/89543
+    dummy = log_p.new_full((), -1.0)
+    small_input = torch.where(small_mask, log_p, dummy)
+    medium_input = torch.where(medium_mask, log_p, dummy)
+    large_input = torch.where(large_mask, log_p, dummy)
 
+    neginf = log_p.new_full((), -math.inf)
     small = _ndtri_exp_small(small_input)
     medium = ndtri(medium_input.exp())
     large = -ndtri(-large_input.expm1())
-    finite = torch.where(small_mask, small, torch.where(medium_mask, medium, large))
-    return torch.where(neginf_mask, log_p.new_full((), -math.inf), finite)
+
+    return torch.where(
+        neginf_mask,
+        neginf,
+        torch.where(
+            small_mask,
+            small,
+            torch.where(medium_mask, medium, large),
+        ),
+    )
