@@ -420,7 +420,7 @@ class TestGaussianToBimodal(BimodalTest):
         )
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        λ = self.get_y_star(μ, σ)
+        λ = self.get_x_star(μ, σ)
 
         x = impl(y, μ, σ)
         assert x.dtype == dtype
@@ -428,12 +428,16 @@ class TestGaussianToBimodal(BimodalTest):
             "gaussian_to_bimodal should produce finite outputs for finite inputs"
         )
 
-        x_approx = hard_bend(y, 1 / λ, μ, σ)
+        x_approx = hard_bend(y, λ, μ, σ)
         assert x_approx.dtype == dtype
         assert x_approx.isfinite().all(), (
             "Hard-expand approximation should produce finite outputs"
         )
-        self.assert_upper_bounded(x - x_approx, μ * σ, atol=1e-1, rtol=1e-1)
+        # x = x_approx - \log(2)σ/y + O(y⁻³)
+        atol, rtol = self.TOL[dtype]
+        error = (x - x_approx).abs()
+        bound = (-math.log(2) * σ / y).abs()
+        self.assert_upper_bounded(error, bound, atol=atol, rtol=rtol)
 
     def test_tail_behavior(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
