@@ -576,7 +576,6 @@ class _MixtureToGaussian(Function):
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        r"""Differentiate the explicit mixture-to-Gaussian transport map."""
         (g,) = outer
         z, y, weights, sigmas = ctx.saved_tensors
         d_values, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
@@ -696,7 +695,26 @@ class _GaussianToMixture(Function):
 
 
 class _GaussianToMixtureValueAndJac(Function):
-    r"""Return the Gaussian-to-mixture transport and its $y$-derivative."""
+    r"""Return the Gaussian-to-mixture transport and its $y$-derivative.
+
+    Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
+
+    .. math::  ∂T(x(y, ω, μ, σ), ω, μ, σ) = y
+
+    Hence
+
+    .. math::
+        ∂x/∂y &= (∂T/∂x)⁻¹ \\
+        ∂x/∂θ &= -(∂T/∂x)⁻¹ ∂T/∂θ
+        \qquad θ∈\{ω, μ, σ\}
+
+    For the inverse Jacobian $j = ∂x/∂y = (∂T/∂x)⁻¹$, differentiating once more gives
+
+    .. math::
+        ∂j/∂y &= -(∂²T/∂x²)(∂T/∂x)⁻³ \\
+        ∂j/∂θ &= (∂²T/∂x²)(∂T/∂θ)(∂T/∂x)⁻³ - (∂²T/∂x∂θ)(∂T/∂x)⁻²
+        \qquad θ∈\{ω, μ, σ\}.
+    """
 
     @staticmethod
     @torch.no_grad()
