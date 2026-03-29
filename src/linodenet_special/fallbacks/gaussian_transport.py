@@ -12,7 +12,6 @@ __all__ = [
     "mixture_to_gaussian_value_and_jac",
 ]
 
-import math
 from typing import Final
 
 import torch
@@ -264,19 +263,14 @@ def _mixture_to_gaussian_derivatives(
     # ∂y/∂σₖ = -(ωₖ zₖ / σₖ) exp(½(y² - zₖ²))
     d_sigmas = -z * scaled_ratio
 
-    # ∂y/∂ωₖ = √(2π) ℯ^{½y²}⋅(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))
-    # Project weight gradient onto the simplex tangent space.
-    # ∆ⁿ = {x∈ℝⁿ⁺¹ : ∑ₖxₖ = 0, xₖ≥0}
-    # 𝓣ₓ∆ⁿ = {v∈ℝⁿ⁺¹ : ∑ₖvₖ = 0} is the tangent space of the simplex at x.
-    # proj(g) = g - ⟨𝟏∣g⟩ / ⟨𝟏∣𝟏⟩ * 𝟏 = g - mean(g) * 𝟏
-    log_pdf_u = (0.5 * (LOG_2PI + y2)).unsqueeze(-1)
-    log_phi = log_ndtr(z)  # log Φ(zₖ)
-    log_phi_tangent = (  # log(Φ(zₖ) / (1/n)∑ⱼΦ(zⱼ))
-        log_phi
-        - log_phi.logsumexp(dim=-1, keepdim=True)
-        - math.log(log_phi.shape[-1])  # emulates log_mean_exp
-    )
-    d_weights = torch.logaddexp(log_pdf_u, log_phi_tangent).exp()
+    # ∂y/∂ωₖ = √(2π) ℯ^{½y²}⋅(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ)).
+    # Factor out max(log Φ(zₖ)) to keep the centered CDF difference in a stable range.
+    log_pdf_u = (-0.5 * (LOG_2PI + y2)).unsqueeze(-1)
+    log_phi = log_ndtr(z)
+    log_phi_max = log_phi.amax(dim=-1, keepdim=True)
+    scaled_phi = torch.exp(log_phi - log_phi_max)
+    centered_scaled_phi = scaled_phi - scaled_phi.mean(dim=-1, keepdim=True)
+    d_weights = torch.exp(log_phi_max - log_pdf_u) * centered_scaled_phi
 
     return d_x, d_weights, d_mus, d_sigmas
 
@@ -309,12 +303,12 @@ def _mixture_to_gaussian_derivatives2(
     d_mus = -scaled_ratio
     d_sigmas = -z * scaled_ratio
 
-    log_pdf_u = (0.5 * (LOG_2PI + y2)).unsqueeze(-1)
+    log_pdf_u = (-0.5 * (LOG_2PI + y2)).unsqueeze(-1)
     log_phi = log_ndtr(z)
-    log_phi_tangent = (
-        log_phi - log_phi.logsumexp(dim=-1, keepdim=True) - math.log(log_phi.shape[-1])
-    )
-    d_weights = torch.logaddexp(log_pdf_u, log_phi_tangent).exp()
+    log_phi_max = log_phi.amax(dim=-1, keepdim=True)
+    scaled_phi = torch.exp(log_phi - log_phi_max)
+    centered_scaled_phi = scaled_phi - scaled_phi.mean(dim=-1, keepdim=True)
+    d_weights = torch.exp(log_phi_max - log_pdf_u) * centered_scaled_phi
 
     e_over_sigma = torch.exp(log_ratio - log_sigmas)
     d2_x = y * d_x.square() + (d_sigmas / sigmas).sum(dim=-1)
