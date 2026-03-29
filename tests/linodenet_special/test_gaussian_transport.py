@@ -479,8 +479,6 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
 class TestGaussianToBimodal(BimodalTest):
     X_MIN = -20
     X_MAX = 20
-    STDVS = [1, 2, 3]
-    MEANS = [0.5, 1, 2]
 
     TOL = {
         torch.float32: (1e-4, 1e-4),
@@ -670,10 +668,10 @@ class TestGaussianToBimodal(BimodalTest):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
+@pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC, ids=str)
 class TestGaussianToBimodalValueAndGrad(BimodalTest):
-    STDVS = [1, 2, 3]
-    MEANS = [0.5, 1, 2]
     TOL = {
         torch.float32: (1e-4, 1e-4),
         torch.float64: (1e-7, 1e-7),
@@ -684,8 +682,6 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -693,35 +689,18 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
         impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x_neg = torch.linspace(
-            *(-mean - 3 * stdv, -mean + 3 * stdv),
-            steps=self.N // 2,
-            dtype=dtype,
-            device=device,
-        )
-        x_pos = torch.linspace(
-            *(mean - 3 * stdv, mean + 3 * stdv),
-            steps=self.N // 2,
-            dtype=dtype,
-            device=device,
-        )
-        x_narrow = torch.cat([x_neg, x_pos])
-        y_narrow = bimodal_to_gaussian_py(
-            x_narrow, μ.detach(), σ.detach()
-        ).requires_grad_()
+        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
             impl,
-            (y_narrow, μ, σ),
+            (y, μ, σ),
             atol=atol,
             rtol=rtol,
             eps=eps,
             fast_mode=True,
         )
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
