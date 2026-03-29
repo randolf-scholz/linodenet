@@ -88,33 +88,44 @@ class TestBimodalToGaussian(TestCase):
         lam = math.exp(-0.5 * (mean / stdv) ** 2) / stdv
         return mean * min(1.0, abs(1 / (1 - lam * stdv)))
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    def test_hard_contract_approximation(
-        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
-    ) -> None:
-        torch.manual_seed(self.SEED)
-        r"""When the gaussians are well separated, we can approximate with hard_bend."""
-        impl = BIMODAL_TO_GAUSSIAN[name]
-        x = torch.linspace(
-            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
-        )
-        μ = torch.tensor(mean, dtype=dtype, device=device)
-        σ = torch.tensor(stdv, dtype=dtype, device=device)
-        λ = torch.exp(-0.5 * (μ / σ) ** 2) / σ
+    @classmethod
+    def make_test_range(
+        cls, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> torch.Tensor:
+        r"""Construct a numerically useful test range inside $[-μ, μ]$.
 
-        y = impl(x, μ, σ)
-        assert y.dtype == dtype
-        assert y.isfinite().all(), (
-            "bimodal_to_gaussian should produce finite outputs for finite inputs"
-        )
+        The slope at the origin is $Ψ'(0)=σ⁻¹ℯ^{-½(μ/σ)²}$. For a given floating
+        point dtype we treat the central region as numerically flat once the
+        local slope drops below $√ρ/σ$, where $ρ$ is the decimal resolution.
+        Solving the corresponding Gaussian tail model yields the exclusion radius
 
-        y_approx = hard_bend(x, λ, μ / σ, 1 / σ)
-        assert y_approx.dtype == dtype
-        assert y_approx.isfinite().all(), (
-            "Hard-contract approximation should produce finite outputs"
+        .. math:: x_\text{safe} = \max(0, μ - σ\sqrt{-\log ρ}).
+
+        If $μ/σ$ is smaller than the dtype-dependent threshold $√{-\log ρ}$, we
+        keep the full interval $[-μ, μ]$. Otherwise, we exclude the flat center
+        and use $[-μ, -x_\text{safe}] ∪ [x_\text{safe}, μ]$.
+        """
+        # sqrt(-log(resolution)) is about 3.7 for float32 and 5.9 for float64.
+        threshold = math.sqrt(-math.log(torch.finfo(dtype).resolution))
+        if mean / stdv <= threshold:
+            return torch.linspace(-mean, mean, steps=cls.N, dtype=dtype, device=device)
+
+        x_safe = max(0.0, mean - stdv * (threshold - 0.5))
+        x_neg = torch.linspace(
+            -mean,
+            -x_safe,
+            steps=cls.N // 2,
+            dtype=dtype,
+            device=device,
         )
-        self.assert_upper_bounded(y - y_approx, μ / σ)
+        x_pos = torch.linspace(
+            x_safe,
+            mean,
+            steps=cls.N - cls.N // 2,
+            dtype=dtype,
+            device=device,
+        )
+        return torch.cat([x_neg, x_pos])
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
@@ -220,6 +231,32 @@ class TestBimodalToGaussian(TestCase):
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
+    def test_hard_contract_approximation(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        r"""When the gaussians are well separated, we can approximate with hard_bend."""
+        impl = BIMODAL_TO_GAUSSIAN[name]
+        x = self.make_test_range(mean, stdv, dtype=dtype, device=device)
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        λ = torch.exp(-0.5 * (μ / σ) ** 2) / σ
+
+        y = impl(x, μ, σ)
+        assert y.dtype == dtype
+        assert y.isfinite().all(), (
+            "bimodal_to_gaussian should produce finite outputs for finite inputs"
+        )
+
+        y_approx = hard_bend(x, λ, μ / σ, 1 / σ)
+        assert y_approx.dtype == dtype
+        assert y_approx.isfinite().all(), (
+            "Hard-contract approximation should produce finite outputs"
+        )
+        self.assert_upper_bounded(y - y_approx, μ / σ)
+
+    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
+    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -227,15 +264,7 @@ class TestBimodalToGaussian(TestCase):
         impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x_star = self.get_x_star(mean, stdv)
-        x_narrow = torch.linspace(
-            -x_star,
-            x_star,
-            steps=self.N,
-            dtype=dtype,
-            device=device,
-            requires_grad=True,
-        )
+        x_narrow = self.make_test_range(mean, stdv, dtype, device).requires_grad_()
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
@@ -257,16 +286,7 @@ class TestBimodalToGaussian(TestCase):
         inverse_impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        λ = torch.exp(-0.5 * (μ / σ) ** 2) / σ
-        x_star = μ * min(1, 1 / (1 - λ.item()))
-        x = torch.linspace(
-            -x_star,
-            x_star,
-            steps=self.N,
-            dtype=dtype,
-            device=device,
-            requires_grad=True,
-        )
+        x = self.make_test_range(mean, stdv, dtype, device).requires_grad_()
         y = forward_impl(x, μ, σ)
         x_inv = inverse_impl(y, μ, σ)
         z = x_inv.sum()
