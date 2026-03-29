@@ -446,7 +446,7 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
-        inverse_impl = gaussian_to_bimodal_value_and_jac_py
+        inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
@@ -652,7 +652,7 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
-        forward_impl = bimodal_to_gaussian_value_and_jac_py
+        forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
         y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
         μ = torch.tensor(mean, dtype=dtype, device=device)
@@ -749,7 +749,7 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         forward_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
-        inverse_impl = gaussian_to_mixture_value_and_jac_py
+        inverse_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
         x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)
@@ -847,7 +847,7 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         forward_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
-        inverse_impl = mixture_to_gaussian_value_and_jac_py
+        inverse_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
         y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)
