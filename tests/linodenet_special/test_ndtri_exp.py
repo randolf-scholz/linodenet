@@ -244,4 +244,4 @@ class TestPerformance:
             impl(log_p)
             torch.cuda.synchronize()
 
-        benchmark.pedantic(bench, (), iterations=10, rounds=20, warmup_rounds=20)
+        benchmark.pedantic(bench, (), iterations=10, rounds=20, warmup_rounds=100)
