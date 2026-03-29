@@ -17,6 +17,7 @@ from linodenet_special.fallbacks import (
     bimodal_to_gaussian,
     bimodal_to_gaussian_value_and_jac,
     gaussian_to_bimodal,
+    gaussian_to_bimodal_value_and_jac,
     hard_bend,
     mixture_to_gaussian,
 )
@@ -446,8 +447,7 @@ class TransportPlotStateBimodal:
         self.twin_ax.grid(False)
         self.twin_ax.patch.set_alpha(0)
         self.twin_ax.set_ylim(0, PDF_MAX)
-        jac_max = float(torch.max(jac).item())
-        self.jac_ax.set_ylim(0, max(1.0, 1.05 * jac_max))
+        self.jac_ax.set_ylim(0, 10)
         self.line.figure.canvas.draw_idle()
 
 
@@ -455,10 +455,12 @@ class TransportPlotStateBimodal:
 class TransportPlotStateGaussian:
     y: Tensor
     line: Any
+    jac_line: Any
     component_lines: list[Any]
     input_pdf_line: Any
     target_pdf_line: Any
     twin_ax: Any
+    jac_ax: Any
     input_hist_container: Any
     output_hist_container: Any
     sliders: Mapping[str, Slider]
@@ -469,7 +471,7 @@ class TransportPlotStateGaussian:
         mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
         sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
 
-        x = gaussian_to_bimodal(self.y, mu, sigma)
+        x, jac = gaussian_to_bimodal_value_and_jac(self.y, mu, sigma)
         source = stats.Normal(mu=0.0, sigma=1.0)
         twin = make_bimodal_distribution(mu, sigma)
         y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
@@ -477,6 +479,7 @@ class TransportPlotStateGaussian:
         approximation = gaussian_to_bimodal_approximation(self.y, mu, sigma)
 
         self.line.set_ydata(x)
+        self.jac_line.set_ydata(jac)
         self.component_lines[0].set_ydata(approximation)
         self.input_pdf_line.set_xdata(self.y)
         self.input_pdf_line.set_ydata(source.pdf(self.y))
@@ -503,6 +506,7 @@ class TransportPlotStateGaussian:
         self.twin_ax.grid(False)
         self.twin_ax.patch.set_alpha(0)
         self.twin_ax.set_ylim(0, PDF_MAX)
+        self.jac_ax.set_ylim(0, 10)
         self.line.figure.canvas.draw_idle()
 
 
@@ -606,7 +610,7 @@ def gaussian_to_bimodal_interactive() -> None:
     mu = torch.tensor(3.0, dtype=dtype)
     sigma = torch.tensor(0.5, dtype=dtype)
 
-    x = gaussian_to_bimodal(y, mu, sigma)
+    x, jac = gaussian_to_bimodal_value_and_jac(y, mu, sigma)
     source = stats.Normal(mu=0.0, sigma=1.0)
     target = make_bimodal_distribution(mu, sigma)
     y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
@@ -615,13 +619,26 @@ def gaussian_to_bimodal_interactive() -> None:
     with plt.style.context("bmh"):
         fig, ax = plt.subplots(figsize=(10, 5))
         ax_twin = ax.twinx()
+        ax_jac = ax.twinx()
+        ax_jac.spines.right.set_position(("axes", 1.12))
         ax.patch.set_alpha(0)
         ax_twin.patch.set_alpha(0)
+        ax_jac.patch.set_alpha(0)
         ax_twin.grid(False)
+        ax_jac.grid(False)
         ax.set_zorder(2)
         ax_twin.set_zorder(1)
+        ax_jac.set_zorder(0)
 
         (line,) = ax.plot(y, x, label="transport", lw=5)
+        (jac_line,) = ax_jac.plot(
+            y,
+            jac,
+            color="tab:purple",
+            alpha=0.8,
+            lw=2,
+            label="derivative",
+        )
         component_lines = [
             ax.plot(y, gaussian_to_bimodal_approximation(y, mu, sigma), "k--")[0],
         ]
@@ -657,10 +674,13 @@ def gaussian_to_bimodal_interactive() -> None:
         )
         ax.set_xlim(X_MIN, X_MAX)
         ax_twin.set_xlim(X_MIN, X_MAX)
+        ax_jac.set_xlim(X_MIN, X_MAX)
         ax_twin.set_ylabel("density")
         ax_twin.set_ylim(0, PDF_MAX)
+        ax_jac.set_ylabel("derivative")
+        ax_jac.set_ylim(0, 10)
         ax.set_title("Interactive Transport via gaussian_to_bimodal")
-        ax.legend(loc="upper left")
+        ax.legend([line, jac_line], ["transport", "derivative"], loc="upper left")
 
         slider_specs = [
             ("mu", "μ", -5.0, 5.0, float(mu)),
@@ -679,10 +699,12 @@ def gaussian_to_bimodal_interactive() -> None:
         state = TransportPlotStateGaussian(
             y=y,
             line=line,
+            jac_line=jac_line,
             component_lines=component_lines,
             input_pdf_line=input_pdf_line,
             target_pdf_line=target_pdf_line,
             twin_ax=ax_twin,
+            jac_ax=ax_jac,
             input_hist_container=input_hist_container,
             output_hist_container=output_hist_container,
             sliders=sliders,
@@ -768,7 +790,7 @@ def bimodal_to_gaussian_interactive() -> None:
         ax_twin.set_ylabel("density")
         ax_twin.set_ylim(0, PDF_MAX)
         ax_jac.set_ylabel("derivative")
-        ax_jac.set_ylim(0, max(1.0, 1.05 * float(torch.max(jac).item())))
+        ax_jac.set_ylim(0, 10)
         ax.set_title("Interactive Transport via bimodal_to_gaussian")
         ax.legend([line, jac_line], ["transport", "derivative"], loc="upper left")
 
