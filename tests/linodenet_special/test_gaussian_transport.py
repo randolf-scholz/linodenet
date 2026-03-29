@@ -200,12 +200,12 @@ class TestBimodalToGaussian(BimodalTest):
         y_zero = impl(zero, μ, σ)
         self.assert_close(y_zero, zero)
 
-        x1 = torch.linspace(0, self.X_MAX, steps=self.N, dtype=dtype, device=device)
+        x1 = torch.linspace(*(0, self.X_MAX), steps=self.N, dtype=dtype, device=device)
         y1 = impl(x1, μ, σ)
         assert y1.dtype == dtype
         assert y1.isfinite().all()
 
-        x2 = torch.linspace(0, self.X_MIN, steps=self.N, dtype=dtype, device=device)
+        x2 = torch.linspace(*(0, self.X_MIN), steps=self.N, dtype=dtype, device=device)
         y2 = impl(x2, μ, σ)
         assert y2.dtype == dtype
         assert y2.isfinite().all()
@@ -224,8 +224,7 @@ class TestBimodalToGaussian(BimodalTest):
         λ = self.get_y_star(μ, σ)
 
         x1 = torch.linspace(
-            0,
-            self.X_MAX,
+            *(0, self.X_MAX),
             steps=self.N,
             dtype=dtype,
             device=device,
@@ -240,8 +239,7 @@ class TestBimodalToGaussian(BimodalTest):
         self.assert_close(x1.grad[0], λ, rtol=1e-7)
 
         x2 = torch.linspace(
-            0,
-            self.X_MIN,
+            *(0, self.X_MIN),
             steps=self.N,
             dtype=dtype,
             device=device,
@@ -291,7 +289,7 @@ class TestBimodalToGaussian(BimodalTest):
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         x_tail = torch.linspace(
-            μ + 10 * σ, μ + 50 * σ, steps=self.N, dtype=dtype, device=device
+            *(μ + 10 * σ, μ + 50 * σ), steps=self.N, dtype=dtype, device=device
         )
         x_tail = torch.cat([-x_tail, x_tail]).requires_grad_()
         y_tail = impl(x_tail, μ, σ)
@@ -404,7 +402,7 @@ class TestGaussianToBimodal(BimodalTest):
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
         y = torch.linspace(
-            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
+            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
         )
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
@@ -424,7 +422,7 @@ class TestGaussianToBimodal(BimodalTest):
         self.assert_upper_bounded(x - x_approx, μ * σ, atol=1e-1, rtol=1e-1)
 
         y_tail = torch.linspace(
-            μ + 5 * σ, μ + 50 * σ, steps=self.N, dtype=dtype, device=device
+            *(μ + 5 * σ, μ + 50 * σ), steps=self.N, dtype=dtype, device=device
         )
         y_tail = torch.cat((y_tail, -y_tail), dim=0)
         x_tail = impl(y_tail, μ, σ)
@@ -445,12 +443,12 @@ class TestGaussianToBimodal(BimodalTest):
         x_zero = impl(zero, μ, σ)
         self.assert_close(x_zero, zero)
 
-        y1 = torch.linspace(0, self.X_MAX, steps=self.N, dtype=dtype, device=device)
+        y1 = torch.linspace(*(0, self.X_MAX), steps=self.N, dtype=dtype, device=device)
         x1 = impl(y1, μ, σ)
         assert x1.dtype == dtype
         assert x1.isfinite().all()
 
-        y2 = torch.linspace(0, self.X_MIN, steps=self.N, dtype=dtype, device=device)
+        y2 = torch.linspace(*(0, self.X_MIN), steps=self.N, dtype=dtype, device=device)
         x2 = impl(y2, μ, σ)
         assert x2.dtype == dtype
         assert x2.isfinite().all()
@@ -501,7 +499,7 @@ class TestGaussianToBimodal(BimodalTest):
         self.assert_close(y1.grad, y2.grad)
 
         tail_values = torch.linspace(
-            μ + 5 * σ, μ + 50 * σ, steps=self.N, dtype=dtype, device=device
+            *(μ + 5 * σ, μ + 50 * σ), steps=self.N, dtype=dtype, device=device
         )
         tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
         x_tail = impl(tail, μ, σ)
@@ -561,10 +559,10 @@ class TestGaussianToBimodal(BimodalTest):
         forward_impl = GAUSSIAN_TO_BIMODAL[name]
         inverse_impl = BIMODAL_TO_GAUSSIAN[name]
         y = torch.linspace(
-            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
+            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
         )
         x = torch.linspace(
-            self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
+            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
         )
         μ_pos = torch.tensor(mean, dtype=dtype, device=device)
         μ_neg = torch.tensor(-mean, dtype=dtype, device=device)
@@ -602,15 +600,13 @@ class TestGaussianToBimodalValueAndJac(BimodalTest):
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         x_neg = torch.linspace(
-            -mean - 3 * stdv,
-            -mean + 3 * stdv,
+            *(-mean - 3 * stdv, -mean + 3 * stdv),
             steps=self.N // 2,
             dtype=dtype,
             device=device,
         )
         x_pos = torch.linspace(
-            mean - 3 * stdv,
-            mean + 3 * stdv,
+            *(mean - 3 * stdv, mean + 3 * stdv),
             steps=self.N // 2,
             dtype=dtype,
             device=device,
@@ -683,8 +679,7 @@ class TestMixtureToGaussian(TestCase):
         x_min = torch.min(mus - 3 * sigmas).item()
         x_max = torch.max(mus + 3 * sigmas).item()
         x = torch.linspace(
-            x_min,
-            x_max,
+            *(x_min, x_max),
             steps=self.N,
             dtype=dtype,
             device=device,
@@ -786,8 +781,7 @@ class TestGaussianToMixture(TestCase):
         mus = torch.tensor(means, dtype=dtype, device=device)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
         y = torch.linspace(
-            -4,
-            4,
+            *(-4, 4),
             steps=self.N,
             dtype=dtype,
             device=device,
@@ -898,8 +892,7 @@ class TestMixtureToGaussianValueAndJac(TestCase):
         sigma_max = sigmas.abs().max()
 
         x = torch.linspace(
-            mu_min - sigma_max,
-            mu_max + sigma_max,
+            *(mu_min - sigma_max, mu_max + sigma_max),
             steps=self.N,
             device=device,
             dtype=dtype,
