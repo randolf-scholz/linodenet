@@ -281,7 +281,6 @@ class TestBimodalToGaussian(BimodalTest):
         torch.manual_seed(self.SEED)
         r"""When the gaussians are well separated, we can approximate with hard_bend."""
         impl = BIMODAL_TO_GAUSSIAN[name]
-        x = self.make_x_test_range(mean, stdv, dtype=dtype, device=device)
         x = torch.linspace(
             *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
         )
@@ -364,6 +363,11 @@ class TestBimodalToGaussian(BimodalTest):
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
 class TestBimodalToGaussianValueAndJac(BimodalTest):
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-7, 1e-7),
+    }
+
     GRADCHECK_TOL = {
         torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
@@ -387,6 +391,23 @@ class TestBimodalToGaussianValueAndJac(BimodalTest):
             eps=eps,
             fast_mode=True,
         )
+
+    def test_reversible(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        inverse_impl = gaussian_to_bimodal_value_and_jac_py
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        x = self.make_x_test_range(mean, stdv, dtype=dtype, device=device)
+
+        y, d_x = forward_impl(x, μ, σ)
+        x_inv, d_y = inverse_impl(y, μ, σ)
+
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
+        self.assert_close(d_x * d_y, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -592,6 +613,10 @@ class TestGaussianToBimodal(BimodalTest):
 class TestGaussianToBimodalValueAndJac(BimodalTest):
     STDVS = [1, 2, 3]
     MEANS = [0.5, 1, 2]
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-7, 1e-7),
+    }
 
     GRADCHECK_TOL = {
         torch.float32: (1e-2, 1e-2, 1e-4),
@@ -634,6 +659,25 @@ class TestGaussianToBimodalValueAndJac(BimodalTest):
             fast_mode=True,
         )
 
+    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
+    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
+    def test_reversible(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
+        forward_impl = bimodal_to_gaussian_value_and_jac_py
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        y = self.make_y_test_range(mean, stdv, dtype=dtype, device=device)
+
+        x, d_y = inverse_impl(y, μ, σ)
+        y_inv, d_x = forward_impl(x, μ, σ)
+
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(y_inv, y, atol=atol, rtol=rtol)
+        self.assert_close(d_x * d_y, 1.0, atol=atol, rtol=rtol)
+
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
@@ -642,17 +686,9 @@ class TestGaussianToBimodalValueAndJac(BimodalTest):
     ("weights", "means", "stdvs"),
     [
         pytest.param(
-            [0.4, 0.25, 0.35],
-            [-1.0, 0.5, 1.5],
-            [0.8, 1.1, 0.9],
-            id="asymmetric",
+            [0.4, 0.25, 0.35], [-1.0, 0.5, 1.5], [0.8, 1.1, 0.9], id="asymmetric"
         ),
-        pytest.param(
-            [0.2, 0.5, 0.3],
-            [-1.5, -0.5, 1.0],
-            [1.0, 0.8, 1.2],
-            id="shifted",
-        ),
+        pytest.param([0.2, 0.5, 0.3], [-1.5, -0.5, 1.0], [1.0, 0.8, 1.2], id="shifted"),
     ],
 )
 class TestMixtureToGaussian(TestCase):
@@ -741,6 +777,15 @@ class TestMixtureToGaussian(TestCase):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize(
+    ("weights", "means", "stdvs"),
+    [
+        pytest.param(
+            [0.4, 0.25, 0.35], [-1.0, 0.5, 1.5], [0.8, 1.1, 0.9], id="asymmetric"
+        ),
+        pytest.param([0.2, 0.5, 0.3], [-1.5, -0.5, 1.0], [1.0, 0.8, 1.2], id="shifted"),
+    ],
+)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_MIXTURE, ids=str)
 class TestGaussianToMixture(TestCase):
     SEED = 0
@@ -752,27 +797,10 @@ class TestGaussianToMixture(TestCase):
     }
 
     GRADCHECK_TOL = {
-        torch.float32: (1e-2, 1e-2, 1e-4),
+        torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
-    @pytest.mark.parametrize(
-        ("weights", "means", "stdvs"),
-        [
-            pytest.param(
-                [0.4, 0.25, 0.35],
-                [-1.0, 0.5, 1.5],
-                [0.8, 1.1, 0.9],
-                id="asymmetric",
-            ),
-            pytest.param(
-                [0.2, 0.5, 0.3],
-                [-1.5, -0.5, 1.0],
-                [1.0, 0.8, 1.2],
-                id="shifted",
-            ),
-        ],
-    )
     def test_reversible(
         self,
         name: str,
@@ -804,23 +832,6 @@ class TestGaussianToMixture(TestCase):
         self.assert_close(y_inv, y, atol=atol, rtol=rtol)
         self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
-    @pytest.mark.parametrize(
-        ("weights", "means", "stdvs"),
-        [
-            pytest.param(
-                [0.4, 0.25, 0.35],
-                [-1.0, 0.5, 1.5],
-                [0.8, 1.1, 0.9],
-                id="asymmetric",
-            ),
-            pytest.param(
-                [0.2, 0.5, 0.3],
-                [-1.5, -0.5, 1.0],
-                [1.0, 0.8, 1.2],
-                id="shifted",
-            ),
-        ],
-    )
     @pytest.mark.parametrize(
         "values",
         [
@@ -860,6 +871,15 @@ class TestGaussianToMixture(TestCase):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize(
+    ("weights", "means", "stdvs"),
+    [
+        pytest.param(
+            [0.4, 0.25, 0.35], [-1.0, 0.5, 1.5], [0.8, 1.1, 0.9], id="asymmetric"
+        ),
+        pytest.param([0.2, 0.5, 0.3], [-1.5, -0.5, 1.0], [1.0, 0.8, 1.2], id="shifted"),
+    ],
+)
 @pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
 class TestMixtureToGaussianValueAndJac(TestCase):
     SEED = 0
@@ -869,17 +889,6 @@ class TestMixtureToGaussianValueAndJac(TestCase):
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
-    @pytest.mark.parametrize(
-        ("weights", "means", "stdvs"),
-        [
-            pytest.param(
-                [0.4, 0.25, 0.35], [-1.0, 0.5, 1.5], [0.8, 1.1, 0.9], id="asymmetric"
-            ),
-            pytest.param(
-                [0.2, 0.5, 0.3], [-1.5, -0.5, 1.0], [1.0, 0.8, 1.2], id="shifted"
-            ),
-        ],
-    )
     def test_gradcheck(
         self,
         name: str,
