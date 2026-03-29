@@ -309,7 +309,7 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
 
         const Tensor upper_bound = sigma * exp(0.5 * (mu / sigma).square());
         d_y = d_y.clamp_(sigma, upper_bound);
-        grad_mu = grad_mu.clamp_(-1, 1);
+        grad_mu = grad_mu.clamp_(-1, +1);
 
         return {g * d_y, g * grad_mu, g * grad_sigma, Tensor()};
     }
@@ -342,17 +342,12 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         const Tensor &y = saved[4];
 
         const auto [d_values, d_weights, d_mus, d_sigmas] =
-                mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
-        const Tensor grad_values = g * d_values;
-        const Tensor grad_weights = d_weights * g.unsqueeze(-1);
-        const Tensor grad_mus =     d_mus     * g.unsqueeze(-1);
-        const Tensor grad_sigmas =  d_sigmas  * g.unsqueeze(-1);
-
+            mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
         return {
-            grad_values,
-            grad_weights,
-            grad_mus,
-            grad_sigmas
+            g * d_values,
+            g.unsqueeze(-1) * d_weights,
+            g.unsqueeze(-1) * d_mus,
+            g.unsqueeze(-1) * d_sigmas,
         };
     }
 };
@@ -390,15 +385,12 @@ struct GaussianToMixture : Function<GaussianToMixture> {
 
         const Tensor grad_y = g * d_x.reciprocal();
         const Tensor outer_grad = -grad_y.unsqueeze(-1);
-        const Tensor grad_weights = outer_grad * d_weights;
-        const Tensor grad_mus =     outer_grad * d_mus    ;
-        const Tensor grad_sigmas =  outer_grad * d_sigmas ;
 
         return {
             grad_y,
-            grad_weights,
-            grad_mus,
-            grad_sigmas,
+            outer_grad * d_weights,
+            outer_grad * d_mus,
+            outer_grad * d_sigmas,
             Tensor()
         };
     }
