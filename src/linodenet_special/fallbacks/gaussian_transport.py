@@ -439,7 +439,7 @@ class _GaussianToBimodal(Function):
         return x
 
     @staticmethod
-    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
         r"""Use the derivatives of $T$ to differentiate the inverse map.
 
         .. math::  ∂T(x(y, μ, σ), μ, σ) = y
@@ -475,7 +475,7 @@ class _GaussianToBimodal(Function):
         d_y = d_y.clamp(lower_bound, upper_bound)
         d_mu = d_mu.clamp(-upper_bound, upper_bound)
 
-        return (g * d_y), (g * d_mu), (g * d_sigma)
+        return (g * d_y), (g * d_mu), (g * d_sigma), None
 
 
 class _GaussianToBimodalValueAndJac(Function):
@@ -629,11 +629,9 @@ class _GaussianToMixture(Function):
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
+        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
     ) -> Tensor:
         r"""Solve $T(x, ω, μ, σ)=y$ by safeguarded Newton iteration."""
-        MAXITER: Final[int] = 10
-
         assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
 
         # Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
@@ -645,7 +643,7 @@ class _GaussianToMixture(Function):
         upper = lines.amax(dim=-1)
         x = torch.einsum("k, ...k -> ...", weights, lines)
 
-        for _ in range(MAXITER):
+        for _ in range(maxiter):
             x = x.clamp(lower, upper)
             fy, d_fy = _mixture_to_gaussian_value_and_jac(x, weights, mus, sigmas)
             r = fy - y
@@ -668,7 +666,7 @@ class _GaussianToMixture(Function):
         return x
 
     @staticmethod
-    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, None]:
         r"""Use the derivatives of $T$ to compute the derivatives of $T⁻¹$.
 
         Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
@@ -692,42 +690,7 @@ class _GaussianToMixture(Function):
         grad_mus = torch.einsum("..., ...k -> k", grad_y, -d_mus)
         grad_sigmas = torch.einsum("..., ...k -> k", grad_y, -d_sigmas)
 
-        return grad_y, grad_weights, grad_mus, grad_sigmas
-
-
-def gaussian_to_bimodal(
-    y: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
-) -> Tensor:
-    r"""Map $N(0,1)$ to the symmetric mixture $½N(-μ,σ²) + ½N(μ,σ²)$.
-
-    This is the inverse of
-
-    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
-
-    The inverse map is not available in closed form and is computed with a
-    safeguarded Newton iteration. Evaluation of the underlying transport uses
-    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
-    and `ndtri_exp`.
-
-    so the returned value is the unique $x$ whose bimodal CDF equals $Φ(y)$.
-    """
-    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
-    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    return _GaussianToBimodal.apply(y, mu, sigma)
-
-
-def gaussian_to_bimodal_value_and_jac(
-    y: Tensor,
-    /,
-    mu: Tensor | float = 2.0,
-    sigma: Tensor | float = 1.0,
-    *,
-    maxiter: int = 10,
-) -> tuple[Tensor, Tensor]:
-    r"""Map $N(0,1)$ to the symmetric mixture and return $(f(y), ∂f/∂y)$."""
-    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
-    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    return _GaussianToBimodalValueAndJac.apply(y, mu, sigma, maxiter)
+        return grad_y, grad_weights, grad_mus, grad_sigmas, None
 
 
 def bimodal_to_gaussian(
@@ -754,25 +717,6 @@ def bimodal_to_gaussian_value_and_jac(
     return _BimodalToGaussianValueAndJac.apply(x, mu, sigma)
 
 
-def gaussian_to_mixture(
-    y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
-) -> Tensor:
-    r"""Map $N(0,1)$ to the mixture $∑ₖ ωₖ N(μₖ,σₖ²)$.
-
-    This is the inverse of
-
-    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
-
-    The inverse map is not available in closed form and is computed with a
-    safeguarded Newton iteration. Evaluation of the underlying transport uses
-    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
-    and `ndtri_exp`.
-
-    so the returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
-    """
-    return _GaussianToMixture.apply(y, weights, mus, sigmas)
-
-
 def mixture_to_gaussian(
     x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
@@ -791,3 +735,68 @@ def mixture_to_gaussian_value_and_jac(
 ) -> tuple[Tensor, Tensor]:
     r"""Map the mixture to $N(0,1)$ and return $(f(x), ∂f/∂x)$."""
     return _MixtureToGaussianValueAndJac.apply(x, weights, mus, sigmas)
+
+
+def gaussian_to_bimodal(
+    y: Tensor,
+    /,
+    mu: Tensor | float = 2.0,
+    sigma: Tensor | float = 1.0,
+    *,
+    maxiter: int = 10,
+) -> Tensor:
+    r"""Map $N(0,1)$ to the symmetric mixture $½N(-μ,σ²) + ½N(μ,σ²)$.
+
+    This is the inverse of
+
+    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+
+    The inverse map is not available in closed form and is computed with a
+    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
+    and `ndtri_exp`.
+
+    so the returned value is the unique $x$ whose bimodal CDF equals $Φ(y)$.
+    """
+    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
+    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    return _GaussianToBimodal.apply(y, mu, sigma, maxiter)
+
+
+def gaussian_to_bimodal_value_and_jac(
+    y: Tensor,
+    /,
+    mu: Tensor | float = 2.0,
+    sigma: Tensor | float = 1.0,
+    *,
+    maxiter: int = 10,
+) -> tuple[Tensor, Tensor]:
+    r"""Map $N(0,1)$ to the symmetric mixture and return $(f(y), ∂f/∂y)$."""
+    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
+    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    return _GaussianToBimodalValueAndJac.apply(y, mu, sigma, maxiter)
+
+
+def gaussian_to_mixture(
+    y: Tensor,
+    /,
+    weights: Tensor,
+    mus: Tensor,
+    sigmas: Tensor,
+    *,
+    maxiter: int = 10,
+) -> Tensor:
+    r"""Map $N(0,1)$ to the mixture $∑ₖ ωₖ N(μₖ,σₖ²)$.
+
+    This is the inverse of
+
+    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+
+    The inverse map is not available in closed form and is computed with a
+    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
+    and `ndtri_exp`.
+
+    so the returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
+    """
+    return _GaussianToMixture.apply(y, weights, mus, sigmas, maxiter)
