@@ -744,19 +744,9 @@ class TestMixtureToGaussian(TestCase):
         self.assert_close(x_inv, x, atol=atol, rtol=rtol)
         self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
-    @pytest.mark.parametrize(
-        "values",
-        [
-            pytest.param([[-1.25, -0.5], [0.25, 1.75]], id="batch"),
-            pytest.param(0.375, id="scalar"),
-            pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
-            pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
-        ],
-    )
     def test_gradcheck(
         self,
         name: str,
-        values: list[float] | float,
         weights: list[float],
         means: list[float],
         stdvs: list[float],
@@ -765,10 +755,77 @@ class TestMixtureToGaussian(TestCase):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = MIXTURE_TO_GAUSSIAN[name]
-        x = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
+
+        mu_min = mus.min()
+        mu_max = mus.max()
+        sigma_max = sigmas.abs().max()
+        x = torch.linspace(
+            *(mu_min - sigma_max, mu_max + sigma_max),
+            steps=self.N,
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
+
+        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        gradcheck(
+            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
+            (x, omegas, mus, sigmas),
+            atol=atol,
+            rtol=rtol,
+            eps=eps,
+            fast_mode=True,
+        )
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize(
+    ("weights", "means", "stdvs"),
+    [
+        pytest.param(
+            [0.4, 0.25, 0.35], [-1.0, 0.5, 1.5], [0.8, 1.1, 0.9], id="asymmetric"
+        ),
+        pytest.param([0.2, 0.5, 0.3], [-1.5, -0.5, 1.0], [1.0, 0.8, 1.2], id="shifted"),
+    ],
+)
+@pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
+class TestMixtureToGaussianValueAndJac(TestCase):
+    SEED = 0
+    N = 256
+    GRADCHECK_TOL = {
+        torch.float32: (1e-3, 1e-3, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
+    }
+
+    def test_gradcheck(
+        self,
+        name: str,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
+
+        mu_min = mus.min()
+        mu_max = mus.max()
+        sigma_max = sigmas.abs().max()
+        x = torch.linspace(
+            *(mu_min - sigma_max, mu_max + sigma_max),
+            steps=self.N,
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
@@ -838,19 +895,9 @@ class TestGaussianToMixture(TestCase):
         self.assert_close(y_inv, y, atol=atol, rtol=rtol)
         self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
-    @pytest.mark.parametrize(
-        "values",
-        [
-            pytest.param([[-2.0, -0.75], [0.25, 1.5]], id="batch"),
-            pytest.param(-0.375, id="scalar"),
-            pytest.param([-3.0, -1.5, -0.5, 0.0, 0.5], id="left"),
-            pytest.param([0.0, 0.5, 1.5, 2.25, 3.0], id="right"),
-        ],
-    )
     def test_gradcheck(
         self,
         name: str,
-        values: list[float] | float,
         weights: list[float],
         means: list[float],
         stdvs: list[float],
@@ -859,53 +906,6 @@ class TestGaussianToMixture(TestCase):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_MIXTURE[name]
-        y = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
-        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
-        gradcheck(
-            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
-            (y, omegas, mus, sigmas),
-            eps=eps,
-            atol=atol,
-            rtol=rtol,
-            fast_mode=True,
-        )
-
-
-@pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize(
-    ("weights", "means", "stdvs"),
-    [
-        pytest.param(
-            [0.4, 0.25, 0.35], [-1.0, 0.5, 1.5], [0.8, 1.1, 0.9], id="asymmetric"
-        ),
-        pytest.param([0.2, 0.5, 0.3], [-1.5, -0.5, 1.0], [1.0, 0.8, 1.2], id="shifted"),
-    ],
-)
-@pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
-class TestMixtureToGaussianValueAndJac(TestCase):
-    SEED = 0
-    N = 256
-    GRADCHECK_TOL = {
-        torch.float32: (1e-3, 1e-3, 1e-4),
-        torch.float64: (1e-6, 1e-6, 1e-8),
-    }
-
-    def test_gradcheck(
-        self,
-        name: str,
-        weights: list[float],
-        means: list[float],
-        stdvs: list[float],
-        dtype: torch.dtype,
-        device: str,
-    ) -> None:
-        torch.manual_seed(self.SEED)
-        impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
@@ -913,8 +913,7 @@ class TestMixtureToGaussianValueAndJac(TestCase):
         mu_min = mus.min()
         mu_max = mus.max()
         sigma_max = sigmas.abs().max()
-
-        x = torch.linspace(
+        y = torch.linspace(
             *(mu_min - sigma_max, mu_max + sigma_max),
             steps=self.N,
             device=device,
@@ -925,9 +924,9 @@ class TestMixtureToGaussianValueAndJac(TestCase):
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
             lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
-            (x, omegas, mus, sigmas),
+            (y, omegas, mus, sigmas),
+            eps=eps,
             atol=atol,
             rtol=rtol,
-            eps=eps,
             fast_mode=True,
         )
