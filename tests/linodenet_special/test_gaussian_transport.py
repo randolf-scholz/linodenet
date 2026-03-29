@@ -6,22 +6,60 @@ import pytest
 import torch
 from torch.autograd import gradcheck
 
-from linodenet_special import (
-    bimodal_to_gaussian,
-    bimodal_to_gaussian_value_and_jac,
-    gaussian_to_bimodal,
-    gaussian_to_bimodal_value_and_jac,
-    gaussian_to_mixture,
-    hard_bend,
-    mixture_to_gaussian,
-    mixture_to_gaussian_value_and_jac,
+from linodenet_special import hard_bend
+from linodenet_special.compiled import (
+    bimodal_to_gaussian as bimodal_to_gaussian_cpp,
+    gaussian_to_bimodal as gaussian_to_bimodal_cpp,
+    gaussian_to_mixture as gaussian_to_mixture_cpp,
+    mixture_to_gaussian as mixture_to_gaussian_cpp,
 )
-from linodenet_special.compiled import gaussian_to_mixture as gaussian_to_mixture_cpp
+from linodenet_special.fallbacks import (
+    bimodal_to_gaussian as bimodal_to_gaussian_py,
+    bimodal_to_gaussian_value_and_jac as bimodal_to_gaussian_value_and_jac_py,
+    gaussian_to_bimodal as gaussian_to_bimodal_py,
+    gaussian_to_bimodal_value_and_jac as gaussian_to_bimodal_value_and_jac_py,
+    gaussian_to_mixture as gaussian_to_mixture_py,
+    mixture_to_gaussian as mixture_to_gaussian_py,
+    mixture_to_gaussian_value_and_jac as mixture_to_gaussian_value_and_jac_py,
+)
+from linodenet_special.interfaces import (
+    BimodalToGaussian,
+    GaussianToBimodal,
+    GaussianToMixture,
+    MixtureToGaussian,
+)
 from tests.testing import DEVICES, DTYPES, TestCase
+
+BIMODAL_TO_GAUSSIAN: dict[str, BimodalToGaussian] = {
+    "cpp": bimodal_to_gaussian_cpp,
+    "py": bimodal_to_gaussian_py,
+}
+GAUSSIAN_TO_BIMODAL: dict[str, GaussianToBimodal] = {
+    "cpp": gaussian_to_bimodal_cpp,
+    "py": gaussian_to_bimodal_py,
+}
+MIXTURE_TO_GAUSSIAN: dict[str, MixtureToGaussian] = {
+    "cpp": mixture_to_gaussian_cpp,
+    "py": mixture_to_gaussian_py,
+}
+GAUSSIAN_TO_MIXTURE: dict[str, GaussianToMixture] = {
+    "cpp": gaussian_to_mixture_cpp,
+    "py": gaussian_to_mixture_py,
+}
+BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC = {
+    "py": bimodal_to_gaussian_value_and_jac_py,
+}
+GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC = {
+    "py": gaussian_to_bimodal_value_and_jac_py,
+}
+MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC = {
+    "py": mixture_to_gaussian_value_and_jac_py,
+}
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN, ids=str)
 class TestBimodalToGaussian(TestCase):
     X_MIN = -20
     X_MAX = 20
@@ -53,9 +91,10 @@ class TestBimodalToGaussian(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_hard_contract_approximation(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         r"""When the gaussians are well separated, we can approximate with hard_bend."""
+        impl = BIMODAL_TO_GAUSSIAN[name]
         x = torch.linspace(
             self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
         )
@@ -63,7 +102,7 @@ class TestBimodalToGaussian(TestCase):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = torch.exp(-0.5 * (μ / σ) ** 2) / σ
 
-        y = bimodal_to_gaussian(x, μ, σ)
+        y = impl(x, μ, σ)
         assert y.dtype == dtype
         assert y.isfinite().all(), (
             "bimodal_to_gaussian should produce finite outputs for finite inputs"
@@ -79,23 +118,24 @@ class TestBimodalToGaussian(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_forward(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = (torch.exp(-0.5 * (μ / σ) ** 2) / σ).item()
 
         zero = torch.tensor(0, dtype=dtype, device=device)
-        y_zero = bimodal_to_gaussian(zero, μ, σ)
+        y_zero = impl(zero, μ, σ)
         self.assert_close(y_zero, zero)
 
         x1 = torch.linspace(0, self.X_MAX, steps=self.N, dtype=dtype, device=device)
-        y1 = bimodal_to_gaussian(x1, μ, σ)
+        y1 = impl(x1, μ, σ)
         assert y1.dtype == dtype
         assert y1.isfinite().all()
 
         x2 = torch.linspace(0, self.X_MIN, steps=self.N, dtype=dtype, device=device)
-        y2 = bimodal_to_gaussian(x2, μ, σ)
+        y2 = impl(x2, μ, σ)
         assert y2.dtype == dtype
         assert y2.isfinite().all()
 
@@ -109,8 +149,8 @@ class TestBimodalToGaussian(TestCase):
         x2 = -x1
         tail1 = (x1 - torch.sign(x1) * μ) / σ
         tail2 = (x2 - torch.sign(x2) * μ) / σ
-        y1 = bimodal_to_gaussian(x1, μ, σ)
-        y2 = bimodal_to_gaussian(x2, μ, σ)
+        y1 = impl(x1, μ, σ)
+        y2 = impl(x2, μ, σ)
         assert y1.isfinite().all()
         assert y2.isfinite().all()
         self.assert_close(y1, tail1)
@@ -119,8 +159,9 @@ class TestBimodalToGaussian(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_backward(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = torch.exp(-0.5 * (μ / σ) ** 2) / stdv
@@ -136,7 +177,7 @@ class TestBimodalToGaussian(TestCase):
             device=device,
             requires_grad=True,
         )
-        y1 = bimodal_to_gaussian(x1, μ, σ)
+        y1 = impl(x1, μ, σ)
         y1.sum().backward()
         assert x1.grad is not None
         assert x1.grad.isfinite().all()
@@ -152,7 +193,7 @@ class TestBimodalToGaussian(TestCase):
             device=device,
             requires_grad=True,
         )
-        y2 = bimodal_to_gaussian(x2, μ, σ)
+        y2 = impl(x2, μ, σ)
         y2.sum().backward()
         assert x2.grad is not None
         assert x2.grad.isfinite().all()
@@ -167,7 +208,7 @@ class TestBimodalToGaussian(TestCase):
             10 * x_tail, 100 * x_tail, steps=self.N, dtype=dtype, device=device
         )
         tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
-        y_tail = bimodal_to_gaussian(tail, μ, σ)
+        y_tail = impl(tail, μ, σ)
         assert y_tail.isfinite().all()
         y_tail.sum().backward()
         assert tail.grad is not None
@@ -177,8 +218,9 @@ class TestBimodalToGaussian(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_gradcheck(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         x_star = self.get_x_star(mean, stdv)
@@ -193,34 +235,7 @@ class TestBimodalToGaussian(TestCase):
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
-            bimodal_to_gaussian,
-            (x_narrow, μ, σ),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
-        )
-
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    def test_bimodal_to_gaussian_value_and_jac_gradcheck(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
-    ) -> None:
-        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
-        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x_star = self.get_x_star(mean, stdv)
-        x_narrow = torch.linspace(
-            -x_star,
-            x_star,
-            steps=self.N_FEW,
-            dtype=dtype,
-            device=device,
-            requires_grad=True,
-        )
-
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
-        gradcheck(
-            bimodal_to_gaussian_value_and_jac,
+            impl,
             (x_narrow, μ, σ),
             atol=atol,
             rtol=rtol,
@@ -231,8 +246,10 @@ class TestBimodalToGaussian(TestCase):
     @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
     @pytest.mark.parametrize("mean", [0.1, 0.5, 1, 2], ids="mean={}".format)
     def test_reversible(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        forward_impl = BIMODAL_TO_GAUSSIAN[name]
+        inverse_impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = torch.exp(-0.5 * (μ / σ) ** 2) / σ
@@ -245,8 +262,8 @@ class TestBimodalToGaussian(TestCase):
             device=device,
             requires_grad=True,
         )
-        y = bimodal_to_gaussian(x, μ, σ)
-        x_inv = gaussian_to_bimodal(y, μ, σ)
+        y = forward_impl(x, μ, σ)
+        x_inv = inverse_impl(y, μ, σ)
         z = x_inv.sum()
         z.backward()
         assert x.grad is not None
@@ -257,6 +274,58 @@ class TestBimodalToGaussian(TestCase):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
+class TestBimodalToGaussianValueAndJac(TestCase):
+    N_FEW = 32
+    STDVS = [0.1, 0.5, 1, 2, 10]
+    MEANS = [0.1, 0.5, 1, 2, 10]
+
+    GRADCHECK_TOL = {
+        torch.float32: (1e-3, 1e-3, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
+    }
+
+    @staticmethod
+    def get_x_star(mean: float, stdv: float) -> float:
+        """Critical point of the piecewise-linear approximation.
+
+        Given λ=Ψ'(0)=exp(-½μ²/σ²)/σ, it's λx = (x±μ)/σ ⟺ x = ±μ/(1-λσ)
+        """
+        lam = math.exp(-0.5 * (mean / stdv) ** 2) / stdv
+        return mean * min(1.0, abs(1 / (1 - lam * stdv)))
+
+    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
+    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
+    def test_gradcheck(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
+        x_star = self.get_x_star(mean, stdv)
+        x_narrow = torch.linspace(
+            -x_star,
+            x_star,
+            steps=self.N_FEW,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        gradcheck(
+            impl,
+            (x_narrow, μ, σ),
+            atol=atol,
+            rtol=rtol,
+            eps=eps,
+            fast_mode=True,
+        )
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL, ids=str)
 class TestGaussianToBimodal(TestCase):
     X_MIN = -20
     X_MAX = 20
@@ -287,8 +356,9 @@ class TestGaussianToBimodal(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_hard_expand_approximation(
-        self, dtype: torch.dtype, mean, stdv, device: str
+        self, name: str, mean, stdv, dtype: torch.dtype, device: str
     ) -> None:
+        impl = GAUSSIAN_TO_BIMODAL[name]
         y = torch.linspace(
             self.X_MIN, self.X_MAX, steps=self.N, dtype=dtype, device=device
         )
@@ -296,7 +366,7 @@ class TestGaussianToBimodal(TestCase):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = (torch.exp(-0.5 * (μ / σ) ** 2) / σ).item()
 
-        x = gaussian_to_bimodal(y, μ, σ)
+        x = impl(y, μ, σ)
         assert x.dtype == dtype
         assert x.isfinite().all(), (
             "gaussian_to_bimodal should produce finite outputs for finite inputs"
@@ -312,23 +382,24 @@ class TestGaussianToBimodal(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gaussian_to_bimodal_forward(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = (torch.exp(-0.5 * (μ / σ) ** 2) / σ).item()
 
         zero = torch.tensor(0, dtype=dtype, device=device)
-        x_zero = gaussian_to_bimodal(zero, μ, σ)
+        x_zero = impl(zero, μ, σ)
         self.assert_close(x_zero, zero)
 
         y1 = torch.linspace(0, self.X_MAX, steps=self.N_FEW, dtype=dtype, device=device)
-        x1 = gaussian_to_bimodal(y1, μ, σ)
+        x1 = impl(y1, μ, σ)
         assert x1.dtype == dtype
         assert x1.isfinite().all()
 
         y2 = torch.linspace(0, self.X_MIN, steps=self.N_FEW, dtype=dtype, device=device)
-        x2 = gaussian_to_bimodal(y2, μ, σ)
+        x2 = impl(y2, μ, σ)
         assert x2.dtype == dtype
         assert x2.isfinite().all()
 
@@ -342,8 +413,8 @@ class TestGaussianToBimodal(TestCase):
         y2 = -y1
         tail1 = σ * y1 - μ
         tail2 = σ * y2 + μ
-        x1 = gaussian_to_bimodal(y1, μ, σ)
-        x2 = gaussian_to_bimodal(y2, μ, σ)
+        x1 = impl(y1, μ, σ)
+        x2 = impl(y2, μ, σ)
         assert x1.isfinite().all()
         assert x2.isfinite().all()
         self.assert_close(x1, tail1, rtol=1e-3)
@@ -352,8 +423,9 @@ class TestGaussianToBimodal(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gaussian_to_bimodal_backward(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ_log = 0.5 * (μ / σ) ** 2 + σ.log()
@@ -369,7 +441,7 @@ class TestGaussianToBimodal(TestCase):
             device=device,
             requires_grad=True,
         )
-        x1 = gaussian_to_bimodal(y1, μ, σ)
+        x1 = impl(y1, μ, σ)
         x1.sum().backward()
         assert y1.grad is not None
         assert y1.grad.isfinite().all()
@@ -384,7 +456,7 @@ class TestGaussianToBimodal(TestCase):
             device=device,
             requires_grad=True,
         )
-        x2 = gaussian_to_bimodal(y2, μ, σ)
+        x2 = impl(y2, μ, σ)
         x2.sum().backward()
         assert y2.grad is not None
         assert y2.grad.isfinite().all()
@@ -399,7 +471,7 @@ class TestGaussianToBimodal(TestCase):
             10 * y_tail, 100 * y_tail, steps=self.N, dtype=dtype, device=device
         )
         tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
-        x_tail = gaussian_to_bimodal(tail, μ, σ)
+        x_tail = impl(tail, μ, σ)
         assert x_tail.isfinite().all()
         x_tail.sum().backward()
         assert tail.grad is not None
@@ -410,8 +482,10 @@ class TestGaussianToBimodal(TestCase):
     @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
     @pytest.mark.parametrize("mean", [0.1, 0.5, 1, 2], ids="mean={}".format)
     def test_reversible(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        inverse_impl = GAUSSIAN_TO_BIMODAL[name]
+        forward_impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         y = torch.linspace(
@@ -422,8 +496,8 @@ class TestGaussianToBimodal(TestCase):
             device=device,
             requires_grad=True,
         )
-        x_inv = gaussian_to_bimodal(y, μ, σ)
-        y_inv = bimodal_to_gaussian(x_inv, μ, σ)
+        x_inv = inverse_impl(y, μ, σ)
+        y_inv = forward_impl(x_inv, μ, σ)
         z = y_inv.sum()
         z.backward()
         assert y.grad is not None
@@ -434,8 +508,9 @@ class TestGaussianToBimodal(TestCase):
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gaussian_to_bimodal_gradcheck(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         y_star = self.get_x_star(mean, stdv)
@@ -450,7 +525,7 @@ class TestGaussianToBimodal(TestCase):
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
-            gaussian_to_bimodal,
+            impl,
             (y_narrow, μ, σ),
             atol=atol,
             rtol=rtol,
@@ -460,9 +535,59 @@ class TestGaussianToBimodal(TestCase):
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    def test_value_and_jac_gradcheck(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
+    def test_negative_mu_matches_positive_mu(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
+        forward_impl = GAUSSIAN_TO_BIMODAL[name]
+        inverse_impl = BIMODAL_TO_GAUSSIAN[name]
+        y = torch.linspace(
+            self.X_MIN, self.X_MAX, steps=self.N_FEW, dtype=dtype, device=device
+        )
+        x = torch.linspace(
+            self.X_MIN, self.X_MAX, steps=self.N_FEW, dtype=dtype, device=device
+        )
+        μ_pos = torch.tensor(mean, dtype=dtype, device=device)
+        μ_neg = torch.tensor(-mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+
+        self.assert_close(
+            forward_impl(y, μ_pos, σ),
+            forward_impl(y, μ_neg, σ),
+        )
+        self.assert_close(
+            inverse_impl(x, μ_pos, σ),
+            inverse_impl(x, μ_neg, σ),
+        )
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC, ids=str)
+class TestGaussianToBimodalValueAndJac(TestCase):
+    N_FEW = 32
+    STDVS = [1, 2, 3]
+    MEANS = [0.5, 1, 2]
+
+    GRADCHECK_TOL = {
+        torch.float32: (1e-2, 1e-2, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
+    }
+
+    @staticmethod
+    def get_x_star(mean: float, stdv: float) -> float:
+        """Critical point of the piecewise-linear approximation.
+
+        Given λ=Ψ⁻¹'(0)=σ⋅exp(½μ²/σ²), it's λx = σx±μ ⟺ x = ±μ/(λ-σ),
+        """
+        lam = stdv * math.exp(0.5 * (mean / stdv) ** 2)
+        return abs(mean / (lam - stdv))
+
+    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
+    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
+    def test_gradcheck(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         y_star = self.get_x_star(mean, stdv)
@@ -477,7 +602,7 @@ class TestGaussianToBimodal(TestCase):
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
-            gaussian_to_bimodal_value_and_jac,
+            impl,
             (y_narrow, μ, σ),
             atol=atol,
             rtol=rtol,
@@ -485,33 +610,10 @@ class TestGaussianToBimodal(TestCase):
             fast_mode=True,
         )
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    def test_negative_mu_matches_positive_mu(
-        self, dtype: torch.dtype, mean: float, stdv: float, device: str
-    ) -> None:
-        y = torch.linspace(
-            self.X_MIN, self.X_MAX, steps=self.N_FEW, dtype=dtype, device=device
-        )
-        x = torch.linspace(
-            self.X_MIN, self.X_MAX, steps=self.N_FEW, dtype=dtype, device=device
-        )
-        μ_pos = torch.tensor(mean, dtype=dtype, device=device)
-        μ_neg = torch.tensor(-mean, dtype=dtype, device=device)
-        σ = torch.tensor(stdv, dtype=dtype, device=device)
-
-        self.assert_close(
-            gaussian_to_bimodal(y, μ_pos, σ),
-            gaussian_to_bimodal(y, μ_neg, σ),
-        )
-        self.assert_close(
-            bimodal_to_gaussian(x, μ_pos, σ),
-            bimodal_to_gaussian(x, μ_neg, σ),
-        )
-
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN, ids=str)
 @pytest.mark.parametrize(
     ("weights", "means", "stdvs"),
     [
@@ -544,12 +646,15 @@ class TestMixtureToGaussian(TestCase):
 
     def test_reversible(
         self,
-        dtype: torch.dtype,
+        name: str,
         weights: list[float],
         means: list[float],
         stdvs: list[float],
+        dtype: torch.dtype,
         device: str,
     ) -> None:
+        forward_impl = MIXTURE_TO_GAUSSIAN[name]
+        inverse_impl = GAUSSIAN_TO_MIXTURE[name]
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
@@ -564,8 +669,8 @@ class TestMixtureToGaussian(TestCase):
             requires_grad=True,
         )
 
-        y = mixture_to_gaussian(x, omegas, mus, sigmas)
-        x_inv = gaussian_to_mixture(y, omegas, mus, sigmas)
+        y = forward_impl(x, omegas, mus, sigmas)
+        x_inv = inverse_impl(y, omegas, mus, sigmas)
         x_inv.sum().backward()
         assert x.grad is not None
         atol, rtol = self.TOL[dtype]
@@ -583,13 +688,15 @@ class TestMixtureToGaussian(TestCase):
     )
     def test_gradcheck(
         self,
+        name: str,
         values: list[float] | float,
         weights: list[float],
         means: list[float],
         stdvs: list[float],
-        device: str,
         dtype: torch.dtype,
+        device: str,
     ) -> None:
+        impl = MIXTURE_TO_GAUSSIAN[name]
         x = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
@@ -597,40 +704,7 @@ class TestMixtureToGaussian(TestCase):
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
-            lambda z, ω, μ, σ: mixture_to_gaussian(z, ω / ω.sum(), μ, σ),
-            (x, omegas, mus, sigmas),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
-        )
-
-    @pytest.mark.parametrize(
-        "values",
-        [
-            pytest.param([[-1.25, -0.5], [0.25, 1.75]], id="batch"),
-            pytest.param(0.375, id="scalar"),
-            pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
-            pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
-        ],
-    )
-    def test_value_and_jac_gradcheck(
-        self,
-        values: list[float] | float,
-        weights: list[float],
-        means: list[float],
-        stdvs: list[float],
-        device: str,
-        dtype: torch.dtype,
-    ) -> None:
-        x = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
-        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
-        gradcheck(
-            lambda z, ω, μ, σ: mixture_to_gaussian_value_and_jac(z, ω / ω.sum(), μ, σ),
+            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
             (x, omegas, mus, sigmas),
             atol=atol,
             rtol=rtol,
@@ -641,6 +715,7 @@ class TestMixtureToGaussian(TestCase):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", GAUSSIAN_TO_MIXTURE, ids=str)
 class TestGaussianToMixture(TestCase):
     N = 64
 
@@ -673,12 +748,15 @@ class TestGaussianToMixture(TestCase):
     )
     def test_reversible(
         self,
-        dtype: torch.dtype,
+        name: str,
         weights: list[float],
         means: list[float],
         stdvs: list[float],
+        dtype: torch.dtype,
         device: str,
     ) -> None:
+        forward_impl = GAUSSIAN_TO_MIXTURE[name]
+        inverse_impl = MIXTURE_TO_GAUSSIAN[name]
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
@@ -691,8 +769,8 @@ class TestGaussianToMixture(TestCase):
             requires_grad=True,
         )
 
-        x = gaussian_to_mixture(y, omegas, mus, sigmas)
-        y_inv = mixture_to_gaussian(x, omegas, mus, sigmas)
+        x = forward_impl(y, omegas, mus, sigmas)
+        y_inv = inverse_impl(x, omegas, mus, sigmas)
         y_inv.sum().backward()
         assert y.grad is not None
         atol, rtol = self.TOL[dtype]
@@ -727,13 +805,15 @@ class TestGaussianToMixture(TestCase):
     )
     def test_gradcheck(
         self,
+        name: str,
         values: list[float] | float,
         weights: list[float],
         means: list[float],
         stdvs: list[float],
-        device: str,
         dtype: torch.dtype,
+        device: str,
     ) -> None:
+        impl = GAUSSIAN_TO_MIXTURE[name]
         y = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
@@ -741,7 +821,7 @@ class TestGaussianToMixture(TestCase):
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
-            lambda z, ω, μ, σ: gaussian_to_mixture(z, ω / ω.sum(), μ, σ),
+            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
             (y, omegas, mus, sigmas),
             eps=eps,
             atol=atol,
@@ -749,26 +829,64 @@ class TestGaussianToMixture(TestCase):
             fast_mode=True,
         )
 
-    def test_compiled_scalar_backward_shapes(
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
+@pytest.mark.parametrize(
+    ("weights", "means", "stdvs"),
+    [
+        pytest.param(
+            [0.4, 0.25, 0.35],
+            [-1.0, 0.5, 1.5],
+            [0.8, 1.1, 0.9],
+            id="asymmetric",
+        ),
+        pytest.param(
+            [0.2, 0.5, 0.3],
+            [-1.5, -0.5, 1.0],
+            [1.0, 0.8, 1.2],
+            id="shifted",
+        ),
+    ],
+)
+class TestMixtureToGaussianValueAndJac(TestCase):
+    GRADCHECK_TOL = {
+        torch.float32: (1e-3, 1e-3, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
+    }
+
+    @pytest.mark.parametrize(
+        "values",
+        [
+            pytest.param([[-1.25, -0.5], [0.25, 1.75]], id="batch"),
+            pytest.param(0.375, id="scalar"),
+            pytest.param([-3.0, -2.25, -1.5, -0.5, -0.1], id="p_branch"),
+            pytest.param([0.1, 0.5, 1.5, 2.25, 3.0], id="q_branch"),
+        ],
+    )
+    def test_gradcheck(
         self,
-        device: str,
+        name: str,
+        values: list[float] | float,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
         dtype: torch.dtype,
+        device: str,
     ) -> None:
-        y = torch.tensor(-0.375, dtype=dtype, device=device, requires_grad=True)
-        omegas = torch.tensor(
-            [0.2, 0.5, 0.3], dtype=dtype, device=device, requires_grad=True
-        )
-        mus = torch.tensor(
-            [-1.5, -0.5, 1.0], dtype=dtype, device=device, requires_grad=True
-        )
-        sigmas = torch.tensor(
-            [1.0, 0.8, 1.2], dtype=dtype, device=device, requires_grad=True
-        )
+        impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        x = torch.tensor(values, dtype=dtype, device=device, requires_grad=True)
+        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
 
-        x = gaussian_to_mixture_cpp(y, omegas, mus, sigmas)
-        x.backward()
-
-        assert y.grad is not None
-        assert omegas.grad is not None
-        assert mus.grad is not None
-        assert sigmas.grad is not None
+        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        gradcheck(
+            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
+            (x, omegas, mus, sigmas),
+            atol=atol,
+            rtol=rtol,
+            eps=eps,
+            fast_mode=True,
+        )
