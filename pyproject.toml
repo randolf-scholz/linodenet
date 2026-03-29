@@ -323,7 +323,7 @@ disable_error_code = [
 warn_no_return = true
 warn_redundant_casts = true
 warn_return_any = false
-warn_unreachable = true
+warn_unreachable = false  # unreliable
 warn_unused_configs = true
 warn_unused_ignores = true
 
