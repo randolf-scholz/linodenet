@@ -210,8 +210,8 @@ struct SingularTriplet : Function<SingularTriplet> {
     static std::vector<Tensor> forward(
         AutogradContext *ctx,
         const Tensor &A_in,
-        const optional<Tensor> &u0,
-        const optional<Tensor> &v0,
+        const Tensor &u0,
+        const Tensor &v0,
         const int64_t maxiter,
         const double atol = 1e-6,
         const double rtol = 1e-6
@@ -219,8 +219,6 @@ struct SingularTriplet : Function<SingularTriplet> {
         torch::NoGradGuard guard;
 
         // Sec: Option parsing
-        const int64_t M = A_in.size(0);
-        const int64_t N = A_in.size(1);
         const auto OPTIONS = A_in.options();
         bool converged = false;
         const Tensor ATOL = torch::scalar_tensor(atol, OPTIONS);
@@ -229,19 +227,15 @@ struct SingularTriplet : Function<SingularTriplet> {
         // Preconditioning: normalize A by its infinity norm
         const Tensor SCALE = A_in.abs().max();
         const Tensor A = A_in / SCALE;
-        const Tensor A_t = A.transpose(-2, -1);
-
-        // pre-allocate buffers
-        Tensor grad_u = torch::empty({M}, OPTIONS);
-        Tensor grad_v = torch::empty({N}, OPTIONS);
-        Tensor sigma_u = torch::empty({}, OPTIONS);
-        Tensor sigma_v = torch::empty({}, OPTIONS);
+        const Tensor A_t = A.mH();
 
         Tensor sigma = torch::zeros({}, OPTIONS);
-        Tensor u = u0 ? u0.value() : torch::randn({M}, OPTIONS);
-        Tensor v = v0 ? v0.value() : torch::randn({N}, OPTIONS);
-        u = u.div_(linalg_vector_norm(u));
-        v = v.div_(linalg_vector_norm(v));
+        Tensor u = u0;
+        Tensor v = v0;
+        Tensor grad_u = torch::empty_like(u);
+        Tensor grad_v = torch::empty_like(v);
+        Tensor sigma_u = torch::empty({}, OPTIONS);
+        Tensor sigma_v = torch::empty({}, OPTIONS);
 
         // special case: if SCALE == 0, then A is the zero matrix,
         // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
@@ -412,7 +406,15 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     const double atol,
     const double rtol
 ) {
-    auto output = SingularTriplet::apply(A, u0, v0, maxiter, atol, rtol);
+    Tensor u = u0.has_value()
+        ? u0.value().detach().clone()
+        : torch::randn({A.size(0)}, A.options());
+    Tensor v = v0.has_value()
+        ? v0.value().detach().clone()
+        : torch::randn({A.size(1)}, A.options());
+    u = u.div_(linalg_vector_norm(u));
+    v = v.div_(linalg_vector_norm(v));
+    auto output = SingularTriplet::apply(A, u, v, maxiter, atol, rtol);
     return std::make_tuple(output[0], output[1], output[2]);
 }
 
