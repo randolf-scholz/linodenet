@@ -13,7 +13,8 @@ class TestCase:
     def assert_upper_bounded(
         self,
         value: Tensor | float,
-        bound: Tensor | float,
+        upper: Tensor | float,
+        *,
         atol: float = 0.0,
         rtol: float = 0.0,
         warn_loose: bool = False,
@@ -21,13 +22,14 @@ class TestCase:
         r"""Check that |left| ≤ (1+rtol) |right| + atol."""
         __tracebackhide__ = True
 
-        value = torch.as_tensor(value)
-        bound = torch.as_tensor(bound)
+        x_hat = torch.as_tensor(value)
+        bound = torch.as_tensor(upper, device=x_hat.device, dtype=x_hat.dtype)
+        x_hat, bound = torch.broadcast_tensors(x_hat, bound)
         upper_bound = (1 + rtol) * bound + atol
-        assert upper_bound >= 0.0
-        ok = value <= upper_bound
+        assert (upper_bound >= 0.0).all()
+        ok = x_hat <= upper_bound
 
-        abs_violation = (value - upper_bound).clamp_min(0)
+        abs_violation = (x_hat - upper_bound).clamp_min(0)
         rel_violation = abs_violation / upper_bound.abs()
 
         max_abs_err = abs_violation.max().item()
@@ -40,7 +42,7 @@ class TestCase:
         if not ok.all():
             msg = (
                 f"Values exceed bound! "
-                f"\n\tvalue: {value.tolist()}"
+                f"\n\tvalue: {x_hat.tolist()}"
                 f"\n\tbound: {bound.tolist()}"
                 f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
@@ -66,7 +68,8 @@ class TestCase:
     def assert_lower_bounded(
         self,
         value: Tensor | float,
-        bound: Tensor | float,
+        lower: Tensor | float,
+        *,
         atol: float = 0.0,
         rtol: float = 0.0,
         warn_loose: bool = False,
@@ -74,13 +77,14 @@ class TestCase:
         r"""Check that |left| ≥ (1-rtol) |right| - atol."""
         __tracebackhide__ = True
 
-        value = torch.as_tensor(value)
-        bound = torch.as_tensor(bound)
+        x_hat = torch.as_tensor(value)
+        bound = torch.as_tensor(lower, device=x_hat.device, dtype=x_hat.dtype)
+        x_hat, bound = torch.broadcast_tensors(x_hat, bound)
         lower_bound = (1 - rtol) * bound - atol
         assert (1 - rtol) >= 0.0
-        ok = value >= lower_bound
+        ok = x_hat >= lower_bound
 
-        abs_violation = (lower_bound - value).clamp_min(0)
+        abs_violation = (lower_bound - x_hat).clamp_min(0)
         rel_violation = abs_violation / lower_bound.abs()
 
         max_abs_err = abs_violation.max().item()
@@ -93,7 +97,7 @@ class TestCase:
         if not ok.all():
             msg = (
                 f"Values exceed bound! "
-                f"\n\tvalue: {value.tolist()}"
+                f"\n\tvalue: {x_hat.tolist()}"
                 f"\n\tbound: {bound.tolist()}"
                 f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
