@@ -362,7 +362,7 @@ class TestBimodalToGaussian(BimodalTest):
 @pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
-class TestBimodalToGaussianValueAndJac(BimodalTest):
+class TestBimodalToGaussianValueAndGrad(BimodalTest):
     TOL = {
         torch.float32: (1e-4, 1e-4),
         torch.float64: (1e-7, 1e-7),
@@ -613,7 +613,7 @@ class TestGaussianToBimodal(BimodalTest):
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC, ids=str)
-class TestGaussianToBimodalValueAndJac(BimodalTest):
+class TestGaussianToBimodalValueAndGrad(BimodalTest):
     STDVS = [1, 2, 3]
     MEANS = [0.5, 1, 2]
     TOL = {
@@ -793,7 +793,7 @@ class TestMixtureToGaussian(TestCase):
     ],
 )
 @pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
-class TestMixtureToGaussianValueAndJac(TestCase):
+class TestMixtureToGaussianValueAndGrad(TestCase):
     SEED = 0
     N = 256
     GRADCHECK_TOL = {
