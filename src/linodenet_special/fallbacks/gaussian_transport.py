@@ -468,7 +468,8 @@ class _GaussianToBimodal(Function):
         lower_bound = sigma
         upper_bound = sigma * torch.exp(0.5 * (mu / sigma) ** 2)
         d_y = d_y.clamp(lower_bound, upper_bound)
-        d_mu = d_mu.clamp(-upper_bound, upper_bound)
+        # ∂x/∂μ = -(∂T/∂μ)/(∂T/∂x) is dimensionless and equals ±1 in the tails.
+        d_mu = d_mu.clamp(-1, 1)
 
         return (g * d_y), (g * d_mu), (g * d_sigma), None
 
@@ -512,7 +513,8 @@ class _GaussianToBimodalValueAndJac(Function):
         lower_bound = sigma
         upper_bound = sigma * torch.exp(0.5 * (mu / sigma) ** 2)
         d_y = d_y.clamp(lower_bound, upper_bound)
-        d_mu_inv = d_mu_inv.clamp(-upper_bound, upper_bound)
+        # ∂x/∂μ = -(∂T/∂μ)/(∂T/∂x) is dimensionless and equals ±1 in the tails.
+        d_mu_inv = d_mu_inv.clamp(-1, 1)
 
         j_y = -d2_x * dx_inv.pow(3)
         j_mu = (d2_x * d_mu - d2_mu * d_x) * dx_inv.pow(3)

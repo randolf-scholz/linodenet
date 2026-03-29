@@ -286,7 +286,7 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
 
         const Tensor upper_bound = sigma * exp(0.5 * (mu / sigma).square());
         d_y = d_y.clamp_(sigma, upper_bound);
-        grad_mu = grad_mu.clamp_(-upper_bound, upper_bound);
+        grad_mu = grad_mu.clamp_(-1, 1);
 
         return {g * d_y, g * grad_mu, g * grad_sigma, Tensor()};
     }
