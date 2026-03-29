@@ -10,6 +10,7 @@ __all__ = [
     "gaussian_to_bimodal",
     "gaussian_to_bimodal_value_and_grad",
     "gaussian_to_mixture",
+    "gaussian_to_mixture_value_and_grad",
     "fixpoint_solve",
     "hard_bend",
     "hard_contract",
@@ -34,6 +35,7 @@ from .gaussian_transport import (
     gaussian_to_bimodal,
     gaussian_to_bimodal_value_and_grad,
     gaussian_to_mixture,
+    gaussian_to_mixture_value_and_grad,
     mixture_to_gaussian,
     mixture_to_gaussian_value_and_grad,
 )
