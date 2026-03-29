@@ -101,7 +101,7 @@ class BimodalTest(TestCase):
         return max(0.0, mean - stdv * threshold)  # ≤ μ
 
     @classmethod
-    def get_x_safe_inv(cls, mean: float, stdv: float, *, dtype: torch.dtype) -> float:
+    def get_y_safe(cls, mean: float, stdv: float, *, dtype: torch.dtype) -> float:
         r"""Return the inner cutoff for numerically stable inverse bimodal tests.
 
         The inverse slope at the origin is
@@ -148,7 +148,7 @@ class BimodalTest(TestCase):
         cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
     ) -> Tensor:
         r"""Construct a numerically useful inverse test range around the origin."""
-        y_safe = cls.get_x_safe_inv(mean, stdv, dtype=dtype)
+        y_safe = cls.get_y_safe(mean, stdv, dtype=dtype)
         if y_safe == 0.0:
             return torch.linspace(
                 *(-mean / stdv - 4, mean / stdv + 4),
@@ -451,6 +451,14 @@ class TestGaussianToBimodal(BimodalTest):
         x_tail_approx = hard_bend(y_tail, 1 / λ, μ, σ)
         self.assert_upper_bounded((x_tail - x_tail_approx).abs(), σ / y_tail.abs())
 
+        tail = self.make_inv_tail_range(mean, stdv, dtype=dtype, device=device)
+        x_tail = impl(tail, μ, σ)
+        assert x_tail.isfinite().all()
+        x_tail.sum().backward()
+        assert tail.grad is not None
+        assert tail.grad.isfinite().all()
+        self.assert_close(tail.grad, σ, atol=1e-3, rtol=1e-1)
+
     def test_gaussian_to_bimodal_forward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -481,13 +489,14 @@ class TestGaussianToBimodal(BimodalTest):
         impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
+        y_safe = self.get_y_safe(mean, stdv, dtype=dtype)
         λ_log = 0.5 * (μ / σ) ** 2 + σ.log()
         g_rtol = 2**-4
         log_tol = math.log(1 + g_rtol)
         log_grad_bound = λ_log + log_tol
 
         y1 = torch.linspace(
-            *(0, self.X_MAX),
+            *(y_safe, self.X_MAX),
             steps=self.N,
             dtype=dtype,
             device=device,
@@ -501,7 +510,7 @@ class TestGaussianToBimodal(BimodalTest):
         assert y1.grad.log().max() <= log_grad_bound
 
         y2 = torch.linspace(
-            *(0, self.X_MIN),
+            *(-y_safe, self.X_MIN),
             steps=self.N,
             dtype=dtype,
             device=device,
@@ -513,16 +522,7 @@ class TestGaussianToBimodal(BimodalTest):
         assert y2.grad.isfinite().all()
         assert y2.grad.min() >= min(1, σ.item())
         assert y2.grad.log().max() <= log_grad_bound
-
         self.assert_close(y1.grad, y2.grad)
-
-        tail = self.make_inv_tail_range(mean, stdv, dtype=dtype, device=device)
-        x_tail = impl(tail, μ, σ)
-        assert x_tail.isfinite().all()
-        x_tail.sum().backward()
-        assert tail.grad is not None
-        assert tail.grad.isfinite().all()
-        self.assert_close(tail.grad, σ, atol=1e-3, rtol=1e-1)
 
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
