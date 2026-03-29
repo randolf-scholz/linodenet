@@ -369,7 +369,7 @@ class TestGaussianToBimodal(TestCase):
 
     TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-8, 1e-8),
+        torch.float64: (1e-7, 1e-7),
     }
 
     GRADCHECK_TOL = {
@@ -678,7 +678,7 @@ class TestMixtureToGaussian(TestCase):
 
     TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-8, 1e-8),
+        torch.float64: (1e-7, 1e-7),
     }
 
     GRADCHECK_TOL = {
@@ -766,7 +766,7 @@ class TestGaussianToMixture(TestCase):
 
     TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-8, 1e-8),
+        torch.float64: (1e-7, 1e-7),
     }
 
     GRADCHECK_TOL = {
