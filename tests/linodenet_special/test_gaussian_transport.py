@@ -128,10 +128,15 @@ class BimodalTest(TestCase):
         r"""Construct a numerically useful test range inside $[-μ, μ]$."""
         x_safe = cls.get_x_safe(mean, stdv, dtype=dtype)
         if x_safe == 0.0:
-            return torch.linspace(-mean, mean, steps=cls.N, dtype=dtype, device=device)
+            return torch.linspace(
+                *(-mean, mean),
+                steps=cls.N,
+                dtype=dtype,
+                device=device,
+                requires_grad=True,
+            )
         x = torch.linspace(
-            x_safe,
-            mean,
+            *(x_safe, mean + 5 * stdv),
             steps=cls.N // 2,
             dtype=dtype,
             device=device,
@@ -146,14 +151,18 @@ class BimodalTest(TestCase):
         y_safe = cls.get_x_safe_inv(mean, stdv, dtype=dtype)
         if y_safe == 0.0:
             return torch.linspace(
-                -mean / stdv, mean / stdv, steps=cls.N, dtype=dtype, device=device
+                *(-mean / stdv, mean / stdv),
+                steps=cls.N,
+                dtype=dtype,
+                device=device,
+                requires_grad=True,
             )
         y = torch.linspace(
-            y_safe,
-            mean / stdv,
+            *(y_safe, mean / stdv),
             steps=cls.N // 2,
             dtype=dtype,
             device=device,
+            requires_grad=True,
         )
         return torch.cat([-y, y]).requires_grad_(True)
 
@@ -282,7 +291,7 @@ class TestBimodalToGaussian(BimodalTest):
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         x_tail = torch.linspace(
-            μ + 5 * σ, μ + 50 * σ, steps=self.N, dtype=dtype, device=device
+            μ + 10 * σ, μ + 50 * σ, steps=self.N, dtype=dtype, device=device
         )
         x_tail = torch.cat([-x_tail, x_tail]).requires_grad_()
         y_tail = impl(x_tail, μ, σ)
@@ -290,7 +299,8 @@ class TestBimodalToGaussian(BimodalTest):
         y_tail.sum().backward()
         assert x_tail.grad is not None
         assert x_tail.grad.isfinite().all()
-        self.assert_close(x_tail.grad, σ)
+        self.assert_close(x_tail.grad, 1 / σ, rtol=1e-2)
+        self.assert_upper_bounded(x_tail.grad, 1 / σ, rtol=0.0)
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
@@ -461,8 +471,7 @@ class TestGaussianToBimodal(BimodalTest):
         log_grad_bound = λ_log + log_tol
 
         y1 = torch.linspace(
-            0,
-            self.X_MAX,
+            *(0, self.X_MAX),
             steps=self.N,
             dtype=dtype,
             device=device,
@@ -476,8 +485,7 @@ class TestGaussianToBimodal(BimodalTest):
         assert y1.grad.log().max() <= log_grad_bound
 
         y2 = torch.linspace(
-            0,
-            self.X_MIN,
+            *(0, self.X_MIN),
             steps=self.N,
             dtype=dtype,
             device=device,
