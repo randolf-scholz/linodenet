@@ -122,7 +122,7 @@ class BimodalTest(TestCase):
         return max(0.0, (mean - x_safe) / stdv)  # ≤ μ/σ
 
     @classmethod
-    def make_test_range(
+    def make_x_test_range(
         cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
     ) -> Tensor:
         r"""Construct a numerically useful test range inside $[-μ, μ]$."""
@@ -144,7 +144,7 @@ class BimodalTest(TestCase):
         return torch.cat([-x.flip(0), x]).requires_grad_(True)
 
     @classmethod
-    def make_inv_test_range(
+    def make_y_test_range(
         cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
     ) -> Tensor:
         r"""Construct a numerically useful inverse test range around the origin."""
@@ -281,7 +281,7 @@ class TestBimodalToGaussian(BimodalTest):
         torch.manual_seed(self.SEED)
         r"""When the gaussians are well separated, we can approximate with hard_bend."""
         impl = BIMODAL_TO_GAUSSIAN[name]
-        x = self.make_test_range(mean, stdv, dtype=dtype, device=device)
+        x = self.make_x_test_range(mean, stdv, dtype=dtype, device=device)
         x = torch.linspace(
             *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
         )
@@ -328,7 +328,7 @@ class TestBimodalToGaussian(BimodalTest):
         impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x = self.make_test_range(mean, stdv, dtype=dtype, device=device)
+        x = self.make_x_test_range(mean, stdv, dtype=dtype, device=device)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
@@ -349,7 +349,7 @@ class TestBimodalToGaussian(BimodalTest):
         atol, rtol = self.TOL[dtype]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        x = self.make_test_range(mean, stdv, dtype=dtype, device=device)
+        x = self.make_x_test_range(mean, stdv, dtype=dtype, device=device)
         y = forward_impl(x, μ, σ)
         x_inv = inverse_impl(y, μ, σ)
         x_inv.sum().backward()
@@ -376,7 +376,7 @@ class TestBimodalToGaussianValueAndJac(BimodalTest):
         impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x = self.make_test_range(mean, stdv, dtype=dtype, device=device)
+        x = self.make_x_test_range(mean, stdv, dtype=dtype, device=device)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
@@ -532,7 +532,7 @@ class TestGaussianToBimodal(BimodalTest):
         forward_impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        y = self.make_inv_test_range(mean, stdv, dtype=dtype, device=device)
+        y = self.make_y_test_range(mean, stdv, dtype=dtype, device=device)
         x_inv = inverse_impl(y, μ, σ)
         y_inv = forward_impl(x_inv, μ, σ)
         y_inv.sum().backward()
@@ -548,7 +548,7 @@ class TestGaussianToBimodal(BimodalTest):
         impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        y_narrow = self.make_inv_test_range(mean, stdv, dtype=dtype, device=device)
+        y_narrow = self.make_y_test_range(mean, stdv, dtype=dtype, device=device)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
