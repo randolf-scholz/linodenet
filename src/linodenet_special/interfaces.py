@@ -5,10 +5,14 @@ __all__ = [
     "DEFAULT_NEWTON_MAXITER",
     # Protocols
     "BimodalToGaussian",
+    "BimodalToGaussianValueAndGrad",
     "GaussianToBimodal",
+    "GaussianToBimodalValueAndGrad",
     "GaussianToMixture",
+    "GaussianToMixtureValueAndGrad",
     "HardBend",
     "MixtureToGaussian",
+    "MixtureToGaussianValueAndGrad",
     "NdtriExp",
     "SingularTriplet",
     "SpectralNorm",
@@ -46,12 +50,34 @@ class GaussianToBimodal(Protocol):
     ) -> Tensor: ...
 
 
+class GaussianToBimodalValueAndGrad(Protocol):
+    r"""Protocol for Gaussian-to-bimodal transport with elementwise derivative."""
+
+    def __call__(
+        self,
+        y: Tensor,
+        /,
+        mu: Tensor = ...,
+        sigma: Tensor = ...,
+        *,
+        maxiter: Optional[int] = ...,
+    ) -> tuple[Tensor, Tensor]: ...
+
+
 class BimodalToGaussian(Protocol):
     r"""Protocol for bimodal-to-Gaussian transport implementations."""
 
     def __call__(
         self, x: Tensor, /, mu: Tensor = ..., sigma: Tensor = ...
     ) -> Tensor: ...
+
+
+class BimodalToGaussianValueAndGrad(Protocol):
+    r"""Protocol for bimodal-to-Gaussian transport with elementwise derivative."""
+
+    def __call__(
+        self, x: Tensor, /, mu: Tensor = ..., sigma: Tensor = ...
+    ) -> tuple[Tensor, Tensor]: ...
 
 
 class GaussianToMixture(Protocol):
@@ -69,12 +95,35 @@ class GaussianToMixture(Protocol):
     ) -> Tensor: ...
 
 
+class GaussianToMixtureValueAndGrad(Protocol):
+    r"""Protocol for Gaussian-to-mixture transport with elementwise derivative."""
+
+    def __call__(
+        self,
+        y: Tensor,
+        /,
+        weights: Tensor,
+        mus: Tensor,
+        sigmas: Tensor,
+        *,
+        maxiter: Optional[int] = ...,
+    ) -> tuple[Tensor, Tensor]: ...
+
+
 class MixtureToGaussian(Protocol):
     r"""Protocol for mixture-to-Gaussian transport implementations."""
 
     def __call__(
         self, x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
     ) -> Tensor: ...
+
+
+class MixtureToGaussianValueAndGrad(Protocol):
+    r"""Protocol for mixture-to-Gaussian transport with elementwise derivative."""
+
+    def __call__(
+        self, x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+    ) -> tuple[Tensor, Tensor]: ...
 
 
 class HardBend(Protocol):
