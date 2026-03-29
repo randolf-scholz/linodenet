@@ -17,6 +17,7 @@ from linodenet_special.fallbacks import (
     bimodal_to_gaussian,
     bimodal_to_gaussian_value_and_jac,
     gaussian_to_bimodal,
+    hard_bend,
     mixture_to_gaussian,
 )
 from tests.testing import PROJECT
@@ -24,9 +25,49 @@ from tests.testing import PROJECT
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
+@pytest.mark.interactive
+def test_gaussian_to_bimodal_interactive() -> None:
+    gaussian_to_bimodal_interactive()
+
+
+@pytest.mark.interactive
+def test_bimodal_to_gaussian_interactive() -> None:
+    bimodal_to_gaussian_interactive()
+
+
+@pytest.mark.interactive
+def test_2_components_interactive() -> None:
+    two_components_interactive()
+
+
+@pytest.mark.interactive
+def test_3_components_interactive() -> None:
+    three_components_interactive()
+
+
 PDF_MAX = 2.0
 X_MIN = -8
 X_MAX = +8
+
+
+def bimodal_to_gaussian_approximation(
+    x: Tensor,
+    /,
+    mu: Tensor,
+    sigma: Tensor,
+) -> Tensor:
+    lam = math.exp(-0.5 * (mu / sigma) ** 2) / sigma
+    return hard_bend(x, lam, mu / sigma, 1 / sigma)
+
+
+def gaussian_to_bimodal_approximation(
+    x: Tensor,
+    /,
+    mu: Tensor,
+    sigma: Tensor,
+) -> Tensor:
+    lam = sigma * math.exp(0.5 * (mu / sigma) ** 2)
+    return hard_bend(x, lam, mu, sigma)
 
 
 def asymptotic_line(
@@ -375,13 +416,11 @@ class TransportPlotStateBimodal:
         target = stats.Normal(mu=0.0, sigma=1.0)
         x_samples = torch.tensor(twin.sample(shape=1_000, rng=0), dtype=dtype)
         y_samples = bimodal_to_gaussian(x_samples, mu, sigma)
-        asymptote0 = asymptotic_line(self.x, 0, 1, 0.5, mu, sigma)
-        asymptote1 = asymptotic_line(self.x, 0, 1, 0.5, -mu, sigma)
+        approximation = bimodal_to_gaussian_approximation(self.x, mu, sigma)
 
         self.line.set_ydata(y)
         self.jac_line.set_ydata(jac)
-        self.component_lines[0].set_ydata(asymptote0)
-        self.component_lines[1].set_ydata(asymptote1)
+        self.component_lines[0].set_ydata(approximation)
         self.input_pdf_line.set_xdata(self.x)
         self.input_pdf_line.set_ydata(twin.pdf(self.x))
         self.target_pdf_line.set_xdata(self.x)
@@ -435,14 +474,10 @@ class TransportPlotStateGaussian:
         twin = make_bimodal_distribution(mu, sigma)
         y_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
         x_samples = gaussian_to_bimodal(y_samples, mu, sigma)
+        approximation = gaussian_to_bimodal_approximation(self.y, mu, sigma)
 
         self.line.set_ydata(x)
-        self.component_lines[0].set_ydata(
-            asymptotic_inverse(self.y, 0, 1, 0.5, +mu, sigma)
-        )
-        self.component_lines[1].set_ydata(
-            asymptotic_inverse(self.y, 0, 1, 0.5, -mu, sigma)
-        )
+        self.component_lines[0].set_ydata(approximation)
         self.input_pdf_line.set_xdata(self.y)
         self.input_pdf_line.set_ydata(source.pdf(self.y))
         self.target_pdf_line.set_xdata(self.y)
@@ -471,8 +506,99 @@ class TransportPlotStateGaussian:
         self.line.figure.canvas.draw_idle()
 
 
-@pytest.mark.interactive
-def test_gaussian_to_bimodal_interactive() -> None:
+@dataclass
+class TransportPlotState3Components:
+    x: Tensor
+    line: Any
+    component_lines: list[Any]
+    input_pdf_line: Any
+    target_pdf_line: Any
+    twin_ax: Any
+    input_hist_container: Any
+    output_hist_container: Any
+    sliders: Mapping[str, Slider]
+
+    def update(self, _value: float) -> None:
+        dtype = self.x.dtype
+
+        mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
+        sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
+
+        omegas = torch.tensor(
+            [
+                self.sliders["omega_1"].val,
+                self.sliders["omega_2"].val,
+                self.sliders["omega_3"].val,
+            ],
+            dtype=dtype,
+        )
+        omegas = omegas / omegas.sum()
+
+        mus = torch.tensor(
+            [
+                self.sliders["mu_1"].val,
+                self.sliders["mu_2"].val,
+                self.sliders["mu_3"].val,
+            ],
+            dtype=dtype,
+        )
+
+        sigmas = torch.tensor(
+            [
+                self.sliders["sigma_1"].val,
+                self.sliders["sigma_2"].val,
+                self.sliders["sigma_3"].val,
+            ],
+            dtype=dtype,
+        )
+
+        y = mixture_to_gaussian((self.x - mu) / sigma, omegas, mus, sigmas)
+        source = make_input_mixture(mu, sigma, omegas, mus, sigmas)
+        target = stats.Normal(mu=0.0, sigma=1.0)
+        x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
+        y_samples = mixture_to_gaussian((x_samples - mu) / sigma, omegas, mus, sigmas)
+
+        self.line.set_ydata(y)
+        self.input_pdf_line.set_xdata(self.x)
+        self.input_pdf_line.set_ydata(source.pdf(self.x))
+        self.target_pdf_line.set_xdata(self.x)
+        self.target_pdf_line.set_ydata(target.pdf(self.x))
+        for k, line in enumerate(self.component_lines):
+            line.set_ydata(
+                asymptotic_line(
+                    (self.x - mu) / sigma,
+                    mus[k],
+                    sigmas[k],
+                    omegas[k],
+                    mus[k],
+                    sigmas[k],
+                )
+            )
+
+        self.input_hist_container.remove()
+        self.input_hist_container = self.twin_ax.hist(
+            x_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="green",
+        )[2]
+        self.output_hist_container.remove()
+        self.output_hist_container = self.twin_ax.hist(
+            y_samples,
+            bins=50,
+            density=True,
+            alpha=0.2,
+            color="red",
+        )[2]
+        self.twin_ax.set_xlabel("density")
+        self.twin_ax.grid(False)
+        self.twin_ax.patch.set_alpha(0)
+        self.twin_ax.set_ylim(0, PDF_MAX)
+        self.line.figure.canvas.draw_idle()
+
+
+def gaussian_to_bimodal_interactive() -> None:
     dtype = torch.float64
 
     y = torch.linspace(X_MIN, X_MAX, 200, dtype=dtype)
@@ -497,8 +623,7 @@ def test_gaussian_to_bimodal_interactive() -> None:
 
         (line,) = ax.plot(y, x, label="transport", lw=5)
         component_lines = [
-            ax.plot(y, asymptotic_inverse(y, 0, 1, 0.5, +mu, sigma), "k--")[0],
-            ax.plot(y, asymptotic_inverse(y, 0, 1, 0.5, -mu, sigma), "k--")[0],
+            ax.plot(y, gaussian_to_bimodal_approximation(y, mu, sigma), "k--")[0],
         ]
         (input_pdf_line,) = ax_twin.plot(
             y,
@@ -568,8 +693,7 @@ def test_gaussian_to_bimodal_interactive() -> None:
         plt.show()
 
 
-@pytest.mark.interactive
-def test_bimodal_to_gaussian_interactive() -> None:
+def bimodal_to_gaussian_interactive() -> None:
     dtype = torch.float64
 
     x = torch.linspace(X_MIN, X_MAX, 200, dtype=dtype)
@@ -606,12 +730,8 @@ def test_bimodal_to_gaussian_interactive() -> None:
             lw=2,
             label="derivative",
         )
-        asymptote0 = asymptotic_line(x, 0, 1, 0.5, +mu, sigma)
-        asymptote1 = asymptotic_line(x, 0, 1, 0.5, -mu, sigma)
-        component_lines = [
-            ax.plot(x, asymptote0, "k--")[0],
-            ax.plot(x, asymptote1, "k--")[0],
-        ]
+        asymptote = bimodal_to_gaussian_approximation(x, mu, sigma)
+        component_lines = [ax.plot(x, asymptote, "k--")[0]]
         (input_pdf_line,) = ax_twin.plot(
             x,
             source.pdf(x),
@@ -685,8 +805,7 @@ def test_bimodal_to_gaussian_interactive() -> None:
         plt.show()
 
 
-@pytest.mark.interactive
-def test_2_components_interactive() -> None:
+def two_components_interactive() -> None:
     dtype = torch.float64
 
     x = torch.linspace(X_MIN, X_MAX, 200, dtype=dtype)
@@ -800,100 +919,7 @@ def test_2_components_interactive() -> None:
         plt.show()
 
 
-@dataclass
-class TransportPlotState3Components:
-    x: Tensor
-    line: Any
-    component_lines: list[Any]
-    input_pdf_line: Any
-    target_pdf_line: Any
-    twin_ax: Any
-    input_hist_container: Any
-    output_hist_container: Any
-    sliders: Mapping[str, Slider]
-
-    def update(self, _value: float) -> None:
-        dtype = self.x.dtype
-
-        mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
-        sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
-
-        omegas = torch.tensor(
-            [
-                self.sliders["omega_1"].val,
-                self.sliders["omega_2"].val,
-                self.sliders["omega_3"].val,
-            ],
-            dtype=dtype,
-        )
-        omegas = omegas / omegas.sum()
-
-        mus = torch.tensor(
-            [
-                self.sliders["mu_1"].val,
-                self.sliders["mu_2"].val,
-                self.sliders["mu_3"].val,
-            ],
-            dtype=dtype,
-        )
-
-        sigmas = torch.tensor(
-            [
-                self.sliders["sigma_1"].val,
-                self.sliders["sigma_2"].val,
-                self.sliders["sigma_3"].val,
-            ],
-            dtype=dtype,
-        )
-
-        y = mixture_to_gaussian((self.x - mu) / sigma, omegas, mus, sigmas)
-        source = make_input_mixture(mu, sigma, omegas, mus, sigmas)
-        target = stats.Normal(mu=0.0, sigma=1.0)
-        x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
-        y_samples = mixture_to_gaussian((x_samples - mu) / sigma, omegas, mus, sigmas)
-
-        self.line.set_ydata(y)
-        self.input_pdf_line.set_xdata(self.x)
-        self.input_pdf_line.set_ydata(source.pdf(self.x))
-        self.target_pdf_line.set_xdata(self.x)
-        self.target_pdf_line.set_ydata(target.pdf(self.x))
-        for k, line in enumerate(self.component_lines):
-            line.set_ydata(
-                asymptotic_line(
-                    (self.x - mu) / sigma,
-                    mus[k],
-                    sigmas[k],
-                    omegas[k],
-                    mus[k],
-                    sigmas[k],
-                )
-            )
-
-        self.input_hist_container.remove()
-        self.input_hist_container = self.twin_ax.hist(
-            x_samples,
-            bins=50,
-            density=True,
-            alpha=0.2,
-            color="green",
-        )[2]
-        self.output_hist_container.remove()
-        self.output_hist_container = self.twin_ax.hist(
-            y_samples,
-            bins=50,
-            density=True,
-            alpha=0.2,
-            color="red",
-        )[2]
-        self.twin_ax.set_xlabel("density")
-        self.twin_ax.grid(False)
-        self.twin_ax.patch.set_alpha(0)
-        self.twin_ax.set_ylim(0, PDF_MAX)
-        self.line.figure.canvas.draw_idle()
-
-
-@pytest.mark.interactive
-def test_3_components_interactive() -> None:
+def three_components_interactive() -> None:
     dtype = torch.float64
 
     x = torch.linspace(X_MIN, X_MAX, 200, dtype=dtype)
