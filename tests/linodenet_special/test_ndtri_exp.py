@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 import torch
 from pytest_benchmark.fixture import BenchmarkFixture
-from scipy.special import ndtri_exp as scipy_ndtri_exp_py
+from scipy.special import log_ndtr as scipy_log_ndtr, ndtri_exp as scipy_ndtri_exp_py
+from torch import Tensor
 from torch.autograd import gradcheck
 from torch.special import log_ndtr
 
@@ -18,26 +19,38 @@ from tests.testing import DEVICES, DTYPES, TestCase
 
 assert ndtri_exp_cpp is not None
 
-ATOL = 1e-6
-RTOL = 1e-3
+
+def _scipy_ndtri_exp_reference(values: Tensor, /) -> Tensor:
+    reference = scipy_ndtri_exp_py(values.detach().cpu().numpy())
+    tensor = torch.from_numpy(np.asarray(reference)).to(values.device, values.dtype)
+    assert tensor.isfinite().all()
+    return tensor
+
+
+def _scipy_log_ndtr_reference(values: Tensor, /) -> Tensor:
+    reference = scipy_log_ndtr(values.detach().cpu().numpy())
+    tensor = torch.from_numpy(np.asarray(reference)).to(values.device, values.dtype)
+    assert tensor.isfinite().all()
+    return tensor
+
+
 IMPLS = {
     "py": ndtri_exp_py,
     "cpp": ndtri_exp_cpp,
 }
+TOL = {
+    torch.float32: (1e-6, 1e-6),
+    torch.float64: (1e-10, 1e-10),
+}
 
 
-def _scipy_reference(values: torch.Tensor) -> torch.Tensor:
-    reference = scipy_ndtri_exp_py(values.detach().cpu().numpy())
-    return torch.from_numpy(np.asarray(reference)).to(values.device, values.dtype)
-
-
-def _assert_matches_reference(values: torch.Tensor, actual: torch.Tensor) -> None:
-    reference = _scipy_reference(values)
-    assert torch.isnan(actual).eq(torch.isnan(reference)).all()
-    assert torch.isposinf(actual).eq(torch.isposinf(reference)).all()
-    assert torch.isneginf(actual).eq(torch.isneginf(reference)).all()
-    finite = torch.isfinite(reference)
-    assert torch.allclose(actual[finite], reference[finite], atol=ATOL, rtol=RTOL)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+def test_torch_log_ndtr_matches_scipy(dtype: torch.dtype) -> None:
+    values = torch.linspace(-100, +100, steps=2048, dtype=dtype)
+    actual = log_ndtr(values)
+    reference = _scipy_log_ndtr_reference(values)
+    atol, rtol = TOL[dtype]
+    assert torch.allclose(actual, reference, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -50,6 +63,18 @@ class TestCorrectness(TestCase):
         (_LOWER_CUTOFF, _UPPER_CUTOFF),
         (_UPPER_CUTOFF + 1e-6, -1e-6),
     ]
+
+    TOL = {
+        torch.float32: (1e-6, 1e-6),
+        torch.float64: (1e-10, 1e-10),
+    }
+
+    REVERSIBLE_TOL = {
+        torch.float32: (1e-5, 1e-5),
+        torch.float64: (1e-10, 1e-10),
+    }
+
+    GRADCHECK_TOL = {}
 
     def test_special_values(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
@@ -112,7 +137,14 @@ class TestCorrectness(TestCase):
     ) -> None:
         impl = IMPLS[name]
         log_p = torch.linspace(lower, upper, steps=self.N, dtype=dtype, device=device)
-        _assert_matches_reference(log_p, impl(log_p))
+        expected = _scipy_ndtri_exp_reference(log_p)
+        actual = impl(log_p)
+        atol, rtol = self.TOL[dtype]
+
+        assert actual.isnan().eq(expected.isnan()).all()
+        assert actual.isposinf().eq(expected.isposinf()).all()
+        assert actual.isneginf().eq(expected.isneginf()).all()
+        assert torch.allclose(actual, expected, atol=atol, rtol=rtol)
 
     def test_reversible(
         self,
@@ -121,30 +153,22 @@ class TestCorrectness(TestCase):
         dtype: torch.dtype,
     ) -> None:
         impl = IMPLS[name]
-        match dtype:
-            case torch.float32:
-                lower = -5.0
-                upper = 5.0
-                atol = rtol = 1e-4
-            case torch.float64:
-                lower = -8.0
-                upper = 6.0
-                atol = rtol = 1e-6
-            case _:
-                raise ValueError(f"Unsupported dtype: {dtype}")
 
         x = torch.linspace(
-            lower,
-            upper,
+            -8.0,
+            +8.0,
             steps=self.N,
             dtype=dtype,
             device=device,
             requires_grad=True,
         )
-        x_recovered = impl(log_ndtr(x))
+        y = log_ndtr(x)
+        x_recovered = impl(y)
         x_recovered.sum().backward()
         assert x.grad is not None
+        assert x.grad.isfinite().all()
 
+        atol, rtol = self.TOL[dtype]
         self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
         self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
