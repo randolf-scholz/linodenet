@@ -26,7 +26,13 @@ class GaussianToBimodal(Protocol):
     r"""Protocol for Gaussian-to-bimodal transport implementations."""
 
     def __call__(
-        self, y: Tensor, /, mu: Tensor = ..., sigma: Tensor = ...
+        self,
+        y: Tensor,
+        /,
+        mu: Tensor = ...,
+        sigma: Tensor = ...,
+        *,
+        maxiter: int = ...,
     ) -> Tensor: ...
 
 
@@ -42,7 +48,14 @@ class GaussianToMixture(Protocol):
     r"""Protocol for Gaussian-to-mixture transport implementations."""
 
     def __call__(
-        self, y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+        self,
+        y: Tensor,
+        /,
+        weights: Tensor,
+        mus: Tensor,
+        sigmas: Tensor,
+        *,
+        maxiter: int = ...,
     ) -> Tensor: ...
 
 

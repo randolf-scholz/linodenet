@@ -157,11 +157,11 @@ def _compile_liblinodenet() -> KnownFunctions:
 
 
 def gaussian_to_mixture(
-    y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+    y: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor, *, maxiter: int = 10
 ) -> Tensor:
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
     assert _gaussian_to_mixture is not None, "missing kernel"
-    return _gaussian_to_mixture(y, weights, mus, sigmas)
+    return _gaussian_to_mixture(y, weights, mus, sigmas, maxiter=maxiter)
 
 
 def mixture_to_gaussian(
@@ -173,13 +173,18 @@ def mixture_to_gaussian(
 
 
 def gaussian_to_bimodal(
-    y: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
+    y: Tensor,
+    /,
+    mu: Tensor | float = 2.0,
+    sigma: Tensor | float = 1.0,
+    *,
+    maxiter: int = 10,
 ) -> Tensor:
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
     assert _gaussian_to_bimodal is not None, "missing kernel"
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    return _gaussian_to_bimodal(y, mu, sigma)
+    return _gaussian_to_bimodal(y, mu, sigma, maxiter=maxiter)
 
 
 def bimodal_to_gaussian(

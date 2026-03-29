@@ -14,7 +14,6 @@ using torch::special::log_ndtr;
 namespace {
 constexpr double LOG_HALF = -0.6931471805599453;
 constexpr double LOG_2PI = 1.8378770664093453;
-constexpr int64_t MAXITER = 10;
 
 void check_bimodal_args(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
     TORCH_CHECK(x.is_floating_point(), "x must be a floating point tensor.");
@@ -231,7 +230,13 @@ static variable_list backward(const AutogradContext *ctx, const variable_list &g
 };
 
 struct GaussianToBimodal : Function<GaussianToBimodal> {
-    static Tensor forward(AutogradContext *ctx, const Tensor &y, const Tensor &mu, const Tensor &sigma) {
+    static Tensor forward(
+        AutogradContext *ctx,
+        const Tensor &y,
+        const Tensor &mu,
+        const Tensor &sigma,
+        const int64_t maxiter
+    ) {
         torch::NoGradGuard guard;
         const Tensor m = mu.abs();
         Tensor lower = sigma * y - m;
@@ -241,7 +246,7 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         Tensor x_newton = torch::empty_like(x);
         Tensor x_bisect = torch::empty_like(x);
 
-        for (int64_t i = 0; i < MAXITER; ++i) {
+        for (int64_t i = 0; i < maxiter; ++i) {
             const auto [fx, d_fx] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
             at::sub_out(residual, fx, y);
             at::where_out(lower, residual < 0, x, lower);
@@ -277,7 +282,7 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         d_y = d_y.clamp_(sigma, upper_bound);
         grad_mu = grad_mu.clamp_(-upper_bound, upper_bound);
 
-        return {g * d_y, g * grad_mu, g * grad_sigma};
+        return {g * d_y, g * grad_mu, g * grad_sigma, Tensor()};
     }
 };
 
@@ -326,7 +331,8 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const Tensor &y,
         const Tensor &weights,
         const Tensor &mus,
-        const Tensor &sigmas
+        const Tensor &sigmas,
+        const int64_t maxiter
     ) {
         torch::NoGradGuard guard;
         const Tensor lines = mus + sigmas * y.unsqueeze(-1);
@@ -337,7 +343,7 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         Tensor x_newton = torch::empty_like(x);
         Tensor x_bisect = torch::empty_like(x);
 
-        for (int64_t i = 0; i < MAXITER; ++i) {
+        for (int64_t i = 0; i < maxiter; ++i) {
             const auto [fx, d_fx] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
             at::sub_out(residual, fx, y);
             at::where_out(lower, residual < 0, x, lower);
@@ -376,7 +382,8 @@ struct GaussianToMixture : Function<GaussianToMixture> {
             // Note: project onto tangent plane.
             grad_weights - grad_weights.mean(-1, true),
             grad_mus,
-            grad_sigmas
+            grad_sigmas,
+            Tensor()
         };
     }
 };
@@ -390,8 +397,14 @@ Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor 
     return torch::empty_like(tensors[0]);
 }
 
-Tensor gaussian_to_bimodal_meta(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
+Tensor gaussian_to_bimodal_meta(
+    const Tensor &y,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const int64_t maxiter
+) {
     check_bimodal_args(y, mu, sigma);
+    TORCH_CHECK(maxiter >= 0, "maxiter must be a non-negative integer.");
     const auto tensors = torch::broadcast_tensors({y, mu, sigma});
     return torch::empty_like(tensors[0]);
 }
@@ -400,8 +413,13 @@ Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigm
     return BimodalToGaussian::apply(x, mu, sigma);
 }
 
-Tensor gaussian_to_bimodal(const Tensor &y, const Tensor &mu, const Tensor &sigma) {
-    return GaussianToBimodal::apply(y, mu, sigma);
+Tensor gaussian_to_bimodal(
+    const Tensor &y,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const int64_t maxiter
+) {
+    return GaussianToBimodal::apply(y, mu, sigma, maxiter);
 }
 
 Tensor mixture_to_gaussian_meta(
@@ -419,9 +437,11 @@ Tensor gaussian_to_mixture_meta(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
-    const Tensor &sigmas
+    const Tensor &sigmas,
+    const int64_t maxiter
 ) {
     check_mixture_args(y, weights, mus, sigmas);
+    TORCH_CHECK(maxiter >= 0, "maxiter must be a non-negative integer.");
     const auto tensors = torch::broadcast_tensors({y, weights, mus, sigmas});
     return torch::empty_like(tensors[0]);
 }
@@ -439,18 +459,19 @@ Tensor gaussian_to_mixture(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
-    const Tensor &sigmas
+    const Tensor &sigmas,
+    const int64_t maxiter
 ) {
-    return GaussianToMixture::apply(y, weights, mus, sigmas);
+    return GaussianToMixture::apply(y, weights, mus, sigmas, maxiter);
 }
 
 } // namespace linodenet_special
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("bimodal_to_gaussian(Tensor _, Tensor mu, Tensor sigma) -> Tensor");
-    m.def("gaussian_to_bimodal(Tensor _, Tensor mu, Tensor sigma) -> Tensor");
+    m.def("gaussian_to_bimodal(Tensor _, Tensor mu, Tensor sigma, int maxiter) -> Tensor");
     m.def("mixture_to_gaussian(Tensor _, Tensor weights, Tensor mus, Tensor sigmas) -> Tensor");
-    m.def("gaussian_to_mixture(Tensor _, Tensor weights, Tensor mus, Tensor sigmas) -> Tensor");
+    m.def("gaussian_to_mixture(Tensor _, Tensor weights, Tensor mus, Tensor sigmas, int maxiter) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
