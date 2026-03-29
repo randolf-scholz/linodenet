@@ -141,7 +141,7 @@ class BimodalTest(TestCase):
             dtype=dtype,
             device=device,
         )
-        return torch.cat([-x, x]).requires_grad_(True)
+        return torch.cat([-x.flip(0), x]).requires_grad_(True)
 
     @classmethod
     def make_inv_test_range(
@@ -163,7 +163,7 @@ class BimodalTest(TestCase):
             dtype=dtype,
             device=device,
         )
-        return torch.cat([-y, y]).requires_grad_(True)
+        return torch.cat([-y.flip(0), y]).requires_grad_(True)
 
     @classmethod
     def make_tail_range(
@@ -176,7 +176,7 @@ class BimodalTest(TestCase):
             dtype=dtype,
             device=device,
         )
-        return torch.cat([-x_tail, x_tail]).requires_grad_(True)
+        return torch.cat([-x_tail.flip(0), x_tail]).requires_grad_(True)
 
     @classmethod
     def make_inv_tail_range(
@@ -189,17 +189,17 @@ class BimodalTest(TestCase):
             dtype=dtype,
             device=device,
         )
-        return torch.cat([-y_tail, y_tail]).requires_grad_(True)
+        return torch.cat([-y_tail.flip(0), y_tail]).requires_grad_(True)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
+@pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN, ids=str)
 class TestBimodalToGaussian(BimodalTest):
     X_MIN = -20
     X_MAX = 20
-    STDVS = BimodalTest.STDVS
-    MEANS = BimodalTest.MEANS
 
     TOL = {
         torch.float32: (1e-4, 1e-4),
@@ -211,8 +211,6 @@ class TestBimodalToGaussian(BimodalTest):
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_forward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -237,8 +235,6 @@ class TestBimodalToGaussian(BimodalTest):
 
         self.assert_close(y1, -y2)
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -279,18 +275,19 @@ class TestBimodalToGaussian(BimodalTest):
         self.assert_close(x2.grad[0], λ, rtol=1e-7)
         self.assert_close(x1.grad, x2.grad)
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    def test_hard_contract_approximation(
+    def test_piecewise_linear_approximation(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
         r"""When the gaussians are well separated, we can approximate with hard_bend."""
         impl = BIMODAL_TO_GAUSSIAN[name]
         x = self.make_test_range(mean, stdv, dtype=dtype, device=device)
+        x = torch.linspace(
+            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
+        )
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        λ = torch.exp(-0.5 * (μ / σ) ** 2) / σ
+        λ = self.get_y_star(μ, σ)
 
         y = impl(x, μ, σ)
         assert y.dtype == dtype
@@ -303,10 +300,12 @@ class TestBimodalToGaussian(BimodalTest):
         assert y_approx.isfinite().all(), (
             "Hard-contract approximation should produce finite outputs"
         )
-        self.assert_upper_bounded(y - y_approx, μ / σ)
+        # y = y_approx + O(\log(2)((x-μ⋅\sign(x))/σ)⁻¹)
+        atol, rtol = self.TOL[dtype]
+        error = (y - y_approx).abs()
+        error_bound = math.log(2) * σ / (x - x.sign() * μ).abs()
+        self.assert_upper_bounded(error, error_bound, atol=atol, rtol=rtol)
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_tail_behavior(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -322,8 +321,6 @@ class TestBimodalToGaussian(BimodalTest):
         self.assert_close(x_tail.grad, 1 / σ, rtol=1e-2)
         self.assert_upper_bounded(x_tail.grad, 1 / σ, rtol=0.0)
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_bimodal_to_gaussian_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -343,8 +340,6 @@ class TestBimodalToGaussian(BimodalTest):
             fast_mode=True,
         )
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -365,18 +360,15 @@ class TestBimodalToGaussian(BimodalTest):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
+@pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
 class TestBimodalToGaussianValueAndJac(BimodalTest):
-    STDVS = BimodalTest.STDVS
-    MEANS = BimodalTest.MEANS
-
     GRADCHECK_TOL = {
         torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -416,9 +408,9 @@ class TestGaussianToBimodal(BimodalTest):
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
-    def test_hard_expand_approximation(
+    @pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
+    @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
+    def test_piecewise_linear_approximation(
         self, name: str, mean, stdv, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
@@ -428,7 +420,7 @@ class TestGaussianToBimodal(BimodalTest):
         )
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        λ = (torch.exp(-0.5 * (μ / σ) ** 2) / σ).item()
+        λ = self.get_y_star(μ, σ)
 
         x = impl(y, μ, σ)
         assert x.dtype == dtype
@@ -443,6 +435,13 @@ class TestGaussianToBimodal(BimodalTest):
         )
         self.assert_upper_bounded(x - x_approx, μ * σ, atol=1e-1, rtol=1e-1)
 
+    def test_tail_behavior(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        impl = GAUSSIAN_TO_BIMODAL[name]
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        λ = self.get_y_star(μ, σ)
         y_tail = self.make_inv_tail_range(mean, stdv, dtype=dtype, device=device)
         x_tail = impl(y_tail, μ, σ)
         x_tail_approx = hard_bend(y_tail, 1 / λ, μ, σ)
