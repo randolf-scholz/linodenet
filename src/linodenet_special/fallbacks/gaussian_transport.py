@@ -18,6 +18,7 @@ from typing import Final
 import torch
 from torch import Tensor
 from torch.autograd import Function
+from torch.linalg import vecdot
 from torch.special import log_ndtr
 
 from linodenet_special.interfaces import DEFAULT_NEWTON_MAXITER
@@ -305,7 +306,7 @@ def _gaussian_to_mixture_value(
     lines = mus + sigmas * y.unsqueeze(-1)
     lower = lines.amin(dim=-1)
     upper = lines.amax(dim=-1)
-    x = torch.einsum("k, ...k -> ...", weights, lines)
+    x = vecdot(weights, lines, dim=-1)
 
     for _ in range(maxiter):
         x = x.clamp(lower, upper)
