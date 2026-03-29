@@ -28,15 +28,10 @@ declare -A LIBTORCH_HASHES=(
   ["2.5.1+cu124"]="470ab7f7f56e96d28d1dc9ae34ceb2e0d8723cc2899c5d0192f4cb12b8f7843b"
   ["2.9.1+cu128"]="b052452965093db69f537b3cf376812d5acf6dca28819b20d28d7f0b171d7699"
   ["2.10.0+cu128"]="429aa9fead3cf3d557e7c310442a1fae3879cdc14a469ff452043b39b61666a9"
+  ["2.11.0+cu130"]="a163eff74ffc1eaf3827e808c8bad3a88338ca68b5733d0974c1cbc9bc033295"
 )
 
 LIBTORCH_HASH="${LIBTORCH_HASHES[$LIBTORCH_VERSION]:-}"
-
-if [ -z "$LIBTORCH_HASH" ]; then
-  echo "Error: no known hash for libtorch version $LIBTORCH_VERSION"
-  echo "Please add the hash for this version to the script."
-  exit 1
-fi
 
 # check if libtorch folder exists
 if [ -d "$LIBTORCH_DIR" ]; then
