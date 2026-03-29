@@ -293,17 +293,12 @@ class TestBimodalToGaussian(BimodalTest):
         y_zero = impl(zero, μ, σ)
         self.assert_close(y_zero, zero)
 
-        x1 = torch.linspace(*(0, self.X_MAX), steps=self.N, dtype=dtype, device=device)
-        y1 = impl(x1, μ, σ)
-        assert y1.dtype == dtype
-        assert y1.isfinite().all()
+        x = self.make_full_range(dtype=dtype, device=device)
+        y = impl(x, μ, σ)
+        assert y.dtype == dtype
+        assert y.isfinite().all()
 
-        x2 = torch.linspace(*(0, self.X_MIN), steps=self.N, dtype=dtype, device=device)
-        y2 = impl(x2, μ, σ)
-        assert y2.dtype == dtype
-        assert y2.isfinite().all()
-
-        self.assert_close(y1, -y2)
+        self.assert_close(-y, y.flip(0))
 
     def test_bimodal_to_gaussian_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -536,16 +531,13 @@ class TestGaussianToBimodal(BimodalTest):
         x_zero = impl(zero, μ, σ)
         self.assert_close(x_zero, zero)
 
-        y1 = torch.linspace(*(0, self.X_MAX), steps=self.N, dtype=dtype, device=device)
-        x1 = impl(y1, μ, σ)
-        assert x1.dtype == dtype
-        assert x1.isfinite().all()
+        y = self.make_full_range(dtype=dtype, device=device)
+        x = impl(y, μ, σ)
+        assert x.dtype == dtype
+        assert x.isfinite().all()
 
-        y2 = torch.linspace(*(0, self.X_MIN), steps=self.N, dtype=dtype, device=device)
-        x2 = impl(y2, μ, σ)
-        assert x2.dtype == dtype
-        assert x2.isfinite().all()
-        self.assert_close(x1, -x2)
+        x1, x2 = x.chunk(2)
+        self.assert_close(-x1, x2.flip(0))
 
     def test_gaussian_to_bimodal_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
