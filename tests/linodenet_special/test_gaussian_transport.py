@@ -98,7 +98,7 @@ class BimodalTest(TestCase):
         threshold = math.floor(math.sqrt(-math.log(torch.finfo(dtype).resolution)))
         if mean / stdv <= threshold:
             return 0.0
-        return max(0.0, mean - stdv * threshold)
+        return max(0.0, mean - stdv * threshold)  # ≤ μ
 
     @classmethod
     def get_x_safe_inv(cls, mean: float, stdv: float, *, dtype: torch.dtype) -> float:
@@ -119,7 +119,7 @@ class BimodalTest(TestCase):
         interval around the origin.
         """
         x_safe = cls.get_x_safe(mean, stdv, dtype=dtype)
-        return max(0.0, (mean - x_safe) / stdv)
+        return max(0.0, (mean - x_safe) / stdv)  # ≤ μ/σ
 
     @classmethod
     def make_test_range(
@@ -129,14 +129,14 @@ class BimodalTest(TestCase):
         x_safe = cls.get_x_safe(mean, stdv, dtype=dtype)
         if x_safe == 0.0:
             return torch.linspace(
-                *(-mean, mean),
+                *(-mean - 4 * stdv, mean + 4 * stdv),
                 steps=cls.N,
                 dtype=dtype,
                 device=device,
                 requires_grad=True,
             )
         x = torch.linspace(
-            *(x_safe, mean + 5 * stdv),
+            *(x_safe, mean + 4 * stdv),
             steps=cls.N // 2,
             dtype=dtype,
             device=device,
@@ -151,20 +151,45 @@ class BimodalTest(TestCase):
         y_safe = cls.get_x_safe_inv(mean, stdv, dtype=dtype)
         if y_safe == 0.0:
             return torch.linspace(
-                *(-mean / stdv, mean / stdv),
+                *(-mean / stdv - 4, mean / stdv + 4),
                 steps=cls.N,
                 dtype=dtype,
                 device=device,
                 requires_grad=True,
             )
         y = torch.linspace(
-            *(y_safe, mean / stdv),
+            *(y_safe, mean / stdv + 4),
             steps=cls.N // 2,
             dtype=dtype,
             device=device,
-            requires_grad=True,
         )
         return torch.cat([-y, y]).requires_grad_(True)
+
+    @classmethod
+    def make_tail_range(
+        cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
+    ) -> Tensor:
+        r"""Construct a symmetric tail range outside the bimodal transition region."""
+        x_tail = torch.linspace(
+            *(mean + 10 * stdv, mean + 50 * stdv),
+            steps=cls.N,
+            dtype=dtype,
+            device=device,
+        )
+        return torch.cat([-x_tail, x_tail]).requires_grad_(True)
+
+    @classmethod
+    def make_inv_tail_range(
+        cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
+    ) -> Tensor:
+        r"""Construct a symmetric inverse-tail range outside the Gaussian core."""
+        y_tail = torch.linspace(
+            *(mean / stdv + 10, mean / stdv + 50),
+            steps=cls.N,
+            dtype=dtype,
+            device=device,
+        )
+        return torch.cat([-y_tail, y_tail]).requires_grad_(True)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -288,10 +313,7 @@ class TestBimodalToGaussian(BimodalTest):
         impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        x_tail = torch.linspace(
-            *(μ + 10 * σ, μ + 50 * σ), steps=self.N, dtype=dtype, device=device
-        )
-        x_tail = torch.cat([-x_tail, x_tail]).requires_grad_()
+        x_tail = self.make_tail_range(mean, stdv, dtype=dtype, device=device)
         y_tail = impl(x_tail, μ, σ)
         assert y_tail.isfinite().all()
         y_tail.sum().backward()
@@ -362,12 +384,12 @@ class TestBimodalToGaussianValueAndJac(BimodalTest):
         impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x_narrow = self.make_test_range(mean, stdv, dtype=dtype, device=device)
+        x = self.make_test_range(mean, stdv, dtype=dtype, device=device)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
             impl,
-            (x_narrow, μ, σ),
+            (x, μ, σ),
             atol=atol,
             rtol=rtol,
             eps=eps,
@@ -421,10 +443,7 @@ class TestGaussianToBimodal(BimodalTest):
         )
         self.assert_upper_bounded(x - x_approx, μ * σ, atol=1e-1, rtol=1e-1)
 
-        y_tail = torch.linspace(
-            *(μ + 5 * σ, μ + 50 * σ), steps=self.N, dtype=dtype, device=device
-        )
-        y_tail = torch.cat((y_tail, -y_tail), dim=0)
+        y_tail = self.make_inv_tail_range(mean, stdv, dtype=dtype, device=device)
         x_tail = impl(y_tail, μ, σ)
         x_tail_approx = hard_bend(y_tail, 1 / λ, μ, σ)
         self.assert_upper_bounded((x_tail - x_tail_approx).abs(), σ / y_tail.abs())
@@ -498,10 +517,7 @@ class TestGaussianToBimodal(BimodalTest):
 
         self.assert_close(y1.grad, y2.grad)
 
-        tail_values = torch.linspace(
-            *(μ + 5 * σ, μ + 50 * σ), steps=self.N, dtype=dtype, device=device
-        )
-        tail = torch.cat([tail_values, tail_values.neg()]).requires_grad_()
+        tail = self.make_inv_tail_range(mean, stdv, dtype=dtype, device=device)
         x_tail = impl(tail, μ, σ)
         assert x_tail.isfinite().all()
         x_tail.sum().backward()
@@ -522,8 +538,7 @@ class TestGaussianToBimodal(BimodalTest):
         y = self.make_inv_test_range(mean, stdv, dtype=dtype, device=device)
         x_inv = inverse_impl(y, μ, σ)
         y_inv = forward_impl(x_inv, μ, σ)
-        z = y_inv.sum()
-        z.backward()
+        y_inv.sum().backward()
         assert y.grad is not None
         atol, rtol = self.TOL[dtype]
         self.assert_close(y_inv, y, atol=atol, rtol=rtol)
