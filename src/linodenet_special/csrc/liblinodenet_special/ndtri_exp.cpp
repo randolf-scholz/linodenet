@@ -103,20 +103,36 @@ Tensor ndtri_exp_meta(const Tensor &log_p) {
 }
 
 Tensor ndtri_exp(const Tensor &log_p) {
-    const double finfo_min_value = finfo_min(log_p.scalar_type());
+    const Tensor invalid_mask = log_p.isnan() | (log_p > 0.0);
+    const Tensor neginf_mask = log_p.isneginf();
+    const Tensor small_mask = (log_p < LOWER_CUTOFF) & ~(invalid_mask | neginf_mask);
+    const Tensor medium_mask = (log_p >= LOWER_CUTOFF) & (log_p <= UPPER_CUTOFF);
+    const Tensor large_mask = (log_p > UPPER_CUTOFF) & ~invalid_mask;
+
+    // Mask the unused part of each branch with a safe dummy value.
+    // This prevents propagation of spurious NANs through inactive branches.
+    const Tensor dummy = torch::scalar_tensor(-1.0, log_p.options());
+    const Tensor small_input = torch::where(small_mask, log_p, dummy);
+    const Tensor medium_input = torch::where(medium_mask, log_p, dummy);
+    const Tensor large_input = torch::where(large_mask, log_p, dummy);
+
     const Tensor neg_infinity = torch::scalar_tensor(NEG_INFINITY, log_p.options());
+    const Tensor invalid = torch::full({}, std::numeric_limits<double>::quiet_NaN(), log_p.options());
+    const Tensor small = ndtri_exp_small(small_input);
+    const Tensor medium = torch::special::ndtri(medium_input.exp());
+    const Tensor large = -torch::special::ndtri(-large_input.expm1());
 
     return torch::where(
-        log_p < LOWER_CUTOFF,
+        invalid_mask,
+        invalid,
         torch::where(
-            log_p < finfo_min_value,
+            neginf_mask,
             neg_infinity,
-            ndtri_exp_small(log_p)
-        ),
-        torch::where(
-            log_p < UPPER_CUTOFF,
-            torch::special::ndtri(log_p.exp()),
-            -torch::special::ndtri(-log_p.expm1())
+            torch::where(
+                small_mask,
+                small,
+                torch::where(medium_mask, medium, large)
+            )
         )
     );
 }
