@@ -447,9 +447,9 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
         torch.manual_seed(self.SEED)
         forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
         inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
+        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
 
         y, d_x = forward_impl(x, μ, σ)
         x_inv, d_y = inverse_impl(y, μ, σ)
@@ -484,10 +484,10 @@ class TestGaussianToBimodal(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
+        y = self.make_full_range(dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
 
-        y = self.make_full_range(dtype=dtype, device=device)
         x = impl(y, μ, σ)
         assert x.dtype == dtype
         assert x.isfinite().all()
@@ -500,9 +500,9 @@ class TestGaussianToBimodal(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
+        y_safe = self.get_y_safe(mean, stdv, dtype=dtype)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        y_safe = self.get_y_safe(mean, stdv, dtype=dtype)
         λ_log = 0.5 * (μ / σ) ** 2 + σ.log()
         g_rtol = 2**-4
         log_tol = math.log(1 + g_rtol)
@@ -543,9 +543,9 @@ class TestGaussianToBimodal(BimodalTest):
         torch.manual_seed(self.SEED)
         inverse_impl = GAUSSIAN_TO_BIMODAL[name]
         forward_impl = BIMODAL_TO_GAUSSIAN[name]
+        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
         x_inv = inverse_impl(y, μ, σ)
         y_inv = forward_impl(x_inv, μ, σ)
         y_inv.sum().backward()
