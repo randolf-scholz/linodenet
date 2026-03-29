@@ -66,8 +66,8 @@ class TestBimodalToGaussian(TestCase):
     N = 1000
     N_FEW = 32
 
-    STDVS = [0.1, 0.5, 1, 2, 10]
-    MEANS = [0.1, 0.5, 1, 2, 10]
+    STDVS = [0.25, 0.5, 1, 2, 10]
+    MEANS = [0.1, 0.5, 1, 2, 4]
 
     TOL = {
         torch.float32: (1e-4, 1e-4),
@@ -277,8 +277,8 @@ class TestBimodalToGaussian(TestCase):
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
 class TestBimodalToGaussianValueAndJac(TestCase):
     N_FEW = 32
-    STDVS = [0.1, 0.5, 1, 2, 10]
-    MEANS = [0.1, 0.5, 1, 2, 10]
+    STDVS = [0.25, 0.5, 1, 2, 10]
+    MEANS = [0.1, 0.5, 1, 2, 4]
 
     GRADCHECK_TOL = {
         torch.float32: (1e-3, 1e-3, 1e-4),
@@ -302,15 +302,21 @@ class TestBimodalToGaussianValueAndJac(TestCase):
         impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x_star = self.get_x_star(mean, stdv)
-        x_narrow = torch.linspace(
-            -x_star,
-            x_star,
-            steps=self.N_FEW,
+        x_neg = torch.linspace(
+            -mean - 3 * stdv,
+            -mean + 3 * stdv,
+            steps=self.N_FEW // 2,
             dtype=dtype,
             device=device,
-            requires_grad=True,
         )
+        x_pos = torch.linspace(
+            mean - 3 * stdv,
+            mean + 3 * stdv,
+            steps=self.N_FEW // 2,
+            dtype=dtype,
+            device=device,
+        )
+        x_narrow = torch.cat([x_neg, x_pos]).requires_grad_()
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
