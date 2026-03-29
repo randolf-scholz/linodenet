@@ -65,9 +65,23 @@ GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC = {
 class BimodalTest(TestCase):
     SEED = 0
     N = 256
+    X_MIN = -20
+    X_MAX = 20
 
     STDVS = [0.25, 0.5, 1, 2, 10]
     MEANS = [0.1, 0.5, 1, 2, 4]
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-7, 1e-7),
+    }
+    FORWARD_GRADCHECK_TOL = {
+        torch.float32: (1e-3, 1e-3, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
+    }
+    INVERSE_GRADCHECK_TOL = {
+        torch.float32: (1e-2, 1e-2, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
+    }
 
     SAFE_SIGMA_THRESHOLD = {
         torch.float32: 3.0,
@@ -195,6 +209,17 @@ class BimodalTest(TestCase):
         )
         return torch.cat([-y_tail.flip(0), y_tail]).requires_grad_(True)
 
+    @classmethod
+    def make_full_range(cls, *, dtype: torch.dtype, device: str) -> Tensor:
+        r"""Construct the shared full test range on $[X_\min, X_\max]$."""
+        return torch.linspace(
+            *(cls.X_MIN, cls.X_MAX),
+            steps=cls.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
 
 class TestMixture(TestCase):
     SEED = 0
@@ -256,19 +281,6 @@ class TestMixture(TestCase):
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN, ids=str)
 class TestBimodalToGaussian(BimodalTest):
-    X_MIN = -20
-    X_MAX = 20
-
-    TOL = {
-        torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-7, 1e-7),
-    }
-
-    GRADCHECK_TOL = {
-        torch.float32: (1e-3, 1e-3, 1e-4),
-        torch.float64: (1e-6, 1e-6, 1e-8),
-    }
-
     def test_bimodal_to_gaussian_forward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -339,9 +351,7 @@ class TestBimodalToGaussian(BimodalTest):
         torch.manual_seed(self.SEED)
         r"""When the gaussians are well separated, we can approximate with hard_bend."""
         impl = BIMODAL_TO_GAUSSIAN[name]
-        x = torch.linspace(
-            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
-        )
+        x = self.make_full_range(dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = self.get_y_star(μ, σ)
@@ -387,7 +397,7 @@ class TestBimodalToGaussian(BimodalTest):
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
 
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
         gradcheck(
             impl,
             (x, μ, σ),
@@ -421,16 +431,6 @@ class TestBimodalToGaussian(BimodalTest):
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
 class TestBimodalToGaussianValueAndGrad(BimodalTest):
-    TOL = {
-        torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-7, 1e-7),
-    }
-
-    GRADCHECK_TOL = {
-        torch.float32: (1e-3, 1e-3, 1e-4),
-        torch.float64: (1e-6, 1e-6, 1e-8),
-    }
-
     def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -440,7 +440,7 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
 
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
         gradcheck(
             impl,
             (x, μ, σ),
@@ -477,27 +477,12 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL, ids=str)
 class TestGaussianToBimodal(BimodalTest):
-    X_MIN = -20
-    X_MAX = 20
-
-    TOL = {
-        torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-7, 1e-7),
-    }
-
-    GRADCHECK_TOL = {
-        torch.float32: (1e-2, 1e-2, 1e-4),
-        torch.float64: (1e-6, 1e-6, 1e-8),
-    }
-
     def test_piecewise_linear_approximation(
         self, name: str, mean, stdv, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
-        y = torch.linspace(
-            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
-        )
+        y = self.make_full_range(dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = self.get_x_star(μ, σ)
@@ -630,7 +615,7 @@ class TestGaussianToBimodal(BimodalTest):
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         y_narrow = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        atol, rtol, eps = self.INVERSE_GRADCHECK_TOL[dtype]
         gradcheck(
             impl,
             (y_narrow, μ, σ),
@@ -646,12 +631,8 @@ class TestGaussianToBimodal(BimodalTest):
         torch.manual_seed(self.SEED)
         forward_impl = GAUSSIAN_TO_BIMODAL[name]
         inverse_impl = BIMODAL_TO_GAUSSIAN[name]
-        y = torch.linspace(
-            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
-        )
-        x = torch.linspace(
-            *(self.X_MIN, self.X_MAX), steps=self.N, dtype=dtype, device=device
-        )
+        y = self.make_full_range(dtype=dtype, device=device)
+        x = self.make_full_range(dtype=dtype, device=device)
         μ_pos = torch.tensor(mean, dtype=dtype, device=device)
         μ_neg = torch.tensor(-mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
@@ -672,16 +653,6 @@ class TestGaussianToBimodal(BimodalTest):
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC, ids=str)
 class TestGaussianToBimodalValueAndGrad(BimodalTest):
-    TOL = {
-        torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-7, 1e-7),
-    }
-
-    GRADCHECK_TOL = {
-        torch.float32: (1e-2, 1e-2, 1e-4),
-        torch.float64: (1e-6, 1e-6, 1e-8),
-    }
-
     def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -691,7 +662,7 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
         y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        atol, rtol, eps = self.INVERSE_GRADCHECK_TOL[dtype]
         gradcheck(
             impl,
             (y, μ, σ),
