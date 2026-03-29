@@ -31,14 +31,14 @@ def hard_bend(
         m: The slope of the outer regions, defaults to 1.0.
 
     Note: Inversion formula
-        $y = f(x, a, c, m) ⟺ x = f(y, 1/a, c, 1/m)$
+        $y = f(x, a, c, m) ⟺ x = f(y, 1/a, c/m, 1/m)$
 
     Note:
+        An optimal transport from $N(0,1)$ to $½N(μ, σ²) + ½N(-μ, σ²)$
+        can be approximated with hard_bend(x, σℯ^{½μ²/σ²}, μ, σ).
+
         The optimal transport from $½N(μ, σ²) + ½N(-μ, σ²)$ to $N(0,1)$
         can be approximated with hard_bend(x, σ⁻¹ℯ^{-½μ²/σ²}, μ/σ, 1/σ).
-
-        An optimal transport from $N(0,1)$ to $½N(μ, σ²) + ½N(-μ, σ²)$ can be
-        approximated with hard_bend(x, σℯ^{½μ²/σ²}, μ/σ, σ).
     """
     a = torch.as_tensor(a, dtype=x.dtype, device=x.device)
     m = torch.as_tensor(m, dtype=x.dtype, device=x.device)
