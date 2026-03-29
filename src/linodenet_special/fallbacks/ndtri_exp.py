@@ -105,7 +105,7 @@ _COEFF_CACHE: Final[
 
 
 def _get_coeffs(
-    device: torch.device, dtype: torch.dtype
+    device: torch.device, dtype: torch.dtype, /
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     key = (device, dtype)
     coeffs = _COEFF_CACHE.get(key)
@@ -120,7 +120,7 @@ def _get_coeffs(
     return coeffs
 
 
-def _polevl(x: Tensor, coeffs: Tensor) -> Tensor:
+def _polyeval(x: Tensor, coeffs: Tensor, /) -> Tensor:
     # Horner, coeffs in descending order
     y = torch.zeros_like(x)
     for c in coeffs:
@@ -128,7 +128,7 @@ def _polevl(x: Tensor, coeffs: Tensor) -> Tensor:
     return y
 
 
-def _p1evl(x: Tensor, coeffs: Tensor) -> Tensor:
+def _poly1eval(x: Tensor, coeffs: Tensor, /) -> Tensor:
     # Horner with leading 1: evaluates x^n + c0*x^(n-1)+...+c_{n-1}
     y = torch.ones_like(x)
     for c in coeffs:
@@ -136,18 +136,17 @@ def _p1evl(x: Tensor, coeffs: Tensor) -> Tensor:
     return y
 
 
-def _ndtri_exp_small(log_p: Tensor) -> Tensor:
+def _ndtri_exp_small(log_p: Tensor, /) -> Tensor:
     r"""Rational approximation of Φ⁻¹√(-2 log p) when log_p < -2."""
     # cast the coefficients to the same dtype and device as log_p
     p1, q1, p2, q2 = _get_coeffs(log_p.device, log_p.dtype)
-    # Avoid potential overflow in -2*y for absurdly negative y (mirrors SciPy idea).
-    x = _SQRT_2 * torch.sqrt(-log_p)
+    x = torch.sqrt(-2 * log_p)
     z = x.reciprocal()  # 1/x
     x0 = x - z * x.log()  # x - log(x)/x
     x1 = torch.where(
         x < 8.0,
-        z * _polevl(z, p1) / _p1evl(z, q1),
-        z * _polevl(z, p2) / _p1evl(z, q2),
+        z * _polyeval(z, p1) / _poly1eval(z, q1),
+        z * _polyeval(z, p2) / _poly1eval(z, q2),
     )
     return x1 - x0
 
@@ -169,10 +168,11 @@ def ndtri_exp(log_p: Tensor) -> Tensor:
     References:
         - scipy.special.ndtri_exp
     """
+    invalid_mask = log_p.isnan() | (log_p > 0)
     neginf_mask = log_p.isneginf()
-    small_mask = (log_p < _LOWER_CUTOFF) & ~neginf_mask
+    small_mask = (log_p < _LOWER_CUTOFF) & ~(invalid_mask | neginf_mask)
     medium_mask = (log_p >= _LOWER_CUTOFF) & (log_p <= _UPPER_CUTOFF)
-    large_mask = log_p > _UPPER_CUTOFF
+    large_mask = (log_p > _UPPER_CUTOFF) & ~invalid_mask
 
     # mask the unused part of the test with constant dummy value.
     # this prevents propagation of spurious NANs.
@@ -183,16 +183,21 @@ def ndtri_exp(log_p: Tensor) -> Tensor:
     large_input = torch.where(large_mask, log_p, dummy)
 
     neginf = log_p.new_full((), -math.inf)
+    invalid = log_p.new_full((), math.nan)
     small = _ndtri_exp_small(small_input)
     medium = ndtri(medium_input.exp())
     large = -ndtri(-large_input.expm1())
 
     return torch.where(
-        neginf_mask,
-        neginf,
+        invalid_mask,
+        invalid,
         torch.where(
-            small_mask,
-            small,
-            torch.where(medium_mask, medium, large),
+            neginf_mask,
+            neginf,
+            torch.where(
+                small_mask,
+                small,
+                torch.where(medium_mask, medium, large),
+            ),
         ),
     )
