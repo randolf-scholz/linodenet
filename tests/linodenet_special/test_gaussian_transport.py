@@ -404,10 +404,13 @@ class TestBimodalToGaussianValueAndJac(BimodalTest):
 
         y, d_x = forward_impl(x, μ, σ)
         x_inv, d_y = inverse_impl(y, μ, σ)
+        x_inv.sum().backward()
+        assert x.grad is not None
 
         atol, rtol = self.TOL[dtype]
         self.assert_close(x_inv, x, atol=atol, rtol=rtol)
         self.assert_close(d_x * d_y, 1.0, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -673,10 +676,13 @@ class TestGaussianToBimodalValueAndJac(BimodalTest):
 
         x, d_y = inverse_impl(y, μ, σ)
         y_inv, d_x = forward_impl(x, μ, σ)
+        y_inv.sum().backward()
+        assert y.grad is not None
 
         atol, rtol = self.TOL[dtype]
         self.assert_close(y_inv, y, atol=atol, rtol=rtol)
         self.assert_close(d_x * d_y, 1.0, atol=atol, rtol=rtol)
+        self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
