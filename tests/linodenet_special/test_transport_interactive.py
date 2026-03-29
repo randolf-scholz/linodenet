@@ -15,6 +15,7 @@ from torch import Tensor
 
 from linodenet_special.fallbacks import (
     bimodal_to_gaussian,
+    bimodal_to_gaussian_value_and_jac,
     gaussian_to_bimodal,
     mixture_to_gaussian,
 )
@@ -353,10 +354,12 @@ class TransportPlotState2:
 class TransportPlotStateBimodal:
     x: Tensor
     line: Any
+    jac_line: Any
     component_lines: list[Any]
     input_pdf_line: Any
     target_pdf_line: Any
     twin_ax: Any
+    jac_ax: Any
     input_hist_container: Any
     output_hist_container: Any
     sliders: Mapping[str, Slider]
@@ -367,7 +370,7 @@ class TransportPlotStateBimodal:
         mu = torch.tensor(self.sliders["mu"].val, dtype=dtype)
         sigma = torch.tensor(self.sliders["sigma"].val, dtype=dtype)
 
-        y = bimodal_to_gaussian(self.x, mu, sigma)
+        y, jac = bimodal_to_gaussian_value_and_jac(self.x, mu, sigma)
         twin = make_bimodal_distribution(mu, sigma)
         target = stats.Normal(mu=0.0, sigma=1.0)
         x_samples = torch.tensor(twin.sample(shape=1_000, rng=0), dtype=dtype)
@@ -376,6 +379,7 @@ class TransportPlotStateBimodal:
         asymptote1 = asymptotic_line(self.x, 0, 1, 0.5, -mu, sigma)
 
         self.line.set_ydata(y)
+        self.jac_line.set_ydata(jac)
         self.component_lines[0].set_ydata(asymptote0)
         self.component_lines[1].set_ydata(asymptote1)
         self.input_pdf_line.set_xdata(self.x)
@@ -403,6 +407,8 @@ class TransportPlotStateBimodal:
         self.twin_ax.grid(False)
         self.twin_ax.patch.set_alpha(0)
         self.twin_ax.set_ylim(0, PDF_MAX)
+        jac_max = float(torch.max(jac).item())
+        self.jac_ax.set_ylim(0, max(1.0, 1.05 * jac_max))
         self.line.figure.canvas.draw_idle()
 
 
@@ -571,7 +577,7 @@ def test_bimodal_to_gaussian_interactive() -> None:
     mu = torch.tensor(3.0, dtype=dtype)
     sigma = torch.tensor(0.5, dtype=dtype)
 
-    y = bimodal_to_gaussian(x, mu, sigma)
+    y, jac = bimodal_to_gaussian_value_and_jac(x, mu, sigma)
     source = make_bimodal_distribution(mu, sigma)
     target = stats.Normal(mu=0.0, sigma=1.0)
     x_samples = torch.tensor(source.sample(shape=1_000, rng=0), dtype=dtype)
@@ -580,13 +586,26 @@ def test_bimodal_to_gaussian_interactive() -> None:
     with plt.style.context("bmh"):
         fig, ax = plt.subplots(figsize=(10, 5))
         ax_twin = ax.twinx()
+        ax_jac = ax.twinx()
+        ax_jac.spines.right.set_position(("axes", 1.12))
         ax.patch.set_alpha(0)
         ax_twin.patch.set_alpha(0)
+        ax_jac.patch.set_alpha(0)
         ax_twin.grid(False)
+        ax_jac.grid(False)
         ax.set_zorder(2)
         ax_twin.set_zorder(1)
+        ax_jac.set_zorder(0)
 
         (line,) = ax.plot(x, y, label="transport", lw=5)
+        (jac_line,) = ax_jac.plot(
+            x,
+            jac,
+            color="tab:purple",
+            alpha=0.8,
+            lw=2,
+            label="derivative",
+        )
         asymptote0 = asymptotic_line(x, 0, 1, 0.5, +mu, sigma)
         asymptote1 = asymptotic_line(x, 0, 1, 0.5, -mu, sigma)
         component_lines = [
@@ -625,10 +644,13 @@ def test_bimodal_to_gaussian_interactive() -> None:
         )
         ax.set_xlim(X_MIN, X_MAX)
         ax_twin.set_xlim(X_MIN, X_MAX)
+        ax_jac.set_xlim(X_MIN, X_MAX)
         ax_twin.set_ylabel("density")
         ax_twin.set_ylim(0, PDF_MAX)
+        ax_jac.set_ylabel("derivative")
+        ax_jac.set_ylim(0, max(1.0, 1.05 * float(torch.max(jac).item())))
         ax.set_title("Interactive Transport via bimodal_to_gaussian")
-        ax.legend(loc="upper left")
+        ax.legend([line, jac_line], ["transport", "derivative"], loc="upper left")
 
         slider_specs = [
             ("mu", "μ", -5.0, 5.0, float(mu)),
@@ -647,10 +669,12 @@ def test_bimodal_to_gaussian_interactive() -> None:
         state = TransportPlotStateBimodal(
             x=x,
             line=line,
+            jac_line=jac_line,
             component_lines=component_lines,
             input_pdf_line=input_pdf_line,
             target_pdf_line=target_pdf_line,
             twin_ax=ax_twin,
+            jac_ax=ax_jac,
             input_hist_container=input_hist_container,
             output_hist_container=output_hist_container,
             sliders=sliders,
