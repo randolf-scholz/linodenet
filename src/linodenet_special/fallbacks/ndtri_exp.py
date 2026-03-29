@@ -105,7 +105,7 @@ _COEFF_CACHE: Final[
 
 
 def _get_coeffs(
-    device: torch.device, dtype: torch.dtype, /
+    *, device: torch.device, dtype: torch.dtype
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     key = (device, dtype)
     coeffs = _COEFF_CACHE.get(key)
@@ -120,33 +120,50 @@ def _get_coeffs(
     return coeffs
 
 
-def _polyeval(x: Tensor, coeffs: Tensor, /) -> Tensor:
+def _polyeval8(x: Tensor, coeffs: Tensor, /) -> Tensor:
     # Horner, coeffs in descending order
+    assert coeffs.shape == (9,)
     y = torch.zeros_like(x)
-    for c in coeffs:
-        y = y * x + c
+    # y = y * x + c, unrolled for better performance
+    y = torch.addcmul(coeffs[0], x, y)
+    y = torch.addcmul(coeffs[1], x, y)
+    y = torch.addcmul(coeffs[2], x, y)
+    y = torch.addcmul(coeffs[3], x, y)
+    y = torch.addcmul(coeffs[4], x, y)
+    y = torch.addcmul(coeffs[5], x, y)
+    y = torch.addcmul(coeffs[6], x, y)
+    y = torch.addcmul(coeffs[7], x, y)
+    y = torch.addcmul(coeffs[8], x, y)
     return y
 
 
-def _poly1eval(x: Tensor, coeffs: Tensor, /) -> Tensor:
+def _poly1eval8(x: Tensor, coeffs: Tensor, /) -> Tensor:
     # Horner with leading 1: evaluates x^n + c0*x^(n-1)+...+c_{n-1}
+    assert coeffs.shape == (8,)
     y = torch.ones_like(x)
-    for c in coeffs:
-        y = y * x + c
+    # y = y * x + c, unrolled for better performance
+    y = torch.addcmul(coeffs[0], x, y)
+    y = torch.addcmul(coeffs[1], x, y)
+    y = torch.addcmul(coeffs[2], x, y)
+    y = torch.addcmul(coeffs[3], x, y)
+    y = torch.addcmul(coeffs[4], x, y)
+    y = torch.addcmul(coeffs[5], x, y)
+    y = torch.addcmul(coeffs[6], x, y)
+    y = torch.addcmul(coeffs[7], x, y)
     return y
 
 
 def _ndtri_exp_small(log_p: Tensor, /) -> Tensor:
     r"""Rational approximation of Φ⁻¹√(-2 log p) when log_p < -2."""
     # cast the coefficients to the same dtype and device as log_p
-    p1, q1, p2, q2 = _get_coeffs(log_p.device, log_p.dtype)
+    p1, q1, p2, q2 = _get_coeffs(device=log_p.device, dtype=log_p.dtype)
     x = torch.sqrt(-2 * log_p)
     z = x.reciprocal()  # 1/x
     x0 = x - z * x.log()  # x - log(x)/x
     x1 = torch.where(
         x < 8.0,
-        z * _polyeval(z, p1) / _poly1eval(z, q1),
-        z * _polyeval(z, p2) / _poly1eval(z, q2),
+        z * _polyeval8(z, p1) / _poly1eval8(z, q1),
+        z * _polyeval8(z, p2) / _poly1eval8(z, q2),
     )
     return x1 - x0
 
