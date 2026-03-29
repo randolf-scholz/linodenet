@@ -391,6 +391,8 @@ class TestBimodalToGaussianValueAndJac(BimodalTest):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
+@pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL, ids=str)
 class TestGaussianToBimodal(BimodalTest):
     X_MIN = -20
@@ -408,8 +410,6 @@ class TestGaussianToBimodal(BimodalTest):
         torch.float64: (1e-6, 1e-6, 1e-8),
     }
 
-    @pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
     def test_piecewise_linear_approximation(
         self, name: str, mean, stdv, dtype: torch.dtype, device: str
     ) -> None:
@@ -451,8 +451,6 @@ class TestGaussianToBimodal(BimodalTest):
         x_tail_approx = hard_bend(y_tail, 1 / λ, μ, σ)
         self.assert_upper_bounded((x_tail - x_tail_approx).abs(), σ / y_tail.abs())
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gaussian_to_bimodal_forward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -476,8 +474,6 @@ class TestGaussianToBimodal(BimodalTest):
         assert x2.isfinite().all()
         self.assert_close(x1, -x2)
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gaussian_to_bimodal_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -528,8 +524,6 @@ class TestGaussianToBimodal(BimodalTest):
         assert tail.grad.isfinite().all()
         self.assert_close(tail.grad, σ, atol=1e-3, rtol=1e-1)
 
-    @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", [0.1, 0.5, 1, 2], ids="mean={}".format)
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -547,8 +541,6 @@ class TestGaussianToBimodal(BimodalTest):
         self.assert_close(y_inv, y, atol=atol, rtol=rtol)
         self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_gaussian_to_bimodal_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
@@ -568,8 +560,6 @@ class TestGaussianToBimodal(BimodalTest):
             fast_mode=True,
         )
 
-    @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
-    @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
     def test_negative_mu_matches_positive_mu(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
