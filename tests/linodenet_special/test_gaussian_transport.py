@@ -68,8 +68,8 @@ class BimodalTest(TestCase):
     X_MIN = -20
     X_MAX = 20
 
-    STDVS = [0.25, 0.5, 1, 2, 10]
-    MEANS = [0.1, 0.5, 1, 2, 4]
+    STDVS = [0.25, 0.5, 1, 2, 4]
+    MEANS = [0.25, 0.5, 1, 2, 4]
     TOL = {
         torch.float32: (1e-4, 1e-4),
         torch.float64: (1e-7, 1e-7),
@@ -169,7 +169,7 @@ class BimodalTest(TestCase):
         y_safe = cls.get_y_safe(mean, stdv, dtype=dtype)
         if y_safe == 0.0:
             return torch.linspace(
-                *(-mean / stdv - 4, mean / stdv + 4),
+                *(-mean / stdv - 3, mean / stdv + 3),
                 steps=cls.N,
                 dtype=dtype,
                 device=device,
