@@ -215,7 +215,10 @@ struct BimodalToGaussian : Function<BimodalToGaussian> {
         return y;
     }
 
-static variable_list backward(const AutogradContext *ctx, const variable_list &grad_output) {
+    static variable_list backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) {
         const Tensor &g = grad_output[0];
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
@@ -263,7 +266,10 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         return x;
     }
 
-    static variable_list backward(const AutogradContext *ctx, const variable_list &grad_output) {
+    static variable_list backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &mu = saved[1];
@@ -300,7 +306,10 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         return y;
     }
 
-    static variable_list backward(const AutogradContext *ctx, const variable_list &grad_output) {
+    static variable_list backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) {
         const Tensor &g = grad_output[0];
         const auto saved = ctx->get_saved_variables();
         const Tensor &z = saved[0];
@@ -360,7 +369,10 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         return x;
     }
 
-    static variable_list backward(const AutogradContext *ctx, const variable_list &grad_output) {
+    static variable_list backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) {
         const Tensor &g = grad_output[0];
         const auto saved = ctx->get_saved_variables();
         const Tensor &z = saved[0];
