@@ -20,6 +20,7 @@ from linodenet_special.fallbacks import (
     gaussian_to_bimodal as gaussian_to_bimodal_py,
     gaussian_to_bimodal_value_and_grad as gaussian_to_bimodal_value_and_jac_py,
     gaussian_to_mixture as gaussian_to_mixture_py,
+    gaussian_to_mixture_value_and_grad as gaussian_to_mixture_value_and_jac_py,
     mixture_to_gaussian as mixture_to_gaussian_py,
     mixture_to_gaussian_value_and_grad as mixture_to_gaussian_value_and_jac_py,
 )
@@ -55,6 +56,9 @@ GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC = {
 }
 MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC = {
     "py": mixture_to_gaussian_value_and_jac_py,
+}
+GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC = {
+    "py": gaussian_to_mixture_value_and_jac_py,
 }
 
 
@@ -796,6 +800,10 @@ class TestMixtureToGaussian(TestCase):
 class TestMixtureToGaussianValueAndGrad(TestCase):
     SEED = 0
     N = 256
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-7, 1e-7),
+    }
     GRADCHECK_TOL = {
         torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
@@ -836,6 +844,41 @@ class TestMixtureToGaussianValueAndGrad(TestCase):
             eps=eps,
             fast_mode=True,
         )
+
+    def test_reversible(
+        self,
+        name: str,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        forward_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        inverse_impl = gaussian_to_mixture_value_and_jac_py
+        omegas = torch.tensor(weights, dtype=dtype, device=device)
+        mus = torch.tensor(means, dtype=dtype, device=device)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
+        x_min = torch.min(mus - 3 * sigmas).item()
+        x_max = torch.max(mus + 3 * sigmas).item()
+        x = torch.linspace(
+            *(x_min, x_max),
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        y, d_x = forward_impl(x, omegas, mus, sigmas)
+        x_inv, d_y = inverse_impl(y, omegas, mus, sigmas)
+        x_inv.sum().backward()
+        assert x.grad is not None
+
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
+        self.assert_close(d_x * d_y, 1.0, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -930,3 +973,97 @@ class TestGaussianToMixture(TestCase):
             rtol=rtol,
             fast_mode=True,
         )
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize(
+    ("weights", "means", "stdvs"),
+    [
+        pytest.param(
+            [0.4, 0.25, 0.35], [-1.0, 0.5, 1.5], [0.8, 1.1, 0.9], id="asymmetric"
+        ),
+        pytest.param([0.2, 0.5, 0.3], [-1.5, -0.5, 1.0], [1.0, 0.8, 1.2], id="shifted"),
+    ],
+)
+@pytest.mark.parametrize("name", GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC, ids=str)
+class TestGaussianToMixtureValueAndGrad(TestCase):
+    SEED = 0
+    N = 256
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-7, 1e-7),
+    }
+    GRADCHECK_TOL = {
+        torch.float32: (1e-3, 1e-3, 1e-4),
+        torch.float64: (1e-6, 1e-6, 1e-8),
+    }
+
+    def test_gradcheck(
+        self,
+        name: str,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
+        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
+
+        mu_min = mus.min()
+        mu_max = mus.max()
+        sigma_max = sigmas.abs().max()
+        y = torch.linspace(
+            *(mu_min - sigma_max, mu_max + sigma_max),
+            steps=self.N,
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
+
+        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        gradcheck(
+            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
+            (y, omegas, mus, sigmas),
+            eps=eps,
+            atol=atol,
+            rtol=rtol,
+            fast_mode=True,
+        )
+
+    def test_reversible(
+        self,
+        name: str,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        forward_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
+        inverse_impl = mixture_to_gaussian_value_and_jac_py
+        omegas = torch.tensor(weights, dtype=dtype, device=device)
+        mus = torch.tensor(means, dtype=dtype, device=device)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
+        y = torch.linspace(
+            *(-4, 4),
+            steps=self.N,
+            dtype=dtype,
+            device=device,
+            requires_grad=True,
+        )
+
+        x, d_y = forward_impl(y, omegas, mus, sigmas)
+        y_inv, d_x = inverse_impl(x, omegas, mus, sigmas)
+        y_inv.sum().backward()
+        assert y.grad is not None
+
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(y_inv, y, atol=atol, rtol=rtol)
+        self.assert_close(d_x * d_y, 1.0, atol=atol, rtol=rtol)
+        self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
