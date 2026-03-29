@@ -120,19 +120,36 @@ class TestCase:
         self,
         value: Tensor | float,
         expected: Tensor | float,
+        *,
         atol: float = ATOL,
         rtol: float = RTOL,
     ) -> None:
         r"""Checks that |value - expected| ≤ rtol|expected| + atol."""
         __tracebackhide__ = True
 
-        value = torch.as_tensor(value)
-        expected = torch.as_tensor(expected)
-        residual = (value - expected).abs()
-        magnitude = expected.abs()
+        x_hat = torch.as_tensor(value)
+        x_ref = torch.as_tensor(expected, device=x_hat.device, dtype=x_hat.dtype)
+        x_hat, x_ref = torch.broadcast_tensors(x_hat, x_ref)
+        residual = (x_hat - x_ref).abs()
+        magnitude = x_ref.abs()
         ok = residual <= rtol * magnitude + atol
 
         if not ok.all():
+            flat_index = residual.reshape(-1).argmax().item()
+            worst_index = (
+                ()
+                if residual.ndim == 0
+                else tuple(
+                    torch.unravel_index(
+                        torch.tensor(flat_index, device=residual.device),
+                        residual.shape,
+                    )
+                )
+            )
+            worst_value = x_hat.reshape(-1)[flat_index].item()
+            worst_expected = x_ref.reshape(-1)[flat_index].item()
+            worst_abs_err = residual.reshape(-1)[flat_index].item()
+            worst_rel_err = (residual / magnitude).reshape(-1)[flat_index].item()
             max_abs_err = residual.max().item()
             mean_abs_err = residual.mean().item()
             median_abs_err = residual.median().item()
@@ -149,6 +166,11 @@ class TestCase:
                 f"\n\tmax    rel error={max_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmean   rel error={mean_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmedian rel error={median_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tworst offender index={worst_index}"
+                f"\n\tworst offender value={worst_value!r}"
+                f"\n\tworst offender expected={worst_expected!r}"
+                f"\n\tworst offender abs error={worst_abs_err:8.2e}"
+                f"\n\tworst offender rel error={worst_rel_err:8.2e}"
             )
             raise AssertionError(msg)
 
