@@ -78,7 +78,7 @@ def singular_triplet(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = _DEFAULT_MAXITER,
+    maxiter: int = _DEFAULT_MAXITER,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:
@@ -92,7 +92,7 @@ def singular_triplet_native(
     *,
     u0: Optional[Tensor] = None,  # noqa: ARG001
     v0: Optional[Tensor] = None,  # noqa: ARG001
-    maxiter: Optional[int] = None,  # noqa: ARG001
+    maxiter: int = _DEFAULT_MAXITER,  # noqa: ARG001
     atol: float = 1e-6,  # noqa: ARG001
     rtol: float = 1e-6,  # noqa: ARG001
 ) -> tuple[Tensor, Tensor, Tensor]:

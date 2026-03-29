@@ -216,7 +216,7 @@ def spectral_norm(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
+    maxiter: int = 256,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
@@ -246,7 +246,7 @@ def singular_triplet(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: Optional[int] = None,
+    maxiter: int = 256,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:

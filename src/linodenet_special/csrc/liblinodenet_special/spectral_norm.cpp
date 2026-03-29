@@ -135,15 +135,13 @@ struct SpectralNorm: Function<SpectralNorm> {
         const Tensor &A_in,
         const optional<Tensor> &u0,
         const optional<Tensor> &v0,
-        const optional<int64_t> &maxiter,
+        const int64_t maxiter,
         const double atol = 1e-6,
         const double rtol = 1e-6
     ) {
         torch::NoGradGuard guard;
 
         // Sec: Option parsing
-        constexpr int64_t DEFAULT_MAXITER = 256;
-        const int64_t MAXITER = maxiter ? maxiter.value() : DEFAULT_MAXITER;
         const int64_t M = A_in.size(0);
         const int64_t N = A_in.size(1);
         const auto OPTIONS = A_in.options();
@@ -178,7 +176,7 @@ struct SpectralNorm: Function<SpectralNorm> {
         // Perform power-iteration for maxiter times or until convergence.
         // NOTE: performing at least 2 iterations before the first convergence check is crucial,
         //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
-        for (int64_t i = 0; i<MAXITER; i++) {
+        for (int64_t i = 0; i<maxiter; i++) {
 			// NOTE: Perform multiple iterations per loop to increase performance.
 			//  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
 			//   The compiler cannot do this optimization on it's own because it would change behavior.
@@ -207,7 +205,7 @@ struct SpectralNorm: Function<SpectralNorm> {
 
         // Emit warning if no convergence within maxiter iterations.
         if (!converged) {
-            TORCH_WARN("No convergence in ", MAXITER, " iterations for input of shape ", A.sizes());
+            TORCH_WARN("No convergence in ", maxiter, " iterations for input of shape ", A.sizes());
         }
 
         // compute pre-conditioned sigma
@@ -219,7 +217,7 @@ struct SpectralNorm: Function<SpectralNorm> {
                 "Computation resulted in invalid singular value σ=", sigma,
                 " for input of shape ", A.sizes(), ". ",
                 "Try increasing the number of iterations or the tolerance. ",
-                "Currently maxiter=", MAXITER , ", atol=" , atol,  ", rtol=" , rtol , "."
+                "Currently maxiter=", maxiter , ", atol=" , atol,  ", rtol=" , rtol , "."
             ));
         }
 
@@ -255,7 +253,7 @@ Tensor spectral_norm_meta(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
-    const optional<int64_t> &maxiter,
+    const int64_t maxiter,
     const double atol,
     const double rtol
 ) {
@@ -271,9 +269,7 @@ Tensor spectral_norm_meta(
         TORCH_CHECK(v0.value().sizes() == torch::IntArrayRef({N}), "v0 must have shape (N,).");
         TORCH_CHECK(v0.value().dtype() == A.dtype(), "v0 must have the same dtype as A.");
     }
-    if (maxiter.has_value()) {
-        TORCH_CHECK(maxiter.value() > 0, "maxiter must be a positive integer.");
-    }
+    TORCH_CHECK(maxiter > 0, "maxiter must be a positive integer.");
     TORCH_CHECK(atol > 0.0, "atol must be a positive number.");
     TORCH_CHECK(rtol > 0.0, "rtol must be a positive number.");
     return torch::empty({}, A.options());
@@ -284,7 +280,7 @@ Tensor spectral_norm(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
-    const optional<int64_t> &maxiter,
+    const int64_t maxiter,
     const double atol,
     const double rtol
 ) {
@@ -300,7 +296,7 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
             "Tensor A,"
             "Tensor? u0=None,"
             "Tensor? v0=None,"
-            "int? maxiter=None,"
+            "int maxiter=256,"
             "float atol=1e-6,"
             "float rtol=1e-6"
         ") -> Tensor"

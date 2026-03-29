@@ -97,7 +97,7 @@ class SingularTriplet(Protocol):
         *,
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = ...,
+        maxiter: int = ...,
         atol: float = ...,
         rtol: float = ...,
     ) -> tuple[Tensor, Tensor, Tensor]:
@@ -130,7 +130,7 @@ class SpectralNorm(Protocol):
         *,
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = None,
+        maxiter: int = ...,
         atol: float = ...,
         rtol: float = ...,
     ) -> Tensor:
