@@ -20,14 +20,14 @@ from tests.testing import DEVICES, DTYPES, TestCase
 assert ndtri_exp_cpp is not None
 
 
-def _scipy_ndtri_exp_reference(values: Tensor, /) -> Tensor:
+def _scipy_ndtri_exp(values: Tensor, /) -> Tensor:
     reference = scipy_ndtri_exp_py(values.detach().cpu().numpy())
     tensor = torch.from_numpy(np.asarray(reference)).to(values.device, values.dtype)
     assert tensor.isfinite().all()
     return tensor
 
 
-def _scipy_log_ndtr_reference(values: Tensor, /) -> Tensor:
+def _scipy_log_ndtr(values: Tensor, /) -> Tensor:
     reference = scipy_log_ndtr(values.detach().cpu().numpy())
     tensor = torch.from_numpy(np.asarray(reference)).to(values.device, values.dtype)
     assert tensor.isfinite().all()
@@ -46,11 +46,16 @@ TOL = {
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 def test_torch_log_ndtr_matches_scipy(dtype: torch.dtype) -> None:
-    values = torch.linspace(-100, +100, steps=2048, dtype=dtype)
-    actual = log_ndtr(values)
-    reference = _scipy_log_ndtr_reference(values)
+    x = torch.linspace(-100, +100, steps=2048, dtype=dtype, requires_grad=True)
+    actual = log_ndtr(x)
+    reference = _scipy_log_ndtr(x)
     atol, rtol = TOL[dtype]
     assert torch.allclose(actual, reference, atol=atol, rtol=rtol)
+
+    # check grads are finite.
+    actual.sum().backward()
+    assert x.grad is not None
+    assert x.grad.isfinite().all()
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -137,7 +142,7 @@ class TestCorrectness(TestCase):
     ) -> None:
         impl = IMPLS[name]
         log_p = torch.linspace(lower, upper, steps=self.N, dtype=dtype, device=device)
-        expected = _scipy_ndtri_exp_reference(log_p)
+        expected = _scipy_ndtri_exp(log_p)
         actual = impl(log_p)
         atol, rtol = self.TOL[dtype]
 
