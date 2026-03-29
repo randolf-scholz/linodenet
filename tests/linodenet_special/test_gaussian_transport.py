@@ -281,17 +281,28 @@ class TestMixture(TestCase):
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN, ids=str)
 class TestBimodalToGaussian(BimodalTest):
-    def test_bimodal_to_gaussian_forward(
+    def test_special_values(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        impl = BIMODAL_TO_GAUSSIAN[name]
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        λ = self.get_y_star(μ, σ)
+
+        zero = torch.tensor(0, dtype=dtype, device=device, requires_grad=True)
+        y_zero = impl(zero, μ, σ)
+        self.assert_close(y_zero, zero)
+        y_zero.backward()
+        assert zero.grad is not None
+        self.assert_close(zero.grad, λ, rtol=1e-7)
+
+    def test_forward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-
-        zero = torch.tensor(0, dtype=dtype, device=device)
-        y_zero = impl(zero, μ, σ)
-        self.assert_close(y_zero, zero)
 
         x = self.make_full_range(dtype=dtype, device=device)
         y = impl(x, μ, σ)
@@ -300,7 +311,7 @@ class TestBimodalToGaussian(BimodalTest):
 
         self.assert_close(-y, y.flip(0))
 
-    def test_bimodal_to_gaussian_backward(
+    def test_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
@@ -309,36 +320,50 @@ class TestBimodalToGaussian(BimodalTest):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = self.get_y_star(μ, σ)
 
-        x1 = torch.linspace(
-            *(0, self.X_MAX),
-            steps=self.N,
-            dtype=dtype,
-            device=device,
-            requires_grad=True,
-        )
-        y1 = impl(x1, μ, σ)
-        y1.sum().backward()
-        assert x1.grad is not None
-        assert x1.grad.isfinite().all()
-        self.assert_upper_bounded(x1.grad, 1 / σ, rtol=0.0)
-        self.assert_lower_bounded(x1.grad, λ, rtol=1e-7)
-        self.assert_close(x1.grad[0], λ, rtol=1e-7)
+        x = self.make_full_range(dtype=dtype, device=device)
+        y = impl(x, μ, σ)
+        y.sum().backward()
+        assert x.grad is not None
+        assert x.grad.isfinite().all()
+        self.assert_upper_bounded(x.grad, 1 / σ, rtol=0.0)
+        self.assert_lower_bounded(x.grad, λ, rtol=1e-7)
+        self.assert_close(x.grad, x.grad.flip(0))
 
-        x2 = torch.linspace(
-            *(0, self.X_MIN),
-            steps=self.N,
-            dtype=dtype,
-            device=device,
-            requires_grad=True,
+    def test_gradcheck(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        impl = BIMODAL_TO_GAUSSIAN[name]
+        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
+        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
+        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
+
+        atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
+        gradcheck(
+            impl,
+            (x, μ, σ),
+            atol=atol,
+            rtol=rtol,
+            eps=eps,
+            fast_mode=True,
         )
-        y2 = impl(x2, μ, σ)
-        y2.sum().backward()
-        assert x2.grad is not None
-        assert x2.grad.isfinite().all()
-        self.assert_upper_bounded(x2.grad, 1 / σ, rtol=0.0)
-        self.assert_lower_bounded(x2.grad, λ, rtol=1e-7)
-        self.assert_close(x2.grad[0], λ, rtol=1e-7)
-        self.assert_close(x1.grad, x2.grad)
+
+    def test_reversible(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        forward_impl = BIMODAL_TO_GAUSSIAN[name]
+        inverse_impl = GAUSSIAN_TO_BIMODAL[name]
+        atol, rtol = self.TOL[dtype]
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
+        y = forward_impl(x, μ, σ)
+        x_inv = inverse_impl(y, μ, σ)
+        x_inv.sum().backward()
+        assert x.grad is not None
+        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
     def test_piecewise_linear_approximation(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -382,42 +407,6 @@ class TestBimodalToGaussian(BimodalTest):
         assert x_tail.grad.isfinite().all()
         self.assert_close(x_tail.grad, 1 / σ, rtol=1e-2)
         self.assert_upper_bounded(x_tail.grad, 1 / σ, rtol=0.0)
-
-    def test_bimodal_to_gaussian_gradcheck(
-        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
-    ) -> None:
-        torch.manual_seed(self.SEED)
-        impl = BIMODAL_TO_GAUSSIAN[name]
-        μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
-        σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
-
-        atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
-        gradcheck(
-            impl,
-            (x, μ, σ),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
-        )
-
-    def test_reversible(
-        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
-    ) -> None:
-        torch.manual_seed(self.SEED)
-        forward_impl = BIMODAL_TO_GAUSSIAN[name]
-        inverse_impl = GAUSSIAN_TO_BIMODAL[name]
-        atol, rtol = self.TOL[dtype]
-        μ = torch.tensor(mean, dtype=dtype, device=device)
-        σ = torch.tensor(stdv, dtype=dtype, device=device)
-        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
-        y = forward_impl(x, μ, σ)
-        x_inv = inverse_impl(y, μ, σ)
-        x_inv.sum().backward()
-        assert x.grad is not None
-        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
-        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -472,57 +461,9 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL, ids=str)
 class TestGaussianToBimodal(BimodalTest):
-    def test_piecewise_linear_approximation(
-        self, name: str, mean, stdv, dtype: torch.dtype, device: str
-    ) -> None:
-        torch.manual_seed(self.SEED)
-        impl = GAUSSIAN_TO_BIMODAL[name]
-        y = self.make_full_range(dtype=dtype, device=device)
-        μ = torch.tensor(mean, dtype=dtype, device=device)
-        σ = torch.tensor(stdv, dtype=dtype, device=device)
-        λ = self.get_x_star(μ, σ)
-
-        x = impl(y, μ, σ)
-        assert x.dtype == dtype
-        assert x.isfinite().all(), (
-            "gaussian_to_bimodal should produce finite outputs for finite inputs"
-        )
-
-        x_approx = hard_bend(y, λ, μ, σ)
-        assert x_approx.dtype == dtype
-        assert x_approx.isfinite().all(), (
-            "Hard-expand approximation should produce finite outputs"
-        )
-        # x = x_approx - \log(2)σ/y + O(y⁻³)
-        atol, rtol = self.TOL[dtype]
-        error = (x - x_approx).abs()
-        bound = (-math.log(2) * σ / y).abs()
-        self.assert_upper_bounded(error, bound, atol=atol, rtol=rtol)
-
-    def test_tail_behavior(
+    def test_special_values(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
-        impl = GAUSSIAN_TO_BIMODAL[name]
-        μ = torch.tensor(mean, dtype=dtype, device=device)
-        σ = torch.tensor(stdv, dtype=dtype, device=device)
-        λ = self.get_y_star(μ, σ)
-        y_tail = self.make_tail_y_range(mean, stdv, dtype=dtype, device=device)
-        x_tail = impl(y_tail, μ, σ)
-        x_tail_approx = hard_bend(y_tail, 1 / λ, μ, σ)
-        self.assert_upper_bounded((x_tail - x_tail_approx).abs(), σ / y_tail.abs())
-
-        tail = self.make_tail_y_range(mean, stdv, dtype=dtype, device=device)
-        x_tail = impl(tail, μ, σ)
-        assert x_tail.isfinite().all()
-        x_tail.sum().backward()
-        assert tail.grad is not None
-        assert tail.grad.isfinite().all()
-        self.assert_close(tail.grad, σ, atol=1e-3, rtol=1e-1)
-
-    def test_gaussian_to_bimodal_forward(
-        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
-    ) -> None:
-        torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
@@ -530,6 +471,14 @@ class TestGaussianToBimodal(BimodalTest):
         zero = torch.tensor(0, dtype=dtype, device=device)
         x_zero = impl(zero, μ, σ)
         self.assert_close(x_zero, zero)
+
+    def test_forward(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        impl = GAUSSIAN_TO_BIMODAL[name]
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
 
         y = self.make_full_range(dtype=dtype, device=device)
         x = impl(y, μ, σ)
@@ -539,7 +488,7 @@ class TestGaussianToBimodal(BimodalTest):
         x1, x2 = x.chunk(2)
         self.assert_close(-x1, x2.flip(0))
 
-    def test_gaussian_to_bimodal_backward(
+    def test_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
@@ -598,7 +547,7 @@ class TestGaussianToBimodal(BimodalTest):
         self.assert_close(y_inv, y, atol=atol, rtol=rtol)
         self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
-    def test_gaussian_to_bimodal_gradcheck(
+    def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
@@ -616,6 +565,53 @@ class TestGaussianToBimodal(BimodalTest):
             eps=eps,
             fast_mode=True,
         )
+
+    def test_piecewise_linear_approximation(
+        self, name: str, mean, stdv, dtype: torch.dtype, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        impl = GAUSSIAN_TO_BIMODAL[name]
+        y = self.make_full_range(dtype=dtype, device=device)
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        λ = self.get_x_star(μ, σ)
+
+        x = impl(y, μ, σ)
+        assert x.dtype == dtype
+        assert x.isfinite().all(), (
+            "gaussian_to_bimodal should produce finite outputs for finite inputs"
+        )
+
+        x_approx = hard_bend(y, λ, μ, σ)
+        assert x_approx.dtype == dtype
+        assert x_approx.isfinite().all(), (
+            "Hard-expand approximation should produce finite outputs"
+        )
+        # x = x_approx - \log(2)σ/y + O(y⁻³)
+        atol, rtol = self.TOL[dtype]
+        error = (x - x_approx).abs()
+        bound = (-math.log(2) * σ / y).abs()
+        self.assert_upper_bounded(error, bound, atol=atol, rtol=rtol)
+
+    def test_tail_behavior(
+        self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
+    ) -> None:
+        impl = GAUSSIAN_TO_BIMODAL[name]
+        μ = torch.tensor(mean, dtype=dtype, device=device)
+        σ = torch.tensor(stdv, dtype=dtype, device=device)
+        λ = self.get_y_star(μ, σ)
+        y_tail = self.make_tail_y_range(mean, stdv, dtype=dtype, device=device)
+        x_tail = impl(y_tail, μ, σ)
+        x_tail_approx = hard_bend(y_tail, 1 / λ, μ, σ)
+        self.assert_upper_bounded((x_tail - x_tail_approx).abs(), σ / y_tail.abs())
+
+        tail = self.make_tail_y_range(mean, stdv, dtype=dtype, device=device)
+        x_tail = impl(tail, μ, σ)
+        assert x_tail.isfinite().all()
+        x_tail.sum().backward()
+        assert tail.grad is not None
+        assert tail.grad.isfinite().all()
+        self.assert_close(tail.grad, σ, atol=1e-3, rtol=1e-1)
 
     def test_negative_mu_matches_positive_mu(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -690,31 +686,6 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
 @pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN, ids=str)
 @pytest.mark.parametrize(("weights", "means", "stdvs"), TestMixture.CASES)
 class TestMixtureToGaussian(TestMixture):
-    def test_reversible(
-        self,
-        name: str,
-        weights: list[float],
-        means: list[float],
-        stdvs: list[float],
-        dtype: torch.dtype,
-        device: str,
-    ) -> None:
-        torch.manual_seed(self.SEED)
-        forward_impl = MIXTURE_TO_GAUSSIAN[name]
-        inverse_impl = GAUSSIAN_TO_MIXTURE[name]
-        omegas = torch.tensor(weights, dtype=dtype, device=device)
-        mus = torch.tensor(means, dtype=dtype, device=device)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
-        x = self.make_safe_x_range(mus, sigmas)
-
-        y = forward_impl(x, omegas, mus, sigmas)
-        x_inv = inverse_impl(y, omegas, mus, sigmas)
-        x_inv.sum().backward()
-        assert x.grad is not None
-        atol, rtol = self.TOL[dtype]
-        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
-        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
-
     def test_gradcheck(
         self,
         name: str,
@@ -740,6 +711,31 @@ class TestMixtureToGaussian(TestMixture):
             eps=eps,
             fast_mode=True,
         )
+
+    def test_reversible(
+        self,
+        name: str,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        forward_impl = MIXTURE_TO_GAUSSIAN[name]
+        inverse_impl = GAUSSIAN_TO_MIXTURE[name]
+        omegas = torch.tensor(weights, dtype=dtype, device=device)
+        mus = torch.tensor(means, dtype=dtype, device=device)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
+        x = self.make_safe_x_range(mus, sigmas)
+
+        y = forward_impl(x, omegas, mus, sigmas)
+        x_inv = inverse_impl(y, omegas, mus, sigmas)
+        x_inv.sum().backward()
+        assert x.grad is not None
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -806,31 +802,6 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
 @pytest.mark.parametrize(("weights", "means", "stdvs"), TestMixture.CASES)
 @pytest.mark.parametrize("name", GAUSSIAN_TO_MIXTURE, ids=str)
 class TestGaussianToMixture(TestMixture):
-    def test_reversible(
-        self,
-        name: str,
-        weights: list[float],
-        means: list[float],
-        stdvs: list[float],
-        dtype: torch.dtype,
-        device: str,
-    ) -> None:
-        torch.manual_seed(self.SEED)
-        forward_impl = GAUSSIAN_TO_MIXTURE[name]
-        inverse_impl = MIXTURE_TO_GAUSSIAN[name]
-        omegas = torch.tensor(weights, dtype=dtype, device=device)
-        mus = torch.tensor(means, dtype=dtype, device=device)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
-        y = self.make_gaussian_test_range(mus)
-
-        x = forward_impl(y, omegas, mus, sigmas)
-        y_inv = inverse_impl(x, omegas, mus, sigmas)
-        y_inv.sum().backward()
-        assert y.grad is not None
-        atol, rtol = self.TOL[dtype]
-        self.assert_close(y_inv, y, atol=atol, rtol=rtol)
-        self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
-
     def test_gradcheck(
         self,
         name: str,
@@ -856,6 +827,31 @@ class TestGaussianToMixture(TestMixture):
             rtol=rtol,
             fast_mode=True,
         )
+
+    def test_reversible(
+        self,
+        name: str,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+        forward_impl = GAUSSIAN_TO_MIXTURE[name]
+        inverse_impl = MIXTURE_TO_GAUSSIAN[name]
+        omegas = torch.tensor(weights, dtype=dtype, device=device)
+        mus = torch.tensor(means, dtype=dtype, device=device)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
+        y = self.make_gaussian_test_range(mus)
+
+        x = forward_impl(y, omegas, mus, sigmas)
+        y_inv = inverse_impl(x, omegas, mus, sigmas)
+        y_inv.sum().backward()
+        assert y.grad is not None
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(y_inv, y, atol=atol, rtol=rtol)
+        self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
