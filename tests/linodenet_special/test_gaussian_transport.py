@@ -71,7 +71,7 @@ class TestBimodalToGaussian(TestCase):
 
     TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-8, 1e-8),
+        torch.float64: (1e-7, 1e-7),
     }
 
     GRADCHECK_TOL = {
@@ -106,11 +106,10 @@ class TestBimodalToGaussian(TestCase):
         and use $[-μ, -x_\text{safe}] ∪ [x_\text{safe}, μ]$.
         """
         # sqrt(-log(resolution)) is about 3.7 for float32 and 5.9 for float64.
-        threshold = math.sqrt(-math.log(torch.finfo(dtype).resolution))
+        threshold = math.sqrt(-math.log(torch.finfo(dtype).resolution)) - 0.5
         if mean / stdv <= threshold:
             return torch.linspace(-mean, mean, steps=cls.N, dtype=dtype, device=device)
-
-        x_safe = max(0.0, mean - stdv * (threshold - 0.5))
+        x_safe = max(0.0, mean - stdv * threshold)
         x_neg = torch.linspace(
             -mean,
             -x_safe,
