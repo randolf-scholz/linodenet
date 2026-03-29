@@ -276,6 +276,30 @@ class TestMixture(TestCase):
             requires_grad=True,
         )
 
+    def assert_gradcheck(
+        self,
+        impl,
+        x: Tensor,
+        weights: list[float],
+        means: list[float],
+        stdvs: list[float],
+        *,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
+        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
+        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
+        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
+        gradcheck(
+            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
+            (x, omegas, mus, sigmas),
+            atol=atol,
+            rtol=rtol,
+            eps=eps,
+            fast_mode=True,
+        )
+
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
@@ -700,19 +724,8 @@ class TestMixtureToGaussian(TestMixture):
         torch.manual_seed(self.SEED)
         impl = MIXTURE_TO_GAUSSIAN[name]
         x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
-
-        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
-        gradcheck(
-            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
-            (x, omegas, mus, sigmas),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
+        self.assert_gradcheck(
+            impl, x, weights, means, stdvs, dtype=dtype, device=device
         )
 
     def test_reversible(
@@ -758,19 +771,8 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
         torch.manual_seed(self.SEED)
         impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
         x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
-
-        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
-        gradcheck(
-            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
-            (x, omegas, mus, sigmas),
-            atol=atol,
-            rtol=rtol,
-            eps=eps,
-            fast_mode=True,
+        self.assert_gradcheck(
+            impl, x, weights, means, stdvs, dtype=dtype, device=device
         )
 
     def test_reversible(
@@ -818,19 +820,8 @@ class TestGaussianToMixture(TestMixture):
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_MIXTURE[name]
         y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
-
-        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
-        gradcheck(
-            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
-            (y, omegas, mus, sigmas),
-            eps=eps,
-            atol=atol,
-            rtol=rtol,
-            fast_mode=True,
+        self.assert_gradcheck(
+            impl, y, weights, means, stdvs, dtype=dtype, device=device
         )
 
     def test_reversible(
@@ -876,19 +867,8 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
         y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
-
-        omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
-        mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
-        sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-
-        atol, rtol, eps = self.GRADCHECK_TOL[dtype]
-        gradcheck(
-            lambda z, ω, μ, σ: impl(z, ω / ω.sum(), μ, σ),
-            (y, omegas, mus, sigmas),
-            eps=eps,
-            atol=atol,
-            rtol=rtol,
-            fast_mode=True,
+        self.assert_gradcheck(
+            impl, y, weights, means, stdvs, dtype=dtype, device=device
         )
 
     def test_reversible(
