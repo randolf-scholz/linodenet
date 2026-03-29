@@ -202,7 +202,7 @@ def _gaussian_to_bimodal_value(
 
 def _mixture_to_gaussian_value(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
-) -> tuple[Tensor, Tensor]:
+) -> Tensor:
     r"""Evaluate the mixture-to-Gaussian transport and cache normalized coordinates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
@@ -213,7 +213,7 @@ def _mixture_to_gaussian_value(
 
     y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
     y = y.clamp(z.amin(dim=-1), z.amax(dim=-1))
-    return y, z
+    return y
 
 
 def _mixture_to_gaussian_value_and_grad(
@@ -236,7 +236,7 @@ def _mixture_to_gaussian_value_and_grad(
 
 
 def _mixture_to_gaussian_derivatives(
-    z: Tensor, weights: Tensor, sigmas: Tensor, y: Tensor, /
+    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, y: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the mixture-to-Gaussian transport.
 
@@ -248,6 +248,7 @@ def _mixture_to_gaussian_derivatives(
     """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
+    z = (x.unsqueeze(-1) - mus) / sigmas
     y2 = y.square()
     # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
     log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
@@ -276,7 +277,7 @@ def _mixture_to_gaussian_derivatives(
 
 
 def _mixture_to_gaussian_derivatives2(
-    z: Tensor, weights: Tensor, sigmas: Tensor, y: Tensor, /
+    x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, y: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     r"""Compute first and second derivatives for the mixture-to-Gaussian transport.
 
@@ -292,6 +293,7 @@ def _mixture_to_gaussian_derivatives2(
     """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
+    z = (x.unsqueeze(-1) - mus) / sigmas
     y2 = y.square()
     # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
     log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
@@ -486,10 +488,10 @@ class _GaussianToBimodalValueAndGrad(Function):
         ctx, y: Tensor, mu: Tensor, sigma: Tensor, maxiter, /
     ) -> tuple[Tensor, Tensor]:
         x = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
-        fx, d_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
+        fx, df_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
         # Note: d_x is already clamped
         ctx.save_for_backward(x, mu, sigma, fx)
-        return x, d_x.reciprocal()
+        return x, df_x.reciprocal()
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
@@ -567,19 +569,19 @@ class _MixtureToGaussian(Function):
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
+        ctx, x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
     ) -> Tensor:
         assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
-        u, z = _mixture_to_gaussian_value(y, weights, mus, sigmas)
-        ctx.save_for_backward(z, u, weights, sigmas)
-        return u
+        y = _mixture_to_gaussian_value(x, weights, mus, sigmas)
+        ctx.save_for_backward(x, weights, mus, sigmas, y)
+        return y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         (g,) = outer
-        z, y, weights, sigmas = ctx.saved_tensors
+        x, weights, mus, sigmas, y = ctx.saved_tensors
         d_values, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
-            z, weights, sigmas, y
+            x, weights, mus, sigmas, y
         )
 
         return (
@@ -599,16 +601,15 @@ class _MixtureToGaussianValueAndGrad(Function):
         ctx, x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
     ) -> tuple[Tensor, Tensor]:
         y, d_x = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
-        z = (x.unsqueeze(-1) - mus) / sigmas
-        ctx.save_for_backward(z, y, weights, sigmas)
+        ctx.save_for_backward(x, weights, mus, sigmas, y)
         return y, d_x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         grad_y, grad_dy = outer
-        z, y, weights, sigmas = ctx.saved_tensors
+        x, weights, mus, sigmas, y = ctx.saved_tensors
         d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas = (
-            _mixture_to_gaussian_derivatives2(z, weights, sigmas, y)
+            _mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y)
         )
         return (
             grad_y * d_x + grad_dy * d2_x,
@@ -644,13 +645,13 @@ class _GaussianToMixture(Function):
 
         for _ in range(maxiter):
             x = x.clamp(lower, upper)
-            fy, d_fy = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
-            r = fy - y
+            y_star, d_f = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
+            r = y_star - y
             # Since T is monotone, the sign of the residual tells us which side of
             # the bracket still contains the inverse solution.
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
-            x_newton = x - r / d_fy
+            x_newton = x - r / d_f
             x_bisect = 0.5 * (lower + upper)
             x = torch.where(
                 (x_newton >= lower) & (x_newton <= upper),
@@ -659,9 +660,8 @@ class _GaussianToMixture(Function):
             )
 
         x = x.clamp(lower, upper)
-        fy, z = _mixture_to_gaussian_value(x, weights, mus, sigmas)
-
-        ctx.save_for_backward(z, fy, weights, mus, sigmas)
+        y_star = _mixture_to_gaussian_value(x, weights, mus, sigmas)
+        ctx.save_for_backward(x, weights, mus, sigmas, y_star)
         return x
 
     @staticmethod
@@ -680,9 +680,9 @@ class _GaussianToMixture(Function):
             \qquad θ∈\{ω, μ, σ\}
         """
         (g,) = outer
-        z, y, weights, _, sigmas = ctx.saved_tensors
+        x, weights, mus, sigmas, y = ctx.saved_tensors
         d_x, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
-            z, weights, sigmas, y
+            x, weights, mus, sigmas, y
         )
         grad_y = g * d_x.reciprocal()
         return (
@@ -731,11 +731,11 @@ class _GaussianToMixtureValueAndGrad(Function):
 
         for _ in range(maxiter):
             x = x.clamp(lower, upper)
-            fy, d_fy = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
-            r = fy - y
+            y_star, d_f = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
+            r = y_star - y
             lower = torch.where(r < 0, x, lower)
             upper = torch.where(r > 0, x, upper)
-            x_newton = x - r / d_fy
+            x_newton = x - r / d_f
             x_bisect = 0.5 * (lower + upper)
             x = torch.where(
                 (x_newton >= lower) & (x_newton <= upper),
@@ -744,17 +744,16 @@ class _GaussianToMixtureValueAndGrad(Function):
             )
 
         x = x.clamp(lower, upper)
-        fy, z = _mixture_to_gaussian_value(x, weights, mus, sigmas)
-        d_x, *_ = _mixture_to_gaussian_derivatives2(z, weights, sigmas, fy)
-        ctx.save_for_backward(z, fy, weights, sigmas)
-        return x, d_x.reciprocal()
+        y_star, dy_star = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
+        ctx.save_for_backward(x, weights, mus, sigmas, y_star)
+        return x, dy_star.reciprocal()
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, None]:
         grad_x, grad_dx = outer
-        z, y, weights, sigmas = ctx.saved_tensors
+        x, weights, mus, sigmas, y = ctx.saved_tensors
         d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas = (
-            _mixture_to_gaussian_derivatives2(z, weights, sigmas, y)
+            _mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y)
         )
         dx_inv = d_x.reciprocal()
 
