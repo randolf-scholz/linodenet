@@ -240,39 +240,17 @@ class TestMixture(TestCase):
     }
 
     @classmethod
-    def make_safe_x_range(cls, mus: Tensor, sigmas: Tensor, /) -> Tensor:
-        x_min = torch.min(mus - 3 * sigmas).item()
-        x_max = torch.max(mus + 3 * sigmas).item()
-        return torch.linspace(
-            *(x_min, x_max),
-            steps=cls.N,
-            dtype=mus.dtype,
-            device=mus.device,
-            requires_grad=True,
-        )
-
-    @classmethod
     def make_full_range(
-        cls, mus: list[float], sigmas: list[float], *, dtype: torch.dtype, device: str
+        cls, means: list[float], stdvs: list[float], *, dtype: torch.dtype, device: str
     ) -> Tensor:
-        mu_min = min(mus)
-        mu_max = max(mus)
-        sigma_max = max(sigmas)
+        mu_min = min(means)
+        mu_max = max(means)
+        sigma_max = max(stdvs)
         return torch.linspace(
             *(mu_min - sigma_max, mu_max + sigma_max),
             steps=cls.N,
             dtype=dtype,
             device=device,
-            requires_grad=True,
-        )
-
-    @classmethod
-    def make_gaussian_test_range(cls, mus: Tensor, /) -> Tensor:
-        return torch.linspace(
-            *(-4, 4),
-            steps=cls.N,
-            dtype=mus.dtype,
-            device=mus.device,
             requires_grad=True,
         )
 
@@ -672,9 +650,9 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
+        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
-        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
         atol, rtol, eps = self.INVERSE_GRADCHECK_TOL[dtype]
         gradcheck(
@@ -692,9 +670,10 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
         torch.manual_seed(self.SEED)
         inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
         forward_impl = bimodal_to_gaussian_value_and_jac_py
+        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
+
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
         x, d_y = inverse_impl(y, μ, σ)
         y_inv, d_x = forward_impl(x, μ, σ)
@@ -740,10 +719,11 @@ class TestMixtureToGaussian(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = MIXTURE_TO_GAUSSIAN[name]
         inverse_impl = GAUSSIAN_TO_MIXTURE[name]
+        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
-        x = self.make_safe_x_range(mus, sigmas)
 
         y = forward_impl(x, omegas, mus, sigmas)
         x_inv = inverse_impl(y, omegas, mus, sigmas)
@@ -787,10 +767,11 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
         inverse_impl = gaussian_to_mixture_value_and_jac_py
+        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
-        x = self.make_safe_x_range(mus, sigmas)
 
         y, d_x = forward_impl(x, omegas, mus, sigmas)
         x_inv, d_y = inverse_impl(y, omegas, mus, sigmas)
@@ -836,10 +817,11 @@ class TestGaussianToMixture(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = GAUSSIAN_TO_MIXTURE[name]
         inverse_impl = MIXTURE_TO_GAUSSIAN[name]
+        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
-        y = self.make_gaussian_test_range(mus)
 
         x = forward_impl(y, omegas, mus, sigmas)
         y_inv = inverse_impl(x, omegas, mus, sigmas)
@@ -883,10 +865,11 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
         inverse_impl = mixture_to_gaussian_value_and_jac_py
+        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device)
-        y = self.make_gaussian_test_range(mus)
 
         x, d_y = forward_impl(y, omegas, mus, sigmas)
         y_inv, d_x = inverse_impl(x, omegas, mus, sigmas)
