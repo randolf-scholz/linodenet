@@ -31,6 +31,11 @@ class TestBimodalToGaussian(TestCase):
     STDVS = [0.1, 0.5, 1, 2, 10]
     MEANS = [0.1, 0.5, 1, 2, 10]
 
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-8, 1e-8),
+    }
+
     GRADCHECK_TOL = {
         torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
@@ -193,6 +198,7 @@ class TestBimodalToGaussian(TestCase):
             atol=atol,
             rtol=rtol,
             eps=eps,
+            fast_mode=True,
         )
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
@@ -219,6 +225,7 @@ class TestBimodalToGaussian(TestCase):
             atol=atol,
             rtol=rtol,
             eps=eps,
+            fast_mode=True,
         )
 
     @pytest.mark.parametrize("stdv", [0.5, 1, 2, 10], ids="stdv={}".format)
@@ -243,8 +250,9 @@ class TestBimodalToGaussian(TestCase):
         z = x_inv.sum()
         z.backward()
         assert x.grad is not None
-        self.assert_close(x_inv, x, rtol=1e-4, atol=1e-4)
-        self.assert_close(x.grad, 1.0, rtol=1e-4, atol=1e-4)
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -256,6 +264,11 @@ class TestGaussianToBimodal(TestCase):
     N_FEW = 32
     STDVS = [1, 2, 3]
     MEANS = [0.5, 1, 2]
+
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-8, 1e-8),
+    }
 
     GRADCHECK_TOL = {
         torch.float32: (1e-2, 1e-2, 1e-4),
@@ -414,8 +427,9 @@ class TestGaussianToBimodal(TestCase):
         z = y_inv.sum()
         z.backward()
         assert y.grad is not None
-        self.assert_close(y_inv, y, rtol=1e-4, atol=1e-4)
-        self.assert_close(y.grad, 1.0, rtol=1e-4, atol=1e-4)
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(y_inv, y, atol=atol, rtol=rtol)
+        self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
     @pytest.mark.parametrize("mean", MEANS, ids="mean={}".format)
@@ -441,6 +455,7 @@ class TestGaussianToBimodal(TestCase):
             atol=atol,
             rtol=rtol,
             eps=eps,
+            fast_mode=True,
         )
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
@@ -467,6 +482,7 @@ class TestGaussianToBimodal(TestCase):
             atol=atol,
             rtol=rtol,
             eps=eps,
+            fast_mode=True,
         )
 
     @pytest.mark.parametrize("stdv", STDVS, ids="stdv={}".format)
@@ -516,6 +532,11 @@ class TestGaussianToBimodal(TestCase):
 class TestMixtureToGaussian(TestCase):
     N = 64
 
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-8, 1e-8),
+    }
+
     GRADCHECK_TOL = {
         torch.float32: (1e-3, 1e-3, 1e-4),
         torch.float64: (1e-6, 1e-6, 1e-8),
@@ -547,8 +568,9 @@ class TestMixtureToGaussian(TestCase):
         x_inv = gaussian_to_mixture(y, omegas, mus, sigmas)
         x_inv.sum().backward()
         assert x.grad is not None
-        self.assert_close(x_inv, x, rtol=1e-4, atol=1e-4)
-        self.assert_close(x.grad, 1.0, rtol=1e-4, atol=1e-4)
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(x_inv, x, atol=atol, rtol=rtol)
+        self.assert_close(x.grad, 1.0, atol=atol, rtol=rtol)
 
     @pytest.mark.parametrize(
         "values",
@@ -580,6 +602,7 @@ class TestMixtureToGaussian(TestCase):
             atol=atol,
             rtol=rtol,
             eps=eps,
+            fast_mode=True,
         )
 
     @pytest.mark.parametrize(
@@ -612,6 +635,7 @@ class TestMixtureToGaussian(TestCase):
             atol=atol,
             rtol=rtol,
             eps=eps,
+            fast_mode=True,
         )
 
 
@@ -619,6 +643,11 @@ class TestMixtureToGaussian(TestCase):
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 class TestGaussianToMixture(TestCase):
     N = 64
+
+    TOL = {
+        torch.float32: (1e-4, 1e-4),
+        torch.float64: (1e-8, 1e-8),
+    }
 
     GRADCHECK_TOL = {
         torch.float32: (1e-2, 1e-2, 1e-4),
@@ -666,8 +695,9 @@ class TestGaussianToMixture(TestCase):
         y_inv = mixture_to_gaussian(x, omegas, mus, sigmas)
         y_inv.sum().backward()
         assert y.grad is not None
-        self.assert_close(y_inv, y, rtol=1e-4, atol=1e-4)
-        self.assert_close(y.grad, 1.0, rtol=1e-4, atol=1e-4)
+        atol, rtol = self.TOL[dtype]
+        self.assert_close(y_inv, y, atol=atol, rtol=rtol)
+        self.assert_close(y.grad, 1.0, atol=atol, rtol=rtol)
 
     @pytest.mark.parametrize(
         ("weights", "means", "stdvs"),
@@ -716,6 +746,7 @@ class TestGaussianToMixture(TestCase):
             eps=eps,
             atol=atol,
             rtol=rtol,
+            fast_mode=True,
         )
 
     def test_compiled_scalar_backward_shapes(
