@@ -252,15 +252,17 @@ class TestMixture(TestCase):
         )
 
     @classmethod
-    def make_safe_y_range(cls, mus: Tensor, sigmas: Tensor, /) -> Tensor:
-        mu_min = mus.min().item()
-        mu_max = mus.max().item()
-        sigma_max = sigmas.abs().max().item()
+    def make_full_range(
+        cls, mus: list[float], sigmas: list[float], *, dtype: torch.dtype, device: str
+    ) -> Tensor:
+        mu_min = min(mus)
+        mu_max = max(mus)
+        sigma_max = max(sigmas)
         return torch.linspace(
             *(mu_min - sigma_max, mu_max + sigma_max),
             steps=cls.N,
-            dtype=mus.dtype,
-            device=mus.device,
+            dtype=dtype,
+            device=device,
             requires_grad=True,
         )
 
@@ -697,10 +699,11 @@ class TestMixtureToGaussian(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = MIXTURE_TO_GAUSSIAN[name]
+        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-        x = self.make_safe_y_range(mus, sigmas)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
@@ -754,10 +757,11 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-        x = self.make_safe_y_range(mus, sigmas)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
@@ -813,10 +817,11 @@ class TestGaussianToMixture(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_MIXTURE[name]
+        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-        y = self.make_safe_y_range(mus, sigmas)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
@@ -870,10 +875,11 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
+        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+
         omegas = torch.tensor(weights, dtype=dtype, device=device, requires_grad=True)
         mus = torch.tensor(means, dtype=dtype, device=device, requires_grad=True)
         sigmas = torch.tensor(stdvs, dtype=dtype, device=device, requires_grad=True)
-        y = self.make_safe_y_range(mus, sigmas)
 
         atol, rtol, eps = self.GRADCHECK_TOL[dtype]
         gradcheck(
