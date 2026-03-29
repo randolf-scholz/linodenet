@@ -10,6 +10,32 @@ class TestCase:
     ATOL = 1e-6
     RTOL = 1e-6
 
+    @staticmethod
+    def _worst_offender(
+        residual: Tensor,
+        expected: Tensor,
+        actual: Tensor,
+    ) -> tuple[tuple[int, ...], object, object, float, float]:
+        flat_index = int(residual.reshape(-1).argmax().item())
+        worst_index = (
+            ()
+            if residual.ndim == 0
+            else tuple(
+                int(index.item())
+                for index in torch.unravel_index(
+                    torch.tensor(flat_index, device=residual.device),
+                    residual.shape,
+                )
+            )
+        )
+        worst_value = actual.reshape(-1)[flat_index].item()
+        worst_expected = expected.reshape(-1)[flat_index].item()
+        worst_abs_err = float(residual.reshape(-1)[flat_index].item())
+        worst_rel_err = float(
+            (residual / expected).abs().reshape(-1)[flat_index].item()
+        )
+        return worst_index, worst_value, worst_expected, worst_abs_err, worst_rel_err
+
     def assert_upper_bounded(
         self,
         value: Tensor | float,
@@ -26,7 +52,7 @@ class TestCase:
         bound = torch.as_tensor(upper, device=x_hat.device, dtype=x_hat.dtype)
         x_hat, bound = torch.broadcast_tensors(x_hat, bound)
         upper_bound = (1 + rtol) * bound + atol
-        assert (upper_bound >= 0.0).all()
+        assert (upper_bound >= 0.0).all(), "upper bound must be non-negative"
         ok = x_hat <= upper_bound
 
         abs_violation = (x_hat - upper_bound).clamp_min(0)
@@ -40,16 +66,26 @@ class TestCase:
         median_rel_err = rel_violation.nanmedian().item()
 
         if not ok.all():
+            (
+                worst_index,
+                worst_value,
+                worst_upper_bound,
+                worst_abs_err,
+                worst_rel_err,
+            ) = self._worst_offender(abs_violation, upper_bound, x_hat)
             msg = (
                 f"Values exceed bound! "
-                f"\n\tvalue: {x_hat.tolist()}"
-                f"\n\tbound: {bound.tolist()}"
                 f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmax    rel violation={max_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmean   rel violation={mean_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmedian rel violation={median_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tworst offender index={worst_index}"
+                f"\n\tworst offender value={worst_value!r}"
+                f"\n\tworst offender upper bound={worst_upper_bound!r}"
+                f"\n\tworst offender abs violation={worst_abs_err:8.2e}"
+                f"\n\tworst offender rel violation={worst_rel_err:8.2e}"
             )
             raise AssertionError(msg)
 
@@ -95,16 +131,26 @@ class TestCase:
         median_rel_err = rel_violation.nanmedian().item()
 
         if not ok.all():
+            (
+                worst_index,
+                worst_value,
+                worst_lower_bound,
+                worst_abs_err,
+                worst_rel_err,
+            ) = self._worst_offender(abs_violation, lower_bound, x_hat)
             msg = (
                 f"Values exceed bound! "
-                f"\n\tvalue: {x_hat.tolist()}"
-                f"\n\tbound: {bound.tolist()}"
                 f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
                 f"\n\tmax    rel violation={max_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmean   rel violation={mean_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmedian rel violation={median_rel_err:8.2e}  (expected {rtol})"
+                f"\n\tworst offender index={worst_index}"
+                f"\n\tworst offender value={worst_value!r}"
+                f"\n\tworst offender lower bound={worst_lower_bound!r}"
+                f"\n\tworst offender abs violation={worst_abs_err:8.2e}"
+                f"\n\tworst offender rel violation={worst_rel_err:8.2e}"
             )
             raise AssertionError(msg)
 
@@ -139,21 +185,9 @@ class TestCase:
         ok = residual <= rtol * magnitude + atol
 
         if not ok.all():
-            flat_index = residual.reshape(-1).argmax().item()
-            worst_index = (
-                ()
-                if residual.ndim == 0
-                else tuple(
-                    torch.unravel_index(
-                        torch.tensor(flat_index, device=residual.device),
-                        residual.shape,
-                    )
-                )
+            worst_index, worst_value, worst_expected, worst_abs_err, worst_rel_err = (
+                self._worst_offender(residual, x_ref, x_hat)
             )
-            worst_value = x_hat.reshape(-1)[flat_index].item()
-            worst_expected = x_ref.reshape(-1)[flat_index].item()
-            worst_abs_err = residual.reshape(-1)[flat_index].item()
-            worst_rel_err = (residual / magnitude).reshape(-1)[flat_index].item()
             max_abs_err = residual.max().item()
             mean_abs_err = residual.mean().item()
             median_abs_err = residual.median().item()
