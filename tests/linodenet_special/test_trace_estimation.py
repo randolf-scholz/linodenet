@@ -1,17 +1,15 @@
+import itertools
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import numpy as np
 import pytest
 import torch
 from torch import Tensor
 
-from linodenet_special.trace_estimation import (
-    Samplers,
-    TraceEstimators,
-)
+from linodenet_special.trace_estimation import TraceEstimators
 from tests.testing import DEVICES, DTYPES, PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
@@ -269,16 +267,19 @@ class TestVisualizations(TestTraceEstimator):
     INPUT_SIZE = 256
     DTYPE = torch.float32
     DEVICE = "cpu"
-    SAMPLER = "sphere"
+    SAMPLER = "orth"
     NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
     METHODS = {
-        "hutch": ("hutch", "forward"),
-        "hutch++": ("hutch++", "forward"),
-        "xtrace": ("xtrace", "forward"),
-        # "hutch(adjoint)": ("hutch", "adjoint"),
-        # "hutch(symmetric)": ("hutch", "symmetric"),
-        # "hutch++(adjoint)": ("hutch++", "adjoint"),
-        # "hutch++(symmetric)": ("hutch++", "symmetric"),
+        "hutch": ("hutch", "forward", "sphere"),
+        "hutch++": ("hutch++", "forward", "sphere"),
+        "xtrace": ("xtrace", "forward", "sphere"),
+        "hutch(gauss)": ("hutch", "forward", "gaussian"),
+        "hutch++(gauss)": ("hutch++", "forward", "gaussian"),
+        "xtrace(gauss)": ("xtrace", "forward", "gaussian"),
+        # "hutch(adjoint)": ("hutch", "adjoint", "orth"),
+        # "hutch(symmetric)": ("hutch", "symmetric", "orth"),
+        # "hutch++(adjoint)": ("hutch++", "adjoint", "orth"),
+        # "hutch++(symmetric)": ("hutch++", "symmetric", "orth"),
     }
 
     def compute_curves(
@@ -301,14 +302,14 @@ class TestVisualizations(TestTraceEstimator):
         curves: dict[str, list[Tensor]] = {test_id: [] for test_id in self.METHODS}
 
         for num_matvecs in self.NUM_MATVECS_GRID:
-            for test_id, (name, mode) in self.METHODS.items():
+            for test_id, (name, mode, sampler) in self.METHODS.items():
                 torch.manual_seed(self.SEED)
                 try:
                     estimator = TraceEstimators.new(
                         name,
                         num_matvecs=num_matvecs,
                         mode=mode,
-                        sampler=Samplers.new(self.SAMPLER),
+                        sampler=sampler,
                     )
                     estimate = estimator.to(device=device, dtype=dtype)(op, x)
                 except ValueError:
@@ -329,33 +330,21 @@ class TestVisualizations(TestTraceEstimator):
     ) -> None:
         RESULT_DIR.mkdir(exist_ok=True)
         fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
-        colors = {
-            "hutch": "C0",
-            "hutch++": "C1",
-            "xtrace": "C2",
-        }
-        markers = {
-            "hutch": "^",
-            "hutch++": "D",
-            "xtrace": "s",
-        }
-        linestyles = {
-            "forward": "-",
-            "adjoint": "--",
-            "symmetric": ":",
-        }
+        colors = {"hutch": "C0", "hutch++": "C1", "xtrace": "C2"}
+        markers = {"hutch": "^", "hutch++": "D", "xtrace": "s"}
+        linestyles: defaultdict[str, itertools.cycle[str]] = defaultdict(
+            lambda: itertools.cycle(["-", "--", ":", "-."])
+        )
         for test_id, curve in curves.items():
-            name, mode = self.METHODS[test_id]
-            finite = torch.isfinite(curve)
+            name, _, _ = self.METHODS[test_id]
             ax.plot(
-                np.asarray(self.NUM_MATVECS_GRID)[finite.numpy()],
-                curve[finite],
+                self.NUM_MATVECS_GRID,
+                curve,
                 color=colors[name],
                 marker=markers[name],
-                linestyle=linestyles[mode],
+                linestyle=next(linestyles[name]),
                 label=test_id,
             )
-            assert finite.any()
 
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
