@@ -1,5 +1,8 @@
 r"""Base test class for transforms."""
 
+__all__ = ["TestTransform"]
+
+import torch
 from torch import Tensor
 
 from linodenet.mappings.transforms import Transform
@@ -80,3 +83,59 @@ class TestTransform(TestSuite):
         self.assert_left_invertible(transform, y, atol=atol, rtol=rtol)
         self.assert_right_invertible_with_logabsdet(transform, x, atol=atol, rtol=rtol)
         self.assert_left_invertible_with_logabsdet(transform, y, atol=atol, rtol=rtol)
+
+    def assert_dual(
+        self,
+        transform: Transform,
+        inverse: Transform,
+        x: Tensor,
+        y: Tensor,
+        *,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        encoded_x = transform.encode(x)
+        decoded_x = inverse.decode(x)
+        decoded_y = transform.decode(y)
+        encoded_y = inverse.encode(y)
+        recovered_x = inverse.encode(encoded_x)
+        recovered_y = transform.encode(encoded_y)
+        self.assert_close(encoded_x, decoded_x, atol=atol, rtol=rtol)
+        self.assert_close(decoded_y, encoded_y, atol=atol, rtol=rtol)
+        self.assert_close(recovered_x, x, atol=atol, rtol=rtol)
+        self.assert_close(recovered_y, y, atol=atol, rtol=rtol)
+
+        encoded_x, encoded_x_logabsdet = transform.encode_and_logabsdet(x)
+        decoded_x, decoded_x_logabsdet = inverse.decode_and_logabsdet(x)
+        decoded_y, decoded_y_logabsdet = transform.decode_and_logabsdet(y)
+        encoded_y, encoded_y_logabsdet = inverse.encode_and_logabsdet(y)
+        recovered_x, recovered_x_logabsdet = inverse.encode_and_logabsdet(encoded_x)
+        recovered_y, recovered_y_logabsdet = transform.encode_and_logabsdet(encoded_y)
+        self.assert_close(encoded_x, decoded_x, atol=atol, rtol=rtol)
+        self.assert_close(decoded_y, encoded_y, atol=atol, rtol=rtol)
+        self.assert_close(recovered_x, x, atol=atol, rtol=rtol)
+        self.assert_close(recovered_y, y, atol=atol, rtol=rtol)
+        self.assert_close(
+            encoded_x_logabsdet + decoded_x_logabsdet,
+            torch.zeros_like(encoded_x_logabsdet),
+            atol=atol,
+            rtol=rtol,
+        )
+        self.assert_close(
+            decoded_y_logabsdet + encoded_y_logabsdet,
+            torch.zeros_like(decoded_y_logabsdet),
+            atol=atol,
+            rtol=rtol,
+        )
+        self.assert_close(
+            encoded_x_logabsdet + recovered_x_logabsdet,
+            torch.zeros_like(encoded_x_logabsdet),
+            atol=atol,
+            rtol=rtol,
+        )
+        self.assert_close(
+            encoded_y_logabsdet + recovered_y_logabsdet,
+            torch.zeros_like(encoded_y_logabsdet),
+            atol=atol,
+            rtol=rtol,
+        )
