@@ -179,8 +179,14 @@ class _SpectralNormImpl(torch.autograd.Function):
         ctx, *grad_outputs: Tensor
     ) -> tuple[Tensor, Tensor, Tensor, None, None, None]:
         u, v = ctx.saved_tensors
-        grad = grad_outputs[0] * torch.outer(u, v)
-        return grad, torch.zeros_like(u), torch.zeros_like(v), None, None, None
+        return (
+            grad_outputs[0] * torch.outer(u, v),
+            torch.zeros_like(u),
+            torch.zeros_like(v),
+            None,
+            None,
+            None,
+        )
 
 
 def spectral_norm(

@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 import torch
 from torch import Tensor
-from torch.linalg import vector_norm
+from torch.linalg import vecdot, vector_norm
 
 from linodenet_special.interfaces import DEFAULT_SPECTRAL_NORM_MAXITER
 
@@ -42,6 +42,9 @@ class _SingularTripletImpl(torch.autograd.Function):
         A, sigma, u, v = ctx.saved_tensors
         g_sigma, g_u, g_v = outer
 
+        zero_u = torch.zeros_like(u)
+        zero_v = torch.zeros_like(v)
+
         if g_sigma is None:
             g_sigma = torch.zeros((), dtype=A.dtype, device=A.device)
         if g_u is None:
@@ -52,24 +55,18 @@ class _SingularTripletImpl(torch.autograd.Function):
         g_sigma_out = g_sigma * torch.outer(u, v)
 
         if not (g_u.any().item() or g_v.any().item()):
-            return (
-                g_sigma_out,
-                torch.zeros_like(u),
-                torch.zeros_like(v),
-                None,
-                None,
-                None,
-            )
+            return g_sigma_out, zero_u, zero_v, None, None, None
 
         m, n = A.shape
-        options = {"dtype": A.dtype, "device": A.device}
-        zero_u = torch.zeros((m, 1), **options)
-        zero_v = torch.zeros((n, 1), **options)
-        eye_m = torch.eye(m, **options)
-        eye_n = torch.eye(n, **options)
+        eye_m = torch.eye(m, dtype=A.dtype, device=A.device)
+        eye_n = torch.eye(n, dtype=A.dtype, device=A.device)
 
-        k_top = torch.cat((sigma * eye_m, -A, u.unsqueeze(-1), zero_u), dim=1)
-        k_bottom = torch.cat((-A.T, sigma * eye_n, zero_v, v.unsqueeze(-1)), dim=1)
+        k_top = torch.cat(
+            [sigma * eye_m, -A, u.unsqueeze(-1), zero_u.unsqueeze(-1)], dim=1
+        )
+        k_bottom = torch.cat(
+            [-A.T, sigma * eye_n, zero_v.unsqueeze(-1), v.unsqueeze(-1)], dim=1
+        )
         k_mat = torch.cat((k_top, k_bottom), dim=0)
         c_vec = torch.cat((g_u, g_v), dim=0)
 
@@ -77,16 +74,9 @@ class _SingularTripletImpl(torch.autograd.Function):
         p = x[:m]
         q = x[m : m + n]
 
-        g_u_out = torch.outer(p - torch.dot(u, p) * u, v)
-        g_v_out = torch.outer(u, q - torch.dot(v, q) * v)
-        return (
-            g_sigma_out + g_u_out + g_v_out,
-            torch.zeros_like(u),
-            torch.zeros_like(v),
-            None,
-            None,
-            None,
-        )
+        g_u_out = torch.outer(p - vecdot(u, p) * u, v)
+        g_v_out = torch.outer(u, q - vecdot(v, q) * v)
+        return g_sigma_out + g_u_out + g_v_out, zero_u, zero_v, None, None, None
 
 
 def singular_triplet(
