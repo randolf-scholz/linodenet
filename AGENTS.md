@@ -21,6 +21,7 @@ Project conventions for automated agents contributing to `linodenet`.
 - Use f-strings for formatting.
 - Prefer comprehensions over `for`-loops and `map`/`filter`.
 - Avoid nested loops inside comprehensions; use an explicit loop when flattening or combining iterables.
+- Use relative imports only when importing from sibling submodules; use absolute imports otherwise.
 - Use context managers for resources.
 
 ## Typing
