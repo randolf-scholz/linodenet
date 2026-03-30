@@ -3,7 +3,6 @@ __all__ = [
 ]
 
 
-from functools import cache
 from typing import NamedTuple
 
 import torch
@@ -35,7 +34,6 @@ class ExampleWithKnownSVD(NamedTuple):
         return self.V[..., 0]
 
     @property
-    @cache  # noqa: B019
     def value(self) -> nn.Parameter:
         r"""Reconstruct the matrix A = U diag(S) Vᵀ."""
         A = torch.einsum("...mk, ...k, ...nk -> ...mn", self.U, self.S, self.V)
