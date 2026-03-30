@@ -82,6 +82,8 @@ repos:
           - "forward"
           - "backward"
           - "--"
+      - id: use-relative-imports
+        files: '^src/|^tests/'
       # script-based hooks
       - id: check-clean-interface
         files: '^src/'
