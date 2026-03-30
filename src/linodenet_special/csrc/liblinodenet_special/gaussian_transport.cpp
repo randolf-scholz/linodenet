@@ -146,6 +146,8 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_to_gaussian_d
     d_x = d_x.clamp_(lower_bound, upper_bound);
     const Tensor d_mu = mu_sign * d_mu_abs.clamp_(-upper_bound, upper_bound);
 
+    // Reuse d_x as the common scale so only the normalized two-mode weights
+    // need to be carried into the second-derivative terms.
     const Tensor z_avg = z_plus * w_plus + z_minus * w_minus;
     const Tensor z_diff = z_plus * w_plus - z_minus * w_minus;
     const Tensor z2_avg = z_plus.square() * w_plus + z_minus.square() * w_minus;
@@ -161,6 +163,8 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_to_gaussian_d
 }
 
 Tensor gaussian_to_bimodal_guess(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+    // Match the slope at the origin with the hard-bend surrogate to get a cheap
+    // initial guess for the safeguarded Newton iteration.
     const Tensor lambda = exp(-0.5 * (mu / sigma).square()) / sigma;
     return linodenet_special::hard_bend(x, lambda, mu, sigma.reciprocal());
 }
@@ -277,6 +281,8 @@ mixture_to_gaussian_derivatives2(
     const Tensor centered_scaled_phi = scaled_phi - scaled_phi.mean(-1, true);
     const Tensor d_weights = (log_phi_max - log_pdf_u).exp() * centered_scaled_phi;
 
+    // Eₖ / σₖ reappears in multiple mixed second derivatives, so keep that
+    // common factor grouped before forming the final Jacobian entries.
     const Tensor e_over_sigma = (log_ratio - log_sigmas).exp();
     const Tensor d2_x = y * d_x.square() + (d_sigmas / sigmas).sum(-1);
     const Tensor d2_weights =
@@ -478,6 +484,8 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
         d_y = d_y.clamp_(sigma, upper_bound);
         d_mu_inv = d_mu_inv.clamp_(-1, 1);
 
+        // j = ∂x/∂y = (∂T/∂x)⁻¹, so differentiating the inverse map once more
+        // introduces the cubic power of dx_inv in these Jacobian-output terms.
         const Tensor dx_inv3 = dx_inv.pow(3);
         const Tensor j_y = -d2_x * dx_inv3;
         const Tensor j_mu = (d2_x * d_mu - d2_mu * d_x) * dx_inv3;
@@ -643,6 +651,8 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
         const auto [d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas] =
             mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
         const Tensor dx_inv = d_x.reciprocal();
+        // Every inverse-map parameter derivative is -(∂T/∂θ)/(∂T/∂x), and the
+        // Jacobian-output derivatives reuse the same dx_inv³ factor.
         const Tensor dx_inv3 = dx_inv.pow(3);
 
         const Tensor d_y = dx_inv;
