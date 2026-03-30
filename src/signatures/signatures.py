@@ -654,7 +654,7 @@ class Parser:
                         assert offset is not None
                         return offset
                     case [(Sign.POS, ConstantDim(1), var)], None:
-                        return var  # type: ignore[unreachable]
+                        return var
                     case _:
                         return affine_dim
 
