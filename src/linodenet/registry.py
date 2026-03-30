@@ -11,7 +11,7 @@ __all__ = [
 from collections.abc import Callable as Fn, Iterator, Mapping
 from dataclasses import dataclass, fields
 
-from .domains import Domain
+from .domains import MATRIX_TESTS, VECTOR_TESTS, Domain, is_orthogonal
 from .initializations import INITIALIZATION_FNS
 from .mappings import BIJECTIONS, PROJECTION_FNS, SURJECTIONS
 from .parametrizations import (
@@ -24,7 +24,6 @@ from .regularizations import (
     REGULARIZATION_FNS_WITHOUT_ARGS,
     REGULARIZATIONS,
 )
-from .testing import MATRIX_TESTS, VECTOR_TESTS, is_orthogonal
 
 
 @dataclass(slots=True)

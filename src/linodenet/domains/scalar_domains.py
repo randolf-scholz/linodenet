@@ -21,6 +21,7 @@ __logger__ = logging.getLogger(__name__)
 class Interval(ScalarDomain):
     r"""A named tuple representing an interval."""
 
+    # pyrefly: ignore [bad-assignment]
     EMPTY: ClassVar[Final[Interval]] = ...  # pyright: ignore[reportAssignmentType]
 
     lower: Final[float]  # type: ignore[misc]
