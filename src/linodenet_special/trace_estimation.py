@@ -39,7 +39,7 @@ import math
 from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from enum import StrEnum
-from typing import Final, Protocol, overload
+from typing import Any, Final, Protocol, overload
 
 import torch
 from torch import Tensor, nn, vmap
@@ -65,15 +65,18 @@ class Samplers(StrEnum):
         r"""Construct a built-in sampler or forward a custom sampler as-is."""
         if callable(sampler):
             return sampler
-        match cls(sampler):
-            case cls.GAUSSIAN:
+
+        match Samplers(sampler):
+            case Samplers.GAUSSIAN:
                 return GaussianSampler()
-            case cls.SIGN:
+            case Samplers.SIGN:
                 return SignSampler()
-            case cls.SPHERE:
+            case Samplers.SPHERE:
                 return SphereSampler()
-            case cls.ORTH:
+            case Samplers.ORTH:
                 return OrthSampler()
+            case _:
+                raise ValueError
 
 
 class TraceEstimators(StrEnum):
@@ -92,17 +95,22 @@ class TraceEstimators(StrEnum):
         num_matvecs: int,
         mode: str,
         sampler: str | AbstractSampler,
+        **kwargs: Any,
     ) -> TraceEstimator:
-        match cls(estimator):
-            case cls.EXACT:
+        match TraceEstimators(estimator):
+            case TraceEstimators.EXACT:
                 __logger__.warning("Estimator 'exact' was chosen, ignoring passed args")
                 return ExactTrace()
-            case cls.HUTCH:
+            case TraceEstimators.HUTCH:
                 return HutchinsonEstimator(num_matvecs, sampler=sampler, mode=mode)
-            case cls.HUTCH_PP:
+            case TraceEstimators.HUTCH_PP:
                 return HutchPP_Estimator(num_matvecs, sampler=sampler, mode=mode)
-            case cls.XTRACE:
-                return XTraceEstimator(num_matvecs, sampler=sampler, mode=mode)
+            case TraceEstimators.XTRACE:
+                return XTraceEstimator(
+                    num_matvecs, sampler=sampler, mode=mode, **kwargs
+                )
+            case _:
+                raise ValueError
 
 
 class LogAbsDetEstimators(StrEnum):
@@ -122,8 +130,8 @@ class LogAbsDetEstimators(StrEnum):
         sampler: str | AbstractSampler = "sphere",
         mode: str = "symmetric",
     ) -> ExactLogabsdet | LogabsdetSeriesEstimator:
-        match e := cls(estimator):
-            case cls.EXACT:
+        match e := LogAbsDetEstimators(estimator):
+            case LogAbsDetEstimators.EXACT:
                 __logger__.warning("Estimator 'exact' was chosen, ignoring passed args")
                 return ExactLogabsdet()
             case _:
