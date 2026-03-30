@@ -13,7 +13,7 @@ class InitializationFn(Protocol):
 
     def __call__(
         self,
-        size: int | tuple[int, ...] = (),
+        size: int | tuple[int, ...],
         /,
         *args: Any,
         dtype: Optional[torch.dtype] = None,
@@ -24,7 +24,7 @@ class InitializationFn(Protocol):
         ...
 
 
-class Initialization(InitializationFn, Protocol):
+class Initialization(Protocol):
     r"""Protocol for shape-bound initialization samplers."""
 
     def __call__(

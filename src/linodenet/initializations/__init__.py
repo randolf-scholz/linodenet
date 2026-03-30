@@ -6,7 +6,7 @@ Notes:
     - See `linodenet.initializations.functional` for functional implementations.
     - See `linodenet.initializations.modules` for all module-based initializations.
 """
-# ruff: noqa: F403, F405
+# ruff: noqa: F403
 
 __all__ = [
     # Sub-Modules
@@ -18,15 +18,19 @@ __all__ = [
     # protocols
     "InitializationFn",
     "Initialization",
+    # extra
+    "thomson_initialization",
+    "wide_angle_sphere_init",
 ]
 
 from . import functional, modules
 from .base import Initialization, InitializationFn
 from .functional import *
 from .modules import *
-from .thomson_initialization import thomson_initialization
+from .thomson_initialization import thomson_initialization, wide_angle_sphere_init
 
-__all__ += functional.__all__ + modules.__all__
+__all__ += functional.__all__
+__all__ += modules.__all__
 
 INITIALIZATION_FNS: dict[str, InitializationFn] = {
     "symplectic"          : functional.symplectic,
@@ -38,7 +42,6 @@ INITIALIZATION_FNS: dict[str, InitializationFn] = {
     "special_orthogonal"  : functional.special_orthogonal,
     "symmetric"           : functional.symmetric,
     "traceless"           : functional.traceless,
-    "thomson"             : thomson_initialization,
 }  # fmt: skip
 r"""Dictionary containing all available initializations (functions)."""
 
