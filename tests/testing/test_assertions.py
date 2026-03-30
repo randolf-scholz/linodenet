@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from tests.testing import TestSuite
+from .assertions import TestSuite
 
 
 class TestBoundedAssertions(TestSuite):
