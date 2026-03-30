@@ -43,64 +43,64 @@ class ComplexDomain(ScalarDomain):
 class OpenRightPlane(ComplexDomain):
     r"""The complex region with $Re(z) > 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.real > 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.real > 0
 
 
 @dataclass(frozen=True)
 class OpenLeftPlane(ComplexDomain):
     r"""The complex region with $Re(z) < 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.real < 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.real < 0
 
 
 @dataclass(frozen=True)
 class OpenUpperPlane(ComplexDomain):
     r"""The complex region with $Im(z) > 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((item + 0.0j).imag > 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (value + 0.0j).imag > 0
 
 
 @dataclass(frozen=True)
 class OpenLowerPlane(ComplexDomain):
     r"""The complex region with $Im(z) < 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((item + 0.0j).imag < 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (value + 0.0j).imag < 0
 
 
 @dataclass(frozen=True)
 class ClosedRightPlane(ComplexDomain):
     r"""The complex region with $Re(z) ≥ 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.real >= 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.real >= 0
 
 
 @dataclass(frozen=True)
 class ClosedLeftPlane(ComplexDomain):
     r"""The complex region with $Re(z) ≤ 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.real <= 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.real <= 0
 
 
 @dataclass(frozen=True)
 class ClosedUpperPlane(ComplexDomain):
     r"""The complex region with $Im(z) ≥ 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((item + 0.0j).imag >= 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (value + 0.0j).imag >= 0
 
 
 @dataclass(frozen=True)
 class ClosedLowerPlane(ComplexDomain):
     r"""The complex region with $Im(z) ≤ 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((item + 0.0j).imag <= 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (value + 0.0j).imag <= 0
 
 
 @dataclass(frozen=True)
@@ -113,8 +113,8 @@ class OpenDisk(ComplexDomain):
         if self.radius < 0:
             raise ValueError("Open disks require a non-negative radius.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.abs() < self.radius).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.abs() < self.radius
 
 
 @dataclass(frozen=True)
@@ -127,32 +127,32 @@ class ClosedDisk(ComplexDomain):
         if self.radius < 0:
             raise ValueError("Closed disks require a non-negative radius.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.abs() <= self.radius).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.abs() <= self.radius
 
 
 @dataclass(frozen=True)
 class OpenUnitDisk(ComplexDomain):
     r"""The complex region with $|z| < 1$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.abs() < 1).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.abs() < 1
 
 
 @dataclass(frozen=True)
 class ClosedUnitDisk(ComplexDomain):
     r"""The complex region with $|z| ≤ 1$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.abs() <= 1).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.abs() <= 1
 
 
 @dataclass(frozen=True)
 class UnitCircle(ComplexDomain):
     r"""The complex region with $|z| = 1$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.abs() == 1).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.abs() == 1
 
 
 @dataclass(frozen=True)
@@ -166,8 +166,8 @@ class OpenVerticalStrip(ComplexDomain):
         if self.lower > self.upper:
             raise ValueError("Expected lower <= upper.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((self.lower < item.real) & (item.real < self.upper)).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (self.lower < value.real) & (value.real < self.upper)
 
 
 @dataclass(frozen=True)
@@ -181,8 +181,8 @@ class ClosedVerticalStrip(ComplexDomain):
         if self.lower > self.upper:
             raise ValueError("Expected lower <= upper.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((self.lower <= item.real) & (item.real <= self.upper)).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (self.lower <= value.real) & (value.real <= self.upper)
 
 
 @dataclass(frozen=True)
@@ -196,9 +196,9 @@ class OpenHorizontalStrip(ComplexDomain):
         if self.lower > self.upper:
             raise ValueError("Expected lower <= upper.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        imag = (item + 0.0j).imag
-        return bool(((self.lower < imag) & (imag < self.upper)).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        imag = (value + 0.0j).imag
+        return (self.lower < imag) & (imag < self.upper)
 
 
 @dataclass(frozen=True)
@@ -212,9 +212,9 @@ class ClosedHorizontalStrip(ComplexDomain):
         if self.lower > self.upper:
             raise ValueError("Expected lower <= upper.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        imag = (item + 0.0j).imag
-        return bool(((self.lower <= imag) & (imag <= self.upper)).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        imag = (value + 0.0j).imag
+        return (self.lower <= imag) & (imag <= self.upper)
 
 
 @dataclass(frozen=True)
@@ -223,8 +223,8 @@ class HorizontalLine(ComplexDomain):
 
     value: Final[float]  # type: ignore[misc]
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((item + 0.0j).imag == self.value).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (value + 0.0j).imag == self.value
 
 
 @dataclass(frozen=True)
@@ -233,21 +233,21 @@ class VerticalLine(ComplexDomain):
 
     value: Final[float]  # type: ignore[misc]
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.real == self.value).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.real == self.value
 
 
 @dataclass(frozen=True)
 class ImaginaryAxis(ComplexDomain):
     r"""The complex region with $Re(z) = 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool((item.real == 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.real == 0
 
 
 @dataclass(frozen=True)
 class RealAxis(ComplexDomain):
     r"""The complex region with $Im(z) = 0$."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(((item + 0.0j).imag == 0).item())
+    def check(self, value: Tensor, /) -> Tensor:
+        return (value + 0.0j).imag == 0
