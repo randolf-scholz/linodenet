@@ -8,31 +8,45 @@ from linodenet.mappings.transforms import (
     GaussianToMixture,
     MixtureToGaussian,
 )
-from tests.testing import SEEDS_10
+from tests.testing import SEEDS_5
 
 from .test_transform import TestTransform
 
 
-@pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
+@pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
 class TestGaussianTransportFlow(TestTransform):
     VALUE_TOL = (1e-5, 1e-5)
-    BATCH_SIZE = 128
-    TEST_RANGE = (-4.0, 4.0)
+    NUM_STEPS = 128
+    NUM_COMPONENTS = 3
+    TEST_RANGE = (-5.0, 5.0)
 
-    def make_test_range(self) -> Tensor:
+    def make_bimodal_test_case(self, seed: int) -> tuple[Tensor, Tensor, Tensor]:
+        generator = torch.Generator().manual_seed(seed)
         start, end = self.TEST_RANGE
-        return torch.linspace(start, end, self.BATCH_SIZE)
+        values = torch.linspace(start, end, self.NUM_STEPS)
+        mean = 3 * torch.rand((), generator=generator) - 1.5
+        log_std = torch.rand((), generator=generator) - 0.5
+        return values, mean, log_std
 
-    @pytest.mark.parametrize(("mean", "log_std"), [(1.75, -0.2)])
-    def test_bimodal_to_gaussian(self, seed: int, mean: float, log_std: float) -> None:
-        torch.manual_seed(seed)
+    def make_mixture_test_case(
+        self, seed: int
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        generator = torch.Generator().manual_seed(seed)
+        start, end = self.TEST_RANGE
+        values = torch.linspace(start, end, self.NUM_STEPS)
+        weights = torch.randn(self.NUM_COMPONENTS, generator=generator)
+        means = 4 * torch.rand(self.NUM_COMPONENTS, generator=generator) - 2
+        log_std = torch.rand(self.NUM_COMPONENTS, generator=generator) - 0.5
+        return values, weights, means, log_std
+
+    def test_bimodal_to_gaussian(self, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
+        x, mean, log_std = self.make_bimodal_test_case(seed)
         flow = BimodalToGaussian()
         with torch.no_grad():
-            flow.mean.copy_(torch.tensor(mean))
-            flow.log_std.copy_(torch.tensor(log_std))
+            flow.mean.copy_(mean)
+            flow.log_std.copy_(log_std)
 
-        x = self.make_test_range()
         y = flow.encode(x)
         self.assert_invertible(flow, x, y, atol=value_atol, rtol=value_rtol)
         inverse = GaussianToBimodal()
@@ -41,16 +55,14 @@ class TestGaussianTransportFlow(TestTransform):
             inverse.log_std.copy_(flow.log_std)
         self.assert_dual(flow, inverse, x, y, atol=value_atol, rtol=value_rtol)
 
-    @pytest.mark.parametrize(("mean", "log_std"), [(1.5, 0.1)])
-    def test_gaussian_to_bimodal(self, seed: int, mean: float, log_std: float) -> None:
-        torch.manual_seed(seed)
+    def test_gaussian_to_bimodal(self, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
+        y, mean, log_std = self.make_bimodal_test_case(seed)
         flow = GaussianToBimodal()
         with torch.no_grad():
-            flow.mean.copy_(torch.tensor(mean))
-            flow.log_std.copy_(torch.tensor(log_std))
+            flow.mean.copy_(mean)
+            flow.log_std.copy_(log_std)
 
-        y = self.make_test_range()
         x = flow.encode(y)
         self.assert_invertible(flow, y, x, atol=value_atol, rtol=value_rtol)
         inverse = BimodalToGaussian()
@@ -59,58 +71,36 @@ class TestGaussianTransportFlow(TestTransform):
             inverse.log_std.copy_(flow.log_std)
         self.assert_dual(flow, inverse, y, x, atol=value_atol, rtol=value_rtol)
 
-    @pytest.mark.parametrize(
-        ("weights", "means", "log_std"),
-        [([-0.2, 0.1, 0.5], [-2.0, 0.0, 1.5], [-0.4, 0.0, 0.3])],
-    )
-    def test_mixture_to_gaussian(
-        self,
-        seed: int,
-        weights: list[float],
-        means: list[float],
-        log_std: list[float],
-    ) -> None:
-        torch.manual_seed(seed)
+    def test_mixture_to_gaussian(self, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
-        flow = MixtureToGaussian(3)
+        x, weights, means, log_std = self.make_mixture_test_case(seed)
+        flow = MixtureToGaussian(self.NUM_COMPONENTS)
         with torch.no_grad():
-            flow.weights.copy_(torch.tensor(weights))
-            flow.means.copy_(torch.tensor(means))
-            flow.log_std.copy_(torch.tensor(log_std))
+            flow.weights.copy_(weights)
+            flow.means.copy_(means)
+            flow.log_std.copy_(log_std)
 
-        x = self.make_test_range()
         y = flow.encode(x)
         self.assert_invertible(flow, x, y, atol=value_atol, rtol=value_rtol)
-        inverse = GaussianToMixture(3)
+        inverse = GaussianToMixture(self.NUM_COMPONENTS)
         with torch.no_grad():
             inverse.weights.copy_(flow.weights)
             inverse.means.copy_(flow.means)
             inverse.log_std.copy_(flow.log_std)
         self.assert_dual(flow, inverse, x, y, atol=value_atol, rtol=value_rtol)
 
-    @pytest.mark.parametrize(
-        ("weights", "means", "log_std"),
-        [([0.2, -0.1, 0.7], [-1.0, 0.5, 2.0], [0.0, -0.3, 0.2])],
-    )
-    def test_gaussian_to_mixture(
-        self,
-        seed: int,
-        weights: list[float],
-        means: list[float],
-        log_std: list[float],
-    ) -> None:
-        torch.manual_seed(seed)
+    def test_gaussian_to_mixture(self, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
-        flow = GaussianToMixture(3)
+        y, weights, means, log_std = self.make_mixture_test_case(seed)
+        flow = GaussianToMixture(self.NUM_COMPONENTS)
         with torch.no_grad():
-            flow.weights.copy_(torch.tensor(weights))
-            flow.means.copy_(torch.tensor(means))
-            flow.log_std.copy_(torch.tensor(log_std))
+            flow.weights.copy_(weights)
+            flow.means.copy_(means)
+            flow.log_std.copy_(log_std)
 
-        y = self.make_test_range()
         x = flow.encode(y)
         self.assert_invertible(flow, y, x, atol=value_atol, rtol=value_rtol)
-        inverse = MixtureToGaussian(3)
+        inverse = MixtureToGaussian(self.NUM_COMPONENTS)
         with torch.no_grad():
             inverse.weights.copy_(flow.weights)
             inverse.means.copy_(flow.means)
