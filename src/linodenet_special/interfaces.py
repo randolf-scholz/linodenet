@@ -19,7 +19,6 @@ __all__ = [
     # Classes
     "KnownFunctions",
     "Kernels",
-    "IncompleteKernels",
 ]
 
 from dataclasses import dataclass
@@ -247,24 +246,4 @@ class Kernels:
     gaussian_to_mixture_value_and_grad:  GaussianToMixtureValueAndGrad
     mixture_to_gaussian:                 MixtureToGaussian
     mixture_to_gaussian_value_and_grad:  MixtureToGaussianValueAndGrad
-    # fmt: on
-
-
-@dataclass(frozen=True)
-class IncompleteKernels:
-    r"""The selected kernels exposed as attributes."""
-
-    # fmt: off
-    singular_triplet:                    SingularTriplet | None
-    spectral_norm:                       SpectralNorm | None
-    ndtri_exp:                           NdtriExp | None
-    hard_bend:                           HardBend | None
-    bimodal_to_gaussian:                 BimodalToGaussian | None
-    bimodal_to_gaussian_value_and_grad:  BimodalToGaussianValueAndGrad | None
-    gaussian_to_bimodal:                 GaussianToBimodal | None
-    gaussian_to_bimodal_value_and_grad:  GaussianToBimodalValueAndGrad | None
-    gaussian_to_mixture:                 GaussianToMixture | None
-    gaussian_to_mixture_value_and_grad:  GaussianToMixtureValueAndGrad | None
-    mixture_to_gaussian:                 MixtureToGaussian | None
-    mixture_to_gaussian_value_and_grad:  MixtureToGaussianValueAndGrad | None
     # fmt: on

@@ -25,13 +25,13 @@ import logging
 from typing import Any, Final
 
 from . import compiled as CPP, fallbacks as PY
-from .interfaces import IncompleteKernels, Kernels, KnownFunctions
+from .interfaces import Kernels, KnownFunctions
 
 logging.basicConfig(level=logging.WARNING)
 __logger__ = logging.getLogger(__package__)
 
 
-def _select_fns() -> IncompleteKernels:
+def _select_fns() -> Kernels:
     r"""Select compiled kernels when available and fall back otherwise."""
     impls: dict[str, Any] = {}
     compiled_missing: set[str] = set()
@@ -53,7 +53,7 @@ def _select_fns() -> IncompleteKernels:
             "\nUsing pure python fallbacks for these functions."
         )
 
-    return IncompleteKernels(**impls)
+    return Kernels(**impls)
 
 
 FALLBACKS: Final[Kernels] = Kernels(
@@ -86,7 +86,7 @@ COMPILED: Final[Kernels] = Kernels(
     mixture_to_gaussian_value_and_grad=CPP.mixture_to_gaussian_value_and_grad,
 )
 
-KERNELS: Final[IncompleteKernels] = _select_fns()
+KERNELS: Final[Kernels] = _select_fns()
 # fmt: off
 hard_bend: Final            = KERNELS.hard_bend
 ndtri_exp: Final            = KERNELS.ndtri_exp

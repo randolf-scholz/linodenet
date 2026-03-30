@@ -22,6 +22,7 @@ __all__ = [
 import logging
 import math
 import os
+from collections.abc import Callable as Fn
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final, Optional, cast
@@ -299,18 +300,18 @@ def singular_triplet(
 
 RAW_KERNELS: Final[KnownFunctions] = _compile_liblinodenet()
 # fmt: off
-_bimodal_to_gaussian                 = RAW_KERNELS.get("bimodal_to_gaussian")
-_bimodal_to_gaussian_value_and_grad  = RAW_KERNELS.get("bimodal_to_gaussian_value_and_grad")
-_gaussian_to_bimodal                 = RAW_KERNELS.get("gaussian_to_bimodal")
-_gaussian_to_bimodal_value_and_grad  = RAW_KERNELS.get("gaussian_to_bimodal_value_and_grad")
-_gaussian_to_mixture                 = RAW_KERNELS.get("gaussian_to_mixture")
-_gaussian_to_mixture_value_and_grad  = RAW_KERNELS.get("gaussian_to_mixture_value_and_grad")
-_mixture_to_gaussian                 = RAW_KERNELS.get("mixture_to_gaussian")
-_mixture_to_gaussian_value_and_grad  = RAW_KERNELS.get("mixture_to_gaussian_value_and_grad")
-_hard_bend                           = RAW_KERNELS.get("hard_bend")
-_ndtri_exp                           = RAW_KERNELS.get("ndtri_exp")
-_singular_triplet                    = RAW_KERNELS.get("singular_triplet")
-_spectral_norm                       = RAW_KERNELS.get("spectral_norm")
+_bimodal_to_gaussian                : Fn | None  = RAW_KERNELS.get("bimodal_to_gaussian")
+_bimodal_to_gaussian_value_and_grad : Fn | None  = RAW_KERNELS.get("bimodal_to_gaussian_value_and_grad")
+_gaussian_to_bimodal                : Fn | None  = RAW_KERNELS.get("gaussian_to_bimodal")
+_gaussian_to_bimodal_value_and_grad : Fn | None  = RAW_KERNELS.get("gaussian_to_bimodal_value_and_grad")
+_gaussian_to_mixture                : Fn | None  = RAW_KERNELS.get("gaussian_to_mixture")
+_gaussian_to_mixture_value_and_grad : Fn | None  = RAW_KERNELS.get("gaussian_to_mixture_value_and_grad")
+_mixture_to_gaussian                : Fn | None  = RAW_KERNELS.get("mixture_to_gaussian")
+_mixture_to_gaussian_value_and_grad : Fn | None  = RAW_KERNELS.get("mixture_to_gaussian_value_and_grad")
+_hard_bend                          : Fn | None  = RAW_KERNELS.get("hard_bend")
+_ndtri_exp                          : Fn | None  = RAW_KERNELS.get("ndtri_exp")
+_singular_triplet                   : Fn | None  = RAW_KERNELS.get("singular_triplet")
+_spectral_norm                      : Fn | None  = RAW_KERNELS.get("spectral_norm")
 # fmt: on
 
 AVAILABLE_KERNELS: Final[frozenset[str]] = frozenset(
