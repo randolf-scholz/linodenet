@@ -41,13 +41,16 @@ class Union(constraints.Constraint):
     def check(self, value: Tensor) -> Tensor:
         if not self.constraints:
             return torch.zeros_like(value, dtype=torch.bool)
-        checks = [constraint.check(value) for constraint in self.constraints]
+        checks: list[Tensor] = [
+            constraint.check(value) for constraint in self.constraints
+        ]
         return torch.stack(checks).any(dim=0)
 
 
 class MarchenkoPastur(Distribution):
     r"""Marchenko-Pastur distribution with parameters γ and σ²."""
 
+    # pyrefly: ignore [bad-override]
     arg_constraints = {  # pyright: ignore [reportIncompatibleMethodOverride, reportAssignmentType]
         "gamma": constraints.positive,
         "sigma2": constraints.positive,
