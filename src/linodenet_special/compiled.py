@@ -24,7 +24,7 @@ import math
 import os
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Final, Optional
+from typing import Any, Final, Optional, cast
 
 import torch
 from torch import Tensor
@@ -116,28 +116,10 @@ def _compile_fns() -> KnownFunctions:
         )
         __logger__.warning("%s", message)
 
-    return {
-        "singular_triplet": compiled_fns.get("singular_triplet"),
-        "spectral_norm": compiled_fns.get("spectral_norm"),
-        "ndtri_exp": compiled_fns.get("ndtri_exp"),
-        "hard_bend": compiled_fns.get("hard_bend"),
-        "bimodal_to_gaussian": compiled_fns.get("bimodal_to_gaussian"),
-        "bimodal_to_gaussian_value_and_grad": compiled_fns.get(
-            "bimodal_to_gaussian_value_and_grad"
-        ),
-        "gaussian_to_bimodal": compiled_fns.get("gaussian_to_bimodal"),
-        "gaussian_to_bimodal_value_and_grad": compiled_fns.get(
-            "gaussian_to_bimodal_value_and_grad"
-        ),
-        "gaussian_to_mixture": compiled_fns.get("gaussian_to_mixture"),
-        "gaussian_to_mixture_value_and_grad": compiled_fns.get(
-            "gaussian_to_mixture_value_and_grad"
-        ),
-        "mixture_to_gaussian": compiled_fns.get("mixture_to_gaussian"),
-        "mixture_to_gaussian_value_and_grad": compiled_fns.get(
-            "mixture_to_gaussian_value_and_grad"
-        ),
-    }
+    return cast(
+        "KnownFunctions",
+        {key: compiled_fns.get(key) for key in KnownFunctions.__required_keys__},
+    )
 
 
 def _load_prebuilts() -> KnownFunctions:
@@ -149,28 +131,10 @@ def _load_prebuilts() -> KnownFunctions:
             f"Could not load custom binaries from {_LIB_FILE!s}."
         ) from exc
 
-    return {
-        "singular_triplet": getattr(_LIB, "singular_triplet", None),
-        "spectral_norm": getattr(_LIB, "spectral_norm", None),
-        "ndtri_exp": getattr(_LIB, "ndtri_exp", None),
-        "hard_bend": getattr(_LIB, "hard_bend", None),
-        "bimodal_to_gaussian": getattr(_LIB, "bimodal_to_gaussian", None),
-        "bimodal_to_gaussian_value_and_grad": getattr(
-            _LIB, "bimodal_to_gaussian_value_and_grad", None
-        ),
-        "gaussian_to_bimodal": getattr(_LIB, "gaussian_to_bimodal", None),
-        "gaussian_to_bimodal_value_and_grad": getattr(
-            _LIB, "gaussian_to_bimodal_value_and_grad", None
-        ),
-        "gaussian_to_mixture": getattr(_LIB, "gaussian_to_mixture", None),
-        "gaussian_to_mixture_value_and_grad": getattr(
-            _LIB, "gaussian_to_mixture_value_and_grad", None
-        ),
-        "mixture_to_gaussian": getattr(_LIB, "mixture_to_gaussian", None),
-        "mixture_to_gaussian_value_and_grad": getattr(
-            _LIB, "mixture_to_gaussian_value_and_grad", None
-        ),
-    }
+    return cast(
+        "KnownFunctions",
+        {key: getattr(_LIB, key, None) for key in KnownFunctions.__required_keys__},
+    )
 
 
 def _compile_liblinodenet() -> KnownFunctions:
