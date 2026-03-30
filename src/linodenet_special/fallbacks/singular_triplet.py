@@ -10,7 +10,9 @@ from typing import Any, Optional
 import torch
 from torch import Tensor
 
-from .spectral_norm import _DEFAULT_MAXITER, _spectral_norm_forward_impl
+from linodenet_special.interfaces import DEFAULT_SPECTRAL_NORM_MAXITER
+
+from .spectral_norm import _spectral_norm_forward_impl
 
 
 class _SingularTripletImpl(torch.autograd.Function):
@@ -78,11 +80,12 @@ def singular_triplet(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: int = _DEFAULT_MAXITER,
+    maxiter: int | None = None,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute the dominant singular triplet of a matrix."""
+    maxiter = DEFAULT_SPECTRAL_NORM_MAXITER[A.dtype] if maxiter is None else maxiter
     return _SingularTripletImpl.apply(A, u0, v0, maxiter, atol, rtol)
 
 
@@ -92,7 +95,7 @@ def singular_triplet_native(
     *,
     u0: Optional[Tensor] = None,  # noqa: ARG001
     v0: Optional[Tensor] = None,  # noqa: ARG001
-    maxiter: int = _DEFAULT_MAXITER,  # noqa: ARG001
+    maxiter: int | None = None,  # noqa: ARG001
     atol: float = 1e-6,  # noqa: ARG001
     rtol: float = 1e-6,  # noqa: ARG001
 ) -> tuple[Tensor, Tensor, Tensor]:
