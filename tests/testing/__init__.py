@@ -17,10 +17,10 @@ __all__ = [
     "timer",
 ]
 
-from tests.testing.assertions import TestSuite
-from tests.testing.constants import DEVICES, DTYPES, SEED, SEEDS_5, SEEDS_10
-from tests.testing.misc import camel2snake, snake2camel
-from tests.testing.plotting import visualize_distribution
-from tests.testing.project import PROJECT
-from tests.testing.timer import timer
-from tests.testing.xfail import pytest_xfail
+from .assertions import TestSuite
+from .constants import DEVICES, DTYPES, SEED, SEEDS_5, SEEDS_10
+from .misc import camel2snake, snake2camel
+from .plotting import visualize_distribution
+from .project import PROJECT
+from .timer import timer
+from .xfail import pytest_xfail
