@@ -9,7 +9,7 @@ from matplotlib.widgets import Slider
 from torch import Tensor
 
 from linodenet_special.fallbacks.hard_bend import hard_bend, hard_contract, hard_expand
-from tests.testing import PROJECT
+from tests.testing import PROJECT, TestCase
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 X_MIN, X_MAX = -8.0, 8.0
@@ -33,34 +33,34 @@ def _slider_positions(
 @pytest.mark.parametrize(
     "a", [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0], ids=lambda a: f"a={a}"
 )
-@pytest.mark.parametrize("c", [-3, -2, -0.5, 0.5, 1.0, 3.0], ids=lambda c: f"c={c}")
-@pytest.mark.parametrize("m", [0.125, 0.5, 1.0, 2.0], ids=lambda m: f"m={m}")
-def test_hard_bend_reversible(a: float, c: float, m: float) -> None:
-    x = make_test_grid(a, c, m)
-    y = hard_bend(x, a, c, m)
-    x_recovered = hard_bend(y, 1 / a, c / m, 1 / m)
+class TestCorrectness(TestCase):
+    RTOL = 1e-14
+    ATOL = 1e-14
 
-    torch.testing.assert_close(x_recovered, x, rtol=1e-14, atol=1e-14)
+    @pytest.mark.parametrize("c", [-3, -2, -0.5, 0.5, 1.0, 3.0], ids=lambda c: f"c={c}")
+    @pytest.mark.parametrize("m", [0.125, 0.5, 1.0, 2.0], ids=lambda m: f"m={m}")
+    def test_hard_bend_reversible(self, a: float, c: float, m: float) -> None:
+        x = make_test_grid(a, c, m)
+        y = hard_bend(x, a, c, m)
+        x_recovered = hard_bend(y, 1 / a, c / m, 1 / m)
 
+        self.assert_close(x_recovered, x)
 
-@pytest.mark.parametrize("a", [0.125, 0.25, 0.5, 1.0], ids=lambda a: f"a={a}")
-@pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
-def test_hard_contract_reversible(a: float, c: float) -> None:
-    x = make_test_grid(a, c)
-    y = hard_contract(x, a=a, c=c)
-    x_recovered = hard_expand(y, a=1 / a, c=c)
+    @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
+    def test_hard_contract_reversible(self, a: float, c: float) -> None:
+        x = make_test_grid(a, c)
+        y = hard_contract(x, a=a, c=c)
+        x_recovered = hard_expand(y, a=1 / a, c=c)
 
-    torch.testing.assert_close(x_recovered, x, rtol=1e-14, atol=1e-14)
+        self.assert_close(x_recovered, x)
 
+    @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
+    def test_hard_expand_reversible(self, a: float, c: float) -> None:
+        x = make_test_grid(a, c)
+        y = hard_expand(x, a=a, c=c)
+        x_recovered = hard_contract(y, a=1 / a, c=c)
 
-@pytest.mark.parametrize("a", [1.0, 2.0, 4.0, 8.0], ids=lambda a: f"a={a}")
-@pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
-def test_hard_expand_reversible(a: float, c: float) -> None:
-    x = make_test_grid(a, c)
-    y = hard_expand(x, a=a, c=c)
-    x_recovered = hard_contract(y, a=1 / a, c=c)
-
-    torch.testing.assert_close(x_recovered, x, rtol=1e-14, atol=1e-14)
+        self.assert_close(x_recovered, x)
 
 
 def bend(x: Tensor, a: Tensor | float, c: Tensor | float) -> Tensor:
