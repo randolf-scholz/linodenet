@@ -18,9 +18,11 @@ __all__ = [
     "SpectralNorm",
     # Classes
     "KnownFunctions",
+    "Kernels",
+    "IncompleteKernels",
 ]
 
-
+from dataclasses import dataclass
 from typing import Final, Optional, Protocol, ReadOnly, TypedDict
 
 import torch
@@ -225,4 +227,44 @@ class KnownFunctions(TypedDict):
     gaussian_to_mixture_value_and_grad:  ReadOnly[ GaussianToMixtureValueAndGrad | None ]
     mixture_to_gaussian:                 ReadOnly[ MixtureToGaussian | None ]
     mixture_to_gaussian_value_and_grad:  ReadOnly[ MixtureToGaussianValueAndGrad | None ]
+    # fmt: on
+
+
+@dataclass(frozen=True)
+class Kernels:
+    r"""The selected kernels exposed as attributes."""
+
+    # fmt: off
+    singular_triplet:                    SingularTriplet
+    spectral_norm:                       SpectralNorm
+    ndtri_exp:                           NdtriExp
+    hard_bend:                           HardBend
+    bimodal_to_gaussian:                 BimodalToGaussian
+    bimodal_to_gaussian_value_and_grad:  BimodalToGaussianValueAndGrad
+    gaussian_to_bimodal:                 GaussianToBimodal
+    gaussian_to_bimodal_value_and_grad:  GaussianToBimodalValueAndGrad
+    gaussian_to_mixture:                 GaussianToMixture
+    gaussian_to_mixture_value_and_grad:  GaussianToMixtureValueAndGrad
+    mixture_to_gaussian:                 MixtureToGaussian
+    mixture_to_gaussian_value_and_grad:  MixtureToGaussianValueAndGrad
+    # fmt: on
+
+
+@dataclass(frozen=True)
+class IncompleteKernels:
+    r"""The selected kernels exposed as attributes."""
+
+    # fmt: off
+    singular_triplet:                    SingularTriplet | None
+    spectral_norm:                       SpectralNorm | None
+    ndtri_exp:                           NdtriExp | None
+    hard_bend:                           HardBend | None
+    bimodal_to_gaussian:                 BimodalToGaussian | None
+    bimodal_to_gaussian_value_and_grad:  BimodalToGaussianValueAndGrad | None
+    gaussian_to_bimodal:                 GaussianToBimodal | None
+    gaussian_to_bimodal_value_and_grad:  GaussianToBimodalValueAndGrad | None
+    gaussian_to_mixture:                 GaussianToMixture | None
+    gaussian_to_mixture_value_and_grad:  GaussianToMixtureValueAndGrad | None
+    mixture_to_gaussian:                 MixtureToGaussian | None
+    mixture_to_gaussian_value_and_grad:  MixtureToGaussianValueAndGrad | None
     # fmt: on
