@@ -438,16 +438,17 @@ def xtrace_naive_estimator(
     Y = batched_op(samples)  # (...Nm)
 
     mus = []
-    for i in range(num_samples):
-        col_indices = torch.arange(num_samples, device=Y.device)
+    for i in range(k):
+        col_indices = torch.arange(k, device=Y.device)
         Q_i, _ = qr(Y[..., i != col_indices], mode="reduced")
         ω_i = samples[..., [i]]
         μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
         mus.append(μ_i)
         tr = tr + vecdot(Q_i, batched_op(Q_i), dim=-2).sum(dim=-1)
     μ = torch.cat(mus, dim=-1)
-    scale = 1.0 - renormalize * (1.0 - (N - k + 1) / vecdot(μ, μ, dim=-2, keepdim=True))
-    μ = μ * scale
+    μ_norm_sq = vecdot(μ, μ, dim=-2)
+    scale = 1.0 - renormalize * (1.0 - (N - k + 1) / μ_norm_sq)
+    μ = μ * scale.unsqueeze(-2)
     residual = vecdot(μ, batched_op(μ), dim=-2).mean(dim=-1)
     return tr / k + residual
 
@@ -1056,7 +1057,7 @@ class XTraceEstimator(TraceEstimator):
         4: Z ← AQ
         5: H ← QᴴZ, W ← QᴴΩ, T ← ZᴴΩ
         6: S ← R⁻ᴴ
-        7: S ← S · diag(∥sᵢ∥: i=1…m/2)
+        7: Normalize the columns of S to unit norm
         8: for i = 1 … m/2 do
         9:     xᵢ ← wᵢ − ⟨sᵢ∣wᵢ⟩·sᵢ
         10:    trᵢ ← \tr(H) − ⟨sᵢ|H sᵢ⟩ + ⟨wᵢ∣sᵢ⟩·⟨sᵢ∣rᵢ⟩ − ⟨tᵢ|xᵢ⟩ + ⟨xᵢ|Hxᵢ⟩
