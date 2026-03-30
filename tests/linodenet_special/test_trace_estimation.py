@@ -418,8 +418,8 @@ class TestVisualizations(TestTraceEstimator):
 
         curves: dict[str, list[Tensor]] = {test_id: [] for test_id in self.METHODS}
 
-        for num_matvecs in self.NUM_MATVECS_GRID:
-            for test_id, (name, mode, sampler) in self.METHODS.items():
+        for test_id, (name, mode, sampler) in self.METHODS.items():
+            for num_matvecs in self.NUM_MATVECS_GRID:
                 torch.manual_seed(self.SEED)
                 try:
                     estimator = TraceEstimators.new(
