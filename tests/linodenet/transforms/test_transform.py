@@ -47,7 +47,7 @@ class TestTransform(TestSuite):
         self.assert_close(decoded, arg, atol=atol, rtol=rtol)
         self.assert_close(
             forward_logabsdet + inverse_logabsdet,
-            forward_logabsdet.new_zeros(forward_logabsdet.shape),
+            torch.zeros_like(forward_logabsdet),
             atol=atol,
             rtol=rtol,
         )
@@ -65,7 +65,7 @@ class TestTransform(TestSuite):
         self.assert_close(encoded, arg, atol=atol, rtol=rtol)
         self.assert_close(
             forward_logabsdet + inverse_logabsdet,
-            forward_logabsdet.new_zeros(forward_logabsdet.shape),
+            torch.zeros_like(forward_logabsdet),
             atol=atol,
             rtol=rtol,
         )
@@ -94,48 +94,38 @@ class TestTransform(TestSuite):
         atol: float,
         rtol: float,
     ) -> None:
-        encoded_x = transform.encode(x)
-        decoded_x = inverse.decode(x)
-        decoded_y = transform.decode(y)
-        encoded_y = inverse.encode(y)
-        recovered_x = inverse.encode(encoded_x)
-        recovered_y = transform.encode(encoded_y)
-        self.assert_close(encoded_x, decoded_x, atol=atol, rtol=rtol)
-        self.assert_close(decoded_y, encoded_y, atol=atol, rtol=rtol)
-        self.assert_close(recovered_x, x, atol=atol, rtol=rtol)
-        self.assert_close(recovered_y, y, atol=atol, rtol=rtol)
+        y_primal = transform.encode(x)
+        x_primal = transform.decode(y)
+        y_dual = inverse.decode(x)
+        x_dual = inverse.encode(y)
+        x_recovered = inverse.encode(y_primal)
+        y_recovered = transform.encode(x_dual)
+        self.assert_close(y_primal, y_dual, atol=atol, rtol=rtol)
+        self.assert_close(x_primal, x_dual, atol=atol, rtol=rtol)
+        self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
+        self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
 
-        encoded_x, encoded_x_logabsdet = transform.encode_and_logabsdet(x)
-        decoded_x, decoded_x_logabsdet = inverse.decode_and_logabsdet(x)
-        decoded_y, decoded_y_logabsdet = transform.decode_and_logabsdet(y)
-        encoded_y, encoded_y_logabsdet = inverse.encode_and_logabsdet(y)
-        recovered_x, recovered_x_logabsdet = inverse.encode_and_logabsdet(encoded_x)
-        recovered_y, recovered_y_logabsdet = transform.encode_and_logabsdet(encoded_y)
-        self.assert_close(encoded_x, decoded_x, atol=atol, rtol=rtol)
-        self.assert_close(decoded_y, encoded_y, atol=atol, rtol=rtol)
-        self.assert_close(recovered_x, x, atol=atol, rtol=rtol)
-        self.assert_close(recovered_y, y, atol=atol, rtol=rtol)
+        y_primal, y_primal_logabsdet = transform.encode_and_logabsdet(x)
+        x_primal, x_primal_logabsdet = transform.decode_and_logabsdet(y)
+        y_dual, y_dual_logabsdet = inverse.decode_and_logabsdet(x)
+        x_dual, x_dual_logabsdet = inverse.encode_and_logabsdet(y)
+        x_recovered, x_recovered_logabsdet = inverse.encode_and_logabsdet(y_primal)
+        y_recovered, y_recovered_logabsdet = transform.encode_and_logabsdet(x_dual)
+        self.assert_close(y_primal, y_dual, atol=atol, rtol=rtol)
+        self.assert_close(x_primal, x_dual, atol=atol, rtol=rtol)
+        self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
+        self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
+        self.assert_close(y_primal_logabsdet, y_dual_logabsdet, atol=atol, rtol=rtol)
+        self.assert_close(x_primal_logabsdet, x_dual_logabsdet, atol=atol, rtol=rtol)
         self.assert_close(
-            encoded_x_logabsdet + decoded_x_logabsdet,
-            torch.zeros_like(encoded_x_logabsdet),
+            y_primal_logabsdet + x_recovered_logabsdet,
+            torch.zeros_like(y_primal_logabsdet),
             atol=atol,
             rtol=rtol,
         )
         self.assert_close(
-            decoded_y_logabsdet + encoded_y_logabsdet,
-            torch.zeros_like(decoded_y_logabsdet),
-            atol=atol,
-            rtol=rtol,
-        )
-        self.assert_close(
-            encoded_x_logabsdet + recovered_x_logabsdet,
-            torch.zeros_like(encoded_x_logabsdet),
-            atol=atol,
-            rtol=rtol,
-        )
-        self.assert_close(
-            encoded_y_logabsdet + recovered_y_logabsdet,
-            torch.zeros_like(encoded_y_logabsdet),
+            x_dual_logabsdet + y_recovered_logabsdet,
+            torch.zeros_like(x_dual_logabsdet),
             atol=atol,
             rtol=rtol,
         )
