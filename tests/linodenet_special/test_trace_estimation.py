@@ -10,9 +10,7 @@ from torch import Tensor
 
 from linodenet_special.trace_estimation import (
     Samplers,
-    hutch_pp_estimator,
-    hutchinson_estimator,
-    xtrace_estimator,
+    TraceEstimators,
 )
 from tests.testing import DEVICES, DTYPES, PROJECT, TestSuite
 
@@ -274,9 +272,13 @@ class TestVisualizations(TestTraceEstimator):
     SAMPLER = "sphere"
     NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
     METHODS = {
-        "xtrace": xtrace_estimator,
-        "hutch": hutchinson_estimator,
-        "hutch++": hutch_pp_estimator,
+        "hutch": ("hutch", "forward"),
+        "hutch++": ("hutch++", "forward"),
+        "xtrace": ("xtrace", "forward"),
+        # "hutch(adjoint)": ("hutch", "adjoint"),
+        # "hutch(symmetric)": ("hutch", "symmetric"),
+        # "hutch++(adjoint)": ("hutch++", "adjoint"),
+        # "hutch++(symmetric)": ("hutch++", "symmetric"),
     }
 
     def compute_curves(
@@ -296,17 +298,24 @@ class TestVisualizations(TestTraceEstimator):
         x = torch.zeros(batch_size, input_size, device=device, dtype=dtype)
         op = linear_map(matrix)
 
-        curves: dict[str, list[Tensor]] = {name: [] for name in self.METHODS}
+        curves: dict[str, list[Tensor]] = {test_id: [] for test_id in self.METHODS}
 
         for num_matvecs in self.NUM_MATVECS_GRID:
-            for name, method in self.METHODS.items():
-                sampler = Samplers.new(self.SAMPLER)
+            for test_id, (name, mode) in self.METHODS.items():
                 torch.manual_seed(self.SEED)
                 try:
-                    estimate = method(op, x, num_matvecs, sampler=sampler)
+                    estimator = TraceEstimators.new(
+                        name,
+                        num_matvecs=num_matvecs,
+                        mode=mode,
+                        sampler=Samplers.new(self.SAMPLER),
+                    )
+                    estimate = estimator.to(device=device, dtype=dtype)(op, x)
                 except ValueError:
                     estimate = torch.full((), torch.nan, device=device, dtype=dtype)
-                curves[name].append(((estimate - expected).abs() / denom).mean())
+                except NotImplementedError:
+                    estimate = torch.full((), torch.nan, device=device, dtype=dtype)
+                curves[test_id].append(((estimate - expected).abs() / denom).mean())
 
         return {name: torch.stack(values).cpu() for name, values in curves.items()}
 
@@ -320,18 +329,31 @@ class TestVisualizations(TestTraceEstimator):
     ) -> None:
         RESULT_DIR.mkdir(exist_ok=True)
         fig, ax = plt.subplots(figsize=(7, 4), constrained_layout=True)
+        colors = {
+            "hutch": "C0",
+            "hutch++": "C1",
+            "xtrace": "C2",
+        }
         markers = {
-            "xtrace": "s",
             "hutch": "^",
             "hutch++": "D",
+            "xtrace": "s",
         }
-        for name, curve in curves.items():
+        linestyles = {
+            "forward": "-",
+            "adjoint": "--",
+            "symmetric": ":",
+        }
+        for test_id, curve in curves.items():
+            name, mode = self.METHODS[test_id]
             finite = torch.isfinite(curve)
             ax.plot(
                 np.asarray(self.NUM_MATVECS_GRID)[finite.numpy()],
                 curve[finite],
+                color=colors[name],
                 marker=markers[name],
-                label=name,
+                linestyle=linestyles[mode],
+                label=test_id,
             )
             assert finite.any()
 
