@@ -111,7 +111,6 @@ class LogAbsDetEstimators(StrEnum):
     EXACT = "exact"
     HUTCH = "hutch"
     HUTCH_PP = "hutch++"
-    XTRACE = "xtrace"
 
     @classmethod
     def new(
