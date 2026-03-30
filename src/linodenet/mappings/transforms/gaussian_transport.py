@@ -13,9 +13,13 @@ from torch import Tensor, nn
 
 from linodenet_special import (
     bimodal_to_gaussian,
+    bimodal_to_gaussian_value_and_grad,
     gaussian_to_bimodal,
+    gaussian_to_bimodal_value_and_grad,
     gaussian_to_mixture,
+    gaussian_to_mixture_value_and_grad,
     mixture_to_gaussian,
+    mixture_to_gaussian_value_and_grad,
 )
 
 from .base import TransformBase
@@ -59,6 +63,20 @@ class BimodalToGaussian(TransformBase):
         sigma = self.log_std.exp()
         return gaussian_to_bimodal(x, mu, sigma)
 
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        mu = self.mean
+        sigma = self.log_std.exp()
+        y, grad = bimodal_to_gaussian_value_and_grad(x, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return y, grad.log()
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        mu = self.mean
+        sigma = self.log_std.exp()
+        x, grad = gaussian_to_bimodal_value_and_grad(y, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return x, grad.log()
+
 
 class GaussianToBimodal(TransformBase):
     r"""Monotone transport from $N(0,1)$ to the symmetric bimodal mixture $½N(-μ,σ²)+½N(μ,σ²)$.
@@ -101,6 +119,20 @@ class GaussianToBimodal(TransformBase):
         sigma = self.log_std.exp()
         return bimodal_to_gaussian(x, mu, sigma)
 
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        mu = self.mean
+        sigma = self.log_std.exp()
+        y, grad = gaussian_to_bimodal_value_and_grad(x, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return y, grad.log()
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        mu = self.mean
+        sigma = self.log_std.exp()
+        x, grad = bimodal_to_gaussian_value_and_grad(y, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return x, grad.log()
+
 
 class MixtureToGaussian(TransformBase):
     r"""Monotone transport from the Gaussian mixture $∑ₖ ωₖ N(μₖ, σₖ²)$ to $N(0,1)$.
@@ -142,6 +174,22 @@ class MixtureToGaussian(TransformBase):
         mu = self.means
         sigma = self.log_std.exp()
         return gaussian_to_mixture(x, w, mu, sigma)
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        w = self.weights.softmax(dim=-1)
+        mu = self.means
+        sigma = self.log_std.exp()
+        y, grad = mixture_to_gaussian_value_and_grad(x, w, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return y, grad.log()
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        w = self.weights.softmax(dim=-1)
+        mu = self.means
+        sigma = self.log_std.exp()
+        x, grad = gaussian_to_mixture_value_and_grad(y, w, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return x, grad.log()
 
 
 class GaussianToMixture(TransformBase):
@@ -188,3 +236,19 @@ class GaussianToMixture(TransformBase):
         mu = self.means
         sigma = self.log_std.exp()
         return mixture_to_gaussian(x, w, mu, sigma)
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        w = self.weights.softmax(dim=-1)
+        mu = self.means
+        sigma = self.log_std.exp()
+        y, grad = gaussian_to_mixture_value_and_grad(x, w, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return y, grad.log()
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        w = self.weights.softmax(dim=-1)
+        mu = self.means
+        sigma = self.log_std.exp()
+        x, grad = mixture_to_gaussian_value_and_grad(y, w, mu, sigma)
+        # Note: grad is guaranteed to be positive for these 1D transport maps
+        return x, grad.log()
