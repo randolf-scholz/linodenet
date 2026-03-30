@@ -813,7 +813,7 @@ def gaussian_to_bimodal(
     """
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _GaussianToBimodal.apply(y, mu, sigma, maxiter)
 
 
@@ -828,7 +828,7 @@ def gaussian_to_bimodal_value_and_grad(
     r"""Map $N(0,1)$ to the symmetric mixture and return $(f(y), ∂f/∂y)$."""
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _GaussianToBimodalValueAndGrad.apply(y, mu, sigma, maxiter)
 
 
@@ -854,7 +854,7 @@ def gaussian_to_mixture(
 
     The returned value is the unique $x$ whose mixture CDF equals $Φ(y)$.
     """
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _GaussianToMixture.apply(y, weights, mus, sigmas, maxiter)
 
 
@@ -868,5 +868,5 @@ def gaussian_to_mixture_value_and_grad(
     maxiter: int | None = None,
 ) -> tuple[Tensor, Tensor]:
     r"""Map $N(0,1)$ to the mixture and return $(f(y), ∂f/∂y)$."""
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _GaussianToMixtureValueAndGrad.apply(y, weights, mus, sigmas, maxiter)
