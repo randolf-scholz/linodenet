@@ -17,7 +17,7 @@ class TestScalarOpenUnitBallMap:
         x = torch.randn(3, 4, 5)
         y = bijection(x)
 
-        assert ScalarDomains.OPEN_UNIT_BALL.__contains__(y).all()
+        assert ScalarDomains.OPEN_UNIT_BALL.check(y).all()
         assert torch.allclose(bijection.inverse(y), x, atol=1e-6, rtol=1e-6)
 
     def test_inverse_roundtrip_on_codomain_samples(
@@ -40,4 +40,4 @@ class TestScalarOpenUnitBallMap:
         y = bijection(x)
 
         assert y.shape == x.shape
-        assert ScalarDomains.OPEN_UNIT_BALL.__contains__(y).all()
+        assert ScalarDomains.OPEN_UNIT_BALL.check(y).all()
