@@ -294,8 +294,7 @@ respect-type-ignore-comments = false
 [tool.pyrefly]
 python-version = "3.14"
 output-format="min-text"
-search-path = ["src/", "tests/"]
-project-includes = ["src/", "tests/"]
+search-path = ["src/", "."]
 replace-imports-with-any = [
     "torchdiffeq",
 ]
