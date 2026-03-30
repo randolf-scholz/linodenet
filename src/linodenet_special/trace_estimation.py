@@ -34,12 +34,12 @@ __all__ = [
     "xtrace_naive_estimator",
 ]
 
+import logging
 import math
 from abc import abstractmethod
 from collections.abc import Callable as Fn, Iterator
 from enum import StrEnum
 from typing import Final, Protocol, overload
-from warnings import warn
 
 import torch
 from torch import Tensor, nn, vmap
@@ -47,6 +47,9 @@ from torch.func import linearize, vjp
 from torch.linalg import qr, solve_triangular, vecdot, vector_norm
 
 from signatures import signature
+
+logging.basicConfig(level=logging.WARNING)
+__logger__ = logging.getLogger(__package__)
 
 
 class Samplers(StrEnum):
@@ -92,7 +95,7 @@ class TraceEstimators(StrEnum):
     ) -> TraceEstimator:
         match cls(estimator):
             case cls.EXACT:
-                warn("Estimator 'exact' was chosen, ignoring passed args")
+                __logger__.warning("Estimator 'exact' was chosen, ignoring passed args")
                 return ExactTrace()
             case cls.HUTCH:
                 return HutchinsonEstimator(num_matvecs, sampler=sampler, mode=mode)
@@ -122,7 +125,7 @@ class LogAbsDetEstimators(StrEnum):
     ) -> ExactLogabsdet | LogabsdetSeriesEstimator:
         match e := cls(estimator):
             case cls.EXACT:
-                warn("Estimator 'exact' was chosen, ignoring passed args")
+                __logger__.warning("Estimator 'exact' was chosen, ignoring passed args")
                 return ExactLogabsdet()
             case _:
                 return LogabsdetSeriesEstimator(
@@ -287,8 +290,8 @@ def exact_logabsdet(op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Ten
     Cost: $𝓞(N³)$ where N is the dimension of the operator.
 
     Args:
-        op:
-        x:
+        op: Function $f$ whose Jacobian log-absolute-determinant should be estimated
+        x: Evaluation point. Its shape, dtype, and device define the domain.
 
     Returns:
         y: $f(x)$
@@ -418,7 +421,7 @@ def xtrace_naive_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
-    renormalize: bool = False,
+    renormalize: bool = True,
 ) -> Tensor:
     r"""Naive XTrace estimate of $\tr(𝐃f(x))$ for debugging."""
     if num_matvecs < 2:
@@ -458,7 +461,7 @@ def xtrace_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
-    renormalize: bool = False,
+    renormalize: bool = True,
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with the fast XTrace estimator.
 
@@ -486,13 +489,17 @@ def xtrace_estimator(
 
     Y = batched_op(samples)  # (...dk)
     Q, R = qr(Y, mode="reduced")  # (...dk), (...kk)
+    # Q has normalized cols <-> Q.norm(dim=-2) = 1
+
     Z = batched_op(Q)  # (...dk)
     H = Q.mH @ Z  # (...kk)
     W = Q.mH @ samples  # (...kk)
     T = Z.mH @ samples  # (...kk)
 
     identity = torch.eye(k, dtype=samples.dtype, device=samples.device)
+    # solve R^* S = Iₖ
     S = solve_triangular(R.mH, identity, upper=False, left=True)  # (...kk)
+    # normalize COLS
     S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
 
     sw = vecdot(S, W, dim=-2)  # (...k)
@@ -505,10 +512,10 @@ def xtrace_estimator(
 
     shs = torch.einsum("...ik, ...kl, ...li -> ...i", S.mH, H, S)
     hw = H @ W
-    term1 = sw.abs().square() * shs
-    term2 = sw.conj() * vecdot(S, R - hw, dim=-2)
+    term1 = sw.abs().square() * shs  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
+    term2 = sw.conj() * vecdot(S, R - hw, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
     x_term = W - sw.unsqueeze(-2) * S
-    term3 = -vecdot(T - H.mH @ W, x_term, dim=-2)
+    term3 = -vecdot(T - H.mH @ W, x_term, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
     trs = -shs + scale * (term1 + term2 + term3)
 
     estimate = H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
@@ -1017,15 +1024,15 @@ class XTraceEstimator(TraceEstimator):
     r"""Estimate traces with the XTrace estimator.
 
     This module wraps the same trace estimator as `xtrace_estimator`. The current
-    implementation only supports `mode="forward"` and only implements the first
-    Jacobian power, so `powers(..., max_power=1)` matches `forward`.
+    implementation only supports `mode="forward"` and does not support Jacobian
+    power traces.
 
     Args:
         num_matvecs: Total matrix-vector product budget. XTrace uses
             `num_matvecs // 2` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         renormalize: Whether to apply the paper's renormalization.
-        mode: Jacobian action mode. Only `"forward"` is currently implemented.
+        mode: Jacobian action mode. Must be `"forward"`.
 
     Cost: $mN² + 𝓞(m³)$
         m is the number of matvecs (=2x`num_samples`),
@@ -1058,15 +1065,14 @@ class XTraceEstimator(TraceEstimator):
         12: tr ← mean(trᵢ: i=1…m/2)
     """
 
-    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
+    MODES: Final[frozenset[str]] = frozenset({"forward"})
 
     num_matvecs: Final[int]
     num_samples: Final[int]
     renormalize: Final[bool]
+    sampler: Final[AbstractSampler]
     mode: Final[str]
     r"""Whether to apply renormalization from paper section 2.3"""
-
-    sampler: Final[AbstractSampler]
 
     @overload
     def __init__(
@@ -1092,7 +1098,7 @@ class XTraceEstimator(TraceEstimator):
         *,
         num_samples: int | None = None,
         sampler: str | AbstractSampler = Samplers.SPHERE,
-        mode: str = "symmetric",
+        mode: str = "forward",
         renormalize: bool = True,
     ) -> None:
         match num_samples, num_matvecs:
@@ -1126,7 +1132,9 @@ class XTraceEstimator(TraceEstimator):
             op: Function $f$ whose Jacobian trace should be estimated at $x$.
             x: Evaluation point. Its shape, dtype, and device define the domain.
         """
-        return next(self.powers(op, x, 1))
+        return xtrace_estimator(
+            op, x, self.num_matvecs, sampler=self.sampler, renormalize=self.renormalize
+        )
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def estimate_naive(self, op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
@@ -1135,106 +1143,15 @@ class XTraceEstimator(TraceEstimator):
         This method is mainly useful for debugging against the optimized
         implementation in `forward` and `powers`.
         """
-        if self.mode != "forward":
-            raise NotImplementedError(
-                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
-            )
-
-        *batch, N = x.shape
-        k = min(N, self.num_samples)
-        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
-        tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
-        _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
-        Y = batched_op(samples)  # (...Nm)
-
-        mus = []
-        for i in range(self.num_samples):
-            col_indices = torch.arange(self.num_samples, device=Y.device)
-            Q_i, _ = qr(Y[..., i != col_indices], mode="reduced")
-            ω_i = samples[..., [i]]
-            μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
-            mus.append(μ_i)
-            tr = tr + vecdot(Q_i, batched_op(Q_i), dim=-2).sum(dim=-1)
-        μ = torch.cat(mus, dim=-1)
-        scale = 1.0 - (1.0 - (N - k + 1) / vecdot(μ, μ, dim=-2)) * self.renormalize
-        μ = μ * scale.unsqueeze(-2)
-        residual = vecdot(μ, batched_op(μ), dim=-2).mean(dim=-1)
-        return tr / k + residual
+        return xtrace_naive_estimator(
+            op, x, self.num_matvecs, sampler=self.sampler, renormalize=self.renormalize
+        )
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def powers(
         self, op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int
     ) -> Iterator[Tensor]:
-        if max_power > 1:
-            raise NotImplementedError("XTraceEstimator currently only supports k=1")
-        if self.mode != "forward":
-            raise NotImplementedError(
-                f"XTraceEstimator only supports mode='forward', got {self.mode!r}"
-            )
-
-        *_, N = x.shape
-        k = min(N, self.num_samples)
-        samples = self.sampler(x.shape, k, device=x.device, dtype=x.dtype)
-        _, jvp_fn = linearize(op, x)
-        batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
-        Y = batched_op(samples)  # (...Nm)
-        Q, R = qr(Y, mode="reduced")  # (...Nk), (...kk)
-        # Q has normalized cols <-> Q.norm(dim=-2) = 1
-
-        Z = batched_op(Q)  # (...Nk)
-        H = Q.mH @ Z  # (...kk)
-        W = Q.mH @ samples  # (...kk)
-        T = Z.mH @ samples  # (...kk)
-
-        # solve R^* S = Iₖ
-        I = torch.eye(k, dtype=samples.dtype, device=samples.device)
-        S = solve_triangular(R.mH, I, upper=False, left=True)  # lower triangular
-        # normalize COLS
-        S = S / vector_norm(S, dim=-2, keepdim=True)  # (...kk)
-
-        SW = vecdot(S, W, dim=-2)  # (...i)
-        SR = vecdot(S, R, dim=-2)  # (...i)
-        X = W - SW.unsqueeze(-2) * S  # (...kk)
-        TX = vecdot(T, X, dim=-2)  # (...i)
-        XHX = torch.einsum("...ki, ...kl, ...li -> ...i", X.conj(), H, X)
-        SHS = torch.einsum("...ki, ...kl, ...li -> ...i", S.conj(), H, S)
-
-        if False:
-            mus = []
-            for i in range(self.num_samples):
-                col_indices = torch.arange(self.num_samples, device=Y.device)
-                Q_i, R = qr(Y[..., i != col_indices], mode="reduced")
-                ω_i = samples[..., [i]]
-                μ_i = ω_i - Q_i @ (Q_i.mH @ ω_i)
-                mus.append(μ_i)
-            μ = torch.cat(mus, dim=-1)
-            mu_norm_sq_a = vecdot(μ, μ, dim=-2)  # column norm
-            mu_norm_sq_b = (
-                vecdot(samples, samples, dim=-2)
-                - vecdot(W, W, dim=-2)
-                + SW.abs().square()
-            )
-
-        if self.renormalize:
-            scale = (N - k + 1) / (
-                vecdot(samples, samples, dim=-2)
-                - vecdot(W, W, dim=-2)
-                + SW.abs().square()
-            )
-        else:
-            scale = 1.0
-
-        WS = SW.conj()  # (...i)
-        trs = -SHS + scale * (XHX + WS * SR - TX)
-
-        HW = H @ W
-        term1 = SW.abs().square() * SHS  # |⟨sᵢ∣wᵢ⟩|²⟨sᵢ∣Hsᵢ⟩
-        term2 = SW.conj() * vecdot(S, R - HW, dim=-2)  # ⟨wᵢ∣sᵢ⟩⟨sᵢ∣rᵢ - Hwᵢ⟩
-        term3 = -vecdot(T - H.mH @ W, X, dim=-2)  # -⟨tᵢ - Hᴴwᵢ∣wᵢ - ⟨sᵢ∣wᵢ⟩sᵢ⟩
-        trs = -SHS + scale * (term1 + term2 + term3)
-
-        yield H.diagonal(dim1=-2, dim2=-1).sum(dim=-1) + trs.mean(dim=-1)
+        raise NotImplementedError("XTraceEstimator does not support power traces")
 
 
 class ExactLogabsdet(nn.Module):
@@ -1254,7 +1171,7 @@ class ExactLogabsdet(nn.Module):
 
 
 class LogabsdetSeriesEstimator(nn.Module):
-    r"""Estimate $\log|\det(𝕀 + 𝐃f(x))|$ with a trace-estimator backend
+    r"""Estimate $\log|\det(𝕀 + 𝐃f(x))|$ with a trace-estimator backend.
 
     .. math::  \log|\det(𝕀 + A)| = ∑ₖ(-1)ᵏ⁺¹/k \tr(Aᵏ)
 
