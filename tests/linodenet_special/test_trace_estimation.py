@@ -386,17 +386,17 @@ class TestVisualizations(TestTraceEstimator):
     DEVICE = "cpu"
     SAMPLER = "orth"
     NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
-    METHODS = {
-        "hutch": ("hutch", "forward", "sphere"),
-        "hutch++": ("hutch++", "forward", "sphere"),
-        "xtrace": ("xtrace", "forward", "sphere"),
-        "hutch(gauss)": ("hutch", "forward", "gaussian"),
-        "hutch++(gauss)": ("hutch++", "forward", "gaussian"),
-        "xtrace(gauss)": ("xtrace", "forward", "gaussian"),
-        # "hutch(adjoint)": ("hutch", "adjoint", "orth"),
-        # "hutch(symmetric)": ("hutch", "symmetric", "orth"),
-        # "hutch++(adjoint)": ("hutch++", "adjoint", "orth"),
-        # "hutch++(symmetric)": ("hutch++", "symmetric", "orth"),
+    METHODS: dict[str, tuple[str, str, str, dict]] = {
+        "hutch": ("hutch", "forward", "sphere", {}),
+        "hutch++": ("hutch++", "forward", "sphere", {}),
+        "xtrace": ("xtrace", "forward", "sphere", {}),
+        # "hutch(gauss)": ("hutch", "forward", "gaussian", {}),
+        # "hutch++(gauss)": ("hutch++", "forward", "gaussian", {}),
+        # "xtrace(gauss)": ("xtrace", "forward", "gaussian", {}),
+        # "hutch(adjoint)": ("hutch", "adjoint", "orth", {}),
+        # "hutch(symmetric)": ("hutch", "symmetric", "orth", {}),
+        # "hutch++(adjoint)": ("hutch++", "adjoint", "orth", {}),
+        # "hutch++(symmetric)": ("hutch++", "symmetric", "orth", {}),
     }
 
     def compute_curves(
@@ -418,7 +418,7 @@ class TestVisualizations(TestTraceEstimator):
 
         curves: dict[str, list[Tensor]] = {test_id: [] for test_id in self.METHODS}
 
-        for test_id, (name, mode, sampler) in self.METHODS.items():
+        for test_id, (name, mode, sampler, kwargs) in self.METHODS.items():
             for num_matvecs in self.NUM_MATVECS_GRID:
                 torch.manual_seed(self.SEED)
                 try:
@@ -427,6 +427,7 @@ class TestVisualizations(TestTraceEstimator):
                         num_matvecs=num_matvecs,
                         mode=mode,
                         sampler=sampler,
+                        **kwargs,
                     )
                     estimate = estimator.to(device=device, dtype=dtype)(op, x)
                 except ValueError:
@@ -453,7 +454,10 @@ class TestVisualizations(TestTraceEstimator):
             lambda: itertools.cycle(["-", "--", ":", "-."])
         )
         for test_id, curve in curves.items():
-            name, _, _ = self.METHODS[test_id]
+            (
+                name,
+                *_,
+            ) = self.METHODS[test_id]
             ax.plot(
                 self.NUM_MATVECS_GRID,
                 curve,
