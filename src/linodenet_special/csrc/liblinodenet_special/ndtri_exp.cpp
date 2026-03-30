@@ -205,16 +205,17 @@ Tensor ndtri_exp(const Tensor &log_p) {
         )
     );
 }
-}  // namespace linodenet_special
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("ndtri_exp(Tensor log_p) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, CompositeImplicitAutograd, m) {
-    m.impl("ndtri_exp", &linodenet_special::ndtri_exp);
+    m.impl("ndtri_exp", &ndtri_exp);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("ndtri_exp", &linodenet_special::ndtri_exp_meta);
+    m.impl("ndtri_exp", &ndtri_exp_meta);
 }
+
+}  // namespace linodenet_special

@@ -51,7 +51,7 @@ struct MatrixExponential : public Function<MatrixExponential> {
      * @note We allow batched inputs for dt.
      **/
         Tensor Adt = A * dt.unsqueeze(-2);
-        Tensor expAdt = torch::linalg::matrix_exp(Adt);
+        Tensor expAdt = torch::linalg_matrix_exp(Adt);
 
         // After convergence, we have: Av = σu, Aᵀu = σv. Thus σ = uᵀAv.
         ctx->save_for_backward({A, dt});
@@ -155,7 +155,7 @@ std::tuple<Tensor, Tensor, Tensor> matrix_exp(
      */
     auto output = MatrixExponential::apply(A, dt, atol, rtol);
     // assert(output.size() == 3);
-    return std::make_tuple(output[0], output[1], output[2]);
+    return {output[0], output[1], output[2]};
 }
 
 std::tuple<Tensor, Tensor, Tensor> matrix_exp_action(
@@ -169,7 +169,7 @@ std::tuple<Tensor, Tensor, Tensor> matrix_exp_action(
      */
     auto output = MatrixExponentialAction::apply(A, dt, atol, rtol);
     // assert(output.size() == 3);
-    return std::make_tuple(output[0], output[1], output[2]);
+    return {output[0], output[1], output[2]};
 }
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {

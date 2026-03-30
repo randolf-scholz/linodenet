@@ -62,7 +62,7 @@ std::tuple<Tensor, Tensor, Tensor> matrix_root(
      */
     auto output = MatrixRoot::apply(A, u0, v0, maxiter, atol, rtol);
     // assert(output.size() == 3);
-    return std::make_tuple(output[0], output[1], output[2]);
+    return {output[0], output[1], output[2]};
 }
 
 

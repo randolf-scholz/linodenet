@@ -289,8 +289,6 @@ Tensor spectral_norm(
     return SpectralNorm::apply(A, u, v, maxiter, atol, rtol);
 }
 
-}  // namespace linodenet_special
-
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def(
@@ -306,9 +304,11 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("spectral_norm", &linodenet_special::spectral_norm);
+    m.impl("spectral_norm", &spectral_norm);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("spectral_norm", &linodenet_special::spectral_norm_meta);
+    m.impl("spectral_norm", &spectral_norm_meta);
 }
+
+}  // namespace linodenet_special

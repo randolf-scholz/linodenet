@@ -39,16 +39,15 @@ Tensor hard_bend_meta(const Tensor &x, const Tensor &a, const Tensor &c, const T
     return torch::empty_like(broadcasted[0]);
 }
 
-}  // namespace linodenet_special
-
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("hard_bend(Tensor x, Tensor a, Tensor c, Tensor m) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, CompositeImplicitAutograd, m) {
-    m.impl("hard_bend", &linodenet_special::hard_bend);
+    m.impl("hard_bend", &hard_bend);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("hard_bend", &linodenet_special::hard_bend_meta);
+    m.impl("hard_bend", &hard_bend_meta);
 }
+}  // namespace linodenet_special

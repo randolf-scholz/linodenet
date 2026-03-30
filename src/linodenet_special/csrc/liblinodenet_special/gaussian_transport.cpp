@@ -655,7 +655,7 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
         // Jacobian-output derivatives reuse the same dx_inv³ factor.
         const Tensor dx_inv3 = dx_inv.pow(3);
 
-        const Tensor d_y = dx_inv;
+        const Tensor &d_y = dx_inv;
         const Tensor d_weights_inv = -d_weights * dx_inv.unsqueeze(-1);
         const Tensor d_mus_inv = -d_mus * dx_inv.unsqueeze(-1);
         const Tensor d_sigmas_inv = -d_sigmas * dx_inv.unsqueeze(-1);
@@ -836,7 +836,6 @@ std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
     return {output[0], output[1]};
 }
 
-} // namespace linodenet_special
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("bimodal_to_gaussian(Tensor _, Tensor mu, Tensor sigma) -> Tensor");
@@ -850,23 +849,25 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("bimodal_to_gaussian", &linodenet_special::bimodal_to_gaussian);
-    m.impl("gaussian_to_bimodal", &linodenet_special::gaussian_to_bimodal);
-    m.impl("mixture_to_gaussian", &linodenet_special::mixture_to_gaussian);
-    m.impl("gaussian_to_mixture", &linodenet_special::gaussian_to_mixture);
-    m.impl("bimodal_to_gaussian_value_and_grad", &linodenet_special::bimodal_to_gaussian_value_and_grad);
-    m.impl("gaussian_to_bimodal_value_and_grad", &linodenet_special::gaussian_to_bimodal_value_and_grad);
-    m.impl("mixture_to_gaussian_value_and_grad", &linodenet_special::mixture_to_gaussian_value_and_grad);
-    m.impl("gaussian_to_mixture_value_and_grad", &linodenet_special::gaussian_to_mixture_value_and_grad);
+    m.impl("bimodal_to_gaussian", &bimodal_to_gaussian);
+    m.impl("gaussian_to_bimodal", &gaussian_to_bimodal);
+    m.impl("mixture_to_gaussian", &mixture_to_gaussian);
+    m.impl("gaussian_to_mixture", &gaussian_to_mixture);
+    m.impl("bimodal_to_gaussian_value_and_grad", &bimodal_to_gaussian_value_and_grad);
+    m.impl("gaussian_to_bimodal_value_and_grad", &gaussian_to_bimodal_value_and_grad);
+    m.impl("mixture_to_gaussian_value_and_grad", &mixture_to_gaussian_value_and_grad);
+    m.impl("gaussian_to_mixture_value_and_grad", &gaussian_to_mixture_value_and_grad);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("bimodal_to_gaussian", &linodenet_special::bimodal_to_gaussian_meta);
-    m.impl("gaussian_to_bimodal", &linodenet_special::gaussian_to_bimodal_meta);
-    m.impl("mixture_to_gaussian", &linodenet_special::mixture_to_gaussian_meta);
-    m.impl("gaussian_to_mixture", &linodenet_special::gaussian_to_mixture_meta);
-    m.impl("bimodal_to_gaussian_value_and_grad", &linodenet_special::bimodal_to_gaussian_value_and_grad_meta);
-    m.impl("gaussian_to_bimodal_value_and_grad", &linodenet_special::gaussian_to_bimodal_value_and_grad_meta);
-    m.impl("mixture_to_gaussian_value_and_grad", &linodenet_special::mixture_to_gaussian_value_and_grad_meta);
-    m.impl("gaussian_to_mixture_value_and_grad", &linodenet_special::gaussian_to_mixture_value_and_grad_meta);
+    m.impl("bimodal_to_gaussian", &bimodal_to_gaussian_meta);
+    m.impl("gaussian_to_bimodal", &gaussian_to_bimodal_meta);
+    m.impl("mixture_to_gaussian", &mixture_to_gaussian_meta);
+    m.impl("gaussian_to_mixture", &gaussian_to_mixture_meta);
+    m.impl("bimodal_to_gaussian_value_and_grad", &bimodal_to_gaussian_value_and_grad_meta);
+    m.impl("gaussian_to_bimodal_value_and_grad", &gaussian_to_bimodal_value_and_grad_meta);
+    m.impl("mixture_to_gaussian_value_and_grad", &mixture_to_gaussian_value_and_grad_meta);
+    m.impl("gaussian_to_mixture_value_and_grad", &gaussian_to_mixture_value_and_grad_meta);
 }
+
+} // namespace linodenet_special

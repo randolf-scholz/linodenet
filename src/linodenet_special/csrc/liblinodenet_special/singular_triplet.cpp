@@ -59,7 +59,7 @@ using torch::indexing::Slice;
 namespace linodenet_special {
 /** @brief Compute the singular triplet of a matrix.
  *
- * @details Formalizing as a optimization problem:
+ * @details Formalizing as an optimization problem:
  * By Eckard-Young Theorem: min_{u,v} ‖A - σuvᵀ‖² s.t. ‖u‖₂ = ‖v‖₂ = 1
  * Equivalently: max_{u,v} ⟨A∣uvᵀ⟩ s.t. ‖u‖₂ = ‖v‖₂ = 1
  *
@@ -153,7 +153,7 @@ namespace linodenet_special {
  *      In particular, we could get away with only a single tolerance parameter ξ = α + β.
  *      Note that this has a failure mode: if ũ ≈ -u and ṽ ≈ -v, then the criterion is satisfied.
  *      But this can never happen in practice, since effectively ũ ∝ AAᵀu and ṽ ∝ AᵀAv.
- *      And both AAᵀ and AᵀA are positive semi-definite, hence ũ and ṽ can never be anti-parallel.
+ *      And both AAᵀ and AᵀA are positive semi-definite, hence ũ and ṽ can never be antiparallel.
  *
  *      Adding σ into the equation:
  *
@@ -391,11 +391,11 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
     TORCH_CHECK(maxiter > 0, "maxiter must be a positive integer.");
     TORCH_CHECK(atol > 0.0, "atol must be a positive number.");
     TORCH_CHECK(rtol > 0.0, "rtol must be a positive number.");
-    return std::make_tuple(
+    return {
         torch::empty({}, A.options()),  // sigma
         torch::empty({M}, A.options()), // u
         torch::empty({N}, A.options())  // v
-    );
+    };
 }
 
 std::tuple<Tensor, Tensor, Tensor> singular_triplet(
@@ -415,10 +415,8 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet(
     u = u.div_(linalg_vector_norm(u));
     v = v.div_(linalg_vector_norm(v));
     auto output = SingularTriplet::apply(A, u, v, maxiter, atol, rtol);
-    return std::make_tuple(output[0], output[1], output[2]);
+    return {output[0], output[1], output[2]};
 }
-
-}  // namespace linodenet_special
 
 
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
@@ -435,9 +433,11 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
-    m.impl("singular_triplet", &linodenet_special::singular_triplet);
+    m.impl("singular_triplet", &singular_triplet);
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("singular_triplet", &linodenet_special::singular_triplet_meta);
+    m.impl("singular_triplet", &singular_triplet_meta);
 }
+
+}  // namespace linodenet_special
