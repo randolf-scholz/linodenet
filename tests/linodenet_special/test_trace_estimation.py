@@ -1,7 +1,9 @@
 import itertools
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from datetime import datetime
+from functools import cached_property
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -13,6 +15,28 @@ from linodenet_special.trace_estimation import TraceEstimators
 from tests.testing import DEVICES, DTYPES, PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
+
+
+@dataclass(frozen=True)
+class TraceCase:
+    r"""Test matrix with known spectral data."""
+
+    matrix: Tensor
+    spectrum: Tensor
+
+    @cached_property
+    def trace(self) -> Tensor:
+        trace = self.spectrum.sum(dim=-1)
+        return trace.real if trace.is_complex() else trace
+
+    @cached_property
+    def logabsdet(self) -> Tensor:
+        return torch.log(torch.abs(1 + self.spectrum)).sum(dim=-1)
+
+    def powers(self, k: int, /) -> Iterator[Tensor]:
+        for degree in range(1, k + 1):
+            trace = self.spectrum.pow(degree).sum(dim=-1)
+            yield trace.real if trace.is_complex() else trace
 
 
 def linear_map(matrix: Tensor, /) -> Callable[[Tensor], Tensor]:
@@ -28,6 +52,17 @@ class TestTraceEstimator(TestSuite):
     DTYPE = torch.float32
     SEED = 0
 
+    def _make_generator(
+        self,
+        /,
+        *,
+        seed: int | None,
+        device: str | torch.device,
+    ) -> torch.Generator:
+        generator = torch.Generator(device=device)
+        generator.manual_seed(self.SEED if seed is None else seed)
+        return generator
+
     def make_diagonal(
         self,
         /,
@@ -37,18 +72,23 @@ class TestTraceEstimator(TestSuite):
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-    ) -> tuple[Tensor, Tensor]:
-        torch.manual_seed(self.SEED if seed is None else seed)
+    ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         dtype = self.DTYPE if dtype is None else dtype
+        generator = self._make_generator(seed=seed, device=device)
 
-        diagonal = 0.5 + torch.rand(batch_size, input_size, device=device, dtype=dtype)
-        matrix = torch.diag_embed(diagonal)
-        trace = diagonal.sum(dim=-1)
-        return matrix, trace
+        spectrum = 0.5 + torch.rand(
+            batch_size,
+            input_size,
+            device=device,
+            dtype=dtype,
+            generator=generator,
+        )
+        matrix = torch.diag_embed(spectrum)
+        return TraceCase(matrix=matrix, spectrum=spectrum)
 
-    def make_gaussian(
+    def make_ldu(
         self,
         /,
         *,
@@ -57,24 +97,71 @@ class TestTraceEstimator(TestSuite):
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-    ) -> tuple[Tensor, Tensor]:
-        torch.manual_seed(self.SEED if seed is None else seed)
+    ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         dtype = self.DTYPE if dtype is None else dtype
+        generator = self._make_generator(seed=seed, device=device)
 
-        matrix = (
+        spectrum = (
+            torch.randn(
+                batch_size,
+                input_size,
+                device=device,
+                dtype=dtype,
+                generator=generator,
+            )
+            / input_size**0.5
+        )
+        lower = (
             torch.randn(
                 batch_size,
                 input_size,
                 input_size,
                 device=device,
                 dtype=dtype,
+                generator=generator,
             )
             / input_size**0.5
         )
-        trace = torch.einsum("...ii -> ...", matrix)
-        return matrix, trace
+        lower = torch.tril(lower, diagonal=-1) + torch.eye(
+            input_size,
+            device=device,
+            dtype=dtype,
+        )
+        upper = (
+            torch.randn(
+                batch_size,
+                input_size,
+                input_size,
+                device=device,
+                dtype=dtype,
+                generator=generator,
+            )
+            / input_size**0.5
+        )
+        upper = torch.triu(upper, diagonal=1) + torch.eye(
+            input_size,
+            device=device,
+            dtype=dtype,
+        )
+        scale = torch.exp(
+            0.1
+            * torch.randn(
+                batch_size,
+                input_size,
+                device=device,
+                dtype=dtype,
+                generator=generator,
+            )
+        )
+        basis = lower @ torch.diag_embed(scale) @ upper
+        diagonal = torch.diag_embed(spectrum)
+        matrix = torch.linalg.solve(
+            basis.mT,
+            torch.einsum("...ij, ...jk -> ...ik", basis, diagonal).mT,
+        ).mT
+        return TraceCase(matrix=matrix, spectrum=spectrum)
 
     def make_symmetric(
         self,
@@ -85,22 +172,31 @@ class TestTraceEstimator(TestSuite):
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-    ) -> tuple[Tensor, Tensor]:
-        torch.manual_seed(self.SEED if seed is None else seed)
+    ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         dtype = self.DTYPE if dtype is None else dtype
+        generator = self._make_generator(seed=seed, device=device)
 
-        matrix = torch.randn(
-            batch_size,
-            input_size,
-            input_size,
-            device=device,
+        q = self._make_orthogonal_batch(
+            batch_size=batch_size,
+            input_size=input_size,
             dtype=dtype,
+            device=device,
+            generator=generator,
         )
-        matrix = (matrix + matrix.mT) / (2 * input_size**0.5)
-        trace = torch.einsum("...ii -> ...", matrix)
-        return matrix, trace
+        spectrum = (
+            torch.randn(
+                batch_size,
+                input_size,
+                device=device,
+                dtype=dtype,
+                generator=generator,
+            )
+            / input_size**0.5
+        )
+        matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
+        return TraceCase(matrix=matrix, spectrum=spectrum)
 
     def make_skew_symmetric(
         self,
@@ -111,22 +207,46 @@ class TestTraceEstimator(TestSuite):
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-    ) -> tuple[Tensor, Tensor]:
-        torch.manual_seed(self.SEED if seed is None else seed)
+    ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         dtype = self.DTYPE if dtype is None else dtype
+        generator = self._make_generator(seed=seed, device=device)
 
-        matrix = torch.randn(
+        q = self._make_orthogonal_batch(
+            batch_size=batch_size,
+            input_size=input_size,
+            dtype=dtype,
+            device=device,
+            generator=generator,
+        )
+        num_blocks = input_size // 2
+        frequencies = 0.5 + torch.rand(
+            batch_size,
+            num_blocks,
+            device=device,
+            dtype=dtype,
+            generator=generator,
+        )
+        canonical = torch.zeros(
             batch_size,
             input_size,
             input_size,
             device=device,
             dtype=dtype,
         )
-        matrix = (matrix - matrix.mT) / (2 * input_size**0.5)
-        trace = torch.zeros(batch_size, device=device, dtype=dtype)
-        return matrix, trace
+        indices = torch.arange(num_blocks, device=device)
+        canonical[..., 2 * indices, 2 * indices + 1] = frequencies
+        canonical[..., 2 * indices + 1, 2 * indices] = -frequencies
+        matrix = torch.einsum("...ik, ...kl, ...jl -> ...ij", q, canonical, q)
+
+        complex_dtype = torch.complex64 if dtype == torch.float32 else torch.complex128
+        spectrum = torch.zeros(
+            batch_size, input_size, device=device, dtype=complex_dtype
+        )
+        spectrum[..., 2 * indices] = 1j * frequencies.to(dtype=complex_dtype)
+        spectrum[..., 2 * indices + 1] = -1j * frequencies.to(dtype=complex_dtype)
+        return TraceCase(matrix=matrix, spectrum=spectrum)
 
     def make_linear_spectrum(
         self,
@@ -137,24 +257,23 @@ class TestTraceEstimator(TestSuite):
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-    ) -> tuple[Tensor, Tensor]:
-        torch.manual_seed(self.SEED if seed is None else seed)
+    ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         dtype = self.DTYPE if dtype is None else dtype
+        generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
-            seed=seed,
             batch_size=batch_size,
             input_size=input_size,
             dtype=dtype,
             device=device,
+            generator=generator,
         )
         spectrum = torch.linspace(0, 2, input_size, device=device, dtype=dtype)
         spectrum = spectrum.expand(batch_size, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
-        trace = spectrum.sum(dim=-1)
-        return matrix, trace
+        return TraceCase(matrix=matrix, spectrum=spectrum)
 
     def make_exponential_spectrum(
         self,
@@ -165,18 +284,18 @@ class TestTraceEstimator(TestSuite):
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-    ) -> tuple[Tensor, Tensor]:
-        torch.manual_seed(self.SEED if seed is None else seed)
+    ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         dtype = self.DTYPE if dtype is None else dtype
+        generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
-            seed=seed,
             batch_size=batch_size,
             input_size=input_size,
             dtype=dtype,
             device=device,
+            generator=generator,
         )
         exponents = torch.arange(
             -(input_size // 2),
@@ -186,8 +305,7 @@ class TestTraceEstimator(TestSuite):
         )
         spectrum = (1.25**exponents).expand(batch_size, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
-        trace = spectrum.sum(dim=-1)
-        return matrix, trace
+        return TraceCase(matrix=matrix, spectrum=spectrum)
 
     def make_low_rank(
         self,
@@ -198,18 +316,18 @@ class TestTraceEstimator(TestSuite):
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-    ) -> tuple[Tensor, Tensor]:
-        torch.manual_seed(self.SEED if seed is None else seed)
+    ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         dtype = self.DTYPE if dtype is None else dtype
+        generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
-            seed=seed,
             batch_size=batch_size,
             input_size=input_size,
             dtype=dtype,
             device=device,
+            generator=generator,
         )
         rank = input_size // 16
         spectrum = torch.cat(
@@ -219,26 +337,25 @@ class TestTraceEstimator(TestSuite):
             ]
         ).expand(batch_size, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
-        trace = spectrum.sum(dim=-1)
-        return matrix, trace
+        return TraceCase(matrix=matrix, spectrum=spectrum)
 
     def _make_orthogonal_batch(
         self,
         /,
         *,
-        seed: int | None = None,
         batch_size: int,
         input_size: int,
         dtype: torch.dtype,
         device: str | torch.device,
+        generator: torch.Generator,
     ) -> Tensor:
-        torch.manual_seed(self.SEED if seed is None else seed)
         gaussian = torch.randn(
             batch_size,
             input_size,
             input_size,
             device=device,
             dtype=dtype,
+            generator=generator,
         )
         q, _ = torch.linalg.qr(gaussian)
         return q
@@ -370,8 +487,8 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_diagonal(self) -> None:
-        matrix, expected = self.make_diagonal(dtype=self.DTYPE, device=self.DEVICE)
-        curves = self.compute_curves(matrix, expected)
+        test_case = self.make_diagonal(dtype=self.DTYPE, device=self.DEVICE)
+        curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
             title=(
@@ -382,24 +499,22 @@ class TestVisualizations(TestTraceEstimator):
         )
 
     @torch.no_grad()
-    def test_gaussian(self) -> None:
-        matrix, expected = self.make_gaussian(dtype=self.DTYPE, device=self.DEVICE)
-        curves = self.compute_curves(matrix, expected)
+    def test_ldu(self) -> None:
+        test_case = self.make_ldu(dtype=self.DTYPE, device=self.DEVICE)
+        curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
             title=(
-                f"Gaussian trace estimation "
+                f"LDU trace estimation "
                 f"({self.DEVICE}, batch={self.BATCH_SIZE}, input={self.INPUT_SIZE})"
             ),
-            stem="trace_estimation_gaussian",
+            stem="trace_estimation_ldu",
         )
 
     @torch.no_grad()
     def test_linear_spectrum(self) -> None:
-        matrix, expected = self.make_linear_spectrum(
-            dtype=self.DTYPE, device=self.DEVICE
-        )
-        curves = self.compute_curves(matrix, expected)
+        test_case = self.make_linear_spectrum(dtype=self.DTYPE, device=self.DEVICE)
+        curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
             title=(
@@ -411,11 +526,11 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_exponential_spectrum(self) -> None:
-        matrix, expected = self.make_exponential_spectrum(
+        test_case = self.make_exponential_spectrum(
             dtype=self.DTYPE,
             device=self.DEVICE,
         )
-        curves = self.compute_curves(matrix, expected)
+        curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
             title=(
@@ -427,8 +542,8 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_low_rank(self) -> None:
-        matrix, expected = self.make_low_rank(dtype=self.DTYPE, device=self.DEVICE)
-        curves = self.compute_curves(matrix, expected)
+        test_case = self.make_low_rank(dtype=self.DTYPE, device=self.DEVICE)
+        curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
             title=(
