@@ -16,31 +16,41 @@ X_MIN, X_MAX = -8.0, 8.0
 Y_MIN, Y_MAX = -8.0, 8.0
 
 
-def _slider_positions(
-    count: int,
-    /,
-    *,
-    bottom: float = 0.02,
-    height: float = 0.03,
-    gap: float = 0.01,
-) -> list[tuple[float, float, float, float]]:
-    return [
-        (0.12, bottom + i * (height + gap), 0.76, height)
-        for i in range(count - 1, -1, -1)
-    ]
-
-
 @pytest.mark.parametrize(
     "a", [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0], ids=lambda a: f"a={a}"
 )
 class TestCorrectness(TestCase):
     RTOL = 1e-14
     ATOL = 1e-14
+    STEPS = 257
+
+    def make_test_grid(self, a: float, c: float, m: float = 1.0, /) -> Tensor:
+        if a == m:
+            return torch.linspace(-8 * c, 8 * c, steps=257, dtype=torch.float64)
+
+        threshold = c / abs(a - m)
+        points = torch.tensor(
+            [
+                -threshold - 2 * c,
+                -threshold - c,
+                -threshold,
+                -0.5 * threshold,
+                0.0,
+                0.5 * threshold,
+                threshold,
+                threshold + c,
+                threshold + 2 * c,
+            ],
+            dtype=torch.float64,
+        )
+        return torch.cat(
+            (torch.linspace(-4 * threshold, 4 * threshold, steps=self.STEPS), points)
+        ).unique()
 
     @pytest.mark.parametrize("c", [-3, -2, -0.5, 0.5, 1.0, 3.0], ids=lambda c: f"c={c}")
     @pytest.mark.parametrize("m", [0.125, 0.5, 1.0, 2.0], ids=lambda m: f"m={m}")
     def test_hard_bend_reversible(self, a: float, c: float, m: float) -> None:
-        x = make_test_grid(a, c, m)
+        x = self.make_test_grid(a, c, m)
         y = hard_bend(x, a, c, m)
         x_recovered = hard_bend(y, 1 / a, c / m, 1 / m)
 
@@ -48,7 +58,7 @@ class TestCorrectness(TestCase):
 
     @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
     def test_hard_contract_reversible(self, a: float, c: float) -> None:
-        x = make_test_grid(a, c)
+        x = self.make_test_grid(a, c)
         y = hard_contract(x, a=a, c=c)
         x_recovered = hard_expand(y, a=1 / a, c=c)
 
@@ -56,74 +66,11 @@ class TestCorrectness(TestCase):
 
     @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
     def test_hard_expand_reversible(self, a: float, c: float) -> None:
-        x = make_test_grid(a, c)
+        x = self.make_test_grid(a, c)
         y = hard_expand(x, a=a, c=c)
         x_recovered = hard_contract(y, a=1 / a, c=c)
 
         self.assert_close(x_recovered, x)
-
-
-def bend(x: Tensor, a: Tensor | float, c: Tensor | float) -> Tensor:
-    if a == 1:
-        return x
-    return torch.where(
-        x > c / (a - 1),
-        x + c,
-        torch.where(x < -c / (a - 1), x - c, a * x),
-    )
-
-
-def make_test_grid(a: float, c: float, m: float = 1.0, /) -> Tensor:
-    if a == m:
-        return torch.linspace(-8 * c, 8 * c, steps=257, dtype=torch.float64)
-
-    threshold = c / abs(a - m)
-    points = torch.tensor(
-        [
-            -threshold - 2 * c,
-            -threshold - c,
-            -threshold,
-            -0.5 * threshold,
-            0.0,
-            0.5 * threshold,
-            threshold,
-            threshold + c,
-            threshold + 2 * c,
-        ],
-        dtype=torch.float64,
-    )
-    return torch.cat(
-        (torch.linspace(-4 * threshold, 4 * threshold, steps=257), points)
-    ).unique()
-
-
-def test_bend_histogram_grid() -> None:
-    torch.manual_seed(0)
-    x = torch.randn(20000)
-    a_values = (1.0, 2.0, 4.0, 8.0)
-    c_values = (0.5, 1.0, 2.0, 4.0)
-    xmin = -5
-    xmax = 5
-
-    with plt.style.context("bmh"):
-        fig, axes = plt.subplots(
-            nrows=4,
-            ncols=4,
-            figsize=(12, 12),
-            constrained_layout=True,
-            squeeze=False,
-            sharex=True,
-            sharey=True,
-        )
-        for col, a in enumerate(a_values):
-            for row, c in enumerate(c_values):
-                ax = axes[row][col]
-                ax.set_xlim(xmin, xmax)
-                y = bend(x, a, c)
-                ax.hist(y.numpy(), bins=50, density=True)
-                ax.set_title(f"bend(x, a={a}, c={c})")
-        fig.savefig(RESULT_DIR / "bend_hist_grid.png", dpi=200)
-        plt.close(fig)
 
 
 class TestVisual:
@@ -192,6 +139,48 @@ class TestVisual:
             filename="hard_expand_grid.png",
         )
 
+    def test_bend_histogram_grid(self) -> None:
+        torch.manual_seed(0)
+        x = torch.randn(20000)
+        a_values = (1.0, 2.0, 4.0, 8.0)
+        c_values = (0.5, 1.0, 2.0, 4.0)
+        xmin = -5
+        xmax = 5
+
+        with plt.style.context("bmh"):
+            fig, axes = plt.subplots(
+                nrows=4,
+                ncols=4,
+                figsize=(12, 12),
+                constrained_layout=True,
+                squeeze=False,
+                sharex=True,
+                sharey=True,
+            )
+            for col, a in enumerate(a_values):
+                for row, c in enumerate(c_values):
+                    ax = axes[row][col]
+                    ax.set_xlim(xmin, xmax)
+                    y = hard_bend(x, a, c)
+                    ax.hist(y.numpy(), bins=50, density=True)
+                    ax.set_title(f"bend(x, a={a}, c={c})")
+            fig.savefig(RESULT_DIR / "bend_hist_grid.png", dpi=200)
+            plt.close(fig)
+
+    @staticmethod
+    def _slider_positions(
+        count: int,
+        /,
+        *,
+        bottom: float = 0.02,
+        height: float = 0.03,
+        gap: float = 0.01,
+    ) -> list[tuple[float, float, float, float]]:
+        return [
+            (0.12, bottom + i * (height + gap), 0.76, height)
+            for i in range(count - 1, -1, -1)
+        ]
+
     @pytest.mark.interactive
     def test_hard_bend_interactive(self) -> None:
         x = torch.linspace(X_MIN, X_MAX, steps=1000, dtype=torch.float64)
@@ -218,7 +207,7 @@ class TestVisual:
                 ("m", "m", -3.0, 3.0, m),
             ]
             slider_axes = [
-                fig.add_axes(pos) for pos in _slider_positions(len(slider_specs))
+                fig.add_axes(pos) for pos in self._slider_positions(len(slider_specs))
             ]
             sliders = {
                 key: Slider(ax_, label, min_, max_, valinit=init)
