@@ -31,7 +31,7 @@ class Fallback(MatrixDomain):
 
     name: str
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
 
@@ -52,10 +52,11 @@ class Rectangular(MatrixDomain):
             return None
         return self.rows, self.cols
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
+        *batch_shape, m, n = value.shape
         if self.shape is None:
-            return True
-        return item.shape[-2:] == self.shape
+            return value.new_full(batch_shape, True, dtype=torch.bool)
+        return value.new_full(batch_shape, self.shape == (m, n), dtype=torch.bool)
 
     def __call__(self, rows: int | None = None, cols: int | None = None) -> Rectangular:
         return Rectangular(rows, cols)
@@ -70,8 +71,10 @@ class Tall(Rectangular):
         if self.rows is not None and self.cols is not None and self.rows < self.cols:
             raise ValueError("Tall matrices must satisfy rows >= cols.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return super().__contains__(item) and item.shape[-2] >= item.shape[-1]
+    def check(self, value: Tensor, /) -> Tensor:
+        return super().check(value) & value.new_full(
+            value.shape[:-2], value.shape[-2] >= value.shape[-1], dtype=torch.bool
+        )
 
     def __call__(self, rows: int | None = None, cols: int | None = None) -> Tall:
         return Tall(rows, cols)
@@ -86,8 +89,10 @@ class Wide(Rectangular):
         if self.rows is not None and self.cols is not None and self.cols < self.rows:
             raise ValueError("Wide matrices must satisfy cols >= rows.")
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return super().__contains__(item) and item.shape[-1] >= item.shape[-2]
+    def check(self, value: Tensor, /) -> Tensor:
+        return super().check(value) & value.new_full(
+            value.shape[:-2], value.shape[-1] >= value.shape[-2], dtype=torch.bool
+        )
 
     def __call__(self, rows: int | None = None, cols: int | None = None) -> Wide:
         return Wide(rows, cols)
@@ -97,13 +102,15 @@ class Wide(Rectangular):
 class ColumnOrthogonal(Tall):
     r"""Domain of tall matrices with orthonormal columns."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        if not super().__contains__(item):
-            return False
-        cols = item.shape[-1]
-        gram = item.mT @ item
-        eye = torch.eye(cols, dtype=item.dtype, device=item.device)
-        return bool(torch.allclose(gram, eye))
+    def check(self, value: Tensor, /) -> Tensor:
+        shape_ok = super().check(value)
+        if not bool(shape_ok.all()):
+            return shape_ok & False
+
+        cols = value.shape[-1]
+        gram = value.mT @ value
+        eye = torch.eye(cols, dtype=value.dtype, device=value.device)
+        return shape_ok & torch.isclose(gram, eye).all(dim=(-2, -1))
 
     def __call__(
         self, rows: int | None = None, cols: int | None = None
@@ -115,13 +122,15 @@ class ColumnOrthogonal(Tall):
 class RowOrthogonal(Wide):
     r"""Domain of wide matrices with orthonormal rows."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        if not super().__contains__(item):
-            return False
-        rows = item.shape[-2]
-        gram = item @ item.mT
-        eye = torch.eye(rows, dtype=item.dtype, device=item.device)
-        return bool(torch.allclose(gram, eye))
+    def check(self, value: Tensor, /) -> Tensor:
+        shape_ok = super().check(value)
+        if not bool(shape_ok.all()):
+            return shape_ok & False
+
+        rows = value.shape[-2]
+        gram = value @ value.mT
+        eye = torch.eye(rows, dtype=value.dtype, device=value.device)
+        return shape_ok & torch.isclose(gram, eye).all(dim=(-2, -1))
 
     def __call__(
         self, rows: int | None = None, cols: int | None = None
@@ -149,10 +158,11 @@ class Square(MatrixDomain):
             return None
         return self.size, self.size
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
+        *batch_shape, m, n = value.shape
         if self.size is None:
-            return item.shape[-1] == item.shape[-2]
-        return item.shape[-2:] == self.shape
+            return value.new_full(batch_shape, m == n, dtype=torch.bool)
+        return value.new_full(batch_shape, (m, n) == self.shape, dtype=torch.bool)
 
     def __call__(self, size: int) -> Square:
         return Square(size)
@@ -165,7 +175,7 @@ class LowRank(Rectangular):
     _: KW_ONLY
     rank: Final[int | None] = None
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
     def __call__(
@@ -182,7 +192,7 @@ class LowRank(Rectangular):
 class Symmetric(Square):
     r"""Domain of symmetric square matrices."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
     def __call__(self, size: int) -> Symmetric:
@@ -193,7 +203,7 @@ class Symmetric(Square):
 class SkewSymmetric(Square):
     r"""Domain of skew-symmetric square matrices."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
     def __call__(self, size: int) -> SkewSymmetric:
@@ -293,7 +303,7 @@ class MatrixDomains(PosetEnum):
 
     HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
 

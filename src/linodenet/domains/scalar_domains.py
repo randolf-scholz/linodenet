@@ -198,14 +198,14 @@ class Interval(ScalarDomain):
         assert non_empty ^ is_empty_sentinel  # safety check.
         return is_empty_sentinel
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, item: Tensor, /) -> Tensor:
         lower_mask = (
             (item >= self.lower) if self.lower_inclusive else (item > self.lower)
         )
         upper_mask = (
             (item <= self.upper) if self.upper_inclusive else (item < self.upper)
         )
-        return bool((lower_mask & upper_mask).item())
+        return lower_mask & upper_mask
 
     def __pos__(self) -> Interval:
         return self
@@ -408,7 +408,7 @@ Interval.EMPTY = Interval(  # pyright: ignore[reportAttributeAccessIssue]
 )
 
 
-class RealDomain(ScalarDomain, Collection[Interval]):
+class RealDomain(ScalarDomain, Collection[Interval]):  # type: ignore[misc]
     r"""A finite union of sorted, simplified intervals on the extended real line.
 
     Invariants:
@@ -565,11 +565,11 @@ class RealDomain(ScalarDomain, Collection[Interval]):
 
         yield current
 
-    def __contains__(self, item: Tensor, /) -> bool:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
-        mask = item in self[0]
+    def check(self, item: Tensor, /) -> Tensor:
+        result = self[0].check(item)
         for interval in self[1:]:
-            mask = mask | (item in interval)
-        return mask
+            result = result | interval.check(item)
+        return result
 
     def __eq__(self, rhs: object, /) -> bool:
         if (other := RealDomain.parse(rhs)) is None:
@@ -704,8 +704,8 @@ class ScalarDomains(ScalarDomain, Enum):
     def domain(self) -> ScalarDomain:
         return self.value
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return item in self.domain
+    def check(self, item: Tensor, /) -> Tensor:
+        return self.domain.check(item)
 
     def __le__(self, other: object, /) -> bool | Indeterminate:
         if isinstance(other, ScalarDomains):

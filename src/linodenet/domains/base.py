@@ -22,6 +22,7 @@ from functools import cache
 from types import MappingProxyType, NotImplementedType
 from typing import Any, ClassVar, Final, Protocol, Self, overload, runtime_checkable
 
+import torch
 from torch import Tensor
 
 
@@ -100,8 +101,13 @@ def _le(a, b, /) -> bool | Indeterminate | NotImplementedType:
 class Domain(Protocol):
     r"""Protocol for Domains."""
 
+    def __contains__(self, value: Tensor, /) -> bool:
+        r"""Check if the tensor is in the domain (unbatched only)."""
+        return bool(self.check(value).item())
+
     @abstractmethod
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
+        r"""Batched version of contains."""
         raise NotImplementedError
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
@@ -129,8 +135,11 @@ class Inverse[D: Domain](Domain):
 
     domain: Final[D]  # type: ignore[misc]
 
+    def check(self, item: Tensor, /) -> Tensor:
+        return ~self.domain.check(item)
+
     def __contains__(self, item: Tensor, /) -> bool:
-        return item not in self.domain
+        return bool(self.check(item).item())
 
     def __invert__(self) -> D:
         # (Aᶜ)ᶜ ≡ A
@@ -169,7 +178,16 @@ class Meet[D: Domain](Domain):
         object.__setattr__(self, "factors", frozenset(nodes))
 
     def __contains__(self, item: Tensor, /) -> bool:
-        return all(item in factor for factor in self)
+        return bool(self.check(item).item())
+
+    def check(self, item: Tensor, /) -> Tensor:
+        result = None
+        for factor in self:
+            factor_result = factor.check(item)
+            result = factor_result if result is None else result & factor_result
+        return (
+            result if result is not None else item.new_full((), True, dtype=torch.bool)
+        )
 
     def __len__(self) -> int:
         return len(self.factors)
@@ -261,7 +279,16 @@ class Join[D: Domain](Domain):
         object.__setattr__(self, "members", frozenset(nodes))
 
     def __contains__(self, item: Tensor, /) -> bool:
-        return any(item in member for member in self)
+        return bool(self.check(item).item())
+
+    def check(self, item: Tensor, /) -> Tensor:
+        result = None
+        for member in self:
+            member_result = member.check(item)
+            result = member_result if result is None else result | member_result
+        return (
+            result if result is not None else item.new_full((), False, dtype=torch.bool)
+        )
 
     def __len__(self) -> int:
         return len(self.members)
@@ -405,7 +432,11 @@ class PosetEnum(Enum):
     KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet[Self]]]]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
 
-    def __contains__(self, item: Tensor, /) -> bool:
+    def __contains__(self, value: Tensor, /) -> bool:
+        return bool(self.check(value).item())
+
+    @abstractmethod
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
     def __le__(self, other: object, /) -> bool | Indeterminate:
@@ -749,8 +780,11 @@ class ScalarDomain:
         return ()
 
     @abstractmethod
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
+
+    def __contains__(self, value: Tensor, /) -> bool:
+        return bool(self.check(value).item())
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
@@ -783,8 +817,11 @@ class VectorDomain:
         return None if self.size is None else (self.size,)
 
     @abstractmethod
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
+
+    def __contains__(self, value: Tensor, /) -> bool:
+        return bool(self.check(value).item())
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
@@ -823,8 +860,11 @@ class MatrixDomain:
         return None
 
     @abstractmethod
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
+
+    def __contains__(self, value: Tensor, /) -> bool:
+        return bool(self.check(value).item())
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
@@ -853,8 +893,11 @@ class TensorDomain:
     def shape(self) -> tuple[int, ...] | None: ...
 
     @abstractmethod
-    def __contains__(self, item: Tensor, /) -> bool:
+    def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
+
+    def __contains__(self, value: Tensor, /) -> bool:
+        return bool(self.check(value).item())
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
