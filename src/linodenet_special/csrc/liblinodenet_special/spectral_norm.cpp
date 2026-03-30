@@ -237,8 +237,14 @@ struct SpectralNorm: Function<SpectralNorm> {
         const auto saved = ctx->get_saved_variables();
         const Tensor &u = saved[0];
         const Tensor &v = saved[1];
-        const Tensor g_sigma = grad_output[0] * outer(u, v);
-        return { g_sigma, torch::zeros_like(u), torch::zeros_like(v), Tensor(), Tensor(), Tensor() };
+        return {
+            grad_output[0] * outer(u, v),
+            torch::zeros_like(u),
+            torch::zeros_like(v),
+            Tensor(),
+            Tensor(),
+            Tensor()
+        };
     }
 };
 

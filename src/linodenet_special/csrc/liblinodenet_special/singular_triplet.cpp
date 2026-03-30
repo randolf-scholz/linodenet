@@ -271,7 +271,7 @@ struct SingularTriplet : Function<SingularTriplet> {
                   (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
                 & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
                 ).item<bool>())
-            ) {break;}
+            ) { break; }
         }
 
         // Emit warning if no convergence within maxiter iterations.
@@ -288,14 +288,14 @@ struct SingularTriplet : Function<SingularTriplet> {
                 "Computation resulted in invalid singular value σ=", sigma,
                 " for input of shape ", A.sizes(), ". ",
                 "Try increasing the number of iterations or the tolerance. ",
-                "Currently maxiter=", maxiter , ", atol=" , atol,  ", rtol=" , rtol , "."
+                "Currently maxiter=", maxiter, ", atol=", atol, ", rtol=", rtol, "."
             ));
         }
 
         // store pre-conditioned tensors for backward
-        ctx->save_for_backward({u, v,sigma, A, SCALE});
+        ctx->save_for_backward({u, v, sigma, A, SCALE});
 
-        return {SCALE*sigma, u, v};
+        return {SCALE * sigma, u, v};
     }
 
     /** @brief Backward Pass.
@@ -318,17 +318,19 @@ struct SingularTriplet : Function<SingularTriplet> {
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
-
         const auto saved = ctx->get_saved_variables();
         const Tensor &u = saved[0];
         const Tensor &v = saved[1];
-        const Tensor g_sigma = grad_output[0] * outer(u, v);
+        const Tensor zero_u = torch::zeros_like(u);
+        const Tensor zero_v = torch::zeros_like(v);
 
         // exit early if grad_output is zero for both u and v.
         const Tensor &phi = grad_output[1];
         const Tensor &psi = grad_output[2];
-        if ( !(phi.any() | psi.any()).item<bool>() ) {
-            return {g_sigma, torch::zeros_like(u), torch::zeros_like(v), Tensor(), Tensor(), Tensor()};
+        const Tensor g_sigma = grad_output[0] * outer(u, v);
+
+        if (!(phi.any() | psi.any()).item<bool>()) {
+            return {g_sigma, zero_u, zero_v, Tensor(), Tensor(), Tensor()};
         }
 
         // parse the remaining inputs
@@ -339,19 +341,13 @@ struct SingularTriplet : Function<SingularTriplet> {
         const int64_t N = A.size(1);
         const auto OPTIONS = A.options();
 
-        const Tensor zero_u = torch::zeros_like(u).unsqueeze(-1);
-        const Tensor zero_v = torch::zeros_like(v).unsqueeze(-1);
-
         // construct the K matrix
         // [ σ𝕀ₘ | -A  | u | 0 ] ⋅ [p, q, μ, ν] = [ϕ]
         // [ -Aᵀ | σ𝕀ₙ | 0 | v ]                  [ψ]
-        const Tensor K = cat(
-            {
-                cat({sigma * eye(M, OPTIONS), -A,     u.unsqueeze(-1), zero_u}, 1),
-                cat({-A.t(), sigma * eye(N, OPTIONS), zero_v, v.unsqueeze(-1)}, 1)
-            },
-            0
-        );
+        const Tensor K = cat({
+            cat({sigma * eye(M, OPTIONS), -A,     u.unsqueeze(-1), zero_u.unsqueeze(-1)}, 1),
+            cat({-A.t(), sigma * eye(N, OPTIONS), zero_v.unsqueeze(-1), v.unsqueeze(-1)}, 1)
+        }, 0);
         const Tensor c = cat({phi, psi}, 0);
 
         // solve the underdetermined system
@@ -362,9 +358,9 @@ struct SingularTriplet : Function<SingularTriplet> {
         const Tensor q = x.slice(0, M, M + N) / SCALE;
 
         // compute the VJP
-        const Tensor g_u = outer(p - dot(u, p) * u, v);
-        const Tensor g_v = outer(u, q - dot(v, q) * v);
-        return { g_sigma + g_u + g_v, torch::zeros_like(u), torch::zeros_like(v), Tensor(), Tensor(), Tensor() };
+        const Tensor g_u = outer(p - at::linalg_vecdot(u, p) * u, v);
+        const Tensor g_v = outer(u, q - at::linalg_vecdot(v, q) * v);
+        return {g_sigma + g_u + g_v, zero_u, zero_v, Tensor(), Tensor(), Tensor()};
     }
 };
 
