@@ -11,8 +11,8 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet_special.trace_estimation import TraceEstimators
-from tests.testing import DEVICES, DTYPES, PROJECT, TestSuite
+from linodenet_special.trace_estimation import LogAbsDetEstimators, TraceEstimators
+from tests.testing import DEVICES, PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
@@ -49,7 +49,6 @@ def linear_map(matrix: Tensor, /) -> Callable[[Tensor], Tensor]:
 class TestTraceEstimator(TestSuite):
     BATCH_SIZE = 32
     INPUT_SIZE = 256
-    DTYPE = torch.float32
     SEED = 0
 
     def _make_generator(
@@ -75,7 +74,6 @@ class TestTraceEstimator(TestSuite):
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
-        dtype = self.DTYPE if dtype is None else dtype
         generator = self._make_generator(seed=seed, device=device)
 
         spectrum = 0.5 + torch.rand(
@@ -100,7 +98,6 @@ class TestTraceEstimator(TestSuite):
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
-        dtype = self.DTYPE if dtype is None else dtype
         generator = self._make_generator(seed=seed, device=device)
 
         spectrum = (
@@ -175,7 +172,6 @@ class TestTraceEstimator(TestSuite):
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
-        dtype = self.DTYPE if dtype is None else dtype
         generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
@@ -210,7 +206,6 @@ class TestTraceEstimator(TestSuite):
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
-        dtype = self.DTYPE if dtype is None else dtype
         generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
@@ -260,7 +255,6 @@ class TestTraceEstimator(TestSuite):
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
-        dtype = self.DTYPE if dtype is None else dtype
         generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
@@ -287,7 +281,6 @@ class TestTraceEstimator(TestSuite):
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
-        dtype = self.DTYPE if dtype is None else dtype
         generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
@@ -319,7 +312,6 @@ class TestTraceEstimator(TestSuite):
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
-        dtype = self.DTYPE if dtype is None else dtype
         generator = self._make_generator(seed=seed, device=device)
 
         q = self._make_orthogonal_batch(
@@ -339,13 +331,49 @@ class TestTraceEstimator(TestSuite):
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
         return TraceCase(matrix=matrix, spectrum=spectrum)
 
+    def make_contraction(
+        self,
+        test_case: TraceCase,
+        /,
+        *,
+        c: float = 0.97,
+    ) -> TraceCase:
+        max_spectral_radius = test_case.spectrum.abs().amax(dim=-1, keepdim=True)
+        one = torch.ones_like(max_spectral_radius)
+        eps = torch.finfo(test_case.matrix.dtype).eps
+        scale = torch.minimum(one, c / max_spectral_radius.clamp_min(eps))
+        return TraceCase(
+            matrix=test_case.matrix * scale.unsqueeze(-1),
+            spectrum=test_case.spectrum * scale,
+        )
+
+    def make_low_rank_contraction(
+        self,
+        /,
+        *,
+        seed: int | None = None,
+        batch_size: int | None = None,
+        input_size: int | None = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device = "cpu",
+        c: float = 0.97,
+    ) -> TraceCase:
+        test_case = self.make_low_rank(
+            seed=seed,
+            batch_size=batch_size,
+            input_size=input_size,
+            dtype=dtype,
+            device=device,
+        )
+        return self.make_contraction(test_case, c=c)
+
     def _make_orthogonal_batch(
         self,
         /,
         *,
         batch_size: int,
         input_size: int,
-        dtype: torch.dtype,
+        dtype: torch.dtype | None,
         device: str | torch.device,
         generator: torch.Generator,
     ) -> Tensor:
@@ -362,27 +390,65 @@ class TestTraceEstimator(TestSuite):
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 class TestTraceCorrectness(TestTraceEstimator):
     pass
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 class TestPowersCorrectness(TestTraceEstimator):
     pass
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
 class TestLogAbsDetCorrectness(TestTraceEstimator):
-    pass
+    NUM_MATVECS = 96
+    NUM_TERMS = 64
+    TOLERANCES: dict[str, float] = {
+        LogAbsDetEstimators.EXACT: 1e-5,
+        LogAbsDetEstimators.HUTCH: 1e-1,
+        LogAbsDetEstimators.HUTCH_PP: 5e-2,
+    }
+
+    def assert_logabsdet_close(
+        self, name: str, test_case: TraceCase, /, *, device: str
+    ) -> None:
+        torch.manual_seed(self.SEED)
+
+        estimator = LogAbsDetEstimators.new(
+            name,
+            num_matvecs=self.NUM_MATVECS,
+            num_terms=self.NUM_TERMS,
+            sampler="orth",
+            mode="symmetric",
+        ).to(device=device)
+
+        x = torch.zeros(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+        )
+        output = estimator(linear_map(test_case.matrix), x)
+        estimate = output[1] if isinstance(output, tuple) else output
+
+        expected = test_case.logabsdet
+        mean_relative_error = ((estimate - expected) / expected).abs().mean()
+        atol = self.TOLERANCES[name]
+        self.assert_upper_bounded(mean_relative_error, 0.0, atol=atol, rtol=0.0)
+
+    @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
+    def test_low_rank_contraction(self, name: str, device: str) -> None:
+        test_case = self.make_low_rank_contraction(device=device)
+        self.assert_logabsdet_close(name, test_case, device=device)
+
+    @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
+    def test_dense_contraction(self, name: str, device: str) -> None:
+        test_case = self.make_contraction(self.make_symmetric(device=device))
+        self.assert_logabsdet_close(name, test_case, device=device)
 
 
 class TestVisualizations(TestTraceEstimator):
     BATCH_SIZE = 32
     INPUT_SIZE = 256
-    DTYPE = torch.float32
     DEVICE = "cpu"
     SAMPLER = "orth"
     NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
@@ -410,10 +476,10 @@ class TestVisualizations(TestTraceEstimator):
 
         batch_size = self.BATCH_SIZE
         input_size = self.INPUT_SIZE
-        dtype = self.DTYPE
         device = self.DEVICE
-        denom = expected.abs().clamp_min(torch.finfo(dtype).eps)
-        x = torch.zeros(batch_size, input_size, device=device, dtype=dtype)
+        eps = torch.finfo(expected.dtype).eps
+        denom = expected.abs().clamp_min(eps)
+        x = torch.zeros(batch_size, input_size, device=device)
         op = linear_map(matrix)
 
         curves: dict[str, list[Tensor]] = {test_id: [] for test_id in self.METHODS}
@@ -429,11 +495,11 @@ class TestVisualizations(TestTraceEstimator):
                         sampler=sampler,
                         **kwargs,
                     )
-                    estimate = estimator.to(device=device, dtype=dtype)(op, x)
+                    estimate = estimator.to(device=device)(op, x)
                 except ValueError:
-                    estimate = torch.full((), torch.nan, device=device, dtype=dtype)
+                    estimate = torch.full((), torch.nan, device=device)
                 except NotImplementedError:
-                    estimate = torch.full((), torch.nan, device=device, dtype=dtype)
+                    estimate = torch.full((), torch.nan, device=device)
                 curves[test_id].append(((estimate - expected).abs() / denom).mean())
 
         return {name: torch.stack(values).cpu() for name, values in curves.items()}
@@ -491,7 +557,7 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_diagonal(self) -> None:
-        test_case = self.make_diagonal(dtype=self.DTYPE, device=self.DEVICE)
+        test_case = self.make_diagonal(device=self.DEVICE)
         curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
@@ -504,7 +570,7 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_ldu(self) -> None:
-        test_case = self.make_ldu(dtype=self.DTYPE, device=self.DEVICE)
+        test_case = self.make_ldu(device=self.DEVICE)
         curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
@@ -517,7 +583,7 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_linear_spectrum(self) -> None:
-        test_case = self.make_linear_spectrum(dtype=self.DTYPE, device=self.DEVICE)
+        test_case = self.make_linear_spectrum(device=self.DEVICE)
         curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
@@ -530,10 +596,7 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_exponential_spectrum(self) -> None:
-        test_case = self.make_exponential_spectrum(
-            dtype=self.DTYPE,
-            device=self.DEVICE,
-        )
+        test_case = self.make_exponential_spectrum(device=self.DEVICE)
         curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
@@ -546,7 +609,7 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_low_rank(self) -> None:
-        test_case = self.make_low_rank(dtype=self.DTYPE, device=self.DEVICE)
+        test_case = self.make_low_rank(device=self.DEVICE)
         curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
