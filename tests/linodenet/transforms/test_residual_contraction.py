@@ -12,7 +12,7 @@ from linodenet.mappings import (
     TransformBase,
 )
 from linodenet.nn.parametrize import update_parametrizations
-from tests.testing import DEVICES, DTYPES, SEEDS_5, TestCase, pytest_xfail
+from tests.testing import DEVICES, DTYPES, SEEDS_5, TestSuite, pytest_xfail
 
 
 class ShiftedHalfContraction(nn.Module):
@@ -28,7 +28,7 @@ class ShiftedHalfContraction(nn.Module):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
-class TestReZero(TestCase):
+class TestReZero(TestSuite):
     BATCH_SIZE = 32
     INPUT_SIZE = 8
     TRAIN_STEPS = 5
@@ -117,7 +117,7 @@ class TestReZero(TestCase):
     [ResidualContractionFallback, ResidualContraction],
     ids=["loop", "fixpoint_solve"],
 )
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     BATCH_SIZE = 32
     INPUT_SIZE = 8
     FLOW_MAXITER = 128
@@ -279,7 +279,7 @@ class TestCorrectness(TestCase):
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("trace_estimator", ["hutch", "xtrace"])
-class TestLogAbsDet(TestCase):
+class TestLogAbsDet(TestSuite):
     BATCH_SIZE = 8
     INPUT_SIZE = 4
     SCALE = 0.125
@@ -336,7 +336,7 @@ class TestLogAbsDet(TestCase):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
-class TestLogAbsDetExact(TestCase):
+class TestLogAbsDetExact(TestSuite):
     BATCH_SIZE = TestLogAbsDet.BATCH_SIZE
     INPUT_SIZE = TestLogAbsDet.INPUT_SIZE
     SCALE = TestLogAbsDet.SCALE
@@ -382,7 +382,7 @@ class TestLogAbsDetExact(TestCase):
     [ResidualContractionFallback, ResidualContraction],
     ids=["loop", "fixpoint_solve"],
 )
-class TestPerformance(TestCase):
+class TestPerformance(TestSuite):
     BATCH_SIZE = 32
     PERF_SEED = 0
     PERF_INPUT_SIZE = 256

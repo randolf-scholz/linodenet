@@ -2,10 +2,10 @@ import pytest
 import torch
 
 from linodenet.mappings.transforms import TriangularTransform
-from tests.testing import SEEDS_10, TestCase
+from tests.testing import SEEDS_10, TestSuite
 
 
-class TestTriangularFlow(TestCase):
+class TestTriangularFlow(TestSuite):
     VALUE_ATOL = 1e-5
     VALUE_RTOL = 1e-5
     LOGABSDET_ATOL = 1e-6

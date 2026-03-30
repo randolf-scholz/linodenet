@@ -9,7 +9,7 @@ from matplotlib.widgets import Slider
 from torch import Tensor
 
 from linodenet_special.fallbacks.hard_bend import hard_bend, hard_contract, hard_expand
-from tests.testing import PROJECT, TestCase
+from tests.testing import PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 X_MIN, X_MAX = -8.0, 8.0
@@ -19,7 +19,7 @@ Y_MIN, Y_MAX = -8.0, 8.0
 @pytest.mark.parametrize(
     "a", [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0], ids=lambda a: f"a={a}"
 )
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     RTOL = 1e-14
     ATOL = 1e-14
     STEPS = 257

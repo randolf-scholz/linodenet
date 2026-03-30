@@ -19,14 +19,14 @@ from linodenet.parametrizations import (
 )
 from linodenet.registry import get_registry_entry
 from linodenet.testing import VectorTest
-from tests.testing import DEVICES, TestCase, pytest_xfail
+from tests.testing import DEVICES, TestSuite, pytest_xfail
 
 VECTOR_SIZE = 4
 
 
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("name", VECTOR_PARAMETRIZATIONS)
-class TestParametrization(TestCase):
+class TestParametrization(TestSuite):
     BATCH_SIZE = 8
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6

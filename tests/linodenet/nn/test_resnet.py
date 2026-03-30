@@ -4,7 +4,7 @@ from torch import nn
 
 from linodenet.nn import ResNet
 from linodenet.nn.rezero import ReZero
-from tests.testing import TestCase
+from tests.testing import TestSuite
 
 
 @pytest.mark.parametrize("use_rezero", [False, True], ids=["plain", "rezero"])
@@ -33,7 +33,7 @@ def test_instantiation(use_rezero: bool) -> None:
     assert all(isinstance(block, expected_type) for block in model)
 
 
-class TestResNet(TestCase):
+class TestResNet(TestSuite):
     def test_rezero_initializes_to_identity(self) -> None:
         model = ResNet(
             4,

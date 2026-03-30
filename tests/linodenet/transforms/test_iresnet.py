@@ -13,7 +13,7 @@ from linodenet.mappings.transforms.residual_contraction import (
     ReZeroContraction,
 )
 from linodenet.nn.parametrize import update_parametrizations
-from tests.testing import DEVICES, DTYPES, PROJECT, TestCase, visualize_distribution
+from tests.testing import DEVICES, DTYPES, PROJECT, TestSuite, visualize_distribution
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
@@ -126,7 +126,7 @@ def test_instantiation(use_rezero: bool) -> None:
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("use_rezero", [False, True], ids=["plain", "rezero"])
-class TestIResNetInvertibility(TestCase):
+class TestIResNetInvertibility(TestSuite):
     INPUT_SIZE = 8
     BATCH_SIZE = 64
     NUM_BLOCKS = 3

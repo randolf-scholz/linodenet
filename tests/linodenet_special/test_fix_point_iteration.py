@@ -9,7 +9,7 @@ from linodenet_special.fallbacks.fixpoint_iteration import (
     fixpoint_solve,
     fixpoint_solve_functional,
 )
-from tests.testing import DEVICES, DTYPES, TestCase
+from tests.testing import DEVICES, DTYPES, TestSuite
 
 
 def compile_fresh(fn, /):
@@ -78,7 +78,7 @@ class LinearFixpointModel(nn.Module):
         )
 
 
-class TestFixPointIteration(TestCase):
+class TestFixPointIteration(TestSuite):
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
 
@@ -262,7 +262,7 @@ class TestFixPointIteration(TestCase):
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     BATCH_SIZE = 5
     INPUT_SIZE = 2
     MAXITER = 100

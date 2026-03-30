@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from linodenet.nn.rezero import ReZero
-from tests.testing import TestCase
+from tests.testing import TestSuite
 
 
 class ShiftScalar(nn.Module):
@@ -10,7 +10,7 @@ class ShiftScalar(nn.Module):
         return x + 1.0
 
 
-class TestReZero(TestCase):
+class TestReZero(TestSuite):
     def test_default_scalar_map_is_identity(self) -> None:
         module = ReZero(nn.Identity())
 

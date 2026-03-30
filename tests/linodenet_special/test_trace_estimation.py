@@ -3,7 +3,7 @@ from collections.abc import Callable
 import torch
 from torch import Tensor
 
-from tests.testing import TestCase
+from tests.testing import TestSuite
 
 
 def linear_map(matrix: Tensor, /) -> Callable[[Tensor], Tensor]:
@@ -13,7 +13,7 @@ def linear_map(matrix: Tensor, /) -> Callable[[Tensor], Tensor]:
     return op
 
 
-class TestTraceEstimator(TestCase):
+class TestTraceEstimator(TestSuite):
     BATCH_SIZE = 32
     INPUT_SIZE = 256
     DTYPE = torch.float32

@@ -1,10 +1,10 @@
 import pytest
 import torch
 
-from tests.testing import TestCase
+from tests.testing import TestSuite
 
 
-class TestBoundedAssertions(TestCase):
+class TestBoundedAssertions(TestSuite):
     def test_assert_upper_bounded_broadcasts_and_equalizes_dtype(self) -> None:
         value = torch.tensor([[1.0], [1.5]], dtype=torch.float32)
         bound = torch.tensor([1.5, 2.5], dtype=torch.float64)

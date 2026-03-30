@@ -2,10 +2,10 @@ import pytest
 import torch
 
 from linodenet.mappings.transforms import LowRankTransform
-from tests.testing import SEEDS_10, TestCase
+from tests.testing import SEEDS_10, TestSuite
 
 
-class TestLowRankFlow(TestCase):
+class TestLowRankFlow(TestSuite):
     VALUE_ATOL = 1e-3
     VALUE_RTOL = 1e-5
     LOGABSDET_ATOL = 1e-5

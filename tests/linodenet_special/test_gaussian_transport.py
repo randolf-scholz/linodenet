@@ -34,7 +34,7 @@ from linodenet_special.interfaces import (
     GaussianToMixture,
     MixtureToGaussian,
 )
-from tests.testing import DEVICES, DTYPES, TestCase
+from tests.testing import DEVICES, DTYPES, TestSuite
 
 BIMODAL_TO_GAUSSIAN: dict[str, BimodalToGaussian] = {
     "cpp": bimodal_to_gaussian_cpp,
@@ -70,7 +70,7 @@ GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD = {
 }
 
 
-class BimodalTest(TestCase):
+class BimodalTest(TestSuite):
     SEED = 0
     N = 256
     X_MIN = -20
@@ -256,7 +256,7 @@ class BimodalTest(TestCase):
         )
 
 
-class TestMixture(TestCase):
+class TestMixture(TestSuite):
     SEED = 0
     N = 256
     CASES = [

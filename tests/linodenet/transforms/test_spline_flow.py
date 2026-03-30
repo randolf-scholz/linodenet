@@ -3,12 +3,12 @@ import pytest
 import torch
 
 from linodenet.mappings.transforms import SplineTransform
-from tests.testing import PROJECT, SEEDS_10, TestCase
+from tests.testing import PROJECT, SEEDS_10, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
-class TestSplineFlow(TestCase):
+class TestSplineFlow(TestSuite):
     TEST_FNS = {
         "sinusoid": lambda x: x + 3 + 0.5 * torch.sin(x + 3),
         "small_slope": lambda x: 0.2 * x,

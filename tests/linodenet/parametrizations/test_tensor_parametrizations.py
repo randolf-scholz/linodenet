@@ -12,7 +12,7 @@ from linodenet.parametrizations import (
     register_optimizer_hook,
     register_parametrization,
 )
-from tests.testing import DEVICES, TestCase
+from tests.testing import DEVICES, TestSuite
 
 
 class ResidualModel(nn.Module):
@@ -26,7 +26,7 @@ class ResidualModel(nn.Module):
         return self.output(hidden)
 
 
-class TestReZero(TestCase):
+class TestReZero(TestSuite):
     NUM_ITERATIONS = 3
     VECTOR_SIZE = 4
     TARGET_SIZE = 2

@@ -10,10 +10,10 @@ from linodenet.nn.parametrize import (
     is_parametrized,
     update_parametrizations,
 )
-from tests.testing import DEVICES, TestCase
+from tests.testing import DEVICES, TestSuite
 
 
-class TestLinearContraction(TestCase):
+class TestLinearContraction(TestSuite):
     VALUE_ATOL = 1e-5
     VALUE_RTOL = 1e-5
 

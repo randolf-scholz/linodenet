@@ -14,7 +14,7 @@ from linodenet_special.trace_estimation import (
     xtrace_estimator,
     xtrace_estimator_matlab,
 )
-from tests.testing import DEVICES, TestCase
+from tests.testing import DEVICES, TestSuite
 
 
 def ceil_power_of_ten(x: Tensor | float) -> float:
@@ -50,7 +50,7 @@ ESTIMATORS = {
 @pytest.mark.parametrize("samples", NUM_SAMPLES, ids="samples={}".format)
 @pytest.mark.parametrize("size", MATRIX_SIZES, ids="size={}".format)
 @pytest.mark.parametrize("method", ESTIMATORS)
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     NUM_SAMPLES = NUM_SAMPLES
     MATRIX_SIZES = MATRIX_SIZES
     MATRIX_KINDS = MATRIX_KINDS
@@ -338,7 +338,7 @@ class ScaledMap(torch.nn.Module):
         return self.scale * x
 
 
-class TestLogAbsDetEstimator(TestCase):
+class TestLogAbsDetEstimator(TestSuite):
     BATCH_SIZE = 16
     INPUT_SIZE = 4
 

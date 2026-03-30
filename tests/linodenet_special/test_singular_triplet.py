@@ -13,7 +13,7 @@ import linodenet_special
 from linodenet_special import singular_triplet, singular_triplet_native
 from linodenet_special.compiled import singular_triplet as singular_triplet_cpp
 from linodenet_special.fallbacks import singular_triplet as singular_triplet_py
-from tests.testing import DEVICES, SEEDS_5, TestCase, timer
+from tests.testing import DEVICES, SEEDS_5, TestSuite, timer
 from tests.testing.examples import ExampleWithKnownSVD
 
 
@@ -315,7 +315,7 @@ class TestBasic:
 @pytest.mark.parametrize("shape", CORRECTNESS_SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("method", CORRECTNESS_SINGULAR_TRIPLETS)
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     SINGULAR_TRIPLETS = CORRECTNESS_SINGULAR_TRIPLETS
     ATOL = 1e-3
     RTOL = 1e-5
@@ -470,7 +470,7 @@ class TestCorrectness(TestCase):
 @pytest.mark.parametrize("shape", PERFORMANCE_SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("name", PERFORMANCE_SINGULAR_TRIPLETS)
-class TestPerformance(TestCase):
+class TestPerformance(TestSuite):
     SINGULAR_TRIPLETS = PERFORMANCE_SINGULAR_TRIPLETS
     SHAPES = PERFORMANCE_SHAPES
     ROUNDS = 64

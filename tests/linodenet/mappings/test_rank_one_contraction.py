@@ -3,10 +3,10 @@ import torch
 from torch import nn
 
 from linodenet.mappings import RankOneContraction
-from tests.testing import DEVICES, TestCase
+from tests.testing import DEVICES, TestSuite
 
 
-class TestRankOneContraction(TestCase):
+class TestRankOneContraction(TestSuite):
     VALUE_ATOL = 1e-5
     VALUE_RTOL = 1e-5
 

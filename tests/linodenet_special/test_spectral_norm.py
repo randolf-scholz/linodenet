@@ -17,7 +17,7 @@ from linodenet_special.fallbacks.spectral_norm import (
     _cond_fn as cond_fn,
     _spectral_norm_forward_impl,
 )
-from tests.testing import DEVICES, SEEDS_5, TestCase, timer
+from tests.testing import DEVICES, SEEDS_5, TestSuite, timer
 from tests.testing.examples import ExampleWithKnownSVD
 
 
@@ -268,7 +268,7 @@ class BasicTest:
 @pytest.mark.parametrize("shape", CORRECTNESS_SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("method", CORRECTNESS_SPECTRAL_NORMS)
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     SPECTRAL_NORMS = CORRECTNESS_SPECTRAL_NORMS
     SHAPES = CORRECTNESS_SHAPES
     ATOL = 1e-3
@@ -419,7 +419,7 @@ class TestCorrectness(TestCase):
 @pytest.mark.parametrize("shape", PERFORMANCE_SHAPES, ids=lambda x: f"{x[0]}x{x[1]}")
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("name", PERFORMANCE_SPECTRAL_NORMS)
-class TestPerformance(TestCase):
+class TestPerformance(TestSuite):
     SPECTRAL_NORMS = PERFORMANCE_SPECTRAL_NORMS
     SHAPES = PERFORMANCE_SHAPES
     ROUNDS = 64

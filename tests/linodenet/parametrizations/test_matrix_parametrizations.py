@@ -21,7 +21,7 @@ from linodenet.parametrizations import (
 )
 from linodenet.registry import get_registry_entry
 from linodenet.testing import MatrixTest
-from tests.testing import DEVICES, TestCase, pytest_xfail
+from tests.testing import DEVICES, TestSuite, pytest_xfail
 
 SQUARE_SHAPE = (4, 4)
 RECTANGULAR_SHAPE = (5, 4)
@@ -55,7 +55,7 @@ PARAMETRIZATION_ARGUMENTS: defaultdict[
 
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("name", MATRIX_PARAMETRIZATIONS)
-class TestParametrization(TestCase):
+class TestParametrization(TestSuite):
     BATCH_SIZE = 8
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6

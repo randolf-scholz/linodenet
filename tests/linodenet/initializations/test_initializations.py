@@ -11,13 +11,13 @@ import torch
 
 from linodenet.initializations import INITIALIZATION_FNS
 from linodenet.registry import get_registry_entry
-from tests.testing import PROJECT, TestCase
+from tests.testing import PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
 @pytest.mark.parametrize("name", INITIALIZATION_FNS)
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     r"""Validate correctness properties of initialization functions."""
 
     BATCH_SIZE = 10
@@ -130,7 +130,7 @@ class TestCorrectness(TestCase):
         assert matrix.shape == (*expected_batch_shape, SIZE, SIZE)
 
 
-class TestVisualization(TestCase):
+class TestVisualization(TestSuite):
     r"""Exercise visualization-only branches for initialization diagnostics."""
 
     BATCH_SIZE = 256

@@ -15,7 +15,7 @@ from linodenet_special.fallbacks.ndtri_exp import (
     _UPPER_CUTOFF,
     ndtri_exp as ndtri_exp_py,
 )
-from tests.testing import DEVICES, DTYPES, TestCase
+from tests.testing import DEVICES, DTYPES, TestSuite
 
 assert ndtri_exp_cpp is not None
 
@@ -61,7 +61,7 @@ def test_torch_log_ndtr_matches_scipy(dtype: torch.dtype) -> None:
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("name", IMPLS, ids=str)
-class TestCorrectness(TestCase):
+class TestCorrectness(TestSuite):
     N = 256
     RANGES = [
         (-80.0, _LOWER_CUTOFF - 1e-3),

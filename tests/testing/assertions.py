@@ -1,4 +1,4 @@
-__all__ = ["TestCase"]
+__all__ = ["TestSuite"]
 
 import warnings
 
@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 
 
-class TestCase:
+class TestSuite:
     ATOL = 1e-6
     RTOL = 1e-6
 
