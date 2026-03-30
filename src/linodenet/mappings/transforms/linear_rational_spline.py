@@ -598,7 +598,7 @@ class LearnableLRS(TransformBase):
         # Submodules
         self.spline = UnconstrainedLinearRationalSpline(use_fp64=use_fp64)
 
-    def spline_parameters(self, batch_shape: torch.Size, /) -> BinWidths:
+    def spline_parameters(self, batch_shape: tuple[int, ...], /) -> BinWidths:
         r"""Expand spline parameters to match the batch shape."""
         widths = self.spline.MIN_BIN_WIDTH + F.softplus(self.widths)
         heights = self.spline.MIN_BIN_HEIGHT + F.softplus(self.heights)
