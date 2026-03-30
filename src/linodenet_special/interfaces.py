@@ -3,6 +3,7 @@ r"""Public Interfaces."""
 __all__ = [
     # Constants
     "DEFAULT_NEWTON_MAXITER",
+    "DEFAULT_SPECTRAL_NORM_MAXITER",
     # Protocols
     "BimodalToGaussian",
     "BimodalToGaussianValueAndGrad",
@@ -19,8 +20,10 @@ __all__ = [
     # Classes
     "KnownFunctions",
     "Kernels",
+    "Defaults",
 ]
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final, Optional, Protocol, ReadOnly, TypedDict
 
@@ -29,12 +32,37 @@ from torch import Tensor
 
 from signatures import signature
 
-DEFAULT_NEWTON_MAXITER: Final[dict[torch.dtype, int]] = {
-    torch.float16: 10,
-    torch.bfloat16: 10,
-    torch.float32: 10,
-    torch.float64: 15,
-}
+
+@dataclass(frozen=True)
+class Defaults[K, V]:
+    r"""Container for default values."""
+
+    data: Final[Mapping[K, V]]  # type: ignore[misc]
+    fallback: Final[V]  # type: ignore[misc]
+
+    def __getitem__(self, key: K) -> V:
+        return self.data.get(key, self.fallback)
+
+
+DEFAULT_NEWTON_MAXITER: Final[Defaults[torch.dtype, int]] = Defaults(
+    {
+        torch.float16: 10,
+        torch.bfloat16: 10,
+        torch.float32: 10,
+        torch.float64: 15,
+    },
+    15,
+)
+
+DEFAULT_SPECTRAL_NORM_MAXITER: Final[Defaults[torch.dtype, int]] = Defaults(
+    {
+        torch.float16: 256,
+        torch.bfloat16: 256,
+        torch.float32: 256,
+        torch.float64: 256,
+    },
+    256,
+)
 
 
 class GaussianToBimodal(Protocol):
@@ -157,7 +185,7 @@ class SingularTriplet(Protocol):
         *,
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
-        maxiter: int = ...,
+        maxiter: Optional[int] = ...,
         atol: float = ...,
         rtol: float = ...,
     ) -> tuple[Tensor, Tensor, Tensor]:
@@ -190,7 +218,7 @@ class SpectralNorm(Protocol):
         *,
         u0: Optional[Tensor] = None,
         v0: Optional[Tensor] = None,
-        maxiter: int = ...,
+        maxiter: Optional[int] = ...,
         atol: float = ...,
         rtol: float = ...,
     ) -> Tensor:
