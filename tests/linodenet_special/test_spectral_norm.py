@@ -15,7 +15,7 @@ from linodenet_special.fallbacks.spectral_norm import (
     State,
     _body_fn as body_fn,
     _cond_fn as cond_fn,
-    _spectral_norm_forward_impl,
+    _spectral_norm_forward_impl as spectral_norm_impl,
 )
 from tests.testing import DEVICES, SEEDS_5, TestSuite, timer
 from tests.testing.examples import ExampleWithKnownSVD
@@ -27,12 +27,16 @@ def test_compile_torch_while() -> None:
     v = torch.randn(4)
     grad_u = A.mv(v)
     grad_v = A.mT.mv(u)
-    maxiter = torch.as_tensor(10, device=A.device, dtype=torch.int32)
-    atol = torch.as_tensor(1e-6, device=A.device, dtype=A.dtype)
-    rtol = torch.as_tensor(1e-6, device=A.device, dtype=A.dtype)
+
+    maxiter = 10
+    atol = 1e-6
+    rtol = 1e-6
+    budget = torch.as_tensor(maxiter, device=A.device, dtype=torch.int32)
+    atol_t = torch.as_tensor(atol, device=A.device, dtype=A.dtype)
+    rtol_t = torch.as_tensor(rtol, device=A.device, dtype=A.dtype)
 
     # test with plain python
-    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    state = State(budget, u, v, grad_u, grad_v, A, atol_t, rtol_t)
     assert cond_fn(state)
     while cond_fn(state):
         state = body_fn(state)
@@ -41,14 +45,14 @@ def test_compile_torch_while() -> None:
     # test with torch.compiled cond_fn, body_fn
     compiled_body_fn = torch.compile(body_fn)
     compiled_cond_fn = torch.compile(cond_fn)
-    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    state = State(budget, u, v, grad_u, grad_v, A, atol_t, rtol_t)
     assert compiled_cond_fn(state)
     while compiled_cond_fn(state):
         state = compiled_body_fn(state)
     assert not compiled_cond_fn(state)
 
     # test with torch.while_loop
-    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    state = State(budget, u, v, grad_u, grad_v, A, atol_t, rtol_t)
     assert cond_fn(state)
     state = torch.while_loop(
         cond_fn=cond_fn,
@@ -65,14 +69,14 @@ def test_compile_torch_while() -> None:
             carried_inputs=(st,),
         )
 
-    state = State(maxiter, u, v, grad_u, grad_v, A, atol, rtol)
+    state = State(budget, u, v, grad_u, grad_v, A, atol_t, rtol_t)
     assert cond_fn(state)
     state = loop_body(state)
     assert not cond_fn(state)
 
     # check forward_impl
-    _spectral_norm_forward_impl(A, u, v, 10, atol, rtol)
-    compiled_impl = torch.compile(_spectral_norm_forward_impl)
+    spectral_norm_impl(A, u, v, 10, atol, rtol)
+    compiled_impl = torch.compile(spectral_norm_impl)
     compiled_impl(A, u, v, 10, atol, rtol)
 
     # check the entire spectral norm implementation
