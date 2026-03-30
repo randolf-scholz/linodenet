@@ -6,13 +6,13 @@ __all__ = [
     "spectral_norm_native",
 ]
 
-from typing import Final, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 import torch
 from torch import Tensor
-from torch.linalg import vector_norm as v_norm
+from torch.linalg import vector_norm
 
-_DEFAULT_MAXITER: Final[int] = 256
+from linodenet_special.interfaces import DEFAULT_SPECTRAL_NORM_MAXITER
 
 
 class State(NamedTuple):
@@ -37,7 +37,7 @@ def _cond_fn(state: State, /) -> Tensor:
     grad_u = A.mv(v)  # gᵤ ← Av
     grad_v = A.mT.mv(u)  # gᵥ ← Aᵀu
 
-    scale = torch.maximum(v_norm(grad_u), v_norm(grad_v))
+    scale = torch.maximum(vector_norm(grad_u), vector_norm(grad_v))
     tol = rtol * scale + atol
 
     sigma_u = torch.dot(grad_u, u)  # σᵤ ← ⟨u∣gᵤ⟩
@@ -45,8 +45,8 @@ def _cond_fn(state: State, /) -> Tensor:
     grad_u = grad_u.addcmul(sigma_u, u, value=-1.0)  # gᵤ ← gᵤ - σᵤu
     grad_v = grad_v.addcmul(sigma_v, v, value=-1.0)  # gᵥ ← gᵥ - σᵥv
 
-    left_converged = v_norm(grad_u) < tol
-    right_converged = v_norm(grad_v) < tol
+    left_converged = vector_norm(grad_u) < tol
+    right_converged = vector_norm(grad_v) < tol
     converged = (left_converged & right_converged).all()
     sigmas_nonnegative = (sigma_u >= 0).all() & (sigma_v >= 0).all()
 
@@ -61,44 +61,44 @@ def _body_fn(state: State, /) -> State:
     # Note: must alternate, computing both grad_u and grad_v simultaneously would be incorrect.
     # Note: unroll 8 iteration since convergence check is expensive
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
 
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
 
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
 
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
 
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
 
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
 
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
 
     grad_u = A.mv(v)             # gᵤ ← Av
-    u = grad_u / v_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
+    u = grad_u / vector_norm(grad_u)  # u ← gᵤ/‖gᵤ‖
     grad_v = A.mT.mv(u)          # gᵥ ← Aᵀu
-    v = grad_v / v_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
+    v = grad_v / vector_norm(grad_v)  # v ← gᵥ/‖gᵥ‖
     # fmt: on
 
     return State(
@@ -116,24 +116,20 @@ def _body_fn(state: State, /) -> State:
 @torch.no_grad()
 def _spectral_norm_forward_impl(
     A: Tensor,
-    u0: Optional[Tensor],
-    v0: Optional[Tensor],
-    maxiter: Optional[int | Tensor],
-    atol: float | Tensor,
-    rtol: float | Tensor,
+    u0: Tensor,
+    v0: Tensor,
+    maxiter: int,
+    atol: float,
+    rtol: float,
+    /,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    maxiter = _DEFAULT_MAXITER if maxiter is None else maxiter
-    maxiter = torch.as_tensor(maxiter, device=A.device, dtype=torch.int32)
-    atol = torch.as_tensor(atol, device=A.device, dtype=A.dtype)
-    rtol = torch.as_tensor(rtol, device=A.device, dtype=A.dtype)
-
-    m, n = A.shape
-    u0 = u0 if u0 is not None else torch.randn(m, dtype=A.dtype, device=A.device)
-    v0 = v0 if v0 is not None else torch.randn(n, dtype=A.dtype, device=A.device)
+    budget = torch.as_tensor(maxiter, device=A.device, dtype=torch.int32)
+    atol_t = torch.as_tensor(atol, device=A.device, dtype=A.dtype)
+    rtol_t = torch.as_tensor(rtol, device=A.device, dtype=A.dtype)
     grad_u = torch.empty_like(u0)
     grad_v = torch.empty_like(v0)
 
-    initial_state = State(maxiter, u0, v0, grad_u, grad_v, A, atol, rtol)
+    initial_state = State(budget, u0, v0, grad_u, grad_v, A, atol_t, rtol_t)
     final_state = torch.while_loop(_cond_fn, _body_fn, (initial_state,))
 
     _, u, v, _, _, _, _, _ = final_state
@@ -167,9 +163,9 @@ class _SpectralNormImpl(torch.autograd.Function):
     def forward(
         ctx,
         A: Tensor,
-        u0: Optional[Tensor],
-        v0: Optional[Tensor],
-        maxiter: Optional[int],
+        u0: Tensor,
+        v0: Tensor,
+        maxiter: int,
         atol: float,
         rtol: float,
         /,
@@ -181,10 +177,10 @@ class _SpectralNormImpl(torch.autograd.Function):
     @staticmethod
     def backward(
         ctx, *grad_outputs: Tensor
-    ) -> tuple[Tensor, None, None, None, None, None]:
+    ) -> tuple[Tensor, Tensor, Tensor, None, None, None]:
         u, v = ctx.saved_tensors
         grad = grad_outputs[0] * torch.outer(u, v)
-        return grad, None, None, None, None, None
+        return grad, torch.zeros_like(u), torch.zeros_like(v), None, None, None
 
 
 def spectral_norm(
@@ -193,12 +189,25 @@ def spectral_norm(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: int = _DEFAULT_MAXITER,
+    maxiter: int | None = None,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
     r"""Compute the spectral norm of a matrix."""
-    return _SpectralNormImpl.apply(A, u0, v0, maxiter, atol, rtol)
+    maxiter = DEFAULT_SPECTRAL_NORM_MAXITER[A.dtype] if maxiter is None else maxiter
+    u = (
+        u0.detach().clone()
+        if u0 is not None
+        else torch.randn(A.shape[-2], dtype=A.dtype, device=A.device)
+    )
+    v = (
+        v0.detach().clone()
+        if v0 is not None
+        else torch.randn(A.shape[-1], dtype=A.dtype, device=A.device)
+    )
+    u = u / vector_norm(u, dim=-1, keepdims=True)
+    v = v / vector_norm(v, dim=-1, keepdims=True)
+    return _SpectralNormImpl.apply(A, u, v, maxiter, atol, rtol)
 
 
 def spectral_norm_native(
@@ -207,7 +216,7 @@ def spectral_norm_native(
     *,
     u0: Optional[Tensor] = None,  # noqa: ARG001
     v0: Optional[Tensor] = None,  # noqa: ARG001
-    maxiter: int = _DEFAULT_MAXITER,  # noqa: ARG001
+    maxiter: int | None = None,  # noqa: ARG001
     atol: float = 1e-6,  # noqa: ARG001
     rtol: float = 1e-6,  # noqa: ARG001
 ) -> Tensor:

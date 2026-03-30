@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 import torch
 from torch import Tensor
+from torch.linalg import vector_norm
 
 from linodenet_special.interfaces import DEFAULT_SPECTRAL_NORM_MAXITER
 
@@ -23,8 +24,8 @@ class _SingularTripletImpl(torch.autograd.Function):
     def forward(
         ctx: Any,
         A: Tensor,
-        u0: Optional[Tensor],
-        v0: Optional[Tensor],
+        u0: Tensor,
+        v0: Tensor,
         maxiter: int,
         atol: float,
         rtol: float,
@@ -37,7 +38,7 @@ class _SingularTripletImpl(torch.autograd.Function):
     @staticmethod
     def backward(
         ctx, *outer: Tensor | None
-    ) -> tuple[Tensor, None, None, None, None, None]:
+    ) -> tuple[Tensor, Tensor, Tensor, None, None, None]:
         A, sigma, u, v = ctx.saved_tensors
         g_sigma, g_u, g_v = outer
 
@@ -51,7 +52,14 @@ class _SingularTripletImpl(torch.autograd.Function):
         g_sigma_out = g_sigma * torch.outer(u, v)
 
         if not (g_u.any().item() or g_v.any().item()):
-            return g_sigma_out, None, None, None, None, None
+            return (
+                g_sigma_out,
+                torch.zeros_like(u),
+                torch.zeros_like(v),
+                None,
+                None,
+                None,
+            )
 
         m, n = A.shape
         options = {"dtype": A.dtype, "device": A.device}
@@ -71,7 +79,14 @@ class _SingularTripletImpl(torch.autograd.Function):
 
         g_u_out = torch.outer(p - torch.dot(u, p) * u, v)
         g_v_out = torch.outer(u, q - torch.dot(v, q) * v)
-        return g_sigma_out + g_u_out + g_v_out, None, None, None, None, None
+        return (
+            g_sigma_out + g_u_out + g_v_out,
+            torch.zeros_like(u),
+            torch.zeros_like(v),
+            None,
+            None,
+            None,
+        )
 
 
 def singular_triplet(
@@ -86,7 +101,19 @@ def singular_triplet(
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute the dominant singular triplet of a matrix."""
     maxiter = DEFAULT_SPECTRAL_NORM_MAXITER[A.dtype] if maxiter is None else maxiter
-    return _SingularTripletImpl.apply(A, u0, v0, maxiter, atol, rtol)
+    u = (
+        u0.detach().clone()
+        if u0 is not None
+        else torch.randn(A.shape[-2], dtype=A.dtype, device=A.device)
+    )
+    v = (
+        v0.detach().clone()
+        if v0 is not None
+        else torch.randn(A.shape[-1], dtype=A.dtype, device=A.device)
+    )
+    u = u / vector_norm(u, dim=-1, keepdims=True)
+    v = v / vector_norm(v, dim=-1, keepdims=True)
+    return _SingularTripletImpl.apply(A, u, v, maxiter, atol, rtol)
 
 
 def singular_triplet_native(

@@ -30,7 +30,11 @@ from typing import Any, Final, Optional, cast
 import torch
 from torch import Tensor
 
-from .interfaces import DEFAULT_NEWTON_MAXITER, KnownFunctions
+from .interfaces import (
+    DEFAULT_NEWTON_MAXITER,
+    DEFAULT_SPECTRAL_NORM_MAXITER,
+    KnownFunctions,
+)
 
 # constants
 _LIB_NAME: Final[str] = "liblinodenet_special"
@@ -150,7 +154,7 @@ def gaussian_to_mixture(
 ) -> Tensor:
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$."""
     assert _gaussian_to_mixture is not None, "missing kernel"
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _gaussian_to_mixture(y, weights, mus, sigmas, maxiter=maxiter)
 
 
@@ -165,7 +169,7 @@ def gaussian_to_mixture_value_and_grad(
 ) -> tuple[Tensor, Tensor]:
     r"""Optimal transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$ and its derivative."""
     assert _gaussian_to_mixture_value_and_grad is not None, "missing kernel"
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter=maxiter)
 
 
@@ -197,7 +201,7 @@ def gaussian_to_bimodal(
     assert _gaussian_to_bimodal is not None, "missing kernel"
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _gaussian_to_bimodal(y, mu, sigma, maxiter=maxiter)
 
 
@@ -213,7 +217,7 @@ def gaussian_to_bimodal_value_and_grad(
     assert _gaussian_to_bimodal_value_and_grad is not None, "missing kernel"
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
-    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    maxiter = DEFAULT_NEWTON_MAXITER[y.dtype] if maxiter is None else maxiter
     return _gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter=maxiter)
 
 
@@ -256,12 +260,13 @@ def spectral_norm(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: int = 256,
+    maxiter: int | None = None,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
     r"""Computes the spectral norm."""
     assert _spectral_norm is not None, "missing kernel"
+    maxiter = DEFAULT_SPECTRAL_NORM_MAXITER[A.dtype] if maxiter is None else maxiter
     return _spectral_norm(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
 
 
@@ -286,12 +291,13 @@ def singular_triplet(
     *,
     u0: Optional[Tensor] = None,
     v0: Optional[Tensor] = None,
-    maxiter: int = 256,
+    maxiter: int | None = None,
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Computes the singular triplet."""
     assert _singular_triplet is not None, "missing kernel"
+    maxiter = DEFAULT_SPECTRAL_NORM_MAXITER[A.dtype] if maxiter is None else maxiter
     return _singular_triplet(A, u0=u0, v0=v0, maxiter=maxiter, atol=atol, rtol=rtol)
 
 
