@@ -6,10 +6,14 @@ __all__ = [
     "WRAPPED_KERNELS",
     # Implementations
     "bimodal_to_gaussian",
+    "bimodal_to_gaussian_value_and_grad",
     "gaussian_to_bimodal",
+    "gaussian_to_bimodal_value_and_grad",
     "gaussian_to_mixture",
+    "gaussian_to_mixture_value_and_grad",
     "hard_bend",
     "mixture_to_gaussian",
+    "mixture_to_gaussian_value_and_grad",
     "ndtri_exp",
     "singular_triplet",
     "spectral_norm",
@@ -28,11 +32,15 @@ from torch import Tensor
 from .interfaces import (
     DEFAULT_NEWTON_MAXITER,
     BimodalToGaussian,
+    BimodalToGaussianValueAndGrad,
     GaussianToBimodal,
+    GaussianToBimodalValueAndGrad,
     GaussianToMixture,
+    GaussianToMixtureValueAndGrad,
     HardBend,
     KnownFunctions,
     MixtureToGaussian,
+    MixtureToGaussianValueAndGrad,
     NdtriExp,
     SingularTriplet,
     SpectralNorm,
@@ -114,9 +122,21 @@ def _compile_fns() -> KnownFunctions:
         "ndtri_exp": compiled_fns.get("ndtri_exp"),
         "hard_bend": compiled_fns.get("hard_bend"),
         "bimodal_to_gaussian": compiled_fns.get("bimodal_to_gaussian"),
+        "bimodal_to_gaussian_value_and_grad": compiled_fns.get(
+            "bimodal_to_gaussian_value_and_grad"
+        ),
         "gaussian_to_bimodal": compiled_fns.get("gaussian_to_bimodal"),
+        "gaussian_to_bimodal_value_and_grad": compiled_fns.get(
+            "gaussian_to_bimodal_value_and_grad"
+        ),
         "gaussian_to_mixture": compiled_fns.get("gaussian_to_mixture"),
+        "gaussian_to_mixture_value_and_grad": compiled_fns.get(
+            "gaussian_to_mixture_value_and_grad"
+        ),
         "mixture_to_gaussian": compiled_fns.get("mixture_to_gaussian"),
+        "mixture_to_gaussian_value_and_grad": compiled_fns.get(
+            "mixture_to_gaussian_value_and_grad"
+        ),
     }
 
 
@@ -135,9 +155,21 @@ def _load_prebuilts() -> KnownFunctions:
         "ndtri_exp": getattr(_LIB, "ndtri_exp", None),
         "hard_bend": getattr(_LIB, "hard_bend", None),
         "bimodal_to_gaussian": getattr(_LIB, "bimodal_to_gaussian", None),
+        "bimodal_to_gaussian_value_and_grad": getattr(
+            _LIB, "bimodal_to_gaussian_value_and_grad", None
+        ),
         "gaussian_to_bimodal": getattr(_LIB, "gaussian_to_bimodal", None),
+        "gaussian_to_bimodal_value_and_grad": getattr(
+            _LIB, "gaussian_to_bimodal_value_and_grad", None
+        ),
         "gaussian_to_mixture": getattr(_LIB, "gaussian_to_mixture", None),
+        "gaussian_to_mixture_value_and_grad": getattr(
+            _LIB, "gaussian_to_mixture_value_and_grad", None
+        ),
         "mixture_to_gaussian": getattr(_LIB, "mixture_to_gaussian", None),
+        "mixture_to_gaussian_value_and_grad": getattr(
+            _LIB, "mixture_to_gaussian_value_and_grad", None
+        ),
     }
 
 
@@ -172,12 +204,35 @@ def gaussian_to_mixture(
     return _gaussian_to_mixture(y, weights, mus, sigmas, maxiter=maxiter)
 
 
+def gaussian_to_mixture_value_and_grad(
+    y: Tensor,
+    /,
+    weights: Tensor,
+    mus: Tensor,
+    sigmas: Tensor,
+    *,
+    maxiter: int | None = None,
+) -> tuple[Tensor, Tensor]:
+    r"""Optimal transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$ and its derivative."""
+    assert _gaussian_to_mixture_value_and_grad is not None, "missing kernel"
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    return _gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter=maxiter)
+
+
 def mixture_to_gaussian(
     x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
 ) -> Tensor:
     r"""Optimal Transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$."""
     assert _mixture_to_gaussian is not None, "missing kernel"
     return _mixture_to_gaussian(x, weights, mus, sigmas)
+
+
+def mixture_to_gaussian_value_and_grad(
+    x: Tensor, /, weights: Tensor, mus: Tensor, sigmas: Tensor
+) -> tuple[Tensor, Tensor]:
+    r"""Optimal transport from mixture $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$ and its derivative."""
+    assert _mixture_to_gaussian_value_and_grad is not None, "missing kernel"
+    return _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
 
 
 def gaussian_to_bimodal(
@@ -196,6 +251,22 @@ def gaussian_to_bimodal(
     return _gaussian_to_bimodal(y, mu, sigma, maxiter=maxiter)
 
 
+def gaussian_to_bimodal_value_and_grad(
+    y: Tensor,
+    /,
+    mu: Tensor | float = 2.0,
+    sigma: Tensor | float = 1.0,
+    *,
+    maxiter: int | None = None,
+) -> tuple[Tensor, Tensor]:
+    r"""Optimal transport from $N(0,1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$ and its derivative."""
+    assert _gaussian_to_bimodal_value_and_grad is not None, "missing kernel"
+    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
+    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    maxiter = DEFAULT_NEWTON_MAXITER.get(y.dtype, 10) if maxiter is None else maxiter
+    return _gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter=maxiter)
+
+
 def bimodal_to_gaussian(
     y: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
 ) -> Tensor:
@@ -204,6 +275,16 @@ def bimodal_to_gaussian(
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
     return _bimodal_to_gaussian(y, mu, sigma)
+
+
+def bimodal_to_gaussian_value_and_grad(
+    y: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
+) -> tuple[Tensor, Tensor]:
+    r"""Optimal transport from mixture $½N(-μ, σ²) + ½N(μ, σ²)$ to $N(0,1)$ and its derivative."""
+    assert _bimodal_to_gaussian_value_and_grad is not None, "missing kernel"
+    mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
+    sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
+    return _bimodal_to_gaussian_value_and_grad(y, mu, sigma)
 
 
 def ndtri_exp(log_p: Tensor, /) -> Tensor:
@@ -270,25 +351,33 @@ def singular_triplet(
 RAW_KERNELS: Final[KnownFunctions] = _compile_liblinodenet()
 
 # fmt: off
-_bimodal_to_gaussian: BimodalToGaussian | None = RAW_KERNELS.get("bimodal_to_gaussian")
-_gaussian_to_bimodal: GaussianToBimodal | None = RAW_KERNELS.get("gaussian_to_bimodal")
-_gaussian_to_mixture: GaussianToMixture | None = RAW_KERNELS.get("gaussian_to_mixture")
-_mixture_to_gaussian: MixtureToGaussian | None = RAW_KERNELS.get("mixture_to_gaussian")
-_hard_bend:           HardBend          | None = RAW_KERNELS.get("hard_bend")
-_ndtri_exp:           NdtriExp          | None = RAW_KERNELS.get("ndtri_exp")
-_singular_triplet:    SingularTriplet   | None = RAW_KERNELS.get("singular_triplet")
-_spectral_norm:       SpectralNorm      | None = RAW_KERNELS.get("spectral_norm")
+_bimodal_to_gaussian:                BimodalToGaussian                | None = RAW_KERNELS.get("bimodal_to_gaussian")
+_bimodal_to_gaussian_value_and_grad: BimodalToGaussianValueAndGrad    | None = RAW_KERNELS.get("bimodal_to_gaussian_value_and_grad")
+_gaussian_to_bimodal:                GaussianToBimodal                | None = RAW_KERNELS.get("gaussian_to_bimodal")
+_gaussian_to_bimodal_value_and_grad: GaussianToBimodalValueAndGrad    | None = RAW_KERNELS.get("gaussian_to_bimodal_value_and_grad")
+_gaussian_to_mixture:                GaussianToMixture                | None = RAW_KERNELS.get("gaussian_to_mixture")
+_gaussian_to_mixture_value_and_grad: GaussianToMixtureValueAndGrad    | None = RAW_KERNELS.get("gaussian_to_mixture_value_and_grad")
+_mixture_to_gaussian:                MixtureToGaussian                | None = RAW_KERNELS.get("mixture_to_gaussian")
+_mixture_to_gaussian_value_and_grad: MixtureToGaussianValueAndGrad    | None = RAW_KERNELS.get("mixture_to_gaussian_value_and_grad")
+_hard_bend:                          HardBend                         | None = RAW_KERNELS.get("hard_bend")
+_ndtri_exp:                          NdtriExp                         | None = RAW_KERNELS.get("ndtri_exp")
+_singular_triplet:                   SingularTriplet                  | None = RAW_KERNELS.get("singular_triplet")
+_spectral_norm:                      SpectralNorm                     | None = RAW_KERNELS.get("spectral_norm")
 # fmt: on
 
 
 WRAPPED_KERNELS: Final[KnownFunctions] = {
-    "bimodal_to_gaussian" : None if RAW_KERNELS.get("bimodal_to_gaussian") is None else bimodal_to_gaussian,
-    "gaussian_to_bimodal" : None if RAW_KERNELS.get("gaussian_to_bimodal") is None else gaussian_to_bimodal,
-    "gaussian_to_mixture" : None if RAW_KERNELS.get("gaussian_to_mixture") is None else gaussian_to_mixture,
-    "mixture_to_gaussian" : None if RAW_KERNELS.get("mixture_to_gaussian") is None else mixture_to_gaussian,
-    "hard_bend"           : None if RAW_KERNELS.get("hard_bend")           is None else hard_bend,
-    "ndtri_exp"           : None if RAW_KERNELS.get("ndtri_exp")           is None else ndtri_exp,
-    "singular_triplet"    : None if RAW_KERNELS.get("singular_triplet")    is None else singular_triplet,
-    "spectral_norm"       : None if RAW_KERNELS.get("spectral_norm")       is None else spectral_norm,
+    "bimodal_to_gaussian"                : None if RAW_KERNELS.get("bimodal_to_gaussian")                is None else bimodal_to_gaussian,
+    "bimodal_to_gaussian_value_and_grad" : None if RAW_KERNELS.get("bimodal_to_gaussian_value_and_grad") is None else bimodal_to_gaussian_value_and_grad,
+    "gaussian_to_bimodal"                : None if RAW_KERNELS.get("gaussian_to_bimodal")                is None else gaussian_to_bimodal,
+    "gaussian_to_bimodal_value_and_grad" : None if RAW_KERNELS.get("gaussian_to_bimodal_value_and_grad") is None else gaussian_to_bimodal_value_and_grad,
+    "gaussian_to_mixture"                : None if RAW_KERNELS.get("gaussian_to_mixture")                is None else gaussian_to_mixture,
+    "gaussian_to_mixture_value_and_grad" : None if RAW_KERNELS.get("gaussian_to_mixture_value_and_grad") is None else gaussian_to_mixture_value_and_grad,
+    "mixture_to_gaussian"                : None if RAW_KERNELS.get("mixture_to_gaussian")                is None else mixture_to_gaussian,
+    "mixture_to_gaussian_value_and_grad" : None if RAW_KERNELS.get("mixture_to_gaussian_value_and_grad") is None else mixture_to_gaussian_value_and_grad,
+    "hard_bend"                          : None if RAW_KERNELS.get("hard_bend")                           is None else hard_bend,
+    "ndtri_exp"                          : None if RAW_KERNELS.get("ndtri_exp")                           is None else ndtri_exp,
+    "singular_triplet"                   : None if RAW_KERNELS.get("singular_triplet")                    is None else singular_triplet,
+    "spectral_norm"                      : None if RAW_KERNELS.get("spectral_norm")                       is None else spectral_norm,
 }  # fmt: skip
 r"""Wrapped C++ kernels."""

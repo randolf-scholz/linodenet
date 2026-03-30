@@ -10,19 +10,23 @@ from torch.autograd import gradcheck
 from linodenet_special import hard_bend
 from linodenet_special.compiled import (
     bimodal_to_gaussian as bimodal_to_gaussian_cpp,
+    bimodal_to_gaussian_value_and_grad as bimodal_to_gaussian_value_and_grad_cpp,
     gaussian_to_bimodal as gaussian_to_bimodal_cpp,
+    gaussian_to_bimodal_value_and_grad as gaussian_to_bimodal_value_and_grad_cpp,
     gaussian_to_mixture as gaussian_to_mixture_cpp,
+    gaussian_to_mixture_value_and_grad as gaussian_to_mixture_value_and_grad_cpp,
     mixture_to_gaussian as mixture_to_gaussian_cpp,
+    mixture_to_gaussian_value_and_grad as mixture_to_gaussian_value_and_grad_cpp,
 )
 from linodenet_special.fallbacks import (
     bimodal_to_gaussian as bimodal_to_gaussian_py,
-    bimodal_to_gaussian_value_and_grad as bimodal_to_gaussian_value_and_jac_py,
+    bimodal_to_gaussian_value_and_grad as bimodal_to_gaussian_value_and_grad_py,
     gaussian_to_bimodal as gaussian_to_bimodal_py,
-    gaussian_to_bimodal_value_and_grad as gaussian_to_bimodal_value_and_jac_py,
+    gaussian_to_bimodal_value_and_grad as gaussian_to_bimodal_value_and_grad_py,
     gaussian_to_mixture as gaussian_to_mixture_py,
-    gaussian_to_mixture_value_and_grad as gaussian_to_mixture_value_and_jac_py,
+    gaussian_to_mixture_value_and_grad as gaussian_to_mixture_value_and_grad_py,
     mixture_to_gaussian as mixture_to_gaussian_py,
-    mixture_to_gaussian_value_and_grad as mixture_to_gaussian_value_and_jac_py,
+    mixture_to_gaussian_value_and_grad as mixture_to_gaussian_value_and_grad_py,
 )
 from linodenet_special.interfaces import (
     BimodalToGaussian,
@@ -48,17 +52,21 @@ GAUSSIAN_TO_MIXTURE: dict[str, GaussianToMixture] = {
     "cpp": gaussian_to_mixture_cpp,
     "py": gaussian_to_mixture_py,
 }
-BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC = {
-    "py": bimodal_to_gaussian_value_and_jac_py,
+BIMODAL_TO_GAUSSIAN_VALUE_AND_GRAD = {
+    "cpp": bimodal_to_gaussian_value_and_grad_cpp,
+    "py": bimodal_to_gaussian_value_and_grad_py,
 }
-GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC = {
-    "py": gaussian_to_bimodal_value_and_jac_py,
+GAUSSIAN_TO_BIMODAL_VALUE_AND_GRAD = {
+    "cpp": gaussian_to_bimodal_value_and_grad_cpp,
+    "py": gaussian_to_bimodal_value_and_grad_py,
 }
-MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC = {
-    "py": mixture_to_gaussian_value_and_jac_py,
+MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD = {
+    "cpp": mixture_to_gaussian_value_and_grad_cpp,
+    "py": mixture_to_gaussian_value_and_grad_py,
 }
-GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC = {
-    "py": gaussian_to_mixture_value_and_jac_py,
+GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD = {
+    "cpp": gaussian_to_mixture_value_and_grad_cpp,
+    "py": gaussian_to_mixture_value_and_grad_py,
 }
 
 
@@ -432,21 +440,21 @@ class TestBimodalToGaussian(BimodalTest):
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
-@pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
+@pytest.mark.parametrize("name", BIMODAL_TO_GAUSSIAN_VALUE_AND_GRAD, ids=str)
 class TestBimodalToGaussianValueAndGrad(BimodalTest):
     def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
-        impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_GRAD[name]
         self.assert_gradcheck(impl, mean, stdv, dtype=dtype, device=device)
 
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
-        forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
-        inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
+        forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_GRAD[name]
+        inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_GRAD[name]
         x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
@@ -636,13 +644,13 @@ class TestGaussianToBimodal(BimodalTest):
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("stdv", BimodalTest.STDVS, ids="stdv={}".format)
 @pytest.mark.parametrize("mean", BimodalTest.MEANS, ids="mean={}".format)
-@pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC, ids=str)
+@pytest.mark.parametrize("name", GAUSSIAN_TO_BIMODAL_VALUE_AND_GRAD, ids=str)
 class TestGaussianToBimodalValueAndGrad(BimodalTest):
     def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
-        impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
+        impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_GRAD[name]
         self.assert_gradcheck(
             impl, mean, stdv, dtype=dtype, device=device, inverse=True
         )
@@ -651,8 +659,8 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
     ) -> None:
         torch.manual_seed(self.SEED)
-        inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_JAC[name]
-        forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_GRAD[name]
+        forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_GRAD[name]
         y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
         μ = torch.tensor(mean, dtype=dtype, device=device)
@@ -720,7 +728,7 @@ class TestMixtureToGaussian(TestMixture):
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize(("weights", "means", "stdvs"), TestMixture.CASES)
-@pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC, ids=str)
+@pytest.mark.parametrize("name", MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD, ids=str)
 class TestMixtureToGaussianValueAndGrad(TestMixture):
     def test_gradcheck(
         self,
@@ -732,7 +740,7 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
         device: str,
     ) -> None:
         torch.manual_seed(self.SEED)
-        impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD[name]
         x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
         self.assert_gradcheck(
             impl, x, weights, means, stdvs, dtype=dtype, device=device
@@ -748,8 +756,8 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
         device: str,
     ) -> None:
         torch.manual_seed(self.SEED)
-        forward_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
-        inverse_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
+        forward_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD[name]
+        inverse_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD[name]
         x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)
@@ -818,7 +826,7 @@ class TestGaussianToMixture(TestMixture):
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize(("weights", "means", "stdvs"), TestMixture.CASES)
-@pytest.mark.parametrize("name", GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC, ids=str)
+@pytest.mark.parametrize("name", GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD, ids=str)
 class TestGaussianToMixtureValueAndGrad(TestMixture):
     def test_gradcheck(
         self,
@@ -830,7 +838,7 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
         device: str,
     ) -> None:
         torch.manual_seed(self.SEED)
-        impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
+        impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD[name]
         y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
         self.assert_gradcheck(
             impl, y, weights, means, stdvs, dtype=dtype, device=device
@@ -846,8 +854,8 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
         device: str,
     ) -> None:
         torch.manual_seed(self.SEED)
-        forward_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_JAC[name]
-        inverse_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_JAC[name]
+        forward_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD[name]
+        inverse_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD[name]
         y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)

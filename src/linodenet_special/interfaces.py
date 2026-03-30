@@ -213,12 +213,16 @@ class KnownFunctions(TypedDict):
     r"""The known functions in the custom library."""
 
     # fmt: off
-    singular_triplet:    ReadOnly[ SingularTriplet | None ]
-    spectral_norm:       ReadOnly[ SpectralNorm | None ]
-    ndtri_exp:           ReadOnly[ NdtriExp | None ]
-    hard_bend:           ReadOnly[ HardBend | None ]
-    bimodal_to_gaussian: ReadOnly[ BimodalToGaussian | None ]
-    gaussian_to_bimodal: ReadOnly[ GaussianToBimodal | None ]
-    gaussian_to_mixture: ReadOnly[ GaussianToMixture | None ]
-    mixture_to_gaussian: ReadOnly[ MixtureToGaussian | None ]
+    singular_triplet:                    ReadOnly[ SingularTriplet | None ]
+    spectral_norm:                       ReadOnly[ SpectralNorm | None ]
+    ndtri_exp:                           ReadOnly[ NdtriExp | None ]
+    hard_bend:                           ReadOnly[ HardBend | None ]
+    bimodal_to_gaussian:                 ReadOnly[ BimodalToGaussian | None ]
+    bimodal_to_gaussian_value_and_grad:  ReadOnly[ BimodalToGaussianValueAndGrad | None ]
+    gaussian_to_bimodal:                 ReadOnly[ GaussianToBimodal | None ]
+    gaussian_to_bimodal_value_and_grad:  ReadOnly[ GaussianToBimodalValueAndGrad | None ]
+    gaussian_to_mixture:                 ReadOnly[ GaussianToMixture | None ]
+    gaussian_to_mixture_value_and_grad:  ReadOnly[ GaussianToMixtureValueAndGrad | None ]
+    mixture_to_gaussian:                 ReadOnly[ MixtureToGaussian | None ]
+    mixture_to_gaussian_value_and_grad:  ReadOnly[ MixtureToGaussianValueAndGrad | None ]
     # fmt: on

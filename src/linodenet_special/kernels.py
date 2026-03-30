@@ -13,9 +13,13 @@ __all__ = [
     "singular_triplet",
     "spectral_norm",
     "bimodal_to_gaussian",
+    "bimodal_to_gaussian_value_and_grad",
     "gaussian_to_bimodal",
+    "gaussian_to_bimodal_value_and_grad",
     "gaussian_to_mixture",
+    "gaussian_to_mixture_value_and_grad",
     "mixture_to_gaussian",
+    "mixture_to_gaussian_value_and_grad",
 ]
 
 import logging
@@ -26,11 +30,15 @@ from . import compiled, fallbacks
 from .compiled import WRAPPED_KERNELS
 from .interfaces import (
     BimodalToGaussian,
+    BimodalToGaussianValueAndGrad,
     GaussianToBimodal,
+    GaussianToBimodalValueAndGrad,
     GaussianToMixture,
+    GaussianToMixtureValueAndGrad,
     HardBend,
     KnownFunctions,
     MixtureToGaussian,
+    MixtureToGaussianValueAndGrad,
     NdtriExp,
     SingularTriplet,
     SpectralNorm,
@@ -49,9 +57,13 @@ class Kernels:
     ndtri_exp: NdtriExp
     hard_bend: HardBend
     bimodal_to_gaussian: BimodalToGaussian
+    bimodal_to_gaussian_value_and_grad: BimodalToGaussianValueAndGrad
     gaussian_to_bimodal: GaussianToBimodal
+    gaussian_to_bimodal_value_and_grad: GaussianToBimodalValueAndGrad
     gaussian_to_mixture: GaussianToMixture
+    gaussian_to_mixture_value_and_grad: GaussianToMixtureValueAndGrad
     mixture_to_gaussian: MixtureToGaussian
+    mixture_to_gaussian_value_and_grad: MixtureToGaussianValueAndGrad
 
 
 def _select_fns() -> Kernels:
@@ -85,9 +97,13 @@ FALLBACKS: Final[KnownFunctions] = {
     "spectral_norm"       : fallbacks.spectral_norm,
     "hard_bend"           : fallbacks.hard_bend,
     "bimodal_to_gaussian" : fallbacks.bimodal_to_gaussian,
+    "bimodal_to_gaussian_value_and_grad" : fallbacks.bimodal_to_gaussian_value_and_grad,
     "gaussian_to_bimodal" : fallbacks.gaussian_to_bimodal,
+    "gaussian_to_bimodal_value_and_grad" : fallbacks.gaussian_to_bimodal_value_and_grad,
     "gaussian_to_mixture" : fallbacks.gaussian_to_mixture,
+    "gaussian_to_mixture_value_and_grad" : fallbacks.gaussian_to_mixture_value_and_grad,
     "mixture_to_gaussian" : fallbacks.mixture_to_gaussian,
+    "mixture_to_gaussian_value_and_grad" : fallbacks.mixture_to_gaussian_value_and_grad,
 }  # fmt: skip
 
 COMPILED: Final[KnownFunctions] = {
@@ -96,9 +112,13 @@ COMPILED: Final[KnownFunctions] = {
     "spectral_norm"       : compiled.spectral_norm,
     "hard_bend"           : compiled.hard_bend,
     "bimodal_to_gaussian" : compiled.bimodal_to_gaussian,
+    "bimodal_to_gaussian_value_and_grad" : compiled.bimodal_to_gaussian_value_and_grad,
     "gaussian_to_bimodal" : compiled.gaussian_to_bimodal,
+    "gaussian_to_bimodal_value_and_grad" : compiled.gaussian_to_bimodal_value_and_grad,
     "gaussian_to_mixture" : compiled.gaussian_to_mixture,
+    "gaussian_to_mixture_value_and_grad" : compiled.gaussian_to_mixture_value_and_grad,
     "mixture_to_gaussian" : compiled.mixture_to_gaussian,
+    "mixture_to_gaussian_value_and_grad" : compiled.mixture_to_gaussian_value_and_grad,
 }  # fmt: skip
 
 KERNELS: Final[Kernels] = _select_fns()
@@ -109,7 +129,11 @@ ndtri_exp:           NdtriExp          = KERNELS.ndtri_exp
 singular_triplet:    SingularTriplet   = KERNELS.singular_triplet
 spectral_norm:       SpectralNorm      = KERNELS.spectral_norm
 bimodal_to_gaussian: BimodalToGaussian = KERNELS.bimodal_to_gaussian
+bimodal_to_gaussian_value_and_grad: BimodalToGaussianValueAndGrad = KERNELS.bimodal_to_gaussian_value_and_grad
 gaussian_to_bimodal: GaussianToBimodal = KERNELS.gaussian_to_bimodal
+gaussian_to_bimodal_value_and_grad: GaussianToBimodalValueAndGrad = KERNELS.gaussian_to_bimodal_value_and_grad
 gaussian_to_mixture: GaussianToMixture = KERNELS.gaussian_to_mixture
+gaussian_to_mixture_value_and_grad: GaussianToMixtureValueAndGrad = KERNELS.gaussian_to_mixture_value_and_grad
 mixture_to_gaussian: MixtureToGaussian = KERNELS.mixture_to_gaussian
+mixture_to_gaussian_value_and_grad: MixtureToGaussianValueAndGrad = KERNELS.mixture_to_gaussian_value_and_grad
 # fmt: on
