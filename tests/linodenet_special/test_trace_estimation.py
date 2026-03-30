@@ -401,8 +401,9 @@ class TestPowersCorrectness(TestTraceEstimator):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestLogAbsDetCorrectness(TestTraceEstimator):
-    NUM_MATVECS = 96
-    NUM_TERMS = 64
+    PROBLEM_SIZE = 128
+    NUM_MATVECS = 16
+    NUM_TERMS = 8
     TOLERANCES: dict[str, float] = {
         LogAbsDetEstimators.EXACT: 1e-5,
         LogAbsDetEstimators.HUTCH: 1e-1,
@@ -418,13 +419,13 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             name,
             num_matvecs=self.NUM_MATVECS,
             num_terms=self.NUM_TERMS,
-            sampler="orth",
+            sampler="sphere",
             mode="symmetric",
         ).to(device=device)
 
         x = torch.zeros(
             self.BATCH_SIZE,
-            self.INPUT_SIZE,
+            self.PROBLEM_SIZE,
             device=device,
         )
         output = estimator(linear_map(test_case.matrix), x)
@@ -437,12 +438,17 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
 
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
     def test_low_rank_contraction(self, name: str, device: str) -> None:
-        test_case = self.make_low_rank_contraction(device=device)
+        test_case = self.make_low_rank_contraction(
+            input_size=self.PROBLEM_SIZE,
+            device=device,
+        )
         self.assert_logabsdet_close(name, test_case, device=device)
 
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
     def test_dense_contraction(self, name: str, device: str) -> None:
-        test_case = self.make_contraction(self.make_symmetric(device=device))
+        test_case = self.make_contraction(
+            self.make_symmetric(input_size=self.PROBLEM_SIZE, device=device)
+        )
         self.assert_logabsdet_close(name, test_case, device=device)
 
 
