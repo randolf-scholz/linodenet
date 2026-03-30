@@ -1,4 +1,4 @@
-r"""Tests for matrix prametrizations."""
+r"""Tests for matrix parameterization."""
 
 from collections import defaultdict
 
