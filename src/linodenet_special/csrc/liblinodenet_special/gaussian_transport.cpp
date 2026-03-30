@@ -45,7 +45,7 @@ void check_mixture_args(
     );
 }
 
-std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_value_and_stats(
+std::tuple<Tensor, Tensor, Tensor> bimodal_value_and_stats(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
@@ -61,7 +61,7 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_value_and_stats(
         linodenet_special::ndtri_exp(log_p),
         -linodenet_special::ndtri_exp(log_q)
     );
-    return {y.clamp_(z_minus, z_plus), mu_abs, z_plus, z_minus, sigma.log()};
+    return {y.clamp_(z_minus, z_plus), z_plus, z_minus};
 }
 
 std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
@@ -69,8 +69,9 @@ std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
     const Tensor &mu,
     const Tensor &sigma
 ) {
-    const auto [fx, mu_abs, z_plus, z_minus, log_sigma] = bimodal_value_and_stats(x, mu, sigma);
-    const Tensor lower_bound = exp(-0.5 * (mu_abs / sigma).square()) / sigma;
+    const auto [fx, z_plus, z_minus] = bimodal_value_and_stats(x, mu, sigma);
+    const Tensor log_sigma = sigma.log();
+    const Tensor lower_bound = exp(-0.5 * (mu / sigma).square()) / sigma;
     const Tensor upper_bound = sigma.reciprocal();
     const Tensor y2 = fx.square();
     const Tensor log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF;
@@ -92,7 +93,11 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives(
     const Tensor &sigma,
     const Tensor &y
 ) {
-    const auto [_, mu_abs, z_plus, z_minus, log_sigma] = bimodal_value_and_stats(x, mu, sigma);
+    const Tensor mu_abs = mu.abs();
+    const Tensor z_plus = (x + mu_abs) / sigma;
+    const Tensor z_minus = (x - mu_abs) / sigma;
+    const Tensor log_sigma = sigma.log();
+    const Tensor mu_sign = mu.sign();
     const Tensor y2 = y.square();
     // Evaluate the two mode contributions in log space to avoid tail underflow.
     const Tensor log_phi_plus = LOG_HALF + 0.5 * (y2 - z_plus.square()) - log_sigma;
@@ -101,14 +106,14 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives(
     const Tensor lo = minimum(log_phi_plus, log_phi_minus);
 
     Tensor d_x = exp(logaddexp(log_phi_plus, log_phi_minus));
-    Tensor d_mu = sign(log_phi_plus - log_phi_minus) * exp(hi + log1p(-exp(lo - hi)));
-    Tensor d_sigma = -(x * d_x + mu_abs * d_mu) / sigma;
+    Tensor d_mu_abs = sign(log_phi_plus - log_phi_minus) * exp(hi + log1p(-exp(lo - hi)));
+    Tensor d_sigma = -(x * d_x + mu_abs * d_mu_abs) / sigma;
 
     // The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     const Tensor lower_bound = exp(-0.5 * (mu_abs / sigma).square()) / sigma;
     const Tensor upper_bound = sigma.reciprocal();
     d_x = d_x.clamp_(lower_bound, upper_bound);
-    d_mu = d_mu.clamp_(-upper_bound, upper_bound);
+    Tensor d_mu = mu_sign * d_mu_abs.clamp_(-upper_bound, upper_bound);
 
     return {d_x, d_mu, d_sigma};
 }
@@ -145,7 +150,7 @@ Tensor gaussian_to_bimodal_value(
     return x.clamp_(lower, upper);
 }
 
-std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_value_and_stats(
+std::tuple<Tensor, Tensor, Tensor> mixture_value_and_stats(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
@@ -153,7 +158,6 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_value_and_stats(
 ) {
     const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
     const Tensor log_w = weights.log();
-    const Tensor log_sigmas = sigmas.log();
     const Tensor log_p = logsumexp(log_w + log_ndtr(z), -1);
     const Tensor log_q = logsumexp(log_w + log_ndtr(-z), -1);
     const Tensor lower = std::get<0>(z.min(-1));
@@ -165,12 +169,12 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_value_and_stats(
         -linodenet_special::ndtri_exp(log_q)
     ).clamp_(lower, upper);
 
-    return {y, z, log_w, log_sigmas};
+    return {y, z, log_w};
 }
 
 /*
  * ∂y/∂x &= ∑ₖ (ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
- * ∂y/∂ωₖ &= \sqrt{2π} ℯ^{½y²} Φ(zₖ), \\
+ * ∂y/∂ωₖ &= \sqrt{2π} ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ)), \\
  * ∂y/∂μₖ &= -(ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
  * ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) ℯ^{½(y²-zₖ²)}.
  */
@@ -181,7 +185,9 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_to_gaussian_derivatives(
     const Tensor &sigmas,
     const Tensor &y
 ) {
-    const auto [_, z, log_w, log_sigmas] = mixture_value_and_stats(x, weights, mus, sigmas);
+    const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
+    const Tensor log_w = weights.log();
+    const Tensor log_sigmas = sigmas.log();
     const Tensor y2 = y.square();
     // exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
     const Tensor log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square());
@@ -210,7 +216,8 @@ std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
     const Tensor &mus,
     const Tensor &sigmas
 ) {
-    const auto [fx, z, log_w, log_sigmas] = mixture_value_and_stats(x, weights, mus, sigmas);
+    const auto [fx, z, log_w] = mixture_value_and_stats(x, weights, mus, sigmas);
+    const Tensor log_sigmas = sigmas.log();
     const Tensor log_ratio = 0.5 * (fx.square().unsqueeze(-1) - z.square());
     const Tensor d_fx = exp(log_ratio + log_w - log_sigmas).sum(-1);
     return {fx, d_fx};

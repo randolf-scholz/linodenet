@@ -29,7 +29,7 @@ from .ndtri_exp import ndtri_exp
 
 def _bimodal_value_and_stats(
     x: Tensor, mu: Tensor, sigma: Tensor, /
-) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     r"""Return the transport value and shared bimodal intermediates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
@@ -39,7 +39,7 @@ def _bimodal_value_and_stats(
     log_p = torch.logaddexp(LOG_HALF + log_ndtr(z_plus), LOG_HALF + log_ndtr(z_minus))
     log_q = torch.logaddexp(LOG_HALF + log_ndtr(-z_plus), LOG_HALF + log_ndtr(-z_minus))
     y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-    return y.clamp(z_minus, z_plus), m, z_plus, z_minus, sigma.log()
+    return y.clamp(z_minus, z_plus), z_plus, z_minus
 
 
 def _bimodal_to_gaussian_value_and_grad(
@@ -48,11 +48,12 @@ def _bimodal_to_gaussian_value_and_grad(
     r"""Evaluate the bimodal transport and its $x$-derivative in one pass."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
-    fx, m, z_plus, z_minus, log_sigma = _bimodal_value_and_stats(x, mu, sigma)
+    fx, z_plus, z_minus = _bimodal_value_and_stats(x, mu, sigma)
+    log_sigma = sigma.log()
     y2 = fx.square()
     log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF
     log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF
-    lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
+    lower_bound = torch.exp(-0.5 * (mu / sigma) ** 2) / sigma
     upper_bound = 1 / sigma
     d_fx = torch.logaddexp(log_phi_plus, log_phi_minus).exp()
     d_fx = d_fx.clamp(lower_bound, upper_bound)
@@ -72,7 +73,10 @@ def _bimodal_to_gaussian_derivatives(
     """
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
-    _, m, z_plus, z_minus, log_sigma = _bimodal_value_and_stats(x, mu, sigma)
+    m = mu.abs()
+    z_plus = (x + m) / sigma
+    z_minus = (x - m) / sigma
+    log_sigma = sigma.log()
     mu_sign = torch.sign(mu)
     y2 = y.square()
     # Evaluate the two mode contributions in log space to avoid tail underflow.
@@ -109,7 +113,10 @@ def _bimodal_to_gaussian_derivatives2(
     """
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
-    _, m, z_plus, z_minus, log_sigma = _bimodal_value_and_stats(x, mu, sigma)
+    m = mu.abs()
+    z_plus = (x + m) / sigma
+    z_minus = (x - m) / sigma
+    log_sigma = sigma.log()
     mu_sign = torch.sign(mu)
     y2 = y.square()
     # Evaluate the two mode contributions in log space to avoid tail underflow.
@@ -187,24 +194,24 @@ def _gaussian_to_bimodal_value(
 
 def _mixture_value_and_stats(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     r"""Return the transport value and shared mixture intermediates."""
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     z = (x.unsqueeze(-1) - mus) / sigmas
     log_w = torch.log(weights)
-    log_sigmas = torch.log(sigmas)
     log_p = torch.logsumexp(log_w + log_ndtr(z), dim=-1)
     log_q = torch.logsumexp(log_w + log_ndtr(-z), dim=-1)
     y = torch.where(log_p < LOG_HALF, ndtri_exp(log_p), -ndtri_exp(log_q))
-    return y.clamp(z.amin(dim=-1), z.amax(dim=-1)), z, log_w, log_sigmas
+    return y.clamp(z.amin(dim=-1), z.amax(dim=-1)), z, log_w
 
 
 def _mixture_to_gaussian_value_and_grad(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
 ) -> tuple[Tensor, Tensor]:
     r"""Evaluate the mixture transport and its $x$-derivative in one pass."""
-    fx, z, log_w, log_sigmas = _mixture_value_and_stats(x, weights, mus, sigmas)
+    fx, z, log_w = _mixture_value_and_stats(x, weights, mus, sigmas)
+    log_sigmas = torch.log(sigmas)
     log_ratio = 0.5 * (fx.square().unsqueeze(-1) - z.square())
     d_fx = torch.exp(log_ratio + log_w - log_sigmas).sum(dim=-1)
     return fx, d_fx
@@ -223,7 +230,9 @@ def _mixture_to_gaussian_derivatives(
     """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
-    _, z, log_w, log_sigmas = _mixture_value_and_stats(x, weights, mus, sigmas)
+    z = (x.unsqueeze(-1) - mus) / sigmas
+    log_w = torch.log(weights)
+    log_sigmas = torch.log(sigmas)
     y2 = y.square()
     # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
     log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
@@ -266,7 +275,8 @@ def _mixture_to_gaussian_derivatives2(
     """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
-    _, z, log_w, log_sigmas = _mixture_value_and_stats(x, weights, mus, sigmas)
+    _, z, log_w = _mixture_value_and_stats(x, weights, mus, sigmas)
+    log_sigmas = torch.log(sigmas)
     y2 = y.square()
     # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
     log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square())
