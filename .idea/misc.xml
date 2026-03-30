@@ -13,6 +13,7 @@
   <component name="ProjectRootManager" version="2" project-jdk-name="uv (linodenet)" project-jdk-type="Python SDK" />
   <component name="PyreflyConfiguration">
     <option name="enabled" value="true" />
+    <option name="inlayHints" value="false" />
   </component>
   <component name="PythonCompatibilityInspectionAdvertiser">
     <option name="version" value="3" />
