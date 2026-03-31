@@ -205,43 +205,6 @@ class ResidualBottleneck(TransformBase):
         nn.init.kaiming_uniform_(self.weight_v, a=sqrt(5))
         update_parametrizations(self)
 
-    def _logabsdet(
-        self,
-        z: Tensor,
-        h: Tensor,
-        /,
-    ) -> Tensor:
-        # SECTION: activation derivative
-        h = h.requires_grad_(True)
-        u = self.activation(h)
-        du, *_ = torch.autograd.grad(
-            u,
-            h,
-            grad_outputs=torch.ones_like(u),
-            create_graph=True,
-        )
-
-        # SECTION: bottleneck jacobian
-        batch_shape = z.shape[:-1]
-        z_flat = z.reshape(-1, self.hidden_size)
-        jac_fn = torch.func.jacrev(
-            lambda z_single: self.bottleneck(z_single.unsqueeze(0)).squeeze(0)
-        )
-        batched_jac_fn = torch.func.vmap(jac_fn)
-        ds = batched_jac_fn(z_flat).reshape(
-            *batch_shape, self.hidden_size, self.hidden_size
-        )
-
-        # SECTION: determinant lemma
-        vtduu = torch.einsum(
-            "ni,...nr->...ir",
-            self.weight_v,
-            du.unsqueeze(-1) * self.weight_u,
-        )
-        matrix = self.eye + vtduu.matmul(ds)
-        _, logabsdet = torch.linalg.slogdet(matrix)
-        return logabsdet
-
     def encode(self, x: Tensor, /) -> Tensor:
         z = x.matmul(self.weight_v)
         s = self.bottleneck(z)
@@ -271,7 +234,35 @@ class ResidualBottleneck(TransformBase):
         s = self.bottleneck(z)
         h = s.matmul(self.weight_u.mT)
         u = self.activation(h)
-        logabsdet = self._logabsdet(z, h)
+
+        # SECTION: activation derivative
+        h = h.requires_grad_(True)
+        du, *_ = torch.autograd.grad(
+            u,
+            h,
+            grad_outputs=torch.ones_like(u),
+            create_graph=True,
+        )
+
+        # SECTION: bottleneck jacobian
+        batch_shape = z.shape[:-1]
+        z_flat = z.reshape(-1, self.hidden_size)
+        jac_fn = torch.func.jacrev(
+            lambda z_single: self.bottleneck(z_single.unsqueeze(0)).squeeze(0)
+        )
+        batched_jac_fn = torch.func.vmap(jac_fn)
+        ds = batched_jac_fn(z_flat).reshape(
+            *batch_shape, self.hidden_size, self.hidden_size
+        )
+
+        # SECTION: determinant lemma
+        vtduu = torch.einsum(
+            "ni,...nr->...ir",
+            self.weight_v,
+            du.unsqueeze(-1) * self.weight_u,
+        )
+        matrix = self.eye + vtduu.matmul(ds)
+        _, logabsdet = torch.linalg.slogdet(matrix)
         return x + u, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
