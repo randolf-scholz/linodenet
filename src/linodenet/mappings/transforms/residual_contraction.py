@@ -205,38 +205,36 @@ class ResidualBottleneck(TransformBase):
         nn.init.kaiming_uniform_(self.V, a=sqrt(5))
         update_parametrizations(self)
 
-    def encode(self, x: Tensor, /) -> Tensor:
-        # y = x + ϕᵤ(Uϕₛ(Vᵀx))
-        z = x @ self.V
-        s = self.bottleneck(z)
-        h = s @ self.U.mH
-        u = self.activation(h)
+    def lift(self, z: Tensor, /) -> Tensor:
+        r"""Compute $ϕᵤ(Uϕₛ(z))$ in row-vector convention."""
+        return self.activation(self.bottleneck(z) @ self.U.mH)
 
-        return x + u
+    def encode(self, x: Tensor, /) -> Tensor:
+        # note: implementation uses transposed matrices (row-vector)
+        # y = x + ϕᵤ(Uϕₛ(Vᵀx))
+        return x + self.lift(x @ self.V)
 
     def decode(self, y: Tensor, /) -> Tensor:
-        # z = Vᵀy
+        # note: implementation uses transposed matrices (row-vector)
+        # solve z = Vᵀy - Vᵀϕᵤ(Uϕₛ(z)),  z = Vᵀx
         vty = y @ self.V
-        # solve z = Vᵀy - Vᵀϕᵤ(Uϕₛ(z))
         z_star = fixpoint_solve(
-            lambda z: vty - self.activation(self.bottleneck(z) @ self.U.mH) @ self.V,
+            lambda z: vty - self.lift(z) @ self.V,
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,
         )
-        # SECTION: x = y - ϕᵤ(Uϕₛ(z))
-        correction = self.activation(self.bottleneck(z_star) @ self.U.mH)
-        return y - correction
+        # x⁎ = y - ϕᵤ(Uϕₛ(z⁎))
+        return y - self.lift(z_star)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         z = x @ self.V
-        s = self.bottleneck(z)
-        h = s @ self.U.mH
-        u = self.activation(h)
+        h = self.bottleneck(z) @ self.U.mH
 
         # SECTION: activation derivative
         h = h.requires_grad_(True)
+        u = self.activation(h)
         du, *_ = torch.autograd.grad(
             u,
             h,
