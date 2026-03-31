@@ -307,12 +307,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         V = nn.Linear(
             input_size, hidden_size, bias=use_bias, device=device, dtype=dtype
         )
-        contraction = nn.Sequential(
-            V,
-            bottleneck,
-            U,
-            activation,
-        )
+        contraction = nn.Sequential(V, bottleneck, U, activation)
 
         super().__init__(contraction, gate, maxiter=maxiter, atol=atol, rtol=rtol)
         self.input_size = input_size
