@@ -119,7 +119,9 @@ class ResidualContraction[M: nn.Module](TransformBase):
         )
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
+        x = self.decode(y)
+        _, logabsdet = self.encode_and_logabsdet(x)
+        return x, -logabsdet
 
 
 class ResidualBottleneck(TransformBase):
