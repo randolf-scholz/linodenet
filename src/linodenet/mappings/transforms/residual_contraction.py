@@ -31,7 +31,7 @@ from .base import TransformBase
 class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformBase):
     r"""Shared base class for residual contractions with implicit inverses.
 
-    Forward: y ← x + g(x)
+    Forward: y ← x + ρ(f(x))
     Inverse: via fix-point iteration.
     """
 
@@ -59,14 +59,14 @@ class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformB
         self.gate = cast("G", nn.Identity() if gate is None else gate)
 
     def encode(self, x: Tensor, /) -> Tensor:
-        r"""Compute the forward residual map $y = x + g(x)$."""
+        r"""Compute the forward residual map $y = x + ρ(f(x))$."""
         return x + self.gate(self.contraction(x))
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         r"""Compute the forward residual map and its log absolute Jacobian determinant."""
         y = self.encode(x)
 
-        # materialize the full jacobian of y = x + g(x) with vjp
+        # materialize the full jacobian of y = x + ρ(f(x)) with vjp
         _, vjp_fn, *_ = vjp(self.encode, x)
         eye_n = torch.eye(x.shape[-1], device=x.device, dtype=x.dtype)
         eye_n = eye_n.expand(*x.shape, x.shape[-1])
@@ -77,7 +77,7 @@ class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformB
 
     def decode(self, y: Tensor, /) -> Tensor:
         r"""Compute the inverse through fixed point iteration."""
-        # note: solve x = y - g(x) = f(x, y)
+        # note: solve x = y - ρ(f(x))
         return fixpoint_solve(
             lambda x: y - self.gate(self.contraction(x)),  # type: ignore[misc]
             y.clone(),
@@ -96,22 +96,22 @@ class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformB
 class ResidualContraction[M: nn.Module](ResidualContractionBase):
     r"""A residual flow based on a contraction layer.
 
-    Forward: y ← x + g(x)
+    Forward: y ← x + ρ(f(x))
     Inverse: via fix-point iteration.
 
     If ``use_rezero=True``, then
 
-    .. math:: y ← x + φ(ε)⋅g(x)  \qquad  φ(ε) ∈ (-1, 1), φ(0)=0
+    .. math:: y ← x + ρ(f(x)), \qquad ρ(u)=φ(ε)⋅u,\quad φ(ε) ∈ (-1, 1), φ(0)=0
 
     ε is initialized to 0, so that the initial transformation is the identity.
 
     The jacobian determinant of the forward transformation is:
 
-    .. math:: \log\det(∂y/∂x) = \log\det(𝕀 + ∂g/∂x) = \tr\log(𝕀 + ∂g/∂x)
+    .. math:: \log\det(∂y/∂x) = \log\det(𝕀 + ∂(ρ∘f)/∂x) = \tr\log(𝕀 + ∂(ρ∘f)/∂x)
 
     Using the power series, this is
 
-    .. math:: ∑_k (-1)ᵏ⁺¹ \tr((∂g/∂x)ᵏ)/k
+    .. math:: ∑_k (-1)ᵏ⁺¹ \tr((∂(ρ∘f)/∂x)ᵏ)/k
 
     The trace of A can be estimated with the Hutchinson trace estimator:
 
@@ -130,8 +130,9 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
 
     See Also:
         - `ReZeroContraction`: adds a learnable scalar ε and parametrization
-            to the contraction layer:. $y ← x + φ(ε)⋅g(x)$ with $φ(ε) ∈ (-1, 1)$.
-            ε is initialized to 0, so that the initial transformation is the identity.
+            to the contraction layer:. $y ← x + φ(ε)⋅f(x)$ with $φ(ε) ∈ (-1, 1)$,
+            i.e. $ρ(u) = φ(ε)⋅u$. ε is initialized to 0, so that the initial
+            transformation is the identity.
         - `ResidualContractionFallback`: Uses a plain python loop rather than `torch.while_loop`.
     """
 
@@ -222,22 +223,22 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
 
     The transformation is
 
-    .. math:: y = x + ϕᵤ(U f(Vᵀx))
+    .. math:: y = x + ρ(U f(Vᵀx))
 
     where $U,V∈ℝ^{n×k}$ have orthonormal columns, $f:ℝᵏ→ℝᵏ$ is an arbitrary
-    bottleneck module, and $ϕᵤ$ is an elementwise post-activation.
+    bottleneck module, and $ρ$ is the optional gate.
 
     Since there is no pre-activation, the inverse can be solved in bottleneck
     coordinates:
 
-    .. math:: z = Vᵀy - Vᵀϕᵤ(U f(z))
+    .. math:: z = Vᵀy - Vᵀρ(U f(z))
 
-    and then lifted back with $x = y - ϕᵤ(U f(z))$.
+    and then lifted back with $x = y - ρ(U f(z))$.
 
     The Jacobian determinant is computed exactly with the matrix determinant
     lemma:
 
-    .. math:: \log|det(𝕀ₙ + Dᵤ U Dₛ Vᵀ)| = \log|det(𝕀ₖ + Vᵀ Dᵤ U Dₛ)|.
+    .. math:: \log|det(𝕀ₙ + Dᵨ U Dₛ Vᵀ)| = \log|det(𝕀ₖ + Vᵀ Dᵨ U Dₛ)|.
     """
 
     input_size: Final[int]
@@ -246,7 +247,6 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
     U: nn.Linear
     V: nn.Linear
     bottleneck: M
-    activation: nn.Module
     eye: Tensor
 
     def __init__(
@@ -257,7 +257,6 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         bottleneck: M,  # (...k) -> (...k)
         use_rezero: bool = False,
         scalar_map: nn.Module | str | None = None,
-        activation: str | nn.Module = "Identity",
         use_bias: bool = True,
         maxiter: int = 256,
         atol: float = 1e-6,
@@ -267,8 +266,6 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
     ) -> None:
         if not 1 <= hidden_size <= input_size:
             raise ValueError("hidden_size must be between 1 and input_size")
-
-        activation = NonExpansiveMapping.new(activation)
 
         if use_rezero:
             scalar_map_module = NonExpansiveMapping.new(
@@ -288,7 +285,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         V = nn.Linear(
             input_size, hidden_size, bias=use_bias, device=device, dtype=dtype
         )
-        contraction = nn.Sequential(V, bottleneck, U, activation)
+        contraction = nn.Sequential(V, bottleneck, U)
 
         super().__init__(contraction, gate, maxiter=maxiter, atol=atol, rtol=rtol)
         self.input_size = input_size
@@ -297,12 +294,10 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         self.bottleneck = bottleneck
         self.U = U
         self.V = V
-        self.activation = activation
         self.scalar = scalar
         self.lift = nn.Sequential(
             self.bottleneck,
             self.U,
-            self.activation,
             self.gate,
         )
         self.register_buffer(
@@ -326,7 +321,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         update_parametrizations(self)
 
     def latent_map(self, z: Tensor, /) -> Tensor:
-        r"""Compute $z + Vᵀϕᵤ(Uϕₛ(z))$ in bottleneck space."""
+        r"""Compute $z + Vᵀρ(Uϕₛ(z))$ in bottleneck space."""
         return z + linear(self.lift(z), self.V.weight)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -340,7 +335,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         return x + self.lift(z), logabsdet
 
     def decode(self, y: Tensor, /) -> Tensor:
-        # solve z = Vy + b - Vϕᵤ(Uϕₛ(z)),  z = Vx + b
+        # solve z = Vy + b - Vρ(Uϕₛ(z)),  z = Vx + b
         vty = self.V(y)
         z_star = fixpoint_solve(
             lambda z: vty - (self.latent_map(z) - z),  # type: ignore[misc]
@@ -349,5 +344,5 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
             atol=self.atol,
             rtol=self.rtol,
         )
-        # x⁎ = y - ϕᵤ(Uϕₛ(z⁎))
+        # x⁎ = y - ρ(Uϕₛ(z⁎))
         return y - self.lift(z_star)
