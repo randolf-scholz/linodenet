@@ -55,6 +55,7 @@ __all__ = [
     "TransformSequence",
     # classes
     "BimodalToGaussian",
+    "BottleneckFlow",
     "GaussianToBimodal",
     "GaussianToMixture",
     "IResNet",
@@ -68,6 +69,7 @@ __all__ = [
 ]
 
 from .base import InverseTransform, Transform, TransformBase, TransformSequence
+from .bottleneck_flow import BottleneckFlow
 from .gaussian_transport import (
     BimodalToGaussian,
     GaussianToBimodal,
