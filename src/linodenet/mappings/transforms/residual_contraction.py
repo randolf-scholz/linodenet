@@ -191,7 +191,11 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         )
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        return self.logabsdet_estimator(self.contraction, x)
+        residual, logabsdet = self.logabsdet_estimator(
+            lambda y: self.gate(self.contraction(y)),
+            x,
+        )
+        return x + residual, logabsdet
 
 
 class ResidualContractionFallback[M: nn.Module](ResidualContraction[M]):

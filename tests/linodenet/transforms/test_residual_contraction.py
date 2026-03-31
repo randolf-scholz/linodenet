@@ -291,9 +291,11 @@ class TestLogAbsDet(TestSuite):
     class ScaledContraction(nn.Module):
         r"""Simple contraction $g(x) = αx$ with scalar $|α| < 1$."""
 
+        scale: Tensor
+
         def __init__(self, scale: float, /) -> None:
             super().__init__()
-            self.scale = scale
+            self.register_buffer("scale", torch.tensor(scale))
 
         def forward(self, x: Tensor, /) -> Tensor:
             return self.scale * x
