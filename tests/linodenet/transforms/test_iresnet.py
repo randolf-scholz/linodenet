@@ -9,7 +9,9 @@ from torchinfo import summary
 
 from linodenet.mappings.transforms import IResNet, ResidualContraction
 from linodenet.nn.parametrize import update_parametrizations
-from tests.testing import DEVICES, DTYPES, PROJECT, TestSuite, visualize_distribution
+from tests.testing import DEVICES, DTYPES, PROJECT, visualize_distribution
+
+from .test_transform import TestTransform
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
@@ -123,7 +125,7 @@ def test_instantiation(use_rezero: bool) -> None:
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("use_rezero", [False, True], ids=["plain", "rezero"])
-class TestIResNetInvertibility(TestSuite):
+class TestIResNetInvertibility(TestTransform):
     INPUT_SIZE = 8
     BATCH_SIZE = 64
     NUM_BLOCKS = 3
@@ -149,8 +151,18 @@ class TestIResNetInvertibility(TestSuite):
         dtype: torch.dtype,
         device: str,
     ) -> None:
+        max_error = float(self.ERROR_TARGETS[dtype][-1])
         x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
+        self.assert_invertible(
+            model,
+            x,
+            y,
+            atol=max_error,
+            rtol=max_error,
+            logdet_atol=max_error,
+            logdet_rtol=max_error,
+        )
         metrics = compute_inversion_errors(model, x, y)
         quantiles = self.QUANTILES.to(device=device, dtype=dtype)
 

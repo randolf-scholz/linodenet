@@ -2,10 +2,12 @@ import pytest
 import torch
 
 from linodenet.mappings.transforms import TriangularTransform
-from tests.testing import SEEDS_10, TestSuite
+from tests.testing import SEEDS_10
+
+from .test_transform import TestTransform
 
 
-class TestTriangularFlow(TestSuite):
+class TestTriangularFlow(TestTransform):
     VALUE_ATOL = 1e-5
     VALUE_RTOL = 1e-5
     LOGABSDET_ATOL = 1e-6
@@ -22,43 +24,15 @@ class TestTriangularFlow(TestSuite):
             flow.lower.copy_(0.1 * torch.randn_like(flow.lower).tril(diagonal=-1))
 
         x = torch.randn(self.BATCH_SIZE, input_size)
-        y, forward_logabsdet = flow.encode_and_logabsdet(x)
-        xhat, inverse_logabsdet = flow.decode_and_logabsdet(y)
-
-        assert y.shape == x.shape
-        assert xhat.shape == x.shape
-        assert forward_logabsdet.shape == (self.BATCH_SIZE,)
-        assert inverse_logabsdet.shape == (self.BATCH_SIZE,)
-        self.assert_close(xhat, x, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
-        self.assert_close(
-            forward_logabsdet,
-            torch.zeros_like(forward_logabsdet),
-            atol=self.LOGABSDET_ATOL,
-            rtol=self.LOGABSDET_RTOL,
-        )
-        self.assert_close(
-            inverse_logabsdet,
-            torch.zeros_like(inverse_logabsdet),
-            atol=self.LOGABSDET_ATOL,
-            rtol=self.LOGABSDET_RTOL,
-        )
-
         y = torch.randn(self.BATCH_SIZE, input_size)
-        x, inverse_logabsdet = flow.decode_and_logabsdet(y)
-        yhat, forward_logabsdet = flow.encode_and_logabsdet(x)
-
-        self.assert_close(yhat, y, atol=self.VALUE_ATOL, rtol=self.VALUE_RTOL)
-        self.assert_close(
-            forward_logabsdet,
-            torch.zeros_like(forward_logabsdet),
-            atol=self.LOGABSDET_ATOL,
-            rtol=self.LOGABSDET_RTOL,
-        )
-        self.assert_close(
-            inverse_logabsdet,
-            torch.zeros_like(inverse_logabsdet),
-            atol=self.LOGABSDET_ATOL,
-            rtol=self.LOGABSDET_RTOL,
+        self.assert_invertible(
+            flow,
+            x,
+            y,
+            atol=self.VALUE_ATOL,
+            rtol=self.VALUE_RTOL,
+            logdet_atol=self.LOGABSDET_ATOL,
+            logdet_rtol=self.LOGABSDET_RTOL,
         )
 
     def test_weight_is_unit_lower_triangular(self) -> None:

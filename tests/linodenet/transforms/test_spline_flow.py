@@ -3,12 +3,14 @@ import pytest
 import torch
 
 from linodenet.mappings.transforms import SplineTransform
-from tests.testing import PROJECT, SEEDS_10, TestSuite
+from tests.testing import PROJECT, SEEDS_10
+
+from .test_transform import TestTransform
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
-class TestSplineFlow(TestSuite):
+class TestSplineFlow(TestTransform):
     TEST_FNS = {
         "sinusoid": lambda x: x + 3 + 0.5 * torch.sin(x + 3),
         "small_slope": lambda x: 0.2 * x,
@@ -78,35 +80,15 @@ class TestSplineFlow(TestSuite):
         )
 
         x = torch.randn(self.BATCH_SIZE, self.NUM_HEADS)
-        y, forward_logabsdet = flow.encode_and_logabsdet(x)
-        xhat, inverse_logabsdet = flow.decode_and_logabsdet(y)
-
-        assert y.shape == x.shape
-        assert forward_logabsdet.shape == (self.BATCH_SIZE,)
-        assert xhat.shape == x.shape
-        assert inverse_logabsdet.shape == (self.BATCH_SIZE,)
-        self.assert_close(xhat, x, atol=value_atol, rtol=self.VALUE_RTOL)
-        self.assert_close(
-            forward_logabsdet + inverse_logabsdet,
-            torch.zeros_like(forward_logabsdet),
-            atol=logabsdet_atol,
-            rtol=self.LOGABSDET_RTOL,
-        )
-
         y = torch.randn(self.BATCH_SIZE, self.NUM_HEADS)
-        x, inverse_logabsdet = flow.decode_and_logabsdet(y)
-        yhat, forward_logabsdet = flow.encode_and_logabsdet(x)
-
-        assert x.shape == y.shape
-        assert inverse_logabsdet.shape == (self.BATCH_SIZE,)
-        assert yhat.shape == y.shape
-        assert forward_logabsdet.shape == (self.BATCH_SIZE,)
-        self.assert_close(yhat, y, atol=value_atol, rtol=self.VALUE_RTOL)
-        self.assert_close(
-            inverse_logabsdet + forward_logabsdet,
-            torch.zeros_like(inverse_logabsdet),
-            atol=logabsdet_atol,
-            rtol=self.LOGABSDET_RTOL,
+        self.assert_invertible(
+            flow,
+            x,
+            y,
+            atol=value_atol,
+            rtol=self.VALUE_RTOL,
+            logdet_atol=logabsdet_atol,
+            logdet_rtol=self.LOGABSDET_RTOL,
         )
 
     @pytest.mark.parametrize("case", TEST_FNS)

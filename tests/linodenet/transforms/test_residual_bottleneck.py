@@ -83,19 +83,15 @@ class TestResidualBottleneck(TestTransform):
         )
 
         x = torch.randn(self.BATCH_SIZE, input_size, device=device, dtype=dtype)
-        y, forward_logabsdet = flow.encode_and_logabsdet(x)
-        xhat, inverse_logabsdet = flow.decode_and_logabsdet(y)
-
-        assert y.shape == x.shape
-        assert xhat.shape == x.shape
-        assert forward_logabsdet.shape == x.shape[:-1]
-        assert inverse_logabsdet.shape == x.shape[:-1]
-        self.assert_close(xhat, x, atol=atol, rtol=rtol)
-        self.assert_close(
-            forward_logabsdet + inverse_logabsdet,
-            torch.zeros_like(forward_logabsdet),
-            atol=logdet_atol,
-            rtol=logdet_rtol,
+        y = torch.randn(self.BATCH_SIZE, input_size, device=device, dtype=dtype)
+        self.assert_invertible(
+            flow,
+            x,
+            y,
+            atol=atol,
+            rtol=rtol,
+            logdet_atol=logdet_atol,
+            logdet_rtol=logdet_rtol,
         )
 
     def test_logabsdet_matches_dense_jacobian(

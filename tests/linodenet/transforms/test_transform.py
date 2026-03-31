@@ -120,11 +120,41 @@ class TestTransform(TestSuite):
         *,
         atol: float,
         rtol: float,
+        logdet_atol: float | None = None,
+        logdet_rtol: float | None = None,
     ) -> None:
-        self.assert_right_invertible(transform, x, atol=atol, rtol=rtol)
-        self.assert_left_invertible(transform, y, atol=atol, rtol=rtol)
-        self.assert_right_invertible_with_logabsdet(transform, x, atol=atol, rtol=rtol)
-        self.assert_left_invertible_with_logabsdet(transform, y, atol=atol, rtol=rtol)
+        logdet_atol = atol if logdet_atol is None else logdet_atol
+        logdet_rtol = rtol if logdet_rtol is None else logdet_rtol
+
+        y_from_x = transform.encode(x)
+        x_from_y = transform.decode(y)
+        x_recovered = transform.decode(y_from_x)
+        y_recovered = transform.encode(x_from_y)
+        self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
+        self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
+
+        y_from_x, forward_logabsdet = transform.encode_and_logabsdet(x)
+        x_from_y, inverse_logabsdet = transform.decode_and_logabsdet(y)
+        x_recovered, recovered_inverse_logabsdet = transform.decode_and_logabsdet(
+            y_from_x
+        )
+        y_recovered, recovered_forward_logabsdet = transform.encode_and_logabsdet(
+            x_from_y
+        )
+        self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
+        self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
+        self.assert_close(
+            forward_logabsdet + recovered_inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=logdet_atol,
+            rtol=logdet_rtol,
+        )
+        self.assert_close(
+            inverse_logabsdet + recovered_forward_logabsdet,
+            torch.zeros_like(inverse_logabsdet),
+            atol=logdet_atol,
+            rtol=logdet_rtol,
+        )
 
     def assert_dual(
         self,

@@ -13,6 +13,8 @@ from linodenet.mappings import (
 from linodenet.nn.parametrize import update_parametrizations
 from tests.testing import DEVICES, DTYPES, SEEDS_5, TestSuite, pytest_xfail
 
+from .test_transform import TestTransform
+
 
 class ShiftedHalfContraction(nn.Module):
     r"""Simple contraction $g(x) = ½x + b$ with trainable bias."""
@@ -116,7 +118,7 @@ class TestReZero(TestSuite):
     [ResidualContractionFallback, ResidualContraction],
     ids=["loop", "fixpoint_solve"],
 )
-class TestCorrectness(TestSuite):
+class TestCorrectness(TestTransform):
     BATCH_SIZE = 32
     INPUT_SIZE = 8
     FLOW_MAXITER = 128
@@ -165,20 +167,10 @@ class TestCorrectness(TestSuite):
         flow = flow_cls(layer)
 
         x = torch.randn(self.BATCH_SIZE, input_size, device=device, dtype=dtype)
-        y = flow.encode(x)
-        xhat = flow.decode(y)
-
-        assert y.shape == x.shape
-        assert xhat.shape == x.shape
-        self.assert_close(xhat, x, atol=atol, rtol=rtol)
+        self.assert_right_invertible(flow, x, atol=atol, rtol=rtol)
 
         y = torch.randn(self.BATCH_SIZE, input_size, device=device, dtype=dtype)
-        x = flow.decode(y)
-        yhat = flow.encode(x)
-
-        assert x.shape == y.shape
-        assert yhat.shape == y.shape
-        self.assert_close(yhat, y, atol=atol, rtol=rtol)
+        self.assert_left_invertible(flow, y, atol=atol, rtol=rtol)
 
     @pytest_xfail(
         condition=lambda *_, flow_cls, **__: flow_cls is ResidualContractionFallback,
