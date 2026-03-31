@@ -211,7 +211,7 @@ class ResidualContractionFallback[M: nn.Module](ResidualContraction[M]):
 
         for _ in range(self.maxiter):
             x_prev = x
-            x = y - self.contraction(x_prev)
+            x = y - self.gate(self.contraction(x_prev))
             residual = torch.abs(x - x_prev)
             tolerance = self.rtol * torch.abs(x) + self.atol
 
@@ -296,6 +296,8 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
             gate = ReZero(scalar_map=scalar_map_module)
             scalar = gate.scalar
         else:
+            if scalar_map is not None:
+                raise ValueError("Scalar map is only legal when use_rezero=True")
             gate = None
             scalar = nn.Parameter(torch.ones(()), requires_grad=False)
 
