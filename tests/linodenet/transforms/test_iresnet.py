@@ -66,15 +66,16 @@ class TestIResNet(TestTransform):
     SEED = 0
     BATCH_SIZE = 32
     INPUT_SIZE = 64
+    LATENT_SIZE = 16
     MODEL_CONFIG = {
-        "latent_size": 16,
+        "latent_size": LATENT_SIZE,
         "num_blocks": 3,
         "layers_per_block": 2,
         "maxiter": 256,
         "atol": 1e-6,
         "rtol": 1e-6,
         "trace_estimator": "hutch++",
-        "trace_matvecs": 32,
+        "trace_matvecs": 3 * LATENT_SIZE,
         "logdet_series_terms": 8,
         "trace_probe_sampler": "sphere",
         "trace_mode": "reverse",
