@@ -9,8 +9,8 @@ from torchinfo import summary
 
 from linodenet.mappings.transforms.iresnet import IResNet
 from linodenet.mappings.transforms.residual_contraction import (
-    ResidualContraction,
-    ReZeroContraction,
+    IResNetContraction,
+    IReZeroContraction,
 )
 from linodenet.nn.parametrize import update_parametrizations
 from tests.testing import DEVICES, DTYPES, PROJECT, TestSuite, visualize_distribution
@@ -59,7 +59,7 @@ def train_model(
 ) -> None:
     if model.use_rezero:
         parameters = [
-            block.scalar for block in model if isinstance(block, ReZeroContraction)
+            block.scalar for block in model if isinstance(block, IReZeroContraction)
         ]
     else:
         parameters = list(model.parameters())
@@ -111,7 +111,7 @@ def test_instantiation(use_rezero: bool) -> None:
     assert model.latent_size == latent_size
     assert model.use_rezero is use_rezero
     assert len(model) == num_blocks
-    expected_block_type = ReZeroContraction if use_rezero else ResidualContraction
+    expected_block_type = IReZeroContraction if use_rezero else IResNetContraction
     assert all(isinstance(block, expected_block_type) for block in model)
 
     stats = summary(

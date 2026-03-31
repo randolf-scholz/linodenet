@@ -89,8 +89,8 @@ EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
 r"""Dictionary of available embeddings (nn.Module)."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
-    "ContractiveFP"        : transforms.ResidualContraction,
-    "ReZeroContraction"    : transforms.ReZeroContraction,
+    "ContractiveFP"        : transforms.IResNetContraction,
+    "ReZeroContraction"    : transforms.IReZeroContraction,
     "ResidualBottleneck"   : transforms.ResidualBottleneck,
     "ReZeroBottleneck"     : transforms.ReZeroBottleneck,
     "ContractiveTransform" : transforms.ResidualContractionFallback,

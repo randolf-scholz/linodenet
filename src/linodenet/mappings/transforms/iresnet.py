@@ -11,12 +11,12 @@ from linodenet.nn.activations import get_activation
 
 from .base import TransformSequence
 from .residual_contraction import (
-    ResidualContraction,
-    ReZeroContraction,
+    IResNetContraction,
+    IReZeroContraction,
 )
 
 
-class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
+class IResNet(TransformSequence[IResNetContraction | IReZeroContraction]):
     r"""Invertible residual network built from contractive residual blocks.
 
     References:
@@ -96,7 +96,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
         atol: float,
         rtol: float,
         trace_estimator: str,
-    ) -> ResidualContraction | ReZeroContraction:
+    ) -> IResNetContraction | IReZeroContraction:
         layers: list[nn.Module] = []
         act = get_activation(activation)
         assert isinstance(act, nn.Module)
@@ -115,7 +115,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
 
         contraction = nn.Sequential(*layers)
         if use_rezero:
-            return ReZeroContraction(
+            return IReZeroContraction(
                 contraction,
                 scalar_map=scalar_map,
                 maxiter=maxiter,
@@ -123,7 +123,7 @@ class IResNet(TransformSequence[ResidualContraction | ReZeroContraction]):
                 rtol=rtol,
                 trace_estimator=trace_estimator,
             )
-        return ResidualContraction(
+        return IResNetContraction(
             contraction,
             maxiter=maxiter,
             atol=atol,

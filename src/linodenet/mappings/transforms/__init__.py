@@ -61,9 +61,9 @@ __all__ = [
     "LowRankTransform",
     "ReZeroBottleneck",
     "MixtureToGaussian",
-    "ReZeroContraction",
+    "IReZeroContraction",
     "ResidualBottleneck",
-    "ResidualContraction",
+    "IResNetContraction",
     "ResidualContractionFallback",
     "SplineTransform",
     "TriangularTransform",
@@ -79,11 +79,11 @@ from .gaussian_transport import (
 from .iresnet import IResNet
 from .linear_rational_spline import SplineTransform
 from .residual_contraction import (
+    IResNetContraction,
+    IReZeroContraction,
     ResidualBottleneck,
-    ResidualContraction,
     ResidualContractionFallback,
     ReZeroBottleneck,
-    ReZeroContraction,
 )
 from .residual_low_rank import LowRankTransform
 from .triangular import TriangularTransform

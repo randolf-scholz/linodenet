@@ -2,9 +2,10 @@ r"""ContractiveFlow implementation (iResNet-block)."""
 
 __all__ = [
     "ResidualContraction",
+    "IResNetContraction",
     "ResidualBottleneck",
     "ReZeroBottleneck",
-    "ReZeroContraction",
+    "IReZeroContraction",
     "ResidualContractionFallback",
 ]
 
@@ -30,7 +31,7 @@ from linodenet_special.trace_estimation import LogAbsDetEstimators
 from .base import TransformBase
 
 
-class ResidualContractionBase(TransformBase):
+class ResidualContraction(TransformBase):
     r"""Shared base class for residual contractions with implicit inverses.
 
     Forward: y ← x + g(x)
@@ -91,7 +92,7 @@ class ResidualContractionBase(TransformBase):
         return x, -logabsdet
 
 
-class ResidualContraction[M: nn.Module](ResidualContractionBase):
+class IResNetContraction[M: nn.Module](ResidualContraction):
     r"""A residual flow based on a contraction layer.
 
     Forward: y ← x + g(x)
@@ -165,7 +166,7 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         return self.logabsdet_estimator(self.module, x)
 
 
-class ReZeroContraction[M: nn.Module](ResidualContraction[ReZero[M]]):
+class IReZeroContraction[M: nn.Module](IResNetContraction[ReZero[M]]):
     r"""A residual flow based on a scaled contraction layer.
 
     .. math:: y ← x + φ(ε)⋅g(x)  \qquad  φ(ε) ∈ (-1, 1), φ(0)=0
@@ -218,7 +219,7 @@ class ReZeroContraction[M: nn.Module](ResidualContraction[ReZero[M]]):
         self.scalar_map = self.module.scalar_map
 
 
-class ResidualContractionFallback(ResidualContraction):
+class ResidualContractionFallback(IResNetContraction):
     r"""Fallback implementation of ResidualContraction that uses a plain python loop.
 
     See Also:
@@ -269,7 +270,7 @@ class ResidualContractionFallback(ResidualContraction):
         raise NotImplementedError
 
 
-class ResidualBottleneck[B: nn.Module](ResidualContractionBase):
+class ResidualBottleneck[B: nn.Module](ResidualContraction):
     r"""Residual low-rank contraction with exact low-dimensional logabsdet.
 
     The transformation is
