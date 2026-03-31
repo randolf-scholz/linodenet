@@ -458,7 +458,7 @@ def test_trace_estimator_accepts_hutchinson_alias() -> None:
     estimator = TraceEstimators.new(
         "hutchinson",
         num_matvecs=4,
-        mode="adjoint",
+        mode="reverse",
         sampler="sphere",
     )
     assert isinstance(estimator, HutchinsonEstimator)
@@ -470,7 +470,7 @@ def test_logabsdet_estimator_accepts_hutchinson_alias() -> None:
         num_matvecs=4,
         num_terms=3,
         sampler="sphere",
-        mode="adjoint",
+        mode="reverse",
     )
     assert isinstance(estimator, LogabsdetSeriesEstimator)
     assert isinstance(estimator.estimator, HutchinsonEstimator)
@@ -482,15 +482,15 @@ class TestVisualizations(TestTraceEstimator):
     DEVICE = "cpu"
     NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
     METHODS: dict[str, tuple[str, str, str, dict]] = {
-        "hutch": ("hutch", "adjoint", "sphere", {}),
-        "hutch++": ("hutch++", "adjoint", "sphere", {}),
-        "xtrace": ("xtrace", "adjoint", "sphere", {}),
+        "hutch": ("hutch", "reverse", "sphere", {}),
+        "hutch++": ("hutch++", "reverse", "sphere", {}),
+        "xtrace": ("xtrace", "reverse", "sphere", {}),
         # "hutch(gauss)": ("hutch", "forward", "gaussian", {}),
         # "hutch++(gauss)": ("hutch++", "forward", "gaussian", {}),
         # "xtrace(gauss)": ("xtrace", "forward", "gaussian", {}),
-        # "hutch(adjoint)": ("hutch", "adjoint", "orth", {}),
+        # "hutch(reverse)": ("hutch", "reverse", "orth", {}),
         # "hutch(symmetric)": ("hutch", "symmetric", "orth", {}),
-        # "hutch++(adjoint)": ("hutch++", "adjoint", "orth", {}),
+        # "hutch++(reverse)": ("hutch++", "reverse", "orth", {}),
         # "hutch++(symmetric)": ("hutch++", "symmetric", "orth", {}),
     }
 

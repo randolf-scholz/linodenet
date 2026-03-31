@@ -156,7 +156,7 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         trace_matvecs: int = 3,
         logdet_series_terms: int = 8,
         trace_probe_sampler: str = "sphere",
-        trace_mode: str = "adjoint",
+        trace_mode: str = "reverse",
     ) -> None:
         if use_rezero:
             match scalar_map:

@@ -280,11 +280,11 @@ class TestHutchPlusPlusEstimator:
         expected = scale.sum(-1)
         torch.testing.assert_close(estimate, expected, atol=0.15, rtol=0.0)
 
-    def test_hutchplusplus_estimate_adjoint(self, device: str) -> None:
+    def test_hutchplusplus_estimate_reverse(self, device: str) -> None:
         torch.manual_seed(0)
         scale = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = HutchPP_Estimator(
-            self.NUM_MATVECS, sampler="sphere", mode="adjoint"
+            self.NUM_MATVECS, sampler="sphere", mode="reverse"
         )
 
         estimate = estimator(lambda x: scale * x, scale)

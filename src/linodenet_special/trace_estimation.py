@@ -140,7 +140,7 @@ class LogAbsDetEstimators(StrEnum):
         num_matvecs: int,
         num_terms: int,
         sampler: str | AbstractSampler = "sphere",
-        mode: str = "adjoint",
+        mode: str = "reverse",
     ) -> ExactLogabsdet | LogabsdetSeriesEstimator:
         match e := LogAbsDetEstimators(estimator):
             case LogAbsDetEstimators.EXACT:
@@ -273,7 +273,7 @@ def _make_batched_op(
         case "forward":
             y, jvp_fn = linearize(op, x)
             return y, vmap(jvp_fn, -1, -1)
-        case "adjoint":
+        case "reverse":
             y, vjp_fn, *_ = vjp(op, x)
             return y, vmap(lambda z: vjp_fn(z)[0], -1, -1)
         case _:
@@ -282,14 +282,14 @@ def _make_batched_op(
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def exact_trace(
-    op: Fn[[Tensor], Tensor], x: Tensor, /, *, mode: str = "adjoint"
+    op: Fn[[Tensor], Tensor], x: Tensor, /, *, mode: str = "reverse"
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ by explicitly materializing the Jacobian.
 
     Args:
         op: Function $f$ whose Jacobian trace should be estimated at $x$.
         x: Evaluation point. Its shape, dtype, and device define the domain.
-        mode: Whether to materialize the forward or adjoint Jacobian action.
+        mode: Whether to materialize the forward or reverse Jacobian action.
 
     Returns:
         The exact trace $\tr(𝐃f(x))$, computed from the full Jacobian.
@@ -303,7 +303,7 @@ def exact_trace(
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def exact_powers(
-    op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int, *, mode: str = "adjoint"
+    op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int, *, mode: str = "reverse"
 ) -> Iterator[Tensor]:
     r"""Yield $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
     dim = x.shape[-1]
@@ -318,7 +318,7 @@ def exact_powers(
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def exact_logabsdet(
-    op: Fn[[Tensor], Tensor], x: Tensor, /, *, mode: str = "adjoint"
+    op: Fn[[Tensor], Tensor], x: Tensor, /, *, mode: str = "reverse"
 ) -> tuple[Tensor, Tensor]:
     r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
 
@@ -332,7 +332,7 @@ def exact_logabsdet(
     Args:
         op: Function $f$ whose Jacobian log-absolute-determinant should be estimated
         x: Evaluation point. Its shape, dtype, and device define the domain.
-        mode: Whether to materialize the forward or adjoint Jacobian action.
+        mode: Whether to materialize the forward or reverse Jacobian action.
 
     Returns:
         y: $f(x)$
@@ -341,8 +341,8 @@ def exact_logabsdet(
     dim = x.shape[-1]
     eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
     y, batched_op = _make_batched_op(op, x, mode)
-    adjoint_matrix = batched_op(eye)
-    matrix = eye + adjoint_matrix
+    reverse_matrix = batched_op(eye)
+    matrix = eye + reverse_matrix
     _, value = torch.linalg.slogdet(matrix)
     return y, value
 
@@ -386,7 +386,7 @@ def hutchinson_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
-    mode: str = "adjoint",
+    mode: str = "reverse",
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with Hutchinson's estimator.
 
@@ -398,7 +398,7 @@ def hutchinson_estimator(
         num_matvecs: number of matrix-vector products to use for the estimator.
             This is equivalent to the number of probe vectors.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
-        mode: Whether to apply forward or adjoint Jacobian actions.
+        mode: Whether to apply forward or reverse Jacobian actions.
 
     Returns:
         A Hutchinson estimate of $\tr(𝐃f(x))$.
@@ -408,8 +408,8 @@ def hutchinson_estimator(
 
     probes = sampler(x.shape, num_matvecs, dtype=x.dtype, device=x.device)
     _, batched_op = _make_batched_op(op, x, mode)
-    adjoint_probes = batched_op(probes)
-    estimate = vecdot(probes, adjoint_probes, dim=-2).mean(dim=-1)
+    reverse_probes = batched_op(probes)
+    estimate = vecdot(probes, reverse_probes, dim=-2).mean(dim=-1)
     return estimate
 
 
@@ -421,7 +421,7 @@ def hutch_pp_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
-    mode: str = "adjoint",
+    mode: str = "reverse",
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with Hutch++.
 
@@ -432,7 +432,7 @@ def hutch_pp_estimator(
         x: Evaluation point. Its shape, dtype, and device define the domain.
         num_matvecs: Total matrix-vector product budget.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
-        mode: Whether to apply forward or adjoint Jacobian actions.
+        mode: Whether to apply forward or reverse Jacobian actions.
 
     Returns:
         A Hutch++ estimate of $\tr(𝐃f(x))$.
@@ -465,7 +465,7 @@ def xtrace_naive_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
-    mode: str = "adjoint",
+    mode: str = "reverse",
     renormalize: bool = True,
 ) -> Tensor:
     r"""Naive XTrace estimate of $\tr(𝐃f(x))$ for debugging."""
@@ -506,7 +506,7 @@ def xtrace_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
-    mode: str = "adjoint",
+    mode: str = "reverse",
     renormalize: bool = True,
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with the fast XTrace estimator.
@@ -517,7 +517,7 @@ def xtrace_estimator(
         num_matvecs: Total matrix-vector product budget. XTrace uses
             `num_matvecs // 2` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
-        mode: Whether to apply forward or adjoint Jacobian actions.
+        mode: Whether to apply forward or reverse Jacobian actions.
         renormalize: Whether to apply the XTrace renormalization correction.
 
     Returns:
@@ -575,7 +575,7 @@ def xtrace_estimator_matlab(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
-    mode: str = "adjoint",
+    mode: str = "reverse",
     renormalize: bool = False,
 ) -> Tensor:
     r"""Estimate the trace of a matrix using the original XTrace MATLAB algorithm.
@@ -746,17 +746,17 @@ class HutchinsonEstimator(TraceEstimator):
     This module wraps the same trace estimator as `hutchinson_estimator`.
     The `forward` method estimates $\tr(𝐃f(x))$ and `powers` extends the
     same sampling scheme to powers of the Jacobian by repeatedly applying Jacobian
-    or adjoint actions according to `mode`.
+    or reverse actions according to `mode`.
 
     Args:
         num_matvecs: Number of matrix-vector products, equal to the number of probe
             vectors used per estimate.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
-        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
+        mode: Whether to use forward Jacobian-vector products, reverse vector-Jacobian
             products, or a symmetric alternating scheme.
     """
 
-    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
+    MODES: Final[frozenset[str]] = frozenset({"forward", "reverse", "symmetric"})
 
     num_matvecs: Final[int]
     num_samples: Final[int]
@@ -777,7 +777,7 @@ class HutchinsonEstimator(TraceEstimator):
         *,
         num_samples: int | None = None,
         sampler: str | AbstractSampler = Samplers.SPHERE,
-        mode: str = "adjoint",
+        mode: str = "reverse",
     ) -> None:
         match num_samples, num_matvecs:
             case None, None:
@@ -837,9 +837,9 @@ class HutchinsonEstimator(TraceEstimator):
                     right_samples = batched_jvp_fn(right_samples)
                     yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
 
-            case "adjoint":
+            case "reverse":
                 # use x ↦ Aᵀx only
-                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                _, batched_vjp_fn = _make_batched_op(op, x, "reverse")
 
                 for _ in range(max_power):
                     left_samples = batched_vjp_fn(left_samples)
@@ -849,7 +849,7 @@ class HutchinsonEstimator(TraceEstimator):
                 # alternate between Ax and Aᵀx, which is good for forward sensitivity.
                 # as it grows exponentially in the number of matvecs.
                 _, batched_jvp_fn = _make_batched_op(op, x, "forward")
-                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                _, batched_vjp_fn = _make_batched_op(op, x, "reverse")
 
                 power = 0
                 while power < max_power:
@@ -883,7 +883,7 @@ class HutchPP_Estimator(TraceEstimator):
             `num_matvecs // 3` probe vectors for the sketch and the same number for
             the residual term.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
-        mode: Whether to use forward Jacobian-vector products, adjoint vector-Jacobian
+        mode: Whether to use forward Jacobian-vector products, reverse vector-Jacobian
             products, or a symmetric alternating scheme.
 
     References:
@@ -893,7 +893,7 @@ class HutchPP_Estimator(TraceEstimator):
           | DOI: 10.1137/1.9781611976496.16
     """
 
-    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint", "symmetric"})
+    MODES: Final[frozenset[str]] = frozenset({"forward", "reverse", "symmetric"})
 
     num_matvecs: Final[int]
     num_samples: Final[int]
@@ -914,7 +914,7 @@ class HutchPP_Estimator(TraceEstimator):
         *,
         num_samples: int | None = None,
         sampler: str | AbstractSampler = Samplers.SPHERE,
-        mode: str = "adjoint",
+        mode: str = "reverse",
     ) -> None:
         match num_samples, num_matvecs:
             case None, None:
@@ -993,8 +993,8 @@ class HutchPP_Estimator(TraceEstimator):
                     residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
                     yield low_rank + residual
 
-            case "adjoint":
-                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+            case "reverse":
+                _, batched_vjp_fn = _make_batched_op(op, x, "reverse")
                 sketch = batched_vjp_fn(samples)
                 Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
@@ -1015,7 +1015,7 @@ class HutchPP_Estimator(TraceEstimator):
 
             case "symmetric":
                 _, batched_jvp_fn = _make_batched_op(op, x, "forward")
-                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                _, batched_vjp_fn = _make_batched_op(op, x, "reverse")
 
                 # Hutch++ uses a fixed projector P = QQᵀ and the exact split
                 #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
@@ -1061,7 +1061,7 @@ class XTraceEstimator(TraceEstimator):
     r"""Estimate traces with the XTrace estimator.
 
     This module wraps the same trace estimator as `xtrace_estimator` and supports
-    both forward and adjoint Jacobian actions. It does not support Jacobian power
+    both forward and reverse Jacobian actions. It does not support Jacobian power
     traces.
 
     Args:
@@ -1069,7 +1069,7 @@ class XTraceEstimator(TraceEstimator):
             `num_matvecs // 2` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         renormalize: Whether to apply the paper's renormalization.
-        mode: Jacobian action mode. Must be `"forward"` or `"adjoint"`.
+        mode: Jacobian action mode. Must be `"forward"` or `"reverse"`.
 
     Cost: $mN² + 𝓞(m³)$
         m is the number of matvecs (=2x`num_samples`),
@@ -1102,7 +1102,7 @@ class XTraceEstimator(TraceEstimator):
         12: tr ← mean(trᵢ: i=1…m/2)
     """
 
-    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint"})
+    MODES: Final[frozenset[str]] = frozenset({"forward", "reverse"})
 
     num_matvecs: Final[int]
     num_samples: Final[int]
@@ -1135,7 +1135,7 @@ class XTraceEstimator(TraceEstimator):
         *,
         num_samples: int | None = None,
         sampler: str | AbstractSampler = Samplers.SPHERE,
-        mode: str = "adjoint",
+        mode: str = "reverse",
         renormalize: bool = True,
     ) -> None:
         match num_samples, num_matvecs:
@@ -1246,7 +1246,7 @@ class LogabsdetSeriesEstimator(nn.Module):
         num_matvecs: int,
         num_terms: int,
         sampler: str | AbstractSampler = "sphere",
-        mode: str = "adjoint",
+        mode: str = "reverse",
     ) -> None:
         super().__init__()
         self.num_matvecs = num_matvecs
