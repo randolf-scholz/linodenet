@@ -16,6 +16,7 @@ import torch
 from torch import Tensor, nn
 from torch.func import vjp, vmap
 from torch.linalg import slogdet
+from torch.nn.functional import linear
 
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet.mappings.nonlinear_contractions import get_nonlinear_contraction
@@ -149,6 +150,7 @@ class ResidualBottleneck(TransformBase):
     maxiter: Final[int]
     atol: Final[float]
     rtol: Final[float]
+    use_bias: Final[bool]
     U: nn.Linear
     V: nn.Linear
     bottleneck: nn.Module
@@ -162,6 +164,7 @@ class ResidualBottleneck(TransformBase):
         *,
         bottleneck: nn.Module,  # (...k) -> (...k)
         activation: str | nn.Module = "Identity",
+        use_bias: bool = True,
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
@@ -183,19 +186,20 @@ class ResidualBottleneck(TransformBase):
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
+        self.use_bias = use_bias
         self.bottleneck = bottleneck
         self.activation = activation_module
         self.U = nn.Linear(
             hidden_size,
             input_size,
-            bias=False,
+            bias=use_bias,
             device=device,
             dtype=dtype,
         )
         self.V = nn.Linear(
             input_size,
             hidden_size,
-            bias=False,
+            bias=use_bias,
             device=device,
             dtype=dtype,
         )
@@ -212,23 +216,31 @@ class ResidualBottleneck(TransformBase):
     def reset_parameters(self) -> None:
         nn.init.kaiming_uniform_(self.U.weight, a=sqrt(5))
         nn.init.kaiming_uniform_(self.V.weight, a=sqrt(5))
+        if self.U.bias is not None:
+            bound = 1 / sqrt(self.hidden_size) if self.hidden_size > 0 else 0.0
+            nn.init.uniform_(self.U.bias, -bound, bound)
+        if self.V.bias is not None:
+            bound = 1 / sqrt(self.input_size) if self.input_size > 0 else 0.0
+            nn.init.uniform_(self.V.bias, -bound, bound)
         update_parametrizations(self)
 
     def lift(self, z: Tensor, /) -> Tensor:
-        r"""Compute $ϕᵤ(Uϕₛ(z))$ in row-vector convention."""
+        r"""Compute $ϕᵤ(Uϕₛ(z))$."""
         return self.activation(self.U(self.bottleneck(z)))
 
+    def latent_map(self, z: Tensor, /) -> Tensor:
+        r"""Compute $z + Wᵀϕᵤ(Uϕₛ(z))$ in bottleneck space."""
+        return z + linear(self.lift(z), self.V.weight)
+
     def encode(self, x: Tensor, /) -> Tensor:
-        # note: implementation uses transposed matrices (row-vector)
         # y = x + ϕᵤ(Uϕₛ(Vᵀx))
         return x + self.lift(self.V(x))
 
     def decode(self, y: Tensor, /) -> Tensor:
-        # note: implementation uses transposed matrices (row-vector)
-        # solve z = Vᵀy - Vᵀϕᵤ(Uϕₛ(z)),  z = Vᵀx
+        # solve z = Wy + b - Wϕᵤ(Uϕₛ(z)),  z = Wx + b
         vty = self.V(y)
         z_star = fixpoint_solve(
-            lambda z: vty - self.V(self.lift(z)),
+            lambda z: vty - (self.latent_map(z) - z),
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,
@@ -244,7 +256,7 @@ class ResidualBottleneck(TransformBase):
         # log|det(𝕀ₙ + 𝐃(Vᵀ lift)(z))| = log|det 𝐃(z + Vᵀ lift(z))|
         eye_k = torch.eye(self.hidden_size, device=z.device, dtype=z.dtype)
         eye_k = eye_k.expand(*z.shape, self.hidden_size)
-        _, vjp_fn, *_ = vjp(lambda w: w + self.V(self.lift(w)), z)
+        _, vjp_fn, *_ = vjp(self.latent_map, z)
         batched_vjp_fn = vmap(lambda w: vjp_fn(w)[0], -1, -1)
         matrix = batched_vjp_fn(eye_k)
         _, logabsdet = slogdet(matrix)
