@@ -229,25 +229,12 @@ class ResidualBottleneck(TransformBase):
         return self.activation(self.U(self.bottleneck(z)))
 
     def latent_map(self, z: Tensor, /) -> Tensor:
-        r"""Compute $z + Wᵀϕᵤ(Uϕₛ(z))$ in bottleneck space."""
+        r"""Compute $z + Vᵀϕᵤ(Uϕₛ(z))$ in bottleneck space."""
         return z + linear(self.lift(z), self.V.weight)
 
     def encode(self, x: Tensor, /) -> Tensor:
         # y = x + ϕᵤ(Uϕₛ(Vᵀx))
         return x + self.lift(self.V(x))
-
-    def decode(self, y: Tensor, /) -> Tensor:
-        # solve z = Wy + b - Wϕᵤ(Uϕₛ(z)),  z = Wx + b
-        vty = self.V(y)
-        z_star = fixpoint_solve(
-            lambda z: vty - (self.latent_map(z) - z),
-            vty.clone(),
-            maxiter=self.maxiter,
-            atol=self.atol,
-            rtol=self.rtol,
-        )
-        # x⁎ = y - ϕᵤ(Uϕₛ(z⁎))
-        return y - self.lift(z_star)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         z = self.V(x)
@@ -261,6 +248,19 @@ class ResidualBottleneck(TransformBase):
         matrix = batched_vjp_fn(eye_k)
         _, logabsdet = slogdet(matrix)
         return x + u, logabsdet
+
+    def decode(self, y: Tensor, /) -> Tensor:
+        # solve z = Vy + b - Vϕᵤ(Uϕₛ(z)),  z = Vx + b
+        vty = self.V(y)
+        z_star = fixpoint_solve(
+            lambda z: vty - (self.latent_map(z) - z),
+            vty.clone(),
+            maxiter=self.maxiter,
+            atol=self.atol,
+            rtol=self.rtol,
+        )
+        # x⁎ = y - ϕᵤ(Uϕₛ(z⁎))
+        return y - self.lift(z_star)
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         x = self.decode(y)
