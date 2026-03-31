@@ -5,9 +5,8 @@ from torch import Tensor, nn
 from torch.nn.functional import mse_loss
 
 from linodenet.mappings import (
-    IResNetContraction,
-    IReZeroContraction,
     LinearContraction,
+    ResidualContraction,
     ResidualContractionFallback,
     TransformBase,
 )
@@ -35,13 +34,13 @@ class TestReZero(TestSuite):
     LEARNING_RATE = 0.5
     TARGET_SCALE = 0.35
 
-    def make_model(self, /, *, device: str, dtype: torch.dtype) -> IReZeroContraction:
+    def make_model(self, /, *, device: str, dtype: torch.dtype) -> ResidualContraction:
         contraction = nn.Sequential(
             LinearContraction(self.INPUT_SIZE, 2 * self.INPUT_SIZE, bias=True),
             nn.ReLU(),
             LinearContraction(2 * self.INPUT_SIZE, self.INPUT_SIZE),
         )
-        module = IReZeroContraction(contraction)
+        module = ResidualContraction(contraction)
         module = module.to(dtype=dtype, device=device)
         update_parametrizations(module)  # Important after .to()
         return module
@@ -114,7 +113,7 @@ class TestReZero(TestSuite):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
-    [ResidualContractionFallback, IResNetContraction],
+    [ResidualContractionFallback, ResidualContraction],
     ids=["loop", "fixpoint_solve"],
 )
 class TestCorrectness(TestSuite):
@@ -306,7 +305,7 @@ class TestLogAbsDet(TestSuite):
         trace_estimator: str,
     ) -> None:
         torch.manual_seed(self.SEED)
-        flow = IResNetContraction(
+        flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
             trace_matvecs=self.NUM_TRACE_SAMPLES,
             num_series_terms=self.NUM_SERIES_TERMS,
@@ -352,7 +351,7 @@ class TestLogAbsDetExact(TestSuite):
         device: str,
     ) -> None:
         torch.manual_seed(self.SEED)
-        flow = IResNetContraction(
+        flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
             trace_matvecs=self.NUM_TRACE_SAMPLES,
             num_series_terms=self.NUM_SERIES_TERMS,
@@ -379,7 +378,7 @@ class TestLogAbsDetExact(TestSuite):
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
-    [ResidualContractionFallback, IResNetContraction],
+    [ResidualContractionFallback, ResidualContraction],
     ids=["loop", "fixpoint_solve"],
 )
 class TestPerformance(TestSuite):
@@ -413,10 +412,11 @@ class TestPerformance(TestSuite):
 
         # NOTE: required for fullgraph=True
         # REF: https://docs.pytorch.org/tutorials/intermediate/compiled_autograd_tutorial.html
+        # pyrefly: ignore[bad-assignment]
         torch._dynamo.config.compiled_autograd = True  # noqa: SLF001
         compiled_decode = torch.compile(
             flow.decode,
-            fullgraph=flow_cls is IResNetContraction,
+            fullgraph=flow_cls is ResidualContraction,
         )
 
         # trigger compile

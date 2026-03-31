@@ -14,7 +14,6 @@ __all__ = [
     "surjections",
     "functional",
     "bijections",
-    "nonlinear_contractions",
     "linear",
     "transforms",
     # Constants
@@ -38,7 +37,6 @@ from . import (
     embeddings,
     functional,
     linear,
-    nonlinear_contractions,
     projections,
     surjections,
     transforms,
@@ -89,11 +87,9 @@ EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
 r"""Dictionary of available embeddings (nn.Module)."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
-    "ContractiveFP"        : transforms.IResNetContraction,
-    "ReZeroContraction"    : transforms.IReZeroContraction,
+    "ResidualContraction"  : transforms.ResidualContraction,
     "ResidualBottleneck"   : transforms.ResidualBottleneck,
-    "ReZeroBottleneck"     : transforms.ReZeroBottleneck,
-    "ContractiveTransform" : transforms.ResidualContractionFallback,
+    "ResidualContractionFallback" : transforms.ResidualContractionFallback,
     "SplineTransform"      : transforms.SplineTransform,
     "LowRankTransform"     : transforms.LowRankTransform,
     "TriangularTransform"  : transforms.TriangularTransform,

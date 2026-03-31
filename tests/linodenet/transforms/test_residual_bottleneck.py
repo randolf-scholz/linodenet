@@ -1,9 +1,9 @@
 import pytest
 import torch
 
-from linodenet.mappings import LinearContraction, ResidualBottleneck, ReZeroBottleneck
+from linodenet.mappings import LinearContraction, ResidualBottleneck
 from linodenet.nn.parametrize import update_parametrizations
-from tests.testing import DEVICES, DTYPES, SEEDS_5, TestSuite
+from tests.testing import DEVICES, DTYPES, SEEDS_5
 
 from .test_transform import TestTransform
 
@@ -134,37 +134,3 @@ class TestResidualBottleneck(TestTransform):
             atol=atol,
             rtol=rtol,
         )
-
-
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("device", DEVICES)
-class TestReZeroBottleneck(TestSuite):
-    def test_initially_identity(
-        self,
-        dtype: torch.dtype,
-        device: str,
-    ) -> None:
-        flow = ReZeroBottleneck(
-            input_size=5,
-            hidden_size=2,
-            bottleneck=LinearContraction(
-                2,
-                2,
-                bias=True,
-                c=0.5,
-                device=device,
-                dtype=dtype,
-            ),
-            activation="Tanh",
-            use_bias=False,
-            maxiter=128,
-            device=device,
-            dtype=dtype,
-        )
-        update_parametrizations(flow)
-        x = torch.randn(16, 5, device=device, dtype=dtype)
-
-        y, logabsdet = flow.encode_and_logabsdet(x)
-
-        self.assert_close(y, x)
-        self.assert_close(logabsdet, torch.zeros_like(logabsdet))
