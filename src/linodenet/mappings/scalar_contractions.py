@@ -15,8 +15,6 @@ __all__ = [
     # enums
     "ScalarContraction",
     "NonExpansiveMapping",
-    # functions
-    "get_nonlinear_contraction",
 ]
 
 from collections.abc import Callable
@@ -201,13 +199,19 @@ class ScalarContraction(StrEnum):
         return _SCALAR_CONTRACTION_SPECS[self.value]
 
     @classmethod
-    def new(cls, name: str, /) -> nn.Module:
-        r"""Instantiate a named scalar contraction."""
-        try:
-            return cls(name).spec.factory()
-        except ValueError as err:
-            msg = f"Unknown scalar contraction: {name!r}."
-            raise KeyError(msg) from err
+    def new(cls, name: str | nn.Module, /) -> nn.Module:
+        r"""Instantiate a named scalar contraction or pass through a module."""
+        match name:
+            case nn.Module() as module:
+                return module
+            case str():
+                try:
+                    return cls(name).spec.factory()
+                except ValueError as err:
+                    msg = f"Unknown scalar contraction: {name!r}."
+                    raise KeyError(msg) from err
+            case _:
+                raise TypeError(f"Expected str or nn.Module, got {type(name)}")
 
 
 class NonExpansiveMapping(StrEnum):
@@ -248,29 +252,22 @@ class NonExpansiveMapping(StrEnum):
         return _NON_EXPANSIVE_MAPPING_SPECS[self.value]
 
     @classmethod
-    def new(cls, name: str, /) -> nn.Module:
-        r"""Instantiate a named non-expansive mapping."""
-        try:
-            return cls(name).spec.factory()
-        except ValueError as err:
-            msg = f"Unknown non-expansive mapping: {name!r}."
-            raise KeyError(msg) from err
+    def new(cls, name: str | nn.Module, /) -> nn.Module:
+        r"""Instantiate a named non-expansive mapping or pass through a module."""
+        match name:
+            case nn.Module() as module:
+                return module
+            case str():
+                try:
+                    return cls(name).spec.factory()
+                except ValueError as err:
+                    msg = f"Unknown non-expansive mapping: {name!r}."
+                    raise KeyError(msg) from err
+            case _:
+                raise TypeError(f"Expected str or nn.Module, got {type(name)}")
 
 
 assert all(
     name in NonExpansiveMapping._value2member_map_
     for name in ScalarContraction._value2member_map_
 ), "NonExpansiveMapping must contain every ScalarContraction value."
-
-
-def get_nonlinear_contraction(name: str, /) -> nn.Module:
-    r"""Instantiate a named non-linear contraction."""
-    try:
-        return ScalarContraction.new(name)
-    except KeyError:
-        pass
-    try:
-        return NonExpansiveMapping.new(name)
-    except KeyError as err:
-        msg = f"Unknown non-linear contraction: {name!r}."
-        raise KeyError(msg) from err

@@ -19,7 +19,7 @@ from torch.linalg import slogdet
 from torch.nn.functional import linear
 
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
-from linodenet.mappings.scalar_contractions import get_nonlinear_contraction
+from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn import ReZero
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
@@ -276,11 +276,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         if not 1 <= hidden_size <= input_size:
             raise ValueError("hidden_size must be between 1 and input_size")
 
-        match activation:
-            case str(name):
-                activation = get_nonlinear_contraction(name)
-            case other:
-                activation = other
+        activation = NonExpansiveMapping.new(activation)
 
         if use_rezero:
             match scalar_map:
