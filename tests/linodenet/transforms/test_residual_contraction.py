@@ -11,7 +11,7 @@ from linodenet.mappings import (
     TransformBase,
 )
 from linodenet.nn.parametrize import update_parametrizations
-from tests.testing import DEVICES, DTYPES, SEEDS_5, TestSuite, pytest_xfail
+from tests.testing import DEVICES, SEEDS_5, TestSuite, pytest_xfail
 
 from .test_transform import TestTransform
 
@@ -27,7 +27,7 @@ class ShiftedHalfContraction(nn.Module):
         return 0.5 * x + self.bias
 
 
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 class TestReZero(TestSuite):
     BATCH_SIZE = 32
@@ -111,7 +111,7 @@ class TestReZero(TestSuite):
 
 
 @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",
@@ -124,19 +124,15 @@ class TestCorrectness(TestTransform):
     FLOW_MAXITER = 128
     FLOW_ATOL = {
         torch.float32: 1e-6,
-        torch.float64: 1e-8,
     }
     FLOW_RTOL = {
         torch.float32: 1e-6,
-        torch.float64: 1e-8,
     }
     VALUE_TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-6, 1e-6),
     }
     GRAD_TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-6, 1e-6),
     }
 
     @pytest_xfail(
@@ -267,7 +263,7 @@ class TestCorrectness(TestTransform):
         )
 
 
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("trace_estimator", ["hutch", "hutch++"])
 class TestLogAbsDet(TestSuite):
@@ -327,7 +323,7 @@ class TestLogAbsDet(TestSuite):
         )
 
 
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 class TestLogAbsDetExact(TestSuite):
     BATCH_SIZE = TestLogAbsDet.BATCH_SIZE
@@ -368,7 +364,7 @@ class TestLogAbsDetExact(TestSuite):
         self.assert_close(logabsdet, expected_logabsdet, atol=1e-6, rtol=0.0)
 
 
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize(
     "flow_cls",

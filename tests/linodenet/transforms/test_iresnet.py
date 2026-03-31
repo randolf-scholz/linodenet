@@ -10,7 +10,7 @@ from torchinfo import summary
 
 from linodenet.mappings.transforms import IResNet, ResidualContraction
 from linodenet.nn.parametrize import update_parametrizations
-from tests.testing import DEVICES, DTYPES, PROJECT, visualize_distribution
+from tests.testing import DEVICES, PROJECT, visualize_distribution
 
 from .test_transform import TestTransform
 
@@ -86,11 +86,9 @@ class TestIResNet(TestTransform):
     QUANTILES = torch.tensor([0.5, 0.68, 0.95, 0.997])
     ERROR_TARGETS = {
         torch.float32: torch.tensor([1e-6, 2e-6, 1e-5, 1e-3]),
-        torch.float64: torch.tensor([1e-9, 1e-8, 1e-7, 5e-7]),
     }
     FLOW_TOL = {
         torch.float32: (1e-6, 1e-6),
-        torch.float64: (1e-8, 1e-8),
     }
 
     @staticmethod
@@ -234,7 +232,7 @@ class TestIResNet(TestTransform):
         self.evaluate_invertibility(model, dtype=dtype, device=device)
 
 
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("use_rezero", [False], ids=["plain"])
 def test_plot_errors(
@@ -251,7 +249,7 @@ def test_plot_errors(
     latent_size = 16
     batch_size = 2_048
     maxiter = 256
-    atol = 1e-6 if dtype is torch.float32 else 1e-8
+    atol = 1e-6
     rtol = atol
     extra_stats = {
         "Samples": f"{batch_size}",

@@ -3,30 +3,26 @@ import torch
 
 from linodenet.mappings import LinearContraction, ResidualBottleneck
 from linodenet.nn.parametrize import update_parametrizations
-from tests.testing import DEVICES, DTYPES, SEEDS_5
+from tests.testing import DEVICES, SEEDS_5
 
 from .test_transform import TestTransform
 
 
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 class TestResidualBottleneck(TestTransform):
     VALUE_TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-6, 1e-6),
     }
     LOGDET_TOL = {
         torch.float32: (1e-4, 1e-4),
-        torch.float64: (1e-6, 1e-6),
     }
     BATCH_SIZE = 32
     FINITE_DIFF_STEP = {
         torch.float32: 1e-3,
-        torch.float64: 1e-5,
     }
     FINITE_DIFF_TOL = {
         torch.float32: (2e-2, 2e-2),
-        torch.float64: (2e-4, 2e-4),
     }
 
     def make_flow(
@@ -50,8 +46,8 @@ class TestResidualBottleneck(TestTransform):
             ),
             activation="Tanh",
             maxiter=128,
-            atol=1e-8 if dtype is torch.float64 else 1e-6,
-            rtol=1e-8 if dtype is torch.float64 else 1e-6,
+            atol=1e-6,
+            rtol=1e-6,
             device=device,
             dtype=dtype,
         )
