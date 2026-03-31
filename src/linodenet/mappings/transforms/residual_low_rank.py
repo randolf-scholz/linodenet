@@ -88,9 +88,7 @@ class LowRankTransform(TransformBase):
         _, logabsdet = torch.linalg.slogdet(A)
         v = torch.einsum("nk, ...n -> ...k", self.V, x)  # v = Vᵀx
         u = torch.einsum("nk, ...k -> ...n", self.U, v)  # u = Uv
-        y = x + u
-        logabsdet = logabsdet.expand(x.shape[:-1])
-        return y, logabsdet
+        return x + u, logabsdet.expand(x.shape[:-1])
 
     @signature("(..., n) -> [(..., n), (...)]")
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -98,7 +96,5 @@ class LowRankTransform(TransformBase):
         v = torch.einsum("nk, ...n -> ...k", self.V, y)  # v = Vᵀy
         z = torch.linalg.solve(A, v[..., None]).squeeze(-1)  # z = (𝕀ₖ + VᵀU)⁻¹v
         u = torch.einsum("nk, ...k -> ...n", self.U, z)  # u = Uz
-        x = y - u
         _, logabsdet = torch.linalg.slogdet(A)
-        logabsdet = (-logabsdet).expand(y.shape[:-1])
-        return x, logabsdet
+        return y - u, -logabsdet.expand(y.shape[:-1])
