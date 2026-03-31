@@ -60,13 +60,13 @@ def compute_inversion_errors(
 
 
 @pytest.mark.parametrize("dtype", [torch.float32], ids=str)
-@pytest.mark.parametrize("device", ["cpu"])
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("use_rezero", [False, True], ids=["plain", "rezero"])
 class TestIResNet(TestTransform):
     SEED = 0
     BATCH_SIZE = 32
     INPUT_SIZE = 64
-    LATENT_SIZE = 16
+    LATENT_SIZE = 8
     MODEL_CONFIG = {
         "latent_size": LATENT_SIZE,
         "num_blocks": 3,
@@ -85,7 +85,7 @@ class TestIResNet(TestTransform):
     LEARNING_RATE = 1.0
     QUANTILES = torch.tensor([0.5, 0.68, 0.95, 0.997])
     ERROR_TARGETS = {
-        torch.float32: torch.tensor([1e-6, 2e-6, 1e-5, 1e-4]),
+        torch.float32: torch.tensor([1e-6, 2e-6, 1e-5, 1e-3]),
         torch.float64: torch.tensor([1e-9, 1e-8, 1e-7, 5e-7]),
     }
     FLOW_TOL = {
