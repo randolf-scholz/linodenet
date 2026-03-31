@@ -147,8 +147,8 @@ class ResidualBottleneck(TransformBase):
     maxiter: Final[int]
     atol: Final[float]
     rtol: Final[float]
-    weight_u: Tensor
-    weight_v: Tensor
+    U: Tensor
+    V: Tensor
     bottleneck: nn.Module
     activation: nn.Module
     eye: Tensor
@@ -183,10 +183,10 @@ class ResidualBottleneck(TransformBase):
         self.rtol = rtol
         self.bottleneck = bottleneck
         self.activation = activation_module
-        self.weight_u = nn.Parameter(
+        self.U = nn.Parameter(
             torch.empty(input_size, hidden_size, device=device, dtype=dtype)
         )
-        self.weight_v = nn.Parameter(
+        self.V = nn.Parameter(
             torch.empty(input_size, hidden_size, device=device, dtype=dtype)
         )
         self.register_buffer(
@@ -196,46 +196,43 @@ class ResidualBottleneck(TransformBase):
         )
 
         self.reset_parameters()
-        register_parametrization(self, "weight_u", OrthogonalHouseholder())
-        register_parametrization(self, "weight_v", OrthogonalHouseholder())
+        register_parametrization(self, "U", OrthogonalHouseholder())
+        register_parametrization(self, "V", OrthogonalHouseholder())
         self.parametrizations: nn.ModuleDict
 
     def reset_parameters(self) -> None:
-        nn.init.kaiming_uniform_(self.weight_u, a=sqrt(5))
-        nn.init.kaiming_uniform_(self.weight_v, a=sqrt(5))
+        nn.init.kaiming_uniform_(self.U, a=sqrt(5))
+        nn.init.kaiming_uniform_(self.V, a=sqrt(5))
         update_parametrizations(self)
 
     def encode(self, x: Tensor, /) -> Tensor:
         # y = x + ϕᵤ(Uϕₛ(Vᵀx))
-        z = x @ self.weight_v
+        z = x @ self.V
         s = self.bottleneck(z)
-        h = s @ self.weight_u.mT
+        h = s @ self.U.mT
         u = self.activation(h)
 
         return x + u
 
     def decode(self, y: Tensor, /) -> Tensor:
         # z = Vᵀy
-        vty = y @ self.weight_v
+        vty = y @ self.V
         # solve z = Vᵀy - Vᵀϕᵤ(Uϕₛ(z))
         z_star = fixpoint_solve(
-            lambda z: (
-                vty
-                - self.activation(self.bottleneck(z) @ self.weight_u.mT) @ self.weight_v
-            ),
+            lambda z: vty - self.activation(self.bottleneck(z) @ self.U.mT) @ self.V,
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,
         )
         # SECTION: x = y - ϕᵤ(Uϕₛ(z))
-        correction = self.activation(self.bottleneck(z_star) @ self.weight_u.mT)
+        correction = self.activation(self.bottleneck(z_star) @ self.U.mT)
         return y - correction
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        z = x @ self.weight_v
+        z = x @ self.V
         s = self.bottleneck(z)
-        h = s @ self.weight_u.mT
+        h = s @ self.U.mT
         u = self.activation(h)
 
         # SECTION: activation derivative
@@ -261,8 +258,8 @@ class ResidualBottleneck(TransformBase):
         # SECTION: determinant lemma
         vtduu = torch.einsum(
             "ni,...nr->...ir",
-            self.weight_v,
-            du.unsqueeze(-1) * self.weight_u,
+            self.V,
+            du.unsqueeze(-1) * self.U,
         )
         matrix = self.eye + vtduu @ ds
         _, logabsdet = torch.linalg.slogdet(matrix)
