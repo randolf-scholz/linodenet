@@ -76,10 +76,10 @@ from .gaussian_transport import (
 )
 from .iresnet import IResNet
 from .linear_rational_spline import SplineTransform
-from .low_rank import LowRankTransform
 from .residual_contraction import (
     ResidualContraction,
     ResidualContractionFallback,
     ReZeroContraction,
 )
+from .residual_low_rank import LowRankTransform
 from .triangular import TriangularTransform
