@@ -302,7 +302,7 @@ class TestLogAbsDet(TestSuite):
         flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
             trace_matvecs=self.NUM_TRACE_SAMPLES,
-            num_series_terms=self.NUM_SERIES_TERMS,
+            logdet_series_terms=self.NUM_SERIES_TERMS,
             trace_estimator=trace_estimator,
         ).to(device=device, dtype=dtype)
         x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
@@ -348,7 +348,7 @@ class TestLogAbsDetExact(TestSuite):
         flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
             trace_matvecs=self.NUM_TRACE_SAMPLES,
-            num_series_terms=self.NUM_SERIES_TERMS,
+            logdet_series_terms=self.NUM_SERIES_TERMS,
             trace_estimator="exact",
         ).to(device=device, dtype=dtype)
         x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)

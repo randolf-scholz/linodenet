@@ -154,7 +154,7 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         rtol: float = 1e-6,
         trace_estimator: str = "hutch",
         trace_matvecs: int = 3,
-        num_series_terms: int = 8,
+        logdet_series_terms: int = 8,
         trace_probe_sampler: str = "sphere",
         trace_mode: str = "adjoint",
     ) -> None:
@@ -180,12 +180,12 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         super().__init__(contraction, gate, maxiter=maxiter, atol=atol, rtol=rtol)
         self.scalar = scalar
         self.num_trace_samples = trace_matvecs
-        self.num_series_terms = num_series_terms
+        self.num_series_terms = logdet_series_terms
         self.trace_estimator = trace_estimator
         self.logabsdet_estimator = LogAbsDetEstimators.new(
             trace_estimator,
             num_matvecs=trace_matvecs,
-            num_terms=num_series_terms,
+            num_terms=logdet_series_terms,
             sampler=trace_probe_sampler,
             mode=trace_mode,
         )
