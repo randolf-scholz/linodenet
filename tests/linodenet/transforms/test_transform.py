@@ -10,6 +10,48 @@ from tests.testing import TestSuite
 
 
 class TestTransform(TestSuite):
+    def assert_logabsdet_matches_finite_difference_volume_change(
+        self,
+        transform: Transform,
+        arg: Tensor,
+        *,
+        step: float,
+        atol: float,
+        rtol: float,
+    ) -> None:
+        _, logabsdet = transform.encode_and_logabsdet(arg)
+        estimates = torch.stack(
+            [
+                self._finite_difference_logabsdet(
+                    transform,
+                    point,
+                    step=step,
+                )
+                for point in arg
+            ]
+        )
+        self.assert_close(logabsdet, estimates, atol=atol, rtol=rtol)
+
+    def _finite_difference_logabsdet(
+        self,
+        transform: Transform,
+        x: Tensor,
+        *,
+        step: float,
+    ) -> Tensor:
+        frame = torch.randn(x.shape[-1], x.shape[-1], device=x.device, dtype=x.dtype)
+        orthogonal_frame, _ = torch.linalg.qr(frame)
+        columns = []
+
+        for direction in orthogonal_frame.mT:
+            y_plus = transform.encode(x + step * direction)
+            y_minus = transform.encode(x - step * direction)
+            columns.append((y_plus - y_minus) / (2 * step))
+
+        jacobian = torch.stack(columns, dim=-1)
+        _, logabsdet = torch.linalg.slogdet(jacobian)
+        return logabsdet
+
     def assert_right_invertible(
         self,
         transform: Transform,

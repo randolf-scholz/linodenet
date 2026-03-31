@@ -5,10 +5,12 @@ from linodenet.mappings import LinearContraction, ResidualBottleneck, ReZeroBott
 from linodenet.nn.parametrize import update_parametrizations
 from tests.testing import DEVICES, DTYPES, SEEDS_5, TestSuite
 
+from .test_transform import TestTransform
+
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
-class TestResidualBottleneck(TestSuite):
+class TestResidualBottleneck(TestTransform):
     VALUE_TOL = {
         torch.float32: (1e-4, 1e-4),
         torch.float64: (1e-6, 1e-6),
@@ -18,6 +20,14 @@ class TestResidualBottleneck(TestSuite):
         torch.float64: (1e-6, 1e-6),
     }
     BATCH_SIZE = 32
+    FINITE_DIFF_STEP = {
+        torch.float32: 1e-3,
+        torch.float64: 1e-5,
+    }
+    FINITE_DIFF_TOL = {
+        torch.float32: (2e-2, 2e-2),
+        torch.float64: (2e-4, 2e-4),
+    }
 
     def make_flow(
         self,
@@ -105,6 +115,25 @@ class TestResidualBottleneck(TestSuite):
         assert y.shape == x.shape
         assert logabsdet.shape == x.shape[:-1]
         self.assert_close(logabsdet, expected_logabsdet, atol=atol, rtol=rtol)
+
+    @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
+    def test_logabsdet_matches_finite_difference_volume_change(
+        self,
+        seed: int,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        torch.manual_seed(seed)
+        atol, rtol = self.FINITE_DIFF_TOL[dtype]
+        flow = self.make_flow(5, 2, device=device, dtype=dtype)
+        x = torch.randn(3, 5, device=device, dtype=dtype)
+        self.assert_logabsdet_matches_finite_difference_volume_change(
+            flow,
+            x,
+            step=self.FINITE_DIFF_STEP[dtype],
+            atol=atol,
+            rtol=rtol,
+        )
 
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
