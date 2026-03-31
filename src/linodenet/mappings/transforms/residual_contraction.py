@@ -74,7 +74,7 @@ class ResidualContraction(TransformBase):
         trace_matvecs: int = 3,
         num_series_terms: int = 8,
         trace_probe_sampler: str = "sphere",
-        trace_mode: str = "symmetric",
+        trace_mode: str = "adjoint",
     ) -> None:
         super().__init__()
         self.contraction: nn.Module = contraction

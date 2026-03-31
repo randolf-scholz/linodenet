@@ -1,6 +1,7 @@
 import itertools
+import math
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
@@ -37,13 +38,6 @@ class TraceCase:
         for degree in range(1, k + 1):
             trace = self.spectrum.pow(degree).sum(dim=-1)
             yield trace.real if trace.is_complex() else trace
-
-
-def linear_map(matrix: Tensor, /) -> Callable[[Tensor], Tensor]:
-    def op(x: Tensor, /) -> Tensor:
-        return torch.einsum("...ij, ...j -> ...i", matrix, x)
-
-    return op
 
 
 class TestTraceEstimator(TestSuite):
@@ -321,7 +315,7 @@ class TestTraceEstimator(TestSuite):
             device=device,
             generator=generator,
         )
-        rank = input_size // 16
+        rank = math.ceil(math.cbrt(input_size))
         spectrum = torch.cat(
             [
                 torch.ones(rank, device=device, dtype=dtype),
@@ -401,9 +395,11 @@ class TestPowersCorrectness(TestTraceEstimator):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestLogAbsDetCorrectness(TestTraceEstimator):
+    BATCH_SIZE = 4
     PROBLEM_SIZE = 128
     NUM_MATVECS = 16
     NUM_TERMS = 8
+    SEED = 0
     TOLERANCES: dict[str, float] = {
         LogAbsDetEstimators.EXACT: 1e-5,
         LogAbsDetEstimators.HUTCH: 1e-1,
@@ -428,7 +424,8 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             self.PROBLEM_SIZE,
             device=device,
         )
-        output = estimator(linear_map(test_case.matrix), x)
+        A = test_case.matrix
+        output = estimator(lambda z: torch.einsum("...ji, ...j -> ...i", A, z), x)
         estimate = output[1] if isinstance(output, tuple) else output
 
         expected = test_case.logabsdet
@@ -456,12 +453,11 @@ class TestVisualizations(TestTraceEstimator):
     BATCH_SIZE = 32
     INPUT_SIZE = 256
     DEVICE = "cpu"
-    SAMPLER = "orth"
     NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
     METHODS: dict[str, tuple[str, str, str, dict]] = {
-        "hutch": ("hutch", "forward", "sphere", {}),
-        "hutch++": ("hutch++", "forward", "sphere", {}),
-        "xtrace": ("xtrace", "forward", "sphere", {}),
+        "hutch": ("hutch", "adjoint", "sphere", {}),
+        "hutch++": ("hutch++", "adjoint", "sphere", {}),
+        "xtrace": ("xtrace", "adjoint", "sphere", {}),
         # "hutch(gauss)": ("hutch", "forward", "gaussian", {}),
         # "hutch++(gauss)": ("hutch++", "forward", "gaussian", {}),
         # "xtrace(gauss)": ("xtrace", "forward", "gaussian", {}),
@@ -486,9 +482,12 @@ class TestVisualizations(TestTraceEstimator):
         eps = torch.finfo(expected.dtype).eps
         denom = expected.abs().clamp_min(eps)
         x = torch.zeros(batch_size, input_size, device=device)
-        op = linear_map(matrix)
 
         curves: dict[str, list[Tensor]] = {test_id: [] for test_id in self.METHODS}
+
+        batched_mm = torch.compile(
+            lambda z: torch.einsum("...ji, ...j -> ...i", matrix, z)
+        )
 
         for test_id, (name, mode, sampler, kwargs) in self.METHODS.items():
             for num_matvecs in self.NUM_MATVECS_GRID:
@@ -500,8 +499,8 @@ class TestVisualizations(TestTraceEstimator):
                         mode=mode,
                         sampler=sampler,
                         **kwargs,
-                    )
-                    estimate = estimator.to(device=device)(op, x)
+                    ).to(device=device)
+                    estimate = estimator(batched_mm, x)
                 except ValueError:
                     estimate = torch.full((), torch.nan, device=device)
                 except NotImplementedError:

@@ -128,7 +128,7 @@ class LogAbsDetEstimators(StrEnum):
         num_matvecs: int,
         num_terms: int,
         sampler: str | AbstractSampler = "sphere",
-        mode: str = "symmetric",
+        mode: str = "adjoint",
     ) -> ExactLogabsdet | LogabsdetSeriesEstimator:
         match e := LogAbsDetEstimators(estimator):
             case LogAbsDetEstimators.EXACT:
@@ -250,35 +250,52 @@ class OrthSampler(nn.Module):
         return math.sqrt(n) * q
 
 
+@signature("[{(..., d) -> (..., d)}, (..., d), str] -> [{(..., d, n) -> (..., d, n)}]")
+def _make_batched_op(
+    op: Fn[[Tensor], Tensor], x: Tensor, /, mode: str
+) -> Fn[[Tensor], Tensor]:
+    r"""Construct a batched Jacobian action $V ↦ AV$ or $V ↦ AᵀV$."""
+    match mode:
+        case "forward":
+            _, jvp_fn = linearize(op, x)
+            return vmap(jvp_fn, -1, -1)
+        case "adjoint":
+            _, vjp_fn, *_ = vjp(op, x)
+            return vmap(lambda z: vjp_fn(z)[0], -1, -1)
+        case _:
+            raise ValueError(f"invalid mode {mode!r}")
+
+
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def exact_trace(op: Fn[[Tensor], Tensor], x: Tensor, /) -> Tensor:
+def exact_trace(
+    op: Fn[[Tensor], Tensor], x: Tensor, /, *, mode: str = "adjoint"
+) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ by explicitly materializing the Jacobian.
 
     Args:
         op: Function $f$ whose Jacobian trace should be estimated at $x$.
         x: Evaluation point. Its shape, dtype, and device define the domain.
+        mode: Whether to materialize the forward or adjoint Jacobian action.
 
     Returns:
         The exact trace $\tr(𝐃f(x))$, computed from the full Jacobian.
     """
     dim = x.shape[-1]
     eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape[:-1], dim, dim)
-    _, jvp_fn = linearize(op, x)
-    batched_jvp_fn = vmap(jvp_fn, -1, -1)
-    matrix = batched_jvp_fn(eye)
+    batched_op = _make_batched_op(op, x, mode)
+    matrix = batched_op(eye)
     return torch.einsum("...ii -> ...", matrix)
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
 def exact_powers(
-    op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int
+    op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int, *, mode: str = "adjoint"
 ) -> Iterator[Tensor]:
     r"""Yield $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
     dim = x.shape[-1]
     eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape[:-1], dim, dim)
-    _, jvp_fn = linearize(op, x)
-    batched_jvp_fn = vmap(jvp_fn, -1, -1)
-    matrix = batched_jvp_fn(eye)
+    batched_op = _make_batched_op(op, x, mode)
+    matrix = batched_op(eye)
     eigenvalues = torch.linalg.eigvals(matrix)
     for power in range(1, max_power + 1):
         trace_power = eigenvalues.pow(power).sum(dim=-1)
@@ -286,7 +303,9 @@ def exact_powers(
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def exact_logabsdet(op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Tensor]:
+def exact_logabsdet(
+    op: Fn[[Tensor], Tensor], x: Tensor, /, *, mode: str = "adjoint"
+) -> tuple[Tensor, Tensor]:
     r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
 
     .. math:: \log|\det(𝕀 + A)| = ∑ᵢ\log|1+λᵢ| for eigenvalues λᵢ of A.
@@ -299,6 +318,7 @@ def exact_logabsdet(op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Ten
     Args:
         op: Function $f$ whose Jacobian log-absolute-determinant should be estimated
         x: Evaluation point. Its shape, dtype, and device define the domain.
+        mode: Whether to materialize the forward or adjoint Jacobian action.
 
     Returns:
         y: $f(x)$
@@ -306,9 +326,9 @@ def exact_logabsdet(op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Ten
     """
     dim = x.shape[-1]
     eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
-    _, jvp_fn = linearize(op, x)
-    batched_op = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-    matrix = eye + batched_op(eye)
+    batched_op = _make_batched_op(op, x, mode)
+    adjoint_matrix = batched_op(eye)
+    matrix = eye + adjoint_matrix
     _, value = torch.linalg.slogdet(matrix)
     return value
 
@@ -352,6 +372,7 @@ def hutchinson_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
+    mode: str = "adjoint",
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with Hutchinson's estimator.
 
@@ -363,6 +384,7 @@ def hutchinson_estimator(
         num_matvecs: number of matrix-vector products to use for the estimator.
             This is equivalent to the number of probe vectors.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
+        mode: Whether to apply forward or adjoint Jacobian actions.
 
     Returns:
         A Hutchinson estimate of $\tr(𝐃f(x))$.
@@ -371,9 +393,9 @@ def hutchinson_estimator(
         raise ValueError("num_samples must be at least 1")
 
     probes = sampler(x.shape, num_matvecs, dtype=x.dtype, device=x.device)
-    _, jvp_fn = linearize(op, x)
-    batched_jvp_fn = vmap(jvp_fn, -1, -1)
-    estimate = vecdot(probes, batched_jvp_fn(probes), dim=-2).mean(dim=-1)
+    batched_op = _make_batched_op(op, x, mode)
+    adjoint_probes = batched_op(probes)
+    estimate = vecdot(probes, adjoint_probes, dim=-2).mean(dim=-1)
     return estimate
 
 
@@ -385,6 +407,7 @@ def hutch_pp_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
+    mode: str = "adjoint",
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with Hutch++.
 
@@ -395,6 +418,7 @@ def hutch_pp_estimator(
         x: Evaluation point. Its shape, dtype, and device define the domain.
         num_matvecs: Total matrix-vector product budget.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
+        mode: Whether to apply forward or adjoint Jacobian actions.
 
     Returns:
         A Hutch++ estimate of $\tr(𝐃f(x))$.
@@ -406,16 +430,15 @@ def hutch_pp_estimator(
     samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
     residual_samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
 
-    _, jvp_fn = linearize(op, x)
-    batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-    sketch = batched_jvp_fn(samples)
+    batched_op = _make_batched_op(op, x, mode)
+    sketch = batched_op(samples)
     q, _ = qr(sketch, mode="reduced")  # (...dr)
 
     residual_samples = residual_samples - q @ (q.mH @ residual_samples)
-    low_rank = vecdot(q, batched_jvp_fn(q), dim=-2).sum(dim=-1)
-    residual = vecdot(residual_samples, batched_jvp_fn(residual_samples), dim=-2).mean(
-        dim=-1
-    )
+    low_rank_q = batched_op(q)
+    residual_action = batched_op(residual_samples)
+    low_rank = vecdot(q, low_rank_q, dim=-2).sum(dim=-1)
+    residual = vecdot(residual_samples, residual_action, dim=-2).mean(dim=-1)
     estimate = low_rank + residual
     return estimate.real if not estimate.is_complex() else estimate
 
@@ -428,6 +451,7 @@ def xtrace_naive_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
+    mode: str = "adjoint",
     renormalize: bool = True,
 ) -> Tensor:
     r"""Naive XTrace estimate of $\tr(𝐃f(x))$ for debugging."""
@@ -438,8 +462,7 @@ def xtrace_naive_estimator(
     *batch, N = x.shape
     k = min(N, num_samples)
 
-    _, jvp_fn = linearize(op, x)
-    batched_op = vmap(jvp_fn, -1, -1)  # (...Nm) -> (...Nm)
+    batched_op = _make_batched_op(op, x, mode)
     tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
 
     samples = sampler(x.shape, k, device=x.device, dtype=x.dtype)
@@ -469,6 +492,7 @@ def xtrace_estimator(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
+    mode: str = "adjoint",
     renormalize: bool = True,
 ) -> Tensor:
     r"""Estimate $\tr(𝐃f(x))$ with the fast XTrace estimator.
@@ -479,11 +503,13 @@ def xtrace_estimator(
         num_matvecs: Total matrix-vector product budget. XTrace uses
             `num_matvecs // 2` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
+        mode: Whether to apply forward or adjoint Jacobian actions.
         renormalize: Whether to apply the XTrace renormalization correction.
 
     Returns:
         An XTrace estimate of $\tr(𝐃f(x))$.
     """
+    batched_op = _make_batched_op(op, x, mode)
     if num_matvecs < 2:
         raise ValueError("num_matvecs must be at least 2")
 
@@ -492,9 +518,6 @@ def xtrace_estimator(
     k = min(N, num_samples)
 
     samples = sampler(x.shape, k, device=x.device, dtype=x.dtype)
-    _, jvp_fn = linearize(op, x)
-    batched_op = vmap(jvp_fn, -1, -1)  # (...dk) -> (...dk)
-
     Y = batched_op(samples)  # (...dk)
     Q, R = qr(Y, mode="reduced")  # (...dk), (...kk)
     # Q has normalized cols <-> Q.norm(dim=-2) = 1
@@ -538,6 +561,7 @@ def xtrace_estimator_matlab(
     num_matvecs: int,
     *,
     sampler: AbstractSampler,
+    mode: str = "adjoint",
     renormalize: bool = False,
 ) -> Tensor:
     r"""Estimate the trace of a matrix using the original XTrace MATLAB algorithm.
@@ -548,10 +572,9 @@ def xtrace_estimator_matlab(
         raise ValueError("num_matvecs must be at least 2")
 
     samples = sampler(x.shape, num_matvecs // 2, dtype=x.dtype, device=x.device)
-    _, jvp_fn = linearize(op, x)
-    fn = vmap(jvp_fn, -1, -1)
+    batched_op = _make_batched_op(op, x, mode)
 
-    *_, m, d = samples.shape
+    *_, d, m = samples.shape
 
     # MATLAB: Om = sqrt(N) * cnormc(randn(N, m))
     # Here we reuse the provided probes as the m columns of Ω.
@@ -560,7 +583,7 @@ def xtrace_estimator_matlab(
 
     # MATLAB: Y = A * Om
     # Y: (..., d, m)
-    y = fn(omega.mH).mH
+    y = batched_op(omega.mH).mH
     # MATLAB: [Q, R] = qr(Y, 0)
     # Q: (..., d, m), R: (..., m, m)
     q, r = qr(y, mode="reduced")
@@ -586,7 +609,7 @@ def xtrace_estimator_matlab(
 
     # MATLAB: Z = A * Q
     # Z: (..., d, m)
-    z = fn(q.mH).mH
+    z = batched_op(q.mH).mH
     # MATLAB: H = Q' * Z
     # H: (..., m, m)
     h = torch.einsum("...dm, ...dn -> ...mn", q.conj(), z)
@@ -740,7 +763,7 @@ class HutchinsonEstimator(TraceEstimator):
         *,
         num_samples: int | None = None,
         sampler: str | AbstractSampler = Samplers.SPHERE,
-        mode: str = "symmetric",
+        mode: str = "adjoint",
     ) -> None:
         match num_samples, num_matvecs:
             case None, None:
@@ -794,8 +817,7 @@ class HutchinsonEstimator(TraceEstimator):
         match self.mode:
             case "forward":
                 # use x ↦ Ax only
-                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                batched_jvp_fn = _make_batched_op(op, x, "forward")
 
                 for _ in range(max_power):
                     right_samples = batched_jvp_fn(right_samples)
@@ -803,20 +825,17 @@ class HutchinsonEstimator(TraceEstimator):
 
             case "adjoint":
                 # use x ↦ Aᵀx only
-                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
 
                 for _ in range(max_power):
-                    (left_samples,) = batched_vjp_fn(left_samples)
+                    left_samples = batched_vjp_fn(left_samples)
                     yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
 
             case "symmetric":
                 # alternate between Ax and Aᵀx, which is good for forward sensitivity.
                 # as it grows exponentially in the number of matvecs.
-                _, jvp_fn = linearize(op, x)  # (...d) -> (...d)
-                _, vjp_fn, *_ = vjp(op, x)  # (...d) -> tuple[(...d)]
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+                batched_jvp_fn = _make_batched_op(op, x, "forward")
+                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
 
                 power = 0
                 while power < max_power:
@@ -827,7 +846,7 @@ class HutchinsonEstimator(TraceEstimator):
                     if power == max_power:
                         break
 
-                    (left_samples,) = batched_vjp_fn(left_samples)
+                    left_samples = batched_vjp_fn(left_samples)
                     power += 1
                     yield vecdot(left_samples, right_samples, dim=-2).mean(dim=-1)
             case _:
@@ -881,7 +900,7 @@ class HutchPP_Estimator(TraceEstimator):
         *,
         num_samples: int | None = None,
         sampler: str | AbstractSampler = Samplers.SPHERE,
-        mode: str = "symmetric",
+        mode: str = "adjoint",
     ) -> None:
         match num_samples, num_matvecs:
             case None, None:
@@ -941,8 +960,7 @@ class HutchPP_Estimator(TraceEstimator):
 
         match self.mode:
             case "forward":
-                _, jvp_fn = linearize(op, x)
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
+                batched_jvp_fn = _make_batched_op(op, x, "forward")
                 sketch = batched_jvp_fn(samples)
                 Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
@@ -962,9 +980,8 @@ class HutchPP_Estimator(TraceEstimator):
                     yield low_rank + residual
 
             case "adjoint":
-                _, vjp_fn, *_ = vjp(op, x)
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
-                (sketch,) = batched_vjp_fn(samples)
+                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                sketch = batched_vjp_fn(samples)
                 Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
                 projected_samples = Q
@@ -975,23 +992,21 @@ class HutchPP_Estimator(TraceEstimator):
                 residual_r = residual_samples.clone()
 
                 for _ in range(max_power):
-                    (projected_l,) = batched_vjp_fn(projected_l)
-                    (residual_l,) = batched_vjp_fn(residual_l)
+                    projected_l = batched_vjp_fn(projected_l)
+                    residual_l = batched_vjp_fn(residual_l)
 
                     low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
                     residual = vecdot(residual_l, residual_r, dim=-2).mean(dim=-1)
                     yield low_rank + residual
 
             case "symmetric":
-                _, jvp_fn = linearize(op, x)
-                _, vjp_fn, *_ = vjp(op, x)
-                batched_jvp_fn = vmap(jvp_fn, -1, -1)  # (...dn) -> (...dn)
-                batched_vjp_fn = vmap(vjp_fn, -1, -1)  # (...dn) -> tuple[(...dn)]
+                batched_jvp_fn = _make_batched_op(op, x, "forward")
+                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
 
                 # Hutch++ uses a fixed projector P = QQᵀ and the exact split
                 #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).
                 left_sketch, right_sketch = torch.tensor_split(samples, 2, dim=-1)
-                (left_sketch,) = batched_vjp_fn(left_sketch)
+                left_sketch = batched_vjp_fn(left_sketch)
                 right_sketch = batched_jvp_fn(right_sketch)
                 sketch = torch.cat([left_sketch, right_sketch], dim=-1)
                 Q, _ = qr(sketch, mode="reduced")  # (...dr)
@@ -1016,8 +1031,8 @@ class HutchPP_Estimator(TraceEstimator):
                     if power == max_power:
                         break
 
-                    (projected_l,) = batched_vjp_fn(projected_l)
-                    (residual_l,) = batched_vjp_fn(residual_l)
+                    projected_l = batched_vjp_fn(projected_l)
+                    residual_l = batched_vjp_fn(residual_l)
                     power += 1
 
                     low_rank = vecdot(projected_l, projected_r, dim=-2).sum(dim=-1)
@@ -1031,16 +1046,16 @@ class HutchPP_Estimator(TraceEstimator):
 class XTraceEstimator(TraceEstimator):
     r"""Estimate traces with the XTrace estimator.
 
-    This module wraps the same trace estimator as `xtrace_estimator`. The current
-    implementation only supports `mode="forward"` and does not support Jacobian
-    power traces.
+    This module wraps the same trace estimator as `xtrace_estimator` and supports
+    both forward and adjoint Jacobian actions. It does not support Jacobian power
+    traces.
 
     Args:
         num_matvecs: Total matrix-vector product budget. XTrace uses
             `num_matvecs // 2` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         renormalize: Whether to apply the paper's renormalization.
-        mode: Jacobian action mode. Must be `"forward"`.
+        mode: Jacobian action mode. Must be `"forward"` or `"adjoint"`.
 
     Cost: $mN² + 𝓞(m³)$
         m is the number of matvecs (=2x`num_samples`),
@@ -1073,7 +1088,7 @@ class XTraceEstimator(TraceEstimator):
         12: tr ← mean(trᵢ: i=1…m/2)
     """
 
-    MODES: Final[frozenset[str]] = frozenset({"forward"})
+    MODES: Final[frozenset[str]] = frozenset({"forward", "adjoint"})
 
     num_matvecs: Final[int]
     num_samples: Final[int]
@@ -1106,7 +1121,7 @@ class XTraceEstimator(TraceEstimator):
         *,
         num_samples: int | None = None,
         sampler: str | AbstractSampler = Samplers.SPHERE,
-        mode: str = "forward",
+        mode: str = "adjoint",
         renormalize: bool = True,
     ) -> None:
         match num_samples, num_matvecs:
@@ -1141,7 +1156,12 @@ class XTraceEstimator(TraceEstimator):
             x: Evaluation point. Its shape, dtype, and device define the domain.
         """
         return xtrace_estimator(
-            op, x, self.num_matvecs, sampler=self.sampler, renormalize=self.renormalize
+            op,
+            x,
+            self.num_matvecs,
+            sampler=self.sampler,
+            mode=self.mode,
+            renormalize=self.renormalize,
         )
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -1152,7 +1172,12 @@ class XTraceEstimator(TraceEstimator):
         implementation in `forward` and `powers`.
         """
         return xtrace_naive_estimator(
-            op, x, self.num_matvecs, sampler=self.sampler, renormalize=self.renormalize
+            op,
+            x,
+            self.num_matvecs,
+            sampler=self.sampler,
+            mode=self.mode,
+            renormalize=self.renormalize,
         )
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -1207,7 +1232,7 @@ class LogabsdetSeriesEstimator(nn.Module):
         num_matvecs: int,
         num_terms: int,
         sampler: str | AbstractSampler = "sphere",
-        mode: str = "symmetric",
+        mode: str = "adjoint",
     ) -> None:
         super().__init__()
         self.num_matvecs = num_matvecs

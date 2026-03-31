@@ -31,13 +31,6 @@ def scaled_map(scale: Tensor):
     return op
 
 
-def linear_map(matrix: Tensor):
-    def op(x: Tensor, /) -> Tensor:
-        return torch.einsum("...ij, ...j -> ...i", matrix, x)
-
-    return op
-
-
 class OnesSampler:
     def __call__(
         self,
@@ -114,7 +107,10 @@ class TestExactEstimator:
         x = torch.zeros(matrix.shape[:-1], device=device)
         estimator = ExactTrace()
 
-        estimate = estimator(linear_map(matrix), x)
+        estimate = estimator(
+            lambda z: torch.einsum("...ij, ...j -> ...i", matrix, z),
+            x,
+        )
 
         expected = torch.einsum("...ii -> ...", matrix)
         torch.testing.assert_close(estimate, expected)
@@ -130,7 +126,9 @@ class TestExactEstimator:
         x = torch.zeros(matrix.shape[:-1], device=device)
         estimator = ExactTrace()
 
-        estimates = list(estimator.powers(linear_map(matrix), x, 3))
+        estimates = estimator.powers(
+            lambda z: torch.einsum("...ij, ...j -> ...i", matrix, z), x, 3
+        )
 
         expected = [
             torch.einsum("...ii -> ...", torch.linalg.matrix_power(matrix, power))
@@ -150,7 +148,10 @@ class TestExactEstimator:
         x = torch.zeros(matrix.shape[:-1], device=device)
         estimator = ExactTrace()
 
-        estimate = estimator.estimate_logabsdet(linear_map(matrix), x)
+        estimate = estimator.logabsdet(
+            lambda z: torch.einsum("...ij, ...j -> ...i", matrix, z),
+            x,
+        )
 
         eigenvalues = torch.linalg.eigvals(matrix)
         expected = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
@@ -191,7 +192,7 @@ class TestHutchinsonEstimator:
 
         samples = estimator.sampler((3, 5), 4, dtype=torch.float32, device=device)
 
-        assert isinstance(estimator.sampler, type(Samplers.new(Samplers.SIGN)))
+        assert isinstance(estimator.sampler, type(Samplers.SIGN))
         assert samples.shape == (3, 5, 4)
         assert torch.all((samples == -1) | (samples == +1))
 
@@ -387,24 +388,23 @@ class TestXTraceEstimator:
         torch.testing.assert_close(estimate, expected, atol=4.0, rtol=0.0)
 
     @pytest.mark.parametrize("mode", XTraceEstimator.MODES)
-    def test_xtrace_nonforward_modes_not_implemented(
-        self, device: str, mode: str
-    ) -> None:
-        fn, _ = self.make_test(device=device)
+    def test_xtrace_modes(self, device: str, mode: str) -> None:
+        fn, expected = self.make_test(device=device)
         x = torch.zeros(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
         estimator = XTraceEstimator(self.NUM_MATVECS, mode=mode)
-
-        with pytest.raises(
-            NotImplementedError,
-            match=f"XTraceEstimator only supports mode='forward', got '{mode}'",
-        ):
-            estimator(fn, x)
+        estimate = estimator(fn, x)
+        torch.testing.assert_close(estimate, expected, atol=4.0, rtol=0.0)
 
     def test_xtrace_corrected(self, device: str) -> None:
         fn, expected = self.make_test(device=device)
 
         x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device)
-        estimate = xtrace_estimator_matlab(vmap(fn, -2, -2), x, self.NUM_MATVECS)
+        estimate = xtrace_estimator_matlab(
+            vmap(fn, -2, -2),
+            x,
+            self.NUM_MATVECS,
+            sampler=Samplers.new(Samplers.SPHERE),
+        )
 
         torch.testing.assert_close(estimate, expected, atol=0.4, rtol=0.0)
 
