@@ -14,7 +14,7 @@ from typing import Final
 
 import torch
 from torch import Tensor, nn
-from torch.func import jacrev, vmap
+from torch.func import vjp, vmap
 from torch.linalg import slogdet
 
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
@@ -239,36 +239,14 @@ class ResidualBottleneck(TransformBase):
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         z = self.V(x)
-        h = self.U(self.bottleneck(z))
+        u = self.lift(z)
 
-        # SECTION: activation derivative
-        h = h.requires_grad_(True)
-        u = self.activation(h)
-        du, *_ = torch.autograd.grad(
-            u,
-            h,
-            grad_outputs=torch.ones_like(u),
-            create_graph=True,
-        )
-
-        # compute Dₛ = 𝐃ϕₛ(z)
-        batch_shape = z.shape[:-1]
-        z_flat = z.reshape(-1, self.hidden_size)
-        jac_fn = jacrev(
-            lambda z_single: self.bottleneck(z_single.unsqueeze(0)).squeeze(0)
-        )
-        batched_jac_fn = vmap(jac_fn)
-        ds = batched_jac_fn(z_flat).reshape(
-            *batch_shape, self.hidden_size, self.hidden_size
-        )
-
-        # log|det(𝕀ₙ + DᵤUDₛVᵀ)| = log|det(𝕀ₖ + VᵀDᵤUDₛ)|
-        vtduu = torch.einsum(
-            "ni,...nr->...ir",
-            self.V.weight.mT,
-            du.unsqueeze(-1) * self.U.weight,
-        )
-        matrix = self.eye + vtduu @ ds
+        # log|det(𝕀ₙ + 𝐃(Vᵀ lift)(z))| = log|det 𝐃(z + Vᵀ lift(z))|
+        eye_k = torch.eye(self.hidden_size, device=z.device, dtype=z.dtype)
+        eye_k = eye_k.expand(*z.shape, self.hidden_size)
+        _, vjp_fn, *_ = vjp(lambda w: w + self.V(self.lift(w)), z)
+        batched_vjp_fn = vmap(lambda w: vjp_fn(w)[0], -1, -1)
+        matrix = batched_vjp_fn(eye_k)
         _, logabsdet = slogdet(matrix)
         return x + u, logabsdet
 
