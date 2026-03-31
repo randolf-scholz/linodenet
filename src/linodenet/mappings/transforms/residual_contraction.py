@@ -206,33 +206,36 @@ class ResidualBottleneck(TransformBase):
         update_parametrizations(self)
 
     def encode(self, x: Tensor, /) -> Tensor:
-        z = x.matmul(self.weight_v)
+        # y = x + ϕᵤ(Uϕₛ(Vᵀx))
+        z = x @ self.weight_v
         s = self.bottleneck(z)
-        h = s.matmul(self.weight_u.mT)
+        h = s @ self.weight_u.mT
         u = self.activation(h)
+
         return x + u
 
     def decode(self, y: Tensor, /) -> Tensor:
-        vty = y.matmul(self.weight_v)
-        z = fixpoint_solve(
+        # z = Vᵀy
+        vty = y @ self.weight_v
+        # solve z = Vᵀy - Vᵀϕᵤ(Uϕₛ(z))
+        z_star = fixpoint_solve(
             lambda z: (
                 vty
-                - self.activation(self.bottleneck(z).matmul(self.weight_u.mT)).matmul(
-                    self.weight_v
-                )
+                - self.activation(self.bottleneck(z) @ self.weight_u.mT) @ self.weight_v
             ),
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,
         )
-        correction = self.activation(self.bottleneck(z).matmul(self.weight_u.mT))
+        # SECTION: x = y - ϕᵤ(Uϕₛ(z))
+        correction = self.activation(self.bottleneck(z_star) @ self.weight_u.mT)
         return y - correction
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        z = x.matmul(self.weight_v)
+        z = x @ self.weight_v
         s = self.bottleneck(z)
-        h = s.matmul(self.weight_u.mT)
+        h = s @ self.weight_u.mT
         u = self.activation(h)
 
         # SECTION: activation derivative
@@ -261,7 +264,7 @@ class ResidualBottleneck(TransformBase):
             self.weight_v,
             du.unsqueeze(-1) * self.weight_u,
         )
-        matrix = self.eye + vtduu.matmul(ds)
+        matrix = self.eye + vtduu @ ds
         _, logabsdet = torch.linalg.slogdet(matrix)
         return x + u, logabsdet
 
