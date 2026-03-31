@@ -13,6 +13,7 @@ __all__ = [
 ]
 
 from collections.abc import Iterable
+from typing import cast
 
 import torch
 from torch import Tensor, nn
@@ -20,7 +21,10 @@ from torch import Tensor, nn
 from signatures import signature
 
 
-class ReZero[M: nn.Module = nn.Identity](nn.Module):
+class ReZero[
+    M: nn.Module = nn.Identity,
+    S: nn.Module = nn.Identity,
+](nn.Module):
     r"""ReZero module.
 
     Simply multiplies the inputs by a scalar initialized to zero.
@@ -28,8 +32,10 @@ class ReZero[M: nn.Module = nn.Identity](nn.Module):
 
     scalar: Tensor
     r"""PARAM: The scalar to multiply the inputs by."""
-    scalar_map: nn.Module
+    scalar_map: S
     r"""MODULE: Map applied to the scalar before scaling the input."""
+    module: M
+    r"""MODULE: Map applied to the inputs before scaling them."""
 
     @property
     def config(self) -> dict:
@@ -43,12 +49,12 @@ class ReZero[M: nn.Module = nn.Identity](nn.Module):
         self,
         module: M | None = None,
         *,
-        scalar_map: nn.Module | None = None,
+        scalar_map: S | None = None,
     ) -> None:
         super().__init__()
         self.scalar = nn.Parameter(torch.tensor(0.0))
-        self.scalar_map: nn.Module = nn.Identity() if scalar_map is None else scalar_map
-        self.module: M | nn.Identity = nn.Identity() if module is None else module
+        self.scalar_map = cast("S", nn.Identity() if scalar_map is None else scalar_map)
+        self.module = cast("M", nn.Identity() if module is None else module)
 
     @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
