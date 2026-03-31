@@ -282,6 +282,7 @@ class LinODEnet(nn.Module):
         q: Tensor,
         t: Tensor,
         x: Tensor,
+        *,
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
