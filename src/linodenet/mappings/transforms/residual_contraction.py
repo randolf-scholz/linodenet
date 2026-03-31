@@ -149,8 +149,8 @@ class ResidualBottleneck(TransformBase):
     maxiter: Final[int]
     atol: Final[float]
     rtol: Final[float]
-    U: Tensor
-    V: Tensor
+    U: nn.Linear
+    V: nn.Linear
     bottleneck: nn.Module
     activation: nn.Module
     eye: Tensor
@@ -185,11 +185,19 @@ class ResidualBottleneck(TransformBase):
         self.rtol = rtol
         self.bottleneck = bottleneck
         self.activation = activation_module
-        self.U = nn.Parameter(
-            torch.empty(input_size, hidden_size, device=device, dtype=dtype)
+        self.U = nn.Linear(
+            hidden_size,
+            input_size,
+            bias=False,
+            device=device,
+            dtype=dtype,
         )
-        self.V = nn.Parameter(
-            torch.empty(input_size, hidden_size, device=device, dtype=dtype)
+        self.V = nn.Linear(
+            input_size,
+            hidden_size,
+            bias=False,
+            device=device,
+            dtype=dtype,
         )
         self.register_buffer(
             "eye",
@@ -198,30 +206,29 @@ class ResidualBottleneck(TransformBase):
         )
 
         self.reset_parameters()
-        register_parametrization(self, "U", OrthogonalHouseholder())
-        register_parametrization(self, "V", OrthogonalHouseholder())
-        self.parametrizations: nn.ModuleDict
+        register_parametrization(self.U, "weight", OrthogonalHouseholder())
+        register_parametrization(self.V, "weight", OrthogonalHouseholder(mode="rows"))
 
     def reset_parameters(self) -> None:
-        nn.init.kaiming_uniform_(self.U, a=sqrt(5))
-        nn.init.kaiming_uniform_(self.V, a=sqrt(5))
+        nn.init.kaiming_uniform_(self.U.weight, a=sqrt(5))
+        nn.init.kaiming_uniform_(self.V.weight, a=sqrt(5))
         update_parametrizations(self)
 
     def lift(self, z: Tensor, /) -> Tensor:
         r"""Compute $ϕᵤ(Uϕₛ(z))$ in row-vector convention."""
-        return self.activation(self.bottleneck(z) @ self.U.mH)
+        return self.activation(self.U(self.bottleneck(z)))
 
     def encode(self, x: Tensor, /) -> Tensor:
         # note: implementation uses transposed matrices (row-vector)
         # y = x + ϕᵤ(Uϕₛ(Vᵀx))
-        return x + self.lift(x @ self.V)
+        return x + self.lift(self.V(x))
 
     def decode(self, y: Tensor, /) -> Tensor:
         # note: implementation uses transposed matrices (row-vector)
         # solve z = Vᵀy - Vᵀϕᵤ(Uϕₛ(z)),  z = Vᵀx
-        vty = y @ self.V
+        vty = self.V(y)
         z_star = fixpoint_solve(
-            lambda z: vty - self.lift(z) @ self.V,
+            lambda z: vty - self.V(self.lift(z)),
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,
@@ -231,8 +238,8 @@ class ResidualBottleneck(TransformBase):
         return y - self.lift(z_star)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        z = x @ self.V
-        h = self.bottleneck(z) @ self.U.mH
+        z = self.V(x)
+        h = self.U(self.bottleneck(z))
 
         # SECTION: activation derivative
         h = h.requires_grad_(True)
@@ -258,8 +265,8 @@ class ResidualBottleneck(TransformBase):
         # SECTION: determinant lemma
         vtduu = torch.einsum(
             "ni,...nr->...ir",
-            self.V,
-            du.unsqueeze(-1) * self.U,
+            self.V.weight.mT,
+            du.unsqueeze(-1) * self.U.weight,
         )
         matrix = self.eye + vtduu @ ds
         _, logabsdet = slogdet(matrix)
