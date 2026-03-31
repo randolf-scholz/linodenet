@@ -141,51 +141,23 @@ class TestTransform(TestSuite):
         logdet_atol: float | None = None,
         logdet_rtol: float | None = None,
     ) -> None:
-        logdet_atol = atol if logdet_atol is None else logdet_atol
-        logdet_rtol = rtol if logdet_rtol is None else logdet_rtol
-
-        y_from_x = transform.encode(x)
-        x_from_y = transform.decode(y)
-        x_recovered = transform.decode(y_from_x)
-        y_recovered = transform.encode(x_from_y)
-        self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
-        self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
-
-        y_from_x, forward_logabsdet = transform.encode_and_logabsdet(x)
-        x_from_y, inverse_logabsdet = transform.decode_and_logabsdet(y)
-        x_recovered, recovered_inverse_logabsdet = transform.decode_and_logabsdet(
-            y_from_x
+        self.assert_right_invertible(transform, x, atol=atol, rtol=rtol)
+        self.assert_left_invertible(transform, y, atol=atol, rtol=rtol)
+        self.assert_right_invertible_with_logabsdet(
+            transform,
+            x,
+            atol=atol,
+            rtol=rtol,
+            logdet_atol=logdet_atol,
+            logdet_rtol=logdet_rtol,
         )
-        y_recovered, recovered_forward_logabsdet = transform.encode_and_logabsdet(
-            x_from_y
-        )
-        self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
-        self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
-        forward_cancellation_error = (
-            forward_logabsdet + recovered_inverse_logabsdet
-        ).abs()
-        forward_cancellation_bound = torch.maximum(
-            forward_logabsdet.abs(),
-            recovered_inverse_logabsdet.abs(),
-        )
-        self.assert_upper_bounded(
-            forward_cancellation_error,
-            forward_cancellation_bound,
-            atol=logdet_atol,
-            rtol=logdet_rtol,
-        )
-        inverse_cancellation_error = (
-            inverse_logabsdet + recovered_forward_logabsdet
-        ).abs()
-        inverse_cancellation_bound = torch.maximum(
-            inverse_logabsdet.abs(),
-            recovered_forward_logabsdet.abs(),
-        )
-        self.assert_upper_bounded(
-            inverse_cancellation_error,
-            inverse_cancellation_bound,
-            atol=logdet_atol,
-            rtol=logdet_rtol,
+        self.assert_left_invertible_with_logabsdet(
+            transform,
+            y,
+            atol=atol,
+            rtol=rtol,
+            logdet_atol=logdet_atol,
+            logdet_rtol=logdet_rtol,
         )
 
     def assert_dual(
