@@ -11,6 +11,11 @@ class ShiftScalar(nn.Module):
 
 
 class TestReZero(TestSuite):
+    def test_default_module_is_identity(self) -> None:
+        module = ReZero()
+
+        assert isinstance(module.module, nn.Identity)
+
     def test_default_scalar_map_is_identity(self) -> None:
         module = ReZero(nn.Identity())
 

@@ -13,7 +13,6 @@ __all__ = [
 ]
 
 from collections.abc import Iterable
-from typing import Optional
 
 import torch
 from torch import Tensor, nn
@@ -21,7 +20,7 @@ from torch import Tensor, nn
 from signatures import signature
 
 
-class ReZero[M: nn.Module](nn.Module):
+class ReZero[M: nn.Module = nn.Identity](nn.Module):
     r"""ReZero module.
 
     Simply multiplies the inputs by a scalar initialized to zero.
@@ -42,14 +41,14 @@ class ReZero[M: nn.Module](nn.Module):
 
     def __init__(
         self,
-        module: M,
+        module: M | None = None,
         *,
-        scalar_map: Optional[nn.Module] = None,
+        scalar_map: nn.Module | None = None,
     ) -> None:
         super().__init__()
         self.scalar = nn.Parameter(torch.tensor(0.0))
         self.scalar_map: nn.Module = nn.Identity() if scalar_map is None else scalar_map
-        self.module: M = module
+        self.module: M | nn.Identity = nn.Identity() if module is None else module
 
     @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
