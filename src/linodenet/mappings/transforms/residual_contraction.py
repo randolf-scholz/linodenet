@@ -161,7 +161,7 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         if use_rezero:
             match scalar_map:
                 case None | "smooth-softsign":
-                    scalar_map_module = SmoothSoftsign()
+                    scalar_map_module: nn.Module = SmoothSoftsign()
                 case "tanh":
                     scalar_map_module = TanhMap()
                 case str(other):
@@ -191,7 +191,7 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         )
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        return self.logabsdet_estimator(self.module, x)
+        return self.logabsdet_estimator(self.contraction, x)
 
 
 class ResidualContractionFallback[M: nn.Module](ResidualContraction[M]):
@@ -281,7 +281,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         if use_rezero:
             match scalar_map:
                 case None | "smooth-softsign":
-                    scalar_map_module = SmoothSoftsign()
+                    scalar_map_module: nn.Module = SmoothSoftsign()
                 case "tanh":
                     scalar_map_module = TanhMap()
                 case str(other):

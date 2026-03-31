@@ -40,7 +40,7 @@ class TestReZero(TestSuite):
             nn.ReLU(),
             LinearContraction(2 * self.INPUT_SIZE, self.INPUT_SIZE),
         )
-        module = ResidualContraction(contraction)
+        module = ResidualContraction(contraction, use_rezero=True)
         module = module.to(dtype=dtype, device=device)
         update_parametrizations(module)  # Important after .to()
         return module
