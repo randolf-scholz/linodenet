@@ -54,8 +54,9 @@ class ResidualContraction(TransformBase):
         self.atol = atol
         self.rtol = rtol
 
+    @property
     @abstractmethod
-    def contraction(self, x: Tensor, /) -> Tensor: ...
+    def contraction(self, /) -> nn.Module: ...
 
     def encode(self, x: Tensor, /) -> Tensor:
         r"""Compute the forward residual map $y = x + g(x)$."""
@@ -147,7 +148,7 @@ class IResNetContraction[M: nn.Module](ResidualContraction):
         trace_mode: str = "adjoint",
     ) -> None:
         super().__init__(maxiter=maxiter, atol=atol, rtol=rtol)
-        self.module = contraction
+        self.contraction = contraction
         self.num_trace_samples = trace_matvecs
         self.num_series_terms = num_series_terms
         self.trace_estimator = trace_estimator
@@ -158,9 +159,6 @@ class IResNetContraction[M: nn.Module](ResidualContraction):
             sampler=trace_probe_sampler,
             mode=trace_mode,
         )
-
-    def contraction(self, x: Tensor, /) -> Tensor:
-        return self.module(x)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         return self.logabsdet_estimator(self.module, x)
@@ -178,7 +176,7 @@ class IReZeroContraction[M: nn.Module](IResNetContraction[ReZero[M]]):
         - `ResidualContractionFallback`
     """
 
-    module: ReZero[M]
+    contraction: ReZero[M]
     scalar: Tensor
     scalar_map: nn.Module
 
@@ -204,9 +202,9 @@ class IReZeroContraction[M: nn.Module](IResNetContraction[ReZero[M]]):
                 raise ValueError(f"Unknown scalar map {other}")
             case _:
                 scalar_map_module = scalar_map
-        rezero = ReZero(contraction, scalar_map=scalar_map_module)
+
         super().__init__(
-            rezero,
+            ReZero(contraction, scalar_map=scalar_map_module),
             maxiter=maxiter,
             atol=atol,
             rtol=rtol,
@@ -214,9 +212,8 @@ class IReZeroContraction[M: nn.Module](IResNetContraction[ReZero[M]]):
             num_series_terms=num_series_terms,
             trace_estimator=trace_estimator,
         )
-        self.module: ReZero[M]
-        self.scalar = self.module.scalar
-        self.scalar_map = self.module.scalar_map
+        self.scalar = self.contraction.scalar
+        self.scalar_map = self.contraction.scalar_map
 
 
 class ResidualContractionFallback(IResNetContraction):
