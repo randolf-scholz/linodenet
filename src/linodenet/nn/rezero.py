@@ -22,8 +22,8 @@ from signatures import signature
 
 
 class ReZero[
-    M: nn.Module = nn.Identity,
-    S: nn.Module = nn.Identity,
+    M: nn.Module = nn.Module,
+    S: nn.Module = nn.Module,
 ](nn.Module):
     r"""ReZero module.
 
@@ -45,16 +45,16 @@ class ReZero[
             "scalar_map": self.scalar_map,
         }
 
-    def __init__(
-        self,
-        module: M | None = None,
+    def __init__[U: nn.Module = nn.Identity, V: nn.Module = nn.Identity](
+        self: ReZero[U, V],
+        module: U | None = None,
         *,
-        scalar_map: S | None = None,
+        scalar_map: V | None = None,
     ) -> None:
         super().__init__()
         self.scalar = nn.Parameter(torch.tensor(0.0))
-        self.scalar_map = cast("S", nn.Identity() if scalar_map is None else scalar_map)
-        self.module = cast("M", nn.Identity() if module is None else module)
+        self.module = cast("U", nn.Identity() if module is None else module)
+        self.scalar_map = cast("V", nn.Identity() if scalar_map is None else scalar_map)
 
     @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
