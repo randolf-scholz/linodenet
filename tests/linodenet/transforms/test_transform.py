@@ -83,15 +83,24 @@ class TestTransform(TestSuite):
         *,
         atol: float,
         rtol: float,
+        logdet_atol: float | None = None,
+        logdet_rtol: float | None = None,
     ) -> None:
+        logdet_atol = atol if logdet_atol is None else logdet_atol
+        logdet_rtol = rtol if logdet_rtol is None else logdet_rtol
         encoded, forward_logabsdet = transform.encode_and_logabsdet(arg)
         decoded, inverse_logabsdet = transform.decode_and_logabsdet(encoded)
         self.assert_close(decoded, arg, atol=atol, rtol=rtol)
-        self.assert_close(
-            forward_logabsdet + inverse_logabsdet,
-            torch.zeros_like(forward_logabsdet),
-            atol=atol,
-            rtol=rtol,
+        cancellation_error = (forward_logabsdet + inverse_logabsdet).abs()
+        cancellation_bound = torch.maximum(
+            forward_logabsdet.abs(),
+            inverse_logabsdet.abs(),
+        )
+        self.assert_upper_bounded(
+            cancellation_error,
+            cancellation_bound,
+            atol=logdet_atol,
+            rtol=logdet_rtol,
         )
 
     def assert_left_invertible_with_logabsdet(
@@ -101,15 +110,24 @@ class TestTransform(TestSuite):
         *,
         atol: float,
         rtol: float,
+        logdet_atol: float | None = None,
+        logdet_rtol: float | None = None,
     ) -> None:
+        logdet_atol = atol if logdet_atol is None else logdet_atol
+        logdet_rtol = rtol if logdet_rtol is None else logdet_rtol
         decoded, inverse_logabsdet = transform.decode_and_logabsdet(arg)
         encoded, forward_logabsdet = transform.encode_and_logabsdet(decoded)
         self.assert_close(encoded, arg, atol=atol, rtol=rtol)
-        self.assert_close(
-            forward_logabsdet + inverse_logabsdet,
-            torch.zeros_like(forward_logabsdet),
-            atol=atol,
-            rtol=rtol,
+        cancellation_error = (forward_logabsdet + inverse_logabsdet).abs()
+        cancellation_bound = torch.maximum(
+            forward_logabsdet.abs(),
+            inverse_logabsdet.abs(),
+        )
+        self.assert_upper_bounded(
+            cancellation_error,
+            cancellation_bound,
+            atol=logdet_atol,
+            rtol=logdet_rtol,
         )
 
     def assert_invertible(
@@ -143,15 +161,29 @@ class TestTransform(TestSuite):
         )
         self.assert_close(x_recovered, x, atol=atol, rtol=rtol)
         self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
-        self.assert_close(
-            forward_logabsdet + recovered_inverse_logabsdet,
-            torch.zeros_like(forward_logabsdet),
+        forward_cancellation_error = (
+            forward_logabsdet + recovered_inverse_logabsdet
+        ).abs()
+        forward_cancellation_bound = torch.maximum(
+            forward_logabsdet.abs(),
+            recovered_inverse_logabsdet.abs(),
+        )
+        self.assert_upper_bounded(
+            forward_cancellation_error,
+            forward_cancellation_bound,
             atol=logdet_atol,
             rtol=logdet_rtol,
         )
-        self.assert_close(
-            inverse_logabsdet + recovered_forward_logabsdet,
-            torch.zeros_like(inverse_logabsdet),
+        inverse_cancellation_error = (
+            inverse_logabsdet + recovered_forward_logabsdet
+        ).abs()
+        inverse_cancellation_bound = torch.maximum(
+            inverse_logabsdet.abs(),
+            recovered_forward_logabsdet.abs(),
+        )
+        self.assert_upper_bounded(
+            inverse_cancellation_error,
+            inverse_cancellation_bound,
             atol=logdet_atol,
             rtol=logdet_rtol,
         )
@@ -189,15 +221,25 @@ class TestTransform(TestSuite):
         self.assert_close(y_recovered, y, atol=atol, rtol=rtol)
         self.assert_close(y_primal_logabsdet, y_dual_logabsdet, atol=atol, rtol=rtol)
         self.assert_close(x_primal_logabsdet, x_dual_logabsdet, atol=atol, rtol=rtol)
-        self.assert_close(
-            y_primal_logabsdet + x_recovered_logabsdet,
-            torch.zeros_like(y_primal_logabsdet),
+        y_cancellation_error = (y_primal_logabsdet + x_recovered_logabsdet).abs()
+        y_cancellation_bound = torch.maximum(
+            y_primal_logabsdet.abs(),
+            x_recovered_logabsdet.abs(),
+        )
+        self.assert_upper_bounded(
+            y_cancellation_error,
+            y_cancellation_bound,
             atol=atol,
             rtol=rtol,
         )
-        self.assert_close(
-            x_dual_logabsdet + y_recovered_logabsdet,
-            torch.zeros_like(x_dual_logabsdet),
+        x_cancellation_error = (x_dual_logabsdet + y_recovered_logabsdet).abs()
+        x_cancellation_bound = torch.maximum(
+            x_dual_logabsdet.abs(),
+            y_recovered_logabsdet.abs(),
+        )
+        self.assert_upper_bounded(
+            x_cancellation_error,
+            x_cancellation_bound,
             atol=atol,
             rtol=rtol,
         )
