@@ -251,7 +251,7 @@ class ResidualBottleneck(TransformBase):
             create_graph=True,
         )
 
-        # SECTION: bottleneck jacobian
+        # compute Dₛ = 𝐃ϕₛ(z)
         batch_shape = z.shape[:-1]
         z_flat = z.reshape(-1, self.hidden_size)
         jac_fn = jacrev(
@@ -262,7 +262,7 @@ class ResidualBottleneck(TransformBase):
             *batch_shape, self.hidden_size, self.hidden_size
         )
 
-        # SECTION: determinant lemma
+        # log|det(𝕀ₙ + DᵤUDₛVᵀ)| = log|det(𝕀ₖ + VᵀDᵤUDₛ)|
         vtduu = torch.einsum(
             "ni,...nr->...ir",
             self.V.weight.mT,
