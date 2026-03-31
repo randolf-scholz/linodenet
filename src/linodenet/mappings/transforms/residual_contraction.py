@@ -209,7 +209,7 @@ class ResidualBottleneck(TransformBase):
         # y = x + ϕᵤ(Uϕₛ(Vᵀx))
         z = x @ self.V
         s = self.bottleneck(z)
-        h = s @ self.U.mT
+        h = s @ self.U.mH
         u = self.activation(h)
 
         return x + u
@@ -219,20 +219,20 @@ class ResidualBottleneck(TransformBase):
         vty = y @ self.V
         # solve z = Vᵀy - Vᵀϕᵤ(Uϕₛ(z))
         z_star = fixpoint_solve(
-            lambda z: vty - self.activation(self.bottleneck(z) @ self.U.mT) @ self.V,
+            lambda z: vty - self.activation(self.bottleneck(z) @ self.U.mH) @ self.V,
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,
         )
         # SECTION: x = y - ϕᵤ(Uϕₛ(z))
-        correction = self.activation(self.bottleneck(z_star) @ self.U.mT)
+        correction = self.activation(self.bottleneck(z_star) @ self.U.mH)
         return y - correction
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         z = x @ self.V
         s = self.bottleneck(z)
-        h = s @ self.U.mT
+        h = s @ self.U.mH
         u = self.activation(h)
 
         # SECTION: activation derivative
