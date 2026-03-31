@@ -277,7 +277,7 @@ class TestCorrectness(TestSuite):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("trace_estimator", ["hutch", "xtrace"])
+@pytest.mark.parametrize("trace_estimator", ["hutch", "hutch++"])
 class TestLogAbsDet(TestSuite):
     BATCH_SIZE = 8
     INPUT_SIZE = 4
