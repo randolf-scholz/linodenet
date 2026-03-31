@@ -14,6 +14,8 @@ from typing import Final
 
 import torch
 from torch import Tensor, nn
+from torch.func import jacrev, vmap
+from torch.linalg import slogdet
 
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet.mappings.nonlinear_contractions import get_nonlinear_contraction
@@ -245,10 +247,10 @@ class ResidualBottleneck(TransformBase):
         # SECTION: bottleneck jacobian
         batch_shape = z.shape[:-1]
         z_flat = z.reshape(-1, self.hidden_size)
-        jac_fn = torch.func.jacrev(
+        jac_fn = jacrev(
             lambda z_single: self.bottleneck(z_single.unsqueeze(0)).squeeze(0)
         )
-        batched_jac_fn = torch.func.vmap(jac_fn)
+        batched_jac_fn = vmap(jac_fn)
         ds = batched_jac_fn(z_flat).reshape(
             *batch_shape, self.hidden_size, self.hidden_size
         )
@@ -260,7 +262,7 @@ class ResidualBottleneck(TransformBase):
             du.unsqueeze(-1) * self.U,
         )
         matrix = self.eye + vtduu @ ds
-        _, logabsdet = torch.linalg.slogdet(matrix)
+        _, logabsdet = slogdet(matrix)
         return x + u, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
