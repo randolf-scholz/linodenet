@@ -54,9 +54,8 @@ class ResidualContraction(TransformBase):
         self.atol = atol
         self.rtol = rtol
 
-    @property
     @abstractmethod
-    def contraction(self, /) -> nn.Module: ...
+    def contraction(self, x: Tensor, /) -> Tensor: ...
 
     def encode(self, x: Tensor, /) -> Tensor:
         r"""Compute the forward residual map $y = x + g(x)$."""
@@ -129,10 +128,11 @@ class IResNetContraction[M: nn.Module](ResidualContraction):
         - `ResidualContractionFallback`: Uses a plain python loop rather than `torch.while_loop`.
     """
 
+    # pyrefly: ignore[bad-override]
+    contraction: M
     num_trace_samples: Final[int]
     num_series_terms: Final[int]
     trace_estimator: Final[str]
-    module: M
 
     def __init__(
         self,
@@ -148,7 +148,7 @@ class IResNetContraction[M: nn.Module](ResidualContraction):
         trace_mode: str = "adjoint",
     ) -> None:
         super().__init__(maxiter=maxiter, atol=atol, rtol=rtol)
-        self.contraction = contraction
+        self.contraction: M = contraction  # pyright: ignore[reportIncompatibleMethodOverride]
         self.num_trace_samples = trace_matvecs
         self.num_series_terms = num_series_terms
         self.trace_estimator = trace_estimator
@@ -392,7 +392,7 @@ class ResidualBottleneck[B: nn.Module](ResidualContraction):
         return y - self.lift(z_star)
 
 
-class ReZeroBottleneck[B: nn.Module](ResidualBottleneck[ReZero[B]]):
+class ReZeroBottleneck[B: nn.Module](ResidualBottleneck[B]):
     r"""Residual bottleneck with a learnable ReZero-scaled bottleneck module.
 
     .. math:: y = x + ϕᵤ(U (φ(ε)⋅f)(Vx))
@@ -401,7 +401,7 @@ class ReZeroBottleneck[B: nn.Module](ResidualBottleneck[ReZero[B]]):
     initialized at zero.
     """
 
-    bottleneck: ReZero[B]
+    bottleneck: B
     scalar: Tensor
     scalar_map: nn.Module
 
@@ -420,6 +420,18 @@ class ReZeroBottleneck[B: nn.Module](ResidualBottleneck[ReZero[B]]):
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
+        super().__init__(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            bottleneck=bottleneck,
+            activation=activation,
+            use_bias=use_bias,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
+            device=device,
+            dtype=dtype,
+        )
         scalar_map_module: nn.Module
         match scalar_map:
             case None | "smooth-softsign":
@@ -431,18 +443,10 @@ class ReZeroBottleneck[B: nn.Module](ResidualBottleneck[ReZero[B]]):
             case _:
                 scalar_map_module = scalar_map
 
-        super().__init__(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            bottleneck=ReZero(bottleneck, scalar_map=scalar_map_module),
-            activation=activation,
-            use_bias=use_bias,
-            maxiter=maxiter,
-            atol=atol,
-            rtol=rtol,
-            device=device,
-            dtype=dtype,
-        )
-        self.bottleneck: ReZero[B]
-        self.scalar = self.bottleneck.scalar
-        self.scalar_map = self.bottleneck.scalar_map
+        self.rezero = ReZero(scalar_map=scalar_map_module)
+        self.scalar = self.rezero.scalar
+        self.scalar_map = self.rezero.scalar_map
+
+    def lift(self, z: Tensor, /) -> Tensor:
+        r"""Compute $ϕᵤ(Uϕₛ(z))$."""
+        return self.rezero(self.activation(self.U(self.bottleneck(z))))
