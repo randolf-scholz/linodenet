@@ -12,22 +12,16 @@ without increasing the global Lipschitz bound.
 __all__ = [
     "NonlinearContractionSpec",
     "LipschitzAttainment",
+    # enums
     "ScalarContraction",
     "NonExpansiveMapping",
-    "NON_EXPANSIVE_MAPPINGS",
-    "NONLINEAR_CONTRACTIONS",
-    "STRICT_NONLINEAR_CONTRACTIONS",
-    "list_nonlinear_contractions",
+    # functions
     "get_nonlinear_contraction",
-    "elu_contraction",
-    "celu_contraction",
-    "leaky_relu_contraction",
 ]
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
 
 from torch import nn
 
@@ -215,21 +209,21 @@ class NonExpansiveMapping(StrEnum):
                 )
             case NonExpansiveMapping.ELU:
                 return NonlinearContractionSpec(
-                    factory=elu_contraction,
+                    factory=nn.ELU,
                     lipschitz_bound=1.0,
                     attainment=LipschitzAttainment.INFINITE_SET,
                     note="Certified for alpha <= 1 only.",
                 )
             case NonExpansiveMapping.CELU:
                 return NonlinearContractionSpec(
-                    factory=celu_contraction,
+                    factory=nn.CELU,
                     lipschitz_bound=1.0,
                     attainment=LipschitzAttainment.INFINITE_SET,
                     note="Certified for alpha <= 1 only.",
                 )
             case NonExpansiveMapping.LEAKY_RELU:
                 return NonlinearContractionSpec(
-                    factory=leaky_relu_contraction,
+                    factory=nn.LeakyReLU,
                     lipschitz_bound=1.0,
                     attainment=LipschitzAttainment.INFINITE_SET,
                     note="Certified for 0 <= negative_slope <= 1 only.",
@@ -244,76 +238,6 @@ class NonExpansiveMapping(StrEnum):
         except ValueError as err:
             msg = f"Unknown non-expansive mapping: {name!r}."
             raise KeyError(msg) from err
-
-
-def elu_contraction(*, alpha: float = 1.0) -> nn.ELU:
-    r"""Return an ELU activation with certified Lipschitz constant at most $1$."""
-    if not 0 < alpha <= 1:
-        raise ValueError(f"Expected 0 < alpha <= 1, got {alpha=}.")
-    return nn.ELU(alpha=alpha)
-
-
-def celu_contraction(*, alpha: float = 1.0) -> nn.CELU:
-    r"""Return a CELU activation with certified Lipschitz constant at most $1$."""
-    if not 0 < alpha <= 1:
-        raise ValueError(f"Expected 0 < alpha <= 1, got {alpha=}.")
-    return nn.CELU(alpha=alpha)
-
-
-def leaky_relu_contraction(*, negative_slope: float = 1e-2) -> nn.LeakyReLU:
-    r"""Return a LeakyReLU activation with certified Lipschitz constant at most $1$."""
-    if not 0 <= negative_slope <= 1:
-        raise ValueError(f"Expected 0 <= negative_slope <= 1, got {negative_slope=}.")
-    return nn.LeakyReLU(negative_slope=negative_slope)
-
-
-NON_EXPANSIVE_MAPPINGS: Final[dict[str, NonlinearContractionSpec]] = {
-    mapping.value: mapping.spec for mapping in NonExpansiveMapping
-}
-r"""Non-expansive maps whose unit bound is attained on an infinite set."""
-
-SCALAR_CONTRACTIONS: Final[dict[str, NonlinearContractionSpec]] = {
-    contraction.value: contraction.spec for contraction in ScalarContraction
-}
-r"""Scalar contraction maps collected from `ScalarContraction`."""
-
-assert len(
-    _combined := list(SCALAR_CONTRACTIONS) + list(NON_EXPANSIVE_MAPPINGS)
-) == len(set(_combined)), "duplicate names across contraction groups"
-
-NONLINEAR_CONTRACTIONS: Final[dict[str, NonlinearContractionSpec]] = {
-    **SCALAR_CONTRACTIONS,
-    **NON_EXPANSIVE_MAPPINGS,
-}
-r"""Known non-linear contractions and non-expansive activations."""
-
-STRICT_NONLINEAR_CONTRACTIONS: Final[dict[str, NonlinearContractionSpec]] = {
-    name: spec
-    for name, spec in NONLINEAR_CONTRACTIONS.items()
-    if spec.lipschitz_bound < 1.0
-}
-r"""Subset of maps with certified global Lipschitz bound strictly below $1$."""
-
-
-def list_nonlinear_contractions(*, strict: bool | None = None) -> tuple[str, ...]:
-    r"""Return the available contraction names.
-
-    Args:
-        strict: If `True`, only return strict contractions. If `False`, only
-            return the non-strict entries. If `None`, return all entries.
-    """
-    match strict:
-        case True:
-            source = STRICT_NONLINEAR_CONTRACTIONS
-        case False:
-            source = {
-                name: spec
-                for name, spec in NONLINEAR_CONTRACTIONS.items()
-                if spec.lipschitz_bound >= 1.0
-            }
-        case None:
-            source = NONLINEAR_CONTRACTIONS
-    return tuple(source)
 
 
 def get_nonlinear_contraction(name: str, /) -> nn.Module:
