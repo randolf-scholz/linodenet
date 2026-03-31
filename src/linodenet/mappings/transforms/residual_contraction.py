@@ -2,10 +2,11 @@ r"""ContractiveFlow implementation (iResNet-block)."""
 
 __all__ = [
     "ResidualContraction",
-    "IResNetContraction",
-    "ResidualBottleneck",
-    "ReZeroBottleneck",
+    # Classes
     "IReZeroContraction",
+    "IResNetContraction",
+    "ReZeroBottleneck",
+    "ResidualBottleneck",
     "ResidualContractionFallback",
 ]
 
@@ -368,15 +369,13 @@ class ResidualBottleneck[B: nn.Module](ResidualContraction):
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         z = self.V(x)
-        u = self.lift(z)
-
         # log|det(𝕀ₙ + 𝐃(Vᵀ lift)(z))| = log|det 𝐃(z + Vᵀ lift(z))|
         # materialize the low-rank jacobian of the latent map with vjp
         _, vjp_fn, *_ = vjp(self.latent_map, z)
         batched_vjp_fn = vmap(lambda w: vjp_fn(w)[0], -1, -1)
         matrix = batched_vjp_fn(self.eye.expand(*z.shape, self.hidden_size))
         _, logabsdet = slogdet(matrix)
-        return x + u, logabsdet
+        return x + self.lift(z), logabsdet
 
     def decode(self, y: Tensor, /) -> Tensor:
         # solve z = Vy + b - Vϕᵤ(Uϕₛ(z)),  z = Vx + b
