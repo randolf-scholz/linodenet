@@ -1,5 +1,4 @@
 import itertools
-import math
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -11,6 +10,7 @@ import matplotlib.pyplot as plt
 import pytest
 import torch
 from torch import Tensor
+from torch.linalg import matrix_norm
 
 from linodenet_special.trace_estimation import (
     HutchinsonEstimator,
@@ -303,6 +303,7 @@ class TestTraceEstimator(TestSuite):
         self,
         /,
         *,
+        rank: int,
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
@@ -320,7 +321,6 @@ class TestTraceEstimator(TestSuite):
             device=device,
             generator=generator,
         )
-        rank = math.ceil(math.cbrt(input_size))
         spectrum = torch.cat(
             [
                 torch.ones(rank, device=device, dtype=dtype),
@@ -350,6 +350,7 @@ class TestTraceEstimator(TestSuite):
         self,
         /,
         *,
+        rank: int,
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
@@ -358,6 +359,7 @@ class TestTraceEstimator(TestSuite):
         c: float = 0.97,
     ) -> TraceCase:
         test_case = self.make_low_rank(
+            rank=rank,
             seed=seed,
             batch_size=batch_size,
             input_size=input_size,
@@ -387,10 +389,163 @@ class TestTraceEstimator(TestSuite):
         q, _ = torch.linalg.qr(gaussian)
         return q
 
+    def assert_trace_close(
+        self,
+        name: str,
+        test_case: TraceCase,
+        /,
+        *,
+        atol: float,
+        num_matvecs: int,
+        device: str,
+        debug: bool = False,
+    ) -> None:
+        torch.manual_seed(self.SEED)
+
+        estimator = TraceEstimators.new(
+            name,
+            num_matvecs=num_matvecs,
+            mode="reverse",
+            sampler="sphere",
+        ).to(device=device)
+
+        x = torch.zeros(
+            test_case.matrix.shape[0],
+            test_case.matrix.shape[-1],
+            device=device,
+            dtype=test_case.matrix.dtype,
+        )
+        matrix = test_case.matrix
+        estimate = estimator(
+            lambda z: torch.einsum("...ji, ...j -> ...i", matrix, z),
+            x,
+        )
+
+        expected = test_case.trace
+        errors = estimate - expected
+        norms = matrix_norm(matrix, ord="nuc")
+        eps = torch.finfo(norms.dtype).eps
+        scaled_rmse = (errors / norms.clamp_min(eps)).square().mean().sqrt()
+        mean_relative_error = (errors.abs() / expected.abs().clamp_min(eps)).mean()
+
+        if debug:
+            print(
+                f"{name=:8s} "
+                f"scaled_rmse={scaled_rmse.item():.4e} "
+                f"mean_relative_error={mean_relative_error.item():.4e}"
+            )
+            return
+
+        self.assert_upper_bounded(scaled_rmse, 0.0, atol=atol, rtol=0.0)
+
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestTraceCorrectness(TestTraceEstimator):
-    pass
+    BATCH_SIZE = 8
+    PROBLEM_SIZE = 128
+    PROBLEM_RANK = 6
+    NUM_MATVECS = 16
+    SEED = 0
+    TOLERANCES: dict[tuple[str, str], float] = {
+        ("diagonal", TraceEstimators.EXACT): 1e-5,
+        ("diagonal", TraceEstimators.HUTCH): 2e-2,
+        ("diagonal", TraceEstimators.HUTCH_PP): 3e-2,
+        ("diagonal", TraceEstimators.XTRACE): 2e-2,
+        ("ldu", TraceEstimators.EXACT): 1e-5,
+        ("ldu", TraceEstimators.HUTCH): 6e-2,
+        ("ldu", TraceEstimators.HUTCH_PP): 7e-2,
+        ("ldu", TraceEstimators.XTRACE): 5e-2,
+        ("low_rank", TraceEstimators.EXACT): 1e-5,
+        ("low_rank", TraceEstimators.HUTCH): 2.5e-1,
+        ("low_rank", TraceEstimators.HUTCH_PP): 1e-1,
+        ("low_rank", TraceEstimators.XTRACE): 1e-4,
+    }
+
+    @pytest.mark.parametrize("name", TraceEstimators, ids=str)
+    def test_diagonal(self, name: str, device: str) -> None:
+        test_case = self.make_diagonal(
+            batch_size=self.BATCH_SIZE,
+            input_size=self.PROBLEM_SIZE,
+            device=device,
+        )
+        self.assert_trace_close(
+            name,
+            test_case,
+            atol=self.TOLERANCES["diagonal", name],
+            num_matvecs=self.NUM_MATVECS,
+            device=device,
+        )
+
+    @pytest.mark.parametrize("name", TraceEstimators, ids=str)
+    def test_ldu(self, name: str, device: str) -> None:
+        test_case = self.make_ldu(
+            batch_size=self.BATCH_SIZE,
+            input_size=self.PROBLEM_SIZE,
+            device=device,
+        )
+        self.assert_trace_close(
+            name,
+            test_case,
+            atol=self.TOLERANCES["ldu", name],
+            num_matvecs=self.NUM_MATVECS,
+            device=device,
+        )
+
+    @pytest.mark.parametrize("name", TraceEstimators, ids=str)
+    def test_low_rank(self, name: str, device: str) -> None:
+        test_case = self.make_low_rank(
+            rank=self.PROBLEM_RANK,
+            batch_size=self.BATCH_SIZE,
+            input_size=self.PROBLEM_SIZE,
+            device=device,
+        )
+        self.assert_trace_close(
+            name,
+            test_case,
+            atol=self.TOLERANCES["low_rank", name],
+            num_matvecs=self.NUM_MATVECS,
+            device=device,
+        )
+
+    @pytest.mark.parametrize("name", TraceEstimators, ids=str)
+    def test_calibration(self, name: str, device: str) -> None:
+        print()
+        for label, test_case in (
+            (
+                "diagonal",
+                self.make_diagonal(
+                    batch_size=self.BATCH_SIZE,
+                    input_size=self.PROBLEM_SIZE,
+                    device=device,
+                ),
+            ),
+            (
+                "ldu",
+                self.make_ldu(
+                    batch_size=self.BATCH_SIZE,
+                    input_size=self.PROBLEM_SIZE,
+                    device=device,
+                ),
+            ),
+            (
+                "low_rank",
+                self.make_low_rank(
+                    rank=self.PROBLEM_RANK,
+                    batch_size=self.BATCH_SIZE,
+                    input_size=self.PROBLEM_SIZE,
+                    device=device,
+                ),
+            ),
+        ):
+            print(f"{device=}, {label=}")
+            self.assert_trace_close(
+                name,
+                test_case,
+                atol=self.TOLERANCES[label, name],
+                num_matvecs=self.NUM_MATVECS,
+                device=device,
+                debug=True,
+            )
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -402,6 +557,7 @@ class TestPowersCorrectness(TestTraceEstimator):
 class TestLogAbsDetCorrectness(TestTraceEstimator):
     BATCH_SIZE = 4
     PROBLEM_SIZE = 128
+    PROBLEM_RANK = 6
     NUM_MATVECS = 16
     NUM_TERMS = 8
     SEED = 0
@@ -441,6 +597,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
     def test_low_rank_contraction(self, name: str, device: str) -> None:
         test_case = self.make_low_rank_contraction(
+            rank=self.PROBLEM_RANK,
             input_size=self.PROBLEM_SIZE,
             device=device,
         )
@@ -479,6 +636,7 @@ def test_logabsdet_estimator_accepts_hutchinson_alias() -> None:
 class TestVisualizations(TestTraceEstimator):
     BATCH_SIZE = 32
     INPUT_SIZE = 256
+    LOW_RANK = 7
     DEVICE = "cpu"
     NUM_MATVECS_GRID = (1, 2, 4, 8, 16, 32, 64, 128, 256)
     METHODS: dict[str, tuple[str, str, str, dict]] = {
@@ -641,7 +799,7 @@ class TestVisualizations(TestTraceEstimator):
 
     @torch.no_grad()
     def test_low_rank(self) -> None:
-        test_case = self.make_low_rank(device=self.DEVICE)
+        test_case = self.make_low_rank(rank=self.LOW_RANK, device=self.DEVICE)
         curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
