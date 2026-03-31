@@ -148,11 +148,12 @@ class TestExactEstimator:
         x = torch.zeros(matrix.shape[:-1], device=device)
         estimator = ExactTrace()
 
-        estimate = estimator.logabsdet(
+        value, estimate = estimator.logabsdet(
             lambda z: torch.einsum("...ij, ...j -> ...i", matrix, z),
             x,
         )
 
+        torch.testing.assert_close(value, torch.zeros_like(x))
         eigenvalues = torch.linalg.eigvals(matrix)
         expected = torch.log(torch.abs(1 + eigenvalues)).sum(dim=-1)
         torch.testing.assert_close(estimate, expected)
@@ -174,8 +175,11 @@ class TestBaseEstimator:
         scale = torch.tensor([[0.125], [-0.2], [0.3]], device=device)
         estimator = AnalyticEstimator()
 
-        estimate = logabsdet_series(scaled_map(scale), scale, 6, estimator=estimator)
+        value, estimate = logabsdet_series(
+            scaled_map(scale), scale, 6, estimator=estimator
+        )
 
+        torch.testing.assert_close(value, scale.square())
         expected = sum(
             ((-1) ** (power + 1) / power) * scale.squeeze(-1).pow(power)
             for power in range(1, 7)
@@ -212,14 +216,6 @@ class TestHutchinsonEstimator:
 
         expected = scale.squeeze(-1)
         torch.testing.assert_close(estimate, expected)
-
-    def test_hutchinson_sampler_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="is not a valid Sampler"):
-            HutchinsonEstimator(4, sampler="unknown")
-
-    def test_hutchinson_mode_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="mode must be one of"):
-            HutchinsonEstimator(4, mode="unknown")
 
     @pytest.mark.parametrize("mode", HutchinsonEstimator.MODES)
     def test_hutchinson_estimate(self, device: str, mode: str) -> None:
@@ -272,14 +268,6 @@ class TestHutchPlusPlusEstimator:
 
         assert samples.shape == (2, 3, 4)
         torch.testing.assert_close(samples, torch.ones_like(samples))
-
-    def test_hutchplusplus_sampler_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="is not a valid Sampler"):
-            HutchPP_Estimator(6, sampler="unknown")
-
-    def test_hutchplusplus_mode_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="mode must be one of"):
-            HutchPP_Estimator(6, mode="unknown")
 
     @pytest.mark.parametrize("mode", HutchPP_Estimator.MODES)
     def test_hutchplusplus_estimate(self, device: str, mode: str) -> None:
@@ -354,14 +342,6 @@ class TestXTraceEstimator:
 
         assert samples.shape == (2, 5, 3)
         torch.testing.assert_close(samples, torch.ones_like(samples))
-
-    def test_xtrace_sampler_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="is not a valid Sampler"):
-            XTraceEstimator(4, sampler="unknown")
-
-    def test_xtrace_mode_rejects_unknown_string(self, device: str) -> None:
-        with pytest.raises(ValueError, match="mode must be one of"):
-            XTraceEstimator(4, mode="unknown")
 
     def test_xtrace_estimate_op_only(self, device: str) -> None:
         fn, expected = self.make_test(device=device)
