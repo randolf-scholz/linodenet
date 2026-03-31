@@ -281,7 +281,7 @@ def exact_trace(
         The exact trace $\tr(𝐃f(x))$, computed from the full Jacobian.
     """
     dim = x.shape[-1]
-    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape[:-1], dim, dim)
+    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
     batched_op = _make_batched_op(op, x, mode)
     matrix = batched_op(eye)
     return torch.einsum("...ii -> ...", matrix)
@@ -293,7 +293,7 @@ def exact_powers(
 ) -> Iterator[Tensor]:
     r"""Yield $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
     dim = x.shape[-1]
-    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape[:-1], dim, dim)
+    eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
     batched_op = _make_batched_op(op, x, mode)
     matrix = batched_op(eye)
     eigenvalues = torch.linalg.eigvals(matrix)
