@@ -88,6 +88,12 @@ class TraceEstimators(StrEnum):
     XTRACE = "xtrace"
 
     @classmethod
+    def _missing_(cls, value: object) -> TraceEstimators | None:
+        if value == "hutchinson":
+            return cls.HUTCH
+        return None
+
+    @classmethod
     def new(
         cls,
         estimator: str,
@@ -119,6 +125,12 @@ class LogAbsDetEstimators(StrEnum):
     EXACT = "exact"
     HUTCH = "hutch"
     HUTCH_PP = "hutch++"
+
+    @classmethod
+    def _missing_(cls, value: object) -> LogAbsDetEstimators | None:
+        if value == "hutchinson":
+            return cls.HUTCH
+        return None
 
     @classmethod
     def new(
@@ -250,18 +262,20 @@ class OrthSampler(nn.Module):
         return math.sqrt(n) * q
 
 
-@signature("[{(..., d) -> (..., d)}, (..., d), str] -> [{(..., d, n) -> (..., d, n)}]")
+@signature(
+    "[{(..., d) -> (..., d)}, (..., d), str] -> [(..., d), {(..., d, n) -> (..., d, n)}]"
+)
 def _make_batched_op(
     op: Fn[[Tensor], Tensor], x: Tensor, /, mode: str
-) -> Fn[[Tensor], Tensor]:
-    r"""Construct a batched Jacobian action $V ↦ AV$ or $V ↦ AᵀV$."""
+) -> tuple[Tensor, Fn[[Tensor], Tensor]]:
+    r"""Construct `op(x)` together with a batched Jacobian action $V ↦ AV$ or $V ↦ AᵀV$."""
     match mode:
         case "forward":
-            _, jvp_fn = linearize(op, x)
-            return vmap(jvp_fn, -1, -1)
+            y, jvp_fn = linearize(op, x)
+            return y, vmap(jvp_fn, -1, -1)
         case "adjoint":
-            _, vjp_fn, *_ = vjp(op, x)
-            return vmap(lambda z: vjp_fn(z)[0], -1, -1)
+            y, vjp_fn, *_ = vjp(op, x)
+            return y, vmap(lambda z: vjp_fn(z)[0], -1, -1)
         case _:
             raise ValueError(f"invalid mode {mode!r}")
 
@@ -282,7 +296,7 @@ def exact_trace(
     """
     dim = x.shape[-1]
     eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
-    batched_op = _make_batched_op(op, x, mode)
+    _, batched_op = _make_batched_op(op, x, mode)
     matrix = batched_op(eye)
     return torch.einsum("...ii -> ...", matrix)
 
@@ -294,7 +308,7 @@ def exact_powers(
     r"""Yield $\tr(𝐃f(x)ᵏ)$ for $k = 1, …, \text{max_power}$."""
     dim = x.shape[-1]
     eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
-    batched_op = _make_batched_op(op, x, mode)
+    _, batched_op = _make_batched_op(op, x, mode)
     matrix = batched_op(eye)
     eigenvalues = torch.linalg.eigvals(matrix)
     for power in range(1, max_power + 1):
@@ -326,11 +340,11 @@ def exact_logabsdet(
     """
     dim = x.shape[-1]
     eye = torch.eye(dim, device=x.device, dtype=x.dtype).expand(*x.shape, dim)
-    batched_op = _make_batched_op(op, x, mode)
+    y, batched_op = _make_batched_op(op, x, mode)
     adjoint_matrix = batched_op(eye)
     matrix = eye + adjoint_matrix
     _, value = torch.linalg.slogdet(matrix)
-    return value
+    return y, value
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
@@ -393,7 +407,7 @@ def hutchinson_estimator(
         raise ValueError("num_samples must be at least 1")
 
     probes = sampler(x.shape, num_matvecs, dtype=x.dtype, device=x.device)
-    batched_op = _make_batched_op(op, x, mode)
+    _, batched_op = _make_batched_op(op, x, mode)
     adjoint_probes = batched_op(probes)
     estimate = vecdot(probes, adjoint_probes, dim=-2).mean(dim=-1)
     return estimate
@@ -430,7 +444,7 @@ def hutch_pp_estimator(
     samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
     residual_samples = sampler(x.shape, num_samples, device=x.device, dtype=x.dtype)
 
-    batched_op = _make_batched_op(op, x, mode)
+    _, batched_op = _make_batched_op(op, x, mode)
     sketch = batched_op(samples)
     q, _ = qr(sketch, mode="reduced")  # (...dr)
 
@@ -462,7 +476,7 @@ def xtrace_naive_estimator(
     *batch, N = x.shape
     k = min(N, num_samples)
 
-    batched_op = _make_batched_op(op, x, mode)
+    _, batched_op = _make_batched_op(op, x, mode)
     tr = torch.zeros(batch, dtype=x.dtype, device=x.device)
 
     samples = sampler(x.shape, k, device=x.device, dtype=x.dtype)
@@ -509,7 +523,7 @@ def xtrace_estimator(
     Returns:
         An XTrace estimate of $\tr(𝐃f(x))$.
     """
-    batched_op = _make_batched_op(op, x, mode)
+    _, batched_op = _make_batched_op(op, x, mode)
     if num_matvecs < 2:
         raise ValueError("num_matvecs must be at least 2")
 
@@ -572,7 +586,7 @@ def xtrace_estimator_matlab(
         raise ValueError("num_matvecs must be at least 2")
 
     samples = sampler(x.shape, num_matvecs // 2, dtype=x.dtype, device=x.device)
-    batched_op = _make_batched_op(op, x, mode)
+    _, batched_op = _make_batched_op(op, x, mode)
 
     *_, d, m = samples.shape
 
@@ -817,7 +831,7 @@ class HutchinsonEstimator(TraceEstimator):
         match self.mode:
             case "forward":
                 # use x ↦ Ax only
-                batched_jvp_fn = _make_batched_op(op, x, "forward")
+                _, batched_jvp_fn = _make_batched_op(op, x, "forward")
 
                 for _ in range(max_power):
                     right_samples = batched_jvp_fn(right_samples)
@@ -825,7 +839,7 @@ class HutchinsonEstimator(TraceEstimator):
 
             case "adjoint":
                 # use x ↦ Aᵀx only
-                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
 
                 for _ in range(max_power):
                     left_samples = batched_vjp_fn(left_samples)
@@ -834,8 +848,8 @@ class HutchinsonEstimator(TraceEstimator):
             case "symmetric":
                 # alternate between Ax and Aᵀx, which is good for forward sensitivity.
                 # as it grows exponentially in the number of matvecs.
-                batched_jvp_fn = _make_batched_op(op, x, "forward")
-                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                _, batched_jvp_fn = _make_batched_op(op, x, "forward")
+                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
 
                 power = 0
                 while power < max_power:
@@ -960,7 +974,7 @@ class HutchPP_Estimator(TraceEstimator):
 
         match self.mode:
             case "forward":
-                batched_jvp_fn = _make_batched_op(op, x, "forward")
+                _, batched_jvp_fn = _make_batched_op(op, x, "forward")
                 sketch = batched_jvp_fn(samples)
                 Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
@@ -980,7 +994,7 @@ class HutchPP_Estimator(TraceEstimator):
                     yield low_rank + residual
 
             case "adjoint":
-                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
                 sketch = batched_vjp_fn(samples)
                 Q, _ = qr(sketch, mode="reduced")  # (...dr)
 
@@ -1000,8 +1014,8 @@ class HutchPP_Estimator(TraceEstimator):
                     yield low_rank + residual
 
             case "symmetric":
-                batched_jvp_fn = _make_batched_op(op, x, "forward")
-                batched_vjp_fn = _make_batched_op(op, x, "adjoint")
+                _, batched_jvp_fn = _make_batched_op(op, x, "forward")
+                _, batched_vjp_fn = _make_batched_op(op, x, "adjoint")
 
                 # Hutch++ uses a fixed projector P = QQᵀ and the exact split
                 #   tr(Aᵏ) = tr(Qᵀ Aᵏ Q) + tr((I-P) Aᵏ (I-P)).

@@ -12,7 +12,12 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet_special.trace_estimation import LogAbsDetEstimators, TraceEstimators
+from linodenet_special.trace_estimation import (
+    HutchinsonEstimator,
+    LogAbsDetEstimators,
+    LogabsdetSeriesEstimator,
+    TraceEstimators,
+)
 from tests.testing import DEVICES, PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
@@ -447,6 +452,28 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             self.make_symmetric(input_size=self.PROBLEM_SIZE, device=device)
         )
         self.assert_logabsdet_close(name, test_case, device=device)
+
+
+def test_trace_estimator_accepts_hutchinson_alias() -> None:
+    estimator = TraceEstimators.new(
+        "hutchinson",
+        num_matvecs=4,
+        mode="adjoint",
+        sampler="sphere",
+    )
+    assert isinstance(estimator, HutchinsonEstimator)
+
+
+def test_logabsdet_estimator_accepts_hutchinson_alias() -> None:
+    estimator = LogAbsDetEstimators.new(
+        "hutchinson",
+        num_matvecs=4,
+        num_terms=3,
+        sampler="sphere",
+        mode="adjoint",
+    )
+    assert isinstance(estimator, LogabsdetSeriesEstimator)
+    assert isinstance(estimator.estimator, HutchinsonEstimator)
 
 
 class TestVisualizations(TestTraceEstimator):
