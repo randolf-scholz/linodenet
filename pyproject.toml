@@ -311,6 +311,7 @@ invalid-overload = false
 # region mypy configuration ------------------------------------------------------------
 [tool.mypy]
 # SEE: https://mypy.readthedocs.io/en/stable/config_file.html
+follow_imports = "silent"
 files = ["src/", "tests/"]
 platform = "linux"
 plugins = []
@@ -354,7 +355,8 @@ implicit_reexport = false
 #enable_error_code =[]
 #disable_error_code = []
 allow_untyped_globals = false
-allow_redefinition = false
+allow_redefinition_new = true
+local_partial_types = true
 
 # configuring error messages
 color_output = true
