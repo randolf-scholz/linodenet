@@ -18,7 +18,6 @@ from torch.func import vjp, vmap
 from torch.linalg import slogdet
 from torch.nn.functional import linear
 
-from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
 from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn import ReZero
@@ -159,16 +158,9 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         trace_mode: str = "reverse",
     ) -> None:
         if use_rezero:
-            match scalar_map:
-                case None | "smooth-softsign":
-                    scalar_map_module: nn.Module = SmoothSoftsign()
-                case "tanh":
-                    scalar_map_module = TanhMap()
-                case str(other):
-                    raise ValueError(f"Unknown scalar map {other}")
-                case _:
-                    scalar_map_module = scalar_map
-
+            scalar_map_module = NonExpansiveMapping.new(
+                "smooth-softsign" if scalar_map is None else scalar_map
+            )
             gate = ReZero(scalar_map=scalar_map_module)
             scalar = gate.scalar
         else:
@@ -279,16 +271,9 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         activation = NonExpansiveMapping.new(activation)
 
         if use_rezero:
-            match scalar_map:
-                case None | "smooth-softsign":
-                    scalar_map_module: nn.Module = SmoothSoftsign()
-                case "tanh":
-                    scalar_map_module = TanhMap()
-                case str(other):
-                    raise ValueError(f"Unknown scalar map {other}")
-                case _:
-                    scalar_map_module = scalar_map
-
+            scalar_map_module = NonExpansiveMapping.new(
+                "smooth-softsign" if scalar_map is None else scalar_map
+            )
             gate = ReZero(scalar_map=scalar_map_module)
             scalar = gate.scalar
         else:
