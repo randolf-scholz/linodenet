@@ -200,24 +200,38 @@ class OrthogonalHouseholder(SurjectionBase):
     DOMAIN: Final[MatrixDomains] = MatrixDomains.TALL
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.COLUMN_ORTHOGONAL
 
-    @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def __init__(self, *, mode: str = "columns") -> None:
+        super().__init__()
+        if mode not in {"columns", "rows"}:
+            raise ValueError(f"Unknown mode {mode!r}. Expected 'columns' or 'rows'.")
+        self.mode = mode
+
+    def _forward_columns(self, x: Tensor, /) -> Tensor:
         a = x.tril(diagonal=-1)  # (..., m, n)
         tau = 2.0 / (1.0 + vecdot(a, a, dim=-2))  # (...n)
         q = torch.linalg.householder_product(a, tau)
-        # normalize the sign
         diagonal = x.diagonal(dim1=-2, dim2=-1).detach()
         ones = torch.ones_like(diagonal)
         signs = torch.where(diagonal < 0, -ones, ones)
         return q * signs.unsqueeze(-2)
 
-    @signature("(..., m, n) -> (..., m, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
-        # note: geqrf low level reduced QR decomposition
+    def _right_inverse_columns(self, y: Tensor, /) -> Tensor:
         a, tau = torch.geqrf(y)  # (...mn), (...n)
         signs = a.diagonal(dim1=-2, dim2=-1).sign()  # (...n)
         signs = torch.where(tau == 0, -signs, signs)  # (...n)
         return a.tril(diagonal=-1).diagonal_scatter(signs, dim1=-2, dim2=-1)
+
+    @signature("(..., m, n) -> (..., m, n)")
+    def forward(self, x: Tensor) -> Tensor:
+        if self.mode == "rows":
+            return self._forward_columns(x.mT).mT
+        return self._forward_columns(x)
+
+    @signature("(..., m, n) -> (..., m, n)")
+    def right_inverse(self, y: Tensor) -> Tensor:
+        if self.mode == "rows":
+            return self._right_inverse_columns(y.mT).mT
+        return self._right_inverse_columns(y)
 
 
 class OrthogonalCayley(SurjectionBase):

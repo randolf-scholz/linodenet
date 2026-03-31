@@ -3,6 +3,7 @@ r"""Tests for linodenet.surjections."""
 import pytest
 import torch
 
+from linodenet.domains.matrix_tests import is_orthogonal, is_row_orthogonal
 from linodenet.mappings import (
     NegativeDefinite,
     Orthogonal,
@@ -15,7 +16,6 @@ from linodenet.mappings import (
     Surjection,
 )
 from linodenet.registry import get_registry_entry
-from linodenet.testing import is_orthogonal
 from tests.testing import SEEDS_10
 
 SURJECTION_MODULES = {
@@ -67,6 +67,19 @@ def test_orthogonal_maps(surjection_cls: type[Surjection], seed: int) -> None:
     y = surjection(x)
 
     assert is_orthogonal(y).all()
+    z = surjection.right_inverse(y)
+    assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
+def test_orthogonal_householder_rows_mode(seed: int) -> None:
+    torch.manual_seed(seed)
+    surjection = OrthogonalHouseholder(mode="rows")
+
+    x = torch.randn(8, 3, 5)
+    y = surjection(x)
+
+    assert is_row_orthogonal(y).all()
     z = surjection.right_inverse(y)
     assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
 
