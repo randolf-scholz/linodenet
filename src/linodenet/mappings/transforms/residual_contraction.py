@@ -158,7 +158,7 @@ class ResidualBottleneck(TransformBase):
         input_size: int,
         hidden_size: int,
         *,
-        bottleneck: nn.Module,
+        bottleneck: nn.Module,  # (...k) -> (...k)
         activation: str | nn.Module = "Identity",
         maxiter: int = 256,
         atol: float = 1e-6,
@@ -205,45 +205,34 @@ class ResidualBottleneck(TransformBase):
         nn.init.kaiming_uniform_(self.weight_v, a=sqrt(5))
         update_parametrizations(self)
 
-    def _apply_bottleneck(self, z: Tensor, /) -> Tensor:
-        s = self.bottleneck(z)
-        if s.shape != z.shape:
-            raise ValueError(
-                f"bottleneck must preserve shape (..., {self.hidden_size}),"
-                f" got {z.shape=} and {s.shape=}."
-            )
-        return s
-
-    def _activation_and_derivative(self, h: Tensor, /) -> tuple[Tensor, Tensor]:
-        h = h.requires_grad_(True)
-        u = self.activation(h)
-        grad_outputs = torch.ones_like(u)
-        du, *_ = torch.autograd.grad(
-            u,
-            h,
-            grad_outputs=grad_outputs,
-            create_graph=True,
-        )
-        return u, du
-
-    def _bottleneck_jacobian(self, z: Tensor, /) -> Tensor:
-        batch_shape = z.shape[:-1]
-        z_flat = z.reshape(-1, self.hidden_size)
-
-        def single_bottleneck(z_single: Tensor, /) -> Tensor:
-            return self._apply_bottleneck(z_single.unsqueeze(0)).squeeze(0)
-
-        jacobian = torch.func.vmap(torch.func.jacrev(single_bottleneck))(z_flat)
-        return jacobian.reshape(*batch_shape, self.hidden_size, self.hidden_size)
-
     def _logabsdet(
         self,
         z: Tensor,
         h: Tensor,
         /,
     ) -> Tensor:
-        du = self._activation_and_derivative(h)[1]
-        ds = self._bottleneck_jacobian(z)
+        # SECTION: activation derivative
+        h = h.requires_grad_(True)
+        u = self.activation(h)
+        du, *_ = torch.autograd.grad(
+            u,
+            h,
+            grad_outputs=torch.ones_like(u),
+            create_graph=True,
+        )
+
+        # SECTION: bottleneck jacobian
+        batch_shape = z.shape[:-1]
+        z_flat = z.reshape(-1, self.hidden_size)
+        jac_fn = torch.func.jacrev(
+            lambda z_single: self.bottleneck(z_single.unsqueeze(0)).squeeze(0)
+        )
+        batched_jac_fn = torch.func.vmap(jac_fn)
+        ds = batched_jac_fn(z_flat).reshape(
+            *batch_shape, self.hidden_size, self.hidden_size
+        )
+
+        # SECTION: determinant lemma
         vtduu = torch.einsum(
             "ni,...nr->...ir",
             self.weight_v,
@@ -255,7 +244,7 @@ class ResidualBottleneck(TransformBase):
 
     def encode(self, x: Tensor, /) -> Tensor:
         z = x.matmul(self.weight_v)
-        s = self._apply_bottleneck(z)
+        s = self.bottleneck(z)
         h = s.matmul(self.weight_u.mT)
         u = self.activation(h)
         return x + u
@@ -265,21 +254,21 @@ class ResidualBottleneck(TransformBase):
         z = fixpoint_solve(
             lambda z: (
                 vty
-                - self.activation(
-                    self._apply_bottleneck(z).matmul(self.weight_u.mT)
-                ).matmul(self.weight_v)
+                - self.activation(self.bottleneck(z).matmul(self.weight_u.mT)).matmul(
+                    self.weight_v
+                )
             ),
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,
         )
-        correction = self.activation(self._apply_bottleneck(z).matmul(self.weight_u.mT))
+        correction = self.activation(self.bottleneck(z).matmul(self.weight_u.mT))
         return y - correction
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         z = x.matmul(self.weight_v)
-        s = self._apply_bottleneck(z)
+        s = self.bottleneck(z)
         h = s.matmul(self.weight_u.mT)
         u = self.activation(h)
         logabsdet = self._logabsdet(z, h)
