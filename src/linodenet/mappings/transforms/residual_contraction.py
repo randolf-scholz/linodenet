@@ -20,7 +20,7 @@ from linodenet_special.trace_estimation import LogAbsDetEstimators
 from .base import TransformBase
 
 
-class ResidualContraction(TransformBase):
+class ResidualContraction[M: nn.Module](TransformBase):
     r"""A residual flow based on a contraction layer.
 
     Forward: y ← x + g(x)
@@ -65,7 +65,7 @@ class ResidualContraction(TransformBase):
 
     def __init__(
         self,
-        contraction: nn.Module,
+        contraction: M,
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
@@ -77,7 +77,7 @@ class ResidualContraction(TransformBase):
         trace_mode: str = "adjoint",
     ) -> None:
         super().__init__()
-        self.contraction: nn.Module = contraction
+        self.contraction: M = contraction
         self.maxiter = maxiter
         self.atol = atol
         self.rtol = rtol
@@ -113,7 +113,7 @@ class ResidualContraction(TransformBase):
         raise NotImplementedError
 
 
-class ReZeroContraction[M: nn.Module](ResidualContraction):
+class ReZeroContraction[M: nn.Module](ResidualContraction[ReZero[M]]):
     r"""A residual flow based on a scaled contraction layer.
 
     .. math:: y ← x + φ(ε)⋅g(x)  \qquad  φ(ε) ∈ (-1, 1), φ(0)=0
@@ -161,7 +161,7 @@ class ReZeroContraction[M: nn.Module](ResidualContraction):
             num_series_terms=num_series_terms,
             trace_estimator=trace_estimator,
         )
-        self.contraction: ReZero[M]  # pyright: ignore[reportIncompatibleVariableOverride]
+        self.contraction: ReZero[M]
         self.scalar = self.contraction.scalar
         self.scalar_map = self.contraction.scalar_map
 
