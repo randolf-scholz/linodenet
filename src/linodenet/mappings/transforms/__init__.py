@@ -59,12 +59,12 @@ __all__ = [
     "GaussianToMixture",
     "IResNet",
     "LowRankTransform",
+    "ReZeroBottleneck",
     "MixtureToGaussian",
     "ReZeroContraction",
     "ResidualBottleneck",
     "ResidualContraction",
     "ResidualContractionFallback",
-    "ResidualLowRankContraction",
     "SplineTransform",
     "TriangularTransform",
 ]
@@ -82,7 +82,7 @@ from .residual_contraction import (
     ResidualBottleneck,
     ResidualContraction,
     ResidualContractionFallback,
-    ResidualLowRankContraction,
+    ReZeroBottleneck,
     ReZeroContraction,
 )
 from .residual_low_rank import LowRankTransform

@@ -3,7 +3,7 @@ r"""ContractiveFlow implementation (iResNet-block)."""
 __all__ = [
     "ResidualContraction",
     "ResidualBottleneck",
-    "ResidualLowRankContraction",
+    "ReZeroBottleneck",
     "ReZeroContraction",
     "ResidualContractionFallback",
 ]
@@ -269,7 +269,7 @@ class ResidualContractionFallback(ResidualContraction):
         raise NotImplementedError
 
 
-class ResidualBottleneck(ResidualContractionBase):
+class ResidualBottleneck[B: nn.Module](ResidualContractionBase):
     r"""Residual low-rank contraction with exact low-dimensional logabsdet.
 
     The transformation is
@@ -297,7 +297,7 @@ class ResidualBottleneck(ResidualContractionBase):
     use_bias: Final[bool]
     U: nn.Linear
     V: nn.Linear
-    bottleneck: nn.Module
+    bottleneck: B
     activation: nn.Module
     eye: Tensor
 
@@ -306,7 +306,7 @@ class ResidualBottleneck(ResidualContractionBase):
         input_size: int,
         hidden_size: int,
         *,
-        bottleneck: nn.Module,  # (...k) -> (...k)
+        bottleneck: B,  # (...k) -> (...k)
         activation: str | nn.Module = "Identity",
         use_bias: bool = True,
         maxiter: int = 256,
@@ -394,4 +394,57 @@ class ResidualBottleneck(ResidualContractionBase):
         return y - self.lift(z_star)
 
 
-ResidualLowRankContraction = ResidualBottleneck
+class ReZeroBottleneck[B: nn.Module](ResidualBottleneck[ReZero[B]]):
+    r"""Residual bottleneck with a learnable ReZero-scaled bottleneck module.
+
+    .. math:: y = x + ϕᵤ(U (φ(ε)⋅f)(Vx))
+
+    where $φ(ε) ∈ (-1, 1)$ and $φ(0)=0$, so the bottleneck branch is
+    initialized at zero.
+    """
+
+    bottleneck: ReZero[B]
+    scalar: Tensor
+    scalar_map: nn.Module
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bottleneck: B,
+        scalar_map: nn.Module | str | None = "smooth-softsign",
+        activation: str | nn.Module = "Identity",
+        use_bias: bool = True,
+        maxiter: int = 256,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        scalar_map_module: nn.Module
+        match scalar_map:
+            case None | "smooth-softsign":
+                scalar_map_module = SmoothSoftsign()
+            case "tanh":
+                scalar_map_module = TanhMap()
+            case str(other):
+                raise ValueError(f"Unknown scalar map {other}")
+            case _:
+                scalar_map_module = scalar_map
+
+        super().__init__(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            bottleneck=ReZero(bottleneck, scalar_map=scalar_map_module),
+            activation=activation,
+            use_bias=use_bias,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
+            device=device,
+            dtype=dtype,
+        )
+        self.bottleneck: ReZero[B]
+        self.scalar = self.bottleneck.scalar
+        self.scalar_map = self.bottleneck.scalar_map

@@ -92,6 +92,7 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "ContractiveFP"        : transforms.ResidualContraction,
     "ReZeroContraction"    : transforms.ReZeroContraction,
     "ResidualBottleneck"   : transforms.ResidualBottleneck,
+    "ReZeroBottleneck"     : transforms.ReZeroBottleneck,
     "ContractiveTransform" : transforms.ResidualContractionFallback,
     "SplineTransform"      : transforms.SplineTransform,
     "LowRankTransform"     : transforms.LowRankTransform,
