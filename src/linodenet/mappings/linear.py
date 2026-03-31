@@ -162,7 +162,7 @@ class LowRankContraction(nn.Module):
 
     The factors $U∈ℝ^{m×r}$ and $V∈ℝ^{n×r}$ are parametrized to have orthonormal
     columns, and the diagonal entries of $Σ$ are constrained to lie in $(0, c)$.
-    Hence $‖UΣVᵀ‖₂ = ‖Σ‖₂ ≤ c$.
+    Hence, $‖UΣVᵀ‖₂ = ‖Σ‖₂ ≤ c$.
     """
 
     in_features: Final[int]
