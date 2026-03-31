@@ -2,18 +2,24 @@ r"""ContractiveFlow implementation (iResNet-block)."""
 
 __all__ = [
     "ResidualContraction",
+    "ResidualBottleneck",
+    "ResidualLowRankContraction",
     "ReZeroContraction",
     "ResidualContractionFallback",
 ]
 
 import warnings
+from math import sqrt
 from typing import Final
 
 import torch
 from torch import Tensor, nn
 
 from linodenet.mappings.bijections import SmoothSoftsign, TanhMap
+from linodenet.mappings.nonlinear_contractions import get_nonlinear_contraction
+from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn import ReZero
+from linodenet.nn.parametrize import register_parametrization, update_parametrizations
 from linodenet_special import fixpoint_solve
 from linodenet_special.trace_estimation import LogAbsDetEstimators
 
@@ -111,6 +117,181 @@ class ResidualContraction[M: nn.Module](TransformBase):
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         raise NotImplementedError
+
+
+class ResidualBottleneck(TransformBase):
+    r"""Residual low-rank contraction with exact low-dimensional logabsdet.
+
+    The transformation is
+
+    .. math:: y = x + ϕᵤ(U f(Vᵀx))
+
+    where $U,V∈ℝ^{n×k}$ have orthonormal columns, $f:ℝᵏ→ℝᵏ$ is an arbitrary
+    bottleneck module, and $ϕᵤ$ is an elementwise post-activation.
+
+    Since there is no pre-activation, the inverse can be solved in bottleneck
+    coordinates:
+
+    .. math:: z = Vᵀy - Vᵀϕᵤ(U f(z))
+
+    and then lifted back with $x = y - ϕᵤ(U f(z))$.
+
+    The Jacobian determinant is computed exactly with the matrix determinant
+    lemma:
+
+    .. math:: \log|det(𝕀ₙ + Dᵤ U Dₛ Vᵀ)| = \log|det(𝕀ₖ + Vᵀ Dᵤ U Dₛ)|.
+    """
+
+    input_size: Final[int]
+    hidden_size: Final[int]
+    maxiter: Final[int]
+    atol: Final[float]
+    rtol: Final[float]
+    weight_u: Tensor
+    weight_v: Tensor
+    bottleneck: nn.Module
+    activation: nn.Module
+    eye: Tensor
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bottleneck: nn.Module,
+        activation: str | nn.Module = "Identity",
+        maxiter: int = 256,
+        atol: float = 1e-6,
+        rtol: float = 1e-6,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        if not 1 <= hidden_size <= input_size:
+            raise ValueError("hidden_size must be between 1 and input_size")
+
+        match activation:
+            case str(name):
+                activation_module = get_nonlinear_contraction(name)
+            case _:
+                activation_module = activation
+
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.maxiter = maxiter
+        self.atol = atol
+        self.rtol = rtol
+        self.bottleneck = bottleneck
+        self.activation = activation_module
+        self.weight_u = nn.Parameter(
+            torch.empty(input_size, hidden_size, device=device, dtype=dtype)
+        )
+        self.weight_v = nn.Parameter(
+            torch.empty(input_size, hidden_size, device=device, dtype=dtype)
+        )
+        self.register_buffer(
+            "eye",
+            torch.eye(hidden_size, device=device, dtype=dtype),
+            persistent=True,
+        )
+
+        self.reset_parameters()
+        register_parametrization(self, "weight_u", OrthogonalHouseholder())
+        register_parametrization(self, "weight_v", OrthogonalHouseholder())
+        self.parametrizations: nn.ModuleDict
+
+    def reset_parameters(self) -> None:
+        nn.init.kaiming_uniform_(self.weight_u, a=sqrt(5))
+        nn.init.kaiming_uniform_(self.weight_v, a=sqrt(5))
+        update_parametrizations(self)
+
+    def _apply_bottleneck(self, z: Tensor, /) -> Tensor:
+        s = self.bottleneck(z)
+        if s.shape != z.shape:
+            raise ValueError(
+                f"bottleneck must preserve shape (..., {self.hidden_size}),"
+                f" got {z.shape=} and {s.shape=}."
+            )
+        return s
+
+    def _activation_and_derivative(self, h: Tensor, /) -> tuple[Tensor, Tensor]:
+        h = h.requires_grad_(True)
+        u = self.activation(h)
+        grad_outputs = torch.ones_like(u)
+        du, *_ = torch.autograd.grad(
+            u,
+            h,
+            grad_outputs=grad_outputs,
+            create_graph=True,
+        )
+        return u, du
+
+    def _bottleneck_jacobian(self, z: Tensor, /) -> Tensor:
+        batch_shape = z.shape[:-1]
+        z_flat = z.reshape(-1, self.hidden_size)
+
+        def single_bottleneck(z_single: Tensor, /) -> Tensor:
+            return self._apply_bottleneck(z_single.unsqueeze(0)).squeeze(0)
+
+        jacobian = torch.func.vmap(torch.func.jacrev(single_bottleneck))(z_flat)
+        return jacobian.reshape(*batch_shape, self.hidden_size, self.hidden_size)
+
+    def _logabsdet(
+        self,
+        z: Tensor,
+        h: Tensor,
+        /,
+    ) -> Tensor:
+        du = self._activation_and_derivative(h)[1]
+        ds = self._bottleneck_jacobian(z)
+        vtduu = torch.einsum(
+            "ni,...nr->...ir",
+            self.weight_v,
+            du.unsqueeze(-1) * self.weight_u,
+        )
+        matrix = self.eye + vtduu.matmul(ds)
+        _, logabsdet = torch.linalg.slogdet(matrix)
+        return logabsdet
+
+    def encode(self, x: Tensor, /) -> Tensor:
+        z = x.matmul(self.weight_v)
+        s = self._apply_bottleneck(z)
+        h = s.matmul(self.weight_u.mT)
+        u = self.activation(h)
+        return x + u
+
+    def decode(self, y: Tensor, /) -> Tensor:
+        vty = y.matmul(self.weight_v)
+        z = fixpoint_solve(
+            lambda z: (
+                vty
+                - self.activation(
+                    self._apply_bottleneck(z).matmul(self.weight_u.mT)
+                ).matmul(self.weight_v)
+            ),
+            vty.clone(),
+            maxiter=self.maxiter,
+            atol=self.atol,
+            rtol=self.rtol,
+        )
+        correction = self.activation(self._apply_bottleneck(z).matmul(self.weight_u.mT))
+        return y - correction
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        z = x.matmul(self.weight_v)
+        s = self._apply_bottleneck(z)
+        h = s.matmul(self.weight_u.mT)
+        u = self.activation(h)
+        logabsdet = self._logabsdet(z, h)
+        return x + u, logabsdet
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        x = self.decode(y)
+        _, logabsdet = self.encode_and_logabsdet(x)
+        return x, -logabsdet
+
+
+ResidualLowRankContraction = ResidualBottleneck
 
 
 class ReZeroContraction[M: nn.Module](ResidualContraction[ReZero[M]]):
