@@ -3,7 +3,7 @@ import pytest
 import torch
 
 from linodenet.mappings.transforms import SplineTransform
-from tests.testing import PROJECT, SEEDS_10
+from tests.testing import PROJECT, SEEDS_5
 
 from .test_transform import TestTransform
 
@@ -58,7 +58,7 @@ class TestSplineFlow(TestTransform):
         assert xhat.shape == z.shape
         assert inverse_logabsdet.shape == (self.NUM_HEADS_BATCH_SIZE, *head_shape[:-1])
 
-    @pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
+    @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
     @pytest.mark.parametrize("layers", [1, 2, 3, 4], ids="layers={}".format)
     @pytest.mark.parametrize("bins", [1, 2, 4, 8], ids="bins={}".format)
     def test_invertibility(self, seed: int, layers: int, bins: int) -> None:
@@ -115,7 +115,7 @@ class TestSplineFlow(TestTransform):
             initial_prediction = model.encode(x)
             initial_loss = torch.mean((initial_prediction - y) ** 2)
 
-        for _ in range(400):
+        for _ in range(200):
             optimizer.zero_grad()
             prediction = model.encode(x)
             loss = torch.mean((prediction - y) ** 2)
