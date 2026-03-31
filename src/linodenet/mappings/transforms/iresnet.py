@@ -48,7 +48,11 @@ class IResNet(TransformSequence[ResidualContraction]):
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        trace_estimator: str = "hutchinson",
+        trace_estimator: str = "hutch",
+        trace_matvecs: int = 3,
+        logdet_series_terms: int = 8,
+        trace_probe_sampler: str = "sphere",
+        trace_mode: str = "adjoint",
     ) -> None:
         self.input_size = input_size
         self.num_blocks = num_blocks
@@ -75,6 +79,10 @@ class IResNet(TransformSequence[ResidualContraction]):
                 atol=atol,
                 rtol=rtol,
                 trace_estimator=trace_estimator,
+                trace_matvecs=trace_matvecs,
+                logdet_series_terms=logdet_series_terms,
+                trace_probe_sampler=trace_probe_sampler,
+                trace_mode=trace_mode,
             )
             for _ in range(self.num_blocks)
         ]
@@ -93,6 +101,10 @@ class IResNet(TransformSequence[ResidualContraction]):
         atol: float,
         rtol: float,
         trace_estimator: str,
+        trace_matvecs: int,
+        logdet_series_terms: int,
+        trace_probe_sampler: str,
+        trace_mode: str,
     ) -> ResidualContraction:
         layers: list[nn.Module] = []
         act = get_activation(activation)
@@ -119,4 +131,8 @@ class IResNet(TransformSequence[ResidualContraction]):
             atol=atol,
             rtol=rtol,
             trace_estimator=trace_estimator,
+            trace_matvecs=trace_matvecs,
+            logdet_series_terms=logdet_series_terms,
+            trace_probe_sampler=trace_probe_sampler,
+            trace_mode=trace_mode,
         )
