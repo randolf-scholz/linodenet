@@ -1,5 +1,6 @@
 import pytest
 import torch
+from torch import nn
 
 from linodenet.mappings import LinearContraction, ResidualBottleneck
 from linodenet.nn.parametrize import update_parametrizations
@@ -36,15 +37,17 @@ class TestResidualBottleneck(TestTransform):
         flow = ResidualBottleneck(
             input_size=input_size,
             hidden_size=hidden_size,
-            bottleneck=LinearContraction(
-                hidden_size,
-                hidden_size,
-                bias=True,
-                c=0.5,
-                device=device,
-                dtype=dtype,
+            bottleneck=nn.Sequential(
+                nn.ELU(),
+                LinearContraction(
+                    hidden_size,
+                    hidden_size,
+                    bias=True,
+                    c=0.5,
+                    device=device,
+                    dtype=dtype,
+                ),
             ),
-            activation="Tanh",
             maxiter=128,
             atol=1e-6,
             rtol=1e-6,
