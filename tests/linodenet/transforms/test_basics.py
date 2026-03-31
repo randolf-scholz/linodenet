@@ -1,22 +1,9 @@
+r"""Basic gradient-structure checks for residual transform Jacobians."""
+
 import pytest
 import torch
 from torch import Tensor
-
-
-def _relu_derivative(x: Tensor, /) -> Tensor:
-    return (x > 0).to(dtype=x.dtype)
-
-
-def _identity_derivative(x: Tensor, /) -> Tensor:
-    return torch.ones_like(x)
-
-
-def _tanh_derivative(x: Tensor, /) -> Tensor:
-    return 1 - torch.tanh(x).square()
-
-
-def _elu_derivative(x: Tensor, /) -> Tensor:
-    return torch.where(x > 0, torch.ones_like(x), torch.exp(x))
+from torch.func import grad, vmap
 
 
 def _make_scaled_matrix(input_size: int, /) -> Tensor:
@@ -25,11 +12,11 @@ def _make_scaled_matrix(input_size: int, /) -> Tensor:
     return matrix.requires_grad_()
 
 
-ACTIVATION_DERIVATIVES = {
-    "relu": _relu_derivative,
-    "identity": _identity_derivative,
-    "tanh": _tanh_derivative,
-    "elu": _elu_derivative,
+ACTIVATIONS: dict = {
+    "relu": torch.relu,
+    "identity": lambda x: x,
+    "tanh": torch.tanh,
+    "elu": torch.nn.functional.elu,
 }
 
 
@@ -50,35 +37,35 @@ def test_preactivation(activation: str) -> None:
     input_size = 7
     x = torch.randn(input_size)
     A = _make_scaled_matrix(input_size)
+    activation_fn = ACTIVATIONS[activation]
 
-    slopes = ACTIVATION_DERIVATIVES[activation](A @ x)
+    slopes = vmap(grad(activation_fn))(A @ x)
     jacobian = torch.eye(input_size, dtype=A.dtype) + torch.diag(slopes) @ A
     loss = torch.linalg.slogdet(jacobian).logabsdet
     loss.backward()
     assert A.grad is not None
-    grad = A.grad
 
-    assert torch.linalg.norm(grad) > 0
+    assert torch.linalg.norm(A.grad) > 0
 
     match activation:
         case "identity":
-            assert torch.all(torch.linalg.vector_norm(grad, dim=1) > 0)
+            assert torch.all(torch.linalg.vector_norm(A.grad, dim=1) > 0)
         case "relu":
             inactive = slopes == 0
             assert torch.any(inactive)
             assert torch.allclose(
-                grad[inactive],
-                torch.zeros_like(grad[inactive]),
+                A.grad[inactive],
+                torch.zeros_like(A.grad[inactive]),
                 atol=0.0,
                 rtol=0.0,
             )
-            assert torch.linalg.norm(grad[~inactive]) > 0
+            assert torch.linalg.norm(A.grad[~inactive]) > 0
         case "tanh":
             assert torch.all(slopes > 0)
-            assert torch.all(torch.linalg.vector_norm(grad, dim=1) > 0)
+            assert torch.all(torch.linalg.vector_norm(A.grad, dim=1) > 0)
         case "elu":
             assert torch.all(slopes > 0)
-            assert torch.all(torch.linalg.vector_norm(grad, dim=1) > 0)
+            assert torch.all(torch.linalg.vector_norm(A.grad, dim=1) > 0)
         case _:
             raise AssertionError(f"Unhandled activation: {activation}")
 
@@ -100,34 +87,34 @@ def test_postactivation(activation: str) -> None:
     input_size = 7
     x = torch.randn(input_size)
     A = _make_scaled_matrix(input_size)
+    activation_fn = ACTIVATIONS[activation]
 
-    slopes = ACTIVATION_DERIVATIVES[activation](x)
+    slopes = vmap(grad(activation_fn))(x)
     jacobian = torch.eye(input_size, dtype=A.dtype) + A @ torch.diag(slopes)
     loss = torch.linalg.slogdet(jacobian).logabsdet
     loss.backward()
     assert A.grad is not None
-    grad = A.grad
 
-    assert torch.linalg.norm(grad) > 0
+    assert torch.linalg.norm(A.grad) > 0
 
     match activation:
         case "identity":
-            assert torch.all(torch.linalg.vector_norm(grad, dim=0) > 0)
+            assert torch.all(torch.linalg.vector_norm(A.grad, dim=0) > 0)
         case "relu":
             inactive = slopes == 0
             assert torch.any(inactive)
             assert torch.allclose(
-                grad[:, inactive],
-                torch.zeros_like(grad[:, inactive]),
+                A.grad[:, inactive],
+                torch.zeros_like(A.grad[:, inactive]),
                 atol=0.0,
                 rtol=0.0,
             )
-            assert torch.linalg.norm(grad[:, ~inactive]) > 0
+            assert torch.linalg.norm(A.grad[:, ~inactive]) > 0
         case "tanh":
             assert torch.all(slopes > 0)
-            assert torch.all(torch.linalg.vector_norm(grad, dim=0) > 0)
+            assert torch.all(torch.linalg.vector_norm(A.grad, dim=0) > 0)
         case "elu":
             assert torch.all(slopes > 0)
-            assert torch.all(torch.linalg.vector_norm(grad, dim=0) > 0)
+            assert torch.all(torch.linalg.vector_norm(A.grad, dim=0) > 0)
         case _:
             raise AssertionError(f"Unhandled activation: {activation}")
