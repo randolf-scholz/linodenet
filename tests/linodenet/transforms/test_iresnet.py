@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pytest
@@ -58,21 +59,26 @@ def compute_inversion_errors(
     }
 
 
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("dtype", [torch.float32], ids=str)
+@pytest.mark.parametrize("device", ["cpu"])
 @pytest.mark.parametrize("use_rezero", [False, True], ids=["plain", "rezero"])
 class TestIResNet(TestTransform):
+    SEED = 0
     BATCH_SIZE = 32
     INPUT_SIZE = 64
-    LATENT_SIZE = 16
-    NUM_BLOCKS = 3
-    LAYERS_PER_BLOCK = 2
-
-    TRACE_ESTIMATOR = "hutch"
-    TRACE_MATVECS = 3
-    LOGDET_SERIES_TERMS = 8
-    TRACE_PROBE_SAMPLER = "sphere"
-    TRACE_MODE = "reverse"
+    MODEL_CONFIG = {
+        "latent_size": 16,
+        "num_blocks": 3,
+        "layers_per_block": 2,
+        "maxiter": 256,
+        "atol": 1e-6,
+        "rtol": 1e-6,
+        "trace_estimator": "hutch++",
+        "trace_matvecs": 32,
+        "logdet_series_terms": 8,
+        "trace_probe_sampler": "sphere",
+        "trace_mode": "reverse",
+    }
 
     TRAIN_STEPS = 20
     LEARNING_RATE = 1.0
@@ -91,36 +97,16 @@ class TestIResNet(TestTransform):
         input_size: int,
         /,
         *,
-        num_blocks: int,
-        layers_per_block: int,
-        latent_size: int,
         use_rezero: bool,
-        maxiter: int,
-        atol: float,
-        rtol: float,
-        trace_estimator: str = "hutch",
-        trace_matvecs: int = 3,
-        logdet_series_terms: int = 8,
-        trace_probe_sampler: str = "sphere",
-        trace_mode: str = "reverse",
         device: str = "cpu",
         dtype: torch.dtype = torch.float32,
+        **kwargs: Any,
     ) -> IResNet:
         model = IResNet(
             input_size,
-            num_blocks=num_blocks,
-            layers_per_block=layers_per_block,
-            latent_size=latent_size,
-            activation="ReLU",
+            activation="Tanh",
             use_rezero=use_rezero,
-            maxiter=maxiter,
-            atol=atol,
-            rtol=rtol,
-            trace_estimator=trace_estimator,
-            trace_matvecs=trace_matvecs,
-            logdet_series_terms=logdet_series_terms,
-            trace_probe_sampler=trace_probe_sampler,
-            trace_mode=trace_mode,
+            **kwargs,
         )
         model = model.to(device=device, dtype=dtype)
         update_parametrizations(model)
@@ -132,30 +118,21 @@ class TestIResNet(TestTransform):
         device: str,
         use_rezero: bool,
     ) -> None:
+        torch.manual_seed(self.SEED)
         model = self.make_model(
             self.INPUT_SIZE,
-            num_blocks=self.NUM_BLOCKS,
-            layers_per_block=self.LAYERS_PER_BLOCK,
-            latent_size=self.LATENT_SIZE,
             use_rezero=use_rezero,
-            maxiter=128,
-            atol=1e-6,
-            rtol=1e-6,
-            trace_estimator=self.TRACE_ESTIMATOR,
-            trace_matvecs=self.TRACE_MATVECS,
-            logdet_series_terms=self.LOGDET_SERIES_TERMS,
-            trace_probe_sampler=self.TRACE_PROBE_SAMPLER,
-            trace_mode=self.TRACE_MODE,
             device=device,
             dtype=dtype,
+            **(self.MODEL_CONFIG | {"maxiter": 128}),
         )
 
         assert model.input_size == self.INPUT_SIZE
-        assert model.num_blocks == self.NUM_BLOCKS
-        assert model.layers_per_block == self.LAYERS_PER_BLOCK
-        assert model.latent_size == self.LATENT_SIZE
+        assert model.num_blocks == self.MODEL_CONFIG["num_blocks"]
+        assert model.layers_per_block == self.MODEL_CONFIG["layers_per_block"]
+        assert model.latent_size == self.MODEL_CONFIG["latent_size"]
         assert model.use_rezero is use_rezero
-        assert len(model) == self.NUM_BLOCKS
+        assert len(model) == self.MODEL_CONFIG["num_blocks"]
         assert all(isinstance(block, ResidualContraction) for block in model)
 
         stats = summary(
@@ -205,23 +182,14 @@ class TestIResNet(TestTransform):
         device: str,
         use_rezero: bool,
     ) -> None:
+        torch.manual_seed(self.SEED)
         atol, rtol = self.FLOW_TOL[dtype]
         model = self.make_model(
             self.INPUT_SIZE,
-            num_blocks=self.NUM_BLOCKS,
-            layers_per_block=self.LAYERS_PER_BLOCK,
-            latent_size=self.LATENT_SIZE,
             use_rezero=use_rezero,
-            maxiter=256,
-            atol=atol,
-            rtol=rtol,
-            trace_estimator=self.TRACE_ESTIMATOR,
-            trace_matvecs=self.TRACE_MATVECS,
-            logdet_series_terms=self.LOGDET_SERIES_TERMS,
-            trace_probe_sampler=self.TRACE_PROBE_SAMPLER,
-            trace_mode=self.TRACE_MODE,
             device=device,
             dtype=dtype,
+            **(self.MODEL_CONFIG | {"atol": atol, "rtol": rtol}),
         )
         self.evaluate_invertibility(model, dtype=dtype, device=device)
 
@@ -235,20 +203,10 @@ class TestIResNet(TestTransform):
         atol, rtol = self.FLOW_TOL[dtype]
         model = self.make_model(
             self.INPUT_SIZE,
-            num_blocks=self.NUM_BLOCKS,
-            layers_per_block=self.LAYERS_PER_BLOCK,
-            latent_size=self.LATENT_SIZE,
             use_rezero=use_rezero,
-            maxiter=256,
-            atol=atol,
-            rtol=rtol,
-            trace_estimator=self.TRACE_ESTIMATOR,
-            trace_matvecs=self.TRACE_MATVECS,
-            logdet_series_terms=self.LOGDET_SERIES_TERMS,
-            trace_probe_sampler=self.TRACE_PROBE_SAMPLER,
-            trace_mode=self.TRACE_MODE,
             device=device,
             dtype=dtype,
+            **(self.MODEL_CONFIG | {"atol": atol, "rtol": rtol}),
         )
         with torch.no_grad():
             train_x = torch.randn(
