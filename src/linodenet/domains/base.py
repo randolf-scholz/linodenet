@@ -518,14 +518,13 @@ class PosetEnum(Enum):
         target `A & B` denotes the stronger statement `x ≤ A ∧ B`, so this
         parser expands it to the implied direct supertypes `A` and `B`.
         """
-        raw_supers: Mapping[Self, frozenset[Self | Meet[Self]]] = cls.KNOWN_SUPERTYPES  # type: ignore[assignment]
         members = frozenset(cls)
 
-        if bad_keys := {node for node in raw_supers if node not in members}:
+        if bad_keys := {node for node in cls.KNOWN_SUPERTYPES if node not in members}:
             raise TypeError(f"Expected {cls.__name__} nodes, got {bad_keys!r}.")
 
         supertypes: dict[Self, frozenset[Self]] = {}
-        for node, supers in raw_supers.items():
+        for node, supers in cls.KNOWN_SUPERTYPES.items():
             if bad_targets := {
                 target
                 for target in supers
@@ -563,15 +562,14 @@ class PosetEnum(Enum):
         separately as implication rules because `A & B ≤ X` cannot be reduced to
         direct subtype declarations.
         """
-        raw_subtypes: Mapping[Self, frozenset[Self | Meet[Self]]] = cls.KNOWN_SUBTYPES  # type: ignore[assignment]
         members = frozenset(cls)
 
-        if bad_keys := {node for node in raw_subtypes if node not in members}:
+        if bad_keys := {node for node in cls.KNOWN_SUBTYPES if node not in members}:
             raise TypeError(f"Expected {cls.__name__} nodes, got {bad_keys!r}.")
 
         parsed_subtypes: dict[Self, frozenset[Self]] = {}
         subtype_meets: list[tuple[Self, frozenset[Self]]] = []
-        for node, subtypes in raw_subtypes.items():
+        for node, subtypes in cls.KNOWN_SUBTYPES.items():
             if bad_subtypes := {
                 subtype
                 for subtype in subtypes
@@ -632,13 +630,12 @@ class PosetEnum(Enum):
     @classmethod
     @cache
     def _parse_known_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
-        raw_meets: Sequence[tuple[Self, Meet[Self]]] = cls.KNOWN_MEETS  # type: ignore[assignment]
         members = frozenset(cls)
 
-        if bad_keys := {node for node, _ in raw_meets if node not in members}:
+        if bad_keys := {node for node, _ in cls.KNOWN_MEETS if node not in members}:
             raise TypeError(f"Expected {cls.__name__} meet nodes, got {bad_keys!r}.")
 
-        meets = tuple((node, frozenset(factors)) for node, factors in raw_meets)
+        meets = tuple((node, frozenset(factors)) for node, factors in cls.KNOWN_MEETS)
 
         all_factors = frozenset().union(*(factors for _, factors in meets))
         if bad_factors := {factor for factor in all_factors if factor not in members}:

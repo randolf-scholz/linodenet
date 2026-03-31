@@ -10,9 +10,10 @@ from linodenet.domains import (
     ScalarDomains as S,
     TensorDomains as T,
     VectorDomains as V,
+    is_left_invertible,
+    is_right_invertible,
 )
 from linodenet.domains.matrix_domains import ColumnOrthogonal, RowOrthogonal, Tall, Wide
-from linodenet.testing import is_left_invertible, is_right_invertible
 
 
 class TestScalarDomains:
@@ -340,7 +341,7 @@ class TestMatrixDomains:
         assert not M.NEGATIVE_DEFINITE <= M.POSITIVE_DEFINITE
 
         assert M.EYE is M.IDENTITY
-        assert str(M.SQUARE) == "square"  # type: ignore[unreachable]
+        assert str(M.SQUARE) == "square"
 
         with pytest.raises(TypeError):
             _ = M.SQUARE <= "square"
