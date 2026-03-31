@@ -190,18 +190,10 @@ class ResidualBottleneck(TransformBase):
         self.bottleneck = bottleneck
         self.activation = activation_module
         self.U = nn.Linear(
-            hidden_size,
-            input_size,
-            bias=use_bias,
-            device=device,
-            dtype=dtype,
+            hidden_size, input_size, bias=use_bias, device=device, dtype=dtype
         )
         self.V = nn.Linear(
-            input_size,
-            hidden_size,
-            bias=use_bias,
-            device=device,
-            dtype=dtype,
+            input_size, hidden_size, bias=use_bias, device=device, dtype=dtype
         )
         self.register_buffer(
             "eye",
@@ -241,11 +233,10 @@ class ResidualBottleneck(TransformBase):
         u = self.lift(z)
 
         # log|det(𝕀ₙ + 𝐃(Vᵀ lift)(z))| = log|det 𝐃(z + Vᵀ lift(z))|
-        eye_k = torch.eye(self.hidden_size, device=z.device, dtype=z.dtype)
-        eye_k = eye_k.expand(*z.shape, self.hidden_size)
+        # materialize the low-rank jacobian of the latent map with vjp
         _, vjp_fn, *_ = vjp(self.latent_map, z)
         batched_vjp_fn = vmap(lambda w: vjp_fn(w)[0], -1, -1)
-        matrix = batched_vjp_fn(eye_k)
+        matrix = batched_vjp_fn(self.eye.expand(*z.shape, self.hidden_size))
         _, logabsdet = slogdet(matrix)
         return x + u, logabsdet
 
