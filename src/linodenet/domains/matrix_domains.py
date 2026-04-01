@@ -177,9 +177,8 @@ class LowRank(Rectangular):
     rank: Final[int | None] = None
 
     def check(self, value: Tensor, /) -> Tensor:
-        shape_ok = super().check(value)
-        if self.rank is None or not bool(shape_ok.all()):
-            return shape_ok
+        if self.rank is None:
+            return super().check(value)
         return is_low_rank(value, self.rank, shape=self.shape)
 
     @overload
