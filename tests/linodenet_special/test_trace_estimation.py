@@ -1,4 +1,5 @@
 import itertools
+import math
 from collections import defaultdict
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -759,21 +760,23 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         estimate = output[1] if isinstance(output, tuple) else output
 
         expected = test_case.logabsdet
-        mean_relative_error = ((estimate - expected) / expected).abs().mean()
+        rmse = ((estimate - expected) / expected).abs().mean()
 
         if debug:
             # scaling: see XTrace paper.
             # Var[tr] = E[|tr - tr(A)|²] ≤ η‖A‖⁎² ⇝ scaled_rmse ≤ η
             # reminder: ‖A‖⁎ = nuclear norm = sum of singular values.
             nuc_norms = matrix_norm(A, ord="nuc")
+            scale = 10 ** math.floor(math.log10(abs(rmse)))
+            bound = math.ceil(rmse / scale) * scale
             print(
-                f"{test_case.name:32s} {method=:8s} "
-                f"rmse={mean_relative_error:.1e} "
+                f"{test_case.name:32s} {method=:8s}  "
+                f"{rmse=:.1e} (<{bound}) "
                 f"‖A‖⁎={nuc_norms.mean():.1e}"
             )
             return
 
-        self.assert_upper_bounded(mean_relative_error, 0.0, atol=atol, rtol=0.0)
+        self.assert_upper_bounded(rmse, 0.0, atol=atol, rtol=0.0)
 
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
     def test_low_rank_contraction(self, name: str, device: str) -> None:
