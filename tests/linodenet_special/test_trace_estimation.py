@@ -13,6 +13,7 @@ from torch import Tensor
 from torch.linalg import matrix_norm
 
 from linodenet_special.trace_estimation import (
+    ExactTrace,
     HutchinsonEstimator,
     LogAbsDetEstimators,
     LogabsdetSeriesEstimator,
@@ -546,6 +547,82 @@ class TestTraceCorrectness(TestTraceEstimator):
                 device=device,
                 debug=True,
             )
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
+class TestExactTrace(TestTraceEstimator):
+    BATCH_SIZE = 4
+    INPUT_SIZE = 32
+    MAX_POWER = 4
+
+    def test_exact_trace_matches_known_spectrum(self, device: str) -> None:
+        test_case = self.make_ldu(
+            batch_size=self.BATCH_SIZE,
+            input_size=self.INPUT_SIZE,
+            device=device,
+        )
+        estimator = ExactTrace().to(device=device)
+        x = torch.zeros(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=test_case.matrix.dtype,
+        )
+
+        estimate = estimator(
+            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
+            x,
+        )
+
+        torch.testing.assert_close(estimate, test_case.trace)
+
+    def test_exact_trace_powers_match_known_spectrum(self, device: str) -> None:
+        test_case = self.make_skew_symmetric(
+            batch_size=self.BATCH_SIZE,
+            input_size=self.INPUT_SIZE,
+            dtype=torch.float32,
+            device=device,
+        )
+        estimator = ExactTrace().to(device=device)
+        x = torch.zeros(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=test_case.matrix.dtype,
+        )
+
+        estimates = estimator.powers(
+            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
+            x,
+            self.MAX_POWER,
+        )
+        expected = test_case.powers(self.MAX_POWER)
+
+        for estimate, truth in zip(estimates, expected, strict=True):
+            torch.testing.assert_close(estimate, truth, atol=1e-4, rtol=1e-5)
+
+    def test_exact_trace_logabsdet_matches_closed_form(self, device: str) -> None:
+        test_case = self.make_low_rank_contraction(
+            rank=6,
+            batch_size=self.BATCH_SIZE,
+            input_size=self.INPUT_SIZE,
+            device=device,
+        )
+        estimator = ExactTrace().to(device=device)
+        x = torch.zeros(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=test_case.matrix.dtype,
+        )
+
+        value, estimate = estimator.logabsdet(
+            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
+            x,
+        )
+
+        torch.testing.assert_close(value, torch.zeros_like(x))
+        torch.testing.assert_close(estimate, test_case.logabsdet)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
