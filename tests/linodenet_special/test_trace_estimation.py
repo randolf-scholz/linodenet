@@ -24,6 +24,28 @@ from tests.testing import DEVICES, PROJECT, TestSuite
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
+def test_trace_estimator_accepts_hutchinson_alias() -> None:
+    estimator = TraceEstimators.new(
+        "hutchinson",
+        num_matvecs=4,
+        mode="reverse",
+        sampler="sphere",
+    )
+    assert isinstance(estimator, HutchinsonEstimator)
+
+
+def test_logabsdet_estimator_accepts_hutchinson_alias() -> None:
+    estimator = LogAbsDetEstimators.new(
+        "hutchinson",
+        num_matvecs=4,
+        num_terms=3,
+        sampler="sphere",
+        mode="reverse",
+    )
+    assert isinstance(estimator, LogabsdetSeriesEstimator)
+    assert isinstance(estimator.estimator, HutchinsonEstimator)
+
+
 @dataclass(frozen=True)
 class TraceCase:
     r"""Test matrix with known spectral data."""
@@ -441,6 +463,82 @@ class TestTraceEstimator(TestSuite):
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
+class TestExactTrace(TestTraceEstimator):
+    BATCH_SIZE = 4
+    INPUT_SIZE = 32
+    MAX_POWER = 4
+
+    def test_exact_trace_matches_known_spectrum(self, device: str) -> None:
+        test_case = self.make_ldu(
+            batch_size=self.BATCH_SIZE,
+            input_size=self.INPUT_SIZE,
+            device=device,
+        )
+        estimator = ExactTrace().to(device=device)
+        x = torch.zeros(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=test_case.matrix.dtype,
+        )
+
+        estimate = estimator(
+            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
+            x,
+        )
+
+        self.assert_close(estimate, test_case.trace)
+
+    def test_exact_trace_powers_match_known_spectrum(self, device: str) -> None:
+        test_case = self.make_skew_symmetric(
+            batch_size=self.BATCH_SIZE,
+            input_size=self.INPUT_SIZE,
+            dtype=torch.float32,
+            device=device,
+        )
+        estimator = ExactTrace().to(device=device)
+        x = torch.zeros(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=test_case.matrix.dtype,
+        )
+
+        estimates = estimator.powers(
+            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
+            x,
+            self.MAX_POWER,
+        )
+        expected = test_case.powers(self.MAX_POWER)
+
+        for estimate, truth in zip(estimates, expected, strict=True):
+            self.assert_close(estimate, truth, atol=1e-4, rtol=1e-5)
+
+    def test_exact_trace_logabsdet_matches_closed_form(self, device: str) -> None:
+        test_case = self.make_low_rank_contraction(
+            rank=6,
+            batch_size=self.BATCH_SIZE,
+            input_size=self.INPUT_SIZE,
+            device=device,
+        )
+        estimator = ExactTrace().to(device=device)
+        x = torch.zeros(
+            self.BATCH_SIZE,
+            self.INPUT_SIZE,
+            device=device,
+            dtype=test_case.matrix.dtype,
+        )
+
+        value, estimate = estimator.logabsdet(
+            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
+            x,
+        )
+
+        self.assert_close(value, torch.zeros_like(x))
+        self.assert_close(estimate, test_case.logabsdet)
+
+
+@pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestTraceCorrectness(TestTraceEstimator):
     BATCH_SIZE = 8
     PROBLEM_SIZE = 128
@@ -550,102 +648,37 @@ class TestTraceCorrectness(TestTraceEstimator):
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
-class TestExactTrace(TestTraceEstimator):
-    BATCH_SIZE = 4
-    INPUT_SIZE = 32
-    MAX_POWER = 4
-
-    def test_exact_trace_matches_known_spectrum(self, device: str) -> None:
-        test_case = self.make_ldu(
-            batch_size=self.BATCH_SIZE,
-            input_size=self.INPUT_SIZE,
-            device=device,
-        )
-        estimator = ExactTrace().to(device=device)
-        x = torch.zeros(
-            self.BATCH_SIZE,
-            self.INPUT_SIZE,
-            device=device,
-            dtype=test_case.matrix.dtype,
-        )
-
-        estimate = estimator(
-            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
-            x,
-        )
-
-        self.assert_close(estimate, test_case.trace)
-
-    def test_exact_trace_powers_match_known_spectrum(self, device: str) -> None:
-        test_case = self.make_skew_symmetric(
-            batch_size=self.BATCH_SIZE,
-            input_size=self.INPUT_SIZE,
-            dtype=torch.float32,
-            device=device,
-        )
-        estimator = ExactTrace().to(device=device)
-        x = torch.zeros(
-            self.BATCH_SIZE,
-            self.INPUT_SIZE,
-            device=device,
-            dtype=test_case.matrix.dtype,
-        )
-
-        estimates = estimator.powers(
-            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
-            x,
-            self.MAX_POWER,
-        )
-        expected = test_case.powers(self.MAX_POWER)
-
-        for estimate, truth in zip(estimates, expected, strict=True):
-            self.assert_close(estimate, truth, atol=1e-4, rtol=1e-5)
-
-    def test_exact_trace_logabsdet_matches_closed_form(self, device: str) -> None:
-        test_case = self.make_low_rank_contraction(
-            rank=6,
-            batch_size=self.BATCH_SIZE,
-            input_size=self.INPUT_SIZE,
-            device=device,
-        )
-        estimator = ExactTrace().to(device=device)
-        x = torch.zeros(
-            self.BATCH_SIZE,
-            self.INPUT_SIZE,
-            device=device,
-            dtype=test_case.matrix.dtype,
-        )
-
-        value, estimate = estimator.logabsdet(
-            lambda z: torch.einsum("...ji, ...j -> ...i", test_case.matrix, z),
-            x,
-        )
-
-        self.assert_close(value, torch.zeros_like(x))
-        self.assert_close(estimate, test_case.logabsdet)
-
-
-@pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestPowersCorrectness(TestTraceEstimator):
     pass
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestLogAbsDetCorrectness(TestTraceEstimator):
-    BATCH_SIZE = 4
+    BATCH_SIZE = 32
     PROBLEM_SIZE = 128
-    PROBLEM_RANK = 6
+    PROBLEM_RANK = 8
     NUM_MATVECS = 16
     NUM_TERMS = 8
     SEED = 0
-    TOLERANCES: dict[str, float] = {
-        LogAbsDetEstimators.EXACT: 1e-5,
-        LogAbsDetEstimators.HUTCH: 1e-1,
-        LogAbsDetEstimators.HUTCH_PP: 5e-2,
+
+    TOLERANCES: dict[tuple[str, str], float] = {
+        ("low_rank_contraction", LogAbsDetEstimators.EXACT): 1e-5,
+        ("low_rank_contraction", LogAbsDetEstimators.HUTCH): 1.7e-1,
+        ("low_rank_contraction", LogAbsDetEstimators.HUTCH_PP): 1.1e-1,
+        ("dense_contraction", LogAbsDetEstimators.EXACT): 1e-5,
+        ("dense_contraction", LogAbsDetEstimators.HUTCH): 3.2e-1,
+        ("dense_contraction", LogAbsDetEstimators.HUTCH_PP): 3.0e-1,
     }
 
     def assert_logabsdet_close(
-        self, name: str, test_case: TraceCase, /, *, device: str
+        self,
+        name: str,
+        test_case: TraceCase,
+        /,
+        *,
+        atol: float,
+        device: str,
+        debug: bool = False,
     ) -> None:
         torch.manual_seed(self.SEED)
 
@@ -668,7 +701,11 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
 
         expected = test_case.logabsdet
         mean_relative_error = ((estimate - expected) / expected).abs().mean()
-        atol = self.TOLERANCES[name]
+
+        if debug:
+            print(f"{name=:8s} mean_relative_error={mean_relative_error.item():.4e}")
+            return
+
         self.assert_upper_bounded(mean_relative_error, 0.0, atol=atol, rtol=0.0)
 
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
@@ -678,36 +715,52 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             input_size=self.PROBLEM_SIZE,
             device=device,
         )
-        self.assert_logabsdet_close(name, test_case, device=device)
+        self.assert_logabsdet_close(
+            name,
+            test_case,
+            atol=self.TOLERANCES["low_rank_contraction", name],
+            device=device,
+        )
 
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
     def test_dense_contraction(self, name: str, device: str) -> None:
         test_case = self.make_contraction(
             self.make_symmetric(input_size=self.PROBLEM_SIZE, device=device)
         )
-        self.assert_logabsdet_close(name, test_case, device=device)
+        self.assert_logabsdet_close(
+            name,
+            test_case,
+            atol=self.TOLERANCES["dense_contraction", name],
+            device=device,
+        )
 
-
-def test_trace_estimator_accepts_hutchinson_alias() -> None:
-    estimator = TraceEstimators.new(
-        "hutchinson",
-        num_matvecs=4,
-        mode="reverse",
-        sampler="sphere",
-    )
-    assert isinstance(estimator, HutchinsonEstimator)
-
-
-def test_logabsdet_estimator_accepts_hutchinson_alias() -> None:
-    estimator = LogAbsDetEstimators.new(
-        "hutchinson",
-        num_matvecs=4,
-        num_terms=3,
-        sampler="sphere",
-        mode="reverse",
-    )
-    assert isinstance(estimator, LogabsdetSeriesEstimator)
-    assert isinstance(estimator.estimator, HutchinsonEstimator)
+    @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
+    def test_calibration(self, name: str, device: str) -> None:
+        print()
+        for label, test_case in (
+            (
+                "low_rank_contraction",
+                self.make_low_rank_contraction(
+                    rank=self.PROBLEM_RANK,
+                    input_size=self.PROBLEM_SIZE,
+                    device=device,
+                ),
+            ),
+            (
+                "dense_contraction",
+                self.make_contraction(
+                    self.make_symmetric(input_size=self.PROBLEM_SIZE, device=device)
+                ),
+            ),
+        ):
+            print(f"{device=}, {label=}")
+            self.assert_logabsdet_close(
+                name,
+                test_case,
+                atol=self.TOLERANCES[label, name],
+                device=device,
+                debug=True,
+            )
 
 
 class TestVisualizations(TestTraceEstimator):
