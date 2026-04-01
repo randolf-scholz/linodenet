@@ -27,11 +27,14 @@ from torch import Tensor
 
 from .base import MatrixDomain, PosetEnum
 from .matrix_tests import (
+    is_column_orthogonal,
     is_low_rank,
     is_low_rank_skew_symmetric,
     is_low_rank_square,
     is_low_rank_symmetric,
+    is_row_orthogonal,
     is_skew_symmetric,
+    is_square,
     is_symmetric,
 )
 
@@ -114,14 +117,7 @@ class ColumnOrthogonal(Tall):
     r"""Domain of tall matrices with orthonormal columns."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        shape_ok = super().check(value)
-        if not bool(shape_ok.all()):
-            return shape_ok & False
-
-        cols = value.shape[-1]
-        gram = value.mT @ value
-        eye = torch.eye(cols, dtype=value.dtype, device=value.device)
-        return shape_ok & torch.isclose(gram, eye).all(dim=(-2, -1))
+        return is_column_orthogonal(value, shape=self.shape)
 
     def __call__(
         self, rows: int | None = None, cols: int | None = None
@@ -134,14 +130,7 @@ class RowOrthogonal(Wide):
     r"""Domain of wide matrices with orthonormal rows."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        shape_ok = super().check(value)
-        if not bool(shape_ok.all()):
-            return shape_ok & False
-
-        rows = value.shape[-2]
-        gram = value @ value.mT
-        eye = torch.eye(rows, dtype=value.dtype, device=value.device)
-        return shape_ok & torch.isclose(gram, eye).all(dim=(-2, -1))
+        return is_row_orthogonal(value, shape=self.shape)
 
     def __call__(
         self, rows: int | None = None, cols: int | None = None
@@ -170,10 +159,7 @@ class Square(MatrixDomain):
         return self.size, self.size
 
     def check(self, value: Tensor, /) -> Tensor:
-        *batch_shape, m, n = value.shape
-        if self.size is None:
-            return value.new_full(batch_shape, m == n, dtype=torch.bool)
-        return value.new_full(batch_shape, (m, n) == self.shape, dtype=torch.bool)
+        return is_square(value, shape=self.shape)
 
     def __call__(self, size: int) -> Square:
         return Square(size)
@@ -211,7 +197,7 @@ class LowRankSquare(Square):
 
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
-            return super().check(value)
+            return is_square(value, shape=self.shape)
         return is_low_rank_square(value, self.rank, size=self.size)
 
     def __call__(
