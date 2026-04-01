@@ -694,7 +694,9 @@ class MatrixDomains(PosetEnum):
     ANY = "any"  # top node
     NONE = "none"  # bottom node
 
-    BOOLEAN = "boolean"  # only 0 and 1 entries
+    ZERO = "zero"  # a matrix of only zeros
+    ONES = "ones"  # a matrix of only ones
+    BOOLEAN = "boolean"  # a matrix of only zeros and ones
     SPARSE = "sparse"  # many 0 entries
     MASKED = "masked"  # X⊙M = X for some mask M
 
@@ -707,7 +709,6 @@ class MatrixDomains(PosetEnum):
     EVEN_SQUARE = "even_square"  # 2n × 2n matrices
 
     # specific matrices
-    ZERO = "zero"  # the zero matrix
     IDENTITY = "identity"  # the identity matrix
     EYE = "identity"  # alias
     STANDARD_SYMPLECTIC = "standard_symplectic"  # [0, 𝕀; -𝕀, 0]
