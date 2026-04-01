@@ -322,6 +322,51 @@ class TestTraceEstimator(TestSuite):
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
         return TraceCase(matrix=matrix, spectrum=spectrum)
 
+    def make_decaying_spectrum_contraction(
+        self,
+        /,
+        *,
+        q: float,
+        seed: int | None = None,
+        batch_size: int | None = None,
+        input_size: int | None = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device = "cpu",
+    ) -> TraceCase:
+        batch_size = self.BATCH_SIZE if batch_size is None else batch_size
+        input_size = self.INPUT_SIZE if input_size is None else input_size
+        generator = self._make_generator(seed=seed, device=device)
+
+        if not 0.0 < q < 1.0:
+            raise ValueError(f"q must satisfy 0 < q < 1, got {q!r}")
+
+        basis = self._make_orthogonal_batch(
+            batch_size=batch_size,
+            input_size=input_size,
+            dtype=dtype,
+            device=device,
+            generator=generator,
+        )
+        exponents = torch.arange(1, input_size + 1, device=device, dtype=torch.float32)
+        magnitudes = torch.as_tensor(q, device=device, dtype=torch.float32).pow(
+            exponents
+        )
+        signs = (
+            2
+            * torch.randint(
+                0,
+                2,
+                (batch_size, input_size),
+                device=device,
+                generator=generator,
+            )
+            - 1
+        )
+        spectrum = signs.to(dtype=torch.float32) * magnitudes
+        spectrum = spectrum.to(device=device, dtype=dtype)
+        matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", basis, spectrum, basis)
+        return TraceCase(matrix=matrix, spectrum=spectrum)
+
     def make_low_rank(
         self,
         /,
@@ -657,17 +702,21 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     BATCH_SIZE = 32
     PROBLEM_SIZE = 128
     PROBLEM_RANK = 8
+    DECAY_Q = 0.95
     NUM_MATVECS = 16
     NUM_TERMS = 8
     SEED = 0
 
     TOLERANCES: dict[tuple[str, str], float] = {
-        ("low_rank_contraction", LogAbsDetEstimators.EXACT): 1e-5,
-        ("low_rank_contraction", LogAbsDetEstimators.HUTCH): 1.7e-1,
-        ("low_rank_contraction", LogAbsDetEstimators.HUTCH_PP): 1.1e-1,
-        ("dense_contraction", LogAbsDetEstimators.EXACT): 1e-5,
-        ("dense_contraction", LogAbsDetEstimators.HUTCH): 3.2e-1,
-        ("dense_contraction", LogAbsDetEstimators.HUTCH_PP): 3.0e-1,
+        ("low_rank", LogAbsDetEstimators.EXACT): 1e-5,
+        ("low_rank", LogAbsDetEstimators.HUTCH): 1.7e-1,
+        ("low_rank", LogAbsDetEstimators.HUTCH_PP): 1.1e-1,
+        ("flat_spectrum", LogAbsDetEstimators.EXACT): 1e-5,
+        ("flat_spectrum", LogAbsDetEstimators.HUTCH): 5.3e-1,
+        ("flat_spectrum", LogAbsDetEstimators.HUTCH_PP): 7.8e-1,
+        ("decaying_spectrum", LogAbsDetEstimators.EXACT): 1e-5,
+        ("decaying_spectrum", LogAbsDetEstimators.HUTCH): 2.6e-1,
+        ("decaying_spectrum", LogAbsDetEstimators.HUTCH_PP): 3.1e-1,
     }
 
     def assert_logabsdet_close(
@@ -718,19 +767,33 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         self.assert_logabsdet_close(
             name,
             test_case,
-            atol=self.TOLERANCES["low_rank_contraction", name],
+            atol=self.TOLERANCES["low_rank", name],
             device=device,
         )
 
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
-    def test_dense_contraction(self, name: str, device: str) -> None:
+    def test_flat_spectrum_contraction(self, name: str, device: str) -> None:
         test_case = self.make_contraction(
             self.make_symmetric(input_size=self.PROBLEM_SIZE, device=device)
         )
         self.assert_logabsdet_close(
             name,
             test_case,
-            atol=self.TOLERANCES["dense_contraction", name],
+            atol=self.TOLERANCES["flat_spectrum", name],
+            device=device,
+        )
+
+    @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
+    def test_decaying_spectrum_contraction(self, name: str, device: str) -> None:
+        test_case = self.make_decaying_spectrum_contraction(
+            q=self.DECAY_Q,
+            input_size=self.PROBLEM_SIZE,
+            device=device,
+        )
+        self.assert_logabsdet_close(
+            name,
+            test_case,
+            atol=self.TOLERANCES["decaying_spectrum", name],
             device=device,
         )
 
@@ -739,7 +802,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         print()
         for label, test_case in (
             (
-                "low_rank_contraction",
+                "low_rank",
                 self.make_low_rank_contraction(
                     rank=self.PROBLEM_RANK,
                     input_size=self.PROBLEM_SIZE,
@@ -747,9 +810,17 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
                 ),
             ),
             (
-                "dense_contraction",
+                "flat_spectrum",
                 self.make_contraction(
                     self.make_symmetric(input_size=self.PROBLEM_SIZE, device=device)
+                ),
+            ),
+            (
+                "decaying_spectrum",
+                self.make_decaying_spectrum_contraction(
+                    q=self.DECAY_Q,
+                    input_size=self.PROBLEM_SIZE,
+                    device=device,
                 ),
             ),
         ):
