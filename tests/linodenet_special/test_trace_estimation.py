@@ -574,7 +574,7 @@ class TestExactTrace(TestTraceEstimator):
             x,
         )
 
-        torch.testing.assert_close(estimate, test_case.trace)
+        self.assert_close(estimate, test_case.trace)
 
     def test_exact_trace_powers_match_known_spectrum(self, device: str) -> None:
         test_case = self.make_skew_symmetric(
@@ -599,7 +599,7 @@ class TestExactTrace(TestTraceEstimator):
         expected = test_case.powers(self.MAX_POWER)
 
         for estimate, truth in zip(estimates, expected, strict=True):
-            torch.testing.assert_close(estimate, truth, atol=1e-4, rtol=1e-5)
+            self.assert_close(estimate, truth, atol=1e-4, rtol=1e-5)
 
     def test_exact_trace_logabsdet_matches_closed_form(self, device: str) -> None:
         test_case = self.make_low_rank_contraction(
@@ -621,8 +621,8 @@ class TestExactTrace(TestTraceEstimator):
             x,
         )
 
-        torch.testing.assert_close(value, torch.zeros_like(x))
-        torch.testing.assert_close(estimate, test_case.logabsdet)
+        self.assert_close(value, torch.zeros_like(x))
+        self.assert_close(estimate, test_case.logabsdet)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
