@@ -736,6 +736,22 @@ class ExactTrace(TraceEstimator):
         return exact_logabsdet(op, x)
 
 
+class ExactLogabsdet(nn.Module):
+    r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
+
+    .. math:: \log|\det(𝕀 + A)| = ∑ᵢ\log|1+λᵢ| for eigenvalues λᵢ of A.
+
+    Note:
+        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
+
+    Cost: $𝓞(N³)$ where N is the dimension of the operator.
+    """
+
+    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    def forward(self, op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Tensor]:
+        return exact_logabsdet(op, x)
+
+
 class HutchinsonEstimator(TraceEstimator):
     r"""Estimate traces with Hutchinson's estimator.
 
@@ -1199,22 +1215,6 @@ class XTraceEstimator(TraceEstimator):
         self, op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int
     ) -> Iterator[Tensor]:
         raise NotImplementedError("XTraceEstimator does not support power traces")
-
-
-class ExactLogabsdet(nn.Module):
-    r"""Compute $\log|\det(𝕀 + 𝐃f(x))|$ by materializing the Jacobian matrix.
-
-    .. math:: \log|\det(𝕀 + A)| = ∑ᵢ\log|1+λᵢ| for eigenvalues λᵢ of A.
-
-    Note:
-        Assumes $𝐃f(x)$ is a contraction, i.e. $‖𝐃f(x)‖₂ < 1$.
-
-    Cost: $𝓞(N³)$ where N is the dimension of the operator.
-    """
-
-    @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-    def forward(self, op: Fn[[Tensor], Tensor], x: Tensor, /) -> tuple[Tensor, Tensor]:
-        return exact_logabsdet(op, x)
 
 
 class LogabsdetSeriesEstimator(nn.Module):
