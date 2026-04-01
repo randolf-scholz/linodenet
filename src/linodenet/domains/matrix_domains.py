@@ -736,47 +736,46 @@ class MatrixDomains(PosetEnum):
     IDENTITY = "identity"  # the identity matrix
     EYE = "identity"  # alias
 
-    STANDARD_SYMPLECTIC = "standard_symplectic"  # [0, 𝕀; -𝕀, 0]
-    SPARSE = "sparse"  # many 0 entries
+    ONE_HOT = "one-hot"  # a single 1 entry and 0 elsewhere
     MASKED = "masked"  # X⊙M = X for some mask M
 
     RECTANGULAR = "rectangular"  # m × n matrices
     TALL = "tall"  # m × n matrices with m ≥ n
     WIDE = "wide"  # m × n matrices with m ≤ n
-    COLUMN_ORTHOGONAL = "column_orthogonal"  # m × n matrices with QᵀQ = 𝕀ₙ
-    ROW_ORTHOGONAL = "row_orthogonal"  # m × n matrices with QQᵀ = 𝕀ₘ
+    COLUMN_ORTHOGONAL = "column-orthogonal"  # m × n matrices with QᵀQ = 𝕀ₙ
+    ROW_ORTHOGONAL = "row-orthogonal"  # m × n matrices with QQᵀ = 𝕀ₘ
     SQUARE = "square"  # n × n matrices
-    EVEN_SQUARE = "even_square"  # 2n × 2n matrices
+    EVEN_SQUARE = "even-square"  # 2n × 2n matrices
 
     # rank
-    LOW_RANK = "low_rank"  # UVᵀ
-    LOW_RANK_SQUARE = "low_rank_square"
-    LOW_RANK_SYMMETRIC = "low_rank_symmetric"  # UVᵀ + VUᵀ
-    LOW_RANK_SKEW_SYMMETRIC = "low_rank_skew_symmetric"  # UVᵀ - VUᵀ
-    RANK_ONE = "rank_one"  # uvᵀ
+    LOW_RANK = "low-rank"  # UVᵀ
+    LOW_RANK_SQUARE = "low-rank-square"
+    LOW_RANK_SYMMETRIC = "low-rank-symmetric"  # UVᵀ + VUᵀ
+    LOW_RANK_SKEW_SYMMETRIC = "low-rank-skew-symmetric"  # UVᵀ - VUᵀ
+    RANK_ONE = "rank-one"  # uvᵀ
 
     # determinant-based
     SINGULAR = "singular"  # det=0
-    LEFT_INVERTIBLE = "left_invertible"  # full column rank, admits L with LA = 𝕀
-    RIGHT_INVERTIBLE = "right_invertible"  # full row rank, admits R with AR = 𝕀
+    LEFT_INVERTIBLE = "left-invertible"  # full column rank, admits L with LA = 𝕀
+    RIGHT_INVERTIBLE = "right-invertible"  # full row rank, admits R with AR = 𝕀
     INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
-    LOWER_INVERTIBLE = "lower_invertible"
-    UPPER_INVERTIBLE = "upper_invertible"
-    CHOLESKY_FACTOR = "cholesky_factor"
-    UNIT_DETERMINANT = "unit_determinant"  # SLₙ(R) (det=1)
+    LOWER_INVERTIBLE = "lower-invertible"
+    UPPER_INVERTIBLE = "upper-invertible"
+    CHOLESKY_FACTOR = "cholesky-factor"
+    UNIT_DETERMINANT = "unit-determinant"  # SLₙ(R) (det=1)
     GENERAL_LINEAR = "invertible"  # alias
-    SPECIAL_LINEAR = "unit_determinant"  # alias
-    POSITIVE_DETERMINANT = "positive_determinant"  # GLₙ⁺(R) (det>0)
-    NEGATIVE_DETERMINANT = "negative_determinant"  # GLₙ⁻(R) (det<0)
+    SPECIAL_LINEAR = "unit-determinant"  # alias
+    POSITIVE_DETERMINANT = "positive-determinant"  # GLₙ⁺(R) (det>0)
+    NEGATIVE_DETERMINANT = "negative-determinant"  # GLₙ⁻(R) (det<0)
 
     # symmetry / entry based
     SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
-    SKEW_SYMMETRIC = "skew_symmetric"
+    SKEW_SYMMETRIC = "skew-symmetric"
     DIAGONAL = "diagonal"
-    POSITIVE_DIAGONAL_ENTRIES = "positive_diagonal_entries"
-    NEGATIVE_DIAGONAL_ENTRIES = "negative_diagonal_entries"
-    ZERO_DIAGONAL_ENTRIES = "zero_diagonal"
-    ZERO_DIAGONAL = "zero_diagonal"
+    POSITIVE_DIAGONAL_ENTRIES = "positive-diagonal-entries"
+    NEGATIVE_DIAGONAL_ENTRIES = "negative-diagonal-entries"
+    ZERO_DIAGONAL_ENTRIES = "zero-diagonal"
+    ZERO_DIAGONAL = "zero-diagonal"
     TRIDIAGONAL = "tridiagonal"
     BANDED = "banded"
     TOEPLITZ = "toeplitz"  # constant along diagonals
@@ -784,41 +783,62 @@ class MatrixDomains(PosetEnum):
     CIRCULANT = "circulant"  # constant along diagonals, wrap around
 
     # eigenvalues
-    POSITIVE_DEFINITE = "positive_definite"  # 𝕊ₙ⁺(ℝ)
-    NEGATIVE_DEFINITE = "negative_definite"  # 𝕊ₙ⁻(ℝ)
-    POSITIVE_SEMIDEFINITE = "positive_semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
-    NEGATIVE_SEMIDEFINITE = "negative_semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
+    POSITIVE_DEFINITE = "positive-definite"  # 𝕊ₙ⁺(ℝ)
+    NEGATIVE_DEFINITE = "negative-definite"  # 𝕊ₙ⁻(ℝ)
+    POSITIVE_SEMIDEFINITE = "positive-semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
+    NEGATIVE_SEMIDEFINITE = "negative-semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
 
     CONTRACTION = "contraction"  # ‖A‖₂ < 1
-    SPECTRAL_NORMALIZED = "spectral_normalized"  # ‖A‖₂ = 1
-    LIPSCHITZ_BOUNDED = "lipschitz_bounded"  # ‖A‖₂ ≤ C
-    DIAGONALLY_DOMINANT = "diagonally_dominant"  # |Aᵢᵢ| ≥ ∑_{j≠i} |Aᵢⱼ| for all i
+    SPECTRAL_NORMALIZED = "spectral-normalized"  # ‖A‖₂ = 1
+    LIPSCHITZ_BOUNDED = "lipschitz-bounded"  # ‖A‖₂ ≤ C
+    DIAGONALLY_DOMINANT = "diagonally-dominant"  # |Aᵢᵢ| ≥ ∑_{j≠i} |Aᵢⱼ| for all i
 
     NORMAL = "normal"
     ORTHOGONAL = "orthogonal"  # Oₙ(R)
-    CAYLEY_ORTHOGONAL = "cayley_orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
-    SPECIAL_ORTHOGONAL = "special_orthogonal"  # SOₙ(R)
+    CAYLEY_ORTHOGONAL = "cayley-orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
+    SPECIAL_ORTHOGONAL = "special-orthogonal"  # SOₙ(R)
 
     TRACELESS = "traceless"
     SYMPLECTIC = "symplectic"  # 2n×2n with AᵀJA = J for J=[0, I;-I, 0]
     HAMILTONIAN = "hamiltonian"  # 2n×2n with (JA)ᵀ = JA for J=[0, I;-I, 0]
 
     TRIANGULAR = "triangular"  # lower or upper
-    UPPER_TRIANGULAR = "upper_triangular"
-    LOWER_TRIANGULAR = "lower_triangular"
+    UPPER_TRIANGULAR = "upper-triangular"
+    LOWER_TRIANGULAR = "lower-triangular"
 
-    ROW_STOCHASTIC = "row_stochastic"
-    COLUMN_STOCHASTIC = "column_stochastic"
-    DOUBLY_STOCHASTIC = "doubly_stochastic"
+    ROW_CENTERED = "row-centered"  # A𝟏 = 𝟎
+    COLUMN_CENTERED = "column-centered"  # Aᵀ𝟏 = 𝟎
+    COL_CENTERED = "column-centered"  # alias
+    DOUBLY_CENTERED = "doubly-centered"  # A𝟏 = 𝟎 and Aᵀ𝟏 = 𝟎
+    CENTERED = "doubly-centered"  # alias
+    CENTERING = "centering"  # 𝕀ₙ - 1/n𝟏ₙ𝟏ₙᵀ special centering matrix
+    INTENSITY = "intensity"  # Aᵢᵢ = -∑_{j≠i} Aᵢⱼ for all i, Aᵢⱼ ≥ 0 for i≠j
+    # ⇝ row-centered, nonpositive diagonal, diagonally dominant
+
+    ROW_STOCHASTIC = "row-stochastic"  # nonnegative, A𝟏 = 𝟏
+    COLUMN_STOCHASTIC = "column-stochastic"  # nonnegative, Aᵀ𝟏 = 𝟏
+    COL_STOCHASTIC = "column-stochastic"  # alias
+    DOUBLY_STOCHASTIC = "doubly-stochastic"
     PERMUTATION = "permutation"
 
     IDEMPOTENT = "idempotent"  # Aᵏ = A for some k≥2
     PROJECTION = "projection"  # A² = A
     NILPOTENT = "nilpotent"  # Aᵏ = 0 for some k≥2
 
-    EFFICIENTLY_INVERTIBLE = "efficient_invertible"
+    STANDARD_NILPOTENT = "canonical-nilpotent"  # standard nilpotent matrix
+    STANDARD_SYMPLECTIC = "standard-symplectic"  # [0, 𝕀; -𝕀, 0]
 
     HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
+
+    BLOCK_DIAGONAL = "block-diagonal"
+    JORDAN_BLOCK = "jordan-block"  # λI + N, N is standard nilpotent
+    JORDAN = "jordan"  # block diagonal with Jordan blocks
+
+    # TODO: graph theory (degree, adjacency, incidence, Laplacian)
+
+    # tag-like
+    SPARSE = "sparse"  # many 0 entries
+    EFFICIENTLY_INVERTIBLE = "efficiently-invertible"
 
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
@@ -854,6 +874,7 @@ MatrixDomains.KNOWN_MEETS = (
     (M.POSITIVE_DEFINITE, M.POSITIVE_SEMIDEFINITE & M.INVERTIBLE),
     (M.SPECIAL_ORTHOGONAL, M.ORTHOGONAL & M.UNIT_DETERMINANT),
     (M.SQUARE, M.TALL & M.WIDE),
+    (M.SQUARE, M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC),  # theorem
     (M.UPPER_INVERTIBLE, M.UPPER_TRIANGULAR & M.INVERTIBLE),
 )
 MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
@@ -879,7 +900,6 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.NORMAL: frozenset({M.SQUARE}),
     M.ORTHOGONAL: frozenset({M.NORMAL}),
-    M.PERMUTATION: frozenset({M.SPARSE}),
     M.POSITIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.POSITIVE_DIAGONAL_ENTRIES: frozenset({M.RECTANGULAR}),
     M.POSITIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
@@ -901,14 +921,19 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.UNIT_DETERMINANT: frozenset({M.POSITIVE_DETERMINANT}),
     M.UPPER_TRIANGULAR: frozenset({M.TRIANGULAR}),
     M.WIDE: frozenset({M.RECTANGULAR}),
-    M.ZERO: frozenset({M.SPARSE, M.BOOLEAN}),
+    M.ZERO: frozenset({M.BOOLEAN}),
     M.ZERO_DIAGONAL: frozenset({M.TRACELESS}),
 })  # fmt: skip
 MatrixDomains.KNOWN_SUBTYPES = MappingProxyType({
+    # These relationships are not modeled by inheritance.
+    M.SPARSE: frozenset({
+        M.ZERO, M.PERMUTATION, M.ONE_HOT, M.BANDED,
+        M.BLOCK_DIAGONAL, M.JORDAN_BLOCK, M.STANDARD_NILPOTENT,
+        M.STANDARD_SYMPLECTIC,
+    }),
     M.EFFICIENTLY_INVERTIBLE: frozenset({
         M.SPARSE, M.PERMUTATION, M.ORTHOGONAL,
         M.TRIANGULAR, M.DIAGONAL, M.TRIDIAGONAL,
     }),
-    M.SQUARE: frozenset({M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC}),
 })  # fmt: skip
 del M  # remove alias
