@@ -77,6 +77,33 @@ class Rectangular(MatrixDomain):
 
 
 @dataclass(frozen=True)
+class Square(MatrixDomain):
+    r"""Domain of square matrices with optional fixed size."""
+
+    size: Final[int | None] = None
+
+    @property
+    def rows(self) -> int | None:
+        return self.size
+
+    @property
+    def cols(self) -> int | None:
+        return self.size
+
+    @property
+    def shape(self) -> tuple[int, int] | None:
+        if self.size is None:
+            return None
+        return self.size, self.size
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return is_square(value, shape=self.shape)
+
+    def __call__(self, size: int) -> Square:
+        return Square(size)
+
+
+@dataclass(frozen=True)
 class Tall(Rectangular):
     r"""Domain of matrices with at least as many rows as columns."""
 
@@ -136,33 +163,6 @@ class RowOrthogonal(Wide):
         self, rows: int | None = None, cols: int | None = None
     ) -> RowOrthogonal:
         return RowOrthogonal(rows, cols)
-
-
-@dataclass(frozen=True)
-class Square(MatrixDomain):
-    r"""Domain of square matrices with optional fixed size."""
-
-    size: Final[int | None] = None
-
-    @property
-    def rows(self) -> int | None:
-        return self.size
-
-    @property
-    def cols(self) -> int | None:
-        return self.size
-
-    @property
-    def shape(self) -> tuple[int, int] | None:
-        if self.size is None:
-            return None
-        return self.size, self.size
-
-    def check(self, value: Tensor, /) -> Tensor:
-        return is_square(value, shape=self.shape)
-
-    def __call__(self, size: int) -> Square:
-        return Square(size)
 
 
 @dataclass(frozen=True)
