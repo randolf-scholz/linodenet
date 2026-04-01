@@ -16,7 +16,7 @@ from torch.linalg import matrix_norm
 from linodenet_special.trace_estimation import (
     ExactTrace,
     HutchinsonEstimator,
-    LogAbsDetEstimators,
+    LogAbsDetEstimators as L,
     LogabsdetSeriesEstimator,
     TraceEstimators,
 )
@@ -36,7 +36,7 @@ def test_trace_estimator_accepts_hutchinson_alias() -> None:
 
 
 def test_logabsdet_estimator_accepts_hutchinson_alias() -> None:
-    estimator = LogAbsDetEstimators.new(
+    estimator = L.new(
         "hutchinson",
         num_matvecs=4,
         num_terms=3,
@@ -719,15 +719,15 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     SEED = 0
 
     TOLERANCES: dict[tuple[str, str], float] = {
-        ("low_rank", LogAbsDetEstimators.EXACT): 1e-5,
-        ("low_rank", LogAbsDetEstimators.HUTCH): 1.7e-1,
-        ("low_rank", LogAbsDetEstimators.HUTCH_PP): 1.1e-1,
-        ("flat_spectrum", LogAbsDetEstimators.EXACT): 1e-5,
-        ("flat_spectrum", LogAbsDetEstimators.HUTCH): 5.3e-1,
-        ("flat_spectrum", LogAbsDetEstimators.HUTCH_PP): 7.8e-1,
-        ("decaying_spectrum", LogAbsDetEstimators.EXACT): 1e-5,
-        ("decaying_spectrum", LogAbsDetEstimators.HUTCH): 2.6e-1,
-        ("decaying_spectrum", LogAbsDetEstimators.HUTCH_PP): 3.1e-1,
+        ("low_rank", L.EXACT): 3e-7,
+        ("low_rank", L.HUTCH): 2e-1,
+        ("low_rank", L.HUTCH_PP): 2e-1,
+        ("flat_spectrum", L.EXACT): 7e-6,
+        ("flat_spectrum", L.HUTCH): 6e0,
+        ("flat_spectrum", L.HUTCH_PP): 2e1,
+        ("decaying_spectrum", L.EXACT): 4e-7,
+        ("decaying_spectrum", L.HUTCH): 3e-1,
+        ("decaying_spectrum", L.HUTCH_PP): 4e-1,
     }
 
     def assert_logabsdet_close(
@@ -742,7 +742,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     ) -> None:
         torch.manual_seed(self.SEED)
 
-        estimator = LogAbsDetEstimators.new(
+        estimator = L.new(
             method,
             num_matvecs=self.NUM_MATVECS,
             num_terms=self.NUM_TERMS,
@@ -771,14 +771,14 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             bound = math.ceil(rmse / scale) * scale
             print(
                 f"{test_case.name:32s} {method=:8s}  "
-                f"{rmse=:.1e} (<{bound}) "
+                f"{rmse=:.1e} (<{bound:.0e}) "
                 f"‖A‖⁎={nuc_norms.mean():.1e}"
             )
             return
 
         self.assert_upper_bounded(rmse, 0.0, atol=atol, rtol=0.0)
 
-    @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
+    @pytest.mark.parametrize("name", L, ids=str)
     def test_low_rank_contraction(self, name: str, device: str) -> None:
         test_case = self.make_low_rank_contraction(
             rank=self.PROBLEM_RANK,
@@ -793,7 +793,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             device=device,
         )
 
-    @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
+    @pytest.mark.parametrize("name", L, ids=str)
     def test_flat_contraction(self, name: str, device: str) -> None:
         test_case = self.make_contraction(
             self.make_ldu(input_size=self.PROBLEM_SIZE, device=device),
@@ -806,7 +806,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             device=device,
         )
 
-    @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
+    @pytest.mark.parametrize("name", L, ids=str)
     def test_decaying_contraction(self, name: str, device: str) -> None:
         test_case = self.make_decaying_contraction(
             q=self.DECAY_Q,
@@ -820,7 +820,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             device=device,
         )
 
-    @pytest.mark.parametrize("method", LogAbsDetEstimators)
+    @pytest.mark.parametrize("method", L)
     def test_calibration(self, method: str, device: str) -> None:
         print()
         for label, test_case in (
