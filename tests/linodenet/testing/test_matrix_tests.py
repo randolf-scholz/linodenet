@@ -16,7 +16,9 @@ from linodenet.domains.matrix_tests import (
     is_skew_symmetric,
     is_square,
     is_symmetric,
+    is_tall,
     is_upper_triangular,
+    is_wide,
 )
 
 
@@ -42,6 +44,8 @@ def test_non_batched_shape_checks_return_scalar_false() -> None:
     x = torch.eye(3)
 
     assert not is_square(x, shape=(4, 4)).item()
+    assert not is_tall(x, shape=(4, 4)).item()
+    assert not is_wide(x, shape=(4, 4)).item()
     assert not is_banded(x, -1, 1, shape=(4, 4)).item()
 
 
@@ -62,6 +66,26 @@ def test_matrix_tests_support_non_default_matrix_dims() -> None:
         ]
     ).movedim((-2, -1), (0, 2))
     assert is_skew_symmetric(skew_symmetric, size=2, dim=(0, 2)).all()
+
+    tall = torch.randn(2, 4, 3).movedim((-2, -1), (0, 2))
+    wide = torch.randn(2, 3, 4).movedim((-2, -1), (0, 2))
+    assert is_tall(tall, shape=(4, 3), dim=(0, 2)).all()
+    assert is_wide(wide, shape=(3, 4), dim=(0, 2)).all()
+
+
+def test_tall_and_wide_matrix_tests() -> None:
+    tall = torch.randn(2, 4, 3)
+    wide = torch.randn(2, 3, 4)
+    square = torch.randn(2, 3, 3)
+
+    assert is_tall(tall).all()
+    assert not is_wide(tall).any()
+
+    assert is_wide(wide).all()
+    assert not is_tall(wide).any()
+
+    assert is_tall(square).all()
+    assert is_wide(square).all()
 
 
 def test_low_rank_symmetric_matrix_test() -> None:

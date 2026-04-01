@@ -40,6 +40,8 @@ __all__ = [
     "is_traceless",
     "is_tridiagonal",
     "is_upper_triangular",
+    "is_tall",
+    "is_wide",
 ]
 
 from collections.abc import Callable
@@ -230,6 +232,46 @@ def is_square(
         return _full_false(x, dim)
     return torch.tensor(
         x.shape[dim[0]] == x.shape[dim[1]],
+        dtype=torch.bool,
+        device=x.device,
+    )
+
+
+@signature("(..., m, n) -> bool[()]")
+def is_tall(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
+) -> Tensor:
+    r"""Check whether the given tensor is tall along the given dimensions."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+    return torch.tensor(
+        x.shape[dim[0]] >= x.shape[dim[1]],
+        dtype=torch.bool,
+        device=x.device,
+    )
+
+
+@signature("(..., m, n) -> bool[()]")
+def is_wide(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
+) -> Tensor:
+    r"""Check whether the given tensor is wide along the given dimensions."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+    return torch.tensor(
+        x.shape[dim[0]] <= x.shape[dim[1]],
         dtype=torch.bool,
         device=x.device,
     )

@@ -36,6 +36,8 @@ from .matrix_tests import (
     is_skew_symmetric,
     is_square,
     is_symmetric,
+    is_tall,
+    is_wide,
 )
 
 
@@ -119,9 +121,7 @@ class Tall(Rectangular):
             raise ValueError("Tall matrices must satisfy rows >= cols.")
 
     def check(self, value: Tensor, /) -> Tensor:
-        return super().check(value) & value.new_full(
-            value.shape[:-2], value.shape[-2] >= value.shape[-1], dtype=torch.bool
-        )
+        return is_tall(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
@@ -134,9 +134,7 @@ class Wide(Rectangular):
             raise ValueError("Wide matrices must satisfy cols >= rows.")
 
     def check(self, value: Tensor, /) -> Tensor:
-        return super().check(value) & value.new_full(
-            value.shape[:-2], value.shape[-1] >= value.shape[-2], dtype=torch.bool
-        )
+        return is_wide(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
