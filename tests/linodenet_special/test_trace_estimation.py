@@ -403,12 +403,12 @@ class TestTraceEstimator(TestSuite):
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
         return TraceCase(name="low_rank", matrix=matrix, spectrum=spectrum)
 
-    def make_flat_contraction(
+    def make_contraction(
         self,
         test_case: TraceCase,
         /,
         *,
-        c: float = 0.97,
+        c: float,
     ) -> TraceCase:
         max_spectral_radius = test_case.spectrum.abs().amax(dim=-1, keepdim=True)
         one = torch.ones_like(max_spectral_radius)
@@ -425,12 +425,12 @@ class TestTraceEstimator(TestSuite):
         /,
         *,
         rank: int,
+        c: float,
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
         dtype: torch.dtype | None = None,
         device: str | torch.device = "cpu",
-        c: float = 0.97,
     ) -> TraceCase:
         test_case = self.make_low_rank(
             rank=rank,
@@ -440,7 +440,7 @@ class TestTraceEstimator(TestSuite):
             dtype=dtype,
             device=device,
         )
-        return self.make_flat_contraction(test_case, c=c)
+        return self.make_contraction(test_case, c=c)
 
     def _make_orthogonal_batch(
         self,
@@ -519,6 +519,9 @@ class TestExactTrace(TestTraceEstimator):
     INPUT_SIZE = 32
     MAX_POWER = 4
 
+    PROBLEM_RANK = 8
+    DECAY_Q = 0.95
+
     def test_exact_trace_matches_known_spectrum(self, device: str) -> None:
         test_case = self.make_ldu(
             batch_size=self.BATCH_SIZE,
@@ -567,7 +570,8 @@ class TestExactTrace(TestTraceEstimator):
 
     def test_exact_trace_logabsdet_matches_closed_form(self, device: str) -> None:
         test_case = self.make_low_rank_contraction(
-            rank=6,
+            rank=self.PROBLEM_RANK,
+            c=self.DECAY_Q,
             batch_size=self.BATCH_SIZE,
             input_size=self.INPUT_SIZE,
             device=device,
@@ -717,12 +721,12 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         ("low_rank", LogAbsDetEstimators.EXACT): 1e-5,
         ("low_rank", LogAbsDetEstimators.HUTCH): 1.7e-1,
         ("low_rank", LogAbsDetEstimators.HUTCH_PP): 1.1e-1,
-        ("flat", LogAbsDetEstimators.EXACT): 1e-5,
-        ("flat", LogAbsDetEstimators.HUTCH): 5.3e-1,
-        ("flat", LogAbsDetEstimators.HUTCH_PP): 7.8e-1,
-        ("decaying", LogAbsDetEstimators.EXACT): 1e-5,
-        ("decaying", LogAbsDetEstimators.HUTCH): 2.6e-1,
-        ("decaying", LogAbsDetEstimators.HUTCH_PP): 3.1e-1,
+        ("flat_spectrum", LogAbsDetEstimators.EXACT): 1e-5,
+        ("flat_spectrum", LogAbsDetEstimators.HUTCH): 5.3e-1,
+        ("flat_spectrum", LogAbsDetEstimators.HUTCH_PP): 7.8e-1,
+        ("decaying_spectrum", LogAbsDetEstimators.EXACT): 1e-5,
+        ("decaying_spectrum", LogAbsDetEstimators.HUTCH): 2.6e-1,
+        ("decaying_spectrum", LogAbsDetEstimators.HUTCH_PP): 3.1e-1,
     }
 
     def assert_logabsdet_close(
@@ -758,9 +762,14 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         mean_relative_error = ((estimate - expected) / expected).abs().mean()
 
         if debug:
+            # scaling: see XTrace paper.
+            # Var[tr] = E[|tr - tr(A)|²] ≤ η‖A‖⁎² ⇝ scaled_rmse ≤ η
+            # reminder: ‖A‖⁎ = nuclear norm = sum of singular values.
+            nuc_norms = matrix_norm(A, ord="nuc")
             print(
-                f"{test_case.name:12s} {method=:8s} "
-                f"rmse={mean_relative_error.item():.4e}"
+                f"{test_case.name:32s} {method=:8s} "
+                f"rmse={mean_relative_error:.1e} "
+                f"‖A‖⁎={nuc_norms.mean():.1e}"
             )
             return
 
@@ -770,6 +779,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     def test_low_rank_contraction(self, name: str, device: str) -> None:
         test_case = self.make_low_rank_contraction(
             rank=self.PROBLEM_RANK,
+            c=self.DECAY_Q,
             input_size=self.PROBLEM_SIZE,
             device=device,
         )
@@ -782,8 +792,9 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
 
     @pytest.mark.parametrize("name", LogAbsDetEstimators, ids=str)
     def test_flat_contraction(self, name: str, device: str) -> None:
-        test_case = self.make_flat_contraction(
-            self.make_ldu(input_size=self.PROBLEM_SIZE, device=device)
+        test_case = self.make_contraction(
+            self.make_ldu(input_size=self.PROBLEM_SIZE, device=device),
+            c=self.DECAY_Q,
         )
         self.assert_logabsdet_close(
             name,
@@ -814,14 +825,16 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
                 "low_rank",
                 self.make_low_rank_contraction(
                     rank=self.PROBLEM_RANK,
+                    c=self.DECAY_Q,
                     input_size=self.PROBLEM_SIZE,
                     device=device,
                 ),
             ),
             (
                 "flat_spectrum",
-                self.make_flat_contraction(
-                    self.make_symmetric(input_size=self.PROBLEM_SIZE, device=device)
+                self.make_contraction(
+                    self.make_ldu(input_size=self.PROBLEM_SIZE, device=device),
+                    c=self.DECAY_Q,
                 ),
             ),
             (
