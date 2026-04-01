@@ -4,15 +4,19 @@ import torch
 
 from linodenet.domains.matrix_tests import (
     is_banded,
+    is_boolean,
     is_column_stochastic,
     is_diagonal,
     is_doubly_stochastic,
+    is_identity,
     is_low_rank,
     is_low_rank_skew_symmetric,
     is_low_rank_square,
     is_low_rank_symmetric,
     is_negative_definite,
     is_negative_semidefinite,
+    is_ones,
+    is_permutation,
     is_positive_definite,
     is_positive_semidefinite,
     is_row_stochastic,
@@ -23,6 +27,7 @@ from linodenet.domains.matrix_tests import (
     is_triangular,
     is_upper_triangular,
     is_wide,
+    is_zero,
 )
 
 
@@ -117,6 +122,32 @@ def test_stochastic_matrix_tests() -> None:
     assert is_doubly_stochastic(doubly_stochastic).all()
     assert not is_row_stochastic(non_stochastic).any()
     assert not is_column_stochastic(non_stochastic).any()
+
+
+def test_boolean_zero_ones_identity_permutation_matrix_tests_are_dtype_independent() -> (
+    None
+):
+    boolean_numeric = torch.tensor([[[0.0, 1.0], [1.0, 0.0]]])
+    boolean_bool = torch.tensor([[[False, True], [True, False]]])
+    zero_numeric = torch.zeros(1, 2, 2)
+    zero_bool = torch.zeros(1, 2, 2, dtype=torch.bool)
+    ones_numeric = torch.ones(1, 2, 2)
+    ones_bool = torch.ones(1, 2, 2, dtype=torch.bool)
+    identity_numeric = torch.eye(2).unsqueeze(0)
+    identity_bool = torch.eye(2, dtype=torch.bool).unsqueeze(0)
+    permutation_numeric = torch.tensor([[[0.0, 1.0], [1.0, 0.0]]])
+    permutation_bool = torch.tensor([[[False, True], [True, False]]])
+
+    assert is_boolean(boolean_numeric).all()
+    assert is_boolean(boolean_bool).all()
+    assert is_zero(zero_numeric).all()
+    assert is_zero(zero_bool).all()
+    assert is_ones(ones_numeric).all()
+    assert is_ones(ones_bool).all()
+    assert is_identity(identity_numeric).all()
+    assert is_identity(identity_bool).all()
+    assert is_permutation(permutation_numeric).all()
+    assert is_permutation(permutation_bool).all()
 
 
 def test_low_rank_symmetric_matrix_test() -> None:

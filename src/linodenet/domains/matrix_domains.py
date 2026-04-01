@@ -6,6 +6,7 @@ __all__ = [
     "Square",
     "EvenSquare",
     "Rectangular",
+    "Boolean",
     "Tall",
     "Wide",
     "RankOne",
@@ -45,7 +46,10 @@ __all__ = [
     "DiagonallyDominant",
     "ForwardStable",
     "BackwardStable",
+    "Zero",
+    "Ones",
     "Identity",
+    "Permutation",
     "Fallback",
 ]
 
@@ -681,7 +685,39 @@ class BackwardStable(Rectangular):
 
 
 @dataclass(frozen=True)
-class Identity(Diagonal):
+class Boolean(Rectangular):
+    r"""Domain of matrices whose entries are only zeros and ones."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_boolean(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class Zero(Boolean):
+    r"""Domain of matrices whose entries are only zeros."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_zero(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class Ones(Boolean):
+    r"""Domain of matrices whose entries are only ones."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_ones(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class Permutation(DoublyStochastic):
+    r"""Domain of permutation matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_permutation(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Identity(Diagonal, Permutation):
     r"""Domain of identity matrices."""
 
     def check(self, value: Tensor, /) -> Tensor:
@@ -822,6 +858,7 @@ MatrixDomains.KNOWN_MEETS = (
 )
 MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.BANDED: frozenset({M.RECTANGULAR}),
+    M.BOOLEAN: frozenset({M.RECTANGULAR}),
     M.CAYLEY_ORTHOGONAL: frozenset({M.SPECIAL_ORTHOGONAL}),
     M.CIRCULANT: frozenset({M.TOEPLITZ, M.SQUARE}),
     M.COLUMN_ORTHOGONAL: frozenset({M.LEFT_INVERTIBLE, M.SPECTRAL_NORMALIZED}),
@@ -838,6 +875,7 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.LOW_RANK: frozenset({M.RECTANGULAR}),
     M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.NEGATIVE_DIAGONAL_ENTRIES: frozenset({M.RECTANGULAR}),
+    M.ONES: frozenset({M.BOOLEAN}),
     M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.NORMAL: frozenset({M.SQUARE}),
     M.ORTHOGONAL: frozenset({M.NORMAL}),
@@ -863,7 +901,7 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.UNIT_DETERMINANT: frozenset({M.POSITIVE_DETERMINANT}),
     M.UPPER_TRIANGULAR: frozenset({M.TRIANGULAR}),
     M.WIDE: frozenset({M.RECTANGULAR}),
-    M.ZERO: frozenset({M.SPARSE}),
+    M.ZERO: frozenset({M.SPARSE, M.BOOLEAN}),
     M.ZERO_DIAGONAL: frozenset({M.TRACELESS}),
 })  # fmt: skip
 MatrixDomains.KNOWN_SUBTYPES = MappingProxyType({

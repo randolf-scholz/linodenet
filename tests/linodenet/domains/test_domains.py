@@ -17,6 +17,7 @@ from linodenet.domains import (
 from linodenet.domains.matrix_domains import (
     BackwardStable,
     Banded,
+    Boolean,
     ColumnOrthogonal,
     ColumnStochastic,
     Contraction,
@@ -36,7 +37,9 @@ from linodenet.domains.matrix_domains import (
     NegativeDefinite,
     NegativeSemidefinite,
     Normal,
+    Ones,
     Orthogonal,
+    Permutation,
     PositiveDefinite,
     PositiveSemidefinite,
     RankOne,
@@ -52,6 +55,7 @@ from linodenet.domains.matrix_domains import (
     Tridiagonal,
     UpperTriangular,
     Wide,
+    Zero,
 )
 
 
@@ -538,7 +542,15 @@ class TestMatrixDomains:
         row_stochastic = tensor([[0.5, 0.5], [0.25, 0.75]])
         column_stochastic = tensor([[0.5, 0.25], [0.5, 0.75]])
         doubly_stochastic = tensor([[0.5, 0.5], [0.5, 0.5]])
+        boolean_numeric = tensor([[0.0, 1.0], [1.0, 0.0]])
+        boolean_bool = tensor([[False, True], [True, False]])
+        zero = tensor([[0.0, 0.0], [0.0, 0.0]])
+        ones = tensor([[1.0, 1.0], [1.0, 1.0]])
 
+        assert boolean_numeric in Boolean()
+        assert boolean_bool in Boolean()
+        assert zero in Zero()
+        assert ones in Ones()
         assert rank_one in RankOne()
         assert orthogonal in Normal()
         assert orthogonal in Orthogonal()
@@ -561,6 +573,7 @@ class TestMatrixDomains:
         assert row_stochastic in RowStochastic()
         assert column_stochastic in ColumnStochastic()
         assert doubly_stochastic in DoublyStochastic()
+        assert tensor([[0.0, 1.0], [1.0, 0.0]]) in Permutation()
         assert orthogonal in SpectralNormalized()
         assert orthogonal in LipschitzBounded(lipschitz_bound=1.0)
         assert contraction in Contraction()

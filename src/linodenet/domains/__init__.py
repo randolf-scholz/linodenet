@@ -61,6 +61,9 @@ r"""Map supported vector domains to their corresponding vector test."""
 
 MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.SQUARE                  : matrix_tests.is_square,
+    MatrixDomains.BOOLEAN                 : matrix_tests.is_boolean,
+    MatrixDomains.ZERO                    : matrix_tests.is_zero,
+    MatrixDomains.ONES                    : matrix_tests.is_ones,
     MatrixDomains.LOW_RANK                : matrix_tests.is_low_rank,
     MatrixDomains.LOW_RANK_SQUARE         : matrix_tests.is_low_rank_square,
     MatrixDomains.LOW_RANK_SKEW_SYMMETRIC: matrix_tests.is_low_rank_skew_symmetric,
@@ -91,6 +94,7 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.HAMILTONIAN             : matrix_tests.is_hamiltonian,
     MatrixDomains.MASKED                  : matrix_tests.is_masked,
     MatrixDomains.IDENTITY                : matrix_tests.is_identity,
+    MatrixDomains.PERMUTATION             : matrix_tests.is_permutation,
     MatrixDomains.DIAGONAL                : matrix_tests.is_diagonal,
     MatrixDomains.TRIDIAGONAL             : matrix_tests.is_tridiagonal,
     MatrixDomains.UPPER_TRIANGULAR        : matrix_tests.is_upper_triangular,

@@ -7,6 +7,7 @@ __all__ = [
     # is_* checks
     "is_backward_stable",
     "is_banded",
+    "is_boolean",
     "is_contraction",
     "is_column_stochastic",
     "is_column_orthogonal",
@@ -28,6 +29,8 @@ __all__ = [
     "is_negative_semidefinite",
     "is_normal",
     "is_orthogonal",
+    "is_ones",
+    "is_permutation",
     "is_positive_definite",
     "is_positive_semidefinite",
     "is_right_invertible",
@@ -46,6 +49,7 @@ __all__ = [
     "is_upper_triangular",
     "is_tall",
     "is_wide",
+    "is_zero",
 ]
 
 from collections.abc import Callable
@@ -306,6 +310,54 @@ def is_identity(
     ).all(dim=(-2, -1))
 
 
+@signature("(..., m, n) -> bool[(...)]")
+def is_boolean(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
+) -> Tensor:
+    r"""Check whether the given tensor contains only zeros and ones."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+    return ((x == 0) | (x == 1)).all(dim=dim)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_zero(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
+) -> Tensor:
+    r"""Check whether the given tensor contains only zeros."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+    return (x == 0).all(dim=dim)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_ones(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
+) -> Tensor:
+    r"""Check whether the given tensor contains only ones."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+    return (x == 1).all(dim=dim)
+
+
 @signature("(..., n, n) -> bool[(...)]")
 def is_symmetric(
     x: Tensor,
@@ -340,12 +392,7 @@ def is_skew_symmetric(
     r"""Check whether the given tensor is skew-symmetric."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
-    return torch.isclose(
-        x,
-        -x.swapaxes(*dim),
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=dim)
+    return torch.isclose(x, -x.swapaxes(*dim), rtol=rtol, atol=atol).all(dim=dim)
 
 
 @signature("(..., n, n) -> bool[(...)]")
@@ -471,13 +518,27 @@ def is_doubly_stochastic(
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
     return (
-        is_row_stochastic(
-            x, shape=(x.shape[dim[0]], x.shape[dim[1]]), dim=dim, rtol=rtol, atol=atol
-        )
-        & is_column_stochastic(
-            x, shape=(x.shape[dim[0]], x.shape[dim[1]]), dim=dim, rtol=rtol, atol=atol
-        )
-        & is_square(x, shape=(x.shape[dim[0]], x.shape[dim[1]]), dim=dim)
+        is_square(x, dim=dim)
+        & is_row_stochastic(x, dim=dim, rtol=rtol, atol=atol)
+        & is_column_stochastic(x, dim=dim, rtol=rtol, atol=atol)
+    )
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_permutation(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is a permutation matrix."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+    return is_doubly_stochastic(x, dim=dim, rtol=rtol, atol=atol) & is_boolean(
+        x, dim=dim
     )
 
 
