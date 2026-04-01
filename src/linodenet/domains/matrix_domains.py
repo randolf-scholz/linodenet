@@ -821,8 +821,9 @@ class MatrixDomains(PosetEnum):
     DOUBLY_STOCHASTIC = "doubly-stochastic"
     PERMUTATION = "permutation"
 
-    IDEMPOTENT = "idempotent"  # Aᵏ = A for some k≥2
-    PROJECTION = "projection"  # A² = A
+    IDEMPOTENT = "idempotent"  # Pᵏ = P for some k≥2
+    PROJECTION = "projection"  # P² = P  (P=QQ⁺ + QZ(I-QQ⁺) for some Q,Z)
+    ORTHOGONAL_PROJECTION = "orthogonal-projection"  # P² = P, P symmetric (P=QQ⁺)
     NILPOTENT = "nilpotent"  # Aᵏ = 0 for some k≥2
 
     STANDARD_NILPOTENT = "canonical-nilpotent"  # standard nilpotent matrix
