@@ -694,9 +694,13 @@ class MatrixDomains(PosetEnum):
     ANY = "any"  # top node
     NONE = "none"  # bottom node
 
+    BOOLEAN = "boolean"  # a matrix of only zeros and ones
     ZERO = "zero"  # a matrix of only zeros
     ONES = "ones"  # a matrix of only ones
-    BOOLEAN = "boolean"  # a matrix of only zeros and ones
+    IDENTITY = "identity"  # the identity matrix
+    EYE = "identity"  # alias
+
+    STANDARD_SYMPLECTIC = "standard_symplectic"  # [0, 𝕀; -𝕀, 0]
     SPARSE = "sparse"  # many 0 entries
     MASKED = "masked"  # X⊙M = X for some mask M
 
@@ -707,11 +711,6 @@ class MatrixDomains(PosetEnum):
     ROW_ORTHOGONAL = "row_orthogonal"  # m × n matrices with QQᵀ = 𝕀ₘ
     SQUARE = "square"  # n × n matrices
     EVEN_SQUARE = "even_square"  # 2n × 2n matrices
-
-    # specific matrices
-    IDENTITY = "identity"  # the identity matrix
-    EYE = "identity"  # alias
-    STANDARD_SYMPLECTIC = "standard_symplectic"  # [0, 𝕀; -𝕀, 0]
 
     # rank
     LOW_RANK = "low_rank"  # UVᵀ
@@ -763,7 +762,6 @@ class MatrixDomains(PosetEnum):
     ORTHOGONAL = "orthogonal"  # Oₙ(R)
     CAYLEY_ORTHOGONAL = "cayley_orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
     SPECIAL_ORTHOGONAL = "special_orthogonal"  # SOₙ(R)
-    PERMUTATION = "permutation"
 
     TRACELESS = "traceless"
     SYMPLECTIC = "symplectic"  # 2n×2n with AᵀJA = J for J=[0, I;-I, 0]
@@ -776,6 +774,7 @@ class MatrixDomains(PosetEnum):
     ROW_STOCHASTIC = "row_stochastic"
     COLUMN_STOCHASTIC = "column_stochastic"
     DOUBLY_STOCHASTIC = "doubly_stochastic"
+    PERMUTATION = "permutation"
 
     IDEMPOTENT = "idempotent"  # Aᵏ = A for some k≥2
     PROJECTION = "projection"  # A² = A
