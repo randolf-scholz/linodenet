@@ -1,4 +1,5 @@
 import pytest
+import torch
 from torch import tensor
 
 from linodenet.domains import (
@@ -14,12 +15,39 @@ from linodenet.domains import (
     is_right_invertible,
 )
 from linodenet.domains.matrix_domains import (
+    BackwardStable,
+    Banded,
     ColumnOrthogonal,
+    Contraction,
+    Diagonal,
+    DiagonallyDominant,
+    ForwardStable,
+    Hamiltonian,
+    Identity,
+    LeftInvertible,
+    LipschitzBounded,
+    LowerTriangular,
     LowRankSkewSymmetric,
     LowRankSquare,
     LowRankSymmetric,
+    Masked,
+    NegativeDefinite,
+    NegativeSemidefinite,
+    Normal,
+    Orthogonal,
+    PositiveDefinite,
+    PositiveSemidefinite,
+    RankOne,
+    RightInvertible,
     RowOrthogonal,
+    SpecialOrthogonal,
+    SpectralNormalized,
+    Symplectic,
     Tall,
+    Traceless,
+    Triangular,
+    Tridiagonal,
+    UpperTriangular,
     Wide,
 )
 
@@ -488,3 +516,53 @@ class TestMatrixDomains:
 
         assert not is_left_invertible(rank_deficient_tall)
         assert not is_right_invertible(rank_deficient_wide)
+
+    def test_matrix_domain_wrappers_cover_predicate_families(self) -> None:
+        rank_one = tensor([[1.0, 2.0], [0.0, 0.0]])
+        orthogonal = tensor([[0.0, 1.0], [1.0, 0.0]])
+        special_orthogonal = tensor([[0.0, -1.0], [1.0, 0.0]])
+        positive = tensor([[2.0, 0.0], [0.0, 1.0]])
+        negative = -positive
+        traceless = tensor([[1.0, 0.0], [0.0, -1.0]])
+        symplectic = tensor([[0.0, 1.0], [-1.0, 0.0]])
+        diagonal = tensor([[1.0, 0.0], [0.0, 2.0]])
+        lower = tensor([[1.0, 0.0], [2.0, 3.0]])
+        upper = tensor([[1.0, 2.0], [0.0, 3.0]])
+        tridiagonal = tensor([[1.0, 2.0, 0.0], [3.0, 4.0, 5.0], [0.0, 6.0, 7.0]])
+        banded = tensor([[1.0, 2.0, 0.0], [3.0, 4.0, 5.0], [0.0, 6.0, 7.0]])
+        masked = tensor([[1.0, 0.0], [0.0, 4.0]])
+        contraction = 0.5 * tensor([[1.0, 0.0], [0.0, 1.0]])
+
+        assert rank_one in RankOne()
+        assert orthogonal in Normal()
+        assert orthogonal in Orthogonal()
+        assert special_orthogonal in SpecialOrthogonal()
+        assert positive in PositiveSemidefinite()
+        assert positive in PositiveDefinite()
+        assert negative in NegativeSemidefinite()
+        assert negative in NegativeDefinite()
+        assert traceless in Traceless()
+        assert symplectic in Symplectic()
+        assert symplectic in Hamiltonian()
+        assert diagonal in Diagonal()
+        assert lower in Triangular()
+        assert upper in Triangular()
+        assert lower in LowerTriangular()
+        assert upper in UpperTriangular()
+        assert tridiagonal in Tridiagonal()
+        assert banded in Banded(3, 3, lower=-1, upper=1)
+        assert masked in Masked(2, 2, mask=tensor([[1, 0], [0, 1]], dtype=torch.bool))
+        assert orthogonal in SpectralNormalized()
+        assert orthogonal in LipschitzBounded(lipschitz_bound=1.0)
+        assert contraction in Contraction()
+        assert positive in DiagonallyDominant()
+        assert diagonal not in Identity()
+        assert tensor([[1.0, 0.0], [0.0, 1.0]]) in Identity()
+
+    def test_stability_wrappers_smoke(self) -> None:
+        matrix = tensor([[0.0, 0.0], [0.0, 0.0]])
+
+        assert ForwardStable().check(matrix).shape == ()
+        assert BackwardStable().check(matrix).shape == ()
+        assert LeftInvertible().check(tensor([[1.0], [0.0]])).shape == ()
+        assert RightInvertible().check(tensor([[1.0, 0.0]])).shape == ()

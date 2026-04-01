@@ -17,6 +17,7 @@ from linodenet.domains.matrix_tests import (
     is_square,
     is_symmetric,
     is_tall,
+    is_triangular,
     is_upper_triangular,
     is_wide,
 )
@@ -86,6 +87,16 @@ def test_tall_and_wide_matrix_tests() -> None:
 
     assert is_tall(square).all()
     assert is_wide(square).all()
+
+
+def test_triangular_matrix_test() -> None:
+    lower = torch.tensor([[[1.0, 0.0], [2.0, 3.0]]])
+    upper = torch.tensor([[[1.0, 2.0], [0.0, 3.0]]])
+    non_triangular = torch.tensor([[[1.0, 2.0], [3.0, 4.0]]])
+
+    assert is_triangular(lower).all()
+    assert is_triangular(upper).all()
+    assert not is_triangular(non_triangular).any()
 
 
 def test_low_rank_symmetric_matrix_test() -> None:

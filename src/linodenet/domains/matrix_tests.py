@@ -38,6 +38,7 @@ __all__ = [
     "is_symmetric",
     "is_symplectic",
     "is_traceless",
+    "is_triangular",
     "is_tridiagonal",
     "is_upper_triangular",
     "is_tall",
@@ -752,6 +753,22 @@ def is_upper_triangular(
 
 
 @signature("(..., m, n) -> bool[(...)]")
+def is_triangular(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,
+    atol: float = 0.0,
+) -> Tensor:
+    r"""Check whether the given tensor is lower or upper triangular."""
+    return is_lower_triangular(
+        x, shape=shape, dim=dim, rtol=rtol, atol=atol
+    ) | is_upper_triangular(x, shape=shape, dim=dim, rtol=rtol, atol=atol)
+
+
+@signature("(..., m, n) -> bool[(...)]")
 def is_tridiagonal(
     x: Tensor,
     /,
@@ -961,8 +978,8 @@ def is_forward_stable(
     stdv = x.std(dim=dim)
     zeros = torch.zeros_like(mean)
     ones = torch.ones_like(stdv)
-    mean_stable = torch.isclose(mean, zeros, atol=atol, rtol=rtol).all(dim=dim)
-    stdv_stable = torch.isclose(stdv, ones / num, atol=atol, rtol=rtol).all(dim=dim)
+    mean_stable = torch.isclose(mean, zeros, atol=atol, rtol=rtol)
+    stdv_stable = torch.isclose(stdv, ones / num, atol=atol, rtol=rtol)
     return mean_stable & stdv_stable
 
 

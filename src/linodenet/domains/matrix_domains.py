@@ -4,17 +4,45 @@ __all__ = [
     "MatrixDomains",
     # Classes
     "Square",
+    "EvenSquare",
     "Rectangular",
     "Tall",
     "Wide",
+    "RankOne",
     "ColumnOrthogonal",
     "RowOrthogonal",
+    "LeftInvertible",
+    "RightInvertible",
     "Symmetric",
     "SkewSymmetric",
+    "Normal",
+    "Orthogonal",
+    "SpecialOrthogonal",
     "LowRank",
     "LowRankSquare",
     "LowRankSymmetric",
     "LowRankSkewSymmetric",
+    "PositiveSemidefinite",
+    "PositiveDefinite",
+    "NegativeSemidefinite",
+    "NegativeDefinite",
+    "Traceless",
+    "Symplectic",
+    "Hamiltonian",
+    "Diagonal",
+    "Triangular",
+    "LowerTriangular",
+    "UpperTriangular",
+    "Tridiagonal",
+    "Banded",
+    "Masked",
+    "SpectralNormalized",
+    "LipschitzBounded",
+    "Contraction",
+    "DiagonallyDominant",
+    "ForwardStable",
+    "BackwardStable",
+    "Identity",
     "Fallback",
 ]
 
@@ -25,20 +53,8 @@ from typing import Final, Self, overload
 import torch
 from torch import Tensor
 
+from . import matrix_tests as tests
 from .base import MatrixDomain, PosetEnum
-from .matrix_tests import (
-    is_column_orthogonal,
-    is_low_rank,
-    is_low_rank_skew_symmetric,
-    is_low_rank_square,
-    is_low_rank_symmetric,
-    is_row_orthogonal,
-    is_skew_symmetric,
-    is_square,
-    is_symmetric,
-    is_tall,
-    is_wide,
-)
 
 
 @dataclass(frozen=True)
@@ -101,7 +117,7 @@ class Square(Rectangular):
         return self.size, self.size
 
     def check(self, value: Tensor, /) -> Tensor:
-        return is_square(value, shape=self.shape)
+        return tests.is_square(value, shape=self.shape)
 
     @overload
     def __call__(self, size: int | None = None, /) -> Self: ...
@@ -109,6 +125,22 @@ class Square(Rectangular):
     def __call__(self, rows: int, cols: int, /) -> Self: ...
     def __call__(self, rows: int | None = None, cols: int | None = None, /) -> Self:
         return self.__class__(rows, cols)
+
+
+@dataclass(frozen=True)
+class EvenSquare(Square):
+    r"""Domain of square matrices with even size."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.size is not None and self.size % 2 != 0:
+            raise ValueError("Even square matrices must have even size.")
+
+    def check(self, value: Tensor, /) -> Tensor:
+        shape_ok = super().check(value)
+        return shape_ok & value.new_full(
+            value.shape[:-2], value.shape[-2] % 2 == 0, dtype=torch.bool
+        )
 
 
 @dataclass(frozen=True)
@@ -121,7 +153,7 @@ class Tall(Rectangular):
             raise ValueError("Tall matrices must satisfy rows >= cols.")
 
     def check(self, value: Tensor, /) -> Tensor:
-        return is_tall(value, shape=self.shape)
+        return tests.is_tall(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
@@ -134,7 +166,7 @@ class Wide(Rectangular):
             raise ValueError("Wide matrices must satisfy cols >= rows.")
 
     def check(self, value: Tensor, /) -> Tensor:
-        return is_wide(value, shape=self.shape)
+        return tests.is_wide(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
@@ -142,7 +174,7 @@ class ColumnOrthogonal(Tall):
     r"""Domain of tall matrices with orthonormal columns."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        return is_column_orthogonal(value, shape=self.shape)
+        return tests.is_column_orthogonal(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
@@ -150,7 +182,7 @@ class RowOrthogonal(Wide):
     r"""Domain of wide matrices with orthonormal rows."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        return is_row_orthogonal(value, shape=self.shape)
+        return tests.is_row_orthogonal(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
@@ -158,7 +190,7 @@ class Symmetric(Square):
     r"""Domain of symmetric square matrices."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        return is_symmetric(value, size=self.size)
+        return tests.is_symmetric(value, size=self.size)
 
 
 @dataclass(frozen=True)
@@ -166,7 +198,7 @@ class SkewSymmetric(Square):
     r"""Domain of skew-symmetric square matrices."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        return is_skew_symmetric(value, size=self.size)
+        return tests.is_skew_symmetric(value, size=self.size)
 
 
 @dataclass(frozen=True)
@@ -179,7 +211,7 @@ class LowRank(Rectangular):
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
             return super().check(value)
-        return is_low_rank(value, self.rank, shape=self.shape)
+        return tests.is_low_rank(value, self.rank, shape=self.shape)
 
     @overload
     def __call__(self, /, *, rank: int | None = None) -> Self: ...
@@ -197,13 +229,28 @@ class LowRank(Rectangular):
 
 
 @dataclass(frozen=True)
+class RankOne(LowRank):
+    r"""Domain of rank-one rectangular matrices."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.rank is None:
+            object.__setattr__(self, "rank", 1)
+        elif self.rank != 1:
+            raise ValueError("Rank must be 1.")
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_rank_one(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
 class LowRankSquare(Square, LowRank):
     r"""Domain of square matrices with optional rank bound."""
 
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
-            return is_square(value, shape=self.shape)
-        return is_low_rank_square(value, self.rank, size=self.size)
+            return tests.is_square(value, shape=self.shape)
+        return tests.is_low_rank_square(value, self.rank, size=self.size)
 
     @overload
     def __call__(
@@ -228,8 +275,8 @@ class LowRankSymmetric(LowRankSquare):
 
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
-            return is_symmetric(value, size=self.size)
-        return is_low_rank_symmetric(value, self.rank, size=self.size)
+            return tests.is_symmetric(value, size=self.size)
+        return tests.is_low_rank_symmetric(value, self.rank, size=self.size)
 
 
 @dataclass(frozen=True)
@@ -238,8 +285,380 @@ class LowRankSkewSymmetric(LowRankSquare):
 
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
-            return is_skew_symmetric(value, size=self.size)
-        return is_low_rank_skew_symmetric(value, self.rank, size=self.size)
+            return tests.is_skew_symmetric(value, size=self.size)
+        return tests.is_low_rank_skew_symmetric(value, self.rank, size=self.size)
+
+
+@dataclass(frozen=True)
+class LeftInvertible(Tall):
+    r"""Domain of left-invertible tall matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_left_invertible(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class RightInvertible(Wide):
+    r"""Domain of right-invertible wide matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_right_invertible(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class Normal(Square):
+    r"""Domain of normal square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_normal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Orthogonal(Normal):
+    r"""Domain of orthogonal square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_orthogonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class SpecialOrthogonal(Orthogonal):
+    r"""Domain of special orthogonal square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_special_orthogonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class PositiveSemidefinite(Symmetric):
+    r"""Domain of symmetric positive semidefinite matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_positive_semidefinite(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class PositiveDefinite(PositiveSemidefinite):
+    r"""Domain of symmetric positive definite matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_positive_definite(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class NegativeSemidefinite(Symmetric):
+    r"""Domain of symmetric negative semidefinite matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_negative_semidefinite(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class NegativeDefinite(NegativeSemidefinite):
+    r"""Domain of symmetric negative definite matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_negative_definite(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Traceless(Square):
+    r"""Domain of traceless square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_traceless(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Symplectic(EvenSquare):
+    r"""Domain of symplectic even square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_symplectic(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Hamiltonian(EvenSquare):
+    r"""Domain of Hamiltonian even square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_hamiltonian(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Banded(Rectangular):
+    r"""Domain of banded matrices."""
+
+    _: KW_ONLY
+    lower: Final[int | None] = None
+    upper: Final[int | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.lower is None or self.upper is None:
+            return super().check(value)
+        return tests.is_banded(value, self.lower, self.upper, shape=self.shape)
+
+    @overload
+    def __call__(
+        self, /, *, lower: int | None = None, upper: int | None = None
+    ) -> Self: ...
+    @overload
+    def __call__(
+        self,
+        rows: int,
+        cols: int,
+        /,
+        *,
+        lower: int | None = None,
+        upper: int | None = None,
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        lower: int | None = None,
+        upper: int | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, lower=lower, upper=upper)
+
+
+@dataclass(frozen=True)
+class Tridiagonal(Square):
+    r"""Domain of tridiagonal square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_tridiagonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Diagonal(Tridiagonal):
+    r"""Domain of diagonal square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_diagonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Triangular(Rectangular):
+    r"""Domain of lower or upper triangular matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_triangular(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class LowerTriangular(Triangular):
+    r"""Domain of lower triangular matrices."""
+
+    _: KW_ONLY
+    lower: Final[int | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.lower is None:
+            return tests.is_lower_triangular(value, shape=self.shape)
+        return tests.is_lower_triangular(value, self.lower, shape=self.shape)
+
+    @overload
+    def __call__(self, /, *, lower: int | None = None) -> Self: ...
+    @overload
+    def __call__(
+        self, rows: int, cols: int, /, *, lower: int | None = None
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        lower: int | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, lower=lower)
+
+
+@dataclass(frozen=True)
+class UpperTriangular(Triangular):
+    r"""Domain of upper triangular matrices."""
+
+    _: KW_ONLY
+    upper: Final[int | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.upper is None:
+            return tests.is_upper_triangular(value, shape=self.shape)
+        return tests.is_upper_triangular(value, self.upper, shape=self.shape)
+
+    @overload
+    def __call__(self, /, *, upper: int | None = None) -> Self: ...
+    @overload
+    def __call__(
+        self, rows: int, cols: int, /, *, upper: int | None = None
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        upper: int | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, upper=upper)
+
+
+@dataclass(frozen=True)
+class Masked(Rectangular):
+    r"""Domain of matrices supported on a fixed mask."""
+
+    _: KW_ONLY
+    mask: Final[Tensor | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.mask is None:
+            return super().check(value)
+        return tests.is_masked(value, self.mask, shape=self.shape)
+
+    @overload
+    def __call__(self, /, *, mask: Tensor | None = None) -> Self: ...
+    @overload
+    def __call__(
+        self, rows: int, cols: int, /, *, mask: Tensor | None = None
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        mask: Tensor | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, mask=mask)
+
+
+@dataclass(frozen=True)
+class LipschitzBounded(Rectangular):
+    r"""Domain of matrices with bounded Lipschitz constant."""
+
+    _: KW_ONLY
+    lipschitz_bound: Final[float | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.lipschitz_bound is None:
+            return super().check(value)
+        return tests.is_lipschitz_bounded(value, self.lipschitz_bound, shape=self.shape)
+
+    @overload
+    def __call__(self, /, *, lipschitz_bound: float | None = None) -> Self: ...
+    @overload
+    def __call__(
+        self, rows: int, cols: int, /, *, lipschitz_bound: float | None = None
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        lipschitz_bound: float | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, lipschitz_bound=lipschitz_bound)
+
+
+@dataclass(frozen=True)
+class SpectralNormalized(LipschitzBounded):
+    r"""Domain of matrices with unit spectral norm."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.lipschitz_bound is None:
+            object.__setattr__(self, "lipschitz_bound", 1.0)
+        elif self.lipschitz_bound != 1.0:
+            raise ValueError(
+                "Spectral normalized matrices must have lipschitz_bound=1.0."
+            )
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_spectral_normalized(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class Contraction(LipschitzBounded):
+    r"""Domain of contraction matrices."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.lipschitz_bound is not None and not (0 < self.lipschitz_bound <= 1):
+            raise ValueError("Contraction bound must satisfy 0 < lipschitz_bound <= 1.")
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.lipschitz_bound is None:
+            return super().check(value)
+        return tests.is_contraction(value, self.lipschitz_bound, shape=self.shape)
+
+    @overload
+    def __call__(self, /, *, lipschitz_bound: float | None = 1.0) -> Self: ...
+    @overload
+    def __call__(
+        self, rows: int, cols: int, /, *, lipschitz_bound: float | None = 1.0
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        lipschitz_bound: float | None = 1.0,
+    ) -> Self:
+        return self.__class__(rows, cols, lipschitz_bound=lipschitz_bound)
+
+
+@dataclass(frozen=True)
+class DiagonallyDominant(Square):
+    r"""Domain of diagonally dominant square matrices."""
+
+    _: KW_ONLY
+    strict: Final[bool] = False
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_diagonally_dominant(value, size=self.size, strict=self.strict)
+
+    @overload
+    def __call__(self, size: int | None = None, /, *, strict: bool = False) -> Self: ...
+    @overload
+    def __call__(self, rows: int, cols: int, /, *, strict: bool = False) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        strict: bool = False,
+    ) -> Self:
+        return self.__class__(rows, cols, strict=strict)
+
+
+@dataclass(frozen=True)
+class ForwardStable(Rectangular):
+    r"""Domain of forward stable matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_forward_stable(value)
+
+
+@dataclass(frozen=True)
+class BackwardStable(Rectangular):
+    r"""Domain of backward stable matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_backward_stable(value)
+
+
+@dataclass(frozen=True)
+class Identity(Diagonal):
+    r"""Domain of identity matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_identity(value, size=self.size)
 
 
 class MatrixDomains(PosetEnum):
