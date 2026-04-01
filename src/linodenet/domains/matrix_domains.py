@@ -78,15 +78,19 @@ class Rectangular(MatrixDomain):
 class Square(Rectangular):
     r"""Domain of square matrices with optional fixed size."""
 
-    size: Final[int | None] = None
+    rows: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
+    cols: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
 
-    # computed from size.
-    rows: Final[int | None] = field(init=False, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
-    cols: Final[int | None] = field(init=False, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
+    size: Final[int | None] = field(default=None, init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "rows", self.size)
-        object.__setattr__(self, "cols", self.size)
+        if self.cols is None:
+            object.__setattr__(self, "cols", self.rows)
+            object.__setattr__(self, "size", self.rows)
+        elif self.rows is None:  # called as (None, int)
+            raise ValueError("Expected size")
+        elif self.rows != self.cols:
+            raise ValueError("Square matrices must satisfy rows=cols.")
 
     @property
     def shape(self) -> tuple[int, int] | None:
@@ -97,12 +101,12 @@ class Square(Rectangular):
     def check(self, value: Tensor, /) -> Tensor:
         return is_square(value, shape=self.shape)
 
-    @overload  # type: ignore[override]
-    def __call__(self, /) -> Self: ...
     @overload
-    def __call__(self, size: int, /) -> Self: ...
-    def __call__(self, size: int | None = None, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return self.__class__(size)
+    def __call__(self, size: int | None = None, /) -> Self: ...
+    @overload
+    def __call__(self, rows: int, cols: int, /) -> Self: ...
+    def __call__(self, rows: int | None = None, cols: int | None = None, /) -> Self:
+        return self.__class__(rows, cols)
 
 
 @dataclass(frozen=True)
@@ -204,12 +208,21 @@ class LowRankSquare(Square, LowRank):
             return is_square(value, shape=self.shape)
         return is_low_rank_square(value, self.rank, size=self.size)
 
-    @overload  # type: ignore[override]
-    def __call__(self, /, *, rank: int | None = None) -> Self: ...
     @overload
-    def __call__(self, size: int, /, *, rank: int | None = None) -> Self: ...
-    def __call__(self, size: int | None = None, /, *, rank: int | None = None) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return self.__class__(size, rank=rank)
+    def __call__(
+        self, size: int | None = None, /, *, rank: int | None = None
+    ) -> Self: ...
+    @overload
+    def __call__(self, rows: int, cols: int, /, *, rank: int | None = None) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        rank: int | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, rank=rank)
 
 
 @dataclass(frozen=True)
