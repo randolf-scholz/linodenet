@@ -13,7 +13,15 @@ from linodenet.domains import (
     is_left_invertible,
     is_right_invertible,
 )
-from linodenet.domains.matrix_domains import ColumnOrthogonal, RowOrthogonal, Tall, Wide
+from linodenet.domains.matrix_domains import (
+    ColumnOrthogonal,
+    LowRankSkewSymmetric,
+    LowRankSquare,
+    LowRankSymmetric,
+    RowOrthogonal,
+    Tall,
+    Wide,
+)
 
 
 class TestScalarDomains:
@@ -314,6 +322,12 @@ class TestMatrixDomains:
         assert M.RANK_ONE != M.LOW_RANK
         assert M.RANK_ONE <= M.RECTANGULAR
         assert M.RANK_ONE != M.RECTANGULAR
+        assert M.LOW_RANK_SQUARE <= M.LOW_RANK
+        assert M.LOW_RANK_SQUARE <= M.SQUARE
+        assert M.LOW_RANK_SYMMETRIC <= M.LOW_RANK_SQUARE
+        assert M.LOW_RANK_SYMMETRIC <= M.SYMMETRIC
+        assert M.LOW_RANK_SKEW_SYMMETRIC <= M.LOW_RANK_SQUARE
+        assert M.LOW_RANK_SKEW_SYMMETRIC <= M.SKEW_SYMMETRIC
 
         assert M.SPECIAL_ORTHOGONAL <= M.ORTHOGONAL
         assert M.SPECIAL_ORTHOGONAL != M.ORTHOGONAL
@@ -410,6 +424,51 @@ class TestMatrixDomains:
         assert column_orthogonal not in ColumnOrthogonal(2, 2)
         assert row_orthogonal in RowOrthogonal(2, 3)
         assert row_orthogonal not in RowOrthogonal(2, 2)
+
+    def test_low_rank_symmetric_membership(self) -> None:
+        low_rank_symmetric = tensor([[2.0, 0.0], [0.0, -1.0]])
+        high_rank_symmetric = tensor(
+            [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]]
+        )
+        non_symmetric = tensor([[0.0, 1.0], [0.0, 0.0]])
+
+        assert low_rank_symmetric in LowRankSymmetric(rank=1)
+        assert low_rank_symmetric in LowRankSymmetric(2, rank=1)
+        assert low_rank_symmetric not in LowRankSymmetric(3, rank=1)
+
+        assert high_rank_symmetric not in LowRankSymmetric(rank=1)
+        assert non_symmetric not in LowRankSymmetric(rank=1)
+
+    def test_low_rank_square_membership(self) -> None:
+        low_rank_square = tensor([[1.0, 0.0], [0.0, 0.0]])
+        high_rank_square = tensor([[1.0, 0.0], [0.0, 2.0]])
+        rectangular = tensor([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
+
+        assert low_rank_square in LowRankSquare(rank=1)
+        assert low_rank_square in LowRankSquare(2, rank=1)
+        assert low_rank_square not in LowRankSquare(3, rank=1)
+
+        assert high_rank_square not in LowRankSquare(rank=1)
+        assert rectangular not in LowRankSquare(rank=2)
+
+    def test_low_rank_skew_symmetric_membership(self) -> None:
+        low_rank_skew_symmetric = tensor([[0.0, 2.0], [-2.0, 0.0]])
+        high_rank_skew_symmetric = tensor(
+            [
+                [0.0, 1.0, 0.0, 0.0],
+                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 3.0],
+                [0.0, 0.0, -3.0, 0.0],
+            ]
+        )
+        non_skew_symmetric = tensor([[0.0, 1.0], [1.0, 0.0]])
+
+        assert low_rank_skew_symmetric in LowRankSkewSymmetric(rank=1)
+        assert low_rank_skew_symmetric in LowRankSkewSymmetric(2, rank=1)
+        assert low_rank_skew_symmetric not in LowRankSkewSymmetric(3, rank=1)
+
+        assert high_rank_skew_symmetric not in LowRankSkewSymmetric(rank=1)
+        assert non_skew_symmetric not in LowRankSkewSymmetric(rank=1)
 
     def test_left_and_right_invertible_membership(self) -> None:
         left_invertible = tensor([[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]])

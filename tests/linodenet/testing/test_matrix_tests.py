@@ -2,14 +2,18 @@ r"""Tests for `linodenet.testing.matrix_tests`."""
 
 import torch
 
-from linodenet.testing.matrix_tests import (
+from linodenet.domains.matrix_tests import (
     is_banded,
     is_diagonal,
     is_low_rank,
+    is_low_rank_skew_symmetric,
+    is_low_rank_square,
+    is_low_rank_symmetric,
     is_negative_definite,
     is_negative_semidefinite,
     is_positive_definite,
     is_positive_semidefinite,
+    is_skew_symmetric,
     is_square,
     is_symmetric,
     is_upper_triangular,
@@ -50,6 +54,57 @@ def test_matrix_tests_support_non_default_matrix_dims() -> None:
 
     symmetric = torch.eye(4).expand(2, -1, -1).movedim((-2, -1), (0, 2))
     assert is_symmetric(symmetric, size=4, dim=(0, 2)).all()
+
+    skew_symmetric = torch.tensor(
+        [
+            [[0.0, 1.0], [-1.0, 0.0]],
+            [[0.0, 2.0], [-2.0, 0.0]],
+        ]
+    ).movedim((-2, -1), (0, 2))
+    assert is_skew_symmetric(skew_symmetric, size=2, dim=(0, 2)).all()
+
+
+def test_low_rank_symmetric_matrix_test() -> None:
+    matrices = torch.tensor([
+        [[2.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 0.0]],
+        [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]],
+        [[0.0, 1.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+    ])  # fmt: skip
+
+    assert torch.equal(
+        is_low_rank_symmetric(matrices, 1),
+        torch.tensor([True, False, False]),
+    )
+
+
+def test_low_rank_square_matrix_test() -> None:
+    batched = torch.tensor([
+        [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 0.0]],
+        [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]],
+    ])  # fmt: skip
+    rectangular = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]]])
+
+    assert torch.equal(is_low_rank_square(batched, 2), torch.tensor([True, False]))
+    assert not is_low_rank_square(rectangular, 2).item()
+
+
+def test_low_rank_skew_symmetric_matrix_test() -> None:
+    low_rank = torch.tensor([[[0.0, 2.0, 0.0], [-2.0, 0.0, 0.0], [0.0, 0.0, 0.0]]])
+    high_rank = torch.tensor(
+        [
+            [
+                [0.0, 1.0, 0.0, 0.0],
+                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 3.0],
+                [0.0, 0.0, -3.0, 0.0],
+            ]
+        ]
+    )
+    non_skew = torch.tensor([[[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]])
+
+    assert torch.equal(is_low_rank_skew_symmetric(low_rank, 1), torch.tensor([True]))
+    assert torch.equal(is_low_rank_skew_symmetric(high_rank, 1), torch.tensor([False]))
+    assert torch.equal(is_low_rank_skew_symmetric(non_skew, 1), torch.tensor([False]))
 
 
 class TestDefiniteness:

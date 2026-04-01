@@ -18,6 +18,9 @@ __all__ = [
     "is_hamiltonian",
     "is_identity",
     "is_low_rank",
+    "is_low_rank_square",
+    "is_low_rank_skew_symmetric",
+    "is_low_rank_symmetric",
     "is_lower_triangular",
     "is_masked",
     "is_negative_definite",
@@ -139,6 +142,77 @@ def is_rank_one(
     x = x.movedim(dim, (-2, -1))
     ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
     return ranks <= 1
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_low_rank_square(
+    x: Tensor,
+    /,
+    rank: int,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is square with rank at most `rank`."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
+    return ranks <= rank
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_low_rank_symmetric(
+    x: Tensor,
+    /,
+    rank: int,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is symmetric with rank at most `2⋅rank`."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    symmetric = is_symmetric(x, dim=(-2, -1), rtol=rtol, atol=atol)
+    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
+    return symmetric & (ranks <= 2 * rank)
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_low_rank_skew_symmetric(
+    x: Tensor,
+    /,
+    rank: int,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is skew-symmetric with rank at most `2⋅rank`."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    skew_symmetric = is_skew_symmetric(x, dim=(-2, -1), rtol=rtol, atol=atol)
+    ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
+    return skew_symmetric & (ranks <= 2 * rank)
 
 
 @signature("(..., m, n) -> bool[()]")

@@ -12,6 +12,9 @@ __all__ = [
     "Symmetric",
     "SkewSymmetric",
     "LowRank",
+    "LowRankSquare",
+    "LowRankSymmetric",
+    "LowRankSkewSymmetric",
     "Fallback",
 ]
 
@@ -23,6 +26,14 @@ import torch
 from torch import Tensor
 
 from .base import MatrixDomain, PosetEnum
+from .matrix_tests import (
+    is_low_rank,
+    is_low_rank_skew_symmetric,
+    is_low_rank_square,
+    is_low_rank_symmetric,
+    is_skew_symmetric,
+    is_symmetric,
+)
 
 
 @dataclass(frozen=True)
@@ -176,7 +187,10 @@ class LowRank(Rectangular):
     rank: Final[int | None] = None
 
     def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
+        shape_ok = super().check(value)
+        if self.rank is None or not bool(shape_ok.all()):
+            return shape_ok
+        return is_low_rank(value, self.rank, shape=self.shape)
 
     def __call__(
         self,
@@ -189,11 +203,29 @@ class LowRank(Rectangular):
 
 
 @dataclass(frozen=True)
+class LowRankSquare(Square):
+    r"""Domain of square matrices with optional rank bound."""
+
+    _: KW_ONLY
+    rank: Final[int | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.rank is None:
+            return super().check(value)
+        return is_low_rank_square(value, self.rank, size=self.size)
+
+    def __call__(
+        self, size: int | None = None, *, rank: int | None = None
+    ) -> LowRankSquare:
+        return LowRankSquare(size, rank=rank)
+
+
+@dataclass(frozen=True)
 class Symmetric(Square):
     r"""Domain of symmetric square matrices."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
+        return is_symmetric(value, size=self.size)
 
     def __call__(self, size: int) -> Symmetric:
         return Symmetric(size)
@@ -204,10 +236,46 @@ class SkewSymmetric(Square):
     r"""Domain of skew-symmetric square matrices."""
 
     def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
+        return is_skew_symmetric(value, size=self.size)
 
     def __call__(self, size: int) -> SkewSymmetric:
         return SkewSymmetric(size)
+
+
+@dataclass(frozen=True)
+class LowRankSymmetric(Square):
+    r"""Domain of matrices of the form $UVᵀ + VUᵀ$ with optional factor rank bound."""
+
+    _: KW_ONLY
+    rank: Final[int | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.rank is None:
+            return is_symmetric(value, size=self.size)
+        return is_low_rank_symmetric(value, self.rank, size=self.size)
+
+    def __call__(
+        self, size: int | None = None, *, rank: int | None = None
+    ) -> LowRankSymmetric:
+        return LowRankSymmetric(size, rank=rank)
+
+
+@dataclass(frozen=True)
+class LowRankSkewSymmetric(Square):
+    r"""Domain of matrices of the form $UVᵀ - VUᵀ$ with optional factor rank bound."""
+
+    _: KW_ONLY
+    rank: Final[int | None] = None
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.rank is None:
+            return is_skew_symmetric(value, size=self.size)
+        return is_low_rank_skew_symmetric(value, self.rank, size=self.size)
+
+    def __call__(
+        self, size: int | None = None, *, rank: int | None = None
+    ) -> LowRankSkewSymmetric:
+        return LowRankSkewSymmetric(size, rank=rank)
 
 
 class MatrixDomains(PosetEnum):
@@ -235,8 +303,11 @@ class MatrixDomains(PosetEnum):
     STANDARD_SYMPLECTIC = "standard_symplectic"  # [0, 𝕀; -𝕀, 0]
 
     # rank
-    LOW_RANK = "low_rank"  # rank small relative to size
-    RANK_ONE = "rank_one"
+    LOW_RANK = "low_rank"  # UVᵀ
+    LOW_RANK_SQUARE = "low_rank_square"
+    LOW_RANK_SYMMETRIC = "low_rank_symmetric"  # UVᵀ + VUᵀ
+    LOW_RANK_SKEW_SYMMETRIC = "low_rank_skew_symmetric"  # UVᵀ - VUᵀ
+    RANK_ONE = "rank_one"  # uvᵀ
 
     # determinant-based
     SINGULAR = "singular"  # det=0
@@ -328,6 +399,9 @@ MatrixDomains.KNOWN_MEETS = (
     (M.DOUBLY_STOCHASTIC, M.SQUARE & M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC),
     (M.INVERTIBLE, M.LEFT_INVERTIBLE & M.RIGHT_INVERTIBLE),
     (M.LOWER_INVERTIBLE, M.LOWER_TRIANGULAR & M.INVERTIBLE),
+    (M.LOW_RANK_SKEW_SYMMETRIC, M.LOW_RANK_SQUARE & M.SKEW_SYMMETRIC),
+    (M.LOW_RANK_SQUARE, M.LOW_RANK & M.SQUARE),
+    (M.LOW_RANK_SYMMETRIC, M.LOW_RANK_SQUARE & M.SYMMETRIC),
     (M.NEGATIVE_DEFINITE, M.NEGATIVE_SEMIDEFINITE & M.INVERTIBLE),
     (M.ORTHOGONAL, M.COLUMN_ORTHOGONAL & M.ROW_ORTHOGONAL),
     (M.PERMUTATION, M.ORTHOGONAL & M.DOUBLY_STOCHASTIC),
