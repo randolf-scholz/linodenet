@@ -18,9 +18,9 @@ __all__ = [
     "Fallback",
 ]
 
-from dataclasses import KW_ONLY, dataclass
+from dataclasses import KW_ONLY, dataclass, field
 from types import MappingProxyType
-from typing import Final
+from typing import Final, Self, overload
 
 import torch
 from torch import Tensor
@@ -60,35 +60,33 @@ class Rectangular(MatrixDomain):
         if (self.rows is None) ^ (self.cols is None):
             raise ValueError("Must specify both rows and cols, or neither.")
 
-    @property
-    def shape(self) -> tuple[int, int] | None:
-        if self.rows is None or self.cols is None:
-            return None
-        return self.rows, self.cols
-
     def check(self, value: Tensor, /) -> Tensor:
         *batch_shape, m, n = value.shape
         if self.shape is None:
             return value.new_full(batch_shape, True, dtype=torch.bool)
         return value.new_full(batch_shape, self.shape == (m, n), dtype=torch.bool)
 
-    def __call__(self, rows: int | None = None, cols: int | None = None) -> Rectangular:
-        return Rectangular(rows, cols)
+    @overload
+    def __call__(self, /) -> Self: ...
+    @overload
+    def __call__(self, rows: int, cols: int, /) -> Self: ...
+    def __call__(self, rows: int | None = None, cols: int | None = None, /) -> Self:
+        return self.__class__(rows, cols)
 
 
 @dataclass(frozen=True)
-class Square(MatrixDomain):
+class Square(Rectangular):
     r"""Domain of square matrices with optional fixed size."""
 
     size: Final[int | None] = None
 
-    @property
-    def rows(self) -> int | None:
-        return self.size
+    # computed from size.
+    rows: Final[int | None] = field(init=False, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
+    cols: Final[int | None] = field(init=False, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
 
-    @property
-    def cols(self) -> int | None:
-        return self.size
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "rows", self.size)
+        object.__setattr__(self, "cols", self.size)
 
     @property
     def shape(self) -> tuple[int, int] | None:
@@ -99,8 +97,12 @@ class Square(MatrixDomain):
     def check(self, value: Tensor, /) -> Tensor:
         return is_square(value, shape=self.shape)
 
-    def __call__(self, size: int) -> Square:
-        return Square(size)
+    @overload  # type: ignore[override]
+    def __call__(self, /) -> Self: ...
+    @overload
+    def __call__(self, size: int, /) -> Self: ...
+    def __call__(self, size: int | None = None, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return self.__class__(size)
 
 
 @dataclass(frozen=True)
@@ -117,9 +119,6 @@ class Tall(Rectangular):
             value.shape[:-2], value.shape[-2] >= value.shape[-1], dtype=torch.bool
         )
 
-    def __call__(self, rows: int | None = None, cols: int | None = None) -> Tall:
-        return Tall(rows, cols)
-
 
 @dataclass(frozen=True)
 class Wide(Rectangular):
@@ -135,9 +134,6 @@ class Wide(Rectangular):
             value.shape[:-2], value.shape[-1] >= value.shape[-2], dtype=torch.bool
         )
 
-    def __call__(self, rows: int | None = None, cols: int | None = None) -> Wide:
-        return Wide(rows, cols)
-
 
 @dataclass(frozen=True)
 class ColumnOrthogonal(Tall):
@@ -145,11 +141,6 @@ class ColumnOrthogonal(Tall):
 
     def check(self, value: Tensor, /) -> Tensor:
         return is_column_orthogonal(value, shape=self.shape)
-
-    def __call__(
-        self, rows: int | None = None, cols: int | None = None
-    ) -> ColumnOrthogonal:
-        return ColumnOrthogonal(rows, cols)
 
 
 @dataclass(frozen=True)
@@ -159,10 +150,21 @@ class RowOrthogonal(Wide):
     def check(self, value: Tensor, /) -> Tensor:
         return is_row_orthogonal(value, shape=self.shape)
 
-    def __call__(
-        self, rows: int | None = None, cols: int | None = None
-    ) -> RowOrthogonal:
-        return RowOrthogonal(rows, cols)
+
+@dataclass(frozen=True)
+class Symmetric(Square):
+    r"""Domain of symmetric square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return is_symmetric(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class SkewSymmetric(Square):
+    r"""Domain of skew-symmetric square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return is_skew_symmetric(value, size=self.size)
 
 
 @dataclass(frozen=True)
@@ -178,90 +180,56 @@ class LowRank(Rectangular):
             return shape_ok
         return is_low_rank(value, self.rank, shape=self.shape)
 
+    @overload
+    def __call__(self, /, *, rank: int | None = None) -> Self: ...
+    @overload
+    def __call__(self, rows: int, cols: int, /, *, rank: int | None = None) -> Self: ...
     def __call__(
         self,
         rows: int | None = None,
         cols: int | None = None,
+        /,
         *,
         rank: int | None = None,
-    ) -> LowRank:
-        return LowRank(rows, cols, rank=rank)
+    ) -> Self:
+        return self.__class__(rows, cols, rank=rank)
 
 
 @dataclass(frozen=True)
-class LowRankSquare(Square):
+class LowRankSquare(Square, LowRank):
     r"""Domain of square matrices with optional rank bound."""
-
-    _: KW_ONLY
-    rank: Final[int | None] = None
 
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
             return is_square(value, shape=self.shape)
         return is_low_rank_square(value, self.rank, size=self.size)
 
-    def __call__(
-        self, size: int | None = None, *, rank: int | None = None
-    ) -> LowRankSquare:
-        return LowRankSquare(size, rank=rank)
+    @overload  # type: ignore[override]
+    def __call__(self, /, *, rank: int | None = None) -> Self: ...
+    @overload
+    def __call__(self, size: int, /, *, rank: int | None = None) -> Self: ...
+    def __call__(self, size: int | None = None, /, *, rank: int | None = None) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return self.__class__(size, rank=rank)
 
 
 @dataclass(frozen=True)
-class Symmetric(Square):
-    r"""Domain of symmetric square matrices."""
-
-    def check(self, value: Tensor, /) -> Tensor:
-        return is_symmetric(value, size=self.size)
-
-    def __call__(self, size: int) -> Symmetric:
-        return Symmetric(size)
-
-
-@dataclass(frozen=True)
-class SkewSymmetric(Square):
-    r"""Domain of skew-symmetric square matrices."""
-
-    def check(self, value: Tensor, /) -> Tensor:
-        return is_skew_symmetric(value, size=self.size)
-
-    def __call__(self, size: int) -> SkewSymmetric:
-        return SkewSymmetric(size)
-
-
-@dataclass(frozen=True)
-class LowRankSymmetric(Square):
+class LowRankSymmetric(LowRankSquare):
     r"""Domain of matrices of the form $UVᵀ + VUᵀ$ with optional factor rank bound."""
-
-    _: KW_ONLY
-    rank: Final[int | None] = None
 
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
             return is_symmetric(value, size=self.size)
         return is_low_rank_symmetric(value, self.rank, size=self.size)
 
-    def __call__(
-        self, size: int | None = None, *, rank: int | None = None
-    ) -> LowRankSymmetric:
-        return LowRankSymmetric(size, rank=rank)
-
 
 @dataclass(frozen=True)
-class LowRankSkewSymmetric(Square):
+class LowRankSkewSymmetric(LowRankSquare):
     r"""Domain of matrices of the form $UVᵀ - VUᵀ$ with optional factor rank bound."""
-
-    _: KW_ONLY
-    rank: Final[int | None] = None
 
     def check(self, value: Tensor, /) -> Tensor:
         if self.rank is None:
             return is_skew_symmetric(value, size=self.size)
         return is_low_rank_skew_symmetric(value, self.rank, size=self.size)
-
-    def __call__(
-        self, size: int | None = None, *, rank: int | None = None
-    ) -> LowRankSkewSymmetric:
-        return LowRankSkewSymmetric(size, rank=rank)
 
 
 class MatrixDomains(PosetEnum):

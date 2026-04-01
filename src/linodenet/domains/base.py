@@ -425,11 +425,11 @@ class DomainMapping[D: Domain](Mapping[D, D]):
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet[Self]]]]
+    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Dependencies"""
-    KNOWN_SUBTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet[Self]]]]
+    KNOWN_SUBTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Reverse dependencies."""
-    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet[Self]]]]
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
 
     def __contains__(self, value: Tensor, /) -> bool:
@@ -764,8 +764,8 @@ class PosetEnum(Enum):
         return str(self.value)
 
 
-PosetEnum.KNOWN_SUPERTYPES = MappingProxyType({})  # pyright: ignore[reportAttributeAccessIssue]
-PosetEnum.KNOWN_SUBTYPES = MappingProxyType({})  # pyright: ignore[reportAttributeAccessIssue]
+PosetEnum.KNOWN_SUPERTYPES = MappingProxyType({})
+PosetEnum.KNOWN_SUBTYPES = MappingProxyType({})
 PosetEnum.KNOWN_MEETS = ()
 
 
@@ -852,9 +852,9 @@ class MatrixDomain:
 
     @property
     def shape(self) -> tuple[int, int] | None:
-        if self.rows is not None and self.cols is not None:
-            return self.rows, self.cols
-        return None
+        if self.rows is None or self.cols is None:
+            return None
+        return self.rows, self.cols
 
     @abstractmethod
     def check(self, value: Tensor, /) -> Tensor:
