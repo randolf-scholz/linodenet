@@ -18,9 +18,11 @@ from linodenet.domains.matrix_domains import (
     BackwardStable,
     Banded,
     ColumnOrthogonal,
+    ColumnStochastic,
     Contraction,
     Diagonal,
     DiagonallyDominant,
+    DoublyStochastic,
     ForwardStable,
     Hamiltonian,
     Identity,
@@ -40,6 +42,7 @@ from linodenet.domains.matrix_domains import (
     RankOne,
     RightInvertible,
     RowOrthogonal,
+    RowStochastic,
     SpecialOrthogonal,
     SpectralNormalized,
     Symplectic,
@@ -532,6 +535,9 @@ class TestMatrixDomains:
         banded = tensor([[1.0, 2.0, 0.0], [3.0, 4.0, 5.0], [0.0, 6.0, 7.0]])
         masked = tensor([[1.0, 0.0], [0.0, 4.0]])
         contraction = 0.5 * tensor([[1.0, 0.0], [0.0, 1.0]])
+        row_stochastic = tensor([[0.5, 0.5], [0.25, 0.75]])
+        column_stochastic = tensor([[0.5, 0.25], [0.5, 0.75]])
+        doubly_stochastic = tensor([[0.5, 0.5], [0.5, 0.5]])
 
         assert rank_one in RankOne()
         assert orthogonal in Normal()
@@ -552,6 +558,9 @@ class TestMatrixDomains:
         assert tridiagonal in Tridiagonal()
         assert banded in Banded(3, 3, lower=-1, upper=1)
         assert masked in Masked(2, 2, mask=tensor([[1, 0], [0, 1]], dtype=torch.bool))
+        assert row_stochastic in RowStochastic()
+        assert column_stochastic in ColumnStochastic()
+        assert doubly_stochastic in DoublyStochastic()
         assert orthogonal in SpectralNormalized()
         assert orthogonal in LipschitzBounded(lipschitz_bound=1.0)
         assert contraction in Contraction()

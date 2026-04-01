@@ -8,6 +8,7 @@ __all__ = [
     "is_backward_stable",
     "is_banded",
     "is_contraction",
+    "is_column_stochastic",
     "is_column_orthogonal",
     "is_spectral_normalized",
     "is_lipschitz_bounded",
@@ -30,7 +31,9 @@ __all__ = [
     "is_positive_definite",
     "is_positive_semidefinite",
     "is_right_invertible",
+    "is_doubly_stochastic",
     "is_row_orthogonal",
+    "is_row_stochastic",
     "is_special_orthogonal",
     "is_rank_one",
     "is_skew_symmetric",
@@ -413,6 +416,72 @@ def is_row_orthogonal(
 
 
 @signature("(..., m, n) -> bool[(...)]")
+def is_row_stochastic(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether rows are nonnegative and sum to one."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    bounded = ((x >= 0) & (x <= 1)).all(dim=(-2, -1))
+    row_sums = x.sum(dim=-1)
+    ones = torch.ones_like(row_sums)
+    return bounded & torch.isclose(row_sums, ones, rtol=rtol, atol=atol).all(dim=-1)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_column_stochastic(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether columns are nonnegative and sum to one."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    bounded = ((x >= 0) & (x <= 1)).all(dim=(-2, -1))
+    col_sums = x.sum(dim=-2)
+    ones = torch.ones_like(col_sums)
+    return bounded & torch.isclose(col_sums, ones, rtol=rtol, atol=atol).all(dim=-1)
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_doubly_stochastic(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the matrix is square, row-stochastic, and column-stochastic."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+    return (
+        is_row_stochastic(
+            x, shape=(x.shape[dim[0]], x.shape[dim[1]]), dim=dim, rtol=rtol, atol=atol
+        )
+        & is_column_stochastic(
+            x, shape=(x.shape[dim[0]], x.shape[dim[1]]), dim=dim, rtol=rtol, atol=atol
+        )
+        & is_square(x, shape=(x.shape[dim[0]], x.shape[dim[1]]), dim=dim)
+    )
+
+
+@signature("(..., m, n) -> bool[(...)]")
 def is_left_invertible(
     x: Tensor,
     /,
@@ -613,12 +682,10 @@ def is_normal(
     r"""Check whether the given tensor is normal."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
-    return torch.isclose(
-        x @ x.swapaxes(*dim),
-        x.swapaxes(*dim) @ x,
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=dim)
+    result = torch.isclose(
+        x @ x.swapaxes(*dim), x.swapaxes(*dim) @ x, rtol=rtol, atol=atol
+    )
+    return result.all(dim=(-2, -1))
 
 
 @signature("(..., 2n, 2n) -> bool[(...)]")
@@ -645,12 +712,8 @@ def is_symplectic(
     eye = torch.eye(dim_x // 2, device=x.device, dtype=x.dtype)
     J = torch.kron(J1, eye)
 
-    return torch.isclose(
-        x,
-        J.T @ x @ J,
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=(-2, -1))
+    result = torch.isclose(x, J.T @ x @ J, rtol=rtol, atol=atol)
+    return result.all(dim=(-2, -1))
 
 
 @signature("(..., 2n, 2n) -> bool[(...)]")
@@ -701,12 +764,7 @@ def is_diagonal(
 
     x = x.movedim(dim, (-2, -1))
     mask = torch.eye(x.shape[-2], x.shape[-1], device=x.device, dtype=x.dtype)
-    return torch.isclose(
-        x,
-        x * mask,
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=(-2, -1))
+    return is_masked(x, mask, rtol=rtol, atol=atol)
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -744,12 +802,7 @@ def is_upper_triangular(
         return _full_false(x, dim)
 
     x = x.movedim(dim, (-2, -1))
-    return torch.isclose(
-        x,
-        x.triu(upper),
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=(-2, -1))
+    return torch.isclose(x, x.triu(upper), rtol=rtol, atol=atol).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -783,12 +836,7 @@ def is_tridiagonal(
         return _full_false(x, dim)
 
     x = x.movedim(dim, (-2, -1))
-    return torch.isclose(
-        x,
-        x.triu(-1).tril(+1),
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=(-2, -1))
+    return torch.isclose(x, x.triu(-1).tril(+1), rtol=rtol, atol=atol).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -810,12 +858,8 @@ def is_banded(
         raise ValueError("Lower bound must be greater than or equal to upper bound.")
 
     x = x.movedim(dim, (-2, -1))
-    return torch.isclose(
-        x,
-        x.triu(lower).tril(upper),
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=(-2, -1))
+    result = torch.isclose(x, x.triu(lower).tril(upper), rtol=rtol, atol=atol)
+    return result.all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -833,12 +877,7 @@ def is_masked(
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
     mask_ = torch.as_tensor(mask, dtype=x.dtype, device=x.device)
-    return torch.isclose(
-        x,
-        x * mask_,
-        rtol=rtol,
-        atol=atol,
-    ).all(dim=dim)
+    return torch.isclose(x, x * mask_, rtol=rtol, atol=atol).all(dim=dim)
 
 
 # endregion masked checks --------------------------------------------------------------

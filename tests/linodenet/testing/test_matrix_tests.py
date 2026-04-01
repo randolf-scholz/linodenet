@@ -4,7 +4,9 @@ import torch
 
 from linodenet.domains.matrix_tests import (
     is_banded,
+    is_column_stochastic,
     is_diagonal,
+    is_doubly_stochastic,
     is_low_rank,
     is_low_rank_skew_symmetric,
     is_low_rank_square,
@@ -13,6 +15,7 @@ from linodenet.domains.matrix_tests import (
     is_negative_semidefinite,
     is_positive_definite,
     is_positive_semidefinite,
+    is_row_stochastic,
     is_skew_symmetric,
     is_square,
     is_symmetric,
@@ -97,6 +100,23 @@ def test_triangular_matrix_test() -> None:
     assert is_triangular(lower).all()
     assert is_triangular(upper).all()
     assert not is_triangular(non_triangular).any()
+
+
+def test_stochastic_matrix_tests() -> None:
+    row_stochastic = torch.tensor([[[0.5, 0.5], [0.25, 0.75]]])
+    column_stochastic = torch.tensor([[[0.5, 0.25], [0.5, 0.75]]])
+    doubly_stochastic = torch.tensor([[[0.5, 0.5], [0.5, 0.5]]])
+    non_stochastic = torch.tensor([[[1.2, -0.2], [0.0, 1.0]]])
+
+    assert is_row_stochastic(row_stochastic).all()
+    assert not is_column_stochastic(row_stochastic).all()
+
+    assert is_column_stochastic(column_stochastic).all()
+    assert not is_row_stochastic(column_stochastic).all()
+
+    assert is_doubly_stochastic(doubly_stochastic).all()
+    assert not is_row_stochastic(non_stochastic).any()
+    assert not is_column_stochastic(non_stochastic).any()
 
 
 def test_low_rank_symmetric_matrix_test() -> None:

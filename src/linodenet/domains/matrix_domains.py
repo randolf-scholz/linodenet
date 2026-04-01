@@ -11,6 +11,9 @@ __all__ = [
     "RankOne",
     "ColumnOrthogonal",
     "RowOrthogonal",
+    "RowStochastic",
+    "ColumnStochastic",
+    "DoublyStochastic",
     "LeftInvertible",
     "RightInvertible",
     "Symmetric",
@@ -183,6 +186,30 @@ class RowOrthogonal(Wide):
 
     def check(self, value: Tensor, /) -> Tensor:
         return tests.is_row_orthogonal(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class RowStochastic(Rectangular):
+    r"""Domain of row-stochastic matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_row_stochastic(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class ColumnStochastic(Rectangular):
+    r"""Domain of column-stochastic matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_column_stochastic(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class DoublyStochastic(Square):
+    r"""Domain of doubly stochastic square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_doubly_stochastic(value, size=self.size)
 
 
 @dataclass(frozen=True)
