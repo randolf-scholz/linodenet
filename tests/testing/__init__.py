@@ -4,6 +4,7 @@ __all__ = [
     "PROJECT",
     "DTYPES",
     "DEVICES",
+    "PREFER_GPU",
     "SEEDS_10",
     "SEEDS_5",
     "SEED",
@@ -18,7 +19,7 @@ __all__ = [
 ]
 
 from .assertions import TestSuite
-from .constants import DEVICES, DTYPES, SEED, SEEDS_5, SEEDS_10
+from .constants import DEVICES, DTYPES, PREFER_GPU, SEED, SEEDS_5, SEEDS_10
 from .misc import camel2snake, snake2camel
 from .plotting import visualize_distribution
 from .project import PROJECT

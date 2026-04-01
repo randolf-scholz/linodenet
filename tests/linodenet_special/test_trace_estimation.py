@@ -20,7 +20,7 @@ from linodenet_special.trace_estimation import (
     LogabsdetSeriesEstimator,
     TraceEstimators,
 )
-from tests.testing import DEVICES, PROJECT, TestSuite
+from tests.testing import DEVICES, PREFER_GPU, PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
@@ -596,7 +596,7 @@ class TestExactTrace(TestTraceEstimator):
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
 class TestTraceCorrectness(TestTraceEstimator):
-    BATCH_SIZE = 8
+    BATCH_SIZE = 32
     PROBLEM_SIZE = 128
     PROBLEM_RANK = 6
     NUM_MATVECS = 16
@@ -708,14 +708,14 @@ class TestPowersCorrectness(TestTraceEstimator):
     pass
 
 
-@pytest.mark.parametrize("device", DEVICES, ids=str)
+@pytest.mark.parametrize("device", PREFER_GPU, ids=str)
 class TestLogAbsDetCorrectness(TestTraceEstimator):
     BATCH_SIZE = 32
-    PROBLEM_SIZE = 128
+    PROBLEM_SIZE = 256
     PROBLEM_RANK = 8
     DECAY_Q = 0.95
     NUM_MATVECS = 16
-    NUM_TERMS = 8
+    NUM_TERMS = 10
     SEED = 0
 
     TOLERANCES: dict[tuple[str, str], float] = {
