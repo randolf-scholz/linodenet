@@ -841,8 +841,11 @@ class MatrixDomains(PosetEnum):
     ORTHOGONAL_PROJECTION = "orthogonal-projection"  # P² = P, P symmetric (P=QQ⁺)
     NILPOTENT = "nilpotent"  # Aᵏ = 0 for some k≥2
 
+    # special matrices
     STANDARD_NILPOTENT = "canonical-nilpotent"  # standard nilpotent matrix
     STANDARD_SYMPLECTIC = "standard-symplectic"  # [0, 𝕀; -𝕀, 0]
+    HOUSEHOLDER = "householder"
+    GIVENS_ROTATION = "givens-rotation"
 
     HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
 
