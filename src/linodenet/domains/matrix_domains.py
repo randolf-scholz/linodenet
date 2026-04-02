@@ -852,7 +852,6 @@ class MatrixDomains(PosetEnum):
     COLUMN_ORTHOGONAL = "column-orthogonal"  # m × n matrices with QᵀQ = 𝕀ₙ
     ROW_ORTHOGONAL = "row-orthogonal"  # m × n matrices with QQᵀ = 𝕀ₘ
     SQUARE = "square"  # n × n matrices
-    EVEN_SQUARE = "even-square"  # 2n × 2n matrices
 
     # rank
     LOW_RANK = "low-rank"  # UVᵀ
@@ -910,6 +909,7 @@ class MatrixDomains(PosetEnum):
     CAYLEY_ORTHOGONAL = "cayley-orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
     SPECIAL_ORTHOGONAL = "special-orthogonal"  # SOₙ(R)
 
+    EVEN_SQUARE = "even-square"  # 2n × 2n matrices
     SYMPLECTIC = "symplectic"  # 2n×2n with AᵀJA = J for J=[0, I;-I, 0]
     HAMILTONIAN = "hamiltonian"  # 2n×2n with (JA)ᵀ = JA for J=[0, I;-I, 0]
 
@@ -920,7 +920,6 @@ class MatrixDomains(PosetEnum):
     ROW_CENTERED = "row-centered"  # A𝟏 = 𝟎
     COLUMN_CENTERED = "column-centered"  # Aᵀ𝟏 = 𝟎
     DOUBLY_CENTERED = "doubly-centered"  # A𝟏 = 𝟎 and Aᵀ𝟏 = 𝟎
-    CENTERED = "doubly-centered"  # alias
     CENTERING = "centering"  # 𝕀ₙ - 1/n𝟏ₙ𝟏ₙᵀ special centering matrix
     INTENSITY = "intensity"  # Aᵢᵢ = -∑_{j≠i} Aᵢⱼ for all i, Aᵢⱼ ≥ 0 for i≠j
     # ⇝ row-centered, nonpositive diagonal, diagonally dominant
