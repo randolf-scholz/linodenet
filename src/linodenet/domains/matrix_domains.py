@@ -846,11 +846,10 @@ class MatrixDomains(PosetEnum):
     STANDARD_SYMPLECTIC = "standard-symplectic"  # [0, 𝕀; -𝕀, 0]
     HOUSEHOLDER = "householder"
     GIVENS_ROTATION = "givens-rotation"
-
     HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
+    JORDAN_BLOCK = "jordan-block"  # λI + N, N is standard nilpotent
 
     BLOCK_DIAGONAL = "block-diagonal"
-    JORDAN_BLOCK = "jordan-block"  # λI + N, N is standard nilpotent
     JORDAN = "jordan"  # block diagonal with Jordan blocks
 
     # TODO: graph theory (degree, adjacency, incidence, Laplacian)
