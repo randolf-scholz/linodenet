@@ -844,7 +844,6 @@ class MatrixDomains(PosetEnum):
     EYE = "identity"  # alias
 
     ONE_HOT = "one-hot"  # a single 1 entry and 0 elsewhere
-    MASKED = "masked"  # X⊙M = X for some mask M
 
     RECTANGULAR = "rectangular"  # m × n matrices
     TALL = "tall"  # m × n matrices with m ≥ n
@@ -948,6 +947,7 @@ class MatrixDomains(PosetEnum):
     # TODO: graph theory (degree, adjacency, incidence, Laplacian)
 
     # tag-like
+    MASKED = "masked"  # X⊙M = X for some mask M
     SPARSE = "sparse"  # many 0 entries
     EFFICIENTLY_INVERTIBLE = "efficiently-invertible"
     FORWARD_STABLE = "forward-stable"
