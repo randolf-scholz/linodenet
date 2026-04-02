@@ -5,6 +5,7 @@ import torch
 from linodenet.domains.matrix_tests import (
     is_banded,
     is_boolean,
+    is_circulant,
     is_column_centered,
     is_column_stochastic,
     is_diagonal,
@@ -28,6 +29,7 @@ from linodenet.domains.matrix_tests import (
     is_square,
     is_symmetric,
     is_tall,
+    is_toeplitz,
     is_triangular,
     is_upper_triangular,
     is_wide,
@@ -84,6 +86,21 @@ def test_matrix_tests_support_non_default_matrix_dims() -> None:
     wide = torch.randn(2, 3, 4).movedim((-2, -1), (0, 2))
     assert is_tall(tall, shape=(4, 3), dim=(0, 2)).all()
     assert is_wide(wide, shape=(3, 4), dim=(0, 2)).all()
+
+    toeplitz = torch.tensor(
+        [
+            [[1.0, 2.0, 3.0], [4.0, 1.0, 2.0]],
+            [[2.0, -1.0, 0.0], [5.0, 2.0, -1.0]],
+        ]
+    ).movedim((-2, -1), (0, 2))
+    circulant = torch.tensor(
+        [
+            [[1.0, 2.0, 3.0], [3.0, 1.0, 2.0], [2.0, 3.0, 1.0]],
+            [[0.0, 1.0, -1.0], [-1.0, 0.0, 1.0], [1.0, -1.0, 0.0]],
+        ]
+    ).movedim((-2, -1), (0, 2))
+    assert is_toeplitz(toeplitz, shape=(2, 3), dim=(0, 2)).all()
+    assert is_circulant(circulant, size=3, dim=(0, 2)).all()
 
     centered = torch.tensor(
         [
@@ -153,6 +170,22 @@ def test_centered_matrix_tests() -> None:
     assert is_doubly_centered(doubly_centered).all()
     assert not is_row_centered(non_centered).any()
     assert not is_column_centered(non_centered).any()
+
+
+def test_toeplitz_and_circulant_matrix_tests() -> None:
+    toeplitz = torch.tensor([[[1.0, 2.0, 3.0], [4.0, 1.0, 2.0], [5.0, 4.0, 1.0]]])
+    circulant = torch.tensor([[[1.0, 2.0, 3.0], [3.0, 1.0, 2.0], [2.0, 3.0, 1.0]]])
+    non_toeplitz = torch.tensor([[[1.0, 2.0, 3.0], [4.0, 0.0, 2.0], [5.0, 4.0, 1.0]]])
+    non_circulant = torch.tensor([[[1.0, 2.0, 3.0], [3.0, 1.0, 2.0], [2.0, 0.0, 1.0]]])
+    rectangular = torch.tensor([[[1.0, 2.0, 3.0], [4.0, 1.0, 2.0]]])
+
+    assert is_toeplitz(toeplitz).all()
+    assert is_toeplitz(rectangular).all()
+    assert not is_toeplitz(non_toeplitz).any()
+
+    assert is_circulant(circulant).all()
+    assert not is_circulant(non_circulant).any()
+    assert not is_circulant(rectangular).any()
 
 
 def test_boolean_zero_ones_identity_permutation_matrix_tests_are_dtype_independent() -> (

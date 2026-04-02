@@ -48,12 +48,14 @@ __all__ = [
     "is_symmetric",
     "is_symplectic",
     "is_traceless",
+    "is_toeplitz",
     "is_triangular",
     "is_tridiagonal",
     "is_upper_triangular",
     "is_tall",
     "is_wide",
     "is_zero",
+    "is_circulant",
 ]
 
 from collections.abc import Callable
@@ -978,6 +980,50 @@ def is_tridiagonal(
 
     x = x.movedim(dim, (-2, -1))
     return torch.isclose(x, x.triu(-1).tril(+1), rtol=rtol, atol=atol).all(dim=(-2, -1))
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_toeplitz(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is constant along diagonals."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    return torch.isclose(x[..., 1:, 1:], x[..., :-1, :-1], rtol=rtol, atol=atol).all(
+        dim=(-2, -1)
+    )
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_circulant(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is circulant."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    shifted_rows = torch.roll(x[..., :-1, :], shifts=1, dims=-1)
+    return torch.isclose(x[..., 1:, :], shifted_rows, rtol=rtol, atol=atol).all(
+        dim=(-2, -1)
+    )
 
 
 @signature("(..., m, n) -> bool[(...)]")

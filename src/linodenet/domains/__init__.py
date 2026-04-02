@@ -101,6 +101,8 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.PERMUTATION             : matrix_tests.is_permutation,
     MatrixDomains.DIAGONAL                : matrix_tests.is_diagonal,
     MatrixDomains.TRIDIAGONAL             : matrix_tests.is_tridiagonal,
+    MatrixDomains.TOEPLITZ                : matrix_tests.is_toeplitz,
+    MatrixDomains.CIRCULANT               : matrix_tests.is_circulant,
     MatrixDomains.UPPER_TRIANGULAR        : matrix_tests.is_upper_triangular,
     MatrixDomains.LOWER_TRIANGULAR        : matrix_tests.is_lower_triangular,
     MatrixDomains.BANDED                  : matrix_tests.is_banded,

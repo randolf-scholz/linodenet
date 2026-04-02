@@ -41,6 +41,8 @@ __all__ = [
     "LowerTriangular",
     "UpperTriangular",
     "Tridiagonal",
+    "Toeplitz",
+    "Circulant",
     "Banded",
     "Masked",
     "SpectralNormalized",
@@ -445,7 +447,15 @@ class Hamiltonian(EvenSquare):
 
 
 @dataclass(frozen=True)
-class Banded(Rectangular):
+class Toeplitz(Rectangular):
+    r"""Domain of matrices that are constant along diagonals."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_toeplitz(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class Banded(Toeplitz):
     r"""Domain of banded matrices."""
 
     _: KW_ONLY
@@ -484,7 +494,15 @@ class Banded(Rectangular):
 
 
 @dataclass(frozen=True)
-class Tridiagonal(Square):
+class Circulant(Square, Toeplitz):
+    r"""Domain of circulant square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_circulant(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Tridiagonal(Circulant):
     r"""Domain of tridiagonal square matrices."""
 
     def check(self, value: Tensor, /) -> Tensor:
@@ -813,15 +831,17 @@ class MatrixDomains(PosetEnum):
     # symmetry / entry based
     SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
     SKEW_SYMMETRIC = "skew-symmetric"
-    DIAGONAL = "diagonal"
     POSITIVE_DIAGONAL_ENTRIES = "positive-diagonal-entries"
     NEGATIVE_DIAGONAL_ENTRIES = "negative-diagonal-entries"
     ZERO_DIAGONAL_ENTRIES = "zero-diagonal"
     ZERO_DIAGONAL = "zero-diagonal"
-    TRIDIAGONAL = "tridiagonal"
-    BANDED = "banded"
+
     TOEPLITZ = "toeplitz"  # constant along diagonals
     CIRCULANT = "circulant"  # constant along diagonals, wrap around
+    TRIDIAGONAL = "tridiagonal"
+    DIAGONAL = "diagonal"
+
+    BANDED = "banded"
     HANKEL = "hankel"  # constant along anti-diagonals
 
     # eigenvalues
@@ -927,7 +947,7 @@ MatrixDomains.KNOWN_MEETS = (
     (M.UPPER_INVERTIBLE, M.UPPER_TRIANGULAR & M.INVERTIBLE),
 )
 MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
-    M.BANDED: {M.RECTANGULAR},
+    M.BANDED: {M.TOEPLITZ},
     M.BOOLEAN: {M.RECTANGULAR},
     M.CAYLEY_ORTHOGONAL: {M.SPECIAL_ORTHOGONAL},
     M.CHOLESKY_FACTOR: {M.LOWER_INVERTIBLE, M.POSITIVE_DIAGONAL_ENTRIES},
@@ -980,7 +1000,7 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.TALL: {M.RECTANGULAR},
     M.TOEPLITZ: {M.RECTANGULAR},
     M.TRACELESS: {M.SQUARE},
-    M.TRIDIAGONAL: {M.BANDED, M.SQUARE},
+    M.TRIDIAGONAL: {M.CIRCULANT},
     M.UNIT_DETERMINANT: {M.POSITIVE_DETERMINANT},
     M.UPPER_INVERTIBLE: {M.UPPER_TRIANGULAR, M.INVERTIBLE},
     M.UPPER_TRIANGULAR: {M.TRIANGULAR},
