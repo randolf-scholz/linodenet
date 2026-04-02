@@ -831,17 +831,20 @@ class MatrixDomains(PosetEnum):
     # symmetry / entry based
     SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
     SKEW_SYMMETRIC = "skew-symmetric"
-    POSITIVE_DIAGONAL_ENTRIES = "positive-diagonal-entries"
-    NEGATIVE_DIAGONAL_ENTRIES = "negative-diagonal-entries"
-    ZERO_DIAGONAL_ENTRIES = "zero-diagonal"
-    ZERO_DIAGONAL = "zero-diagonal"
 
     TOEPLITZ = "toeplitz"  # constant along diagonals
+    BANDED = "banded"
     CIRCULANT = "circulant"  # constant along diagonals, wrap around
     TRIDIAGONAL = "tridiagonal"
     DIAGONAL = "diagonal"
 
-    BANDED = "banded"
+    # diagonal conditions
+    POSITIVE_DIAGONAL_ENTRIES = "positive-diagonal-entries"
+    NEGATIVE_DIAGONAL_ENTRIES = "negative-diagonal-entries"
+    ZERO_DIAGONAL_ENTRIES = "zero-diagonal"
+    ZERO_DIAGONAL = "zero-diagonal"
+    TRACELESS = "traceless"
+
     HANKEL = "hankel"  # constant along anti-diagonals
 
     # eigenvalues
@@ -860,7 +863,6 @@ class MatrixDomains(PosetEnum):
     CAYLEY_ORTHOGONAL = "cayley-orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
     SPECIAL_ORTHOGONAL = "special-orthogonal"  # SOₙ(R)
 
-    TRACELESS = "traceless"
     SYMPLECTIC = "symplectic"  # 2n×2n with AᵀJA = J for J=[0, I;-I, 0]
     HAMILTONIAN = "hamiltonian"  # 2n×2n with (JA)ᵀ = JA for J=[0, I;-I, 0]
 
@@ -870,7 +872,6 @@ class MatrixDomains(PosetEnum):
 
     ROW_CENTERED = "row-centered"  # A𝟏 = 𝟎
     COLUMN_CENTERED = "column-centered"  # Aᵀ𝟏 = 𝟎
-    COL_CENTERED = "column-centered"  # alias
     DOUBLY_CENTERED = "doubly-centered"  # A𝟏 = 𝟎 and Aᵀ𝟏 = 𝟎
     CENTERED = "doubly-centered"  # alias
     CENTERING = "centering"  # 𝕀ₙ - 1/n𝟏ₙ𝟏ₙᵀ special centering matrix
@@ -879,7 +880,6 @@ class MatrixDomains(PosetEnum):
 
     ROW_STOCHASTIC = "row-stochastic"  # nonnegative, A𝟏 = 𝟏
     COLUMN_STOCHASTIC = "column-stochastic"  # nonnegative, Aᵀ𝟏 = 𝟏
-    COL_STOCHASTIC = "column-stochastic"  # alias
     DOUBLY_STOCHASTIC = "doubly-stochastic"
     PERMUTATION = "permutation"
 
