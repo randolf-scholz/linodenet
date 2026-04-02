@@ -41,6 +41,7 @@ __all__ = [
     "LowerTriangular",
     "UpperTriangular",
     "Tridiagonal",
+    "BlockDiagonal",
     "Toeplitz",
     "Circulant",
     "Banded",
@@ -515,6 +516,52 @@ class Diagonal(Tridiagonal):
 
     def check(self, value: Tensor, /) -> Tensor:
         return tests.is_diagonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class BlockDiagonal(Square):
+    r"""Domain of square matrices supported on diagonal blocks."""
+
+    _: KW_ONLY
+    block_sizes: Final[tuple[int, ...] | None] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.block_sizes is None:
+            return
+        if not self.block_sizes or any(
+            block_size <= 0 for block_size in self.block_sizes
+        ):
+            raise ValueError(
+                "block_sizes must be a non-empty tuple of positive integers."
+            )
+        if self.size is not None and sum(self.block_sizes) != self.size:
+            raise ValueError("Sum of block_sizes must equal the matrix size.")
+
+    def check(self, value: Tensor, /) -> Tensor:
+        if self.block_sizes is None:
+            return tests.is_square(value, shape=self.shape)
+        return tests.is_block_diagonal(
+            value, self.block_sizes, size=self.size if self.size is not None else None
+        )
+
+    @overload
+    def __call__(
+        self, size: int | None = None, /, *, block_sizes: tuple[int, ...] | None = None
+    ) -> Self: ...
+    @overload
+    def __call__(
+        self, rows: int, cols: int, /, *, block_sizes: tuple[int, ...] | None = None
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        block_sizes: tuple[int, ...] | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, block_sizes=block_sizes)
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,7 @@ from linodenet.domains import (
 from linodenet.domains.matrix_domains import (
     BackwardStable,
     Banded,
+    BlockDiagonal,
     Boolean,
     Circulant,
     ColumnCentered,
@@ -546,6 +547,7 @@ class TestMatrixDomains:
         tridiagonal = tensor([[1.0, 2.0, 0.0], [3.0, 4.0, 5.0], [0.0, 6.0, 7.0]])
         toeplitz = tensor([[1.0, 2.0, 3.0], [4.0, 1.0, 2.0], [5.0, 4.0, 1.0]])
         circulant = tensor([[1.0, 2.0, 3.0], [3.0, 1.0, 2.0], [2.0, 3.0, 1.0]])
+        block_diagonal = tensor([[1.0, 2.0, 0.0], [3.0, 4.0, 0.0], [0.0, 0.0, 5.0]])
         banded = tensor([[1.0, 2.0, 0.0], [3.0, 4.0, 5.0], [0.0, 6.0, 7.0]])
         masked = tensor([[1.0, 0.0], [0.0, 4.0]])
         contraction = 0.5 * tensor([[1.0, 0.0], [0.0, 1.0]])
@@ -587,6 +589,9 @@ class TestMatrixDomains:
         assert tridiagonal in Tridiagonal()
         assert toeplitz in Toeplitz()
         assert circulant in Circulant()
+        assert block_diagonal in BlockDiagonal()
+        assert block_diagonal in BlockDiagonal(3, block_sizes=(2, 1))
+        assert block_diagonal not in BlockDiagonal(3, block_sizes=(1, 2))
         assert banded in Banded(3, 3, lower=-1, upper=1)
         assert masked in Masked(2, 2, mask=tensor([[1, 0], [0, 1]], dtype=torch.bool))
         assert row_stochastic in RowStochastic()

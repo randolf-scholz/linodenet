@@ -4,6 +4,7 @@ import torch
 
 from linodenet.domains.matrix_tests import (
     is_banded,
+    is_block_diagonal,
     is_boolean,
     is_circulant,
     is_column_centered,
@@ -102,6 +103,16 @@ def test_matrix_tests_support_non_default_matrix_dims() -> None:
     assert is_toeplitz(toeplitz, shape=(2, 3), dim=(0, 2)).all()
     assert is_circulant(circulant, size=3, dim=(0, 2)).all()
 
+    block_diagonal = torch.tensor(
+        [
+            [[1.0, 2.0, 0.0], [3.0, 4.0, 0.0], [0.0, 0.0, 5.0]],
+            [[2.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 6.0]],
+        ]
+    ).movedim((-2, -1), (0, 2))
+    assert is_block_diagonal(
+        block_diagonal, block_sizes=(2, 1), size=3, dim=(0, 2)
+    ).all()
+
     centered = torch.tensor(
         [
             [[1.0, -1.0], [-1.0, 1.0]],
@@ -186,6 +197,21 @@ def test_toeplitz_and_circulant_matrix_tests() -> None:
     assert is_circulant(circulant).all()
     assert not is_circulant(non_circulant).any()
     assert not is_circulant(rectangular).any()
+
+
+def test_block_diagonal_matrix_test() -> None:
+    block_diagonal = torch.tensor([[[1.0, 2.0, 0.0], [3.0, 4.0, 0.0], [0.0, 0.0, 5.0]]])
+    other_block_diagonal = torch.tensor(
+        [[[2.0, 0.0, 0.0], [0.0, 3.0, 4.0], [0.0, 5.0, 6.0]]]
+    )
+    non_block_diagonal = torch.tensor(
+        [[[1.0, 2.0, 7.0], [3.0, 4.0, 0.0], [0.0, 0.0, 5.0]]]
+    )
+
+    assert is_block_diagonal(block_diagonal, block_sizes=(2, 1)).all()
+    assert is_block_diagonal(other_block_diagonal, block_sizes=(1, 2)).all()
+    assert not is_block_diagonal(non_block_diagonal, block_sizes=(2, 1)).any()
+    assert is_block_diagonal(block_diagonal, size=3).all()
 
 
 def test_boolean_zero_ones_identity_permutation_matrix_tests_are_dtype_independent() -> (

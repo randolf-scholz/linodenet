@@ -7,6 +7,7 @@ __all__ = [
     # is_* checks
     "is_backward_stable",
     "is_banded",
+    "is_block_diagonal",
     "is_boolean",
     "is_contraction",
     "is_column_stochastic",
@@ -980,6 +981,43 @@ def is_tridiagonal(
 
     x = x.movedim(dim, (-2, -1))
     return torch.isclose(x, x.triu(-1).tril(+1), rtol=rtol, atol=atol).all(dim=(-2, -1))
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_block_diagonal(
+    x: Tensor,
+    /,
+    block_sizes: tuple[int, ...] | None = None,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,
+    atol: float = 0.0,
+) -> Tensor:
+    r"""Check whether the given tensor is block diagonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    if block_sizes is None:
+        return torch.ones(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    if not block_sizes or any(block_size <= 0 for block_size in block_sizes):
+        raise ValueError("block_sizes must be a non-empty tuple of positive integers.")
+    if sum(block_sizes) != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    mask = torch.block_diag(
+        *(
+            torch.ones(block_size, block_size, device=x.device, dtype=torch.bool)
+            for block_size in block_sizes
+        )
+    )
+    masked = torch.where(mask, x, 0)
+    return torch.isclose(x, masked, rtol=rtol, atol=atol).all(dim=(-2, -1))
 
 
 @signature("(..., m, n) -> bool[(...)]")

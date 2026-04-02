@@ -100,6 +100,7 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.IDENTITY                : matrix_tests.is_identity,
     MatrixDomains.PERMUTATION             : matrix_tests.is_permutation,
     MatrixDomains.DIAGONAL                : matrix_tests.is_diagonal,
+    MatrixDomains.BLOCK_DIAGONAL          : matrix_tests.is_block_diagonal,
     MatrixDomains.TRIDIAGONAL             : matrix_tests.is_tridiagonal,
     MatrixDomains.TOEPLITZ                : matrix_tests.is_toeplitz,
     MatrixDomains.CIRCULANT               : matrix_tests.is_circulant,
