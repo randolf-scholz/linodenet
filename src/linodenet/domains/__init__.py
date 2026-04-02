@@ -64,6 +64,7 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.BOOLEAN                 : matrix_tests.is_boolean,
     MatrixDomains.ZERO                    : matrix_tests.is_zero,
     MatrixDomains.ONES                    : matrix_tests.is_ones,
+    MatrixDomains.ONE_HOT                 : matrix_tests.is_one_hot,
     MatrixDomains.LOW_RANK                : matrix_tests.is_low_rank,
     MatrixDomains.LOW_RANK_SQUARE         : matrix_tests.is_low_rank_square,
     MatrixDomains.LOW_RANK_SKEW_SYMMETRIC: matrix_tests.is_low_rank_skew_symmetric,

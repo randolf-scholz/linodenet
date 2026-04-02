@@ -48,6 +48,7 @@ __all__ = [
     "BackwardStable",
     "Zero",
     "Ones",
+    "OneHot",
     "Identity",
     "Permutation",
     "Fallback",
@@ -573,6 +574,12 @@ class LipschitzBounded(Rectangular):
     _: KW_ONLY
     lipschitz_bound: Final[float | None] = None
 
+    def __post_init__(self):
+        if self.lipschitz_bound is None:
+            pass
+        elif self.lipschitz_bound < 0:
+            raise ValueError("lipschitz_bound must be >= 0")
+
     def check(self, value: Tensor, /) -> Tensor:
         if self.lipschitz_bound is None:
             return super().check(value)
@@ -709,6 +716,14 @@ class Ones(Boolean):
 
 
 @dataclass(frozen=True)
+class OneHot(Boolean):
+    r"""Domain of matrices with exactly one 1 entry and zeros elsewhere."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_one_hot(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
 class Permutation(DoublyStochastic):
     r"""Domain of permutation matrices."""
 
@@ -793,7 +808,7 @@ class MatrixDomains(PosetEnum):
     LIPSCHITZ_BOUNDED = "lipschitz-bounded"  # ‖A‖₂ ≤ C
     DIAGONALLY_DOMINANT = "diagonally-dominant"  # |Aᵢᵢ| ≥ ∑_{j≠i} |Aᵢⱼ| for all i
 
-    NORMAL = "normal"
+    NORMAL = "normal"  # AᵀA = AAᵀ
     ORTHOGONAL = "orthogonal"  # Oₙ(R)
     CAYLEY_ORTHOGONAL = "cayley-orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
     SPECIAL_ORTHOGONAL = "special-orthogonal"  # SOₙ(R)
@@ -840,6 +855,9 @@ class MatrixDomains(PosetEnum):
     # tag-like
     SPARSE = "sparse"  # many 0 entries
     EFFICIENTLY_INVERTIBLE = "efficiently-invertible"
+    FORWARD_STABLE = "forward-stable"
+    BACKWARD_STABLE = "backward-stable"
+    DIAGONALIZABLE = "diagonalizable"
 
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
@@ -861,6 +879,7 @@ MatrixDomains.KNOWN_MEETS = (
     (M.ZERO, M.SYMMETRIC & M.SKEW_SYMMETRIC),
     (M.EYE, M.POSITIVE_DEFINITE & M.ORTHOGONAL),
     (M.EYE, M.DIAGONAL & M.PERMUTATION),
+    (M.DOUBLY_CENTERED, M.ROW_CENTERED & M.COLUMN_CENTERED),
     (M.DIAGONAL, M.LOWER_TRIANGULAR & M.UPPER_TRIANGULAR),
     (M.CHOLESKY_FACTOR, M.LOWER_INVERTIBLE & M.POSITIVE_DIAGONAL_ENTRIES),
     (M.DOUBLY_STOCHASTIC, M.SQUARE & M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC),
@@ -898,6 +917,7 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.NEGATIVE_DETERMINANT: frozenset({M.INVERTIBLE}),
     M.NEGATIVE_DIAGONAL_ENTRIES: frozenset({M.RECTANGULAR}),
     M.ONES: frozenset({M.BOOLEAN}),
+    M.ONE_HOT: frozenset({M.BOOLEAN}),
     M.NEGATIVE_SEMIDEFINITE: frozenset({M.SYMMETRIC}),
     M.NORMAL: frozenset({M.SQUARE}),
     M.ORTHOGONAL: frozenset({M.NORMAL}),

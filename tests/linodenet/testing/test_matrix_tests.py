@@ -15,6 +15,7 @@ from linodenet.domains.matrix_tests import (
     is_low_rank_symmetric,
     is_negative_definite,
     is_negative_semidefinite,
+    is_one_hot,
     is_ones,
     is_permutation,
     is_positive_definite,
@@ -137,6 +138,8 @@ def test_boolean_zero_ones_identity_permutation_matrix_tests_are_dtype_independe
     identity_bool = torch.eye(2, dtype=torch.bool).unsqueeze(0)
     permutation_numeric = torch.tensor([[[0.0, 1.0], [1.0, 0.0]]])
     permutation_bool = torch.tensor([[[False, True], [True, False]]])
+    one_hot_numeric = torch.tensor([[[0.0, 1.0], [0.0, 0.0]]])
+    one_hot_bool = torch.tensor([[[False, True], [False, False]]])
 
     assert is_boolean(boolean_numeric).all()
     assert is_boolean(boolean_bool).all()
@@ -144,6 +147,8 @@ def test_boolean_zero_ones_identity_permutation_matrix_tests_are_dtype_independe
     assert is_zero(zero_bool).all()
     assert is_ones(ones_numeric).all()
     assert is_ones(ones_bool).all()
+    assert is_one_hot(one_hot_numeric).all()
+    assert is_one_hot(one_hot_bool).all()
     assert is_identity(identity_numeric).all()
     assert is_identity(identity_bool).all()
     assert is_permutation(permutation_numeric).all()

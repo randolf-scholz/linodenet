@@ -37,6 +37,7 @@ from linodenet.domains.matrix_domains import (
     NegativeDefinite,
     NegativeSemidefinite,
     Normal,
+    OneHot,
     Ones,
     Orthogonal,
     Permutation,
@@ -548,11 +549,15 @@ class TestMatrixDomains:
         boolean_bool = tensor([[False, True], [True, False]])
         zero = tensor([[0.0, 0.0], [0.0, 0.0]])
         ones = tensor([[1.0, 1.0], [1.0, 1.0]])
+        one_hot_numeric = tensor([[0.0, 1.0], [0.0, 0.0]])
+        one_hot_bool = tensor([[False, True], [False, False]])
 
         assert boolean_numeric in Boolean()
         assert boolean_bool in Boolean()
         assert zero in Zero()
         assert ones in Ones()
+        assert one_hot_numeric in OneHot()
+        assert one_hot_bool in OneHot()
         assert rank_one in RankOne()
         assert orthogonal in Normal()
         assert orthogonal in Orthogonal()

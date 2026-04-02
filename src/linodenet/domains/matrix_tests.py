@@ -19,6 +19,7 @@ __all__ = [
     "is_forward_stable",
     "is_hamiltonian",
     "is_identity",
+    "is_one_hot",
     "is_low_rank",
     "is_low_rank_square",
     "is_low_rank_skew_symmetric",
@@ -356,6 +357,24 @@ def is_ones(
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
     return (x == 1).all(dim=dim)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_one_hot(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
+) -> Tensor:
+    r"""Check whether the given tensor has exactly one 1 entry and zeros elsewhere."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+    x = x.movedim(dim, (-2, -1))
+    counts = x.sum(dim=(-2, -1))
+    return is_boolean(x, dim=(-2, -1)) & (counts == 1)
 
 
 @signature("(..., n, n) -> bool[(...)]")
