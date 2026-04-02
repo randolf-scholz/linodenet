@@ -5,8 +5,10 @@ import torch
 from linodenet.domains.matrix_tests import (
     is_banded,
     is_boolean,
+    is_column_centered,
     is_column_stochastic,
     is_diagonal,
+    is_doubly_centered,
     is_doubly_stochastic,
     is_identity,
     is_low_rank,
@@ -20,6 +22,7 @@ from linodenet.domains.matrix_tests import (
     is_permutation,
     is_positive_definite,
     is_positive_semidefinite,
+    is_row_centered,
     is_row_stochastic,
     is_skew_symmetric,
     is_square,
@@ -82,6 +85,16 @@ def test_matrix_tests_support_non_default_matrix_dims() -> None:
     assert is_tall(tall, shape=(4, 3), dim=(0, 2)).all()
     assert is_wide(wide, shape=(3, 4), dim=(0, 2)).all()
 
+    centered = torch.tensor(
+        [
+            [[1.0, -1.0], [-1.0, 1.0]],
+            [[2.0, -2.0], [-2.0, 2.0]],
+        ]
+    ).movedim((-2, -1), (0, 2))
+    assert is_row_centered(centered, shape=(2, 2), dim=(0, 2)).all()
+    assert is_column_centered(centered, shape=(2, 2), dim=(0, 2)).all()
+    assert is_doubly_centered(centered, shape=(2, 2), dim=(0, 2)).all()
+
 
 def test_tall_and_wide_matrix_tests() -> None:
     tall = torch.randn(2, 4, 3)
@@ -123,6 +136,23 @@ def test_stochastic_matrix_tests() -> None:
     assert is_doubly_stochastic(doubly_stochastic).all()
     assert not is_row_stochastic(non_stochastic).any()
     assert not is_column_stochastic(non_stochastic).any()
+
+
+def test_centered_matrix_tests() -> None:
+    row_centered = torch.tensor([[[1.0, -1.0, 0.0], [0.5, 0.5, -1.0]]])
+    column_centered = torch.tensor([[[1.0, 0.5], [-1.0, 0.5], [0.0, -1.0]]])
+    doubly_centered = torch.tensor([[[1.0, -1.0], [-1.0, 1.0]]])
+    non_centered = torch.tensor([[[1.0, 0.0], [0.0, 1.0]]])
+
+    assert is_row_centered(row_centered).all()
+    assert not is_column_centered(row_centered).all()
+
+    assert is_column_centered(column_centered).all()
+    assert not is_row_centered(column_centered).all()
+
+    assert is_doubly_centered(doubly_centered).all()
+    assert not is_row_centered(non_centered).any()
+    assert not is_column_centered(non_centered).any()
 
 
 def test_boolean_zero_ones_identity_permutation_matrix_tests_are_dtype_independent() -> (

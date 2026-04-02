@@ -10,6 +10,7 @@ __all__ = [
     "is_boolean",
     "is_contraction",
     "is_column_stochastic",
+    "is_column_centered",
     "is_column_orthogonal",
     "is_spectral_normalized",
     "is_lipschitz_bounded",
@@ -36,7 +37,9 @@ __all__ = [
     "is_positive_semidefinite",
     "is_right_invertible",
     "is_doubly_stochastic",
+    "is_doubly_centered",
     "is_row_orthogonal",
+    "is_row_centered",
     "is_row_stochastic",
     "is_special_orthogonal",
     "is_rank_one",
@@ -503,6 +506,26 @@ def is_row_stochastic(
 
 
 @signature("(..., m, n) -> bool[(...)]")
+def is_row_centered(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether rows sum to zero."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    row_sums = x.sum(dim=-1)
+    zeros = torch.zeros_like(row_sums)
+    return torch.isclose(row_sums, zeros, rtol=rtol, atol=atol).all(dim=-1)
+
+
+@signature("(..., m, n) -> bool[(...)]")
 def is_column_stochastic(
     x: Tensor,
     /,
@@ -521,6 +544,44 @@ def is_column_stochastic(
     col_sums = x.sum(dim=-2)
     ones = torch.ones_like(col_sums)
     return bounded & torch.isclose(col_sums, ones, rtol=rtol, atol=atol).all(dim=-1)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_column_centered(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether columns sum to zero."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    col_sums = x.sum(dim=-2)
+    zeros = torch.zeros_like(col_sums)
+    return torch.isclose(col_sums, zeros, rtol=rtol, atol=atol).all(dim=-1)
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_doubly_centered(
+    x: Tensor,
+    /,
+    shape: tuple[int, int] | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether both rows and columns sum to zero."""
+    if shape is not None and not _has_shape(x, shape, dim):
+        return _full_false(x, dim)
+    return is_row_centered(x, dim=dim, rtol=rtol, atol=atol) & is_column_centered(
+        x, dim=dim, rtol=rtol, atol=atol
+    )
 
 
 @signature("(..., n, n) -> bool[(...)]")

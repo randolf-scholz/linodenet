@@ -18,11 +18,13 @@ from linodenet.domains.matrix_domains import (
     BackwardStable,
     Banded,
     Boolean,
+    ColumnCentered,
     ColumnOrthogonal,
     ColumnStochastic,
     Contraction,
     Diagonal,
     DiagonallyDominant,
+    DoublyCentered,
     DoublyStochastic,
     ForwardStable,
     Hamiltonian,
@@ -45,6 +47,7 @@ from linodenet.domains.matrix_domains import (
     PositiveSemidefinite,
     RankOne,
     RightInvertible,
+    RowCentered,
     RowOrthogonal,
     RowStochastic,
     SpecialOrthogonal,
@@ -545,6 +548,9 @@ class TestMatrixDomains:
         row_stochastic = tensor([[0.5, 0.5], [0.25, 0.75]])
         column_stochastic = tensor([[0.5, 0.25], [0.5, 0.75]])
         doubly_stochastic = tensor([[0.5, 0.5], [0.5, 0.5]])
+        row_centered = tensor([[1.0, -1.0, 0.0], [0.5, 0.5, -1.0]])
+        column_centered = tensor([[1.0, 0.5], [-1.0, 0.5], [0.0, -1.0]])
+        doubly_centered = tensor([[1.0, -1.0], [-1.0, 1.0]])
         boolean_numeric = tensor([[0.0, 1.0], [1.0, 0.0]])
         boolean_bool = tensor([[False, True], [True, False]])
         zero = tensor([[0.0, 0.0], [0.0, 0.0]])
@@ -580,6 +586,9 @@ class TestMatrixDomains:
         assert row_stochastic in RowStochastic()
         assert column_stochastic in ColumnStochastic()
         assert doubly_stochastic in DoublyStochastic()
+        assert row_centered in RowCentered()
+        assert column_centered in ColumnCentered()
+        assert doubly_centered in DoublyCentered()
         assert tensor([[0.0, 1.0], [1.0, 0.0]]) in Permutation()
         assert orthogonal in SpectralNormalized()
         assert orthogonal in LipschitzBounded(lipschitz_bound=1.0)

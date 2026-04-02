@@ -15,6 +15,9 @@ __all__ = [
     "RowStochastic",
     "ColumnStochastic",
     "DoublyStochastic",
+    "RowCentered",
+    "ColumnCentered",
+    "DoublyCentered",
     "LeftInvertible",
     "RightInvertible",
     "Symmetric",
@@ -215,6 +218,30 @@ class DoublyStochastic(Square):
 
     def check(self, value: Tensor, /) -> Tensor:
         return tests.is_doubly_stochastic(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class RowCentered(Rectangular):
+    r"""Domain of matrices whose rows sum to zero."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_row_centered(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class ColumnCentered(Rectangular):
+    r"""Domain of matrices whose columns sum to zero."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_column_centered(value, shape=self.shape)
+
+
+@dataclass(frozen=True)
+class DoublyCentered(Rectangular):
+    r"""Domain of matrices whose rows and columns both sum to zero."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_doubly_centered(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
@@ -794,8 +821,8 @@ class MatrixDomains(PosetEnum):
     TRIDIAGONAL = "tridiagonal"
     BANDED = "banded"
     TOEPLITZ = "toeplitz"  # constant along diagonals
-    HANKEL = "hankel"  # constant along anti-diagonals
     CIRCULANT = "circulant"  # constant along diagonals, wrap around
+    HANKEL = "hankel"  # constant along anti-diagonals
 
     # eigenvalues
     POSITIVE_DEFINITE = "positive-definite"  # 𝕊ₙ⁺(ℝ)
