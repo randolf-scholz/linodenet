@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
@@ -425,9 +425,9 @@ class DomainMapping[D: Domain](Mapping[D, D]):
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Dependencies"""
-    KNOWN_SUBTYPES: ClassVar[Mapping[Self, frozenset[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Reverse dependencies."""
     KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
@@ -764,8 +764,8 @@ class PosetEnum(Enum):
         return str(self.value)
 
 
-PosetEnum.KNOWN_SUPERTYPES = MappingProxyType({})
-PosetEnum.KNOWN_SUBTYPES = MappingProxyType({})
+PosetEnum.KNOWN_SUPERTYPES = MappingProxyType[Any, Any]({})
+PosetEnum.KNOWN_SUBTYPES = MappingProxyType[Any, Any]({})
 PosetEnum.KNOWN_MEETS = ()
 
 

@@ -32,7 +32,7 @@ class Interval(ScalarDomain):
     @overload
     def __new__(cls, s: str | Interval, /) -> Interval: ...
     @overload
-    def __new__(
+    def __new__(  # pyrefly: ignore[inconsistent-overload]
         cls,
         /,
         lower: float,
@@ -301,7 +301,7 @@ class Interval(ScalarDomain):
         return self >= other and self != other
 
     @overload  # type: ignore[override]
-    def __and__(self, rhs: Interval, /) -> Interval: ...
+    def __and__(self, rhs: Interval, /) -> Interval: ...  # pyrefly: ignore[bad-override]
     @overload
     def __and__(self, rhs: RealDomain | str, /) -> Interval | RealDomain: ...
     def __and__(self, rhs: object, /) -> Interval | RealDomain:
@@ -401,6 +401,7 @@ class Interval(ScalarDomain):
         return f"{self.__class__.__name__}('{self!s}')"
 
 
+# pyrefly: ignore[read-only]
 Interval.EMPTY = Interval(  # pyright: ignore[reportAttributeAccessIssue]
     nan,
     nan,

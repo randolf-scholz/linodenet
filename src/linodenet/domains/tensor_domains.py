@@ -31,10 +31,10 @@ class TensorDomains(PosetEnum):
 
 T = TensorDomains  # temporary alias
 TensorDomains.KNOWN_SUPERTYPES = MappingProxyType({
-    T.BOOLEAN: frozenset({T.REAL}),
-    T.ONE: frozenset({T.BOOLEAN, T.NONZERO}),
-    T.REAL: frozenset({T.COMPLEX}),
-    T.ZERO: frozenset({T.BOOLEAN, T.SPARSE}),
+    T.BOOLEAN: {T.REAL},
+    T.ONE: {T.BOOLEAN, T.NONZERO},
+    T.REAL: {T.COMPLEX},
+    T.ZERO: {T.BOOLEAN, T.SPARSE},
 })  # fmt: skip
 TensorDomains.KNOWN_SUBTYPES = MappingProxyType({})
 del T  # remove alias
