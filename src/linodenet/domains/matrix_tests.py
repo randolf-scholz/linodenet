@@ -36,9 +36,11 @@ __all__ = [
     "is_permutation",
     "is_positive_definite",
     "is_positive_semidefinite",
+    "is_projection",
     "is_right_invertible",
     "is_doubly_stochastic",
     "is_doubly_centered",
+    "is_orthogonal_projection",
     "is_row_orthogonal",
     "is_row_centered",
     "is_row_stochastic",
@@ -1109,6 +1111,44 @@ def is_masked(
 
 
 # region other projections -------------------------------------------------------------
+@signature("(..., n, n) -> bool[(...)]")
+def is_projection(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is idempotent."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+    return torch.isclose(x @ x, x, rtol=rtol, atol=atol).all(dim=(-2, -1))
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_orthogonal_projection(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is a symmetric projection."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+    return is_projection(x, dim=dim, rtol=rtol, atol=atol) & is_symmetric(
+        x, dim=dim, rtol=rtol, atol=atol
+    )
+
+
 @signature("(..., m, n) -> bool[(...)]")
 def is_spectral_normalized(
     x: Tensor,

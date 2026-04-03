@@ -21,9 +21,11 @@ from linodenet.domains.matrix_tests import (
     is_negative_semidefinite,
     is_one_hot,
     is_ones,
+    is_orthogonal_projection,
     is_permutation,
     is_positive_definite,
     is_positive_semidefinite,
+    is_projection,
     is_row_centered,
     is_row_stochastic,
     is_skew_symmetric,
@@ -212,6 +214,18 @@ def test_block_diagonal_matrix_test() -> None:
     assert is_block_diagonal(other_block_diagonal, block_sizes=(1, 2)).all()
     assert not is_block_diagonal(non_block_diagonal, block_sizes=(2, 1)).any()
     assert is_block_diagonal(block_diagonal, size=3).all()
+
+
+def test_projection_matrix_tests() -> None:
+    projection = torch.tensor([[[1.0, 1.0], [0.0, 0.0]]])
+    orthogonal_projection = torch.tensor([[[1.0, 0.0], [0.0, 0.0]]])
+    non_projection = torch.tensor([[[1.0, 1.0], [0.0, 1.0]]])
+
+    assert is_projection(projection).all()
+    assert is_projection(orthogonal_projection).all()
+    assert not is_orthogonal_projection(projection).any()
+    assert is_orthogonal_projection(orthogonal_projection).all()
+    assert not is_projection(non_projection).any()
 
 
 def test_boolean_zero_ones_identity_permutation_matrix_tests_are_dtype_independent() -> (

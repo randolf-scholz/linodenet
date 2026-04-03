@@ -25,6 +25,8 @@ __all__ = [
     "Normal",
     "Orthogonal",
     "SpecialOrthogonal",
+    "Projection",
+    "OrthogonalProjection",
     "LowRank",
     "LowRankSquare",
     "LowRankSymmetric",
@@ -389,6 +391,22 @@ class SpecialOrthogonal(Orthogonal):
 
     def check(self, value: Tensor, /) -> Tensor:
         return tests.is_special_orthogonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class Projection(Square):
+    r"""Domain of idempotent square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_projection(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class OrthogonalProjection(Projection):
+    r"""Domain of symmetric idempotent square matrices."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_orthogonal_projection(value, size=self.size)
 
 
 @dataclass(frozen=True)
@@ -991,6 +1009,7 @@ MatrixDomains.KNOWN_MEETS = (
     (M.SQUARE, M.TALL & M.WIDE),
     (M.SQUARE, M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC),  # theorem
     (M.UPPER_INVERTIBLE, M.UPPER_TRIANGULAR & M.INVERTIBLE),
+    (M.ORTHOGONAL_PROJECTION, M.PROJECTION & M.SYMMETRIC),
 )
 MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.BANDED: {M.TOEPLITZ},
@@ -1025,11 +1044,13 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.ONES: {M.BOOLEAN},
     M.ONE_HOT: {M.BOOLEAN},
     M.ORTHOGONAL: {M.COLUMN_ORTHOGONAL, M.ROW_ORTHOGONAL},
+    M.ORTHOGONAL_PROJECTION: {M.PROJECTION, M.SYMMETRIC},
     M.PERMUTATION: {M.ORTHOGONAL, M.DOUBLY_STOCHASTIC},
     M.POSITIVE_DEFINITE: {M.POSITIVE_SEMIDEFINITE, M.INVERTIBLE},
     M.POSITIVE_DETERMINANT: {M.INVERTIBLE},
     M.POSITIVE_DIAGONAL_ENTRIES: {M.RECTANGULAR},
     M.POSITIVE_SEMIDEFINITE: {M.SYMMETRIC},
+    M.PROJECTION: {M.SQUARE},
     M.RANK_ONE: {M.LOW_RANK},
     M.RIGHT_INVERTIBLE: {M.WIDE},
     M.ROW_ORTHOGONAL: {M.RIGHT_INVERTIBLE, M.SPECTRAL_NORMALIZED},
