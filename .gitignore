@@ -29,6 +29,7 @@ _*/
 # documentation
 **/apidoc/
 **/autoapi/
+**/tests/**/reports/
 
 # Project related Files
 dev/**/*.parquet
