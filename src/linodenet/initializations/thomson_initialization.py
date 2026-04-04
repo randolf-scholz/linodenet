@@ -21,6 +21,14 @@ and the sum of the inner products is given by the sum of the entries of G.
 __all__ = [
     "OptimizerResult",
     "OptimizerStatus",
+    # extras
+    "backtracking_line_search",
+    "bisection_line_search",
+    "golden_section_search",
+    "safe_bisection_line_search",
+    "separation_loss",
+    "sphere_geodesic",
+    "sphere_gradient",
     # functions
     "wide_angle_sphere_init",
     "thomson_initialization",
@@ -35,7 +43,9 @@ from typing import Any, Optional
 
 import torch
 from torch import Tensor
-from torch.linalg import vector_norm
+from torch.linalg import vecdot, vector_norm
+
+from signatures import signature
 
 
 def _sample_unique_sequences(
@@ -188,7 +198,7 @@ def wide_angle_sphere_init(
                 torch.full((n_face, 1), sign, dtype=dtype, device=device),
                 values[:, pos:],
             ],
-            dim=1,
+            dim=-1,
         )
         result[face.to(device=device) == i] = values
 
@@ -197,7 +207,7 @@ def wide_angle_sphere_init(
 
     # ensure points are on the sphere
     assert torch.allclose(
-        torch.linalg.norm(result, dim=-1),
+        vector_norm(result, dim=-1),
         torch.ones(num, dtype=dtype, device=device),
     )
 
@@ -205,13 +215,15 @@ def wide_angle_sphere_init(
     return _randomize_orientation(result)
 
 
-def logmeanexp(x: Tensor, /) -> Tensor:
+@signature("(..., n, d) -> (...)")
+def _log_mean_exp(x: Tensor, /) -> Tensor:
     r"""Log-mean-exp over all elements."""
-    flat = x.reshape(-1)
-    return torch.logsumexp(flat, dim=0) - math.log(flat.numel())
+    flat = x.flatten(-2, -1)
+    return torch.logsumexp(flat, dim=-1) - math.log(flat.numel())
 
 
-def loss_sep(x: Tensor, /, *, beta: float | Tensor) -> Tensor:
+@signature("(..., n, d) -> (...)")
+def separation_loss(x: Tensor, /, *, beta: float | Tensor) -> Tensor:
     r"""Separation loss for Thomson initialization.
 
     .. math:: ℓᵦ(X) = \softmaxᵦ(XXᵀ - 2𝕀ₙ) ≈ \max_{i≠j} ⟨xᵢ∣xⱼ⟩
@@ -221,43 +233,20 @@ def loss_sep(x: Tensor, /, *, beta: float | Tensor) -> Tensor:
     Z = Z.masked_fill(mask, -torch.inf)
     beta_t = torch.as_tensor(beta, dtype=x.dtype, device=x.device)
     log_beta = torch.log(beta_t)
-    return logmeanexp(log_beta * Z) / beta_t
+    return _log_mean_exp(log_beta * Z) / beta_t
 
 
-def loss_center(x: Tensor, /) -> Tensor:
-    r"""Center loss for Thomson initialization (½‖1/n∑ₙxₙ‖²)."""
-    center = torch.mean(x, dim=0)
-    return 0.5 * torch.dot(center, center)
-
-
-def total_loss(x: Tensor, /, *, beta: float = 5.0, mu: float = 0.1) -> Tensor:
-    """Total loss for Thomson initialization.
-
-    Args:
-        x: (n, d) array of n points on the sphere.
-        beta: temperature for the separation loss (larger beta = more like max).
-        mu: weight for the center loss.
-
-    𝓛(X) = ℓᵦ(X) + μ * ½‖1/n∑ₙxₙ‖²
-    """
-    l1 = loss_sep(x, beta=beta)
-    l2 = loss_center(x)
-    return l1 + mu * l2
-
-
-def n_sphere_geodesic(t: Tensor, /, start: Tensor, direction: Tensor) -> Tensor:
+@signature("[(..., n), (..., n, d), (..., n, d)] -> (..., n, d)")
+def sphere_geodesic(t: Tensor, /, start: Tensor, direction: Tensor) -> Tensor:
     r"""Exponential map on the sphere.
 
     Assumes both x and g are normalized, i.e. ‖x‖=1 and ‖g‖=1.
     """
-    t = t.reshape(-1, 1)
+    t = t.unsqueeze(-1)
     return torch.cos(t) * start + torch.sin(t) * direction
 
 
-PHI = (1.0 + math.sqrt(5.0)) / 2.0
-INV_PHI = 1 / PHI
-
-
+@signature("{(..., n, d) -> (...)} -> (..., n, d)")
 def golden_section_search(
     fn: Callable[[Tensor], Tensor],
     /,
@@ -267,6 +256,8 @@ def golden_section_search(
     maxiter: int = 20,
 ) -> Tensor:
     r"""Torch implementation of bounded line search via golden-section search."""
+    INV_PHI = 2.0 / (1.0 + math.sqrt(5.0))  # 1 over golden ratio.
+
     lower = torch.as_tensor(lower)
     upper = torch.as_tensor(upper)
 
@@ -282,6 +273,7 @@ def golden_section_search(
     return (lower + upper) / 2
 
 
+@signature("{(..., n, d) -> (...)} -> (..., n, d)")
 def bisection_line_search(
     fn: Callable[[Tensor], Tensor],
     /,
@@ -303,6 +295,7 @@ def bisection_line_search(
     return (lower + upper) / 2
 
 
+@signature("{(..., n, d) -> (...)} -> (..., n, d)")
 def backtracking_line_search(
     fn: Callable[[Tensor], Tensor],
     /,
@@ -319,7 +312,7 @@ def backtracking_line_search(
 
     g0, y0 = grad_and_value_fn(lower)
     p = upper - lower  # search direction
-    m = torch.linalg.vecdot(g0, p)
+    m = vecdot(g0, p, dim=-1)
 
     alpha = 1.0  # start with a full step
     x = lower + alpha * p
@@ -334,6 +327,7 @@ def backtracking_line_search(
     return x
 
 
+@signature("{(..., n, d) -> (...)} -> (..., n, d)")
 def safe_bisection_line_search(
     fn: Callable[[Tensor], Tensor],
     /,
@@ -360,56 +354,10 @@ def safe_bisection_line_search(
     return torch.where(fn(x_backtrack) < fn(x_bisect), x_backtrack, x_bisect)
 
 
+@signature("(..., n, d) -> (..., n, d)")
 def sphere_gradient(x: Tensor, /, *, grad_euclidean: Tensor) -> Tensor:
     r"""Project the Euclidean gradient onto the tangent space of the sphere."""
-    dot = torch.linalg.vecdot(grad_euclidean, x).unsqueeze(-1)
-    return grad_euclidean - dot * x
-
-
-def geodesic_loss(
-    t: Tensor,
-    /,
-    *,
-    point: Tensor,
-    grad: Tensor,
-    loss_fn: Callable[[Tensor], Tensor],
-) -> Tensor:
-    r"""Loss along the geodesic at time t."""
-    return loss_fn(n_sphere_geodesic(t, point, grad))
-
-
-def step(
-    x: Tensor,
-    /,
-    *,
-    loss_fn: Callable[[Tensor], Tensor],
-    grad_fn: Callable[[Tensor], Tensor],
-) -> Tensor:
-    # Negative Euclidean gradient by autodiff
-    g_euclidean = -grad_fn(x)
-    # Convert to Riemannian gradient on tangent space of the sphere
-    g = sphere_gradient(x, grad_euclidean=g_euclidean)
-
-    # normalize the gradient to get a unit direction on the sphere
-    g_norm = torch.linalg.norm(g, dim=1, keepdim=True)
-    g = g / (g_norm + 1e-8)
-
-    # apply retraction (exponential map) to update the points on the sphere
-    # For the sphere, the geodesic from x in the direction of g is:
-    # γ(t) = cos(‖g‖t)x + sin(‖g‖t)g/‖g‖
-    # assuming g is normalized, this is
-    # γ(t) = cos(t)x + sin(t)g
-    fn = partial(geodesic_loss, point=x, grad=g, loss_fn=loss_fn)
-
-    # line search to find the optimal step size along the geodesic
-    lowers = torch.zeros(x.shape[0], dtype=x.dtype, device=x.device)
-    uppers = torch.full((x.shape[0],), math.pi / 4, dtype=x.dtype, device=x.device)
-    t = safe_bisection_line_search(fn, lowers, uppers, maxiter=10)
-    x = n_sphere_geodesic(t, start=x, direction=g)
-
-    # normalize
-    x = x / torch.linalg.norm(x, dim=1, keepdim=True)
-    return x
+    return grad_euclidean - x * vecdot(grad_euclidean, x, dim=-1).unsqueeze(-1)
 
 
 class OptimizerStatus(IntEnum):
@@ -443,7 +391,7 @@ class OptimizerResult:
         return self.status is OptimizerStatus.SUCCESS
 
 
-def scaled_norm(x: Tensor, axis: None | int | tuple[int, ...] = None) -> Tensor:
+def _scaled_norm(x: Tensor, /, *, axis: None | int | tuple[int, ...] = None) -> Tensor:
     r"""Computes $√(1/n ∑ₙ xₙ²)$."""
     # convert to tuple
     match axis:
@@ -496,7 +444,7 @@ def thomson_initialization(
     Returns:
         OptimizerResult
     """
-    loss_fn = partial(loss_sep, beta=beta)
+    loss_fn = partial(separation_loss, beta=beta)
     grad_fn = torch.func.grad(loss_fn)
     grad_and_value_fn = torch.func.grad_and_value(loss_fn)
     options = {"beta": beta, "atol": atol, "rtol": rtol, "maxiter": maxiter}
@@ -547,11 +495,40 @@ def thomson_initialization(
             points, fun=loss, jac=grad, status=OptimizerStatus.SUCCESS, options=options
         )
 
+    def _body_fn(z: Tensor, /) -> Tensor:
+        # Negative Euclidean gradient by autodiff
+        g_euclidean = -grad_fn(z)
+        # Convert to Riemannian gradient on tangent space of the sphere
+        g = sphere_gradient(z, grad_euclidean=g_euclidean)
+
+        # normalize the gradient to get a unit direction on the sphere
+        g_norm = vector_norm(g, dim=-1, keepdim=True)
+        g = g / (g_norm + 1e-8)
+
+        # apply retraction (exponential map) to update the points on the sphere
+        # For the sphere, the geodesic from x in the direction of g is:
+        # γ(t) = cos(‖g‖t)x + sin(‖g‖t)g/‖g‖
+        # assuming g is normalized, this is
+        # γ(t) = cos(t)x + sin(t)g
+        # line search to find the optimal step size along the geodesic
+        lowers = torch.zeros(z.shape[:-1], dtype=z.dtype, device=z.device)
+        uppers = torch.full(z.shape[:-1], math.pi / 4, dtype=z.dtype, device=z.device)
+        t = safe_bisection_line_search(
+            lambda s: loss_fn(sphere_geodesic(s, z, g)),
+            lowers,
+            uppers,
+            maxiter=10,
+        )
+        z = sphere_geodesic(t, start=z, direction=g)
+
+        # normalize the points to ensure they are on the sphere
+        return z / vector_norm(z, dim=-1, keepdim=True)
+
     # general case.
     x = wide_angle_sphere_init(num, dim, dtype=dtype, device=device, seed=seed)
     grad, loss = grad_and_value_fn(x)
     grad = sphere_gradient(x, grad_euclidean=grad)
-    grad_norm = scaled_norm(grad, axis=-1).sum()
+    grad_norm = _scaled_norm(grad, axis=-1).sum()
     loss_value = float(loss)
     grad_norm_value = float(grad_norm)
 
@@ -561,16 +538,18 @@ def thomson_initialization(
 
     it = 0
     for it in range(maxiter):
-        x = step(x, loss_fn=loss_fn, grad_fn=grad_fn)
+        x = _body_fn(x)
+
+        # track iteration progress
         grad, loss = grad_and_value_fn(x)
         grad = sphere_gradient(x, grad_euclidean=grad)
-        grad_norm = scaled_norm(grad, axis=-1).sum()
+        grad_norm = _scaled_norm(grad, axis=-1).sum()
         loss_value = float(loss)
         grad_norm_value = float(grad_norm)
         loss_hist.append(loss_value)
         grad_hist.append(grad_norm_value)
 
-        if not torch.isfinite(loss).item() or not torch.isfinite(grad_norm).item():
+        if not (loss.isfinite() & grad_norm.isfinite()):
             msg = (
                 f"Warning: Non-finite value encountered at iteration {it}."
                 f" loss={loss_value:.6f}, grad_norm={grad_norm_value:.6f}"
@@ -579,12 +558,12 @@ def thomson_initialization(
             break
 
         if not torch.allclose(
-            torch.linalg.norm(x, dim=-1),
+            vector_norm(x, dim=-1),
             torch.ones(x.shape[0], dtype=x.dtype, device=x.device),
             atol=atol,
             rtol=rtol,
         ):
-            max_deviation = torch.abs(torch.linalg.norm(x, dim=-1) - 1).max().item()
+            max_deviation = torch.abs(vector_norm(x, dim=-1) - 1).max().item()
             msg = (
                 f"Warning: Constraint violation at iteration {it}."
                 f" Points not on the sphere: {max_deviation=:.6f}"
