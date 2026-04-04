@@ -68,7 +68,9 @@ type RegularizationWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 
 
 @signature("(..., m, n) -> (...)")
-def matrix_norm(r: Tensor, p: str | int = "fro", size_normalize: bool = True) -> Tensor:
+def matrix_norm(
+    r: Tensor, /, *, p: str | int = "fro", size_normalize: bool = True
+) -> Tensor:
     r"""Return the normalized matrix."""
     s = torch.linalg.matrix_norm(r, ord=p, dim=(-2, -1))
 
@@ -78,7 +80,7 @@ def matrix_norm(r: Tensor, p: str | int = "fro", size_normalize: bool = True) ->
 
 
 @signature("(..., n) -> (...)")
-def vector_norm(r: Tensor, p: float = 2.0, size_normalize: bool = True) -> Tensor:
+def vector_norm(r: Tensor, /, *, p: float = 2.0, size_normalize: bool = True) -> Tensor:
     r"""Return the normalized vector."""
     s = torch.linalg.vector_norm(r, ord=p, dim=-1)
 
@@ -89,7 +91,7 @@ def vector_norm(r: Tensor, p: float = 2.0, size_normalize: bool = True) -> Tenso
 
 # region regularizations ---------------------------------------------------------------
 @signature("(..., n, n) -> (...)")
-def log_det_exp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tensor:
+def log_det_exp(x: Tensor, /, *, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     r"""Bias $\det(eᴬ)$ towards 1.
 
     Returns:
@@ -106,7 +108,9 @@ def log_det_exp(x: Tensor, p: float = 1.0, size_normalize: bool = True) -> Tenso
 
 # region matrix groups -----------------------------------------------------------------
 @signature("(..., m, n) -> (...)")
-def identity(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def identity(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards the identity matrix.
 
     .. math:: A ↦ ‖A-𝕀‖ₚ
@@ -117,7 +121,9 @@ def identity(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
 
 
 @signature("(..., m, n) -> (...)")
-def rank_one(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def rank_one(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being rank-1.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -129,7 +135,9 @@ def rank_one(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
 
 
 @signature("(..., n, n) -> (...)")
-def symmetric(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def symmetric(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being symmetric.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -142,7 +150,7 @@ def symmetric(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> 
 
 @signature("(..., n, n) -> (...)")
 def skew_symmetric(
-    x: Tensor, p: str | int = "fro", size_normalize: bool = False
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being skew-symmetric.
 
@@ -155,7 +163,9 @@ def skew_symmetric(
 
 
 @signature("(..., n, n) -> (...)")
-def orthogonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def orthogonal(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being orthogonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -167,7 +177,9 @@ def orthogonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) ->
 
 
 @signature("(..., n, n) -> (...)")
-def traceless(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def traceless(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being normal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -184,7 +196,9 @@ def traceless(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> 
 
 
 @signature("(..., n, n) -> (...)")
-def normal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def normal(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being normal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -197,7 +211,7 @@ def normal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Ten
 
 @signature("(..., 2n, 2n) -> (...)")
 def hamiltonian(
-    x: Tensor, p: str | int = "fro", size_normalize: bool = False
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being hamiltonian.
 
@@ -210,7 +224,9 @@ def hamiltonian(
 
 
 @signature("(..., 2n, 2n) -> (...)")
-def symplectic(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def symplectic(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being symplectic.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -226,7 +242,9 @@ def symplectic(x: Tensor, p: str | int = "fro", size_normalize: bool = False) ->
 
 # region masked projections ------------------------------------------------------------
 @signature("(..., m, n) -> (...)")
-def diagonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> Tensor:
+def diagonal(
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
+) -> Tensor:
     r"""Bias the matrix towards being diagonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -239,7 +257,7 @@ def diagonal(x: Tensor, p: str | int = "fro", size_normalize: bool = False) -> T
 
 @signature("(..., n, n) -> (...)")
 def diagonally_dominant(
-    x: Tensor, p: float = 2.0, size_normalize: bool = False
+    x: Tensor, /, *, p: float = 2.0, size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being diagonally dominant.
 
@@ -253,7 +271,7 @@ def diagonally_dominant(
 
 @signature("(..., m, n) -> (...)")
 def tridiagonal(
-    x: Tensor, p: str | int = "fro", size_normalize: bool = False
+    x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being tridiagonal.
 
@@ -268,7 +286,9 @@ def tridiagonal(
 @signature("(..., m, n) -> (...)")
 def lower_triangular(
     x: Tensor,
+    /,
     lower: int = 0,
+    *,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -285,7 +305,9 @@ def lower_triangular(
 @signature("(..., m, n) -> (...)")
 def upper_triangular(
     x: Tensor,
+    /,
     upper: int = 0,
+    *,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -307,7 +329,7 @@ def upper_triangular(
 
 @signature("(..., m, n) -> (...)")
 def low_rank(
-    x: Tensor, rank: int, p: str | int = "fro", size_normalize: bool = False
+    x: Tensor, /, rank: int, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
     r"""Bias the matrix towards being low rank.
 
@@ -322,8 +344,10 @@ def low_rank(
 @signature("(..., m, n) -> (...)")
 def banded(
     x: Tensor,
+    /,
     lower: int,
     upper: int,
+    *,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -340,7 +364,9 @@ def banded(
 @signature("(..., m, n) -> (...)")
 def masked(
     x: Tensor,
+    /,
     mask: BoolTensor,
+    *,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -357,7 +383,9 @@ def masked(
 @signature("(..., m, n) -> (...)")
 def contraction(
     x: Tensor,
+    /,
     lipschitz_bound: float,
+    *,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -374,7 +402,9 @@ def contraction(
 @signature("(..., m, n) -> (...)")
 def lipschitz_bounded(
     x: Tensor,
+    /,
     lipschitz_bound: float,
+    *,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -391,6 +421,8 @@ def lipschitz_bounded(
 @signature("(..., m, n) -> (...)")
 def spectral_normalized(
     x: Tensor,
+    /,
+    *,
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
@@ -407,7 +439,9 @@ def spectral_normalized(
 # endregion other regularizations ------------------------------------------------------
 # region vector groups -----------------------------------------------------------------
 @signature("(..., n) -> (...)")
-def unit_vector(x: Tensor, p: float = 2.0, size_normalize: bool = False) -> Tensor:
+def unit_vector(
+    x: Tensor, /, *, p: float = 2.0, size_normalize: bool = False
+) -> Tensor:
     r"""Bias the vector towards having unit norm.
 
     .. math:: x ↦ ‖x-Π(x)‖ₚ

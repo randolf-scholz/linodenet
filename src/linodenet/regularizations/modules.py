@@ -108,7 +108,7 @@ class LogDetExp(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., n, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias $\det(eᴬ)$ towards 1."""
         return log_det_exp(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -125,7 +125,7 @@ class MatrixNorm(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards zero matrix."""
         return matrix_norm(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -143,7 +143,7 @@ class Identity(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards the identity matrix."""
         return identity(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -160,7 +160,7 @@ class DiagonallyDominant(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., n, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards diagonal dominance."""
         return diagonally_dominant(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -186,7 +186,7 @@ class LowRank(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards low-rank matrix."""
         return low_rank(x, rank=self.rank, p=self.p, size_normalize=self.size_normalize)
 
@@ -208,7 +208,7 @@ class RankOne(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards rank-1 matrix."""
         return rank_one(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -228,7 +228,7 @@ class Symmetric(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., n, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards symmetric matrix."""
         return symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -248,7 +248,7 @@ class SkewSymmetric(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., n, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards skew-symmetric matrix."""
         return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -270,7 +270,7 @@ class Orthogonal(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., n, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards orthogonal matrix."""
         return orthogonal(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -287,7 +287,7 @@ class Traceless(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., n, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
         return traceless(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -308,7 +308,7 @@ class Normal(RegularizationBase):
         self.p = p
         self.size_normalize = size_normalize
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
         return normal(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -330,7 +330,7 @@ class Symplectic(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., 2n, 2n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
         return symplectic(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -352,7 +352,7 @@ class Hamiltonian(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., 2n, 2n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
         return hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -378,7 +378,7 @@ class Diagonal(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards diagonal matrix."""
         return diagonal(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -404,7 +404,7 @@ class LowerTriangular(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards lower triangular matrix."""
         return lower_triangular(
             x, lower=self.lower, p=self.p, size_normalize=self.size_normalize
@@ -432,7 +432,7 @@ class UpperTriangular(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards upper triangular matrix."""
         return upper_triangular(
             x, upper=self.upper, p=self.p, size_normalize=self.size_normalize
@@ -467,7 +467,7 @@ class Banded(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards banded matrix."""
         return banded(
             x,
@@ -495,7 +495,7 @@ class Tridiagonal(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards tridiagonal matrix."""
         return tridiagonal(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -525,7 +525,7 @@ class Masked(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards masked matrix."""
         return masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)
 
@@ -560,7 +560,7 @@ class Contraction(RegularizationBase):
         self.lipschitz_bound = lipschitz_bound
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards contraction."""
         return contraction(
             x, self.lipschitz_bound, p=self.p, size_normalize=self.size_normalize
@@ -592,7 +592,7 @@ class LipschitzBounded(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards a Lipschitz-bounded matrix."""
         return lipschitz_bounded(
             x,
@@ -619,7 +619,7 @@ class SpectralNormalized(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., m, n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards a spectrally normalized matrix."""
         return spectral_normalized(x, p=self.p, size_normalize=self.size_normalize)
 
@@ -638,7 +638,7 @@ class UnitVector(RegularizationBase):
         self.size_normalize = size_normalize
 
     @signature("(..., n) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards a unit vector."""
         return unit_vector(x, p=self.p, size_normalize=self.size_normalize)
 
