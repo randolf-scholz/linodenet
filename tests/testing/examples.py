@@ -3,7 +3,7 @@ __all__ = [
 ]
 
 
-from typing import NamedTuple
+from dataclasses import dataclass, field
 
 import torch
 from numpy.random import default_rng
@@ -13,12 +13,20 @@ from torch import Tensor, nn
 from linodenet.distributions import MarchenkoPastur
 
 
-class ExampleWithKnownSVD(NamedTuple):
+@dataclass(frozen=True)
+class ExampleWithKnownSVD:
     r"""Test matrix with known SVD."""
 
     U: Tensor  # left singular vectors (..., m, k)
     S: Tensor  # singular values (..., k)
     V: Tensor  # right singular vectors (..., n, k)
+
+    value: nn.Parameter = field(init=False)
+    r"""Reconstructed matrix A = U diag(S) Vᵀ."""
+
+    def __post_init__(self):
+        A = torch.einsum("...mk, ...k, ...nk -> ...mn", self.U, self.S, self.V)
+        object.__setattr__(self, "value", nn.Parameter(A, requires_grad=True))
 
     @property
     def sigma(self) -> Tensor:
@@ -32,12 +40,6 @@ class ExampleWithKnownSVD(NamedTuple):
     @property
     def v(self) -> Tensor:
         return self.V[..., 0]
-
-    @property
-    def value(self) -> nn.Parameter:
-        r"""Reconstruct the matrix A = U diag(S) Vᵀ."""
-        A = torch.einsum("...mk, ...k, ...nk -> ...mn", self.U, self.S, self.V)
-        return nn.Parameter(A, requires_grad=True)
 
     @property
     def spectral_norm(self) -> Tensor:

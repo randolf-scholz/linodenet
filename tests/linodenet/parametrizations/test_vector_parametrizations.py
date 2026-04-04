@@ -8,7 +8,7 @@ from torch.fx import GraphModule
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
-from linodenet.domains import VectorDomains
+from linodenet.domains import VectorDomains, VectorTest
 from linodenet.parametrizations import (
     VECTOR_PARAMETRIZATIONS,
     ParametrizationBase,
@@ -18,7 +18,6 @@ from linodenet.parametrizations import (
     update_parametrizations,
 )
 from linodenet.registry import get_registry_entry
-from linodenet.testing import VectorTest
 from tests.testing import DEVICES, TestSuite, pytest_xfail
 
 VECTOR_SIZE = 4
