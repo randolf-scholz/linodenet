@@ -116,7 +116,7 @@ class ResNet(ModuleSequence[nn.Module]):
         return block
 
     @signature("(..., n) -> (..., n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         for block in self:
             x = x + block(x)
         return x

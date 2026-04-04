@@ -166,7 +166,7 @@ class MultiHeadGaussian(DistributionBase):
         self.covs = torch.einsum("mij,mkj->mik", L, L)
         return self.covs
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Transform $x -> y = Lx + μ$.
 
         Args:
@@ -179,7 +179,7 @@ class MultiHeadGaussian(DistributionBase):
         y = self.means + torch.einsum("...mj, mij -> ...mi", x, L)
         return y
 
-    def inverse(self, y: Tensor) -> tuple[Tensor, Tensor]:
+    def inverse(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         r"""Transform $y -> x = L⁻¹(y-μ)$.
 
         Args:

@@ -55,7 +55,7 @@ class ReverseDense(nn.Module):
         output_size: int,
         *,
         bias: bool = True,
-        activation: str | Activation | type[Activation],
+        activation: str | Activation,
     ) -> None:
         super().__init__()
 
@@ -75,5 +75,5 @@ class ReverseDense(nn.Module):
             nn.init.kaiming_uniform_(self.bias[None], nonlinearity=activation_name)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
 
     @signature("(..., m) -> (..., n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return self.linear(self.activation(x))

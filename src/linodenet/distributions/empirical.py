@@ -63,7 +63,7 @@ class Empirical(DistributionBase):
         return self.samples
 
     @signature("(..., *xs) -> (...,)")
-    def log_prob(self, value: Tensor) -> Tensor:
+    def log_prob(self, value: Tensor, /) -> Tensor:
         r"""Log probability of the empirical distribution.
 
         Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
@@ -103,7 +103,7 @@ class Dirac(Empirical):
         return self.samples
 
     @signature("(..., *xs) -> (..., *xs)")
-    def log_prob(self, value: Tensor) -> Tensor:
+    def log_prob(self, value: Tensor, /) -> Tensor:
         r"""Log probability of the Dirac distribution.
 
         Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.

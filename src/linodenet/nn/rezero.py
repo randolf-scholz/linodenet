@@ -79,7 +79,7 @@ class ReZeroResNet(nn.ModuleList):
 
         super().__init__(module_list)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         for block in self:
             x = x + block(x)
         return x
