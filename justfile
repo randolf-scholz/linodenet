@@ -1,3 +1,12 @@
+[doc('Sphinx documentation commands.')]
+mod docs
+
+[default]
+[doc('Show available recipes.')]
+help:
+    @just --justfile {{justfile()}} --list
+
+[doc('Configure git remotes for this repository.')]
 setup-remote:
     #!/usr/bin/env bash
     set -eu
