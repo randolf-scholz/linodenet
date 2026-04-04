@@ -141,7 +141,7 @@ def wide_angle_sphere_init(
         raise ValueError("num must be >= 1.")
     if dim == 1:
         # sample from {-1, +1} with equal probability, which is optimal for d=1
-        points = 2 * torch.randint(0, 2, (num, 1), device=device) - 1
+        points = 2.0 * torch.randint(0, 2, (num, 1), device=device) - 1.0
         return points.to(dtype=dtype)
     if num == 1:
         # for n=1, we can just return any point on the sphere, e.g. the north-pole
@@ -504,7 +504,7 @@ def thomson_initialization(
     # special case dim≤2 and num≤2
     if dim == 1:
         # sample from {-1, +1} with equal probability, which is optimal for d=1
-        points = 2 * torch.randint(0, 2, (num, 1), device=device) - 1
+        points = 2.0 * torch.randint(0, 2, (num, 1), device=device) - 1.0
         points = points.to(dtype=dtype)
         grad, loss = grad_and_value_fn(points)
         return OptimizerResult(
