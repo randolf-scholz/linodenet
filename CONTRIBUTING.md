@@ -34,7 +34,7 @@ python -c "import linodenet"
 ### 5. Setup remote repositories and pre-commit hooks
 
 ```bash
-./run/setup_remote.sh
+just setup-remote
 ./run/setup_precommit.sh
 ```
 
