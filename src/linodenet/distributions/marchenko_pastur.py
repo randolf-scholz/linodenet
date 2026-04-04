@@ -173,7 +173,12 @@ class MarchenkoPastur(Distribution):
         inv = _icdf_bisect(self, target)
         return torch.where(target <= point_mass, zeros, inv)
 
-    def sample(self, sample_shape: Size = (), rng: Generator | None = None) -> Tensor:
+    def sample(
+        self, sample_shape: int | Size = (), rng: Generator | None = None
+    ) -> Tensor:
+        sample_shape = (
+            (sample_shape,) if isinstance(sample_shape, int) else tuple(sample_shape)
+        )
         shape = tuple(sample_shape) + self.batch_shape
         value = torch.rand(
             shape,

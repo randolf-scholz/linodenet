@@ -56,10 +56,7 @@ class Empirical(DistributionBase):
             )
 
     @signature("int -> (..., *xs)")
-    def sample(
-        self,
-        num: int = 1,
-    ) -> Tensor:
+    def sample(self, num: int = 1, /) -> Tensor:
         r"""Sample from the empirical distribution."""
         idx = torch.randint(self.num_samples, size=(num,), device=self.data.device)
         self.samples = self.data[idx]  # TODO: support batch shape
@@ -100,7 +97,7 @@ class Dirac(Empirical):
         self.data = self.data.squeeze(dim=0)
 
     @signature("int -> (..., *xs)")
-    def sample(self, num: int = 1) -> Tensor:
+    def sample(self, num: int = 1, /) -> Tensor:
         r"""Sample from the Dirac distribution."""
         self.samples = self.data.expand(*(num,), *self.event_shape)
         return self.samples

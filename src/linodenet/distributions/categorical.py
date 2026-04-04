@@ -58,7 +58,7 @@ class Categorical(DistributionBase):
         return self.weights.softmax(dim=-1)
 
     @override
-    def sample(self, num: int = 1) -> Tensor:
+    def sample(self, num: int = 1, /) -> Tensor:
         self.samples = torch.multinomial(self.probs, num, replacement=True)
         return self.samples
 

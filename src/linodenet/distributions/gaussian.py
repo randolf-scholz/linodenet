@@ -202,7 +202,7 @@ class MultiHeadGaussian(DistributionBase):
         ldj = -L.diagonal(dim1=-2, dim2=-1).log().sum(-1)
         return u, ldj
 
-    def sample(self, size: int | tuple[int, ...] = ()) -> Tensor:
+    def sample(self, size: int | tuple[int, ...] = (), /) -> Tensor:
         r"""Sample from the model.
 
         Args:
