@@ -125,7 +125,7 @@ class LipschitzBounded(ProjectionBase):
         )
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Perform spectral normalization w ↦ w/‖w‖₂."""
         # We use the cached singular vectors as initial guess for the power method.
         sigma, u, v = singular_triplet(
@@ -183,7 +183,7 @@ class SpectralNormalized(LipschitzBounded):
         super().__init__(lipschitz_bound=1.0, atol=atol, rtol=rtol, maxiter=maxiter)
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Perform spectral normalization w ↦ w/‖w‖₂."""
         # We use the cached singular vectors as initial guess for the power method.
         sigma, u, v = singular_triplet(
@@ -260,7 +260,7 @@ class Symmetric(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SYMMETRIC
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of symmetric matrices."""
         return F.symmetric(x)
 
@@ -277,7 +277,7 @@ class SkewSymmetric(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of skew-symmetric matrices."""
         return F.skew_symmetric(x)
 
@@ -298,7 +298,7 @@ class Orthogonal(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.ORTHOGONAL
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of orthogonal matrices."""
         return F.orthogonal(x)
 
@@ -315,7 +315,7 @@ class Traceless(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.TRACELESS
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of traceless matrices."""
         return F.traceless(x)
 
@@ -347,7 +347,7 @@ class Normal(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.NORMAL
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of normal matrices."""
         return F.normal(x)
 
@@ -373,7 +373,7 @@ class Hamiltonian(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.HAMILTONIAN
 
     @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of hamiltonian matrices."""
         return F.hamiltonian(x)
 
@@ -394,7 +394,7 @@ class Symplectic(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SYMPLECTIC
 
     @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of symplectic matrices."""
         return F.symplectic(x)
 
@@ -422,7 +422,7 @@ class Diagonal(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.DIAGONAL
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of diagonal matrices."""
         return F.diagonal(x)
 
@@ -453,7 +453,7 @@ class UpperTriangular(ProjectionBase):
         self.upper = upper
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of upper triangular matrices."""
         return F.upper_triangular(x, upper=self.upper)
 
@@ -484,7 +484,7 @@ class LowerTriangular(ProjectionBase):
         self.lower = lower
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of lower triangular matrices."""
         return F.lower_triangular(x, lower=self.lower)
 
@@ -502,7 +502,7 @@ class Tridiagonal(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.TRIDIAGONAL
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of tridiagonal matrices."""
         return F.tridiagonal(x)
 
@@ -524,7 +524,7 @@ class DiagonallyDominant(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.DIAGONALLY_DOMINANT
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of diagonally dominant matrices."""
         return F.diagonally_dominant(x)
 
@@ -541,7 +541,7 @@ class RankOne(ProjectionBase):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RANK_ONE
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of rank-1 matrices."""
         return F.rank_one(x)
 
@@ -576,7 +576,7 @@ class Masked(ProjectionBase):
         self.mask = torch.as_tensor(mask, dtype=torch.bool)
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of masked matrices."""
         return F.masked(x, mask=self.mask)
 
@@ -599,7 +599,7 @@ class LowRank(ProjectionBase):
         self.rank = rank
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of low rank matrices."""
         return F.low_rank(x, rank=self.rank)
 
@@ -638,7 +638,7 @@ class Banded(ProjectionBase):
             )
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Project into space of banded matrices."""
         return F.banded(x, lower=self.lower, upper=self.upper)
 
@@ -650,7 +650,7 @@ class UnitVector(ProjectionBase):
     CODOMAIN: Final[VectorDomains] = VectorDomains.UNIT_VECTOR
 
     @signature("(..., n) -> (..., n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return F.unit_vector(x)
 
 

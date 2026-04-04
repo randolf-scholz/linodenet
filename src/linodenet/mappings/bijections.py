@@ -33,11 +33,11 @@ class MatrixExponential(BijectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.INVERTIBLE
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return torch.matrix_exp(x)
 
     @signature("(..., n, n) -> (..., n, n)")
-    def inverse(self, y: Tensor) -> Tensor:
+    def inverse(self, y: Tensor, /) -> Tensor:
         # FIXME: https://github.com/pytorch/pytorch/issues/9983 (matrix_log)
         return matrix_log(y).real.to(dtype=y.dtype)
 
@@ -54,12 +54,12 @@ class CayleyMap(BijectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.CAYLEY_ORTHOGONAL
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         I = torch.eye(x.shape[-1], dtype=x.dtype, device=x.device)
         return torch.linalg.lstsq(I + x, I - x).solution
 
     @signature("(..., n, n) -> (..., n, n)")
-    def inverse(self, y: Tensor) -> Tensor:
+    def inverse(self, y: Tensor, /) -> Tensor:
         I = torch.eye(y.shape[-1], dtype=y.dtype, device=y.device)
         return torch.linalg.lstsq(I + y, I - y).solution
 
@@ -71,11 +71,11 @@ class TanhMap(BijectionBase):
     CODOMAIN: Final[ScalarDomains] = ScalarDomains.OPEN_UNIT_BALL
 
     @signature("(...) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return torch.tanh(x)
 
     @signature("(...) -> (...)")
-    def inverse(self, y: Tensor) -> Tensor:
+    def inverse(self, y: Tensor, /) -> Tensor:
         return torch.atanh(y)
 
 
@@ -86,9 +86,9 @@ class SmoothSoftsign(BijectionBase):
     CODOMAIN: Final[ScalarDomains] = ScalarDomains.OPEN_UNIT_BALL
 
     @signature("(...) -> (...)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return 2 * x / (1 + torch.sqrt(1 + 4 * x.square()))
 
     @signature("(...) -> (...)")
-    def inverse(self, y: Tensor) -> Tensor:
+    def inverse(self, y: Tensor, /) -> Tensor:
         return y / (1 - y.square())

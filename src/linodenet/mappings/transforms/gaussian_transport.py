@@ -53,12 +53,12 @@ class BimodalToGaussian(TransformBase):
     def stddev(self) -> Tensor:
         return self.log_std.exp()
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
         return bimodal_to_gaussian(x, mu, sigma)
 
-    def decode(self, x: Tensor) -> Tensor:
+    def decode(self, x: Tensor, /) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
         return gaussian_to_bimodal(x, mu, sigma)
@@ -109,12 +109,12 @@ class GaussianToBimodal(TransformBase):
     def stddev(self) -> Tensor:
         return self.log_std.exp()
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
         return gaussian_to_bimodal(x, mu, sigma)
 
-    def decode(self, x: Tensor) -> Tensor:
+    def decode(self, x: Tensor, /) -> Tensor:
         mu = self.mean
         sigma = self.log_std.exp()
         return bimodal_to_gaussian(x, mu, sigma)
@@ -163,13 +163,13 @@ class MixtureToGaussian(TransformBase):
     def stddev(self) -> Tensor:
         return self.log_std.exp()
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         w = self.weights.softmax(dim=-1)
         mu = self.means
         sigma = self.log_std.exp()
         return mixture_to_gaussian(x, w, mu, sigma)
 
-    def decode(self, x: Tensor) -> Tensor:
+    def decode(self, x: Tensor, /) -> Tensor:
         w = self.weights.softmax(dim=-1)
         mu = self.means
         sigma = self.log_std.exp()
@@ -225,13 +225,13 @@ class GaussianToMixture(TransformBase):
     def stddev(self) -> Tensor:
         return self.log_std.exp()
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         w = self.weights.softmax(dim=-1)
         mu = self.means
         sigma = self.log_std.exp()
         return gaussian_to_mixture(x, w, mu, sigma)
 
-    def decode(self, x: Tensor) -> Tensor:
+    def decode(self, x: Tensor, /) -> Tensor:
         w = self.weights.softmax(dim=-1)
         mu = self.means
         sigma = self.log_std.exp()

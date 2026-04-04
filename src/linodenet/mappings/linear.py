@@ -149,7 +149,7 @@ class RankOneContraction(nn.Module):
     def weight(self) -> Tensor:
         return torch.outer(self.gamma * self.weight_u, self.weight_v)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         projection = x.matmul(self.weight_v)
         y = torch.einsum("..., o -> ...o", projection, self.gamma * self.weight_u)
         if self.bias is not None:
@@ -249,7 +249,7 @@ class LowRankContraction(nn.Module):
     def weight(self) -> Tensor:
         return (self.weight_u * self.sigma).matmul(self.weight_v.mT)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         projection = x.matmul(self.weight_v)
         scaled = projection * self.sigma
         y = scaled.matmul(self.weight_u.mT)

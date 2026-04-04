@@ -207,7 +207,7 @@ class SplineCoefficients(NamedTuple):
         return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
 
     @staticmethod
-    def from_selected_knots(knots: BinKnots, bin_idx: Tensor) -> SplineCoefficients:
+    def from_selected_knots(knots: BinKnots, bin_idx: Tensor, /) -> SplineCoefficients:
         r"""Get the spline coefficients for the selected bins.
 
         Args:
@@ -676,7 +676,7 @@ class LearnableLRS(TransformBase):
         y = y + self.y_center
         return y, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
-    def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         r"""Inverse pass of the flow.
 
         Args:

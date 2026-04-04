@@ -101,11 +101,11 @@ class EmbeddingBase(nn.Module, Embedding[Tensor, Tensor]):
     @abstractmethod
     def left_inverse(self, y: Tensor, /) -> Tensor: ...
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         r"""Alias for `forward` method."""
         return self.forward(x)
 
-    def decode(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor, /) -> Tensor:
         r"""Alias for `left_inverse` method."""
         return self.left_inverse(y)
 
@@ -118,11 +118,11 @@ class SurjectionBase(nn.Module, Surjection[Tensor, Tensor]):
     @abstractmethod
     def right_inverse(self, y: Tensor, /) -> Tensor: ...
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         r"""Alias for `forward` method."""
         return self.forward(x)
 
-    def decode(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor, /) -> Tensor:
         r"""Alias for `right_inverse` method."""
         return self.right_inverse(y)
 
@@ -144,7 +144,7 @@ class ProjectionBase(SurjectionBase, Projection[Tensor]):
 
     @final
     @signature("(..., *ys) -> (..., *xs)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         r"""Right inverse of the projection, i.e. the identity on the image.
 
         Args:
@@ -155,11 +155,11 @@ class ProjectionBase(SurjectionBase, Projection[Tensor]):
         """
         return y
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         r"""Alias for `forward` method."""
         return self.forward(x)
 
-    def decode(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor, /) -> Tensor:
         r"""Alias for `right_inverse` method."""
         return self.right_inverse(y)
 
@@ -214,12 +214,12 @@ class BijectionSequence[B: BijectionBase](BijectionBase, ModuleSequence[B]):
             )
         return BijectionSequence(~layer for layer in reversed(self))
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         for layer in self:
             x = layer.forward(x)
         return x
 
-    def inverse(self, y: Tensor) -> Tensor:
+    def inverse(self, y: Tensor, /) -> Tensor:
         for layer in reversed(self):
             y = layer.inverse(y)
         return y

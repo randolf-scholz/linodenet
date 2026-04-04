@@ -103,17 +103,17 @@ class TransformSequence[T: TransformBase](TransformBase, ModuleSequence[T]):
             )
         return TransformSequence(~layer for layer in reversed(self))
 
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         for layer in self:
             x = layer.encode(x)
         return x
 
-    def decode(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor, /) -> Tensor:
         for layer in reversed(self):
             y = layer.decode(y)
         return y
 
-    def encode_and_logabsdet(self, x: Tensor) -> tuple[Tensor, Tensor]:
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         logabsdets: list[Tensor] = []
 
         for layer in self:
@@ -123,7 +123,7 @@ class TransformSequence[T: TransformBase](TransformBase, ModuleSequence[T]):
         logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
         return x, logabsdet
 
-    def decode_and_logabsdet(self, y: Tensor) -> tuple[Tensor, Tensor]:
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         logabsdets: list[Tensor] = []
 
         for layer in reversed(self):

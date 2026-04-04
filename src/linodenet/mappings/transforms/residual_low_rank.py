@@ -67,14 +67,14 @@ class LowRankTransform(TransformBase):
         self.register_buffer("eye", torch.eye(rank), persistent=True)
 
     @signature("(..., n) -> (..., n)")
-    def encode(self, x: Tensor) -> Tensor:
+    def encode(self, x: Tensor, /) -> Tensor:
         r"""Computes $y = (𝕀ₙ + UVᵀ)x$."""
         v = torch.einsum("nk, ...n -> ...k", self.V, x)  # v = Vᵀx
         u = torch.einsum("nk, ...k -> ...n", self.U, v)  # u = Uv
         return x + u
 
     @signature("(..., n) -> (..., n)")
-    def decode(self, y: Tensor) -> Tensor:
+    def decode(self, y: Tensor, /) -> Tensor:
         r"""Computes $x = (𝕀+UVᵀ)⁻¹y = y - U(𝕀ₖ + VᵀU)⁻¹Vᵀy$."""
         A = self.eye + torch.einsum("ni, nj -> ij", self.V, self.U)
         v = torch.einsum("nk, ...n -> ...k", self.V, y)  # v = Vᵀy

@@ -47,14 +47,14 @@ type ProjectionFnWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 
 
 # region projections -------------------------------------------------------------------
-def unit_vector(x: Tensor) -> Tensor:
+def unit_vector(x: Tensor, /) -> Tensor:
     r"""Return the closest unit vector to X."""
     return x / torch.linalg.vector_norm(x, dim=-1, keepdim=True)
 
 
 # region matrix groups -----------------------------------------------------------------
 @signature("(...) -> (...)")
-def identity(x: Tensor) -> Tensor:
+def identity(x: Tensor, /) -> Tensor:
     r"""Return x as-is.
 
     .. math:: \min_Y ½‖X-Y‖²
@@ -63,7 +63,7 @@ def identity(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def symmetric(x: Tensor) -> Tensor:
+def symmetric(x: Tensor, /) -> Tensor:
     r"""Return the closest symmetric matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   Yᵀ = Y
@@ -74,7 +74,7 @@ def symmetric(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def skew_symmetric(x: Tensor) -> Tensor:
+def skew_symmetric(x: Tensor, /) -> Tensor:
     r"""Return the closest skew-symmetric matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   Yᵀ = -Y
@@ -85,7 +85,7 @@ def skew_symmetric(x: Tensor) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def rank_one(x: Tensor) -> Tensor:
+def rank_one(x: Tensor, /) -> Tensor:
     r"""Return the closest rank-1 matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
@@ -96,7 +96,7 @@ def rank_one(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def orthogonal(x: Tensor) -> Tensor:
+def orthogonal(x: Tensor, /) -> Tensor:
     r"""Return the closest orthogonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀY = 𝕀 = YYᵀ
@@ -112,7 +112,7 @@ def orthogonal(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def traceless(x: Tensor) -> Tensor:
+def traceless(x: Tensor, /) -> Tensor:
     r"""Return the closest traceless matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   tr(Y) = 0
@@ -131,7 +131,7 @@ def traceless(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def normal(x: Tensor) -> Tensor:
+def normal(x: Tensor, /) -> Tensor:
     r"""Return the closest normal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀY = YYᵀ
@@ -157,7 +157,7 @@ def normal(x: Tensor) -> Tensor:
 
 
 @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
-def symplectic(x: Tensor) -> Tensor:
+def symplectic(x: Tensor, /) -> Tensor:
     r"""Return the closest symplectic matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   Yᵀ J Y = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
@@ -172,7 +172,7 @@ def symplectic(x: Tensor) -> Tensor:
 
 
 @signature("(..., 2n, 2n) -> (..., 2n, 2n)")
-def hamiltonian(x: Tensor) -> Tensor:
+def hamiltonian(x: Tensor, /) -> Tensor:
     r"""Return the closest hamiltonian matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   (JY)ᵀ = JA   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
@@ -198,7 +198,7 @@ def hamiltonian(x: Tensor) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def diagonal(x: Tensor) -> Tensor:
+def diagonal(x: Tensor, /) -> Tensor:
     r"""Return the closest diagonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   𝕀⊙Y = Y
@@ -218,7 +218,7 @@ def diagonal(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def upper_triangular(x: Tensor, upper: int = 0) -> Tensor:
+def upper_triangular(x: Tensor, /, upper: int = 0) -> Tensor:
     r"""Return the closest upper triangular matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   U⊙Y = Y
@@ -236,7 +236,7 @@ def upper_triangular(x: Tensor, upper: int = 0) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
+def lower_triangular(x: Tensor, /, lower: int = 0) -> Tensor:
     r"""Return the closest lower triangular matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   L⊙Y = Y
@@ -254,7 +254,7 @@ def lower_triangular(x: Tensor, lower: int = 0) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def tridiagonal(x: Tensor) -> Tensor:
+def tridiagonal(x: Tensor, /) -> Tensor:
     r"""Return the closest tridiagonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   Y = T⊙Y
@@ -271,7 +271,7 @@ def tridiagonal(x: Tensor) -> Tensor:
 
 
 @signature("(..., n, n) -> (..., n, n)")
-def diagonally_dominant(x: Tensor) -> Tensor:
+def diagonally_dominant(x: Tensor, /) -> Tensor:
     r"""Return the closest diagonally dominant matrix to X.
 
     .. math:: \min_Y ‖X-Y‖_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
@@ -287,7 +287,7 @@ def diagonally_dominant(x: Tensor) -> Tensor:
 
 # region special projections -----------------------------------------------------------
 @signature("(..., m, n) -> (..., m, n)")
-def lipschitz_bounded(x: Tensor, lipschitz_bound: float) -> Tensor:
+def lipschitz_bounded(x: Tensor, /, lipschitz_bound: float) -> Tensor:
     r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ
@@ -309,7 +309,7 @@ def lipschitz_bounded(x: Tensor, lipschitz_bound: float) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def spectral_normalized(x: Tensor) -> Tensor:
+def spectral_normalized(x: Tensor, /) -> Tensor:
     r"""Return the closest matrix to X with unit spectral norm.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ = 1
@@ -323,7 +323,7 @@ def spectral_normalized(x: Tensor) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def contraction(x: Tensor, lipschitz_bound: float) -> Tensor:
+def contraction(x: Tensor, /, lipschitz_bound: float) -> Tensor:
     r"""Return the closest matrix to X with spectral norm at most γ<1.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ < 1
@@ -338,7 +338,7 @@ def contraction(x: Tensor, lipschitz_bound: float) -> Tensor:
 
 
 @signature("[(..., m, n), (m, n)] -> (..., m, n)")
-def masked(x: Tensor, mask: Tensor) -> Tensor:
+def masked(x: Tensor, /, mask: Tensor) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   M⊙Y = Y
@@ -358,7 +358,7 @@ def masked(x: Tensor, mask: Tensor) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def banded(x: Tensor, lower: int, upper: int) -> Tensor:
+def banded(x: Tensor, /, lower: int, upper: int) -> Tensor:
     r"""Return the closest banded matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   B⊙Y = Y
@@ -378,7 +378,7 @@ def banded(x: Tensor, lower: int, upper: int) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def low_rank(x: Tensor, rank: int) -> Tensor:
+def low_rank(x: Tensor, /, rank: int) -> Tensor:
     r"""Return the closest low rank matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ k

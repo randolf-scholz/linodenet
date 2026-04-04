@@ -35,11 +35,11 @@ class PositiveSemiDefinite(SurjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SEMIDEFINITE
 
     @signature("(..., m, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return torch.einsum("...km, ...kn -> ...mn", x, x)
 
     @signature("(..., n, n) -> (..., n, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         return matrix_sqrt(y).real.to(dtype=y.dtype)
 
 
@@ -50,14 +50,14 @@ class PositiveDefinite(SurjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_DEFINITE
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         lower = x.tril(diagonal=-1) + torch.diag_embed(
             torch.exp(x.diagonal(dim1=-2, dim2=-1))
         )
         return torch.einsum("...ik, ...jk -> ...ij", lower, lower)
 
     @signature("(..., n, n) -> (..., n, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         lower = torch.linalg.cholesky(y)
         return lower.tril(diagonal=-1) + torch.diag_embed(
             torch.log(lower.diagonal(dim1=-2, dim2=-1))
@@ -71,14 +71,14 @@ class NegativeDefinite(SurjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.NEGATIVE_DEFINITE
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         lower = x.tril(diagonal=-1) + torch.diag_embed(
             torch.exp(x.diagonal(dim1=-2, dim2=-1))
         )
         return -torch.einsum("...ik, ...jk -> ...ij", lower, lower)
 
     @signature("(..., n, n) -> (..., n, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         lower = torch.linalg.cholesky(-y)
         return lower.tril(diagonal=-1) + torch.diag_embed(
             torch.log(lower.diagonal(dim1=-2, dim2=-1))
@@ -126,12 +126,12 @@ class ConcatProjection(SurjectionBase):
         self.padding = nn.Parameter(torch.randn(self.padding_size))
 
     @signature("(..., d+e) -> (..., d)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         r"""Remove the padded state."""
         return x[..., : self.output_size]
 
     @signature("(..., d) -> (..., d+e)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         r"""Concatenate the input with the padding."""
         shape = y.shape[:-1] + (self.padding_size,)
         return torch.cat([y, self.padding.expand(shape)], dim=-1)
@@ -144,11 +144,11 @@ class PositiveVector(SurjectionBase):
     CODOMAIN: Final[VectorDomains] = VectorDomains.POSITIVE
 
     @signature("(..., n) -> (..., n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return torch.nn.functional.softplus(x)
 
     @signature("(..., n) -> (..., n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         return torch.where(y > 20, y, y + torch.log(-torch.expm1(-y)))
 
 
@@ -159,11 +159,11 @@ class StochasticVector(SurjectionBase):
     CODOMAIN: Final[VectorDomains] = VectorDomains.STOCHASTIC
 
     @signature("(..., n) -> (..., n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return x.softmax(dim=-1)
 
     @signature("(..., n) -> (..., n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         logits = y.log()
         return logits - logits.mean(dim=-1, keepdim=True)
 
@@ -180,11 +180,11 @@ class SpecialOrthogonal(SurjectionBase):
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.SPECIAL_ORTHOGONAL
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return torch.matrix_exp(skew_symmetric(x))
 
     @signature("(..., n, n) -> (..., n, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         # FIXME: https://github.com/pytorch/pytorch/issues/9983 (matrix_log)
         return skew_symmetric(matrix_log(y).real.to(dtype=y.dtype))
 
@@ -222,13 +222,13 @@ class OrthogonalHouseholder(SurjectionBase):
         return a.tril(diagonal=-1).diagonal_scatter(signs, dim1=-2, dim2=-1)
 
     @signature("(..., m, n) -> (..., m, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         if self.mode == "rows":
             return self._forward_columns(x.mT).mT
         return self._forward_columns(x)
 
     @signature("(..., m, n) -> (..., m, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         if self.mode == "rows":
             return self._right_inverse_columns(y.mT).mT
         return self._right_inverse_columns(y)
@@ -251,9 +251,9 @@ class OrthogonalCayley(SurjectionBase):
         self.cayley = CayleyMap()
 
     @signature("(..., n, n) -> (..., n, n)")
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, /) -> Tensor:
         return self.cayley(skew_symmetric(x))
 
     @signature("(..., n, n) -> (..., n, n)")
-    def right_inverse(self, y: Tensor) -> Tensor:
+    def right_inverse(self, y: Tensor, /) -> Tensor:
         return self.cayley.inverse(y)
