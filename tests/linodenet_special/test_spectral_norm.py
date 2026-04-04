@@ -489,7 +489,8 @@ class TestPerformance(TestSuite):
         def backward(s: Tensor, /) -> None:
             loss = g_s * s
             loss.backward()
-            torch.cuda.synchronize()
+            if loss.device.type == "cuda":
+                torch.cuda.synchronize()
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
             torch.set_float32_matmul_precision("high")
