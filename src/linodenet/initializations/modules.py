@@ -35,7 +35,7 @@ class Gaussian(nn.Module):
 
     def __init__(
         self,
-        dim: int | tuple[int, ...],
+        dim: int | tuple[int, int],
         *,
         loc: float = 0.0,
         scale: float = 1.0,

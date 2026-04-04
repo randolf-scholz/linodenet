@@ -52,22 +52,22 @@ def _normalize_square_dim(dim: int | tuple[int, int], /) -> int:
 # region initializations ---------------------------------------------------------------
 def gaussian(
     size: int | tuple[int, ...],
-    dim: int | tuple[int, ...],
+    dim: int | tuple[int, int],
     *,
     loc: float = 0.0,
     scale: float = 1.0,
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
-    r"""Sample a random Gaussian tensor.
+    r"""Sample a random Gaussian matrix.
 
-    `size` is interpreted as sample shape and `dim` as the event shape.
-    The standard deviation is normalized by the last event axis when present.
+    `size` is interpreted as sample shape and `dim` as the matrix dimension.
+    The standard deviation is normalized by the number of columns.
     """
     batch = _normalize_sample_shape(size)
-    event = (dim,) if isinstance(dim, int) else tuple(dim)
-    shape = (*batch, *event)
-    std = scale if len(event) == 0 else scale / sqrt(event[-1])
+    m, n = _normalize_matrix_dim(dim)
+    shape = (*batch, m, n)
+    std = scale / sqrt(n)
     mean = torch.full(shape, loc, dtype=dtype, device=device)
     return torch.normal(mean=mean, std=std)
 
