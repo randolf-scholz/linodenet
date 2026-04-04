@@ -10,6 +10,13 @@ from signatures import GenericType, Identifier, Parser
     [
         ("(m, n) -> (n, m)", "{(m, n) -> (n, m)}"),
         ("{(m, n) -> (n, m)}", "{(m, n) -> (n, m)}"),
+        ("{A -> B} -> C", "{{A -> B} -> C}"),
+        ("A -> {B -> C}", "{A -> {B -> C}}"),
+        ("{A -> B} -> {C -> D}", "{{A -> B} -> {C -> D}}"),
+        (
+            "{(..., n, d) -> (...)} -> (..., n, d)",
+            "{{(..., n, d) -> (..., )} -> (..., n, d)}",
+        ),
         ("[(m, n), {(n) -> (m)}] -> (m, n)", "{[(m, n), {(n) -> (m)}] -> (m, n)}"),
         (
             "[Tensor[(m, n)]?, Label?] -> Output?",

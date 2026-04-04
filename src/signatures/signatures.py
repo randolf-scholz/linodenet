@@ -412,6 +412,26 @@ def tokenize(source: str, /) -> Iterator[Token]:
     yield Token(n, TokenKind.EOF)
 
 
+def _has_wrapping_braces(source: str, /) -> bool:
+    r"""Return whether `source` is enclosed by a single top-level `{...}` pair."""
+    stripped = source.strip()
+    if len(stripped) < 2 or stripped[0] != "{" or stripped[-1] != "}":
+        return False
+
+    depth = 0
+    for idx, char in enumerate(stripped):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0 and idx != len(stripped) - 1:
+                return False
+            if depth < 0:
+                return False
+
+    return depth == 0
+
+
 class Parser:
     r"""Recursive-descent parser consuming an Iterator[Token]."""
 
@@ -420,7 +440,11 @@ class Parser:
         r"""Parse the grammar starting from SignatureType and ensure full consumption."""
         self = Parser(tokenize(arg))
         try:
-            result = self._parse_signature_type()
+            result = (
+                self._parse_fn_type()
+                if _has_wrapping_braces(arg)
+                else self._parse_fn_body()
+            )
             self._check_eof()
         except SyntaxError as parser_error:
             exc = RuntimeError(f"Failed to parse signature {arg!r}")
