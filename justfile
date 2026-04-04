@@ -1,10 +1,20 @@
-[doc('Sphinx documentation commands.')]
+# Sphinx documentation commands.
 mod docs
 
 [default]
 [doc('Show available recipes.')]
 help:
-    @just --justfile {{justfile()}} --list
+    @just --justfile {{ justfile() }} --list
+
+[doc('Clean the workspace, create a uv virtualenv, and install the project editable.')]
+setup:
+    #!/usr/bin/env bash
+    set -eu
+
+    git clean -fdx
+    uv venv
+    . .venv/bin/activate
+    uv pip install --editable .
 
 [doc('Configure git remotes for this repository.')]
 setup-remote:
