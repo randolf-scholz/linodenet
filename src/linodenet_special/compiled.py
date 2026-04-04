@@ -22,6 +22,7 @@ __all__ = [
 import logging
 import math
 import os
+import traceback
 from collections.abc import Callable as Fn
 from pathlib import Path
 from types import ModuleType
@@ -47,6 +48,21 @@ _SOURCE_DIR: Final[Path] = Path(__file__).parent / "csrc" / f"{_LIB_NAME}"
 r"""The source directory."""
 _LIB_FILE: Final[Path] = _BUILD_DIR / f"{_LIB_NAME}.so"
 r"""The name of the custom library."""
+_OPERATOR_SOURCE_FILES: Final[dict[str, str]] = {
+    "singular_triplet": "singular_triplet.cpp",
+    "spectral_norm": "spectral_norm.cpp",
+    "ndtri_exp": "ndtri_exp.cpp",
+    "hard_bend": "hard_bend.cpp",
+    "bimodal_to_gaussian": "gaussian_transport.cpp",
+    "bimodal_to_gaussian_value_and_grad": "gaussian_transport.cpp",
+    "gaussian_to_bimodal": "gaussian_transport.cpp",
+    "gaussian_to_bimodal_value_and_grad": "gaussian_transport.cpp",
+    "gaussian_to_mixture": "gaussian_transport.cpp",
+    "gaussian_to_mixture_value_and_grad": "gaussian_transport.cpp",
+    "mixture_to_gaussian": "gaussian_transport.cpp",
+    "mixture_to_gaussian_value_and_grad": "gaussian_transport.cpp",
+}
+r"""Mapping from exported operator names to their translation units."""
 
 assert _SOURCE_DIR.is_dir(), f"{_SOURCE_DIR} is not a directory!"
 
@@ -60,7 +76,6 @@ def _compile_fns() -> KnownFunctions:
     from torch.utils import cpp_extension  # noqa: PLC0415
 
     cpp_extension.verify_ninja_availability()
-    os.environ["CUDA_HOME"] = "/usr/local/cuda-12.8"
     cache_dir = Path(
         os.environ.get(
             "TORCH_EXTENSIONS_DIR",
@@ -68,18 +83,18 @@ def _compile_fns() -> KnownFunctions:
         )
     )
     assert not cache_dir.exists() or cache_dir.is_dir()
-    print("Compiling custom operators...")
+    print("\nCompiling custom operators!")
 
     compiled_fns: dict[str, Any] = {}
     exceptions: dict[str, Exception] = {}
 
-    for name in (fn_names := KnownFunctions.__required_keys__):
+    for name in (fn_names := sorted(KnownFunctions.__required_keys__)):
         try:
             print(f"Compiling {name}...", flush=True)
             cpp_extension.load(
                 name=name,
-                sources=[str(_SOURCE_DIR / f"{name}.cpp")],
-                extra_cflags=["-O3"],  # , "-DPy_LIMITED_API=0x030A0000"],
+                sources=[str(_SOURCE_DIR / _OPERATOR_SOURCE_FILES[name])],
+                extra_cflags=["-O3"],  # "-DPy_LIMITED_API=0x030E0000"],
                 extra_cuda_cflags=["-O3"],
                 is_python_module=False,
                 verbose=False,
@@ -95,14 +110,21 @@ def _compile_fns() -> KnownFunctions:
         max_len = max(map(len, fn_names))
         FAILURE = "\033[91m❌️ FAILED\033[0m"
         SUCCESS = "\033[92m✅️ SUCCESS\033[0m"
-
+        exception_details = "\n".join(
+            f"\n{name}:\n{''.join(traceback.format_exception(exc)).rstrip()}"
+            for name, exc in exceptions.items()
+        )
         message = (
-            f"Failed to compile {len(exceptions)}/{len(fn_names)} custom operators!\n"
+            f"\n{'-' * 80}\n"
+            f"Exceptions:\n{exception_details}"
+            f"\n{'-' * 80}\n"
             + "\n".join(
                 f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
                 for name in fn_names
             )
-            + f"Consider clearing the torch_extension cache at {cache_dir!s}"
+            + f"\nFailed to compile {len(exceptions)}/{len(fn_names)} custom operators!"
+            + f"\nConsider clearing the torch_extension cache at {cache_dir!s}"
+            + f"\n{'-' * 80}\n"
         )
         __logger__.warning("%s", message)
 
@@ -132,8 +154,8 @@ def _compile_liblinodenet() -> KnownFunctions:
         compiled_fns = _load_prebuilts()
     else:
         __logger__.warning(
-            f"\n\t Custom binaries not found! ({_LIB_FILE!s})"
-            "\n\t -> Consider compiling the linodenet_special extension."
+            f"\n\tCustom binaries not found! ({_LIB_FILE!s})"
+            "\n\tConsider compiling the linodenet_special extension."
         )
         compiled_fns = _compile_fns()
 
