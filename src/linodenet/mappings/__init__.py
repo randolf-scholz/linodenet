@@ -87,12 +87,19 @@ EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
 r"""Dictionary of available embeddings (nn.Module)."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
+    "BimodalToGaussian"    : transforms.BimodalToGaussian,
     "BottleneckFlow"       : transforms.BottleneckFlow,
-    "ResidualContraction"  : transforms.ResidualContraction,
+    "GaussianToBimodal"    : transforms.GaussianToBimodal,
+    "GaussianToMixture"    : transforms.GaussianToMixture,
+    "InverseTransform"     : transforms.InverseTransform,
+    "IResNet"              : transforms.IResNet,
+    "LowRankTransform"     : transforms.LowRankTransform,
+    "MixtureToGaussian"    : transforms.MixtureToGaussian,
     "ResidualBottleneck"   : transforms.ResidualBottleneck,
+    "ResidualContraction"  : transforms.ResidualContraction,
     "ResidualContractionFallback" : transforms.ResidualContractionFallback,
     "SplineTransform"      : transforms.SplineTransform,
-    "LowRankTransform"     : transforms.LowRankTransform,
+    "TransformSequence"    : transforms.TransformSequence,
     "TriangularTransform"  : transforms.TriangularTransform,
 }  # fmt: skip
 r"""Dictionary containing all available transforms (nn.Module)."""
