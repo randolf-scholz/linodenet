@@ -231,8 +231,8 @@ class TestPerformance:
         log_p = log_p.unsqueeze(0).repeat(32, 1)
 
         def bench():
-            torch.cuda.synchronize()
             impl(log_p)
-            torch.cuda.synchronize()
+            if log_p.device == "cuda":
+                torch.cuda.synchronize()
 
         benchmark.pedantic(bench, (), iterations=10, rounds=20, warmup_rounds=100)
