@@ -46,8 +46,4 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 TORCH_LIBRARY_IMPL(linodenet_special, CompositeImplicitAutograd, m) {
     m.impl("hard_bend", &hard_bend);
 }
-
-TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
-    m.impl("hard_bend", &hard_bend_meta);
-}
 }  // namespace linodenet_special
