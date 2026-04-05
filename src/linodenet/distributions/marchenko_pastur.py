@@ -26,7 +26,9 @@ import math
 
 import torch
 from torch import Generator, Tensor
-from torch.distributions import Distribution, constraints
+from torch.distributions import constraints
+
+from .base import DistributionBase
 
 type Size = tuple[int, ...] | list[int]
 
@@ -47,11 +49,10 @@ class Union(constraints.Constraint):
         return torch.stack(checks).any(dim=0)
 
 
-class MarchenkoPastur(Distribution):
+class MarchenkoPastur(DistributionBase):
     r"""Marchenko-Pastur distribution with parameters γ and σ²."""
 
-    # pyrefly: ignore [bad-override]
-    arg_constraints = {  # pyright: ignore [reportIncompatibleMethodOverride, reportAssignmentType]
+    arg_constraints = {
         "gamma": constraints.positive,
         "sigma2": constraints.positive,
     }
@@ -72,8 +73,16 @@ class MarchenkoPastur(Distribution):
         super().__init__(
             batch_shape=batch_shape,
             event_shape=torch.Size(),
-            validate_args=validate_args,
         )
+
+        if validate_args:
+            for key, constraint in self.arg_constraints.items():
+                param = getattr(self, key)
+                if not constraint.check(param).all():
+                    raise ValueError(
+                        f"Invalid parameter {key}={param} for {self.__class__.__name__}. "
+                        f"Must satisfy constraint {constraint}."
+                    )
 
     @property
     def support(self) -> constraints.Constraint:
@@ -123,8 +132,6 @@ class MarchenkoPastur(Distribution):
         (added point mass at 0 when γ > 1, with weight 1 - 1/γ).
         """
         x = value
-        if self._validate_args:
-            self._validate_sample(x)
         a = self.lower_bound
         b = self.upper_bound
         in_support = (x >= a) & (x <= b)
@@ -164,9 +171,6 @@ class MarchenkoPastur(Distribution):
         )
 
     def icdf(self, value: Tensor) -> Tensor:
-        if self._validate_args:
-            self._validate_sample(value)
-
         point_mass = torch.broadcast_to(self.point_mass, value.shape)
         zeros = torch.zeros_like(value)
         target = torch.clamp(value, min=0.0, max=1.0)
