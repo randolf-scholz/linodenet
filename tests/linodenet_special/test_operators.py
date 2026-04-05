@@ -19,7 +19,7 @@ EXAMPLE_ARGS: dict[str, dict[str, tuple[tuple, dict]]] = {
     "gaussian_to_bimodal": {
         "vector": (
             (linspace(-2.0, 2.0, steps=9), tensor(2.0), tensor(1.0)),
-            {},
+            {"maxiter": 8},
         ),
     },
     "gaussian_to_mixture": {
@@ -30,7 +30,7 @@ EXAMPLE_ARGS: dict[str, dict[str, tuple[tuple, dict]]] = {
                 tensor([-2.0, 0.0, 1.5]),
                 tensor([0.8, 1.0, 1.2]),
             ),
-            {},
+            {"maxiter": 8},
         ),
     },
     "hard_bend": {
@@ -90,11 +90,11 @@ EXAMPLE_ARGS: dict[str, dict[str, tuple[tuple, dict]]] = {
 def test_opcheck(name: str) -> None:
     if (impl := RAW_KERNELS.get(name)) is None:
         pytest.skip(f"No implementation for {name}", allow_module_level=True)
-    if (cases := EXAMPLE_ARGS.get(name)) is None:
-        pytest.xfail()
     if (reason := XFAIL_OPCHECK.get(name)) is not None:
         pytest.xfail(reason)
 
-    for case, (args, kwargs) in cases.items():
+    test_cases = EXAMPLE_ARGS[name]
+
+    for case, (args, kwargs) in test_cases.items():
         torch.library.opcheck(impl, args, kwargs)  # type: ignore[arg-type]
         print(f"{case}: pass")
