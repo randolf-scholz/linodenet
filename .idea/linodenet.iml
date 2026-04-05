@@ -244,7 +244,6 @@
     </content>
     <orderEntry type="jdk" jdkName="uv (linodenet)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="uv (linodenet) interpreter library" level="application" />
   </component>
   <component name="PackageRequirementsSettings">
     <option name="versionSpecifier" value="Greater or equal (&gt;=x.y.z)" />
