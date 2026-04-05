@@ -23,6 +23,7 @@ from linodenet_special.trace_estimation import (
 from tests.testing import DEVICES, PREFER_GPU, PROJECT, TestSuite
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
+type Tolerance = float
 
 
 def test_trace_estimator_accepts_hutchinson_alias() -> None:
@@ -470,7 +471,7 @@ class TestTraceEstimator(TestSuite):
         test_case: TraceCase,
         /,
         *,
-        atol: float,
+        eta: Tolerance,
         num_matvecs: int,
         device: str,
         debug: bool = False,
@@ -498,20 +499,23 @@ class TestTraceEstimator(TestSuite):
 
         expected = test_case.trace
         errors = estimate - expected
-        norms = matrix_norm(matrix, ord="nuc")
-        eps = torch.finfo(norms.dtype).eps
-        scaled_rmse = (errors / norms.clamp_min(eps)).square().mean().sqrt()
+        nuc_norm = matrix_norm(matrix, ord="nuc").mean()
+        eps = torch.finfo(errors.dtype).eps
+        rmse = errors.square().mean().sqrt()
+        calibrated_eta = rmse / nuc_norm.clamp_min(eps)
         mean_relative_error = (errors.abs() / expected.abs().clamp_min(eps)).mean()
 
         if debug:
             print(
                 f"{name=:8s} "
-                f"scaled_rmse={scaled_rmse.item():.4e} "
+                f"rmse={rmse.item():.4e} "
+                f"eta={calibrated_eta.item():.4e} "
+                f"‖A‖⁎={nuc_norm.item():.4e} "
                 f"mean_relative_error={mean_relative_error.item():.4e}"
             )
             return
 
-        self.assert_upper_bounded(scaled_rmse, 0.0, atol=atol, rtol=0.0)
+        self.assert_upper_bounded(rmse, eta * nuc_norm)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -601,19 +605,19 @@ class TestTraceCorrectness(TestTraceEstimator):
     PROBLEM_RANK = 6
     NUM_MATVECS = 16
     SEED = 0
-    TOLERANCES: dict[tuple[str, str], float] = {
-        ("diagonal", TraceEstimators.EXACT): 1e-5,
+    ETAS: dict[tuple[str, str], Tolerance] = {
+        ("diagonal", TraceEstimators.EXACT): 1e-7,
         ("diagonal", TraceEstimators.HUTCH): 2e-2,
         ("diagonal", TraceEstimators.HUTCH_PP): 3e-2,
         ("diagonal", TraceEstimators.XTRACE): 2e-2,
-        ("ldu", TraceEstimators.EXACT): 1e-5,
-        ("ldu", TraceEstimators.HUTCH): 6e-2,
-        ("ldu", TraceEstimators.HUTCH_PP): 7e-2,
+        ("ldu", TraceEstimators.EXACT): 2e-8,
+        ("ldu", TraceEstimators.HUTCH): 4e-2,
+        ("ldu", TraceEstimators.HUTCH_PP): 4e-2,
         ("ldu", TraceEstimators.XTRACE): 5e-2,
-        ("low_rank", TraceEstimators.EXACT): 1e-5,
-        ("low_rank", TraceEstimators.HUTCH): 2.5e-1,
-        ("low_rank", TraceEstimators.HUTCH_PP): 1e-1,
-        ("low_rank", TraceEstimators.XTRACE): 1e-4,
+        ("low_rank", TraceEstimators.EXACT): 1e-7,
+        ("low_rank", TraceEstimators.HUTCH): 2e-1,
+        ("low_rank", TraceEstimators.HUTCH_PP): 1.5e-1,
+        ("low_rank", TraceEstimators.XTRACE): 3e-7,
     }
 
     @pytest.mark.parametrize("name", TraceEstimators, ids=str)
@@ -626,7 +630,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         self.assert_trace_close(
             name,
             test_case,
-            atol=self.TOLERANCES["diagonal", name],
+            eta=self.ETAS["diagonal", name],
             num_matvecs=self.NUM_MATVECS,
             device=device,
         )
@@ -641,7 +645,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         self.assert_trace_close(
             name,
             test_case,
-            atol=self.TOLERANCES["ldu", name],
+            eta=self.ETAS["ldu", name],
             num_matvecs=self.NUM_MATVECS,
             device=device,
         )
@@ -657,7 +661,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         self.assert_trace_close(
             name,
             test_case,
-            atol=self.TOLERANCES["low_rank", name],
+            eta=self.ETAS["low_rank", name],
             num_matvecs=self.NUM_MATVECS,
             device=device,
         )
@@ -696,7 +700,7 @@ class TestTraceCorrectness(TestTraceEstimator):
             self.assert_trace_close(
                 name,
                 test_case,
-                atol=self.TOLERANCES[label, name],
+                eta=self.ETAS[label, name],
                 num_matvecs=self.NUM_MATVECS,
                 device=device,
                 debug=True,
@@ -718,16 +722,16 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     NUM_TERMS = 10
     SEED = 0
 
-    TOLERANCES: dict[tuple[str, str], float] = {
+    ETAS: dict[tuple[str, str], Tolerance] = {
         ("low_rank", L.EXACT): 3e-7,
-        ("low_rank", L.HUTCH): 2e-1,
-        ("low_rank", L.HUTCH_PP): 2e-1,
-        ("flat_spectrum", L.EXACT): 7e-6,
-        ("flat_spectrum", L.HUTCH): 6e0,
-        ("flat_spectrum", L.HUTCH_PP): 2e1,
-        ("decaying_spectrum", L.EXACT): 4e-7,
-        ("decaying_spectrum", L.HUTCH): 3e-1,
-        ("decaying_spectrum", L.HUTCH_PP): 4e-1,
+        ("low_rank", L.HUTCH): 1e-1,
+        ("low_rank", L.HUTCH_PP): 1e-1,
+        ("flat_spectrum", L.EXACT): 6e-8,
+        ("flat_spectrum", L.HUTCH): 4e-2,
+        ("flat_spectrum", L.HUTCH_PP): 5e-2,
+        ("decaying_spectrum", L.EXACT): 3e-7,
+        ("decaying_spectrum", L.HUTCH): 9e-2,
+        ("decaying_spectrum", L.HUTCH_PP): 2e-1,
     }
 
     def assert_logabsdet_close(
@@ -736,7 +740,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         test_case: TraceCase,
         /,
         *,
-        atol: float,
+        eta: Tolerance,
         device: str,
         debug: bool = False,
     ) -> None:
@@ -760,23 +764,26 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         estimate = output[1] if isinstance(output, tuple) else output
 
         expected = test_case.logabsdet
-        rmse = ((estimate - expected) / expected).abs().mean()
+        errors = estimate - expected
+        nuc_norm = matrix_norm(A, ord="nuc").mean()
+        eps = torch.finfo(errors.dtype).eps
+        rmse = errors.square().mean().sqrt()
+        calibrated_eta = rmse / nuc_norm.clamp_min(eps)
 
         if debug:
-            # scaling: see XTrace paper.
-            # Var[tr] = E[|tr - tr(A)|²] ≤ η‖A‖⁎² ⇝ scaled_rmse ≤ η
-            # reminder: ‖A‖⁎ = nuclear norm = sum of singular values.
-            nuc_norms = matrix_norm(A, ord="nuc")
-            scale = 10 ** math.floor(math.log10(abs(rmse)))
-            bound = math.ceil(rmse / scale) * scale
+            # Calibration target: choose η so rmse ≤ η‖A‖⁎.
+            eta_value = calibrated_eta.item()
+            scale = 10 ** math.floor(math.log10(abs(eta_value)))
+            bound = math.ceil(eta_value / scale) * scale
             print(
                 f"{test_case.name:32s} {method=:8s}  "
-                f"{rmse=:.1e} (<{bound:.0e}) "
-                f"‖A‖⁎={nuc_norms.mean():.1e}"
+                f"rmse={rmse.item():.1e}  "
+                f"eta={eta_value:.1e} (<{bound:.0e}) "
+                f"‖A‖⁎={nuc_norm.item():.1e}"
             )
             return
 
-        self.assert_upper_bounded(rmse, 0.0, atol=atol, rtol=0.0)
+        self.assert_upper_bounded(rmse, eta * nuc_norm)
 
     @pytest.mark.parametrize("name", L, ids=str)
     def test_low_rank_contraction(self, name: str, device: str) -> None:
@@ -789,7 +796,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         self.assert_logabsdet_close(
             name,
             test_case,
-            atol=self.TOLERANCES["low_rank", name],
+            eta=self.ETAS["low_rank", name],
             device=device,
         )
 
@@ -802,7 +809,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         self.assert_logabsdet_close(
             name,
             test_case,
-            atol=self.TOLERANCES["flat_spectrum", name],
+            eta=self.ETAS["flat_spectrum", name],
             device=device,
         )
 
@@ -816,7 +823,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
         self.assert_logabsdet_close(
             name,
             test_case,
-            atol=self.TOLERANCES["decaying_spectrum", name],
+            eta=self.ETAS["decaying_spectrum", name],
             device=device,
         )
 
@@ -852,7 +859,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             self.assert_logabsdet_close(
                 method,
                 test_case,
-                atol=self.TOLERANCES[label, method],
+                eta=self.ETAS[label, method],
                 device=device,
                 debug=True,
             )
