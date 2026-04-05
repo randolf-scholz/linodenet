@@ -59,7 +59,6 @@ def test_empirical(
 @pytest.mark.parametrize(
     "event_shape", [(), (1,), (2,), (1, 1), (2, 2)], ids=lambda es: f"event_shape={es}"
 )
-@pytest.mark.xfail(raises=NotImplementedError, strict=False)
 def test_empirical_with_batch_shape(
     batch_shape: tuple[int, ...],
     event_shape: tuple[int, ...],
@@ -76,14 +75,14 @@ def test_empirical_with_batch_shape(
 
     # samples from the distribution itself
     samples = dist.sample(num_samples)
-    assert samples.shape == (num_samples, *event_shape)
+    assert samples.shape == (num_samples, *batch_shape, *event_shape)
     sample_ll = dist.log_prob(samples)
-    assert sample_ll.shape == (num_samples,)
+    assert sample_ll.shape == (num_samples, *batch_shape)
     assert (sample_ll == torch.inf).all()
 
     # sample from outside the distribution
-    samples = torch.randn((num_samples, *event_shape))
-    assert samples.shape == (num_samples, *event_shape)
+    samples = torch.randn((num_samples, *batch_shape, *event_shape))
+    assert samples.shape == (num_samples, *batch_shape, *event_shape)
     sample_ll = dist.log_prob(samples)
-    assert sample_ll.shape == (num_samples,)
+    assert sample_ll.shape == (num_samples, *batch_shape)
     assert torch.all(sample_ll == -torch.inf)

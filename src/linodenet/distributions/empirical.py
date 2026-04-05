@@ -45,21 +45,23 @@ class Empirical(DistributionBase):
         num_samples = values.shape[-(n + 1)]
         event_shape = values.shape[-n : n and None]  # last n elements (n maybe 0)
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
-        self.data = values
+        self.data = values  # (..., N, *D)
         self.num_samples = num_samples
         self.ndims = len(self.event_shape)
         self.dims = tuple(range(-self.ndims, 0))
 
-        if batch_shape != ():
-            raise NotImplementedError(
-                "Empirical distribution with batch shape is not implemented."
-            )
-
     @signature("int -> (..., *xs)")
     def sample(self, num: int = 1, /) -> Tensor:
         r"""Sample from the empirical distribution."""
-        idx = torch.randint(self.num_samples, size=(num,), device=self.data.device)
-        self.samples = self.data[idx]  # TODO: support batch shape
+        sample_shape = (num,)
+        size = sample_shape + self.batch_shape + (1,) + (1,) * self.ndims
+        index = torch.randint(self.num_samples, size=size, device=self.data.device)
+        index = index.expand(*sample_shape, *self.batch_shape, 1, *self.event_shape)
+        # Broadcast the empirical dataset across the requested sample shape.
+        data = self.data.expand(*sample_shape, *self.data.shape)
+        # Gather one empirical point per `(sample, *batch)` entry along the dataset axis.
+        dim = len(sample_shape) + len(self.batch_shape)
+        self.samples = data.gather(dim=dim, index=index).squeeze(dim=dim)
         return self.samples
 
     @signature("(..., *xs) -> (...,)")
