@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
-project(linodenet_special VERSION 0.2.0 LANGUAGES CXX CUDA)
+project(linodenet_special VERSION 0.2.0 LANGUAGES CXX)
 
 
 # OPTIONS
@@ -19,28 +19,22 @@ execute_process (
 )
 message(STATUS "NOTE: PROJECT_ROOT=${PROJECT_ROOT}")
 
-set(PYTHON_EXECUTABLE "${PROJECT_ROOT}/.venv/bin/python3")
-if(NOT EXISTS "${PYTHON_EXECUTABLE}")
-  message(STATUS "NOTE: venv python not found at ${PYTHON_EXECUTABLE} — falling back to system python3")
-  set(PYTHON_EXECUTABLE "python3")
-endif()
-message(STATUS "NOTE: PYTHON_EXECUTABLE=${PYTHON_EXECUTABLE}")
+set(LIBTORCH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/libtorch")
+set(LIBTORCH_CMAKE_DIR "${LIBTORCH_ROOT}/share/cmake")
 
-# determine cuda version from calling torch.__version__ in python
-execute_process (
-    COMMAND ${PYTHON_EXECUTABLE} -c "import torch; print(torch.version.cuda, end='')"
-    OUTPUT_VARIABLE CUDA_VERSION
-)
-message(STATUS "NOTE: CUDA_VERSION=${CUDA_VERSION}")
-
-
-set(CMAKE_INCLUDE_PATH  "/usr/local/cuda-${CUDA_VERSION}/include")
-set(CMAKE_LIBRARY_PATH "/usr/local/cuda-${CUDA_VERSION}/lib64")
-set(CUDAToolkit_ROOT "/usr/local/cuda-${CUDA_VERSION}")
-set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-${CUDA_VERSION}")
+set(DEFAULT_CUDA_ROOT "")
+foreach(CUDA_ROOT_CANDIDATE IN ITEMS /usr/local/cuda /usr/local/cuda-13 /usr/local/cuda-13.0)
+  if(EXISTS "${CUDA_ROOT_CANDIDATE}")
+    set(DEFAULT_CUDA_ROOT "${CUDA_ROOT_CANDIDATE}")
+    break()
+  endif()
+endforeach()
+message(STATUS "NOTE: DEFAULT_CUDA_ROOT=${DEFAULT_CUDA_ROOT}")
 
 # get dependencies
-list(APPEND CMAKE_PREFIX_PATH "libtorch/share/cmake")
+if(EXISTS "${LIBTORCH_CMAKE_DIR}")
+  list(PREPEND CMAKE_PREFIX_PATH "${LIBTORCH_CMAKE_DIR}")
+endif()
 
 
 
@@ -50,13 +44,51 @@ option(USE_CUDA "Use CUDA" ON)
 option(USE_CUDNN "Use CUDNN" ON)
 # option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
 
+if(USE_CUDA AND DEFAULT_CUDA_ROOT)
+  set(CMAKE_INCLUDE_PATH "${DEFAULT_CUDA_ROOT}/include")
+  set(CMAKE_LIBRARY_PATH "${DEFAULT_CUDA_ROOT}/lib64")
+  set(CUDAToolkit_ROOT "${DEFAULT_CUDA_ROOT}")
+  set(CUDA_TOOLKIT_ROOT_DIR "${DEFAULT_CUDA_ROOT}")
+endif()
+
+if(USE_CUDA AND (NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL ""))
+  set(CMAKE_CUDA_ARCHITECTURES "all-major")
+endif()
+
+if(USE_CUDA AND DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(TORCH_CUDA_ARCH_LIST_FROM_CMAKE "")
+  set(TORCH_CUDA_ARCH_TRANSLATION_OK ON)
+  foreach(CUDA_ARCH IN LISTS CMAKE_CUDA_ARCHITECTURES)
+    string(REGEX REPLACE "-(real|virtual)$" "" CUDA_ARCH_TOKEN "${CUDA_ARCH}")
+    if(CUDA_ARCH_TOKEN MATCHES "^([0-9]+)([0-9])([a-z]?)$")
+      list(APPEND TORCH_CUDA_ARCH_LIST_FROM_CMAKE "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}${CMAKE_MATCH_3}")
+    elseif(CUDA_ARCH_TOKEN MATCHES "^(all|all-major|native)$")
+      set(TORCH_CUDA_ARCH_TRANSLATION_OK OFF)
+      message(STATUS "NOTE: keeping TORCH_CUDA_ARCH_LIST unset for special CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH_TOKEN}")
+      break()
+    else()
+      set(TORCH_CUDA_ARCH_TRANSLATION_OK OFF)
+      message(STATUS "NOTE: ignoring unsupported CMAKE_CUDA_ARCHITECTURES entry: ${CUDA_ARCH}")
+      break()
+    endif()
+  endforeach()
+
+  if(TORCH_CUDA_ARCH_TRANSLATION_OK AND TORCH_CUDA_ARCH_LIST_FROM_CMAKE)
+    list(JOIN TORCH_CUDA_ARCH_LIST_FROM_CMAKE ";" TORCH_CUDA_ARCH_LIST)
+    message(STATUS "NOTE: TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}")
+  endif()
+endif()
+
+if(USE_CUDA AND NOT DEFINED TORCH_CUDA_ARCH_LIST)
+  set(TORCH_CUDA_ARCH_LIST "")
+endif()
+
 # Dependency discovery
 find_package(Torch REQUIRED)
 find_package(Python REQUIRED COMPONENTS Development)
 
-if(USE_CUDA)
-  enable_language(CUDA)
-  find_package(CUDAToolkit)
+if(USE_CUDA AND DEFAULT_CUDA_ROOT)
+  find_package(CUDAToolkit REQUIRED)
 endif()
 
 
