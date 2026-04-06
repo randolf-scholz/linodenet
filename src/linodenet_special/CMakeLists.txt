@@ -1,101 +1,16 @@
 cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
-project(linodenet_special VERSION 0.2.0 LANGUAGES CXX)
+project(linodenet_special VERSION 0.4.2 LANGUAGES CXX)
 
+# Section: configure user-facing build options.
+option(LINODENET_SPECIAL_USE_CUDA "Enable CUDA-dependent build configuration" ON)
+option(LINODENET_SPECIAL_ENABLE_CLANG_TIDY "Run clang-tidy during builds" ON)
+option(LINODENET_SPECIAL_USE_CUDNN "Enable cuDNN support" ON)
+option(LINODENET_SPECIAL_USE_CUSPARSELT "Enable cuSPARSELt support" OFF)
+option(LINODENET_SPECIAL_USE_CUDSS "Enable cuDSS support" OFF)
+option(LINODENET_SPECIAL_USE_CUFILE "Enable cuFile support" OFF)
 
-# OPTIONS
-# Global settings
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_CLANG_TIDY clang-tidy)
-
-
-message(STATUS "Configuring linodenet_special...")
-
-# determine project root
-execute_process (
-    COMMAND bash -c "git rev-parse --show-toplevel | xargs echo -n"
-    OUTPUT_VARIABLE PROJECT_ROOT
-)
-message(STATUS "NOTE: PROJECT_ROOT=${PROJECT_ROOT}")
-
-set(LIBTORCH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/libtorch")
-set(LIBTORCH_CMAKE_DIR "${LIBTORCH_ROOT}/share/cmake")
-
-set(DEFAULT_CUDA_ROOT "")
-foreach(CUDA_ROOT_CANDIDATE IN ITEMS /usr/local/cuda /usr/local/cuda-13 /usr/local/cuda-13.0)
-  if(EXISTS "${CUDA_ROOT_CANDIDATE}")
-    set(DEFAULT_CUDA_ROOT "${CUDA_ROOT_CANDIDATE}")
-    break()
-  endif()
-endforeach()
-message(STATUS "NOTE: DEFAULT_CUDA_ROOT=${DEFAULT_CUDA_ROOT}")
-
-# get dependencies
-if(EXISTS "${LIBTORCH_CMAKE_DIR}")
-  list(PREPEND CMAKE_PREFIX_PATH "${LIBTORCH_CMAKE_DIR}")
-endif()
-
-
-
-# set compiler flags
-set(CAFFE2_USE_CUDNN true)
-option(USE_CUDA "Use CUDA" ON)
-option(USE_CUDNN "Use CUDNN" ON)
-# option(CAFFE2_USE_CUDNN "Use CUDNN" ON)  # otherwise cudnn is not found
-
-if(USE_CUDA AND DEFAULT_CUDA_ROOT)
-  set(CMAKE_INCLUDE_PATH "${DEFAULT_CUDA_ROOT}/include")
-  set(CMAKE_LIBRARY_PATH "${DEFAULT_CUDA_ROOT}/lib64")
-  set(CUDAToolkit_ROOT "${DEFAULT_CUDA_ROOT}")
-  set(CUDA_TOOLKIT_ROOT_DIR "${DEFAULT_CUDA_ROOT}")
-endif()
-
-if(USE_CUDA AND (NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL ""))
-  set(CMAKE_CUDA_ARCHITECTURES "all-major")
-endif()
-
-if(USE_CUDA AND DEFINED CMAKE_CUDA_ARCHITECTURES)
-  set(TORCH_CUDA_ARCH_LIST_FROM_CMAKE "")
-  set(TORCH_CUDA_ARCH_TRANSLATION_OK ON)
-  foreach(CUDA_ARCH IN LISTS CMAKE_CUDA_ARCHITECTURES)
-    string(REGEX REPLACE "-(real|virtual)$" "" CUDA_ARCH_TOKEN "${CUDA_ARCH}")
-    if(CUDA_ARCH_TOKEN MATCHES "^([0-9]+)([0-9])([a-z]?)$")
-      list(APPEND TORCH_CUDA_ARCH_LIST_FROM_CMAKE "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}${CMAKE_MATCH_3}")
-    elseif(CUDA_ARCH_TOKEN MATCHES "^(all|all-major|native)$")
-      set(TORCH_CUDA_ARCH_TRANSLATION_OK OFF)
-      message(STATUS "NOTE: keeping TORCH_CUDA_ARCH_LIST unset for special CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH_TOKEN}")
-      break()
-    else()
-      set(TORCH_CUDA_ARCH_TRANSLATION_OK OFF)
-      message(STATUS "NOTE: ignoring unsupported CMAKE_CUDA_ARCHITECTURES entry: ${CUDA_ARCH}")
-      break()
-    endif()
-  endforeach()
-
-  if(TORCH_CUDA_ARCH_TRANSLATION_OK AND TORCH_CUDA_ARCH_LIST_FROM_CMAKE)
-    list(JOIN TORCH_CUDA_ARCH_LIST_FROM_CMAKE ";" TORCH_CUDA_ARCH_LIST)
-    message(STATUS "NOTE: TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}")
-  endif()
-endif()
-
-if(USE_CUDA AND NOT DEFINED TORCH_CUDA_ARCH_LIST)
-  set(TORCH_CUDA_ARCH_LIST "")
-endif()
-
-# Dependency discovery
-find_package(Torch REQUIRED)
-find_package(Python REQUIRED COMPONENTS Development)
-
-if(USE_CUDA AND DEFAULT_CUDA_ROOT)
-  find_package(CUDAToolkit REQUIRED)
-endif()
-
-
-# Targets
-add_library(
-        linodenet_special
-        SHARED
+# Section: declare the source files for the shared extension target.
+set(linodenet_special_sources
         csrc/liblinodenet_special/singular_triplet.cpp
         csrc/liblinodenet_special/spectral_norm.cpp
         csrc/liblinodenet_special/ndtri_exp.cpp
@@ -103,7 +18,40 @@ add_library(
         csrc/liblinodenet_special/gaussian_transport.cpp
 )
 
-# Target configuration
+# Section: discover third-party dependencies, preferring the vendored LibTorch package.
+list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libtorch/share/cmake")
+
+if (LINODENET_SPECIAL_USE_CUDA)
+    if (NOT DEFINED TORCH_CUDA_ARCH_LIST)
+        set(TORCH_CUDA_ARCH_LIST "Common")
+    endif ()
+
+    set(CAFFE2_USE_CUDNN "${LINODENET_SPECIAL_USE_CUDNN}" CACHE BOOL "Enable cuDNN support" FORCE)
+    set(CAFFE2_USE_CUSPARSELT "${LINODENET_SPECIAL_USE_CUSPARSELT}" CACHE BOOL "Enable cuSPARSELt support" FORCE)
+    set(USE_CUDSS "${LINODENET_SPECIAL_USE_CUDSS}" CACHE BOOL "Enable cuDSS support" FORCE)
+    set(CAFFE2_USE_CUFILE "${LINODENET_SPECIAL_USE_CUFILE}" CACHE BOOL "Enable cuFile support" FORCE)
+    find_package(CUDAToolkit REQUIRED)
+endif ()
+
+find_package(Torch REQUIRED)
+
+# Section: define the shared library target built from the custom operator sources.
+add_library(linodenet_special SHARED ${linodenet_special_sources})
+
+# Section: apply target-local language, tooling, and linkage settings.
 target_compile_features(linodenet_special PRIVATE cxx_std_17)
-# Link against LibTorch
-target_link_libraries(linodenet_special "${TORCH_LIBRARIES}")
+set_target_properties(
+        linodenet_special
+        PROPERTIES
+        CXX_EXTENSIONS OFF
+)
+
+if (LINODENET_SPECIAL_ENABLE_CLANG_TIDY)
+    set_target_properties(
+            linodenet_special
+            PROPERTIES
+            CXX_CLANG_TIDY "clang-tidy"
+    )
+endif ()
+
+target_link_libraries(linodenet_special PRIVATE "${TORCH_LIBRARIES}")
