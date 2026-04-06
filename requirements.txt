@@ -3,7 +3,7 @@
 -e .
 cuda-bindings==13.2.0 ; sys_platform == 'linux'
     # via torch
-cuda-pathfinder==1.5.0 ; sys_platform == 'linux'
+cuda-pathfinder==1.5.1 ; sys_platform == 'linux'
     # via cuda-bindings
 cuda-toolkit==13.0.2 ; sys_platform == 'linux'
     # via torch

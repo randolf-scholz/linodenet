@@ -89,15 +89,16 @@ hooks = [{ id = "nbstripout-fast", exclude = "^docs/|^experiments/" }]
 repo = "https://github.com/randolf-scholz/assorted-hooks.git"
 rev = "v0.7.22"
 hooks = [
-  { id = "check-separator-length-88" },
-  { id = "pyarrow-timestamp-seconds" },
-  { id = "numpy-rename-axes-axis" },
-  { id = "python-consider-using-raw-string" },
-  { id = "python-system-exit" },
-  { id = "python-match-case-builtins" },
-  { id = "python-double-comment" },
   { id = "check-direct-imports" },
   { id = "check-dunder-all", files = "^src/" },
+  { id = "check-separator-length-88" },
+  { id = "numpy-rename-axes-axis" },
+  { id = "pyarrow-timestamp-seconds" },
+  { id = "python-consider-using-raw-string" },
+  { id = "python-double-comment" },
+  { id = "python-match-case-builtins" },
+  { id = "python-system-exit" },
+  { id = "use-relative-imports", files = "^src/|^tests/" },
   {
     id = "check-signatures",
     files = "^src/",
@@ -110,18 +111,13 @@ hooks = [
       "--"
     ]
   },
-  { id = "use-relative-imports", files = "^src/|^tests/" },
-  {
-    id = "check-clean-interface",
-    files = "^src/",
-    exclude = "^tests/|/tests/"
-  },
-  { id = "update-requirements" },
-  { id = "check-requirements-valid" },
+  { id = "check-clean-interface", files = "^src/" },
+  { id = "check-archived-hooks" },
   { id = "check-requirements-maintained" },
   { id = "check-requirements-used" },
-  { id = "check-archived-hooks" },
-  { id = "check-resolved-github-issues", files = "^src/|^tests/" }
+  { id = "check-requirements-valid" },
+  { id = "check-resolved-github-issues", files = "^src/|^tests/" },
+  { id = "update-requirements" },
 ]
 
 [[repos]]
