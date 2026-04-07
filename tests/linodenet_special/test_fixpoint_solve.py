@@ -14,6 +14,10 @@ from linodenet_special.fallbacks.fixpoint_iteration import (
 )
 from tests.testing import DEVICES, TestSuite, pytest_xfail
 
+# TODO: neither of these seem to do good things here...
+# torch._dynamo.config.trace_autograd_ops = True
+# torch._dynamo.config.compiled_autograd = True
+
 
 def compile_fresh(fn, /):
     r"""Compile `fn` after clearing Dynamo state from earlier test cases."""
