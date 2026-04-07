@@ -277,7 +277,8 @@ def _mixture_to_gaussian_derivatives2(
     """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
-    _, z, log_w = _mixture_value_and_stats(x, weights, mus, sigmas)
+    z = (x.unsqueeze(-1) - mus) / sigmas
+    log_w = torch.log(weights)
     log_sigmas = torch.log(sigmas)
     y2 = y.square()
     # exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
