@@ -1,5 +1,6 @@
 import math
 from collections.abc import Callable
+from enum import StrEnum
 from typing import Concatenate, NamedTuple
 
 import pytest
@@ -47,6 +48,18 @@ class LinearLayer(nn.Module):
         return x @ self.A.mT + b
 
 
+class LinearModule(nn.Module):
+    r"""Linear contraction $f(x) = xAᵀ + b$ with trainable weight and bias."""
+
+    def __init__(self, weight: Tensor, bias: Tensor, /) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(weight)
+        self.bias = nn.Parameter(bias)
+
+    def forward(self, x: Tensor, /) -> Tensor:
+        return F.linear(x, self.weight, self.bias)
+
+
 class LinearFixpointModel(nn.Module):
     r"""Model using `fixpoint_solve` with internal weight and external bias."""
 
@@ -86,11 +99,36 @@ class TestCase(NamedTuple):
     args: tuple[Tensor, ...]
 
 
-class TestFixPoint(TestSuite):
+class Mode(StrEnum):
+    EAGER = "eager"
+    COMPILE_FORWARD = "compile-forward"
+    COMPILE_BACKWARD = "compile-backward"
+
+
+class TestFixpoint(TestSuite):
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
 
-    def make_linear_contraction(
+    def select_check(self, mode: Mode, /):
+        match mode:
+            case Mode.EAGER:
+                return self.check_eager
+            case Mode.COMPILE_FORWARD:
+                return self.check_compiled_forward
+            case Mode.COMPILE_BACKWARD:
+                return self.check_compiled_backward
+
+    def assert_test_case_grads(self, case: TestCase, /) -> None:
+        if case.args:
+            assert case.args[0].grad is not None
+            assert case.args[1].grad is not None
+            return
+
+        assert isinstance(case.fn, nn.Module)
+        for parameter in case.fn.parameters():
+            assert parameter.grad is not None
+
+    def make_linear_functional(
         self,
         batch_size: int,
         input_size: int,
@@ -106,44 +144,79 @@ class TestFixPoint(TestSuite):
         bias = nn.Parameter(torch.randn(input_size, device=device, dtype=dtype))
         return TestCase(F.linear, y, (weight, bias))
 
-    def check_eager(self, solver, /) -> None:
-        fn, y, weight, bias = self.make_linear_contraction(5, 3)
-        y_star = solver(fn, y, weight, bias)
+    def make_linear_module(
+        self,
+        batch_size: int,
+        input_size: int,
+        /,
+        *,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> TestCase:
+        case = self.make_linear_functional(
+            batch_size,
+            input_size,
+            device=device,
+            dtype=dtype,
+        )
+        weight, bias = case.args
+        module = LinearModule(weight.detach().clone(), bias.detach().clone())
+        return TestCase(module, case.x, ())
+
+    def check_eager(self, solver, case: TestCase, /) -> None:
+        y_star = solver(case.fn, case.x, *case.args)
         loss = y_star.square().sum()
         loss.backward()
-        assert weight.grad is not None
-        assert bias.grad is not None
+        self.assert_test_case_grads(case)
 
-    def check_compiled_forward(self, solver, /) -> None:
+    def check_compiled_forward(self, solver, case: TestCase, /) -> None:
         torch._dynamo.reset()  # noqa: SLF001
-        fn, y, weight, bias = self.make_linear_contraction(5, 3)
 
         @torch.compile
         def forward(y0: Tensor) -> Tensor:
-            y_star = solver(fn, y0, weight, bias)
+            y_star = solver(case.fn, y0, *case.args)
             return y_star.square().sum()
 
-        loss = forward(y)
+        loss = forward(case.x)
         loss.backward()
-        assert weight.grad is not None
-        assert bias.grad is not None
+        self.assert_test_case_grads(case)
 
-    def check_compiled_backward(self, solver, /) -> None:
+    def check_compiled_backward(self, solver, case: TestCase, /) -> None:
         torch._dynamo.reset()  # noqa: SLF001
-        fn, y, weight, bias = self.make_linear_contraction(5, 3)
 
         @torch.compile
         def backward(y0: Tensor) -> None:
-            y_star = solver(fn, y0, weight, bias)
+            y_star = solver(case.fn, y0, *case.args)
             loss = y_star.square().sum()
             loss.backward()
 
-        backward(y)
-        assert weight.grad is not None
-        assert bias.grad is not None
+        backward(case.x)
+        self.assert_test_case_grads(case)
 
 
-class TestFixpointSolveFunctional(TestFixPoint):
+class TestFixpointSolveFunctional(TestFixpoint):
+    @pytest.mark.parametrize("mode", list(Mode), ids=str)
+    @pytest.mark.parametrize("module", [False, True], ids=["functional", "module"])
+    def test_linear(self, mode: Mode, module: bool) -> None:
+        case = (
+            self.make_linear_module(5, 3)
+            if module
+            else self.make_linear_functional(5, 3)
+        )
+
+        def solver(fn, x, /, *args):
+            return fixpoint_solve_functional(
+                fn,
+                x,
+                args=args,
+                maxiter=128,
+                atol=1e-6,
+                rtol=1e-6,
+            )
+
+        check = self.select_check(mode)
+        check(solver, case)
+
     def test_cosine_forward_and_backward(self) -> None:
         r"""Check value and gradient for the fixed point near $x = \cos(x)$."""
 
@@ -269,7 +342,7 @@ class TestFixpointSolveFunctional(TestFixPoint):
         assert torch.isfinite(test_bias.grad).all()
 
 
-class TestFixPointIteration(TestFixPoint):
+class TestFixpointSolve(TestFixpoint):
     def test_fixpoint_solve_module_parameter_gradient(self) -> None:
         r"""Check that module parameters used via `fn` receive gradients."""
         module = ShiftedHalfMap(torch.tensor([0.1, -0.2], dtype=torch.float64))
