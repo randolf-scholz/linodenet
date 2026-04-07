@@ -12,7 +12,7 @@ from linodenet_special.fallbacks.fixpoint_iteration import (
     fixpoint_solve,
     fixpoint_solve_functional,
 )
-from tests.testing import DEVICES, DTYPES, TestSuite, pytest_xfail
+from tests.testing import DEVICES, TestSuite, pytest_xfail
 
 
 def compile_fresh(fn, /):
@@ -32,22 +32,6 @@ class ShiftedHalfMap(nn.Module):
         return 0.5 * x + self.bias
 
 
-def linear_fixed_point(x: Tensor, A: Tensor, b: Tensor, /) -> Tensor:
-    r"""Linear contraction $f(x, A, b) = xAᵀ + b$."""
-    return x @ A.mT + b
-
-
-class LinearLayer(nn.Module):
-    r"""Linear contraction $f(x, b) = xAᵀ + b$ with trainable matrix $A$."""
-
-    def __init__(self, weight: Tensor, /) -> None:
-        super().__init__()
-        self.A = nn.Parameter(weight)
-
-    def forward(self, x: Tensor, b: Tensor, /) -> Tensor:
-        return x @ self.A.mT + b
-
-
 class LinearModule(nn.Module):
     r"""Linear contraction $f(x) = xAᵀ + b$ with trainable weight and bias."""
 
@@ -58,39 +42,6 @@ class LinearModule(nn.Module):
 
     def forward(self, x: Tensor, /) -> Tensor:
         return F.linear(x, self.weight, self.bias)
-
-
-class LinearFixpointModel(nn.Module):
-    r"""Model using `fixpoint_solve` with internal weight and external bias."""
-
-    def __init__(
-        self,
-        weight: Tensor,
-        bias: Tensor,
-        /,
-        *,
-        maxiter: int,
-        atol: float,
-        rtol: float,
-    ) -> None:
-        super().__init__()
-        self.input_size = weight.shape[-1]
-        self.layer = LinearLayer(weight)
-        self.bias = nn.Parameter(bias)
-        self.maxiter = maxiter
-        self.atol = atol
-        self.rtol = rtol
-
-    def forward(self, y: Tensor, /) -> Tensor:
-        x0 = y.clone()
-        return fixpoint_solve(
-            self.layer,
-            x0,
-            args=(self.bias,),
-            maxiter=10,
-            atol=1e-6,
-            rtol=1e-6,
-        )
 
 
 class TestCase(NamedTuple):
@@ -338,40 +289,44 @@ class TestFixpointSolveFunctional(TestFixpoint):
 
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
-    def test_fixpoint_solve_linear_contraction(self, device: str, eager) -> None:
-        r"""Check a float32 linear contraction in eager and compiled modes."""
-        torch.manual_seed(0)
-        dim = 8
-        weight = torch.randn(dim, dim, device=device, dtype=torch.float32)
-        weight = 0.95 * weight / torch.linalg.matrix_norm(weight, ord=2)
-        bias = torch.randn(dim, device=device, dtype=torch.float32)
-        x0 = torch.zeros(dim, device=device, dtype=torch.float32)
+    def test_linear_closed_form(self, device: str, eager: bool) -> None:
+        r"""Check `fixpoint_solve_functional` against the exact linear fixed point."""
+        torch.manual_seed(self.SEED)
+        case = self.make_linear_functional(5, 3, device=device, dtype=torch.float64)
+        x = case.x.detach()
+        weight, bias = (arg.detach().requires_grad_() for arg in case.args)
 
-        def fn(x: Tensor, A: Tensor, b: Tensor) -> Tensor:
-            return F.linear(x, A) + b
-
-        def solve(A: Tensor, b: Tensor) -> Tensor:
+        def solve(y: Tensor, A: Tensor, b: Tensor) -> Tensor:
             return fixpoint_solve_functional(
-                fn, x0, args=(A, b), maxiter=256, atol=1e-5, rtol=1e-5
+                case.fn,
+                y,
+                args=(A, b),
+                maxiter=128,
+                atol=1e-10,
+                rtol=1e-10,
             )
 
         impl = solve if eager else compile_fresh(solve)
-        test_weight = weight.detach().clone().requires_grad_()
-        test_bias = bias.detach().clone().requires_grad_()
-        x = impl(test_weight, test_bias)
-        loss = x.square().mean()
+        x_star = impl(x, weight, bias)
+        loss = x_star.square().sum()
         loss.backward()
 
-        expected_x = torch.linalg.solve(
-            torch.eye(dim, device=device, dtype=torch.float32) - weight,
-            bias,
-        )
+        assert weight.grad is not None
+        assert bias.grad is not None
 
-        assert test_weight.grad is not None
-        assert test_bias.grad is not None
-        self.assert_close(x, expected_x, atol=1e-4, rtol=1e-4)
-        assert torch.isfinite(test_weight.grad).all()
-        assert torch.isfinite(test_bias.grad).all()
+        reference_weight = weight.detach().clone().requires_grad_()
+        reference_bias = bias.detach().clone().requires_grad_()
+        eye = torch.eye(reference_weight.shape[-1], dtype=x.dtype, device=x.device)
+        reference_x = torch.linalg.solve(eye - reference_weight, reference_bias)
+        reference_x = reference_x.expand_as(x_star)
+        reference_loss = reference_x.square().sum()
+        reference_loss.backward()
+
+        assert reference_weight.grad is not None
+        assert reference_bias.grad is not None
+        self.assert_close(x_star, reference_x.detach(), atol=1e-10, rtol=1e-10)
+        self.assert_close(weight.grad, reference_weight.grad, atol=1e-9, rtol=1e-9)
+        self.assert_close(bias.grad, reference_bias.grad, atol=1e-9, rtol=1e-9)
 
 
 class TestFixpointSolve(TestFixpoint):
@@ -433,6 +388,52 @@ class TestFixpointSolve(TestFixpoint):
             fast_mode=True,
         )
 
+    @pytest.mark.parametrize("module", [False, True], ids=["functional", "module"])
+    def test_linear_closed_form(self, module: bool) -> None:
+        r"""Check `fixpoint_solve` against the exact linear fixed point."""
+        torch.manual_seed(self.SEED)
+        case = (
+            self.make_linear_module(5, 3, dtype=torch.float64)
+            if module
+            else self.make_linear_functional(5, 3, dtype=torch.float64)
+        )
+        x = case.x.detach().requires_grad_()
+        x_star = fixpoint_solve(
+            case.fn,
+            x,
+            args=case.args,
+            maxiter=128,
+            atol=1e-10,
+            rtol=1e-10,
+        )
+        loss = x_star.square().sum()
+        loss.backward()
+
+        if module:
+            assert isinstance(case.fn, LinearModule)
+            weight = case.fn.weight
+            bias = case.fn.bias
+        else:
+            weight, bias = case.args
+
+        assert weight.grad is not None
+        assert bias.grad is not None
+        assert x.grad is None
+
+        reference_weight = weight.detach().clone().requires_grad_()
+        reference_bias = bias.detach().clone().requires_grad_()
+        eye = torch.eye(reference_weight.shape[-1], dtype=x.dtype, device=x.device)
+        reference_x = torch.linalg.solve(eye - reference_weight, reference_bias)
+        reference_x = reference_x.expand_as(x_star)
+        reference_loss = reference_x.square().sum()
+        reference_loss.backward()
+
+        assert reference_weight.grad is not None
+        assert reference_bias.grad is not None
+        self.assert_close(x_star, reference_x.detach(), atol=1e-10, rtol=1e-10)
+        self.assert_close(weight.grad, reference_weight.grad, atol=1e-9, rtol=1e-9)
+        self.assert_close(bias.grad, reference_bias.grad, atol=1e-9, rtol=1e-9)
+
     def test_fixpoint_solve_module_parameter_gradient(self) -> None:
         r"""Check that module parameters used via `fn` receive gradients."""
         module = ShiftedHalfMap(torch.tensor([0.1, -0.2], dtype=torch.float64))
@@ -468,78 +469,3 @@ class TestFixpointSolve(TestFixpoint):
             rtol=0.0,
         )
         assert not x_star.requires_grad
-
-
-@pytest.mark.parametrize("dtype", DTYPES, ids=str)
-@pytest.mark.parametrize("device", DEVICES)
-class TestCorrectness(TestSuite):
-    BATCH_SIZE = 5
-    INPUT_SIZE = 2
-    MAXITER = 100
-    SOLVER_TOL = {
-        torch.float32: (1e-6, 1e-6),
-        torch.float64: (1e-8, 1e-8),
-    }
-    GRADCHECK_TOL = {
-        torch.float32: (1e-3, 1e-3, 1e-4),
-        torch.float64: (1e-6, 1e-6, 1e-8),
-    }
-
-    W0 = [[0.2, -0.1], [0.05, 0.15]]
-    b0 = [0.3, -0.2]
-
-    def test_linear_module_and_input_gradients_match_closed_form(
-        self, device: str, dtype: torch.dtype
-    ) -> None:
-        r"""Check gradients for internal $A$ and input $b$ against the exact solve."""
-        atol, rtol = self.SOLVER_TOL[dtype]
-        weight = torch.tensor(self.W0, dtype=dtype, device=device)
-        bias = torch.tensor(self.b0, dtype=dtype, device=device)
-        y = torch.randn(
-            self.BATCH_SIZE,
-            self.INPUT_SIZE,
-            device=device,
-            dtype=dtype,
-            requires_grad=True,
-        )
-
-        model = LinearFixpointModel(
-            weight,
-            bias,
-            maxiter=self.MAXITER,
-            atol=atol,
-            rtol=rtol,
-        )
-
-        x_star = model(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
-        loss = x_star.square().sum()
-        loss.backward()
-
-        assert model.layer.A.grad is not None
-        assert model.bias.grad is not None
-        assert y.grad is None
-
-        # SEC: compute reference gradient, using X⁎ = X⁎Aᵀ + 𝟏bᵀ  ⟺  (𝕀-A)X⁎ = 𝟏bᵀ
-        reference_weight = weight.clone().requires_grad_()
-        reference_bias = bias.clone().requires_grad_()
-        eye = torch.eye(model.input_size, dtype=dtype, device=device)
-        reference_x = torch.linalg.solve(eye - reference_weight, reference_bias)
-        reference_x = reference_x.expand(self.BATCH_SIZE, -1)
-        reference_loss = reference_x.square().sum()
-        reference_loss.backward()
-
-        assert reference_weight.grad is not None
-        assert reference_bias.grad is not None
-        self.assert_close(x_star, reference_x.detach(), atol=atol, rtol=rtol)
-        self.assert_close(
-            model.layer.A.grad,
-            reference_weight.grad,
-            atol=atol,
-            rtol=rtol,
-        )
-        self.assert_close(
-            model.bias.grad,
-            reference_bias.grad,
-            atol=atol,
-            rtol=rtol,
-        )
