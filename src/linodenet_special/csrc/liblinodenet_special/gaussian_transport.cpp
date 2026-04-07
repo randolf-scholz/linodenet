@@ -54,7 +54,7 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_value_and_stats(
     const Tensor z_plus = (x + mu_abs) / sigma;
     const Tensor z_minus = (x - mu_abs) / sigma;
     const Tensor log_p = LOG_HALF + at::logaddexp(log_ndtr(z_plus), log_ndtr(z_minus));
-    const Tensor log_q = LOG_HALF + at::logaddexp(log_ndtr(-z_plus),log_ndtr(-z_minus));
+    const Tensor log_q = LOG_HALF + at::logaddexp(log_ndtr(-z_plus), log_ndtr(-z_minus));
     // Switch between lower-tail and upper-tail evaluations to avoid cancellation near 0 and 1.
     Tensor y = torch::where(
         log_p < LOG_HALF,
@@ -76,7 +76,7 @@ std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
     const Tensor y2 = fx.square();
     const Tensor log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF;
     const Tensor log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF;
-    const Tensor d_fx = exp(logaddexp(log_phi_plus, log_phi_minus)).clamp_( lower_bound, upper_bound);
+    const Tensor d_fx = exp(logaddexp(log_phi_plus, log_phi_minus)).clamp_(lower_bound, upper_bound);
 
     return {fx, d_fx};
 }
@@ -101,7 +101,7 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives(
     const Tensor y2 = y.square();
     // Evaluate the two mode contributions in log space to avoid tail underflow.
     const Tensor log_phi_plus = LOG_HALF + 0.5 * (y2 - z_plus.square()) - log_sigma;
-    const Tensor log_phi_minus = LOG_HALF + 0.5 * (y2 - z_minus.square()) - log_sigma ;
+    const Tensor log_phi_minus = LOG_HALF + 0.5 * (y2 - z_minus.square()) - log_sigma;
     const Tensor hi = maximum(log_phi_plus, log_phi_minus);
     const Tensor lo = minimum(log_phi_plus, log_phi_minus);
 
@@ -139,7 +139,7 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_to_gaussian_d
     const Tensor w_minus = (log_phi_minus - log_norm).exp();
     Tensor d_mu_abs = d_x * (w_plus - w_minus);
     const Tensor d_sigma_exact =
-        -(0.5 * (z_plus + z_minus) * d_x + (mu_abs / sigma) * d_mu_abs);
+            -(0.5 * (z_plus + z_minus) * d_x + (mu_abs / sigma) * d_mu_abs);
 
     const Tensor lower_bound = (-0.5 * (mu_abs / sigma).square()).exp() / sigma;
     const Tensor upper_bound = sigma.reciprocal();
@@ -169,7 +169,7 @@ Tensor gaussian_to_bimodal_guess(const Tensor &x, const Tensor &mu, const Tensor
     return linodenet_special::hard_bend(x, lambda, mu, sigma.reciprocal());
 }
 
-Tensor gaussian_to_bimodal_value(
+std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
@@ -179,21 +179,27 @@ Tensor gaussian_to_bimodal_value(
     Tensor lower = sigma * y - m;
     Tensor upper = sigma * y + m;
     Tensor x = gaussian_to_bimodal_guess(y, mu, sigma);
+    x = x.clamp_(lower, upper);
+    auto [fx, d_fx] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
+    Tensor residual = fx - y;
 
     for (int64_t i = 0; i < maxiter; ++i) {
-        x = x.clamp_(lower, upper);
-        const auto [fx, d_fx] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
-        const Tensor residual = fx - y;
         // Since T is monotone, the sign of the residual tells us which side of the
         // bracket still contains the inverse solution.
         lower = torch::where(residual < 0, x, lower);
         upper = torch::where(residual > 0, x, upper);
         const Tensor x_newton = x - residual / d_fx;
         const Tensor x_bisect = 0.5 * (lower + upper);
-        x = torch::where((x_newton >= lower) & (x_newton <= upper), x_newton, x_bisect);
+        x = torch::where(
+            (x_newton >= lower) & (x_newton <= upper),
+            x_newton,
+            x_bisect
+        ).clamp_(lower, upper);
+        std::tie(fx, d_fx) = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
+        residual = fx - y;
     }
 
-    return x.clamp_(lower, upper);
+    return {x, d_fx.reciprocal()};
 }
 
 std::tuple<Tensor, Tensor, Tensor> mixture_value_and_stats(
@@ -264,7 +270,8 @@ mixture_to_gaussian_derivatives2(
     const Tensor &sigmas,
     const Tensor &y
 ) {
-    const auto [_, z, log_w] = mixture_value_and_stats(x, weights, mus, sigmas);
+    const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
+    const Tensor log_w = weights.log();
     const Tensor log_sigmas = sigmas.log();
     const Tensor y2 = y.square();
     const Tensor log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square());
@@ -286,14 +293,14 @@ mixture_to_gaussian_derivatives2(
     const Tensor e_over_sigma = (log_ratio - log_sigmas).exp();
     const Tensor d2_x = y * d_x.square() + (d_sigmas / sigmas).sum(-1);
     const Tensor d2_weights =
-        y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_weights
-        + e_over_sigma
-        - e_over_sigma.mean(-1, true);
+            y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_weights
+            + e_over_sigma
+            - e_over_sigma.mean(-1, true);
     const Tensor d2_mus =
-        y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_mus - d_sigmas / sigmas;
+            y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_mus - d_sigmas / sigmas;
     const Tensor d2_sigmas =
-        y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_sigmas
-        + (z.square() - 1) * scaled_ratio / sigmas;
+            y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_sigmas
+            + (z.square() - 1) * scaled_ratio / sigmas;
 
     return {d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas};
 }
@@ -311,7 +318,7 @@ std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
     return {fx, d_fx};
 }
 
-Tensor gaussian_to_mixture_value(
+std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
@@ -326,33 +333,40 @@ Tensor gaussian_to_mixture_value(
     Tensor lower = std::get<0>(lines.min(-1));
     Tensor upper = std::get<0>(lines.max(-1));
     Tensor x = torch::linalg_vecdot(weights, lines, -1);
+    x = x.clamp_(lower, upper);
+    auto [fx, d_fx] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
+    Tensor residual = fx - y;
 
     for (int64_t i = 0; i < maxiter; ++i) {
-        x = x.clamp_(lower, upper);
-        const auto [fx, d_fx] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
-        const Tensor residual = fx - y;
         // Since T is monotone, the sign of the residual tells us which side of the
         // bracket still contains the inverse solution.
         lower = torch::where(residual < 0, x, lower);
         upper = torch::where(residual > 0, x, upper);
         const Tensor x_newton = x - residual / d_fx;
         const Tensor x_bisect = 0.5 * (lower + upper);
-        x = torch::where((x_newton >= lower) & (x_newton <= upper), x_newton, x_bisect);
+        x = torch::where(
+            (x_newton >= lower) & (x_newton <= upper),
+            x_newton,
+            x_bisect
+        ).clamp_(lower, upper);
+        std::tie(fx, d_fx) = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
+        residual = fx - y;
     }
 
-    return x.clamp_(lower, upper);
+    return {x, d_fx.reciprocal()};
 }
 
 
 struct BimodalToGaussian : Function<BimodalToGaussian> {
-    static Tensor forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+    [[maybe_unused]] static Tensor forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu,
+                                           const Tensor &sigma) {
         torch::NoGradGuard guard;
         const Tensor y = std::get<0>(bimodal_value_and_stats(x, mu, sigma));
         ctx->save_for_backward({x, mu, sigma, y});
         return y;
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -364,13 +378,13 @@ struct BimodalToGaussian : Function<BimodalToGaussian> {
         const Tensor &y = saved[3];
 
         const auto [d_x, d_mu, d_sigma] =
-            bimodal_to_gaussian_derivatives(x, mu, sigma, y);
+                bimodal_to_gaussian_derivatives(x, mu, sigma, y);
         return {g * d_x, g * d_mu, g * d_sigma};
     }
 };
 
 struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
-    static variable_list forward(
+    [[maybe_unused]] static variable_list forward(
         AutogradContext *ctx,
         const Tensor &x,
         const Tensor &mu,
@@ -382,7 +396,7 @@ struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
         return {y, d_x};
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -395,7 +409,7 @@ struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
         const Tensor &y = saved[3];
 
         const auto [d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma] =
-            bimodal_to_gaussian_derivatives2(x, mu, sigma, y);
+                bimodal_to_gaussian_derivatives2(x, mu, sigma, y);
         return {
             grad_y * d_x + grad_dy * d2_x,
             grad_y * d_mu + grad_dy * d2_mu,
@@ -405,7 +419,7 @@ struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
 };
 
 struct GaussianToBimodal : Function<GaussianToBimodal> {
-    static Tensor forward(
+    [[maybe_unused]] static Tensor forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &mu,
@@ -413,13 +427,12 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         const int64_t maxiter
     ) {
         torch::NoGradGuard guard;
-        const Tensor x = gaussian_to_bimodal_value(y, mu, sigma, maxiter);
-        const Tensor fx = std::get<0>(bimodal_value_and_stats(x, mu, sigma));
-        ctx->save_for_backward({x,mu, sigma, fx});
+        const auto [x, _] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
+        ctx->save_for_backward({x, mu, sigma, y});
         return x;
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -431,7 +444,7 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         const Tensor &g = grad_output[0];
 
         const auto [d_x, d_mu, d_sigma] =
-            bimodal_to_gaussian_derivatives(x, mu, sigma, y);
+                bimodal_to_gaussian_derivatives(x, mu, sigma, y);
 
         Tensor d_y = d_x.reciprocal();
         Tensor grad_mu = -d_mu * d_y;
@@ -446,7 +459,7 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
 };
 
 struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
-    static variable_list forward(
+    [[maybe_unused]] static variable_list forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &mu,
@@ -454,13 +467,12 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
         const int64_t maxiter
     ) {
         torch::NoGradGuard guard;
-        const Tensor x = gaussian_to_bimodal_value(y, mu, sigma, maxiter);
-        const auto [fx, df_x] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
-        ctx->save_for_backward({x, mu, sigma, fx});
-        return {x, df_x.reciprocal()};
+        const auto [x, d_fx] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
+        ctx->save_for_backward({x, mu, sigma, y});
+        return {x, d_fx};
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -473,7 +485,7 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
         const Tensor &fx = saved[3];
 
         const auto [d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma] =
-            bimodal_to_gaussian_derivatives2(x, mu, sigma, fx);
+                bimodal_to_gaussian_derivatives2(x, mu, sigma, fx);
         const Tensor dx_inv = d_x.reciprocal();
 
         Tensor d_y = dx_inv;
@@ -501,7 +513,7 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
 };
 
 struct MixtureToGaussian : Function<MixtureToGaussian> {
-    static Tensor forward(
+    [[maybe_unused]] static Tensor forward(
         AutogradContext *ctx,
         const Tensor &x,
         const Tensor &weights,
@@ -514,7 +526,7 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         return y;
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -527,7 +539,7 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         const Tensor &y = saved[4];
 
         const auto [d_values, d_weights, d_mus, d_sigmas] =
-            mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
+                mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
         return {
             g * d_values,
             g.unsqueeze(-1) * d_weights,
@@ -538,7 +550,7 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
 };
 
 struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
-    static variable_list forward(
+    [[maybe_unused]] static variable_list forward(
         AutogradContext *ctx,
         const Tensor &x,
         const Tensor &weights,
@@ -551,7 +563,7 @@ struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
         return {y, d_x};
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -565,7 +577,7 @@ struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
         const Tensor &y = saved[4];
 
         const auto [d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas] =
-            mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
+                mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
         return {
             grad_y * d_x + grad_dy * d2_x,
             grad_y.unsqueeze(-1) * d_weights + grad_dy.unsqueeze(-1) * d2_weights,
@@ -576,7 +588,7 @@ struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
 };
 
 struct GaussianToMixture : Function<GaussianToMixture> {
-    static Tensor forward(
+    [[maybe_unused]] static Tensor forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &weights,
@@ -585,13 +597,12 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const int64_t maxiter
     ) {
         torch::NoGradGuard guard;
-        const Tensor x = gaussian_to_mixture_value(y, weights, mus, sigmas, maxiter);
-        const Tensor fx = std::get<0>(mixture_value_and_stats(x, weights, mus, sigmas));
-        ctx->save_for_backward({x, weights, mus, sigmas, fx});
+        const auto [x, _] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
+        ctx->save_for_backward({x, weights, mus, sigmas, y});
         return x;
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -604,7 +615,7 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const Tensor &y = saved[4];
 
         const auto [d_x, d_weights, d_mus, d_sigmas] =
-            mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
+                mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
 
         const Tensor grad_y = g * d_x.reciprocal();
         const Tensor outer_grad = -grad_y.unsqueeze(-1);
@@ -620,7 +631,7 @@ struct GaussianToMixture : Function<GaussianToMixture> {
 };
 
 struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
-    static variable_list forward(
+    [[maybe_unused]] static variable_list forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &weights,
@@ -629,13 +640,12 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
         const int64_t maxiter
     ) {
         torch::NoGradGuard guard;
-        const Tensor x = gaussian_to_mixture_value(y, weights, mus, sigmas, maxiter);
-        const auto [y_star, dy_star] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
-        ctx->save_for_backward({x, weights, mus, sigmas, y_star});
-        return {x, dy_star.reciprocal()};
+        const auto [x, d_fx] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
+        ctx->save_for_backward({x, weights, mus, sigmas, y});
+        return {x, d_fx};
     }
 
-    static variable_list backward(
+    [[maybe_unused]] static variable_list backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
     ) {
@@ -648,8 +658,10 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
         const Tensor &sigmas = saved[3];
         const Tensor &y = saved[4];
 
-        const auto [d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas] =
-            mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
+        const auto [
+            d_x, d_weights, d_mus, d_sigmas,
+            d2_x, d2_weights, d2_mus, d2_sigmas
+        ] = mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
         const Tensor dx_inv = d_x.reciprocal();
         // Every inverse-map parameter derivative is -(∂T/∂θ)/(∂T/∂x), and the
         // Jacobian-output derivatives reuse the same dx_inv³ factor.
@@ -662,14 +674,14 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
 
         const Tensor j_y = -d2_x * dx_inv3;
         const Tensor j_weights =
-            (d2_x.unsqueeze(-1) * d_weights - d2_weights * d_x.unsqueeze(-1))
-            * dx_inv3.unsqueeze(-1);
+                (d2_x.unsqueeze(-1) * d_weights - d2_weights * d_x.unsqueeze(-1))
+                * dx_inv3.unsqueeze(-1);
         const Tensor j_mus =
-            (d2_x.unsqueeze(-1) * d_mus - d2_mus * d_x.unsqueeze(-1))
-            * dx_inv3.unsqueeze(-1);
+                (d2_x.unsqueeze(-1) * d_mus - d2_mus * d_x.unsqueeze(-1))
+                * dx_inv3.unsqueeze(-1);
         const Tensor j_sigmas =
-            (d2_x.unsqueeze(-1) * d_sigmas - d2_sigmas * d_x.unsqueeze(-1))
-            * dx_inv3.unsqueeze(-1);
+                (d2_x.unsqueeze(-1) * d_sigmas - d2_sigmas * d_x.unsqueeze(-1))
+                * dx_inv3.unsqueeze(-1);
 
         return {
             grad_x * d_y + grad_dx * j_y,
@@ -680,7 +692,6 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
         };
     }
 };
-
 } // namespace
 
 namespace linodenet_special {
@@ -844,8 +855,10 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def("gaussian_to_mixture(Tensor _, Tensor weights, Tensor mus, Tensor sigmas, int maxiter) -> Tensor");
     m.def("bimodal_to_gaussian_value_and_grad(Tensor _, Tensor mu, Tensor sigma) -> (Tensor, Tensor)");
     m.def("gaussian_to_bimodal_value_and_grad(Tensor _, Tensor mu, Tensor sigma, int maxiter) -> (Tensor, Tensor)");
-    m.def("mixture_to_gaussian_value_and_grad(Tensor _, Tensor weights, Tensor mus, Tensor sigmas) -> (Tensor, Tensor)");
-    m.def("gaussian_to_mixture_value_and_grad(Tensor _, Tensor weights, Tensor mus, Tensor sigmas, int maxiter) -> (Tensor, Tensor)");
+    m.def(
+        "mixture_to_gaussian_value_and_grad(Tensor _, Tensor weights, Tensor mus, Tensor sigmas) -> (Tensor, Tensor)");
+    m.def(
+        "gaussian_to_mixture_value_and_grad(Tensor _, Tensor weights, Tensor mus, Tensor sigmas, int maxiter) -> (Tensor, Tensor)");
 }
 
 TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
@@ -869,5 +882,4 @@ TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
     m.impl("mixture_to_gaussian_value_and_grad", &mixture_to_gaussian_value_and_grad_meta);
     m.impl("gaussian_to_mixture_value_and_grad", &gaussian_to_mixture_value_and_grad_meta);
 }
-
 } // namespace linodenet_special
