@@ -259,7 +259,10 @@ def fixpoint_solve(
     vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
     # _, vjp_fn, *_ = torch.func.vjp(lambda z: fn(z, *args), z0)
 
-    def backward_hook(g: Tensor, /) -> Tensor:
+    def backward_hook(g: Tensor | None, /) -> Tensor | None:
+        if g is None:
+            return None
+
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
         # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
         with torch.no_grad():
