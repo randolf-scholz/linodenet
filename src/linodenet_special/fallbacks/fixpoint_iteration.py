@@ -122,55 +122,64 @@ class _FixpointSolve_Impl(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx: Any,
         fn: Callable[..., Tensor],
         x0: Tensor,
-        maxiter: int,
-        atol: float,
-        rtol: float,
-        /,
+        maxiter: Tensor,
+        atol: Tensor,
+        rtol: Tensor,
         *params: Tensor,
     ) -> Tensor:
-        ctx.fn = fn
-        ctx.maxiter = torch.as_tensor(maxiter, dtype=torch.int32, device=x0.device)
-        ctx.atol = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
-        ctx.rtol = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
-
         # SEC: solve x = f(x, θ) with fixed point iteration
         sol = _fixpoint_solve_impl(
             lambda z: fn(z, *params),
             x0,
-            maxiter=ctx.maxiter,
-            atol=ctx.atol,
-            rtol=ctx.rtol,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
         )
-
-        ctx.save_for_backward(sol.x, *params)
         return sol.x
+
+    @staticmethod
+    def setup_context(ctx, inputs, output):
+        fn, _, maxiter, atol, rtol, *params = inputs
+        x_star = output
+
+        # FIXME: https://github.com/pytorch/pytorch/issues/179510
+        #  cant use torch.func.vjp due to torch.compile bug.
+        with torch.enable_grad():
+            z = fn(x_star, *params)
+            z0 = z.clone().detach().requires_grad_(True)
+            f0 = fn(z0, *params)
+        # x_star, vjp_fn, *_ = torch.func.vjp(lambda z: fn(z, *params), x_star)
+        ctx.save_for_backward(x_star, maxiter, atol, rtol, *params)
+        ctx.fn = fn
+        ctx.vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)
 
     @staticmethod
     def backward(
         ctx: Any, *grad_outputs: Tensor | None
     ) -> tuple[None, Tensor, None, None, None, *tuple[Tensor | None, ...]]:
         (grad_output,) = grad_outputs
-        x_star, *params = ctx.saved_tensors
+        x_star, maxiter, atol, rtol, *params = ctx.saved_tensors
 
         if grad_output is None:
             grad_output = torch.zeros_like(x_star)
 
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
-        _, vjp_fn, *_ = torch.func.vjp(lambda x: ctx.fn(x, *params), x_star)
         sol = _fallback_solve_impl(
-            lambda u: grad_output + vjp_fn(u)[0],
+            lambda u: grad_output + ctx.vjp_fn(u)[0],
             grad_output,
-            maxiter=ctx.maxiter,
-            atol=ctx.atol,
-            rtol=ctx.rtol,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
         )
 
         # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
         _, params_vjp_fn, *_ = torch.func.vjp(lambda *θ: ctx.fn(x_star, *θ), *params)
         grad_params = params_vjp_fn(sol.x)
+        # _, grad_params = torch.autograd.functional.vjp(
+        #     lambda *θ: ctx.fn(x_star, *θ), tuple(params), sol.x
+        # )
 
         return None, torch.zeros_like(x_star), None, None, None, *grad_params
 
@@ -197,7 +206,10 @@ def fixpoint_solve_functional(
         atol: Absolute tolerance for convergence.
         rtol: Relative tolerance for convergence.
     """
-    return _FixpointSolve_Impl.apply(fn, x0, maxiter, atol, rtol, *args)
+    maxiter_t = torch.as_tensor(maxiter, dtype=torch.int32, device=x0.device)
+    atol_t = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
+    rtol_t = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
+    return _FixpointSolve_Impl.apply(fn, x0, maxiter_t, atol_t, rtol_t, *args)
 
 
 def fixpoint_solve(
@@ -235,23 +247,21 @@ def fixpoint_solve(
             rtol=t_rtol,
         )
 
-    x_star = sol.x.new_tensor(sol.x, requires_grad=True)
+    x_star = fn(sol.x, *args)
 
-    x_star = fn(x_star, *args)
     if not x_star.requires_grad:
         return x_star
 
-    def backward_hook(g: Tensor | None, /) -> Tensor | None:
+    # FIXME: https://github.com/pytorch/pytorch/issues/179510
+    #  cant use torch.func.vjp due to torch.compile bug.
+    z0 = x_star.clone().detach().requires_grad_()
+    f0 = fn(z0, *args)
+    vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
+    # _, vjp_fn, *_ = torch.func.vjp(lambda z: fn(z, *args), z0)
+
+    def backward_hook(g: Tensor, /) -> Tensor:
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
         # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
-        if g is None:
-            return None
-
-        _, vjp_fn, *_ = torch.func.vjp(
-            lambda z: fn(z, *args),
-            x_star,
-        )
-
         with torch.no_grad():
             # FIXME: vjp_fn doesn't compose with while_loop when compiling.
             #  raises UncapturedHigherOrderOpError
