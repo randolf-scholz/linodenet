@@ -165,19 +165,19 @@ def _gaussian_to_bimodal_guess(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tenso
     return hard_bend(x, λ, mu, 1 / sigma)
 
 
-def _gaussian_to_bimodal_value(
+def _gaussian_to_bimodal_value_and_grad(
     y: Tensor, mu: Tensor, sigma: Tensor, maxiter: int, /
-) -> Tensor:
+) -> tuple[Tensor, Tensor]:
     r"""Solve the inverse bimodal transport by safeguarded Newton iteration."""
     m = mu.abs()
     lower = sigma * y - m
     upper = sigma * y + m
     x = _gaussian_to_bimodal_guess(y, mu, sigma)
+    x = x.clamp(lower, upper)  # unnecessary.
+    fx, d_fx = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
+    r = fx - y
 
-    for _ in range(maxiter):
-        x = x.clamp(lower, upper)
-        fx, d_fx = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
-        r = fx - y
+    for _ in range(maxiter):  # consider adding tol / using torch.while_loop.
         lower = torch.where(r < 0, x, lower)
         upper = torch.where(r > 0, x, upper)
         x_newton = x - r / d_fx
@@ -186,9 +186,11 @@ def _gaussian_to_bimodal_value(
             (x_newton >= lower) & (x_newton <= upper),
             x_newton,
             x_bisect,
-        )
+        ).clamp(lower, upper)
+        fx, d_fx = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
+        r = fx - y
 
-    return x.clamp(lower, upper)
+    return x, d_fx.reciprocal()
 
 
 def _mixture_value_and_stats(
@@ -305,9 +307,9 @@ def _mixture_to_gaussian_derivatives2(
     return d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas
 
 
-def _gaussian_to_mixture_value(
+def _gaussian_to_mixture_value_and_grad(
     y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
-) -> Tensor:
+) -> tuple[Tensor, Tensor]:
     r"""Solve the inverse mixture transport by safeguarded Newton iteration."""
     assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
     # Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
@@ -318,22 +320,24 @@ def _gaussian_to_mixture_value(
     lower = lines.amin(dim=-1)
     upper = lines.amax(dim=-1)
     x = vecdot(weights, lines, dim=-1)
+    x = x.clamp(lower, upper)
+    y_star, d_fx = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
+    r = y_star - y
 
     for _ in range(maxiter):
-        x = x.clamp(lower, upper)
-        y_star, d_f = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
-        r = y_star - y
         lower = torch.where(r < 0, x, lower)
         upper = torch.where(r > 0, x, upper)
-        x_newton = x - r / d_f
+        x_newton = x - r / d_fx
         x_bisect = 0.5 * (lower + upper)
         x = torch.where(
             (x_newton >= lower) & (x_newton <= upper),
             x_newton,
             x_bisect,
-        )
+        ).clamp(lower, upper)
+        y_star, d_fx = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
+        r = y_star - y
 
-    return x.clamp(lower, upper)
+    return x, d_fx.reciprocal()
 
 
 class _BimodalToGaussian(torch.autograd.Function):
@@ -450,7 +454,7 @@ class _GaussianToBimodal(torch.autograd.Function):
         $T(x, μ, σ) ≈ σ⁻¹(x-\sign(x)|μ|)$, so
         $T⁻¹(y, μ, σ) ≈ σy + \sign(y)|μ|$.
         """
-        return _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
+        return _gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter)[0]
 
     @staticmethod
     def setup_context(ctx, inputs, output) -> None:
@@ -504,10 +508,7 @@ class _GaussianToBimodalValueAndGrad(torch.autograd.Function):
     def forward(
         y: Tensor, mu: Tensor, sigma: Tensor, maxiter, /
     ) -> tuple[Tensor, Tensor]:
-        x = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
-        _, df_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
-        # Note: d_x is already clamped
-        return x, df_x.reciprocal()
+        return _gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter)
 
     @staticmethod
     def setup_context(ctx, inputs, output) -> None:
@@ -651,7 +652,7 @@ class _GaussianToMixture(torch.autograd.Function):
         y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
     ) -> Tensor:
         r"""Solve $T(x, ω, μ, σ)=y$ by safeguarded Newton iteration."""
-        return _gaussian_to_mixture_value(y, weights, mus, sigmas, maxiter)
+        return _gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter)[0]
 
     @staticmethod
     def setup_context(ctx, inputs, output) -> None:
@@ -714,9 +715,7 @@ class _GaussianToMixtureValueAndGrad(torch.autograd.Function):
     def forward(
         y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
     ) -> tuple[Tensor, Tensor]:
-        x = _gaussian_to_mixture_value(y, weights, mus, sigmas, maxiter)
-        _, dy_star = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
-        return x, dy_star.reciprocal()
+        return _gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter)
 
     @staticmethod
     def setup_context(ctx, inputs, output) -> None:
