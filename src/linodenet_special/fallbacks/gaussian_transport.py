@@ -17,7 +17,6 @@ from typing import Final
 
 import torch
 from torch import Tensor
-from torch.autograd import Function
 from torch.linalg import vecdot
 from torch.special import log_ndtr
 
@@ -196,6 +195,7 @@ def _mixture_value_and_stats(
     x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Return the transport value and shared mixture intermediates."""
+    assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
     z = (x.unsqueeze(-1) - mus) / sigmas
@@ -309,6 +309,7 @@ def _gaussian_to_mixture_value(
     y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
 ) -> Tensor:
     r"""Solve the inverse mixture transport by safeguarded Newton iteration."""
+    assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
     # Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
     # must lie between the smallest and largest of these affine tail candidates,
     # so we use their pointwise min/max as a safe bracket and their weighted mean
@@ -335,7 +336,7 @@ def _gaussian_to_mixture_value(
     return x.clamp(lower, upper)
 
 
-class _BimodalToGaussian(Function):
+class _BimodalToGaussian(torch.autograd.Function):
     r"""Optimal Transport from mixture $p = ½N(-μ, σ²) + ½N(μ, σ²)$ to $q = N(0, 1)$.
 
     If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the optimal transport map is given by
@@ -391,10 +392,12 @@ class _BimodalToGaussian(Function):
 
     @staticmethod
     @torch.no_grad()
-    def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
-        y, *_ = _bimodal_value_and_stats(x, mu, sigma)
-        ctx.save_for_backward(x, mu, sigma, y)
-        return y
+    def forward(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
+        return _bimodal_value_and_stats(x, mu, sigma)[0]
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs, output)  # x, μ, σ, y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -404,15 +407,17 @@ class _BimodalToGaussian(Function):
         return (g * d_x), (g * d_mu), (g * d_sigma)
 
 
-class _BimodalToGaussianValueAndGrad(Function):
+class _BimodalToGaussianValueAndGrad(torch.autograd.Function):
     r"""Return the bimodal-to-Gaussian transport and its $x$-derivative."""
 
     @staticmethod
     @torch.no_grad()
-    def forward(ctx, x: Tensor, mu: Tensor, sigma: Tensor, /) -> tuple[Tensor, Tensor]:
-        y, d_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
-        ctx.save_for_backward(x, mu, sigma, y)
-        return y, d_x
+    def forward(x: Tensor, mu: Tensor, sigma: Tensor, /) -> tuple[Tensor, Tensor]:
+        return _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs, output[0])  # x, μ, σ, y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -428,12 +433,12 @@ class _BimodalToGaussianValueAndGrad(Function):
         )
 
 
-class _GaussianToBimodal(Function):
+class _GaussianToBimodal(torch.autograd.Function):
     r"""Optimal Transport from $N(0, 1)$ to symmetric mixture $½N(-μ, σ²) + ½N(μ, σ²)$."""
 
     @staticmethod
     @torch.no_grad()
-    def forward(ctx, y: Tensor, mu: Tensor, sigma: Tensor, maxiter: int, /) -> Tensor:
+    def forward(y: Tensor, mu: Tensor, sigma: Tensor, maxiter: int, /) -> Tensor:
         r"""Solve $y = T(x, μ, σ)$ for $x$ using Newton's method.
 
         Here $T$ is the transport from the symmetric bimodal mixture to $N(0,1)$.
@@ -445,9 +450,11 @@ class _GaussianToBimodal(Function):
         $T(x, μ, σ) ≈ σ⁻¹(x-\sign(x)|μ|)$, so
         $T⁻¹(y, μ, σ) ≈ σy + \sign(y)|μ|$.
         """
-        x = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
-        ctx.save_for_backward(x, mu, sigma)
-        return x
+        return _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs[:-1], output)  # y, μ, σ, x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
@@ -471,9 +478,8 @@ class _GaussianToBimodal(Function):
             ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻².
         """
         (g,) = outer
-        x, mu, sigma = ctx.saved_tensors
-        fx, *_ = _bimodal_value_and_stats(x, mu, sigma)
-        d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(x, mu, sigma, fx)
+        y, mu, sigma, x = ctx.saved_tensors
+        d_x, d_mu, d_sigma = _bimodal_to_gaussian_derivatives(x, mu, sigma, y)
         dx_inv = d_x.reciprocal()
 
         d_y = dx_inv
@@ -490,19 +496,22 @@ class _GaussianToBimodal(Function):
         return (g * d_y), (g * d_mu), (g * d_sigma), None
 
 
-class _GaussianToBimodalValueAndGrad(Function):
+class _GaussianToBimodalValueAndGrad(torch.autograd.Function):
     r"""Return the Gaussian-to-bimodal transport and its $y$-derivative."""
 
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, y: Tensor, mu: Tensor, sigma: Tensor, maxiter, /
+        y: Tensor, mu: Tensor, sigma: Tensor, maxiter, /
     ) -> tuple[Tensor, Tensor]:
         x = _gaussian_to_bimodal_value(y, mu, sigma, maxiter)
-        fx, df_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
+        _, df_x = _bimodal_to_gaussian_value_and_grad(x, mu, sigma)
         # Note: d_x is already clamped
-        ctx.save_for_backward(x, mu, sigma, fx)
         return x, df_x.reciprocal()
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs[:-1], output[0])  # y, μ, σ, x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
@@ -516,9 +525,9 @@ class _GaussianToBimodalValueAndGrad(Function):
             ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻².
         """
         grad_x, grad_dx = outer
-        x, mu, sigma, fx = ctx.saved_tensors
+        y, mu, sigma, x = ctx.saved_tensors
         d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma = _bimodal_to_gaussian_derivatives2(
-            x, mu, sigma, fx
+            x, mu, sigma, y
         )
         dx_inv = d_x.reciprocal()
 
@@ -544,7 +553,7 @@ class _GaussianToBimodalValueAndGrad(Function):
         )
 
 
-class _MixtureToGaussian(Function):
+class _MixtureToGaussian(torch.autograd.Function):
     r"""Optimal transport from $∑ₖωₖN(μₖ,σₖ²)$ to $N(0,1)$.
 
     If $Fₚ$ is the CDF of the mixture and $Φ$ is the standard normal CDF, then
@@ -579,20 +588,18 @@ class _MixtureToGaussian(Function):
 
     @staticmethod
     @torch.no_grad()
-    def forward(
-        ctx, x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
-    ) -> Tensor:
-        assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
-        y, *_ = _mixture_value_and_stats(x, weights, mus, sigmas)
-        ctx.save_for_backward(x, weights, mus, sigmas, y)
-        return y
+    def forward(x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /) -> Tensor:
+        return _mixture_value_and_stats(x, weights, mus, sigmas)[0]
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs, output)  # x, ω, μ, σ, y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         (g,) = outer
-        x, weights, mus, sigmas, y = ctx.saved_tensors
         d_values, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
-            x, weights, mus, sigmas, y
+            *ctx.saved_tensors
         )
 
         return (
@@ -603,24 +610,25 @@ class _MixtureToGaussian(Function):
         )
 
 
-class _MixtureToGaussianValueAndGrad(Function):
+class _MixtureToGaussianValueAndGrad(torch.autograd.Function):
     r"""Return the mixture-to-Gaussian transport and its $x$-derivative."""
 
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
+        x: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, /
     ) -> tuple[Tensor, Tensor]:
-        y, d_x = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
-        ctx.save_for_backward(x, weights, mus, sigmas, y)
-        return y, d_x
+        return _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs, output[0])  # x, ω, μ, σ, y
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         grad_y, grad_dy = outer
-        x, weights, mus, sigmas, y = ctx.saved_tensors
         d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas = (
-            _mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y)
+            _mixture_to_gaussian_derivatives2(*ctx.saved_tensors)
         )
         return (
             grad_y * d_x + grad_dy * d2_x,
@@ -630,7 +638,7 @@ class _MixtureToGaussianValueAndGrad(Function):
         )
 
 
-class _GaussianToMixture(Function):
+class _GaussianToMixture(torch.autograd.Function):
     r"""Optimal Transport from $N(0,1)$ to mixture $∑ₖωₖN(μₖ, σₖ²)$.
 
     This inverse map is not available in closed form, so we compute it with a
@@ -640,14 +648,14 @@ class _GaussianToMixture(Function):
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
+        y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
     ) -> Tensor:
         r"""Solve $T(x, ω, μ, σ)=y$ by safeguarded Newton iteration."""
-        assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
-        x = _gaussian_to_mixture_value(y, weights, mus, sigmas, maxiter)
-        y_star, *_ = _mixture_value_and_stats(x, weights, mus, sigmas)
-        ctx.save_for_backward(x, weights, mus, sigmas, y_star)
-        return x
+        return _gaussian_to_mixture_value(y, weights, mus, sigmas, maxiter)
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs[:-1], output)  # y, ω, μ, σ, x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, None]:
@@ -665,7 +673,7 @@ class _GaussianToMixture(Function):
             \qquad θ∈\{ω, μ, σ\}
         """
         (g,) = outer
-        x, weights, mus, sigmas, y = ctx.saved_tensors
+        y, weights, mus, sigmas, x = ctx.saved_tensors
         d_x, d_weights, d_mus, d_sigmas = _mixture_to_gaussian_derivatives(
             x, weights, mus, sigmas, y
         )
@@ -679,7 +687,7 @@ class _GaussianToMixture(Function):
         )
 
 
-class _GaussianToMixtureValueAndGrad(Function):
+class _GaussianToMixtureValueAndGrad(torch.autograd.Function):
     r"""Return the Gaussian-to-mixture transport and its $y$-derivative.
 
     Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
@@ -704,18 +712,20 @@ class _GaussianToMixtureValueAndGrad(Function):
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx, y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
+        y: Tensor, weights: Tensor, mus: Tensor, sigmas: Tensor, maxiter: int, /
     ) -> tuple[Tensor, Tensor]:
-        assert weights.shape[0] == mus.shape[0] == sigmas.shape[0]
         x = _gaussian_to_mixture_value(y, weights, mus, sigmas, maxiter)
-        y_star, dy_star = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
-        ctx.save_for_backward(x, weights, mus, sigmas, y_star)
+        _, dy_star = _mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas)
         return x, dy_star.reciprocal()
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(*inputs[:-1], output[0])  # y, ω, μ, σ, x
 
     @staticmethod
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, None]:
         grad_x, grad_dx = outer
-        x, weights, mus, sigmas, y = ctx.saved_tensors
+        y, weights, mus, sigmas, x = ctx.saved_tensors
         d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas = (
             _mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y)
         )
