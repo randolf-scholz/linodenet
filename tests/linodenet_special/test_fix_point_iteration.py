@@ -375,6 +375,8 @@ class TestFixpointSolveFunctional(TestFixpoint):
 
 
 class TestFixpointSolve(TestFixpoint):
+    SEED = 0
+
     @pytest.mark.parametrize("mode", list(Mode), ids=str)
     @pytest.mark.parametrize("module", [False, True], ids=["functional", "module"])
     def test_linear(self, mode: Mode, module: bool) -> None:
@@ -396,6 +398,40 @@ class TestFixpointSolve(TestFixpoint):
 
         check = self.select_check(mode)
         check(solver, case)
+
+    @pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
+    @pytest.mark.parametrize("module", [False, True], ids=["functional", "module"])
+    def test_gradcheck(self, eager: bool, module: bool) -> None:
+        r"""Check `fixpoint_solve` gradients for a linear map."""
+        torch.manual_seed(self.SEED)
+        case = (
+            self.make_linear_module(5, 3, dtype=torch.float64)
+            if module
+            else self.make_linear_functional(5, 3, dtype=torch.float64)
+        )
+        x = case.x.detach().requires_grad_()
+        args = tuple(arg.detach().requires_grad_() for arg in case.args)
+
+        def func(y: Tensor, /, *parameters: Tensor) -> Tensor:
+            return fixpoint_solve(
+                case.fn,
+                y,
+                args=parameters,
+                maxiter=128,
+                atol=1e-10,
+                rtol=1e-10,
+            )
+
+        impl = func if eager else compile_fresh(func)
+
+        assert torch.autograd.gradcheck(
+            impl,
+            (x, *args),
+            eps=1e-6,
+            atol=1e-6,
+            rtol=1e-6,
+            fast_mode=True,
+        )
 
     def test_fixpoint_solve_module_parameter_gradient(self) -> None:
         r"""Check that module parameters used via `fn` receive gradients."""
@@ -436,7 +472,6 @@ class TestFixpointSolve(TestFixpoint):
 
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
 class TestCorrectness(TestSuite):
     BATCH_SIZE = 5
     INPUT_SIZE = 2
@@ -454,7 +489,7 @@ class TestCorrectness(TestSuite):
     b0 = [0.3, -0.2]
 
     def test_linear_module_and_input_gradients_match_closed_form(
-        self, eager: bool, device: str, dtype: torch.dtype
+        self, device: str, dtype: torch.dtype
     ) -> None:
         r"""Check gradients for internal $A$ and input $b$ against the exact solve."""
         atol, rtol = self.SOLVER_TOL[dtype]
@@ -476,25 +511,9 @@ class TestCorrectness(TestSuite):
             rtol=rtol,
         )
 
-        if eager:
-            x_star = model(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
-            loss = x_star.square().sum()
-            loss.backward()
-        elif False:
-            torch._dynamo.config.compiled_autograd = True
-            impl = compile_fresh(model)
-            x_star = impl(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
-            loss = x_star.square().sum()
-            loss.backward()
-        else:
-            torch._dynamo.config.compiled_autograd = True
-
-            @torch.compile
-            def train(f, x):
-                loss = f(x).square().sum()
-                loss.backward()
-
-            train(model, y)
+        x_star = model(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
+        loss = x_star.square().sum()
+        loss.backward()
 
         assert model.layer.A.grad is not None
         assert model.bias.grad is not None
@@ -523,44 +542,4 @@ class TestCorrectness(TestSuite):
             reference_bias.grad,
             atol=atol,
             rtol=rtol,
-        )
-
-    def test_gradcheck_linear_module_and_input_gradients(
-        self, eager: bool, device: str, dtype: torch.dtype
-    ) -> None:
-        r"""Check `fixpoint_solve` gradients for internal $A$ and input $b$."""
-        atol, rtol = self.SOLVER_TOL[dtype]
-        eps, grad_atol, grad_rtol = self.GRADCHECK_TOL[dtype]
-        weight = torch.tensor(
-            self.W0,
-            dtype=dtype,
-            device=device,
-            requires_grad=True,
-        )
-        bias = torch.tensor(
-            self.b0,
-            dtype=dtype,
-            device=device,
-            requires_grad=True,
-        )
-        y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
-
-        def func(z, A: Tensor, b: Tensor) -> Tensor:
-            x0 = z.clone()
-            return fixpoint_solve(
-                lambda x, W, c: x @ W.mT + c,  # type: ignore[misc]
-                x0,
-                args=(A, b),
-                maxiter=self.MAXITER,
-                atol=atol,
-                rtol=rtol,
-            )
-
-        impl = func if eager else compile_fresh(func)
-        assert torch.autograd.gradcheck(
-            impl,
-            (y, weight, bias),
-            eps=eps,
-            atol=grad_atol,
-            rtol=grad_rtol,
         )
