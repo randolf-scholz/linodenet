@@ -5,7 +5,7 @@ __all__ = [
     "singular_triplet_native",
 ]
 
-from typing import Any, Optional
+from typing import Optional
 
 import torch
 from torch import Tensor
@@ -22,7 +22,6 @@ class _SingularTripletImpl(torch.autograd.Function):
     @staticmethod
     @torch.no_grad()
     def forward(
-        ctx: Any,
         A: Tensor,
         u0: Tensor,
         v0: Tensor,
@@ -31,9 +30,11 @@ class _SingularTripletImpl(torch.autograd.Function):
         rtol: float,
         /,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        sigma, u, v = _spectral_norm_forward_impl(A, u0, v0, maxiter, atol, rtol)
-        ctx.save_for_backward(A, sigma, u, v)
-        return sigma, u, v
+        return _spectral_norm_forward_impl(A, u0, v0, maxiter, atol, rtol)
+
+    @staticmethod
+    def setup_context(ctx, inputs, output) -> None:
+        ctx.save_for_backward(inputs[0], *output)  # A, σ, u, v
 
     @staticmethod
     def backward(
