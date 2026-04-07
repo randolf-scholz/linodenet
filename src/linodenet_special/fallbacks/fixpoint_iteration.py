@@ -140,7 +140,7 @@ class _FixpointSolve_Impl(torch.autograd.Function):
         return sol.x
 
     @staticmethod
-    def setup_context(ctx, inputs, output):
+    def setup_context(ctx, inputs, output) -> None:
         fn, _, maxiter, atol, rtol, *params = inputs
         x_star = output
 
