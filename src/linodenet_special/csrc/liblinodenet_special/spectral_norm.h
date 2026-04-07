@@ -23,4 +23,4 @@ Tensor spectral_norm(
     double atol = 1e-6,
     double rtol = 1e-6
 );
-}  // namespace linodenet_special
+} // namespace linodenet_special

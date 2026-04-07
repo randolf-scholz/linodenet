@@ -11,4 +11,4 @@ Tensor hard_bend(
     const Tensor &c,
     const Tensor &m
 );
-}  // namespace linodenet_special
+} // namespace linodenet_special

@@ -12,7 +12,6 @@ using torch::autograd::AutogradContext;
 using torch::autograd::Function;
 
 namespace linodenet_special {
-
 /*
  * NOTE: discontinuity of singular vectors.
  *
@@ -116,9 +115,7 @@ namespace linodenet_special {
  * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
  *
  **/
-struct SpectralNorm: Function<SpectralNorm> {
-
-
+struct SpectralNorm : Function<SpectralNorm> {
     /** @brief Forward pass.
      *
      * @param ctx: context object
@@ -163,38 +160,38 @@ struct SpectralNorm: Function<SpectralNorm> {
         // special case: if SCALE == 0, then A is the zero matrix,
         // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
         if (SCALE.item<double>() == 0) {
-			ctx->save_for_backward({u, v});
-			return sigma;
-		}
+            ctx->save_for_backward({u, v});
+            return sigma;
+        }
 
         // Perform power-iteration for maxiter times or until convergence.
         // NOTE: performing at least 2 iterations before the first convergence check is crucial,
         //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
-        for (int64_t i = 0; i<maxiter; i++) {
-			// NOTE: Perform multiple iterations per loop to increase performance.
-			//  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
-			//   The compiler cannot do this optimization on it's own because it would change behavior.
+        for (int64_t i = 0; i < maxiter; i++) {
+            // NOTE: Perform multiple iterations per loop to increase performance.
+            //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
+            //   The compiler cannot do this optimization on it's own because it would change behavior.
             #pragma unroll
-            for (auto j = 0; j<7; j++) {
+            for (auto j = 0; j < 7; j++) {
                 // update u
-                at::mv_out(grad_u, A, v);               // gᵤ ← Av
-                at::div_out(u, grad_u, linalg_vector_norm(grad_u));  // u ← gᵤ/‖gᵤ‖
+                at::mv_out(grad_u, A, v);                           // gᵤ ← Av
+                at::div_out(u, grad_u, linalg_vector_norm(grad_u)); // u ← gᵤ/‖gᵤ‖
                 // update v
-                at::mv_out(grad_v, A_t, u);             // gᵥ ← Aᵀu
-                at::div_out(v, grad_v, linalg_vector_norm(grad_v));  // v ← gᵥ/‖gᵥ‖
+                at::mv_out(grad_v, A_t, u);                         // gᵥ ← Aᵀu
+                at::div_out(v, grad_v, linalg_vector_norm(grad_v)); // v ← gᵥ/‖gᵥ‖
             }
             // convergence check
-            at::mv_out(grad_u, A, v);                // gᵤ ← Av
-            at::mv_out(grad_v, A_t, u);              // gᵥ ← Aᵀu
-            at::dot_out(sigma_u, grad_u, u);       // σᵤ ← ⟨u∣gᵤ⟩
-            at::dot_out(sigma_v, grad_v, v);       // σᵥ ← ⟨v∣gᵥ⟩
+            at::mv_out(grad_u, A, v);                   // gᵤ ← Av
+            at::mv_out(grad_v, A_t, u);                 // gᵥ ← Aᵀu
+            at::dot_out(sigma_u, grad_u, u);            // σᵤ ← ⟨u∣gᵤ⟩
+            at::dot_out(sigma_v, grad_v, v);            // σᵥ ← ⟨v∣gᵥ⟩
             grad_u = grad_u.addcmul_(sigma_u, u, -1.0); // gᵤ ← gᵤ - σᵤu
             grad_v = grad_v.addcmul_(sigma_v, v, -1.0); // gᵥ ← gᵥ - σᵥv
             if ((converged = (
-                  (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
-                & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
+                    (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
+                    & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
                 ).item<bool>())
-            ) {break;}
+            ) { break; }
         }
 
         // Emit warning if no convergence within maxiter iterations.
@@ -211,7 +208,7 @@ struct SpectralNorm: Function<SpectralNorm> {
                 "Computation resulted in invalid singular value σ=", sigma,
                 " for input of shape ", A.sizes(), ". ",
                 "Try increasing the number of iterations or the tolerance. ",
-                "Currently maxiter=", maxiter , ", atol=" , atol,  ", rtol=" , rtol , "."
+                "Currently maxiter=", maxiter, ", atol=", atol, ", rtol=", rtol, "."
             ));
         }
 
@@ -285,26 +282,25 @@ Tensor spectral_norm(
     const double rtol
 ) {
     Tensor u = u0.has_value()
-        ? u0.value().detach().clone()
-        : torch::randn({A.size(0)}, A.options());
+               ? u0.value().detach().clone()
+               : torch::randn({A.size(0)}, A.options());
     Tensor v = v0.has_value()
-        ? v0.value().detach().clone()
-        : torch::randn({A.size(1)}, A.options());
+               ? v0.value().detach().clone()
+               : torch::randn({A.size(1)}, A.options());
     u = u.div_(linalg_vector_norm(u));
     v = v.div_(linalg_vector_norm(v));
     return SpectralNorm::apply(A, u, v, maxiter, atol, rtol);
 }
 
-
 TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
     m.def(
         "spectral_norm("
-            "Tensor A,"
-            "Tensor? u0=None,"
-            "Tensor? v0=None,"
-            "int maxiter=256,"
-            "float atol=1e-6,"
-            "float rtol=1e-6"
+        "Tensor A,"
+        "Tensor? u0=None,"
+        "Tensor? v0=None,"
+        "int maxiter=256,"
+        "float atol=1e-6,"
+        "float rtol=1e-6"
         ") -> Tensor"
     );
 }
@@ -316,5 +312,4 @@ TORCH_LIBRARY_IMPL(linodenet_special, Autograd, m) {
 TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
     m.impl("spectral_norm", &spectral_norm_meta);
 }
-
-}  // namespace linodenet_special
+} // namespace linodenet_special

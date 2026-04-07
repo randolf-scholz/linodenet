@@ -6,12 +6,15 @@ namespace linodenet_special {
 using torch::Tensor;
 
 Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma);
+
 Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma);
+
 std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad_meta(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
 );
+
 std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &mu,
@@ -24,18 +27,21 @@ Tensor mixture_to_gaussian_meta(
     const Tensor &mus,
     const Tensor &sigmas
 );
+
 Tensor mixture_to_gaussian(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
 );
+
 std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad_meta(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
 );
+
 std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &weights,
@@ -49,18 +55,21 @@ Tensor gaussian_to_bimodal_meta(
     const Tensor &sigma,
     int64_t maxiter
 );
+
 Tensor gaussian_to_bimodal(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     int64_t maxiter
 );
+
 std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad_meta(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     int64_t maxiter
 );
+
 std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad(
     const Tensor &y,
     const Tensor &mu,
@@ -75,6 +84,7 @@ Tensor gaussian_to_mixture_meta(
     const Tensor &sigmas,
     int64_t maxiter
 );
+
 Tensor gaussian_to_mixture(
     const Tensor &y,
     const Tensor &weights,
@@ -82,6 +92,7 @@ Tensor gaussian_to_mixture(
     const Tensor &sigmas,
     int64_t maxiter
 );
+
 std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad_meta(
     const Tensor &y,
     const Tensor &weights,
@@ -89,6 +100,7 @@ std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad_meta(
     const Tensor &sigmas,
     int64_t maxiter
 );
+
 std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
     const Tensor &y,
     const Tensor &weights,
@@ -96,4 +108,4 @@ std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
     const Tensor &sigmas,
     int64_t maxiter
 );
-}  // namespace linodenet_special
+} // namespace linodenet_special
