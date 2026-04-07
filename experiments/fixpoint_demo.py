@@ -48,7 +48,7 @@ class LinearFixpointModel(nn.Module):
     def forward(self, y: Tensor, /) -> Tensor:
         x0 = y.clone()
         return fixpoint_solve(
-            self.layer,
+            lambda z: self.layer(z),
             x0,
             args=(self.bias,),
             maxiter=self.maxiter,
@@ -61,6 +61,7 @@ def main():
     r"""Test fixpoint solve."""
     y = torch.randn(32, 2, requires_grad=True)
     W0 = torch.tensor([[0.2, -0.1], [0.05, 0.15]])
+    x0 = torch.zeros_like(y)
     b0 = torch.tensor([0.3, -0.2])
 
     model = LinearFixpointModel(
@@ -79,25 +80,31 @@ def main():
     loss.backward()
 
     print("EAGER OK")
+    print(f"{y.grad=}")
 
-    y.grad = None
+    shift = b0.clone().requires_grad_()
 
-    torch._dynamo.config.compiled_autograd = True
-
-    @torch.compile
-    def train():
-        y_star = fixpoint_solve(
-            lambda z: z @ W0.mH,
-            y,
+    def solve_compiled(c: Tensor) -> None:
+        x_star = fixpoint_solve_functional(
+            linear_fixed_point,
+            x0,
+            args=(W0, c),
+            maxiter=10,
+            atol=1e-6,
+            rtol=1e-6,
         )
-        loss = y_star.square().sum()
+        loss = x_star.square().sum()
         loss.backward()
 
-    try:
-        train()
-    except Exception as e:
-        print("COMPILED AUTOGRAD FAILED")
-        print(e)
+    compiled_solve = torch.compile(solve_compiled)
+    compiled_solve(shift)
+
+    print("COMPILED OK")
+    print(f"{shift.grad=}")
+    print(
+        "NOTE: compiling `fixpoint_solve` itself, or enabling compiled autograd, "
+        "still fails here with `NotImplementedError: Cannot access storage of TensorWrapper`."
+    )
 
 
 if __name__ == "__main__":
