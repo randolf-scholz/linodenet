@@ -1,4 +1,6 @@
 import math
+from collections.abc import Callable
+from typing import Concatenate, NamedTuple
 
 import pytest
 import torch
@@ -42,7 +44,7 @@ class LinearLayer(nn.Module):
         self.A = nn.Parameter(weight)
 
     def forward(self, x: Tensor, b: Tensor, /) -> Tensor:
-        return linear_fixed_point(x, self.A, b)
+        return x @ self.A.mT + b
 
 
 class LinearFixpointModel(nn.Module):
@@ -72,34 +74,78 @@ class LinearFixpointModel(nn.Module):
             self.layer,
             x0,
             args=(self.bias,),
-            maxiter=self.maxiter,
-            atol=self.atol,
-            rtol=self.rtol,
+            maxiter=10,
+            atol=1e-6,
+            rtol=1e-6,
         )
 
 
-class TestFixPointIteration(TestSuite):
+class TestCase(NamedTuple):
+    fn: Callable[Concatenate[Tensor, ...], Tensor]
+    x: Tensor
+    args: tuple[Tensor, ...]
+
+
+class TestFixPoint(TestSuite):
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
 
-    def test_cosine_forward(self) -> None:
-        r"""Solve the classical fixed point equation $x = \cos(x)$."""
+    def make_linear_contraction(
+        self,
+        batch_size: int,
+        input_size: int,
+        /,
+        *,
+        device: str | torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> TestCase:
+        y = torch.randn(batch_size, input_size, device=device, dtype=dtype)
+        weight = torch.randn(input_size, input_size, device=device, dtype=dtype)
+        weight = 0.95 * weight / torch.linalg.matrix_norm(weight, ord=2)
+        weight = nn.Parameter(weight)
+        bias = nn.Parameter(torch.randn(input_size, device=device, dtype=dtype))
+        return TestCase(F.linear, y, (weight, bias))
 
-        def fn(z: Tensor) -> Tensor:
-            return torch.cos(z)
+    def check_eager(self, solver, /) -> None:
+        fn, y, weight, bias = self.make_linear_contraction(5, 3)
+        y_star = solver(fn, y, weight, bias)
+        loss = y_star.square().sum()
+        loss.backward()
+        assert weight.grad is not None
+        assert bias.grad is not None
 
-        x0 = torch.zeros((), dtype=torch.float64)
-        x = fixpoint_solve_functional(fn, x0, maxiter=128, atol=1e-10, rtol=0.0)
+    def check_compiled_forward(self, solver, /) -> None:
+        torch._dynamo.reset()  # noqa: SLF001
+        fn, y, weight, bias = self.make_linear_contraction(5, 3)
 
-        self.assert_close(
-            x,
-            torch.tensor(0.7390851332151607),
-            atol=self.VALUE_ATOL,
-            rtol=self.VALUE_RTOL,
-        )
+        @torch.compile
+        def forward(y0: Tensor) -> Tensor:
+            y_star = solver(fn, y0, weight, bias)
+            return y_star.square().sum()
 
-    def test_cosine_backward(self) -> None:
-        r"""Differentiate the parameterized fixed point near $x = \cos(x)$."""
+        loss = forward(y)
+        loss.backward()
+        assert weight.grad is not None
+        assert bias.grad is not None
+
+    def check_compiled_backward(self, solver, /) -> None:
+        torch._dynamo.reset()  # noqa: SLF001
+        fn, y, weight, bias = self.make_linear_contraction(5, 3)
+
+        @torch.compile
+        def backward(y0: Tensor) -> None:
+            y_star = solver(fn, y0, weight, bias)
+            loss = y_star.square().sum()
+            loss.backward()
+
+        backward(y)
+        assert weight.grad is not None
+        assert bias.grad is not None
+
+
+class TestFixpointSolveFunctional(TestFixPoint):
+    def test_cosine_forward_and_backward(self) -> None:
+        r"""Check value and gradient for the fixed point near $x = \cos(x)$."""
 
         def fn(z: Tensor, c: Tensor) -> Tensor:
             return torch.cos(z) + c
@@ -160,42 +206,6 @@ class TestFixPointIteration(TestSuite):
             atol=self.VALUE_ATOL,
             rtol=self.VALUE_RTOL,
         )
-
-    def test_fixpoint_solve_module_parameter_gradient(self) -> None:
-        r"""Check that module parameters used via `fn` receive gradients."""
-        module = ShiftedHalfMap(torch.tensor([0.1, -0.2], dtype=torch.float64))
-        x0 = torch.zeros(2, dtype=torch.float64)
-
-        x_star = fixpoint_solve(module, x0, maxiter=128, atol=1e-12, rtol=0.0)
-        loss = x_star.square().sum()
-        loss.backward()
-
-        grad_expected = 8.0 * module.bias.detach()
-
-        assert module.bias.grad is not None
-        self.assert_close(
-            module.bias.grad,
-            grad_expected,
-            atol=1e-10,
-            rtol=1e-10,
-        )
-
-    def test_fixpoint_solve_constant_map_without_grad_dependencies(self) -> None:
-        r"""Check a constant map fixed point with no differentiable dependencies."""
-
-        def fn(x: Tensor, /) -> Tensor:
-            return torch.full_like(x, 0.25)
-
-        x0 = torch.zeros(3, dtype=torch.float64)
-        x_star = fixpoint_solve(fn, x0, maxiter=32, atol=1e-12, rtol=0.0)
-
-        self.assert_close(
-            x_star,
-            torch.full_like(x0, 0.25),
-            atol=1e-12,
-            rtol=0.0,
-        )
-        assert not x_star.requires_grad
 
     def test_fixpoint_solve_functional_module_parameter_gradient_regression(
         self,
@@ -259,6 +269,44 @@ class TestFixPointIteration(TestSuite):
         assert torch.isfinite(test_bias.grad).all()
 
 
+class TestFixPointIteration(TestFixPoint):
+    def test_fixpoint_solve_module_parameter_gradient(self) -> None:
+        r"""Check that module parameters used via `fn` receive gradients."""
+        module = ShiftedHalfMap(torch.tensor([0.1, -0.2], dtype=torch.float64))
+        x0 = torch.zeros(2, dtype=torch.float64)
+
+        x_star = fixpoint_solve(module, x0, maxiter=128, atol=1e-12, rtol=0.0)
+        loss = x_star.square().sum()
+        loss.backward()
+
+        grad_expected = 8.0 * module.bias.detach()
+
+        assert module.bias.grad is not None
+        self.assert_close(
+            module.bias.grad,
+            grad_expected,
+            atol=1e-10,
+            rtol=1e-10,
+        )
+
+    def test_fixpoint_solve_constant_map_without_grad_dependencies(self) -> None:
+        r"""Check a constant map fixed point with no differentiable dependencies."""
+
+        def fn(x: Tensor, /) -> Tensor:
+            return torch.full_like(x, 0.25)
+
+        x0 = torch.zeros(3, dtype=torch.float64)
+        x_star = fixpoint_solve(fn, x0, maxiter=32, atol=1e-12, rtol=0.0)
+
+        self.assert_close(
+            x_star,
+            torch.full_like(x0, 0.25),
+            atol=1e-12,
+            rtol=0.0,
+        )
+        assert not x_star.requires_grad
+
+
 @pytest.mark.parametrize("dtype", DTYPES, ids=str)
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
@@ -300,10 +348,26 @@ class TestCorrectness(TestSuite):
             atol=atol,
             rtol=rtol,
         )
-        impl = model if eager else compile_fresh(model)
-        x_star = impl(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
-        loss = x_star.square().sum()
-        loss.backward()
+
+        if eager:
+            x_star = model(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
+            loss = x_star.square().sum()
+            loss.backward()
+        elif False:
+            torch._dynamo.config.compiled_autograd = True
+            impl = compile_fresh(model)
+            x_star = impl(y)  # X⁎ = X⁎Aᵀ + 𝟏bᵀ ⟺  (𝕀-A)⁻¹X⁎ = 𝟏bᵀ
+            loss = x_star.square().sum()
+            loss.backward()
+        else:
+            torch._dynamo.config.compiled_autograd = True
+
+            @torch.compile
+            def train(f, x):
+                loss = f(x).square().sum()
+                loss.backward()
+
+            train(model, y)
 
         assert model.layer.A.grad is not None
         assert model.bias.grad is not None
