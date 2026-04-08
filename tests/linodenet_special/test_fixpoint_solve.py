@@ -22,6 +22,10 @@ from tests.testing import DEVICES, TestSuite, pytest_xfail
 def compile_fresh(fn, /):
     r"""Compile `fn` after clearing Dynamo state from earlier test cases."""
     torch._dynamo.reset()  # noqa: SLF001
+    assert not torch._dynamo.config.trace_autograd_ops  # noqa: SLF001
+    assert not torch._dynamo.config.compiled_autograd  # noqa: SLF001
+    # torch._dynamo.config.trace_autograd_ops = True
+    # torch._dynamo.config.compiled_autograd = True
     return torch.compile(fn)
 
 
@@ -125,27 +129,23 @@ class TestFixpoint(TestSuite):
         self.assert_test_case_grads(case)
 
     def check_compiled_forward(self, solver, case: TestCase, /) -> None:
-        torch._dynamo.reset()  # noqa: SLF001
-
-        @torch.compile
         def forward(y0: Tensor) -> Tensor:
             y_star = solver(case.fn, y0, *case.args)
             return y_star.square().sum()
 
-        loss = forward(case.x)
+        compiled_forward = compile_fresh(forward)
+        loss = compiled_forward(case.x)
         loss.backward()
         self.assert_test_case_grads(case)
 
     def check_compiled_backward(self, solver, case: TestCase, /) -> None:
-        torch._dynamo.reset()  # noqa: SLF001
-
-        @torch.compile
         def backward(y0: Tensor) -> None:
             y_star = solver(case.fn, y0, *case.args)
             loss = y_star.square().sum()
             loss.backward()
 
-        backward(case.x)
+        compiled_backward = compile_fresh(backward)
+        compiled_backward(case.x)
         self.assert_test_case_grads(case)
 
 
