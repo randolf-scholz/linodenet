@@ -2,7 +2,7 @@ r"""Simple i-ResNet built from residual contraction blocks."""
 
 __all__ = ["IResNet"]
 
-from typing import Final, Optional
+from typing import Final
 
 from torch import nn
 
@@ -10,7 +10,7 @@ from linodenet.mappings.linear import LinearContraction
 from linodenet.nn.activations import get_activation
 
 from .base import TransformSequence
-from .residual_contraction import ResidualContraction
+from .residual_contraction import DEFAULT_REZERO_SCALAR_MAP, ResidualContraction
 
 
 class IResNet(TransformSequence[ResidualContraction]):
@@ -44,7 +44,7 @@ class IResNet(TransformSequence[ResidualContraction]):
         latent_size: int | None = None,
         activation: str | nn.Module = "ReLU",
         use_rezero: bool = False,
-        scalar_map: Optional[nn.Module | str] = None,
+        scalar_map: nn.Module | str = DEFAULT_REZERO_SCALAR_MAP,
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
@@ -96,7 +96,7 @@ class IResNet(TransformSequence[ResidualContraction]):
         latent_size: int,
         activation: str | nn.Module,
         use_rezero: bool,
-        scalar_map: nn.Module | str | None,
+        scalar_map: nn.Module | str,
         maxiter: int,
         atol: float,
         rtol: float,
