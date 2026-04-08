@@ -251,19 +251,19 @@ def fixpoint_solve(
         if g is None:
             return None
 
-        with torch.enable_grad():
-            # FIXME: https://github.com/pytorch/pytorch/issues/179510
-            #  cant use torch.func.vjp due to torch.compile bug.
-            z0 = x_star.clone().detach().requires_grad_()
-            f0 = fn(z0, *args)
-            vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
+        # with torch.enable_grad():
+        #     # FIXME: https://github.com/pytorch/pytorch/issues/179510
+        #     #  cant use torch.func.vjp due to torch.compile bug.
+        #     z0 = x_star.clone()  # .detach()
+        #     f0 = fn(z0, *args)
+        #     vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
 
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
         # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
         # FIXME: vjp_fn doesn't compose with while_loop when compiling.
         #  raises UncapturedHigherOrderOpError
-        # _, vjp_fn, *_ = torch.func.vjp(lambda z: fn(z, *args), x_star)
-        return _fallback_solve_impl(
+        _, vjp_fn, *_ = torch.func.vjp(lambda z: fn(z, *args), x_star)
+        return _fixpoint_solve_impl(
             lambda u: g + vjp_fn(u)[0],
             g,
             maxiter=t_maxiter,
