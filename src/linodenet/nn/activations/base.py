@@ -4,7 +4,6 @@ __all__ = [
     # ABCs & Protocols
     "Activation",
     "GenericActivation",
-    "ActivationRequiresDim",
     "ActivationBase",
     # functions
     "get_activation",
@@ -18,6 +17,15 @@ from torch import Tensor, nn
 
 from blueprint import Makes, initialize
 from signatures import signature
+
+from .crelu import CReLU, crelu
+from .imported import (
+    BimodalToGaussian,
+    GaussianToBimodal,
+    bimodal_to_gaussian,
+    gaussian_to_bimodal,
+    hard_bend,
+)
 
 type GenericActivation = Callable[..., Tensor | tuple[Tensor, ...]]
 r"""Type alias for generic activation functions (may require additional args!)."""
@@ -34,14 +42,6 @@ class Activation(Protocol):
     @abstractmethod
     @signature("(..., *xs) -> (..., *xs)")
     def __call__(self, x: Tensor, /) -> Tensor: ...
-
-
-class ActivationRequiresDim(Protocol):
-    r"""Protocol for activation functions that require a dimension argument."""
-
-    @abstractmethod
-    @signature("[(..., *xs), dim] -> (..., *xs)")
-    def __call__(self, x: Tensor, /, *, dim: int | tuple[int, ...]) -> Tensor: ...
 
 
 class ActivationBase(nn.Module):
@@ -80,7 +80,6 @@ def get_activation(arg: object, /, **cfg: object) -> nn.Module:
         # if a name, look up in the dictionary
         case str(name):
             # avoid circular import
-            from . import ACTIVATIONS  # noqa: PLC0415
 
             match ACTIVATIONS.get(name):
                 case None:
@@ -112,3 +111,71 @@ def get_activation(arg: object, /, **cfg: object) -> nn.Module:
 
         case _:
             raise TypeError(f"Invalid argument: {arg!r}")
+
+
+ACTIVATIONS: dict[str, type[nn.Module]] = {
+    "CReLU": CReLU,
+    "GaussianToBimodal": GaussianToBimodal,
+    "BimodalToGaussian": BimodalToGaussian,
+    # torch imports
+    "CELU"        : nn.CELU,
+    "ELU"         : nn.ELU,
+    "GELU"        : nn.GELU,
+    "GLU"         : nn.GLU,
+    "Hardshrink"  : nn.Hardshrink,
+    "Hardsigmoid" : nn.Hardsigmoid,
+    "Hardswish"   : nn.Hardswish,
+    "Hardtanh"    : nn.Hardtanh,
+    "Identity"    : nn.Identity,
+    "LeakyReLU"   : nn.LeakyReLU,
+    "LogSigmoid"  : nn.LogSigmoid,
+    "Mish"        : nn.Mish,
+    "PReLU"       : nn.PReLU,
+    "RReLU"       : nn.RReLU,
+    "ReLU"        : nn.ReLU,
+    "ReLU6"       : nn.ReLU6,
+    "SELU"        : nn.SELU,
+    "SiLU"        : nn.SiLU,
+    "Sigmoid"     : nn.Sigmoid,
+    "Softplus"    : nn.Softplus,
+    "Softshrink"  : nn.Softshrink,
+    "Softsign"    : nn.Softsign,
+    "Tanh"        : nn.Tanh,
+    "Tanhshrink"  : nn.Tanhshrink,
+}  # fmt: skip
+r"""Dictionary containing all available activation classes."""
+
+
+ACTIVATION_FNS: dict[str, Activation] = {
+    "hard_bend": hard_bend,
+    "gaussian_to_bimodal": gaussian_to_bimodal,
+    "bimodal_to_gaussian": bimodal_to_gaussian,
+    # torch imports
+    "celu"        : nn.functional.celu,
+    "elu"         : nn.functional.elu,
+    "gelu"        : nn.functional.gelu,
+    "hardshrink"  : nn.functional.hardshrink,
+    "hardsigmoid" : nn.functional.hardsigmoid,
+    "hardswish"   : nn.functional.hardswish,
+    "hardtanh"    : nn.functional.hardtanh,
+    "leaky_relu"  : nn.functional.leaky_relu,
+    "log_sigmoid" : nn.functional.logsigmoid,
+    "mish"        : nn.functional.mish,
+    "relu"        : nn.functional.relu,
+    "relu6"       : nn.functional.relu6,
+    "rrelu"       : nn.functional.rrelu,
+    "selu"        : nn.functional.selu,
+    "sigmoid"     : nn.functional.sigmoid,
+    "silu"        : nn.functional.silu,
+    "softplus"    : nn.functional.softplus,
+    "softshrink"  : nn.functional.softshrink,
+    "softsign"    : nn.functional.softsign,
+    "tanh"        : nn.functional.tanh,
+    "tanhshrink"  : nn.functional.tanhshrink,
+}  # fmt: skip
+r"""Dictionary containing all available activation functions."""
+
+ACTIVATION_FNS_WITH_ARGS: dict[str, GenericActivation] = {
+    "crelu": crelu,
+}  # fmt: skip
+r"""Activations that do not match the usual signature of activations."""
