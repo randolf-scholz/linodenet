@@ -403,12 +403,13 @@ class TestPerformance(TestSuite):
         # NOTE: required for fullgraph=True
         # REF: https://docs.pytorch.org/tutorials/intermediate/compiled_autograd_tutorial.html
         # pyrefly: ignore[bad-assignment]
+        torch._dynamo.reset()  # noqa: SLF001
+        torch._dynamo.config.trace_autograd_ops = True  # noqa: SLF001
         torch._dynamo.config.compiled_autograd = True  # noqa: SLF001
         compiled_decode = torch.compile(
             flow.decode,
             fullgraph=flow_cls is ResidualContraction,
         )
-
         # trigger compile
         y_demo = torch.randn(
             self.BATCH_SIZE,
@@ -418,18 +419,16 @@ class TestPerformance(TestSuite):
         )
         compiled_decode(y_demo)
 
-        def setup() -> tuple[tuple, dict]:
-            y = torch.randn(
-                self.BATCH_SIZE,
-                self.PERF_INPUT_SIZE,
-                device=device,
-                dtype=dtype,
-            )
-            return (y,), {}
+        y = torch.randn(
+            self.BATCH_SIZE,
+            self.PERF_INPUT_SIZE,
+            device=device,
+            dtype=dtype,
+        )
 
         benchmark.pedantic(
-            compiled_decode,
-            setup=setup,
+            lambda: compiled_decode(y),
             rounds=self.PERF_ROUNDS,
             warmup_rounds=self.PERF_WARMUP_ROUNDS,
+            iterations=10,
         )
