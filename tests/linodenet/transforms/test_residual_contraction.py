@@ -403,13 +403,10 @@ class TestPerformance(TestSuite):
         # NOTE: required for fullgraph=True
         # REF: https://docs.pytorch.org/tutorials/intermediate/compiled_autograd_tutorial.html
         # pyrefly: ignore[bad-assignment]
-        torch._dynamo.reset()  # noqa: SLF001
-        torch._dynamo.config.trace_autograd_ops = True  # noqa: SLF001
-        torch._dynamo.config.compiled_autograd = True  # noqa: SLF001
-        compiled_decode = torch.compile(
-            flow.decode,
-            fullgraph=flow_cls is ResidualContraction,
-        )
+        # torch._dynamo.reset()
+        # torch._dynamo.config.trace_autograd_ops = True
+        # torch._dynamo.config.compiled_autograd = True
+        compiled_decode = torch.compile(flow.decode)
         # trigger compile
         y_demo = torch.randn(
             self.BATCH_SIZE,

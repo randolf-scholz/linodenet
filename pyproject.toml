@@ -162,6 +162,9 @@ max-doc-length = 120
 max-line-length = 120
 ignore-overlong-task-comments = true
 
+[tool.ruff.lint.flake8-self]
+ignore-names = ["_dynamo"]
+
 [tool.ruff.lint.flake8-pytest-style]
 fixture-parentheses = false
 mark-parentheses = false
