@@ -2,26 +2,11 @@ r"""Base classes and protocols for initializations."""
 
 __all__ = ["InitializationFn", "Initialization"]
 
-from typing import Any, Optional, Protocol
+from collections.abc import Callable
+from typing import Concatenate, Optional, Protocol
 
 import torch
 from torch import Tensor
-
-
-class InitializationFn(Protocol):
-    r"""Protocol for shape-bound initialization samplers."""
-
-    def __call__(
-        self,
-        size: int | tuple[int, ...],
-        /,
-        *args: Any,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
-        **kwargs: Any,
-    ) -> Tensor:
-        r"""Draw samples with batch shape `size`."""
-        ...
 
 
 class Initialization(Protocol):
@@ -37,3 +22,6 @@ class Initialization(Protocol):
     ) -> Tensor:
         r"""Draw samples with batch shape `size`."""
         ...
+
+
+type InitializationFn = Callable[Concatenate[int | tuple[int, ...], ...], Tensor]
