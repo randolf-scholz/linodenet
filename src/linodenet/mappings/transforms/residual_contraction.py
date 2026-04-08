@@ -80,7 +80,7 @@ class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformB
         # note: solve x = y - ρ(f(x))
         return fixpoint_solve(
             lambda x: y - self.gate(self.contraction(x)),  # type: ignore[misc]
-            y.clone(),
+            y,
             maxiter=self.maxiter,
             atol=self.atol,
             rtol=self.rtol,

@@ -67,7 +67,8 @@ def _fixpoint_solve_impl(
         return _LoopState(x, r, budget - 1)
 
     r0 = torch.full_like(x0, torch.inf)
-    initial_state = _LoopState(x0, r0, maxiter)
+    # Note: x0.clone() needed in case fn uses x0 which leads to alias error.
+    initial_state = _LoopState(x0.clone(), r0, maxiter)
 
     return torch.while_loop(cond_fn, body_fn, (initial_state,))
 
