@@ -18,10 +18,10 @@ wheels = [
 
 [[packages]]
 name = "cuda-pathfinder"
-version = "1.5.1"
+version = "1.5.2"
 marker = "sys_platform == 'linux'"
 index = "https://pypi.org/simple"
-wheels = [{ url = "https://files.pythonhosted.org/packages/c4/74/8c66861b873d8eed51fde56d3091baa4906a56f0d4390cae991f2d41dda5/cuda_pathfinder-1.5.1-py3-none-any.whl", upload-time = 2026-04-03T16:41:22Z, size = 49861, hashes = { sha256 = "b3718097fb57cf9e8a904dd072d806f2c9a27627e35c020b06ab9454bcec08c0" } }]
+wheels = [{ url = "https://files.pythonhosted.org/packages/f2/f9/1b9b60a30fc463c14cdea7a77228131a0ccc89572e8df9cb86c9648271ab/cuda_pathfinder-1.5.2-py3-none-any.whl", upload-time = 2026-04-06T23:01:05Z, size = 49988, hashes = { sha256 = "0c5f160a7756c5b072723cbbd6d861e38917ef956c68150b02f0b6e9271c71fa" } }]
 
 [[packages]]
 name = "cuda-toolkit"

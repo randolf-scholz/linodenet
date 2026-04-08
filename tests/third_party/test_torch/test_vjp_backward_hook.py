@@ -54,7 +54,7 @@ def check_eager(solver):
 
 
 def check_compiled_forward(solver):
-    torch._dynamo.reset()  # noqa: SLF001
+    torch._dynamo.reset()
     y = torch.randn(5, 3)
     W = nn.Parameter(torch.randn(3, 3))
     b = nn.Parameter(torch.randn(3))
@@ -70,7 +70,7 @@ def check_compiled_forward(solver):
 
 
 def check_compiled_backward(solver):
-    torch._dynamo.reset()  # noqa: SLF001
+    torch._dynamo.reset()
     y = torch.randn(5, 3)
     W = nn.Parameter(torch.randn(3, 3))
     b = nn.Parameter(torch.randn(3))
