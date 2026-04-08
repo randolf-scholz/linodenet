@@ -12,6 +12,7 @@ __all__ = [
     "gaussian_to_mixture",
     "gaussian_to_mixture_value_and_grad",
     "fixpoint_solve",
+    "fixpoint_solve_functional",
     "hard_bend",
     "hard_contract",
     "hard_expand",
@@ -28,7 +29,7 @@ __all__ = [
     "spectral_norm_native",
 ]
 
-from .fixpoint_iteration import fixpoint_solve
+from .fixpoint_iteration import fixpoint_solve, fixpoint_solve_functional
 from .gaussian_transport import (
     bimodal_to_gaussian,
     bimodal_to_gaussian_value_and_grad,

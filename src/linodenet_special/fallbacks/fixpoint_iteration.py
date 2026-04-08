@@ -233,16 +233,23 @@ def fixpoint_solve(
     t_atol = torch.as_tensor(atol, dtype=x0.dtype, device=x0.device)
     t_rtol = torch.as_tensor(rtol, dtype=x0.dtype, device=x0.device)
 
-    with torch.no_grad():
-        sol = _fixpoint_solve_impl(
-            lambda z: fn(z, *args),
-            x0,
-            maxiter=t_maxiter,
-            atol=t_atol,
-            rtol=t_rtol,
-        )
+    sol = _fixpoint_solve_impl(
+        lambda z: fn(z, *args),
+        x0,
+        maxiter=t_maxiter,
+        atol=t_atol,
+        rtol=t_rtol,
+    )
 
+    # Note: sol.x has no gradients, add one more pass through fn,
+    #   to pick up gradients from parameters if fn is a nn.Module
     x_star = fn(sol.x, *args)
+
+    # FIXME: raises NotImplementedError in torch.compile
+    # x_star, vjp_fn, *_ = torch.func.vjp(
+    #     lambda z: fn(z, *args),
+    #     sol.x.clone().detach().requires_grad_(True),
+    # )
 
     if not x_star.requires_grad:
         return x_star
@@ -251,19 +258,18 @@ def fixpoint_solve(
         if g is None:
             return None
 
-        # with torch.enable_grad():
-        #     # FIXME: https://github.com/pytorch/pytorch/issues/179510
-        #     #  cant use torch.func.vjp due to torch.compile bug.
-        #     z0 = x_star.clone()  # .detach()
-        #     f0 = fn(z0, *args)
-        #     vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
+        with torch.enable_grad():
+            # FIXME: https://github.com/pytorch/pytorch/issues/179510
+            #  cant use torch.func.vjp due to torch.compile bug.
+            # we also need ∂f/∂x for the backward pass
+            z0 = sol.x.clone().detach().requires_grad_(True)
+            f0 = fn(z0, *args)
+            vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
 
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
-        # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
         # FIXME: vjp_fn doesn't compose with while_loop when compiling.
         #  raises UncapturedHigherOrderOpError
-        _, vjp_fn, *_ = torch.func.vjp(lambda z: fn(z, *args), x_star)
-        return _fixpoint_solve_impl(
+        return _fallback_solve_impl(
             lambda u: g + vjp_fn(u)[0],
             g,
             maxiter=t_maxiter,
@@ -271,5 +277,6 @@ def fixpoint_solve(
             rtol=t_rtol,
         ).x
 
+    # SEC: return ∂y/∂x = (∂f/∂θ)ᵀu⁎
     x_star.register_hook(backward_hook)
     return x_star

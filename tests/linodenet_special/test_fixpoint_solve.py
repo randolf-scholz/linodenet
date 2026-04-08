@@ -8,25 +8,8 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from linodenet_special.fallbacks.fixpoint_iteration import (
-    fixpoint_solve,
-    fixpoint_solve_functional,
-)
+from linodenet_special.fallbacks import fixpoint_solve, fixpoint_solve_functional
 from tests.testing import DEVICES, TestSuite, pytest_xfail
-
-# TODO: neither of these seem to do good things here...
-# torch._dynamo.config.trace_autograd_ops = True
-# torch._dynamo.config.compiled_autograd = True
-
-
-def compile_fresh(fn, /):
-    r"""Compile `fn` after clearing Dynamo state from earlier test cases."""
-    torch._dynamo.reset()  # noqa: SLF001
-    assert not torch._dynamo.config.trace_autograd_ops  # noqa: SLF001
-    assert not torch._dynamo.config.compiled_autograd  # noqa: SLF001
-    # torch._dynamo.config.trace_autograd_ops = True
-    # torch._dynamo.config.compiled_autograd = True
-    return torch.compile(fn)
 
 
 class ShiftedHalfMap(nn.Module):
@@ -67,15 +50,37 @@ class Mode(StrEnum):
 class TestFixpoint(TestSuite):
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
+    DYNAMO_OPTIONS = {
+        "trace_autograd_ops": False,
+        "compiled_autograd": False,
+    }
 
-    def select_check(self, mode: Mode, /):
+    def run_check(self, mode: Mode, solver, case: TestCase, /) -> None:
         match mode:
             case Mode.EAGER:
-                return self.check_eager
+                y_star = solver(case.fn, case.x, *case.args)
+                loss = y_star.square().sum()
+                loss.backward()
             case Mode.COMPILE_FORWARD:
-                return self.check_compiled_forward
+
+                def forward(y0: Tensor) -> Tensor:
+                    y_star = solver(case.fn, y0, *case.args)
+                    return y_star.square().sum()
+
+                compiled_forward = torch.compile(forward)
+                loss = compiled_forward(case.x)
+                loss.backward()
             case Mode.COMPILE_BACKWARD:
-                return self.check_compiled_backward
+
+                def backward(y0: Tensor) -> None:
+                    y_star = solver(case.fn, y0, *case.args)
+                    loss = y_star.square().sum()
+                    loss.backward()
+
+                compiled_backward = torch.compile(backward)
+                compiled_backward(case.x)
+
+        self.assert_test_case_grads(case)
 
     def assert_test_case_grads(self, case: TestCase, /) -> None:
         if case.args:
@@ -122,32 +127,6 @@ class TestFixpoint(TestSuite):
         module = LinearModule(weight.detach().clone(), bias.detach().clone())
         return TestCase(module, case.x, ())
 
-    def check_eager(self, solver, case: TestCase, /) -> None:
-        y_star = solver(case.fn, case.x, *case.args)
-        loss = y_star.square().sum()
-        loss.backward()
-        self.assert_test_case_grads(case)
-
-    def check_compiled_forward(self, solver, case: TestCase, /) -> None:
-        def forward(y0: Tensor) -> Tensor:
-            y_star = solver(case.fn, y0, *case.args)
-            return y_star.square().sum()
-
-        compiled_forward = compile_fresh(forward)
-        loss = compiled_forward(case.x)
-        loss.backward()
-        self.assert_test_case_grads(case)
-
-    def check_compiled_backward(self, solver, case: TestCase, /) -> None:
-        def backward(y0: Tensor) -> None:
-            y_star = solver(case.fn, y0, *case.args)
-            loss = y_star.square().sum()
-            loss.backward()
-
-        compiled_backward = compile_fresh(backward)
-        compiled_backward(case.x)
-        self.assert_test_case_grads(case)
-
 
 class TestFixpointSolveFunctional(TestFixpoint):
     SEED = 0
@@ -171,9 +150,8 @@ class TestFixpointSolveFunctional(TestFixpoint):
                 rtol=1e-6,
             )
 
-        check = self.select_check(mode)
         with pytest_xfail(condition=module):
-            check(solver, case)
+            self.run_check(mode, solver, case)
 
     @pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
     def test_gradcheck(self, eager: bool) -> None:
@@ -193,7 +171,7 @@ class TestFixpointSolveFunctional(TestFixpoint):
                 rtol=1e-10,
             )
 
-        impl = func if eager else compile_fresh(func)
+        impl = func if eager else torch.compile(func)
 
         assert torch.autograd.gradcheck(
             impl,
@@ -248,7 +226,7 @@ class TestFixpointSolveFunctional(TestFixpoint):
         eager_x.square().backward()
 
         compiled_shift = torch.tensor(0.1, dtype=torch.float64, requires_grad=True)
-        compiled_solve = compile_fresh(solve)
+        compiled_solve = torch.compile(solve)
         compiled_x = compiled_solve(compiled_shift)
         compiled_x.square().backward()
 
@@ -310,7 +288,7 @@ class TestFixpointSolveFunctional(TestFixpoint):
                 rtol=1e-10,
             )
 
-        impl = solve if eager else compile_fresh(solve)
+        impl = solve if eager else torch.compile(solve)
         x_star = impl(x, weight, bias)
         loss = x_star.square().sum()
         loss.backward()
@@ -336,6 +314,11 @@ class TestFixpointSolveFunctional(TestFixpoint):
 class TestFixpointSolve(TestFixpoint):
     SEED = 0
 
+    DYNAMO_OPTIONS = {
+        "trace_autograd_ops": True,
+        "compiled_autograd": True,
+    }
+
     @pytest.mark.parametrize("mode", list(Mode), ids=str)
     @pytest.mark.parametrize("module", [False, True], ids=["functional", "module"])
     def test_linear(self, mode: Mode, module: bool) -> None:
@@ -355,8 +338,7 @@ class TestFixpointSolve(TestFixpoint):
                 rtol=1e-6,
             )
 
-        check = self.select_check(mode)
-        check(solver, case)
+        self.run_check(mode, solver, case)
 
     @pytest.mark.parametrize("eager", [True, False], ids=["eager", "compiled"])
     @pytest.mark.parametrize("module", [False, True], ids=["functional", "module"])
@@ -381,7 +363,7 @@ class TestFixpointSolve(TestFixpoint):
                 rtol=1e-10,
             )
 
-        impl = func if eager else compile_fresh(func)
+        impl = func if eager else torch.compile(func)
 
         assert torch.autograd.gradcheck(
             impl,
