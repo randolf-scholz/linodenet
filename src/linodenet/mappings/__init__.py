@@ -176,6 +176,7 @@ MATRIX_PROJECTION_FNS: dict[str, ProjectionFn] = {
 r"""Dictionary containing all available matrix projections (function)."""
 
 MATRIX_PROJECTIONS_WITH_ARGS: dict[str, ProjectionFnWithArgs] = {
+    **MATRIX_PROJECTION_FNS,
     "banded"            : functional.banded,
     "low_rank"          : functional.low_rank,
     "masked"            : functional.masked,

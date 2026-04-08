@@ -59,7 +59,7 @@ def test_names_modular(name: str) -> None:
     assert actual_name in {name, f"{name}Projection"}
 
 
-@pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS | MATRIX_PROJECTIONS_WITH_ARGS)
+@pytest.mark.parametrize("name", MATRIX_PROJECTIONS_WITH_ARGS)
 def test_names_matrix_tests(name: str) -> None:
     r"""Test that all matrix tests have the correct name."""
     matrix_test = get_projection_test(name)
@@ -68,7 +68,7 @@ def test_names_matrix_tests(name: str) -> None:
     assert actual_name == f"is_{expected_name}"
 
 
-@pytest.mark.parametrize("name", MATRIX_PROJECTION_FNS | MATRIX_PROJECTIONS_WITH_ARGS)
+@pytest.mark.parametrize("name", MATRIX_PROJECTIONS_WITH_ARGS)
 def test_inclusion_functional_has_test(name: str) -> None:
     r"""Test that all projections have tests."""
     assert callable(get_projection_test(name))
