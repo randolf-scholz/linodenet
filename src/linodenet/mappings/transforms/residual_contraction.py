@@ -1,6 +1,7 @@
 r"""ContractiveFlow implementation (iResNet-block)."""
 
 __all__ = [
+    "DEFAULT_REZERO_SCALAR_MAP",
     "ResidualContractionBase",
     # Classes
     "ResidualContraction",
@@ -26,6 +27,10 @@ from linodenet_special import fixpoint_solve
 from linodenet_special.trace_estimation import LogAbsDetEstimators
 
 from .base import TransformBase
+
+DEFAULT_REZERO_SCALAR_MAP: Final[NonExpansiveMapping] = (
+    NonExpansiveMapping.SMOOTH_SOFTSIGN
+)
 
 
 class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformBase):
@@ -148,7 +153,7 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         contraction: M,
         *,
         use_rezero: bool = False,
-        scalar_map: nn.Module | str | None = None,
+        scalar_map: nn.Module | str = DEFAULT_REZERO_SCALAR_MAP,
         maxiter: int = 256,
         atol: float = 1e-6,
         rtol: float = 1e-6,
@@ -159,14 +164,14 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         trace_mode: str = "reverse",
     ) -> None:
         if use_rezero:
-            scalar_map_module = NonExpansiveMapping.new(
-                "smooth-softsign" if scalar_map is None else scalar_map
-            )
-            gate = ReZero(scalar_map=scalar_map_module)
+            gate = ReZero(scalar_map=NonExpansiveMapping.new(scalar_map))
             scalar = gate.scalar
         else:
-            if scalar_map is not None:
-                raise ValueError("Scalar map is only legal when use_rezero=True")
+            if scalar_map is not DEFAULT_REZERO_SCALAR_MAP:
+                warnings.warn(
+                    "Ignoring scalar_map because use_rezero=False.",
+                    stacklevel=2,
+                )
             gate = None
             scalar = nn.Parameter(torch.ones(()), requires_grad=False)
 
@@ -256,7 +261,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         *,
         bottleneck: M,  # (...k) -> (...k)
         use_rezero: bool = False,
-        scalar_map: nn.Module | str | None = None,
+        scalar_map: nn.Module | str = DEFAULT_REZERO_SCALAR_MAP,
         use_bias: bool = True,
         maxiter: int = 256,
         atol: float = 1e-6,
@@ -268,14 +273,14 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
             raise ValueError("hidden_size must be between 1 and input_size")
 
         if use_rezero:
-            scalar_map_module = NonExpansiveMapping.new(
-                "smooth-softsign" if scalar_map is None else scalar_map
-            )
-            gate = ReZero(scalar_map=scalar_map_module)
+            gate = ReZero(scalar_map=NonExpansiveMapping.new(scalar_map))
             scalar = gate.scalar
         else:
-            if scalar_map is not None:
-                raise ValueError("Scalar map is only legal when use_rezero=True")
+            if scalar_map is not DEFAULT_REZERO_SCALAR_MAP:
+                warnings.warn(
+                    "Ignoring scalar_map because use_rezero=False.",
+                    stacklevel=2,
+                )
             gate = None
             scalar = nn.Parameter(torch.ones(()), requires_grad=False)
 

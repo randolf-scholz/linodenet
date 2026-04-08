@@ -2,7 +2,7 @@ r"""Residual flow built from bottleneck contraction blocks."""
 
 __all__ = ["BottleneckFlow"]
 
-from typing import Final, Optional
+from typing import Final
 
 from torch import nn
 
@@ -10,7 +10,10 @@ from linodenet.mappings.linear import LinearContraction
 from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 
 from .base import TransformSequence
-from .residual_contraction import ResidualBottleneck
+from .residual_contraction import (
+    DEFAULT_REZERO_SCALAR_MAP,
+    ResidualBottleneck,
+)
 
 
 class BottleneckFlow(TransformSequence[ResidualBottleneck]):
@@ -36,7 +39,7 @@ class BottleneckFlow(TransformSequence[ResidualBottleneck]):
         layers_per_block: int = 1,
         bottleneck_activation: str | nn.Module = "elu",
         use_rezero: bool = True,
-        scalar_map: Optional[nn.Module | str] = None,
+        scalar_map: nn.Module | str = DEFAULT_REZERO_SCALAR_MAP,
         use_bias: bool = True,
         maxiter: int = 256,
         atol: float = 1e-6,
@@ -47,9 +50,6 @@ class BottleneckFlow(TransformSequence[ResidualBottleneck]):
         self.layers_per_block = layers_per_block
         self.hidden_size = hidden_size
         self.use_rezero = use_rezero
-
-        if scalar_map is not None and not self.use_rezero:
-            raise ValueError("scalar_map requires use_rezero=True")
 
         blocks = [
             self._make_block(
@@ -76,7 +76,7 @@ class BottleneckFlow(TransformSequence[ResidualBottleneck]):
         layers_per_block: int,
         bottleneck_activation: str | nn.Module,
         use_rezero: bool,
-        scalar_map: nn.Module | str | None,
+        scalar_map: nn.Module | str,
         use_bias: bool,
         maxiter: int,
         atol: float,
