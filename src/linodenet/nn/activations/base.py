@@ -22,6 +22,8 @@ from .crelu import CReLU, crelu
 from .imported import (
     BimodalToGaussian,
     GaussianToBimodal,
+    GaussianToMixture,
+    MixtureToGaussian,
     bimodal_to_gaussian,
     gaussian_to_bimodal,
     hard_bend,
@@ -117,6 +119,8 @@ ACTIVATIONS: dict[str, type[nn.Module]] = {
     "CReLU": CReLU,
     "GaussianToBimodal": GaussianToBimodal,
     "BimodalToGaussian": BimodalToGaussian,
+    "GaussianToMixture": GaussianToMixture,
+    "MixtureToGaussian": MixtureToGaussian,
     # torch imports
     "CELU"        : nn.CELU,
     "ELU"         : nn.ELU,
