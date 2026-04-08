@@ -7,7 +7,7 @@ from typing import Final
 from torch import nn
 
 from linodenet.mappings.linear import LinearContraction
-from linodenet.nn.activations import get_activation
+from linodenet.nn.activations import Activations
 
 from .base import TransformSequence
 from .residual_contraction import DEFAULT_REZERO_SCALAR_MAP, ResidualContraction
@@ -107,7 +107,7 @@ class IResNet(TransformSequence[ResidualContraction]):
         trace_mode: str,
     ) -> ResidualContraction:
         layers: list[nn.Module] = []
-        act = get_activation(activation)
+        act = Activations.new(activation)
         assert isinstance(act, nn.Module)
         if layers_per_block < 1:
             raise ValueError("layers_per_block must be at least 1")

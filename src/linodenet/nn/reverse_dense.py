@@ -10,7 +10,7 @@ from torch import Tensor, nn
 
 from signatures import signature
 
-from .activations import Activation, get_activation
+from .activations import Activations
 
 
 class ReverseDense(nn.Module):
@@ -33,12 +33,20 @@ class ReverseDense(nn.Module):
     r"""The size of the output"""
 
     # PARAMETERS
-    activation: Activation
+    activation: nn.Module
     r"""The activation function to apply after the linear transformation."""
     weight: Tensor
     r"""The weight matrix."""
     bias: Optional[Tensor]
     r"""The bias vector."""
+
+    @property
+    def nonlinearity(self) -> str:
+        match self.activation.__class__.__name__:
+            case "LeakyReLU":
+                return "leaky_relu"
+            case name:
+                return name.lower()
 
     @property
     def config(self) -> dict:
@@ -55,7 +63,7 @@ class ReverseDense(nn.Module):
         output_size: int,
         *,
         bias: bool = True,
-        activation: str | Activation,
+        activation: str | nn.Module,
     ) -> None:
         super().__init__()
 
@@ -67,12 +75,11 @@ class ReverseDense(nn.Module):
         self.bias = self.linear.bias
 
         # initialize activation
-        self.activation = get_activation(activation)
-        activation_name = self.activation.__class__.__name__.lower()
-        nn.init.kaiming_uniform_(self.weight, nonlinearity=activation_name)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        self.activation = Activations.new(activation)
+        nn.init.kaiming_uniform_(self.weight, nonlinearity=self.nonlinearity)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
 
         if self.bias is not None:
-            nn.init.kaiming_uniform_(self.bias[None], nonlinearity=activation_name)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            nn.init.kaiming_uniform_(self.bias[None], nonlinearity=self.nonlinearity)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
 
     @signature("(..., m) -> (..., n)")
     def forward(self, x: Tensor, /) -> Tensor:

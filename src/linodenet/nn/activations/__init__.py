@@ -6,28 +6,24 @@ Notes:
 """
 
 __all__ = [
-    # Sub-Modules
-    "base",
     # Constants
     "ACTIVATIONS",
     "ACTIVATION_FNS",
     "ACTIVATION_FNS_WITH_ARGS",
     # ABCs & Protocols
     "Activation",
+    "Activations",
     "ActivationBase",
     "GenericActivation",
-    # utils
-    "get_activation",
 ]
 
 
-from . import base
 from .base import (
     ACTIVATION_FNS,
     ACTIVATION_FNS_WITH_ARGS,
     ACTIVATIONS,
     Activation,
     ActivationBase,
+    Activations,
     GenericActivation,
-    get_activation,
 )

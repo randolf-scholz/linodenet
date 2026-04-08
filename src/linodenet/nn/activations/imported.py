@@ -1,3 +1,5 @@
+r"""Activation wrappers around functions imported from `linodenet_special`."""
+
 __all__ = [
     "BimodalToGaussian",
     "GaussianToBimodal",
@@ -14,11 +16,11 @@ import torch
 from torch import Tensor, nn
 
 from linodenet_special import (
-    bimodal_to_gaussian as bimodal_to_gaussian,
-    gaussian_to_bimodal as gaussian_to_bimodal,
-    gaussian_to_mixture as gaussian_to_mixture,
-    hard_bend as hard_bend,
-    mixture_to_gaussian as mixture_to_gaussian,
+    bimodal_to_gaussian,
+    gaussian_to_bimodal,
+    gaussian_to_mixture,
+    hard_bend,
+    mixture_to_gaussian,
 )
 
 

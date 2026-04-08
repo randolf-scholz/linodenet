@@ -46,13 +46,13 @@ from linodenet.regularizations import (
 )
 
 
-class Case(NamedTuple):
+class Case[StrT: str](NamedTuple):
     r"""NamedTuple for each case."""
 
     module: ModuleType
     protocol: type | None
     base_class: type | None
-    elements: Mapping[str, type] | Mapping[str, Callable]
+    elements: Mapping[StrT, type] | Mapping[StrT, Callable]
     excluded: set = set()
 
 
@@ -100,6 +100,8 @@ def test_name(case_name: str, item_name: object) -> None:
     r"""Check if the name of the class matches the item name."""
     if not isinstance(item_name, str):
         return
+    if case_name == "activations":
+        return
     case = CASES[case_name]
     obj = case.elements[item_name]
     # fallback for jit.ScriptFunction
@@ -110,6 +112,10 @@ def test_name(case_name: str, item_name: object) -> None:
 def test_name_casing(case_name: str, item_name: object) -> None:
     r"""Check that the case name is in snake_case."""
     if not isinstance(item_name, str):
+        return
+    if case_name == "activations":
+        assert item_name == item_name.lower()
+        assert "_" not in item_name
         return
     case = CASES[case_name]
     item = case.elements[item_name]

@@ -1,16 +1,20 @@
 r"""Base classes for activations."""
 
 __all__ = [
+    "ACTIVATIONS",
+    "ACTIVATION_FNS",
+    "ACTIVATION_FNS_WITH_ARGS",
     # ABCs & Protocols
     "Activation",
+    "Activations",
     "GenericActivation",
     "ActivationBase",
-    # functions
-    "get_activation",
 ]
 
+import re
 from abc import abstractmethod
 from collections.abc import Callable
+from enum import StrEnum
 from typing import Protocol, overload, runtime_checkable
 
 from torch import Tensor, nn
@@ -26,7 +30,9 @@ from .imported import (
     MixtureToGaussian,
     bimodal_to_gaussian,
     gaussian_to_bimodal,
+    gaussian_to_mixture,
     hard_bend,
+    mixture_to_gaussian,
 )
 
 type GenericActivation = Callable[..., Tensor | tuple[Tensor, ...]]
@@ -63,91 +69,139 @@ class ActivationBase(nn.Module):
         ...
 
 
-@overload
-def get_activation[T: nn.Module](arg: Makes[T], /, **cfg: object) -> T: ...
-@overload
-def get_activation(arg: str | dict, /, **cfg: object) -> nn.Module: ...
-def get_activation(arg: object, /, **cfg: object) -> nn.Module:
-    r"""Get an activation function by name.
-
-    Args:
-        arg: The activation to retrieve. Can be one of the following:
-            - A string name of an activation function or class.
-            - A dictionary (Blueprint) with instructions for initializing an activation function or class.
-            - An instance of an activation function or class.
-            - A class of an activation function or class.
-        **cfg: Additional keyword arguments to pass to the activation function or class when initializing.
-    """
-    match arg:
-        # if a name, look up in the dictionary
-        case str(name):
-            # avoid circular import
-
-            match ACTIVATIONS.get(name):
-                case None:
-                    pass
-                case cls:
-                    return get_activation(cls, **cfg)
-
-            raise LookupError(f"Unknown activation function: {name!r}")
-
-        # if a class, try to instantiate it with the given configuration
-        case type() as cls:
-            try:
-                return cls(**cfg)
-            except TypeError as exc:
-                exc.add_note(f"Failed to instantiate {cls} with arguments {cfg!r}")
-                raise
-
-        # if a config, use the blueprint system to initialize it
-        case dict(spec):
-            result = initialize(spec)
-            assert isinstance(result, nn.Module)
-            return result
-
-        # if an instance, return as-is
-        case nn.Module() as instance:
-            if cfg:
-                raise ValueError(f"Cannot pass arguments to an instance: {cfg!r}")
-            return instance
-
-        case _:
-            raise TypeError(f"Invalid argument: {arg!r}")
+def _to_kebab_case(value: str, /) -> str:
+    r"""Normalize a name to lowercase kebab-case."""
+    normalized = re.sub(r"_", "-", value.strip())
+    normalized = re.sub(r"([a-z0-9])([A-Z][a-z])", r"\1-\2", normalized)
+    return normalized.lower()
 
 
-ACTIVATIONS: dict[str, type[nn.Module]] = {
-    "CReLU": CReLU,
-    "GaussianToBimodal": GaussianToBimodal,
-    "BimodalToGaussian": BimodalToGaussian,
-    "GaussianToMixture": GaussianToMixture,
-    "MixtureToGaussian": MixtureToGaussian,
+class Activations(StrEnum):
+    r"""Enum of the provided activation modules."""
+
+    CRELU = "crelu"
+    GAUSSIAN_TO_BIMODAL = "gaussian-to-bimodal"
+    BIMODAL_TO_GAUSSIAN = "bimodal-to-gaussian"
+    GAUSSIAN_TO_MIXTURE = "gaussian-to-mixture"
+    MIXTURE_TO_GAUSSIAN = "mixture-to-gaussian"
+    CELU = "celu"
+    ELU = "elu"
+    GELU = "gelu"
+    GLU = "glu"
+    HARDSHRINK = "hardshrink"
+    HARDSIGMOID = "hardsigmoid"
+    HARDSWISH = "hardswish"
+    HARDTANH = "hardtanh"
+    IDENTITY = "identity"
+    LEAKY_RELU = "leaky-relu"
+    LOG_SIGMOID = "log-sigmoid"
+    MISH = "mish"
+    PRELU = "prelu"
+    RRELU = "rrelu"
+    RELU = "relu"
+    RELU6 = "relu6"
+    SELU = "selu"
+    SILU = "silu"
+    SIGMOID = "sigmoid"
+    SOFTPLUS = "softplus"
+    SOFTSHRINK = "softshrink"
+    SOFTSIGN = "softsign"
+    TANH = "tanh"
+    TANHSHRINK = "tanhshrink"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Activations | None:
+        if not isinstance(value, str):
+            return None
+        normalized = _to_kebab_case(value)
+
+        if activation := cls.__members__.get(normalized):
+            return activation
+
+        for member in cls:
+            if _to_kebab_case(ACTIVATIONS[member].__name__) == normalized:
+                return member
+        return None
+
+    @overload
+    @classmethod
+    def new[T: nn.Module](cls, arg: Makes[T], /, **cfg: object) -> T: ...
+    @overload
+    @classmethod
+    def new(cls, arg: str, /, **cfg: object) -> nn.Module: ...
+    @classmethod
+    def new(cls, arg: object, /, **cfg: object) -> nn.Module:
+        r"""Instantiate an activation module from a name, class, config, or instance."""
+        match arg:
+            case Activations() as member:
+                return cls.new(ACTIVATIONS[member], **cfg)
+
+            case str(name):
+                try:
+                    activation = cls(name)
+                except ValueError as exc:
+                    normalized = _to_kebab_case(name)
+                    raise LookupError(
+                        f"Unknown activation function: {name!r} (normalized: {normalized!r})"
+                    ) from exc
+                return cls.new(activation, **cfg)
+
+            case type() as module_cls:
+                try:
+                    return module_cls(**cfg)
+                except TypeError as exc:
+                    exc.add_note(
+                        f"Failed to instantiate {module_cls} with arguments {cfg!r}"
+                    )
+                    raise
+
+            case dict(spec):
+                result = initialize(spec)
+                assert isinstance(result, nn.Module)
+                return result
+
+            case nn.Module() as instance:
+                if cfg:
+                    raise ValueError(f"Cannot pass arguments to an instance: {cfg!r}")
+                return instance
+
+            case _:
+                raise TypeError(f"Invalid argument: {arg!r}")
+
+
+ACTIVATIONS: dict[Activations, type[nn.Module]] = {
+    Activations.CRELU: CReLU,
+    Activations.GAUSSIAN_TO_BIMODAL: GaussianToBimodal,
+    Activations.BIMODAL_TO_GAUSSIAN: BimodalToGaussian,
+    Activations.GAUSSIAN_TO_MIXTURE: GaussianToMixture,
+    Activations.MIXTURE_TO_GAUSSIAN: MixtureToGaussian,
     # torch imports
-    "CELU"        : nn.CELU,
-    "ELU"         : nn.ELU,
-    "GELU"        : nn.GELU,
-    "GLU"         : nn.GLU,
-    "Hardshrink"  : nn.Hardshrink,
-    "Hardsigmoid" : nn.Hardsigmoid,
-    "Hardswish"   : nn.Hardswish,
-    "Hardtanh"    : nn.Hardtanh,
-    "Identity"    : nn.Identity,
-    "LeakyReLU"   : nn.LeakyReLU,
-    "LogSigmoid"  : nn.LogSigmoid,
-    "Mish"        : nn.Mish,
-    "PReLU"       : nn.PReLU,
-    "RReLU"       : nn.RReLU,
-    "ReLU"        : nn.ReLU,
-    "ReLU6"       : nn.ReLU6,
-    "SELU"        : nn.SELU,
-    "SiLU"        : nn.SiLU,
-    "Sigmoid"     : nn.Sigmoid,
-    "Softplus"    : nn.Softplus,
-    "Softshrink"  : nn.Softshrink,
-    "Softsign"    : nn.Softsign,
-    "Tanh"        : nn.Tanh,
-    "Tanhshrink"  : nn.Tanhshrink,
+    Activations.CELU: nn.CELU,
+    Activations.ELU: nn.ELU,
+    Activations.GELU: nn.GELU,
+    Activations.GLU: nn.GLU,
+    Activations.HARDSHRINK: nn.Hardshrink,
+    Activations.HARDSIGMOID: nn.Hardsigmoid,
+    Activations.HARDSWISH: nn.Hardswish,
+    Activations.HARDTANH: nn.Hardtanh,
+    Activations.IDENTITY: nn.Identity,
+    Activations.LEAKY_RELU: nn.LeakyReLU,
+    Activations.LOG_SIGMOID: nn.LogSigmoid,
+    Activations.MISH: nn.Mish,
+    Activations.PRELU: nn.PReLU,
+    Activations.RRELU: nn.RReLU,
+    Activations.RELU: nn.ReLU,
+    Activations.RELU6: nn.ReLU6,
+    Activations.SELU: nn.SELU,
+    Activations.SILU: nn.SiLU,
+    Activations.SIGMOID: nn.Sigmoid,
+    Activations.SOFTPLUS: nn.Softplus,
+    Activations.SOFTSHRINK: nn.Softshrink,
+    Activations.SOFTSIGN: nn.Softsign,
+    Activations.TANH: nn.Tanh,
+    Activations.TANHSHRINK: nn.Tanhshrink,
 }  # fmt: skip
-r"""Dictionary containing all available activation classes."""
+r"""Dictionary mapping activation enum values to module classes."""
 
 
 ACTIVATION_FNS: dict[str, Activation] = {
@@ -181,5 +235,7 @@ r"""Dictionary containing all available activation functions."""
 
 ACTIVATION_FNS_WITH_ARGS: dict[str, GenericActivation] = {
     "crelu": crelu,
+    "mixture_to_gaussian": mixture_to_gaussian,
+    "gaussian_to_mixture": gaussian_to_mixture,
 }  # fmt: skip
 r"""Activations that do not match the usual signature of activations."""
