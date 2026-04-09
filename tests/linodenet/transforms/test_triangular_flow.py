@@ -52,10 +52,10 @@ class TestTriangularFlow(TestTransform):
 
         expected = torch.arange(8, dtype=torch.int64)
 
-        assert torch.equal(flow.perm, expected)
-        assert torch.equal(flow.invperm, expected)
-        assert flow.state_dict()["perm"].dtype == torch.int64
-        assert flow.state_dict()["invperm"].dtype == torch.int64
+        assert torch.equal(flow.permutation, expected)
+        assert torch.equal(flow.inverse_permutation, expected)
+        assert flow.state_dict()["permutation"].dtype == torch.int64
+        assert flow.state_dict()["inverse_permutation"].dtype == torch.int64
 
     def test_permuted_flow_matches_manual_change_of_basis(self) -> None:
         r"""Check the permutation is applied before and after the triangular map."""
@@ -75,15 +75,15 @@ class TestTriangularFlow(TestTransform):
 
         x = torch.tensor([[1.0, -2.0, 3.0, -4.0], [0.5, 1.5, -0.5, 2.0]])
         lower = flow.lower.tril(diagonal=-1)
-        x_perm = x[..., flow.perm]
+        x_perm = x[..., flow.permutation]
         y_perm = x_perm + torch.einsum("mn, ...n -> ...m", lower, x_perm)
-        y_expected = y_perm[..., flow.invperm]
+        y_expected = y_perm[..., flow.inverse_permutation]
         x_expected = torch.linalg.solve_triangular(
             flow.weight,
-            y_expected[..., flow.perm, None],
+            y_expected[..., flow.permutation, None],
             upper=False,
             unitriangular=True,
-        ).squeeze(-1)[..., flow.invperm]
+        ).squeeze(-1)[..., flow.inverse_permutation]
 
         y = flow.encode(x)
         xhat = flow.decode(y)
