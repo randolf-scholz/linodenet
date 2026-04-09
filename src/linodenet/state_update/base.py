@@ -52,10 +52,6 @@ from signatures import signature
 class AbstractStateUpdate[X, Y](Protocol):
     r"""Abstract protocol for state-update callbacks.
 
-    Currently unused and only included for documentation purposes.
-    The state updates we consider in practice take Tensors as inputs and outputs.
-    In principle, however, one could consider more general types.
-
     .. math::  x' = F(y, x)
     """
 
