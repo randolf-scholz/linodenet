@@ -102,7 +102,6 @@ from collections.abc import Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
-    TYPE_CHECKING,
     Any,
     Final,
     Literal,
@@ -148,9 +147,7 @@ def is_surjection(obj: object, /) -> bool:
     This method is needed because standard isinstance checks do not work with jit.ScriptModule.
     This is because Protocol used getattr_static, rather than proper getattr/hasattr.
     """
-    return all(
-        callable(getattr(obj, name, None)) for name in get_protocol_members(Surjection)
-    )
+    return callable(obj) and callable(getattr(obj, "right_inverse", None))
 
 
 @runtime_checkable
@@ -391,21 +388,17 @@ class WrappedParametrization(ParametrizationBase):
         if not callable(getattr(parametrization, "right_inverse", None)):
             parametrization = WithoutRightInverse(parametrization)
 
-        if TYPE_CHECKING:
-            assert (  # noqa: PT018
-                isinstance(parametrization, nn.Module)
-                and isinstance(parametrization, Surjection)
-            )
+        parametrization = parametrization.to(device=tensor.device, dtype=tensor.dtype)
 
-        if getattr(parametrization, "DOMAIN", None) is not None:
-            self.DOMAIN: Final = parametrization.DOMAIN
+        if (domain := getattr(parametrization, "DOMAIN", None)) is not None:
+            self.DOMAIN: Final = domain
 
-        if getattr(parametrization, "CODOMAIN", None) is not None:
-            self.CODOMAIN: Final = parametrization.CODOMAIN
+        if (codomain := getattr(parametrization, "CODOMAIN", None)) is not None:
+            self.CODOMAIN: Final = codomain
 
-        self.parametrization: Surjection = parametrization.to(
-            device=tensor.device, dtype=tensor.dtype
-        )
+        assert is_surjection(parametrization)
+        # pyrefly: ignore[bad-assignment]
+        self.parametrization: Surjection[Tensor, Tensor] = parametrization  # pyright: ignore[reportAttributeAccessIssue]
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
