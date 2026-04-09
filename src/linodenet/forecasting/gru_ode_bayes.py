@@ -60,9 +60,8 @@ class GRUODECell(nn.Module):
         The step size is given by delta_t.
 
         Args:
-            x:        input values
-            h:        hidden state (current)
-            delta_t:  time step
+            x: input values
+            h: hidden state (current)
 
         Returns:
             Updated h
@@ -140,9 +139,8 @@ class FullGRUODECell(nn.Module):
         The step size is given by delta_t.
 
         Args:
-            x:        input values
-            h:        hidden state (current)
-            delta_t:  time step
+            x: input values
+            h: hidden state (current)
 
         Returns:
             Updated h
@@ -459,7 +457,7 @@ class GRU_ODE_Bayes(nn.Module):
             assert not self.impute, (
                 "Dopri5 solver is only compatible with autonomous ODE."
             )
-            solution, eval_times, eval_vals = odeint(
+            solution, eval_times, eval_vals = odeint(  # pyright: ignore[reportAssignmentType]
                 self.gru_c,
                 h,
                 torch.tensor([0, delta_t]),
