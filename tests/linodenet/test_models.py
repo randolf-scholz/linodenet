@@ -7,9 +7,9 @@ import pytest
 import torch
 from torch import Tensor, nn
 
-from linodenet.flows import LinearFlow
 from linodenet.forecasting import LinODEnet
 from linodenet.mappings.linear import LinearContraction
+from linodenet.state_propagation.flows import LinearFlow
 from linodenet.testing import assert_model_ok, check_initialization
 from tests.testing import PROJECT
 

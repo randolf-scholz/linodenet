@@ -1,9 +1,10 @@
-r"""Shared protocols and base classes for dynamical flows."""
+r"""Core protocols and base classes for state propagation.
 
-__all__ = [
-    "Flow",
-    "FlowBase",
-]
+This module defines the structural interface and abstract base class for
+time-indexed operators that evolve a system state across one or more deltas.
+"""
+
+__all__ = ["Propagator", "PropagatorBase"]
 
 from abc import abstractmethod
 from typing import Final, Protocol
@@ -13,7 +14,7 @@ from torch import Tensor, nn
 from signatures import signature
 
 
-class Flow(Protocol):
+class Propagator(Protocol):
     r"""Protocol for time-indexed state evolution operators."""
 
     input_shape: Final[tuple[int, ...]]  # type: ignore[misc]
@@ -25,8 +26,15 @@ class Flow(Protocol):
         ...
 
 
-class FlowBase(nn.Module):
+class PropagatorBase(nn.Module):
     r"""Abstract base class for time-indexed state evolution operators."""
+
+    input_shape: Final[tuple[int, ...]]
+    r"""CONST: The dimensionality of inputs."""
+
+    def __init__(self, input_shape: tuple[int, ...]) -> None:
+        super().__init__()
+        self.input_shape = input_shape
 
     @abstractmethod
     @signature("[(..., $deltas), (..., *ds)] -> (..., $deltas, *ds)")

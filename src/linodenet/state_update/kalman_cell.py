@@ -1,7 +1,4 @@
-r"""Implementations of Kalman-inspired RNN Cells.
-
-Cells are building blocks for RNNs; as per the Cell Protocol,
-a cell essentially is a function $(y, x) -> x'$.
+r"""Implementations of Kalman-inspired filters.
 
 KalmanCell
 ----------
@@ -26,10 +23,10 @@ The KalmanCell filter is a generalization of the classical Kalman Filter.
 """
 
 __all__ = [
-    "KalmanCell",
-    "PseudoKalmanCell",
-    "NonLinearKalmanCell",
-    "NonLinearCell",
+    "KalmanUpdate",
+    "PseudoKalmanUpdate",
+    "NonLinearKalmanUpdate",
+    "NonLinearUpdate",
 ]
 
 from enum import Enum
@@ -41,7 +38,7 @@ from torch import Tensor, nn
 
 from signatures import signature
 
-from .base import CellBase
+from .base import StateUpdaterBase
 
 
 class _Alpha(float, Enum):
@@ -56,8 +53,8 @@ class _Alpha(float, Enum):
         return float(arg)
 
 
-class KalmanCell(CellBase):
-    r"""Implements a Kalman Filter Cell.
+class KalmanUpdate(StateUpdaterBase):
+    r"""Implements a Kalman state update.
 
     .. math:: F(y，x) =  x - ΣHᵀ(HΣHᵀ + R)⁻¹(Hx - y)
 
@@ -67,10 +64,10 @@ class KalmanCell(CellBase):
     """
 
 
-class PseudoKalmanCell(CellBase):
-    r"""Implements a Kalman-inspired Filter Cell.
+class PseudoKalmanUpdate(StateUpdaterBase):
+    r"""Implements a Kalman-inspired state update.
 
-    Contrary to the KalmanCell, this cell does not learn a single covariance
+    Contrary to the KalmanUpdate, this module does not learn a single covariance
     but two separate matrices $A$ and $B$.
 
     .. math::  x' = x - αBHᵀΠₘᵀAΠₘ(Hx - y)
@@ -156,8 +153,8 @@ class PseudoKalmanCell(CellBase):
         return x - self.alpha * z
 
 
-class NonLinearKalmanCell(CellBase):
-    r"""A Kalman-Filter inspired non-linear Filter.
+class NonLinearKalmanUpdate(StateUpdaterBase):
+    r"""A Kalman-inspired nonlinear state update.
 
     We assume that $y = h(x)$ and $y = H⋅x$ in the linear case. We adapt  the formula
     provided by the regular Kalman Filter and replace the matrices with learnable
@@ -256,8 +253,8 @@ class NonLinearKalmanCell(CellBase):
         return torch.einsum("ij, ...j -> ...i", self.B, q)
 
 
-class NonLinearCell(CellBase):
-    r"""Non-linear Layers stacked on top of linear core."""
+class NonLinearUpdate(StateUpdaterBase):
+    r"""Nonlinear layers stacked on top of a linear core."""
 
     # PARAMETERS
     H: Tensor

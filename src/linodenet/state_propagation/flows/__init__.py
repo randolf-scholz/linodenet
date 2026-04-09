@@ -12,9 +12,7 @@ __all__ = [
     "LinearFlow",
 ]
 
-from .base import Flow, FlowBase
-from .continuous import ContinuousFlow
-from .discrete import DiscreteFlow
+from .base import ContinuousFlow, DiscreteFlow, Flow, FlowBase
 from .linear import LinearFlow
 
 FLOWS: dict[str, type[Flow]] = {

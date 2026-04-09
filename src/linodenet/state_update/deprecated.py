@@ -1,16 +1,17 @@
 r"""Deprecated Filters implementations."""
 
 __all__ = [
-    "FilterList",
-    "FilterSequence",
-    "FilterResNet",
-    "ReZeroFilter",
-    "PseudoKalmanCell",
+    "UpdateList",
+    "UpdateSequence",
+    "UpdateResNet",
+    "ReZeroUpdate",
+    "PseudoKalmanUpdate",
 ]
 
 
 from abc import abstractmethod
 from collections.abc import Iterable
+from typing import Final, Protocol, TypeIs, runtime_checkable
 
 import torch
 from torch import Tensor, nn
@@ -18,12 +19,94 @@ from torch import Tensor, nn
 from linodenet.nn import ModuleSequence
 from signatures import signature
 
-from .base import CellBase, FilterBase
+from .base import AbstractStateUpdate, StateUpdaterBase
 from .kalman_cell import _Alpha
 
 
-class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):
-    r"""Base class for nn.ModuleList of Filters that's a Filter itself.
+@runtime_checkable
+class AbstractSquareStateUpdate[Y](AbstractStateUpdate[Y, Y], Protocol):
+    r"""Abstract protocol for square state-update callbacks.
+
+    Currently unused and only included for documentation purposes.
+    Square state updates are the special case where observation and state spaces coincide.
+    In principle, however, one could consider more general types.
+
+    .. math::  y' = F(y_obs, y_pred)
+    """
+
+    def __call__(self, y_obs: Y, y_pred: Y, /) -> Y: ...
+
+
+@runtime_checkable
+class SquareStateUpdater(AbstractSquareStateUpdate[Tensor], Protocol):
+    r"""Protocol for vector-valued square state updaters.
+
+    .. math::  y' = F(y_obs, y_pred)
+
+    Note: Every SquareStateUpdater is also a StateUpdater with `hidden_size == input_size`.
+    """
+
+    input_size: Final[int]  # type: ignore[misc]
+    hidden_size: Final[int]  # type: ignore[misc]
+
+    def __init__(self, /, input_size: int) -> None:
+        super().__init__()
+        self.input_size = int(input_size)
+        self.hidden_size = int(input_size)
+
+    @abstractmethod
+    @signature("[(..., d), (..., d)] -> (..., d)")
+    def __call__(self, y_obs: Tensor, y_pred: Tensor, /) -> Tensor: ...
+
+
+class SquareStateUpdaterBase(StateUpdaterBase):
+    r"""Base class for square state updaters.
+
+    This base class is specialized to the case when X=Y=Tensor, and the arguments
+    are vectors.
+
+    .. math::  y' = F(y_obs, y_pred)
+
+    Where $x$ is the current state of the system, $y$ is the current measurement, and
+    $x'$ is the new state of the system. $ϕ$ is a function that maps the measurement
+    to the state of the system. $h$ is a function that maps the current state of the
+    system to the measurement.
+
+    Or multiple blocks of said form. In particular, we are interested in state updaters
+    satisfying the idempotence property: if $y=h(x)$, then $x'=x$.
+    """
+
+    def __init__(self, /, input_size: int) -> None:
+        super().__init__(input_size, input_size)
+
+    @abstractmethod
+    @signature("[(..., d), (..., d)] -> (..., d)")
+    def forward(self, y_obs: Tensor, y_hat: Tensor, /) -> Tensor:
+        r"""Forward pass of the state updater.
+
+        Args:
+            y_obs: The current measurement of the system.
+            y_hat: The current estimation of the state of the system.
+
+        Returns:
+            The updated state of the system.
+        """
+        ...
+
+
+def is_square_state_updater(arg: object, /) -> TypeIs[SquareStateUpdater]:
+    r"""Check whether an object is a square state updater."""
+    input_size = getattr(arg, "input_size", None)
+    hidden_size = getattr(arg, "hidden_size", None)
+    return (
+        isinstance(input_size, int)
+        and isinstance(hidden_size, int)
+        and input_size == hidden_size
+    )
+
+
+class UpdateList[C: StateUpdaterBase](SquareStateUpdaterBase, ModuleSequence[C]):
+    r"""Base class for deprecated `nn.ModuleList` state updaters.
 
     Note: This class takes care of tricky multiple inheritance issues with nn.Module.
     """
@@ -48,8 +131,8 @@ class FilterList[C: CellBase](FilterBase, ModuleSequence[C]):
     def forward(self, y_obs: Tensor, y_hat: Tensor, /) -> Tensor: ...
 
 
-class FilterSequence[C: CellBase](FilterList[C]):
-    r"""Apply multiple Filters sequentially."""
+class UpdateSequence[C: StateUpdaterBase](UpdateList[C]):
+    r"""Apply multiple deprecated state updaters sequentially."""
 
     def __init__(self, modules: Iterable[C] = ()) -> None:
         filters = list(modules)
@@ -79,8 +162,8 @@ class FilterSequence[C: CellBase](FilterList[C]):
         return y
 
 
-class FilterResNet[C: CellBase](FilterSequence[C]):
-    r"""Sequential Filter with Residual connections.
+class UpdateResNet[C: StateUpdaterBase](UpdateSequence[C]):
+    r"""Sequential state update with residual connections.
 
     .. math:: yₖ₊₁ = yₖ + Fₖ(y_obs, yₖ)
     """
@@ -92,8 +175,8 @@ class FilterResNet[C: CellBase](FilterSequence[C]):
         return y
 
 
-class ReZeroFilter[C: CellBase](FilterSequence[C]):
-    r"""Sequential Filter with ReZero connections.
+class ReZeroUpdate[C: StateUpdaterBase](UpdateSequence[C]):
+    r"""Sequential state update with ReZero connections.
 
     .. math:: xₖ₊₁ = xₖ + εₖ⋅Fₖ(y, xₖ)
     """
@@ -104,7 +187,7 @@ class ReZeroFilter[C: CellBase](FilterSequence[C]):
 
     def __init__(self, layers: Iterable[C]) -> None:
         r"""Initialize from modules."""
-        # TODO: Use intersection Type Filter & nn.Module
+        # TODO: Use intersection Type StateUpdater & nn.Module
         module_list: list[C] = list(layers)
 
         if not module_list:
@@ -134,8 +217,8 @@ class ReZeroFilter[C: CellBase](FilterSequence[C]):
         return y
 
 
-class PseudoKalmanCell(CellBase):
-    r"""A Linear, Autoregressive Filter.
+class PseudoKalmanUpdate(StateUpdaterBase):
+    r"""A linear, autoregressive state update.
 
     .. math::  x̂' = x̂ - αP∏ₘᵀP⁻¹Πₘ(x̂ - x)
 

@@ -9,7 +9,6 @@ import pytest
 
 import linodenet as lib
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
-from linodenet.flows import FLOWS, Flow, FlowBase
 from linodenet.imputation import IMPUTERS, ImputerProtocol
 from linodenet.initializations import INITIALIZATION_FNS
 from linodenet.initializations.base import Initialization
@@ -44,6 +43,7 @@ from linodenet.regularizations import (
     Regularization,
     RegularizationBase,
 )
+from linodenet.state_propagation.flows import FLOWS, Flow, FlowBase
 
 
 class Case[StrT: str](NamedTuple):

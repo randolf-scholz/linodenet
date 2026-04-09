@@ -5,11 +5,11 @@ import logging
 import pytest
 import torch
 
-import linodenet.filters.deprecated
-from linodenet import flows
 from linodenet.forecasting import LinODEnet
 from linodenet.mappings import embeddings
 from linodenet.nn import ResNet
+from linodenet.state_propagation import flows
+from linodenet.state_update import deprecated
 
 
 @pytest.mark.skip(reason="Not implemented yet.")
@@ -24,7 +24,7 @@ def test_model_stability() -> None:
         "input_size": D,
         "hidden_size": L,
         "embedding_type": "concat",
-        "Filter": linodenet.filters.deprecated.FilterList,
+        "Filter": deprecated.UpdateList,
         "System": {
             "__module__": flows.LinearFlow.__module__,
             "__name__": flows.LinearFlow.__qualname__,

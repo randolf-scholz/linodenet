@@ -1,9 +1,9 @@
-r"""Containers for sequential application of Cells and Filters."""
+r"""Containers for sequential application of filters."""
 
 __all__ = [
-    "CellList",
-    "CellSequence",
-    "ResidualCellSequence",
+    "UpdateList",
+    "UpdateSequence",
+    "ResidualUpdateSequence",
 ]
 
 from abc import abstractmethod
@@ -15,11 +15,11 @@ from torch import Tensor, nn
 from linodenet.nn import ModuleSequence
 from signatures import signature
 
-from .base import Cell, CellBase
+from .base import StateUpdater, StateUpdaterBase
 
 
-class CellList[C: CellBase](CellBase, ModuleSequence[C]):
-    r"""Base class for nn.ModuleList of Cells that's a Cell itself.
+class UpdateList[C: StateUpdaterBase](StateUpdaterBase, ModuleSequence[C]):
+    r"""Base class for `nn.ModuleList` of state updaters that is itself a state updater.
 
     Note: This class takes care of tricky multiple inheritance issues with nn.Module.
     """
@@ -33,16 +33,16 @@ class CellList[C: CellBase](CellBase, ModuleSequence[C]):
         # Therefore, we need to carefully manually reproduce the __init__ logic here.
         assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
         ModuleSequence[C].__init__(self, modules)
-        # Note: Need to call Cell.__init__, not CellBase.__init__
+        # Note: Need to call StateUpdater.__init__, not StateUpdaterBase.__init__
         #   Otherwise nn.Module.__init__ gets called twice!
-        Cell.__init__(self, input_size, hidden_size)
+        StateUpdater.__init__(self, input_size, hidden_size)
 
     @abstractmethod
     def forward(self, y_obs: Tensor, x_hat: Tensor, /) -> Tensor: ...
 
 
-class CellSequence[C: CellBase](CellList[C]):
-    r"""Apply multiple Cells sequentially.
+class UpdateSequence[C: StateUpdaterBase](UpdateList[C]):
+    r"""Apply multiple state updaters sequentially.
 
     .. math:: xₖ₊₁ = Fₖ(y, xₖ)
     """
@@ -76,13 +76,13 @@ class CellSequence[C: CellBase](CellList[C]):
         return x
 
 
-class ResidualCellSequence[C: CellBase](CellSequence[C]):
-    r"""Sequential Cell with Residual connections.
+class ResidualUpdateSequence[C: StateUpdaterBase](UpdateSequence[C]):
+    r"""Sequential state updater with residual connections.
 
     .. math:: xₖ₊₁ = xₖ + αₖ⋅Fₖ(y, xₖ)
 
     Args:
-        modules: An iterable of Cell modules to be applied sequentially.
+        modules: An iterable of state updater modules to be applied sequentially.
         alpha_learnable (default=True): If True, the residual scaling factors αₖ are learnable
         alpha (default=0.0): Initial value for the residual scaling factors αₖ.
 

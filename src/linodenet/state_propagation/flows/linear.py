@@ -14,7 +14,7 @@ from linodenet.mappings.functional import identity as identity_map
 from linodenet.types import SelfMap
 from signatures import signature
 
-from .continuous import ContinuousFlowBase
+from .base import ContinuousFlowBase
 
 
 class LinearFlow(ContinuousFlowBase):
@@ -37,8 +37,6 @@ class LinearFlow(ContinuousFlowBase):
     r"""CONST: The dimensionality of the outputs."""
     scalar_learnable: Final[bool]
     r"""CONST: Whether the scalar is learnable or not."""
-    input_shape: Final[tuple[int]]
-    r"""CONST: The shape of the input state."""
 
     # Parameters
     scalar: Tensor
@@ -69,7 +67,7 @@ class LinearFlow(ContinuousFlowBase):
         scalar_learnable: bool = True,
     ) -> None:
         r"""Initialize the Linear ODE Cell."""
-        super().__init__()
+        super().__init__(input_shape=(input_size,))
         self.kernel_initialization_spec = kernel_initialization
         self.kernel_parametrization_spec = kernel_parametrization
         self.scalar_init = scalar
@@ -119,7 +117,6 @@ class LinearFlow(ContinuousFlowBase):
         self.input_size = input_size
         self.output_size = input_size
         self.scalar_learnable = scalar_learnable
-        self.input_shape = (input_size,)
         self._kernel_initialization = kernel_initialization_dispatch()
         self._kernel_parametrization = kernel_parametrization_dispatch()
 
@@ -157,10 +154,9 @@ class LinearFlow(ContinuousFlowBase):
         .. math:: step(∆tₙ, x) = e^{ε⋅π(A)∆tₙ}x
         """
         self.kernel = self.scalar * self.kernel_parametrization(self.weight)
-        Adt = torch.einsum("...n, kl -> ...nkl", timedeltas, self.kernel)
+        Adt = torch.einsum("..., kl -> ...kl", timedeltas, self.kernel)
         expAdt = torch.linalg.matrix_exp(Adt)  # (*bs, n)
-        xhat = torch.einsum("...nkl, ...l -> ...nk", expAdt, x0)
-        return xhat
+        return torch.einsum("...nkl, ...l -> ...nk", expAdt, x0)
 
     @signature("[(..., $n), (..., d)] -> (..., $n, d)")
     def forecast(

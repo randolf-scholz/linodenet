@@ -1,6 +1,6 @@
-r"""Wraps an existing Filter $F$ so that it can handle missing values."""
+r"""Wraps an existing state updater $F$ so that it can handle missing values."""
 
-__all__ = ["MissingValueCell"]
+__all__ = ["MissingValueUpdate"]
 
 
 from collections.abc import Mapping
@@ -14,11 +14,11 @@ from linodenet.constants import EMPTY_MAP
 from linodenet.imputation import ImputationStrategy, ImputerProtocol
 from signatures import signature
 
-from .base import Cell, CellBase
+from .base import StateUpdater, StateUpdaterBase
 
 
-class MissingValueCell(CellBase):
-    r"""Wraps an existing Filter $F$ so that it can handle missing values.
+class MissingValueUpdate(StateUpdaterBase):
+    r"""Wraps an existing state updater $F$ so that it can handle missing values.
 
     .. math:: x' &= F(u，x)   &   u = impute(m, y, x)
 
@@ -53,8 +53,8 @@ class MissingValueCell(CellBase):
         return {
             "input_size": self.input_size,
             "hidden_size": self.hidden_size,
-            "cell_type": self.cell_type,
-            "cell_kwargs": dict(self.cell_kwargs),
+            "filter_type": self.filter_type,
+            "filter_kwargs": dict(self.filter_kwargs),
             "concat_mask": self.concat_mask,
             "imputation": self.imputation,
         }
@@ -64,24 +64,24 @@ class MissingValueCell(CellBase):
         input_size: int,
         hidden_size: int,
         *,
-        cell_type: type[Cell],
-        cell_kwargs: Mapping[str, Any] = EMPTY_MAP,
+        filter_type: type[StateUpdater],
+        filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
         concat_mask: bool = True,
         imputation: str | float | Tensor | nn.Module = "zero",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
-        self.cell_type = cell_type
-        self.cell_kwargs = dict(cell_kwargs)
+        self.filter_type = filter_type
+        self.filter_kwargs = dict(filter_kwargs)
         self.imputation = imputation
         self.concat_mask = bool(concat_mask)
 
-        # initialize filter
+        # initialize state updater
         filter_input_size = self.input_size * (1 + self.concat_mask)
-        filter_options = dict(cell_kwargs) | {
+        filter_options = dict(filter_kwargs) | {
             "input_size": filter_input_size,
             "hidden_size": hidden_size,
         }
-        self.cell = cell_type(**filter_options)
+        self.filter = filter_type(**filter_options)
 
         # initialize imputation strategy
         # imputation_strategy: ImputationStrategy
@@ -131,4 +131,4 @@ class MissingValueCell(CellBase):
         if self.concat_mask:
             u = torch.cat([u, self.mask], dim=-1)
 
-        return self.cell(u, x)
+        return self.filter(u, x)

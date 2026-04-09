@@ -1,8 +1,8 @@
-r"""Linear Filter Cells."""
+r"""Linear filters."""
 
 __all__ = [
-    "LinearCell",
-    "LinearResidualCell",
+    "LinearUpdate",
+    "LinearResidualUpdate",
 ]
 
 from math import sqrt
@@ -13,11 +13,11 @@ from torch import Tensor, nn
 
 from signatures import signature
 
-from .base import CellBase
+from .base import StateUpdaterBase
 
 
-class LinearCell(CellBase):
-    r"""Linear RNN Cell.
+class LinearUpdate(StateUpdaterBase):
+    r"""Linear state update.
 
     .. math:: F(y，x) =  Ux + Vy + b
 
@@ -49,7 +49,7 @@ class LinearCell(CellBase):
 
     @signature("[(..., n), (..., m)] -> (..., m)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Forward pass of the cell.
+        r"""Forward pass of the state update.
 
         .. math:: F(y，x) =  Ux + Vy + b
         """
@@ -61,8 +61,8 @@ class LinearCell(CellBase):
         return z
 
 
-class LinearResidualCell(CellBase):
-    r"""Linear RNN Cell that performs a residual update.
+class LinearResidualUpdate(StateUpdaterBase):
+    r"""Linear residual state update.
 
     .. math:: x' = x - F⋅(Hy - x)
 

@@ -13,10 +13,10 @@ import torch
 from torch import Tensor, nn
 
 from blueprint import Blueprint, initialize
-from linodenet.filters import Filter, MissingValueCell
-from linodenet.flows import ContinuousFlow, LinearFlow
 from linodenet.mappings import ConcatEmbedding, ConcatProjection
 from linodenet.nn import ResNet
+from linodenet.state_propagation.flows import ContinuousFlow, LinearFlow
+from linodenet.state_update import MissingValueUpdate, StateUpdater
 from linodenet.utils import deep_dict_update
 from linodenet_special import pad
 from signatures import signature
@@ -34,7 +34,7 @@ _DEFAULT_LSSM_CONFIG = {
     "System": _module_config(LinearFlow),
     "Embedding": _module_config(ConcatEmbedding),
     "Projection": _module_config(ConcatProjection),
-    "Filter": _module_config(MissingValueCell),
+    "Filter": _module_config(MissingValueUpdate),
     "Encoder": _module_config(ResNet),
     "Decoder": _module_config(ResNet),
 }
@@ -135,7 +135,7 @@ class LatentStateSpaceModel(nn.Module):
         self.filter = initialize(filter)
 
         # ensure filter and system satisfy the protocols
-        assert isinstance(self.filter, Filter)
+        assert isinstance(self.filter, StateUpdater)
         assert isinstance(self.system, ContinuousFlow)
 
         self.input_size = int(self.filter.input_size)
@@ -166,7 +166,7 @@ class LatentStateSpaceModel(nn.Module):
         self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
 
     def validate_sizes(self) -> None:
-        assert isinstance(self.filter, Filter)
+        assert isinstance(self.filter, StateUpdater)
         assert isinstance(self.system, ContinuousFlow)
         filter_input = int(self.filter.input_size)
         filter_hidden = int(self.filter.hidden_size)

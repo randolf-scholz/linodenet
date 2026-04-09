@@ -1,9 +1,9 @@
-r"""Probabilistic filter protocol.
+r"""Probabilistic state-update protocol.
 
 NOTE: WIP, not yet implemented.
 
-Probabilistic Filter
---------------------
+Probabilistic State Update
+--------------------------
 - We need sampling distribution. What if we have multiple independent measurements
   of the same quantity at time t?
   - ⟹ We approximate the observational distribution.
@@ -22,12 +22,12 @@ R is observed or a hyperparameter.
 
 __all__ = [
     # Protocols & ABCs
-    "ProbabilisticFilter",
-    "EmpiricalFilter",
-    "DiracFilter",
+    "ProbabilisticStateUpdate",
+    "EmpiricalStateUpdate",
+    "DiracStateUpdate",
     # Classes
-    "probabilistic_kalman_filter",
-    "discrete_probabilistic_kalman_filter",
+    "probabilistic_kalman_update",
+    "discrete_probabilistic_kalman_update",
 ]
 
 from abc import abstractmethod
@@ -41,10 +41,10 @@ from linodenet.distributions import Dirac, Distribution, Empirical
 
 
 @runtime_checkable
-class ProbabilisticFilter[P: Distribution, Q: Distribution](Protocol):
-    r"""Protocol for probabilistic filters.
+class ProbabilisticStateUpdate[P: Distribution, Q: Distribution](Protocol):
+    r"""Protocol for probabilistic state updates.
 
-    The goal of a probabilistic filter is to update the distribution of the hidden state,
+    The goal of a probabilistic state update is to update the distribution of the hidden state,
     given the current observation. This is done by updating the parameters of the distribution
     that represents the state.
 
@@ -56,21 +56,21 @@ class ProbabilisticFilter[P: Distribution, Q: Distribution](Protocol):
     def __call__(self, y: Q, x: P, /) -> P: ...
 
 
-class DiracFilter[D: Distribution](ProbabilisticFilter[D, Dirac]):
-    r"""Protocol for probabilistic filter with single value observations."""
+class DiracStateUpdate[D: Distribution](ProbabilisticStateUpdate[D, Dirac]):
+    r"""Protocol for probabilistic state update with single-value observations."""
 
     @abstractmethod
     def __call__(self, y: Tensor | Dirac, x: D, /) -> D: ...
 
 
-class EmpiricalFilter[D: Distribution](ProbabilisticFilter[D, Empirical]):
-    r"""Protocol for probabilistic filter with discrete observations."""
+class EmpiricalStateUpdate[D: Distribution](ProbabilisticStateUpdate[D, Empirical]):
+    r"""Protocol for probabilistic state update with discrete observations."""
 
     @abstractmethod
     def __call__(self, y: Tensor | Empirical, x: D, /) -> D: ...
 
 
-def probabilistic_kalman_filter(
+def probabilistic_kalman_update(
     obs: MultivariateNormal,
     val: MultivariateNormal,
     /,
@@ -123,7 +123,7 @@ def probabilistic_kalman_filter(
     return MultivariateNormal(μ, Σ)
 
 
-def discrete_probabilistic_kalman_filter(
+def discrete_probabilistic_kalman_update(
     observation: Dirac,
     state: MultivariateNormal,
     *,
@@ -154,4 +154,4 @@ def discrete_probabilistic_kalman_filter(
     R = R[..., mask][..., mask, :]  # (..., m_obs, m_obs)
 
     obs_dist = MultivariateNormal(y, R)
-    return probabilistic_kalman_filter(obs_dist, state, H=H)
+    return probabilistic_kalman_update(obs_dist, state, H=H)
