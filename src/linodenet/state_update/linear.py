@@ -42,8 +42,8 @@ class LinearUpdate(StateUpdaterBase):
         bias: bool = True,
     ) -> None:
         super().__init__(input_size, hidden_size)
-        n = self.input_size
         m = self.hidden_size
+        n = self.input_size
         self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
         self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
         self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
@@ -60,7 +60,7 @@ class LinearUpdate(StateUpdaterBase):
 class LinearResidualUpdate(StateUpdaterBase):
     r"""Linear residual state update.
 
-    .. math:: x' = x - F⋅(Hy - x)
+    .. math:: x' = x - F⋅(y - Hx)
 
     Where $F$ is a learnable square matrix, and $H$ is either a learnable matrix or
     a fixed matrix.
@@ -79,10 +79,11 @@ class LinearResidualUpdate(StateUpdaterBase):
         hidden_size: int,
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
-        m, n = self.hidden_size, self.input_size
-        self.F = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
-        self.H = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
+        m = self.hidden_size
+        n = self.input_size
+        self.F = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, n)))
+        self.H = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(n, m)))
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r = torch.einsum("...i, ij -> ...j", y, self.H) - x
-        return x - torch.einsum("...i, ij -> ...j", r, self.F)
+        r = y - F.linear(x, self.H, None)
+        return x - F.linear(r, self.F, None)
