@@ -20,7 +20,7 @@ from .imputation import ImputationStrategy, ImputerProtocol
 class MissingValueUpdate(StateUpdaterBase):
     r"""Wraps an existing state updater $F$ so that it can handle missing values.
 
-    .. math:: x' &= F(u，x)   &   u = impute(m, y, x)
+    .. math:: x' &= F(u，x)   &   (u, m) = impute(y, x)
 
     where $u$ is an imputed value that is free of missing values.
     There are several available imputation strategies:
@@ -34,7 +34,7 @@ class MissingValueUpdate(StateUpdaterBase):
 
     Optionally, the mask can be concatenated to the input.
 
-    .. math:: u = concat([impute(m, y, x)，m])
+    .. math:: u = concat([impute(y, x)₀，impute(y, x)₁])
     """
 
     # CONSTANTS
@@ -114,17 +114,12 @@ class MissingValueUpdate(StateUpdaterBase):
         # FIXME: https://github.com/python/mypy/issues/10736
         #   Need to unconditionally assign Final due to mypy bug
         self.imputation_strategy = imputation_strategy
-        self._imputer = imputer
-
-    def impute(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
-        return self._imputer(mask, y, x)
+        self.imputer = imputer
 
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        # compute and buffer mask
-        self.mask = ~torch.isnan(y)
-        # impute missing values
-        self.imputed = self.impute(self.mask, y, x)
+        # impute missing values and store the inferred observation mask
+        self.imputed, self.mask = self.imputer(y, x)
         u = self.imputed
 
         if self.concat_mask:

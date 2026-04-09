@@ -28,14 +28,17 @@ from signatures import signature
 class ImputerProtocol(Protocol):
     r"""Protocol for imputer."""
 
-    @signature("[(..., m), (..., m), (..., n)] -> (..., m)")
-    def __call__(self, mask: Tensor, y: Tensor, x: Tensor, /) -> Tensor:
+    @signature("[(..., m), (..., n)] -> [(..., m), (..., m)]")
+    def __call__(self, y_obs: Tensor, x: Tensor, /) -> tuple[Tensor, Tensor]:
         r"""Impute missing values in a tensor.
 
         Args:
-            mask: Mask tensor (true if observed, false if missing).
-            y: Observed state.
+            y_obs: Observed state.
             x: Estimated state.
+
+        Returns:
+            y: Imputed state, where missing values have been replaced with imputed values.
+            m: Mask indicating which values were observed (True) vs imputed (False).
         """
         ...
 
@@ -53,33 +56,33 @@ class LinearImputer(nn.Module):
         super().__init__()
         self.linear = nn.Linear(hidden_size, input_size, bias=use_bias)
 
-    def forward(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
         r"""Impute missing values with a linear function.
 
-        .. math:: (m, y, x) ⟼ ⟦m ? y : Hx+b⟧
+        .. math:: (y, x) ⟼ (u, m), \quad u = ⟦m ? y : Hx+b⟧
 
         Args:
-            mask: Mask tensor (true if observed)
             y: Observed state.
             x: Estimated state.
         """
-        return torch.where(mask, y, self.linear(x))
+        mask = ~y.isnan()
+        return torch.where(mask, y, self.linear(x)), mask
 
 
 class ZeroImputer(nn.Module):
     r"""Impute missing values with zero."""
 
-    def forward(self, m: Tensor, y: Tensor, _: Tensor) -> Tensor:
+    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
         r"""Impute missing values with zero.
 
-        .. math:: (m, y, *) ⟼ ⟦m ? y : 0⟧
+        .. math:: (y, *) ⟼ (u, m), \quad u = ⟦m ? y : 0⟧
 
         Args:
-            m (Tensor): Mask tensor (true if observed)
             y (Tensor): Observed state.
             _ (Tensor): Hidden state.
         """
-        return torch.where(m, y, torch.zeros_like(y))
+        mask = ~y.isnan()
+        return torch.where(mask, y, torch.zeros_like(y)), mask
 
 
 class ConstantImputer(nn.Module):
@@ -92,17 +95,17 @@ class ConstantImputer(nn.Module):
         super().__init__()
         self.register_buffer("value", torch.as_tensor(constant))
 
-    def forward(self, mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
+    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
         r"""Impute missing values with a constant.
 
-        .. math:: (m, y, *) ⟼ ⟦m ? y : c⟧
+        .. math:: (y, *) ⟼ (u, m), \quad u = ⟦m ? y : c⟧
 
         Args:
-            mask (Tensor): Mask tensor (true if observed)
             y (Tensor): Observed state.
             _ (Tensor): Hidden state.
         """
-        return torch.where(mask, y, self.value)
+        mask = ~y.isnan()
+        return torch.where(mask, y, self.value), mask
 
 
 class CorrelationImputer(nn.Module):
@@ -145,7 +148,7 @@ class CorrelationImputer(nn.Module):
         L = self.get_cholesky()
         return L @ L.mT
 
-    def forward(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
         r"""Impute missing values with the conditional Gaussian posterior mean.
 
         Let $ŷ = decoder(x)$ and assume the true observation follows
@@ -159,10 +162,10 @@ class CorrelationImputer(nn.Module):
         .. math:: y'ₘ = ŷₘ + Σₘₒ Σₒₒ⁻¹ (yₒ - ŷₒ)
 
         Args:
-            mask: Mask tensor (true if observed, false if missing).
             y: Observed state, possibly containing NaNs at missing coordinates.
             x: Hidden state used by the decoder.
         """
+        mask = ~y.isnan()
         y_hat = self.decoder(x)
         if y_hat.shape[-1] != self.input_size:
             raise ValueError(
@@ -178,7 +181,7 @@ class CorrelationImputer(nn.Module):
 
         L = torch.linalg.cholesky(innovation_covariance)
         z = torch.cholesky_solve(residual.unsqueeze(-1), L).squeeze(-1)
-        return y_hat - torch.einsum("ij, ...j -> ...i", covariance, z)
+        return y_hat - torch.einsum("ij, ...j -> ...i", covariance, z), mask
 
 
 class LearnableImputer(nn.Module):
@@ -196,17 +199,17 @@ class LearnableImputer(nn.Module):
         )
         self.value = nn.Parameter(torch.randn(self.input_shape))
 
-    def forward(self, mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
+    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
         r"""Impute missing values with a learnable value.
 
-        .. math:: (m, y, *) ⟼ ⟦m ? y : c⟧
+        .. math:: (y, *) ⟼ (u, m), \quad u = ⟦m ? y : c⟧
 
         Args:
-            mask (Tensor): Mask tensor (true if observed)
             y (Tensor): Observed state.
             _ (Tensor): Hidden state.
         """
-        return torch.where(mask, y, self.value)
+        mask = ~y.isnan()
+        return torch.where(mask, y, self.value), mask
 
 
 class LastValueImputer(nn.Module):
@@ -222,20 +225,20 @@ class LastValueImputer(nn.Module):
         self.register_buffer("last_value", torch.zeros(()))
         self.decay = nn.Parameter(torch.tensor(decay), requires_grad=decay_learnable)
 
-    def forward(self, mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
+    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
         r"""Impute missing values with the last observed value.
 
-        .. math:: (m, yₖ, *) ⟼ ⟦m ? yₖ : \tilde{y}ₖ₋₁⟧
+        .. math:: (yₖ, *) ⟼ (u, m), \quad u = ⟦m ? yₖ : \tilde{y}ₖ₋₁⟧
 
         Args:
-            mask (Tensor): Mask tensor (true if observed)
             y (Tensor): Observed state.
             _ (Tensor): Hidden state.
         """
+        mask = ~y.isnan()
         # convex combination of last value and current value
         z = torch.where(mask, y, self.last_value)
         self.last_value = self.decay * self.last_value + (1 - self.decay) * z
-        return self.last_value
+        return self.last_value, mask
 
 
 IMPUTERS: dict[str, type[ImputerProtocol]] = {
