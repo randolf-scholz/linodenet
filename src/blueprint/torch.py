@@ -139,11 +139,11 @@ def _infer_nn_sequential(model: nn.Sequential, /) -> Args:
     return list(model), {}
 
 
-def _infer_nn_modulelist(model: nn.ModuleList, /) -> Args:
+def _infer_nn_module_list(model: nn.ModuleList, /) -> Args:
     return [list(model)], {}
 
 
-def _infer_nn_moduledict(model: nn.ModuleDict, /) -> Args:
+def _infer_nn_module_dict(model: nn.ModuleDict, /) -> Args:
     return [dict(model)], {}
 
 
@@ -153,8 +153,8 @@ def _infer_exported_module(model: ExportedProgram, /) -> Args:
 
 # Register special inference functions for some common nn.Modules
 INFER_ARGS_REGISTRY.register(nn.Sequential, _infer_nn_sequential)
-INFER_ARGS_REGISTRY.register(nn.ModuleList, _infer_nn_modulelist)
-INFER_ARGS_REGISTRY.register(nn.ModuleDict, _infer_nn_moduledict)
+INFER_ARGS_REGISTRY.register(nn.ModuleList, _infer_nn_module_list)
+INFER_ARGS_REGISTRY.register(nn.ModuleDict, _infer_nn_module_dict)
 INFER_ARGS_REGISTRY.register(nn.Linear, _infer_nn_linear)
 INFER_ARGS_REGISTRY.register(ExportedProgram, _infer_exported_module)
 
