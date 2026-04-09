@@ -6,6 +6,10 @@ __all__ = [
     "UpdateResNet",
     "ReZeroUpdate",
     "PseudoKalmanUpdate",
+    "AbstractSquareStateUpdate",
+    "SquareStateUpdater",
+    "is_square_state_updater",
+    "SquareStateUpdaterBase",
 ]
 
 
@@ -20,7 +24,7 @@ from linodenet.nn import ModuleSequence
 from signatures import signature
 
 from .base import AbstractStateUpdate, StateUpdaterBase
-from .kalman_cell import _Alpha
+from .kalman import _Alpha
 
 
 @runtime_checkable

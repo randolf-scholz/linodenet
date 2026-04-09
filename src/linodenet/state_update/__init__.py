@@ -22,9 +22,9 @@ __all__ = [
     "StateUpdater",
     "StateUpdaterBase",
     # Classes
-    "UpdateList",
+    "StateUpdaterList",
     "UpdateSequence",
-    "ResidualUpdateSequence",
+    "ResidualUpdate",
     "MissingValueUpdate",
     "LinearUpdate",
     "LinearResidualUpdate",
@@ -39,7 +39,6 @@ __all__ = [
     "GRUCell",
     "LSTMCell",
     # Functions
-    "get_state_updater",
     "is_state_updater",
 ]
 
@@ -47,22 +46,20 @@ from torch.nn import GRUCell, LSTMCell, RNNCell
 
 from . import probabilistic
 from .base import (
+    MissingValueUpdate,
+    ResidualUpdate,
     StateUpdater,
     StateUpdaterBase,
-    get_state_updater,
-    is_state_updater,
-)
-from .containers import (
-    ResidualUpdateSequence,
-    UpdateList,
+    StateUpdaterList,
     UpdateSequence,
+    is_state_updater,
 )
 from .imported import (
     GRU_Update,
     LSTM_Update,
     RNN_Update,
 )
-from .kalman_cell import (
+from .kalman import (
     KalmanUpdate,
     NonLinearKalmanUpdate,
     NonLinearUpdate,
@@ -71,7 +68,6 @@ from .linear import (
     LinearResidualUpdate,
     LinearUpdate,
 )
-from .missing_value_filter import MissingValueUpdate
 
 STATE_UPDATERS: dict[str, type[StateUpdater]] = {
     # PyTorch recurrent state updaters
@@ -86,6 +82,6 @@ STATE_UPDATERS: dict[str, type[StateUpdater]] = {
     "NonLinearKalmanUpdate": NonLinearKalmanUpdate,
     "NonLinearUpdate": NonLinearUpdate,
     "UpdateSequence": UpdateSequence,
-    "ResidualUpdateSequence": ResidualUpdateSequence,
+    "ResidualUpdateSequence": ResidualUpdate,
 }  # fmt: skip
 r"""Dictionary of all available state updaters."""

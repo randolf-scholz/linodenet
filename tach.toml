@@ -59,7 +59,7 @@ utility = true
 
 [[modules ]]
 path = "linodenet"
-depends_on = ["linodenet.distributions", "linodenet.initializations", "linodenet_special", "linodenet.state_update", "linodenet.forecasting", "linodenet.nn", "linodenet.testing", "linodenet.parametrizations", "linodenet.regularizations", "linodenet.domains", "linodenet.mappings", "linodenet.state_propagation"]
+depends_on = ["linodenet.distributions", "linodenet.initializations", "linodenet_special", "linodenet.state_update", "linodenet.forecasting", "linodenet.nn", "linodenet.testing", "linodenet.parametrizations", "linodenet.regularizations", "linodenet.domains", "linodenet.mappings", "linodenet.state_propagation", "linodenet.state_update.imputation"]
 
 [[modules ]]
 path = "signatures"
@@ -105,4 +105,8 @@ depends_on = ["linodenet.mappings", "linodenet.initializations"]
 
 [[modules ]]
 path = "linodenet.state_update"
-depends_on = ["linodenet.distributions", "linodenet.nn"]
+depends_on = ["linodenet.distributions", "linodenet.nn", "linodenet.state_update.imputation"]
+
+[[modules ]]
+path = "linodenet.state_update.imputation"
+depends_on = []
