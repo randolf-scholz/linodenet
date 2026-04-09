@@ -9,6 +9,7 @@
       <w>Pastur</w>
       <w>arglist</w>
       <w>coeffs</w>
+      <w>covs</w>
       <w>crelu</w>
       <w>denom</w>
       <w>dets</w>
@@ -21,7 +22,10 @@
       <w>hutchplusplus</w>
       <w>linestyles</w>
       <w>logabsdets</w>
+      <w>logaddexp</w>
+      <w>logdet</w>
       <w>logsumexp</w>
+      <w>logvar</w>
       <w>lsamples</w>
       <w>marchenko</w>
       <w>matvecs</w>
@@ -34,6 +38,7 @@
       <w>qquad</w>
       <w>rsamples</w>
       <w>twosided</w>
+      <w>vecdot</w>
       <w>widetilde</w>
       <w>xtrace</w>
     </words>
