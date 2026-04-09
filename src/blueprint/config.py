@@ -63,8 +63,8 @@ def has_default_config(arg: object, /) -> TypeGuard[SupportsDefaultConfig]:
 
 
 @runtime_checkable
-class SupportsFromConfig[K: Key, V](Protocol):
+class SupportsFromConfig(Protocol):
     r"""Models that can be explicitly initialized from a configuration dictionary."""
 
     @classmethod
-    def from_config(cls, config: dict[K, V], /) -> Self: ...
+    def from_config(cls, config: dict[str, Any], /) -> Self: ...
