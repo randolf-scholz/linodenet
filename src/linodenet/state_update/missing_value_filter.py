@@ -95,8 +95,7 @@ class MissingValueUpdate(StateUpdaterBase):
                 imputer = imp.LastValueImputer()
             case "learnable":
                 imputation_strategy = ImputationStrategy.LEARNABLE
-                value = torch.randn((input_size,))
-                imputer = imp.ConstantImputer(value, learnable=True)
+                imputer = imp.LearnableImputer(input_size)
             case "linear":
                 imputation_strategy = ImputationStrategy.LINEAR
                 imputer = imp.LinearImputer(

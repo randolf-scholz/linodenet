@@ -9,6 +9,7 @@ __all__ = [
     # classes
     "ZeroImputer",
     "ConstantImputer",
+    "LearnableImputer",
     "LastValueImputer",
     "LinearImputer",
 ]
@@ -84,17 +85,41 @@ class ConstantImputer(nn.Module):
 
     value: Tensor
     r"""Constant value to impute missing values."""
-    learnable: Final[bool]
-    r"""Whether the constant value is learnable or not."""
 
-    def __init__(self, constant: float | Tensor, /, *, learnable: bool = False) -> None:
+    def __init__(self, constant: float | Tensor, /) -> None:
         super().__init__()
-        tensor = torch.as_tensor(constant)
-        self.learnable = learnable
-        self.value = nn.Parameter(tensor, requires_grad=learnable)
+        self.register_buffer("value", torch.as_tensor(constant))
 
     def forward(self, mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
         r"""Impute missing values with a constant.
+
+        .. math:: (m, y, *) ⟼ ⟦m ? y : c⟧
+
+        Args:
+            mask (Tensor): Mask tensor (true if observed)
+            y (Tensor): Observed state.
+            _ (Tensor): Hidden state.
+        """
+        return torch.where(mask, y, self.value)
+
+
+class LearnableImputer(nn.Module):
+    r"""Impute missing values with a learnable value."""
+
+    input_shape: Final[tuple[int, ...]]
+    r"""CONST: The shape of the learnable imputation value."""
+    value: Tensor
+    r"""PARAM: Learnable value used to impute missing observations."""
+
+    def __init__(self, input_shape: int | tuple[int, ...], /) -> None:
+        super().__init__()
+        self.input_shape = (
+            (input_shape,) if isinstance(input_shape, int) else input_shape
+        )
+        self.value = nn.Parameter(torch.randn(self.input_shape))
+
+    def forward(self, mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
+        r"""Impute missing values with a learnable value.
 
         .. math:: (m, y, *) ⟼ ⟦m ? y : c⟧
 
@@ -138,6 +163,7 @@ class LastValueImputer(nn.Module):
 IMPUTERS: dict[str, type[ImputerProtocol]] = {
     "ZeroImputer"      : ZeroImputer,
     "ConstantImputer"  : ConstantImputer,
+    "LearnableImputer" : LearnableImputer,
     "LastValueImputer" : LastValueImputer,
     "LinearImputer"    : LinearImputer,
 }  # fmt: skip
