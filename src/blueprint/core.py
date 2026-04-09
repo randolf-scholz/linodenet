@@ -327,7 +327,7 @@ def _initialize_from_args[T](cls: type[T], args: POArgs, kwargs: KWArgs, /) -> T
     r"""Initialize a model from args and kwargs."""
     if not args and issubclass(cls, SupportsFromConfig):
         try:
-            return cls.from_config(kwargs)
+            return cast("T", cls.from_config(kwargs))
         except Exception as exc:
             raise ValueError(
                 f"Failed to initialize {cls.__qualname__} from config."
