@@ -96,7 +96,7 @@ _Q2: Final[list[float]] = [
 
 # create a small cache for the coefficients so they do not need to
 # be re-initialized constantly per device.
-_COEFF_CACHE: Final[
+_COEFFICIENT_CACHE: Final[
     dict[
         tuple[torch.device, torch.dtype],
         tuple[Tensor, Tensor, Tensor, Tensor],
@@ -108,7 +108,7 @@ def _get_coeffs(
     *, device: torch.device, dtype: torch.dtype
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     key = (device, dtype)
-    coeffs = _COEFF_CACHE.get(key)
+    coeffs = _COEFFICIENT_CACHE.get(key)
     if coeffs is None:
         coeffs = (
             torch.tensor(_P1, device=device, dtype=dtype),
@@ -116,7 +116,7 @@ def _get_coeffs(
             torch.tensor(_P2, device=device, dtype=dtype),
             torch.tensor(_Q2, device=device, dtype=dtype),
         )
-        _COEFF_CACHE[key] = coeffs
+        _COEFFICIENT_CACHE[key] = coeffs
     return coeffs
 
 
