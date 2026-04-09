@@ -9,6 +9,7 @@ __all__ = [
     # classes
     "ZeroImputer",
     "ConstantImputer",
+    "CorrelationImputer",
     "LearnableImputer",
     "LastValueImputer",
     "LinearImputer",
@@ -18,6 +19,7 @@ from enum import StrEnum
 from typing import Final, Protocol
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from signatures import signature
@@ -103,6 +105,82 @@ class ConstantImputer(nn.Module):
         return torch.where(mask, y, self.value)
 
 
+class CorrelationImputer(nn.Module):
+    r"""Fuse observations and decoder predictions via Gaussian conditioning."""
+
+    decoder: nn.Module
+    r"""Decoder used to predict the observation mean from the hidden state."""
+    input_size: Final[int]
+    r"""CONST: Number of observed features."""
+    covariance_factor: Tensor
+    r"""PARAM: Unconstrained lower-triangular covariance factor parameters."""
+    eye: Tensor
+    r"""BUFFER: Diagonal mask used to enforce a positive Cholesky diagonal."""
+    identity: Tensor
+    r"""BUFFER: Identity matrix used for masked linear solves."""
+
+    def __init__(self, *, decoder: nn.Module) -> None:
+        super().__init__()
+        input_size = int(getattr(decoder, "output_size", -1))
+        if input_size <= 0:
+            raise ValueError(
+                "CorrelationImputer requires decoder.output_size to be a positive integer."
+            )
+
+        self.decoder = decoder
+        self.input_size = input_size
+        self.covariance_factor = nn.Parameter(torch.eye(input_size))
+        self.register_buffer("eye", torch.eye(input_size, dtype=torch.bool))
+        self.register_buffer("identity", torch.eye(input_size))
+
+    def get_cholesky(self) -> Tensor:
+        r"""Return a valid Cholesky factor for the learned covariance."""
+        lower = self.covariance_factor.tril()
+        diag = lower.diagonal(dim1=-2, dim2=-1)
+        positive_diag = F.softplus(diag) + 1e-6
+        return torch.where(self.eye, positive_diag.unsqueeze(-1), lower)
+
+    def get_covariance(self) -> Tensor:
+        r"""Return the covariance matrix $Σ = LLᵀ$."""
+        L = self.get_cholesky()
+        return L @ L.mT
+
+    def forward(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
+        r"""Impute missing values with the conditional Gaussian posterior mean.
+
+        Let $ŷ = decoder(x)$ and assume the true observation follows
+        $y ∼ 𝓝(ŷ, Σ)$. Conditioning on the observed coordinates selected by the
+        mask $Π$ gives the full-vector update
+
+        .. math:: y' = ŷ - Σ (ΠΣΠ + 𝕀 - Π)⁻¹ Π(ŷ - y)
+
+        which is equivalent to
+
+        .. math:: y'ₘ = ŷₘ + Σₘₒ Σₒₒ⁻¹ (yₒ - ŷₒ)
+
+        Args:
+            mask: Mask tensor (true if observed, false if missing).
+            y: Observed state, possibly containing NaNs at missing coordinates.
+            x: Hidden state used by the decoder.
+        """
+        y_hat = self.decoder(x)
+        if y_hat.shape[-1] != self.input_size:
+            raise ValueError(
+                f"Decoder output shape mismatch: expected last dimension "
+                f"{self.input_size}, got {y_hat.shape[-1]}."
+            )
+
+        covariance = self.get_covariance()
+        residual = torch.where(mask, y_hat - y, y_hat.new_zeros(()))
+
+        observed = torch.einsum("...i, ...j -> ...ij", mask, mask)
+        innovation_covariance = torch.where(observed, covariance, self.identity)
+
+        L = torch.linalg.cholesky(innovation_covariance)
+        z = torch.cholesky_solve(residual.unsqueeze(-1), L).squeeze(-1)
+        return y_hat - torch.einsum("ij, ...j -> ...i", covariance, z)
+
+
 class LearnableImputer(nn.Module):
     r"""Impute missing values with a learnable value."""
 
@@ -163,6 +241,7 @@ class LastValueImputer(nn.Module):
 IMPUTERS: dict[str, type[ImputerProtocol]] = {
     "ZeroImputer"      : ZeroImputer,
     "ConstantImputer"  : ConstantImputer,
+    "CorrelationImputer": CorrelationImputer,
     "LearnableImputer" : LearnableImputer,
     "LastValueImputer" : LastValueImputer,
     "LinearImputer"    : LinearImputer,
