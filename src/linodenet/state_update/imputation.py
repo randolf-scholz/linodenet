@@ -11,8 +11,6 @@ __all__ = [
     "ConstantImputer",
     "LastValueImputer",
     "LinearImputer",
-    # functions
-    "zero_impute",
 ]
 
 from enum import StrEnum
@@ -39,52 +37,30 @@ class ImputerProtocol(Protocol):
         ...
 
 
-class ImputationStrategy(StrEnum):
-    r"""The strategy to use for imputation."""
-
-    LAST = "last"
-    r"""Impute with last observed value."""
-    ZERO = "zero"
-    r"""Impute with zeros."""
-    CONSTANT = "constant"
-    r"""Impute with a (possibly non-zero) constant value."""
-    LEARNABLE = "learnable"
-    r"""Impute with a (possibly non-zero) learnable value."""
-    LINEAR = "linear"
-    r"""Impute with a linear function of the hidden state."""
-    OTHER = "other"
-    r"""Impute with decoder."""
-
-
 class LinearImputer(nn.Module):
     r"""Impute missing values with a linear function of the hidden state."""
 
-    def __init__(self, input_size: int, hidden_size: int) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        use_bias: bool = False,
+    ) -> None:
         super().__init__()
-        self.linear = nn.Linear(hidden_size, input_size)
+        self.linear = nn.Linear(hidden_size, input_size, bias=use_bias)
 
-    def forward(self, mask: Tensor, y_obs: Tensor, y_hat: Tensor) -> Tensor:
+    def forward(self, mask: Tensor, y: Tensor, x: Tensor) -> Tensor:
         r"""Impute missing values with a linear function.
 
-        .. math:: (m, y, x) ⟼ ⟦m ? y : Hx⟧
+        .. math:: (m, y, x) ⟼ ⟦m ? y : Hx+b⟧
 
         Args:
             mask: Mask tensor (true if observed)
-            y_obs: Observed state.
-            y_hat: Estimated state.
+            y: Observed state.
+            x: Estimated state.
         """
-        return torch.where(mask, y_obs, self.linear(y_hat))
-
-
-def zero_impute(mask: Tensor, y: Tensor, _: Tensor) -> Tensor:
-    r"""Impute missing values with a constant.
-
-    Args:
-        mask (Tensor): Mask tensor (true if observed)
-        y (Tensor): Observed state.
-        _ (Tensor): Hidden state.
-    """
-    return torch.where(mask, y, torch.zeros_like(y))
+        return torch.where(mask, y, self.linear(x))
 
 
 class ZeroImputer(nn.Module):
@@ -155,8 +131,7 @@ class LastValueImputer(nn.Module):
         """
         # convex combination of last value and current value
         z = torch.where(mask, y, self.last_value)
-        c = self.decay
-        self.last_value = c * self.last_value + (1 - c) * z
+        self.last_value = self.decay * self.last_value + (1 - self.decay) * z
         return self.last_value
 
 
@@ -166,3 +141,18 @@ IMPUTERS: dict[str, type[ImputerProtocol]] = {
     "LastValueImputer" : LastValueImputer,
     "LinearImputer"    : LinearImputer,
 }  # fmt: skip
+
+
+class ImputationStrategy(StrEnum):
+    r"""The strategy to use for imputation."""
+
+    LAST = "last"
+    r"""Impute with last observed value."""
+    ZERO = "zero"
+    r"""Impute with zeros."""
+    CONSTANT = "constant"
+    r"""Impute with a (possibly non-zero) constant value."""
+    LEARNABLE = "learnable"
+    r"""Impute with a (possibly non-zero) learnable value."""
+    LINEAR = "linear"
+    r"""Impute with a linear function of the hidden state."""

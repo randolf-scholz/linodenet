@@ -107,7 +107,7 @@ class MissingValueUpdate(StateUpdaterBase):
                 imputation_strategy = ImputationStrategy.CONSTANT
                 imputer = imp.ConstantImputer(value)
             case nn.Module as module:
-                imputation_strategy = ImputationStrategy.OTHER
+                imputation_strategy = "other"
                 imputer = cast("ImputerProtocol", module)
             case _:
                 raise ValueError(f"Unknown imputation strategy: {imputation}")
