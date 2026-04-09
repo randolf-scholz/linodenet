@@ -1,13 +1,18 @@
 r"""Base imputer classes and functions."""
 
 __all__ = [
+    # constants
+    "IMPUTERS",
+    # types
     "ImputerProtocol",
     "ImputationStrategy",
-    "zero_impute",
+    # classes
     "ZeroImputer",
     "ConstantImputer",
     "LastValueImputer",
     "LinearImputer",
+    # functions
+    "zero_impute",
 ]
 
 from enum import StrEnum
@@ -153,3 +158,11 @@ class LastValueImputer(nn.Module):
         c = self.decay
         self.last_value = c * self.last_value + (1 - c) * z
         return self.last_value
+
+
+IMPUTERS: dict[str, type[ImputerProtocol]] = {
+    "ZeroImputer"      : ZeroImputer,
+    "ConstantImputer"  : ConstantImputer,
+    "LastValueImputer" : LastValueImputer,
+    "LinearImputer"    : LinearImputer,
+}  # fmt: skip

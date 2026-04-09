@@ -9,10 +9,10 @@ __all__ = [
     "embeddings",
     "flows",
     "forecasting",
-    "imputation",
     "initializations",
     "mappings",
     "nn",
+    "imputation",
     "parametrizations",
     "projections",
     "registry",
@@ -40,7 +40,6 @@ from . import (
     distributions,
     domains,
     forecasting,
-    imputation,
     initializations,
     mappings,
     nn,
@@ -61,3 +60,4 @@ from .mappings import (
     transforms,
 )
 from .state_propagation import flows
+from .state_update import imputation

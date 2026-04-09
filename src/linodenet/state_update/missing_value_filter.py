@@ -9,12 +9,12 @@ from typing import Any, Final, cast
 import torch
 from torch import Tensor, nn
 
-import linodenet.imputation as imp
 from linodenet.constants import EMPTY_MAP
-from linodenet.imputation import ImputationStrategy, ImputerProtocol
 from signatures import signature
 
+from . import imputation as imp
 from .base import StateUpdater, StateUpdaterBase
+from .imputation import ImputationStrategy, ImputerProtocol
 
 
 class MissingValueUpdate(StateUpdaterBase):
