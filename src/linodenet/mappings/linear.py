@@ -29,6 +29,7 @@ from typing import Final, override
 
 import torch
 from torch import Tensor, nn
+from torch.nn import functional as F
 
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
 
@@ -47,15 +48,15 @@ class LinearContraction(nn.Linear):
     output_size: Final[int]
 
     @override
-    def __init__(
+    def __init__(  # pyrefly: ignore[bad-override]
         self,
         in_features: int,
         out_features: int,
         *,
+        c: float = 0.97,
         bias: bool = True,
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
-        c: float = 0.97,
     ) -> None:
         super().__init__(
             in_features, out_features, bias=bias, device=device, dtype=dtype
@@ -94,10 +95,10 @@ class RankOneContraction(nn.Module):
         in_features: int,
         out_features: int,
         *,
+        c: float = 0.97,
         bias: bool = True,
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
-        c: float = 0.97,
     ) -> None:
         super().__init__()
         if not 0 < c < 1:
@@ -110,19 +111,16 @@ class RankOneContraction(nn.Module):
         self.register_buffer(
             "gamma", torch.tensor(float(c), device=device, dtype=dtype)
         )
-
         self.weight_u = nn.Parameter(
             torch.empty(out_features, device=device, dtype=dtype)
         )
         self.weight_v = nn.Parameter(
             torch.empty(in_features, device=device, dtype=dtype)
         )
-        if bias:
-            self.bias = nn.Parameter(
-                torch.empty(out_features, device=device, dtype=dtype)
-            )
-        else:
-            self.register_parameter("bias", None)
+        bias_tensor = nn.Parameter(
+            torch.empty(out_features, device=device, dtype=dtype)
+        )
+        self.register_parameter("bias", bias_tensor if bias else None)
 
         self.reset_parameters()
         register_parametrization(self, "weight_u", UnitVector())
@@ -150,11 +148,12 @@ class RankOneContraction(nn.Module):
         return torch.outer(self.gamma * self.weight_u, self.weight_v)
 
     def forward(self, x: Tensor, /) -> Tensor:
-        projection = x.matmul(self.weight_v)
-        y = torch.einsum("..., o -> ...o", projection, self.gamma * self.weight_u)
-        if self.bias is not None:
-            y = y + self.bias
-        return y
+        projection = x @ self.weight_v
+        return F.linear(
+            projection.unsqueeze(-1),
+            self.gamma * self.weight_u.unsqueeze(-1),
+            self.bias,
+        )
 
 
 class LowRankContraction(nn.Module):
@@ -183,10 +182,10 @@ class LowRankContraction(nn.Module):
         out_features: int,
         *,
         rank: int,
+        c: float = 0.97,
         bias: bool = True,
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
-        c: float = 0.97,
     ) -> None:
         super().__init__()
         if not 0 < c < 1:
@@ -250,9 +249,6 @@ class LowRankContraction(nn.Module):
         return (self.weight_u * self.sigma).matmul(self.weight_v.mT)
 
     def forward(self, x: Tensor, /) -> Tensor:
-        projection = x.matmul(self.weight_v)
-        scaled = projection * self.sigma
-        y = scaled.matmul(self.weight_u.mT)
-        if self.bias is not None:
-            y = y + self.bias
-        return y
+        # computes UVᵀx + b without explicitly forming the weight matrix
+        projection = x @ self.weight_v  # Vᵀx
+        return F.linear(projection, self.sigma * self.weight_u, self.bias)
