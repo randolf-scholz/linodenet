@@ -83,37 +83,31 @@ class ResidualUpdateSequence[C: StateUpdaterBase](UpdateSequence[C]):
 
     Args:
         modules: An iterable of state updater modules to be applied sequentially.
-        alpha_learnable (default=True): If True, the residual scaling factors αₖ are learnable
-        alpha (default=0.0): Initial value for the residual scaling factors αₖ.
+        use_rezero: Whether to use rezero (default: True)
 
     A regular ResNet is obtained by setting all αₖ=1.0 and making them non-learnable.
     """
 
     alpha: Tensor
     r"""PARAM: The residual scaling factors αₖ."""
+    use_rezero: Tensor
+    r"""Whether to use rezero"""
 
     def __init__(
         self,
         modules: Iterable[C] = (),
         /,
         *,
-        alpha_learnable: bool = True,
-        alpha: float | list[float] | Tensor = 0.0,
+        use_rezero: bool = True,
     ) -> None:
         super().__init__(modules)
-        alphas = torch.as_tensor(alpha).ravel()
-        num = len(self)
-        if alphas.numel() == 1:
-            alphas = alphas.repeat(num)
-        elif alphas.numel() != num:
-            raise ValueError(
-                f"alpha_value must be a scalar or have length {num}, but got {alphas.shape}"
-            )
-        assert alphas.shape == (num,)
-        self.alpha = nn.Parameter(alphas, requires_grad=alpha_learnable)
+        self.alpha = nn.Parameter(
+            torch.zeros(len(self)) if use_rezero else torch.ones(len(self)),
+            requires_grad=use_rezero,
+        )
 
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         for alpha, cell in zip(self.alpha, self, strict=True):
-            x = x + alpha * cell(y, x)
+            x = x.addcmul(alpha, cell(y, x))  # xₖ₊₁ <- xₖ + αₖfₖ(y, xₖ)
         return x
