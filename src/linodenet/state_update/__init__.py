@@ -18,24 +18,19 @@ __all__ = [
     "probabilistic",
     # Constants
     "STATE_UPDATERS",
-    "SQUARE_STATE_UPDATERS",
     # Types
     "StateUpdater",
     "StateUpdaterBase",
-    "SquareStateUpdater",
-    "SquareStateUpdaterBase",
     # Classes
     "UpdateList",
     "UpdateSequence",
     "ResidualUpdateSequence",
     "MissingValueUpdate",
-    "ReZeroUpdate",
     "LinearUpdate",
     "LinearResidualUpdate",
     "NonLinearUpdate",
     "NonLinearKalmanUpdate",
     "KalmanUpdate",
-    "PseudoKalmanUpdate",
     # Imported
     "RNN_Update",
     "GRU_Update",
@@ -46,7 +41,6 @@ __all__ = [
     # Functions
     "get_state_updater",
     "is_state_updater",
-    "is_square_state_updater",
 ]
 
 from torch.nn import GRUCell, LSTMCell, RNNCell
@@ -63,12 +57,10 @@ from .containers import (
     UpdateList,
     UpdateSequence,
 )
-from .deprecated import (
-    PseudoKalmanUpdate,
-    ReZeroUpdate,
-    SquareStateUpdater,
-    SquareStateUpdaterBase,
-    is_square_state_updater,
+from .imported import (
+    GRU_Update,
+    LSTM_Update,
+    RNN_Update,
 )
 from .kalman_cell import (
     KalmanUpdate,
@@ -80,17 +72,9 @@ from .linear import (
     LinearUpdate,
 )
 from .missing_value_filter import MissingValueUpdate
-from .torch_filters import (
-    GRU_Update,
-    LSTM_Update,
-    RNN_Update,
-)
 
 STATE_UPDATERS: dict[str, type[StateUpdater]] = {
     # PyTorch recurrent state updaters
-    "GRUCell": GRUCell,
-    "LSTMCell": LSTMCell,
-    "RNNCell": RNNCell,
     "GRU_Update": GRU_Update,
     "LSTM_Update": LSTM_Update,
     "RNN_Update": RNN_Update,
@@ -101,16 +85,7 @@ STATE_UPDATERS: dict[str, type[StateUpdater]] = {
     "MissingValueUpdate": MissingValueUpdate,
     "NonLinearKalmanUpdate": NonLinearKalmanUpdate,
     "NonLinearUpdate": NonLinearUpdate,
-    "PseudoKalmanUpdate": PseudoKalmanUpdate,
-    "ReZeroUpdate": ReZeroUpdate,
     "UpdateSequence": UpdateSequence,
     "ResidualUpdateSequence": ResidualUpdateSequence,
 }  # fmt: skip
 r"""Dictionary of all available state updaters."""
-
-SQUARE_STATE_UPDATERS: dict[str, type[SquareStateUpdater]] = {}
-r"""Registry reserved for state updaters with an intrinsic square-state interface."""
-
-FILTERS = STATE_UPDATERS
-SQUARE_FILTERS = SQUARE_STATE_UPDATERS
-CELLS = STATE_UPDATERS

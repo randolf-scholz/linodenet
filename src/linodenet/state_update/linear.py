@@ -10,6 +10,7 @@ from typing import Optional
 
 import torch
 from torch import Tensor, nn
+from torch.nn import functional as F
 
 from signatures import signature
 
@@ -53,12 +54,7 @@ class LinearUpdate(StateUpdaterBase):
 
         .. math:: F(y，x) =  Ux + Vy + b
         """
-        z = torch.einsum("ij, ...i -> ...j", self.U, x)
-        z = z + torch.einsum("ij, ...i -> ...j", self.V, y)
-
-        if self.bias is not None:
-            z = z + self.bias
-        return z
+        return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
 
 class LinearResidualUpdate(StateUpdaterBase):
@@ -73,7 +69,7 @@ class LinearResidualUpdate(StateUpdaterBase):
     # PARAMETERS
     F: Tensor
     r"""PARAM: the hidden state matrix."""
-    H: Optional[Tensor]
+    H: Tensor
     r"""PARAM: the observable matrix."""
 
     def __init__(
@@ -88,5 +84,5 @@ class LinearResidualUpdate(StateUpdaterBase):
         self.H = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r = torch.einsum("...i,ij->...j", y, self.H) - x
-        return x - torch.einsum("...i,ij->...j", r, self.F)
+        r = torch.einsum("...i, ij -> ...j", y, self.H) - x
+        return x - torch.einsum("...i, ij -> ...j", r, self.F)
