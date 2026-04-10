@@ -1,5 +1,7 @@
 r"""Linear filters."""
 
+from torch.linalg import solve_triangular
+
 __all__ = [
     "LinearCell",
     "LinearInnovationCell",
@@ -11,6 +13,7 @@ from typing import Optional
 
 import torch
 from torch import Tensor, nn
+from torch.linalg import solve, solve_triangular
 from torch.nn import functional as F
 
 from linodenet.mappings import bijections, surjections
@@ -148,10 +151,10 @@ class LinearKalmanCell(StateUpdaterBase):
 
     observation_map: nn.Linear
     r"""MODULE: Linear observation map $H$ from hidden to observation space."""
-    state_scale: Tensor
-    r"""PARAM: Factor defining the hidden covariance $Σₓₓ$."""
-    noise_scale: Tensor
-    r"""PARAM: Observation noise covariance $R$ with configurable structure."""
+    correlation_cholesky: Tensor
+    r"""PARAM: Cholesky factor defining the hidden covariance $Σₓₓ$."""
+    noise_cholesky: Tensor
+    r"""PARAM: Cholesky factor defining the observation noise covariance $R$."""
     noise: str
     r"""CONST: Structure of the observation noise covariance."""
     eye: Tensor
@@ -176,35 +179,46 @@ class LinearKalmanCell(StateUpdaterBase):
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         m = self.hidden_size
         n = self.input_size
+
+        if m < n:
+            raise ValueError
+
         self.noise = noise
         self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
-        self.state_scale = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
+        self.correlation_cholesky = nn.Parameter(
+            torch.normal(0, 1 / sqrt(m), size=(m, m))
+        )
+        register_parametrization(
+            self,
+            "correlation_cholesky",
+            surjections.CholeskyFactor(),
+        )
 
         match noise:
             case "scalar":
-                self.noise_scale = nn.Parameter(torch.zeros(()))
+                self.noise_cholesky = nn.Parameter(torch.zeros(()))
                 register_parametrization(
                     self,
-                    "noise_scale",
+                    "noise_cholesky",
                     bijections.PositiveScalarMatrix(size=n),
                     unsafe=True,
                 )
             case "diagonal":
-                self.noise_scale = nn.Parameter(torch.normal(0, 1, size=(n,)))
+                self.noise_cholesky = nn.Parameter(torch.normal(0, 1, size=(n,)))
                 register_parametrization(
                     self,
-                    "noise_scale",
+                    "noise_cholesky",
                     bijections.PositiveDiagonal(),
                     unsafe=True,
                 )
             case "dense":
-                self.noise_scale = nn.Parameter(
+                self.noise_cholesky = nn.Parameter(
                     torch.normal(0, 1 / sqrt(n), size=(n, n))
                 )
                 register_parametrization(
                     self,
-                    "noise_scale",
-                    surjections.PositiveDefinite(),
+                    "noise_cholesky",
+                    surjections.CholeskyFactor(),
                 )
             case str():
                 raise ValueError(
@@ -221,23 +235,26 @@ class LinearKalmanCell(StateUpdaterBase):
         y_pred = self.observation_map(x)
         missing = y.isnan()
         observed = (~missing).to(y.dtype)
-
-        # Build Σₓₓ, Σₓᵧ = ΣₓₓHᵀ, and Σᵧᵧ = HΣₓₓHᵀ.
-        sigma_xx = self.state_scale @ self.state_scale.mT
-        sigma_xy = self.observation_map(sigma_xx)  # ΣHᵀ
-        sigma_yy = self.observation_map(sigma_xy.mT)  # HΣHᵀ
-        system = sigma_yy + self.noise_scale + torch.finfo(y.dtype).eps * self.eye
+        L = self.correlation_cholesky
+        J = self.noise_cholesky
 
         # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
         innovation = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
-        # Mask the normal equations to M(Σᵧᵧ + R)Mᵀ and keep the solve nonsingular
-        # by inserting 𝕀 on unobserved coordinates.
-        system_mask = observed.unsqueeze(-1) * observed.unsqueeze(-2)
-        system = system * system_mask + torch.diag_embed(missing.to(y.dtype))
-        # Apply the same projection to Σₓᵧ = ΣₓₓHᵀ.
-        sigma_xy = sigma_xy * observed.unsqueeze(-2)
 
-        gain_rhs = torch.linalg.solve(system, innovation.unsqueeze(-1))
-        correction = (sigma_xy @ gain_rhs).squeeze(-1)
+        # Build Σₓᵧ = ΣₓₓHᵀ and Σᵧᵧ = HΣₓₓHᵀ from the state Cholesky factor.
+        # compute
+        HL = self.observation_map(L)  # HL
+
+        # u = (HLLᵀHᵀ + JJᵀ)⁻¹r
+        # note: (HLLᵀHᵀ + JJᵀ) = J(𝕀 + J⁻¹HLLᵀHᵀJ⁻ᵀ)Jᵀ = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹HL
+        # solve via: z = J⁻¹r, w = (𝕀 + BBᵀ)⁻¹z, u = J⁻ᵀw
+        # middle part via woodbury: (𝕀 + BBᵀ)⁻¹ = 𝕀 - B(𝕀 + BᵀB)⁻¹Bᵀ (good if m>n)
+        B = solve_triangular(J, HL.mT, upper=False)  # J⁻¹HL
+        z = solve_triangular(J, innovation, upper=False)  # J⁻¹r
+        w = z - F.linear(solve(self.eye + B @ B.mT, F.linear(z, B.mT)), B)
+        u = solve_triangular(J, w, transpose=True, upper=False)  # J⁻ᵀw
+
+        # correction = Σₓᵧu = LLᵀHᵀu
+        correction = F.linear(F.linear(u, HL.mT), L)
 
         return x + correction
