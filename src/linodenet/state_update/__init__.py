@@ -26,15 +26,12 @@ __all__ = [
     "UpdateSequence",
     "ResidualUpdate",
     "MissingValueUpdate",
-    "LinearUpdate",
-    "LinearResidualUpdate",
+    "LinearCell",
+    "LinearResidualCell",
     "NonLinearUpdate",
     "NonLinearKalmanUpdate",
     "KalmanUpdate",
     # Imported
-    "RNN_Update",
-    "GRU_Update",
-    "LSTM_Update",
     "RNNCell",
     "GRUCell",
     "LSTMCell",
@@ -54,30 +51,25 @@ from .base import (
     UpdateSequence,
     is_state_updater,
 )
-from .imported import (
-    GRU_Update,
-    LSTM_Update,
-    RNN_Update,
-)
 from .kalman import (
     KalmanUpdate,
     NonLinearKalmanUpdate,
     NonLinearUpdate,
 )
 from .linear import (
-    LinearResidualUpdate,
-    LinearUpdate,
+    LinearCell,
+    LinearResidualCell,
 )
 
 STATE_UPDATERS: dict[str, type[StateUpdater]] = {
     # PyTorch recurrent state updaters
-    "GRU_Update": GRU_Update,
-    "LSTM_Update": LSTM_Update,
-    "RNN_Update": RNN_Update,
+    "GRUCell": GRUCell,
+    "LSTMCell": LSTMCell,
+    "RNNCell": RNNCell,
     # custom state updaters
     "KalmanUpdate": KalmanUpdate,
-    "LinearUpdate": LinearUpdate,
-    "LinearResidualUpdate": LinearResidualUpdate,
+    "LinearCell": LinearCell,
+    "LinearResidualCell": LinearResidualCell,
     "MissingValueUpdate": MissingValueUpdate,
     "NonLinearKalmanUpdate": NonLinearKalmanUpdate,
     "NonLinearUpdate": NonLinearUpdate,

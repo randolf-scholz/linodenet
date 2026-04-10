@@ -1,8 +1,8 @@
 r"""Linear filters."""
 
 __all__ = [
-    "LinearUpdate",
-    "LinearResidualUpdate",
+    "LinearCell",
+    "LinearResidualCell",
 ]
 
 from math import sqrt
@@ -17,7 +17,7 @@ from signatures import signature
 from .base import StateUpdaterBase
 
 
-class LinearUpdate(StateUpdaterBase):
+class LinearCell(StateUpdaterBase):
     r"""Linear state update.
 
     .. math:: F(y，x) =  Ux + Vy + b
@@ -57,7 +57,7 @@ class LinearUpdate(StateUpdaterBase):
         return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
 
-class LinearResidualUpdate(StateUpdaterBase):
+class LinearResidualCell(StateUpdaterBase):
     r"""Linear residual state update.
 
     .. math:: x' = x - F⋅(y - Hx)
