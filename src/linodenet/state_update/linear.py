@@ -206,19 +206,9 @@ class LinearKalmanCell(StateUpdaterBase):
                     bijections.PositiveDiagonal(),
                     unsafe=True,
                 )
-            case "dense":
-                self.noise_cholesky = nn.Parameter(
-                    torch.normal(0, 1 / sqrt(n), size=(n, n))
-                )
-                register_parametrization(
-                    self,
-                    "noise_cholesky",
-                    surjections.CholeskyFactor(),
-                )
             case str():
                 raise ValueError(
-                    f"Unknown noise: {noise!r}. "
-                    "Expected 'scalar', 'diagonal', or 'dense'."
+                    f"Unknown noise: {noise!r}. Expected 'scalar' or 'diagonal'."
                 )
             case _:
                 raise TypeError(f"noise must be a string, got {type(noise)!r}.")
@@ -230,6 +220,7 @@ class LinearKalmanCell(StateUpdaterBase):
         y_pred = self.observation_map(x)
         missing = y.isnan()
         observed = (~missing).to(y.dtype)
+        # TODO: consider solving only over unmasked coordinates (requires flattening).
         L = self.correlation_cholesky
         J = observed.unsqueeze(-1) * self.noise_cholesky + torch.diag_embed(
             missing.to(y.dtype)
@@ -238,20 +229,19 @@ class LinearKalmanCell(StateUpdaterBase):
         # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
         innovation = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
 
-        # Build Σₓᵧ = ΣₓₓHᵀ and Σᵧᵧ = HΣₓₓHᵀ from the state Cholesky factor.
-        # compute
-        HL = self.observation_map(L)
+        # Build HL indirectly as (LHᵀ)ᵀ to avoid depending on raw layer weights.
+        HL = self.observation_map(L.mT).mT
 
-        # u = (HLLᵀHᵀ + JJᵀ)⁻¹r
-        # note: (HLLᵀHᵀ + JJᵀ) = J(𝕀 + J⁻¹HLLᵀHᵀJ⁻ᵀ)Jᵀ = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹HL
+        # u = (M(HLLᵀHᵀ + JJᵀ)M + I_missing)⁻¹r
+        # note: M(HLLᵀHᵀ + JJᵀ)M + I_missing = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹MHL
         # solve via: z = J⁻¹r, w = (𝕀 + BBᵀ)⁻¹z, u = J⁻ᵀw
         # middle part via woodbury: (𝕀 + BBᵀ)⁻¹ = 𝕀 - B(𝕀 + BᵀB)⁻¹Bᵀ (good if m>n)
-        B = observed.unsqueeze(-1) * solve_triangular(J, HL.mT, upper=False)  # J⁻¹MHL
+        B = solve_triangular(J, observed.unsqueeze(-1) * HL, upper=False)  # J⁻¹MHL
         z = solve_triangular(J, innovation.unsqueeze(-1), upper=False)  # J⁻¹r
         w = solve(self.eye + B @ B.mT, z)
-        u = observed * solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw
+        u = solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw
 
         # correction = Σₓᵧu = LLᵀHᵀu
-        correction = F.linear(F.linear(u, HL), L.mT)
+        correction = (u @ HL) @ L.mT
 
         return x + correction
