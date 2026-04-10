@@ -1,9 +1,9 @@
 r"""Generic types for PyTorch modules."""
 
 __all__ = [
+    "Constant",
     "ModuleMapping",
     "ModuleSequence",
-    # Functions
 ]
 
 from collections.abc import (
@@ -17,7 +17,24 @@ from collections.abc import (
 )
 from typing import TYPE_CHECKING, Never, Self, overload
 
+import torch
+from torch import Tensor, nn
 from torch.nn import Module, ModuleDict, ModuleList
+
+
+class Constant(Module):
+    r"""Module that returns a learned constant tensor."""
+
+    value: Tensor
+    r"""PARAM: Constant tensor returned by the module."""
+
+    def __init__(self, shape: tuple[int, ...], /, *, learnable: bool = True) -> None:
+        super().__init__()
+        self.value = nn.Parameter(torch.randn(shape), requires_grad=learnable)
+        nn.init.kaiming_uniform_(self.value)
+
+    def forward(self, _: Tensor) -> Tensor:
+        return self.value
 
 
 class ModuleSequence[M: Module](ModuleList, Sequence[M]):
