@@ -10,8 +10,10 @@ References:
 __all__ = [
     "ReZero",
     "ReZeroResNet",
+    "resolve_gate",
 ]
 
+import warnings
 from collections.abc import Iterable
 from typing import cast
 
@@ -83,3 +85,37 @@ class ReZeroResNet(nn.ModuleList):
         for block in self:
             x = x + block(x)
         return x
+
+
+def resolve_gate(
+    gate: str | nn.Module | None,
+    /,
+    *,
+    scalar_map: nn.Module | None = None,
+) -> nn.Module:
+    match gate:
+        case "rezero":
+            return ReZero(scalar_map=scalar_map)
+        case None | "identity":
+            if scalar_map is not None:
+                warnings.warn(
+                    "Ignoring scalar_map because gate is not 'rezero'.",
+                    stacklevel=3,
+                )
+            return nn.Identity()
+        case nn.Module():
+            if scalar_map is not None:
+                warnings.warn(
+                    "Ignoring scalar_map because gate is not 'rezero'.",
+                    stacklevel=3,
+                )
+            return gate
+        case str():
+            raise ValueError(
+                f"Unknown gate: {gate!r}. "
+                "Expected 'rezero', 'identity', None, or an nn.Module."
+            )
+        case _:
+            raise TypeError(
+                f"gate must be a string, nn.Module, or None, got {type(gate)!r}."
+            )

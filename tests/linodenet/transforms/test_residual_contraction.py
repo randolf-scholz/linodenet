@@ -11,6 +11,7 @@ from linodenet.mappings import (
     TransformBase,
 )
 from linodenet.nn.parametrize import update_parametrizations
+from linodenet.nn.rezero import ReZero
 from tests.testing import DEVICES, SEEDS_5, TestSuite, pytest_xfail
 
 from .test_transform import TestTransform
@@ -25,6 +26,21 @@ class ShiftedHalfContraction(nn.Module):
 
     def forward(self, x: Tensor, /) -> Tensor:
         return 0.5 * x + self.bias
+
+
+def test_identity_gate_ignores_scalar_map_and_has_no_scalar() -> None:
+    r"""Non-ReZero gates should warn about unused scalar maps and expose no scalar."""
+    with pytest.warns(
+        UserWarning,
+        match="Ignoring scalar_map because gate is not 'rezero'.",
+    ):
+        flow = ResidualContraction(
+            nn.Identity(),
+            gate="identity",
+            scalar_map=nn.Identity(),
+        )
+
+    assert isinstance(flow.gate, nn.Identity)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32], ids=str)
@@ -42,7 +58,7 @@ class TestReZero(TestSuite):
             nn.ReLU(),
             LinearContraction(2 * self.INPUT_SIZE, self.INPUT_SIZE),
         )
-        module = ResidualContraction(contraction, use_rezero=True)
+        module = ResidualContraction(contraction)
         module = module.to(dtype=dtype, device=device)
         update_parametrizations(module)  # Important after .to()
         return module
@@ -74,7 +90,8 @@ class TestReZero(TestSuite):
         with torch.no_grad():
             initial_loss = mse_loss(flow.encode(x), target)
 
-        optimizer = torch.optim.SGD([flow.scalar], lr=self.LEARNING_RATE)
+        assert isinstance(flow.gate, ReZero)
+        optimizer = torch.optim.SGD([flow.gate.scalar], lr=self.LEARNING_RATE)
 
         for _ in range(self.TRAIN_STEPS):
             optimizer.zero_grad()
@@ -96,7 +113,8 @@ class TestReZero(TestSuite):
         flow = self.make_model(device=device, dtype=dtype)
         x, target = self.make_test_case(device=device, dtype=dtype)
 
-        optimizer = torch.optim.SGD([flow.scalar], lr=self.LEARNING_RATE)
+        assert isinstance(flow.gate, ReZero)
+        optimizer = torch.optim.SGD([flow.gate.scalar], lr=self.LEARNING_RATE)
 
         for _ in range(self.TRAIN_STEPS):
             optimizer.zero_grad()
@@ -160,7 +178,7 @@ class TestCorrectness(TestTransform):
             device=device,
             dtype=dtype,
         )
-        flow = flow_cls(layer)
+        flow = flow_cls(layer, gate="identity")
 
         x = torch.randn(self.BATCH_SIZE, input_size, device=device, dtype=dtype)
         self.assert_right_invertible(flow, x, atol=atol, rtol=rtol)
@@ -187,7 +205,7 @@ class TestCorrectness(TestTransform):
         y = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         bias = torch.randn(self.INPUT_SIZE, device=device, dtype=dtype)
         contraction = ShiftedHalfContraction(bias)
-        flow = flow_cls(contraction)
+        flow = flow_cls(contraction, gate="identity")
 
         x_star = flow.decode(y)
         loss = x_star.square().sum()
@@ -231,6 +249,7 @@ class TestCorrectness(TestTransform):
         )
         flow = flow_cls(
             layer,
+            gate="identity",
             maxiter=self.FLOW_MAXITER,
             atol=flow_atol,
             rtol=flow_rtol,
@@ -297,6 +316,7 @@ class TestLogAbsDet(TestSuite):
         torch.manual_seed(self.SEED)
         flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
+            gate="identity",
             trace_matvecs=self.NUM_TRACE_SAMPLES,
             logdet_series_terms=self.NUM_SERIES_TERMS,
             trace_estimator=trace_estimator,
@@ -343,6 +363,7 @@ class TestLogAbsDetExact(TestSuite):
         torch.manual_seed(self.SEED)
         flow = ResidualContraction(
             self.ScaledContraction(self.SCALE),
+            gate="identity",
             trace_matvecs=self.NUM_TRACE_SAMPLES,
             logdet_series_terms=self.NUM_SERIES_TERMS,
             trace_estimator="exact",
@@ -398,7 +419,7 @@ class TestPerformance(TestSuite):
             device=device,
             dtype=dtype,
         )
-        flow = flow_cls(layer)
+        flow = flow_cls(layer, gate="identity")
 
         # NOTE: required for fullgraph=True
         # REF: https://docs.pytorch.org/tutorials/intermediate/compiled_autograd_tutorial.html

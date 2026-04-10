@@ -2,6 +2,7 @@ r"""Residual flow built from bottleneck contraction blocks."""
 
 __all__ = ["BottleneckFlow"]
 
+import warnings
 from typing import Final
 
 from torch import nn
@@ -50,6 +51,12 @@ class BottleneckFlow(TransformSequence[ResidualBottleneck]):
         self.layers_per_block = layers_per_block
         self.hidden_size = hidden_size
         self.use_rezero = use_rezero
+        if scalar_map is not DEFAULT_REZERO_SCALAR_MAP and not self.use_rezero:
+            warnings.warn(
+                "Ignoring scalar_map because use_rezero=False.",
+                stacklevel=2,
+            )
+            scalar_map = DEFAULT_REZERO_SCALAR_MAP
 
         blocks = [
             self._make_block(
@@ -99,7 +106,7 @@ class BottleneckFlow(TransformSequence[ResidualBottleneck]):
             input_size=input_size,
             hidden_size=hidden_size,
             bottleneck=bottleneck,
-            use_rezero=use_rezero,
+            gate="rezero" if use_rezero else "identity",
             scalar_map=scalar_map,
             use_bias=use_bias,
             maxiter=maxiter,

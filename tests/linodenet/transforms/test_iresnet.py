@@ -10,6 +10,7 @@ from torchinfo import summary
 
 from linodenet.mappings.transforms import IResNet, ResidualContraction
 from linodenet.nn.parametrize import update_parametrizations
+from linodenet.nn.rezero import ReZero
 from tests.testing import DEVICES, PROJECT, visualize_distribution
 
 from .test_transform import TestTransform
@@ -28,9 +29,9 @@ def train_model(
 ) -> None:
     if model.use_rezero:
         parameters = [
-            block.scalar
+            block.gate.scalar
             for block in model
-            if isinstance(block, ResidualContraction) and block.scalar is not None
+            if isinstance(block, ResidualContraction) and isinstance(block.gate, ReZero)
         ]
     else:
         parameters = list(model.parameters())

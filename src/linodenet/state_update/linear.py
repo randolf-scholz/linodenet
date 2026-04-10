@@ -12,7 +12,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from linodenet.nn import ReZero
+from linodenet.nn.rezero import resolve_gate
 from signatures import signature
 
 from .base import StateUpdaterBase
@@ -71,6 +71,7 @@ class LinearInnovationCell(StateUpdaterBase):
     - ``"rezero"``: use a learnable ReZero scalar $ρ(z)=αz$ with $α$ initialized
       to zero, so that the cell starts as the identity map.
     - ``"identity"``: use $ρ(z)=z$ with no additional scaling.
+    - ``None``: alias for ``"identity"``.
     - ``nn.Module``: use a custom user-provided gate.
 
     The observation map can be:
@@ -85,8 +86,6 @@ class LinearInnovationCell(StateUpdaterBase):
     r"""MODULE: The learnable innovation gain."""
     observation_map: nn.Module
     r"""MODULE: The observation map used in the innovation term."""
-    scalar: Tensor | None
-    r"""PARAM: Optional scalar exposed by the gate."""
     gate: nn.Module
     r"""MODULE: Optional gate for the innovation term."""
 
@@ -96,32 +95,13 @@ class LinearInnovationCell(StateUpdaterBase):
         input_size: int,
         hidden_size: int,
         *,
-        gate: str | nn.Module = "rezero",
+        gate: str | nn.Module | None = "rezero",
         observation_map: str | nn.Module = "linear",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
 
         self.gain = nn.Linear(input_size, hidden_size, bias=False)
-
-        match gate:
-            case nn.Module():
-                self.gate = gate
-                self.scalar = getattr(gate, "scalar", None)
-            case "rezero":
-                self.gate = ReZero()
-                self.scalar = self.gate.scalar
-            case "identity":
-                self.gate = nn.Identity()
-                self.scalar = None
-            case str():
-                raise ValueError(
-                    f"Unknown gate: {gate!r}. "
-                    "Expected 'rezero', 'identity', or an nn.Module."
-                )
-            case _:
-                raise TypeError(
-                    f"gate must be a string or nn.Module, got {type(gate)!r}."
-                )
+        self.gate = resolve_gate(gate)
 
         match observation_map:
             case nn.Module():

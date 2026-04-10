@@ -11,7 +11,7 @@ __all__ = [
 
 import warnings
 from math import sqrt
-from typing import Final, cast
+from typing import Final
 
 import torch
 from torch import Tensor, nn
@@ -21,8 +21,8 @@ from torch.nn.functional import linear
 
 from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 from linodenet.mappings.surjections import OrthogonalHouseholder
-from linodenet.nn import ReZero
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
+from linodenet.nn.rezero import resolve_gate
 from linodenet_special import fixpoint_solve
 from linodenet_special.trace_estimation import LogAbsDetEstimators
 
@@ -33,7 +33,7 @@ DEFAULT_REZERO_SCALAR_MAP: Final[NonExpansiveMapping] = (
 )
 
 
-class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformBase):
+class ResidualContractionBase[M: nn.Module](TransformBase):
     r"""Shared base class for residual contractions with implicit inverses.
 
     Forward: y ← x + ρ(f(x))
@@ -45,12 +45,12 @@ class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformB
     rtol: Final[float]
 
     contraction: M
-    gate: G
+    gate: nn.Module
 
     def __init__(
         self,
         contraction: M,
-        gate: G | None = None,
+        gate: str | nn.Module | None = None,
         *,
         maxiter: int = 256,
         atol: float = 1e-6,
@@ -61,7 +61,7 @@ class ResidualContractionBase[M: nn.Module, G: nn.Module = nn.Module](TransformB
         self.atol = atol
         self.rtol = rtol
         self.contraction = contraction
-        self.gate = cast("G", nn.Identity() if gate is None else gate)
+        self.gate = resolve_gate(gate)
 
     def encode(self, x: Tensor, /) -> Tensor:
         r"""Compute the forward residual map $y = x + ρ(f(x))$."""
@@ -104,11 +104,11 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
     Forward: y ← x + ρ(f(x))
     Inverse: via fix-point iteration.
 
-    If ``use_rezero=True``, then
+    Standard gate options are:
 
-    .. math:: y ← x + ρ(f(x)), \qquad ρ(u)=φ(ε)⋅u,\quad φ(ε) ∈ (-1, 1), φ(0)=0
-
-    ε is initialized to 0, so that the initial transformation is the identity.
+    - ``"rezero"``: use a learnable scalar gate with optional ``scalar_map``.
+    - ``"identity"`` or ``None``: use no additional gating.
+    - ``nn.Module``: use a custom user-provided gate.
 
     The jacobian determinant of the forward transformation is:
 
@@ -146,13 +146,12 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
     num_trace_samples: Final[int]
     num_series_terms: Final[int]
     trace_estimator: Final[str]
-    scalar: Tensor
 
     def __init__(
         self,
         contraction: M,
         *,
-        use_rezero: bool = False,
+        gate: str | nn.Module | None = "rezero",
         scalar_map: nn.Module | str = DEFAULT_REZERO_SCALAR_MAP,
         maxiter: int = 256,
         atol: float = 1e-6,
@@ -163,20 +162,14 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         trace_probe_sampler: str = "sphere",
         trace_mode: str = "reverse",
     ) -> None:
-        if use_rezero:
-            gate = ReZero(scalar_map=NonExpansiveMapping.new(scalar_map))
-            scalar = gate.scalar
-        else:
-            if scalar_map is not DEFAULT_REZERO_SCALAR_MAP:
-                warnings.warn(
-                    "Ignoring scalar_map because use_rezero=False.",
-                    stacklevel=2,
-                )
-            gate = None
-            scalar = nn.Parameter(torch.ones(()), requires_grad=False)
-
-        super().__init__(contraction, gate, maxiter=maxiter, atol=atol, rtol=rtol)
-        self.scalar = scalar
+        gate = resolve_gate(gate, scalar_map=NonExpansiveMapping.new(scalar_map))
+        super().__init__(
+            contraction,
+            gate,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
+        )
         self.num_trace_samples = trace_matvecs
         self.num_series_terms = logdet_series_terms
         self.trace_estimator = trace_estimator
@@ -260,7 +253,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         hidden_size: int,
         *,
         bottleneck: M,  # (...k) -> (...k)
-        use_rezero: bool = False,
+        gate: str | nn.Module | None = "rezero",
         scalar_map: nn.Module | str = DEFAULT_REZERO_SCALAR_MAP,
         use_bias: bool = True,
         maxiter: int = 256,
@@ -272,18 +265,6 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         if not 1 <= hidden_size <= input_size:
             raise ValueError("hidden_size must be between 1 and input_size")
 
-        if use_rezero:
-            gate = ReZero(scalar_map=NonExpansiveMapping.new(scalar_map))
-            scalar = gate.scalar
-        else:
-            if scalar_map is not DEFAULT_REZERO_SCALAR_MAP:
-                warnings.warn(
-                    "Ignoring scalar_map because use_rezero=False.",
-                    stacklevel=2,
-                )
-            gate = None
-            scalar = nn.Parameter(torch.ones(()), requires_grad=False)
-
         U = nn.Linear(
             hidden_size, input_size, bias=use_bias, device=device, dtype=dtype
         )
@@ -291,15 +272,21 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
             input_size, hidden_size, bias=use_bias, device=device, dtype=dtype
         )
         contraction = nn.Sequential(V, bottleneck, U)
+        gate = resolve_gate(gate, scalar_map=NonExpansiveMapping.new(scalar_map))
 
-        super().__init__(contraction, gate, maxiter=maxiter, atol=atol, rtol=rtol)
+        super().__init__(
+            contraction,
+            gate,
+            maxiter=maxiter,
+            atol=atol,
+            rtol=rtol,
+        )
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.use_bias = use_bias
         self.bottleneck = bottleneck
         self.U = U
         self.V = V
-        self.scalar = scalar
         self.lift = nn.Sequential(
             self.bottleneck,
             self.U,

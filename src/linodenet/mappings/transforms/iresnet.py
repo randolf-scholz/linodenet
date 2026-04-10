@@ -2,6 +2,7 @@ r"""Simple i-ResNet built from residual contraction blocks."""
 
 __all__ = ["IResNet"]
 
+import warnings
 from typing import Final
 
 from torch import nn
@@ -64,8 +65,12 @@ class IResNet(TransformSequence[ResidualContraction]):
             raise ValueError(
                 "latent_size must equal input_size when layers_per_block <= 1"
             )
-        if scalar_map is not None and not self.use_rezero:
-            raise ValueError("scalar_map requires use_rezero=True")
+        if scalar_map is not DEFAULT_REZERO_SCALAR_MAP and not self.use_rezero:
+            warnings.warn(
+                "Ignoring scalar_map because use_rezero=False.",
+                stacklevel=2,
+            )
+            scalar_map = DEFAULT_REZERO_SCALAR_MAP
 
         blocks = [
             self._make_block(
@@ -125,7 +130,7 @@ class IResNet(TransformSequence[ResidualContraction]):
         contraction = nn.Sequential(*layers)
         return ResidualContraction(
             contraction,
-            use_rezero=use_rezero,
+            gate="rezero" if use_rezero else "identity",
             scalar_map=scalar_map,
             maxiter=maxiter,
             atol=atol,

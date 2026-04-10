@@ -26,18 +26,26 @@ __all__ = [
     "EmpiricalStateUpdate",
     "DiracStateUpdate",
     # Classes
+    "GradientStepUpdater",
+    "NaturalGaussianUpdater",
     "probabilistic_kalman_update",
     "discrete_probabilistic_kalman_update",
 ]
 
 from abc import abstractmethod
-from typing import Optional, Protocol, runtime_checkable
+from collections.abc import Callable
+from math import expm1, log
+from typing import Any, Optional, Protocol, runtime_checkable
 
 import torch
-from torch import Tensor
+import torch.nn.functional as F
+from torch import Tensor, nn
 from torch.distributions import MultivariateNormal
+from torch.utils import _pytree
 
 from linodenet.distributions import Dirac, Distribution, Empirical
+from linodenet.distributions.gaussian import multivariate_gaussian_log_likelihood
+from linodenet.mappings.transforms import Transform
 
 
 @runtime_checkable
@@ -68,6 +76,193 @@ class EmpiricalStateUpdate[D: Distribution](ProbabilisticStateUpdate[D, Empirica
 
     @abstractmethod
     def __call__(self, y: Tensor | Empirical, x: D, /) -> D: ...
+
+
+class GradientStepUpdater(nn.Module):
+    r"""Single gradient-step updater for latent distribution parameters.
+
+    Given an observation $y$ and latent parameters $θ$, this module pulls the
+    observation back through the decoder and performs the Euclidean one-step
+    update
+
+    .. math::
+        θ' = θ - λ⁻¹ ∇_θ[-\log p_θ(y)]
+
+    where $p_θ(y)$ is induced by the decoder and the latent density.
+    """
+
+    decoder: Transform[Tensor, Tensor]
+    r"""Decoder used to pull observations back to latent space."""
+    latent_dist: Callable[[Tensor, Any], Tensor]
+    r"""Callable returning the latent log-density $log p(x∣θ)$."""
+    raw_lambda: Tensor
+    r"""Unconstrained parameter whose softplus defines the positive $λ$."""
+
+    def __init__(
+        self,
+        *,
+        decoder: Transform[Tensor, Tensor],
+        latent_dist: Callable[[Tensor, Any], Tensor],
+        lambda_init: float = 1.0,
+    ) -> None:
+        super().__init__()
+        if lambda_init <= 0:
+            raise ValueError(f"Expected lambda_init > 0, got {lambda_init}.")
+        self.decoder = decoder
+        self.latent_dist = latent_dist
+        raw_lambda = log(expm1(lambda_init))
+        self.raw_lambda = nn.Parameter(torch.tensor(raw_lambda))
+
+    @property
+    def lambda_(self) -> Tensor:
+        r"""Return the positive regularization/step-size parameter $λ$."""
+        return F.softplus(self.raw_lambda) + torch.finfo(self.raw_lambda.dtype).eps
+
+    def forward(self, y: Tensor, theta: Any, /) -> Any:
+        r"""Update the latent parameter pytree using a single observation.
+
+        Args:
+            y: Observed value in data space.
+            theta: Pytree of tensor parameters defining the latent distribution.
+
+        Returns:
+            Updated pytree with the same structure as `theta`.
+        """
+        leaves, spec = _pytree.tree_flatten(theta)
+        differentiable_indices = [
+            k
+            for k, leaf in enumerate(leaves)
+            if isinstance(leaf, Tensor)
+            and (leaf.is_floating_point() or leaf.is_complex())
+        ]
+
+        if not differentiable_indices:
+            return theta
+
+        updated_leaves = list(leaves)
+        grad_leaves: list[Tensor] = []
+        for k in differentiable_indices:
+            leaf = leaves[k]
+            assert isinstance(leaf, Tensor)
+            cloned = leaf.detach().clone().requires_grad_(True)
+            updated_leaves[k] = cloned
+            grad_leaves.append(cloned)
+
+        theta_var = _pytree.tree_unflatten(updated_leaves, spec)
+        # Pull back y ↦ x via the decoder so log p_θ(y) = log p(x∣θ) + log│det ∂x/∂y│.
+        x, logabsdet = self.decoder.decode_and_logabsdet(y)
+        log_density = self.latent_dist(x, theta_var)
+        # Minimize L(θ) = -log p_θ(y) = -(log p(x∣θ) + log│det ∂x/∂y│).
+        loss = -(log_density + logabsdet).sum()
+        gradients = torch.autograd.grad(loss, grad_leaves, allow_unused=True)
+        scale = self.lambda_.reciprocal()
+
+        for index, leaf, gradient in zip(
+            differentiable_indices, grad_leaves, gradients, strict=True
+        ):
+            # Single Euclidean step: θ' = θ - λ⁻¹∇_θL.
+            updated_leaves[index] = (
+                leaf if gradient is None else leaf - scale * gradient
+            )
+
+        return _pytree.tree_unflatten(updated_leaves, spec)
+
+
+class NaturalGaussianUpdater(nn.Module):
+    r"""Closed-form proximal update for a Gaussian latent state.
+
+    Assumptions:
+        1. The latent distribution is Gaussian: $x ∼ 𝓝(μ, Σ)$.
+        2. The decoder is an invertible transform $y = h(x)$ providing
+           `decode_and_logabsdet`.
+        3. We observe a single Dirac value $y$.
+        4. The Gaussian parameters are passed explicitly as the tuple $(μ, Σ)$.
+
+    Let
+
+    .. math::
+        z = h⁻¹(y), \qquad
+        \log p_θ(y) = \log 𝓝(z; μ, Σ) + \log|\det \frac{∂z}{∂y}|
+
+    Since the Jacobian term is independent of $(μ, Σ)$, this module computes the
+    exact minimizer of the KL-regularized objective
+
+    .. math::
+        \min_{μ', Σ'} -\log 𝓝(z; μ', Σ') + λ⋅\mathrm{KL}(𝓝(μ, Σ) \,\|\, 𝓝(μ', Σ'))
+
+    Writing $η = (1 + λ)⁻¹$ and $δ = z - μ$, the unique Gaussian minimizer is
+
+    .. math:: μ' = (1-η)μ + η z \qquad Σ' = (1-η)Σ + η(1-η)δδᵀ
+    """
+
+    decoder: Transform[Tensor, Tensor]
+    r"""Decoder used to pull observations back to latent space."""
+    raw_lambda: Tensor
+    r"""Unconstrained parameter whose softplus defines the positive $λ$."""
+    log_prob: Tensor
+    r"""BUFFER: The most recent predictive log-likelihood $log p_θ(y)$."""
+
+    def __init__(
+        self,
+        *,
+        decoder: Transform[Tensor, Tensor],
+        lambda_init: float = 1.0,
+    ) -> None:
+        super().__init__()
+        if lambda_init <= 0:
+            raise ValueError(f"Expected lambda_init > 0, got {lambda_init}.")
+        self.decoder = decoder
+        raw_lambda = log(expm1(lambda_init))
+        self.raw_lambda = nn.Parameter(torch.tensor(raw_lambda))
+        self.register_buffer("log_prob", torch.empty(()), persistent=False)
+
+    @property
+    def lambda_(self) -> Tensor:
+        r"""Return the positive regularization parameter $λ$."""
+        return F.softplus(self.raw_lambda) + torch.finfo(self.raw_lambda.dtype).eps
+
+    def forward(
+        self,
+        y: Tensor,
+        params: tuple[Tensor, Tensor],
+        /,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Return the updated Gaussian parameters $(μ', Σ')$."""
+        mu, sigma = params
+        if mu.ndim < 1:
+            raise ValueError(
+                f"Expected μ to have at least one dimension, got {mu.shape}."
+            )
+        if sigma.ndim < 2 or sigma.shape[-2:] != (mu.shape[-1], mu.shape[-1]):
+            raise ValueError(
+                "Expected Σ to have shape (..., d, d) matching μ.shape[-1], "
+                f"got μ.shape={mu.shape} and Σ.shape={sigma.shape}."
+            )
+        if mu.shape[:-1] != sigma.shape[:-2]:
+            raise ValueError(
+                "Expected μ and Σ to share the same batch shape, "
+                f"got μ.shape={mu.shape} and Σ.shape={sigma.shape}."
+            )
+
+        # Pull back y ↦ z so p_θ(y) = 𝓝(z; μ, Σ) · │det ∂z/∂y│.
+        z, logabsdet = self.decoder.decode_and_logabsdet(y)
+        self.log_prob = (
+            multivariate_gaussian_log_likelihood(
+                z,
+                mean=mu,
+                covariance_matrix=sigma,
+            )
+            + logabsdet
+        )
+
+        eta = (1 + self.lambda_).reciprocal()
+        delta = z - mu
+        outer = torch.einsum("...i, ...j -> ...ij", delta, delta)
+
+        # Exact proximal solution: μ' = (1-η)μ + ηz and Σ' = (1-η)Σ + η(1-η)δδᵀ.
+        mu_new = mu + eta * delta
+        sigma_new = (1 - eta) * sigma + eta * (1 - eta) * outer
+        return mu_new, sigma_new
 
 
 def probabilistic_kalman_update(

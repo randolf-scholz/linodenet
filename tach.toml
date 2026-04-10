@@ -105,7 +105,7 @@ depends_on = ["linodenet.mappings", "linodenet.initializations"]
 
 [[modules ]]
 path = "linodenet.state_update"
-depends_on = ["linodenet.distributions", "linodenet.nn", "linodenet.state_update.imputation"]
+depends_on = ["linodenet.distributions", "linodenet.nn", "linodenet.state_update.imputation", "linodenet.mappings"]
 
 [[modules ]]
 path = "linodenet.state_update.imputation"

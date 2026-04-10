@@ -48,6 +48,7 @@ class TestResidualBottleneck(TestTransform):
                     dtype=dtype,
                 ),
             ),
+            gate="identity",
             maxiter=128,
             atol=1e-6,
             rtol=1e-6,
@@ -56,6 +57,28 @@ class TestResidualBottleneck(TestTransform):
         )
         update_parametrizations(flow)
         return flow
+
+    def test_identity_gate_ignores_scalar_map_and_has_no_scalar(
+        self,
+        dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        r"""Non-ReZero bottlenecks should warn about unused scalar maps."""
+        with pytest.warns(
+            UserWarning,
+            match="Ignoring scalar_map because gate is not 'rezero'.",
+        ):
+            flow = ResidualBottleneck(
+                input_size=5,
+                hidden_size=2,
+                bottleneck=nn.Identity(),
+                gate="identity",
+                scalar_map=nn.Identity(),
+                device=device,
+                dtype=dtype,
+            )
+
+        assert isinstance(flow.gate, nn.Identity)
 
     @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)
     @pytest.mark.parametrize("input_size", [4, 16], ids="input_size={}".format)
