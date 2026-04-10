@@ -66,14 +66,16 @@ class LinearCell(StateUpdaterBase):
 class LinearInnovationCell(StateUpdaterBase):
     r"""Linear innovation state update.
 
-    .. math:: x' = x - ρ(K(y - h(x)))
+    .. math:: x' = x - ρ(K(x)(y - h(x)))
 
     where $K(x)$ is a learnable innovation gain, $h$ is the observation map, and
-    $ρ$ is a gate applied to the innovation correction.
+    $ρ$ is a gate applied to the innovation correction. By default, $K$ is a
+    learned constant matrix, but it can also be provided as a custom module that
+    depends on the current hidden state $x$.
 
     The gain can be:
 
-    - ``"constant"``: use a learned constant gain matrix.
+    - ``"constant"``: use a learned constant gain matrix. This is the default.
     - ``nn.Module``: use a custom user-provided state-dependent gain module.
 
     Standard gate options are:
@@ -158,13 +160,12 @@ class LinearInnovationCell(StateUpdaterBase):
 class KalmanCell(StateUpdaterBase):
     r"""Linear Kalman-style hidden-state update with masked observations.
 
-    .. math::
-        x' = x + ρ\left(
-            Σₓₓ Hᵀ Mᵀ (M(HΣₓₓHᵀ + R)Mᵀ)⁻¹(y_{\text{obs}} - MHx)
-        \right)
+    .. math:: x' = x + ρ\left(Σ(x)HᵀMᵀ(M(HΣ(x)Hᵀ + R)Mᵀ)⁻¹(y - MHx)\right)
 
-    Here, $y = Hx$, $Σₓₓ = \Cov(x)$, and $Σᵧᵧ = HΣₓₓHᵀ + R$,
-    for the masked observation model $y_{\text{obs}} = My$.
+    Here, $y = Hx$, $Σ(x)$ is the hidden-state covariance, and
+    $Σᵧᵧ = HΣ(x)Hᵀ + R$, for the masked observation model $y_{\text{obs}} = My$.
+    In the implementation, $Σ(x)$ is represented through a covariance factor
+    $L(x)$, typically a Cholesky factor, such that $Σ(x)=L(x)L(x)ᵀ$.
     $ρ$ is an optional gate applied to the Kalman correction. Standard
     gate options are the same as for `LinearInnovationCell`: ``"rezero"``,
     ``"identity"``, ``None``, or a custom `nn.Module`.
@@ -178,8 +179,8 @@ class KalmanCell(StateUpdaterBase):
 
     observation_map: nn.Module
     r"""MODULE: Observation map $H$ from hidden to observation space."""
-    correlation_cholesky: Tensor
-    r"""PARAM: Cholesky factor defining the hidden covariance $Σₓₓ$."""
+    covariance_factor: nn.Module
+    r"""MODULE: Covariance factor $L(x)$ with $Σₓₓ(x)=L(x)L(x)ᵀ$."""
     noise_cholesky: Tensor
     r"""PARAM: Cholesky factor defining the observation noise covariance $R$."""
     gate: nn.Module
@@ -203,23 +204,37 @@ class KalmanCell(StateUpdaterBase):
         hidden_size: int,
         *,
         noise: str = "scalar",
+        covariance_factor: str | nn.Module = "constant",
         gate: str | nn.Module | None = "rezero",
         observation_map: str | nn.Module = "linear",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         m = self.hidden_size
         n = self.input_size
-
-        self.correlation_cholesky = nn.Parameter(
-            torch.normal(0, 1 / sqrt(m), size=(m, m))
-        )
-        register_parametrization(
-            self,
-            "correlation_cholesky",
-            surjections.CholeskyFactor(),
-        )
-
         self.gate = resolve_gate(gate)
+        self.register_buffer("eye", torch.eye(n), persistent=False)
+
+        match covariance_factor:
+            case nn.Module():
+                self.covariance_factor = covariance_factor
+            case "constant":
+                self.covariance_factor = Constant((m, m))
+                register_parametrization(
+                    self.covariance_factor,
+                    "value",
+                    surjections.CholeskyFactor(),
+                )
+            case str():
+                raise ValueError(
+                    "Unknown covariance_factor: "
+                    f"{covariance_factor!r}. Expected 'constant' or an nn.Module."
+                )
+            case _:
+                raise TypeError(
+                    "covariance_factor must be a string or nn.Module, "
+                    f"got {type(covariance_factor)!r}."
+                )
+
         match observation_map:
             case nn.Module():
                 self.observation_map = observation_map
@@ -266,15 +281,13 @@ class KalmanCell(StateUpdaterBase):
             case _:
                 raise TypeError(f"noise must be a string, got {type(noise)!r}.")
 
-        self.register_buffer("eye", torch.eye(n), persistent=False)
-
     @signature("[(..., n), (..., m)] -> (..., m)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         y_pred = self.observation_map(x)
         missing = y.isnan()
         observed = (~missing).to(y.dtype)
         # TODO: consider solving only over unmasked coordinates (requires flattening).
-        L = self.correlation_cholesky
+        L = self.covariance_factor(x)
         J = observed.unsqueeze(-1) * self.noise_cholesky + torch.diag_embed(
             missing.to(y.dtype)
         )

@@ -4,6 +4,7 @@ import pytest
 import torch
 from torch import nn
 
+from linodenet.nn.containers import Constant
 from linodenet.state_update import KalmanCell
 
 
@@ -15,9 +16,10 @@ def test_linear_kalman_cell_matches_masked_scalar_blup_by_default() -> None:
 
     with torch.no_grad():
         assert isinstance(cell.observation_map, nn.Linear)
+        assert isinstance(cell.covariance_factor, Constant)
         cell.observation_map.weight.copy_(torch.eye(3))
-        cell.correlation_cholesky.zero_()
-        cell.correlation_cholesky.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
+        cell.covariance_factor.value.zero_()
+        cell.covariance_factor.value.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
         cell.noise_cholesky.copy_(torch.sqrt(torch.tensor(3.0)) * torch.eye(3))
 
     expected_correction = torch.tensor(
@@ -49,8 +51,9 @@ def test_linear_kalman_cell_matches_general_masked_formula_with_diagonal_noise()
 
     with torch.no_grad():
         assert isinstance(cell.observation_map, nn.Linear)
+        assert isinstance(cell.covariance_factor, Constant)
         cell.observation_map.weight.copy_(H)
-        cell.correlation_cholesky.copy_(torch.linalg.cholesky(sigma_xx))
+        cell.covariance_factor.value.copy_(torch.linalg.cholesky(sigma_xx))
         cell.noise_cholesky.copy_(torch.diag(torch.tensor([3.0, 4.0, 5.0])))
 
     y_pred = x @ H.mT
@@ -79,8 +82,9 @@ def test_linear_kalman_cell_identity_observation_map_uses_x_directly() -> None:
     y = torch.tensor([[4.0, float("nan"), 9.0]])
 
     with torch.no_grad():
-        cell.correlation_cholesky.zero_()
-        cell.correlation_cholesky.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
+        assert isinstance(cell.covariance_factor, Constant)
+        cell.covariance_factor.value.zero_()
+        cell.covariance_factor.value.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
         cell.noise_cholesky.copy_(torch.sqrt(torch.tensor(3.0)) * torch.eye(3))
 
     assert isinstance(cell.observation_map, nn.Identity)
@@ -105,6 +109,55 @@ def test_linear_kalman_cell_accepts_custom_observation_map() -> None:
     cell = KalmanCell(3, 5, observation_map=observation_map)
 
     assert cell.observation_map is observation_map
+
+
+def test_linear_kalman_cell_accepts_custom_covariance_factor() -> None:
+    r"""Custom covariance factors should be used verbatim."""
+    covariance_factor = nn.Linear(5, 25, bias=False)
+    cell = KalmanCell(3, 5, covariance_factor=covariance_factor)
+
+    assert cell.covariance_factor is covariance_factor
+
+
+def test_linear_kalman_cell_supports_batched_attention_like_covariance_factor() -> None:
+    r"""State-dependent covariance factors may produce a batched lower-triangular $L(x)$."""
+
+    class AttentionFactor(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.key = nn.Linear(4, 16, bias=False)
+            self.query = nn.Linear(4, 16, bias=False)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            xk = self.key(x).unflatten(-1, (4, 4))
+            xq = self.query(x).unflatten(-1, (4, 4))
+            return torch.tril(xk @ xq.mT)
+
+    covariance_factor = AttentionFactor()
+    cell = KalmanCell(
+        4,
+        4,
+        covariance_factor=covariance_factor,
+        observation_map="identity",
+        gate="identity",
+    )
+    x = torch.randn(6, 4, requires_grad=True)
+    y = torch.randn(6, 4)
+    y[torch.rand(6, 4) < 0.4] = float("nan")
+
+    assert cell.covariance_factor is covariance_factor
+
+    output = cell(y, x)
+    loss = output.square().mean()
+    loss.backward()
+
+    assert torch.isfinite(output).all()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+
+    for parameter in covariance_factor.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
 
 
 def test_linear_kalman_cell_rejects_identity_for_nonsquare_shapes() -> None:
@@ -137,9 +190,10 @@ def test_linear_kalman_cell_gate_variants() -> None:
     with torch.no_grad():
         for cell in (none_gate, identity_gate, rezero_gate):
             assert isinstance(cell.observation_map, nn.Linear)
+            assert isinstance(cell.covariance_factor, Constant)
             cell.observation_map.weight.copy_(torch.eye(3))
-            cell.correlation_cholesky.zero_()
-            cell.correlation_cholesky.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
+            cell.covariance_factor.value.zero_()
+            cell.covariance_factor.value.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
             cell.noise_cholesky.copy_(torch.sqrt(torch.tensor(3.0)) * torch.eye(3))
 
     torch.testing.assert_close(none_gate(y, x), identity_gate(y, x))
