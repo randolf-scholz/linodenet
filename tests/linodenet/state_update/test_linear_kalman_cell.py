@@ -2,17 +2,19 @@ r"""Tests for linear Kalman-style state updaters."""
 
 import pytest
 import torch
+from torch import nn
 
-from linodenet.state_update import LinearKalmanCell
+from linodenet.state_update import KalmanCell
 
 
 def test_linear_kalman_cell_matches_masked_scalar_blup_by_default() -> None:
     r"""The default update should match the masked closed-form BLUP with scalar noise."""
-    cell = LinearKalmanCell(3, 3, gate="identity")
+    cell = KalmanCell(3, 3, gate="identity")
     x = torch.tensor([[1.0, 2.0, 3.0]])
     y = torch.tensor([[4.0, float("nan"), 9.0]])
 
     with torch.no_grad():
+        assert isinstance(cell.observation_map, nn.Linear)
         cell.observation_map.weight.copy_(torch.eye(3))
         cell.correlation_cholesky.zero_()
         cell.correlation_cholesky.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
@@ -36,7 +38,7 @@ def test_linear_kalman_cell_matches_general_masked_formula_with_diagonal_noise()
     None
 ):
     r"""The update should match the masked LMMSE formula with diagonal noise."""
-    cell = LinearKalmanCell(3, 2, noise="diagonal", gate="identity")
+    cell = KalmanCell(3, 2, noise="diagonal", gate="identity")
     x = torch.tensor([[1.0, -1.0]])
     y = torch.tensor([[2.0, float("nan"), 0.5]])
 
@@ -46,6 +48,7 @@ def test_linear_kalman_cell_matches_general_masked_formula_with_diagonal_noise()
     observed = torch.tensor([0, 2])
 
     with torch.no_grad():
+        assert isinstance(cell.observation_map, nn.Linear)
         cell.observation_map.weight.copy_(H)
         cell.correlation_cholesky.copy_(torch.linalg.cholesky(sigma_xx))
         cell.noise_cholesky.copy_(torch.diag(torch.tensor([3.0, 4.0, 5.0])))
@@ -66,12 +69,56 @@ def test_linear_kalman_cell_matches_general_masked_formula_with_diagonal_noise()
 def test_linear_kalman_cell_rejects_dense_noise() -> None:
     r"""Dense observation noise is currently unsupported."""
     with pytest.raises(ValueError, match="Expected 'scalar' or 'diagonal'"):
-        LinearKalmanCell(3, 2, noise="dense")
+        KalmanCell(3, 2, noise="dense")
+
+
+def test_linear_kalman_cell_identity_observation_map_uses_x_directly() -> None:
+    r"""Identity observation maps should use the hidden state directly."""
+    cell = KalmanCell(3, 3, observation_map="identity", gate="identity")
+    x = torch.tensor([[1.0, 2.0, 3.0]])
+    y = torch.tensor([[4.0, float("nan"), 9.0]])
+
+    with torch.no_grad():
+        cell.correlation_cholesky.zero_()
+        cell.correlation_cholesky.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
+        cell.noise_cholesky.copy_(torch.sqrt(torch.tensor(3.0)) * torch.eye(3))
+
+    assert isinstance(cell.observation_map, nn.Identity)
+
+    expected_correction = torch.tensor(
+        [
+            [
+                (4.0 / 7.0) * (4.0 - 1.0),
+                0.0,
+                (16.0 / 19.0) * (9.0 - 3.0),
+            ]
+        ]
+    )
+    expected = x + expected_correction
+
+    torch.testing.assert_close(cell(y, x), expected)
+
+
+def test_linear_kalman_cell_accepts_custom_observation_map() -> None:
+    r"""Custom observation maps should be used verbatim."""
+    observation_map = nn.Linear(5, 3, bias=False)
+    cell = KalmanCell(3, 5, observation_map=observation_map)
+
+    assert cell.observation_map is observation_map
+
+
+def test_linear_kalman_cell_rejects_identity_for_nonsquare_shapes() -> None:
+    r"""Identity observation maps require matching input and hidden sizes."""
+    with pytest.raises(
+        ValueError,
+        match=r"observation_map='identity' requires input_size == hidden_size!",
+    ):
+        KalmanCell(3, 5, observation_map="identity")
 
 
 def test_linear_kalman_cell_ignores_fully_missing_observations() -> None:
     r"""If no coordinates are observed, the state should remain unchanged."""
-    cell = LinearKalmanCell(4, 6, gate="identity")
+    cell = KalmanCell(4, 6, gate="identity")
     x = torch.randn(5, 6)
     y = torch.full((5, 4), float("nan"))
 
@@ -80,15 +127,16 @@ def test_linear_kalman_cell_ignores_fully_missing_observations() -> None:
 
 def test_linear_kalman_cell_gate_variants() -> None:
     r"""Identity-like gates should match and ReZero should start at zero correction."""
-    none_gate = LinearKalmanCell(3, 3, gate=None)
-    identity_gate = LinearKalmanCell(3, 3, gate="identity")
-    rezero_gate = LinearKalmanCell(3, 3)
+    none_gate = KalmanCell(3, 3, gate=None)
+    identity_gate = KalmanCell(3, 3, gate="identity")
+    rezero_gate = KalmanCell(3, 3)
 
     x = torch.tensor([[1.0, 2.0, 3.0]])
     y = torch.tensor([[4.0, float("nan"), 9.0]])
 
     with torch.no_grad():
         for cell in (none_gate, identity_gate, rezero_gate):
+            assert isinstance(cell.observation_map, nn.Linear)
             cell.observation_map.weight.copy_(torch.eye(3))
             cell.correlation_cholesky.zero_()
             cell.correlation_cholesky.diagonal().copy_(torch.tensor([2.0, 3.0, 4.0]))
@@ -102,7 +150,7 @@ def test_linear_kalman_cell_masked_backward_has_finite_gradients() -> None:
     r"""Masked observations should not introduce NaNs into gradients."""
     torch.manual_seed(0)
 
-    cell = LinearKalmanCell(5, 7, noise="diagonal", gate="identity")
+    cell = KalmanCell(5, 7, noise="diagonal", gate="identity")
     x = torch.randn(8, 7, requires_grad=True)
     y = torch.randn(8, 5)
     mask = torch.rand(8, 5) < 0.5

@@ -31,7 +31,7 @@ __all__ = [
     "MissingValueCell",
     "LinearCell",
     "LinearInnovationCell",
-    "LinearKalmanCell",
+    "KalmanCell",
     "NonLinearUpdate",
     "NonLinearKalmanUpdate",
     "KalmanUpdate",
@@ -62,9 +62,9 @@ from .kalman import (
     NonLinearUpdate,
 )
 from .linear import (
+    KalmanCell,
     LinearCell,
     LinearInnovationCell,
-    LinearKalmanCell,
 )
 
 STATE_UPDATERS: dict[str, type[StateUpdater]] = {
@@ -73,14 +73,14 @@ STATE_UPDATERS: dict[str, type[StateUpdater]] = {
     "LSTMCell": LSTMCell,
     "RNNCell": RNNCell,
     # custom state updaters
-    "KalmanUpdate": KalmanUpdate,
     "LinearCell": LinearCell,
-    "LinearKalmanCell": LinearKalmanCell,
-    "LinearResidualCell": LinearInnovationCell,
+    "KalmanCell": KalmanCell,
+    "LinearInnovationCell": LinearInnovationCell,
     "MissingValueCell": MissingValueCell,
     "NonLinearKalmanUpdate": NonLinearKalmanUpdate,
     "NonLinearUpdate": NonLinearUpdate,
     "CellSequence": CellSequence,
+    "ResidualCell": ResidualCell,
     "ResidualCellSequence": ResidualCellSequence,
 }  # fmt: skip
 r"""Dictionary of all available state updaters."""

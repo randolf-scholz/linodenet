@@ -199,6 +199,30 @@ class CellSequence[C: StateUpdaterBase](StateUpdaterList[C]):
         return x
 
 
+class ResidualCell[C: StateUpdater](StateUpdaterBase):
+    r"""Residual wrapper for state updaters.
+
+    .. math:: x' = x - ρ(F(y, x))
+
+    where $F$ is a state updater and $ρ$ is an optional gate.
+    """
+
+    cell: C
+    gate: nn.Module
+
+    def __init__(self, cell: C, gate: str | nn.Module | None = None) -> None:
+        super().__init__(
+            input_size=cell.input_size,
+            hidden_size=cell.hidden_size,
+        )
+        self.cell = cell
+        self.gate = resolve_gate(gate)
+
+    @signature("[(..., d), (..., h)] -> (..., h)")
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        return x - self.gate(self.cell(y, x))
+
+
 class ResidualCellSequence[C: StateUpdaterBase](CellSequence[C]):
     r"""Sequential state updater with residual connections.
 
@@ -234,30 +258,6 @@ class ResidualCellSequence[C: StateUpdaterBase](CellSequence[C]):
         for alpha, cell in zip(self.alpha, self, strict=True):
             x = x.addcmul(alpha, cell(y, x), value=-1.0)  # xₖ₊₁ <- xₖ - αₖfₖ(y, xₖ)
         return x
-
-
-class ResidualCell[C: StateUpdater](StateUpdaterBase):
-    r"""Residual wrapper for state updaters.
-
-    .. math:: x' = x - ρ(F(y, x))
-
-    where $F$ is a state updater and $ρ$ is an optional gate.
-    """
-
-    cell: C
-    gate: nn.Module
-
-    def __init__(self, cell: C, gate: str | nn.Module | None = None) -> None:
-        super().__init__(
-            input_size=cell.input_size,
-            hidden_size=cell.hidden_size,
-        )
-        self.cell = cell
-        self.gate = resolve_gate(gate)
-
-    @signature("[(..., d), (..., h)] -> (..., h)")
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
-        return x - self.gate(self.cell(y, x))
 
 
 class MissingValueCell(StateUpdaterBase):

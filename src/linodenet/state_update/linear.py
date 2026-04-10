@@ -3,7 +3,7 @@ r"""Linear filters."""
 __all__ = [
     "LinearCell",
     "LinearInnovationCell",
-    "LinearKalmanCell",
+    "KalmanCell",
 ]
 
 from math import sqrt
@@ -134,7 +134,7 @@ class LinearInnovationCell(StateUpdaterBase):
         return x - self.gate(self.gain(r))
 
 
-class LinearKalmanCell(StateUpdaterBase):
+class KalmanCell(StateUpdaterBase):
     r"""Linear Kalman-style hidden-state update with masked observations.
 
     .. math::
@@ -155,14 +155,12 @@ class LinearKalmanCell(StateUpdaterBase):
         unbiased estimator within the same linear class.
     """
 
-    observation_map: nn.Linear
-    r"""MODULE: Linear observation map $H$ from hidden to observation space."""
+    observation_map: nn.Module
+    r"""MODULE: Observation map $H$ from hidden to observation space."""
     correlation_cholesky: Tensor
     r"""PARAM: Cholesky factor defining the hidden covariance $Σₓₓ$."""
     noise_cholesky: Tensor
     r"""PARAM: Cholesky factor defining the observation noise covariance $R$."""
-    noise: str
-    r"""CONST: Structure of the observation noise covariance."""
     gate: nn.Module
     r"""MODULE: Optional gate for the Kalman correction."""
     eye: Tensor
@@ -185,14 +183,12 @@ class LinearKalmanCell(StateUpdaterBase):
         *,
         noise: str = "scalar",
         gate: str | nn.Module | None = "rezero",
+        observation_map: str | nn.Module = "linear",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         m = self.hidden_size
         n = self.input_size
 
-        self.noise = noise
-        self.gate = resolve_gate(gate)
-        self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
         self.correlation_cholesky = nn.Parameter(
             torch.normal(0, 1 / sqrt(m), size=(m, m))
         )
@@ -201,6 +197,29 @@ class LinearKalmanCell(StateUpdaterBase):
             "correlation_cholesky",
             surjections.CholeskyFactor(),
         )
+
+        self.gate = resolve_gate(gate)
+        match observation_map:
+            case nn.Module():
+                self.observation_map = observation_map
+            case "linear":
+                self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
+            case "identity":
+                if input_size != hidden_size:
+                    raise ValueError(
+                        "observation_map='identity' requires input_size == hidden_size!"
+                    )
+                self.observation_map = nn.Identity()
+            case str():
+                raise ValueError(
+                    f"Unknown observation_map: {observation_map!r}. "
+                    "Expected 'linear', 'identity', or an nn.Module."
+                )
+            case _:
+                raise TypeError(
+                    "observation_map must be a string or nn.Module, "
+                    f"got {type(observation_map)!r}."
+                )
 
         match noise:
             case "scalar":
