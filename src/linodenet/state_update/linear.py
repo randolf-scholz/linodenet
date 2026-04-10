@@ -1,7 +1,5 @@
 r"""Linear filters."""
 
-from torch.linalg import solve_triangular
-
 __all__ = [
     "LinearCell",
     "LinearInnovationCell",
@@ -180,9 +178,6 @@ class LinearKalmanCell(StateUpdaterBase):
         m = self.hidden_size
         n = self.input_size
 
-        if m < n:
-            raise ValueError
-
         self.noise = noise
         self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
         self.correlation_cholesky = nn.Parameter(
@@ -236,25 +231,27 @@ class LinearKalmanCell(StateUpdaterBase):
         missing = y.isnan()
         observed = (~missing).to(y.dtype)
         L = self.correlation_cholesky
-        J = self.noise_cholesky
+        J = observed.unsqueeze(-1) * self.noise_cholesky + torch.diag_embed(
+            missing.to(y.dtype)
+        )
 
         # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
         innovation = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
 
         # Build Σₓᵧ = ΣₓₓHᵀ and Σᵧᵧ = HΣₓₓHᵀ from the state Cholesky factor.
         # compute
-        HL = self.observation_map(L)  # HL
+        HL = self.observation_map(L)
 
         # u = (HLLᵀHᵀ + JJᵀ)⁻¹r
         # note: (HLLᵀHᵀ + JJᵀ) = J(𝕀 + J⁻¹HLLᵀHᵀJ⁻ᵀ)Jᵀ = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹HL
         # solve via: z = J⁻¹r, w = (𝕀 + BBᵀ)⁻¹z, u = J⁻ᵀw
         # middle part via woodbury: (𝕀 + BBᵀ)⁻¹ = 𝕀 - B(𝕀 + BᵀB)⁻¹Bᵀ (good if m>n)
-        B = solve_triangular(J, HL.mT, upper=False)  # J⁻¹HL
-        z = solve_triangular(J, innovation, upper=False)  # J⁻¹r
-        w = z - F.linear(solve(self.eye + B @ B.mT, F.linear(z, B.mT)), B)
-        u = solve_triangular(J, w, transpose=True, upper=False)  # J⁻ᵀw
+        B = observed.unsqueeze(-1) * solve_triangular(J, HL.mT, upper=False)  # J⁻¹MHL
+        z = solve_triangular(J, innovation.unsqueeze(-1), upper=False)  # J⁻¹r
+        w = solve(self.eye + B @ B.mT, z)
+        u = observed * solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw
 
         # correction = Σₓᵧu = LLᵀHᵀu
-        correction = F.linear(F.linear(u, HL.mT), L)
+        correction = F.linear(F.linear(u, HL), L.mT)
 
         return x + correction
