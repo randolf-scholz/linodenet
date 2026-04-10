@@ -30,7 +30,11 @@ Note:
     parameters.
 """
 
-__all__ = ["MultivariateNormal", "MultiHeadGaussian"]
+__all__ = [
+    "multivariate_gaussian_log_likelihood",
+    "MultivariateNormal",
+    "MultiHeadGaussian",
+]
 
 import math
 from typing import Final, Optional, Self
@@ -38,8 +42,43 @@ from typing import Final, Optional, Self
 import torch
 import torch.nn.functional as F
 from torch import Tensor, distributions as dist, nn
+from torch.linalg import cholesky, solve_triangular, vecdot
 
 from .base import DistributionBase
+
+
+def multivariate_gaussian_log_likelihood(
+    value: Tensor,
+    /,
+    *,
+    mean: Tensor,
+    covariance_matrix: Tensor,
+) -> Tensor:
+    r"""Return the log-likelihood of a multivariate Gaussian.
+
+    Args:
+        value: Evaluation point $x$ with shape `(..., d)`.
+        mean: Mean $μ$ with shape `(..., d)`.
+        covariance_matrix: Covariance $Σ$ with shape `(..., d, d)`.
+
+    Returns:
+        The log-density
+
+        .. math::
+            \log 𝓝(x; μ, Σ) = -½(d\log(2π) + \log\det Σ + (x-μ)ᵀΣ⁻¹(x-μ)).
+    """
+    # Factor Σ = LLᵀ so the Mahalanobis term becomes ‖L⁻¹(x-μ)‖².
+    residual = value - mean
+    L = cholesky(covariance_matrix)
+    whitened = solve_triangular(
+        L,
+        residual.unsqueeze(-1),
+        upper=False,
+    ).squeeze(-1)
+    dim = residual.shape[-1]
+    logdet = 2 * L.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+    mahalanobis = vecdot(whitened, whitened, dim=-1)
+    return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
 
 
 class MultivariateNormal(dist.MultivariateNormal):
@@ -195,7 +234,7 @@ class MultiHeadGaussian(DistributionBase):
         y = y - self.means
         y = y.moveaxis(0, -1)  # (B, H, D) -> (H, D, B)
         # (H, D, D), (H, D, B) -> (H, D, B)
-        u = torch.linalg.solve_triangular(L, y, upper=False)
+        u = solve_triangular(L, y, upper=False)
         u = u.moveaxis(-1, 0)  # (H, D, B) -> (B, H, D)
 
         # compute log |det L⁻¹| = - log |det L| = log ∏ᵢ Lᵢᵢ
@@ -234,7 +273,7 @@ class MultiHeadGaussian(DistributionBase):
 
         # compute the base log probability
         # ½*log(2π) + ½\log(σ²) + ½‖x-μ‖²/σ² = ½*log(2π) +  ½‖x‖²
-        log_prob = self.normalization_constant + 0.5 * (z * z).sum(-1)  # (..., H)
+        log_prob = self.normalization_constant + 0.5 * vecdot(z, z, dim=-1)  # (..., H)
         log_prob = log_prob - ldj  # (..., H)
         self.log_probs = log_prob  # store buffer for post-hoc analysis
         return log_prob
