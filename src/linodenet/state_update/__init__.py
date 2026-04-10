@@ -16,6 +16,8 @@ state $\{x_{q₁}, x_{q₂}, …, x_{qₙ}\}$ at the query times $\{q₁, q₂, 
 __all__ = [
     # submodules
     "probabilistic",
+    "linear",
+    "kalman",
     # Constants
     "STATE_UPDATERS",
     # Types
@@ -29,6 +31,7 @@ __all__ = [
     "MissingValueCell",
     "LinearCell",
     "LinearInnovationCell",
+    "LinearKalmanCell",
     "NonLinearUpdate",
     "NonLinearKalmanUpdate",
     "KalmanUpdate",
@@ -42,7 +45,7 @@ __all__ = [
 
 from torch.nn import GRUCell, LSTMCell, RNNCell
 
-from . import probabilistic
+from . import kalman, linear, probabilistic
 from .base import (
     CellSequence,
     MissingValueCell,
@@ -61,6 +64,7 @@ from .kalman import (
 from .linear import (
     LinearCell,
     LinearInnovationCell,
+    LinearKalmanCell,
 )
 
 STATE_UPDATERS: dict[str, type[StateUpdater]] = {
@@ -71,6 +75,7 @@ STATE_UPDATERS: dict[str, type[StateUpdater]] = {
     # custom state updaters
     "KalmanUpdate": KalmanUpdate,
     "LinearCell": LinearCell,
+    "LinearKalmanCell": LinearKalmanCell,
     "LinearResidualCell": LinearInnovationCell,
     "MissingValueCell": MissingValueCell,
     "NonLinearKalmanUpdate": NonLinearKalmanUpdate,
