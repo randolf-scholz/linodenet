@@ -15,6 +15,8 @@ Project conventions for automated agents contributing to `linodenet`.
 - Prefer straightforward inline code over extracting tiny helper functions.
 - Introduce a helper function only when it is reused, materially improves readability, or isolates non-trivial logic
   that would otherwise obscure the main control flow.
+- As a rule of thumb, only extract a helper when it leads to a meaningful reduction in code at the call sites; if the
+  diff is roughly line-neutral, keep the logic inline.
 - Do not extract one- or two-line private helpers for single-use expressions unless they encode an important domain
   concept.
 - Keep related logic in the main method when the extracted helper would force the reader to jump around the file to
