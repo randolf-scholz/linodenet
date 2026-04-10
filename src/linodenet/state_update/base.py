@@ -37,9 +37,10 @@ __all__ = [
     "StateUpdaterBase",
     # classes
     "StateUpdaterList",
-    "UpdateSequence",
-    "ResidualUpdate",
-    "MissingValueUpdate",
+    "CellSequence",
+    "ResidualCellSequence",
+    "ResidualCell",
+    "MissingValueCell",
     # functions
     "is_state_updater",
 ]
@@ -159,17 +160,17 @@ class StateUpdaterList[C: StateUpdaterBase](StateUpdaterBase, ModuleSequence[C])
         StateUpdater.__init__(self, input_size, hidden_size)
 
     @abstractmethod
-    def forward(self, y_obs: Tensor, x_hat: Tensor, /) -> Tensor: ...
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor: ...
 
 
-class UpdateSequence[C: StateUpdaterBase](StateUpdaterList[C]):
+class CellSequence[C: StateUpdaterBase](StateUpdaterList[C]):
     r"""Apply multiple state updaters sequentially.
 
     .. math:: xₖ₊₁ = Fₖ(y, xₖ)
     """
 
-    def __init__(self, modules: Iterable[C] = (), /) -> None:
-        cells = list(modules)
+    def __init__(self, cells: Iterable[C] = (), /) -> None:
+        cells = list(cells)
 
         if not cells:
             raise ValueError("At least one module must be given!")
@@ -188,7 +189,7 @@ class UpdateSequence[C: StateUpdaterBase](StateUpdaterList[C]):
                     f"Expected {hidden_size}, but {module=} has {module.hidden_size}"
                 )
 
-        super().__init__(modules, input_size=input_size, hidden_size=hidden_size)
+        super().__init__(cells, input_size=input_size, hidden_size=hidden_size)
 
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -197,13 +198,13 @@ class UpdateSequence[C: StateUpdaterBase](StateUpdaterList[C]):
         return x
 
 
-class ResidualUpdate[C: StateUpdaterBase](UpdateSequence[C]):
+class ResidualCellSequence[C: StateUpdaterBase](CellSequence[C]):
     r"""Sequential state updater with residual connections.
 
-    .. math:: xₖ₊₁ = xₖ + αₖ⋅Fₖ(y, xₖ)
+    .. math:: xₖ₊₁ = xₖ - αₖ⋅Fₖ(y, xₖ)
 
     Args:
-        modules: An iterable of state updater modules to be applied sequentially.
+        cells: An iterable of state updater modules to be applied sequentially.
         use_rezero: Whether to use rezero (default: True)
 
     A regular ResNet is obtained by setting all αₖ=1.0 and making them non-learnable.
@@ -216,12 +217,12 @@ class ResidualUpdate[C: StateUpdaterBase](UpdateSequence[C]):
 
     def __init__(
         self,
-        modules: Iterable[C] = (),
+        cells: Iterable[C] = (),
         /,
         *,
         use_rezero: bool = True,
     ) -> None:
-        super().__init__(modules)
+        super().__init__(cells)
         self.alpha = nn.Parameter(
             torch.zeros(len(self)) if use_rezero else torch.ones(len(self)),
             requires_grad=use_rezero,
@@ -230,11 +231,35 @@ class ResidualUpdate[C: StateUpdaterBase](UpdateSequence[C]):
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         for alpha, cell in zip(self.alpha, self, strict=True):
-            x = x.addcmul(alpha, cell(y, x))  # xₖ₊₁ <- xₖ + αₖfₖ(y, xₖ)
+            x = x.addcmul(alpha, cell(y, x), value=-1.0)  # xₖ₊₁ <- xₖ - αₖfₖ(y, xₖ)
         return x
 
 
-class MissingValueUpdate(StateUpdaterBase):
+class ResidualCell[C: StateUpdater, G: nn.Module = nn.Module](StateUpdaterBase):
+    r"""Residual wrapper for state updaters.
+
+    .. math:: x' = x - ρ(F(y, x))
+
+    where $F$ is a state updater and $ρ$ is an optional gate.
+    """
+
+    cell: C
+    gate: G
+
+    def __init__(self, cell: C, gate: G | None = None) -> None:
+        super().__init__(
+            input_size=cell.input_size,
+            hidden_size=cell.hidden_size,
+        )
+        self.cell = cell
+        self.gate = cast("G", nn.Identity() if gate is None else gate)
+
+    @signature("[(..., d), (..., h)] -> (..., h)")
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        return x - self.gate(self.cell(y, x))
+
+
+class MissingValueCell(StateUpdaterBase):
     r"""Wraps an existing state updater $F$ so that it can handle missing values.
 
     .. math:: x' &= F(u，x)   &   (u, m) = impute(y, x)

@@ -16,7 +16,7 @@ from blueprint import Blueprint, initialize
 from linodenet.mappings import ConcatEmbedding, ConcatProjection
 from linodenet.nn import ResNet
 from linodenet.state_propagation.flows import ContinuousFlow, LinearFlow
-from linodenet.state_update import MissingValueUpdate, StateUpdater
+from linodenet.state_update import MissingValueCell, StateUpdater
 from linodenet.utils import deep_dict_update
 from linodenet_special import pad
 from signatures import signature
@@ -34,7 +34,7 @@ _DEFAULT_LSSM_CONFIG = {
     "System": _module_config(LinearFlow),
     "Embedding": _module_config(ConcatEmbedding),
     "Projection": _module_config(ConcatProjection),
-    "Filter": _module_config(MissingValueUpdate),
+    "Filter": _module_config(MissingValueCell),
     "Encoder": _module_config(ResNet),
     "Decoder": _module_config(ResNet),
 }
