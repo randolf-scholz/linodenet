@@ -224,9 +224,8 @@ class LinearKalmanCell(StateUpdaterBase):
 
         # Build Σₓₓ, Σₓᵧ = ΣₓₓHᵀ, and Σᵧᵧ = HΣₓₓHᵀ.
         sigma_xx = self.state_scale @ self.state_scale.mT
-        H = self.observation_map.weight
-        sigma_xy = sigma_xx @ H.mT
-        sigma_yy = H @ sigma_xx @ H.mT
+        sigma_xy = self.observation_map(sigma_xx)  # ΣHᵀ
+        sigma_yy = self.observation_map(sigma_xy.mT)  # HΣHᵀ
         system = sigma_yy + self.noise_scale + torch.finfo(y.dtype).eps * self.eye
 
         # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
