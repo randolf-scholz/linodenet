@@ -61,6 +61,7 @@ from torch import Tensor, nn
 
 from linodenet.constants import EMPTY_MAP
 from linodenet.nn import ModuleSequence
+from linodenet.nn.rezero import resolve_gate
 from signatures import signature
 
 from .imputation import (
@@ -235,7 +236,7 @@ class ResidualCellSequence[C: StateUpdaterBase](CellSequence[C]):
         return x
 
 
-class ResidualCell[C: StateUpdater, G: nn.Module = nn.Module](StateUpdaterBase):
+class ResidualCell[C: StateUpdater](StateUpdaterBase):
     r"""Residual wrapper for state updaters.
 
     .. math:: x' = x - ρ(F(y, x))
@@ -244,15 +245,15 @@ class ResidualCell[C: StateUpdater, G: nn.Module = nn.Module](StateUpdaterBase):
     """
 
     cell: C
-    gate: G
+    gate: nn.Module
 
-    def __init__(self, cell: C, gate: G | None = None) -> None:
+    def __init__(self, cell: C, gate: str | nn.Module | None = None) -> None:
         super().__init__(
             input_size=cell.input_size,
             hidden_size=cell.hidden_size,
         )
         self.cell = cell
-        self.gate = cast("G", nn.Identity() if gate is None else gate)
+        self.gate = resolve_gate(gate)
 
     @signature("[(..., d), (..., h)] -> (..., h)")
     def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
