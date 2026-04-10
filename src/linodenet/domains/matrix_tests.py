@@ -62,6 +62,7 @@ __all__ = [
     "is_wide",
     "is_zero",
     "is_circulant",
+    "is_cholesky_factor",
 ]
 
 from collections.abc import Callable
@@ -720,6 +721,30 @@ def is_negative_diagonal(
     return is_diagonal(x, dim=(-2, -1), rtol=rtol, atol=atol) & (diagonal < -atol).all(
         dim=-1
     )
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_cholesky_factor(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is lower triangular with positive diagonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1] or torch.is_complex(x):
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    diagonal = x.diagonal(dim1=-2, dim2=-1)
+    return is_lower_triangular(x, dim=(-2, -1), rtol=rtol, atol=atol) & (
+        diagonal > atol
+    ).all(dim=-1)
 
 
 @signature("(..., n, n) -> bool[(...)]")

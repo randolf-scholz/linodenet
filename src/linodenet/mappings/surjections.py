@@ -2,6 +2,7 @@ r"""Surjections are a weaker form of projections."""
 
 __all__ = [
     # Classes
+    "CholeskyFactor",
     "ConcatProjection",
     "NegativeDefinite",
     "OrthogonalCayley",
@@ -26,6 +27,25 @@ from signatures import signature
 from .base import SurjectionBase
 from .bijections import CayleyMap
 from .functional import skew_symmetric
+
+
+class CholeskyFactor(SurjectionBase):
+    r"""Parametrize Cholesky factors via a lower-triangular matrix with log-diagonal."""
+
+    DOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.CHOLESKY_FACTOR
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        return x.tril(diagonal=-1) + torch.diag_embed(
+            torch.exp(x.diagonal(dim1=-2, dim2=-1))
+        )
+
+    @signature("(..., n, n) -> (..., n, n)")
+    def right_inverse(self, y: Tensor, /) -> Tensor:
+        return y.tril(diagonal=-1) + torch.diag_embed(
+            torch.log(y.diagonal(dim1=-2, dim2=-1))
+        )
 
 
 class PositiveSemiDefinite(SurjectionBase):

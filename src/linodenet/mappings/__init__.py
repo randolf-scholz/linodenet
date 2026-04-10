@@ -142,6 +142,7 @@ r"""Dictionary containing all available projections."""
 
 SURJECTIONS: dict[str, type[SurjectionBase]] = {
     **PROJECTIONS,
+    "CholeskyFactor"      : surjections.CholeskyFactor,
     "ConcatProjection"     : surjections.ConcatProjection,
     "NegativeDefinite"     : surjections.NegativeDefinite,
     "OrthogonalCayley"     : surjections.OrthogonalCayley,

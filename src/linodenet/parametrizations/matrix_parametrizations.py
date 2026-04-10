@@ -2,6 +2,7 @@ r"""Parametrizations for matrices (rank-2 tensors)."""
 
 __all__ = [
     "Banded",
+    "CholeskyFactor",
     "NegativeDefinite",
     "PositiveDefinite",
     "Contraction",
@@ -29,6 +30,7 @@ __all__ = [
 
 from linodenet.mappings import projections, surjections
 
+CholeskyFactor = surjections.CholeskyFactor
 PositiveDefinite = surjections.PositiveDefinite
 NegativeDefinite = surjections.NegativeDefinite
 PositiveSemiDefinite = surjections.PositiveSemiDefinite

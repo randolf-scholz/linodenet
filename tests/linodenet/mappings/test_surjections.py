@@ -5,6 +5,7 @@ import torch
 
 from linodenet.domains.matrix_tests import is_orthogonal, is_row_orthogonal
 from linodenet.mappings import (
+    CholeskyFactor,
     NegativeDefinite,
     Orthogonal,
     OrthogonalCayley,
@@ -82,6 +83,21 @@ def test_orthogonal_householder_rows_mode(seed: int) -> None:
     assert is_row_orthogonal(y).all()
     z = surjection.right_inverse(y)
     assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
+
+
+def test_cholesky_factor_surjection() -> None:
+    surjection = CholeskyFactor()
+    matrix_test = get_surjection_test(type(surjection))
+
+    x = torch.randn(8, 5, 5).tril()
+    y = surjection(x)
+
+    assert matrix_test(y).all()
+
+    z = surjection.right_inverse(y)
+    assert torch.allclose(z, z.tril())
+    assert torch.allclose(surjection(z), y, atol=1e-5, rtol=1e-5)
+    assert torch.all(y.diagonal(dim1=-2, dim2=-1) > 0)
 
 
 @pytest.mark.parametrize("surjection_cls", [PositiveDefinite, NegativeDefinite])

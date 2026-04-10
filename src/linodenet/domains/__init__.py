@@ -94,6 +94,7 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.ROW_CENTERED            : matrix_tests.is_row_centered,
     MatrixDomains.COLUMN_STOCHASTIC       : matrix_tests.is_column_stochastic,
     MatrixDomains.COLUMN_CENTERED         : matrix_tests.is_column_centered,
+    MatrixDomains.CHOLESKY_FACTOR         : matrix_tests.is_cholesky_factor,
     MatrixDomains.DOUBLY_CENTERED         : matrix_tests.is_doubly_centered,
     MatrixDomains.DOUBLY_STOCHASTIC       : matrix_tests.is_doubly_stochastic,
     MatrixDomains.SPECIAL_ORTHOGONAL      : matrix_tests.is_special_orthogonal,
