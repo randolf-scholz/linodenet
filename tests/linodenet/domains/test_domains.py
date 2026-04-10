@@ -39,6 +39,7 @@ from linodenet.domains.matrix_domains import (
     LowRankSymmetric,
     Masked,
     NegativeDefinite,
+    NegativeDiagonal,
     NegativeSemidefinite,
     Normal,
     OneHot,
@@ -47,6 +48,8 @@ from linodenet.domains.matrix_domains import (
     OrthogonalProjection,
     Permutation,
     PositiveDefinite,
+    PositiveDiagonal,
+    PositiveScalarMatrix,
     PositiveSemidefinite,
     Projection,
     RankOne,
@@ -359,6 +362,15 @@ class TestMatrixDomains:
         assert M.DIAGONAL != M.SQUARE
         assert M.DIAGONAL <= M.RECTANGULAR
         assert M.DIAGONAL != M.RECTANGULAR
+        assert M.NEGATIVE_DIAGONAL <= M.DIAGONAL
+        assert M.NEGATIVE_DIAGONAL <= M.NEGATIVE_DIAGONAL_ENTRIES
+        assert M.NEGATIVE_DIAGONAL <= M.NEGATIVE_DEFINITE
+        assert M.POSITIVE_DIAGONAL <= M.DIAGONAL
+        assert M.POSITIVE_DIAGONAL <= M.POSITIVE_DIAGONAL_ENTRIES
+        assert M.POSITIVE_DIAGONAL <= M.POSITIVE_DEFINITE
+        assert M.POSITIVE_SCALAR_MATRIX <= M.DIAGONAL
+        assert M.POSITIVE_SCALAR_MATRIX <= M.POSITIVE_DIAGONAL
+        assert M.POSITIVE_SCALAR_MATRIX <= M.POSITIVE_DEFINITE
         assert M.POSITIVE_DIAGONAL_ENTRIES <= M.RECTANGULAR
         assert M.NEGATIVE_DIAGONAL_ENTRIES <= M.RECTANGULAR
         assert M.ZERO_DIAGONAL <= M.RECTANGULAR
@@ -380,6 +392,7 @@ class TestMatrixDomains:
         assert M.SPECIAL_ORTHOGONAL <= M.INVERTIBLE
         assert M.SPECIAL_ORTHOGONAL != M.INVERTIBLE
         assert M.IDENTITY <= M.DIAGONAL
+        assert M.IDENTITY <= M.POSITIVE_SCALAR_MATRIX
         assert M.IDENTITY <= M.PERMUTATION
         assert M.PERMUTATION <= M.ROW_STOCHASTIC
         assert M.PERMUTATION != M.ROW_STOCHASTIC
@@ -544,6 +557,7 @@ class TestMatrixDomains:
         traceless = tensor([[1.0, 0.0], [0.0, -1.0]])
         symplectic = tensor([[0.0, 1.0], [-1.0, 0.0]])
         diagonal = tensor([[1.0, 0.0], [0.0, 2.0]])
+        positive_scalar = tensor([[2.0, 0.0], [0.0, 2.0]])
         lower = tensor([[1.0, 0.0], [2.0, 3.0]])
         upper = tensor([[1.0, 2.0], [0.0, 3.0]])
         tridiagonal = tensor([[1.0, 2.0, 0.0], [3.0, 4.0, 5.0], [0.0, 6.0, 7.0]])
@@ -586,6 +600,9 @@ class TestMatrixDomains:
         assert symplectic in Symplectic()
         assert symplectic in Hamiltonian()
         assert diagonal in Diagonal()
+        assert negative in NegativeDiagonal()
+        assert diagonal in PositiveDiagonal()
+        assert positive_scalar in PositiveScalarMatrix()
         assert lower in Triangular()
         assert upper in Triangular()
         assert lower in LowerTriangular()
@@ -612,6 +629,9 @@ class TestMatrixDomains:
         assert orthogonal in LipschitzBounded(lipschitz_bound=1.0)
         assert contraction in Contraction()
         assert positive in DiagonallyDominant()
+        assert tensor([[-1.0, 0.0], [0.0, 0.0]]) not in NegativeDiagonal()
+        assert tensor([[1.0, 0.0], [0.0, 0.0]]) not in PositiveDiagonal()
+        assert diagonal not in PositiveScalarMatrix()
         assert diagonal not in Identity()
         assert tensor([[1.0, 0.0], [0.0, 1.0]]) in Identity()
 

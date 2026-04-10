@@ -33,6 +33,9 @@ __all__ = [
     "LowRankSkewSymmetric",
     "PositiveSemidefinite",
     "PositiveDefinite",
+    "NegativeDiagonal",
+    "PositiveDiagonal",
+    "PositiveScalarMatrix",
     "NegativeSemidefinite",
     "NegativeDefinite",
     "Traceless",
@@ -537,6 +540,30 @@ class Diagonal(Tridiagonal):
 
 
 @dataclass(frozen=True)
+class NegativeDiagonal(Diagonal, NegativeDefinite):
+    r"""Domain of diagonal matrices with strictly negative diagonal entries."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_negative_diagonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class PositiveDiagonal(Diagonal, PositiveDefinite):
+    r"""Domain of diagonal matrices with strictly positive diagonal entries."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_positive_diagonal(value, size=self.size)
+
+
+@dataclass(frozen=True)
+class PositiveScalarMatrix(PositiveDiagonal):
+    r"""Domain of matrices of the form $σI$ with $σ > 0$."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return tests.is_positive_scalar_matrix(value, size=self.size)
+
+
+@dataclass(frozen=True)
 class BlockDiagonal(Square):
     r"""Domain of square matrices supported on diagonal blocks."""
 
@@ -900,6 +927,9 @@ class MatrixDomains(PosetEnum):
     CIRCULANT = "circulant"  # constant along diagonals, wrap around
     TRIDIAGONAL = "tridiagonal"
     DIAGONAL = "diagonal"
+    NEGATIVE_DIAGONAL = "negative-diagonal"
+    POSITIVE_DIAGONAL = "positive-diagonal"
+    POSITIVE_SCALAR_MATRIX = "positive-scalar-matrix"
 
     # diagonal conditions
     POSITIVE_DIAGONAL_ENTRIES = "positive-diagonal-entries"
@@ -990,11 +1020,12 @@ MatrixDomains.KNOWN_MEETS = (
     (M.ZERO, M.NEGATIVE_SEMIDEFINITE & M.SKEW_SYMMETRIC),
     (M.ZERO, M.POSITIVE_SEMIDEFINITE & M.SKEW_SYMMETRIC),
     (M.ZERO, M.SYMMETRIC & M.SKEW_SYMMETRIC),
-    (M.EYE, M.POSITIVE_DEFINITE & M.ORTHOGONAL),
-    (M.EYE, M.DIAGONAL & M.PERMUTATION),
-    (M.DOUBLY_CENTERED, M.ROW_CENTERED & M.COLUMN_CENTERED),
-    (M.DIAGONAL, M.LOWER_TRIANGULAR & M.UPPER_TRIANGULAR),
+    (M.IDENTITY, M.POSITIVE_DEFINITE & M.ORTHOGONAL),
+    (M.IDENTITY, M.DIAGONAL & M.PERMUTATION),
+    # other
     (M.CHOLESKY_FACTOR, M.LOWER_INVERTIBLE & M.POSITIVE_DIAGONAL_ENTRIES),
+    (M.DIAGONAL, M.LOWER_TRIANGULAR & M.UPPER_TRIANGULAR),
+    (M.DOUBLY_CENTERED, M.ROW_CENTERED & M.COLUMN_CENTERED),
     (M.DOUBLY_STOCHASTIC, M.SQUARE & M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC),
     (M.INVERTIBLE, M.LEFT_INVERTIBLE & M.RIGHT_INVERTIBLE),
     (M.LOWER_INVERTIBLE, M.LOWER_TRIANGULAR & M.INVERTIBLE),
@@ -1002,14 +1033,16 @@ MatrixDomains.KNOWN_MEETS = (
     (M.LOW_RANK_SQUARE, M.LOW_RANK & M.SQUARE),
     (M.LOW_RANK_SYMMETRIC, M.LOW_RANK_SQUARE & M.SYMMETRIC),
     (M.NEGATIVE_DEFINITE, M.NEGATIVE_SEMIDEFINITE & M.INVERTIBLE),
+    (M.NEGATIVE_DIAGONAL, M.DIAGONAL & M.NEGATIVE_DEFINITE),
     (M.ORTHOGONAL, M.COLUMN_ORTHOGONAL & M.ROW_ORTHOGONAL),
+    (M.ORTHOGONAL_PROJECTION, M.PROJECTION & M.SYMMETRIC),
     (M.PERMUTATION, M.ORTHOGONAL & M.DOUBLY_STOCHASTIC),
     (M.POSITIVE_DEFINITE, M.POSITIVE_SEMIDEFINITE & M.INVERTIBLE),
+    (M.POSITIVE_DIAGONAL, M.DIAGONAL & M.POSITIVE_DEFINITE),
     (M.SPECIAL_ORTHOGONAL, M.ORTHOGONAL & M.UNIT_DETERMINANT),
-    (M.SQUARE, M.TALL & M.WIDE),
     (M.SQUARE, M.ROW_STOCHASTIC & M.COLUMN_STOCHASTIC),  # theorem
+    (M.SQUARE, M.TALL & M.WIDE),
     (M.UPPER_INVERTIBLE, M.UPPER_TRIANGULAR & M.INVERTIBLE),
-    (M.ORTHOGONAL_PROJECTION, M.PROJECTION & M.SYMMETRIC),
 )
 MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.BANDED: {M.TOEPLITZ},
@@ -1027,6 +1060,7 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.EVEN_SQUARE: {M.SQUARE},
     M.HAMILTONIAN: {M.EVEN_SQUARE, M.TRACELESS},
     M.HANKEL: {M.RECTANGULAR},
+    M.IDENTITY: {M.POSITIVE_SCALAR_MATRIX},
     M.INVERTIBLE: {M.LEFT_INVERTIBLE, M.RIGHT_INVERTIBLE},
     M.LEFT_INVERTIBLE: {M.TALL},
     M.LIPSCHITZ_BOUNDED: {M.RECTANGULAR},
@@ -1038,6 +1072,7 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.LOW_RANK_SYMMETRIC: {M.LOW_RANK_SQUARE, M.SYMMETRIC},
     M.NEGATIVE_DEFINITE: {M.NEGATIVE_SEMIDEFINITE, M.INVERTIBLE},
     M.NEGATIVE_DETERMINANT: {M.INVERTIBLE},
+    M.NEGATIVE_DIAGONAL: {M.NEGATIVE_DIAGONAL_ENTRIES},
     M.NEGATIVE_DIAGONAL_ENTRIES: {M.RECTANGULAR},
     M.NEGATIVE_SEMIDEFINITE: {M.SYMMETRIC},
     M.NORMAL: {M.SQUARE},
@@ -1048,7 +1083,9 @@ MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
     M.PERMUTATION: {M.ORTHOGONAL, M.DOUBLY_STOCHASTIC},
     M.POSITIVE_DEFINITE: {M.POSITIVE_SEMIDEFINITE, M.INVERTIBLE},
     M.POSITIVE_DETERMINANT: {M.INVERTIBLE},
+    M.POSITIVE_DIAGONAL: {M.POSITIVE_DIAGONAL_ENTRIES},
     M.POSITIVE_DIAGONAL_ENTRIES: {M.RECTANGULAR},
+    M.POSITIVE_SCALAR_MATRIX: {M.POSITIVE_DIAGONAL},
     M.POSITIVE_SEMIDEFINITE: {M.SYMMETRIC},
     M.PROJECTION: {M.SQUARE},
     M.RANK_ONE: {M.LOW_RANK},

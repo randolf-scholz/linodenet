@@ -18,12 +18,15 @@ from linodenet.domains.matrix_tests import (
     is_low_rank_square,
     is_low_rank_symmetric,
     is_negative_definite,
+    is_negative_diagonal,
     is_negative_semidefinite,
     is_one_hot,
     is_ones,
     is_orthogonal_projection,
     is_permutation,
     is_positive_definite,
+    is_positive_diagonal,
+    is_positive_scalar_matrix,
     is_positive_semidefinite,
     is_projection,
     is_row_centered,
@@ -341,3 +344,54 @@ class TestDefiniteness:
             is_negative_semidefinite(-matrices),
             torch.tensor([True, True, False]),
         )
+
+
+def test_positive_scalar_matrix_test() -> None:
+    matrices = torch.tensor(
+        [
+            [[2.0, 0.0], [0.0, 2.0]],
+            [[0.5, 0.0], [0.0, 0.5]],
+            [[2.0, 0.0], [0.0, 1.0]],
+            [[-1.0, 0.0], [0.0, -1.0]],
+            [[1.0, 1.0], [0.0, 1.0]],
+        ]
+    )
+
+    assert torch.equal(
+        is_positive_scalar_matrix(matrices),
+        torch.tensor([True, True, False, False, False]),
+    )
+
+
+def test_positive_diagonal_test() -> None:
+    matrices = torch.tensor(
+        [
+            [[2.0, 0.0], [0.0, 1.0]],
+            [[0.5, 0.0], [0.0, 0.5]],
+            [[2.0, 0.0], [0.0, 0.0]],
+            [[-1.0, 0.0], [0.0, 2.0]],
+            [[1.0, 1.0], [0.0, 1.0]],
+        ]
+    )
+
+    assert torch.equal(
+        is_positive_diagonal(matrices),
+        torch.tensor([True, True, False, False, False]),
+    )
+
+
+def test_negative_diagonal_test() -> None:
+    matrices = torch.tensor(
+        [
+            [[-2.0, 0.0], [0.0, -1.0]],
+            [[-0.5, 0.0], [0.0, -0.5]],
+            [[-2.0, 0.0], [0.0, 0.0]],
+            [[1.0, 0.0], [0.0, -2.0]],
+            [[-1.0, 1.0], [0.0, -1.0]],
+        ]
+    )
+
+    assert torch.equal(
+        is_negative_diagonal(matrices),
+        torch.tensor([True, True, False, False, False]),
+    )

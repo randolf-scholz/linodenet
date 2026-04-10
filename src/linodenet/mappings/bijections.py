@@ -2,6 +2,8 @@ r"""Bijections."""
 
 __all__ = [
     "MatrixExponential",
+    "PositiveScalarMatrix",
+    "PositiveDiagonal",
     "CayleyMap",
     "SmoothSoftsign",
     "TanhMap",
@@ -12,7 +14,7 @@ from typing import Final
 import torch
 from torch import Tensor
 
-from linodenet.domains import MatrixDomains, ScalarDomains
+from linodenet.domains import MatrixDomains, ScalarDomains, VectorDomains
 from linodenet_special import matrix_log
 from signatures import signature
 
@@ -40,6 +42,45 @@ class MatrixExponential(BijectionBase):
     def inverse(self, y: Tensor, /) -> Tensor:
         # FIXME: https://github.com/pytorch/pytorch/issues/9983 (matrix_log)
         return matrix_log(y).real.to(dtype=y.dtype)
+
+
+class PositiveScalarMatrix(BijectionBase):
+    r"""Map scalars to positive scalar matrices via $x ↦ \exp(x) I$."""
+
+    DOMAIN: Final[ScalarDomains] = ScalarDomains.REAL_LINE
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SCALAR_MATRIX
+
+    size: int
+
+    def __init__(self, size: int) -> None:
+        super().__init__()
+        if size <= 0:
+            raise ValueError("size must be a positive integer.")
+        self.size = size
+
+    @signature("(...) -> (..., n, n)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        eye = torch.eye(self.size, dtype=x.dtype, device=x.device)
+        return torch.exp(x).unsqueeze(-1).unsqueeze(-1) * eye
+
+    @signature("(..., n, n) -> (...)")
+    def inverse(self, y: Tensor, /) -> Tensor:
+        return torch.log(y.diagonal(dim1=-2, dim2=-1)[..., 0])
+
+
+class PositiveDiagonal(BijectionBase):
+    r"""Map vectors to positive diagonal matrices via $v ↦ \operatorname{diag}(\exp(v))$."""
+
+    DOMAIN: Final[VectorDomains] = VectorDomains.REAL
+    CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_DIAGONAL
+
+    @signature("(..., n) -> (..., n, n)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        return torch.diag_embed(torch.exp(x))
+
+    @signature("(..., n, n) -> (..., n)")
+    def inverse(self, y: Tensor, /) -> Tensor:
+        return torch.log(y.diagonal(dim1=-2, dim2=-1))
 
 
 class CayleyMap(BijectionBase):

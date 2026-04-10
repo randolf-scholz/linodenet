@@ -74,6 +74,8 @@ __all__ += transforms.__all__
 
 BIJECTIONS: dict[str, type[BijectionBase]] = {
     "MatrixExponential" : bijections.MatrixExponential,
+    "PositiveScalarMatrix": bijections.PositiveScalarMatrix,
+    "PositiveDiagonal"  : bijections.PositiveDiagonal,
     "CayleyMap"         : bijections.CayleyMap,
     "SmoothSoftsign"    : bijections.SmoothSoftsign,
     "TanhMap"           : bijections.TanhMap,

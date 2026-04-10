@@ -28,13 +28,16 @@ __all__ = [
     "is_low_rank_symmetric",
     "is_lower_triangular",
     "is_masked",
+    "is_negative_diagonal",
     "is_negative_definite",
     "is_negative_semidefinite",
     "is_normal",
     "is_orthogonal",
     "is_ones",
     "is_permutation",
+    "is_positive_diagonal",
     "is_positive_definite",
+    "is_positive_scalar_matrix",
     "is_positive_semidefinite",
     "is_projection",
     "is_right_invertible",
@@ -696,6 +699,54 @@ def is_special_orthogonal(
 
 
 @signature("(..., n, n) -> bool[(...)]")
+def is_negative_diagonal(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is diagonal with strictly negative diagonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1] or torch.is_complex(x):
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    diagonal = x.diagonal(dim1=-2, dim2=-1)
+    return is_diagonal(x, dim=(-2, -1), rtol=rtol, atol=atol) & (diagonal < -atol).all(
+        dim=-1
+    )
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_positive_diagonal(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor is diagonal with strictly positive diagonal."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1] or torch.is_complex(x):
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    diagonal = x.diagonal(dim1=-2, dim2=-1)
+    return is_diagonal(x, dim=(-2, -1), rtol=rtol, atol=atol) & (diagonal > atol).all(
+        dim=-1
+    )
+
+
+@signature("(..., n, n) -> bool[(...)]")
 def is_positive_definite(
     x: Tensor,
     /,
@@ -716,6 +767,39 @@ def is_positive_definite(
     symmetric = is_symmetric(x, dim=(-2, -1), rtol=rtol, atol=atol)
     eigenvalues = torch.linalg.eigvalsh(x)
     return symmetric & (eigenvalues > atol).all(dim=-1)
+
+
+@signature("(..., n, n) -> bool[(...)]")
+def is_positive_scalar_matrix(
+    x: Tensor,
+    /,
+    size: int | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = RTOL,
+    atol: float = ATOL,
+) -> Tensor:
+    r"""Check whether the given tensor equals $σI$ for some scalar $σ > 0$."""
+    if size is not None and not _has_size(x, size, dim):
+        return _full_false(x, dim)
+
+    x = x.movedim(dim, (-2, -1))
+    if x.shape[-2] != x.shape[-1]:
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+    if x.shape[-1] == 0 or torch.is_complex(x):
+        return torch.zeros(x.shape[:-2], dtype=torch.bool, device=x.device)
+
+    diagonal = x.diagonal(dim1=-2, dim2=-1)
+    constant_diagonal = torch.isclose(
+        diagonal, diagonal[..., :1], rtol=rtol, atol=atol
+    ).all(dim=-1)
+    positive_scale = diagonal[..., 0] > atol
+
+    return (
+        is_diagonal(x, dim=(-2, -1), rtol=rtol, atol=atol)
+        & constant_diagonal
+        & positive_scale
+    )
 
 
 @signature("(..., n, n) -> bool[(...)]")
@@ -808,7 +892,7 @@ def is_traceless(
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
     return torch.isclose(
-        torch.diagonal(x, dim1=dim[-1], dim2=dim[-2]).sum(dim=-1),
+        torch.sum(x.diagonal(dim1=dim[-1], dim2=dim[-2]), dim=-1),
         torch.zeros((), dtype=x.dtype, device=x.device),
         rtol=rtol,
         atol=atol,
