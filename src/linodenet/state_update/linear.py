@@ -13,6 +13,8 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+from linodenet.mappings import bijections, surjections
+from linodenet.nn.parametrize import register_parametrization
 from linodenet.nn.rezero import resolve_gate
 from signatures import signature
 
@@ -149,22 +151,69 @@ class LinearKalmanCell(StateUpdaterBase):
     state_scale: Tensor
     r"""PARAM: Factor defining the hidden covariance $Σₓₓ$."""
     noise_scale: Tensor
-    r"""PARAM: Factor defining the observation noise covariance $R$."""
+    r"""PARAM: Observation noise covariance $R$ with configurable structure."""
+    noise: str
+    r"""CONST: Structure of the observation noise covariance."""
     eye: Tensor
     r"""BUFFER: Identity matrix used to keep the covariance solve well-posed."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "hidden_size": self.hidden_size,
+            "noise": self.noise,
+        }
 
     def __init__(
         self,
         /,
         input_size: int,
         hidden_size: int,
+        *,
+        noise: str = "scalar",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         m = self.hidden_size
         n = self.input_size
+        self.noise = noise
         self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
         self.state_scale = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
-        self.noise_scale = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(n, n)))
+
+        match noise:
+            case "scalar":
+                self.noise_scale = nn.Parameter(torch.zeros(()))
+                register_parametrization(
+                    self,
+                    "noise_scale",
+                    bijections.PositiveScalarMatrix(size=n),
+                    unsafe=True,
+                )
+            case "diagonal":
+                self.noise_scale = nn.Parameter(torch.normal(0, 1, size=(n,)))
+                register_parametrization(
+                    self,
+                    "noise_scale",
+                    bijections.PositiveDiagonal(),
+                    unsafe=True,
+                )
+            case "dense":
+                self.noise_scale = nn.Parameter(
+                    torch.normal(0, 1 / sqrt(n), size=(n, n))
+                )
+                register_parametrization(
+                    self,
+                    "noise_scale",
+                    surjections.PositiveDefinite(),
+                )
+            case str():
+                raise ValueError(
+                    f"Unknown noise: {noise!r}. "
+                    "Expected 'scalar', 'diagonal', or 'dense'."
+                )
+            case _:
+                raise TypeError(f"noise must be a string, got {type(noise)!r}.")
+
         self.register_buffer("eye", torch.eye(n), persistent=False)
 
     @signature("[(..., n), (..., m)] -> (..., m)")
@@ -178,8 +227,7 @@ class LinearKalmanCell(StateUpdaterBase):
         H = self.observation_map.weight
         sigma_xy = sigma_xx @ H.mT
         sigma_yy = H @ sigma_xx @ H.mT
-        noise = self.noise_scale @ self.noise_scale.mT
-        system = sigma_yy + noise + torch.finfo(y.dtype).eps * self.eye
+        system = sigma_yy + self.noise_scale + torch.finfo(y.dtype).eps * self.eye
 
         # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
         innovation = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
