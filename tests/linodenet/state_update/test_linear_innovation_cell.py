@@ -3,9 +3,17 @@ r"""Tests for linear innovation state updaters."""
 import pytest
 import torch
 from torch import nn
+from torch.nn import functional as F
 
+from linodenet.nn.containers import Constant
 from linodenet.nn.rezero import ReZero
 from linodenet.state_update import LinearInnovationCell
+
+
+def compute_correction(
+    r: torch.Tensor, gain: nn.Module, x: torch.Tensor
+) -> torch.Tensor:
+    return F.linear(r, gain(x))
 
 
 def test_linear_innovation_cell_identity_gate_matches_plain_update() -> None:
@@ -14,10 +22,10 @@ def test_linear_innovation_cell_identity_gate_matches_plain_update() -> None:
     y = torch.randn(7, 3)
     x = torch.randn(7, 5)
 
-    assert isinstance(cell.gain, nn.Linear)
+    assert isinstance(cell.gain, Constant)
     assert isinstance(cell.observation_map, nn.Linear)
     innovation = y - cell.observation_map(x)
-    expected = x - cell.gain(innovation)
+    expected = x - compute_correction(innovation, cell.gain, x)
 
     torch.testing.assert_close(cell(y, x), expected)
 
@@ -41,7 +49,9 @@ def test_linear_innovation_cell_rezero_scalar_controls_correction() -> None:
     x = torch.randn(7, 5)
 
     with torch.no_grad():
-        rezero.gain.weight.copy_(plain.gain.weight)
+        assert isinstance(plain.gain, Constant)
+        assert isinstance(rezero.gain, Constant)
+        rezero.gain.value.copy_(plain.gain.value)
         assert isinstance(plain.observation_map, nn.Linear)
         assert isinstance(rezero.observation_map, nn.Linear)
         rezero.observation_map.weight.copy_(plain.observation_map.weight)
@@ -60,7 +70,27 @@ def test_linear_innovation_cell_identity_observation_map_uses_x_directly() -> No
     assert isinstance(cell.observation_map, nn.Identity)
     innovation = y - x
 
-    torch.testing.assert_close(cell(y, x), x - cell.gain(innovation))
+    torch.testing.assert_close(
+        cell(y, x), x - compute_correction(innovation, cell.gain, x)
+    )
+
+
+def test_linear_innovation_cell_accepts_custom_gain() -> None:
+    r"""Custom gains should be used verbatim."""
+
+    class DiagonalGain(nn.Module):
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return torch.diag(x.mean(dim=0))
+
+    gain = DiagonalGain()
+    cell = LinearInnovationCell(3, 3, gain=gain, gate="identity")
+    x = torch.randn(7, 3)
+    y = torch.randn(7, 3)
+
+    assert cell.gain is gain
+    innovation = y - cell.observation_map(x)
+
+    torch.testing.assert_close(cell(y, x), x - compute_correction(innovation, gain, x))
 
 
 def test_linear_innovation_cell_accepts_custom_observation_map() -> None:
@@ -87,7 +117,9 @@ def test_linear_innovation_cell_none_gate_maps_to_identity() -> None:
     x = torch.randn(7, 5)
 
     with torch.no_grad():
-        none_gate.gain.weight.copy_(identity_gate.gain.weight)
+        assert isinstance(none_gate.gain, Constant)
+        assert isinstance(identity_gate.gain, Constant)
+        none_gate.gain.value.copy_(identity_gate.gain.value)
         assert isinstance(none_gate.observation_map, nn.Linear)
         assert isinstance(identity_gate.observation_map, nn.Linear)
         none_gate.observation_map.weight.copy_(identity_gate.observation_map.weight)
@@ -103,6 +135,15 @@ def test_linear_innovation_cell_rejects_identity_for_nonsquare_shapes() -> None:
         match=r"observation_map='identity' requires input_size == hidden_size!",
     ):
         LinearInnovationCell(3, 5, observation_map="identity")
+
+
+def test_linear_innovation_cell_rejects_unknown_gain() -> None:
+    r"""Unknown gain strings should fail explicitly."""
+    with pytest.raises(
+        ValueError,
+        match=r"Unknown gain: 'other'. Expected 'constant' or an nn.Module.",
+    ):
+        LinearInnovationCell(3, 5, gain="other")
 
 
 def test_linear_innovation_cell_rejects_unknown_gate() -> None:

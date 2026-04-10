@@ -15,6 +15,7 @@ from torch.linalg import solve, solve_triangular
 from torch.nn import functional as F
 
 from linodenet.mappings import bijections, surjections
+from linodenet.nn.containers import Constant
 from linodenet.nn.parametrize import register_parametrization
 from linodenet.nn.rezero import resolve_gate
 from signatures import signature
@@ -67,8 +68,13 @@ class LinearInnovationCell(StateUpdaterBase):
 
     .. math:: x' = x - ρ(K(y - h(x)))
 
-    where $K$ is a learnable innovation gain, $h$ is the observation map, and
+    where $K(x)$ is a learnable innovation gain, $h$ is the observation map, and
     $ρ$ is a gate applied to the innovation correction.
+
+    The gain can be:
+
+    - ``"constant"``: use a learned constant gain matrix.
+    - ``nn.Module``: use a custom user-provided state-dependent gain module.
 
     Standard gate options are:
 
@@ -86,8 +92,8 @@ class LinearInnovationCell(StateUpdaterBase):
     """
 
     # PARAMETERS
-    gain: nn.Linear
-    r"""MODULE: The learnable innovation gain."""
+    gain: nn.Module
+    r"""MODULE: The innovation gain producing matrices $K(x)$."""
     observation_map: nn.Module
     r"""MODULE: The observation map used in the innovation term."""
     gate: nn.Module
@@ -99,13 +105,26 @@ class LinearInnovationCell(StateUpdaterBase):
         input_size: int,
         hidden_size: int,
         *,
+        gain: str | nn.Module = "constant",
         gate: str | nn.Module | None = "rezero",
         observation_map: str | nn.Module = "linear",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
-
-        self.gain = nn.Linear(input_size, hidden_size, bias=False)
         self.gate = resolve_gate(gate)
+
+        match gain:
+            case nn.Module():
+                self.gain = gain
+            case "constant":
+                self.gain = Constant((hidden_size, input_size))
+            case str():
+                raise ValueError(
+                    f"Unknown gain: {gain!r}. Expected 'constant' or an nn.Module."
+                )
+            case _:
+                raise TypeError(
+                    f"gain must be a string or nn.Module, got {type(gain)!r}."
+                )
 
         match observation_map:
             case nn.Module():
@@ -130,8 +149,10 @@ class LinearInnovationCell(StateUpdaterBase):
                 )
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r = y - self.observation_map(x)
-        return x - self.gate(self.gain(r))
+        r = y - self.observation_map(x)  # (..., input_size)
+        K = self.gain(x)  # (hidden_size, input_size) or (..., hidden_size, input_size)
+        correction = (r.unsqueeze(-2) @ K.mT).squeeze(-2)
+        return x - self.gate(correction)
 
 
 class KalmanCell(StateUpdaterBase):
