@@ -254,7 +254,7 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
 
         # get the tensor to parametrizations
         self.register_parameter("original_parameter", tensor)
-        self.register_buffer("cached_parameter", tensor.clone().detach())
+        self.register_buffer("cached_parameter", None)
         self.register_buffer("is_stale", torch.tensor(True), persistent=True)
         self.unsafe = unsafe
 
@@ -279,6 +279,8 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         if not self.unsafe:
             assert_is_safe_parametrization(self, self.original_parameter)
 
+        # initialize the cache
+        self.cached_parameter = self.apply_parametrization().clone().detach_()
         self.update_cache()
 
     @abstractmethod
@@ -293,16 +295,6 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         return self.forward(self.original_parameter)
 
     @jit.export
-    def update_cache(self) -> None:
-        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
-
-        Note:
-            This method should use inplace `copy_` operations to update the cached tensors.
-        """
-        new_tensor = self.apply_parametrization()
-        self.cached_parameter.copy_(new_tensor)
-
-    @jit.export
     def get_original_tensor(self) -> Tensor:
         r"""Get the original tensor from the cached tensor."""
         return self.original_parameter
@@ -311,10 +303,6 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
     def get_cached_tensor(self) -> Tensor:
         r"""Get the cached tensor from the original tensor."""
         return self.cached_parameter
-
-    @jit.export
-    def detach_cache(self) -> None:
-        self.cached_parameter.detach_()
 
     @jit.export
     def set_stale(self) -> None:
@@ -329,11 +317,14 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         assert not self.cached_parameter.isnan().all()
 
     @jit.export
-    @torch.no_grad()
-    def update_original(self) -> None:
-        pullback = self.right_inverse(self.cached_parameter)
-        if pullback is not None:
-            self.original_parameter.copy_(pullback)
+    def update_cache(self) -> None:
+        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
+
+        Note:
+            This method should use inplace `copy_` operations to update the cached tensors.
+        """
+        new_tensor = self.apply_parametrization()
+        self.cached_parameter.copy_(new_tensor)
 
     @jit.export
     def update_parametrization(self) -> None:
@@ -354,10 +345,12 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
             self.update_cache()
 
             # update the original parameters based on the new parametrization
-            self.update_original()
+            pullback = self.right_inverse(self.cached_parameter)
+            if pullback is not None:
+                self.original_parameter.copy_(pullback)
 
             # detach the cached tensors from the autograd engine
-            self.detach_cache()
+            self.cached_parameter.detach_()
 
         # re-enable the autograd engine
         self.update_cache()
