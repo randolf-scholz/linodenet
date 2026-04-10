@@ -137,14 +137,22 @@ class LinearInnovationCell(StateUpdaterBase):
 class LinearKalmanCell(StateUpdaterBase):
     r"""Linear Kalman-style hidden-state update with masked observations.
 
-    Let $μ_x = x$, $μ_y = Hμ_x$, $Σₓₓ = \Cov(x)$, and
-    $Σᵧᵧ = HΣₓₓHᵀ + R$. For the masked observation model
+    .. math::
+        x' = x + ρ\left(
+            Σₓₓ Hᵀ Mᵀ (M(HΣₓₓHᵀ + R)Mᵀ)⁻¹(y_{\text{obs}} - MHx)
+        \right)
 
-    .. math:: y_{\text{obs}} = My
+    Here, $y = Hx$, $Σₓₓ = \Cov(x)$, and $Σᵧᵧ = HΣₓₓHᵀ + R$,
+    for the masked observation model $y_{\text{obs}} = My$.
+    $ρ$ is an optional gate applied to the Kalman correction. Standard
+    gate options are the same as for `LinearInnovationCell`: ``"rezero"``,
+    ``"identity"``, ``None``, or a custom `nn.Module`.
 
-    this cell computes the LMMSE / BLUP estimate
-
-    .. math:: μₓ' = μₓ + Σₓₓ Hᵀ Mᵀ (M(HΣₓₓHᵀ + R)Mᵀ)⁻¹(y_{\text{obs}} - MHμₓ).
+    Notes:
+        LMMSE stands for linear minimum mean squared error: the best affine
+        estimator under squared loss among estimators linear in the observations.
+        BLUP stands for best linear unbiased predictor: the minimum-variance
+        unbiased estimator within the same linear class.
     """
 
     observation_map: nn.Linear
@@ -155,6 +163,8 @@ class LinearKalmanCell(StateUpdaterBase):
     r"""PARAM: Cholesky factor defining the observation noise covariance $R$."""
     noise: str
     r"""CONST: Structure of the observation noise covariance."""
+    gate: nn.Module
+    r"""MODULE: Optional gate for the Kalman correction."""
     eye: Tensor
     r"""BUFFER: Identity matrix used to keep the covariance solve well-posed."""
 
@@ -164,6 +174,7 @@ class LinearKalmanCell(StateUpdaterBase):
             "input_size": self.input_size,
             "hidden_size": self.hidden_size,
             "noise": self.noise,
+            "gate": self.gate,
         }
 
     def __init__(
@@ -173,12 +184,14 @@ class LinearKalmanCell(StateUpdaterBase):
         hidden_size: int,
         *,
         noise: str = "scalar",
+        gate: str | nn.Module | None = "rezero",
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
         m = self.hidden_size
         n = self.input_size
 
         self.noise = noise
+        self.gate = resolve_gate(gate)
         self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
         self.correlation_cholesky = nn.Parameter(
             torch.normal(0, 1 / sqrt(m), size=(m, m))
@@ -244,4 +257,4 @@ class LinearKalmanCell(StateUpdaterBase):
         # correction = Σₓᵧu = LLᵀHᵀu
         correction = (u @ HL) @ L.mT
 
-        return x + correction
+        return x + self.gate(correction)
