@@ -96,3 +96,26 @@ def test_linear_kalman_cell_gate_variants() -> None:
 
     torch.testing.assert_close(none_gate(y, x), identity_gate(y, x))
     torch.testing.assert_close(rezero_gate(y, x), x)
+
+
+def test_linear_kalman_cell_masked_backward_has_finite_gradients() -> None:
+    r"""Masked observations should not introduce NaNs into gradients."""
+    torch.manual_seed(0)
+
+    cell = LinearKalmanCell(5, 7, noise="diagonal", gate="identity")
+    x = torch.randn(8, 7, requires_grad=True)
+    y = torch.randn(8, 5)
+    mask = torch.rand(8, 5) < 0.5
+    y = y.masked_fill(mask, float("nan"))
+
+    output = cell(y, x)
+    loss = output.square().mean()
+    loss.backward()
+
+    assert torch.isfinite(output).all()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+
+    for parameter in cell.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
