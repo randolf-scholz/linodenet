@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from linodenet.nn.containers import Constant
 from linodenet.nn.rezero import ReZero
-from linodenet.state_update import LinearCell
+from linodenet.state_update import AttentionGain, LinearCell
 
 
 def compute_correction(
@@ -93,6 +93,44 @@ def test_linear_innovation_cell_accepts_custom_gain() -> None:
     torch.testing.assert_close(cell(y, x), x - compute_correction(innovation, gain, x))
 
 
+def test_linear_innovation_cell_attention_gain_uses_attention_module() -> None:
+    r"""The attention gain option should instantiate `AttentionGain`."""
+    cell = LinearCell(3, 5, gain="attention", gate="identity")
+    x = torch.randn(7, 5)
+
+    assert isinstance(cell.gain, AttentionGain)
+    gain = cell.gain(x)
+
+    assert gain.shape == (7, 5, 3)
+    assert torch.isfinite(gain).all()
+    torch.testing.assert_close(
+        gain.sum(dim=-1),
+        torch.ones(7, 5),
+    )
+
+
+def test_attention_gain_backward_has_finite_gradients() -> None:
+    r"""Attention-based gains should support stable forward and backward passes."""
+    torch.manual_seed(0)
+
+    cell = LinearCell(4, 6, gain="attention", gate="identity")
+    x = torch.randn(8, 6, requires_grad=True)
+    y = torch.randn(8, 4)
+    y[torch.rand(8, 4) < 0.4] = float("nan")
+
+    output = cell(y, x)
+    loss = output.square().mean()
+    loss.backward()
+
+    assert torch.isfinite(output).all()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+
+    for parameter in cell.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+
+
 def test_linear_innovation_cell_accepts_custom_observation_map() -> None:
     r"""Custom observation maps should be used verbatim."""
     observation_map = nn.Linear(5, 3, bias=False)
@@ -164,7 +202,7 @@ def test_linear_innovation_cell_rejects_unknown_gain() -> None:
     r"""Unknown gain strings should fail explicitly."""
     with pytest.raises(
         ValueError,
-        match=r"Unknown gain: 'other'. Expected 'constant' or an nn.Module.",
+        match=r"Unknown gain: 'other'. Expected 'constant', 'attention', or an nn.Module.",
     ):
         LinearCell(3, 5, gain="other")
 

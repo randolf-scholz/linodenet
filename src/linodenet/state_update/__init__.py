@@ -30,6 +30,7 @@ __all__ = [
     "ResidualCell",
     "MissingValueCell",
     "LinearRNNCell",
+    "AttentionGain",
     "LinearCell",
     "KalmanCell",
     "NonLinearUpdate",
@@ -62,6 +63,7 @@ from .kalman import (
     NonLinearUpdate,
 )
 from .linear import (
+    AttentionGain,
     KalmanCell,
     LinearCell,
     LinearRNNCell,
