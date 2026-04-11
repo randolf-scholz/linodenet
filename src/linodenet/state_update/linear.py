@@ -285,16 +285,24 @@ class LinearCell(StateUpdaterBase):
 
 
 class KalmanCell(StateUpdaterBase):
-    r"""Linear Kalman-style hidden-state update with masked observations.
+    r"""Kalman-style hidden-state update with masked observations.
 
-    .. math:: x' = x + ρ\left(Σ(x)HᵀMᵀ(M(HΣ(x)Hᵀ + R)Mᵀ)⁻¹(y - MHx)\right)
+    .. math::
+        x' = x + ρ\left(
+            Σ(x)𝐃h(x)ᵀMᵀ
+            (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹
+            (y - Mh(x))
+        \right)
 
-    Here, $y = Hx$, $Σ(x)$ is the hidden-state covariance, and
-    $Σᵧᵧ = HΣ(x)Hᵀ + R$, for the masked observation model $y_{\text{obs}} = My$.
-    In the implementation, $Σ(x)$ is represented through a covariance factor
-    $L(x)$, typically a Cholesky factor, such that $Σ(x)=L(x)L(x)ᵀ$.
-    $ρ$ is an optional gate applied to the Kalman correction. Standard
-    gate options are the same as for `LinearInnovationCell`: ``"rezero"``,
+    Here, $h(x)$ is the observation map, $𝐃h(x)$ is its local linearization at
+    the current hidden state, and $Σ(x)$ is the hidden-state covariance. The
+    masked observation model is $y_{\text{obs}} = My$, with local observation
+    covariance $Σᵧᵧ(x) = 𝐃h(x)Σ(x)𝐃h(x)ᵀ + R$. In the implementation, $Σ(x)$ is
+    represented through a covariance factor $L(x)$, typically a Cholesky
+    factor, such that $Σ(x)=L(x)L(x)ᵀ$. The Jacobian action $𝐃h(x)L(x)$ is
+    obtained by pushing the columns of $L(x)$ through the JVP of $h$ at $x$.
+    $ρ$ is an optional gate applied to the Kalman correction. Standard gate
+    options are the same as for `LinearInnovationCell`: ``"rezero"``,
     ``"identity"``, ``None``, or a custom `nn.Module`.
 
     Notes:
@@ -302,10 +310,17 @@ class KalmanCell(StateUpdaterBase):
         estimator under squared loss among estimators linear in the observations.
         BLUP stands for best linear unbiased predictor: the minimum-variance
         unbiased estimator within the same linear class.
+
+    Remark:
+        When $h$ is non-linear, this update uses the local Jacobian $𝐃h(x)$ at
+        the current state, which is the same first-order linearization step used
+        by the extended Kalman filter. In that sense, `KalmanCell` implements an
+        EKF-style measurement update with a learned state covariance factor and
+        optional gated correction.
     """
 
     observation_map: nn.Module
-    r"""MODULE: Observation map $H$ from hidden to observation space."""
+    r"""MODULE: Observation map $h$ from hidden to observation space."""
     covariance_factor: nn.Module
     r"""MODULE: Covariance factor $L(x)$ with $Σₓₓ(x)=L(x)L(x)ᵀ$."""
     noise_cholesky: Tensor
@@ -412,37 +427,40 @@ class KalmanCell(StateUpdaterBase):
 
     @signature("[(..., n), (..., m)] -> (..., m)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        y_pred, jvp_fn = torch.func.linearize(self.observation_map, x)
         *batch_shape, _ = x.shape
-
         missing = y.isnan()
-        observed = (~missing).to(y.dtype)
+
+        y_pred, jvp_fn = torch.func.linearize(self.observation_map, x)
+
         # TODO: consider solving only over unmasked coordinates (requires flattening).
         L = self.covariance_factor(x).expand(
             *batch_shape, self.hidden_size, self.hidden_size
         )
         assert L.shape == (*batch_shape, self.hidden_size, self.hidden_size)
+
         # mask columns for unobserved values in cholesky factor
         J = torch.where(missing.unsqueeze(-2), self.eye, self.noise_cholesky)
+        assert J.shape == (*batch_shape, self.input_size, self.input_size)
 
-        # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
-        innovation = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
+        # Restrict the residual r = y_obs - Mh(x) to the observed coordinates.
+        r = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
 
-        # Push the covariance-factor columns through the local Jacobian to get HL.
+        # Push the covariance-factor columns through 𝐃h(x) to obtain 𝐃h(x)L(x).
         batched_jvp_fn = torch.func.vmap(jvp_fn, -1, -1)
-        HL = batched_jvp_fn(L)
-        assert HL.shape == (*batch_shape, self.input_size, self.hidden_size)
+        MHL = (~missing).unsqueeze(-1) * batched_jvp_fn(L)  # shape: (..., n, m)
+        assert MHL.shape == (*batch_shape, self.input_size, self.hidden_size)
 
-        # u = (M(HLLᵀHᵀ + JJᵀ)M + I_missing)⁻¹r
-        # note: M(HLLᵀHᵀ + JJᵀ)M + I_missing = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹MHL
+        # u = (M(𝐃h(x)LLᵀ𝐃h(x)ᵀ + JJᵀ)M + I_missing)⁻¹r
+        # note: M(𝐃h(x)LLᵀ𝐃h(x)ᵀ + JJᵀ)M + I_missing = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹M𝐃h(x)L
         # solve via: z = J⁻¹r, w = (𝕀 + BBᵀ)⁻¹z, u = J⁻ᵀw
         # middle part via woodbury: (𝕀 + BBᵀ)⁻¹ = 𝕀 - B(𝕀 + BᵀB)⁻¹Bᵀ (good if m>n)
-        B = solve_triangular(J, observed.unsqueeze(-1) * HL, upper=False)  # J⁻¹MHL
-        z = solve_triangular(J, innovation.unsqueeze(-1), upper=False)  # J⁻¹r
-        w = solve(self.eye + B @ B.mT, z)
-        u = solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw
+        B = solve_triangular(J, MHL, upper=False)  # J⁻¹M𝐃h(x)L (..., n, m)
+        z = solve_triangular(J, r.unsqueeze(-1), upper=False)  # J⁻¹r
+        w = solve(self.eye + B @ B.mT, z)  # shape: (..., n, 1)
+        u = solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw (..., n)
         assert u.shape == (*batch_shape, self.input_size)
-        # correction = Σₓᵧu = LLᵀHᵀu
-        correction = torch.einsum("...n,...nm,...km->...k", u, HL, L)
 
-        return x + self.gate(correction)
+        # δ = Σₓᵧu = L(x)L(x)ᵀ𝐃h(x)ᵀu
+        d = torch.einsum("...n, ...nm, ...km -> ...k", u, MHL, L)  # (..., m)
+
+        return x + self.gate(d)
