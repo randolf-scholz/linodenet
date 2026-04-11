@@ -289,9 +289,8 @@ class KalmanCell(StateUpdaterBase):
         observed = (~missing).to(y.dtype)
         # TODO: consider solving only over unmasked coordinates (requires flattening).
         L = self.covariance_factor(x)
-        J = observed.unsqueeze(-1) * self.noise_cholesky + torch.diag_embed(
-            missing.to(y.dtype)
-        )
+        # mask columns for unobserved values in cholesky factor
+        J = torch.where(missing.unsqueeze(-2), self.eye, self.noise_cholesky)
 
         # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
         innovation = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
