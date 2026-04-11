@@ -412,19 +412,26 @@ class KalmanCell(StateUpdaterBase):
 
     @signature("[(..., n), (..., m)] -> (..., m)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        y_pred = self.observation_map(x)
+        y_pred, jvp_fn = torch.func.linearize(self.observation_map, x)
+        *batch_shape, _ = x.shape
+
         missing = y.isnan()
         observed = (~missing).to(y.dtype)
         # TODO: consider solving only over unmasked coordinates (requires flattening).
-        L = self.covariance_factor(x)
+        L = self.covariance_factor(x).expand(
+            *batch_shape, self.hidden_size, self.hidden_size
+        )
+        assert L.shape == (*batch_shape, self.hidden_size, self.hidden_size)
         # mask columns for unobserved values in cholesky factor
         J = torch.where(missing.unsqueeze(-2), self.eye, self.noise_cholesky)
 
         # Restrict the innovation y_obs - MHμₓ to the observed coordinates.
         innovation = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
 
-        # Build HL indirectly as (LHᵀ)ᵀ to avoid depending on raw layer weights.
-        HL = self.observation_map(L.mT).mT
+        # Push the covariance-factor columns through the local Jacobian to get HL.
+        batched_jvp_fn = torch.func.vmap(jvp_fn, -1, -1)
+        HL = batched_jvp_fn(L)
+        assert HL.shape == (*batch_shape, self.input_size, self.hidden_size)
 
         # u = (M(HLLᵀHᵀ + JJᵀ)M + I_missing)⁻¹r
         # note: M(HLLᵀHᵀ + JJᵀ)M + I_missing = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹MHL
@@ -434,8 +441,8 @@ class KalmanCell(StateUpdaterBase):
         z = solve_triangular(J, innovation.unsqueeze(-1), upper=False)  # J⁻¹r
         w = solve(self.eye + B @ B.mT, z)
         u = solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw
-
+        assert u.shape == (*batch_shape, self.input_size)
         # correction = Σₓᵧu = LLᵀHᵀu
-        correction = (u @ HL) @ L.mT
+        correction = torch.einsum("...n,...nm,...km->...k", u, HL, L)
 
         return x + self.gate(correction)
