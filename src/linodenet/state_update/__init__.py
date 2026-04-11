@@ -35,7 +35,6 @@ __all__ = [
     "KalmanCell",
     "NonLinearUpdate",
     "NonLinearKalmanUpdate",
-    "KalmanUpdate",
     # Imported
     "RNNCell",
     "GRUCell",
@@ -57,11 +56,7 @@ from .base import (
     StateUpdaterList,
     is_state_updater,
 )
-from .kalman import (
-    KalmanUpdate,
-    NonLinearKalmanUpdate,
-    NonLinearUpdate,
-)
+from .kalman import NonLinearKalmanUpdate, NonLinearUpdate
 from .linear import (
     AttentionGain,
     KalmanCell,

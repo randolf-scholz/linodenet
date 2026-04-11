@@ -1,29 +1,54 @@
 r"""Implementations of Kalman-inspired filters.
 
-KalmanCell
-----------
-The classical Kalman Filter state update has a few nice properties
+For a linear observation model
+
+.. math:: y = Hx + v, \qquad v ∼ 𝓝(0, R)
+
+with prior mean $x$ and prior covariance $Σ$, the classical Kalman filter update is
 
 .. math::
-       x' &= x - PH'(HPH' + R)⁻¹(Hx - y)
-    \\    &= x - P ∇ₓ½‖(HPH' + R)^{-½}(Hx - y) ‖₂²
+    K &= ΣHᵀ(HΣHᵀ + R)⁻¹ \\
+    x' &= x + K(y - Hx) \\
+       &= x - ΣHᵀ(HΣHᵀ + R)⁻¹(Hx - y)
 
-- The state update is linear (affine) in the state.
-- The state update is linear (affine) in the measurement.
-- The state update can be interpreted as a gradient descent step.
-- The measurement covariance is used to weight the gradient descent step.
-    - If R is large, the gradient descent step is small.
-      We cannot trust the measurement due to high variance.
-    - If R is small, the gradient descent step is large.
-      We can trust the measurement due to low variance.
-    - R should be treated as a hyperparameter / observable.
-      In particular, often it is given as percentage measurement error.
+In observation space, writing
 
-The KalmanCell filter is a generalization of the classical Kalman Filter.
+.. math::
+    μ_y &= Hμ \\
+    Σ_y &= HΣHᵀ + R
+
+the posterior observation mean and covariance are
+
+.. math::
+    μ_y' &= μ_y + (Σ_y - R) Σ_y⁻¹ (y - μ_y) \\
+         &= y - R Σ_y⁻¹ (y - μ_y) \\
+    Σ_y' &= HΣ'Hᵀ + R \\
+         &= Σ_y - (Σ_y - R) Σ_y⁻¹ (Σ_y - R)
+
+When the observation contains missing values, let $m = ¬\operatorname{isnan}(y)$ be
+the observation mask and let $Πₘ$ denote the projection onto the observed coordinates.
+Then the Kalman update restricted to the observed subspace becomes
+
+.. math::
+    Kₘ &= ΣHᵀΠₘᵀ(Πₘ(HΣHᵀ + R)Πₘᵀ)⁻¹ \\
+    x' &= x + Kₘ Πₘ (y - Hx) \\
+       &= x - ΣHᵀΠₘᵀ(Πₘ(HΣHᵀ + R)Πₘᵀ)⁻¹ Πₘ(Hx - y)
+
+Again in observation space, with the masked innovation covariance
+
+.. math:: Σ_{y,m} = Πₘ Σ_y Πₘᵀ
+
+the posterior observation mean and covariance become
+
+.. math::
+    μ_y' &= μ_y + (Σ_y - R) Πₘᵀ Σ_{y,m}⁻¹ Πₘ(y - μ_y) \\
+    Σ_y' &= HΣ'Hᵀ + R \\
+         &= Σ_y - (Σ_y - R) Πₘᵀ Σ_{y,m}⁻¹ Πₘ (Σ_y - R)
+
+This is the form used by the missing-value-aware variants in this module.
 """
 
 __all__ = [
-    "KalmanUpdate",
     "PseudoKalmanUpdate",
     "NonLinearKalmanUpdate",
     "NonLinearUpdate",
@@ -51,17 +76,6 @@ class _Alpha(float, Enum):
         if isinstance(arg, str):
             return cls[arg.replace("-", "_").upper()]
         return float(arg)
-
-
-class KalmanUpdate(StateUpdaterBase):
-    r"""Implements a Kalman state update.
-
-    .. math:: F(y，x) =  x - ΣHᵀ(HΣHᵀ + R)⁻¹(Hx - y)
-
-    .. math::
-        Σ &= 𝕀 + ε⋅AAᵀ \\
-        R &= 𝕀 + ε⋅BBᵀ
-    """
 
 
 class PseudoKalmanUpdate(StateUpdaterBase):
