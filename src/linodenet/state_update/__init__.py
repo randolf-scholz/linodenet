@@ -31,6 +31,7 @@ __all__ = [
     "MissingValueCell",
     "LinearRNNCell",
     "AttentionGain",
+    "AttentionCovarianceFactor",
     "LinearCell",
     "KalmanCell",
     "NonLinearUpdate",
@@ -58,6 +59,7 @@ from .base import (
 )
 from .kalman import NonLinearKalmanUpdate, NonLinearUpdate
 from .linear import (
+    AttentionCovarianceFactor,
     AttentionGain,
     KalmanCell,
     LinearCell,

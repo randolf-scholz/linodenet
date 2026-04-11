@@ -3,6 +3,7 @@ r"""Linear filters."""
 __all__ = [
     "LinearRNNCell",
     "AttentionGain",
+    "AttentionCovarianceFactor",
     "LinearCell",
     "KalmanCell",
 ]
@@ -124,6 +125,64 @@ class AttentionGain(nn.Module):
         key = self.key(x).unflatten(-1, (self.input_size, self.attention_size))
         scores = self.scale * (query @ key.mT)
         return scores.softmax(dim=-1)
+
+
+class AttentionCovarianceFactor(nn.Module):
+    r"""Predict a Cholesky factor with attention-style pairwise interactions."""
+
+    features: nn.Linear
+    r"""MODULE: Projects the hidden state to shared attention features."""
+    diagonal: nn.Linear
+    r"""MODULE: Projects the hidden state to diagonal logits."""
+    hidden_size: int
+    r"""CONST: Number of rows and columns in the Cholesky factor."""
+    attention_size: int
+    r"""CONST: Shared attention feature dimension."""
+    scale: float
+    r"""CONST: Scale factor for the bilinear scores."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "hidden_size": self.hidden_size,
+            "attention_size": self.attention_size,
+        }
+
+    def __init__(
+        self,
+        /,
+        hidden_size: int,
+        *,
+        attention_size: int | None = None,
+    ) -> None:
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.attention_size = (
+            min(hidden_size, 32) if attention_size is None else int(attention_size)
+        )
+        if self.attention_size <= 0:
+            raise ValueError("attention_size must be a positive integer.")
+
+        self.features = nn.Linear(
+            hidden_size,
+            hidden_size * self.attention_size,
+            bias=False,
+        )
+        self.diagonal = nn.Linear(hidden_size, hidden_size)
+        self.scale = self.attention_size**-0.5
+
+        with torch.no_grad():
+            self.diagonal.weight.zero_()
+            self.diagonal.bias.zero_()
+
+    def forward(self, x: Tensor) -> Tensor:
+        features = self.features(x).unflatten(
+            -1, (self.hidden_size, self.attention_size)
+        )
+        scores = self.scale * (features @ features.mT)
+        offdiagonal = scores.tril(-1)
+        diagonal = F.softplus(self.diagonal(x)) + torch.finfo(x.dtype).eps
+        return offdiagonal + torch.diag_embed(diagonal)
 
 
 class LinearCell(StateUpdaterBase):
@@ -292,10 +351,12 @@ class KalmanCell(StateUpdaterBase):
                     "value",
                     surjections.CholeskyFactor(),
                 )
+            case "attention":
+                self.covariance_factor = AttentionCovarianceFactor(m)
             case str():
                 raise ValueError(
                     "Unknown covariance_factor: "
-                    f"{covariance_factor!r}. Expected 'constant' or an nn.Module."
+                    f"{covariance_factor!r}. Expected 'constant', 'attention', or an nn.Module."
                 )
             case _:
                 raise TypeError(

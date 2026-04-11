@@ -81,8 +81,8 @@ class _Alpha(float, Enum):
 class PseudoKalmanUpdate(StateUpdaterBase):
     r"""Implements a Kalman-inspired state update.
 
-    Contrary to the KalmanUpdate, this module does not learn a single covariance
-    but two separate matrices $A$ and $B$.
+    This module does not learn a single covariance but two separate matrices $A$
+    and $B$.
 
     .. math::  x' = x - αBHᵀΠₘᵀAΠₘ(Hx - y)
 

@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 from linodenet.nn.containers import Constant
-from linodenet.state_update import KalmanCell
+from linodenet.state_update import AttentionCovarianceFactor, KalmanCell
 
 
 def test_linear_kalman_cell_matches_masked_scalar_blup_by_default() -> None:
@@ -75,6 +75,18 @@ def test_linear_kalman_cell_rejects_dense_noise() -> None:
         KalmanCell(3, 2, noise="dense")
 
 
+def test_linear_kalman_cell_rejects_unknown_covariance_factor() -> None:
+    r"""Unknown covariance-factor strings should fail explicitly."""
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Unknown covariance_factor: 'other'. "
+            r"Expected 'constant', 'attention', or an nn.Module."
+        ),
+    ):
+        KalmanCell(3, 2, covariance_factor="other")
+
+
 def test_linear_kalman_cell_identity_observation_map_uses_x_directly() -> None:
     r"""Identity observation maps should use the hidden state directly."""
     cell = KalmanCell(3, 3, observation_map="identity", gate="identity")
@@ -119,6 +131,20 @@ def test_linear_kalman_cell_accepts_custom_covariance_factor() -> None:
     assert cell.covariance_factor is covariance_factor
 
 
+def test_linear_kalman_cell_attention_covariance_factor_uses_attention_module() -> None:
+    r"""The attention covariance-factor option should instantiate the attention module."""
+    cell = KalmanCell(3, 5, covariance_factor="attention")
+    x = torch.randn(7, 5)
+
+    assert isinstance(cell.covariance_factor, AttentionCovarianceFactor)
+    factor = cell.covariance_factor(x)
+
+    assert factor.shape == (7, 5, 5)
+    assert torch.isfinite(factor).all()
+    torch.testing.assert_close(factor, factor.tril())
+    assert torch.all(factor.diagonal(dim1=-2, dim2=-1) > 0)
+
+
 def test_linear_kalman_cell_supports_batched_attention_like_covariance_factor() -> None:
     r"""State-dependent covariance factors may produce a batched lower-triangular $L(x)$."""
 
@@ -156,6 +182,30 @@ def test_linear_kalman_cell_supports_batched_attention_like_covariance_factor() 
     assert torch.isfinite(x.grad).all()
 
     for parameter in covariance_factor.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+
+
+def test_linear_kalman_cell_attention_covariance_factor_backward_has_finite_gradients() -> (
+    None
+):
+    r"""Attention-based covariance factors should support stable masked updates."""
+    torch.manual_seed(0)
+
+    cell = KalmanCell(4, 6, covariance_factor="attention", gate="identity")
+    x = torch.randn(8, 6, requires_grad=True)
+    y = torch.randn(8, 4)
+    y[torch.rand(8, 4) < 0.4] = float("nan")
+
+    output = cell(y, x)
+    loss = output.square().mean()
+    loss.backward()
+
+    assert torch.isfinite(output).all()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+
+    for parameter in cell.parameters():
         assert parameter.grad is not None
         assert torch.isfinite(parameter.grad).all()
 
