@@ -151,7 +151,8 @@ class LinearInnovationCell(StateUpdaterBase):
                 )
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r = y - self.observation_map(x)  # (..., input_size)
+        y_pred = self.observation_map(x)
+        r = torch.where(y.isnan(), 0.0, y - y_pred)  # (..., input_size)
         K = self.gain(x)  # (hidden_size, input_size) or (..., hidden_size, input_size)
         correction = (r.unsqueeze(-2) @ K.mT).squeeze(-2)
         return x - self.gate(correction)

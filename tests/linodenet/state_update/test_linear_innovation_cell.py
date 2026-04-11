@@ -128,6 +128,29 @@ def test_linear_innovation_cell_none_gate_maps_to_identity() -> None:
     torch.testing.assert_close(none_gate(y, x), identity_gate(y, x))
 
 
+def test_linear_innovation_cell_masked_backward_has_finite_gradients() -> None:
+    r"""Masked observations should not introduce NaNs into outputs or gradients."""
+    torch.manual_seed(0)
+
+    cell = LinearInnovationCell(5, 7, gate="identity")
+    x = torch.randn(8, 7, requires_grad=True)
+    y = torch.randn(8, 5)
+    mask = torch.rand(8, 5) < 0.5
+    y = y.masked_fill(mask, float("nan"))
+
+    output = cell(y, x)
+    loss = output.square().mean()
+    loss.backward()
+
+    assert torch.isfinite(output).all()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+
+    for parameter in cell.parameters():
+        assert parameter.grad is not None
+        assert torch.isfinite(parameter.grad).all()
+
+
 def test_linear_innovation_cell_rejects_identity_for_nonsquare_shapes() -> None:
     r"""Identity observation maps require matching input and hidden sizes."""
     with pytest.raises(
