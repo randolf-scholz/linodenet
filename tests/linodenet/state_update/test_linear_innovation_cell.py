@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 from linodenet.nn.containers import Constant
 from linodenet.nn.rezero import ReZero
-from linodenet.state_update import LinearInnovationCell
+from linodenet.state_update import LinearCell
 
 
 def compute_correction(
@@ -18,7 +18,7 @@ def compute_correction(
 
 def test_linear_innovation_cell_identity_gate_matches_plain_update() -> None:
     r"""The identity gate should preserve the plain innovation update."""
-    cell = LinearInnovationCell(3, 5, gate="identity")
+    cell = LinearCell(3, 5, gate="identity")
     y = torch.randn(7, 3)
     x = torch.randn(7, 5)
 
@@ -32,7 +32,7 @@ def test_linear_innovation_cell_identity_gate_matches_plain_update() -> None:
 
 def test_linear_innovation_cell_rezero_starts_as_identity() -> None:
     r"""ReZero mode should initialize the innovation path at zero."""
-    cell = LinearInnovationCell(3, 5)
+    cell = LinearCell(3, 5)
     y = torch.randn(7, 3)
     x = torch.randn(7, 5)
 
@@ -43,8 +43,8 @@ def test_linear_innovation_cell_rezero_starts_as_identity() -> None:
 
 def test_linear_innovation_cell_rezero_scalar_controls_correction() -> None:
     r"""Setting the ReZero scalar to one should recover the plain innovation update."""
-    plain = LinearInnovationCell(3, 5, gate="identity")
-    rezero = LinearInnovationCell(3, 5)
+    plain = LinearCell(3, 5, gate="identity")
+    rezero = LinearCell(3, 5)
     y = torch.randn(7, 3)
     x = torch.randn(7, 5)
 
@@ -63,7 +63,7 @@ def test_linear_innovation_cell_rezero_scalar_controls_correction() -> None:
 
 def test_linear_innovation_cell_identity_observation_map_uses_x_directly() -> None:
     r"""Identity observation maps should use the hidden state directly."""
-    cell = LinearInnovationCell(4, 4, observation_map="identity", gate="identity")
+    cell = LinearCell(4, 4, observation_map="identity", gate="identity")
     y = torch.randn(7, 4)
     x = torch.randn(7, 4)
 
@@ -83,7 +83,7 @@ def test_linear_innovation_cell_accepts_custom_gain() -> None:
             return torch.diag(x.mean(dim=0))
 
     gain = DiagonalGain()
-    cell = LinearInnovationCell(3, 3, gain=gain, gate="identity")
+    cell = LinearCell(3, 3, gain=gain, gate="identity")
     x = torch.randn(7, 3)
     y = torch.randn(7, 3)
 
@@ -96,7 +96,7 @@ def test_linear_innovation_cell_accepts_custom_gain() -> None:
 def test_linear_innovation_cell_accepts_custom_observation_map() -> None:
     r"""Custom observation maps should be used verbatim."""
     observation_map = nn.Linear(5, 3, bias=False)
-    cell = LinearInnovationCell(3, 5, observation_map=observation_map)
+    cell = LinearCell(3, 5, observation_map=observation_map)
 
     assert cell.observation_map is observation_map
 
@@ -104,15 +104,15 @@ def test_linear_innovation_cell_accepts_custom_observation_map() -> None:
 def test_linear_innovation_cell_accepts_custom_gate() -> None:
     r"""Custom gates should be used verbatim."""
     gate = nn.Tanh()
-    cell = LinearInnovationCell(3, 5, gate=gate)
+    cell = LinearCell(3, 5, gate=gate)
 
     assert cell.gate is gate
 
 
 def test_linear_innovation_cell_none_gate_maps_to_identity() -> None:
     r"""A None gate should behave like the identity gate."""
-    none_gate = LinearInnovationCell(3, 5, gate=None)
-    identity_gate = LinearInnovationCell(3, 5, gate="identity")
+    none_gate = LinearCell(3, 5, gate=None)
+    identity_gate = LinearCell(3, 5, gate="identity")
     y = torch.randn(7, 3)
     x = torch.randn(7, 5)
 
@@ -132,7 +132,7 @@ def test_linear_innovation_cell_masked_backward_has_finite_gradients() -> None:
     r"""Masked observations should not introduce NaNs into outputs or gradients."""
     torch.manual_seed(0)
 
-    cell = LinearInnovationCell(5, 7, gate="identity")
+    cell = LinearCell(5, 7, gate="identity")
     x = torch.randn(8, 7, requires_grad=True)
     y = torch.randn(8, 5)
     mask = torch.rand(8, 5) < 0.5
@@ -157,7 +157,7 @@ def test_linear_innovation_cell_rejects_identity_for_nonsquare_shapes() -> None:
         ValueError,
         match=r"observation_map='identity' requires input_size == hidden_size!",
     ):
-        LinearInnovationCell(3, 5, observation_map="identity")
+        LinearCell(3, 5, observation_map="identity")
 
 
 def test_linear_innovation_cell_rejects_unknown_gain() -> None:
@@ -166,7 +166,7 @@ def test_linear_innovation_cell_rejects_unknown_gain() -> None:
         ValueError,
         match=r"Unknown gain: 'other'. Expected 'constant' or an nn.Module.",
     ):
-        LinearInnovationCell(3, 5, gain="other")
+        LinearCell(3, 5, gain="other")
 
 
 def test_linear_innovation_cell_rejects_unknown_gate() -> None:
@@ -175,4 +175,4 @@ def test_linear_innovation_cell_rejects_unknown_gate() -> None:
         ValueError,
         match=r"Unknown gate: 'other'. Expected 'rezero', 'identity', None, or an nn.Module.",
     ):
-        LinearInnovationCell(3, 5, gate="other")
+        LinearCell(3, 5, gate="other")

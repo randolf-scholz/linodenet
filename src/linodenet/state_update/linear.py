@@ -1,8 +1,8 @@
 r"""Linear filters."""
 
 __all__ = [
+    "LinearRNNCell",
     "LinearCell",
-    "LinearInnovationCell",
     "KalmanCell",
 ]
 
@@ -23,7 +23,7 @@ from signatures import signature
 from .base import StateUpdaterBase
 
 
-class LinearCell(StateUpdaterBase):
+class LinearRNNCell(StateUpdaterBase):
     r"""Linear state update.
 
     .. math:: F(y，x) =  Ux + Vy + b
@@ -63,7 +63,7 @@ class LinearCell(StateUpdaterBase):
         return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
 
-class LinearInnovationCell(StateUpdaterBase):
+class LinearCell(StateUpdaterBase):
     r"""Linear innovation state update.
 
     .. math:: x' = x - ρ(K(x)(y - h(x)))

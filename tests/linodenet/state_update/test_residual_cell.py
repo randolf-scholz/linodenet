@@ -5,7 +5,7 @@ from torch import nn
 from torch.nn import GRUCell
 
 from linodenet.nn.rezero import ReZero
-from linodenet.state_update import LinearCell, ResidualCell
+from linodenet.state_update import LinearRNNCell, ResidualCell
 
 
 def test_residual_cell_derives_sizes_from_wrapped_cell() -> None:
@@ -24,7 +24,7 @@ def test_residual_cell_derives_sizes_from_wrapped_cell() -> None:
 
 def test_residual_cell_applies_gate_to_cell_output() -> None:
     r"""ResidualCell should apply the gate before adding the residual update."""
-    cell = LinearCell(3, 5)
+    cell = LinearRNNCell(3, 5)
     gate = nn.Tanh()
     residual = ResidualCell(cell, gate)
 
@@ -36,7 +36,7 @@ def test_residual_cell_applies_gate_to_cell_output() -> None:
 
 def test_residual_cell_rezero_gate_starts_as_identity() -> None:
     r"""The ReZero gate should initialize the residual correction at zero."""
-    cell = LinearCell(3, 5)
+    cell = LinearRNNCell(3, 5)
     residual = ResidualCell(cell, gate="rezero")
     y = torch.randn(7, 3)
     x = torch.randn(7, 5)
