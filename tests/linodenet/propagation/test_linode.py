@@ -54,12 +54,13 @@ def compute_linode_error(
     else:
         raise ValueError
 
-    t0, t1 = rng.uniform(low=-10, high=10, size=(2,)).astype(numpy_dtype)
-    t0, t1 = min(t0, t1), max(t0, t1)  # make sure t0 ≤ t1
     A = (rng.normal(size=(D, D)) / np.sqrt(D)).astype(numpy_dtype)
     x0: NDArray = rng.normal(size=(D,)).astype(numpy_dtype)
-    t_span = rng.uniform(low=t0, high=t1, size=N - 2)
-    t_span = np.sort([t0, *t_span, t1]).astype(numpy_dtype)
+
+    t0, t1 = rng.uniform(low=-10, high=10, size=(2,)).astype(numpy_dtype)
+    t0, t1 = min(t0, t1), max(t0, t1) + 1e-5  # make sure t0 < t1
+    t_span = rng.uniform(low=t0, high=t1, size=N - 2).astype(numpy_dtype)
+    t_span = np.unique(np.concatenate(([t0], t_span, [t1])))
 
     def func(_: NDArray, x: NDArray) -> NDArray:
         return A @ x
