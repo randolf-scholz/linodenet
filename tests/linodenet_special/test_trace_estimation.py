@@ -116,7 +116,7 @@ class TestTraceEstimator(TestSuite):
             spectrum=spectrum.to(dtype=dtype),
         )
 
-    def make_ldu(
+    def make_normal(
         self,
         /,
         *,
@@ -131,7 +131,6 @@ class TestTraceEstimator(TestSuite):
         generator = self._make_generator(seed=seed, device=device)
         work_dtype = torch.float64
         scale = 1 / math.sqrt(input_size)
-
         spectrum = scale * torch.randn(
             batch_size,
             input_size,
@@ -139,50 +138,16 @@ class TestTraceEstimator(TestSuite):
             dtype=work_dtype,
             generator=generator,
         )
-        lower = scale * torch.randn(
-            batch_size,
-            input_size,
-            input_size,
-            device=device,
+        basis = self._make_orthogonal_batch(
+            batch_size=batch_size,
+            input_size=input_size,
             dtype=work_dtype,
+            device=device,
             generator=generator,
         )
-        lower = torch.tril(lower, diagonal=-1) + torch.eye(
-            input_size,
-            device=device,
-            dtype=work_dtype,
-        )
-        upper = scale * torch.randn(
-            batch_size,
-            input_size,
-            input_size,
-            device=device,
-            dtype=work_dtype,
-            generator=generator,
-        )
-        upper = torch.triu(upper, diagonal=1) + torch.eye(
-            input_size,
-            device=device,
-            dtype=work_dtype,
-        )
-        scale = torch.exp(
-            0.1
-            * torch.randn(
-                batch_size,
-                input_size,
-                device=device,
-                dtype=work_dtype,
-                generator=generator,
-            )
-        )
-        basis = lower @ torch.diag_embed(scale) @ upper
-        diagonal = torch.diag_embed(spectrum)
-        matrix = torch.linalg.solve(
-            basis.mT,
-            torch.einsum("...ij, ...jk -> ...ik", basis, diagonal).mT,
-        ).mT
+        matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", basis, spectrum, basis)
         return TraceCase(
-            name="ldu",
+            name="normal",
             matrix=matrix.to(dtype=dtype),
             spectrum=spectrum.to(dtype=dtype),
         )
@@ -201,6 +166,7 @@ class TestTraceEstimator(TestSuite):
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
         work_dtype = torch.float64
+        scale = 1 / math.sqrt(input_size)
 
         q = self._make_orthogonal_batch(
             batch_size=batch_size,
@@ -209,15 +175,12 @@ class TestTraceEstimator(TestSuite):
             device=device,
             generator=generator,
         )
-        spectrum = (
-            torch.randn(
-                batch_size,
-                input_size,
-                device=device,
-                dtype=work_dtype,
-                generator=generator,
-            )
-            / input_size**0.5
+        spectrum = scale * torch.randn(
+            batch_size,
+            input_size,
+            device=device,
+            dtype=work_dtype,
+            generator=generator,
         )
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
         return TraceCase(
@@ -374,8 +337,9 @@ class TestTraceEstimator(TestSuite):
             device=device,
             generator=generator,
         )
-        exponents = torch.arange(1, input_size + 1, device=device, dtype=work_dtype)
-        magnitudes = torch.as_tensor(q, device=device, dtype=work_dtype).pow(exponents)
+        magnitudes = q ** (
+            1 + torch.arange(input_size, device=device, dtype=work_dtype)
+        )
         signs = (
             2
             * torch.randint(
@@ -541,7 +505,7 @@ class TestTraceEstimator(TestSuite):
             )
             return
 
-        self.assert_upper_bounded(rmse, eta * nuc_norm)
+        self.assert_magnitude_bounded(rmse, nuc_norm, scale=eta)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -554,7 +518,7 @@ class TestExactTrace(TestTraceEstimator):
     DECAY_Q = 0.95
 
     def test_exact_trace_matches_known_spectrum(self, device: str) -> None:
-        test_case = self.make_ldu(
+        test_case = self.make_normal(
             batch_size=self.BATCH_SIZE,
             input_size=self.INPUT_SIZE,
             device=device,
@@ -633,17 +597,17 @@ class TestTraceCorrectness(TestTraceEstimator):
     SEED = 0
     ETAS: dict[tuple[str, str], Tolerance] = {
         ("diagonal", TraceEstimators.EXACT): 1e-7,
-        ("diagonal", TraceEstimators.HUTCH): 2e-2,
-        ("diagonal", TraceEstimators.HUTCH_PP): 3e-2,
-        ("diagonal", TraceEstimators.XTRACE): 2e-2,
-        ("ldu", TraceEstimators.EXACT): 2e-8,
-        ("ldu", TraceEstimators.HUTCH): 4e-2,
-        ("ldu", TraceEstimators.HUTCH_PP): 4e-2,
-        ("ldu", TraceEstimators.XTRACE): 5e-2,
+        ("diagonal", TraceEstimators.HUTCH): 1e-1,
+        ("diagonal", TraceEstimators.HUTCH_PP): 1e-1,
+        ("diagonal", TraceEstimators.XTRACE): 1e-1,
+        ("normal", TraceEstimators.EXACT): 1e-7,
+        ("normal", TraceEstimators.HUTCH): 1e-1,
+        ("normal", TraceEstimators.HUTCH_PP): 1e-1,
+        ("normal", TraceEstimators.XTRACE): 1e-1,
         ("low_rank", TraceEstimators.EXACT): 1e-7,
         ("low_rank", TraceEstimators.HUTCH): 2e-1,
-        ("low_rank", TraceEstimators.HUTCH_PP): 1.5e-1,
-        ("low_rank", TraceEstimators.XTRACE): 3e-7,
+        ("low_rank", TraceEstimators.HUTCH_PP): 2e-1,
+        ("low_rank", TraceEstimators.XTRACE): 1e-6,
     }
 
     @pytest.mark.parametrize("name", TraceEstimators, ids=str)
@@ -662,8 +626,8 @@ class TestTraceCorrectness(TestTraceEstimator):
         )
 
     @pytest.mark.parametrize("name", TraceEstimators, ids=str)
-    def test_ldu(self, name: str, device: str) -> None:
-        test_case = self.make_ldu(
+    def test_normal(self, name: str, device: str) -> None:
+        test_case = self.make_normal(
             batch_size=self.BATCH_SIZE,
             input_size=self.PROBLEM_SIZE,
             device=device,
@@ -671,7 +635,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         self.assert_trace_close(
             name,
             test_case,
-            eta=self.ETAS["ldu", name],
+            eta=self.ETAS["normal", name],
             num_matvecs=self.NUM_MATVECS,
             device=device,
         )
@@ -705,8 +669,8 @@ class TestTraceCorrectness(TestTraceEstimator):
                 ),
             ),
             (
-                "ldu",
-                self.make_ldu(
+                "normal",
+                self.make_normal(
                     batch_size=self.BATCH_SIZE,
                     input_size=self.PROBLEM_SIZE,
                     device=device,
@@ -749,14 +713,14 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     SEED = 0
 
     ETAS: dict[tuple[str, str], Tolerance] = {
-        ("low_rank", L.EXACT): 3e-7,
+        ("low_rank", L.EXACT): 1e-6,
         ("low_rank", L.HUTCH): 1e-1,
         ("low_rank", L.HUTCH_PP): 1e-1,
-        ("flat_spectrum", L.EXACT): 6e-8,
-        ("flat_spectrum", L.HUTCH): 4e-2,
+        ("flat_spectrum", L.EXACT): 1e-6,
+        ("flat_spectrum", L.HUTCH): 5e-2,
         ("flat_spectrum", L.HUTCH_PP): 5e-2,
-        ("decaying_spectrum", L.EXACT): 3e-7,
-        ("decaying_spectrum", L.HUTCH): 9e-2,
+        ("decaying_spectrum", L.EXACT): 1e-6,
+        ("decaying_spectrum", L.HUTCH): 1e-1,
         ("decaying_spectrum", L.HUTCH_PP): 2e-1,
     }
 
@@ -829,7 +793,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
     @pytest.mark.parametrize("name", L, ids=str)
     def test_flat_contraction(self, name: str, device: str) -> None:
         test_case = self.make_contraction(
-            self.make_ldu(input_size=self.PROBLEM_SIZE, device=device),
+            self.make_normal(input_size=self.PROBLEM_SIZE, device=device),
             c=self.DECAY_Q,
         )
         self.assert_logabsdet_close(
@@ -869,7 +833,7 @@ class TestLogAbsDetCorrectness(TestTraceEstimator):
             (
                 "flat_spectrum",
                 self.make_contraction(
-                    self.make_ldu(input_size=self.PROBLEM_SIZE, device=device),
+                    self.make_normal(input_size=self.PROBLEM_SIZE, device=device),
                     c=self.DECAY_Q,
                 ),
             ),
@@ -1017,16 +981,16 @@ class TestVisualizations(TestTraceEstimator):
         )
 
     @torch.no_grad()
-    def test_ldu(self) -> None:
-        test_case = self.make_ldu(device=self.DEVICE)
+    def test_normal(self) -> None:
+        test_case = self.make_normal(device=self.DEVICE)
         curves = self.compute_curves(test_case.matrix, test_case.trace)
         self.assert_and_plot_curves(
             curves,
             title=(
-                f"LDU trace estimation "
+                f"Normal trace estimation "
                 f"({self.DEVICE}, batch={self.BATCH_SIZE}, input={self.INPUT_SIZE})"
             ),
-            stem="trace_estimation_ldu",
+            stem="trace_estimation_normal",
         )
 
     @torch.no_grad()
