@@ -8,13 +8,9 @@ from torch import Tensor
 
 class TestSuite:
     @staticmethod
-    def _worst_offender(
-        residual: Tensor,
-        expected: Tensor,
-        actual: Tensor,
-    ) -> tuple[tuple[int, ...], object, object, float, float]:
+    def _worst_index(residual: Tensor) -> tuple[int, ...]:
         flat_index = int(residual.reshape(-1).argmax().item())
-        worst_index = (
+        return (
             ()
             if residual.ndim == 0
             else tuple(
@@ -25,6 +21,15 @@ class TestSuite:
                 )
             )
         )
+
+    @staticmethod
+    def _worst_offender(
+        residual: Tensor,
+        expected: Tensor,
+        actual: Tensor,
+    ) -> tuple[tuple[int, ...], object, object, float, float]:
+        flat_index = int(residual.reshape(-1).argmax().item())
+        worst_index = TestSuite._worst_index(residual)
         worst_value = actual.reshape(-1)[flat_index].item()
         worst_expected = expected.reshape(-1)[flat_index].item()
         worst_abs_err = float(residual.reshape(-1)[flat_index].item())
@@ -42,18 +47,22 @@ class TestSuite:
         rtol: float = 0.0,
         warn_loose: bool = False,
     ) -> None:
-        r"""Check that |left| ≤ (1+rtol) |right| + atol."""
+        r"""Check that value ≤ upper + rtol⋅|upper| + atol."""
         __tracebackhide__ = True
 
         x_hat = torch.as_tensor(value)
         bound = torch.as_tensor(upper, device=x_hat.device, dtype=x_hat.dtype)
         x_hat, bound = torch.broadcast_tensors(x_hat, bound)
-        upper_bound = (1 + rtol) * bound + atol
-        assert (upper_bound >= 0.0).all(), "upper bound must be non-negative"
+        assert atol >= 0.0, "absolute tolerance must be non-negative"
+        assert rtol >= 0.0, "relative tolerance must be non-negative"
+        tolerance = atol + rtol * bound.abs()
+        upper_bound = bound + tolerance
         ok = x_hat <= upper_bound
 
         abs_violation = (x_hat - upper_bound).clamp_min(0)
-        rel_violation = abs_violation / upper_bound.abs()
+        rel_violation = abs_violation / tolerance.clamp_min(
+            torch.finfo(x_hat.dtype).eps
+        )
 
         max_abs_err = abs_violation.max().item()
         mean_abs_err = abs_violation.mean().item()
@@ -95,6 +104,82 @@ class TestSuite:
                 f"\n\tmax    rel violation={max_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmean   rel violation={mean_rel_err:8.2e}  (expected {rtol})"
                 f"\n\tmedian rel violation={median_rel_err:8.2e}  (expected {rtol})",
+                stacklevel=2,
+            )
+
+    def assert_magnitude_bounded(
+        self,
+        value: Tensor | float,
+        right: Tensor | float,
+        *,
+        scale: float,
+        atol: float = 0.0,
+        warn_loose: bool = False,
+    ) -> None:
+        r"""Check that |value| ≤ scale⋅|right| + atol."""
+        __tracebackhide__ = True
+
+        x_hat = torch.as_tensor(value)
+        x_ref = torch.as_tensor(right, device=x_hat.device, dtype=x_hat.dtype)
+        x_hat, x_ref = torch.broadcast_tensors(x_hat, x_ref)
+        assert atol >= 0.0, "absolute tolerance must be non-negative"
+        assert scale >= 0.0, "scale must be non-negative"
+
+        magnitude = x_hat.abs()
+        reference_magnitude = x_ref.abs()
+        allowed_magnitude = scale * reference_magnitude + atol
+        ok = magnitude <= allowed_magnitude
+
+        abs_violation = (magnitude - allowed_magnitude).clamp_min(0)
+        actual_scale = magnitude / reference_magnitude.clamp_min(
+            torch.finfo(x_hat.dtype).eps
+        )
+        overshoot = magnitude / allowed_magnitude.clamp_min(
+            torch.finfo(x_hat.dtype).eps
+        )
+
+        max_abs_err = abs_violation.max().item()
+        mean_abs_err = abs_violation.mean().item()
+        median_abs_err = abs_violation.median().item()
+        max_scale = actual_scale.max().item()
+        mean_scale = actual_scale.nanmean().item()
+        median_scale = actual_scale.nanmedian().item()
+
+        if not ok.all():
+            worst_index = self._worst_index(abs_violation)
+            flat_index = int(abs_violation.reshape(-1).argmax().item())
+            worst_value = x_hat.reshape(-1)[flat_index].item()
+            worst_right = x_ref.reshape(-1)[flat_index].item()
+            worst_abs_err = float(abs_violation.reshape(-1)[flat_index].item())
+            worst_scale = float(actual_scale.reshape(-1)[flat_index].item())
+            worst_overshoot = float(overshoot.reshape(-1)[flat_index].item())
+            msg = (
+                f"Magnitudes exceed bound! "
+                f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmax    actual scale={max_scale:8.2e}  (expected ≤ {scale:8.2e})"
+                f"\n\tmean   actual scale={mean_scale:8.2e}  (expected ≤ {scale:8.2e})"
+                f"\n\tmedian actual scale={median_scale:8.2e}  (expected ≤ {scale:8.2e})"
+                f"\n\tworst offender index={worst_index}"
+                f"\n\tworst offender value={worst_value!r}"
+                f"\n\tworst offender right={worst_right!r}"
+                f"\n\tworst offender expected scale={scale:8.2e}"
+                f"\n\tworst offender actual scale={worst_scale:8.2e}"
+                f"\n\tworst offender abs violation={worst_abs_err:8.2e}"
+                f"\n\tworst offender overshoot={worst_overshoot:8.2e}"
+            )
+            raise AssertionError(msg)
+
+        if warn_loose and (max_abs_err < 1e-3 or max_scale <= scale + 1e-3):
+            warnings.warn(
+                f"Bounds are loose:"
+                f"\n\tmax    abs violation={max_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmean   abs violation={mean_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmedian abs violation={median_abs_err:8.2e}  (expected {atol})"
+                f"\n\tmax    actual scale={max_scale:8.2e}  (expected ≤ {scale:8.2e})"
+                f"\n\tmean   actual scale={mean_scale:8.2e}  (expected ≤ {scale:8.2e})"
+                f"\n\tmedian actual scale={median_scale:8.2e}  (expected ≤ {scale:8.2e})",
                 stacklevel=2,
             )
 
