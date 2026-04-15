@@ -94,22 +94,27 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
 
         spectrum = 0.5 + torch.rand(
             batch_size,
             input_size,
             device=device,
-            dtype=dtype,
+            dtype=work_dtype,
             generator=generator,
         )
         matrix = torch.diag_embed(spectrum)
-        return TraceCase(name="diagonal", matrix=matrix, spectrum=spectrum)
+        return TraceCase(
+            name="diagonal",
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(dtype=dtype),
+        )
 
     def make_ldu(
         self,
@@ -118,54 +123,47 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
+        scale = 1 / math.sqrt(input_size)
 
-        spectrum = (
-            torch.randn(
-                batch_size,
-                input_size,
-                device=device,
-                dtype=dtype,
-                generator=generator,
-            )
-            / input_size**0.5
+        spectrum = scale * torch.randn(
+            batch_size,
+            input_size,
+            device=device,
+            dtype=work_dtype,
+            generator=generator,
         )
-        lower = (
-            torch.randn(
-                batch_size,
-                input_size,
-                input_size,
-                device=device,
-                dtype=dtype,
-                generator=generator,
-            )
-            / input_size**0.5
+        lower = scale * torch.randn(
+            batch_size,
+            input_size,
+            input_size,
+            device=device,
+            dtype=work_dtype,
+            generator=generator,
         )
         lower = torch.tril(lower, diagonal=-1) + torch.eye(
             input_size,
             device=device,
-            dtype=dtype,
+            dtype=work_dtype,
         )
-        upper = (
-            torch.randn(
-                batch_size,
-                input_size,
-                input_size,
-                device=device,
-                dtype=dtype,
-                generator=generator,
-            )
-            / input_size**0.5
+        upper = scale * torch.randn(
+            batch_size,
+            input_size,
+            input_size,
+            device=device,
+            dtype=work_dtype,
+            generator=generator,
         )
         upper = torch.triu(upper, diagonal=1) + torch.eye(
             input_size,
             device=device,
-            dtype=dtype,
+            dtype=work_dtype,
         )
         scale = torch.exp(
             0.1
@@ -173,7 +171,7 @@ class TestTraceEstimator(TestSuite):
                 batch_size,
                 input_size,
                 device=device,
-                dtype=dtype,
+                dtype=work_dtype,
                 generator=generator,
             )
         )
@@ -183,7 +181,11 @@ class TestTraceEstimator(TestSuite):
             basis.mT,
             torch.einsum("...ij, ...jk -> ...ik", basis, diagonal).mT,
         ).mT
-        return TraceCase(name="ldu", matrix=matrix, spectrum=spectrum)
+        return TraceCase(
+            name="ldu",
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(dtype=dtype),
+        )
 
     def make_symmetric(
         self,
@@ -192,17 +194,18 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
 
         q = self._make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
-            dtype=dtype,
+            dtype=work_dtype,
             device=device,
             generator=generator,
         )
@@ -211,13 +214,17 @@ class TestTraceEstimator(TestSuite):
                 batch_size,
                 input_size,
                 device=device,
-                dtype=dtype,
+                dtype=work_dtype,
                 generator=generator,
             )
             / input_size**0.5
         )
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
-        return TraceCase(name="symmetric", matrix=matrix, spectrum=spectrum)
+        return TraceCase(
+            name="symmetric",
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(dtype=dtype),
+        )
 
     def make_skew_symmetric(
         self,
@@ -226,17 +233,18 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
 
         q = self._make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
-            dtype=dtype,
+            dtype=work_dtype,
             device=device,
             generator=generator,
         )
@@ -245,7 +253,7 @@ class TestTraceEstimator(TestSuite):
             batch_size,
             num_blocks,
             device=device,
-            dtype=dtype,
+            dtype=work_dtype,
             generator=generator,
         )
         canonical = torch.zeros(
@@ -253,20 +261,25 @@ class TestTraceEstimator(TestSuite):
             input_size,
             input_size,
             device=device,
-            dtype=dtype,
+            dtype=work_dtype,
         )
         indices = torch.arange(num_blocks, device=device)
         canonical[..., 2 * indices, 2 * indices + 1] = frequencies
         canonical[..., 2 * indices + 1, 2 * indices] = -frequencies
         matrix = torch.einsum("...ik, ...kl, ...jl -> ...ij", q, canonical, q)
 
-        complex_dtype = torch.complex64 if dtype == torch.float32 else torch.complex128
         spectrum = torch.zeros(
-            batch_size, input_size, device=device, dtype=complex_dtype
+            batch_size, input_size, device=device, dtype=torch.complex128
         )
-        spectrum[..., 2 * indices] = 1j * frequencies.to(dtype=complex_dtype)
-        spectrum[..., 2 * indices + 1] = -1j * frequencies.to(dtype=complex_dtype)
-        return TraceCase(name="skew_symmetric", matrix=matrix, spectrum=spectrum)
+        spectrum[..., 2 * indices] = 1j * frequencies.to(dtype=torch.complex128)
+        spectrum[..., 2 * indices + 1] = -1j * frequencies.to(dtype=torch.complex128)
+        return TraceCase(
+            name="skew_symmetric",
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(
+                dtype=torch.complex64 if dtype == torch.float32 else torch.complex128
+            ),
+        )
 
     def make_linear_spectrum(
         self,
@@ -275,24 +288,29 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
 
         q = self._make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
-            dtype=dtype,
+            dtype=work_dtype,
             device=device,
             generator=generator,
         )
-        spectrum = torch.linspace(0, 2, input_size, device=device, dtype=dtype)
+        spectrum = torch.linspace(0, 2, input_size, device=device, dtype=work_dtype)
         spectrum = spectrum.expand(batch_size, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
-        return TraceCase(name="linear_spectrum", matrix=matrix, spectrum=spectrum)
+        return TraceCase(
+            name="linear_spectrum",
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(dtype=dtype),
+        )
 
     def make_exponential_spectrum(
         self,
@@ -301,17 +319,18 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
 
         q = self._make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
-            dtype=dtype,
+            dtype=work_dtype,
             device=device,
             generator=generator,
         )
@@ -319,11 +338,15 @@ class TestTraceEstimator(TestSuite):
             -(input_size // 2),
             (input_size + 1) // 2,
             device=device,
-            dtype=dtype,
+            dtype=work_dtype,
         )
         spectrum = (1.25**exponents).expand(batch_size, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
-        return TraceCase(name="exponential_spectrum", matrix=matrix, spectrum=spectrum)
+        return TraceCase(
+            name="exponential_spectrum",
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(dtype=dtype),
+        )
 
     def make_decaying_contraction(
         self,
@@ -333,12 +356,13 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
 
         if not 0.0 < q < 1.0:
             raise ValueError(f"q must satisfy 0 < q < 1, got {q!r}")
@@ -346,14 +370,12 @@ class TestTraceEstimator(TestSuite):
         basis = self._make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
-            dtype=dtype,
+            dtype=work_dtype,
             device=device,
             generator=generator,
         )
-        exponents = torch.arange(1, input_size + 1, device=device, dtype=torch.float32)
-        magnitudes = torch.as_tensor(q, device=device, dtype=torch.float32).pow(
-            exponents
-        )
+        exponents = torch.arange(1, input_size + 1, device=device, dtype=work_dtype)
+        magnitudes = torch.as_tensor(q, device=device, dtype=work_dtype).pow(exponents)
         signs = (
             2
             * torch.randint(
@@ -365,13 +387,12 @@ class TestTraceEstimator(TestSuite):
             )
             - 1
         )
-        spectrum = signs.to(dtype=torch.float32) * magnitudes
-        spectrum = spectrum.to(device=device, dtype=dtype)
+        spectrum = signs.to(dtype=work_dtype) * magnitudes
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", basis, spectrum, basis)
         return TraceCase(
             name="decaying_spectrum_contraction",
-            matrix=matrix,
-            spectrum=spectrum,
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(dtype=dtype),
         )
 
     def make_low_rank(
@@ -382,28 +403,33 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         batch_size = self.BATCH_SIZE if batch_size is None else batch_size
         input_size = self.INPUT_SIZE if input_size is None else input_size
         generator = self._make_generator(seed=seed, device=device)
+        work_dtype = torch.float64
 
         q = self._make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
-            dtype=dtype,
+            dtype=work_dtype,
             device=device,
             generator=generator,
         )
         spectrum = torch.cat(
             [
-                torch.ones(rank, device=device, dtype=dtype),
-                torch.zeros(input_size - rank, device=device, dtype=dtype),
+                torch.ones(rank, device=device, dtype=work_dtype),
+                torch.zeros(input_size - rank, device=device, dtype=work_dtype),
             ]
         ).expand(batch_size, -1)
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", q, spectrum, q)
-        return TraceCase(name="low_rank", matrix=matrix, spectrum=spectrum)
+        return TraceCase(
+            name="low_rank",
+            matrix=matrix.to(dtype=dtype),
+            spectrum=spectrum.to(dtype=dtype),
+        )
 
     def make_contraction(
         self,
@@ -431,7 +457,7 @@ class TestTraceEstimator(TestSuite):
         seed: int | None = None,
         batch_size: int | None = None,
         input_size: int | None = None,
-        dtype: torch.dtype | None = None,
+        dtype: torch.dtype = torch.float32,
         device: str | torch.device = "cpu",
     ) -> TraceCase:
         test_case = self.make_low_rank(
@@ -459,11 +485,11 @@ class TestTraceEstimator(TestSuite):
             input_size,
             input_size,
             device=device,
-            dtype=dtype,
+            dtype=torch.float64,
             generator=generator,
         )
         q, _ = torch.linalg.qr(gaussian)
-        return q
+        return q.to(dtype=dtype)
 
     def assert_trace_close(
         self,
