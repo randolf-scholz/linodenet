@@ -10,6 +10,8 @@
   - [Bayesian Specialization](#bayesian-specialization)
   - [Recovering the Kalman Filter](#recovering-the-kalman-filter)
     - [Newton-Step View of the Mean Update](#newton-step-view-of-the-mean-update)
+    - [Comparing Euclidean, Natural, Newton, and Proximal Updates](#comparing-euclidean-natural-newton-and-proximal-updates)
+    - [Positive-Definite Geometry and Safe Covariance Updates](#positive-definite-geometry-and-safe-covariance-updates)
     - [One-Step Online Updates and Tempered Kalman](#one-step-online-updates-and-tempered-kalman)
   - [What Is `λ` for the Kalman Filter?](#what-is-λ-for-the-kalman-filter)
   - [Observation-Space View](#observation-space-view)
@@ -303,6 +305,208 @@ Its minimizer is still available in closed form,
 
 but that part should be understood as the exact Gaussian/Bayesian covariance
 update, not merely as "one Newton step on a quadratic objective."
+
+### Comparing Euclidean, Natural, Newton, and Proximal Updates
+
+This is the linear-Gaussian specialization of the generic Bayesian/free-energy
+objective from above:
+
+```math
+\begin{aligned}
+θ' &= \arg\min_θ
+D_{𝖪𝖫}\bigl(p(x ∣ θ) ∥ p(x ∣ θ_{\text{old}})\bigr)
+- 𝐄_{p(x ∣ θ)}[\log p(y_{\text{obs}} ∣ x)].
+\end{aligned}
+```
+
+So the comparison below keeps the same observation-fit plus
+latent-regularization functional and changes only the local update rule. Up to
+constants, write
+
+```math
+\begin{aligned}
+J(μ', Σ')
+&= ½(μ' - μ)ᵀ Σ⁻¹ (μ' - μ) \\
+&\quad + ½(y_{\text{obs}} - Hμ')ᵀ R⁻¹(y_{\text{obs}} - Hμ') \\
+&\quad + ½\operatorname{tr}\bigl((Σ⁻¹ + HᵀR⁻¹H)Σ'\bigr) \\
+&\quad - ½\log\det Σ'.
+\end{aligned}
+```
+
+Define
+
+```math
+\begin{aligned}
+r &≔ y_{\text{obs}} - Hμ, \\
+A &≔ HᵀR⁻¹H, \\
+K &≔ ΣHᵀ(HΣHᵀ + R)⁻¹.
+\end{aligned}
+```
+
+At the current point $(μ, Σ)$, the gradients are
+
+```math
+\begin{aligned}
+∇_μ J &= -HᵀR⁻¹r, \\
+∇_Σ J &= ½A.
+\end{aligned}
+```
+
+For the Gaussian family, the Fisher / KL metric is
+
+```math
+\begin{aligned}
+G_μ &= Σ⁻¹, \\
+G_Σ^{-1}[U] &= 2ΣUΣ.
+\end{aligned}
+```
+
+The resulting updates are:
+
+| formula | mean update | covariance update |
+| --- | --- | --- |
+| Euclidean gradient: $θ₊ = θ - α∇J(θ)$ | $μ₊ = μ + αHᵀR⁻¹r$ | $Σ₊ = Σ - ½αA$ |
+| Natural gradient: $θ₊ = θ - αG(θ)^{-1}∇J(θ)$ | $μ₊ = μ + αΣHᵀR⁻¹r$ | $Σ₊ = Σ - αΣAΣ$ |
+| Block Newton, with Gauss-Newton on the mean block: $θ₊ = θ - [∇²J(θ)]^{-1}∇J(θ)$ | $μ₊ = μ + (Σ⁻¹ + A)⁻¹HᵀR⁻¹r = μ + Kr$ | $Σ₊ = Σ - ΣAΣ$ |
+| Exact KL-proximal / Bayes: $θ₊ = \arg\min J(θ)$ | $μ₊ = μ + Kr$ | $Σ₊ = (Σ⁻¹ + A)⁻¹ = (I - KH)Σ$ |
+
+A few points are worth emphasizing:
+
+- the Euclidean updates ignore latent geometry and the covariance step need not
+  preserve positive definiteness
+- the natural-gradient and block-Newton covariance steps coincide here because
+  the Hessian of $-\log\det Σ'$ at the current point is exactly the Gaussian
+  Fisher / KL metric
+- the additive covariance update $Σ - ΣAΣ$ is only the first-order
+  approximation of the exact Kalman covariance
+
+```math
+\begin{aligned}
+(Σ⁻¹ + A)⁻¹
+= Σ - ΣAΣ + O(A²)
+\end{aligned}
+```
+
+- so the Kalman mean update is a single Newton step, but the Kalman covariance
+  update is best understood as the exact KL-proximal / Bayesian solution rather
+  than as a plain additive gradient step
+
+### Positive-Definite Geometry and Safe Covariance Updates
+
+The covariance lives in the open cone of symmetric positive-definite matrices
+$𝕊_{++}^n$, not in a flat vector space. At any $Σ ∈ 𝕊_{++}^n$, the tangent space is
+
+```math
+\begin{aligned}
+T_Σ 𝕊_{++}^n = \operatorname{Sym}(n).
+\end{aligned}
+```
+
+So the issue is not how to get a tangent direction, but how to map that tangent
+direction back into $𝕊_{++}^n$ without leaving the cone.
+
+Reuse the covariance directions from the previous comparison:
+
+```math
+\begin{aligned}
+U_{\text{Euc}}(α) &≔ -½αA, \\
+U_{\text{Nat}}(α) &≔ -αΣAΣ, \\
+U_{\text{Newt}} &≔ -ΣAΣ,
+\end{aligned}
+```
+
+where $A = HᵀR⁻¹H ⪰ 0$.
+
+If these directions are used additively in covariance coordinates, then
+
+```math
+\begin{aligned}
+Σ₊ = Σ + U
+\end{aligned}
+```
+
+stays positive definite only locally:
+
+| raw step | covariance update | SPD guarantee |
+| --- | --- | --- |
+| Euclidean | $Σ₊ = Σ - ½αA$ | only if $I - ½αΣ^{-1/2}AΣ^{-1/2} \succ 0$ |
+| Natural | $Σ₊ = Σ - αΣAΣ$ | only if $I - αΣ^{1/2}AΣ^{1/2} \succ 0$ |
+| Newton | $Σ₊ = Σ - ΣAΣ$ | same condition as the natural step with $α = 1$ |
+| Exact proximal / Kalman | $Σ₊ = (Σ⁻¹ + αA)⁻¹$ | always, for every $α ≥ 0$ |
+
+An intrinsic way to stay on $𝕊_{++}^n$ is to use the affine-invariant
+Riemannian exponential map
+
+```math
+\begin{aligned}
+\operatorname{Exp}_Σ(U)
+= Σ^{1/2}\exp\!\bigl(Σ^{-1/2}UΣ^{-1/2}\bigr)Σ^{1/2}.
+\end{aligned}
+```
+
+Another way is to reparametrize $Σ$ and do the update in coordinates that map
+back into $𝕊_{++}^n$ by construction.
+
+The table below keeps the same underlying covariance direction
+$U ∈ \{U_{\text{Euc}}(α), U_{\text{Nat}}(α), U_{\text{Newt}}\}$ and changes only
+how that direction is realized while preserving positive definiteness.
+
+It is important to distinguish three different notions that are often conflated:
+
+- a generic factor $B$ with $Σ = BBᵀ$
+- a Cholesky factor $L$ with $Σ = LLᵀ$, where $L$ is lower triangular with
+  positive diagonal
+- the principal square root $Σ^{1/2}$, which is itself symmetric positive
+  definite and therefore lives on $𝕊_{++}^n$ again
+
+The factor column below uses the first notion, not the principal square root.
+
+| update schema | intrinsic / no parametrization | precision $Λ = Σ⁻¹$ | factor $Σ = BBᵀ$ | Cholesky $Σ = LLᵀ$ | log-matrix $Σ = \exp(S)$ |
+| --- | --- | --- | --- | --- | --- |
+| Euclidean | $Σ₊ = \operatorname{Exp}_Σ(U_{\text{Euc}}(α)) = Σ^{1/2}\exp(-½αΣ^{-1/2}AΣ^{-1/2})Σ^{1/2}$ | $Λ₊ = Λ + ½αΛAΛ$ | $B₊ = B\exp(-¼αB^{-1}AB^{-T})$ | $L₊ = L\,\operatorname{chol}\!\bigl(\exp(-½αL^{-1}AL^{-T})\bigr)$ | $S₊ = S - ½αD\log_Σ[A]$ |
+| Natural | $Σ₊ = \operatorname{Exp}_Σ(U_{\text{Nat}}(α)) = Σ^{1/2}\exp(-αΣ^{1/2}AΣ^{1/2})Σ^{1/2}$ | $Λ₊ = Λ + αA$ | $B₊ = B\exp(-½αBᵀAB)$ | $L₊ = L\,\operatorname{chol}\!\bigl(\exp(-αLᵀAL)\bigr)$ | $S₊ = S - αD\log_Σ[ΣAΣ]$ |
+| Newton | $Σ₊ = \operatorname{Exp}_Σ(U_{\text{Newt}}) = Σ^{1/2}\exp(-Σ^{1/2}AΣ^{1/2})Σ^{1/2}$ | $Λ₊ = Λ + A$ | $B₊ = B\exp(-½BᵀAB)$ | $L₊ = L\,\operatorname{chol}\!\bigl(\exp(-LᵀAL)\bigr)$ | $S₊ = S - D\log_Σ[ΣAΣ]$ |
+| Exact | $Σ₊ = (Σ⁻¹ + A)⁻¹ = (I - KH)Σ$ | $Λ₊ = Λ + A$ | $B₊ = B(I + BᵀAB)^{-1/2}$ | $L₊ = L\,\operatorname{chol}\!\bigl((I + LᵀAL)^{-1}\bigr)$ | $S₊ = -\log(\exp(-S) + A)$ |
+
+Here $D\log_Σ$ denotes the Fréchet derivative of the matrix logarithm, i.e. the
+inverse of the Fréchet derivative of the matrix exponential at $S = \log Σ$:
+
+```math
+\begin{aligned}
+D\log_Σ[U] = (D\exp_S)^{-1}[U].
+\end{aligned}
+```
+
+Also, $C^{-1/2}$ denotes the principal inverse square root of an SPD matrix
+$C \succ 0$, and $\operatorname{chol}(C)$ denotes its lower-triangular Cholesky
+factor.
+
+A few consequences are especially useful:
+
+- the intrinsic column uses the same tangent direction as before, but replaces
+  the unsafe additive step by the Riemannian exponential map
+- the precision column is particularly natural because
+  $ΔΣ = -Σ(ΔΛ)Σ + O(ΔΛ²)$, so the natural and Newton covariance directions become
+  additive precision updates
+- in particular, the Newton row in precision coordinates gives
+  $Λ₊ = Λ + A$ and $Σ₊ = (Λ + A)⁻¹$, which is exactly the classical Kalman
+  covariance update. A short derivation is:
+  $(Λ + ΔΛ)^{-1} = Λ^{-1} - Λ^{-1}(ΔΛ)Λ^{-1} + O(ΔΛ²)
+  = Σ - Σ(ΔΛ)Σ + O(ΔΛ²)$.
+  Since the Newton covariance direction in $Σ$-coordinates is
+  $ΔΣ_{\text{Newt}} = -ΣAΣ$, matching first-order terms gives $ΔΛ = A$, so the
+  Newton covariance step becomes $Λ₊ = Λ + A$. For the linear-Gaussian model
+  this is not merely a local approximation: the exact Bayesian posterior
+  already satisfies $Σ₊^{-1} = Σ^{-1} + A = Λ + A$. So the precision/Newton row
+  matches Kalman because precision is the natural information parameter and the
+  exact posterior update is affine in that parameter, not because the
+  covariance objective becomes quadratic in $Λ$.
+- the factor, Cholesky, and log-matrix columns preserve positive definiteness by
+  construction
+- if one insists on the principal square-root parametrization
+  $P = Σ^{1/2} \in 𝕊_{++}^n$, then $P$ itself is another SPD variable and must be
+  updated with its own SPD-preserving geometry; there is no equally simple
+  free-factor formula because the constraint is no longer just invertibility
 
 ### One-Step Online Updates and Tempered Kalman
 
