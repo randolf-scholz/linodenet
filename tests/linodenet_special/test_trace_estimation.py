@@ -546,7 +546,7 @@ class TestExactTrace(TestTraceEstimator):
             x,
         )
 
-        self.assert_close(estimate, test_case.trace)
+        self.assert_close(estimate, test_case.trace, atol=1e-6, rtol=1e-6)
 
     def test_exact_trace_powers_match_known_spectrum(self, device: str) -> None:
         test_case = self.make_skew_symmetric(
@@ -594,8 +594,8 @@ class TestExactTrace(TestTraceEstimator):
             x,
         )
 
-        self.assert_close(value, torch.zeros_like(x))
-        self.assert_close(estimate, test_case.logabsdet)
+        self.assert_close(value, torch.zeros_like(x), atol=1e-6, rtol=1e-6)
+        self.assert_close(estimate, test_case.logabsdet, atol=1e-6, rtol=1e-6)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)

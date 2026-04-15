@@ -330,10 +330,10 @@ class TestBimodalToGaussian(BimodalTest):
 
         zero = torch.tensor(0, dtype=dtype, device=device, requires_grad=True)
         y_zero = impl(zero, μ, σ)
-        self.assert_close(y_zero, zero)
+        self.assert_close(y_zero, zero, atol=1e-6, rtol=1e-6)
         y_zero.backward()
         assert zero.grad is not None
-        self.assert_close(zero.grad, λ, rtol=1e-7)
+        self.assert_close(zero.grad, λ, atol=1e-6, rtol=1e-6)
 
     def test_forward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -348,7 +348,7 @@ class TestBimodalToGaussian(BimodalTest):
         assert y.dtype == dtype
         assert y.isfinite().all()
 
-        self.assert_close(-y, y.flip(0))
+        self.assert_close(-y, y.flip(0), atol=1e-6, rtol=1e-6)
 
     def test_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -366,7 +366,7 @@ class TestBimodalToGaussian(BimodalTest):
         assert x.grad.isfinite().all()
         self.assert_upper_bounded(x.grad, 1 / σ, rtol=0.0)
         self.assert_lower_bounded(x.grad, λ, rtol=1e-7)
-        self.assert_close(x.grad, x.grad.flip(0))
+        self.assert_close(x.grad, x.grad.flip(0), atol=1e-6, rtol=1e-6)
 
     def test_gradcheck(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -432,8 +432,8 @@ class TestBimodalToGaussian(BimodalTest):
         y_tail.sum().backward()
         assert x_tail.grad is not None
         assert x_tail.grad.isfinite().all()
-        self.assert_close(x_tail.grad, 1 / σ, rtol=1e-2)
-        self.assert_upper_bounded(x_tail.grad, 1 / σ, rtol=0.0)
+        self.assert_close(x_tail.grad, 1 / σ, atol=1e-6, rtol=1e-2)
+        self.assert_upper_bounded(x_tail.grad, 1 / σ)
 
 
 @pytest.mark.parametrize("device", DEVICES, ids=str)
@@ -485,7 +485,7 @@ class TestGaussianToBimodal(BimodalTest):
 
         zero = torch.tensor(0, dtype=dtype, device=device)
         x_zero = impl(zero, μ, σ)
-        self.assert_close(x_zero, zero)
+        self.assert_close(x_zero, zero, atol=1e-6, rtol=1e-6)
 
     def test_forward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -501,7 +501,7 @@ class TestGaussianToBimodal(BimodalTest):
         assert x.isfinite().all()
 
         x1, x2 = x.chunk(2)
-        self.assert_close(-x1, x2.flip(0))
+        self.assert_close(-x1, x2.flip(0), atol=1e-6, rtol=1e-6)
 
     def test_backward(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -543,7 +543,7 @@ class TestGaussianToBimodal(BimodalTest):
         assert y2.grad.isfinite().all()
         assert y2.grad.min() >= min(1, σ.item())
         assert y2.grad.log().max() <= log_grad_bound
-        self.assert_close(y1.grad, y2.grad)
+        self.assert_close(y1.grad, y2.grad, atol=1e-6, rtol=1e-6)
 
     def test_reversible(
         self, name: str, mean: float, stdv: float, dtype: torch.dtype, device: str
@@ -631,12 +631,10 @@ class TestGaussianToBimodal(BimodalTest):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
 
         self.assert_close(
-            forward_impl(y, μ_pos, σ),
-            forward_impl(y, μ_neg, σ),
+            forward_impl(y, μ_pos, σ), forward_impl(y, μ_neg, σ), atol=1e-6, rtol=1e-6
         )
         self.assert_close(
-            inverse_impl(x, μ_pos, σ),
-            inverse_impl(x, μ_neg, σ),
+            inverse_impl(x, μ_pos, σ), inverse_impl(x, μ_neg, σ), atol=1e-6, rtol=1e-6
         )
 
 

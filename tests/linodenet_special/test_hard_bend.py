@@ -54,7 +54,7 @@ class TestCorrectness(TestSuite):
         y = hard_bend(x, a, c, m)
         x_recovered = hard_bend(y, 1 / a, c / m, 1 / m)
 
-        self.assert_close(x_recovered, x)
+        self.assert_close(x_recovered, x, atol=1e-6, rtol=1e-6)
 
     @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
     def test_hard_contract_reversible(self, a: float, c: float) -> None:
@@ -62,7 +62,7 @@ class TestCorrectness(TestSuite):
         y = hard_contract(x, a=a, c=c)
         x_recovered = hard_expand(y, a=1 / a, c=c)
 
-        self.assert_close(x_recovered, x)
+        self.assert_close(x_recovered, x, atol=1e-6, rtol=1e-6)
 
     @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
     def test_hard_expand_reversible(self, a: float, c: float) -> None:
@@ -70,7 +70,7 @@ class TestCorrectness(TestSuite):
         y = hard_expand(x, a=a, c=c)
         x_recovered = hard_contract(y, a=1 / a, c=c)
 
-        self.assert_close(x_recovered, x)
+        self.assert_close(x_recovered, x, atol=1e-6, rtol=1e-6)
 
 
 class TestVisual:

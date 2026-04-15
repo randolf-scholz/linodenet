@@ -29,4 +29,4 @@ class TestReZero(TestSuite):
 
         y = module(x)
 
-        self.assert_close(y, 3.0 * x)
+        self.assert_close(y, 3.0 * x, atol=1e-6, rtol=1e-6)

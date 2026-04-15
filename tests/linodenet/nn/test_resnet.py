@@ -46,4 +46,4 @@ class TestResNet(TestSuite):
 
         y = model(x)
 
-        self.assert_close(y, x)
+        self.assert_close(y, x, atol=1e-6, rtol=1e-6)

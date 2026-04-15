@@ -48,6 +48,8 @@ class TestReZero(TestSuite):
         self.assert_close(
             parametrization.scalar.detach(),
             torch.tensor(0.0, device=device),
+            atol=1e-6,
+            rtol=1e-6,
         )
 
         original_scalar = parametrization.scalar.detach().clone()

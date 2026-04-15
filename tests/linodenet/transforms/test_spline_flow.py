@@ -189,12 +189,18 @@ class TestSplineFlow(TestTransform):
             y_center=torch.zeros_like(layer.x_center),
         )
 
-        self.assert_close(knots.x, torch.linspace(-3.0, 3.0, steps=5))
+        self.assert_close(
+            knots.x, torch.linspace(-3.0, 3.0, steps=5), atol=1e-6, rtol=1e-6
+        )
         self.assert_close(
             knots.y + layer.y_center,
             torch.linspace(-2.0, 4.0, steps=5),
+            atol=1e-6,
+            rtol=1e-6,
         )
-        self.assert_close(knots.derivatives, torch.ones_like(knots.derivatives))
+        self.assert_close(
+            knots.derivatives, torch.ones_like(knots.derivatives), atol=1e-6, rtol=1e-6
+        )
 
         x = torch.linspace(-5.0, 5.0, steps=17)
         y, forward_logabsdet = model.encode_and_logabsdet(x)
@@ -256,8 +262,8 @@ class TestSplineFlow(TestTransform):
         assert shifted_knots[center_idx].detach() == pytest.approx(
             layer.y_center.item()
         )
-        self.assert_close(y[:2], left_expected)
-        self.assert_close(y[-2:], right_expected)
+        self.assert_close(y[:2], left_expected, atol=1e-6, rtol=1e-6)
+        self.assert_close(y[-2:], right_expected, atol=1e-6, rtol=1e-6)
         self.assert_close(xhat, x, atol=self.LINEAR_ATOL, rtol=self.LINEAR_RTOL)
         self.assert_close(
             forward_logabsdet + inverse_logabsdet,

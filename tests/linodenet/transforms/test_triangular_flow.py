@@ -42,9 +42,9 @@ class TestTriangularFlow(TestTransform):
             flow.lower.copy_(torch.randn_like(flow.lower))
 
         weight = flow.weight
-
-        self.assert_close(weight.diag(), torch.ones(8, dtype=weight.dtype))
-        self.assert_close(weight, weight.tril())
+        diag = weight.diag()
+        self.assert_close(diag, torch.ones_like(diag), atol=1e-6, rtol=1e-6)
+        self.assert_close(weight, weight.tril(), atol=1e-6, rtol=1e-6)
 
     def test_default_permutation_is_identity(self) -> None:
         r"""Check the default permutation is the identity."""
@@ -88,9 +88,9 @@ class TestTriangularFlow(TestTransform):
         y = flow.encode(x)
         xhat = flow.decode(y)
 
-        self.assert_close(y, y_expected)
-        self.assert_close(xhat, x_expected)
-        self.assert_close(xhat, x)
+        self.assert_close(y, y_expected, atol=1e-6, rtol=1e-6)
+        self.assert_close(xhat, x_expected, atol=1e-6, rtol=1e-6)
+        self.assert_close(xhat, x, atol=1e-6, rtol=1e-6)
 
     @pytest.mark.parametrize(
         ("permutation", "error"),

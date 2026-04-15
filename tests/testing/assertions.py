@@ -7,9 +7,6 @@ from torch import Tensor
 
 
 class TestSuite:
-    ATOL = 1e-6
-    RTOL = 1e-6
-
     @staticmethod
     def _worst_offender(
         residual: Tensor,
@@ -171,8 +168,8 @@ class TestSuite:
         value: Tensor | float,
         expected: Tensor | float,
         *,
-        atol: float = ATOL,
-        rtol: float = RTOL,
+        atol: float,
+        rtol: float,
     ) -> None:
         r"""Checks that |value - expected| ≤ rtol|expected| + atol."""
         __tracebackhide__ = True
@@ -216,8 +213,8 @@ class TestSuite:
         self,
         value: Tensor | float,
         expected: Tensor | float,
-        atol: float = ATOL,
-        rtol: float = RTOL,
+        atol: float,
+        rtol: float,
     ) -> None:
         r"""Checks that |value - expected| > rtol|expected| + atol."""
         __tracebackhide__ = True
