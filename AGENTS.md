@@ -12,15 +12,17 @@ Project conventions for automated agents contributing to `linodenet`.
 
 - Prefer `match` over long `if`/`elif` chains when it improves clarity.
 - Avoid deep nesting; refactor only when it materially improves clarity.
-- Prefer straightforward inline code over extracting tiny helper functions.
-- Introduce a helper function only when it is reused, materially improves readability, or isolates non-trivial logic
-  that would otherwise obscure the main control flow.
-- As a rule of thumb, only extract a helper when it leads to a meaningful reduction in code at the call sites; if the
-  diff is roughly line-neutral, keep the logic inline.
-- Do not extract one- or two-line private helpers for single-use expressions unless they encode an important domain
-  concept.
+- Prefer straightforward inline code over extracting helper functions.
+- Helpers that are only used once should usually be inlined.
+- One- or two-line private helpers should usually be inlined.
+- As a rule of thumb, prefer the version with fewer total lines of code overall.
+- Introduce a helper function only when it is reused, materially improves readability, isolates non-trivial logic that
+  would otherwise obscure the main control flow, or clearly reduces the total line count at the call sites.
+- If extracting a helper is roughly line-neutral, keep the logic inline.
 - Keep related logic in the main method when the extracted helper would force the reader to jump around the file to
   understand a short sequence of operations.
+- Exception: a small helper is still acceptable when it encodes an important domain concept more clearly than inline
+  code would.
 - Avoid function definitions inside functions.
 - Exception: local function definitions are acceptable for decorators or when a callback/closure is clearly the most
   readable option.
