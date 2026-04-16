@@ -508,6 +508,67 @@ A few consequences are especially useful:
   updated with its own SPD-preserving geometry; there is no equally simple
   free-factor formula because the constraint is no longer just invertibility
 
+#### Actual Newton in Chosen Coordinates
+
+The previous table answers the question:
+"given a covariance-space direction $U$, how can it be realized safely in a
+chosen parametrization?" Only the intrinsic column uses the SPD exponential map
+itself. The other columns stay inside $𝕊_{++}^n$ by coordinate choice rather than
+by Riemannian retraction.
+
+There is a different question, which is often the more natural one in
+optimization:
+"rewrite the objective directly in the chosen coordinates and take a Newton step
+there."
+
+For the covariance block, write the objective as
+
+```math
+\begin{aligned}
+J(C)
+= ½\operatorname{tr}(MC) - ½\log\det C,
+\qquad
+M ≔ Σ^{-1} + A,
+\end{aligned}
+```
+
+where $C$ is the candidate posterior covariance and the Newton step is taken
+from the current point $C = Σ$. Also define
+
+```math
+\begin{aligned}
+W ≔ Σ^{1/2}AΣ^{1/2}.
+\end{aligned}
+```
+
+Then the actual coordinate-wise Newton systems are:
+
+| parametrization | coordinate objective | actual Newton step from the current point | comment |
+| --- | --- | --- | --- |
+| covariance $C$ | $J(C) = ½\operatorname{tr}(MC) - ½\log\det C$ | $∇J(C) = ½(M - C^{-1})$, $∇²J(C)[U] = ½C^{-1}UC^{-1}$, so at $C = Σ$: $ΔC = -ΣAΣ$ and $C₊ = Σ - ΣAΣ$ | this is the covariance-space Newton step from the earlier table |
+| precision $Λ = C^{-1}$ | $J(Λ) = ½\operatorname{tr}(MΛ^{-1}) + ½\log\det Λ$ | at $Λ = Σ^{-1}$, solve $X + XW + WX = W$ for $X$, then set $ΔΛ = Σ^{-1/2}XΣ^{-1/2}$ and $Λ₊ = Λ + ΔΛ$ | in general this is not $Λ + A$; the scalar case gives $Δλ = λa/(λ + 2a)$ |
+| free factor $C = BBᵀ$ | $J(B) = ½\operatorname{tr}(MBBᵀ) - \log\det B$ | at the current factor $BBᵀ = Σ$, solve $(Σ^{-1} + A)ΔB + B^{-T}ΔBᵀB^{-T} = -AB$ and set $B₊ = B + ΔB$ | gauge-redundant: $B \mapsto BO$ leaves $C$ unchanged for orthogonal $O$, so the Newton system is not unique without a gauge choice |
+| Cholesky $C = LLᵀ$ | $J(L) = ½\operatorname{tr}(MLLᵀ) - \log\det L$ | with $P_{\mathrm{lt}}$ the projection onto lower-triangular matrices, solve $P_{\mathrm{lt}}\!\bigl((Σ^{-1}+A)ΔL + L^{-T}ΔLᵀL^{-T}\bigr) = -P_{\mathrm{lt}}(AL)$ and set $L₊ = L + ΔL$ | gauge-fixed version of the factor parametrization |
+| log-matrix $C = \exp(S)$ | $J(S) = ½\operatorname{tr}(M\exp S) - ½\operatorname{tr}S$ | $∇J(S) = ½D\exp_S[M] - ½I$, so at $S = \log Σ$: $∇J(S) = ½D\exp_S[A]$; then solve $∇²J(S)[ΔS] = -∇J(S)$ | requires the second Fréchet derivative of the matrix exponential, so it is typically the most expensive Newton system |
+
+The main consequence is that "Newton in a chosen parametrization" is generally
+not the same as "take the covariance-space Newton direction and realize it
+safely in that parametrization."
+
+The precision case is the most important example. The safe realization table
+gave $Λ₊ = Λ + A$ because it matched the covariance-space Newton direction
+$ΔC = -ΣAΣ$ to first order and because the exact posterior is affine in
+precision. By contrast, the actual Newton step in $Λ$-coordinates solves the
+Sylvester equation
+
+```math
+\begin{aligned}
+X + XW + WX = W,
+\end{aligned}
+```
+
+so it generally differs from $Λ + A$ except infinitesimally.
+
 ### One-Step Online Updates and Tempered Kalman
 
 For a general model, solving the full variational problem at every time step may
