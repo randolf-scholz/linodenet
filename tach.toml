@@ -92,7 +92,7 @@ depends_on = ["linodenet_special.fallbacks", "linodenet.nn", "linodenet_special"
 
 [[modules ]]
 path = "linodenet.parametrizations"
-depends_on = ["linodenet.nn", "linodenet.mappings", "linodenet.domains"]
+depends_on = ["linodenet.nn", "linodenet.mappings", "linodenet.domains", "linodenet_special"]
 
 [[modules ]]
 path = "linodenet.registry"
