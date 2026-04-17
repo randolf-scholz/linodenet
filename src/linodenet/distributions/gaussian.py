@@ -31,6 +31,8 @@ Note:
 """
 
 __all__ = [
+    "kl",
+    "kl_cholesky",
     "multivariate_gaussian_log_likelihood",
     "MultivariateNormal",
     "MultiHeadGaussian",
@@ -45,6 +47,60 @@ from torch import Tensor, distributions as dist, nn
 from torch.linalg import cholesky, solve_triangular, vecdot
 
 from .base import DistributionBase
+
+
+def kl(
+    p: tuple[Tensor, Tensor],
+    q: tuple[Tensor, Tensor],
+    /,
+) -> Tensor:
+    r"""Return the KL divergence $KL(p, q)$ for multivariate Gaussians.
+
+    Args:
+        p: Mean $μᵤ$ with shape `(..., d)` and covariance $Σᵤ$ with shape `(..., d, d)`.
+        q: Mean $μᵥ$ with shape `(..., d)` and covariance $Σᵥ$ with shape `(..., d, d)`.
+
+    Returns:
+        The KL divergence
+
+        .. math:: KL(p, q) = ½(\tr(Σᵥ⁻¹Σᵤ) -d + (μᵥ-μᵤ)ᵀΣᵥ⁻¹(μᵥ-μᵤ) + \log\det Σᵥ - \log\det Σᵤ)
+    """
+    mean_p, cov_p = p
+    mean_q, cov_q = q
+    return kl_cholesky((mean_p, cholesky(cov_p)), (mean_q, cholesky(cov_q)))
+
+
+def kl_cholesky(
+    p: tuple[Tensor, Tensor],
+    q: tuple[Tensor, Tensor],
+    /,
+) -> Tensor:
+    r"""Return the KL divergence $KL(p, q)$ for Cholesky-parameterized Gaussians.
+
+    Args:
+        p: Mean $μᵤ$ with shape `(..., d)` and lower Cholesky factor $Lᵤ$ with shape `(..., d, d)`.
+        q: Mean $μᵥ$ with shape `(..., d)` and lower Cholesky factor $Lᵥ$ with shape `(..., d, d)`.
+
+    Returns:
+        The KL divergence where $Σᵤ = LᵤLᵤᵀ$ and $Σᵥ = LᵥLᵥᵀ$.
+    """
+    mean_p, chol_p = p
+    mean_q, chol_q = q
+    # (μᵥ - μᵤ)ᵀ Σᵥ⁻¹ (μᵥ - μᵤ)
+    delta = mean_q - mean_p
+    whitened = solve_triangular(chol_q, delta.unsqueeze(-1), upper=False).squeeze(-1)
+    mahalanobis = vecdot(whitened, whitened, dim=-1)
+
+    # tr(Σᵥ⁻¹ Σᵤ) = ⟨Σᵥ⁻¹, Σᵤ⟩ = ⟨Lᵥ⁻ᵀ Lᵥ⁻¹, Lᵤ Lᵤᵀ⟩ = ⟨Lᵥ⁻¹ Lᵤ, Lᵥ⁻¹ Lᵤ⟩ = ‖Lᵥ⁻¹ Lᵤ‖²
+    trace_term = solve_triangular(chol_q, chol_p, upper=False)
+    trace_term = trace_term.square().sum(dim=(-2, -1))
+
+    # log det Σᵤ and log det Σᵥ
+    logdet_p = 2 * chol_p.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+    logdet_q = 2 * chol_q.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+    dim = mean_p.shape[-1]
+
+    return 0.5 * (trace_term + mahalanobis - dim + logdet_q - logdet_p)
 
 
 def multivariate_gaussian_log_likelihood(
