@@ -441,7 +441,7 @@ def is_orthogonal(
         return _full_false(x, dim)
     return torch.isclose(
         x @ x.swapaxes(*dim),
-        torch.eye(x.shape[dim[-1]], device=x.device),
+        torch.eye(x.shape[dim[-1]], dtype=x.dtype, device=x.device),
         rtol=rtol,
         atol=atol,
     ).all(dim=dim)
@@ -967,7 +967,7 @@ def is_symplectic(
     eye = torch.eye(dim_x // 2, device=x.device, dtype=x.dtype)
     J = torch.kron(J1, eye)
 
-    result = torch.isclose(x, J.T @ x @ J, rtol=rtol, atol=atol)
+    result = torch.isclose(x.mT @ J @ x, J, rtol=rtol, atol=atol)
     return result.all(dim=(-2, -1))
 
 
