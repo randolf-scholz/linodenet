@@ -17,8 +17,11 @@ def test_matrix_log_roundtrip() -> None:
         y = torch.matrix_exp(_skew_symmetric(x))
         z = matrix_log(y)
 
-        assert torch.allclose(
-            torch.matrix_exp(z), y.to(dtype=z.dtype), atol=1e-5, rtol=1e-5
+        torch.testing.assert_close(
+            torch.matrix_exp(z),
+            y.to(dtype=z.dtype),
+            atol=1e-5,
+            rtol=1e-5,
         )
 
 
