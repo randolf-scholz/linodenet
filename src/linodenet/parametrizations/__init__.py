@@ -3,8 +3,10 @@ r"""Parametrizations for torch."""
 
 __all__ = [
     # submodules
+    "exponential_maps",
     "parametrize",
     # Constants
+    "RIEMANN_MANIFOLDS",
     "PARAMETRIZATIONS",
     "MATRIX_PARAMETRIZATIONS",
     "VECTOR_PARAMETRIZATIONS",
@@ -14,16 +16,19 @@ from linodenet.nn import parametrize
 from linodenet.nn.parametrize import *
 
 from . import (
+    exponential_maps,
     matrix_parametrizations,
     scalar_parametrizations,
     tensor_parametrizations,
     vector_parametrizations,
 )
+from .exponential_maps import *
 from .matrix_parametrizations import *
 from .tensor_parametrizations import *
 from .vector_parametrizations import *
 
 __all__ += parametrize.__all__
+__all__ += exponential_maps.__all__
 __all__ += matrix_parametrizations.__all__
 __all__ += scalar_parametrizations.__all__
 __all__ += tensor_parametrizations.__all__
@@ -35,6 +40,12 @@ PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
 }  # fmt: skip
 r"""Dictionary of all available parametrizations."""
 
+RIEMANN_MANIFOLDS: dict[str, type[ManifoldBase]] = {
+    "PositiveDefiniteManifold"  : exponential_maps.PositiveDefiniteManifold,
+    "SpecialOrthogonalManifold" : exponential_maps.SpecialOrthogonalManifold,
+    "SphereManifold"            : exponential_maps.SphereManifold,
+}  # fmt: skip
+r"""Dictionary of all available Riemannian-manifold modules."""
 
 VECTOR_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "UnitVector"           : vector_parametrizations.UnitVector,
