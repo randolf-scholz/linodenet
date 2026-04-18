@@ -8,13 +8,12 @@ from linodenet.mappings import (
     BijectionBase,
     PositiveDiagonal,
     PositiveScalarMatrix,
-    SmoothSoftsign,
-    TanhMap,
 )
+from linodenet.mappings.transforms import SmoothSoftsign, Tanh
 from tests.testing import SEEDS_10
 
 
-@pytest.mark.parametrize("bijection_cls", [TanhMap, SmoothSoftsign])
+@pytest.mark.parametrize("bijection_cls", [Tanh, SmoothSoftsign])
 class TestScalarOpenUnitBallMap:
     @torch.no_grad()
     def test_roundtrip(self, bijection_cls: type[BijectionBase]) -> None:

@@ -77,8 +77,8 @@ BIJECTIONS: dict[str, type[BijectionBase]] = {
     "PositiveScalarMatrix": bijections.PositiveScalarMatrix,
     "PositiveDiagonal"  : bijections.PositiveDiagonal,
     "CayleyMap"         : bijections.CayleyMap,
-    "SmoothSoftsign"    : bijections.SmoothSoftsign,
-    "TanhMap"           : bijections.TanhMap,
+    "SmoothSoftsign"    : transforms.SmoothSoftsign,
+    "Tanh"              : transforms.Tanh,
 }  # fmt: skip
 r"""Dictionary containing all available bijections (nn.Module)."""
 

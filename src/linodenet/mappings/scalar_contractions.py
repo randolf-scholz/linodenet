@@ -24,7 +24,7 @@ from enum import StrEnum
 
 from torch import nn
 
-from .bijections import SmoothSoftsign, TanhMap
+from .transforms.scalar import SmoothSoftsign, Tanh
 
 type ModuleFactory = Callable[[], nn.Module]
 
@@ -75,7 +75,7 @@ _SCALAR_CONTRACTION_SPECS: dict[str, NonlinearContractionSpec] = {
         note="Derivative sech²(x) is at most 1.",
     ),
     "tanh-map": NonlinearContractionSpec(
-        factory=TanhMap,
+        factory=Tanh,
         lipschitz_bound=1.0,
         attainment=LipschitzAttainment.FINITE_SET,
         note="Project-local tanh bijection on (-1, 1).",

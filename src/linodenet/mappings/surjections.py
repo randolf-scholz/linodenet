@@ -19,6 +19,7 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 from torch.linalg import vecdot
+from torch.nn import functional as F
 
 from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet_special import matrix_log, matrix_sqrt
@@ -165,7 +166,7 @@ class PositiveVector(SurjectionBase):
 
     @signature("(..., n) -> (..., n)")
     def forward(self, x: Tensor, /) -> Tensor:
-        return torch.nn.functional.softplus(x)
+        return F.softplus(x)
 
     @signature("(..., n) -> (..., n)")
     def right_inverse(self, y: Tensor, /) -> Tensor:

@@ -38,7 +38,7 @@ Note that `torch.distributions.Transform` has some differences:
   Alternatively, one can store `y` in a buffer and reuse it if needed, i.e.
   methods that need `y` can call:
 
->>>
+>>> from torch import Tensor
 >>> def log_abs_det_jacobian(self, x: Tensor, /, y: None | Tensor = None) -> Tensor:
 >>>     if y is None:
 >>>         if id(x) == id(self._last_x):
@@ -46,8 +46,11 @@ Note that `torch.distributions.Transform` has some differences:
 >>>         else:
 >>>             y = self.encode(x)
 """
+# ruff: noqa: F403
 
 __all__ = [
+    # submodules
+    "scalar",
     # ABCs and Protocols
     "Transform",
     "TransformBase",
@@ -68,6 +71,7 @@ __all__ = [
     "TriangularTransform",
 ]
 
+from . import scalar
 from .base import InverseTransform, Transform, TransformBase, TransformSequence
 from .bottleneck_flow import BottleneckFlow
 from .gaussian_transport import (
@@ -84,4 +88,7 @@ from .residual_contraction import (
     ResidualContractionFallback,
 )
 from .residual_low_rank import LowRankTransform
+from .scalar import *
 from .triangular import TriangularTransform
+
+__all__ += scalar.__all__

@@ -5,8 +5,6 @@ __all__ = [
     "PositiveScalarMatrix",
     "PositiveDiagonal",
     "CayleyMap",
-    "SmoothSoftsign",
-    "TanhMap",
 ]
 
 from typing import Final
@@ -103,33 +101,3 @@ class CayleyMap(BijectionBase):
     def inverse(self, y: Tensor, /) -> Tensor:
         I = torch.eye(y.shape[-1], dtype=y.dtype, device=y.device)
         return torch.linalg.lstsq(I + y, I - y).solution
-
-
-class TanhMap(BijectionBase):
-    r"""Map tensor entries elementwise via $x ↦ \tanh(x)$."""
-
-    DOMAIN: Final[ScalarDomains] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomains] = ScalarDomains.OPEN_UNIT_BALL
-
-    @signature("(...) -> (...)")
-    def forward(self, x: Tensor, /) -> Tensor:
-        return torch.tanh(x)
-
-    @signature("(...) -> (...)")
-    def inverse(self, y: Tensor, /) -> Tensor:
-        return torch.atanh(y)
-
-
-class SmoothSoftsign(BijectionBase):
-    r"""Map tensor entries elementwise via $x ↦ 2x/(1 + √(1 + 4x²))$."""
-
-    DOMAIN: Final[ScalarDomains] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomains] = ScalarDomains.OPEN_UNIT_BALL
-
-    @signature("(...) -> (...)")
-    def forward(self, x: Tensor, /) -> Tensor:
-        return 2 * x / (1 + torch.sqrt(1 + 4 * x.square()))
-
-    @signature("(...) -> (...)")
-    def inverse(self, y: Tensor, /) -> Tensor:
-        return y / (1 - y.square())
