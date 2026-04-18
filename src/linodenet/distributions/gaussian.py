@@ -77,38 +77,30 @@ def argmin_proximal_kl(
     provided the candidate precision remains positive definite.
 
     Args:
-        fun: Objective $f$ to linearize at `theta`. If `fun(theta)` is not scalar,
-            gradients are taken with respect to `fun(theta).sum()`.
+        fun: Objective $f$ to linearize at `theta`.
         theta: Linearization point $θ⁎ = (μ⁎, Σ⁎)$ in covariance coordinates.
         gamma: KL regularization strength.
     """
-    gradient_mean, gradient_covariance = torch.func.grad(lambda arg: fun(arg).sum())(
-        theta
-    )
-    gradient_covariance = 0.5 * (gradient_covariance + gradient_covariance.mT)
-
-    mean_prior, covariance_prior = theta
-    gamma_tensor = torch.as_tensor(
-        gamma,
-        dtype=covariance_prior.dtype,
-        device=covariance_prior.device,
-    )
-    if torch.any(gamma_tensor <= 0).item():
-        raise ValueError(f"Expected gamma > 0, got {gamma}.")
+    # NOTE: γ_eff = max(γ, δᵀ Σ*⁻¹ δ - 1 + ε) with δ = ϕ⁻¹(y_obs) - μ*
+    #  safeguard for the the case when f(θ) = -log p(ϕ⁻¹(y)∣θ)|\det 𝐃ϕ⁻¹(y)|
+    mu, sigma = theta
+    gamma_tensor = torch.as_tensor(gamma, dtype=sigma.dtype, device=sigma.device)
+    grad_mu, grad_sigma = torch.func.grad(fun)(theta)
+    grad_sigma = 0.5 * (grad_sigma + grad_sigma.mT)
 
     scale = gamma_tensor.reciprocal()
-    mean_posterior = mean_prior - torch.einsum(
-        "...ij,...j->...i",
-        covariance_prior,
-        gradient_mean * scale[..., None],
+    mean_posterior = mu - torch.einsum(
+        "...ij, ...j -> ...i",
+        sigma,
+        grad_mu * scale.unsqueeze(-1),
     )
 
-    chol_prior = cholesky(covariance_prior)
+    chol_prior = cholesky(sigma)
     precision_prior = torch.cholesky_inverse(chol_prior)
     candidate_precision = 0.5 * (
         precision_prior
-        + 2 * gradient_covariance * scale[..., None, None]
-        + (precision_prior + 2 * gradient_covariance * scale[..., None, None]).mT
+        + 2 * grad_sigma * scale.unsqueeze(-1).unsqueeze(-1)
+        + (precision_prior + 2 * grad_sigma * scale.unsqueeze(-1).unsqueeze(-1)).mT
     )
 
     try:
@@ -199,12 +191,9 @@ def inverse_fisher(
     r"""Apply the inverse Gaussian Fisher/KL metric in the chosen parametrization.
 
     .. math::
-        F_{(μ, Σ)}⁻¹(g, G)
-        &= (Σg, 2Σ\sym(G)Σ), \\
-        F_{(μ, Λ)}⁻¹(g, G)
-        &= (Σg, 2Λ\sym(G)Λ), \qquad Σ = Λ⁻¹, \\
-        F_{(μ, L)}⁻¹(g, G)
-        &= (Σg, L(\tril(LᵀG) - ½\diag(LᵀG))), \qquad Σ = LLᵀ.
+            F_{(μ, Σ)}⁻¹(g, G) &= (Σg, 2Σ\sym(G)Σ)
+        \\  F_{(μ, Λ)}⁻¹(g, G) &= (Σg, 2Λ\sym(G)Λ), \qquad Σ = Λ⁻¹
+        \\  F_{(μ, L)}⁻¹(g, G) &= (Σg, L(\tril(LᵀG) - ½\diag(LᵀG))), \qquad Σ = LLᵀ
 
     Args:
         theta: Gaussian parameters in the selected parametrization.
