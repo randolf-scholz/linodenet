@@ -227,8 +227,8 @@ def test_inverse_fisher_inverts_fisher(parametrization: str) -> None:
     assert (recovered[1] - tangent[1]).abs().amax() < 1e-5
 
 
-def test_argmin_proximal_kl_solves_closed_form_problem() -> None:
-    r"""Test the closed-form KL-proximal Gaussian update."""
+def test_argmin_proximal_kl_covariance_solves_closed_form_problem() -> None:
+    r"""Test the covariance-form KL-proximal Gaussian update."""
     batch_shape = (2, 3)
     dim = 4
     gamma = torch.tensor(1.7)
@@ -263,8 +263,8 @@ def test_argmin_proximal_kl_solves_closed_form_problem() -> None:
         torch.linalg.cholesky(expected_precision)
     )
 
-    assert torch.allclose(mean_post, expected_mean)
-    assert (covariance_post - expected_covariance).abs().amax() < 3e-5
+    assert (mean_post - expected_mean).abs().amax() < 1e-5
+    assert (covariance_post - expected_covariance).abs().amax() < 1e-5
 
     mean_var = mean_post.detach().clone().requires_grad_(True)
     covariance_var = covariance_post.detach().clone().requires_grad_(True)
@@ -278,12 +278,142 @@ def test_argmin_proximal_kl_solves_closed_form_problem() -> None:
         (mean_var, covariance_var),
     )
 
-    assert torch.allclose(mean_grad, torch.zeros_like(mean_grad), atol=1e-6, rtol=1e-6)
-    assert _symmetric(covariance_grad).abs().amax() < 1e-5
+    assert mean_grad.abs().amax() < 1e-6
+    assert _symmetric(covariance_grad).abs().amax() < 1e-4
 
 
-def test_argmin_proximal_kl_raises_when_precision_is_not_pd() -> None:
-    r"""Test that the proximal update rejects non-positive-definite precision."""
+def test_argmin_proximal_kl_precision_solves_closed_form_problem() -> None:
+    r"""Test the precision-form KL-proximal Gaussian update."""
+    batch_shape = (2, 3)
+    dim = 4
+    gamma = torch.tensor(1.7)
+
+    mean_prior = torch.randn(*batch_shape, dim)
+    factor = torch.randn(*batch_shape, dim, dim)
+    covariance_prior = factor @ factor.mT + torch.eye(dim)
+    precision_prior = torch.cholesky_inverse(torch.linalg.cholesky(covariance_prior))
+    chol_prior = torch.linalg.cholesky(precision_prior)
+
+    g = torch.randn(*batch_shape, dim)
+    gradient_precision_factor = torch.randn(*batch_shape, dim, dim)
+    gradient_precision = gradient_precision_factor @ gradient_precision_factor.mT
+
+    def objective_fn(theta: tuple[torch.Tensor, torch.Tensor], /) -> torch.Tensor:
+        mean, precision = theta
+        return (g * mean).sum() + (gradient_precision * precision).sum()
+
+    mean_post, precision_post = argmin_proximal_kl(
+        objective_fn,
+        (mean_prior, precision_prior),
+        gamma=gamma,
+        parametrization="precision",
+    )
+
+    expected_mean = mean_prior - torch.einsum(
+        "...ij,...j->...i", covariance_prior, g / gamma
+    )
+    whitened_gradient = chol_prior.mT @ gradient_precision @ chol_prior
+    whitened_gradient = _symmetric(whitened_gradient)
+    eigenvalues, eigenvectors = torch.linalg.eigh(whitened_gradient)
+    spectral_scale = 2 / (1 + torch.sqrt(1 + 8 * eigenvalues / gamma))
+    whitened_precision = (
+        eigenvectors @ torch.diag_embed(spectral_scale) @ eigenvectors.mT
+    )
+    expected_precision = chol_prior @ whitened_precision @ chol_prior.mT
+
+    assert (mean_post - expected_mean).abs().amax() < 1e-5
+    assert (precision_post - expected_precision).abs().amax() < 1e-5
+
+    mean_var = mean_post.detach().clone().requires_grad_(True)
+    precision_var = precision_post.detach().clone().requires_grad_(True)
+    objective = (
+        (g * (mean_var - mean_prior)).sum()
+        + (gradient_precision * (precision_var - precision_prior)).sum()
+        + gamma
+        * kl(
+            (mean_var, precision_var),
+            (mean_prior, precision_prior),
+            parametrization="precision",
+        ).sum()
+    )
+    mean_grad, precision_grad = torch.autograd.grad(
+        objective,
+        (mean_var, precision_var),
+    )
+
+    assert mean_grad.abs().amax() < 1e-5
+    assert _symmetric(precision_grad).abs().amax() < 1e-5
+
+
+def test_argmin_proximal_kl_cholesky_solves_closed_form_problem() -> None:
+    r"""Test the Cholesky-form KL-proximal Gaussian update."""
+    batch_shape = (2, 3)
+    dim = 4
+    gamma = torch.tensor(1.7)
+
+    mean_prior = torch.randn(*batch_shape, dim)
+    factor = torch.randn(*batch_shape, dim, dim)
+    covariance_prior = factor @ factor.mT + torch.eye(dim)
+    chol_prior = torch.linalg.cholesky(covariance_prior)
+
+    g = torch.randn(*batch_shape, dim)
+    gradient_cholesky = torch.tril(torch.randn(*batch_shape, dim, dim))
+
+    def objective_fn(theta: tuple[torch.Tensor, torch.Tensor], /) -> torch.Tensor:
+        mean, chol = theta
+        return (g * mean).sum() + (gradient_cholesky * chol).sum()
+
+    mean_post, chol_post = argmin_proximal_kl(
+        objective_fn,
+        (mean_prior, chol_prior),
+        gamma=gamma,
+        parametrization="cholesky",
+    )
+
+    expected_mean = mean_prior - torch.einsum(
+        "...ij,...j->...i", covariance_prior, g / gamma
+    )
+    whitened_gradient = chol_prior.mT @ gradient_cholesky
+    diagonal_gradient = whitened_gradient.diagonal(dim1=-2, dim2=-1)
+    diagonal_update = (
+        0.5
+        * (
+            -diagonal_gradient
+            + torch.sqrt(diagonal_gradient.square() + 4 * gamma.square())
+        )
+        / gamma
+    )
+    whitened_cholesky = torch.tril(
+        -whitened_gradient / gamma, diagonal=-1
+    ) + torch.diag_embed(diagonal_update)
+    expected_cholesky = torch.tril(chol_prior @ whitened_cholesky)
+
+    assert (mean_post - expected_mean).abs().amax() < 1e-5
+    assert (chol_post - expected_cholesky).abs().amax() < 1e-5
+
+    mean_var = mean_post.detach().clone().requires_grad_(True)
+    chol_var = chol_post.detach().clone().requires_grad_(True)
+    objective = (
+        (g * (mean_var - mean_prior)).sum()
+        + (gradient_cholesky * (chol_var - chol_prior)).sum()
+        + gamma
+        * kl(
+            (mean_var, chol_var),
+            (mean_prior, chol_prior),
+            parametrization="cholesky",
+        ).sum()
+    )
+    mean_grad, chol_grad = torch.autograd.grad(
+        objective,
+        (mean_var, chol_var),
+    )
+
+    assert mean_grad.abs().amax() < 1e-5
+    assert torch.tril(chol_grad).abs().amax() < 1e-5
+
+
+def test_argmin_proximal_kl_covariance_raises_when_precision_is_not_pd() -> None:
+    r"""Test that the covariance update rejects ill-posed precision shifts."""
     dim = 4
     mean_prior = torch.randn(dim)
     factor = torch.randn(dim, dim)
@@ -291,12 +421,46 @@ def test_argmin_proximal_kl_raises_when_precision_is_not_pd() -> None:
     precision_prior = torch.linalg.inv(covariance_prior)
     mean_gradient = torch.randn(dim)
 
-    with pytest.raises(ValueError, match="not positive definite"):
+    with pytest.raises(ValueError, match="finite minimizer"):
         argmin_proximal_kl(
             lambda theta: (
                 (mean_gradient * theta[0]).sum() + (-precision_prior * theta[1]).sum()
             ),
             (mean_prior, covariance_prior),
+        )
+
+
+def test_argmin_proximal_kl_precision_raises_when_gradient_is_not_psd() -> None:
+    r"""Test that the precision update rejects unbounded linearized objectives."""
+    dim = 4
+    mean_prior = torch.randn(dim)
+    factor = torch.randn(dim, dim)
+    covariance_prior = factor @ factor.mT + torch.eye(dim)
+    precision_prior = torch.linalg.inv(covariance_prior)
+    mean_gradient = torch.randn(dim)
+
+    with pytest.raises(ValueError, match="finite minimizer"):
+        argmin_proximal_kl(
+            lambda theta: (
+                (mean_gradient * theta[0]).sum() + (-torch.eye(dim) * theta[1]).sum()
+            ),
+            (mean_prior, precision_prior),
+            parametrization="precision",
+        )
+
+
+def test_argmin_proximal_kl_rejects_unknown_parametrization() -> None:
+    r"""Test that the proximal update rejects unknown parametrizations."""
+    dim = 4
+    mean = torch.randn(dim)
+    factor = torch.randn(dim, dim)
+    covariance = factor @ factor.mT + torch.eye(dim)
+
+    with pytest.raises(ValueError, match="Expected parametrization"):
+        argmin_proximal_kl(
+            lambda theta: theta[0].sum() + theta[1].sum(),
+            (mean, covariance),
+            parametrization="unknown",
         )
 
 

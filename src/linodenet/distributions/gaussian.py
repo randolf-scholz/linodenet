@@ -60,59 +60,127 @@ def argmin_proximal_kl(
     /,
     *,
     gamma: float | Tensor = 1.0,
+    parametrization: str = "covariance",
 ) -> GaussianParams:
-    r"""Return the Gaussian KL-proximal minimizer in covariance coordinates.
+    r"""Return the Gaussian KL-proximal minimizer in the chosen parametrization.
 
     This returns the solution of
 
     .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ\kl(p(x∣θ) ∣ p(x∣θ⁎))
 
-    where $θ = (μ, Σ)$ and $p(x∣θ) = 𝓝(μ, Σ)$.
+    where $θ$ is interpreted according to `parametrization` and $p(x∣θ) = 𝓝(μ, Σ)$.
 
-    The implementation computes $∇f(θ⁎) = (g, G)$ with `torch.func.grad`
-    and returns the closed-form minimizer
-
-    .. math:: μ' = μ⁎ - γ⁻¹Σ⁎g \qquad Σ'⁻¹ = Σ⁎⁻¹ + 2γ⁻¹\sym(G)
-
-    provided the candidate precision remains positive definite.
+    The implementation computes $∇f(θ⁎)$ with `torch.func.grad`
+    and evaluates the exact closed-form minimizer in covariance,
+    precision, or Cholesky coordinates.
 
     Args:
-        fun: Objective $f$ to linearize at `theta`.
-        theta: Linearization point $θ⁎ = (μ⁎, Σ⁎)$ in covariance coordinates.
+        fun: Objective $f$ to linearize at `theta`. If `fun(theta)` is not
+            scalar, gradients are computed for `fun(theta).sum()`.
+        theta: Linearization point $θ⁎$ in the selected parametrization.
         gamma: KL regularization strength.
+        parametrization: One of `"covariance"`, `"precision"`, or `"cholesky"`.
     """
-    # NOTE: γ_eff = max(γ, δᵀ Σ*⁻¹ δ - 1 + ε) with δ = ϕ⁻¹(y_obs) - μ*
-    #  safeguard for the the case when f(θ) = -log p(ϕ⁻¹(y)∣θ)|\det 𝐃ϕ⁻¹(y)|
-    mu, sigma = theta
-    gamma_tensor = torch.as_tensor(gamma, dtype=sigma.dtype, device=sigma.device)
-    grad_mu, grad_sigma = torch.func.grad(fun)(theta)
-    grad_sigma = 0.5 * (grad_sigma + grad_sigma.mT)
+    mean, matrix = theta
+    gamma = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
+    scale = gamma.reciprocal()
 
-    scale = gamma_tensor.reciprocal()
-    mean_posterior = mu - torch.einsum(
-        "...ij, ...j -> ...i",
-        sigma,
-        grad_mu * scale.unsqueeze(-1),
-    )
+    # (g, G) = ∇_θ f(θ⁎) where g is the mean gradient
+    # and G is the covariance/precision/Cholesky gradient.
+    g, G = torch.func.grad(fun)(theta)
 
-    chol_prior = cholesky(sigma)
-    precision_prior = torch.cholesky_inverse(chol_prior)
-    candidate_precision = 0.5 * (
-        precision_prior
-        + 2 * grad_sigma * scale.unsqueeze(-1).unsqueeze(-1)
-        + (precision_prior + 2 * grad_sigma * scale.unsqueeze(-1).unsqueeze(-1)).mT
-    )
+    match parametrization:
+        case "covariance":
+            # μ' = μ - γ⁻¹Σg,  Σ'⁻¹ = Σ⁻¹ + 2γ⁻¹ sym(G).
+            covariance = matrix
+            grad_covariance = 0.5 * (G + G.mT)
+            mean_posterior = mean - torch.einsum(
+                "...ij, ...j -> ...i", covariance, g * scale
+            )
 
-    try:
-        chol_precision = cholesky(candidate_precision)
-    except RuntimeError as error:
-        raise ValueError(
-            "The proximal Gaussian covariance update is not positive definite. "
-            "Try increasing gamma or regularizing the covariance gradient."
-        ) from error
+            chol_prior = cholesky(covariance)
+            precision_prior = torch.cholesky_inverse(chol_prior)
+            candidate_precision = 0.5 * (
+                precision_prior
+                + 2 * grad_covariance * scale
+                + (precision_prior + 2 * grad_covariance * scale).mT
+            )
 
-    covariance_posterior = torch.cholesky_inverse(chol_precision)
-    return mean_posterior, covariance_posterior
+            try:
+                chol_precision = cholesky(candidate_precision)
+            except RuntimeError as error:
+                raise ValueError(
+                    "The covariance-parametrized proximal Gaussian update does "
+                    "not admit a finite minimizer. Try increasing gamma or "
+                    "regularizing the covariance gradient."
+                ) from error
+
+            covariance_posterior = torch.cholesky_inverse(chol_precision)
+            return mean_posterior, covariance_posterior
+
+        case "precision":
+            # μ' = μ - γ⁻¹Σg,  Λ' = L U diag(2/(1 + √(1 + 8b/γ))) UᵀLᵀ
+            # where sym(LᵀGL) = U diag(b) Uᵀ and Λ = LLᵀ.
+            precision = matrix
+            grad_precision = 0.5 * (G + G.mT)
+            chol_prior = cholesky(precision)
+            mean_posterior = mean - torch.cholesky_solve(
+                (g * scale).unsqueeze(-1), chol_prior
+            ).squeeze(-1)
+
+            whitened_gradient = chol_prior.mT @ grad_precision @ chol_prior
+            whitened_gradient = 0.5 * (whitened_gradient + whitened_gradient.mT)
+            eigenvalues, V = torch.linalg.eigh(whitened_gradient)
+            tolerance = (
+                16
+                * torch.finfo(eigenvalues.dtype).eps
+                * eigenvalues.abs().amax(dim=-1, keepdim=True).clamp_min(1)
+            )
+            if torch.any(eigenvalues < -tolerance).item():
+                raise ValueError(
+                    "The precision-parametrized proximal Gaussian update does "
+                    "not admit a finite minimizer. Regularize the precision "
+                    "gradient or use the Cholesky parametrization."
+                )
+
+            eigenvalues = eigenvalues.clamp_min(0)
+            spectral_scale = 2 / (1 + torch.sqrt(1 + 8 * eigenvalues * scale))
+            whitened_precision = V @ torch.diag_embed(spectral_scale) @ V.mT
+            precision_posterior = chol_prior @ whitened_precision @ chol_prior.mT
+            precision_posterior = 0.5 * (precision_posterior + precision_posterior.mT)
+            return mean_posterior, precision_posterior
+
+        case "cholesky":
+            # μ' = μ - γ⁻¹Σg,  L' = LM with
+            # M = tril(-LᵀG/γ, -1) + diag((-a + √(a² + 4γ²))/(2γ)),
+            # a = diag(LᵀG).
+            chol = matrix
+            grad_cholesky = torch.tril(G)
+            cov = chol @ chol.mT
+            mean_posterior = mean - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
+
+            whitened_gradient = chol.mT @ grad_cholesky
+            diagonal_gradient = whitened_gradient.diagonal(dim1=-2, dim2=-1)
+            diagonal_update = (
+                0.5
+                * scale
+                * (
+                    -diagonal_gradient
+                    + torch.sqrt(diagonal_gradient.square() + 4 * gamma.square())
+                )
+            )
+            whitened_cholesky = torch.tril(
+                -whitened_gradient * scale, diagonal=-1
+            ) + torch.diag_embed(diagonal_update)
+            cholesky_posterior = torch.tril(chol @ whitened_cholesky)
+            return mean_posterior, cholesky_posterior
+
+        case _:
+            raise ValueError(
+                "Expected parametrization to be one of "
+                "{'covariance', 'precision', 'cholesky'}, "
+                f"got {parametrization!r}."
+            )
 
 
 def fisher(
