@@ -195,6 +195,8 @@ class TestInterval:
 
     def test_parse(self) -> None:
         assert Interval.parse("[0, 1]") == Interval("[0, 1]")
+        assert Interval.parse("[∞, +∞]") == Interval("[inf, inf]")
+        assert Interval.parse("[-∞, ∞]") == Interval("[-inf, inf]")
         assert Interval.parse("[0, 1") is None
 
     def test_parse_logs_debug_on_invalid_string(

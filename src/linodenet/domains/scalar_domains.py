@@ -145,19 +145,40 @@ class Interval(ScalarDomain):
 
         match s[1:-1].split(","):
             case left, right:
-                try:
-                    lower = float(left.strip())
-                    upper = float(right.strip())
-                except ValueError:
-                    __logger__.debug(
-                        "Failed to parse interval string %r: invalid bounds", s
-                    )
-                    return None
+                pass
             case _:
                 __logger__.debug(
                     "Failed to parse interval string %r: expected two bounds", s
                 )
                 return None
+
+        match left.strip():
+            case "-∞":
+                lower = float("-inf")
+            case "∞" | "+∞":
+                lower = float("inf")
+            case left:
+                try:
+                    lower = float(left)
+                except ValueError:
+                    __logger__.debug(
+                        "Failed to parse interval string %r: invalid lower bound", s
+                    )
+                    return None
+
+        match right.strip():
+            case "-∞":
+                upper = float("-inf")
+            case "∞" | "+∞":
+                upper = float("inf")
+            case right:
+                try:
+                    upper = float(right)
+                except ValueError:
+                    __logger__.debug(
+                        "Failed to parse interval string %r: invalid upper bound", s
+                    )
+                    return None
 
         return Interval(
             lower=lower,
@@ -701,6 +722,10 @@ class ScalarDomains(ScalarDomain, Enum):
 
     UNIT_BALL = Interval("[-1, 1]")
     OPEN_UNIT_BALL = Interval("(-1, 1)")
+
+    @classmethod
+    def Interval(cls, arg) -> Interval:  # noqa: N802
+        return Interval(arg)
 
     @property
     def domain(self) -> ScalarDomain:
