@@ -41,6 +41,7 @@ __all__ = [
 ]
 
 import math
+from collections.abc import Callable
 from typing import Final, Optional, Self
 
 import torch
@@ -54,41 +55,52 @@ type GaussianParams = tuple[Tensor, Tensor]
 
 
 def argmin_proximal_kl(
-    grads: GaussianParams,
-    priors: GaussianParams,
+    fun: Callable[[GaussianParams], Tensor],
+    theta: GaussianParams,
     /,
     *,
-    lambda_: float | Tensor = 1.0,
+    gamma: float | Tensor = 1.0,
 ) -> GaussianParams:
     r"""Return the Gaussian KL-proximal minimizer in covariance coordinates.
 
-    This solves
+    This returns the solution of
 
-    .. math:: \min_{μ, Σ ≻ 0} ⟨g, μ-μ⁻⟩ + ⟨G, Σ-Σ⁻⟩ + λ⋅KL(𝓝(μ, Σ)，𝓝(μ⁻, Σ⁻))
+    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ\kl(p(x∣θ) ∣ p(x∣θ⁎))
 
-    where `grads = (g, G)` and `priors = (μ⁻, Σ⁻)`.
+    where $θ = (μ, Σ)$ and $p(x∣θ) = 𝓝(μ, Σ)$.
 
-    The unique minimizer is
+    The implementation computes $∇f(θ⁎) = (g, G)$ with `torch.func.grad`
+    and returns the closed-form minimizer
 
-    .. math:: μ' = μ⁻ - λ⁻¹Σ⁻g \qquad Σ'⁻¹ = Σ⁻⁻¹ + 2λ⁻¹\sym(G)
+    .. math:: μ' = μ⁎ - γ⁻¹Σ⁎g \qquad Σ'⁻¹ = Σ⁎⁻¹ + 2γ⁻¹\sym(G)
 
     provided the candidate precision remains positive definite.
+
+    Args:
+        fun: Objective $f$ to linearize at `theta`. If `fun(theta)` is not scalar,
+            gradients are taken with respect to `fun(theta).sum()`.
+        theta: Linearization point $θ⁎ = (μ⁎, Σ⁎)$ in covariance coordinates.
+        gamma: KL regularization strength.
     """
-    g, gradient_covariance = grads
-    mean_prior, covariance_prior = priors
-    lambda_tensor = torch.as_tensor(
-        lambda_,
+    gradient_mean, gradient_covariance = torch.func.grad(lambda arg: fun(arg).sum())(
+        theta
+    )
+    gradient_covariance = 0.5 * (gradient_covariance + gradient_covariance.mT)
+
+    mean_prior, covariance_prior = theta
+    gamma_tensor = torch.as_tensor(
+        gamma,
         dtype=covariance_prior.dtype,
         device=covariance_prior.device,
     )
-    if torch.any(lambda_tensor <= 0).item():
-        raise ValueError(f"Expected lambda_ > 0, got {lambda_}.")
+    if torch.any(gamma_tensor <= 0).item():
+        raise ValueError(f"Expected gamma > 0, got {gamma}.")
 
-    scale = lambda_tensor.reciprocal()
+    scale = gamma_tensor.reciprocal()
     mean_posterior = mean_prior - torch.einsum(
         "...ij,...j->...i",
         covariance_prior,
-        g * scale[..., None],
+        gradient_mean * scale[..., None],
     )
 
     chol_prior = cholesky(covariance_prior)
@@ -104,7 +116,7 @@ def argmin_proximal_kl(
     except RuntimeError as error:
         raise ValueError(
             "The proximal Gaussian covariance update is not positive definite. "
-            "Try increasing lambda_ or regularizing the covariance gradient."
+            "Try increasing gamma or regularizing the covariance gradient."
         ) from error
 
     covariance_posterior = torch.cholesky_inverse(chol_precision)

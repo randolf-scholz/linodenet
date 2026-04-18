@@ -231,7 +231,7 @@ def test_argmin_proximal_kl_solves_closed_form_problem() -> None:
     r"""Test the closed-form KL-proximal Gaussian update."""
     batch_shape = (2, 3)
     dim = 4
-    lambda_ = torch.tensor(1.7)
+    gamma = torch.tensor(1.7)
 
     mean_prior = torch.randn(*batch_shape, dim)
     factor = torch.randn(*batch_shape, dim, dim)
@@ -241,16 +241,20 @@ def test_argmin_proximal_kl_solves_closed_form_problem() -> None:
     g = torch.randn(*batch_shape, dim)
     precision_shift_factor = torch.randn(*batch_shape, dim, dim)
     precision_shift = precision_shift_factor @ precision_shift_factor.mT
-    gradient_covariance = 0.5 * lambda_ * precision_shift
+    gradient_covariance = 0.5 * gamma * precision_shift
+
+    def objective_fn(theta: tuple[torch.Tensor, torch.Tensor], /) -> torch.Tensor:
+        mean, covariance = theta
+        return (g * mean).sum() + (gradient_covariance * covariance).sum()
 
     mean_post, covariance_post = argmin_proximal_kl(
-        (g, gradient_covariance),
+        objective_fn,
         (mean_prior, covariance_prior),
-        lambda_=lambda_,
+        gamma=gamma,
     )
 
     expected_mean = mean_prior - torch.einsum(
-        "...ij,...j->...i", covariance_prior, g / lambda_
+        "...ij,...j->...i", covariance_prior, g / gamma
     )
     expected_precision = 0.5 * (
         precision_prior + precision_shift + (precision_prior + precision_shift).mT
@@ -267,7 +271,7 @@ def test_argmin_proximal_kl_solves_closed_form_problem() -> None:
     objective = (
         (g * (mean_var - mean_prior)).sum()
         + (gradient_covariance * (covariance_var - covariance_prior)).sum()
-        + lambda_ * kl((mean_var, covariance_var), (mean_prior, covariance_prior)).sum()
+        + gamma * kl((mean_var, covariance_var), (mean_prior, covariance_prior)).sum()
     )
     mean_grad, covariance_grad = torch.autograd.grad(
         objective,
@@ -285,10 +289,13 @@ def test_argmin_proximal_kl_raises_when_precision_is_not_pd() -> None:
     factor = torch.randn(dim, dim)
     covariance_prior = factor @ factor.mT + torch.eye(dim)
     precision_prior = torch.linalg.inv(covariance_prior)
+    mean_gradient = torch.randn(dim)
 
     with pytest.raises(ValueError, match="not positive definite"):
         argmin_proximal_kl(
-            (torch.randn(dim), -precision_prior),
+            lambda theta: (
+                (mean_gradient * theta[0]).sum() + (-precision_prior * theta[1]).sum()
+            ),
             (mean_prior, covariance_prior),
         )
 
