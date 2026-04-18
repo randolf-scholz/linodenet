@@ -72,14 +72,14 @@ def argmin_proximal_kl(
 
     The implementation computes $∇f(θ⁎)$ with `torch.func.grad`
     and evaluates the exact closed-form minimizer in covariance,
-    precision, or Cholesky coordinates.
+    precision, Cholesky, or log-Cholesky coordinates.
 
     Args:
-        fun: Objective $f$ to linearize at `theta`. If `fun(theta)` is not
-            scalar, gradients are computed for `fun(theta).sum()`.
+        fun: Scalar objective function to linearize at `theta`.
         theta: Linearization point $θ⁎$ in the selected parametrization.
         gamma: KL regularization strength.
-        parametrization: One of `"covariance"`, `"precision"`, or `"cholesky"`.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`,
+            or `"log-cholesky"`.
     """
     mean, matrix = theta
     gamma = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
@@ -175,10 +175,65 @@ def argmin_proximal_kl(
             cholesky_posterior = torch.tril(chol @ whitened_cholesky)
             return mean_posterior, cholesky_posterior
 
+        case "log-cholesky":
+            # μ' = μ - γ⁻¹Σg,  X' = logchol(LW) with
+            # Wᵢⱼ = -(LᵀGₗ)ᵢⱼ/γ for i>j and
+            # wᵢᵢ = (-aᵢ + √(aᵢ² + 4γ(γ-gᵢ)))/(2γ),
+            # a = diag(LᵀGₗ), g = diag(G), Gₗ = tril(G, -1).
+            log_chol = matrix
+            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            cov = chol @ chol.mT
+            mean_posterior = mean - torch.einsum("...ij,...j->...i", cov, g * scale)
+
+            grad_log_cholesky = torch.tril(G)
+            grad_off_diagonal = torch.tril(grad_log_cholesky, diagonal=-1)
+            diagonal_gradient = grad_log_cholesky.diagonal(dim1=-2, dim2=-1)
+            linear_term = chol.mT @ grad_off_diagonal
+            diagonal_linear = linear_term.diagonal(dim1=-2, dim2=-1)
+
+            eps = torch.finfo(chol.dtype).eps
+            tolerance = (
+                16
+                * eps
+                * (
+                    gamma.abs() + diagonal_gradient.abs() + diagonal_linear.abs()
+                ).clamp_min(1)
+            )
+            if torch.any(diagonal_gradient > gamma + tolerance).item():
+                raise ValueError(
+                    "The log-Cholesky-parametrized proximal Gaussian update does "
+                    "not admit a finite minimizer. Try increasing gamma or "
+                    "regularizing the diagonal log-Cholesky gradient."
+                )
+
+            radicand = diagonal_linear.square() + 4 * gamma * (
+                gamma - diagonal_gradient
+            )
+            diagonal_update = (
+                0.5 * scale * (-diagonal_linear + torch.sqrt(radicand.clamp_min(0)))
+            )
+            if torch.any(diagonal_update <= tolerance).item():
+                raise ValueError(
+                    "The log-Cholesky-parametrized proximal Gaussian update does "
+                    "not admit a finite minimizer. Try increasing gamma or "
+                    "regularizing the diagonal log-Cholesky gradient."
+                )
+
+            whitened_cholesky = torch.tril(
+                -linear_term * scale, diagonal=-1
+            ) + torch.diag_embed(diagonal_update)
+            cholesky_posterior = torch.tril(chol @ whitened_cholesky)
+            log_cholesky_posterior = cholesky_posterior.tril(
+                diagonal=-1
+            ) + torch.diag_embed(cholesky_posterior.diagonal(dim1=-2, dim2=-1).log())
+            return mean_posterior, log_cholesky_posterior
+
         case _:
             raise ValueError(
                 "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky'}, "
+                "{'covariance', 'precision', 'cholesky', 'log_cholesky'}, "
                 f"got {parametrization!r}."
             )
 
@@ -196,11 +251,13 @@ def fisher(
             F_{(μ, Σ)}(δμ, δΣ) &= (Σ⁻¹δμ, ½Σ⁻¹\sym(δΣ)Σ⁻¹)
         \\  F_{(μ, Λ)}(δμ, δΛ) &= (Λδμ, ½Σ\sym(δΛ)Σ), \qquad Σ = Λ⁻¹
         \\  F_{(μ, L)}(δμ, δL) &= (Σ⁻¹δμ, L⁻ᵀ(L⁻¹δL + \diag(L⁻¹δL))), \qquad Σ = LLᵀ
+        \\  F_{(μ, X)}(δμ, δX) &= (Σ⁻¹δμ, Jₓᵀ F_{(μ, L)}(JₓδX)),
+            \qquad L = \tril(X, -1) + \diag(e^{\diag X})
 
     Args:
         theta: Gaussian parameters in the selected parametrization.
         tangent: Tangent/cotangent-like direction to which the metric is applied.
-        parametrization: One of `"covariance"`, `"precision"`, or `"cholesky"`.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
     """
     match parametrization:
         case "covariance":
@@ -241,10 +298,37 @@ def fisher(
                 torch.cholesky_solve(tangent_cholesky + chol @ diag, chol),
             )
 
+        case "log-cholesky":
+            # F(δμ, δX) = (Σ⁻¹δμ, JₓᵀF_L(JₓδX)),
+            # JₓδX = tril(δX, -1) + diag(Lᵢᵢ δxᵢᵢ).
+            mean, log_chol = theta
+            tangent_mean, tangent_log_cholesky = tangent
+            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            diagonal = chol.diagonal(dim1=-2, dim2=-1)
+            tangent_cholesky = tangent_log_cholesky.tril(
+                diagonal=-1
+            ) + torch.diag_embed(
+                diagonal * tangent_log_cholesky.diagonal(dim1=-2, dim2=-1)
+            )
+            cotangent_mean, cotangent_cholesky = fisher(
+                (mean, chol),
+                (tangent_mean, tangent_cholesky),
+                parametrization="cholesky",
+            )
+            return (
+                cotangent_mean,
+                cotangent_cholesky.tril(diagonal=-1)
+                + torch.diag_embed(
+                    diagonal * cotangent_cholesky.diagonal(dim1=-2, dim2=-1)
+                ),
+            )
+
         case _:
             raise ValueError(
                 "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky'}, "
+                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
                 f"got {parametrization!r}."
             )
 
@@ -262,11 +346,13 @@ def inverse_fisher(
             F_{(μ, Σ)}⁻¹(g, G) &= (Σg, 2Σ\sym(G)Σ)
         \\  F_{(μ, Λ)}⁻¹(g, G) &= (Σg, 2Λ\sym(G)Λ), \qquad Σ = Λ⁻¹
         \\  F_{(μ, L)}⁻¹(g, G) &= (Σg, L(\tril(LᵀG) - ½\diag(LᵀG))), \qquad Σ = LLᵀ
+        \\  F_{(μ, X)}⁻¹(g, G) &= (Σg, Jₓ⁻¹F_{(μ, L)}⁻¹(Jₓ^{-ᵀ}G)),
+                \qquad L = \tril(X, -1) + \diag(e^{\diag X})
 
     Args:
         theta: Gaussian parameters in the selected parametrization.
         cotangent: Cotangent-like direction to which the inverse metric is applied.
-        parametrization: One of `"covariance"`, `"precision"`, or `"cholesky"`.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
     """
     match parametrization:
         case "covariance":
@@ -305,10 +391,37 @@ def inverse_fisher(
                 chol @ whitened,
             )
 
+        case "log-cholesky":
+            # F⁻¹(g, G) = (Σg, Jₓ⁻¹F_L⁻¹(Jₓ^{-ᵀ}G)),
+            # Jₓ⁻¹ΔL = tril(ΔL, -1) + diag(ΔLᵢᵢ / Lᵢᵢ).
+            mean, log_chol = theta
+            cotangent_mean, cotangent_log_cholesky = cotangent
+            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            diagonal = chol.diagonal(dim1=-2, dim2=-1)
+            cotangent_cholesky = cotangent_log_cholesky.tril(
+                diagonal=-1
+            ) + torch.diag_embed(
+                cotangent_log_cholesky.diagonal(dim1=-2, dim2=-1) / diagonal
+            )
+            tangent_mean, tangent_cholesky = inverse_fisher(
+                (mean, chol),
+                (cotangent_mean, cotangent_cholesky),
+                parametrization="cholesky",
+            )
+            return (
+                tangent_mean,
+                tangent_cholesky.tril(diagonal=-1)
+                + torch.diag_embed(
+                    tangent_cholesky.diagonal(dim1=-2, dim2=-1) / diagonal
+                ),
+            )
+
         case _:
             raise ValueError(
                 "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky'}, "
+                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
                 f"got {parametrization!r}."
             )
 
@@ -325,11 +438,13 @@ def kl(
     Args:
         p: Gaussian parameters in the selected parametrization.
         q: Gaussian parameters in the selected parametrization.
-        parametrization: One of `"covariance"`, `"precision"`, or `"cholesky"`.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`,
+            or `"log_cholesky"`.
 
     Returns:
         The KL divergence `KL(p, q)`.
     """
+    parametrization = parametrization.replace("-", "_")
     match parametrization:
         case "covariance":
             # KL = ½(tr(Σᵥ⁻¹Σᵤ) - d + (μᵥ-μᵤ)ᵀΣᵥ⁻¹(μᵥ-μᵤ) + log det Σᵥ - log det Σᵤ).
@@ -397,10 +512,39 @@ def kl(
             dim = mean_p.shape[-1]
             return 0.5 * (trace_term + mahalanobis - dim + logdet_q - logdet_p)
 
+        case "log_cholesky":
+            # KL = KL((μ, L(X)) \| (ν, L(Y))) with
+            # L(X) = tril(X, -1) + diag(exp(diag(X))).
+            mean_p, log_chol_p = p
+            mean_q, log_chol_q = q
+            chol_p = log_chol_p.tril(diagonal=-1) + torch.diag_embed(
+                log_chol_p.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            chol_q = log_chol_q.tril(diagonal=-1) + torch.diag_embed(
+                log_chol_q.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            delta = mean_q - mean_p
+            # (μᵥ - μᵤ)ᵀΣᵥ⁻¹(μᵥ - μᵤ) = ‖Lᵥ⁻¹(μᵥ - μᵤ)‖².
+            whitened = solve_triangular(
+                chol_q,
+                delta.unsqueeze(-1),
+                upper=False,
+            ).squeeze(-1)
+            mahalanobis = vecdot(whitened, whitened, dim=-1)
+            # tr(Σᵥ⁻¹Σᵤ) = ⟨Σᵥ⁻¹, Σᵤ⟩ = ⟨Lᵥ⁻ᵀLᵥ⁻¹, LᵤLᵤᵀ⟩
+            #            = ⟨Lᵥ⁻¹Lᵤ, Lᵥ⁻¹Lᵤ⟩ = ‖Lᵥ⁻¹Lᵤ‖².
+            trace_term = solve_triangular(chol_q, chol_p, upper=False)
+            trace_term = trace_term.square().sum(dim=(-2, -1))
+            # log det Σ = 2 ∑ᵢ log Lᵢᵢ for Σ = LLᵀ.
+            logdet_p = 2 * log_chol_p.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
+            logdet_q = 2 * log_chol_q.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
+            dim = mean_p.shape[-1]
+            return 0.5 * (trace_term + mahalanobis - dim + logdet_q - logdet_p)
+
         case _:
             raise ValueError(
                 "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky'}, "
+                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
                 f"got {parametrization!r}."
             )
 
