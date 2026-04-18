@@ -76,8 +76,11 @@ class Tanh(TransformBase):
         return torch.atanh(y)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        # d/dx tanh(x) = 1/cosh(x)²;
+        # log(cosh(x)) = log(0.5) + log(e⁻ˣ + eˣ)
+        # log(1/cosh(x)²) = -2 log(cosh(x)) = -2 (log(0.5) + log(e⁻ˣ + eˣ))
         y = self.forward(x)
-        logabsdet = 2 * (math.log(2.0) - x - F.softplus(-2 * x))
+        logabsdet = -2.0 * (math.log(0.5) + torch.logaddexp(x, -x))
         return y, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -259,6 +262,8 @@ class CELU(TransformBase):
 class EntLU(TransformBase):
     r"""Maps tensor elementwise via $x ↦ ⟦x>0 ? x + 1 : eᴴ⁽¹⁻ˣ⁾⟧$.
 
+    The inverse is $y ↦ ⟦y > 1 ? y-1 : 1 - \log(1/y)/W(\log(1/y))⟧$.
+
     The derivative is: ⟦x > 0 ? 1 : eᴴ⁽¹⁻ˣ⁾ (1 + \log(1-x))⟧.
 
     Here, $H(x)$ is PyTorch's entropy primitive. (EntLU = Entropic Linear Unit)
@@ -266,7 +271,9 @@ class EntLU(TransformBase):
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        return torch.where(x > 0, x + 1, torch.exp(torch.special.entr(1 - x)))
+        # one_m_x avoids NaN production in entr, helps with gradients.
+        one_m_x = torch.where(x > 0, torch.zeros_like(x), 1 - x)
+        return torch.where(x > 0, x + 1, torch.exp(torch.special.entr(one_m_x)))
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         y = self.forward(x)
