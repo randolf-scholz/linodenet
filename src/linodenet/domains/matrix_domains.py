@@ -69,13 +69,13 @@ __all__ = [
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass, field
 from types import MappingProxyType
-from typing import ClassVar, Final, Self, overload
+from typing import Any, ClassVar, Final, Self, overload
 
 import torch
 from torch import Tensor
 
 from . import matrix_tests as tests
-from .base import MatrixDomain, PosetEnum
+from .base import Indeterminate, Join, MatrixDomain, Meet, PosetEnum
 
 
 @dataclass(frozen=True)
@@ -895,136 +895,170 @@ class Identity(Diagonal, Permutation):
         return tests.is_identity(value, size=self.size)
 
 
-class MatrixDomains(PosetEnum):
+class MatrixDomains(MatrixDomain, PosetEnum):
     r"""Enumeration of some matrix domains."""
 
     _STRING_LOOKUP: ClassVar[Mapping[str, Self]]
 
-    ANY = "any"  # top node
-    NONE = "none"  # bottom node
+    ANY = Rectangular()  # top node
+    NONE = Empty()  # bottom node
 
-    BOOLEAN = "boolean"  # a matrix of only zeros and ones
-    ZERO = "zero"  # a matrix of only zeros
-    ONES = "ones"  # a matrix of only ones
-    IDENTITY = "identity"  # the identity matrix
-    EYE = "identity"  # alias
+    BOOLEAN = Boolean()  # a matrix of only zeros and ones
+    ZERO = Zero()  # a matrix of only zeros
+    ONES = Ones()  # a matrix of only ones
+    IDENTITY = Identity()  # the identity matrix
+    EYE = Identity()  # alias
 
-    ONE_HOT = "one-hot"  # a single 1 entry and 0 elsewhere
+    ONE_HOT = OneHot()  # a single 1 entry and 0 elsewhere
 
-    RECTANGULAR = "rectangular"  # m × n matrices
-    TALL = "tall"  # m × n matrices with m ≥ n
-    WIDE = "wide"  # m × n matrices with m ≤ n
-    COLUMN_ORTHOGONAL = "column-orthogonal"  # m × n matrices with QᵀQ = 𝕀ₙ
-    ROW_ORTHOGONAL = "row-orthogonal"  # m × n matrices with QQᵀ = 𝕀ₘ
-    SQUARE = "square"  # n × n matrices
+    RECTANGULAR = Rectangular()  # m × n matrices
+    TALL = Tall()  # m × n matrices with m ≥ n
+    WIDE = Wide()  # m × n matrices with m ≤ n
+    COLUMN_ORTHOGONAL = ColumnOrthogonal()  # m × n matrices with QᵀQ = 𝕀ₙ
+    ROW_ORTHOGONAL = RowOrthogonal()  # m × n matrices with QQᵀ = 𝕀ₘ
+    SQUARE = Square()  # n × n matrices
 
     # rank
-    LOW_RANK = "low-rank"  # UVᵀ
-    LOW_RANK_SQUARE = "low-rank-square"
-    LOW_RANK_SYMMETRIC = "low-rank-symmetric"  # UVᵀ + VUᵀ
-    LOW_RANK_SKEW_SYMMETRIC = "low-rank-skew-symmetric"  # UVᵀ - VUᵀ
-    RANK_ONE = "rank-one"  # uvᵀ
+    LOW_RANK = LowRank()  # UVᵀ
+    LOW_RANK_SQUARE = LowRankSquare()
+    LOW_RANK_SYMMETRIC = LowRankSymmetric()  # UVᵀ + VUᵀ
+    LOW_RANK_SKEW_SYMMETRIC = LowRankSkewSymmetric()  # UVᵀ - VUᵀ
+    RANK_ONE = RankOne()  # uvᵀ
 
     # determinant-based
-    SINGULAR = "singular"  # det=0
-    LEFT_INVERTIBLE = "left-invertible"  # full column rank, admits L with LA = 𝕀
-    RIGHT_INVERTIBLE = "right-invertible"  # full row rank, admits R with AR = 𝕀
-    INVERTIBLE = "invertible"  # GLₙ(R) (det≠0)
-    LOWER_INVERTIBLE = "lower-invertible"
-    UPPER_INVERTIBLE = "upper-invertible"
-    CHOLESKY_FACTOR = "cholesky-factor"
-    UNIT_DETERMINANT = "unit-determinant"  # SLₙ(R) (det=1)
-    GENERAL_LINEAR = "invertible"  # alias
-    SPECIAL_LINEAR = "unit-determinant"  # alias
-    POSITIVE_DETERMINANT = "positive-determinant"  # GLₙ⁺(R) (det>0)
-    NEGATIVE_DETERMINANT = "negative-determinant"  # GLₙ⁻(R) (det<0)
+    SINGULAR = Fallback(name="singular")  # det=0
+    LEFT_INVERTIBLE = LeftInvertible()  # full column rank, admits L with LA = 𝕀
+    RIGHT_INVERTIBLE = RightInvertible()  # full row rank, admits R with AR = 𝕀
+    INVERTIBLE = Fallback(name="invertible")  # GLₙ(R) (det≠0)
+    LOWER_INVERTIBLE = Fallback(name="lower-invertible")
+    UPPER_INVERTIBLE = Fallback(name="upper-invertible")
+    CHOLESKY_FACTOR = Fallback(name="cholesky-factor")
+    UNIT_DETERMINANT = Fallback(name="unit-determinant")  # SLₙ(R) (det=1)
+    GENERAL_LINEAR = Fallback(name="invertible")  # alias
+    SPECIAL_LINEAR = Fallback(name="unit-determinant")  # alias
+    POSITIVE_DETERMINANT = Fallback(name="positive-determinant")  # GLₙ⁺(R) (det>0)
+    NEGATIVE_DETERMINANT = Fallback(name="negative-determinant")  # GLₙ⁻(R) (det<0)
 
     # symmetry / entry based
-    SYMMETRIC = "symmetric"  # 𝕊ₙ(R)
-    SKEW_SYMMETRIC = "skew-symmetric"
+    SYMMETRIC = Symmetric()  # 𝕊ₙ(R)
+    SKEW_SYMMETRIC = SkewSymmetric()
 
-    TOEPLITZ = "toeplitz"  # constant along diagonals
-    BANDED = "banded"
-    CIRCULANT = "circulant"  # constant along diagonals, wrap around
-    TRIDIAGONAL = "tridiagonal"
-    DIAGONAL = "diagonal"
-    NEGATIVE_DIAGONAL = "negative-diagonal"
-    POSITIVE_DIAGONAL = "positive-diagonal"
-    POSITIVE_SCALAR_MATRIX = "positive-scalar-matrix"
+    TOEPLITZ = Toeplitz()  # constant along diagonals
+    BANDED = Banded()
+    CIRCULANT = Circulant()  # constant along diagonals, wrap around
+    TRIDIAGONAL = Tridiagonal()
+    DIAGONAL = Diagonal()
+    NEGATIVE_DIAGONAL = NegativeDiagonal()
+    POSITIVE_DIAGONAL = PositiveDiagonal()
+    POSITIVE_SCALAR_MATRIX = PositiveScalarMatrix()
 
     # diagonal conditions
-    POSITIVE_DIAGONAL_ENTRIES = "positive-diagonal-entries"
-    NEGATIVE_DIAGONAL_ENTRIES = "negative-diagonal-entries"
-    ZERO_DIAGONAL_ENTRIES = "zero-diagonal"
-    ZERO_DIAGONAL = "zero-diagonal"
-    TRACELESS = "traceless"
+    POSITIVE_DIAGONAL_ENTRIES = Fallback(name="positive-diagonal-entries")
+    NEGATIVE_DIAGONAL_ENTRIES = Fallback(name="negative-diagonal-entries")
+    ZERO_DIAGONAL_ENTRIES = Fallback(name="zero-diagonal")
+    ZERO_DIAGONAL = Fallback(name="zero-diagonal")
+    TRACELESS = Traceless()
 
-    HANKEL = "hankel"  # constant along anti-diagonals
+    HANKEL = Fallback(name="hankel")  # constant along anti-diagonals
 
     # eigenvalues
-    POSITIVE_DEFINITE = "positive-definite"  # 𝕊ₙ⁺(ℝ)
-    NEGATIVE_DEFINITE = "negative-definite"  # 𝕊ₙ⁻(ℝ)
-    POSITIVE_SEMIDEFINITE = "positive-semidefinite"  # 𝕊ₙ⁺(ℝ) ∪ {0}
-    NEGATIVE_SEMIDEFINITE = "negative-semidefinite"  # 𝕊ₙ⁻(ℝ) ∪ {0}
+    POSITIVE_DEFINITE = PositiveDefinite()  # 𝕊ₙ⁺(ℝ)
+    NEGATIVE_DEFINITE = NegativeDefinite()  # 𝕊ₙ⁻(ℝ)
+    POSITIVE_SEMIDEFINITE = PositiveSemidefinite()  # 𝕊ₙ⁺(ℝ) ∪ {0}
+    NEGATIVE_SEMIDEFINITE = NegativeSemidefinite()  # 𝕊ₙ⁻(ℝ) ∪ {0}
 
-    CONTRACTION = "contraction"  # ‖A‖₂ < 1
-    SPECTRAL_NORMALIZED = "spectral-normalized"  # ‖A‖₂ = 1
-    LIPSCHITZ_BOUNDED = "lipschitz-bounded"  # ‖A‖₂ ≤ C
-    DIAGONALLY_DOMINANT = "diagonally-dominant"  # |Aᵢᵢ| ≥ ∑_{j≠i} |Aᵢⱼ| for all i
+    CONTRACTION = Contraction()  # ‖A‖₂ < 1
+    SPECTRAL_NORMALIZED = SpectralNormalized()  # ‖A‖₂ = 1
+    LIPSCHITZ_BOUNDED = LipschitzBounded()  # ‖A‖₂ ≤ C
+    DIAGONALLY_DOMINANT = DiagonallyDominant()  # |Aᵢᵢ| ≥ ∑_{j≠i} |Aᵢⱼ| for all i
 
-    NORMAL = "normal"  # AᵀA = AAᵀ
-    ORTHOGONAL = "orthogonal"  # Oₙ(R)
-    CAYLEY_ORTHOGONAL = "cayley-orthogonal"  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
-    SPECIAL_ORTHOGONAL = "special-orthogonal"  # SOₙ(R)
+    NORMAL = Normal()  # AᵀA = AAᵀ
+    ORTHOGONAL = Orthogonal()  # Oₙ(R)
+    CAYLEY_ORTHOGONAL = Fallback(
+        name="cayley-orthogonal"
+    )  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
+    SPECIAL_ORTHOGONAL = SpecialOrthogonal()  # SOₙ(R)
 
-    EVEN_SQUARE = "even-square"  # 2n × 2n matrices
-    SYMPLECTIC = "symplectic"  # 2n×2n with AᵀJA = J for J=[0, I;-I, 0]
-    HAMILTONIAN = "hamiltonian"  # 2n×2n with (JA)ᵀ = JA for J=[0, I;-I, 0]
+    EVEN_SQUARE = EvenSquare()  # 2n × 2n matrices
+    SYMPLECTIC = Symplectic()  # 2n×2n with AᵀJA = J for J=[0, I;-I, 0]
+    HAMILTONIAN = Hamiltonian()  # 2n×2n with (JA)ᵀ = JA for J=[0, I;-I, 0]
 
-    TRIANGULAR = "triangular"  # lower or upper
-    UPPER_TRIANGULAR = "upper-triangular"
-    LOWER_TRIANGULAR = "lower-triangular"
+    TRIANGULAR = Triangular()  # lower or upper
+    UPPER_TRIANGULAR = UpperTriangular()
+    LOWER_TRIANGULAR = LowerTriangular()
 
-    ROW_CENTERED = "row-centered"  # A𝟏 = 𝟎
-    COLUMN_CENTERED = "column-centered"  # Aᵀ𝟏 = 𝟎
-    DOUBLY_CENTERED = "doubly-centered"  # A𝟏 = 𝟎 and Aᵀ𝟏 = 𝟎
-    CENTERING = "centering"  # 𝕀ₙ - 1/n𝟏ₙ𝟏ₙᵀ special centering matrix
-    INTENSITY = "intensity"  # Aᵢᵢ = -∑_{j≠i} Aᵢⱼ for all i, Aᵢⱼ ≥ 0 for i≠j
+    ROW_CENTERED = RowCentered()  # A𝟏 = 𝟎
+    COLUMN_CENTERED = ColumnCentered()  # Aᵀ𝟏 = 𝟎
+    DOUBLY_CENTERED = DoublyCentered()  # A𝟏 = 𝟎 and Aᵀ𝟏 = 𝟎
+    CENTERING = Fallback(name="centering")  # 𝕀ₙ - 1/n𝟏ₙ𝟏ₙᵀ special centering matrix
+    INTENSITY = Fallback(
+        name="intensity"
+    )  # Aᵢᵢ = -∑_{j≠i} Aᵢⱼ for all i, Aᵢⱼ ≥ 0 for i≠j
     # ⇝ row-centered, nonpositive diagonal, diagonally dominant
 
-    ROW_STOCHASTIC = "row-stochastic"  # nonnegative, A𝟏 = 𝟏
-    COLUMN_STOCHASTIC = "column-stochastic"  # nonnegative, Aᵀ𝟏 = 𝟏
-    DOUBLY_STOCHASTIC = "doubly-stochastic"
-    PERMUTATION = "permutation"
+    ROW_STOCHASTIC = RowStochastic()  # nonnegative, A𝟏 = 𝟏
+    COLUMN_STOCHASTIC = ColumnStochastic()  # nonnegative, Aᵀ𝟏 = 𝟏
+    DOUBLY_STOCHASTIC = DoublyStochastic()
+    PERMUTATION = Permutation()
 
-    IDEMPOTENT = "idempotent"  # Pᵏ = P for some k≥2
-    PROJECTION = "projection"  # P² = P  (P=QQ⁺ + QZ(I-QQ⁺) for some Q,Z)
-    ORTHOGONAL_PROJECTION = "orthogonal-projection"  # P² = P, P symmetric (P=QQ⁺)
-    NILPOTENT = "nilpotent"  # Aᵏ = 0 for some k≥2
+    IDEMPOTENT = Fallback(name="idempotent")  # Pᵏ = P for some k≥2
+    PROJECTION = Projection()  # P² = P  (P=QQ⁺ + QZ(I-QQ⁺) for some Q,Z)
+    ORTHOGONAL_PROJECTION = OrthogonalProjection()  # P² = P, P symmetric (P=QQ⁺)
+    NILPOTENT = Fallback(name="nilpotent")  # Aᵏ = 0 for some k≥2
 
     # special matrices
-    STANDARD_NILPOTENT = "canonical-nilpotent"  # standard nilpotent matrix
-    STANDARD_SYMPLECTIC = "standard-symplectic"  # [0, 𝕀; -𝕀, 0]
-    HOUSEHOLDER = "householder"
-    GIVENS_ROTATION = "givens-rotation"
-    HADAMARD = "hadamard"  # entries ±1, HHᵀ=n𝕀
-    JORDAN_BLOCK = "jordan-block"  # λI + N, N is standard nilpotent
+    STANDARD_NILPOTENT = Fallback(
+        name="canonical-nilpotent"
+    )  # standard nilpotent matrix
+    STANDARD_SYMPLECTIC = Fallback(name="standard-symplectic")  # [0, 𝕀; -𝕀, 0]
+    HOUSEHOLDER = Fallback(name="householder")
+    GIVENS_ROTATION = Fallback(name="givens-rotation")
+    HADAMARD = Fallback(name="hadamard")  # entries ±1, HHᵀ=n𝕀
+    JORDAN_BLOCK = Fallback(name="jordan-block")  # λI + N, N is standard nilpotent
 
-    BLOCK_DIAGONAL = "block-diagonal"
-    JORDAN = "jordan"  # block diagonal with Jordan blocks
+    BLOCK_DIAGONAL = BlockDiagonal()
+    JORDAN = Fallback(name="jordan")  # block diagonal with Jordan blocks
 
     # TODO: graph theory (degree, adjacency, incidence, Laplacian)
 
     # tag-like
-    MASKED = "masked"  # X⊙M = X for some mask M
-    SPARSE = "sparse"  # many 0 entries
-    EFFICIENTLY_INVERTIBLE = "efficiently-invertible"
-    FORWARD_STABLE = "forward-stable"
-    BACKWARD_STABLE = "backward-stable"
-    DIAGONALIZABLE = "diagonalizable"
+    MASKED = Masked()  # X⊙M = X for some mask M
+    SPARSE = Fallback(name="sparse")  # many 0 entries
+    EFFICIENTLY_INVERTIBLE = Fallback(name="efficiently-invertible")
+    FORWARD_STABLE = ForwardStable()
+    BACKWARD_STABLE = BackwardStable()
+    DIAGONALIZABLE = Fallback(name="diagonalizable")
+
+    @property
+    def rows(self) -> int | None:
+        return self.value.rows
+
+    @property
+    def cols(self) -> int | None:
+        return self.value.cols
 
     def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
+        return self.value.check(value)
+
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__le__(self, other)
+
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__lt__(self, other)
+
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__ge__(self, other)
+
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__gt__(self, other)
+
+    # pyrefly: ignore[bad-override]
+    def __and__(self, other: Self | Meet[Self], /) -> Self | Meet[Self]:  # pyright: ignore[reportIncompatibleMethodOverride, reportInvalidTypeArguments]
+        return Meet({self, other})
+
+    # pyrefly: ignore[bad-override]
+    def __or__(self, other: Self | Join[Self], /) -> Self | Join[Self]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return Join({self, other})
 
     @classmethod
     def _missing_(cls, value: object) -> Self | None:
