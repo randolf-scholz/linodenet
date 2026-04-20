@@ -3,6 +3,7 @@ r"""Matrix-specific domain primitives and partial-order labels."""
 __all__ = [
     "MatrixDomains",
     # Classes
+    "Empty",
     "Square",
     "EvenSquare",
     "Rectangular",
@@ -65,25 +66,16 @@ __all__ = [
     "Fallback",
 ]
 
+from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass, field
 from types import MappingProxyType
-from typing import Final, Self, overload
+from typing import ClassVar, Final, Self, overload
 
 import torch
 from torch import Tensor
 
 from . import matrix_tests as tests
 from .base import MatrixDomain, PosetEnum
-
-
-@dataclass(frozen=True)
-class Fallback(MatrixDomain):
-    r"""Named placeholder for an otherwise unspecified matrix domain."""
-
-    name: str
-
-    def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -109,6 +101,33 @@ class Rectangular(MatrixDomain):
     def __call__(self, rows: int, cols: int, /) -> Self: ...
     def __call__(self, rows: int | None = None, cols: int | None = None, /) -> Self:
         return self.__class__(rows, cols)
+
+
+@dataclass(frozen=True)
+class Empty(Rectangular):
+    r"""Domain of matrices with no admissible values."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.new_full(value.shape[:-2], False, dtype=torch.bool)
+
+
+@dataclass(frozen=True)
+class Fallback(Rectangular):
+    r"""Named placeholder for an otherwise unspecified matrix domain."""
+
+    _: KW_ONLY
+
+    name: str
+
+    @overload
+    def __call__(self, /) -> Self: ...
+    @overload
+    def __call__(self, rows: int, cols: int, /) -> Self: ...
+    def __call__(self, rows: int | None = None, cols: int | None = None, /) -> Self:
+        return self.__class__(rows, cols, name=self.name)
+
+    def check(self, value: Tensor, /) -> Tensor:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -879,6 +898,8 @@ class Identity(Diagonal, Permutation):
 class MatrixDomains(PosetEnum):
     r"""Enumeration of some matrix domains."""
 
+    _STRING_LOOKUP: ClassVar[Mapping[str, Self]]
+
     ANY = "any"  # top node
     NONE = "none"  # bottom node
 
@@ -1005,6 +1026,12 @@ class MatrixDomains(PosetEnum):
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
+    @classmethod
+    def _missing_(cls, value: object) -> Self | None:
+        if isinstance(value, str):
+            return cls._STRING_LOOKUP.get(value)
+        return None
+
 
 M = MatrixDomains  # temporary alias
 MatrixDomains.KNOWN_MEETS = (  # type: ignore[assignment]  # pyrefly: ignore[bad-assignment]
@@ -1124,4 +1151,101 @@ MatrixDomains.KNOWN_SUBTYPES = MappingProxyType({
         M.TRIANGULAR, M.DIAGONAL, M.TRIDIAGONAL,
     },
 })  # fmt: skip
+MatrixDomains._STRING_LOOKUP = MappingProxyType(  # noqa: SLF001
+    {
+        "any": M.ANY,
+        "backward-stable": M.BACKWARD_STABLE,
+        "banded": M.BANDED,
+        "block-diagonal": M.BLOCK_DIAGONAL,
+        "boolean": M.BOOLEAN,
+        "canonical-nilpotent": M.STANDARD_NILPOTENT,
+        "cayley-orthogonal": M.CAYLEY_ORTHOGONAL,
+        "centering": M.CENTERING,
+        "cholesky-factor": M.CHOLESKY_FACTOR,
+        "circulant": M.CIRCULANT,
+        "column-centered": M.COLUMN_CENTERED,
+        "column-orthogonal": M.COLUMN_ORTHOGONAL,
+        "column-stochastic": M.COLUMN_STOCHASTIC,
+        "contraction": M.CONTRACTION,
+        "diagonal": M.DIAGONAL,
+        "diagonalizable": M.DIAGONALIZABLE,
+        "diagonally-dominant": M.DIAGONALLY_DOMINANT,
+        "doubly-centered": M.DOUBLY_CENTERED,
+        "doubly-stochastic": M.DOUBLY_STOCHASTIC,
+        "efficiently-invertible": M.EFFICIENTLY_INVERTIBLE,
+        "empty": M.NONE,
+        "even-square": M.EVEN_SQUARE,
+        "eye": M.EYE,
+        "forward-stable": M.FORWARD_STABLE,
+        "general-linear": M.GENERAL_LINEAR,
+        "givens-rotation": M.GIVENS_ROTATION,
+        "hadamard": M.HADAMARD,
+        "hamiltonian": M.HAMILTONIAN,
+        "hankel": M.HANKEL,
+        "householder": M.HOUSEHOLDER,
+        "idempotent": M.IDEMPOTENT,
+        "identity": M.IDENTITY,
+        "intensity": M.INTENSITY,
+        "invertible": M.INVERTIBLE,
+        "jordan": M.JORDAN,
+        "jordan-block": M.JORDAN_BLOCK,
+        "left-invertible": M.LEFT_INVERTIBLE,
+        "lipschitz-bounded": M.LIPSCHITZ_BOUNDED,
+        "low-rank": M.LOW_RANK,
+        "low-rank-skew-symmetric": M.LOW_RANK_SKEW_SYMMETRIC,
+        "low-rank-square": M.LOW_RANK_SQUARE,
+        "low-rank-symmetric": M.LOW_RANK_SYMMETRIC,
+        "lower-invertible": M.LOWER_INVERTIBLE,
+        "lower-triangular": M.LOWER_TRIANGULAR,
+        "masked": M.MASKED,
+        "negative-definite": M.NEGATIVE_DEFINITE,
+        "negative-determinant": M.NEGATIVE_DETERMINANT,
+        "negative-diagonal": M.NEGATIVE_DIAGONAL,
+        "negative-diagonal-entries": M.NEGATIVE_DIAGONAL_ENTRIES,
+        "negative-semidefinite": M.NEGATIVE_SEMIDEFINITE,
+        "nilpotent": M.NILPOTENT,
+        "none": M.NONE,
+        "normal": M.NORMAL,
+        "one-hot": M.ONE_HOT,
+        "ones": M.ONES,
+        "orthogonal": M.ORTHOGONAL,
+        "orthogonal-projection": M.ORTHOGONAL_PROJECTION,
+        "permutation": M.PERMUTATION,
+        "positive-definite": M.POSITIVE_DEFINITE,
+        "positive-determinant": M.POSITIVE_DETERMINANT,
+        "positive-diagonal": M.POSITIVE_DIAGONAL,
+        "positive-diagonal-entries": M.POSITIVE_DIAGONAL_ENTRIES,
+        "positive-scalar-matrix": M.POSITIVE_SCALAR_MATRIX,
+        "positive-semidefinite": M.POSITIVE_SEMIDEFINITE,
+        "projection": M.PROJECTION,
+        "rank-one": M.RANK_ONE,
+        "rectangular": M.RECTANGULAR,
+        "right-invertible": M.RIGHT_INVERTIBLE,
+        "row-centered": M.ROW_CENTERED,
+        "row-orthogonal": M.ROW_ORTHOGONAL,
+        "row-stochastic": M.ROW_STOCHASTIC,
+        "singular": M.SINGULAR,
+        "skew-symmetric": M.SKEW_SYMMETRIC,
+        "sparse": M.SPARSE,
+        "special-linear": M.SPECIAL_LINEAR,
+        "special-orthogonal": M.SPECIAL_ORTHOGONAL,
+        "spectral-normalized": M.SPECTRAL_NORMALIZED,
+        "square": M.SQUARE,
+        "standard-symplectic": M.STANDARD_SYMPLECTIC,
+        "symmetric": M.SYMMETRIC,
+        "symplectic": M.SYMPLECTIC,
+        "tall": M.TALL,
+        "toeplitz": M.TOEPLITZ,
+        "traceless": M.TRACELESS,
+        "triangular": M.TRIANGULAR,
+        "tridiagonal": M.TRIDIAGONAL,
+        "unit-determinant": M.UNIT_DETERMINANT,
+        "upper-invertible": M.UPPER_INVERTIBLE,
+        "upper-triangular": M.UPPER_TRIANGULAR,
+        "wide": M.WIDE,
+        "zero": M.ZERO,
+        "zero-diagonal": M.ZERO_DIAGONAL,
+        "zero-diagonal-entries": M.ZERO_DIAGONAL_ENTRIES,
+    }
+)
 del M  # remove alias
