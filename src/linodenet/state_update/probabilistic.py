@@ -44,7 +44,10 @@ from torch.distributions import MultivariateNormal
 from torch.utils import _pytree
 
 from linodenet.distributions import Dirac, Distribution, Empirical
-from linodenet.distributions.gaussian import multivariate_gaussian_log_likelihood
+from linodenet.distributions.gaussian import (
+    kl,
+    multivariate_gaussian_log_likelihood,
+)
 from linodenet.mappings.transforms import Transform
 
 
@@ -350,3 +353,44 @@ def discrete_probabilistic_kalman_update(
 
     obs_dist = MultivariateNormal(y, R)
     return probabilistic_kalman_update(obs_dist, state, H=H)
+
+
+class GaussianLatentStateUpdate(nn.Module):
+    r"""Perform a gradient based update assuming a latent Gaussian distribution.
+
+    .. math:: Jₜ(θ; θ₋, y_obs) = -\log q(y_obs∣θ) + λ\kl(𝓝(μ, Σ), 𝓝(μ₋, Σ₋))
+
+    where $θ = (μ, Σ)$ are the parameters of the latent Gaussian distribution,
+    $θ₋$ are the parameters before the update, and $y_obs$ is the observed value.
+    The first term is the negative log-likelihood of the observation under the current parameters,
+    and the second term is a KL divergence regularization that encourages the updated parameters
+    to stay close to the previous parameters.
+    """
+
+    def __init__(
+        self,
+        decoder: Callable[[tuple[Tensor, Tensor]], Distribution],
+        regularization_strength,
+        regularization_learnable: bool = True,
+    ) -> None:
+        super().__init__()
+
+    def update_covariance(
+        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        r"""Gradient step assuming parameterization $θ=(μ, Σ)$."""
+
+    def update_cholesky(
+        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        r"""Gradient step assuming parameterization $θ=(μ, L)$, with $Σ=LLᵀ$."""
+        mu, sigma = theta
+        mu_dash = nn.Parameter(mu)
+        sigma_dash = nn.Parameter(sigma)
+        grad_fn = torch.func.grad(kl, argnums=0)
+        grad_fn((mu_dash, sigma_dash), (mu, sigma), parametrization="cholesky")
+
+    def update_precision(
+        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        r"""Gradient step assuming parameterization $θ=(μ, Λ)$, with $Σ=Λ⁻¹$."""

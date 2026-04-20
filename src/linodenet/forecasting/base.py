@@ -103,3 +103,26 @@ class PathForecastingModel(Protocol):
         Returns:
             prediction: The joint distribution over the future time steps.
         """
+
+
+class ProbabilisticLSSM(Protocol):
+    r"""Protocol for probabilistic latent state-space models.
+
+    Latent distribution at time t: $p(x∣θₜ)$
+    Predictive distribution at time t:
+        a. $q(y∣ωₜ=ϕ(θₜ))$  (decoder in parameter space)
+        b. $q(y)=p(ϕ⁻¹(y)∣θₜ)|det 𝐃ϕ⁻¹(y)|$ (decoder in data space)
+
+    State update:
+        a. $ωₜ' = f(ωₜ, y_obs)$, $θₜ' = ϕ⁻¹(ωₜ')$ (update in observation space)
+        b. $θₜ' = g(θₜ, ϕ, y_obs)$ (update in latent space)
+
+    Idea:
+        The theoretically correct update is a Bayesian one.
+        However, this is generally intractable.
+        Instead, we could do a gradient step along a variational loss.
+
+        Loss: d_KL(p(x∣θₜ) ∥ p(x∣θₜ')) - E_{x∼p(x∣θ)}[log p(y_obs∣x)]
+
+        y = g(x) + ε, with ε ∼ N(0, R). Then log p(y_obs ∣ x) = const - 1/2 (y_obs - g(x))ᵀ R⁻¹ (y_obs - g(x)).
+    """

@@ -113,9 +113,9 @@ class LatentStateSpaceModel(nn.Module):
     def config(self) -> dict:
         return {
             "encoder": self.encoder,
-            "system": self.system,
+            "system": self.state_propation,
             "decoder": self.decoder,
-            "filter": self.filter,
+            "filter": self.state_update,
             "padding_size": self.padding_size,
         }
 
@@ -123,24 +123,24 @@ class LatentStateSpaceModel(nn.Module):
         self,
         *,
         encoder: nn.Module | Blueprint[nn.Module],
-        system: nn.Module | Blueprint[nn.Module],
+        state_propagration: nn.Module | Blueprint[nn.Module],
         decoder: nn.Module | Blueprint[nn.Module],
-        filter: nn.Module | Blueprint[nn.Module],  # noqa: A002
+        state_update: nn.Module | Blueprint[nn.Module],  # noqa: A002
         padding_size: int = 0,
     ) -> None:
         super().__init__()
         self.encoder = initialize(encoder)
-        self.system = initialize(system)
+        self.state_propation = initialize(state_propagration)
         self.decoder = initialize(decoder)
-        self.filter = initialize(filter)
+        self.state_update = initialize(state_update)
 
         # ensure filter and system satisfy the protocols
-        assert isinstance(self.filter, StateUpdater)
-        assert isinstance(self.system, ContinuousFlow)
+        assert isinstance(self.state_update, StateUpdater)
+        assert isinstance(self.state_propation, ContinuousFlow)
 
-        self.input_size = int(self.filter.input_size)
-        self.output_size = int(self.filter.hidden_size)
-        self.latent_size = int(self.system.input_size)
+        self.input_size = int(self.state_update.input_size)
+        self.output_size = int(self.state_update.hidden_size)
+        self.latent_size = int(self.state_propation.input_size)
         self.hidden_size = -1
         self.padding_size = padding_size
         self.validate_sizes()
@@ -150,7 +150,7 @@ class LatentStateSpaceModel(nn.Module):
         # self.latent_size = system.input_size  # type: ignore[assignment]
         # self.hidden_size = filter.hidden_size  # type: ignore[assignment]
         # self.padding_size = padding_size
-        kernel = getattr(self.system, "kernel", None)
+        kernel = getattr(self.state_propation, "kernel", None)
         if not isinstance(kernel, Tensor):
             raise TypeError("The system must have a kernel attribute")
         self.kernel = kernel
@@ -166,18 +166,18 @@ class LatentStateSpaceModel(nn.Module):
         self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
 
     def validate_sizes(self) -> None:
-        assert isinstance(self.filter, StateUpdater)
-        assert isinstance(self.system, ContinuousFlow)
-        filter_input = int(self.filter.input_size)
-        filter_hidden = int(self.filter.hidden_size)
+        assert isinstance(self.state_update, StateUpdater)
+        assert isinstance(self.state_propation, ContinuousFlow)
+        filter_input = int(self.state_update.input_size)
+        filter_hidden = int(self.state_update.hidden_size)
         if filter_input != filter_hidden:
             raise ValueError(
                 "Filter input_size must match hidden_size; "
                 f"got {filter_input} and {filter_hidden}."
             )
 
-        system_input = int(getattr(self.system, "input_size", -1))
-        system_output = int(getattr(self.system, "output_size", system_input))
+        system_input = int(getattr(self.state_propation, "input_size", -1))
+        system_output = int(getattr(self.state_propation, "output_size", system_input))
         if system_input != system_output:
             raise ValueError(
                 "System input_size must match output_size; "
@@ -214,7 +214,7 @@ class LatentStateSpaceModel(nn.Module):
     def forward(
         self,
         T: Tensor,
-        X: Tensor,
+        Y_OBS: Tensor,
         t0: Optional[Tensor] = None,
         z0: Optional[Tensor] = None,
     ) -> Tensor:
@@ -233,7 +233,7 @@ class LatentStateSpaceModel(nn.Module):
         Args:
             T: Tensor, shape=(...,LEN) or PackedSequence
                 The timestamps of the observations.
-            X: Tensor, shape=(..., LEN, DIM) or PackedSequence
+            Y_OBS: Tensor, shape=(..., LEN, DIM) or PackedSequence
                 The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
             t0: Tensor, shape=(..., 1), optional
                 The timestamps of the initial condition. Defaults to ``T[...,0]``.
@@ -255,7 +255,7 @@ class LatentStateSpaceModel(nn.Module):
             # shape[dim] = self.padding_size
             # z = torch.full(shape, float("nan"), dtype=X.dtype, device=X.device)
             # X = torch.cat([X, z], dim=dim)
-            X = pad(X, float("nan"), self.padding_size)
+            Y_OBS = pad(Y_OBS, float("nan"), self.padding_size)
 
         ## prepend a single zero for the first iteration.
         # DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
@@ -273,7 +273,7 @@ class LatentStateSpaceModel(nn.Module):
         # Move sequence to the front
         DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
         DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
-        X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
+        Y_OBS = torch.moveaxis(Y_OBS, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
         # Initialize buffers
         Zhat_pre: list[Tensor] = []
@@ -283,23 +283,25 @@ class LatentStateSpaceModel(nn.Module):
 
         z_post = z0
 
-        for dt, x_obs in zip(DT, X, strict=True):
+        for dt, y_obs in zip(DT, Y_OBS, strict=True):
             # Propagate the latent state forward in time.
-            z_pre = self.system(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
+            z_pre = self.state_propation(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
 
             # Decode the latent state at the observation time.
-            x_pre = self.decoder(z_pre)  # (..., LAT) -> (..., DIM)
+            y_pre = self.decoder(z_pre)  # (..., LAT) -> (..., DIM)
 
             # Update the state estimate by filtering the observation.
-            x_post = self.filter(x_obs, x_pre)  # (..., DIM), (..., DIM) → (..., DIM)
+            y_post = self.state_update(
+                y_obs, y_pre
+            )  # (..., DIM), (..., DIM) → (..., DIM)
 
             # Encode the latent state at the observation time.
-            z_post = self.encoder(x_post)  # (..., DIM) → (..., LAT)
+            z_post = self.encoder(y_post)  # (..., DIM) → (..., LAT)
 
             # Save all tensors for later.
             Zhat_pre.append(z_pre)
-            Xhat_pre.append(x_pre)
-            Xhat_post.append(x_post)
+            Xhat_pre.append(y_pre)
+            Xhat_post.append(y_post)
             Zhat_post.append(z_post)
 
         self.xhat_pre = torch.stack(Xhat_pre, dim=-2)
@@ -352,8 +354,8 @@ class LatentStateSpaceModel(nn.Module):
 
         return LatentStateSpaceModel(
             encoder=encoder,
-            system=system,
+            state_propagration=system,
             decoder=decoder,
-            filter=filter,
+            state_update=filter,
             padding_size=hidden_size - input_size,
         )

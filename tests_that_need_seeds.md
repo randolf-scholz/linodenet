@@ -1,0 +1,108 @@
+# Unseeded Randomness In Tests
+
+Tests and test helpers in `tests/` that generate random data without fixing a seed in the same test flow.
+
+## Project tests
+
+- `tests/linodenet/propagation/test_linode.py`
+  - `compute_linode_error()` uses `random.choice(...)` and `np.random.default_rng()` without a seed.
+  - Affects `test_linode_error` and `test_make_error_plot`.
+- `tests/linodenet/test_generic.py`
+  - `test_sequence_jit`
+  - `test_mapping_jit`
+- `tests/linodenet/nn/test_resnet.py`
+  - `TestResNet.test_rezero_initializes_to_identity`
+- `tests/linodenet/test_stability.py`
+  - `test_model_stability` (currently skipped, but unseeded)
+- `tests/linodenet/distributions/test_empirical.py`
+  - `test_dirac`
+  - `test_empirical`
+  - `test_empirical_with_batch_shape`
+- `tests/linodenet/parametrizations/test_parametrizations.py`
+  - `test_parametrization`
+- `tests/linodenet/state_update/test_residual_cell.py`
+  - `test_residual_cell_derives_sizes_from_wrapped_cell`
+  - `test_residual_cell_applies_gate_to_cell_output`
+  - `test_residual_cell_rezero_gate_starts_as_identity`
+- `tests/linodenet/state_update/test_filters.py`
+  - `test_filter_consistency`
+- `tests/linodenet/state_update/test_linear_innovation_cell.py`
+  - `test_linear_innovation_cell_identity_gate_matches_plain_update`
+  - `test_linear_innovation_cell_rezero_starts_as_identity`
+  - `test_linear_innovation_cell_rezero_scalar_controls_correction`
+  - `test_linear_innovation_cell_identity_observation_map_uses_x_directly`
+  - `test_linear_innovation_cell_accepts_custom_gain`
+  - `test_linear_innovation_cell_attention_gain_uses_attention_module`
+  - `test_linear_innovation_cell_none_gate_maps_to_identity`
+- `tests/linodenet/state_update/test_linear_kalman_cell.py`
+  - `test_linear_kalman_cell_attention_covariance_factor_uses_attention_module`
+  - `test_linear_kalman_cell_supports_batched_attention_like_covariance_factor`
+  - `test_linear_kalman_cell_ignores_fully_missing_observations`
+- `tests/linodenet/mappings/test_projections.py`
+  - `test_projections_work`
+  - `test_rank_one_matches_low_rank_rank_1`
+  - `test_tridiagonal_matches_banded_1`
+- `tests/linodenet/mappings/test_surjections.py`
+  - `test_cholesky_factor_surjection`
+  - `test_cholesky_surjection`
+- `tests/linodenet/parametrize/test_jit_compatibility.py`
+  - Helper `assert_update_refreshes_parametrized_weight()` is unseeded.
+  - Affects `test_scripted_model_refreshes_parametrized_weight_during_training`, `test_deserialized_model_refreshes_parametrized_weight_during_training`, `test_compile_compatibility`.
+- `tests/linodenet/parametrize/test_parametrize.py`
+  - Helper `assert_update_refreshes_parametrized_weight()` is unseeded.
+  - Affects `test_parametrized_model_training_requires_explicit_refresh`.
+  - `test_cached_refreshes_parametrizations_on_exit` is also directly unseeded.
+- `tests/linodenet/testing/test_matrix_tests.py`
+  - `test_rectangular_matrix_tests_return_false_for_shape_mismatch`
+  - `test_matrix_tests_support_non_default_matrix_dims`
+  - `test_tall_and_wide_matrix_tests`
+- `tests/linodenet/testing/test_testing.py`
+  - `test_test_model`
+- `tests/linodenet/test_models.py`
+  - Helper `_make_tensors()` is unseeded.
+  - Affects `test_all_models`.
+- `tests/linodenet_special/test_ot_activation.py`
+  - `TestSimpleVariants.test_ot_activation_gradcheck`
+- `tests/linodenet_special/test_operators.py`
+  - Module-level `EXAMPLE_ARGS` contains unseeded random inputs.
+  - Affects `test_opcheck` for at least `spectral_norm`, `singular_triplet`, `hard_bend`, and `ndtri_exp`.
+- `tests/benchmarks/test_aggretation.py`
+  - Class-level random tensors are unseeded.
+  - Affects all benchmark methods in `TestAggregation`.
+
+## Third-party test copies
+
+- `tests/third_party/test_torch/test_export.py`
+  - `test_minimal`
+  - `test_export`
+  - `test_exported_trainable`
+  - `test_export_with_property`
+- `tests/third_party/test_torch/test_jit_vs_compile.py`
+  - Module-level `ARGS` is randomized at import.
+  - Affects `test_script`, `test_compile`.
+- `tests/third_party/test_torch/test_vjp_backward_hook.py`
+  - `test` via unseeded helpers.
+- `tests/third_party/test_torch/test_parametrize.py`
+  - `test_torch_parametrize_basic`
+  - `test_torch_parametrize_compile`
+  - `test_torch_parametrize_jit`
+- `tests/third_party/test_torch/test_jit_typing_extensions.py`
+  - `test_function_typing`
+  - `test_module_typing`
+  - `test_function_typing_extensions`
+  - `test_module_typing_extensions`
+- `tests/third_party/test_torch/test_multiple_inheritance_protocol.py`
+  - `test_inherit_protocol_torch`
+- `tests/third_party/test_torch/test_jit_modulelist.py`
+  - `test_jit_iter_modulelist_in_scripted_forward`
+  - `test_jit_mixin`
+- `tests/third_party/test_torch/test_jit_star_unpacking.py`
+  - `test_jit_tuple_concat`
+- `tests/third_party/test_torch/test_jit_protocol_subclass.py`
+  - `test_jit_cell`
+- `tests/third_party/test_torch/test_jit_tuple.py`
+  - `test_jit_list_call_with_tuple`
+  - `test_jit_list_call_with_size`
+- `tests/third_party/test_torch/test_jit_subclassing.py`
+  - `test_with_decoder`
+  - `test_subclass_with_decoder`
