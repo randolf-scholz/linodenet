@@ -5,6 +5,7 @@ __all__ = [
     "Boolean",
     "Complex",
     "Discrete",
+    "Empty",
     "One",
     "Sparse",
     "Vector",
@@ -87,6 +88,14 @@ class Boolean(Vector):
 
     def check(self, value: Tensor, /) -> Tensor:
         return super().check(value) & tests.is_boolean_vector(value)
+
+
+@dataclass(frozen=True)
+class Empty(Vector):
+    r"""Domain of vectors with no admissible values."""
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return value.new_full(value.shape[:-1], False, dtype=torch.bool)
 
 
 @dataclass(frozen=True)
