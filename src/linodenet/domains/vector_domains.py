@@ -27,15 +27,16 @@ __all__ = [
     "ZeroMean",
 ]
 
+from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass
 from types import MappingProxyType
-from typing import Final, Self, overload
+from typing import Any, ClassVar, Final, Self, overload
 
 import torch
 from torch import Tensor
 
 from . import vector_tests as tests
-from .base import PosetEnum, VectorDomain
+from .base import Indeterminate, Join, Meet, PosetEnum, VectorDomain
 
 
 @dataclass(frozen=True)
@@ -250,51 +251,83 @@ class UnitL1Sphere(UnitL1Ball):
         return Vector.check(self, value) & tests.is_unit_l1_sphere_vector(value)
 
 
-class VectorDomains(PosetEnum):
+class VectorDomains(VectorDomain, PosetEnum):
     r"""Enumeration of some vector domains."""
 
-    ANY = "any"  # top node
-    NONE = "none"  # bottom node
+    _STRING_LOOKUP: ClassVar[Mapping[str, Self]]
 
-    REAL = "real"
-    DISCRETE = "discrete"
-    COMPLEX = "complex"
-    BOOLEAN = "boolean"
+    ANY = Vector()  # top node
+    NONE = Empty()  # bottom node
+
+    REAL = Real()
+    DISCRETE = Discrete()
+    COMPLEX = Complex()
+    BOOLEAN = Boolean()
 
     # specific vectors
-    ZERO = "zero"  # xᵢ=0 for all i
-    ONE = "one"  # xᵢ=1 for all i
+    ZERO = Zero()  # xᵢ=0 for all i
+    ONE = One()  # xᵢ=1 for all i
 
-    SPARSE = "sparse"  # xᵢ=0 for many i
-    ONE_HOT = "one-hot"  # xᵢ=1, xⱼ=0 for j≠i
+    SPARSE = Sparse()  # xᵢ=0 for many i
+    ONE_HOT = OneHot()  # xᵢ=1, xⱼ=0 for j≠i
 
-    ZERO_MEAN = "zero-mean"
-    STANDARDIZED = "standardized"  # zero-mean, unit variance
+    ZERO_MEAN = ZeroMean()
+    STANDARDIZED = Standardized()  # zero-mean, unit variance
 
-    UNIT_VECTOR = "unit-vector"  # ‖x‖₂ = 1
-    UNIT_SPHERE = "unit-vector"  # alias
-    UNIT_BALL = "unit-ball"  # ‖x‖₂ ≤ 1
+    UNIT_VECTOR = UnitVector()  # ‖x‖₂ = 1
+    UNIT_SPHERE = UnitVector()  # alias
+    UNIT_BALL = UnitBall()  # ‖x‖₂ ≤ 1
 
-    UNIT_L1_BALL = "unit-l1-ball"  # ‖x‖₁ ≤ 1
-    UNIT_L1_SPHERE = "unit-l1-sphere"  # ‖x‖₁ = 1
+    UNIT_L1_BALL = UnitL1Ball()  # ‖x‖₁ ≤ 1
+    UNIT_L1_SPHERE = UnitL1Sphere()  # ‖x‖₁ = 1
 
-    UNIT_CUBE = "unit-cube"  # ‖x‖_∞ ≤ 1
+    UNIT_CUBE = UnitCube()  # ‖x‖_∞ ≤ 1
 
-    STOCHASTIC = "stochastic"  # ∑xᵢ = 1, xᵢ ≥ 0
-    SIMPLEX = "stochastic"  # alias
+    STOCHASTIC = Stochastic()  # ∑xᵢ = 1, xᵢ ≥ 0
+    SIMPLEX = Stochastic()  # alias
 
-    NONZERO = "nonzero"  # x ≠ 0
-    POSITIVE = "positive"  # xᵢ > 0
-    NEGATIVE = "negative"  # xᵢ < 0
-    NONNEGATIVE = "nonnegative"  # xᵢ ≥ 0
-    NONPOSITIVE = "nonpositive"  # xᵢ ≤ 0
+    NONZERO = NonZero()  # x ≠ 0
+    POSITIVE = Positive()  # xᵢ > 0
+    NEGATIVE = Negative()  # xᵢ < 0
+    NONNEGATIVE = NonNegative()  # xᵢ ≥ 0
+    NONPOSITIVE = NonPositive()  # xᵢ ≤ 0
+
+    @property
+    def size(self) -> int | None:
+        return self.value.size
 
     def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
+        return self.value.check(value)
+
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__le__(self, other)
+
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__lt__(self, other)
+
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__ge__(self, other)
+
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
+        return PosetEnum.__gt__(self, other)
+
+    # pyrefly: ignore[bad-override]
+    def __and__(self, other: Self | Meet[Self], /) -> Self | Meet[Self]:  # pyright: ignore[reportIncompatibleMethodOverride, reportInvalidTypeArguments]
+        return Meet({self, other})
+
+    # pyrefly: ignore[bad-override]
+    def __or__(self, other: Self | Join[Self], /) -> Self | Join[Self]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        return Join({self, other})
+
+    @classmethod
+    def _missing_(cls, value: object) -> Self | None:
+        if isinstance(value, str):
+            return cls._STRING_LOOKUP.get(value)
+        return None
 
 
 V = VectorDomains  # temporary alias
-VectorDomains.KNOWN_MEETS = (
+VectorDomains.KNOWN_MEETS = (  # type: ignore[assignment]  # pyrefly: ignore[bad-assignment]
     (V.NONE, V.NEGATIVE & V.NONNEGATIVE),
     (V.NONE, V.NONZERO & V.ZERO),
     (V.NONE, V.POSITIVE & V.NONPOSITIVE),
@@ -322,5 +355,35 @@ VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({
 })  # fmt: skip
 VectorDomains.KNOWN_SUBTYPES = MappingProxyType(
     {V.SPARSE: {V.ZERO, V.ONE_HOT}},
+)
+VectorDomains._STRING_LOOKUP = MappingProxyType(  # noqa: SLF001
+    {
+        "any": V.ANY,
+        "boolean": V.BOOLEAN,
+        "complex": V.COMPLEX,
+        "discrete": V.DISCRETE,
+        "empty": V.NONE,
+        "negative": V.NEGATIVE,
+        "none": V.NONE,
+        "nonnegative": V.NONNEGATIVE,
+        "nonpositive": V.NONPOSITIVE,
+        "nonzero": V.NONZERO,
+        "one": V.ONE,
+        "one-hot": V.ONE_HOT,
+        "positive": V.POSITIVE,
+        "real": V.REAL,
+        "simplex": V.SIMPLEX,
+        "sparse": V.SPARSE,
+        "standardized": V.STANDARDIZED,
+        "stochastic": V.STOCHASTIC,
+        "unit-ball": V.UNIT_BALL,
+        "unit-cube": V.UNIT_CUBE,
+        "unit-l1-ball": V.UNIT_L1_BALL,
+        "unit-l1-sphere": V.UNIT_L1_SPHERE,
+        "unit-sphere": V.UNIT_SPHERE,
+        "unit-vector": V.UNIT_VECTOR,
+        "zero": V.ZERO,
+        "zero-mean": V.ZERO_MEAN,
+    }
 )
 del V  # remove alias

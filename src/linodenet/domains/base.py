@@ -489,10 +489,10 @@ class PosetEnum(Enum):
             return self >= other and self != other
         return NotImplemented
 
-    def __and__(self, other: Self | Meet[Self], /) -> Meet[Self]:  # pyright: ignore[reportInvalidTypeArguments]
+    def __and__(self, other: Self | Meet[Self], /) -> Self | Meet[Self]:
         return Meet({self, other})
 
-    def __or__(self, other: Self | Join[Self], /) -> Join[Self]:
+    def __or__(self, other: Self | Join[Self], /) -> Self | Join[Self]:
         return Join({self, other})
 
     @classmethod

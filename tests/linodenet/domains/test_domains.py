@@ -14,6 +14,7 @@ from linodenet.domains import (
     is_left_invertible,
     is_right_invertible,
 )
+from linodenet.domains.base import Meet
 from linodenet.domains.matrix_domains import (
     BackwardStable,
     Banded,
@@ -206,6 +207,9 @@ class TestVectorDomains:
         assert not V.UNIT_VECTOR <= V.STOCHASTIC
 
         assert str(V.STOCHASTIC) == "stochastic"
+        assert V("zero-mean") is V.ZERO_MEAN
+        assert V("unit-vector") is V.UNIT_VECTOR
+        assert V("simplex") is V.STOCHASTIC
 
         with pytest.raises(TypeError):
             _ = V.REAL <= "real"
@@ -321,6 +325,7 @@ class TestMatrixDomains:
 
     def test_poset_meet_expression(self) -> None:
         meet = M.TALL & M.WIDE & M.SQUARE
+        assert isinstance(meet, Meet)
         assert len(meet) == 3
         assert set(meet) == {
             M.TALL,
@@ -335,6 +340,7 @@ class TestMatrixDomains:
 
     def test_poset_join_expression(self) -> None:
         join = M.TALL | M.WIDE | M.SQUARE
+        assert isinstance(join, Join)
         assert len(join) == 3
         assert set(join) == {
             M.TALL,

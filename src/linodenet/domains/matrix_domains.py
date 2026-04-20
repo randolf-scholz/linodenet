@@ -1007,7 +1007,7 @@ class MatrixDomains(PosetEnum):
 
 
 M = MatrixDomains  # temporary alias
-MatrixDomains.KNOWN_MEETS = (
+MatrixDomains.KNOWN_MEETS = (  # type: ignore[assignment]  # pyrefly: ignore[bad-assignment]
     (M.NONE, M.CONTRACTION & M.SPECTRAL_NORMALIZED),
     (M.NONE, M.INVERTIBLE & M.SINGULAR),
     (M.NONE, M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE),
