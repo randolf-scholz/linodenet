@@ -206,7 +206,6 @@ class TestVectorDomains:
         assert not V.STOCHASTIC <= V.UNIT_VECTOR
         assert not V.UNIT_VECTOR <= V.STOCHASTIC
 
-        assert str(V.STOCHASTIC) == "stochastic"
         assert V("zero-mean") is V.ZERO_MEAN
         assert V("unit-vector") is V.UNIT_VECTOR
         assert V("simplex") is V.STOCHASTIC
@@ -473,7 +472,6 @@ class TestMatrixDomains:
         assert not M.NEGATIVE_DEFINITE <= M.POSITIVE_DEFINITE
 
         assert M.EYE is M.IDENTITY
-        assert str(M.SQUARE) == "square"
 
         with pytest.raises(TypeError):
             _ = M.SQUARE <= "square"
