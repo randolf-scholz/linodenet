@@ -988,9 +988,8 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     # diagonal conditions
     POSITIVE_DIAGONAL_ENTRIES = Fallback(name="positive-diagonal-entries")
     NEGATIVE_DIAGONAL_ENTRIES = Fallback(name="negative-diagonal-entries")
-    ZERO_DIAGONAL_ENTRIES = Fallback(name="zero-diagonal")
-    ZERO_DIAGONAL = Fallback(name="zero-diagonal")
-    TRACELESS = Traceless()
+    ZERO_DIAGONAL = Fallback(name="zero-diagonal")  # Aᵢᵢ = 0 for all i
+    TRACELESS = Traceless()  # ∑ᵢ Aᵢᵢ = 0
 
     HANKEL = Fallback(name="hankel")  # constant along anti-diagonals
 
@@ -1312,7 +1311,6 @@ MatrixDomains._STRING_LOOKUP = MappingProxyType(  # noqa: SLF001
         "wide": M.WIDE,
         "zero": M.ZERO,
         "zero-diagonal": M.ZERO_DIAGONAL,
-        "zero-diagonal-entries": M.ZERO_DIAGONAL_ENTRIES,
     }
 )
 del M  # remove alias
