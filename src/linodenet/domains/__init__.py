@@ -53,8 +53,26 @@ __all__ += matrix_tests.__all__
 __all__ += vector_tests.__all__
 
 VECTOR_TESTS: dict[VectorDomains, VectorTest | VectorTestWithArgs] = {
+    VectorDomains.REAL        : vector_tests.is_real_vector,
+    VectorDomains.DISCRETE    : vector_tests.is_discrete_vector,
+    VectorDomains.COMPLEX     : vector_tests.is_complex_vector,
+    VectorDomains.BOOLEAN     : vector_tests.is_boolean_vector,
+    VectorDomains.ZERO        : vector_tests.is_zero_vector,
+    VectorDomains.ONE         : vector_tests.is_one_vector,
+    VectorDomains.SPARSE      : vector_tests.is_sparse_vector,
+    VectorDomains.ONE_HOT     : vector_tests.is_one_hot_vector,
+    VectorDomains.NONZERO    : vector_tests.is_nonzero_vector,
     VectorDomains.POSITIVE   : vector_tests.is_positive_vector,
+    VectorDomains.NEGATIVE   : vector_tests.is_negative_vector,
+    VectorDomains.NONNEGATIVE: vector_tests.is_nonnegative_vector,
+    VectorDomains.NONPOSITIVE: vector_tests.is_nonpositive_vector,
     VectorDomains.STOCHASTIC : vector_tests.is_stochastic_vector,
+    VectorDomains.ZERO_MEAN  : vector_tests.is_zero_mean_vector,
+    VectorDomains.STANDARDIZED: vector_tests.is_standardized_vector,
+    VectorDomains.UNIT_BALL  : vector_tests.is_unit_ball_vector,
+    VectorDomains.UNIT_CUBE  : vector_tests.is_unit_cube_vector,
+    VectorDomains.UNIT_L1_BALL: vector_tests.is_unit_l1_ball_vector,
+    VectorDomains.UNIT_L1_SPHERE: vector_tests.is_unit_l1_sphere_vector,
     VectorDomains.UNIT_VECTOR: vector_tests.is_unit_vector,
 }  # fmt: skip
 r"""Map supported vector domains to their corresponding vector test."""

@@ -69,6 +69,15 @@ from linodenet.domains.matrix_domains import (
     Wide,
     Zero,
 )
+from linodenet.domains.vector_domains import (
+    Boolean as VectorBoolean,
+    Complex as VectorComplex,
+    Discrete,
+    One as VectorOne,
+    Real,
+    Sparse,
+    Zero as VectorZero,
+)
 
 
 class TestScalarDomains:
@@ -173,6 +182,7 @@ class TestVectorDomains:
 
     def test_partial_order_and_representation(self) -> None:
         assert V.REAL <= V.REAL
+        assert V.DISCRETE <= V.REAL
         assert V.ONE_HOT < V.STOCHASTIC
         assert not V.STOCHASTIC < V.STOCHASTIC
 
@@ -199,6 +209,49 @@ class TestVectorDomains:
 
         with pytest.raises(TypeError):
             _ = V.REAL <= "real"
+
+    def test_membership(self) -> None:
+        real = tensor([0.0, 1.0])
+        discrete = tensor([0, 1], dtype=torch.int64)
+        boolean = tensor([0.0, 1.0])
+        complex_vector = tensor([1.0 + 0.0j, 0.0 + 1.0j])
+
+        assert real in Real()
+        assert discrete in Real()
+        assert complex_vector not in Real()
+
+        assert discrete in Discrete()
+        assert tensor([True, False]) in Discrete()
+        assert real not in Discrete()
+
+        assert real in VectorComplex()
+        assert complex_vector in VectorComplex()
+
+        assert boolean in VectorBoolean()
+        assert tensor([0, 2], dtype=torch.int64) not in VectorBoolean()
+
+        assert tensor([0.0, 0.0]) in VectorZero()
+        assert tensor([0, 0], dtype=torch.int64) in VectorZero()
+        assert tensor([1.0, 0.0]) not in VectorZero()
+
+        assert tensor([1.0, 1.0]) in VectorOne()
+        assert tensor([True, True]) in VectorOne()
+        assert tensor([1, 0], dtype=torch.int64) not in VectorOne()
+
+    def test_sparse_membership(self) -> None:
+        assert tensor([1.0, 0.0, 2.0]) in Sparse()
+        assert tensor([1.0, 2.0, 3.0]) not in Sparse()
+
+        assert tensor([0.0, 1.0, 0.0, 2.0]) in Sparse(sparsity=0.5)
+        assert tensor([0.0, 1.0, 2.0, 3.0]) not in Sparse(sparsity=0.5)
+        assert tensor([0.0, 0.0, 0.0, 1.0]) in Sparse(sparsity=0.75)
+
+    def test_sparse_validation(self) -> None:
+        with pytest.raises(ValueError, match=r"Expected sparsity"):
+            Sparse(sparsity=-0.1)
+
+        with pytest.raises(ValueError, match=r"Expected sparsity"):
+            Sparse(sparsity=1.1)
 
 
 class TestTensorDomains:
