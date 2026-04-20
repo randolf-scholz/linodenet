@@ -936,6 +936,9 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     ANY = Rectangular()  # top node
     NONE = Empty()  # bottom node
 
+    REAL = Fallback(name="real")
+    COMPLEX = Fallback(name="complex")
+    DISCRETE = Fallback(name="discrete")
     BOOLEAN = Boolean()  # a matrix of only zeros and ones
     ZERO = Zero()  # a matrix of only zeros
     ONES = Ones()  # a matrix of only ones
@@ -966,11 +969,12 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     LOWER_INVERTIBLE = Fallback(name="lower-invertible")
     UPPER_INVERTIBLE = Fallback(name="upper-invertible")
     CHOLESKY_FACTOR = Fallback(name="cholesky-factor")
-    UNIT_DETERMINANT = Fallback(name="unit-determinant")  # SLₙ(R) (det=1)
     GENERAL_LINEAR = Fallback(name="invertible")  # alias
     SPECIAL_LINEAR = Fallback(name="unit-determinant")  # alias
+    UNIT_DETERMINANT = Fallback(name="unit-determinant")  # SLₙ(R) (det=1)
     POSITIVE_DETERMINANT = Fallback(name="positive-determinant")  # GLₙ⁺(R) (det>0)
     NEGATIVE_DETERMINANT = Fallback(name="negative-determinant")  # GLₙ⁻(R) (det<0)
+    UNIMODULAR = Fallback(name="modular")  # discrete and det A = ±1
 
     # symmetry / entry based
     SYMMETRIC = Symmetric()  # 𝕊ₙ(R)
@@ -986,9 +990,14 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     POSITIVE_SCALAR_MATRIX = PositiveScalarMatrix()
 
     # diagonal conditions
-    POSITIVE_DIAGONAL_ENTRIES = Fallback(name="positive-diagonal-entries")
-    NEGATIVE_DIAGONAL_ENTRIES = Fallback(name="negative-diagonal-entries")
+    POSITIVE_DIAGONAL_ENTRIES = Fallback(
+        name="positive-diagonal-entries"
+    )  # Aᵢᵢ > 0 for all i
+    NEGATIVE_DIAGONAL_ENTRIES = Fallback(
+        name="negative-diagonal-entries"
+    )  # Aᵢᵢ < 0 for all i
     ZERO_DIAGONAL = Fallback(name="zero-diagonal")  # Aᵢᵢ = 0 for all i
+    UNIDIAGONAL = Fallback(name="unidagonal")  # Aᵢᵢ = 1 for all i
     TRACELESS = Traceless()  # ∑ᵢ Aᵢᵢ = 0
 
     HANKEL = Fallback(name="hankel")  # constant along anti-diagonals
@@ -1231,10 +1240,12 @@ MatrixDomains._STRING_LOOKUP = MappingProxyType({  # noqa: SLF001
     "column-centered"            : M.COLUMN_CENTERED,
     "column-orthogonal"          : M.COLUMN_ORTHOGONAL,
     "column-stochastic"          : M.COLUMN_STOCHASTIC,
+    "complex"                    : M.COMPLEX,
     "contraction"                : M.CONTRACTION,
     "diagonal"                   : M.DIAGONAL,
     "diagonalizable"             : M.DIAGONALIZABLE,
     "diagonally-dominant"        : M.DIAGONALLY_DOMINANT,
+    "discrete"                   : M.DISCRETE,
     "doubly-centered"            : M.DOUBLY_CENTERED,
     "doubly-stochastic"          : M.DOUBLY_STOCHASTIC,
     "efficiently-invertible"     : M.EFFICIENTLY_INVERTIBLE,
@@ -1284,6 +1295,7 @@ MatrixDomains._STRING_LOOKUP = MappingProxyType({  # noqa: SLF001
     "positive-semidefinite"      : M.POSITIVE_SEMIDEFINITE,
     "projection"                 : M.PROJECTION,
     "rank-one"                   : M.RANK_ONE,
+    "real"                       : M.REAL,
     "rectangular"                : M.RECTANGULAR,
     "right-invertible"           : M.RIGHT_INVERTIBLE,
     "row-centered"               : M.ROW_CENTERED,
@@ -1304,6 +1316,8 @@ MatrixDomains._STRING_LOOKUP = MappingProxyType({  # noqa: SLF001
     "traceless"                  : M.TRACELESS,
     "triangular"                 : M.TRIANGULAR,
     "tridiagonal"                : M.TRIDIAGONAL,
+    "unidiagonal"                : M.UNIDIAGONAL,
+    "unimodular"                 : M.UNIMODULAR,
     "unit-determinant"           : M.UNIT_DETERMINANT,
     "upper-invertible"           : M.UPPER_INVERTIBLE,
     "upper-triangular"           : M.UPPER_TRIANGULAR,

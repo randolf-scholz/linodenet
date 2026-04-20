@@ -158,6 +158,13 @@ class TestScalarDomains:
 
 
 class TestVectorDomains:
+    def test_string_lookup_covers_all_members(self) -> None:
+        reverse_lookup: dict[V, set[str]] = {}
+        for name, domain in V._STRING_LOOKUP.items():  # noqa: SLF001
+            reverse_lookup.setdefault(domain, set()).add(name)
+
+        assert set(V.__members__.values()) <= reverse_lookup.keys()
+
     def test_none_factorizations(self) -> None:
         assert V.NONE.factorizations == frozenset(
             {
@@ -288,6 +295,13 @@ class TestTensorDomains:
 
 
 class TestMatrixDomains:
+    def test_string_lookup_covers_all_members(self) -> None:
+        reverse_lookup: dict[M, set[str]] = {}
+        for name, domain in M._STRING_LOOKUP.items():  # noqa: SLF001
+            reverse_lookup.setdefault(domain, set()).add(name)
+
+        assert set(M.__members__.values()) <= reverse_lookup.keys()
+
     def test_domain_mapping_exact_and_lub_lookup(self) -> None:
         mapping = DomainMapping(
             {
