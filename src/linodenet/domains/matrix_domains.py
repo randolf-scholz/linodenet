@@ -58,6 +58,7 @@ __all__ = [
     "DiagonallyDominant",
     "ForwardStable",
     "BackwardStable",
+    "Sparse",
     "Zero",
     "Ones",
     "OneHot",
@@ -880,6 +881,38 @@ class OneHot(Boolean):
 
 
 @dataclass(frozen=True)
+class Sparse(Rectangular):
+    r"""Domain of matrices with sufficiently many exact zero entries."""
+
+    _: KW_ONLY
+    sparsity: Final[float | None] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.sparsity is not None and not 0.0 <= self.sparsity <= 1.0:
+            raise ValueError("Expected sparsity in [0, 1].")
+
+    def check(self, value: Tensor, /) -> Tensor:
+        return Rectangular.check(self, value) & tests.is_sparse(value, self.sparsity)
+
+    @overload
+    def __call__(self, /, *, sparsity: float | None = None) -> Self: ...
+    @overload
+    def __call__(
+        self, rows: int, cols: int, /, *, sparsity: float | None = None
+    ) -> Self: ...
+    def __call__(
+        self,
+        rows: int | None = None,
+        cols: int | None = None,
+        /,
+        *,
+        sparsity: float | None = None,
+    ) -> Self:
+        return self.__class__(rows, cols, sparsity=sparsity)
+
+
+@dataclass(frozen=True)
 class Permutation(DoublyStochastic):
     r"""Domain of permutation matrices."""
 
@@ -1023,7 +1056,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
 
     # tag-like
     MASKED = Masked()  # X⊙M = X for some mask M
-    SPARSE = Fallback(name="sparse")  # many 0 entries
+    SPARSE = Sparse()  # many 0 entries
     EFFICIENTLY_INVERTIBLE = Fallback(name="efficiently-invertible")
     FORWARD_STABLE = ForwardStable()
     BACKWARD_STABLE = BackwardStable()

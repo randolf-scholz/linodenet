@@ -131,5 +131,6 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.UPPER_TRIANGULAR        : matrix_tests.is_upper_triangular,
     MatrixDomains.LOWER_TRIANGULAR        : matrix_tests.is_lower_triangular,
     MatrixDomains.BANDED                  : matrix_tests.is_banded,
+    MatrixDomains.SPARSE                  : matrix_tests.is_sparse,
 }  # fmt: skip
 r"""Map supported matrix domains to their corresponding matrix test."""

@@ -48,6 +48,7 @@ __all__ = [
     "is_row_centered",
     "is_row_stochastic",
     "is_special_orthogonal",
+    "is_sparse",
     "is_rank_one",
     "is_skew_symmetric",
     "is_square",
@@ -146,6 +147,23 @@ def is_low_rank(
     x = x.movedim(dim, (-2, -1))
     ranks = torch.linalg.matrix_rank(x, rtol=rtol, atol=atol)
     return ranks <= rank
+
+
+@signature("(..., m, n) -> bool[(...)]")
+def is_sparse(
+    x: Tensor,
+    /,
+    sparsity: float | None = None,
+    *,
+    dim: tuple[int, int] = (-2, -1),
+    rtol: float = 0.0,  # noqa: ARG001
+    atol: float = 0.0,  # noqa: ARG001
+) -> Tensor:
+    r"""Check whether the given matrix contains sufficiently many exact zeros."""
+    zero_fraction = (x == 0).to(dtype=torch.float32).mean(dim=dim)
+    if sparsity is None:
+        return zero_fraction > 0.0
+    return zero_fraction >= sparsity
 
 
 @signature("(..., m, n) -> bool[(...)]")
