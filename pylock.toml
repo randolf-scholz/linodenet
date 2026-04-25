@@ -18,10 +18,10 @@ wheels = [
 
 [[packages]]
 name = "cuda-pathfinder"
-version = "1.5.2"
+version = "1.5.3"
 marker = "sys_platform == 'linux'"
 index = "https://pypi.org/simple"
-wheels = [{ url = "https://files.pythonhosted.org/packages/f2/f9/1b9b60a30fc463c14cdea7a77228131a0ccc89572e8df9cb86c9648271ab/cuda_pathfinder-1.5.2-py3-none-any.whl", upload-time = 2026-04-06T23:01:05Z, size = 49988, hashes = { sha256 = "0c5f160a7756c5b072723cbbd6d861e38917ef956c68150b02f0b6e9271c71fa" } }]
+wheels = [{ url = "https://files.pythonhosted.org/packages/d3/d6/ac63065d33dd700fee7ebd7d287332401b54e31b9346e142f871e1f0b116/cuda_pathfinder-1.5.3-py3-none-any.whl", upload-time = 2026-04-14T20:09:27Z, size = 49991, hashes = { sha256 = "dff021123aedbb4117cc7ec81717bbfe198fb4e8b5f1ee57e0e084fec5c8577d" } }]
 
 [[packages]]
 name = "cuda-toolkit"
@@ -32,10 +32,10 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/57/b2/453099f5f3b698d
 
 [[packages]]
 name = "filelock"
-version = "3.25.2"
+version = "3.29.0"
 index = "https://pypi.org/simple"
-sdist = { url = "https://files.pythonhosted.org/packages/94/b8/00651a0f559862f3bb7d6f7477b192afe3f583cc5e26403b44e59a55ab34/filelock-3.25.2.tar.gz", upload-time = 2026-03-11T20:45:38Z, size = 40480, hashes = { sha256 = "b64ece2b38f4ca29dd3e810287aa8c48182bbecd1ae6e9ae126c9b35f1382694" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/a4/a5/842ae8f0c08b61d6484b52f99a03510a3a72d23141942d216ebe81fefbce/filelock-3.25.2-py3-none-any.whl", upload-time = 2026-03-11T20:45:37Z, size = 26759, hashes = { sha256 = "ca8afb0da15f229774c9ad1b455ed96e85a81373065fb10446672f64444ddf70" } }]
+sdist = { url = "https://files.pythonhosted.org/packages/b5/fe/997687a931ab51049acce6fa1f23e8f01216374ea81374ddee763c493db5/filelock-3.29.0.tar.gz", upload-time = 2026-04-19T15:39:10Z, size = 57571, hashes = { sha256 = "69974355e960702e789734cb4871f884ea6fe50bd8404051a3530bc07809cf90" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/81/47/dd9a212ef6e343a6857485ffe25bba537304f1913bdbed446a23f7f592e1/filelock-3.29.0-py3-none-any.whl", upload-time = 2026-04-19T15:39:08Z, size = 39812, hashes = { sha256 = "96f5f6344709aa1572bbf631c640e4ebeeb519e08da902c39a001882f30ac258" } }]
 
 [[packages]]
 name = "fsspec"

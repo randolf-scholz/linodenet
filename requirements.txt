@@ -3,11 +3,11 @@
 -e .
 cuda-bindings==13.2.0 ; sys_platform == 'linux'
     # via torch
-cuda-pathfinder==1.5.2 ; sys_platform == 'linux'
+cuda-pathfinder==1.5.3 ; sys_platform == 'linux'
     # via cuda-bindings
 cuda-toolkit==13.0.2 ; sys_platform == 'linux'
     # via torch
-filelock==3.25.2
+filelock==3.29.0
     # via torch
 fsspec==2026.3.0
     # via torch
