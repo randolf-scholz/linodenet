@@ -931,7 +931,7 @@ class Identity(Diagonal, Permutation):
 class MatrixDomains(MatrixDomain, PosetEnum):
     r"""Enumeration of some matrix domains."""
 
-    _STRING_LOOKUP: ClassVar[Mapping[str, Self]]
+    ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Rectangular()  # top node
     NONE = Empty()  # bottom node
@@ -1104,7 +1104,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     @classmethod
     def _missing_(cls, value: object) -> Self | None:
         if isinstance(value, str):
-            return cls._STRING_LOOKUP.get(value)
+            return cls.ALIASES.get(value)
         return None
 
 
@@ -1226,7 +1226,7 @@ MatrixDomains.KNOWN_SUBTYPES = MappingProxyType({
         M.TRIANGULAR, M.DIAGONAL, M.TRIDIAGONAL,
     },
 })  # fmt: skip
-MatrixDomains._STRING_LOOKUP = MappingProxyType({  # noqa: SLF001
+MatrixDomains.ALIASES = MappingProxyType({
     "any"                        : M.ANY,
     "backward-stable"            : M.BACKWARD_STABLE,
     "banded"                     : M.BANDED,

@@ -254,7 +254,7 @@ class UnitL1Sphere(UnitL1Ball):
 class VectorDomains(VectorDomain, PosetEnum):
     r"""Enumeration of some vector domains."""
 
-    _STRING_LOOKUP: ClassVar[Mapping[str, Self]]
+    ALIASES: ClassVar[Mapping[str, Self]]  # pyright: ignore[reportInvalidTypeForm]
 
     ANY = Vector()  # top node
     NONE = Empty()  # bottom node
@@ -322,7 +322,7 @@ class VectorDomains(VectorDomain, PosetEnum):
     @classmethod
     def _missing_(cls, value: object) -> Self | None:
         if isinstance(value, str):
-            return cls._STRING_LOOKUP.get(value)
+            return cls.ALIASES.get(value)
         return None
 
 
@@ -356,7 +356,7 @@ VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({
 VectorDomains.KNOWN_SUBTYPES = MappingProxyType(
     {V.SPARSE: {V.ZERO, V.ONE_HOT}},
 )
-VectorDomains._STRING_LOOKUP = MappingProxyType({  # noqa: SLF001
+VectorDomains.ALIASES = MappingProxyType({
     "any"            : V.ANY,
     "boolean"        : V.BOOLEAN,
     "complex"        : V.COMPLEX,

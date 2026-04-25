@@ -4,10 +4,11 @@ __all__ = ["Interval", "RealDomain", "ScalarDomains"]
 
 
 import logging
-from collections.abc import Collection, Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from math import isnan, nan
+from types import MappingProxyType
 from typing import ClassVar, Final, Self, overload
 
 from torch import Tensor
@@ -703,6 +704,8 @@ class RealDomain(ScalarDomain, Collection[Interval]):  # type: ignore[misc]
 class ScalarDomains(ScalarDomain, Enum):
     r"""Enumeration of some scalar domains."""
 
+    ALIASES: ClassVar[Mapping[str, Self]]
+
     ZERO = Interval("[0, 0]")
     ONE = Interval("[1, 1]")
     POS_INF = Interval("[+inf, +inf]")
@@ -727,6 +730,18 @@ class ScalarDomains(ScalarDomain, Enum):
     def Interval(cls, arg) -> Interval:  # noqa: N802
         return Interval(arg)
 
+    @classmethod
+    def _missing_(cls, value: object) -> Self | None:
+        if isinstance(value, str):
+            if (matched := cls.ALIASES.get(value)) is not None:
+                return matched
+            if (parsed := Interval.parse(value)) is not None:
+                return cls(parsed)
+            if (parsed := RealDomain.parse(value)) is not None:
+                return cls(parsed)
+            return None
+        return None
+
     @property
     def domain(self) -> ScalarDomain:
         return self.value
@@ -747,3 +762,27 @@ class ScalarDomains(ScalarDomain, Enum):
 
     def __str__(self) -> str:
         return str(self.value)
+
+
+S = ScalarDomains  # temporary alias
+ScalarDomains.ALIASES = MappingProxyType({
+    "zero"                    : S.ZERO,
+    "one"                     : S.ONE,
+    "pos-inf"                 : S.POS_INF,
+    "positive-infinity"       : S.POS_INF,
+    "neg-inf"                 : S.NEG_INF,
+    "negative-infinity"       : S.NEG_INF,
+    "extended-line"           : S.EXTENDED_LINE,
+    "real-line"               : S.REAL_LINE,
+    "positive-reals"          : S.POSITIVE_REALS,
+    "negative-reals"          : S.NEGATIVE_REALS,
+    "nonnegative-reals"       : S.NONNEGATIVE_REALS,
+    "nonpositive-reals"       : S.NONPOSITIVE_REALS,
+    "nonzero"                 : S.NONZERO,
+    "unit-interval"           : S.UNIT_INTERVAL,
+    "open-unit-interval"      : S.OPEN_UNIT_INTERVAL,
+    "half-open-unit-interval" : S.HALF_OPEN_UNIT_INTERVAL,
+    "unit-ball"               : S.UNIT_BALL,
+    "open-unit-ball"          : S.OPEN_UNIT_BALL,
+})  # fmt: skip
+del S  # remove alias

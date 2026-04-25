@@ -82,6 +82,9 @@ from linodenet.domains.vector_domains import (
 
 
 class TestScalarDomains:
+    def test_string_lookup_covers_all_members(self) -> None:
+        assert set(S.__members__.values()) <= set(S.ALIASES.values())
+
     def test_partial_order_and_representation(self) -> None:
         assert S.REAL_LINE <= S.REAL_LINE
         assert S.REAL_LINE < S.EXTENDED_LINE
@@ -159,11 +162,7 @@ class TestScalarDomains:
 
 class TestVectorDomains:
     def test_string_lookup_covers_all_members(self) -> None:
-        reverse_lookup: dict[V, set[str]] = {}
-        for name, domain in V._STRING_LOOKUP.items():  # noqa: SLF001
-            reverse_lookup.setdefault(domain, set()).add(name)
-
-        assert set(V.__members__.values()) <= reverse_lookup.keys()
+        assert set(V.__members__.values()) <= set(V.ALIASES.values())
 
     def test_none_factorizations(self) -> None:
         assert V.NONE.factorizations == frozenset(
@@ -296,11 +295,7 @@ class TestTensorDomains:
 
 class TestMatrixDomains:
     def test_string_lookup_covers_all_members(self) -> None:
-        reverse_lookup: dict[M, set[str]] = {}
-        for name, domain in M._STRING_LOOKUP.items():  # noqa: SLF001
-            reverse_lookup.setdefault(domain, set()).add(name)
-
-        assert set(M.__members__.values()) <= reverse_lookup.keys()
+        assert set(M.__members__.values()) <= set(M.ALIASES.values())
 
     def test_domain_mapping_exact_and_lub_lookup(self) -> None:
         mapping = DomainMapping(
