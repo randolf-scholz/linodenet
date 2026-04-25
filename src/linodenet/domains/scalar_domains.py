@@ -2,7 +2,6 @@ r"""Scalar domain primitives, including intervals and scalar domain labels."""
 
 __all__ = ["Interval", "RealDomain", "ScalarDomains"]
 
-
 import logging
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
@@ -188,9 +187,9 @@ class Interval(ScalarDomain):
             upper_inclusive=upper_inclusive,
         )
 
-    def is_disjoint(self, other: Interval | str, /) -> bool:
+    def is_disjoint(self, arg: Interval | str, /) -> bool:
         r"""Return whether two intervals have empty intersection."""
-        other = Interval(other)
+        other = Interval(arg)
         if self.is_empty() or other.is_empty():
             return True
         if self.upper < other.lower or other.upper < self.lower:
@@ -203,9 +202,9 @@ class Interval(ScalarDomain):
             return not (other.upper_inclusive and self.lower_inclusive)
         return False
 
-    def touches(self, other: Interval | str, /) -> bool:
+    def touches(self, arg: Interval | str, /) -> bool:
         r"""Return whether two intervals meet at an included shared endpoint."""
-        other = Interval(other)
+        other = Interval(arg)
         if self.is_empty() or other.is_empty():
             return False
         return (
