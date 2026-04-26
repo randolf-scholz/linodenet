@@ -40,8 +40,6 @@ from signatures import signature
 class RiemannManifold(Protocol):
     r"""Protocol for Riemannian manifolds with explicit tangent and exp/log maps."""
 
-    MANIFOLD: ClassVar[MatrixDomains | VectorDomains]
-
     @abstractmethod
     @signature("(...) -> (...)")
     def project_manifold(self, x: Tensor, /) -> Tensor:
@@ -74,17 +72,17 @@ class RiemannManifold(Protocol):
 
 
 @runtime_checkable
-class MatrixManifold(RiemannManifold, Protocol):
-    r"""Protocol for matrix manifolds."""
-
-    MANIFOLD: ClassVar[MatrixDomains]
-
-
-@runtime_checkable
 class VectorManifold(RiemannManifold, Protocol):
     r"""Protocol for vector manifolds."""
 
     MANIFOLD: ClassVar[VectorDomains]
+
+
+@runtime_checkable
+class MatrixManifold(RiemannManifold, Protocol):
+    r"""Protocol for matrix manifolds."""
+
+    MANIFOLD: ClassVar[MatrixDomains]
 
 
 @runtime_checkable
