@@ -64,7 +64,7 @@ __all__ = [
     "OneHot",
     "Identity",
     "Permutation",
-    "Fallback",
+    "Placeholder",
 ]
 
 from collections.abc import Mapping
@@ -113,7 +113,7 @@ class Empty(Rectangular):
 
 
 @dataclass(frozen=True)
-class Fallback(Rectangular):
+class Placeholder(Rectangular):
     r"""Named placeholder for an otherwise unspecified matrix domain."""
 
     _: KW_ONLY
@@ -936,9 +936,9 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     ANY = Rectangular()  # top node
     NONE = Empty()  # bottom node
 
-    REAL = Fallback(name="real")
-    COMPLEX = Fallback(name="complex")
-    DISCRETE = Fallback(name="discrete")
+    REAL = Placeholder(name="real")
+    COMPLEX = Placeholder(name="complex")
+    DISCRETE = Placeholder(name="discrete")
     BOOLEAN = Boolean()  # a matrix of only zeros and ones
     ZERO = Zero()  # a matrix of only zeros
     ONES = Ones()  # a matrix of only ones
@@ -962,19 +962,19 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     RANK_ONE = RankOne()  # uvᵀ
 
     # determinant-based
-    SINGULAR = Fallback(name="singular")  # det=0
+    SINGULAR = Placeholder(name="singular")  # det=0
     LEFT_INVERTIBLE = LeftInvertible()  # full column rank, admits L with LA = 𝕀
     RIGHT_INVERTIBLE = RightInvertible()  # full row rank, admits R with AR = 𝕀
-    INVERTIBLE = Fallback(name="invertible")  # GLₙ(R) (det≠0)
-    LOWER_INVERTIBLE = Fallback(name="lower-invertible")
-    UPPER_INVERTIBLE = Fallback(name="upper-invertible")
-    CHOLESKY_FACTOR = Fallback(name="cholesky-factor")
-    GENERAL_LINEAR = Fallback(name="invertible")  # alias
-    SPECIAL_LINEAR = Fallback(name="unit-determinant")  # alias
-    UNIT_DETERMINANT = Fallback(name="unit-determinant")  # SLₙ(R) (det=1)
-    POSITIVE_DETERMINANT = Fallback(name="positive-determinant")  # GLₙ⁺(R) (det>0)
-    NEGATIVE_DETERMINANT = Fallback(name="negative-determinant")  # GLₙ⁻(R) (det<0)
-    UNIMODULAR = Fallback(name="modular")  # discrete and det A = ±1
+    INVERTIBLE = Placeholder(name="invertible")  # GLₙ(R) (det≠0)
+    LOWER_INVERTIBLE = Placeholder(name="lower-invertible")
+    UPPER_INVERTIBLE = Placeholder(name="upper-invertible")
+    CHOLESKY_FACTOR = Placeholder(name="cholesky-factor")
+    GENERAL_LINEAR = Placeholder(name="invertible")  # alias
+    SPECIAL_LINEAR = Placeholder(name="unit-determinant")  # alias
+    UNIT_DETERMINANT = Placeholder(name="unit-determinant")  # SLₙ(R) (det=1)
+    POSITIVE_DETERMINANT = Placeholder(name="positive-determinant")  # GLₙ⁺(R) (det>0)
+    NEGATIVE_DETERMINANT = Placeholder(name="negative-determinant")  # GLₙ⁻(R) (det<0)
+    UNIMODULAR = Placeholder(name="modular")  # discrete and det A = ±1
 
     # symmetry / entry based
     SYMMETRIC = Symmetric()  # 𝕊ₙ(R)
@@ -990,17 +990,17 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     POSITIVE_SCALAR_MATRIX = PositiveScalarMatrix()
 
     # diagonal conditions
-    POSITIVE_DIAGONAL_ENTRIES = Fallback(
+    POSITIVE_DIAGONAL_ENTRIES = Placeholder(
         name="positive-diagonal-entries"
     )  # Aᵢᵢ > 0 for all i
-    NEGATIVE_DIAGONAL_ENTRIES = Fallback(
+    NEGATIVE_DIAGONAL_ENTRIES = Placeholder(
         name="negative-diagonal-entries"
     )  # Aᵢᵢ < 0 for all i
-    ZERO_DIAGONAL = Fallback(name="zero-diagonal")  # Aᵢᵢ = 0 for all i
-    UNIDIAGONAL = Fallback(name="unidagonal")  # Aᵢᵢ = 1 for all i
+    ZERO_DIAGONAL = Placeholder(name="zero-diagonal")  # Aᵢᵢ = 0 for all i
+    UNIDIAGONAL = Placeholder(name="unidagonal")  # Aᵢᵢ = 1 for all i
     TRACELESS = Traceless()  # ∑ᵢ Aᵢᵢ = 0
 
-    HANKEL = Fallback(name="hankel")  # constant along anti-diagonals
+    HANKEL = Placeholder(name="hankel")  # constant along anti-diagonals
 
     # eigenvalues
     POSITIVE_DEFINITE = PositiveDefinite()  # 𝕊ₙ⁺(ℝ)
@@ -1015,7 +1015,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
 
     NORMAL = Normal()  # AᵀA = AAᵀ
     ORTHOGONAL = Orthogonal()  # Oₙ(R)
-    CAYLEY_ORTHOGONAL = Fallback(
+    CAYLEY_ORTHOGONAL = Placeholder(
         name="cayley-orthogonal"
     )  # {Q ∈ SOₙ(n) ∣ -1 ∉ spec(Q)}
     SPECIAL_ORTHOGONAL = SpecialOrthogonal()  # SOₙ(R)
@@ -1031,8 +1031,8 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     ROW_CENTERED = RowCentered()  # A𝟏 = 𝟎
     COLUMN_CENTERED = ColumnCentered()  # Aᵀ𝟏 = 𝟎
     DOUBLY_CENTERED = DoublyCentered()  # A𝟏 = 𝟎 and Aᵀ𝟏 = 𝟎
-    CENTERING = Fallback(name="centering")  # 𝕀ₙ - 1/n𝟏ₙ𝟏ₙᵀ special centering matrix
-    INTENSITY = Fallback(
+    CENTERING = Placeholder(name="centering")  # 𝕀ₙ - 1/n𝟏ₙ𝟏ₙᵀ special centering matrix
+    INTENSITY = Placeholder(
         name="intensity"
     )  # Aᵢᵢ = -∑_{j≠i} Aᵢⱼ for all i, Aᵢⱼ ≥ 0 for i≠j
     # ⇝ row-centered, nonpositive diagonal, diagonally dominant
@@ -1042,33 +1042,33 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     DOUBLY_STOCHASTIC = DoublyStochastic()
     PERMUTATION = Permutation()
 
-    IDEMPOTENT = Fallback(name="idempotent")  # Pᵏ = P for some k≥2
+    IDEMPOTENT = Placeholder(name="idempotent")  # Pᵏ = P for some k≥2
     PROJECTION = Projection()  # P² = P  (P=QQ⁺ + QZ(I-QQ⁺) for some Q,Z)
     ORTHOGONAL_PROJECTION = OrthogonalProjection()  # P² = P, P symmetric (P=QQ⁺)
-    NILPOTENT = Fallback(name="nilpotent")  # Aᵏ = 0 for some k≥2
+    NILPOTENT = Placeholder(name="nilpotent")  # Aᵏ = 0 for some k≥2
 
     # special matrices
-    STANDARD_NILPOTENT = Fallback(
+    STANDARD_NILPOTENT = Placeholder(
         name="canonical-nilpotent"
     )  # standard nilpotent matrix
-    STANDARD_SYMPLECTIC = Fallback(name="standard-symplectic")  # [0, 𝕀; -𝕀, 0]
-    HOUSEHOLDER = Fallback(name="householder")
-    GIVENS_ROTATION = Fallback(name="givens-rotation")
-    HADAMARD = Fallback(name="hadamard")  # entries ±1, HHᵀ=n𝕀
-    JORDAN_BLOCK = Fallback(name="jordan-block")  # λI + N, N is standard nilpotent
+    STANDARD_SYMPLECTIC = Placeholder(name="standard-symplectic")  # [0, 𝕀; -𝕀, 0]
+    HOUSEHOLDER = Placeholder(name="householder")
+    GIVENS_ROTATION = Placeholder(name="givens-rotation")
+    HADAMARD = Placeholder(name="hadamard")  # entries ±1, HHᵀ=n𝕀
+    JORDAN_BLOCK = Placeholder(name="jordan-block")  # λI + N, N is standard nilpotent
 
     BLOCK_DIAGONAL = BlockDiagonal()
-    JORDAN = Fallback(name="jordan")  # block diagonal with Jordan blocks
+    JORDAN = Placeholder(name="jordan")  # block diagonal with Jordan blocks
 
     # TODO: graph theory (degree, adjacency, incidence, Laplacian)
 
     # tag-like
     MASKED = Masked()  # X⊙M = X for some mask M
     SPARSE = Sparse()  # many 0 entries
-    EFFICIENTLY_INVERTIBLE = Fallback(name="efficiently-invertible")
+    EFFICIENTLY_INVERTIBLE = Placeholder(name="efficiently-invertible")
     FORWARD_STABLE = ForwardStable()
     BACKWARD_STABLE = BackwardStable()
-    DIAGONALIZABLE = Fallback(name="diagonalizable")
+    DIAGONALIZABLE = Placeholder(name="diagonalizable")
 
     @property
     def rows(self) -> int | None:
@@ -1094,11 +1094,11 @@ class MatrixDomains(MatrixDomain, PosetEnum):
         return PosetEnum.__gt__(self, other)
 
     # pyrefly: ignore[bad-override]
-    def __and__(self, other: Self | Meet[Self], /) -> Self | Meet[Self]:  # pyright: ignore[reportIncompatibleMethodOverride, reportInvalidTypeArguments]
+    def __and__(self, other, /) -> Meet:  # pyright: ignore[reportIncompatibleMethodOverride]
         return Meet({self, other})
 
     # pyrefly: ignore[bad-override]
-    def __or__(self, other: Self | Join[Self], /) -> Self | Join[Self]:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __or__(self, other, /) -> Join:  # pyright: ignore[reportIncompatibleMethodOverride]
         return Join({self, other})
 
     @classmethod
@@ -1109,7 +1109,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
 
 
 M = MatrixDomains  # temporary alias
-MatrixDomains.KNOWN_MEETS = (  # type: ignore[assignment]  # pyrefly: ignore[bad-assignment]
+MatrixDomains.KNOWN_MEETS = (
     (M.NONE, M.CONTRACTION & M.SPECTRAL_NORMALIZED),
     (M.NONE, M.INVERTIBLE & M.SINGULAR),
     (M.NONE, M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE),
