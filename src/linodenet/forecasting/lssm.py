@@ -113,7 +113,7 @@ class LatentStateSpaceModel(nn.Module):
     def config(self) -> dict:
         return {
             "encoder": self.encoder,
-            "system": self.state_propation,
+            "system": self.state_propagation,
             "decoder": self.decoder,
             "filter": self.state_update,
             "padding_size": self.padding_size,
@@ -123,24 +123,24 @@ class LatentStateSpaceModel(nn.Module):
         self,
         *,
         encoder: nn.Module | Blueprint[nn.Module],
-        state_propagration: nn.Module | Blueprint[nn.Module],
+        state_propagation: nn.Module | Blueprint[nn.Module],
         decoder: nn.Module | Blueprint[nn.Module],
-        state_update: nn.Module | Blueprint[nn.Module],  # noqa: A002
+        state_update: nn.Module | Blueprint[nn.Module],
         padding_size: int = 0,
     ) -> None:
         super().__init__()
         self.encoder = initialize(encoder)
-        self.state_propation = initialize(state_propagration)
+        self.state_propagation = initialize(state_propagation)
         self.decoder = initialize(decoder)
         self.state_update = initialize(state_update)
 
         # ensure filter and system satisfy the protocols
         assert isinstance(self.state_update, StateUpdater)
-        assert isinstance(self.state_propation, ContinuousFlow)
+        assert isinstance(self.state_propagation, ContinuousFlow)
 
         self.input_size = int(self.state_update.input_size)
         self.output_size = int(self.state_update.hidden_size)
-        self.latent_size = int(self.state_propation.input_size)
+        self.latent_size = int(self.state_propagation.input_size)
         self.hidden_size = -1
         self.padding_size = padding_size
         self.validate_sizes()
@@ -150,7 +150,7 @@ class LatentStateSpaceModel(nn.Module):
         # self.latent_size = system.input_size  # type: ignore[assignment]
         # self.hidden_size = filter.hidden_size  # type: ignore[assignment]
         # self.padding_size = padding_size
-        kernel = getattr(self.state_propation, "kernel", None)
+        kernel = getattr(self.state_propagation, "kernel", None)
         if not isinstance(kernel, Tensor):
             raise TypeError("The system must have a kernel attribute")
         self.kernel = kernel
@@ -167,7 +167,7 @@ class LatentStateSpaceModel(nn.Module):
 
     def validate_sizes(self) -> None:
         assert isinstance(self.state_update, StateUpdater)
-        assert isinstance(self.state_propation, ContinuousFlow)
+        assert isinstance(self.state_propagation, ContinuousFlow)
         filter_input = int(self.state_update.input_size)
         filter_hidden = int(self.state_update.hidden_size)
         if filter_input != filter_hidden:
@@ -176,8 +176,10 @@ class LatentStateSpaceModel(nn.Module):
                 f"got {filter_input} and {filter_hidden}."
             )
 
-        system_input = int(getattr(self.state_propation, "input_size", -1))
-        system_output = int(getattr(self.state_propation, "output_size", system_input))
+        system_input = int(getattr(self.state_propagation, "input_size", -1))
+        system_output = int(
+            getattr(self.state_propagation, "output_size", system_input)
+        )
         if system_input != system_output:
             raise ValueError(
                 "System input_size must match output_size; "
@@ -285,7 +287,9 @@ class LatentStateSpaceModel(nn.Module):
 
         for dt, y_obs in zip(DT, Y_OBS, strict=True):
             # Propagate the latent state forward in time.
-            z_pre = self.state_propation(dt, z_post)  # (...,), (..., LAT) -> (..., LAT)
+            z_pre = self.state_propagation(
+                dt, z_post
+            )  # (...,), (..., LAT) -> (..., LAT)
 
             # Decode the latent state at the observation time.
             y_pre = self.decoder(z_pre)  # (..., LAT) -> (..., DIM)
@@ -354,7 +358,7 @@ class LatentStateSpaceModel(nn.Module):
 
         return LatentStateSpaceModel(
             encoder=encoder,
-            state_propagration=system,
+            state_propagation=system,
             decoder=decoder,
             state_update=filter,
             padding_size=hidden_size - input_size,
