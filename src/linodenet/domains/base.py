@@ -26,6 +26,37 @@ import torch
 from torch import Tensor
 
 
+@runtime_checkable
+class Domain(Protocol):
+    r"""Protocol for Domains."""
+
+    @abstractmethod
+    def check(self, value: Tensor, /) -> Tensor:
+        r"""Batched version of contains."""
+        raise NotImplementedError
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return bool(self.check(item).item())
+
+    def __le__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __lt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __gt__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __ge__(self, other: Any, /) -> bool | Indeterminate:
+        return NotImplemented
+
+    def __and__(self, other: Any, /) -> Domain:
+        return Meet({self, other})
+
+    def __or__(self, other: Any, /) -> Domain:
+        return Join({self, other})
+
+
 @dataclass(frozen=True)
 class Indeterminate:
     r"""Placeholder for an order statement whose truth cannot be decided."""
@@ -97,38 +128,6 @@ def _le(a, b, /) -> bool | Indeterminate | NotImplementedType:
     return result
 
 
-@runtime_checkable
-class Domain(Protocol):
-    r"""Protocol for Domains."""
-
-    def __contains__(self, value: Tensor, /) -> bool:
-        r"""Check if the tensor is in the domain (unbatched only)."""
-        return bool(self.check(value).item())
-
-    @abstractmethod
-    def check(self, value: Tensor, /) -> Tensor:
-        r"""Batched version of contains."""
-        raise NotImplementedError
-
-    def __le__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __lt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __gt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __ge__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __and__(self, other: Any, /) -> Domain:
-        return Meet({self, other})
-
-    def __or__(self, other: Any, /) -> Domain:
-        return Join({self, other})
-
-
 @dataclass(frozen=True)
 class Inverse[D: Domain](Domain):
     r"""Structural complement of a domain."""
@@ -137,9 +136,6 @@ class Inverse[D: Domain](Domain):
 
     def check(self, item: Tensor, /) -> Tensor:
         return ~self.domain.check(item)
-
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(self.check(item).item())
 
     def __invert__(self) -> D:
         # (Aᶜ)ᶜ ≡ A
@@ -177,9 +173,6 @@ class Meet[D: Domain](Domain):
 
         object.__setattr__(self, "factors", frozenset(nodes))
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(self.check(item).item())
-
     def check(self, item: Tensor, /) -> Tensor:
         result = None
         for factor in self:
@@ -196,15 +189,16 @@ class Meet[D: Domain](Domain):
         return iter(self.factors)
 
     @overload
-    def __and__(self, other: D | Meet[D], /) -> Meet[D]: ...
+    def __and__(self, other: Join[Domain], /) -> Meet[Domain]: ...
     @overload
-    def __and__(self, other: Join[D], /) -> Join[Domain]: ...
-    def __and__(self, other: D | Meet[D] | Join[D], /) -> Meet[D] | Join[Domain]:
+    def __and__[S: Domain](self: Meet[S], other: S | Meet[S], /) -> Meet[S]: ...
+    def __and__(self, other: Domain, /) -> Meet[Domain]:  # type: ignore[misc]
         match other:
+            # express in CNF (conjunctive normal form)
             case Join():
                 # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∨ … ∨ Bₙ)
-                # ≡ (A₁ ∧ … ∧ Aₙ ∧ B₁) ∨ … ∨ (A₁ ∧ … ∧ Aₙ ∧ Bₙ)
-                return Join({self & y for y in other})
+                # ≡ A₁ ∧ … ∧ Aₙ ∧ (B₁ ∨ … ∨ Bₙ)
+                return Meet({*self, other})
             case Meet():
                 # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∧ … ∧ Bₙ)
                 # ≡ (A₁ ∧ … ∧ Aₙ ∧ B₁ ∧ … ∧ Bₙ)
@@ -213,21 +207,21 @@ class Meet[D: Domain](Domain):
                 # (A₁ ∧ … ∧ Aₙ) ∧ B ≡ (A₁ ∧ … ∧ Aₙ ∧ B)
                 return Meet({*self, other})
 
-    def __or__(self, other: D | Meet[D] | Join[D], /) -> Meet[Domain]:
+    def __or__(self, other: Domain, /) -> Join[Domain]:
         match other:
+            # express in DNF (disjunctive normal form)
             case Meet():
-                # (A₁ ∧ … ∧ Aₙ) ∨ (B₁ ∧ … ∧ Bₙ)
-                # ≡ (A₁ ∨ B) ∧ … ∧ (Aₙ ∨ B)
-                # ≡ (A₁ ∨ B₁) ∧ … ∧ (A₁ ∨ Bₙ) ∧ … ∧ (Aₙ ∨ B₁) ∧ … ∧ (Aₙ ∨ Bₙ)
-                return Meet({x | y for x in self for y in other})
+                # (A₁ ∧ … ∧ Aₙ) ∨ (B₁ ∧ … ∧ Bₘ)
+                # is already in DNF as two conjunctive clauses.
+                return Join({self, other})
             case Join():
-                # (A₁ ∧ … ∧ Aₙ) ∨ (B₁ ∨ … ∨ Bₙ)
-                # ≡ (A₁ ∨ B) ∧ … ∧ (Aₙ ∨ B)
-                # ≡ (A₁ ∨ B₁ ∨ … ∨ Bₙ) ∧ … ∧ (Aₙ ∨ B₁ ∨ … ∨ Bₙ)
-                return Meet({m | other for m in self})
+                # (A₁ ∧ … ∧ Aₙ) ∨ (B₁ ∨ … ∨ Bₘ)
+                # ≡ (A₁ ∧ … ∧ Aₙ) ∨ B₁ ∨ … ∨ Bₘ
+                return Join({self, *other})
             case _:
-                # (A₁ ∧ … ∧ Aₙ) ∨ B ≡ (A₁ ∨ B) ∧ … ∧ (Aₙ ∨ B)
-                return Meet({m | other for m in self})
+                # (A₁ ∧ … ∧ Aₙ) ∨ B
+                # is already in DNF as a conjunctive clause and a singleton term.
+                return Join({self, other})
 
     def __le__(self, other: object, /) -> bool | Indeterminate:
         # (A₁ ∧ … ∧ Aₙ) ≤ B ⇐ Aᵢ ≤ B for some i (sufficient condition)
@@ -278,9 +272,6 @@ class Join[D: Domain](Domain):
 
         object.__setattr__(self, "members", frozenset(nodes))
 
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(self.check(item).item())
-
     def check(self, item: Tensor, /) -> Tensor:
         result = None
         for member in self:
@@ -296,34 +287,37 @@ class Join[D: Domain](Domain):
     def __iter__(self) -> Iterator[D]:
         return iter(self.members)
 
-    def __and__(self, other: D | Join[D] | Meet[D], /) -> Join[Domain]:
+    def __and__(self, other: Domain, /) -> Meet[Domain]:
         match other:
-            case Join():
-                # (A₁ ∨ … ∨ Aₙ) ∧ (B₁ ∨ … ∨ Bₙ)
-                # ≡ (A₁ ∧ B₁) ∨ … ∨ (A₁ ∧ Bₙ) ∨ … ∨ (Aₙ ∧ B₁) ∨ … ∨ (Aₙ ∧ Bₙ)
-                return Join({x & y for x in self for y in other})
+            # express in CNF (conjunctive normal form)
             case Meet():
                 # (A₁ ∨ … ∨ Aₙ) ∧ (B₁ ∧ … ∧ Bₙ)
-                # ≡ (A₁ ∧ B₁ ∧ … ∧ Bₙ) ∨ … ∨ (Aₙ ∧ V₁ ∧ … ∧ Bₙ)
-                return Join({x & other for x in self})
+                # ≡ (A₁ ∨ … ∨ Aₙ) ∧ B₁ ∧ … ∧ Bₙ
+                return Meet({self, *other})
+            case Join():
+                # (A₁ ∨ … ∨ Aₙ) ∧ (B₁ ∨ … ∨ Bₙ)
+                # is already in CNF as two disjunctive clauses.
+                return Meet({self, other})
             case _:
                 # (A₁ ∨ … ∨ Aₙ) ∧ B
-                # ≡ (A₁ ∧ B) ∨ … ∨ (Aₙ ∧ B)
-                return Join({x & other for x in self})
+                # ≡ (A₁ ∨ … ∨ Aₙ) ∧ B
+                return Meet({self, other})
 
     @overload
-    def __or__(self, other: D | Join[D], /) -> Join[D]: ...
+    def __or__(self, other: Meet[Domain], /) -> Join[Domain]: ...
     @overload
-    def __or__(self, other: Meet[D], /) -> Meet[Domain]: ...
-    def __or__(self, other: D | Join[D] | Meet[D], /) -> Join[D] | Meet[Domain]:
+    def __or__[S: Domain](self: Join[S], other: S | Join[S], /) -> Join[S]: ...
+    def __or__(self, other: Domain, /) -> Join[Domain]:  # type: ignore[misc]
         match other:
+            # express in DNF (disjunctive normal form)
             case Join():
-                # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∨ … ∨ Bₙ) ≡ (A₁ ∨ … ∨ Aₙ ∨ B₁ ∨ … ∨ Bₙ)
+                # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∨ … ∨ Bₙ)
+                # ≡ (A₁ ∨ … ∨ Aₙ ∨ B₁ ∨ … ∨ Bₙ)
                 return Join({*self, *other})
             case Meet():
-                # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∧ … ∧ Bₙ)
-                # (A₁ ∨ … ∨ Aₙ ∨ B₁) ∧ … ∧ (A₁ ∨ … ∨ Aₙ ∨ Bₙ)
-                return Meet({self | y for y in other})
+                # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∧ … ∧ Bₘ)
+                # is already in DNF as singleton disjuncts and one conjunctive clause.
+                return Join({*self, other})
             case _:
                 # (A₁ ∨ … ∨ Aₙ) ∨ B ≡ (A₁ ∨ … ∨ Aₙ ∨ B)
                 return Join({*self, other})
@@ -432,12 +426,12 @@ class PosetEnum(Enum):
     KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
 
-    def __contains__(self, value: Tensor, /) -> bool:
-        return bool(self.check(value).item())
-
     @abstractmethod
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
+
+    def __contains__(self, item: Tensor, /) -> bool:
+        return bool(self.check(item).item())
 
     def __le__(self, other: object, /) -> bool | Indeterminate:
         if isinstance(other, type(self)):
@@ -489,10 +483,10 @@ class PosetEnum(Enum):
             return self >= other and self != other
         return NotImplemented
 
-    def __and__(self, other: Self | Meet[Self], /) -> Self | Meet[Self]:
+    def __and__(self, other: PosetEnum, /) -> PosetEnum | Meet[PosetEnum]:
         return Meet({self, other})
 
-    def __or__(self, other: Self | Join[Self], /) -> Self | Join[Self]:
+    def __or__(self, other: PosetEnum, /) -> PosetEnum | Join[PosetEnum]:
         return Join({self, other})
 
     @classmethod
@@ -795,11 +789,11 @@ class ScalarDomain:
     def __ge__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
-    def __or__(self, other: ScalarDomain, /) -> ScalarDomain | Join[ScalarDomain]:
-        return Join({self, other})
-
     def __and__(self, other: ScalarDomain, /) -> ScalarDomain | Meet[ScalarDomain]:
         return Meet({self, other})
+
+    def __or__(self, other: ScalarDomain, /) -> ScalarDomain | Join[ScalarDomain]:
+        return Join({self, other})
 
 
 class VectorDomain:
@@ -817,8 +811,8 @@ class VectorDomain:
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
-    def __contains__(self, value: Tensor, /) -> bool:
-        return bool(self.check(value).item())
+    def __contains__(self, item: Tensor, /) -> bool:
+        return bool(self.check(item).item())
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
@@ -832,11 +826,11 @@ class VectorDomain:
     def __ge__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
-    def __or__(self, other: VectorDomain, /) -> VectorDomain | Join[VectorDomain]:
-        return Join({self, other})
-
     def __and__(self, other: VectorDomain, /) -> VectorDomain | Meet[VectorDomain]:
         return Meet({self, other})
+
+    def __or__(self, other: VectorDomain, /) -> VectorDomain | Join[VectorDomain]:
+        return Join({self, other})
 
 
 class MatrixDomain:
@@ -860,8 +854,8 @@ class MatrixDomain:
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
-    def __contains__(self, value: Tensor, /) -> bool:
-        return bool(self.check(value).item())
+    def __contains__(self, item: Tensor, /) -> bool:
+        return bool(self.check(item).item())
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
@@ -875,11 +869,11 @@ class MatrixDomain:
     def __ge__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
-    def __or__(self, other: MatrixDomain, /) -> MatrixDomain | Join[MatrixDomain]:
-        return Join({self, other})
-
     def __and__(self, other: MatrixDomain, /) -> MatrixDomain | Meet[MatrixDomain]:
         return Meet({self, other})
+
+    def __or__(self, other: MatrixDomain, /) -> MatrixDomain | Join[MatrixDomain]:
+        return Join({self, other})
 
 
 class TensorDomain:
@@ -893,8 +887,8 @@ class TensorDomain:
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
 
-    def __contains__(self, value: Tensor, /) -> bool:
-        return bool(self.check(value).item())
+    def __contains__(self, item: Tensor, /) -> bool:
+        return bool(self.check(item).item())
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
@@ -908,8 +902,8 @@ class TensorDomain:
     def __ge__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
-    def __or__(self, other: TensorDomain, /) -> TensorDomain | Join[TensorDomain]:
-        return Join({self, other})
-
     def __and__(self, other: TensorDomain, /) -> TensorDomain | Meet[TensorDomain]:
         return Meet({self, other})
+
+    def __or__(self, other: TensorDomain, /) -> TensorDomain | Join[TensorDomain]:
+        return Join({self, other})
