@@ -1,8 +1,11 @@
+from typing import Never
+
 import pytest
 import torch
 from torch import tensor
 
 from linodenet.domains import (
+    Domain,
     DomainMapping,
     Interval,
     Join,
@@ -79,6 +82,14 @@ from linodenet.domains.vector_domains import (
     Sparse,
     Zero as VectorZero,
 )
+
+
+def check_meet_join_covariant() -> None:
+    def _upcast_meet(arg: Meet[Never]) -> Meet[Domain]:
+        return arg  # type: ignore[return-value]
+
+    def _upcast_join(arg: Join[Never]) -> Join[Domain]:
+        return arg  # type: ignore[return-value]
 
 
 class TestScalarDomains:
