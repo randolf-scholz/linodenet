@@ -28,10 +28,20 @@ class Constant(Module):
     value: Tensor
     r"""PARAM: Constant tensor returned by the module."""
 
-    def __init__(self, shape: tuple[int, ...], /, *, learnable: bool = True) -> None:
+    def __init__(
+        self, shape_or_tensor: tuple[int, ...] | Tensor, /, *, learnable: bool = True
+    ) -> None:
         super().__init__()
-        self.value = nn.Parameter(torch.randn(shape), requires_grad=learnable)
-        nn.init.kaiming_uniform_(self.value)
+        match shape_or_tensor:
+            case tuple(shape):
+                self.value = nn.Parameter(torch.randn(shape), requires_grad=learnable)
+                nn.init.kaiming_uniform_(self.value)
+            case Tensor() as tensor:
+                self.value = nn.Parameter(tensor, requires_grad=learnable)
+            case _:
+                raise TypeError(
+                    f"Expected shape or tensor, got {type(shape_or_tensor)!r}"
+                )
 
     def forward(self, _: Tensor) -> Tensor:
         return self.value
