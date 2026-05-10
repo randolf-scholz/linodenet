@@ -141,7 +141,7 @@ class FnSequence[M: Fn](Sequence[M], Fn):
     def __getitem__(self, index: SupportsIndex, /) -> M: ...
     @overload
     def __getitem__(self, index: slice, /) -> Self: ...
-    def __getitem__(self, index: SupportsIndex | slice, /) -> M | Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __getitem__(self, index: SupportsIndex | slice, /) -> M | Self:
         if isinstance(index, slice):
             return self.from_iterable(self._data[index])
         return self._data[index]

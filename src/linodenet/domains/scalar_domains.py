@@ -24,10 +24,10 @@ class Interval(ScalarDomain):
     # pyrefly: ignore [bad-assignment]
     EMPTY: ClassVar[Final[Interval]] = ...  # pyright: ignore[reportAssignmentType]
 
-    lower: Final[float]  # type: ignore[misc]
-    upper: Final[float]  # type: ignore[misc]
-    lower_inclusive: Final[bool]  # type: ignore[misc]
-    upper_inclusive: Final[bool]  # type: ignore[misc]
+    lower: Final[float]
+    upper: Final[float]
+    lower_inclusive: Final[bool]
+    upper_inclusive: Final[bool]
 
     @overload
     def __new__(cls, s: str | Interval, /) -> Interval: ...

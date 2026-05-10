@@ -107,7 +107,7 @@ class ClosedLowerPlane(ComplexDomain):
 class OpenDisk(ComplexDomain):
     r"""The complex region with $|z| < r$."""
 
-    radius: Final[float]  # type: ignore[misc]
+    radius: Final[float]
 
     def __post_init__(self) -> None:
         if self.radius < 0:
@@ -121,7 +121,7 @@ class OpenDisk(ComplexDomain):
 class ClosedDisk(ComplexDomain):
     r"""The complex region with $|z| ≤ r$."""
 
-    radius: Final[float]  # type: ignore[misc]
+    radius: Final[float]
 
     def __post_init__(self) -> None:
         if self.radius < 0:
@@ -159,8 +159,8 @@ class UnitCircle(ComplexDomain):
 class OpenVerticalStrip(ComplexDomain):
     r"""The complex region with $Re(z) ∈ (a,b)$."""
 
-    lower: Final[float]  # type: ignore[misc]
-    upper: Final[float]  # type: ignore[misc]
+    lower: Final[float]
+    upper: Final[float]
 
     def __post_init__(self) -> None:
         if self.lower > self.upper:
@@ -174,8 +174,8 @@ class OpenVerticalStrip(ComplexDomain):
 class ClosedVerticalStrip(ComplexDomain):
     r"""The complex region with $Re(z) ∈ [a,b]$."""
 
-    lower: Final[float]  # type: ignore[misc]
-    upper: Final[float]  # type: ignore[misc]
+    lower: Final[float]
+    upper: Final[float]
 
     def __post_init__(self) -> None:
         if self.lower > self.upper:
@@ -189,8 +189,8 @@ class ClosedVerticalStrip(ComplexDomain):
 class OpenHorizontalStrip(ComplexDomain):
     r"""The complex region with $Im(z) ∈ (c, d)$."""
 
-    lower: Final[float]  # type: ignore[misc]
-    upper: Final[float]  # type: ignore[misc]
+    lower: Final[float]
+    upper: Final[float]
 
     def __post_init__(self) -> None:
         if self.lower > self.upper:
@@ -205,8 +205,8 @@ class OpenHorizontalStrip(ComplexDomain):
 class ClosedHorizontalStrip(ComplexDomain):
     r"""The complex region with $Im(z) ∈ [c,d]$."""
 
-    lower: Final[float]  # type: ignore[misc]
-    upper: Final[float]  # type: ignore[misc]
+    lower: Final[float]
+    upper: Final[float]
 
     def __post_init__(self) -> None:
         if self.lower > self.upper:
@@ -221,7 +221,7 @@ class ClosedHorizontalStrip(ComplexDomain):
 class HorizontalLine(ComplexDomain):
     r"""The complex region with $Im(z) = c$."""
 
-    value: Final[float]  # type: ignore[misc]
+    value: Final[float]
 
     def check(self, value: Tensor, /) -> Tensor:
         return (value + 0.0j).imag == self.value
@@ -231,7 +231,7 @@ class HorizontalLine(ComplexDomain):
 class VerticalLine(ComplexDomain):
     r"""The complex region with $Re(z) = c$."""
 
-    value: Final[float]  # type: ignore[misc]
+    value: Final[float]
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.real == self.value

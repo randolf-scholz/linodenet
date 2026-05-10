@@ -18,7 +18,7 @@ def test_size_from_int_sequence() -> None:
         def __getitem__(self, index: int, /) -> int: ...
         @overload
         def __getitem__(self, index: slice, /) -> MyRange: ...
-        def __getitem__(self, index: int | slice, /) -> int | MyRange:  # pyright: ignore[reportIncompatibleMethodOverride]
+        def __getitem__(self, index: int | slice, /) -> int | MyRange:
             if isinstance(index, slice):
                 if index.start not in {None, 0}:
                     raise ValueError
@@ -52,7 +52,7 @@ def test_size_from_index_sequence() -> None:
         def __getitem__(self, index: int, /) -> MyInt: ...
         @overload
         def __getitem__(self, index: slice, /) -> MyRange: ...
-        def __getitem__(self, index: int | slice, /) -> MyInt | MyRange:  # pyright: ignore[reportIncompatibleMethodOverride]
+        def __getitem__(self, index: int | slice, /) -> MyInt | MyRange:
             if isinstance(index, slice):
                 if index.start not in {None, 0}:
                     raise ValueError
