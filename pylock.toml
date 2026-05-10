@@ -18,10 +18,10 @@ wheels = [
 
 [[packages]]
 name = "cuda-pathfinder"
-version = "1.5.3"
+version = "1.5.4"
 marker = "sys_platform == 'linux'"
 index = "https://pypi.org/simple"
-wheels = [{ url = "https://files.pythonhosted.org/packages/d3/d6/ac63065d33dd700fee7ebd7d287332401b54e31b9346e142f871e1f0b116/cuda_pathfinder-1.5.3-py3-none-any.whl", upload-time = 2026-04-14T20:09:27Z, size = 49991, hashes = { sha256 = "dff021123aedbb4117cc7ec81717bbfe198fb4e8b5f1ee57e0e084fec5c8577d" } }]
+wheels = [{ url = "https://files.pythonhosted.org/packages/11/d0/c177e29701cf1d3008d7d2b16b5fc626592ce13bd535f8795c5f57187e0e/cuda_pathfinder-1.5.4-py3-none-any.whl", upload-time = 2026-04-27T22:42:07Z, size = 51657, hashes = { sha256 = "9563d3175ce1828531acf4b94e1c1c7d67208c347ca002493e2654878b26f4b7" } }]
 
 [[packages]]
 name = "cuda-toolkit"
@@ -39,10 +39,10 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/47/dd9a212ef6e343a
 
 [[packages]]
 name = "fsspec"
-version = "2026.3.0"
+version = "2026.4.0"
 index = "https://pypi.org/simple"
-sdist = { url = "https://files.pythonhosted.org/packages/e1/cf/b50ddf667c15276a9ab15a70ef5f257564de271957933ffea49d2cdbcdfb/fsspec-2026.3.0.tar.gz", upload-time = 2026-03-27T19:11:14Z, size = 313547, hashes = { sha256 = "1ee6a0e28677557f8c2f994e3eea77db6392b4de9cd1f5d7a9e87a0ae9d01b41" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/d5/1f/5f4a3cd9e4440e9d9bc78ad0a91a1c8d46b4d429d5239ebe6793c9fe5c41/fsspec-2026.3.0-py3-none-any.whl", upload-time = 2026-03-27T19:11:13Z, size = 202595, hashes = { sha256 = "d2ceafaad1b3457968ed14efa28798162f1638dbb5d2a6868a2db002a5ee39a4" } }]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/8d/1c51c094345df128ca4a990d633fe1a0ff28726c9e6b3c41ba65087bba1d/fsspec-2026.4.0.tar.gz", upload-time = 2026-04-29T20:42:38Z, size = 312760, hashes = { sha256 = "301d8ac70ae90ef3ad05dcf94d6c3754a097f9b5fe4667d2787aa359ec7df7e4" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/d5/0c/043d5e551459da400957a1395e0febbf771446ff34291afcbe3d8be2a279/fsspec-2026.4.0-py3-none-any.whl", upload-time = 2026-04-29T20:42:36Z, size = 203402, hashes = { sha256 = "11ef7bb35dab8a394fde6e608221d5cf3e8499401c249bebaeaad760a1a8dec2" } }]
 
 [[packages]]
 name = "jinja2"

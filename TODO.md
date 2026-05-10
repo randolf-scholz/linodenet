@@ -2,6 +2,13 @@
 
 - [ ] Parallel Scan Algorithm Matrix Exponential
 - [ ] VJP Matrix Exponential
+- [ ] GRU-D
+- [ ] GRU-ODE-Bayes
+- [ ] ODE-RNN
+- [ ] NCDE
+- [ ] NeuralFlow
+- [ ] CRU
+- [ ] Profiti / Grafiti / Moses baseline.
 
 ## LinODEnet
 

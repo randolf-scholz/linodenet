@@ -25,166 +25,6 @@ from signatures import signature
 from .base import StateUpdaterBase
 
 
-class LinearRNNCell(StateUpdaterBase):
-    r"""Linear state update.
-
-    .. math:: F(y，x) =  Ux + Vy + b
-
-    where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
-    """
-
-    # PARAMETERS
-    U: Tensor
-    r"""PARAM: the hidden state matrix."""
-    V: Tensor
-    r"""PARAM: the observable matrix."""
-    bias: Optional[Tensor]
-    r"""PARAM: the bias vector."""
-
-    def __init__(
-        self,
-        /,
-        input_size: int,
-        hidden_size: int,
-        *,
-        bias: bool = True,
-    ) -> None:
-        super().__init__(input_size, hidden_size)
-        m = self.hidden_size
-        n = self.input_size
-        self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
-        self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
-        self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
-
-    @signature("[(..., n), (..., m)] -> (..., m)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Forward pass of the state update.
-
-        .. math:: F(y，x) =  Ux + Vy + b
-        """
-        return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
-
-
-class AttentionGain(nn.Module):
-    r"""Predict a gain matrix with scaled dot-product attention."""
-
-    query: nn.Linear
-    r"""MODULE: Projects the hidden state to row queries."""
-    key: nn.Linear
-    r"""MODULE: Projects the hidden state to column keys."""
-    hidden_size: int
-    r"""CONST: Number of rows in the gain matrix."""
-    input_size: int
-    r"""CONST: Number of columns in the gain matrix."""
-    attention_size: int
-    r"""CONST: Shared query/key feature dimension."""
-    scale: float
-    r"""CONST: Scale factor for attention logits."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "hidden_size": self.hidden_size,
-            "input_size": self.input_size,
-            "attention_size": self.attention_size,
-        }
-
-    def __init__(
-        self,
-        /,
-        hidden_size: int,
-        input_size: int,
-        *,
-        attention_size: int | None = None,
-    ) -> None:
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.input_size = input_size
-        self.attention_size = (
-            min(hidden_size, input_size, 32)
-            if attention_size is None
-            else int(attention_size)
-        )
-        if self.attention_size <= 0:
-            raise ValueError("attention_size must be a positive integer.")
-
-        self.query = nn.Linear(
-            hidden_size,
-            hidden_size * self.attention_size,
-            bias=False,
-        )
-        self.key = nn.Linear(
-            hidden_size,
-            input_size * self.attention_size,
-            bias=False,
-        )
-        self.scale = self.attention_size**-0.5
-
-    def forward(self, x: Tensor) -> Tensor:
-        query = self.query(x).unflatten(-1, (self.hidden_size, self.attention_size))
-        key = self.key(x).unflatten(-1, (self.input_size, self.attention_size))
-        scores = self.scale * (query @ key.mT)
-        return scores.softmax(dim=-1)
-
-
-class AttentionCovarianceFactor(nn.Module):
-    r"""Predict a Cholesky factor with attention-style pairwise interactions."""
-
-    features: nn.Linear
-    r"""MODULE: Projects the hidden state to shared attention features."""
-    diagonal: nn.Linear
-    r"""MODULE: Projects the hidden state to diagonal logits."""
-    hidden_size: int
-    r"""CONST: Number of rows and columns in the Cholesky factor."""
-    attention_size: int
-    r"""CONST: Shared attention feature dimension."""
-    scale: float
-    r"""CONST: Scale factor for the bilinear scores."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "hidden_size": self.hidden_size,
-            "attention_size": self.attention_size,
-        }
-
-    def __init__(
-        self,
-        /,
-        hidden_size: int,
-        *,
-        attention_size: int | None = None,
-    ) -> None:
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.attention_size = (
-            min(hidden_size, 32) if attention_size is None else int(attention_size)
-        )
-        if self.attention_size <= 0:
-            raise ValueError("attention_size must be a positive integer.")
-
-        self.features = nn.Linear(
-            hidden_size,
-            hidden_size * self.attention_size,
-            bias=False,
-        )
-        self.diagonal = nn.Linear(hidden_size, hidden_size)
-        self.scale = self.attention_size**-0.5
-
-        with torch.no_grad():
-            self.diagonal.weight.zero_()
-            self.diagonal.bias.zero_()
-
-    def forward(self, x: Tensor) -> Tensor:
-        features = self.features(x).unflatten(
-            -1, (self.hidden_size, self.attention_size)
-        )
-        scores = self.scale * (features @ features.mT)
-        offdiagonal = scores.tril(-1)
-        diagonal = F.softplus(self.diagonal(x)) + torch.finfo(x.dtype).eps
-        return offdiagonal + torch.diag_embed(diagonal)
-
-
 class LinearCell(StateUpdaterBase):
     r"""Linear innovation state update.
 
@@ -289,9 +129,7 @@ class KalmanCell(StateUpdaterBase):
 
     .. math::
         x' = x + ρ\left(
-            Σ(x)𝐃h(x)ᵀMᵀ
-            (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹
-            (y - Mh(x))
+            Σ(x)𝐃h(x)ᵀMᵀ (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹ (y - Mh(x))
         \right)
 
     Here, $h(x)$ is the observation map, $𝐃h(x)$ is its local linearization at
@@ -464,3 +302,185 @@ class KalmanCell(StateUpdaterBase):
         d = torch.einsum("...n, ...nm, ...km -> ...k", u, MHL, L)  # (..., m)
 
         return x + self.gate(d)
+
+
+class LinearRNNCell(StateUpdaterBase):
+    r"""Linear state update.
+
+    .. math:: F(y，x) =  Ux + Vy + b
+
+    where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
+    """
+
+    # PARAMETERS
+    U: Tensor
+    r"""PARAM: the hidden state matrix."""
+    V: Tensor
+    r"""PARAM: the observable matrix."""
+    bias: Optional[Tensor]
+    r"""PARAM: the bias vector."""
+
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bias: bool = True,
+    ) -> None:
+        super().__init__(input_size, hidden_size)
+        m = self.hidden_size
+        n = self.input_size
+        self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
+        self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
+        self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
+
+    @signature("[(..., n), (..., m)] -> (..., m)")
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Forward pass of the state update.
+
+        .. math:: F(y，x) =  Ux + Vy + b
+        """
+        return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
+
+
+class AttentionGain(nn.Module):
+    r"""Predict a gain matrix with scaled dot-product attention.
+
+    For hidden state $x$, the gain entries are computed as
+
+    .. math:: Kᵢⱼ(x) = \softmax_j(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}})
+
+    where $qᵢ(x)$ and $kⱼ(x)$ are row- and column-specific query/key vectors,
+    and $dₐ$ is the shared attention feature size.
+    """
+
+    query: nn.Linear
+    r"""MODULE: Projects the hidden state to row queries."""
+    key: nn.Linear
+    r"""MODULE: Projects the hidden state to column keys."""
+    hidden_size: int
+    r"""CONST: Number of rows in the gain matrix."""
+    input_size: int
+    r"""CONST: Number of columns in the gain matrix."""
+    attention_size: int
+    r"""CONST: Shared query/key feature dimension."""
+    scale: float
+    r"""CONST: Scale factor for attention logits."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "hidden_size": self.hidden_size,
+            "input_size": self.input_size,
+            "attention_size": self.attention_size,
+        }
+
+    def __init__(
+        self,
+        /,
+        hidden_size: int,
+        input_size: int,
+        *,
+        attention_size: int | None = None,
+    ) -> None:
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.input_size = input_size
+        self.attention_size = (
+            min(hidden_size, input_size, 32)
+            if attention_size is None
+            else int(attention_size)
+        )
+        if self.attention_size <= 0:
+            raise ValueError("attention_size must be a positive integer.")
+
+        self.query = nn.Linear(
+            hidden_size,
+            hidden_size * self.attention_size,
+            bias=False,
+        )
+        self.key = nn.Linear(
+            hidden_size,
+            input_size * self.attention_size,
+            bias=False,
+        )
+        self.scale = self.attention_size**-0.5
+
+    def forward(self, x: Tensor) -> Tensor:
+        query = self.query(x).unflatten(-1, (self.hidden_size, self.attention_size))
+        key = self.key(x).unflatten(-1, (self.input_size, self.attention_size))
+        scores = self.scale * (query @ key.mT)
+        return scores.softmax(dim=-1)
+
+
+class AttentionCovarianceFactor(nn.Module):
+    r"""Predict a Cholesky factor with attention-style pairwise interactions.
+
+    Let $ϕᵢ(x) ∈ ℝ^{dₐ}$ denote the feature vector for row $i$. The module builds
+    a lower-triangular factor $L(x)$ as
+
+    .. math:: Lᵢⱼ(x) =
+        \begin{cases}
+            \frac{ϕᵢ(x)^⊤ϕⱼ(x)}{\sqrt{dₐ}}, & i > j, \\
+            \softplus(dᵢ(x)) + ε, & i = j, \\
+            0, & i < j,
+        \end{cases}
+
+    where $dᵢ(x)$ are learned diagonal logits and $ε$ is machine epsilon for the
+    current dtype, ensuring a strictly positive diagonal.
+    """
+
+    features: nn.Linear
+    r"""MODULE: Projects the hidden state to shared attention features."""
+    diagonal: nn.Linear
+    r"""MODULE: Projects the hidden state to diagonal logits."""
+    hidden_size: int
+    r"""CONST: Number of rows and columns in the Cholesky factor."""
+    attention_size: int
+    r"""CONST: Shared attention feature dimension."""
+    scale: float
+    r"""CONST: Scale factor for the bilinear scores."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "hidden_size": self.hidden_size,
+            "attention_size": self.attention_size,
+        }
+
+    def __init__(
+        self,
+        /,
+        hidden_size: int,
+        *,
+        attention_size: int | None = None,
+    ) -> None:
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.attention_size = (
+            min(hidden_size, 32) if attention_size is None else int(attention_size)
+        )
+        if self.attention_size <= 0:
+            raise ValueError("attention_size must be a positive integer.")
+
+        self.features = nn.Linear(
+            hidden_size,
+            hidden_size * self.attention_size,
+            bias=False,
+        )
+        self.diagonal = nn.Linear(hidden_size, hidden_size)
+        self.scale = self.attention_size**-0.5
+
+        with torch.no_grad():
+            self.diagonal.weight.zero_()
+            self.diagonal.bias.zero_()
+
+    def forward(self, x: Tensor) -> Tensor:
+        features = self.features(x).unflatten(
+            -1, (self.hidden_size, self.attention_size)
+        )
+        scores = self.scale * (features @ features.mT)
+        offdiagonal = scores.tril(-1)
+        diagonal = F.softplus(self.diagonal(x)) + torch.finfo(x.dtype).eps
+        return offdiagonal + torch.diag_embed(diagonal)

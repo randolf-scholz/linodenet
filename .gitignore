@@ -22,6 +22,7 @@ _*/
 *events.out.tfevents*
 
 .coverage
+.codex
 
 # libtorch
 **/libtorch/

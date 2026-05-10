@@ -52,9 +52,10 @@ class ReZero[
         module: U | None = None,
         *,
         scalar_map: V | None = None,
+        initial_value: float = 0.0,
     ) -> None:
         super().__init__()
-        self.scalar = nn.Parameter(torch.tensor(0.0))
+        self.scalar = nn.Parameter(torch.tensor(initial_value))
         self.module = cast("U", nn.Identity() if module is None else module)
         self.scalar_map = cast("V", nn.Identity() if scalar_map is None else scalar_map)
 

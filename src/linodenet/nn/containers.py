@@ -29,7 +29,11 @@ class Constant(Module):
     r"""PARAM: Constant tensor returned by the module."""
 
     def __init__(
-        self, shape_or_tensor: tuple[int, ...] | Tensor, /, *, learnable: bool = True
+        self,
+        shape_or_tensor: tuple[int, ...] | Tensor,
+        /,
+        *,
+        learnable: bool = True,
     ) -> None:
         super().__init__()
         match shape_or_tensor:
