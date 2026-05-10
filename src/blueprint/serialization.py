@@ -30,9 +30,7 @@ from zipfile import ZipFile
 import torch
 from torch import nn
 from torch.export import ExportedProgram
-from torch.jit import (  # type: ignore[attr-defined]
-    RecursiveScriptModule,  # pyright: ignore[reportPrivateImportUsage]
-)
+from torch.jit import RecursiveScriptModule  # type: ignore[attr-defined]
 from typing_extensions import TypedDict
 
 from .core import (
