@@ -9,25 +9,53 @@ __all__ = [
     "Inverse",
     "PosetEnum",
     "ScalarDomain",
-    "VectorDomain",
-    "MatrixDomain",
-    "TensorDomain",
 ]
 
 from abc import abstractmethod
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    Collection,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+    Set as AbstractSet,
+)
 from dataclasses import dataclass
 from enum import Enum
 from functools import cache
 from types import MappingProxyType, NotImplementedType
-from typing import Any, ClassVar, Final, Protocol, Self, overload, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Final,
+    Protocol,
+    Self,
+    overload,
+    runtime_checkable,
+)
 
 import torch
 from torch import Tensor
 
 
+@dataclass(frozen=True)
+class Indeterminate:
+    r"""Placeholder for an order statement whose truth cannot be decided."""
+
+    left: object
+    op: str
+    right: object
+
+    def __str__(self) -> str:
+        return f"{self.left!s} {self.op} {self.right!s}"
+
+    def __bool__(self) -> bool:
+        raise TypeError(f"Truth of order statement {self!s} could not be determined.")
+
+
 @runtime_checkable
-class Domain(Protocol):
+class DomainLike(Protocol):
     r"""Protocol for Domains."""
 
     @abstractmethod
@@ -50,82 +78,16 @@ class Domain(Protocol):
     def __ge__(self, other: Any, /) -> bool | Indeterminate:
         return NotImplemented
 
+
+@runtime_checkable
+class Domain(DomainLike, Protocol):
+    r"""Base protocol for domain definitions."""
+
     def __and__(self, other: Any, /) -> Domain:
         return Meet({self, other})
 
     def __or__(self, other: Any, /) -> Domain:
         return Join({self, other})
-
-
-@dataclass(frozen=True)
-class Indeterminate:
-    r"""Placeholder for an order statement whose truth cannot be decided."""
-
-    left: object
-    op: str
-    right: object
-
-    def __str__(self) -> str:
-        return f"{self.left!s} {self.op} {self.right!s}"
-
-    def __bool__(self) -> bool:
-        raise TypeError(f"Truth of order statement {self!s} could not be determined.")
-
-
-def _gt(a, b, /) -> bool | Indeterminate | NotImplementedType:
-    try:
-        result = a > b
-    except TypeError:
-        return NotImplemented
-    assert (
-        result is NotImplemented
-        or result is True
-        or result is False
-        or isinstance(result, Indeterminate)
-    )
-    return result
-
-
-def _lt(a, b, /) -> bool | Indeterminate | NotImplementedType:
-    try:
-        result = a < b
-    except TypeError:
-        return NotImplemented
-    assert (
-        result is NotImplemented
-        or result is True
-        or result is False
-        or isinstance(result, Indeterminate)
-    )
-    return result
-
-
-def _ge(a, b, /) -> bool | Indeterminate | NotImplementedType:
-    try:
-        result = a >= b
-    except TypeError:
-        return NotImplemented
-    assert (
-        result is NotImplemented
-        or result is True
-        or result is False
-        or isinstance(result, Indeterminate)
-    )
-    return result
-
-
-def _le(a, b, /) -> bool | Indeterminate | NotImplementedType:
-    try:
-        result = a <= b
-    except TypeError:
-        return NotImplemented
-    assert (
-        result is NotImplemented
-        or result is True
-        or result is False
-        or isinstance(result, Indeterminate)
-    )
-    return result
 
 
 @dataclass(frozen=True)
@@ -151,7 +113,7 @@ class Inverse[D: Domain](Domain):
 
 
 @dataclass(frozen=True)
-class Meet[D: Domain](Domain):
+class Meet[D: DomainLike](Domain):
     r"""Formal meet expression for the generated lattice.
 
     When the exact meet is named in the base poset via `KNOWN_MEETS`, order
@@ -173,6 +135,22 @@ class Meet[D: Domain](Domain):
 
         object.__setattr__(self, "factors", frozenset(nodes))
 
+    @property
+    def size(self) -> int | None:
+        return _meet_element(self, "size", int)
+
+    @property
+    def rows(self) -> int | None:
+        return _meet_element(self, "rows", int)
+
+    @property
+    def cols(self) -> int | None:
+        return _meet_element(self, "cols", int)
+
+    @property
+    def shape(self) -> tuple[int, ...] | None:
+        return _meet_element(self, "shape", tuple)
+
     def check(self, item: Tensor, /) -> Tensor:
         result = None
         for factor in self:
@@ -188,11 +166,11 @@ class Meet[D: Domain](Domain):
     def __iter__(self) -> Iterator[D]:
         return iter(self.factors)
 
-    @overload
-    def __and__(self, other: Join[Domain], /) -> Meet[Domain]: ...
-    @overload
-    def __and__[S: Domain](self: Meet[S], other: S | Meet[S], /) -> Meet[S]: ...
-    def __and__(self, other: Domain, /) -> Meet[Domain]:  # type: ignore[misc]
+    # @overload
+    # def __and__(self, other: Join[DomainLike], /) -> Meet[DomainLike]: ...
+    # @overload
+    # def __and__[S: DomainLike](self: Meet[S], other: S | Meet[S], /) -> Meet[S]: ...
+    def __and__(self, other: D, /) -> Meet[D]:
         match other:
             # express in CNF (conjunctive normal form)
             case Join():
@@ -207,7 +185,7 @@ class Meet[D: Domain](Domain):
                 # (A₁ ∧ … ∧ Aₙ) ∧ B ≡ (A₁ ∧ … ∧ Aₙ ∧ B)
                 return Meet({*self, other})
 
-    def __or__(self, other: Domain, /) -> Join[Domain]:
+    def __or__(self, other: D, /) -> Join[D]:
         match other:
             # express in DNF (disjunctive normal form)
             case Meet():
@@ -252,7 +230,7 @@ class Meet[D: Domain](Domain):
 
 
 @dataclass(frozen=True)
-class Join[D: Domain](Domain):
+class Join[D: DomainLike](Domain):
     r"""Formal join expression for the generated lattice.
 
     Order comparisons use structural join rules only. This keeps results stable
@@ -287,7 +265,7 @@ class Join[D: Domain](Domain):
     def __iter__(self) -> Iterator[D]:
         return iter(self.members)
 
-    def __and__(self, other: Domain, /) -> Meet[Domain]:
+    def __and__(self, other: D, /) -> Meet[D]:
         match other:
             # express in CNF (conjunctive normal form)
             case Meet():
@@ -303,11 +281,11 @@ class Join[D: Domain](Domain):
                 # ≡ (A₁ ∨ … ∨ Aₙ) ∧ B
                 return Meet({self, other})
 
-    @overload
-    def __or__(self, other: Meet[Domain], /) -> Join[Domain]: ...
-    @overload
-    def __or__[S: Domain](self: Join[S], other: S | Join[S], /) -> Join[S]: ...
-    def __or__(self, other: Domain, /) -> Join[Domain]:  # type: ignore[misc]
+    # @overload
+    # def __or__(self, other: Meet[DomainLike], /) -> Join[DomainLike]: ...
+    # @overload
+    # def __or__[S: DomainLike](self: Join[S], other: S | Join[S], /) -> Join[S]: ...
+    def __or__(self, other: D, /) -> Join[D]:
         match other:
             # express in DNF (disjunctive normal form)
             case Join():
@@ -416,6 +394,93 @@ class DomainMapping[D: Domain](Mapping[D, D]):
         return self.domains[lub]
 
 
+def _gt(a, b, /) -> bool | Indeterminate | NotImplementedType:
+    try:
+        result = a > b
+    except TypeError:
+        return NotImplemented
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
+    return result
+
+
+def _lt(a, b, /) -> bool | Indeterminate | NotImplementedType:
+    try:
+        result = a < b
+    except TypeError:
+        return NotImplemented
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
+    return result
+
+
+def _ge(a, b, /) -> bool | Indeterminate | NotImplementedType:
+    try:
+        result = a >= b
+    except TypeError:
+        return NotImplemented
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
+    return result
+
+
+def _le(a, b, /) -> bool | Indeterminate | NotImplementedType:
+    try:
+        result = a <= b
+    except TypeError:
+        return NotImplemented
+    assert (
+        result is NotImplemented
+        or result is True
+        or result is False
+        or isinstance(result, Indeterminate)
+    )
+    return result
+
+
+def _meet_element[T](objs: Iterable, name: str, kind: type[T]) -> T | None:
+    r"""Emulates __getattr__ on Meet."""
+    members = list(objs)
+
+    if not all(hasattr(member, name) for member in members):
+        raise TypeError(
+            f"Expected all meet factors to have a {name!r} attribute, but "
+            f"{[member for member in members if not hasattr(member, name)]!r} do not."
+        )
+    vals = [getattr(member, name, None) for member in members]
+    if not all(val is None or isinstance(val, kind) for val in vals):
+        raise ValueError(
+            f"Expected {name!r} to be int or None, but got "
+            f"{[val for val in vals if val is not None or not isinstance(val, kind)]!r}."
+        )
+
+    candidate: T | None = None
+    for v in vals:
+        if v is None:
+            continue
+        if candidate is None:
+            candidate = v
+        elif candidate == v:
+            continue
+        else:
+            raise ValueError(
+                f"Expected all {name!r} values to be the same, but got {vals!r}."
+            )
+    return None
+
+
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
@@ -483,12 +548,6 @@ class PosetEnum(Enum):
             return self >= other and self != other
         return NotImplemented
 
-    def __and__(self, other: PosetEnum, /) -> PosetEnum | Meet[PosetEnum]:
-        return Meet({self, other})
-
-    def __or__(self, other: PosetEnum, /) -> PosetEnum | Join[PosetEnum]:
-        return Join({self, other})
-
     @classmethod
     def _top_node(cls) -> Self | None:
         for name in ("TOP", "ANY"):
@@ -547,7 +606,8 @@ class PosetEnum(Enum):
     def _parse_known_subtypes(
         cls,
     ) -> tuple[
-        Mapping[Self, frozenset[Self]], tuple[tuple[Self, frozenset[Self]], ...]
+        Mapping[Self, frozenset[Self]],
+        tuple[tuple[Self, frozenset[Self]], ...],
     ]:
         r"""Parse declared subtype relations from `KNOWN_SUBTYPES`.
 
@@ -718,7 +778,7 @@ class PosetEnum(Enum):
 
     @classmethod
     @cache
-    def _closure_from(cls, nodes: frozenset[Self], /) -> frozenset[Self]:
+    def _closure_from(cls, nodes: AbstractSet[Self], /) -> frozenset[Self]:
         supertypes = cls._validated_supertypes()
         meets = cls._parse_known_meets()
         subtype_meets = cls._parse_known_subtype_meets()
@@ -763,40 +823,21 @@ PosetEnum.KNOWN_SUBTYPES = MappingProxyType[Any, Any]({})
 PosetEnum.KNOWN_MEETS = ()
 
 
-class ScalarDomain:
+class ScalarDomain(Domain, Protocol):
     r"""Base class for scalar domains."""
 
     @property
     def shape(self) -> tuple[()]:
         return ()
 
-    @abstractmethod
-    def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
-
-    def __contains__(self, value: Tensor, /) -> bool:
-        return bool(self.check(value).item())
-
-    def __le__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __lt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __gt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __ge__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __and__(self, other: ScalarDomain, /) -> ScalarDomain | Meet[ScalarDomain]:
+    def __and__(self, other: Self, /) -> Self | Meet[Self]:
         return Meet({self, other})
 
-    def __or__(self, other: ScalarDomain, /) -> ScalarDomain | Join[ScalarDomain]:
+    def __or__(self, other: Self, /) -> Self | Join[Self]:
         return Join({self, other})
 
 
-class VectorDomain:
+class VectorDomain(Domain, Protocol):
     r"""Base class for vector domains."""
 
     @property
@@ -807,33 +848,14 @@ class VectorDomain:
     def shape(self) -> tuple[int] | None:
         return None if self.size is None else (self.size,)
 
-    @abstractmethod
-    def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
-
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(self.check(item).item())
-
-    def __le__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __lt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __gt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __ge__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __and__(self, other: VectorDomain, /) -> VectorDomain | Meet[VectorDomain]:
+    def __and__(self, other: Self, /) -> Self | Meet[Self]:
         return Meet({self, other})
 
-    def __or__(self, other: VectorDomain, /) -> VectorDomain | Join[VectorDomain]:
+    def __or__(self, other: Self, /) -> Self | Join[Self]:
         return Join({self, other})
 
 
-class MatrixDomain:
+class MatrixDomain(Domain, Protocol):
     r"""Stub base class for matrix domains."""
 
     @property
@@ -850,60 +872,51 @@ class MatrixDomain:
             return None
         return self.rows, self.cols
 
-    @abstractmethod
-    def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
-
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(self.check(item).item())
-
-    def __le__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __lt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __gt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __ge__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __and__(self, other: MatrixDomain, /) -> MatrixDomain | Meet[MatrixDomain]:
+    def __and__(self, other: Self, /) -> Self | Meet[Self]:
         return Meet({self, other})
 
-    def __or__(self, other: MatrixDomain, /) -> MatrixDomain | Join[MatrixDomain]:
+    def __or__(self, other: Self, /) -> Self | Join[Self]:
         return Join({self, other})
 
 
-class TensorDomain:
+class TensorDomain(Domain, Protocol):
     r"""Base class for tensor domains."""
 
     @property
     @abstractmethod
     def shape(self) -> tuple[int, ...] | None: ...
 
-    @abstractmethod
-    def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
-
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(self.check(item).item())
-
-    def __le__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __lt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __gt__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __ge__(self, other: Any, /) -> bool | Indeterminate:
-        return NotImplemented
-
-    def __and__(self, other: TensorDomain, /) -> TensorDomain | Meet[TensorDomain]:
+    def __and__(self, other: Self, /) -> Self | Meet[Self]:
         return Meet({self, other})
 
-    def __or__(self, other: TensorDomain, /) -> TensorDomain | Join[TensorDomain]:
+    def __or__(self, other: Self, /) -> Self | Join[Self]:
         return Join({self, other})
+
+
+#
+# if TYPE_CHECKING:
+#     # validate protocol compliance
+#     # _0: type[Domain] = ScalarDomain
+#     # _1: type[Domain] = VectorDomain
+#     # _2: type[Domain] = MatrixDomain
+#     # _3: type[Domain] = TensorDomain
+#
+#     def _meet_as_domain(m0: Meet[ScalarDomain]) -> ScalarDomain:
+#         return m0
+#
+#     def _upcast_meet(
+#         _m0: Meet[ScalarDomain],
+#         _m1: Meet[VectorDomain],
+#         _m2: Meet[MatrixDomain],
+#         _m3: Meet[TensorDomain],
+#     ) -> None:
+#
+#         _M0: ScalarDomain = _m0
+#         _M1: VectorDomain = _m1
+#         _M2: MatrixDomain = _m2
+#         _M3: TensorDomain = _m3
+#
+#     _J0: type[ScalarDomain] = Join[ScalarDomain]
+#     _J1: type[VectorDomain] = Join[VectorDomain]
+#     _J2: type[MatrixDomain] = Join[MatrixDomain]
+#     _J3: type[TensorDomain] = Join[TensorDomain]

@@ -75,13 +75,13 @@ from typing import Any, ClassVar, Final, Self, overload
 import torch
 from torch import Tensor
 
-from . import matrix_tests as tests
-from .base import Indeterminate, Join, MatrixDomain, Meet, PosetEnum
+from . import MatrixDomain, matrix_tests as tests
+from .base import Indeterminate, PosetEnum
 
 
 @dataclass(frozen=True)
-class Rectangular(MatrixDomain):
-    r"""Domain of rectangular matrices with optional fixed shape."""
+class Matrix(MatrixDomain):
+    r"""Matrix domain with optional admissible values."""
 
     rows: Final[int | None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
     cols: Final[int | None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -105,7 +105,7 @@ class Rectangular(MatrixDomain):
 
 
 @dataclass(frozen=True)
-class Empty(Rectangular):
+class Empty(Matrix):
     r"""Domain of matrices with no admissible values."""
 
     def check(self, value: Tensor, /) -> Tensor:
@@ -113,7 +113,7 @@ class Empty(Rectangular):
 
 
 @dataclass(frozen=True)
-class Placeholder(Rectangular):
+class Placeholder(Matrix):
     r"""Named placeholder for an otherwise unspecified matrix domain."""
 
     _: KW_ONLY
@@ -129,6 +129,11 @@ class Placeholder(Rectangular):
 
     def check(self, value: Tensor, /) -> Tensor:
         raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class Rectangular(Matrix):
+    r"""Domain of rectangular matrices with optional fixed shape."""
 
 
 @dataclass(frozen=True)
@@ -1092,14 +1097,6 @@ class MatrixDomains(MatrixDomain, PosetEnum):
 
     def __gt__(self, other: Any, /) -> bool | Indeterminate:
         return PosetEnum.__gt__(self, other)
-
-    # pyrefly: ignore[bad-override]
-    def __and__(self, other, /) -> Meet:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return Meet({self, other})
-
-    # pyrefly: ignore[bad-override]
-    def __or__(self, other, /) -> Join:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return Join({self, other})
 
     @classmethod
     def _missing_(cls, value: object) -> Self | None:

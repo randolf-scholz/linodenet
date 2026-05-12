@@ -35,8 +35,8 @@ from typing import Any, ClassVar, Final, Self, overload
 import torch
 from torch import Tensor
 
-from . import vector_tests as tests
-from .base import Indeterminate, Join, Meet, PosetEnum, VectorDomain
+from . import VectorDomain, vector_tests as tests
+from .base import Indeterminate, PosetEnum
 
 
 @dataclass(frozen=True)
@@ -254,7 +254,7 @@ class UnitL1Sphere(UnitL1Ball):
 class VectorDomains(VectorDomain, PosetEnum):
     r"""Enumeration of some vector domains."""
 
-    ALIASES: ClassVar[Mapping[str, Self]]  # pyright: ignore[reportInvalidTypeForm]
+    ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Vector()  # top node
     NONE = Empty()  # bottom node
@@ -310,14 +310,6 @@ class VectorDomains(VectorDomain, PosetEnum):
 
     def __gt__(self, other: Any, /) -> bool | Indeterminate:
         return PosetEnum.__gt__(self, other)
-
-    # pyrefly: ignore[bad-override]
-    def __and__(self, other: Self | Meet[Self], /) -> Self | Meet[Self]:  # pyright: ignore[reportIncompatibleMethodOverride, reportInvalidTypeArguments]
-        return Meet({self, other})
-
-    # pyrefly: ignore[bad-override]
-    def __or__(self, other: Self | Join[Self], /) -> Self | Join[Self]:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return Join({self, other})
 
     @classmethod
     def _missing_(cls, value: object) -> Self | None:
