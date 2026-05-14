@@ -319,7 +319,8 @@ class VectorDomains(VectorDomain, PosetEnum):
 
 
 V = VectorDomains  # temporary alias
-VectorDomains.KNOWN_MEETS = (  # type: ignore[assignment]  # pyrefly: ignore[bad-assignment]
+# pyrefly: ignore[bad-assignment]
+VectorDomains.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
     (V.NONE, V.NEGATIVE & V.NONNEGATIVE),
     (V.NONE, V.NONZERO & V.ZERO),
     (V.NONE, V.POSITIVE & V.NONPOSITIVE),
@@ -328,7 +329,8 @@ VectorDomains.KNOWN_MEETS = (  # type: ignore[assignment]  # pyrefly: ignore[bad
     (V.ONE_HOT, V.STOCHASTIC & V.UNIT_VECTOR),
     (V.ZERO, V.NONNEGATIVE & V.NONPOSITIVE),
 )
-VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({
+# pyrefly: ignore[bad-assignment]
+VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccessIssue]
     V.BOOLEAN: {V.REAL & V.NONNEGATIVE},
     V.DISCRETE: {V.REAL},
     V.NEGATIVE: {V.REAL & V.NONPOSITIVE & V.NONZERO},

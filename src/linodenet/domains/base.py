@@ -25,13 +25,11 @@ from enum import Enum
 from functools import cache
 from types import MappingProxyType, NotImplementedType
 from typing import (
-    TYPE_CHECKING,
     Any,
     ClassVar,
     Final,
     Protocol,
     Self,
-    overload,
     runtime_checkable,
 )
 
@@ -170,7 +168,7 @@ class Meet[D: DomainLike](Domain):
     # def __and__(self, other: Join[DomainLike], /) -> Meet[DomainLike]: ...
     # @overload
     # def __and__[S: DomainLike](self: Meet[S], other: S | Meet[S], /) -> Meet[S]: ...
-    def __and__(self, other: D, /) -> Meet[D]:
+    def __and__(self, other: DomainLike, /) -> Meet:
         match other:
             # express in CNF (conjunctive normal form)
             case Join():
@@ -185,7 +183,7 @@ class Meet[D: DomainLike](Domain):
                 # (A₁ ∧ … ∧ Aₙ) ∧ B ≡ (A₁ ∧ … ∧ Aₙ ∧ B)
                 return Meet({*self, other})
 
-    def __or__(self, other: D, /) -> Join[D]:
+    def __or__(self, other: DomainLike, /) -> Join:
         match other:
             # express in DNF (disjunctive normal form)
             case Meet():
@@ -265,7 +263,7 @@ class Join[D: DomainLike](Domain):
     def __iter__(self) -> Iterator[D]:
         return iter(self.members)
 
-    def __and__(self, other: D, /) -> Meet[D]:
+    def __and__(self, other: DomainLike, /) -> Meet:
         match other:
             # express in CNF (conjunctive normal form)
             case Meet():
@@ -285,7 +283,7 @@ class Join[D: DomainLike](Domain):
     # def __or__(self, other: Meet[DomainLike], /) -> Join[DomainLike]: ...
     # @overload
     # def __or__[S: DomainLike](self: Join[S], other: S | Join[S], /) -> Join[S]: ...
-    def __or__(self, other: D, /) -> Join[D]:
+    def __or__(self, other: DomainLike, /) -> Join:
         match other:
             # express in DNF (disjunctive normal form)
             case Join():
@@ -484,11 +482,11 @@ def _meet_element[T](objs: Iterable, name: str, kind: type[T]) -> T | None:
 class PosetEnum(Enum):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]
     r"""Dependencies"""
-    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]
     r"""Reverse dependencies."""
-    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Meet[Self]]]]  # pyright: ignore[reportInvalidTypeForm]
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
 
     @abstractmethod
@@ -689,7 +687,12 @@ class PosetEnum(Enum):
         if bad_keys := {node for node, _ in cls.KNOWN_MEETS if node not in members}:
             raise TypeError(f"Expected {cls.__name__} meet nodes, got {bad_keys!r}.")
 
-        meets = tuple((node, frozenset(factors)) for node, factors in cls.KNOWN_MEETS)
+        meets = tuple(
+            (node, frozenset(factors))
+            if isinstance(factors, Meet)
+            else (node, frozenset({factors}))
+            for node, factors in cls.KNOWN_MEETS
+        )
 
         all_factors = frozenset().union(*(factors for _, factors in meets))
         if bad_factors := {factor for factor in all_factors if factor not in members}:
@@ -830,10 +833,10 @@ class ScalarDomain(Domain, Protocol):
     def shape(self) -> tuple[()]:
         return ()
 
-    def __and__(self, other: Self, /) -> Self | Meet[Self]:
+    def __and__(self, other: Self, /) -> ScalarDomain | Meet[ScalarDomain]:
         return Meet({self, other})
 
-    def __or__(self, other: Self, /) -> Self | Join[Self]:
+    def __or__(self, other: Self, /) -> ScalarDomain | Join[ScalarDomain]:
         return Join({self, other})
 
 
@@ -848,10 +851,10 @@ class VectorDomain(Domain, Protocol):
     def shape(self) -> tuple[int] | None:
         return None if self.size is None else (self.size,)
 
-    def __and__(self, other: Self, /) -> Self | Meet[Self]:
+    def __and__(self, other: Self, /) -> VectorDomain | Meet[VectorDomain]:
         return Meet({self, other})
 
-    def __or__(self, other: Self, /) -> Self | Join[Self]:
+    def __or__(self, other: Self, /) -> VectorDomain | Join[VectorDomain]:
         return Join({self, other})
 
 
@@ -872,10 +875,10 @@ class MatrixDomain(Domain, Protocol):
             return None
         return self.rows, self.cols
 
-    def __and__(self, other: Self, /) -> Self | Meet[Self]:
+    def __and__(self, other: Self, /) -> MatrixDomain | Meet[MatrixDomain]:
         return Meet({self, other})
 
-    def __or__(self, other: Self, /) -> Self | Join[Self]:
+    def __or__(self, other: Self, /) -> MatrixDomain | Join[MatrixDomain]:
         return Join({self, other})
 
 
@@ -886,37 +889,8 @@ class TensorDomain(Domain, Protocol):
     @abstractmethod
     def shape(self) -> tuple[int, ...] | None: ...
 
-    def __and__(self, other: Self, /) -> Self | Meet[Self]:
+    def __and__(self, other: Self, /) -> TensorDomain | Meet[TensorDomain]:
         return Meet({self, other})
 
-    def __or__(self, other: Self, /) -> Self | Join[Self]:
+    def __or__(self, other: Self, /) -> TensorDomain | Join[TensorDomain]:
         return Join({self, other})
-
-
-#
-# if TYPE_CHECKING:
-#     # validate protocol compliance
-#     # _0: type[Domain] = ScalarDomain
-#     # _1: type[Domain] = VectorDomain
-#     # _2: type[Domain] = MatrixDomain
-#     # _3: type[Domain] = TensorDomain
-#
-#     def _meet_as_domain(m0: Meet[ScalarDomain]) -> ScalarDomain:
-#         return m0
-#
-#     def _upcast_meet(
-#         _m0: Meet[ScalarDomain],
-#         _m1: Meet[VectorDomain],
-#         _m2: Meet[MatrixDomain],
-#         _m3: Meet[TensorDomain],
-#     ) -> None:
-#
-#         _M0: ScalarDomain = _m0
-#         _M1: VectorDomain = _m1
-#         _M2: MatrixDomain = _m2
-#         _M3: TensorDomain = _m3
-#
-#     _J0: type[ScalarDomain] = Join[ScalarDomain]
-#     _J1: type[VectorDomain] = Join[VectorDomain]
-#     _J2: type[MatrixDomain] = Join[MatrixDomain]
-#     _J3: type[TensorDomain] = Join[TensorDomain]

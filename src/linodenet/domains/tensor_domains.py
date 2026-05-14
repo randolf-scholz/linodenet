@@ -36,5 +36,5 @@ TensorDomains.KNOWN_SUPERTYPES = MappingProxyType({
     T.REAL: {T.COMPLEX},
     T.ZERO: {T.BOOLEAN, T.SPARSE},
 })  # fmt: skip
-TensorDomains.KNOWN_SUBTYPES = MappingProxyType({})
+TensorDomains.KNOWN_SUBTYPES = MappingProxyType({})  # pyright: ignore[reportAttributeAccessIssue]
 del T  # remove alias

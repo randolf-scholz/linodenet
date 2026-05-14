@@ -1106,7 +1106,8 @@ class MatrixDomains(MatrixDomain, PosetEnum):
 
 
 M = MatrixDomains  # temporary alias
-MatrixDomains.KNOWN_MEETS = (
+# pyrefly: ignore[bad-assignment]
+MatrixDomains.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
     (M.NONE, M.CONTRACTION & M.SPECTRAL_NORMALIZED),
     (M.NONE, M.INVERTIBLE & M.SINGULAR),
     (M.NONE, M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE),
@@ -1143,7 +1144,8 @@ MatrixDomains.KNOWN_MEETS = (
     (M.SQUARE, M.TALL & M.WIDE),
     (M.UPPER_INVERTIBLE, M.UPPER_TRIANGULAR & M.INVERTIBLE),
 )
-MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({
+# pyrefly: ignore[bad-assignment]
+MatrixDomains.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccessIssue]
     M.BANDED: {M.TOEPLITZ},
     M.BOOLEAN: {M.RECTANGULAR},
     M.CAYLEY_ORTHOGONAL: {M.SPECIAL_ORTHOGONAL},

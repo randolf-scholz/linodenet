@@ -10,6 +10,7 @@ from linodenet.domains import (
     Interval,
     Join,
     MatrixDomains as M,
+    Meet,
     RealDomain,
     ScalarDomains as S,
     TensorDomains as T,
@@ -17,7 +18,6 @@ from linodenet.domains import (
     is_left_invertible,
     is_right_invertible,
 )
-from linodenet.domains.base import Meet
 from linodenet.domains.matrix_domains import (
     BackwardStable,
     Banded,

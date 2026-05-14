@@ -17,6 +17,7 @@ __all__ = [
     "DomainMapping",
     "Inverse",
     "Join",
+    "Meet",
     # Domains
     "Interval",
     "MatrixDomain",
@@ -38,6 +39,7 @@ from .base import (
     Inverse,
     Join,
     MatrixDomain,
+    Meet,
     ScalarDomain,
     TensorDomain,
     VectorDomain,
