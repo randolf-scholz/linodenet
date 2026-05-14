@@ -9,75 +9,75 @@ default_language_version = { python = "3.14", node = "24.13.0" }
 [[repos]]
 repo = "builtin"
 hooks = [
-  { id = "trailing-whitespace" },
-  { id = "check-added-large-files" },
-  { id = "check-case-conflict" },
-  { id = "check-illegal-windows-names" },
-  { id = "end-of-file-fixer" },
-  { id = "file-contents-sorter" },
-  { id = "fix-byte-order-marker" },
-  { id = "check-json" },
-  { id = "check-json5" },
-  # { id = "pretty-format-json" },
-  { id = "check-toml" },
-  { id = "check-vcs-permalinks" },
-  { id = "check-yaml" },
-  { id = "check-xml" },
-  { id = "mixed-line-ending" },
-  { id = "check-symlinks" },
-  { id = "destroyed-symlinks" },
-  { id = "check-merge-conflict" },
-  { id = "detect-private-key" },
-  { id = "no-commit-to-branch" },
-  { id = "check-shebang-scripts-are-executable" },
-  { id = "check-executables-have-shebangs" }
+    { id = "trailing-whitespace" },
+    { id = "check-added-large-files" },
+    { id = "check-case-conflict" },
+    { id = "check-illegal-windows-names" },
+    { id = "end-of-file-fixer" },
+    { id = "file-contents-sorter" },
+    { id = "fix-byte-order-marker" },
+    { id = "check-json" },
+    { id = "check-json5" },
+    # { id = "pretty-format-json" },
+    { id = "check-toml" },
+    { id = "check-vcs-permalinks" },
+    { id = "check-yaml" },
+    { id = "check-xml" },
+    { id = "mixed-line-ending" },
+    { id = "check-symlinks" },
+    { id = "destroyed-symlinks" },
+    { id = "check-merge-conflict" },
+    { id = "detect-private-key" },
+    { id = "no-commit-to-branch" },
+    { id = "check-shebang-scripts-are-executable" },
+    { id = "check-executables-have-shebangs" }
 ]
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
 rev = "v0.15.12"
 hooks = [
-  {
-    id = "ruff-check",
-    name = "ruff isort",
-    files = "^src/|^tests/",
-    args = ["--select", "I", "--fix"]
-  },
-  { id = "ruff-format", files = "^src/|^tests/" },
-  { id = "ruff-check", files = "^src/|^tests/" }
+    {
+        id = "ruff-check",
+        name = "ruff isort",
+        files = "^src/|^tests/",
+        args = ["--select", "I", "--fix"]
+    },
+    { id = "ruff-format", files = "^src/|^tests/" },
+    { id = "ruff-check", files = "^src/|^tests/" }
 ]
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
 rev = "0.11.14"
 hooks = [
-  { id = "uv-lock" },
-  {
-    id = "uv-export",
-    args = [
-      "--no-dev",
-      "--frozen",
-      "--no-hashes",
-      "--output-file=requirements.txt"
-    ]
-  },
-  {
-    id = "uv-export",
-    args = ["--no-dev", "--frozen", "--output-file=pylock.toml"]
-  }
+    { id = "uv-lock" },
+    {
+        id = "uv-export",
+        args = [
+            "--no-dev",
+            "--frozen",
+            "--no-hashes",
+            "--output-file=requirements.txt"
+        ]
+    },
+    {
+        id = "uv-export",
+        args = ["--no-dev", "--frozen", "--output-file=pylock.toml"]
+    }
 ]
 
 [[repos]]
 repo = "local"
 hooks = [
-  {
-    id = "tach",
-    name = "tach",
-    description = "Check that the pyproject.toml and setup.cfg versions match.",
-    entry = "tach check",
-    pass_filenames = false,
-    language = "system"
-  }
+    {
+        id = "tach",
+        name = "tach",
+        description = "Check that the pyproject.toml and setup.cfg versions match.",
+        entry = "tach check",
+        pass_filenames = false,
+        language = "system"
+    }
 ]
 
 [[repos]]
@@ -89,73 +89,73 @@ hooks = [{ id = "nbstripout-fast", exclude = "^docs/|^experiments/" }]
 repo = "https://github.com/randolf-scholz/assorted-hooks.git"
 rev = "v0.7.22"
 hooks = [
-  { id = "check-direct-imports" },
-  { id = "check-dunder-all", files = "^src/" },
-  { id = "check-separator-length-88" },
-  { id = "numpy-rename-axes-axis" },
-  { id = "pyarrow-timestamp-seconds" },
-  { id = "python-consider-using-raw-string" },
-  { id = "python-double-comment" },
-  { id = "python-match-case-builtins" },
-  { id = "python-system-exit" },
-  { id = "use-relative-imports", files = "^src/|^tests/" },
-  {
-    id = "check-signatures",
-    files = "^src/",
-    args = [
-      "--max-positional-args",
-      "4",
-      "--ignore-names",
-      "forward",
-      "backward",
-      "--"
-    ]
-  },
-  { id = "check-clean-interface", files = "^src/" },
-  { id = "check-archived-hooks" },
-  { id = "check-requirements-maintained" },
-  { id = "check-requirements-used" },
-  { id = "check-requirements-valid" },
-  { id = "check-resolved-github-issues", files = "^src/|^tests/" },
-  { id = "update-requirements" },
+    { id = "check-direct-imports" },
+    { id = "check-dunder-all", files = "^src/" },
+    { id = "check-separator-length-88" },
+    { id = "numpy-rename-axes-axis" },
+    { id = "pyarrow-timestamp-seconds" },
+    { id = "python-consider-using-raw-string" },
+    { id = "python-double-comment" },
+    { id = "python-match-case-builtins" },
+    { id = "python-system-exit" },
+    { id = "use-relative-imports", files = "^src/|^tests/" },
+    {
+        id = "check-signatures",
+        files = "^src/",
+        args = [
+            "--max-positional-args",
+            "4",
+            "--ignore-names",
+            "forward",
+            "backward",
+            "--"
+        ]
+    },
+    { id = "check-clean-interface", files = "^src/" },
+    { id = "check-archived-hooks" },
+    { id = "check-requirements-maintained" },
+    { id = "check-requirements-used" },
+    { id = "check-requirements-valid" },
+    { id = "check-resolved-github-issues", files = "^src/|^tests/" },
+    { id = "update-requirements" },
 ]
 
 [[repos]]
 repo = "local"
 hooks = [
-  {
-    id = "unknown-inline-pragma",
-    name = "unknown-inline-pragma",
-    description = "Check for unknown inline pragmas.",
-    language = "pygrep",
-    entry = '''(?x)^[^\n]*\S[^\n]*\#\x20+
+    {
+        id = "unknown-inline-pragma",
+        name = "unknown-inline-pragma",
+        description = "Check for unknown inline pragmas.",
+        language = "pygrep",
+        entry = '''(?x)^[^\n]*\S[^\n]*\#\x20+
         (?! type|pyright|pyrefly|ty|mypy
             |noqa|fmt|ruff|shape
             |(?i:FIXME|SEE|NOTE|TODO|X?REF)
             )\w+:[^\n]+$''',
-    types = ["python"],
-    files = "^src/|^tests/"
-  }
+        types = ["python"],
+        files = "^src/|^tests/"
+    }
 ]
 
 [[repos]]
 repo = "https://github.com/igorshubovych/markdownlint-cli"
 rev = "v0.48.0"
 hooks = [
-  {
-    id = "markdownlint",
-    args = ["--disable", "MD013", "MD033", "MD010", "--"]
-  }
+    {
+        id = "markdownlint",
+        args = ["--disable", "MD013", "MD033", "MD010", "--"]
+    }
 ]
 
 [[repos]]
 repo = "https://github.com/shellcheck-py/shellcheck-py"
 rev = "v0.11.0.1"
 hooks = [
-  {
-    id = "shellcheck",
-    args = ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
-  }
+    {
+        id = "shellcheck",
+        args = ["-x", "--shell=bash", "--color=always", "--format=gcc", "--"]
+    }
 ]
 
 [[repos]]
@@ -166,20 +166,17 @@ hooks = [{ id = "pyright-concise", files = "^src/|^tests/" }]
 [[repos]]
 repo = "local"
 hooks = [
-  {
-    id = "mypy",
-    name = "mypy",
-    language = "system",
-    require_serial = true,
-    types_or = ["python", "pyi"],
-    files = "^src/|^tests/",
-    entry = "mypy",
-    args = [
-      "--hide-error-context",
-      "--hide-error-end",
-      "--no-pretty",
-      "--show-traceback",
-      "--"
-    ]
-  }
+    {
+        id = "pyrefly",
+        name = "pyrefly",
+        language = "system",
+        require_serial = true,
+        types_or = ["python", "pyi"],
+        entry = "pyrefly",
+        files = "^src/|^tests/",
+        args = [
+            "check",
+            "--"
+        ]
+    }
 ]
