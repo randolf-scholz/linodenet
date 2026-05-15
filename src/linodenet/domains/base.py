@@ -2,6 +2,7 @@ r"""Base protocols and ordering utilities for domain definitions."""
 
 __all__ = [
     "Domain",
+    "DomainLike",
     "DomainMapping",
     "Indeterminate",
     "Join",
@@ -9,6 +10,9 @@ __all__ = [
     "Inverse",
     "PosetEnum",
     "ScalarDomain",
+    "VectorDomain",
+    "MatrixDomain",
+    "TensorDomain",
 ]
 
 from abc import abstractmethod
@@ -21,17 +25,9 @@ from collections.abc import (
     Set as AbstractSet,
 )
 from dataclasses import dataclass
-from enum import Enum
 from functools import cache
 from types import MappingProxyType, NotImplementedType
-from typing import (
-    Any,
-    ClassVar,
-    Final,
-    Protocol,
-    Self,
-    runtime_checkable,
-)
+from typing import Any, ClassVar, Final, Protocol, Self, runtime_checkable
 
 import torch
 from torch import Tensor
@@ -92,7 +88,7 @@ class Domain(DomainLike, Protocol):
 class Inverse[D: Domain](Domain):
     r"""Structural complement of a domain."""
 
-    domain: Final[D]  # type: ignore[misc]
+    domain: Final[D]
 
     def check(self, item: Tensor, /) -> Tensor:
         return ~self.domain.check(item)
@@ -120,7 +116,7 @@ class Meet[D: DomainLike](Domain):
     base poset.
     """
 
-    factors: Final[frozenset[D]]  # type: ignore[misc]
+    factors: Final[frozenset[D]]
 
     def __init__(self, args: Iterable[D | Meet[D]] = (), /) -> None:
         nodes: set[D] = set()
@@ -235,7 +231,7 @@ class Join[D: DomainLike](Domain):
     when new nodes are added to the base poset.
     """
 
-    members: Final[frozenset[D]]  # type: ignore[misc]
+    members: Final[frozenset[D]]
 
     def __init__(self, args: Iterable[D | Join[D]] = (), /) -> None:
         nodes: set[D] = set()
@@ -336,7 +332,7 @@ class DomainMapping[D: Domain](Mapping[D, D]):
     back to the unique least stored upper bound of the requested key.
     """
 
-    domains: Final[Mapping[D, D]]  # type: ignore[misc]
+    domains: Final[Mapping[D, D]]
 
     def __init__(self, domains: Mapping[D, D], /) -> None:
         backend = dict(domains)
@@ -368,7 +364,7 @@ class DomainMapping[D: Domain](Mapping[D, D]):
                         f"{left_codomain!r} ≰ {right_codomain!r}."
                     )
 
-    def __getitem__(self, key: D, /) -> D | Join:  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __getitem__(self, key: D, /) -> D | Join:  # type: ignore[override]
         if key in self.domains:
             return self.domains[key]
 
@@ -479,86 +475,43 @@ def _meet_element[T](objs: Iterable, name: str, kind: type[T]) -> T | None:
     return None
 
 
-class PosetEnum(Enum):
+from enum import Enum, EnumType
+from typing import _ProtocolMeta
+
+
+class _PosetType(_ProtocolMeta, EnumType):
+    @property
+    def _is_protocol(self) -> bool:
+        return False
+
+    @_is_protocol.setter
+    def _is_protocol(self, value: bool) -> None:
+        pass
+
+
+class PosetEnum(Enum, metaclass=_PosetType):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
-    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]
+    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[intersection]
     r"""Dependencies"""
-    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]
+    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[intersection]
     r"""Reverse dependencies."""
-    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore[intersection]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
+    TOP: ClassVar[Self | None]
+    BOTTOM: ClassVar[Self | None]
 
-    @abstractmethod
-    def check(self, value: Tensor, /) -> Tensor:
-        raise NotImplementedError
-
-    def __contains__(self, item: Tensor, /) -> bool:
-        return bool(self.check(item).item())
-
-    def __le__(self, other: object, /) -> bool | Indeterminate:
-        if isinstance(other, type(self)):
-            return other in self.supertypes
-        if isinstance(other, Meet):
-            for factor in other:
-                match _le(self, factor):
-                    case False:
-                        return False
-                    case True:
-                        continue
-                    case _:
-                        return Indeterminate(self, "<=", other)
-            return True
-        if isinstance(other, Join):
-            if any(_le(self, member) is True for member in other):
-                return True
-            return Indeterminate(self, "<=", other)
-        return NotImplemented
-
-    def __lt__(self, other: object, /) -> bool | Indeterminate:
-        if isinstance(other, type(self)):
-            return self <= other and self != other
-        return NotImplemented
-
-    def __ge__(self, other: object, /) -> bool | Indeterminate:
-        if isinstance(other, type(self)):
-            return self in other.supertypes
-        if isinstance(other, Meet):
-            if all(isinstance(factor, type(self)) for factor in other):
-                return self in type(self)._closure_from(frozenset(other))
-            if any(_ge(self, factor) is True for factor in other):
-                return True
-            return Indeterminate(self, ">=", other)
-        if isinstance(other, Join):
-            for member in other:
-                match _le(member, self):
-                    case False:
-                        return False
-                    case True:
-                        continue
-                    case _:
-                        return Indeterminate(self, ">=", other)
-            return True
-        return NotImplemented
-
-    def __gt__(self, other: object, /) -> bool | Indeterminate:
-        if isinstance(other, type(self)):
-            return self >= other and self != other
-        return NotImplemented
-
-    @classmethod
-    def _top_node(cls) -> Self | None:
-        for name in ("TOP", "ANY"):
-            if name in cls.__members__:
-                return cls.__members__[name]
-        return None
-
-    @classmethod
-    def _bottom_node(cls) -> Self | None:
-        for name in ("BOTTOM", "NONE"):
-            if name in cls.__members__:
-                return cls.__members__[name]
-        return None
+    def __init_subclass__(cls) -> None:
+        if getattr(cls, "KNOWN_SUPERTYPES", None) is None:
+            cls.KNOWN_SUPERTYPES = {}
+        if getattr(cls, "KNOWN_SUBTYPES", None) is None:
+            cls.KNOWN_SUBTYPES = {}
+        if getattr(cls, "KNOWN_MEETS", None) is None:
+            cls.KNOWN_MEETS = []
+        if getattr(cls, "TOP", None) is None:
+            cls.TOP = None
+        if getattr(cls, "BOTTOM", None) is None:
+            cls.BOTTOM = None
 
     @classmethod
     @cache
@@ -729,13 +682,15 @@ class PosetEnum(Enum):
             for subtype in subtypes:
                 supertypes[subtype].add(node)
 
-        if (top := cls._top_node()) is not None:
+        if cls.TOP is not None:
             for node in cls:
-                if node is not top:
-                    supertypes[node].add(top)
+                if node is not cls.TOP:
+                    supertypes[node].add(cls.TOP)
 
-        if (bottom := cls._bottom_node()) is not None:
-            supertypes[bottom].update(node for node in cls if node is not bottom)
+        if cls.BOTTOM is not None:
+            supertypes[cls.BOTTOM].update(
+                node for node in cls if node is not cls.BOTTOM
+            )
 
         return {src: frozenset(targets) for src, targets in supertypes.items()}
 
@@ -807,25 +762,73 @@ class PosetEnum(Enum):
 
         return frozenset(closure)
 
-    @property
-    def supertypes(self) -> frozenset[Self]:
-        return self._closure_from(frozenset({self}))
+    def __le__(self, other: object, /) -> bool | Indeterminate:
+        if isinstance(other, type(self)):
+            return other in self.supertypes
+        if isinstance(other, Meet):
+            for factor in other:
+                match _le(self, factor):
+                    case False:
+                        return False
+                    case True:
+                        continue
+                    case _:
+                        return Indeterminate(self, "<=", other)
+            return True
+        if isinstance(other, Join):
+            if any(_le(self, member) is True for member in other):
+                return True
+            return Indeterminate(self, "<=", other)
+        return NotImplemented
+
+    def __lt__(self, other: object, /) -> bool | Indeterminate:
+        if isinstance(other, type(self)):
+            return self <= other and self != other
+        return NotImplemented
+
+    def __ge__(self, other: object, /) -> bool | Indeterminate:
+        if isinstance(other, type(self)):
+            return self in other.supertypes
+        if isinstance(other, Meet):
+            if all(isinstance(factor, type(self)) for factor in other):
+                return self in type(self)._closure_from(frozenset(other))
+            if any(_ge(self, factor) is True for factor in other):
+                return True
+            return Indeterminate(self, ">=", other)
+        if isinstance(other, Join):
+            for member in other:
+                match _le(member, self):
+                    case False:
+                        return False
+                    case True:
+                        continue
+                    case _:
+                        return Indeterminate(self, ">=", other)
+            return True
+        return NotImplemented
+
+    def __gt__(self, other: object, /) -> bool | Indeterminate:
+        if isinstance(other, type(self)):
+            return self >= other and self != other
+        return NotImplemented
 
     @property
-    def factorizations(self) -> frozenset[Meet[Self]]:
+    def supertypes(self) -> frozenset[Self]:
+        return type(self)._closure_from(frozenset({self}))
+
+    @property
+    def factorizations(self) -> frozenset[Meet[Self]]:  # type: ignore[intersection]
         return frozenset(
-            Meet(factors) for node, factors in self._parse_known_meets() if node is self
+            Meet(factors)  # type: ignore[intersection]
+            for node, factors in type(self)._parse_known_meets()
+            if node is self
         )
 
     def __str__(self) -> str:
         return str(self.value)
 
 
-PosetEnum.KNOWN_SUPERTYPES = MappingProxyType[Any, Any]({})
-PosetEnum.KNOWN_SUBTYPES = MappingProxyType[Any, Any]({})
-PosetEnum.KNOWN_MEETS = ()
-
-
+@runtime_checkable
 class ScalarDomain(Domain, Protocol):
     r"""Base class for scalar domains."""
 
@@ -840,6 +843,7 @@ class ScalarDomain(Domain, Protocol):
         return Join({self, other})
 
 
+@runtime_checkable
 class VectorDomain(Domain, Protocol):
     r"""Base class for vector domains."""
 
@@ -858,6 +862,7 @@ class VectorDomain(Domain, Protocol):
         return Join({self, other})
 
 
+@runtime_checkable
 class MatrixDomain(Domain, Protocol):
     r"""Stub base class for matrix domains."""
 
@@ -882,6 +887,7 @@ class MatrixDomain(Domain, Protocol):
         return Join({self, other})
 
 
+@runtime_checkable
 class TensorDomain(Domain, Protocol):
     r"""Base class for tensor domains."""
 

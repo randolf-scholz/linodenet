@@ -5,14 +5,13 @@ __all__ = ["Interval", "RealDomain", "ScalarDomains"]
 import logging
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
-from enum import Enum
 from math import isnan, nan
 from types import MappingProxyType
 from typing import ClassVar, Final, Self, overload
 
 from torch import Tensor
 
-from .base import Indeterminate, ScalarDomain
+from .base import Indeterminate, PosetEnum, ScalarDomain
 
 __logger__ = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ class Interval(ScalarDomain):
         lower_inclusive: bool,
         upper_inclusive: bool,
     ) -> Interval: ...
-    def __new__(  # type: ignore[misc]  # pyright: ignore[reportInconsistentOverload]
+    def __new__(  # pyright: ignore[reportInconsistentOverload]
         cls,
         lower_or_interval: str | Interval | float | None = None,
         /,
@@ -321,8 +320,8 @@ class Interval(ScalarDomain):
             return union < self
         return self >= other and self != other
 
-    @overload  # type: ignore[override]
-    def __and__(self, rhs: Interval, /) -> Interval: ...  # pyrefly: ignore[bad-override]
+    @overload
+    def __and__(self, rhs: Interval, /) -> Interval: ...
     @overload
     def __and__(self, rhs: RealDomain | str, /) -> Interval | RealDomain: ...
     def __and__(self, rhs: object, /) -> Interval | RealDomain:
@@ -431,7 +430,7 @@ Interval.EMPTY = Interval(  # pyright: ignore[reportAttributeAccessIssue]
 )
 
 
-class RealDomain(ScalarDomain, Collection[Interval]):  # type: ignore[misc]
+class RealDomain(ScalarDomain, Collection[Interval]):
     r"""A finite union of sorted, simplified intervals on the extended real line.
 
     Invariants:
@@ -700,7 +699,7 @@ class RealDomain(ScalarDomain, Collection[Interval]):  # type: ignore[misc]
         return f"{self.__class__.__name__}('{self!s}')"
 
 
-class ScalarDomains(ScalarDomain, Enum):
+class ScalarDomains(ScalarDomain, PosetEnum):
     r"""Enumeration of some scalar domains."""
 
     ALIASES: ClassVar[Mapping[str, Self]]

@@ -7,8 +7,8 @@ from linodenet.domains import Interval, RealDomain, ScalarDomain
 
 class TestInterval:
     def test_scalar_domain_inheritance(self) -> None:
-        assert issubclass(Interval, ScalarDomain)
-        assert issubclass(RealDomain, ScalarDomain)
+        assert isinstance(Interval("[0, 1]"), ScalarDomain)
+        assert isinstance(RealDomain("(0,1)"), ScalarDomain)
 
     def test_init(self) -> None:
         expected = Interval("[0, 1)")

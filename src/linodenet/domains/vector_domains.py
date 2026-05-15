@@ -35,8 +35,8 @@ from typing import Any, ClassVar, Final, Self, overload
 import torch
 from torch import Tensor
 
-from . import VectorDomain, vector_tests as tests
-from .base import Indeterminate, PosetEnum
+from . import vector_tests as tests
+from .base import Indeterminate, PosetEnum, VectorDomain
 
 
 @dataclass(frozen=True)

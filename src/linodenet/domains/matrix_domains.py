@@ -2,6 +2,8 @@ r"""Matrix-specific domain primitives and partial-order labels."""
 
 __all__ = [
     "MatrixDomains",
+    "Matrix",
+    "Placeholder",
     # Classes
     "Empty",
     "Square",
@@ -64,7 +66,6 @@ __all__ = [
     "OneHot",
     "Identity",
     "Permutation",
-    "Placeholder",
 ]
 
 from collections.abc import Mapping
@@ -140,8 +141,8 @@ class Rectangular(Matrix):
 class Square(Rectangular):
     r"""Domain of square matrices with optional fixed size."""
 
-    rows: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
-    cols: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]  # pyright: ignore[reportGeneralTypeIssues]
+    rows: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]
+    cols: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]
 
     size: Final[int | None] = field(default=None, init=False)
 

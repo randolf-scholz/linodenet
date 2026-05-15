@@ -45,7 +45,7 @@ dev = [
 devtools = [
     "cmake>=4.3.2",
     "ninja>=1.13.0",
-    "prek>=0.3.13",
+    "prek>=0.4.0",
     "pybadges>=3.0.1",
 ]
 debug = [
@@ -72,8 +72,8 @@ docs = [
     "sphinx>=9.1.0",
 ]
 linters = [
-    "prek>=0.3.13",
-    "ruff>=0.15.12",
+    "prek>=0.4.0",
+    "ruff>=0.15.13",
     "tach>=0.35.0",
 ]
 tests = [
@@ -307,6 +307,7 @@ replace-imports-with-any = [
 
 [tool.pyrefly.errors]
 invalid-overload = false
+unused-ignore = true
 # endregion pyrefly configuration ------------------------------------------------------
 
 
@@ -409,7 +410,7 @@ strictDictionaryInference = false
 strictSetInference = false
 analyzeUnannotatedFunctions = true
 strictParameterNoneValue = true
-enableTypeIgnoreComments = false  # disable `# type: ignore` comments (use `# pyright: ignore` instead)
+enableTypeIgnoreComments = true  # disable `# type: ignore` comments (use `# pyright: ignore` instead)
 deprecateTypingAliases = true  # deprecate `typing` aliases like `List`, `Dict`, etc.
 enableReachabilityAnalysis = true
 enableExperimentalFeatures = false
@@ -494,7 +495,7 @@ reportUnusedClass = "error"  # default: "none"
 #reportUnusedCoroutine = "error"  # default: "error"
 #reportUnusedExcept = "error"  # default: "error"
 #reportUnusedExpression = "none"  # default: "none"
-reportUnusedFunction = "none"  # default: "none"
+#reportUnusedFunction = "none"  # default: "none"
 reportUnusedImport = "error"  # default: "none"
 reportUnusedVariable = "error"  # default: "none"
 reportWildcardImportFromLibrary = "error"  # default: "warning"
