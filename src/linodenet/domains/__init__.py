@@ -11,6 +11,7 @@ Domains should allow:
 __all__ = [
     # Constants
     "MATRIX_TESTS",
+    "TENSOR_TESTS",
     "VECTOR_TESTS",
     # Protocols
     "Domain",
@@ -32,7 +33,7 @@ __all__ = [
     "TensorDomains",
 ]
 
-from . import matrix_tests, vector_tests
+from . import matrix_tests, tensor_tests, vector_tests
 from .base import (
     Domain,
     DomainMapping,
@@ -48,10 +49,12 @@ from .matrix_domains import MatrixDomains
 from .matrix_tests import *
 from .scalar_domains import Interval, RealDomain, ScalarDomains
 from .tensor_domains import TensorDomains
+from .tensor_tests import *
 from .vector_domains import VectorDomains
 from .vector_tests import *
 
 __all__ += matrix_tests.__all__
+__all__ += tensor_tests.__all__
 __all__ += vector_tests.__all__
 
 VECTOR_TESTS: dict[VectorDomains, VectorTest | VectorTestWithArgs] = {
@@ -78,6 +81,17 @@ VECTOR_TESTS: dict[VectorDomains, VectorTest | VectorTestWithArgs] = {
     VectorDomains.ZERO_MEAN      : vector_tests.is_zero_mean_vector,
 }  # fmt: skip
 r"""Map supported vector domains to their corresponding vector test."""
+
+TENSOR_TESTS: dict[TensorDomains, TensorTest | TensorTestWithArgs] = {
+    TensorDomains.BOOLEAN : tensor_tests.is_boolean_tensor,
+    TensorDomains.COMPLEX : tensor_tests.is_complex_tensor,
+    TensorDomains.NONZERO : tensor_tests.is_nonzero_tensor,
+    TensorDomains.ONE     : tensor_tests.is_one_tensor,
+    TensorDomains.REAL    : tensor_tests.is_real_tensor,
+    TensorDomains.SPARSE  : tensor_tests.is_sparse_tensor,
+    TensorDomains.ZERO    : tensor_tests.is_zero_tensor,
+}  # fmt: skip
+r"""Map supported tensor domains to their corresponding tensor test."""
 
 MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.BANDED                  : matrix_tests.is_banded,

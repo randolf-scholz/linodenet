@@ -25,9 +25,18 @@ from collections.abc import (
     Set as AbstractSet,
 )
 from dataclasses import dataclass
+from enum import Enum, EnumType
 from functools import cache
 from types import MappingProxyType, NotImplementedType
-from typing import Any, ClassVar, Final, Protocol, Self, runtime_checkable
+from typing import (
+    Any,
+    ClassVar,
+    Final,
+    Protocol,
+    Self,
+    _ProtocolMeta,
+    runtime_checkable,
+)
 
 import torch
 from torch import Tensor
@@ -475,23 +484,22 @@ def _meet_element[T](objs: Iterable, name: str, kind: type[T]) -> T | None:
     return None
 
 
-from enum import Enum, EnumType
-from typing import _ProtocolMeta
-
-
 class _PosetType(_ProtocolMeta, EnumType):
+    # HACK: https://github.com/python/cpython/issues/149828
+
     @property
-    def _is_protocol(self) -> bool:
+    def _is_protocol(cls) -> bool:
         return False
 
     @_is_protocol.setter
-    def _is_protocol(self, value: bool) -> None:
+    def _is_protocol(cls, value: bool, /) -> None:
         pass
 
 
 class PosetEnum(Enum, metaclass=_PosetType):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
+    # TODO: return type should be Collection[Self | Meet[Self] & Self], requiring Intersection
     KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[intersection]
     r"""Dependencies"""
     KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[intersection]
@@ -791,7 +799,7 @@ class PosetEnum(Enum, metaclass=_PosetType):
             return self in other.supertypes
         if isinstance(other, Meet):
             if all(isinstance(factor, type(self)) for factor in other):
-                return self in type(self)._closure_from(frozenset(other))
+                return self in self._closure_from(frozenset(other))
             if any(_ge(self, factor) is True for factor in other):
                 return True
             return Indeterminate(self, ">=", other)
@@ -814,13 +822,13 @@ class PosetEnum(Enum, metaclass=_PosetType):
 
     @property
     def supertypes(self) -> frozenset[Self]:
-        return type(self)._closure_from(frozenset({self}))
+        return self._closure_from(frozenset({self}))
 
     @property
     def factorizations(self) -> frozenset[Meet[Self]]:  # type: ignore[intersection]
         return frozenset(
             Meet(factors)  # type: ignore[intersection]
-            for node, factors in type(self)._parse_known_meets()
+            for node, factors in self._parse_known_meets()
             if node is self
         )
 
