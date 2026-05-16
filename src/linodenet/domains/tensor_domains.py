@@ -1,7 +1,9 @@
 r"""Tensor-specific domain primitives and partial-order labels."""
 
 __all__ = [
+    "Tensor",
     "TensorDomains",
+    # Classes
     "Boolean",
     "Complex",
     "Empty",
@@ -9,7 +11,6 @@ __all__ = [
     "One",
     "Real",
     "Sparse",
-    "Tensor",
     "Zero",
 ]
 

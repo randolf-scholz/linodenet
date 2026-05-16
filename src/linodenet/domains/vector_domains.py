@@ -1,23 +1,24 @@
 r"""Vector-specific domain primitives and partial-order labels."""
 
 __all__ = [
+    "Vector",
     "VectorDomains",
+    # Classes
     "Boolean",
     "Complex",
     "Discrete",
     "Empty",
-    "One",
-    "Sparse",
-    "Vector",
-    "OneHot",
-    "NonZero",
-    "Positive",
-    "Real",
     "Negative",
     "NonNegative",
     "NonPositive",
-    "Stochastic",
+    "NonZero",
+    "One",
+    "OneHot",
+    "Positive",
+    "Real",
+    "Sparse",
     "Standardized",
+    "Stochastic",
     "UnitBall",
     "UnitCube",
     "UnitL1Ball",
@@ -292,12 +293,15 @@ class VectorDomains(VectorDomain, PosetEnum):
     NONNEGATIVE = NonNegative()  # xᵢ ≥ 0
     NONPOSITIVE = NonPositive()  # xᵢ ≤ 0
 
+    @classmethod
+    def _missing_(cls, value: object) -> Self | None:
+        if isinstance(value, str):
+            return cls.ALIASES.get(value)
+        return None
+
     @property
     def size(self) -> int | None:
         return self.value.size
-
-    def check(self, value: Tensor, /) -> Tensor:
-        return self.value.check(value)
 
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return PosetEnum.__le__(self, other)
@@ -311,16 +315,10 @@ class VectorDomains(VectorDomain, PosetEnum):
     def __gt__(self, other: Any, /) -> bool | Indeterminate:
         return PosetEnum.__gt__(self, other)
 
-    @classmethod
-    def _missing_(cls, value: object) -> Self | None:
-        if isinstance(value, str):
-            return cls.ALIASES.get(value)
-        return None
-
 
 V = VectorDomains  # temporary alias
 # pyrefly: ignore[bad-assignment]
-VectorDomains.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
+V.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
     (V.NONE, V.NEGATIVE & V.NONNEGATIVE),
     (V.NONE, V.NONZERO & V.ZERO),
     (V.NONE, V.POSITIVE & V.NONPOSITIVE),
@@ -330,7 +328,7 @@ VectorDomains.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
     (V.ZERO, V.NONNEGATIVE & V.NONPOSITIVE),
 )
 # pyrefly: ignore[bad-assignment]
-VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccessIssue]
+V.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccessIssue]
     V.BOOLEAN: {V.REAL & V.NONNEGATIVE},
     V.DISCRETE: {V.REAL},
     V.NEGATIVE: {V.REAL & V.NONPOSITIVE & V.NONZERO},
@@ -347,10 +345,10 @@ VectorDomains.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAtt
     V.UNIT_L1_BALL: {V.UNIT_BALL},
     V.ZERO: {V.BOOLEAN},
 })  # fmt: skip
-VectorDomains.KNOWN_SUBTYPES = MappingProxyType(
+V.KNOWN_SUBTYPES = MappingProxyType(
     {V.SPARSE: {V.ZERO, V.ONE_HOT}},
 )
-VectorDomains.ALIASES = MappingProxyType({
+V.ALIASES = MappingProxyType({
     "any"            : V.ANY,
     "boolean"        : V.BOOLEAN,
     "complex"        : V.COMPLEX,

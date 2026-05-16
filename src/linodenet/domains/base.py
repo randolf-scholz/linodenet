@@ -770,6 +770,9 @@ class PosetEnum(Enum, metaclass=_PosetType):
 
         return frozenset(closure)
 
+    def check(self, value: Tensor, /) -> Tensor:
+        return self.value.check(value)
+
     def __le__(self, other: object, /) -> bool | Indeterminate:
         if isinstance(other, type(self)):
             return other in self.supertypes

@@ -1,6 +1,10 @@
 r"""Scalar domain primitives, including intervals and scalar domain labels."""
 
-__all__ = ["Interval", "RealDomain", "ScalarDomains"]
+__all__ = [
+    "Interval",
+    "RealDomain",
+    "ScalarDomains",
+]
 
 import logging
 from collections.abc import Collection, Iterable, Iterator, Mapping
@@ -763,24 +767,24 @@ class ScalarDomains(ScalarDomain, PosetEnum):
 
 
 S = ScalarDomains  # temporary alias
-ScalarDomains.ALIASES = MappingProxyType({
-    "zero"                    : S.ZERO,
-    "one"                     : S.ONE,
-    "pos-inf"                 : S.POS_INF,
-    "positive-infinity"       : S.POS_INF,
+S.ALIASES = MappingProxyType({
+    "extended-line"           : S.EXTENDED_LINE,
+    "half-open-unit-interval" : S.HALF_OPEN_UNIT_INTERVAL,
     "neg-inf"                 : S.NEG_INF,
     "negative-infinity"       : S.NEG_INF,
-    "extended-line"           : S.EXTENDED_LINE,
-    "real-line"               : S.REAL_LINE,
-    "positive-reals"          : S.POSITIVE_REALS,
     "negative-reals"          : S.NEGATIVE_REALS,
     "nonnegative-reals"       : S.NONNEGATIVE_REALS,
     "nonpositive-reals"       : S.NONPOSITIVE_REALS,
     "nonzero"                 : S.NONZERO,
-    "unit-interval"           : S.UNIT_INTERVAL,
-    "open-unit-interval"      : S.OPEN_UNIT_INTERVAL,
-    "half-open-unit-interval" : S.HALF_OPEN_UNIT_INTERVAL,
-    "unit-ball"               : S.UNIT_BALL,
+    "one"                     : S.ONE,
     "open-unit-ball"          : S.OPEN_UNIT_BALL,
+    "open-unit-interval"      : S.OPEN_UNIT_INTERVAL,
+    "pos-inf"                 : S.POS_INF,
+    "positive-infinity"       : S.POS_INF,
+    "positive-reals"          : S.POSITIVE_REALS,
+    "real-line"               : S.REAL_LINE,
+    "unit-ball"               : S.UNIT_BALL,
+    "unit-interval"           : S.UNIT_INTERVAL,
+    "zero"                    : S.ZERO,
 })  # fmt: skip
 del S  # remove alias

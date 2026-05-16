@@ -11,8 +11,8 @@ __all__ = [
     "is_one_tensor",
     "is_real_tensor",
     "is_sparse_tensor",
-    "is_zero_tensor",
     "is_tensor",
+    "is_zero_tensor",
 ]
 
 from collections.abc import Callable
