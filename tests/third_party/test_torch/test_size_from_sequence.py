@@ -64,4 +64,4 @@ def test_size_from_index_sequence() -> None:
     seq = MyRange(5)
 
     # Test with a sequence
-    torch.Size(seq)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+    torch.Size(seq)  # type: ignore[arg-type]

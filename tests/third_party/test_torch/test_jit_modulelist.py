@@ -167,7 +167,7 @@ def test_jit_mixin() -> None:
     # simple MLP
     modules = [nn.Linear(3, 3), nn.ReLU(), nn.Linear(3, 3), nn.ReLU()]
     print(f"{[t.__name__ for t in MySequential.__mro__]}")
-    module = MySequential(modules, shape=(3, 3))
+    module = MySequential(modules, shape=(3, 3))  # pyrefly: ignore[bad-argument-type]
     scripted = jit.script(module)
     x = torch.randn(5, 3)
     # ['MySequential', 'Mixin', 'ModuleList', 'Module', 'object']

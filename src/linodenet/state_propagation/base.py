@@ -17,7 +17,7 @@ from signatures import signature
 class Propagator(Protocol):
     r"""Protocol for time-indexed state evolution operators."""
 
-    input_shape: Final[tuple[int, ...]]  # type: ignore[misc]
+    input_shape: Final[tuple[int, ...]]
     r"""CONST: The dimensionality of inputs."""
 
     @signature("[(..., $n_deltas), (..., *ds)] -> (..., $n_deltas, *ds)")

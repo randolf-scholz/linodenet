@@ -73,3 +73,4 @@ class GRU_D(nn.Module):
         # ∆tₖ = tₖ - tₖ₋₁; ∆t₁ = 0
         increments = t.diff(prepend=torch.zeros_like(t[..., 0]))
         # δₖ = ⟦mₖ=1 ?  ∆tₖ : ∆tₖ + δₖ₋₁⟧; δ₀ = 0
+        raise NotImplementedError

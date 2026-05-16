@@ -30,7 +30,7 @@ from zipfile import ZipFile
 import torch
 from torch import nn
 from torch.export import ExportedProgram
-from torch.jit import RecursiveScriptModule  # type: ignore[attr-defined]
+from torch.jit import RecursiveScriptModule
 from typing_extensions import TypedDict
 
 from .core import (
@@ -104,7 +104,7 @@ class SavedStateDictBlueprint[T: nn.Module](
     └─ assets/                (optional) tensors referenced by model_init.json
     """
 
-    __storage_format__: ReadOnly[Literal["state_dict"]]  # type: ignore[misc]
+    __storage_format__: ReadOnly[Literal["state_dict"]]
     __blueprint__: ReadOnly[Blueprint[T]]
     __assets__: ReadOnly[list[str]]
 
@@ -121,7 +121,7 @@ class SavedTorchScriptBlueprint[T: RecursiveScriptModule](
     └─ model.pt               (required) torchscript payload
     """
 
-    __storage_format__: ReadOnly[Literal["torchscript"]]  # type: ignore[misc]
+    __storage_format__: ReadOnly[Literal["torchscript"]]
 
 
 class SavedTorchExportBlueprint[T: ExportedProgram](
@@ -136,7 +136,7 @@ class SavedTorchExportBlueprint[T: ExportedProgram](
     └─ model.pt               (required) torch export payload
     """
 
-    __storage_format__: ReadOnly[Literal["torch_export"]]  # type: ignore[misc]
+    __storage_format__: ReadOnly[Literal["torch_export"]]
 
 
 def is_serialized_model_blueprint(arg: object, /) -> TypeGuard[SavedModelBlueprint]:
@@ -228,7 +228,7 @@ def serialize_model[M: nn.Module | ExportedProgram](
                 __logger__.exception(exc)
                 hp = {}
         case {**kwargs}:
-            hp = {"__args__": [], "__kwargs__": dict(kwargs)}  # type: ignore[arg-type]
+            hp = {"__args__": [], "__kwargs__": dict(kwargs)}
         case _:
             raise TypeError(f"Unsupported type: {type(hyperparameters)}")
 

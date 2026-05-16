@@ -94,5 +94,5 @@ def test_opcheck(name: str) -> None:
 
     for case, (args, kwargs) in test_cases.items():
         with pytest_xfail(strict=False):
-            torch.library.opcheck(impl, args, kwargs)  # type: ignore[arg-type]
+            torch.library.opcheck(impl, args, kwargs)  # pyrefly: ignore[bad-argument-type]
             print(f"{case}: pass")

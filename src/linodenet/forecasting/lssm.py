@@ -145,10 +145,6 @@ class LatentStateSpaceModel(nn.Module):
         self.padding_size = padding_size
         self.validate_sizes()
 
-        # self.input_size =  filter.input_size  # type: ignore[assignment]
-        # self.output_size = filter.output_size  # type: ignore[assignment]
-        # self.latent_size = system.input_size  # type: ignore[assignment]
-        # self.hidden_size = filter.hidden_size  # type: ignore[assignment]
         # self.padding_size = padding_size
         kernel = getattr(self.state_propagation, "kernel", None)
         if not isinstance(kernel, Tensor):

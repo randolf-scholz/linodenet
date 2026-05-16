@@ -103,7 +103,7 @@ def test_cholesky_factor_surjection() -> None:
 @pytest.mark.parametrize("surjection_cls", [PositiveDefinite, NegativeDefinite])
 def test_cholesky_surjection(surjection_cls: type[Surjection]) -> None:
     surjection = surjection_cls()
-    matrix_test = get_surjection_test(type(surjection))
+    matrix_test = get_surjection_test(type(surjection))  # pyrefly: ignore[bad-argument-type]
 
     x = torch.randn(8, 5, 5).tril()
     y = surjection(x)

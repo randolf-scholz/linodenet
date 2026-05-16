@@ -423,7 +423,6 @@ class TestPerformance(TestSuite):
 
         # NOTE: required for fullgraph=True
         # REF: https://docs.pytorch.org/tutorials/intermediate/compiled_autograd_tutorial.html
-        # pyrefly: ignore[bad-assignment]
         # torch._dynamo.reset()
         # torch._dynamo.config.trace_autograd_ops = True
         # torch._dynamo.config.compiled_autograd = True

@@ -86,10 +86,10 @@ from linodenet.domains.vector_domains import (
 
 def check_meet_join_covariant() -> None:
     def _upcast_meet(arg: Meet[Never]) -> Meet[Domain]:
-        return arg  # type: ignore[return-value]
+        return arg
 
     def _upcast_join(arg: Join[Never]) -> Join[Domain]:
-        return arg  # type: ignore[return-value]
+        return arg
 
 
 class TestScalarDomains:

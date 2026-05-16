@@ -212,7 +212,7 @@ class _WithPostInitMeta(type):
         pass
 
     def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
-        instance = super().__call__(*args, **kwargs)  # type: ignore[misc]
+        instance = super().__call__(*args, **kwargs)
         instance.__post_init__()
         return instance
 
@@ -426,7 +426,7 @@ def parametrized[P: Parametrization](
                     f"\nMaybe you wanted to pass a transform and forgot to instantiate it?"
                 )
             try:
-                return cls(tensor)  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue]
+                return cls(tensor)  # type: ignore[arg-count]
             except Exception as exc:
                 exc.add_note("Could not instantiate parametrization")
                 raise

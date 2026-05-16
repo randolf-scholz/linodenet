@@ -108,7 +108,7 @@ def is_blueprint_key(value: object, /) -> TypeGuard[DunderKey | SunderKey]:
 
 
 # region blueprint types ---------------------------------------------------------------
-class Blueprint[T](TypedDict, extra_items=ReadOnly[object]):  # type: ignore[call-arg]
+class Blueprint[T](TypedDict, extra_items=ReadOnly[object]):
     r"""A dictionary that can be used to initialize an object of type T.
 
     All keys must be dunder or sunder.
@@ -231,7 +231,7 @@ def _infer_args_from_init(arg: object, /) -> Args:
 
     This only works for models that are essentially dataclasses.
     """
-    signature = inspect.signature(arg.__init__)  # type: ignore[misc]
+    signature = inspect.signature(arg.__init__)
     params = list(signature.parameters.values())
 
     if len(params) == 0:
@@ -600,4 +600,4 @@ def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
             raise TypeError("Expected a blueprint dictionary.")
         return BLUEPRINT_REGISTRY.initialize(spec)
     # fall through
-    return spec  # type: ignore[return-value]
+    return spec  # pyrefly: ignore[bad-return]

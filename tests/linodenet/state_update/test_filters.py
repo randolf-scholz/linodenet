@@ -37,7 +37,7 @@ def test_filter_consistency() -> None:
     # logger.info("KalmanCell: Idempotency holds ✔ ")
 
     # Test SequentialFilterBlock
-    model = linodenet.state_update.ResidualFilter.from_config(
+    model = linodenet.state_update.ResidualFilter.from_config(  # type: ignore[attribute]
         input_size=n,
         hidden_size=m,
         autoregressive=True,

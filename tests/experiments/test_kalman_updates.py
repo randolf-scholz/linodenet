@@ -22,10 +22,14 @@ def observation_precision(dim: int, /) -> Array:
 
 
 def _symmetrize(matrix: Array, /) -> Array:
-    return 0.5 * (matrix + matrix.T)
+    return 0.5 * (matrix + matrix.mT)
 
 
-def _as_real_symmetric(matrix: NDArray[np.complex128] | Array, /) -> Array:
+def _matrix_exp_symmetric(matrix: Array | NDArray[np.complex128], /) -> Array:
+    return _as_real_symmetric(expm(matrix))  # type: ignore[arg-type]
+
+
+def _as_real_symmetric(matrix: Array | NDArray[np.complex128], /) -> Array:
     real_matrix = np.real_if_close(matrix, tol=1000)
     if np.iscomplexobj(real_matrix):
         msg = "Expected a real matrix after matrix-function evaluation."
@@ -35,11 +39,7 @@ def _as_real_symmetric(matrix: NDArray[np.complex128] | Array, /) -> Array:
 
 def _inverse_spd(matrix: Array, /) -> Array:
     eye = np.eye(matrix.shape[0], dtype=float)
-    return _symmetrize(solve(matrix, eye, assume_a="pos"))
-
-
-def _matrix_exp_symmetric(matrix: Array, /) -> Array:
-    return _as_real_symmetric(expm(matrix))
+    return _symmetrize(solve(matrix, eye, assume_a="pos"))  # pyrefly: ignore[bad-argument-type]
 
 
 def _validate_state(y_obs: Array, state: State, /) -> State:

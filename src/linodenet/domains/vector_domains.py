@@ -303,6 +303,9 @@ class VectorDomains(VectorDomain, PosetEnum):
     def size(self) -> int | None:
         return self.value.size
 
+    def check(self, value: Tensor, /) -> Tensor:
+        return self.value.check(value)
+
     def __le__(self, other: Any, /) -> bool | Indeterminate:
         return PosetEnum.__le__(self, other)
 

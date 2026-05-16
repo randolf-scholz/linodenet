@@ -14,7 +14,7 @@ class AddPostInitMeta(type):
         pass
 
     def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
-        instance = super().__call__(*args, **kwargs)  # type: ignore[misc]
+        instance = super().__call__(*args, **kwargs)
         instance.__post_init__()
         return instance
 

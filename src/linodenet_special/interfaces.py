@@ -37,8 +37,8 @@ from signatures import signature
 class Defaults[K, V]:
     r"""Container for default values."""
 
-    data: Final[Mapping[K, V]]  # type: ignore[misc]
-    fallback: Final[V]  # type: ignore[misc]
+    data: Final[Mapping[K, V]]
+    fallback: Final[V]
 
     def __getitem__(self, key: K) -> V:
         return self.data.get(key, self.fallback)

@@ -644,7 +644,7 @@ class Parser:
             dims.append(self._parse_dim_type())
 
         self.consume(TokenKind.RPAREN)
-        return (Ellipsis, *dims) if with_ellipsis else tuple(dims)  # type: ignore[arg-type]
+        return (Ellipsis, *dims) if with_ellipsis else tuple(dims)
 
     # DimType ::= Number | ("*"? IdentifierType)
     def _parse_dim_type(self) -> DimType:
@@ -797,5 +797,5 @@ class signature:
 
     def __call__[Fn: Callable](self, fn: Fn) -> Fn:
         r"""Decorator to annotate function signatures."""
-        fn.signature = self  # type: ignore[attr-defined]  # pyright: ignore[reportFunctionMemberAccess]
+        fn.signature = self  # type: ignore[missing-attribute]
         return fn

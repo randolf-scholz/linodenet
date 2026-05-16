@@ -703,7 +703,7 @@ class TraceEstimator(nn.Module):
         """
         power_op: Fn[[Tensor], Tensor] = lambda z: z  # noqa: E731
         for _ in range(max_power):
-            power_op = lambda z, g=power_op, /: op(g(z))  # type: ignore[misc]  # noqa: E731
+            power_op = lambda z, g=power_op, /: op(g(z))  # noqa: E731
             yield self(power_op, x)
 
 

@@ -92,8 +92,8 @@ class StateUpdater(AbstractStateUpdate[Tensor, Tensor], Protocol):
     .. math::  x' = F(y, x)
     """
 
-    input_size: Final[int]  # type: ignore[misc]
-    hidden_size: Final[int]  # type: ignore[misc]
+    input_size: Final[int]
+    hidden_size: Final[int]
 
     def __init__(self, /, input_size: int, hidden_size: int) -> None:
         super().__init__()

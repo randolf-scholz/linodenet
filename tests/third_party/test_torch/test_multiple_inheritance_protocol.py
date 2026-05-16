@@ -11,8 +11,8 @@ from torch import Tensor, jit, nn
 
 
 class Filter(Protocol):
-    input_size: Final[int]  # type: ignore[misc]
-    hidden_size: Final[int]  # type: ignore[misc]
+    input_size: Final[int]
+    hidden_size: Final[int]
 
     def __init__(self, input_size: int, hidden_size: int) -> None:
         super().__init__()
@@ -69,12 +69,13 @@ def test_multiple_inheritance_fails_with_bad_order() -> None:
     class FilterModule(Filter, nn.Module):  # <- only works with this order!
         pass
 
-    class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):  # type: ignore[misc]
+    # pyrefly: ignore[inconsistent-inheritance]
+    class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
         pass
 
     with pytest.raises(TypeError, match="Cannot create a consistent method resolution"):
 
-        class _(ModuleSequence[nn.Module], FilterModule): ...  # type: ignore  # pyright: ignore  # noqa: PGH003
+        class _(ModuleSequence[nn.Module], FilterModule): ...  # type: ignore  # noqa: PGH003
 
 
 def test_multiple_inheritance() -> None:
@@ -86,11 +87,12 @@ def test_multiple_inheritance() -> None:
         @abstractmethod
         def forward(self, y: Tensor, x: Tensor) -> Tensor: ...
 
-    class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):  # type: ignore[misc]
+    # pyrefly: ignore[inconsistent-inheritance]
+    class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
         pass
 
     # NOTE: init only works with this order!
-    class FilterSequence(FilterModule, ModuleSequence[nn.Module]):  # type: ignore[misc]
+    class FilterSequence(FilterModule, ModuleSequence[nn.Module]):
         def __init__(
             self,
             modules: Iterable[Filter] = (),

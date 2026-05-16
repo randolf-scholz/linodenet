@@ -65,7 +65,7 @@ def compute_linode_error(
     def func(_: NDArray, x: NDArray) -> NDArray:
         return A @ x
 
-    sol = solve_ivp(  # type: ignore[call-overload]
+    sol = solve_ivp(
         func,
         [t0, t1],
         y0=x0,

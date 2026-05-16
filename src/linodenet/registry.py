@@ -216,7 +216,7 @@ class Registry(Mapping[str, RegistryEntry]):
     def __len__(self) -> int:
         return len(self._entries)
 
-    def get[T = None](self, key: str, default: T = None) -> RegistryEntry | T:  # type: ignore[assignment]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def get[T = None](self, key: str, default: T = None) -> RegistryEntry | T:  # type: ignore[default]
         r"""Return the entry for `key` if present."""
         return self._entries.get(normalize_registry_name(key), default)
 

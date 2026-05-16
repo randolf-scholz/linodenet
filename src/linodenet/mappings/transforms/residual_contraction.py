@@ -84,7 +84,7 @@ class ResidualContractionBase[M: nn.Module](TransformBase):
         r"""Compute the inverse through fixed point iteration."""
         # note: solve x = y - ρ(f(x))
         return fixpoint_solve(
-            lambda x: y - self.gate(self.contraction(x)),  # type: ignore[misc]
+            lambda x: y - self.gate(self.contraction(x)),
             y,
             maxiter=self.maxiter,
             atol=self.atol,
@@ -141,7 +141,6 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         - `ResidualContractionFallback`: Uses a plain python loop rather than `torch.while_loop`.
     """
 
-    # pyrefly: ignore[bad-override]
     contraction: M
     num_trace_samples: Final[int]
     num_series_terms: Final[int]
@@ -330,7 +329,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
         # solve z = Vy + b - Vρ(Uϕₛ(z)),  z = Vx + b
         vty = self.V(y)
         z_star = fixpoint_solve(
-            lambda z: vty - (self.latent_map(z) - z),  # type: ignore[misc]
+            lambda z: vty - (self.latent_map(z) - z),
             vty.clone(),
             maxiter=self.maxiter,
             atol=self.atol,

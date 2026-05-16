@@ -76,10 +76,10 @@ class ReverseDense(nn.Module):
 
         # initialize activation
         self.activation = Activations.new(activation)
-        nn.init.kaiming_uniform_(self.weight, nonlinearity=self.nonlinearity)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+        nn.init.kaiming_uniform_(self.weight, nonlinearity=self.nonlinearity)  # type: ignore[arg-type]
 
         if self.bias is not None:
-            nn.init.kaiming_uniform_(self.bias[None], nonlinearity=self.nonlinearity)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+            nn.init.kaiming_uniform_(self.bias[None], nonlinearity=self.nonlinearity)  # type: ignore[arg-type]
 
     @signature("(..., m) -> (..., n)")
     def forward(self, x: Tensor, /) -> Tensor:

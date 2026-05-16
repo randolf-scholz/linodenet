@@ -379,6 +379,7 @@ class GaussianLatentStateUpdate(nn.Module):
         self, theta: tuple[Tensor, Tensor], y_obs: Tensor
     ) -> tuple[Tensor, Tensor]:
         r"""Gradient step assuming parameterization $θ=(μ, Σ)$."""
+        raise NotImplementedError
 
     def update_cholesky(
         self, theta: tuple[Tensor, Tensor], y_obs: Tensor
@@ -389,8 +390,10 @@ class GaussianLatentStateUpdate(nn.Module):
         sigma_dash = nn.Parameter(sigma)
         grad_fn = torch.func.grad(kl, argnums=0)
         grad_fn((mu_dash, sigma_dash), (mu, sigma), parametrization="cholesky")
+        raise NotImplementedError
 
     def update_precision(
         self, theta: tuple[Tensor, Tensor], y_obs: Tensor
     ) -> tuple[Tensor, Tensor]:
         r"""Gradient step assuming parameterization $θ=(μ, Λ)$, with $Σ=Λ⁻¹$."""
+        raise NotImplementedError

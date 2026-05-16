@@ -50,8 +50,8 @@ class SquareStateUpdater(AbstractSquareStateUpdate[Tensor], Protocol):
     Note: Every SquareStateUpdater is also a StateUpdater with `hidden_size == input_size`.
     """
 
-    input_size: Final[int]  # type: ignore[misc]
-    hidden_size: Final[int]  # type: ignore[misc]
+    input_size: Final[int]
+    hidden_size: Final[int]
 
     def __init__(self, /, input_size: int) -> None:
         super().__init__()
@@ -128,8 +128,8 @@ class UpdateList[C: StateUpdaterBase](SquareStateUpdaterBase, ModuleSequence[C])
         # because it will overwrite internal state otherwise.
         # Therefore, we need to carefully manually reproduce the __init__ logic here.
         super(ModuleSequence, self).__init__(modules)
-        self.input_size = int(input_size)  # type: ignore[misc] # pyright: ignore[reportGeneralTypeIssues]
-        self.hidden_size = int(input_size)  # type: ignore[misc] # pyright: ignore[reportGeneralTypeIssues]
+        self.input_size = int(input_size)  # type: ignore[misc]
+        self.hidden_size = int(input_size)  # type: ignore[misc]
 
     @abstractmethod
     def forward(self, y_obs: Tensor, y_hat: Tensor, /) -> Tensor: ...

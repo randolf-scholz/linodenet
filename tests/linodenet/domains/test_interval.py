@@ -24,7 +24,7 @@ class TestInterval:
         assert Interval(Interval.EMPTY) is Interval.EMPTY
 
         with pytest.raises(TypeError):
-            Interval("[0, 1)", 1.0)  # type: ignore[call-overload] # pyright: ignore[reportCallIssue]
+            Interval("[0, 1)", 1.0)  # type: ignore[call]
 
     def test_init_logs_debug_on_invalid_string(
         self, caplog: pytest.LogCaptureFixture
@@ -158,7 +158,7 @@ class TestInterval:
 
     def test_intersection_operator_rejects_non_intervals(self) -> None:
         with pytest.raises(TypeError):
-            _ = Interval("[0, 1]") & 1  # type: ignore[operator]  # pyright: ignore[reportOperatorIssue]
+            _ = Interval("[0, 1]") & 1  # type: ignore[operator]
 
     @pytest.mark.parametrize(
         ("left", "right", "expected"),

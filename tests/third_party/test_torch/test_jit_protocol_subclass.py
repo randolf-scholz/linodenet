@@ -10,8 +10,8 @@ from torch import Tensor, jit, nn
 
 @runtime_checkable
 class Cell(Protocol):
-    input_size: Final[int]  # type: ignore[misc]
-    hidden_size: Final[int]  # type: ignore[misc]
+    input_size: Final[int]
+    hidden_size: Final[int]
 
 
 class MyCell(nn.Module):
