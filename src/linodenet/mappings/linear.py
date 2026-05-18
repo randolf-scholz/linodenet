@@ -31,7 +31,11 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from linodenet.nn.parametrize import register_parametrization, update_parametrizations
+from linodenet.nn import ModuleMapping
+from linodenet.nn.parametrize import (
+    register_parametrization,
+    update_parametrizations,
+)
 
 from .projections import Contraction, UnitVector
 from .surjections import OrthogonalHouseholder
@@ -65,7 +69,7 @@ class LinearContraction(nn.Linear):
         self.output_size = self.out_features
 
         register_parametrization(self, "weight", Contraction(lipschitz_bound=c))
-        self.parametrizations: nn.ModuleDict
+        self.parametrizations: ModuleMapping[nn.Module]
         assert isinstance(self.parametrizations.weight, nn.Module)
         param = self.parametrizations.weight.original_parameter
         assert isinstance(param, nn.Parameter)
@@ -125,7 +129,7 @@ class RankOneContraction(nn.Module):
         self.reset_parameters()
         register_parametrization(self, "weight_u", UnitVector())
         register_parametrization(self, "weight_v", UnitVector())
-        self.parametrizations: nn.ModuleDict
+        self.parametrizations: ModuleMapping[nn.Module]
         assert isinstance(self.parametrizations.weight_u, nn.Module)
         assert isinstance(self.parametrizations.weight_v, nn.Module)
         u_param = self.parametrizations.weight_u.original_parameter
@@ -221,7 +225,7 @@ class LowRankContraction(nn.Module):
         self.reset_parameters()
         register_parametrization(self, "weight_u", OrthogonalHouseholder())
         register_parametrization(self, "weight_v", OrthogonalHouseholder())
-        self.parametrizations: nn.ModuleDict
+        self.parametrizations: ModuleMapping[nn.Module]
         assert isinstance(self.parametrizations.weight_u, nn.Module)
         assert isinstance(self.parametrizations.weight_v, nn.Module)
         u_param = self.parametrizations.weight_u.original_parameter

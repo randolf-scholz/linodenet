@@ -3,12 +3,12 @@ from torch import Tensor, nn
 from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
+from linodenet.nn import ModuleMapping
 from linodenet.nn.parametrize import (
     ParametrizationList,
     cached,
     is_parametrized,
     register_parametrization,
-    register_parametrization_new,
     update_parametrizations,
 )
 
@@ -126,14 +126,14 @@ def test_update_parametrizations_heals_connections_after_to() -> None:
     model = nn.Linear(in_features=5, out_features=4, bias=False)
     register_parametrization(model, "weight", UpperTriangular())
 
-    assert isinstance(model.parametrizations, nn.ModuleDict)
+    assert isinstance(model.parametrizations, ModuleMapping)
     parametrization = model.parametrizations["weight"]
     assert isinstance(parametrization, nn.Module)
     assert isinstance(model.weight, Tensor)
     assert model.weight is parametrization.cached_parameter
 
     model = model.to(dtype=torch.float64)
-    assert isinstance(model.parametrizations, nn.ModuleDict)
+    assert isinstance(model.parametrizations, ModuleMapping)
     parametrization = model.parametrizations["weight"]
     assert isinstance(parametrization, nn.Module)
     assert isinstance(model.weight, Tensor)
@@ -149,7 +149,7 @@ def test_update_parametrizations_heals_connections_after_to() -> None:
 def test_register_parametrization_new_installs_parametrization_list() -> None:
     model = nn.Linear(in_features=4, out_features=4, bias=False)
 
-    register_parametrization_new(model, "weight", ScaleByTwo())
+    register_parametrization(model, "weight", ScaleByTwo())
 
     parametrization = model.parametrizations["weight"]
     assert isinstance(parametrization, ParametrizationList)
@@ -160,8 +160,8 @@ def test_register_parametrization_new_installs_parametrization_list() -> None:
 def test_register_parametrization_new_appends_on_second_registration() -> None:
     model = nn.Linear(in_features=4, out_features=4, bias=False)
 
-    register_parametrization_new(model, "weight", ScaleByTwo())
-    register_parametrization_new(model, "weight", ShiftByOne())
+    register_parametrization(model, "weight", ScaleByTwo())
+    register_parametrization(model, "weight", ShiftByOne())
 
     parametrization = model.parametrizations["weight"]
     assert isinstance(parametrization, ParametrizationList)

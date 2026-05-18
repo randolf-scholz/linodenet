@@ -7,6 +7,7 @@ from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
 from linodenet.parametrizations import (
+    ParametrizationList,
     ReZero,
     get_parametrizations,
     register_optimizer_hook,
@@ -44,15 +45,18 @@ class TestReZero(TestSuite):
         register_optimizer_hook(optimizer, model)
 
         parametrization = get_parametrizations(model.residual)["weight"]
-        assert isinstance(parametrization, ReZero)
+        assert isinstance(parametrization, ParametrizationList)
+        assert len(parametrization) == 1
+        rezero = parametrization[0]
+        assert isinstance(rezero, ReZero)
         self.assert_close(
-            parametrization.scalar.detach(),
+            rezero.scalar.detach(),
             torch.tensor(0.0, device=device),
             atol=1e-6,
             rtol=1e-6,
         )
 
-        original_scalar = parametrization.scalar.detach().clone()
+        original_scalar = rezero.scalar.detach().clone()
         original_output = model(x).detach().clone()
         original_loss = mse_loss(original_output, y)
 
@@ -62,6 +66,6 @@ class TestReZero(TestSuite):
             loss.backward()
             optimizer.step()
 
-        assert not torch.allclose(parametrization.scalar, original_scalar)
+        assert not torch.allclose(rezero.scalar, original_scalar)
         assert not torch.allclose(model(x), original_output)
         assert mse_loss(model(x), y) < original_loss
