@@ -15,6 +15,22 @@ from linodenet.nn.parametrize import (
 from linodenet.nn.rezero import ReZero
 
 
+class ScaleByTwo(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return 2 * x
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        return y / 2
+
+
+class ShiftByOne(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return x + 1
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        return y - 1
+
+
 def register_parametrization_list(
     module: nn.Module,
     tensor_name: str,
@@ -129,3 +145,18 @@ def test_parametrization_list_skew_symmetric_cayley_and_rezero_supports_training
 
     assert not torch.allclose(rezero.scalar, scalar_before)
     assert not torch.allclose(model.weight, torch.zeros_like(model.weight))
+
+
+def test_parametrization_list_right_inverse_inverts_forward_in_reverse_order() -> None:
+    tensor = nn.Parameter(torch.zeros(2, 2))
+    parametrization = ParametrizationList(tensor)
+    parametrization.append(ScaleByTwo())
+    parametrization.append(ShiftByOne())
+
+    original = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
+    transformed = parametrization(original)
+    recovered = parametrization.right_inverse(transformed)
+
+    assert recovered is not None
+    assert torch.allclose(transformed, 2 * original + 1)
+    assert torch.allclose(recovered, original)

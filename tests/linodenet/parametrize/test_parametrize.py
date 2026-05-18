@@ -4,9 +4,11 @@ from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
 from linodenet.nn.parametrize import (
+    ParametrizationList,
     cached,
     is_parametrized,
     register_parametrization,
+    register_parametrization_new,
     update_parametrizations,
 )
 
@@ -17,6 +19,22 @@ class UpperTriangular(nn.Module):
 
     def right_inverse(self, y: Tensor) -> Tensor:
         return y
+
+
+class ScaleByTwo(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return 2 * x
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        return y / 2
+
+
+class ShiftByOne(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return x + 1
+
+    def right_inverse(self, y: Tensor) -> Tensor:
+        return y - 1
 
 
 def is_upper_triangular(x: Tensor) -> bool:
@@ -126,3 +144,27 @@ def test_update_parametrizations_heals_connections_after_to() -> None:
     assert model.weight is parametrization.cached_parameter
     assert model.weight.dtype == torch.float64
     assert is_upper_triangular(model.weight)
+
+
+def test_register_parametrization_new_installs_parametrization_list() -> None:
+    model = nn.Linear(in_features=4, out_features=4, bias=False)
+
+    register_parametrization_new(model, "weight", ScaleByTwo())
+
+    parametrization = model.parametrizations["weight"]
+    assert isinstance(parametrization, ParametrizationList)
+    assert len(parametrization) == 1
+    assert torch.allclose(model.weight, 2 * parametrization.original_parameter)
+
+
+def test_register_parametrization_new_appends_on_second_registration() -> None:
+    model = nn.Linear(in_features=4, out_features=4, bias=False)
+
+    register_parametrization_new(model, "weight", ScaleByTwo())
+    register_parametrization_new(model, "weight", ShiftByOne())
+
+    parametrization = model.parametrizations["weight"]
+    assert isinstance(parametrization, ParametrizationList)
+    assert len(parametrization) == 2
+    assert is_parametrized(model, "weight")
+    assert torch.allclose(model.weight, 2 * parametrization.original_parameter + 1)
