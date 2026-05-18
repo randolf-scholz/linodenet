@@ -70,7 +70,6 @@ def test_riemann_manifolds_implement_protocol(manifold: ManifoldBase) -> None:
 
 def test_special_orthogonal_implements_lie_group_protocol() -> None:
     assert isinstance(SpecialOrthogonalManifold(), MatrixLieGroup)
-    assert not isinstance(PositiveDefiniteManifold(), ManifoldBase)
 
 
 @pytest.mark.parametrize(

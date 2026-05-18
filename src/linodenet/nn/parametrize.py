@@ -72,6 +72,7 @@ __all__ = [
     "Surjection",
     "Parametrization",
     # Classes
+    "post_init_hook",
     "WithoutRightInverse",
     "ParametrizationBase",
     "WrappedParametrization",
@@ -97,7 +98,7 @@ __all__ = [
 ]
 
 import copy
-from abc import abstractmethod
+from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
@@ -105,7 +106,6 @@ from typing import (
     Any,
     Final,
     Literal,
-    Never,
     Optional,
     Protocol,
     Self,
@@ -206,9 +206,10 @@ class WithoutRightInverse(nn.Module):
 
 
 # region base classes ------------------------------------------------------------------
-class _WithPostInitMeta(type):
-    @staticmethod
-    def __post_init__(_: Never, /) -> None:
+class post_init_hook(ABCMeta):
+    r"""Metclass that adds a ``__post_init__`` hook to class initialization."""
+
+    def __post_init__(cls, /) -> None:
         pass
 
     def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
@@ -226,12 +227,12 @@ class _WithPostInitMeta(type):
     ) -> type:
         new: type[Any] = super().__new__(cls, name, bases, namespace, **kwargs)
         if getattr(new, "__post_init__", None) is None:
-            namespace["__post_init__"] = _WithPostInitMeta.__post_init__
+            namespace["__post_init__"] = post_init_hook.__post_init__
             new = super().__new__(cls, name, bases, namespace, **kwargs)
         return new
 
 
-class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
+class ParametrizationBase(nn.Module, metaclass=post_init_hook):
     r"""Base class for parametrization of a single tensor using a single cached tensor."""
 
     original_parameter: nn.Parameter
@@ -357,8 +358,32 @@ class ParametrizationBase(nn.Module, metaclass=_WithPostInitMeta):
         self.set_fresh()
 
 
-class ParametrizationList(ModuleSequence):
-    r"""TODO: implement ParametrizationList."""
+# TODO: Use Intersection type
+class ParametrizationList(ModuleSequence[ParametrizationBase], ParametrizationBase):
+    r"""Applies multiple parametrizations to the same tensor in sequence.
+
+    Uses `right_inverse` to get the pullback of the parametrization to update the original tensor.
+    """
+
+    def __init__(
+        self,
+        tensor: Tensor,
+        *,
+        unsafe: bool = False,
+    ) -> None:
+        ParametrizationBase.__init__(self, tensor, unsafe=unsafe)
+
+    def forward(self, x: Tensor, /) -> Tensor:
+        for parametrization in self:
+            x = parametrization(x)
+        return x
+
+    def right_inverse(self, y: Tensor, /) -> Tensor | None:
+        for parametrization in self:
+            y = parametrization.right_inverse(y)
+            if y is None:
+                return None
+        return y
 
 
 class WrappedParametrization(ParametrizationBase):
