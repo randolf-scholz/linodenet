@@ -13,7 +13,7 @@ BATCH_SIZE = 5
 
 
 class TestModuleSequence:
-    def test_types(self) -> None:
+    def test_interface(self) -> None:
         D = 3
         DIM_OUT = 2
         m1 = nn.Linear(D, D)
@@ -112,7 +112,7 @@ class TestModuleSequence:
 
 
 class TestModuleMapping:
-    def test_types(self) -> None:
+    def test_interface(self) -> None:
         D = 3
         DIM_OUT = 2
         m1 = nn.Linear(D, D)
@@ -123,6 +123,8 @@ class TestModuleMapping:
             assert_type(m, ModuleMapping[nn.Linear])
             assert_type(m["m1"], nn.Linear)
             assert_type(m["m2"], nn.Linear)
+            assert_type(m.get("m1"), nn.Linear | None)
+            assert_type(m.get("missing"), nn.Linear | None)
             assert_type(iter(m), Iterator[str])
             assert_type(m.keys(), KeysView[str])
             assert_type(m.values(), ValuesView[nn.Linear])
@@ -141,6 +143,8 @@ class TestModuleMapping:
             assert type(m) is ModuleMapping
             assert type(m["m1"]) is nn.Linear
             assert type(m["m2"]) is nn.Linear
+            assert type(m.get("m1")) is nn.Linear
+            assert m.get("missing") is None
 
             assert type(iter(m)) is type(iter({}))
             assert type(m.keys()) is type({}.keys())
