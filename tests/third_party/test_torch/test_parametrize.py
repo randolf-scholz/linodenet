@@ -15,6 +15,30 @@ class Symmetric(nn.Module):
         return x.triu() + x.triu(1).transpose(-1, -2)
 
 
+class MyLinear(nn.Module):
+    def __init__(self, in_features: int, out_features: int) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(in_features, out_features))
+
+    def forward(self, x: Tensor) -> Tensor:
+        return nn.functional.linear(x, self.weight)
+
+
+def test_torch_parametrize_demo() -> None:
+    layer = nn.Linear(3, 3)
+    print(f"Unparametrized:\n{layer}")
+
+    # apply parametrization
+    # This injects a nn.ModuleDict called `parametrizations` into the layer,
+    # which holds the parametrization modules.
+    # It also changes layer.__class__ in order to inject the new property.
+    parametrize.register_parametrization(layer, "weight", Symmetric())
+    print(f"\nParametrized:\n{layer}")
+    assert isinstance(layer.parametrizations, nn.ModuleDict)
+    assert isinstance(layer, nn.Linear)
+    assert type(layer) is not nn.Linear
+
+
 def test_torch_parametrize_basic() -> None:
     n = 4
     model = nn.Linear(n, n)
