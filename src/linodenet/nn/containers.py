@@ -15,7 +15,7 @@ from collections.abc import (
     Sequence,
     ValuesView,
 )
-from typing import TYPE_CHECKING, Never, Self, overload
+from typing import TYPE_CHECKING, Never, overload
 
 import torch
 from torch import Tensor, nn
@@ -62,14 +62,21 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
     if TYPE_CHECKING:
         # We add these at type-checking time to help mypy and pyright
         # Since they are skipped at runtime, they won't interfere with JIT compilation
+        _modules: Mapping[str, M]  # type: ignore[override]
 
         def __init__(self, modules: Iterable[M] = (), /) -> None: ...
         def __iter__(self) -> Iterator[M]: ...
 
-        @overload
-        def __getitem__(self, index: int, /) -> M: ...  # pyrefly: ignore[bad-override]
-        @overload
-        def __getitem__(self, index: slice, /) -> Self: ...  # pyright: ignore[reportIncompatibleMethodOverride]
+    @overload
+    def __getitem__(self, index: int, /) -> M: ...  # pyrefly: ignore[bad-override]
+    @overload
+    def __getitem__(self, index: slice, /) -> ModuleSequence[M]: ...
+    def __getitem__(self, index: int | slice, /) -> M | ModuleSequence[M]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(index, slice):
+            modules = list(self._modules.values())
+            selection = modules[index]
+            return ModuleSequence(selection)
+        return self._modules[self._get_abs_string_index(index)]
 
 
 class ModuleMapping[M: Module](ModuleDict, Mapping[str, M]):
