@@ -9,6 +9,7 @@ _*/
 !docs/_static/
 !docs/_templates/
 
+tmp*.py
 # zip files
 *.zip
 # pickle files
