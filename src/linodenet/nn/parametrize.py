@@ -80,8 +80,8 @@ __all__ = [
     # torch.nn.utils.parametrizations replacements
     "parametrized",
     "is_parametrized",
+    "register_parametrization_old",
     "register_parametrization",
-    "register_parametrization_new",
     "remove_parametrizations",
     "cached",
     # Functions
@@ -100,7 +100,7 @@ __all__ = [
 
 import copy
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
@@ -115,6 +115,7 @@ from typing import (
     overload,
     runtime_checkable,
 )
+from warnings import deprecated
 
 import torch
 from torch import Tensor, jit, nn
@@ -359,8 +360,10 @@ class ParametrizationBase(nn.Module, metaclass=post_init_hook):
         self.set_fresh()
 
 
-# TODO: Use Intersection type
-class ParametrizationList(ModuleSequence[ParametrizationBase], ParametrizationBase):
+# TODO: Use Intersection type (Parametrization & Module)
+class ParametrizationList[
+    P: ParametrizationBase = ParametrizationBase,
+](ModuleSequence[P], ParametrizationBase):
     r"""Applies multiple parametrizations to the same tensor in sequence.
 
     Uses `right_inverse` to get the pullback of the parametrization to update the original tensor.
@@ -373,18 +376,23 @@ class ParametrizationList(ModuleSequence[ParametrizationBase], ParametrizationBa
         unsafe: bool = False,
     ) -> None:
         ParametrizationBase.__init__(self, tensor, unsafe=unsafe)
+        self._modules: Mapping[str, P]  # type: ignore[override]
 
-    def forward(self, x: Tensor, /) -> Tensor:
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
         for parametrization in self:
             x = parametrization(x)
         return x
 
-    def right_inverse(self, y: Tensor, /) -> Tensor | None:
-        for parametrization in reversed(self):
-            y = parametrization.right_inverse(y)
-            if y is None:
-                return None
-        return y
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor | None:
+        # NOTE: JIT does not support reversed().
+        z: Tensor | None = y
+        for parametrization in self[::-1]:
+            if z is None:
+                return z
+            z = parametrization.right_inverse(z)
+        return z
 
 
 class WrappedParametrization(ParametrizationBase):
@@ -512,7 +520,8 @@ def _register_stale_hook(wrapper: ParametrizationBase, /) -> None:
     wrapper.original_parameter.register_post_accumulate_grad_hook(hook)
 
 
-def register_parametrization(
+@deprecated("Use register_parametrization instead")
+def register_parametrization_old(
     module: nn.Module,
     tensor_name: str,
     parametrization: nn.Module | type[ParametrizationBase],
@@ -540,7 +549,7 @@ def register_parametrization(
     _register_stale_hook(wrapper)
 
 
-def register_parametrization_new(
+def register_parametrization(
     module: nn.Module,
     tensor_name: str,
     parametrization: nn.Module | type[ParametrizationBase],
