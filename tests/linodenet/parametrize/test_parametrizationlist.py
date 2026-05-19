@@ -108,7 +108,9 @@ def test_parametrization_list_skew_symmetric_then_cayley_supports_training_step(
         CayleyMap(),
     )
 
-    assert get_parametrizations(model)["weight"] is parametrization
+    parametrizations = get_parametrizations(model)
+    assert parametrizations is not None
+    assert parametrizations["weight"] is parametrization
     assert len(parametrization) == 2
     assert is_orthogonal(model.weight, size=4).all()
 
@@ -133,7 +135,9 @@ def test_parametrization_list_skew_symmetric_cayley_and_rezero_supports_training
         WithoutRightInverse(ReZero()),
     )
 
-    assert get_parametrizations(model)["weight"] is parametrization
+    parametrizations = get_parametrizations(model)
+    assert parametrizations is not None
+    assert parametrizations["weight"] is parametrization
     assert len(parametrization) == 3
     assert torch.allclose(model.weight, torch.zeros_like(model.weight))
 

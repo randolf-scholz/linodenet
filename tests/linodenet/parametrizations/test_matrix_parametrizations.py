@@ -93,7 +93,9 @@ class TestParametrization(TestSuite):
         return layer
 
     def get_weight_parametrization(self, layer: nn.Linear, /) -> ParametrizationBase:
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrizations = get_parametrizations(layer)
+        assert parametrizations is not None
+        parametrization = parametrizations["weight"]
         assert isinstance(parametrization, ParametrizationBase)
         return parametrization
 

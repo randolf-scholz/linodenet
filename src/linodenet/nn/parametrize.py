@@ -71,6 +71,7 @@ __all__ = [
     # Protocol
     "Surjection",
     "Parametrization",
+    "Parametrized",
     # Classes
     "post_init_hook",
     "WithoutRightInverse",
@@ -80,7 +81,6 @@ __all__ = [
     # torch.nn.utils.parametrizations replacements
     "parametrized",
     "is_parametrized",
-    "register_parametrization_old",
     "register_parametrization",
     "remove_parametrizations",
     "cached",
@@ -99,6 +99,7 @@ __all__ = [
 ]
 
 import copy
+import warnings
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, ContextDecorator
@@ -115,7 +116,6 @@ from typing import (
     overload,
     runtime_checkable,
 )
-from warnings import deprecated
 
 import torch
 from torch import Tensor, jit, nn
@@ -152,7 +152,6 @@ def is_surjection(obj: object, /) -> bool:
     return callable(obj) and callable(getattr(obj, "right_inverse", None))
 
 
-@runtime_checkable
 class Parametrization(Protocol):
     r"""Protocol for parametrizations."""
 
@@ -186,6 +185,23 @@ def is_parametrization(obj: object, /) -> bool:
         callable(getattr(obj, name, None))
         for name in get_protocol_members(Parametrization)
     )
+
+
+class Parametrized(Protocol):
+    r"""Protocol for parametrized modules."""
+
+    parametrizations: ParametrizationList
+
+
+def is_parametrized(
+    module: nn.Module, tensor_name: Optional[str] = None
+) -> TypeIs[Parametrized]:
+    r"""Return True if the module has any parametrizations."""
+    if tensor_name is None:
+        return any(is_parametrization(m) for m in module.modules())
+
+    parametrizations = get_parametrizations(module)
+    return parametrizations is not None and tensor_name in parametrizations
 
 
 class WithoutRightInverse(nn.Module):
@@ -506,47 +522,16 @@ def _install_parametrization(
             msg = f"Expected a nn.ParameterDict, but got {type(ts)}!"
             raise TypeError(msg)
 
+    # remove the existing tensor
     if hasattr(module, tensor_name):
         delattr(module, tensor_name)
+
     module.register_buffer(tensor_name, wrapper.get_cached_tensor())
 
-
-def _register_stale_hook(wrapper: ParametrizationBase, /) -> None:
-    r"""Mark wrapper cache stale after gradients were accumulated."""
-
-    def hook(_: Tensor) -> None:
-        wrapper.set_stale()
-
-    wrapper.original_parameter.register_post_accumulate_grad_hook(hook)
-
-
-@deprecated("Use register_parametrization instead")
-def register_parametrization_old(
-    module: nn.Module,
-    tensor_name: str,
-    parametrization: nn.Module | type[ParametrizationBase],
-    *,
-    unsafe: bool = False,
-) -> None:
-    r"""Drop-in replacement for nn.utils.parametrizations.register_parametrization."""
-    tensor = getattr(module, tensor_name)
-    if not isinstance(tensor, nn.Parameter):
-        raise TypeError(f"{tensor_name} is not a parameter!")
-
-    if tensor_name in getattr(module, "parametrizations", {}):
-        raise NameError(f"{tensor_name} already parametrized!")
-
-    wrapper = parametrized(tensor, parametrization, unsafe=unsafe)
-
-    if not isinstance(wrapper, nn.Module) or not is_parametrization(wrapper):
-        raise TypeError(f"{parametrization} does not produce a valid parametrization!")
-
-    if not unsafe:
-        assert_is_safe_parametrization(wrapper, tensor)
-
-    _install_parametrization(module, tensor_name, wrapper)
-    wrapper.update_parametrization()
-    _register_stale_hook(wrapper)
+    # register the hook that makes the parametrized tensor stale after backward() call
+    wrapper.original_parameter.register_post_accumulate_grad_hook(
+        lambda _: wrapper.set_stale()
+    )
 
 
 def register_parametrization(
@@ -557,26 +542,32 @@ def register_parametrization(
     unsafe: bool = False,
 ) -> None:
     r"""Register a parametrization, chaining multiple registrations via ParametrizationList."""
-    parametrizations = get_parametrizations(module)
-    match parametrizations.get(tensor_name):
+    existing_parametrizations = get_parametrizations(module)
+    existing_parametrization = (
+        None
+        if existing_parametrizations is None  # fmt
+        else existing_parametrizations.get(tensor_name)
+    )
+    parametrizations: ParametrizationList
+
+    match existing_parametrization:
         case None:
             tensor = getattr(module, tensor_name)
             if not isinstance(tensor, nn.Parameter):
                 raise TypeError(f"{tensor_name} is not a parameter!")
 
-            wrapper = ParametrizationList(tensor, unsafe=unsafe)
-            _register_stale_hook(wrapper)
-            _install_parametrization(module, tensor_name, wrapper)
+            parametrizations = ParametrizationList(tensor, unsafe=unsafe)
+            _install_parametrization(module, tensor_name, parametrizations)
 
-        case ParametrizationList() as wrapper:
-            tensor = wrapper.original_parameter
+        case ParametrizationList() as parametrizations:
+            tensor = parametrizations.original_parameter
 
         case ParametrizationBase() as existing:
+            warnings.warn("Overwriting existing parametrization!", stacklevel=2)
             tensor = existing.original_parameter
-            wrapper = ParametrizationList(tensor, unsafe=unsafe)
-            wrapper.append(existing)
-            _register_stale_hook(wrapper)
-            _install_parametrization(module, tensor_name, wrapper)
+            parametrizations = ParametrizationList(tensor, unsafe=unsafe)
+            parametrizations.append(existing)
+            _install_parametrization(module, tensor_name, parametrizations)
 
         case torch.nn.utils.parametrize.ParametrizationList():
             raise NotImplementedError(
@@ -587,24 +578,16 @@ def register_parametrization(
         case value:
             raise TypeError(f"Expected a ParametrizationBase, but got {type(value)}!")
 
-    child = parametrized(tensor, parametrization, unsafe=unsafe)
-    if not isinstance(child, nn.Module) or not is_parametrization(child):
-        raise TypeError(f"{parametrization} does not produce a valid parametrization!")
-
+    # wrap the parametrization if needed
+    parametrization = parametrized(tensor, parametrization, unsafe=unsafe)
+    assert isinstance(parametrization, nn.Module)
+    assert is_parametrization(parametrization)
     if not unsafe:
-        assert_is_safe_parametrization(child, tensor)
+        assert_is_safe_parametrization(parametrization, tensor)
 
-    wrapper.append(child)
-    wrapper.update_parametrization()
-
-
-def is_parametrized(module: nn.Module, tensor_name: Optional[str] = None) -> bool:
-    r"""Return True if the module has any parametrizations."""
-    if tensor_name is None:
-        return any(is_parametrization(m) for m in module.modules())
-
-    parametrizations = get_parametrizations(module)
-    return tensor_name in parametrizations
+    # append the parametrization to the list
+    parametrizations.append(parametrization)
+    parametrizations.update_parametrization()
 
 
 def assert_is_safe_parametrization(
@@ -659,19 +642,20 @@ def assert_is_safe_parametrization(
             )
 
 
-def get_parametrizations(module: nn.Module, /) -> ModuleMapping[nn.Module]:
-    r"""Return all parametrizations in a module."""
+def get_parametrizations(module: nn.Module, /) -> ModuleMapping[nn.Module] | None:
+    r"""Return all parametrizations in a module, if present."""
     match ps := getattr(module, "parametrizations", None):
         case None:
-            return ModuleMapping()
+            return None
 
         case ModuleMapping():
             return ps
 
-        case nn.Module() as ps:
-            if isinstance(ps, nn.ModuleDict):
-                return ModuleMapping(dict(ps.items()))
+        case nn.ModuleDict():
+            return ModuleMapping(dict(ps.items()))
 
+        case nn.Module() as ps:
+            # Needed since JIT may replace ModuleDict with a plain Module.
             return ModuleMapping(dict(ps.named_children()))
 
         case _:

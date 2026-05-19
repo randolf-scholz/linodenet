@@ -60,7 +60,9 @@ class TestParametrization(TestSuite):
         return layer
 
     def get_bias_parametrization(self, layer: nn.Linear, /) -> ParametrizationBase:
-        parametrization = get_parametrizations(layer)["bias"]
+        parametrizations = get_parametrizations(layer)
+        assert parametrizations is not None
+        parametrization = parametrizations["bias"]
         assert isinstance(parametrization, ParametrizationBase)
         return parametrization
 

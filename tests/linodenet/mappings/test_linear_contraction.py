@@ -28,11 +28,15 @@ class TestLinearContraction(TestSuite):
 
     def test_update_parametrizations_heals_weight_alias_after_to(self) -> None:
         layer = LinearContraction(4, 3, bias=False)
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrizations = get_parametrizations(layer)
+        assert parametrizations is not None
+        parametrization = parametrizations["weight"]
         assert layer.weight is parametrization.cached_parameter
 
         layer = layer.to(dtype=torch.float64)
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrizations = get_parametrizations(layer)
+        assert parametrizations is not None
+        parametrization = parametrizations["weight"]
 
         assert layer.weight is not parametrization.cached_parameter
         assert layer.weight.dtype == torch.float64
@@ -62,16 +66,22 @@ class TestLinearContraction(TestSuite):
         assert is_parametrized(layer, "weight")
 
         # NOTE: using .to() screws up the parametrization
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrizations = get_parametrizations(layer)
+        assert parametrizations is not None
+        parametrization = parametrizations["weight"]
         assert layer.weight is parametrization.cached_parameter
         layer = layer.to(device=device)
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrizations = get_parametrizations(layer)
+        assert parametrizations is not None
+        parametrization = parametrizations["weight"]
         with pytest.raises(AssertionError) if device == "cuda" else nullcontext():
             assert layer.weight is parametrization.cached_parameter
 
         # Note: We can heal it by doing update_parametrizations
         update_parametrizations(layer)
-        parametrization = get_parametrizations(layer)["weight"]
+        parametrizations = get_parametrizations(layer)
+        assert parametrizations is not None
+        parametrization = parametrizations["weight"]
         assert layer.weight is parametrization.cached_parameter
 
         sigma = torch.linalg.matrix_norm(layer.weight, ord=2)

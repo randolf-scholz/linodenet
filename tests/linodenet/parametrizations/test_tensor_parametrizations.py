@@ -44,7 +44,9 @@ class TestReZero(TestSuite):
         optimizer = SGD(model.parameters(), lr=0.1)
         register_optimizer_hook(optimizer, model)
 
-        parametrization = get_parametrizations(model.residual)["weight"]
+        parametrizations = get_parametrizations(model.residual)
+        assert parametrizations is not None
+        parametrization = parametrizations["weight"]
         assert isinstance(parametrization, ParametrizationList)
         assert len(parametrization) == 1
         rezero = parametrization[0]
