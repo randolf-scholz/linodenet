@@ -49,6 +49,8 @@ Project conventions for automated agents contributing to `linodenet`.
 - Follow formatting and linting configured in `pyproject.toml`.
 - Run shell commands with an explicit timeout; use `30s` by default unless a different limit is justified.
   For example, prefer `timeout 30s <command>`.
+- Use the repo-local virtual environment at `.venv` for all project-local Python commands.
+  Prefer `.venv/bin/python -m <tool>` so the interpreter and installed packages are unambiguous.
 - For project-local Python commands, set `PYTHONPATH=src` by default unless there is a specific reason not to.
   This applies to `python`, `pytest`, `pyright`, `mypy`, ad-hoc scripts, and one-off import checks.
 - Docstrings follow Google style; document invariants and edge cases.
@@ -67,4 +69,4 @@ Project conventions for automated agents contributing to `linodenet`.
 ## running tests
 
 - export `PYTHONPATH=src` and disable the `pytest-rerunfailures` plugin and skip benchmark tests:
-  `PYTHONPATH=src pytest -p no:rerunfailures --benchmark-skip <tests>`.
+  `PYTHONPATH=src .venv/bin/python -m pytest -p no:rerunfailures --benchmark-skip <tests>`.
