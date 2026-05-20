@@ -2,7 +2,7 @@ r"""Test Signature utility."""
 
 import pytest
 
-from signatures import GenericType, Identifier, Parser
+from signatures import GenericType, Identifier, Parser, signature
 
 
 @pytest.mark.parametrize(
@@ -28,6 +28,41 @@ def test_signature(argument: str, expected: str) -> None:
     r"""Test Signature utility."""
     sig = Parser.parse_signature(argument)
     assert str(sig) == expected
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ("(n) -> (n-1)", "{(n) -> (n - 1)}"),
+        ("(n) -> (n+1)", "{(n) -> (n + 1)}"),
+        ("(2n-1) -> (n)", "{(2n - 1) -> (n)}"),
+        ("(n-1, m+2) -> (m-3)", "{(n - 1, m + 2) -> (m - 3)}"),
+    ],
+)
+def test_signature_affine_dims(argument: str, expected: str) -> None:
+    r"""Affine dims should preserve signed offsets when parsed."""
+    sig = Parser.parse_signature(argument)
+    assert str(sig) == expected
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ("(n) -> (n-1)", "{(n) -> (n - 1)}"),
+        ("(n) -> (n+1)", "{(n) -> (n + 1)}"),
+    ],
+)
+def test_signature_affine_dim_repr(argument: str, expected: str) -> None:
+    r"""Affine dims should print with spaced `+` and `-` operators."""
+    sig = signature(argument)
+    assert str(sig) == expected
+    assert repr(sig) == expected
+
+
+def test_signature_singleton_shape_output() -> None:
+    r"""Singleton output shapes should not gain a synthetic dimension."""
+    sig = Parser.parse_signature("(m, n) -> [(m, k), (k,), (n, k)]")
+    assert str(sig) == "{(m, n) -> [(m, k), (k), (n, k)]}"
 
 
 @pytest.mark.parametrize(

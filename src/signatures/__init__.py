@@ -20,41 +20,44 @@ takes an `(m, n)`-shaped input and produces an `(n, m)`-shaped output, such as a
 Examples:
     Basic scalar-to-scalar:
         >>> signature("() -> ()")
+        {() -> ()}
 
     vector-to-vector, constant size (fixed at compile time):
         >>> signature("(3) -> (3)")
+        {(3) -> (3)}
 
-    Vector-to-vector, static size (fixed at runtime):
+    Vector-to-vector, static size (fixed at runtime), e.g. `nn.Linear.forward`:
         >>> signature("(m) -> (n)")
-        E.g. `nn.Linear.forward`
+        {(m) -> (n)}
 
-    Sequence-to-sequence, dynamic size (may vary across calls):
+    Sequence-to-sequence, dynamic size (may vary across calls), e.g. `torch.cumsum`:
         >>> signature("($n) -> ($n)")
-        E.g. `torch.cumsum`
+        {($n) -> ($n)}
 
-    Ellipsis (vectorization) (at most one per signature):
+    Ellipsis (vectorization) (at most one per signature), e.g. `torch.tanh`:
         >>> signature("(...) -> (...)")
-        E.g. `torch.tanh`
+        {(...) -> (...)}
 
-    Variadic axes (bundles of static axes):
+    Variadic axes (bundles of static axes), e.g. `torch.sum`:
         >>> signature("(*dims) -> ()")
-        E.g. `torch.sum`
+        {(*dims) -> ()}
 
-    Affine dims:
+    Affine dims (linear/affine combinations), e.g. `torch.diff`:
         >>> signature("(n) -> (n-1)")
-        E.g. `torch.diff`
+        {(n) -> (n - 1)}
 
 Examples:
-    Matrix-multiplication:
+    Matrix-multiplication, e.g. `torch.matmul`:
         >>> signature("[(m, n), (n, p)] -> (m, p)")
-        E.g. `torch.matmul`
+        {[(m, n), (n, p)] -> (m, p)}
 
-    Attention (single head):
+    Attention (single head), e.g. `torch.nn.functional.scaled_dot_product_attention`:
         >>> signature("[(b, $n, e_q), (b, $n, e_k), (b, $n, e_v)] -> (b, $n, e)")
-        E.g. `torch.nn.functional.scaled_dot_product_attention`
+        {[(b, $n, e_q), (b, $n, e_k), (b, $n, e_v)] -> (b, $n, e)}
 
     Matrix factorization (full SVD):
         >>> signature("(m, n) -> [(m, k), (k,), (n, k)]")
+        {(m, n) -> [(m, k), (k), (n, k)]}
 """
 
 __all__ = [

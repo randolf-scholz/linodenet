@@ -14,8 +14,8 @@ KeyArg ::= IdentifierType "?"? "=" ArgType
 // e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]', '{T -> U}'
 ArgType ::= ShapeType | IdentifierType | GenericType | FnType
 
-// e.g. '()', '(1,2,3)', '(..., m, n)'
-ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
+// e.g. '()', '(1,2,3)', '(..., m, n)', '(k,)'
+ShapeType ::= "(" ( ("..." | DimType) ("," DimType)* ","? )? ")"
 
 // Dimension types
 DimType ::= ConstantDim | StaticDim | CompoundDim | DynamicDim | VariadicDim

@@ -232,19 +232,24 @@ class AffineDim(Dim):
         return [sign for sign, _, _ in self.terms]
 
     def __str__(self) -> str:
-        terms: list[str] = []
+        parts: list[str] = []
 
         for sign, coef, var in self.terms:
-            sign_str = "+" if sign is Sign.POS else "-"
-            coef_str = "" if coef.value == 1 else str(coef.value)
-            terms.append(f"{sign_str}{coef_str}{var!s}")
+            body = f"{'' if coef.value == 1 else coef.value}{var!s}"
+            if not parts:
+                parts.append(body if sign is Sign.POS else f"-{body}")
+                continue
+            operator = "+" if sign is Sign.POS else "-"
+            parts.append(f"{operator} {body}")
 
         if self.offset is not None:
-            offset_sign = "+" if self.offset.value >= 0 else "-"
-            terms.append(f"{offset_sign}{self.offset!s}")
+            offset = self.offset.value
+            if not parts:
+                return str(offset)
+            operator = "+" if offset >= 0 else "-"
+            parts.append(f"{operator} {abs(offset)}")
 
-        # Combine and clean up leading plus sign
-        return " ".join(terms).lstrip("+")
+        return " ".join(parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -641,6 +646,8 @@ class Parser:
         # parse remaining dimensions
         while self.current.kind is TokenKind.COMMA:
             self.consume(TokenKind.COMMA)
+            if self.current.kind is TokenKind.RPAREN:
+                break
             dims.append(self._parse_dim_type())
 
         self.consume(TokenKind.RPAREN)
@@ -722,7 +729,7 @@ class Parser:
 
                 case _:
                     # no variable -> offset term
-                    offset = coef
+                    offset = ConstantDim(sign * coef.value)
                     break
 
             # append term
@@ -791,6 +798,9 @@ class signature:
         if not hasattr(self, "_parsed"):
             self._parse()
         return self._parsed
+
+    def __repr__(self) -> str:
+        return str(self.parsed)
 
     def __str__(self) -> str:
         return str(self.parsed)
