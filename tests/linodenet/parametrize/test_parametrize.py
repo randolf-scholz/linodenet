@@ -150,6 +150,7 @@ def test_register_parametrization_new_installs_parametrization_list() -> None:
     model = nn.Linear(in_features=4, out_features=4, bias=False)
 
     register_parametrization(model, "weight", ScaleByTwo())
+    assert is_parametrized(model, "weight")
 
     parametrization = model.parametrizations["weight"]
     assert isinstance(parametrization, ParametrizationList)
@@ -162,7 +163,7 @@ def test_register_parametrization_new_appends_on_second_registration() -> None:
 
     register_parametrization(model, "weight", ScaleByTwo())
     register_parametrization(model, "weight", ShiftByOne())
-
+    assert is_parametrized(model, "weight")
     parametrization = model.parametrizations["weight"]
     assert isinstance(parametrization, ParametrizationList)
     assert len(parametrization) == 2

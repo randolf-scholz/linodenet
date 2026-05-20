@@ -2,7 +2,8 @@
 <project version="4">
   <component name="Black">
     <option name="executionMode" value="BINARY" />
-    <option name="sdkName" value="Python 3.13 (linodenet)" />
+    <option name="pathToExecutable" value="$USER_HOME$/.local/bin/black" />
+    <option name="sdkName" value="uv (linodenet)" />
   </component>
   <component name="CMakePythonSetting">
     <option name="pythonIntegrationState" value="YES" />

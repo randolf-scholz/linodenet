@@ -43,7 +43,7 @@ def assert_signatures_compatible(func: Callable, reference: Callable) -> None:
         param_kind = fun_sig.parameters[param].kind
         if param_kind != ref_kind:
             raise AssertionError(
-                f"Parameter {param} has different kind! (expected {ref_kind}, got {param_kind})"
+                f"Parameter {param!r} has different kind! (expected {ref_kind}, got {param_kind})"
             )
 
 

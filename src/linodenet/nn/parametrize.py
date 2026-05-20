@@ -73,6 +73,7 @@ __all__ = [
     "Parametrization",
     "Parametrized",
     # Classes
+    "SurjectionBase",
     "post_init_hook",
     "WithoutRightInverse",
     "ParametrizationBase",
@@ -101,7 +102,7 @@ __all__ = [
 import copy
 import warnings
 from abc import ABCMeta, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
@@ -112,9 +113,9 @@ from typing import (
     Protocol,
     Self,
     TypeIs,
+    cast,
     get_protocol_members,
     overload,
-    runtime_checkable,
 )
 
 import torch
@@ -124,32 +125,80 @@ from torch.optim import Optimizer
 from .containers import ModuleMapping, ModuleSequence
 
 
-@runtime_checkable
 class Surjection[X, Y](Protocol):
     r"""A protocol for surjections.
 
     Surjections are maps that are onto, i.e., for every $y$ in $Y$, there exists
     an $x$ in $X$ such that $f(x) = y$. In particular, they admit a right inverse,
     i.e., a map $g: Y -> X$ such that $f(g(y)) = y$ for all $y$ in $Y$.
+
+    In the context of parametrizations, we allow surjections to return `None` when
+    calling right_inverse. This is to signal that the right-inverse should not be used,
+    and the parametrized tensor should not be updated with the pullback.
+
+    For example, with the ReZero transform $x ↦ ε⋅x$, since the learnable scalar is initialized with $ε=0$,
+    a `right_inverse` is not not well-defined at initialization.
     """
 
     @abstractmethod
     def __call__(self, x: X, /) -> Y: ...
     @abstractmethod
-    def right_inverse(self, y: Y, /) -> X: ...
+    def right_inverse(self, y: Y, /) -> X | None: ...
 
 
-@overload
-def is_surjection(obj: type, /) -> TypeIs[type[Surjection]]: ...
-@overload
-def is_surjection(obj: object, /) -> TypeIs[Surjection]: ...
-def is_surjection(obj: object, /) -> bool:
+# TODO: Use IntersectionType
+class SurjectionBase(nn.Module, Surjection[Tensor, Tensor]):
+    r"""Substitute for the intersection type ``nn.Module & Surjection``."""
+
+    @abstractmethod
+    def forward(self, x: Tensor, /) -> Tensor: ...
+    @abstractmethod
+    def right_inverse(self, y: Tensor, /) -> Tensor | None: ...
+
+
+def is_surjection(obj: object, /) -> TypeIs[SurjectionBase]:
     r"""Check if the object is a Surjection.
 
     This method is needed because standard isinstance checks do not work with jit.ScriptModule.
     This is because Protocol used getattr_static, rather than proper getattr/hasattr.
     """
-    return callable(obj) and callable(getattr(obj, "right_inverse", None))
+    return isinstance(obj, nn.Module) and callable(getattr(obj, "right_inverse", None))
+
+
+class WithoutRightInverse(SurjectionBase):
+    r"""Wrapper for parametrizations without right inverse."""
+
+    def __init__(self, transform: nn.Module, /) -> None:
+        super().__init__()
+        if not isinstance(transform, nn.Module):
+            raise TypeError(f"Expected a nn.Module, but got {type(transform)}!")
+        self.transform = transform
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        return self.transform(x)
+
+    @jit.export
+    def right_inverse(self, _: Tensor) -> Tensor | None:
+        return None
+
+
+@overload
+def _insert_right_inverse[M: SurjectionBase](arg: M, /) -> M: ...  # pyright: ignore[reportOverlappingOverload]
+@overload
+def _insert_right_inverse(arg: nn.Module, /) -> WithoutRightInverse: ...
+def _insert_right_inverse(arg: nn.Module, /) -> nn.Module:
+    if not isinstance(arg, nn.Module):
+        raise TypeError(f"Expected a nn.Module, but got {type(arg)}!")
+
+    if (right_inverse := getattr(arg, "right_inverse", None)) is not None:
+        if not callable(right_inverse):
+            raise TypeError(
+                f"Given Module has a non-callable right_inverse attribute: {type(right_inverse)}"
+            )
+        return arg
+
+    return WithoutRightInverse(arg)
 
 
 class Parametrization(Protocol):
@@ -187,40 +236,28 @@ def is_parametrization(obj: object, /) -> bool:
     )
 
 
+# TODO: Use intersection type
 class Parametrized(Protocol):
-    r"""Protocol for parametrized modules."""
+    r"""Protocol for parametrized modules.
 
-    parametrizations: ParametrizationList
+    This should only apply to nn.Modules.
+    """
+
+    parametrizations: ModuleMapping[ParametrizationList]
 
 
 def is_parametrized(
-    module: nn.Module, tensor_name: Optional[str] = None
+    module: object, tensor_name: Optional[str] = None
 ) -> TypeIs[Parametrized]:
     r"""Return True if the module has any parametrizations."""
-    if tensor_name is None:
-        return any(is_parametrization(m) for m in module.modules())
-
-    parametrizations = get_parametrizations(module)
-    return parametrizations is not None and tensor_name in parametrizations
-
-
-class WithoutRightInverse(nn.Module):
-    r"""Wrapper for parametrizations without right inverse."""
-
-    def __init__(
-        self,
-        parametrization: nn.Module,
-    ) -> None:
-        super().__init__()
-        self.parametrization = parametrization
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        return self.parametrization(x)
-
-    @jit.export
-    def right_inverse(self, _: Tensor) -> Tensor | None:
-        return None
+    return (
+        isinstance(module, nn.Module)
+        and ((parametrizations := get_parametrizations(module)) is not None)
+        and (
+            (tensor_name is None and len(parametrizations) > 0)
+            or (tensor_name in parametrizations)
+        )
+    )
 
 
 # region base classes ------------------------------------------------------------------
@@ -377,9 +414,7 @@ class ParametrizationBase(nn.Module, metaclass=post_init_hook):
 
 
 # TODO: Use Intersection type (Parametrization & Module)
-class ParametrizationList[
-    P: ParametrizationBase = ParametrizationBase,
-](ModuleSequence[P], ParametrizationBase):
+class ParametrizationList[S: SurjectionBase](ModuleSequence[S], ParametrizationBase):
     r"""Applies multiple parametrizations to the same tensor in sequence.
 
     Uses `right_inverse` to get the pullback of the parametrization to update the original tensor.
@@ -387,12 +422,24 @@ class ParametrizationList[
 
     def __init__(
         self,
-        tensor: Tensor,
+        modules: Iterable[S | nn.Module] = (),
+        /,
         *,
+        original: Tensor,
         unsafe: bool = False,
     ) -> None:
-        ParametrizationBase.__init__(self, tensor, unsafe=unsafe)
-        self._modules: Mapping[str, P]  # type: ignore[override]
+        ParametrizationBase.__init__(self, original, unsafe=unsafe)
+        self._modules: Mapping[str, S]  # type: ignore[override]
+        for module in modules:
+            self.append(_insert_right_inverse(module))
+
+    @property
+    def DOMAIN(self):  # noqa: N802
+        return getattr(self[0], "DOMAIN", None)
+
+    @property
+    def CODOMAIN(self):  # noqa: N802
+        return getattr(self[-1], "CODOMAIN", None)
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -428,9 +475,7 @@ class WrappedParametrization(ParametrizationBase):
     ) -> None:
         super().__init__(tensor, unsafe=unsafe)
 
-        if not callable(getattr(parametrization, "right_inverse", None)):
-            parametrization = WithoutRightInverse(parametrization)
-
+        parametrization = _insert_right_inverse(parametrization)
         parametrization = parametrization.to(device=tensor.device, dtype=tensor.dtype)
 
         if (domain := getattr(parametrization, "DOMAIN", None)) is not None:
@@ -439,9 +484,9 @@ class WrappedParametrization(ParametrizationBase):
         if (codomain := getattr(parametrization, "CODOMAIN", None)) is not None:
             self.CODOMAIN: Final = codomain
 
+        # TODO: Use Intersection type.
         assert is_surjection(parametrization)
-        # pyrefly: ignore[bad-assignment]
-        self.parametrization: Surjection[Tensor, Tensor] = parametrization  # pyright: ignore[reportAttributeAccessIssue]
+        self.parametrization: Surjection[Tensor, Tensor] = parametrization
 
     @jit.export
     def forward(self, x: Tensor) -> Tensor:
@@ -492,48 +537,6 @@ def parametrized[P: Parametrization](
 
 
 # region torch replacements  -----------------------------------------------------------
-def _install_parametrization(
-    module: nn.Module,
-    tensor_name: str,
-    wrapper: ParametrizationBase,
-    /,
-) -> None:
-    r"""Install a parametrization wrapper on a module tensor."""
-    match ps := getattr(module, "parametrizations", None):
-        case None:
-            module.register_module(
-                "parametrizations",
-                ModuleMapping({tensor_name: wrapper}),
-            )
-        case ModuleMapping() as parametrizations:
-            parametrizations[tensor_name] = wrapper
-        case _:
-            raise TypeError(f"Expected a ModuleMapping, but got {type(ps)}!")
-
-    match ts := getattr(module, "parametrized_tensors", None):
-        case None:
-            module.register_module(
-                "parametrized_tensors",
-                nn.ParameterDict({tensor_name: wrapper.original_parameter}),
-            )
-        case nn.ParameterDict() as parametrized_tensors:
-            parametrized_tensors[tensor_name] = wrapper.original_parameter
-        case _:
-            msg = f"Expected a nn.ParameterDict, but got {type(ts)}!"
-            raise TypeError(msg)
-
-    # remove the existing tensor
-    if hasattr(module, tensor_name):
-        delattr(module, tensor_name)
-
-    module.register_buffer(tensor_name, wrapper.get_cached_tensor())
-
-    # register the hook that makes the parametrized tensor stale after backward() call
-    wrapper.original_parameter.register_post_accumulate_grad_hook(
-        lambda _: wrapper.set_stale()
-    )
-
-
 def register_parametrization(
     module: nn.Module,
     tensor_name: str,
@@ -542,32 +545,52 @@ def register_parametrization(
     unsafe: bool = False,
 ) -> None:
     r"""Register a parametrization, chaining multiple registrations via ParametrizationList."""
-    existing_parametrizations = get_parametrizations(module)
-    existing_parametrization = (
-        None
-        if existing_parametrizations is None  # fmt
-        else existing_parametrizations.get(tensor_name)
-    )
-    parametrizations: ParametrizationList
+    parametrizations: ModuleMapping[ParametrizationList]
 
-    match existing_parametrization:
+    match get_parametrizations(module):
         case None:
-            tensor = getattr(module, tensor_name)
-            if not isinstance(tensor, nn.Parameter):
+            module.register_module("parametrizations", ModuleMapping())
+            assert isinstance(module.parametrizations, ModuleMapping)
+            parametrizations = module.parametrizations
+
+        case ModuleMapping() as parametrizations:  # pyright: ignore[reportAssignmentType]
+            pass
+
+        case nn.ModuleDict() as _parametrizations:
+            warnings.warn("Got nn.ModuleDict()", stacklevel=2)
+            parametrizations = cast(
+                "ModuleMapping[ParametrizationList]", _parametrizations
+            )
+
+        case other:
+            raise TypeError(f"Expected a {ModuleMapping!s}, but got {type(other)}!")
+
+    params_list: ParametrizationList
+
+    match parametrizations.get(tensor_name):
+        case None:
+            # The tensor wasn't parametrized before.
+            original = getattr(module, tensor_name)
+            if not isinstance(original, nn.Parameter):
                 raise TypeError(f"{tensor_name} is not a parameter!")
 
-            parametrizations = ParametrizationList(tensor, unsafe=unsafe)
-            _install_parametrization(module, tensor_name, parametrizations)
+            params_list = ParametrizationList([], original=original, unsafe=unsafe)
+            parametrizations[tensor_name] = params_list
 
-        case ParametrizationList() as parametrizations:
-            tensor = parametrizations.original_parameter
+            # remove the existing tensor
+            delattr(module, tensor_name)
 
-        case ParametrizationBase() as existing:
-            warnings.warn("Overwriting existing parametrization!", stacklevel=2)
-            tensor = existing.original_parameter
-            parametrizations = ParametrizationList(tensor, unsafe=unsafe)
-            parametrizations.append(existing)
-            _install_parametrization(module, tensor_name, parametrizations)
+            # re-register as a buffer
+            module.register_buffer(tensor_name, params_list.get_cached_tensor())
+
+            # register the hook that makes the parametrized tensor stale after backward() call
+            params_list.original_parameter.register_post_accumulate_grad_hook(
+                lambda _: params_list.set_stale()
+            )
+
+        case ParametrizationList() as params_list:
+            # The tensor is already parametrized
+            original = params_list.original_parameter
 
         case torch.nn.utils.parametrize.ParametrizationList():
             raise NotImplementedError(
@@ -575,19 +598,21 @@ def register_parametrization(
                 "torch.nn.utils.parametrize.ParametrizationList"
             )
 
-        case value:
-            raise TypeError(f"Expected a ParametrizationBase, but got {type(value)}!")
+        case other:
+            raise TypeError(
+                f"Expected a {ParametrizationList!s}, but got {type(other)}!"
+            )
 
     # wrap the parametrization if needed
-    parametrization = parametrized(tensor, parametrization, unsafe=unsafe)
+    parametrization = parametrized(original, parametrization, unsafe=unsafe)
     assert isinstance(parametrization, nn.Module)
     assert is_parametrization(parametrization)
     if not unsafe:
-        assert_is_safe_parametrization(parametrization, tensor)
+        assert_is_safe_parametrization(parametrization, original)
 
     # append the parametrization to the list
-    parametrizations.append(parametrization)
-    parametrizations.update_parametrization()
+    params_list.append(parametrization)
+    params_list.update_parametrization()
 
 
 def assert_is_safe_parametrization(

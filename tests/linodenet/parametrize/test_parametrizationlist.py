@@ -39,7 +39,7 @@ def register_parametrization_list(
     tensor = getattr(module, tensor_name)
     assert isinstance(tensor, nn.Parameter)
 
-    wrapper = ParametrizationList(tensor)
+    wrapper = ParametrizationList([], original=tensor)
     for parametrization in parametrizations:
         wrapper.append(parametrization)
 
@@ -141,7 +141,7 @@ def test_parametrization_list_skew_symmetric_cayley_and_rezero_supports_training
     assert len(parametrization) == 3
     assert torch.allclose(model.weight, torch.zeros_like(model.weight))
 
-    rezero = parametrization[-1].parametrization
+    rezero = parametrization[-1].transform
     assert isinstance(rezero, ReZero)
     scalar_before = rezero.scalar.detach().clone()
 
@@ -153,7 +153,7 @@ def test_parametrization_list_skew_symmetric_cayley_and_rezero_supports_training
 
 def test_parametrization_list_right_inverse_inverts_forward_in_reverse_order() -> None:
     tensor = nn.Parameter(torch.zeros(2, 2))
-    parametrization = ParametrizationList(tensor)
+    parametrization = ParametrizationList([], original=tensor)
     parametrization.append(ScaleByTwo())
     parametrization.append(ShiftByOne())
 
