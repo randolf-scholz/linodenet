@@ -7,9 +7,10 @@ __all__ = [
     "parametrize",
     # Constants
     "RIEMANN_MANIFOLDS",
-    "PARAMETRIZATIONS",
+    "SCALAR_PARAMETRIZATIONS",
     "MATRIX_PARAMETRIZATIONS",
     "VECTOR_PARAMETRIZATIONS",
+    "TENSOR_PARAMETRIZATIONS",
 ]
 
 from linodenet.nn import parametrize
@@ -35,11 +36,6 @@ __all__ += tensor_parametrizations.__all__
 __all__ += vector_parametrizations.__all__
 
 
-PARAMETRIZATIONS: dict[str, type[Parametrization]] = {
-    "ReZero"                 : tensor_parametrizations.ReZero,
-}  # fmt: skip
-r"""Dictionary of all available parametrizations."""
-
 RIEMANN_MANIFOLDS: dict[str, type[ManifoldBase]] = {
     "PositiveDefiniteManifold"  : exponential_maps.PositiveDefiniteManifold,
     "SpecialOrthogonalManifold" : exponential_maps.SpecialOrthogonalManifold,
@@ -47,11 +43,15 @@ RIEMANN_MANIFOLDS: dict[str, type[ManifoldBase]] = {
 }  # fmt: skip
 r"""Dictionary of all available Riemannian-manifold modules."""
 
+SCALAR_PARAMETRIZATIONS: dict[str, type[Surjection]] = {}
+r"""Dictionary of all builtin scalar parametrizations."""
+
 VECTOR_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "UnitVector"           : vector_parametrizations.UnitVector,
     "StochasticVector"     : vector_parametrizations.StochasticVector,
     "PositiveVector"       : vector_parametrizations.PositiveVector,
 }  # fmt: skip
+r"""Dictionary of all builtin vector parametrizations."""
 
 MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "Banded"               : matrix_parametrizations.Banded,
@@ -80,4 +80,9 @@ MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "Tridiagonal"          : matrix_parametrizations.Tridiagonal,
     "UpperTriangular"      : matrix_parametrizations.UpperTriangular,
 }  # fmt: skip
-r"""Dictionary of all available matrix parametrizations."""
+r"""Dictionary of all builtin matrix parametrizations."""
+
+TENSOR_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
+    "ReZero": tensor_parametrizations.ReZero,
+}  # fmt: skip
+r"""Dictionary of all builtin tensor parametrizations."""

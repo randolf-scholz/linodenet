@@ -52,16 +52,26 @@ class ReZero[
         module: U | None = None,
         *,
         scalar_map: V | None = None,
-        initial_value: float = 0.0,
+        initial_value: Tensor | float = 0.0,
+        learnable: bool = True,
     ) -> None:
         super().__init__()
-        self.scalar = nn.Parameter(torch.tensor(initial_value))
+        self.scalar = nn.Parameter(
+            torch.as_tensor(initial_value), requires_grad=learnable
+        )
         self.module = cast("U", nn.Identity() if module is None else module)
         self.scalar_map = cast("V", nn.Identity() if scalar_map is None else scalar_map)
 
     @signature("(..., *xs) -> (..., *xs)")
     def forward(self, x: Tensor) -> Tensor:
         return self.scalar_map(self.scalar) * self.module(x)
+
+    @signature("(..., *xs) -> (..., *xs)")
+    def right_inverse(self, y: Tensor) -> Tensor | None:
+        if getattr(self.module, "right_inverse", None) is None:
+            return None
+
+        return self.module.right_inverse(y / self.scalar_map(self.scalar))  # type: ignore[call]
 
 
 class ReZeroResNet(nn.ModuleList):

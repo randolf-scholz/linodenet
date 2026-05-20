@@ -16,7 +16,6 @@ from .initializations import INITIALIZATION_FNS
 from .mappings import BIJECTIONS, PROJECTION_FNS, SURJECTIONS
 from .parametrizations import (
     MATRIX_PARAMETRIZATIONS,
-    PARAMETRIZATIONS,
     VECTOR_PARAMETRIZATIONS,
 )
 from .regularizations import (
@@ -234,7 +233,6 @@ REGISTRY.register_mappings(SURJECTIONS)
 REGISTRY.register_mappings(BIJECTIONS)
 REGISTRY.register_mapping_fns(PROJECTION_FNS)
 REGISTRY.register_initializations(INITIALIZATION_FNS)
-REGISTRY.register_parametrizations(PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(MATRIX_PARAMETRIZATIONS)
 REGISTRY.register_parametrizations(VECTOR_PARAMETRIZATIONS)
 REGISTRY.register_regularization_fns(REGULARIZATION_FNS_WITHOUT_ARGS)

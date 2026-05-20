@@ -40,7 +40,7 @@ class TestReZero(TestSuite):
         x = torch.randn(self.BATCH_SIZE, self.VECTOR_SIZE, device=device)
         y = torch.randn(self.BATCH_SIZE, self.TARGET_SIZE, device=device)
 
-        register_parametrization(model.residual, "weight", ReZero)
+        register_parametrization(model.residual, "weight", ReZero())
         optimizer = SGD(model.parameters(), lr=0.1)
         register_optimizer_hook(optimizer, model)
 

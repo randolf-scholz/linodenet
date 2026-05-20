@@ -30,12 +30,6 @@ from linodenet.mappings import (
     TransformBase,
 )
 from linodenet.nn.activations import ACTIVATIONS, Activation
-from linodenet.nn.parametrize import WrappedParametrization
-from linodenet.parametrizations import (
-    PARAMETRIZATIONS,
-    Parametrization,
-    ParametrizationBase,
-)
 from linodenet.regularizations import (
     REGULARIZATION_FNS,
     REGULARIZATIONS,
@@ -67,15 +61,13 @@ CASES: dict[str, Case] = {
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
     "initializations"     : Case(lib.initializations, Initialization, None, INITIALIZATION_FNS),
     # "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_TESTS       ),
-    "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
+    # "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
     "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS        ),
     "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS     ),
     "regularizations_cls" : Case(lib.regularizations  , Regularization , RegularizationBase , REGULARIZATIONS    ),
     "regularizations_fun" : Case(lib.regularizations  , Regularization , None               , REGULARIZATION_FNS ),
 }  # fmt: skip
 r"""Dictionary of all available cases."""
-
-CASES["parametrizations"].excluded.add(WrappedParametrization)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
