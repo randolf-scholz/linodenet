@@ -39,12 +39,12 @@ Note that `torch.distributions.Transform` has some differences:
   methods that need `y` can call:
 
 >>> from torch import Tensor
->>> def log_abs_det_jacobian(self, x: Tensor, /, y: None | Tensor = None) -> Tensor:
->>>     if y is None:
->>>         if id(x) == id(self._last_x):
->>>             y = self._last_y
->>>         else:
->>>             y = self.encode(x)
+>>> def log_abs_det_jacobian(self, x: Tensor, y: None | Tensor = None) -> Tensor:
+...     if y is None:
+...         if id(x) == id(self._last_x):
+...             y = self._last_y
+...         else:
+...             y = self.encode(x)
 """
 # ruff: noqa: F403
 
