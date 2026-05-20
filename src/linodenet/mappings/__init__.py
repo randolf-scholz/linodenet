@@ -103,6 +103,16 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "SplineTransform"      : transforms.SplineTransform,
     "TransformSequence"    : transforms.TransformSequence,
     "TriangularTransform"  : transforms.TriangularTransform,
+    # scalar transforms
+    "CELU"                 : transforms.scalar.CELU,
+    "ELU"                  : transforms.scalar.ELU,
+    "EntLU"                : transforms.scalar.EntLU,
+    "Sigmoid"              : transforms.scalar.Sigmoid,
+    "SmoothSoftsign"       : transforms.scalar.SmoothSoftsign,
+    "Softplus"             : transforms.scalar.Softplus,
+    "Softsign"             : transforms.scalar.Softsign,
+    "Tanh"                 : transforms.scalar.Tanh,
+    "Tanhshrink"           : transforms.scalar.Tanhshrink,
 }  # fmt: skip
 r"""Dictionary containing all available transforms (nn.Module)."""
 
