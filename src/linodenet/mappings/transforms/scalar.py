@@ -21,9 +21,8 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from linodenet.domains import ScalarDomain, ScalarDomains
+from linodenet.mappings.base import TransformBase
 from signatures import signature
-
-from .base import TransformBase
 
 
 class Sigmoid(TransformBase):

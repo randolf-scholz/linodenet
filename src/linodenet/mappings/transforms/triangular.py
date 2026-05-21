@@ -8,9 +8,8 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 
+from linodenet.mappings.base import TransformBase
 from signatures import signature
-
-from .base import TransformBase
 
 
 class TriangularTransform(TransformBase):

@@ -14,8 +14,8 @@ from linodenet.mappings import (
     PositiveVector,
     SpecialOrthogonal,
     StochasticVector,
-    Surjection,
 )
+from linodenet.mappings.abstract import Surjection
 from linodenet.registry import get_registry_entry
 from tests.testing import SEEDS_10
 

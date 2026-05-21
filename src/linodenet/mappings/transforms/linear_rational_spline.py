@@ -28,7 +28,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from .base import TransformBase, TransformSequence
+from linodenet.mappings.base import TransformBase, TransformSequence
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3

@@ -32,6 +32,7 @@ __all__ = [
 ]
 
 from . import (
+    abstract,
     base,
     bijections,
     embeddings,
@@ -41,6 +42,7 @@ from . import (
     surjections,
     transforms,
 )
+from .abstract import *
 from .base import *
 from .bijections import *
 from .embeddings import *
@@ -49,10 +51,12 @@ from .linear import *
 from .projections import *
 from .surjections import *
 from .transforms import *
+from .transforms import linear_rational_spline
 
 assert len(
     _combined := (
-        base.__all__
+        abstract.__all__
+        + base.__all__
         + bijections.__all__
         + embeddings.__all__
         + functional.__all__
@@ -63,6 +67,7 @@ assert len(
     )
 ) == len(set(_combined)), "duplicate names in __all__"
 
+__all__ += abstract.__all__
 __all__ += base.__all__
 __all__ += bijections.__all__
 __all__ += embeddings.__all__
@@ -88,20 +93,20 @@ EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
 }  # fmt: skip
 r"""Dictionary of available embeddings (nn.Module)."""
 
-TRANSFORMS: dict[str, type[Transform]] = {
+TRANSFORMS: dict[str, type[TransformBase]] = {
     "BimodalToGaussian"    : transforms.BimodalToGaussian,
     "BottleneckFlow"       : transforms.BottleneckFlow,
     "GaussianToBimodal"    : transforms.GaussianToBimodal,
     "GaussianToMixture"    : transforms.GaussianToMixture,
-    "InverseTransform"     : transforms.InverseTransform,
+    "InverseTransform"     : base.InverseTransform,
     "IResNet"              : transforms.IResNet,
     "LowRankTransform"     : transforms.LowRankTransform,
     "MixtureToGaussian"    : transforms.MixtureToGaussian,
     "ResidualBottleneck"   : transforms.ResidualBottleneck,
     "ResidualContraction"  : transforms.ResidualContraction,
     "ResidualContractionFallback" : transforms.ResidualContractionFallback,
-    "SplineTransform"      : transforms.SplineTransform,
-    "TransformSequence"    : transforms.TransformSequence,
+    "SplineTransform"      : linear_rational_spline.SplineTransform,
+    "TransformSequence"    : base.TransformSequence,
     "TriangularTransform"  : transforms.TriangularTransform,
     # scalar transforms
     "CELU"                 : transforms.scalar.CELU,

@@ -11,6 +11,7 @@ __all__ = [
 import torch
 from torch import Tensor, nn
 
+from linodenet.mappings.base import TransformBase
 from linodenet_special import (
     bimodal_to_gaussian,
     bimodal_to_gaussian_value_and_grad,
@@ -21,8 +22,6 @@ from linodenet_special import (
     mixture_to_gaussian,
     mixture_to_gaussian_value_and_grad,
 )
-
-from .base import TransformBase
 
 
 class BimodalToGaussian(TransformBase):

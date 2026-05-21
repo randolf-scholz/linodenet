@@ -48,7 +48,7 @@ from linodenet.distributions.gaussian import (
     kl,
     multivariate_gaussian_log_likelihood,
 )
-from linodenet.mappings.transforms import Transform
+from linodenet.mappings import Transform
 
 
 @runtime_checkable

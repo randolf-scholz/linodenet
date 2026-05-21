@@ -7,10 +7,10 @@ from typing import Final
 
 from torch import nn
 
+from linodenet.mappings.base import TransformSequence
 from linodenet.mappings.linear import LinearContraction
 from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 
-from .base import TransformSequence
 from .residual_contraction import (
     DEFAULT_REZERO_SCALAR_MAP,
     ResidualBottleneck,

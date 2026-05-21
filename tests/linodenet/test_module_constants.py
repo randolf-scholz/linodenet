@@ -18,17 +18,14 @@ from linodenet.mappings import (
     PROJECTIONS,
     SURJECTIONS,
     TRANSFORMS,
-    Bijection,
     BijectionBase,
-    Embedding,
     EmbeddingBase,
-    Projection,
     ProjectionBase,
-    Surjection,
     SurjectionBase,
     Transform,
     TransformBase,
 )
+from linodenet.mappings.abstract import Bijection, Embedding, Projection, Surjection
 from linodenet.nn.activations import ACTIVATIONS, Activation
 from linodenet.regularizations import (
     REGULARIZATION_FNS,

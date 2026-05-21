@@ -52,10 +52,6 @@ __all__ = [
     # submodules
     "scalar",
     # ABCs and Protocols
-    "Transform",
-    "TransformBase",
-    "InverseTransform",
-    "TransformSequence",
     # classes
     "BimodalToGaussian",
     "BottleneckFlow",
@@ -72,7 +68,6 @@ __all__ = [
 ]
 
 from . import scalar
-from .base import InverseTransform, Transform, TransformBase, TransformSequence
 from .bottleneck_flow import BottleneckFlow
 from .gaussian_transport import (
     BimodalToGaussian,

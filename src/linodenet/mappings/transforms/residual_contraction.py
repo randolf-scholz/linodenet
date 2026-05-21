@@ -19,14 +19,13 @@ from torch.func import vjp, vmap
 from torch.linalg import slogdet
 from torch.nn.functional import linear
 
+from linodenet.mappings.base import TransformBase
 from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
 from linodenet.nn.rezero import resolve_gate
 from linodenet_special import fixpoint_solve
 from linodenet_special.trace_estimation import LogAbsDetEstimators
-
-from .base import TransformBase
 
 DEFAULT_REZERO_SCALAR_MAP: Final[NonExpansiveMapping] = (
     NonExpansiveMapping.SMOOTH_SOFTSIGN

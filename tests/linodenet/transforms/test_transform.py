@@ -5,7 +5,7 @@ __all__ = ["TestTransform"]
 import torch
 from torch import Tensor
 
-from linodenet.mappings.transforms import Transform
+from linodenet.mappings import Transform
 from tests.testing import TestSuite
 
 
