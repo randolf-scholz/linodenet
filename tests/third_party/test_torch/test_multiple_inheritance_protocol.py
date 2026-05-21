@@ -66,7 +66,9 @@ def test_inherit_protocol_torch() -> None:
 
 
 def test_multiple_inheritance_fails_with_bad_order() -> None:
-    class FilterModule(Filter, nn.Module):  # <- only works with this order!
+    class FilterModule(
+        Filter, nn.Module
+    ):  # <- this order leads to inehritance problems
         pass
 
     # pyrefly: ignore[inconsistent-inheritance]

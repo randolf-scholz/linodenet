@@ -51,7 +51,6 @@ from .linear import *
 from .projections import *
 from .surjections import *
 from .transforms import *
-from .transforms import linear_rational_spline
 
 assert len(
     _combined := (
@@ -98,14 +97,13 @@ TRANSFORMS: dict[str, type[TransformBase]] = {
     "BottleneckFlow"       : transforms.BottleneckFlow,
     "GaussianToBimodal"    : transforms.GaussianToBimodal,
     "GaussianToMixture"    : transforms.GaussianToMixture,
-    "InverseTransform"     : base.InverseTransform,
     "IResNet"              : transforms.IResNet,
     "LowRankTransform"     : transforms.LowRankTransform,
     "MixtureToGaussian"    : transforms.MixtureToGaussian,
     "ResidualBottleneck"   : transforms.ResidualBottleneck,
     "ResidualContraction"  : transforms.ResidualContraction,
     "ResidualContractionFallback" : transforms.ResidualContractionFallback,
-    "SplineTransform"      : linear_rational_spline.SplineTransform,
+    "SplineTransform"      : transforms.SplineTransform,
     "TransformSequence"    : base.TransformSequence,
     "TriangularTransform"  : transforms.TriangularTransform,
     # scalar transforms

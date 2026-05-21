@@ -25,7 +25,7 @@ from signatures import signature
 
 
 @runtime_checkable
-class Embedding[X, Y](Protocol):
+class Embedding[X = Tensor, Y = Tensor](Protocol):
     r"""Protocol for Embedding Components.
 
     See Also:
@@ -46,7 +46,7 @@ class Embedding[X, Y](Protocol):
 
 
 @runtime_checkable
-class Surjection[X, Y](Protocol):
+class Surjection[X = Tensor, Y = Tensor](Protocol):
     r"""A protocol for surjections.
 
     See Also:
@@ -64,7 +64,7 @@ class Surjection[X, Y](Protocol):
 
 
 @runtime_checkable
-class Projection[T](Surjection[T, T], Protocol):
+class Projection[T = Tensor](Surjection[T, T], Protocol):
     r"""Protocol for projections.
 
     Projections are a stronger form of surjections: we additionally require
@@ -90,7 +90,7 @@ class Projection[T](Surjection[T, T], Protocol):
 
     @abstractmethod
     @signature("(..., *xs) -> (..., *ys)")
-    def forward(self, x: T, /) -> T: ...
+    def __call__(self, x: T, /) -> T: ...
 
     @signature("(..., *ys) -> (..., *xs)")
     def right_inverse(self, y: T, /) -> T:
@@ -99,7 +99,7 @@ class Projection[T](Surjection[T, T], Protocol):
 
 
 @runtime_checkable
-class Bijection[X, Y](Surjection[X, Y], Embedding[X, Y], Protocol):
+class Bijection[X = Tensor, Y = Tensor](Surjection[X, Y], Embedding[X, Y], Protocol):
     r"""Protocol for invertible layers.
 
     See Also:
@@ -123,7 +123,7 @@ class Bijection[X, Y](Surjection[X, Y], Embedding[X, Y], Protocol):
 
 
 @runtime_checkable
-class Transform[X, Y](Bijection[X, Y], Protocol):
+class Transform[X = Tensor, Y = Tensor](Bijection[X, Y], Protocol):
     r"""Protocol for diffeomorphism with logabsdet.
 
     Note:
@@ -155,9 +155,15 @@ class Transform[X, Y](Bijection[X, Y], Protocol):
         x, _ = self.decode_and_logabsdet(y)
         return x
 
+    def __call__(self, x: X, /) -> Y:
+        return self.encode(x)
+
+    def inverse(self, y: Y, /) -> X:
+        return self.decode(y)
+
 
 @runtime_checkable
-class ConditionalEmbedding[X, Y, Z](Protocol):
+class ConditionalEmbedding[X = Tensor, Y = Tensor, Z = Tensor](Protocol):
     r"""Protocol for Conditional Embedding Components.
 
     See Also:
@@ -169,6 +175,11 @@ class ConditionalEmbedding[X, Y, Z](Protocol):
     """
 
     @abstractmethod
+    def condition(self, context: Z, /) -> Embedding[X, Y]:
+        r"""Condition on a fixed context to get an unconditional Embedding."""
+        ...
+
+    @abstractmethod
     @signature("(...) -> (...)")
     def __call__(self, x: X, context: Z, /) -> Y: ...
 
@@ -178,7 +189,7 @@ class ConditionalEmbedding[X, Y, Z](Protocol):
 
 
 @runtime_checkable
-class ConditionalSurjection[X, Y, Z](Protocol):
+class ConditionalSurjection[X = Tensor, Y = Tensor, Z = Tensor](Protocol):
     r"""A protocol for conditional surjections.
 
     See Also:
@@ -190,6 +201,11 @@ class ConditionalSurjection[X, Y, Z](Protocol):
     """
 
     @abstractmethod
+    def condition(self, context: Z, /) -> Surjection[X, Y]:
+        r"""Condition on a fixed context to get an unconditional surjection."""
+        ...
+
+    @abstractmethod
     @signature("(...) -> (...)")
     def __call__(self, x: X, context: Z, /) -> Y: ...
 
@@ -199,7 +215,9 @@ class ConditionalSurjection[X, Y, Z](Protocol):
 
 
 @runtime_checkable
-class ConditionalProjection[T, Z](ConditionalSurjection[T, T, Z], Protocol):
+class ConditionalProjection[T = Tensor, Z = Tensor](
+    ConditionalSurjection[T, T, Z], Protocol
+):
     r"""Protocol for conditional projections.
 
     For every fixed context, a conditional projection is idempotent in its input.
@@ -215,8 +233,13 @@ class ConditionalProjection[T, Z](ConditionalSurjection[T, T, Z], Protocol):
     """
 
     @abstractmethod
+    def condition(self, context: Z, /) -> Projection[T]:
+        r"""Condition on a fixed context to get an unconditional projection."""
+        ...
+
+    @abstractmethod
     @signature("(..., *xs) -> (..., *ys)")
-    def forward(self, x: T, context: Z, /) -> T: ...
+    def __call__(self, x: T, context: Z, /) -> T: ...
 
     @signature("(..., *ys) -> (..., *xs)")
     def right_inverse(self, y: T, context: Z, /) -> T:  # noqa: ARG002
@@ -225,7 +248,7 @@ class ConditionalProjection[T, Z](ConditionalSurjection[T, T, Z], Protocol):
 
 
 @runtime_checkable
-class ConditionalBijection[X, Y, Z](
+class ConditionalBijection[X = Tensor, Y = Tensor, Z = Tensor](
     ConditionalSurjection[X, Y, Z],
     ConditionalEmbedding[X, Y, Z],
     Protocol,
@@ -239,6 +262,11 @@ class ConditionalBijection[X, Y, Z](
         - `ConditionalProjection`: Conditional idempotent self-map protocol.
         - `ConditionalTransform`: Conditional bijection with logabsdet.
     """
+
+    @abstractmethod
+    def condition(self, context: Z, /) -> Bijection[X, Y]:
+        r"""Condition on a fixed context to get an unconditional bijection."""
+        ...
 
     @abstractmethod
     @signature("(...) -> (...)")
@@ -256,7 +284,9 @@ class ConditionalBijection[X, Y, Z](
 
 
 @runtime_checkable
-class ConditionalTransform[X, Y, Z](ConditionalBijection[X, Y, Z], Protocol):
+class ConditionalTransform[X = Tensor, Y = Tensor, Z = Tensor](
+    ConditionalBijection[X, Y, Z], Protocol
+):
     r"""Protocol for diffeomorphism with logabsdet.
 
     See Also:
@@ -266,6 +296,11 @@ class ConditionalTransform[X, Y, Z](ConditionalBijection[X, Y, Z], Protocol):
         - `ConditionalSurjection`: Conditional protocol providing a right inverse.
         - `ConditionalProjection`: Conditional idempotent self-map protocol.
     """
+
+    @abstractmethod
+    def condition(self, context: Z, /) -> Transform[X, Y]:
+        r"""Condition on a fixed context to get an unconditional transform."""
+        ...
 
     @abstractmethod
     def encode_and_logabsdet(self, x: X, context: Z, /) -> tuple[Y, Tensor]: ...

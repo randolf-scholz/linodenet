@@ -35,9 +35,7 @@ class _Surjection[X, Y, **P](Protocol):
     def right_inverse(self, y: Y, /, *args: P.args, **kwargs: P.kwargs) -> X: ...
 
 
-class _Projection[T, **P](_Surjection[T, T, P], Protocol):
-    @abstractmethod
-    def forward(self, x: T, /, *args: P.args, **kwargs: P.kwargs) -> T: ...
+class _Projection[T, **P](_Surjection[T, T, P], Protocol): ...
 
 
 class _Bijection[X, Y, **P](_Surjection[X, Y, P], _Embedding[X, Y, P], Protocol):
