@@ -5,7 +5,6 @@ __all__ = [
     "ProductSameFamily",
 ]
 
-from collections.abc import Iterable
 from typing import Final
 
 import torch
@@ -16,6 +15,7 @@ from linodenet.nn import ModuleSequence
 from .base import DistributionBase
 
 
+# TODO: Consider using TypeVarTuple if they ever become powerful enough.
 class Product[D: DistributionBase](ModuleSequence[D]):
     r"""Represents the outer product of random distributions.
 
@@ -37,7 +37,7 @@ class Product[D: DistributionBase](ModuleSequence[D]):
     batch_shape: Final[tuple[int, ...]]
     event_shape: Final[tuple[int, ...]]
 
-    def __init__(self, marginals: Iterable[D], /) -> None:
+    def __init__(self, *marginals: D) -> None:
         super().__init__(marginals)
         self.batch_shape = torch.broadcast_shapes(*(m.batch_shape for m in self))
         assert len(self) >= 1, "At least one marginal distribution is required."

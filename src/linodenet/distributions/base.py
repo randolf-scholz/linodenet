@@ -3,7 +3,11 @@ r"""Distributions base class."""
 __all__ = [
     # ABCs & Protocols
     "Distribution",
+    "RichDistribution",
     "Marginalizable",
+    # Aliases
+    "SampleFn",
+    "LogProbFn",
     # Classes
     "DistributionBase",
     "DistributionList",
@@ -11,28 +15,72 @@ __all__ = [
 ]
 
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Final, Protocol, runtime_checkable
 
 import torch
 from torch import Size, Tensor, nn
 
+from linodenet.domains import Domain
 from linodenet.nn import ModuleMapping, ModuleSequence
+
+type SampleFn[Params: tuple[Tensor, ...]] = Callable[[Params, int], Tensor]
+type LogProbFn[Params: tuple[Tensor, ...]] = Callable[[Params, Tensor], Tensor]
 
 
 @runtime_checkable
 class Distribution[X](Protocol):
     r"""A protocol for distributions, compatible with `torch.distributions.Distribution`."""
 
-    # @property
-    # def batch_shape(self) -> tuple[int, ...]: ...
-    # @property
-    # def event_shape(self) -> tuple[int, ...]: ...
-
     @abstractmethod
     def sample(self, num: int = 1, /) -> X: ...
     @abstractmethod
     def log_prob(self, value: X, /) -> Tensor: ...
+
+
+class RichDistribution[X](Distribution[X], Protocol):
+    r"""A rich distribution, compatible with `torch.distributions.Distribution`."""
+
+    @property
+    def batch_shape(self) -> tuple[int, ...]: ...
+    @property
+    def event_shape(self) -> tuple[int, ...]: ...
+    @property
+    def support(self) -> Domain: ...
+    @property
+    def arg_constraints(self) -> Mapping[str, Domain]: ...
+
+    @property
+    def median(self) -> Tensor:
+        raise NotImplementedError
+
+    @property
+    def mode(self) -> Tensor:
+        raise NotImplementedError
+
+    @property
+    def mean(self) -> Tensor:
+        raise NotImplementedError
+
+    @property
+    def variance(self) -> Tensor:
+        raise NotImplementedError
+
+    @property
+    def stddev(self) -> Tensor:
+        raise NotImplementedError
+
+    def cdf(self, value: X, /) -> Tensor:
+        raise NotImplementedError
+
+    def icdf(self, value: X, /) -> Tensor:
+        raise NotImplementedError
+
+    def entropy(self, /) -> Tensor:
+        raise NotImplementedError
+
+    def perplexity(self, /) -> Tensor:
+        return torch.exp(self.entropy())
 
 
 class DistributionList[X, D: DistributionBase](ModuleSequence[D]):

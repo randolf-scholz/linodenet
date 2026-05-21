@@ -50,7 +50,7 @@ depends_on = []
 
 [[modules ]]
 path = "linodenet.distributions"
-depends_on = ["linodenet.nn"]
+depends_on = ["linodenet.nn", "linodenet.domains"]
 
 [[modules ]]
 path = "blueprint"

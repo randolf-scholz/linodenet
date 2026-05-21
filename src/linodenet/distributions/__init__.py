@@ -70,6 +70,8 @@ __all__ = [
     "Mixture",
     "MultiHeadGaussian",
     "Categorical",
+    "Normal",
+    "Uniform",
     "MixtureSameFamily",
     "MarchenkoPastur",
 ]
@@ -80,11 +82,15 @@ from .empirical import Dirac, Empirical
 from .gaussian import MultiHeadGaussian, MultivariateNormal
 from .marchenko_pastur import MarchenkoPastur
 from .mixture import Mixture, MixtureSameFamily
+from .uniform import Uniform
+from .univariate_normal import Normal
 
 DISTRIBUTIONS: dict[str, type[Distribution]] = {
     "Dirac"             : Dirac,
     "Empirical"         : Empirical,
     "Categorical"       : Categorical,
+    "Normal"            : Normal,
+    "Uniform"           : Uniform,
     "MultiHeadGaussian" : MultiHeadGaussian,
     "MixtureSameFamily" : MixtureSameFamily,
     "MarchenkoPastur"   : MarchenkoPastur,
