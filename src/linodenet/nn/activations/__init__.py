@@ -13,7 +13,6 @@ __all__ = [
     # ABCs & Protocols
     "Activation",
     "Activations",
-    "ActivationBase",
     "GenericActivation",
 ]
 
@@ -23,7 +22,6 @@ from .base import (
     ACTIVATION_FNS_WITH_ARGS,
     ACTIVATIONS,
     Activation,
-    ActivationBase,
     Activations,
     GenericActivation,
 )

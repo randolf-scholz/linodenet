@@ -8,7 +8,6 @@ __all__ = [
     "Activation",
     "Activations",
     "GenericActivation",
-    "ActivationBase",
 ]
 
 import re
@@ -52,30 +51,6 @@ class Activation(Protocol):
     def __call__(self, x: Tensor, /) -> Tensor: ...
 
 
-class ActivationBase(nn.Module):
-    r"""Abstract Base Class for Activation components."""
-
-    @abstractmethod
-    @signature("(..., *xs) -> (..., *xs)")
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the activation.
-
-        Args:
-            x: The input tensor to be activated.
-
-        Returns:
-            y: The activated tensor.
-        """
-        ...
-
-
-def _to_kebab_case(value: str, /) -> str:
-    r"""Normalize a name to lowercase kebab-case."""
-    normalized = re.sub(r"_", "-", value.strip())
-    normalized = re.sub(r"([a-z0-9])([A-Z][a-z])", r"\1-\2", normalized)
-    return normalized.lower()
-
-
 class Activations(StrEnum):
     r"""Enum of the provided activation modules."""
 
@@ -109,17 +84,24 @@ class Activations(StrEnum):
     TANH = "tanh"
     TANHSHRINK = "tanhshrink"
 
+    @staticmethod
+    def _to_kebab_case(value: str, /) -> str:
+        r"""Normalize a name to lowercase kebab-case."""
+        normalized = re.sub(r"_", "-", value.strip())
+        normalized = re.sub(r"([a-z0-9])([A-Z][a-z])", r"\1-\2", normalized)
+        return normalized.lower()
+
     @classmethod
     def _missing_(cls, value: object) -> Activations | None:
         if not isinstance(value, str):
             return None
-        normalized = _to_kebab_case(value)
+        normalized = cls._to_kebab_case(value)
 
         if activation := cls.__members__.get(normalized):
             return activation
 
         for member in cls:
-            if _to_kebab_case(ACTIVATIONS[member].__name__) == normalized:
+            if cls._to_kebab_case(ACTIVATIONS[member].__name__) == normalized:
                 return member
         return None
 
@@ -140,7 +122,7 @@ class Activations(StrEnum):
                 try:
                     activation = cls(name)
                 except ValueError as exc:
-                    normalized = _to_kebab_case(name)
+                    normalized = cls._to_kebab_case(name)
                     raise LookupError(
                         f"Unknown activation function: {name!r} (normalized: {normalized!r})"
                     ) from exc

@@ -99,7 +99,7 @@ __all__ = [
 
 import copy
 import warnings
-from abc import ABCMeta, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
@@ -114,6 +114,7 @@ from typing import (
     cast,
     get_protocol_members,
     overload,
+    runtime_checkable,
 )
 
 import torch
@@ -181,6 +182,7 @@ class WithoutRightInverse(SurjectionBase):
         return None
 
 
+@runtime_checkable
 class Parametrization(Protocol):
     r"""Protocol for parametrizations."""
 
@@ -241,7 +243,7 @@ def is_parametrized(
 
 
 # region base classes ------------------------------------------------------------------
-class _post_init_hook(ABCMeta):
+class _post_init_hook(type(Protocol)):  # pyrefly: ignore[invalid-inheritance]
     r"""Metclass that adds a ``__post_init__`` hook to class initialization."""
 
     def __post_init__(cls, /) -> None:

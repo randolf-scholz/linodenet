@@ -11,9 +11,9 @@ from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
 from linodenet.domains import MatrixDomains, MatrixTest
+from linodenet.nn.parametrize import ParametrizationList
 from linodenet.parametrizations import (
     MATRIX_PARAMETRIZATIONS,
-    ParametrizationBase,
     get_parametrizations,
     register_optimizer_hook,
     register_parametrization,
@@ -92,11 +92,11 @@ class TestParametrization(TestSuite):
             assert isinstance(layer, nn.Linear)
         return layer
 
-    def get_weight_parametrization(self, layer: nn.Linear, /) -> ParametrizationBase:
+    def get_weight_parametrization(self, layer: nn.Linear, /) -> ParametrizationList:
         parametrizations = get_parametrizations(layer)
         assert parametrizations is not None
         parametrization = parametrizations["weight"]
-        assert isinstance(parametrization, ParametrizationBase)
+        assert isinstance(parametrization, ParametrizationList)
         return parametrization
 
     def get_parametrization(self, name: str, /) -> nn.Module:
