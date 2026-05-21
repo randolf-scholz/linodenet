@@ -19,7 +19,7 @@ from torch.func import vjp, vmap
 from torch.linalg import slogdet
 from torch.nn.functional import linear
 
-from linodenet.mappings.base import TransformBase
+from linodenet.mappings.abstract import Transform
 from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
@@ -32,7 +32,7 @@ DEFAULT_REZERO_SCALAR_MAP: Final[NonExpansiveMapping] = (
 )
 
 
-class ResidualContractionBase[M: nn.Module](TransformBase):
+class ResidualContractionBase[M: nn.Module](nn.Module, Transform):
     r"""Shared base class for residual contractions with implicit inverses.
 
     Forward: y ← x + ρ(f(x))

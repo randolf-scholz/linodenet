@@ -6,6 +6,7 @@ from types import ModuleType
 from typing import NamedTuple, is_protocol
 
 import pytest
+from torch import nn
 
 import linodenet as lib
 from linodenet.distributions import DISTRIBUTIONS, Distribution, DistributionBase
@@ -18,14 +19,14 @@ from linodenet.mappings import (
     PROJECTIONS,
     SURJECTIONS,
     TRANSFORMS,
-    BijectionBase,
-    EmbeddingBase,
-    ProjectionBase,
-    SurjectionBase,
-    Transform,
-    TransformBase,
 )
-from linodenet.mappings.abstract import Bijection, Embedding, Projection, Surjection
+from linodenet.mappings.abstract import (
+    Bijection,
+    Embedding,
+    Projection,
+    Surjection,
+    Transform,
+)
 from linodenet.nn.activations import ACTIVATIONS, Activation
 from linodenet.regularizations import (
     REGULARIZATION_FNS,
@@ -49,17 +50,17 @@ class Case[StrT: str](NamedTuple):
 
 CASES: dict[str, Case] = {
     "activations"         : Case(lib.nn.activations   , Activation     , None               , ACTIVATIONS        ),
-    "transforms"          : Case(lib.transforms       , Transform      , TransformBase      , TRANSFORMS         ),
-    "bijections"          : Case(lib.bijections       , Bijection      , BijectionBase      , BIJECTIONS         ),
+    "transforms"          : Case(lib.transforms       , Transform      , nn.Module          , TRANSFORMS         ),
+    "bijections"          : Case(lib.bijections       , Bijection      , nn.Module          , BIJECTIONS         ),
     "distributions"       : Case(lib.distributions    , Distribution   , DistributionBase   , DISTRIBUTIONS      ),
-    "embeddings"          : Case(lib.embeddings       , Embedding      , EmbeddingBase      , EMBEDDINGS         ),
-    "surjections"         : Case(lib.surjections      , Surjection     , SurjectionBase     , SURJECTIONS        ),
+    "embeddings"          : Case(lib.embeddings       , Embedding      , nn.Module          , EMBEDDINGS         ),
+    "surjections"         : Case(lib.surjections      , Surjection     , nn.Module          , SURJECTIONS        ),
     "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS              ),
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
     "initializations"     : Case(lib.initializations, Initialization, None, INITIALIZATION_FNS),
     # "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_TESTS       ),
     # "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
-    "projections_cls"     : Case(lib.projections      , Projection     , ProjectionBase     , PROJECTIONS        ),
+    "projections_cls"     : Case(lib.projections      , Projection     , nn.Module     , PROJECTIONS        ),
     "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS     ),
     "regularizations_cls" : Case(lib.regularizations  , Regularization , RegularizationBase , REGULARIZATIONS    ),
     "regularizations_fun" : Case(lib.regularizations  , Regularization , None               , REGULARIZATION_FNS ),

@@ -10,16 +10,16 @@ __all__ = [
 from typing import Final
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from linodenet.domains import MatrixDomains, ScalarDomains, VectorDomains
 from linodenet_special import matrix_log
 from signatures import signature
 
-from .base import BijectionBase
+from .abstract import Bijection
 
 
-class MatrixExponential(BijectionBase):
+class MatrixExponential(nn.Module, Bijection):
     r"""Parametrize a matrix via matrix exponential.
 
     Note: The following restrictions hold:
@@ -42,7 +42,7 @@ class MatrixExponential(BijectionBase):
         return matrix_log(y).real.to(dtype=y.dtype)
 
 
-class PositiveScalarMatrix(BijectionBase):
+class PositiveScalarMatrix(nn.Module, Bijection):
     r"""Map scalars to positive scalar matrices via $x ↦ \exp(x) I$."""
 
     DOMAIN: Final[ScalarDomains] = ScalarDomains.REAL_LINE
@@ -66,7 +66,7 @@ class PositiveScalarMatrix(BijectionBase):
         return torch.log(y.diagonal(dim1=-2, dim2=-1)[..., 0])
 
 
-class PositiveDiagonal(BijectionBase):
+class PositiveDiagonal(nn.Module, Bijection):
     r"""Map vectors to positive diagonal matrices via $v ↦ \operatorname{diag}(\exp(v))$."""
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
@@ -81,7 +81,7 @@ class PositiveDiagonal(BijectionBase):
         return torch.log(y.diagonal(dim1=-2, dim2=-1))
 
 
-class CayleyMap(BijectionBase):
+class CayleyMap(nn.Module, Bijection):
     r"""Parametrize a matrix to be orthogonal via Cayley-Map.
 
     References:

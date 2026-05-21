@@ -8,7 +8,6 @@ from linodenet.mappings import (
     LinearContraction,
     ResidualContraction,
     ResidualContractionFallback,
-    TransformBase,
 )
 from linodenet.nn.parametrize import update_parametrizations
 from linodenet.nn.rezero import ReZero
@@ -162,7 +161,7 @@ class TestCorrectness(TestTransform):
     @pytest.mark.parametrize("input_size", [4, 16, 64], ids="input_size={}".format)
     def test_invertibility(
         self,
-        flow_cls: type[TransformBase],
+        flow_cls: type[ResidualContractionFallback | ResidualContraction],
         input_size: int,
         dtype: torch.dtype,
         device: str,
@@ -194,7 +193,7 @@ class TestCorrectness(TestTransform):
     )
     def test_gradients_of_contraction_bias(
         self,
-        flow_cls: type[TransformBase],
+        flow_cls: type[ResidualContractionFallback | ResidualContraction],
         dtype: torch.dtype,
         device: str,
         seed: int,
@@ -228,7 +227,7 @@ class TestCorrectness(TestTransform):
     )
     def test_gradients_of_contraction_linear(
         self,
-        flow_cls: type[TransformBase],
+        flow_cls: type[ResidualContractionFallback | ResidualContraction],
         dtype: torch.dtype,
         device: str,
         seed: int,
@@ -402,7 +401,7 @@ class TestPerformance(TestSuite):
     def test_decode_performance(
         self,
         benchmark: BenchmarkFixture,
-        flow_cls: type[TransformBase],
+        flow_cls: type[ResidualContractionFallback | ResidualContraction],
         dtype: torch.dtype,
         device: str,
     ) -> None:

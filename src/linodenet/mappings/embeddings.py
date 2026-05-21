@@ -23,10 +23,10 @@ from torch.nn import functional
 from linodenet.domains import VectorDomains
 from signatures import signature
 
-from .base import EmbeddingBase
+from .abstract import Embedding
 
 
-class ConcatEmbedding(EmbeddingBase):
+class ConcatEmbedding(nn.Module, Embedding):
     r"""Maps $x ⟼ [x,w]$.
 
     This map is left-invertible via $[x,w] ⟼ x$.
@@ -88,7 +88,7 @@ class ConcatEmbedding(EmbeddingBase):
         return y[..., : self.input_size]
 
 
-class LinearEmbedding(EmbeddingBase):
+class LinearEmbedding(nn.Module, Embedding):
     r"""Maps $x ↦ Ax + b$ and $y ↦ A⁺(y-b)$.
 
     Note:

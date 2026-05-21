@@ -38,7 +38,7 @@ __all__ = [
 from typing import ClassVar, Final, Optional
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 import linodenet.mappings.functional as F
 from linodenet.constants import ATOL, RTOL
@@ -46,10 +46,10 @@ from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet_special.fallbacks import singular_triplet
 from signatures import signature
 
-from .base import ProjectionBase
+from .abstract import Projection
 
 
-class LipschitzBounded(ProjectionBase):
+class LipschitzBounded(nn.Module, Projection):
     r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ
@@ -248,7 +248,7 @@ class Contraction(LipschitzBounded):
 
 # region projections -------------------------------------------------------------------
 # region matrix groups -----------------------------------------------------------------
-class Symmetric(ProjectionBase):
+class Symmetric(nn.Module, Projection):
     r"""Return the closest symmetric matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = Y
@@ -265,7 +265,7 @@ class Symmetric(ProjectionBase):
         return F.symmetric(x)
 
 
-class SkewSymmetric(ProjectionBase):
+class SkewSymmetric(nn.Module, Projection):
     r"""Return the closest skew-symmetric matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = -Y
@@ -282,7 +282,7 @@ class SkewSymmetric(ProjectionBase):
         return F.skew_symmetric(x)
 
 
-class Orthogonal(ProjectionBase):
+class Orthogonal(nn.Module, Projection):
     r"""Return the closest orthogonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ Y = 𝕀 = YYᵀ
@@ -303,7 +303,7 @@ class Orthogonal(ProjectionBase):
         return F.orthogonal(x)
 
 
-class Traceless(ProjectionBase):
+class Traceless(nn.Module, Projection):
     r"""Return the closest traceless matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = -Y
@@ -320,7 +320,7 @@ class Traceless(ProjectionBase):
         return F.traceless(x)
 
 
-class Normal(ProjectionBase):
+class Normal(nn.Module, Projection):
     r"""Return the closest normal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. YᵀY = YYᵀ
@@ -352,7 +352,7 @@ class Normal(ProjectionBase):
         return F.normal(x)
 
 
-class Hamiltonian(ProjectionBase):
+class Hamiltonian(nn.Module, Projection):
     r"""Return the closest hamiltonian matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   (JY)ᵀ = JA   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
@@ -378,7 +378,7 @@ class Hamiltonian(ProjectionBase):
         return F.hamiltonian(x)
 
 
-class Symplectic(ProjectionBase):
+class Symplectic(nn.Module, Projection):
     r"""Return the closest symplectic matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
@@ -403,7 +403,7 @@ class Symplectic(ProjectionBase):
 
 
 # region masked projections ------------------------------------------------------------
-class Diagonal(ProjectionBase):
+class Diagonal(nn.Module, Projection):
     r"""Return the closest diagonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕀⊙Y
@@ -427,7 +427,7 @@ class Diagonal(ProjectionBase):
         return F.diagonal(x)
 
 
-class UpperTriangular(ProjectionBase):
+class UpperTriangular(nn.Module, Projection):
     r"""Return the closest upper triangular matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   U⊙Y = Y
@@ -458,7 +458,7 @@ class UpperTriangular(ProjectionBase):
         return F.upper_triangular(x, upper=self.upper)
 
 
-class LowerTriangular(ProjectionBase):
+class LowerTriangular(nn.Module, Projection):
     r"""Return the closest lower triangular matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   𝕃⊙Y = Y
@@ -489,7 +489,7 @@ class LowerTriangular(ProjectionBase):
         return F.lower_triangular(x, lower=self.lower)
 
 
-class Tridiagonal(ProjectionBase):
+class Tridiagonal(nn.Module, Projection):
     r"""Return the closest tridiagonal matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Y = T⊙Y
@@ -511,7 +511,7 @@ class Tridiagonal(ProjectionBase):
 
 
 # region other projections -------------------------------------------------------------
-class DiagonallyDominant(ProjectionBase):
+class DiagonallyDominant(nn.Module, Projection):
     r"""Return the closest diagonally dominant matrix to X.
 
     .. math:: \min_Y ‖X-Y‖_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
@@ -529,7 +529,7 @@ class DiagonallyDominant(ProjectionBase):
         return F.diagonally_dominant(x)
 
 
-class RankOne(ProjectionBase):
+class RankOne(nn.Module, Projection):
     r"""Return the closest rank-1 matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
@@ -550,7 +550,7 @@ class RankOne(ProjectionBase):
 
 
 # region special -----------------------------------------------------------------------
-class Masked(ProjectionBase):
+class Masked(nn.Module, Projection):
     r"""Return the closest banded matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕄⊙Y
@@ -581,7 +581,7 @@ class Masked(ProjectionBase):
         return F.masked(x, mask=self.mask)
 
 
-class LowRank(ProjectionBase):
+class LowRank(nn.Module, Projection):
     r"""Return the closest low rank matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ k
@@ -604,7 +604,7 @@ class LowRank(ProjectionBase):
         return F.low_rank(x, rank=self.rank)
 
 
-class Banded(ProjectionBase):
+class Banded(nn.Module, Projection):
     r"""Return the closest banded matrix to X.
 
     .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝔹⊙Y
@@ -643,7 +643,7 @@ class Banded(ProjectionBase):
         return F.banded(x, lower=self.lower, upper=self.upper)
 
 
-class UnitVector(ProjectionBase):
+class UnitVector(nn.Module, Projection):
     r"""Project vectors onto the unit sphere."""
 
     DOMAIN: Final[VectorDomains] = VectorDomains.NONZERO

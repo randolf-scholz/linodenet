@@ -8,11 +8,11 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 
-from linodenet.mappings.base import TransformBase
+from linodenet.mappings.abstract import Transform
 from signatures import signature
 
 
-class LowRankTransform(TransformBase):
+class LowRankTransform(nn.Module, Transform):
     r"""An invertible, efficient low rank perturbation layer.
 
     .. math:: y = (𝕀ₙ + UVᵀ)x

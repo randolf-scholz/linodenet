@@ -17,7 +17,7 @@ __all__ = [
 
 
 from abc import abstractmethod
-from typing import Protocol, runtime_checkable
+from typing import Protocol, final, runtime_checkable
 
 from torch import Tensor
 
@@ -92,6 +92,7 @@ class Projection[T = Tensor](Surjection[T, T], Protocol):
     @signature("(..., *xs) -> (..., *ys)")
     def __call__(self, x: T, /) -> T: ...
 
+    @final
     @signature("(..., *ys) -> (..., *xs)")
     def right_inverse(self, y: T, /) -> T:
         r"""Right inverse of the projection, i.e. the identity on the image."""

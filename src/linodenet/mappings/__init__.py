@@ -76,7 +76,7 @@ __all__ += projections.__all__
 __all__ += surjections.__all__
 __all__ += transforms.__all__
 
-BIJECTIONS: dict[str, type[BijectionBase]] = {
+BIJECTIONS: dict[str, type[Bijection]] = {
     "MatrixExponential" : bijections.MatrixExponential,
     "PositiveScalarMatrix": bijections.PositiveScalarMatrix,
     "PositiveDiagonal"  : bijections.PositiveDiagonal,
@@ -86,13 +86,13 @@ BIJECTIONS: dict[str, type[BijectionBase]] = {
 }  # fmt: skip
 r"""Dictionary containing all available bijections (nn.Module)."""
 
-EMBEDDINGS: dict[str, type[EmbeddingBase]] = {
+EMBEDDINGS: dict[str, type[Embedding]] = {
     "ConcatEmbedding"  : embeddings.ConcatEmbedding,
     "LinearEmbedding"  : embeddings.LinearEmbedding,
 }  # fmt: skip
 r"""Dictionary of available embeddings (nn.Module)."""
 
-TRANSFORMS: dict[str, type[TransformBase]] = {
+TRANSFORMS: dict[str, type[Transform]] = {
     "BimodalToGaussian"    : transforms.BimodalToGaussian,
     "BottleneckFlow"       : transforms.BottleneckFlow,
     "GaussianToBimodal"    : transforms.GaussianToBimodal,
@@ -119,12 +119,12 @@ TRANSFORMS: dict[str, type[TransformBase]] = {
 }  # fmt: skip
 r"""Dictionary containing all available transforms (nn.Module)."""
 
-VECTOR_PROJECTIONS: dict[str, type[ProjectionBase]] = {
+VECTOR_PROJECTIONS: dict[str, type[Projection]] = {
     "UnitVector" : projections.UnitVector,
 }  # fmt: skip
 r"""Dictionary containing all available vector projections (nn.Module)."""
 
-MATRIX_PROJECTIONS: dict[str, type[ProjectionBase]] = {
+MATRIX_PROJECTIONS: dict[str, type[Projection]] = {
     "Banded"             : projections.Banded,
     "Contraction"        : projections.Contraction,
     "Diagonal"           : projections.Diagonal,
@@ -147,13 +147,13 @@ MATRIX_PROJECTIONS: dict[str, type[ProjectionBase]] = {
 }  # fmt: skip
 r"""Dictionary containing all available matrix projections (nn.Module)."""
 
-PROJECTIONS: dict[str, type[ProjectionBase]] = {
+PROJECTIONS: dict[str, type[Projection]] = {
     **MATRIX_PROJECTIONS,
     **VECTOR_PROJECTIONS,
 }
 r"""Dictionary containing all available projections."""
 
-SURJECTIONS: dict[str, type[SurjectionBase]] = {
+SURJECTIONS: dict[str, type[Surjection]] = {
     **PROJECTIONS,
     "CholeskyFactor"      : surjections.CholeskyFactor,
     "ConcatProjection"     : surjections.ConcatProjection,

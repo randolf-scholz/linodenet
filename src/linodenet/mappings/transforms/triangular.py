@@ -8,11 +8,11 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 
-from linodenet.mappings.base import TransformBase
+from linodenet.mappings.abstract import Transform
 from signatures import signature
 
 
-class TriangularTransform(TransformBase):
+class TriangularTransform(nn.Module, Transform):
     r"""An invertible linear layer with unit lower-triangular Jacobian.
 
     The transformation is parameterized as

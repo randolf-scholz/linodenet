@@ -17,15 +17,15 @@ import math
 from typing import Final
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 from linodenet.domains import ScalarDomain, ScalarDomains
-from linodenet.mappings.base import TransformBase
+from linodenet.mappings.abstract import Transform
 from signatures import signature
 
 
-class Sigmoid(TransformBase):
+class Sigmoid(nn.Module, Transform):
     r"""Map tensor entries elementwise via $x ↦ \sigma(x) = 1/(1 + \exp(-x))$.
 
     The inverse is $y ↦ \log(y/(1-y))$.
@@ -55,7 +55,7 @@ class Sigmoid(TransformBase):
         return x, logabsdet
 
 
-class Tanh(TransformBase):
+class Tanh(nn.Module, Transform):
     r"""Maps tensor elementwise via via $x ↦ \tanh(x)$.
 
     The inverse is $y ↦ \atanh(y) = ½ \log((1+y)/(1-y))$.
@@ -88,7 +88,7 @@ class Tanh(TransformBase):
         return x, logabsdet
 
 
-class Softsign(TransformBase):
+class Softsign(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ x/(1 + |x|)$.
 
     The inverse is $y ↦ y/(1 - |y|)$.
@@ -115,7 +115,7 @@ class Softsign(TransformBase):
         return x, logabsdet
 
 
-class SmoothSoftsign(TransformBase):
+class SmoothSoftsign(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ 2x/(1 + √(1 + 4x²))$.
 
     The inverse is $y ↦ y/(1 - y²)$.
@@ -147,7 +147,7 @@ class SmoothSoftsign(TransformBase):
         return x, logabsdet
 
 
-class Softplus(TransformBase):
+class Softplus(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ \log(1 + \exp(x))$.
 
     The inverse is $y ↦ \log(\exp(y) - 1)$.
@@ -176,7 +176,7 @@ class Softplus(TransformBase):
         return x, logabsdet
 
 
-class ELU(TransformBase):
+class ELU(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ ⟦x > 0 ? x : α(\exp(x) -1)⟧$.
 
     The inverse is y ↦ ⟦y > 0 ? y : \log(1 + y/α)⟧.
@@ -215,7 +215,7 @@ class ELU(TransformBase):
         return x, logabsdet
 
 
-class CELU(TransformBase):
+class CELU(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ ⟦x > 0 ? x : α(\exp(x/α) -1)⟧$.
 
     The inverse is: $y ↦ ⟦y > 0 ? y : α \log(1 + y/α)⟧$.
@@ -258,7 +258,7 @@ class CELU(TransformBase):
         return x, logabsdet
 
 
-class EntLU(TransformBase):
+class EntLU(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ ⟦x>0 ? x + 1 : eᴴ⁽¹⁻ˣ⁾⟧$.
 
     The inverse is $y ↦ ⟦y > 1 ? y-1 : 1 - \log(1/y)/W(\log(1/y))⟧$.
@@ -291,7 +291,7 @@ class EntLU(TransformBase):
         raise NotImplementedError("https://github.com/pytorch/pytorch/issues/108948")
 
 
-class Tanhshrink(TransformBase):
+class Tanhshrink(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ x - tanh(x)$.
 
     The inverse is $y ↦ ½ W(2y+2, 2y-2, -1)$, where $W$ is the generalized

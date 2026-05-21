@@ -28,7 +28,8 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from linodenet.mappings.base import TransformBase, TransformSequence
+from linodenet.mappings.abstract import Transform
+from linodenet.mappings.base import TransformSequence
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
@@ -527,7 +528,7 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
 
 
-class LearnableLRS(TransformBase):
+class LearnableLRS(nn.Module, Transform):
     r"""Trainable Linear Rational Spline."""
 
     n_heads: Final[torch.Size]  # tuple[*H]

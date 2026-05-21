@@ -29,7 +29,7 @@ def test_inherit_protocol_init() -> None:
     assert instance.hidden_size == 4
 
 
-def test_inherit_protocol_torch() -> None:
+def test_protocol_mixin() -> None:
     class FilterModule(Filter, nn.Module):
         @abstractmethod
         def forward(self, y: Tensor, x: Tensor) -> Tensor: ...

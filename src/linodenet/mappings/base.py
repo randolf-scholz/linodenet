@@ -1,12 +1,6 @@
 r"""Base classes for mappings."""
 
 __all__ = [
-    # Classes
-    "BijectionBase",
-    "EmbeddingBase",
-    "ProjectionBase",
-    "SurjectionBase",
-    "TransformBase",
     # sequence classes
     "BijectionSequence",
     "TransformSequence",
@@ -16,91 +10,19 @@ __all__ = [
 ]
 
 
-from abc import abstractmethod
 from collections.abc import Iterable, Iterator
-from typing import final
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 
 from linodenet.nn import ModuleSequence
-from signatures import signature
 
 from .abstract import (
     Bijection,
     ConditionalBijection,
     ConditionalTransform,
-    Embedding,
-    Projection,
-    Surjection,
     Transform,
 )
-
-
-class EmbeddingBase(nn.Module, Embedding[Tensor, Tensor]):
-    r"""Abstract Base Class for Embedding components."""
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def left_inverse(self, y: Tensor, /) -> Tensor: ...
-
-
-class SurjectionBase(nn.Module, Surjection[Tensor, Tensor]):
-    r"""Abstract Base Class for Surjection components."""
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def right_inverse(self, y: Tensor, /) -> Tensor: ...
-
-
-class ProjectionBase(SurjectionBase, Projection[Tensor]):
-    r"""Abstract Base Class for Projection components."""
-
-    @abstractmethod
-    @signature("(..., *xs) -> (..., *ys)")
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the projection."""
-
-    @final
-    @signature("(..., *ys) -> (..., *xs)")
-    def right_inverse(self, y: Tensor, /) -> Tensor:
-        r"""Right inverse of the projection, i.e. the identity on the image."""
-        return y
-
-
-class BijectionBase(nn.Module, Bijection[Tensor, Tensor]):
-    r"""Base class for bijections operating on single tensor."""
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def inverse(self, y: Tensor, /) -> Tensor: ...
-
-
-class TransformBase(BijectionBase, Transform[Tensor, Tensor]):
-    r"""Base class for transforms operating on single tensor."""
-
-    @abstractmethod
-    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]: ...
-
-    @abstractmethod
-    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]: ...
-
-    def encode(self, x: Tensor, /) -> Tensor:
-        y, _ = self.encode_and_logabsdet(x)
-        return y
-
-    def decode(self, y: Tensor, /) -> Tensor:
-        x, _ = self.decode_and_logabsdet(y)
-        return x
-
-    def forward(self, x: Tensor, /) -> Tensor:
-        return self.encode(x)
-
-    def inverse(self, y: Tensor, /) -> Tensor:
-        return self.decode(y)
 
 
 # TODO: use intersection type for upper bound `Bijection & nn.Module`
@@ -120,10 +42,10 @@ class BijectionSequence[
                 f"Inversion not implemented for subclass {type(self)}"
             )
 
-        def _inverse_iterator() -> Iterator[TransformBase]:
+        def _inverse_iterator() -> Iterator[Transform]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer
+                    yield ~layer  # type: ignore[operator]
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"
@@ -159,10 +81,10 @@ class TransformSequence[
                 f"Inversion not implemented for subclass {type(self)}"
             )
 
-        def _inverse_iterator() -> Iterator[TransformBase]:
+        def _inverse_iterator() -> Iterator[Transform]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer
+                    yield ~layer  # type: ignore[operator]
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"
@@ -227,7 +149,7 @@ class ConditionalBijectionSequence[
         def _inverse_iterator() -> Iterator[ConditionalBijection]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer
+                    yield ~layer  # type: ignore[operator]
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"
@@ -269,7 +191,7 @@ class ConditionalTransformSequence[
         def _inverse_iterator() -> Iterator[ConditionalTransform]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer
+                    yield ~layer  # type: ignore[operator]
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"

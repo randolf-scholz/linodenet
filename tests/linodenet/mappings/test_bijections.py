@@ -5,7 +5,7 @@ import torch
 
 from linodenet.domains import MATRIX_TESTS, MatrixDomains, ScalarDomains
 from linodenet.mappings import (
-    BijectionBase,
+    Bijection,
     PositiveDiagonal,
     PositiveScalarMatrix,
 )
@@ -16,7 +16,7 @@ from tests.testing import SEEDS_10
 @pytest.mark.parametrize("bijection_cls", [Tanh, SmoothSoftsign])
 class TestScalarOpenUnitBallMap:
     @torch.no_grad()
-    def test_roundtrip(self, bijection_cls: type[BijectionBase]) -> None:
+    def test_roundtrip(self, bijection_cls: type[Bijection]) -> None:
         torch.manual_seed(0)
         bijection = bijection_cls()
 
@@ -28,7 +28,7 @@ class TestScalarOpenUnitBallMap:
         torch.testing.assert_close(bijection.inverse(y), x, atol=1e-5, rtol=1e-5)
 
     def test_inverse_roundtrip_on_codomain_samples(
-        self, bijection_cls: type[BijectionBase]
+        self, bijection_cls: type[Bijection]
     ) -> None:
         torch.manual_seed(0)
         bijection = bijection_cls()
@@ -40,9 +40,7 @@ class TestScalarOpenUnitBallMap:
 
     @pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
     @torch.no_grad()
-    def test_handles_batches(
-        self, bijection_cls: type[BijectionBase], seed: int
-    ) -> None:
+    def test_handles_batches(self, bijection_cls: type[Bijection], seed: int) -> None:
         torch.manual_seed(seed)
         bijection = bijection_cls()
 

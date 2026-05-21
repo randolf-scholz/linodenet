@@ -25,12 +25,12 @@ from linodenet.domains import MatrixDomains, VectorDomains
 from linodenet_special import matrix_log, matrix_sqrt
 from signatures import signature
 
-from .base import SurjectionBase
+from .abstract import Surjection
 from .bijections import CayleyMap
 from .functional import skew_symmetric
 
 
-class CholeskyFactor(SurjectionBase):
+class CholeskyFactor(nn.Module, Surjection):
     r"""Parametrize Cholesky factors via a lower-triangular matrix with log-diagonal."""
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
@@ -49,7 +49,7 @@ class CholeskyFactor(SurjectionBase):
         )
 
 
-class PositiveSemiDefinite(SurjectionBase):
+class PositiveSemiDefinite(nn.Module, Surjection):
     r"""Parametrize a matrix via gram matrix ($XᵀX$)."""
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.RECTANGULAR
@@ -64,7 +64,7 @@ class PositiveSemiDefinite(SurjectionBase):
         return matrix_sqrt(y).real.to(dtype=y.dtype)
 
 
-class PositiveDefinite(SurjectionBase):
+class PositiveDefinite(nn.Module, Surjection):
     r"""Parametrize PD matrices via a lower-triangular factor with log-diagonal."""
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
@@ -85,7 +85,7 @@ class PositiveDefinite(SurjectionBase):
         )
 
 
-class NegativeDefinite(SurjectionBase):
+class NegativeDefinite(nn.Module, Surjection):
     r"""Parametrize ND matrices via a lower-triangular factor with log-diagonal."""
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
@@ -106,7 +106,7 @@ class NegativeDefinite(SurjectionBase):
         )
 
 
-class ConcatProjection(SurjectionBase):
+class ConcatProjection(nn.Module, Surjection):
     r"""Maps $[x,y] ⟼ x$.
 
     See Also:
@@ -158,7 +158,7 @@ class ConcatProjection(SurjectionBase):
         return torch.cat([y, self.padding.expand(shape)], dim=-1)
 
 
-class PositiveVector(SurjectionBase):
+class PositiveVector(nn.Module, Surjection):
     r"""Map vectors to the positive cone componentwise."""
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
@@ -173,7 +173,7 @@ class PositiveVector(SurjectionBase):
         return torch.where(y > 20, y, y + torch.log(-torch.expm1(-y)))
 
 
-class StochasticVector(SurjectionBase):
+class StochasticVector(nn.Module, Surjection):
     r"""Map vectors to the probability simplex."""
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
@@ -189,7 +189,7 @@ class StochasticVector(SurjectionBase):
         return logits - logits.mean(dim=-1, keepdim=True)
 
 
-class SpecialOrthogonal(SurjectionBase):
+class SpecialOrthogonal(nn.Module, Surjection):
     r"""Map square matrices to special orthogonal matrices via $X ↦ \exp(½(X-Xᵀ))$.
 
     Note:
@@ -210,7 +210,7 @@ class SpecialOrthogonal(SurjectionBase):
         return skew_symmetric(matrix_log(y).real.to(dtype=y.dtype))
 
 
-class OrthogonalHouseholder(SurjectionBase):
+class OrthogonalHouseholder(nn.Module, Surjection):
     r"""Map square matrices to orthogonal matrices via Householder reflections.
 
     The input columns define a sequence of trailing-block Householder reflectors.
@@ -255,7 +255,7 @@ class OrthogonalHouseholder(SurjectionBase):
         return self._right_inverse_columns(y)
 
 
-class OrthogonalCayley(SurjectionBase):
+class OrthogonalCayley(nn.Module, Surjection):
     r"""Map square matrices to orthogonal matrices via skew-symmetrization and Cayley.
 
     Note:
