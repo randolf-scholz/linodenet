@@ -65,7 +65,7 @@ def register_parametrization_list(
             raise TypeError(f"Expected a nn.ParameterDict, but got {type(value)}!")
 
     delattr(module, tensor_name)
-    module.register_buffer(tensor_name, wrapper.get_cached_tensor())
+    module.register_buffer(tensor_name, wrapper.cached_parameter)
     update_parametrizations(module)
     return wrapper
 
@@ -140,7 +140,7 @@ def test_parametrization_list_skew_symmetric_cayley_and_rezero_supports_training
     assert len(parametrization) == 3
     assert torch.allclose(model.weight, torch.zeros_like(model.weight))
 
-    rezero = parametrization[-1].transform
+    rezero = parametrization[-1]
     assert isinstance(rezero, ReZero)
     scalar_before = rezero.scalar.detach().clone()
 

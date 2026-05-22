@@ -1,5 +1,6 @@
 import tempfile
 
+import pytest
 import torch
 from torch import Tensor, jit, nn
 from torch._dynamo import OptimizedModule
@@ -21,17 +22,14 @@ def is_upper_triangular(x: Tensor) -> bool:
     return torch.equal(x, x.triu())
 
 
-def deserialize_module(module: nn.Module | jit.ScriptModule) -> jit.ScriptModule:
-    scripted = jit.script(module)
-
-    with tempfile.TemporaryFile() as file:
-        jit.save(scripted, file)
-        file.seek(0)
-        return jit.load(file)
+def make_parametrized_model() -> nn.Linear:
+    model = nn.Linear(in_features=5, out_features=4, bias=False)
+    register_parametrization(model, "weight", UpperTriangular())
+    return model
 
 
 def assert_update_refreshes_parametrized_weight(model: nn.Module) -> None:
-    model.train()
+    # model.train()
     inputs = torch.randn(3, 5)
     target = torch.randn(3, 4)
     optimizer = SGD(model.parameters(), lr=0.1)
@@ -71,28 +69,78 @@ def test_register_parametrization_uses_upper_triangular_cache() -> None:
     assert is_upper_triangular(model.weight)
 
 
-def test_scripted_model_refreshes_parametrized_weight_during_training() -> None:
-    model = nn.Linear(in_features=5, out_features=4, bias=False)
-    register_parametrization(model, "weight", UpperTriangular())
-    compiled = jit.script(model)
-    assert is_upper_triangular(compiled.weight)
-    assert_update_refreshes_parametrized_weight(compiled)
+class TestTorchScript:
+    @staticmethod
+    def deserialize_module(module: nn.Module | jit.ScriptModule) -> jit.ScriptModule:
+        scripted = jit.script(module)
+
+        with tempfile.TemporaryFile() as file:
+            jit.save(scripted, file)
+            file.seek(0)
+            return jit.load(file)
+
+    def test_training_freshly_scripted_model(self) -> None:
+        model = make_parametrized_model()
+        scripted = jit.script(model)
+
+        assert is_upper_triangular(scripted.weight)
+        assert_update_refreshes_parametrized_weight(scripted)
+
+    def test_training_deserialized_scripted_model(self) -> None:
+        model = make_parametrized_model()
+        scripted = self.deserialize_module(model)
+
+        assert is_upper_triangular(scripted.weight)
+        assert_update_refreshes_parametrized_weight(scripted)
 
 
-def test_deserialized_model_refreshes_parametrized_weight_during_training() -> None:
-    model = nn.Linear(in_features=5, out_features=4, bias=False)
-    register_parametrization(model, "weight", UpperTriangular())
-    compiled = deserialize_module(model)
-    assert is_upper_triangular(compiled.weight)
-    assert_update_refreshes_parametrized_weight(compiled)
+class TestTorchCompile:
+    def test_training_freshly_compiled_model(self) -> None:
+        model = make_parametrized_model()
+        compiled = torch.compile(model)
+
+        assert isinstance(compiled, OptimizedModule)
+        assert is_upper_triangular(compiled.weight)
+        assert_update_refreshes_parametrized_weight(compiled)
 
 
-def test_compile_compatibility() -> None:
-    model = nn.Linear(in_features=5, out_features=4, bias=False)
-    register_parametrization(model, "weight", UpperTriangular())
+class TestTorchExport:
+    @staticmethod
+    def export_module(module: nn.Module) -> nn.Module:
+        inputs = torch.randn(3, 5)
+        return torch.export.export(module, args=(inputs,)).module()
 
-    compiled = torch.compile(model)
+    @staticmethod
+    def deserialize_module(module: nn.Module) -> nn.Module:
+        exported_program = torch.export.export(module, args=(torch.randn(3, 5),))
 
-    assert isinstance(compiled, OptimizedModule)
-    assert is_upper_triangular(compiled.weight)
-    assert_update_refreshes_parametrized_weight(compiled)
+        with tempfile.TemporaryFile() as file:
+            torch.export.save(exported_program, file)
+            file.seek(0)
+            return torch.export.load(file).module()
+
+    @pytest.mark.xfail(
+        raises=NotImplementedError,
+        reason="torch.export does not support exporting entrypoints (https://github.com/pytorch/pytorch/issues/167631)",
+        strict=True,
+    )
+    def test_training_freshly_exported_model(self) -> None:
+        model = make_parametrized_model()
+        exported = self.export_module(model)
+
+        assert isinstance(exported.weight, Tensor)
+        assert is_upper_triangular(exported.weight)
+        assert_update_refreshes_parametrized_weight(exported)
+
+    @pytest.mark.xfail(
+        raises=NotImplementedError,
+        reason="torch.export does not support exporting entrypoints (https://github.com/pytorch/pytorch/issues/167631)",
+        strict=True,
+    )
+    def test_training_deserialized_exported_model(self) -> None:
+        model = make_parametrized_model()
+        exported = self.deserialize_module(model)
+
+        assert isinstance(exported.weight, Tensor)
+        assert is_upper_triangular(exported.weight)
+        assert_update_refreshes_parametrized_weight(exported)

@@ -72,17 +72,12 @@ __all__ = [
     "Surjection",
     "Parametrization",
     "Parametrized",
-    # Functions
-    "assert_is_safe_parametrization",
-    "deepcopy_with_parametrizations",
-    # "detach_caches",
-    "get_parametrizations",
-    "iter_parametrizations",
     "is_parametrization",
     "is_surjection",
+    # Functions
+    "assert_is_safe_parametrization",
+    "get_parametrizations",
     "register_optimizer_hook",
-    # "update_caches",
-    # "update_originals",
     "update_parametrizations",
     # torch.nn.utils.parametrizations replacements
     "ParametrizationList",
@@ -93,10 +88,9 @@ __all__ = [
 ]
 
 
-import copy
 import warnings
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
@@ -169,11 +163,6 @@ class Parametrization(Protocol):
     @abstractmethod
     def update_parametrization(self) -> None:
         r"""Update both the cached and the original tensors."""
-        ...
-
-    @abstractmethod
-    def get_cached_tensor(self) -> Tensor:
-        r"""Get the cached tensor."""
         ...
 
 
@@ -301,26 +290,28 @@ class ParametrizationList[
             assert_is_safe_parametrization(self, self.original_parameter)
 
         # initialize the cache
-        self.cached_parameter = self.apply_parametrization().clone().detach_()
-        self.update_cache()
+        self.initialize_cache()
 
     def __setitem__(self, idx: int, module: S, /) -> None:  # type: ignore[override]
         super().__setitem__(idx, _insert_right_inverse(module))  # type: ignore[arg-type]
-        self.cached_parameter = self.apply_parametrization().clone().detach_()
+        self.initialize_cache()
 
     def add_module(self, name: str, module: nn.Module | None) -> None:
         super().add_module(name, _insert_right_inverse(module))
-        self.cached_parameter = self.apply_parametrization().clone().detach_()
+        self.initialize_cache()
 
     def insert(self, index: int, module: nn.Module) -> None:
         super().insert(index, _insert_right_inverse(module))
-        self.cached_parameter = self.apply_parametrization().clone().detach_()
+        self.initialize_cache()
 
-    @jit.export
     def forward(self, x: Tensor) -> Tensor:
         for parametrization in self:
             x = parametrization(x)
         return x
+
+    @jit.export
+    def evaluate(self) -> Tensor:
+        return self.forward(self.original_parameter)
 
     @jit.export
     def right_inverse(self, y: Tensor) -> Tensor | None:
@@ -332,61 +323,42 @@ class ParametrizationList[
             z = parametrization.right_inverse(z)
         return z
 
-    # implement protocol methods:
     @jit.export
-    def apply_parametrization(self) -> Tensor:
-        r"""Apply the parametrization to the weight matrix."""
-        return self.forward(self.original_parameter)
-
-    @jit.export
-    def get_original_tensor(self) -> Tensor:
-        r"""Get the original tensor from the cached tensor."""
-        return self.original_parameter
-
-    @jit.export
-    def get_cached_tensor(self) -> Tensor:
-        r"""Get the cached tensor from the original tensor."""
-        return self.cached_parameter
+    def initialize_cache(self) -> None:
+        with torch.no_grad():
+            # first, set the buffer, ensuring cached_parameter has
+            # the correct tensor shape, dtype and device
+            self.cached_parameter = self.evaluate().clone().detach_()
+        self.cached_parameter.copy_(self.evaluate())
 
     @jit.export
     def set_stale(self, _: Optional[Tensor] = None) -> None:
-        self.is_stale.fill_(True)
         # poison the cached tensor
         self.cached_parameter.fill_(torch.nan)
+        self.is_stale.fill_(True)
 
     @jit.export
     def set_fresh(self) -> None:
-        self.is_stale.fill_(False)
         # check that the tensor is no longer poisoned.
-        assert not self.cached_parameter.isnan().all()
-
-    @jit.export
-    def update_cache(self) -> None:
-        r"""Update the cached tensors by recomputing the parametrization using the original tensors.
-
-        Note:
-            This method should use inplace `copy_` operations to update the cached tensors.
-        """
-        new_tensor = self.apply_parametrization()
-        self.cached_parameter.copy_(new_tensor)
+        if self.cached_parameter.isnan().all():
+            raise ValueError("Parameter is poisoned, update parametrizations first.")
+        self.is_stale.fill_(False)
 
     @jit.export
     def update_parametrization(self) -> None:
         r"""Update both the cached and the original tensors.
 
         This function needs to be called after each `optimizer.step()` call.
-        Internally, it should perform the following steps:
+        Alternatively, one con use the `register_optimizer_hook` function to register
+        a hook that automatically alls this function after each step.
 
-        1. Call `update_cache()` **without gradients**
-            to get the new parametrization given the modified parameters.
-        2. Call `update_original()` **without gradients**
-            to update the original parameters based on the new parametrization.
-        3. Call `detach_cache()` to detach the cached tensors from the autograd engine.
-        4. Call `update_cache()` a second time **with gradients** to re-enable the autograd engine.
+        See Also:
+            - `update_parametrizations`:
+            - `register_optimizer_hook`:
         """
         with torch.no_grad():
             # recompute the parametrization given the modified parameters
-            self.update_cache()
+            self.cached_parameter.copy_(self.evaluate())
 
             # update the original parameters based on the new parametrization
             pullback = self.right_inverse(self.cached_parameter)
@@ -397,7 +369,7 @@ class ParametrizationList[
             self.cached_parameter.detach_()
 
         # re-enable the autograd engine
-        self.update_cache()
+        self.cached_parameter.copy_(self.evaluate())
         self.set_fresh()
 
 
@@ -477,7 +449,7 @@ def register_parametrization(
             delattr(module, tensor_name)
 
             # re-register as a buffer
-            module.register_buffer(tensor_name, params_list.get_cached_tensor())
+            module.register_buffer(tensor_name, params_list.cached_parameter)
 
         case ParametrizationList() as params_list:
             # The tensor is already parametrized
@@ -565,26 +537,6 @@ def assert_is_safe_parametrization(module: nn.Module, tensor: Tensor) -> None:
             )
 
 
-def get_parametrizations(module: nn.Module, /) -> ModuleMapping[nn.Module] | None:
-    r"""Return all parametrizations in a module, if present."""
-    match ps := getattr(module, "parametrizations", None):
-        case None:
-            return None
-
-        case ModuleMapping():
-            return ps
-
-        case nn.ModuleDict():
-            return ModuleMapping(dict(ps.items()))
-
-        case nn.Module() as ps:
-            # Needed since JIT may replace ModuleDict with a plain Module.
-            return ModuleMapping(dict(ps.named_children()))
-
-        case _:
-            raise TypeError(f"Expected a ModuleMapping, but got {type(ps)}!")
-
-
 def remove_parametrizations(
     module: nn.Module,
     tensor_name: str,
@@ -622,102 +574,88 @@ class cached(ContextDecorator, AbstractContextManager):
 
 
 # region functions for parametrization -------------------------------------------------
-def iter_parametrizations(module: nn.Module, /) -> Iterator[Parametrization]:
-    r"""Yields all parametrizations in a module."""
-    for child in module.children():
-        if is_parametrization(child):
-            yield child
-        else:
-            yield from iter_parametrizations(child)
+def get_parametrizations(module: nn.Module, /) -> ModuleMapping[nn.Module] | None:
+    r"""Return the (top level) parametrizations on a module, if present."""
+    match ps := getattr(module, "parametrizations", None):
+        case None:
+            return None
+
+        case ModuleMapping():
+            return ps
+
+        case nn.ModuleDict():
+            return ModuleMapping(dict(ps.items()))
+
+        case nn.Module() as ps:
+            # Needed since JIT may replace ModuleDict with a plain Module.
+            return ModuleMapping(dict(ps.named_children()))
+
+        case _:
+            raise TypeError(
+                f"Expected parametrizations to be a ModuleMapping "
+                f" or nn.Module, but got {type(ps)}!"
+            )
 
 
-def _heal_parametrization_connections(module: nn.Module, /) -> None:
-    r"""Rebind parametrized module buffers to the wrapper caches.
+def _supports_fallback_interface(parametrization: nn.Module, /) -> bool:
+    return (
+        isinstance(parametrization, nn.Module)
+        and isinstance(getattr(parametrization, "cached_parameter", None), Tensor)
+        and isinstance(getattr(parametrization, "original_parameter", None), Tensor)
+        and isinstance(getattr(parametrization, "is_stale", None), Tensor)
+    )
 
-    This restores aliasing after operations such as ``module.to(...)`` that rewrite
-    buffers in each submodule independently.
-    """
-    for submodule in module.modules():
-        match getattr(submodule, "parametrizations", None):
-            case None:
-                continue
 
-            case nn.Module() as ps:
-                if not isinstance(ps, ModuleMapping):
-                    ps = ModuleMapping(dict(ps.named_children()))
+def _update_fallback(module: nn.Module, tensor_name: str, parametrization: nn.Module):
+    if not _supports_fallback_interface(parametrization):
+        raise TypeError(
+            f"Parametrization {type(parametrization)} for {tensor_name} "
+            f" does not support the minimal interface for fallback update."
+        )
 
-                for tensor_name, parametrization in ps.items():
-                    assert is_parametrization(parametrization)
-                    setattr(submodule, tensor_name, parametrization.get_cached_tensor())
+    # for type checker
+    assert isinstance(parametrization.cached_parameter, Tensor)
+    assert isinstance(parametrization.original_parameter, Tensor)
+    assert isinstance(parametrization.is_stale, Tensor)
 
-            case _:
-                raise TypeError("Expected parametrizations to be a ModuleMapping")
+    with torch.no_grad():
+        new_tensor = parametrization(parametrization.original_parameter)
+        parametrization.cached_parameter.copy_(new_tensor)
+        parametrization.cached_parameter.detach_()
+
+    new_tensor = parametrization(parametrization.original_parameter)
+    parametrization.cached_parameter.copy_(new_tensor)
+    parametrization.is_stale.fill_(False)
+    setattr(module, tensor_name, parametrization.cached_parameter)
 
 
 def update_parametrizations(module: nn.Module, /) -> None:
     r"""Update all parametrizations in a module."""
-    for parametrization in iter_parametrizations(module):
-        parametrization.update_parametrization()
-    _heal_parametrization_connections(module)
+    for submodule in module.modules():
+        if parametrizations := get_parametrizations(submodule):
+            for tensor_name, parametrization in parametrizations.items():
+                if callable(getattr(parametrization, "update_parametrization", None)):
+                    # redundant, but needed for type checker
+                    assert callable(parametrization.update_parametrization)
+
+                    parametrization.update_parametrization()
+
+                    # repair the buffer on the parent module
+                    setattr(submodule, tensor_name, parametrization.cached_parameter)
+
+                else:
+                    _update_fallback(submodule, tensor_name, parametrization)
 
 
-#
-# def detach_caches(module: nn.Module, /) -> None:
-#     r"""Detach all caches in a module."""
-#     for parametrization in iter_parametrizations(module):
-#         parametrization.detach_cache()
-#
-#
-# def update_originals(module: nn.Module, /) -> None:
-#     r"""Update all original tensors in a module."""
-#     for parametrization in iter_parametrizations(module):
-#         parametrization.update_original()
-#
-#
-# def update_caches(module: nn.Module, /) -> None:
-#     r"""Update all cached tensors in a module."""
-#     for parametrization in iter_parametrizations(module):
-#         parametrization.update_cache()
-
-# endregion functions for parametrization ----------------------------------------------
-
-
-# region additional functions ----------------------------------------------------------
-def register_optimizer_hook(
-    optim: Optimizer, /, *module_or_param: nn.Module | Parametrization
-) -> None:
+def register_optimizer_hook(optim: Optimizer, /, *modules: nn.Module) -> None:
     r"""Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
-    # collect all parametrizations
-    parametrizations = []
-    for module in module_or_param:
-        if is_parametrization(module):
-            parametrizations.append(module)
-        else:
-            parametrizations.extend(iter_parametrizations(module))
 
     def hook(opt: Optimizer, /, *args: Any, **kwargs: Any) -> None:  # noqa: ARG001
         r"""Hook to update the parametrization after each optimizer step."""
-        for parametrization in parametrizations:
-            parametrization.update_parametrization()
+        for module in modules:
+            update_parametrizations(module)
 
     optim.register_step_post_hook(hook)
 
 
-def deepcopy_with_parametrizations[M: nn.Module](module: M, /) -> M:
-    r"""Deepcopy a module."""
-    # detach all caches
-    # detach_caches(module)
-    with torch.no_grad():
-        # deepcopy the module
-        cloned = copy.deepcopy(module)
-
-    # recompute all caches for the original module
-    # update_parametrizations(module)
-
-    # recompute all caches for the cloned module
-    update_parametrizations(cloned)
-    # return the cloned module
-    return cloned
-
-
-# endregion additional functions -------------------------------------------------------
+# endregion functions for parametrization ----------------------------------------------
