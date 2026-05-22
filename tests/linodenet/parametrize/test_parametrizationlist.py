@@ -8,7 +8,6 @@ from linodenet.mappings.bijections import CayleyMap
 from linodenet.mappings.projections import SkewSymmetric
 from linodenet.nn.parametrize import (
     ParametrizationList,
-    WithoutRightInverse,
     get_parametrizations,
     update_parametrizations,
 )
@@ -132,7 +131,7 @@ def test_parametrization_list_skew_symmetric_cayley_and_rezero_supports_training
         "weight",
         SkewSymmetric(),
         CayleyMap(),
-        WithoutRightInverse(ReZero()),
+        ReZero(),
     )
 
     parametrizations = get_parametrizations(model)

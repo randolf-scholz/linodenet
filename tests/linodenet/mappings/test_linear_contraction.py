@@ -65,11 +65,12 @@ class TestLinearContraction(TestSuite):
         assert layer.output_size == layer.out_features == 3
         assert is_parametrized(layer, "weight")
 
-        # NOTE: using .to() screws up the parametrization
         parametrizations = get_parametrizations(layer)
         assert parametrizations is not None
         parametrization = parametrizations["weight"]
         assert layer.weight is parametrization.cached_parameter
+
+        # NOTE: using .to() screws up the parametrization
         layer = layer.to(device=device)
         parametrizations = get_parametrizations(layer)
         assert parametrizations is not None

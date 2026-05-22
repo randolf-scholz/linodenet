@@ -72,10 +72,6 @@ __all__ = [
     "Surjection",
     "Parametrization",
     "Parametrized",
-    # Classes
-    "SurjectionBase",
-    "WithoutRightInverse",
-    "ParametrizationBase",
     # Functions
     "assert_is_safe_parametrization",
     "deepcopy_with_parametrizations",
@@ -100,7 +96,7 @@ __all__ = [
 import copy
 import warnings
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator
 from contextlib import AbstractContextManager, ContextDecorator
 from types import TracebackType
 from typing import (
@@ -124,6 +120,7 @@ from torch.optim import Optimizer
 from .containers import ModuleMapping, ModuleSequence
 
 
+# TODO: Use IntersectionType
 class Surjection[X, Y](Protocol):
     r"""A protocol for surjections.
 
@@ -146,40 +143,13 @@ class Surjection[X, Y](Protocol):
 
 
 # TODO: Use IntersectionType
-class SurjectionBase(nn.Module, Surjection[Tensor, Tensor]):
-    r"""Substitute for the intersection type ``nn.Module & Surjection``."""
-
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def right_inverse(self, y: Tensor, /) -> Tensor | None: ...
-
-
-def is_surjection(obj: object, /) -> TypeIs[SurjectionBase]:
+def is_surjection(obj: object, /) -> TypeIs[Surjection]:
     r"""Check if the object is a Surjection.
 
     This method is needed because standard isinstance checks do not work with jit.ScriptModule.
     This is because Protocol used getattr_static, rather than proper getattr/hasattr.
     """
     return isinstance(obj, nn.Module) and callable(getattr(obj, "right_inverse", None))
-
-
-class WithoutRightInverse(SurjectionBase):
-    r"""Wrapper for parametrizations without right inverse."""
-
-    def __init__(self, transform: nn.Module, /) -> None:
-        super().__init__()
-        if not isinstance(transform, nn.Module):
-            raise TypeError(f"Expected a nn.Module, but got {type(transform)}!")
-        self.transform = transform
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        return self.transform(x)
-
-    @jit.export
-    def right_inverse(self, _: Tensor) -> Tensor | None:
-        return None
 
 
 @runtime_checkable
@@ -199,6 +169,11 @@ class Parametrization(Protocol):
     @abstractmethod
     def update_parametrization(self) -> None:
         r"""Update both the cached and the original tensors."""
+        ...
+
+    @abstractmethod
+    def get_cached_tensor(self) -> Tensor:
+        r"""Get the cached tensor."""
         ...
 
 
@@ -269,8 +244,26 @@ class _post_init_hook(type(Protocol)):  # pyrefly: ignore[invalid-inheritance]
         return new
 
 
-class ParametrizationBase(nn.Module, metaclass=_post_init_hook):
-    r"""Base class for parametrization of a single tensor using a single cached tensor."""
+# TODO: Use Intersection type (Surjection & nn.Module)
+class ParametrizationList[
+    S: Surjection,
+](ModuleSequence[S], Parametrization, metaclass=_post_init_hook):  # type: ignore[bad-specialization]
+    r"""Applies multiple parametrizations to the same tensor in sequence.
+
+    Args:
+        modules (Iterable[S | nn.Module]): An iterable of parametrization modules to apply in
+            sequence. Each entry should either implement the `Surjection` protocol (i.e. provide
+            a callable transform and a `right_inverse`) or be a plain `nn.Module`, in which case
+            it will be wrapped by `WithoutRightInverse` so that a `right_inverse` returning
+            `None` is used.
+        original (Tensor): The original tensor (typically an `nn.Parameter`) that is being
+            parametrized. This tensor is stored as `original_parameter` and is the source of
+            truth for updating the cached parametrized value. Its dtype and shape must be
+            compatible with the parametrizations unless `unsafe=True` is set.
+        unsafe (bool): If True, safety checks that ensure the parametrization preserves dtype
+            and shape (and that the `right_inverse` respects these invariants) are skipped.
+            Use with caution; enabling `unsafe` can lead to silently incorrect parametrizations.
+    """
 
     original_parameter: nn.Parameter
     r"""PARAM: Holds parametrized tensors."""
@@ -283,36 +276,25 @@ class ParametrizationBase(nn.Module, metaclass=_post_init_hook):
 
     def __init__(
         self,
-        tensor: Tensor,
+        # TODO: use intersection type.
+        modules: Iterable[nn.Module] = (),
+        /,
         *,
+        original: Tensor,
         unsafe: bool = False,
     ) -> None:
-        super().__init__()
-        if not isinstance(tensor, nn.Parameter):
+        super().__init__(modules)  # type: ignore[arg-type]
+        if not isinstance(original, nn.Parameter):
             raise TypeError("tensor must be a nn.Parameter")
 
         # get the tensor to parametrizations
-        self.register_parameter("original_parameter", tensor)
+        self.register_parameter("original_parameter", original)
         self.register_buffer("cached_parameter", None)
         self.register_buffer("is_stale", torch.tensor(True), persistent=True)
         self.unsafe = unsafe
 
-    # TODO: use this instead of metaclass?
-    r"""
-    def __init_subclass__(cls: type[Self], **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-
-        import functools
-        original_init = cls.__init__
-
-        # add __post_init__ hook to __init__
-        @functools.wraps(original_init)
-        def __init_with_post_init(self: Self, /, *args: Any, **kwargs: Any) -> None:
-            original_init(self, *args, **kwargs)
-            self.__post_init__()
-
-        cls.__init__ = __init_with_post_init  # type: ignore[assignment]  # pyright: ignore[reportAttributeAccessIssue]
-    """
+        # register the hook that makes the parametrized tensor stale after backward() call
+        self.original_parameter.register_post_accumulate_grad_hook(self.set_stale)
 
     def __post_init__(self) -> None:
         if not self.unsafe:
@@ -322,10 +304,33 @@ class ParametrizationBase(nn.Module, metaclass=_post_init_hook):
         self.cached_parameter = self.apply_parametrization().clone().detach_()
         self.update_cache()
 
-    @abstractmethod
-    def forward(self, x: Tensor, /) -> Tensor: ...
-    @abstractmethod
-    def right_inverse(self, y: Tensor, /) -> Tensor | None: ...
+    def __setitem__(self, idx: int, module: S, /) -> None:  # type: ignore[override]
+        super().__setitem__(idx, _insert_right_inverse(module))  # type: ignore[arg-type]
+        self.cached_parameter = self.apply_parametrization().clone().detach_()
+
+    def add_module(self, name: str, module: nn.Module | None) -> None:
+        super().add_module(name, _insert_right_inverse(module))
+        self.cached_parameter = self.apply_parametrization().clone().detach_()
+
+    def insert(self, index: int, module: nn.Module) -> None:
+        super().insert(index, _insert_right_inverse(module))
+        self.cached_parameter = self.apply_parametrization().clone().detach_()
+
+    @jit.export
+    def forward(self, x: Tensor) -> Tensor:
+        for parametrization in self:
+            x = parametrization(x)
+        return x
+
+    @jit.export
+    def right_inverse(self, y: Tensor) -> Tensor | None:
+        # NOTE: JIT does not support reversed().
+        z: Tensor | None = y
+        for parametrization in self[::-1]:
+            if z is None:
+                return z
+            z = parametrization.right_inverse(z)
+        return z
 
     # implement protocol methods:
     @jit.export
@@ -344,7 +349,7 @@ class ParametrizationBase(nn.Module, metaclass=_post_init_hook):
         return self.cached_parameter
 
     @jit.export
-    def set_stale(self) -> None:
+    def set_stale(self, _: Optional[Tensor] = None) -> None:
         self.is_stale.fill_(True)
         # poison the cached tensor
         self.cached_parameter.fill_(torch.nan)
@@ -396,77 +401,11 @@ class ParametrizationBase(nn.Module, metaclass=_post_init_hook):
         self.set_fresh()
 
 
-# TODO: Use Intersection type (Parametrization & Module)
-class ParametrizationList[S: SurjectionBase](ModuleSequence[S], ParametrizationBase):
-    r"""Applies multiple parametrizations to the same tensor in sequence.
-
-    Args:
-        modules (Iterable[S | nn.Module]): An iterable of parametrization modules to apply in
-            sequence. Each entry should either implement the `Surjection` protocol (i.e. provide
-            a callable transform and a `right_inverse`) or be a plain `nn.Module`, in which case
-            it will be wrapped by `WithoutRightInverse` so that a `right_inverse` returning
-            `None` is used.
-        original (Tensor): The original tensor (typically an `nn.Parameter`) that is being
-            parametrized. This tensor is stored as `original_parameter` and is the source of
-            truth for updating the cached parametrized value. Its dtype and shape must be
-            compatible with the parametrizations unless `unsafe=True` is set.
-        unsafe (bool): If True, safety checks that ensure the parametrization preserves dtype
-            and shape (and that the `right_inverse` respects these invariants) are skipped.
-            Use with caution; enabling `unsafe` can lead to silently incorrect parametrizations.
-    """
-
-    original_parameter: nn.Parameter
-    r"""PARAM: Holds parametrized tensors."""
-    cached_parameter: Tensor
-    r"""BUFFER: Holds cached version of the parametrized tensor."""
-    is_stale: Tensor
-    r"""BUFFER: Boolean scalar indicating whether the cached parameter is stale."""
-
-    def __init__(
-        self,
-        modules: Iterable[S | nn.Module] = (),
-        /,
-        *,
-        original: Tensor,
-        unsafe: bool = False,
-    ) -> None:
-        ParametrizationBase.__init__(self, original, unsafe=unsafe)
-        self._modules: Mapping[str, S]  # type: ignore[override]
-        for module in modules:
-            self.append(module)
-
-    def __setitem__(self, idx: int, module: S, /) -> None:  # type: ignore[override]
-        super().__setitem__(idx, _insert_right_inverse(module))
-
-    def add_module(self, name: str, module: nn.Module | None) -> None:
-        super().add_module(name, _insert_right_inverse(module))
-
-    def insert(self, index: int, module: nn.Module) -> None:
-        super().insert(index, _insert_right_inverse(module))
-
-    @jit.export
-    def forward(self, x: Tensor) -> Tensor:
-        for parametrization in self:
-            x = parametrization(x)
-        return x
-
-    @jit.export
-    def right_inverse(self, y: Tensor) -> Tensor | None:
-        # NOTE: JIT does not support reversed().
-        z: Tensor | None = y
-        for parametrization in self[::-1]:
-            if z is None:
-                return z
-            z = parametrization.right_inverse(z)
-        return z
-
-
+# TODO: use intersection type (Surjection & nn.Module)
 @overload
 def _insert_right_inverse(arg: None, /) -> None: ...
 @overload
-def _insert_right_inverse[M: SurjectionBase](arg: M, /) -> M: ...  # pyright: ignore[reportOverlappingOverload]
-@overload
-def _insert_right_inverse(arg: nn.Module, /) -> WithoutRightInverse: ...
+def _insert_right_inverse[M: nn.Module](arg: M, /) -> M: ...
 def _insert_right_inverse(arg: nn.Module | None, /) -> nn.Module | None:
     if arg is None:
         return None
@@ -540,11 +479,6 @@ def register_parametrization(
             # re-register as a buffer
             module.register_buffer(tensor_name, params_list.get_cached_tensor())
 
-            # register the hook that makes the parametrized tensor stale after backward() call
-            params_list.original_parameter.register_post_accumulate_grad_hook(
-                lambda _: params_list.set_stale()
-            )
-
         case ParametrizationList() as params_list:
             # The tensor is already parametrized
             original = params_list.original_parameter
@@ -571,10 +505,16 @@ def register_parametrization(
     params_list.append(parametrization)
     params_list.update_parametrization()
 
+    # re-set the buffer
+    setattr(module, tensor_name, params_list.cached_parameter)
+
+    assert getattr(module, tensor_name) is params_list.cached_parameter
+
 
 def assert_is_safe_parametrization(module: nn.Module, tensor: Tensor) -> None:
     r"""Check if the parametrization is safe to apply to the tensor."""
     transform = _insert_right_inverse(module)
+    assert is_surjection(transform)
     Y = tensor
     X = transform(Y)
 
@@ -707,8 +647,7 @@ def _heal_parametrization_connections(module: nn.Module, /) -> None:
                     ps = ModuleMapping(dict(ps.named_children()))
 
                 for tensor_name, parametrization in ps.items():
-                    if not isinstance(parametrization, ParametrizationBase):
-                        continue
+                    assert is_parametrization(parametrization)
                     setattr(submodule, tensor_name, parametrization.get_cached_tensor())
 
             case _:
