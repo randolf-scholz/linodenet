@@ -76,21 +76,6 @@ __all__ += projections.__all__
 __all__ += surjections.__all__
 __all__ += transforms.__all__
 
-BIJECTIONS: dict[str, type[Bijection]] = {
-    "MatrixExponential" : bijections.MatrixExponential,
-    "PositiveScalarMatrix": bijections.PositiveScalarMatrix,
-    "PositiveDiagonal"  : bijections.PositiveDiagonal,
-    "CayleyMap"         : bijections.CayleyMap,
-    "SmoothSoftsign"    : transforms.SmoothSoftsign,
-    "Tanh"              : transforms.Tanh,
-}  # fmt: skip
-r"""Dictionary containing all available bijections (nn.Module)."""
-
-EMBEDDINGS: dict[str, type[Embedding]] = {
-    "ConcatEmbedding"  : embeddings.ConcatEmbedding,
-    "LinearEmbedding"  : embeddings.LinearEmbedding,
-}  # fmt: skip
-r"""Dictionary of available embeddings (nn.Module)."""
 
 TRANSFORMS: dict[str, type[Transform]] = {
     "BimodalToGaussian"    : transforms.BimodalToGaussian,
@@ -118,6 +103,16 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "Tanhshrink"           : transforms.scalar.Tanhshrink,
 }  # fmt: skip
 r"""Dictionary containing all available transforms (nn.Module)."""
+
+BIJECTIONS: dict[str, type[Bijection]] = {
+    "MatrixExponential"    : bijections.MatrixExponential,
+    "PositiveScalarMatrix" : bijections.PositiveScalarMatrix,
+    "PositiveDiagonal"     : bijections.PositiveDiagonal,
+    "CayleyMap"            : bijections.CayleyMap,
+    "SmoothSoftsign"       : transforms.SmoothSoftsign,
+    "Tanh"                 : transforms.Tanh,
+}  # fmt: skip
+r"""Dictionary containing all available bijections (nn.Module)."""
 
 VECTOR_PROJECTIONS: dict[str, type[Projection]] = {
     "UnitVector" : projections.UnitVector,
@@ -155,7 +150,7 @@ r"""Dictionary containing all available projections."""
 
 SURJECTIONS: dict[str, type[Surjection]] = {
     **PROJECTIONS,
-    "CholeskyFactor"      : surjections.CholeskyFactor,
+    "CholeskyFactor"       : surjections.CholeskyFactor,
     "ConcatProjection"     : surjections.ConcatProjection,
     "NegativeDefinite"     : surjections.NegativeDefinite,
     "OrthogonalCayley"     : surjections.OrthogonalCayley,
@@ -167,6 +162,12 @@ SURJECTIONS: dict[str, type[Surjection]] = {
     "StochasticVector"     : surjections.StochasticVector,
 }  # fmt: skip
 r"""Dictionary containing all available surjections (nn.Module)."""
+
+EMBEDDINGS: dict[str, type[Embedding]] = {
+    "ConcatEmbedding"  : embeddings.ConcatEmbedding,
+    "LinearEmbedding"  : embeddings.LinearEmbedding,
+}  # fmt: skip
+r"""Dictionary of available embeddings (nn.Module)."""
 
 VECTOR_PROJECTION_FNS: dict[str, ProjectionFn] = {
     "unit_vector" : unit_vector

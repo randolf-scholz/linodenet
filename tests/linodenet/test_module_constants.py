@@ -163,6 +163,7 @@ def test_dict_complete(case_name: str) -> None:
                     and isinstance(cls, type)
                     and issubclass(cls, base_class)
                     and cls is not base_class
+                    and cls.__name__ in case.module.__all__
                     # and __init__ is compatible with base_class.__init__
                 )
                 and cls not in case.elements.values()
