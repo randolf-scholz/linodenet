@@ -613,6 +613,7 @@ class TestTraceCorrectness(TestTraceEstimator):
     @pytest.mark.parametrize("name", TraceEstimators, ids=str)
     def test_diagonal(self, name: str, device: str) -> None:
         test_case = self.make_diagonal(
+            seed=self.SEED,
             batch_size=self.BATCH_SIZE,
             input_size=self.PROBLEM_SIZE,
             device=device,
@@ -628,6 +629,7 @@ class TestTraceCorrectness(TestTraceEstimator):
     @pytest.mark.parametrize("name", TraceEstimators, ids=str)
     def test_normal(self, name: str, device: str) -> None:
         test_case = self.make_normal(
+            seed=self.SEED,
             batch_size=self.BATCH_SIZE,
             input_size=self.PROBLEM_SIZE,
             device=device,
@@ -644,6 +646,7 @@ class TestTraceCorrectness(TestTraceEstimator):
     def test_low_rank(self, name: str, device: str) -> None:
         test_case = self.make_low_rank(
             rank=self.PROBLEM_RANK,
+            seed=self.SEED,
             batch_size=self.BATCH_SIZE,
             input_size=self.PROBLEM_SIZE,
             device=device,
@@ -663,6 +666,7 @@ class TestTraceCorrectness(TestTraceEstimator):
             (
                 "diagonal",
                 self.make_diagonal(
+                    seed=self.SEED,
                     batch_size=self.BATCH_SIZE,
                     input_size=self.PROBLEM_SIZE,
                     device=device,
@@ -671,6 +675,7 @@ class TestTraceCorrectness(TestTraceEstimator):
             (
                 "normal",
                 self.make_normal(
+                    seed=self.SEED,
                     batch_size=self.BATCH_SIZE,
                     input_size=self.PROBLEM_SIZE,
                     device=device,
@@ -680,6 +685,7 @@ class TestTraceCorrectness(TestTraceEstimator):
                 "low_rank",
                 self.make_low_rank(
                     rank=self.PROBLEM_RANK,
+                    seed=self.SEED,
                     batch_size=self.BATCH_SIZE,
                     input_size=self.PROBLEM_SIZE,
                     device=device,
