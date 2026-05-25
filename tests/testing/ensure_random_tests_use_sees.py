@@ -36,11 +36,11 @@ class MakeRngChecker(ast.NodeVisitor):
         self.path = path
         self.violations: list[Violation] = []
 
-    def visit_FunctionDef(self, node: ast.FunctionDef, /) -> None:
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self._check(node)
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef, /) -> None:
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self._check(node)
         self.generic_visit(node)
 
