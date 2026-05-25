@@ -8,7 +8,7 @@ from linodenet.mappings.transforms import (
     GaussianToMixture,
     MixtureToGaussian,
 )
-from tests.testing import SEEDS_5
+from tests.testing import SEEDS_5, as_torch_generator
 
 from .test_transform import TestTransform
 
@@ -20,8 +20,10 @@ class TestGaussianTransportFlow(TestTransform):
     NUM_COMPONENTS = 3
     TEST_RANGE = (-5.0, 5.0)
 
-    def make_bimodal_test_case(self, seed: int) -> tuple[Tensor, Tensor, Tensor]:
-        generator = torch.Generator().manual_seed(seed)
+    def make_bimodal_test_case(
+        self, *, rng: int | torch.Generator
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        generator = as_torch_generator(rng)
         start, end = self.TEST_RANGE
         values = torch.linspace(start, end, self.NUM_STEPS)
         mean = 3 * torch.rand((), generator=generator) - 1.5
@@ -29,9 +31,9 @@ class TestGaussianTransportFlow(TestTransform):
         return values, mean, log_std
 
     def make_mixture_test_case(
-        self, seed: int
+        self, *, rng: int | torch.Generator
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        generator = torch.Generator().manual_seed(seed)
+        generator = as_torch_generator(rng)
         start, end = self.TEST_RANGE
         values = torch.linspace(start, end, self.NUM_STEPS)
         weights = torch.randn(self.NUM_COMPONENTS, generator=generator)
@@ -39,9 +41,9 @@ class TestGaussianTransportFlow(TestTransform):
         log_std = torch.rand(self.NUM_COMPONENTS, generator=generator) - 0.5
         return values, weights, means, log_std
 
-    def test_bimodal_to_gaussian(self, seed: int) -> None:
+    def test_bimodal_to_gaussian(self, *, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
-        x, mean, log_std = self.make_bimodal_test_case(seed)
+        x, mean, log_std = self.make_bimodal_test_case(rng=seed)
         flow = BimodalToGaussian()
         with torch.no_grad():
             flow.mean.copy_(mean)
@@ -55,9 +57,9 @@ class TestGaussianTransportFlow(TestTransform):
             inverse.log_std.copy_(flow.log_std)
         self.assert_dual(flow, inverse, x, y, atol=value_atol, rtol=value_rtol)
 
-    def test_gaussian_to_bimodal(self, seed: int) -> None:
+    def test_gaussian_to_bimodal(self, *, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
-        y, mean, log_std = self.make_bimodal_test_case(seed)
+        y, mean, log_std = self.make_bimodal_test_case(rng=seed)
         flow = GaussianToBimodal()
         with torch.no_grad():
             flow.mean.copy_(mean)
@@ -73,7 +75,7 @@ class TestGaussianTransportFlow(TestTransform):
 
     def test_mixture_to_gaussian(self, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
-        x, weights, means, log_std = self.make_mixture_test_case(seed)
+        x, weights, means, log_std = self.make_mixture_test_case(rng=seed)
         flow = MixtureToGaussian(self.NUM_COMPONENTS)
         with torch.no_grad():
             flow.weights.copy_(weights)
@@ -89,9 +91,9 @@ class TestGaussianTransportFlow(TestTransform):
             inverse.log_std.copy_(flow.log_std)
         self.assert_dual(flow, inverse, x, y, atol=value_atol, rtol=value_rtol)
 
-    def test_gaussian_to_mixture(self, seed: int) -> None:
+    def test_gaussian_to_mixture(self, *, seed: int) -> None:
         value_atol, value_rtol = self.VALUE_TOL
-        y, weights, means, log_std = self.make_mixture_test_case(seed)
+        y, weights, means, log_std = self.make_mixture_test_case(rng=seed)
         flow = GaussianToMixture(self.NUM_COMPONENTS)
         with torch.no_grad():
             flow.weights.copy_(weights)

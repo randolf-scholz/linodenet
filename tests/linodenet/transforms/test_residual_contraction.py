@@ -11,7 +11,7 @@ from linodenet.mappings import (
 )
 from linodenet.nn.parametrize import update_parametrizations
 from linodenet.nn.rezero import ReZero
-from tests.testing import DEVICES, SEEDS_5, TestSuite, pytest_xfail
+from tests.testing import DEVICES, SEEDS_5, TestSuite, as_seed, pytest_xfail
 
 from .test_transform import TestTransform
 
@@ -50,6 +50,7 @@ class TestReZero(TestSuite):
     TRAIN_STEPS = 5
     LEARNING_RATE = 0.5
     TARGET_SCALE = 0.35
+    SEED = 0
 
     def make_model(self, /, *, device: str, dtype: torch.dtype) -> ResidualContraction:
         contraction = nn.Sequential(
@@ -62,7 +63,10 @@ class TestReZero(TestSuite):
         update_parametrizations(module)  # Important after .to()
         return module
 
-    def make_test_case(self, device: str, dtype: torch.dtype) -> tuple[Tensor, Tensor]:
+    def make_test_case(
+        self, /, *, rng: int | torch.Generator, device: str, dtype: torch.dtype
+    ) -> tuple[Tensor, Tensor]:
+        torch.manual_seed(as_seed(rng))
         x = torch.randn(self.BATCH_SIZE, self.INPUT_SIZE, device=device, dtype=dtype)
         target = x**2 - 1
         return x, target
@@ -84,7 +88,7 @@ class TestReZero(TestSuite):
     ) -> None:
         torch.manual_seed(0)
         flow = self.make_model(device=device, dtype=dtype)
-        x, target = self.make_test_case(device=device, dtype=dtype)
+        x, target = self.make_test_case(rng=self.SEED, device=device, dtype=dtype)
 
         with torch.no_grad():
             initial_loss = mse_loss(flow.encode(x), target)
@@ -110,7 +114,7 @@ class TestReZero(TestSuite):
     ) -> None:
         torch.manual_seed(0)
         flow = self.make_model(device=device, dtype=dtype)
-        x, target = self.make_test_case(device=device, dtype=dtype)
+        x, target = self.make_test_case(rng=self.SEED, device=device, dtype=dtype)
 
         assert isinstance(flow.gate, ReZero)
         optimizer = torch.optim.SGD([flow.gate.scalar], lr=self.LEARNING_RATE)

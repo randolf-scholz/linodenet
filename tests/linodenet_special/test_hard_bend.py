@@ -24,7 +24,7 @@ class TestCorrectness(TestSuite):
     ATOL = 1e-14
     STEPS = 257
 
-    def make_test_grid(self, a: float, c: float, m: float = 1.0, /) -> Tensor:
+    def get_test_grid(self, a: float, c: float, m: float = 1.0, /) -> Tensor:
         if a == m:
             return torch.linspace(-8 * c, 8 * c, steps=257, dtype=torch.float64)
 
@@ -50,7 +50,7 @@ class TestCorrectness(TestSuite):
     @pytest.mark.parametrize("c", [-3, -2, -0.5, 0.5, 1.0, 3.0], ids=lambda c: f"c={c}")
     @pytest.mark.parametrize("m", [0.125, 0.5, 1.0, 2.0], ids=lambda m: f"m={m}")
     def test_hard_bend_reversible(self, a: float, c: float, m: float) -> None:
-        x = self.make_test_grid(a, c, m)
+        x = self.get_test_grid(a, c, m)
         y = hard_bend(x, a, c, m)
         x_recovered = hard_bend(y, 1 / a, c / m, 1 / m)
 
@@ -58,7 +58,7 @@ class TestCorrectness(TestSuite):
 
     @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
     def test_hard_contract_reversible(self, a: float, c: float) -> None:
-        x = self.make_test_grid(a, c)
+        x = self.get_test_grid(a, c)
         y = hard_contract(x, a=a, c=c)
         x_recovered = hard_expand(y, a=1 / a, c=c)
 
@@ -66,7 +66,7 @@ class TestCorrectness(TestSuite):
 
     @pytest.mark.parametrize("c", [0.25, 1.0, 3.0], ids=lambda c: f"c={c}")
     def test_hard_expand_reversible(self, a: float, c: float) -> None:
-        x = self.make_test_grid(a, c)
+        x = self.get_test_grid(a, c)
         y = hard_expand(x, a=a, c=c)
         x_recovered = hard_contract(y, a=1 / a, c=c)
 

@@ -11,6 +11,7 @@ from scipy.stats import ortho_group
 from torch import Tensor, nn
 
 from linodenet.distributions import MarchenkoPastur
+from tests.testing import as_seed, as_torch_generator
 
 
 @dataclass(frozen=True)
@@ -153,7 +154,7 @@ class ExampleWithKnownSVD:
         *,
         dtype: torch.dtype,
         device: str | torch.device,
-        seed: int | None = None,
+        rng: int | torch.Generator,
     ) -> ExampleWithKnownSVD:
         r"""Generate a random m×n matrix with known spectral data.
 
@@ -165,10 +166,10 @@ class ExampleWithKnownSVD:
         m, n = shape
         k = min(m, n)
         gamma = m / n
-        rng = default_rng(seed)
+        generator = default_rng(as_seed(rng))
 
-        U_numpy = ortho_group(m).rvs(random_state=rng)[..., :k]
-        V_numpy = ortho_group(n).rvs(random_state=rng)[..., :k]
+        U_numpy = ortho_group(m).rvs(random_state=generator)[..., :k]
+        V_numpy = ortho_group(n).rvs(random_state=generator)[..., :k]
         U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
         V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
         dist = MarchenkoPastur(gamma=gamma, sigma2=1.0, validate_args=False)
@@ -186,11 +187,10 @@ class ExampleWithKnownSVD:
         *,
         dtype: torch.dtype,
         device: str | torch.device,
-        seed: int | None = None,
+        rng: int | torch.Generator,
     ) -> ExampleWithKnownSVD:
         r"""Generate a rank-one matrix with known SVD."""
-        generator = torch.Generator(device=device)
-        generator.manual_seed(seed or 0)
+        generator = as_torch_generator(rng, device=device)
 
         m, n = shape
         sigma = 10 * torch.rand((), device=device, dtype=dtype, generator=generator) + 1
@@ -210,12 +210,11 @@ class ExampleWithKnownSVD:
         *,
         dtype: torch.dtype,
         device: str | torch.device,
-        seed: int | None = None,
+        rng: int | torch.Generator,
     ) -> ExampleWithKnownSVD:
         r"""Generate a diagonal matrix with known SVD."""
         m, n = shape
-        generator = torch.Generator(device=device)
-        generator.manual_seed(seed or 0)
+        generator = as_torch_generator(rng, device=device)
 
         k = min(m, n)
         diag = 10 * torch.randn(k, dtype=dtype, device=device, generator=generator)
@@ -235,14 +234,14 @@ class ExampleWithKnownSVD:
         *,
         dtype: torch.dtype,
         device: str | torch.device,
-        seed: int | None = None,
+        rng: int | torch.Generator,
     ) -> ExampleWithKnownSVD:
         r"""Generate an orthogonal matrix with repeated singular values."""
         m, n = shape
         k = min(m, n)
-        rng = default_rng(seed)
-        U_numpy = ortho_group.rvs(m, random_state=rng)[:, :k]
-        V_numpy = ortho_group.rvs(n, random_state=rng)[:, :k]
+        generator = default_rng(as_seed(rng))
+        U_numpy = ortho_group.rvs(m, random_state=generator)[:, :k]
+        V_numpy = ortho_group.rvs(n, random_state=generator)[:, :k]
         U = torch.from_numpy(U_numpy).to(dtype=dtype, device=device)
         V = torch.from_numpy(V_numpy).to(dtype=dtype, device=device)
         S = torch.ones(k, device=device, dtype=dtype)

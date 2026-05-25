@@ -13,7 +13,7 @@ import linodenet_special
 from linodenet_special import singular_triplet, singular_triplet_native
 from linodenet_special.compiled import singular_triplet as singular_triplet_cpp
 from linodenet_special.fallbacks import singular_triplet as singular_triplet_py
-from tests.testing import DEVICES, SEEDS_5, TestSuite, timer
+from tests.testing import DEVICES, SEEDS_5, TestSuite, as_torch_generator, timer
 from tests.testing.examples import ExampleWithKnownSVD
 
 
@@ -401,7 +401,7 @@ class TestCorrectness(TestSuite):
         impl = self.SINGULAR_TRIPLETS[method]
         torch.manual_seed(seed)
         case = ExampleWithKnownSVD.rank_one(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         sigma, u, v = impl(case.value)
         self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
@@ -421,7 +421,7 @@ class TestCorrectness(TestSuite):
         torch.manual_seed(seed)
 
         case = ExampleWithKnownSVD.diagonal(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         sigma, u, v = impl(case.value)
         self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
@@ -441,7 +441,7 @@ class TestCorrectness(TestSuite):
         torch.manual_seed(seed)
 
         case = ExampleWithKnownSVD.quasi_gaussian(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         sigma, u, v = impl(case.value)
         self.check_forward_pass(case, sigma, u, v, atol=self.ATOL, rtol=self.RTOL)
@@ -459,7 +459,7 @@ class TestCorrectness(TestSuite):
         impl = self.SINGULAR_TRIPLETS[method]
 
         case = ExampleWithKnownSVD.repeated_singular_values(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         A = case.value
         sigma, u, v = impl(A)
@@ -481,9 +481,10 @@ class TestPerformance(TestSuite):
         shape: tuple[int, int],
         *,
         device: str | torch.device,
-        generator: torch.Generator,
+        rng: int | torch.Generator,
     ) -> nn.Parameter:
         r"""Get a random parameter of shape (m, n)."""
+        generator = as_torch_generator(rng, device=device)
         n = shape[-1]
         A = torch.randn(shape, device=device, generator=generator) / torch.sqrt(
             torch.tensor(n)
@@ -507,7 +508,7 @@ class TestPerformance(TestSuite):
         generator.manual_seed(0)
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.make_test_case(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, rng=generator)
             return (param,), {}
 
         with torch.no_grad():
@@ -543,7 +544,7 @@ class TestPerformance(TestSuite):
             loss.backward()
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.make_test_case(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, rng=generator)
             s, _, _ = impl(param)
             return (s,), {}
 
@@ -582,7 +583,7 @@ class TestPerformance(TestSuite):
             loss.backward()
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
-            param = self.make_test_case(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, rng=generator)
             s, u, v = impl(param)
             return (s, u, v), {}
 

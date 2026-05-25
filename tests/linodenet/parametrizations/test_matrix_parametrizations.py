@@ -20,7 +20,7 @@ from linodenet.parametrizations import (
     update_parametrizations,
 )
 from linodenet.registry import get_registry_entry
-from tests.testing import DEVICES, TestSuite, pytest_xfail
+from tests.testing import DEVICES, TestSuite, as_seed, pytest_xfail
 
 SQUARE_SHAPE = (4, 4)
 RECTANGULAR_SHAPE = (5, 4)
@@ -59,11 +59,12 @@ class TestParametrization(TestSuite):
     VALUE_ATOL = 1e-6
     VALUE_RTOL = 1e-6
     NUM_ITERATIONS = 3
+    SEED = 0
 
     def make_test_case(
-        self, shape: tuple[int, int], /, *, device: str
+        self, shape: tuple[int, int], /, *, rng: int | torch.Generator, device: str
     ) -> tuple[nn.Sequential, Tensor, Tensor]:
-        torch.manual_seed(0)
+        torch.manual_seed(as_seed(rng))
         out_features, in_features = shape
         model = nn.Sequential(
             nn.Linear(in_features, in_features, bias=False),
@@ -137,7 +138,7 @@ class TestParametrization(TestSuite):
     @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_register_parametrization(self, name: str, device: str) -> None:
         shape = self.get_shape(name)
-        model, _, _ = self.make_test_case(shape, device=device)
+        model, _, _ = self.make_test_case(shape, rng=self.SEED, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", self.get_parametrization(name))
 
@@ -150,7 +151,7 @@ class TestParametrization(TestSuite):
     def test_forward_uses_cached_parameter(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
-        model, x, _ = self.make_test_case(shape, device=device)
+        model, x, _ = self.make_test_case(shape, rng=self.SEED, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", self.get_parametrization(name))
         parametrization = self.get_weight_parametrization(layer)
@@ -180,7 +181,7 @@ class TestParametrization(TestSuite):
     def test_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
-        model, x, y = self.make_test_case(shape, device=device)
+        model, x, y = self.make_test_case(shape, rng=self.SEED, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", self.get_parametrization(name))
         optimizer = SGD(model.parameters(), lr=0.1)
@@ -210,7 +211,7 @@ class TestParametrization(TestSuite):
     ) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
-        model, x, _ = self.make_test_case(shape, device=device)
+        model, x, _ = self.make_test_case(shape, rng=self.SEED, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", self.get_parametrization(name))
 
@@ -236,7 +237,7 @@ class TestParametrization(TestSuite):
     def test_compile_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
-        model, x, y = self.make_test_case(shape, device=device)
+        model, x, y = self.make_test_case(shape, rng=self.SEED, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", self.get_parametrization(name))
 
@@ -267,7 +268,7 @@ class TestParametrization(TestSuite):
     def test_exported_trainable(self, name: str, device: str) -> None:
         torch.manual_seed(0)
         shape = self.get_shape(name)
-        model, x, y = self.make_test_case(shape, device=device)
+        model, x, y = self.make_test_case(shape, rng=self.SEED, device=device)
         layer = self.get_parametrized_layer(model)
         register_parametrization(layer, "weight", self.get_parametrization(name))
         parametrization = self.get_weight_parametrization(layer)

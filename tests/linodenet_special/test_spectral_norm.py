@@ -17,7 +17,7 @@ from linodenet_special.fallbacks.spectral_norm import (
     _cond_fn as cond_fn,
     _spectral_norm_forward_impl as spectral_norm_impl,
 )
-from tests.testing import DEVICES, SEEDS_5, TestSuite, timer
+from tests.testing import DEVICES, SEEDS_5, TestSuite, as_torch_generator, timer
 from tests.testing.examples import ExampleWithKnownSVD
 
 
@@ -346,7 +346,7 @@ class TestCorrectness(TestSuite):
         torch.manual_seed(seed)
 
         case = ExampleWithKnownSVD.rank_one(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         sigma = impl(case.value)
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -369,7 +369,7 @@ class TestCorrectness(TestSuite):
         torch.manual_seed(seed)
 
         case = ExampleWithKnownSVD.diagonal(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         sigma = impl(case.value)
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -390,7 +390,7 @@ class TestCorrectness(TestSuite):
         """
         impl = self.SPECTRAL_NORMS[method]
         case = ExampleWithKnownSVD.quasi_gaussian(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         sigma = impl(case.value)
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -413,7 +413,7 @@ class TestCorrectness(TestSuite):
         """
         impl = self.SPECTRAL_NORMS[method]
         case = ExampleWithKnownSVD.repeated_singular_values(
-            shape, dtype=torch.float, device=device, seed=seed
+            shape, dtype=torch.float, device=device, rng=seed
         )
         sigma = impl(case.value)
         self.check_forward_pass(case, sigma, atol=self.ATOL, rtol=self.RTOL)
@@ -434,9 +434,10 @@ class TestPerformance(TestSuite):
         shape: tuple[int, int],
         *,
         device: str | torch.device,
-        generator: torch.Generator,
+        rng: int | torch.Generator,
     ) -> nn.Parameter:
         r"""Get a random parameter of shape (m, n)."""
+        generator = as_torch_generator(rng, device=device)
         n = shape[-1]
         A = torch.randn(shape, device=device, generator=generator) / torch.sqrt(
             torch.tensor(n)
@@ -459,7 +460,7 @@ class TestPerformance(TestSuite):
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
             torch.set_float32_matmul_precision("high")
-            param = self.make_test_case(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, rng=generator)
             return (param,), {}
 
         with torch.no_grad():
@@ -494,7 +495,7 @@ class TestPerformance(TestSuite):
 
         def setup() -> tuple[tuple, dict]:  # get args and kwargs for benchmark
             torch.set_float32_matmul_precision("high")
-            param = self.make_test_case(shape, device=device, generator=generator)
+            param = self.make_test_case(shape, device=device, rng=generator)
             output = impl(param)
             return (output,), {}
 

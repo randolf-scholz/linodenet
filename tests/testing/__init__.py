@@ -11,6 +11,8 @@ __all__ = [
     # Classes
     "TestSuite",
     # Functions
+    "as_seed",
+    "as_torch_generator",
     "camel2snake",
     "snake2camel",
     "visualize_distribution",
@@ -20,7 +22,7 @@ __all__ = [
 
 from .assertions import TestSuite
 from .constants import DEVICES, DTYPES, PREFER_GPU, SEED, SEEDS_5, SEEDS_10
-from .misc import camel2snake, snake2camel
+from .misc import as_seed, as_torch_generator, camel2snake, snake2camel
 from .plotting import visualize_distribution
 from .project import PROJECT
 from .timer import timer

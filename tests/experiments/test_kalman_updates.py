@@ -4,8 +4,11 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
+import torch
 from numpy.typing import NDArray
 from scipy.linalg import cholesky, expm, logm, solve, sqrtm
+
+from tests.testing import as_seed
 
 type Array = NDArray[np.float64]
 type State = tuple[Array, Array]
@@ -431,22 +434,22 @@ NAIVE_NEWTON_EQUIVALENCE_FUNCTIONS: dict[str, tuple[UpdateFunction, UpdateFuncti
 class _CalibrationBase:
     INPUT_SIZE = 16
     BATCH_SIZE = 32
-    SEED = 0
 
-    def make_batch(self) -> list[tuple[Array, State]]:
-        rng = np.random.default_rng(self.SEED)
-        noise = np.diag(np.linspace(0.5, 1.5, self.INPUT_SIZE, dtype=float))
+    def make_batch(self, *, rng: int | torch.Generator) -> list[tuple[Array, State]]:
+        generator = np.random.default_rng(as_seed(rng))
+        cov_noise = np.diag(np.linspace(0.5, 1.5, self.INPUT_SIZE, dtype=float))
         batch: list[tuple[Array, State]] = []
 
         for _ in range(self.BATCH_SIZE):
-            mu = rng.normal(size=self.INPUT_SIZE)
-            factor = rng.normal(size=(self.INPUT_SIZE, self.INPUT_SIZE))
+            mu = generator.normal(size=self.INPUT_SIZE)
+            factor = generator.normal(size=(self.INPUT_SIZE, self.INPUT_SIZE))
+            noise = generator.normal(size=self.INPUT_SIZE)
             sigma = factor @ factor.T / self.INPUT_SIZE
             sigma += 0.5 * np.eye(self.INPUT_SIZE)
 
-            predictive_covariance = sigma + noise
+            predictive_covariance = sigma + cov_noise
             predictive_factor = np.linalg.cholesky(predictive_covariance)
-            y_obs = mu + predictive_factor @ rng.normal(size=self.INPUT_SIZE)
+            y_obs = mu + predictive_factor @ noise
             batch.append((y_obs, (mu, sigma)))
 
         return batch
@@ -454,6 +457,8 @@ class _CalibrationBase:
 
 @pytest.mark.parametrize(("method_name", "method"), list(UPDATE_FUNCTIONS.items()))
 class TestKalmanUpdateCalibration(_CalibrationBase):
+    SEED = 0
+
     def test_calibration(
         self,
         method_name: str,
@@ -462,7 +467,7 @@ class TestKalmanUpdateCalibration(_CalibrationBase):
         mean_errors: list[float] = []
         covariance_errors: list[float] = []
 
-        for y_obs, state in self.make_batch():
+        for y_obs, state in self.make_batch(rng=self.SEED):
             mean_exact, covariance_exact = exact_update(y_obs, state)
             mean_updated, covariance_updated = method(y_obs, state)
 
@@ -508,6 +513,8 @@ class TestKalmanUpdateCalibration(_CalibrationBase):
     list(NAIVE_NEWTON_EQUIVALENCE_FUNCTIONS.items()),
 )
 class TestNaiveNewtonEquivalence(_CalibrationBase):
+    SEED = 0
+
     def test_naive_newton_matches_closed_form(
         self,
         parametrization: str,
@@ -515,7 +522,7 @@ class TestNaiveNewtonEquivalence(_CalibrationBase):
     ) -> None:
         closed_form, naive = methods
 
-        for y_obs, state in self.make_batch():
+        for y_obs, state in self.make_batch(rng=self.SEED):
             mean_closed, covariance_closed = closed_form(y_obs, state)
             mean_naive, covariance_naive = naive(y_obs, state)
 

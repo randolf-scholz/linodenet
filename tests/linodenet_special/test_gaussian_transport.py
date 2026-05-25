@@ -148,7 +148,7 @@ class BimodalTest(TestSuite):
         return max(0.0, (mean - x_safe) / stdv)  # ≤ μ/σ
 
     @classmethod
-    def make_safe_x_range(
+    def get_safe_x_range(
         cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
     ) -> Tensor:
         r"""Construct a numerically useful test range inside $[-μ, μ]$."""
@@ -170,7 +170,7 @@ class BimodalTest(TestSuite):
         return torch.cat([-x.flip(0), x]).requires_grad_(True)
 
     @classmethod
-    def make_safe_y_range(
+    def get_safe_y_range(
         cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
     ) -> Tensor:
         r"""Construct a numerically useful inverse test range around the origin."""
@@ -192,7 +192,7 @@ class BimodalTest(TestSuite):
         return torch.cat([-y.flip(0), y]).requires_grad_(True)
 
     @classmethod
-    def make_tail_x_range(
+    def get_tail_x_range(
         cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
     ) -> Tensor:
         r"""Construct a symmetric tail range outside the bimodal transition region."""
@@ -205,7 +205,7 @@ class BimodalTest(TestSuite):
         return torch.cat([-x_tail.flip(0), x_tail]).requires_grad_(True)
 
     @classmethod
-    def make_tail_y_range(
+    def get_tail_y_range(
         cls, mean: float, stdv: float, *, dtype: torch.dtype, device: str
     ) -> Tensor:
         r"""Construct a symmetric inverse-tail range outside the Gaussian core."""
@@ -218,7 +218,7 @@ class BimodalTest(TestSuite):
         return torch.cat([-y_tail.flip(0), y_tail]).requires_grad_(True)
 
     @classmethod
-    def make_full_range(cls, *, dtype: torch.dtype, device: str) -> Tensor:
+    def get_full_range(cls, *, dtype: torch.dtype, device: str) -> Tensor:
         r"""Construct the shared full test range on $[X_\min, X_\max]$."""
         return torch.linspace(
             *(cls.X_MIN, cls.X_MAX),
@@ -239,10 +239,10 @@ class BimodalTest(TestSuite):
         inverse: bool = False,
     ) -> None:
         if inverse:
-            x = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
+            x = self.get_safe_y_range(mean, stdv, dtype=dtype, device=device)
             atol, rtol, eps = self.INVERSE_GRADCHECK_TOL[dtype]
         else:
-            x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
+            x = self.get_safe_x_range(mean, stdv, dtype=dtype, device=device)
             atol, rtol, eps = self.FORWARD_GRADCHECK_TOL[dtype]
         μ = torch.tensor(mean, dtype=dtype, device=device, requires_grad=True)
         σ = torch.tensor(stdv, dtype=dtype, device=device, requires_grad=True)
@@ -275,8 +275,13 @@ class TestMixture(TestSuite):
     }
 
     @classmethod
-    def make_full_range(
-        cls, means: list[float], stdvs: list[float], *, dtype: torch.dtype, device: str
+    def get_full_range(
+        cls,
+        means: list[float],
+        stdvs: list[float],
+        *,
+        dtype: torch.dtype,
+        device: str,
     ) -> Tensor:
         mu_min = min(means)
         mu_max = max(means)
@@ -343,7 +348,7 @@ class TestBimodalToGaussian(BimodalTest):
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
 
-        x = self.make_full_range(dtype=dtype, device=device)
+        x = self.get_full_range(dtype=dtype, device=device)
         y = impl(x, μ, σ)
         assert y.dtype == dtype
         assert y.isfinite().all()
@@ -359,7 +364,7 @@ class TestBimodalToGaussian(BimodalTest):
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = self.get_y_star(μ, σ)
 
-        x = self.make_full_range(dtype=dtype, device=device)
+        x = self.get_full_range(dtype=dtype, device=device)
         y = impl(x, μ, σ)
         y.sum().backward()
         assert x.grad is not None
@@ -384,7 +389,7 @@ class TestBimodalToGaussian(BimodalTest):
         atol, rtol = self.TOL[dtype]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
+        x = self.get_safe_x_range(mean, stdv, dtype=dtype, device=device)
         y = forward_impl(x, μ, σ)
         x_inv = inverse_impl(y, μ, σ)
         x_inv.sum().backward()
@@ -398,7 +403,7 @@ class TestBimodalToGaussian(BimodalTest):
         torch.manual_seed(self.SEED)
         r"""When the gaussians are well separated, we can approximate with hard_bend."""
         impl = BIMODAL_TO_GAUSSIAN[name]
-        x = self.make_full_range(dtype=dtype, device=device)
+        x = self.get_full_range(dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = self.get_y_star(μ, σ)
@@ -426,7 +431,7 @@ class TestBimodalToGaussian(BimodalTest):
         impl = BIMODAL_TO_GAUSSIAN[name]
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
-        x_tail = self.make_tail_x_range(mean, stdv, dtype=dtype, device=device)
+        x_tail = self.get_tail_x_range(mean, stdv, dtype=dtype, device=device)
         y_tail = impl(x_tail, μ, σ)
         assert y_tail.isfinite().all()
         y_tail.sum().backward()
@@ -455,7 +460,7 @@ class TestBimodalToGaussianValueAndGrad(BimodalTest):
         torch.manual_seed(self.SEED)
         forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_GRAD[name]
         inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_GRAD[name]
-        x = self.make_safe_x_range(mean, stdv, dtype=dtype, device=device)
+        x = self.get_safe_x_range(mean, stdv, dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
 
@@ -492,7 +497,7 @@ class TestGaussianToBimodal(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
-        y = self.make_full_range(dtype=dtype, device=device)
+        y = self.get_full_range(dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
 
@@ -551,7 +556,7 @@ class TestGaussianToBimodal(BimodalTest):
         torch.manual_seed(self.SEED)
         inverse_impl = GAUSSIAN_TO_BIMODAL[name]
         forward_impl = BIMODAL_TO_GAUSSIAN[name]
-        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
+        y = self.get_safe_y_range(mean, stdv, dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         x_inv = inverse_impl(y, μ, σ)
@@ -576,7 +581,7 @@ class TestGaussianToBimodal(BimodalTest):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_BIMODAL[name]
-        y = self.make_full_range(dtype=dtype, device=device)
+        y = self.get_full_range(dtype=dtype, device=device)
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = self.get_x_star(μ, σ)
@@ -605,12 +610,12 @@ class TestGaussianToBimodal(BimodalTest):
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
         λ = self.get_y_star(μ, σ)
-        y_tail = self.make_tail_y_range(mean, stdv, dtype=dtype, device=device)
+        y_tail = self.get_tail_y_range(mean, stdv, dtype=dtype, device=device)
         x_tail = impl(y_tail, μ, σ)
         x_tail_approx = hard_bend(y_tail, 1 / λ, μ, σ)
         self.assert_upper_bounded((x_tail - x_tail_approx).abs(), σ / y_tail.abs())
 
-        tail = self.make_tail_y_range(mean, stdv, dtype=dtype, device=device)
+        tail = self.get_tail_y_range(mean, stdv, dtype=dtype, device=device)
         x_tail = impl(tail, μ, σ)
         assert x_tail.isfinite().all()
         x_tail.sum().backward()
@@ -624,8 +629,8 @@ class TestGaussianToBimodal(BimodalTest):
         torch.manual_seed(self.SEED)
         forward_impl = GAUSSIAN_TO_BIMODAL[name]
         inverse_impl = BIMODAL_TO_GAUSSIAN[name]
-        y = self.make_full_range(dtype=dtype, device=device)
-        x = self.make_full_range(dtype=dtype, device=device)
+        y = self.get_full_range(dtype=dtype, device=device)
+        x = self.get_full_range(dtype=dtype, device=device)
         μ_pos = torch.tensor(mean, dtype=dtype, device=device)
         μ_neg = torch.tensor(-mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
@@ -659,7 +664,7 @@ class TestGaussianToBimodalValueAndGrad(BimodalTest):
         torch.manual_seed(self.SEED)
         inverse_impl = GAUSSIAN_TO_BIMODAL_VALUE_AND_GRAD[name]
         forward_impl = BIMODAL_TO_GAUSSIAN_VALUE_AND_GRAD[name]
-        y = self.make_safe_y_range(mean, stdv, dtype=dtype, device=device)
+        y = self.get_safe_y_range(mean, stdv, dtype=dtype, device=device)
 
         μ = torch.tensor(mean, dtype=dtype, device=device)
         σ = torch.tensor(stdv, dtype=dtype, device=device)
@@ -691,7 +696,7 @@ class TestMixtureToGaussian(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = MIXTURE_TO_GAUSSIAN[name]
-        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        x = self.get_full_range(means, stdvs, dtype=dtype, device=device)
         self.assert_gradcheck(
             impl, x, weights, means, stdvs, dtype=dtype, device=device
         )
@@ -708,7 +713,7 @@ class TestMixtureToGaussian(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = MIXTURE_TO_GAUSSIAN[name]
         inverse_impl = GAUSSIAN_TO_MIXTURE[name]
-        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        x = self.get_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
@@ -739,7 +744,7 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD[name]
-        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        x = self.get_full_range(means, stdvs, dtype=dtype, device=device)
         self.assert_gradcheck(
             impl, x, weights, means, stdvs, dtype=dtype, device=device
         )
@@ -756,7 +761,7 @@ class TestMixtureToGaussianValueAndGrad(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD[name]
         inverse_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD[name]
-        x = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        x = self.get_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
@@ -789,7 +794,7 @@ class TestGaussianToMixture(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_MIXTURE[name]
-        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        y = self.get_full_range(means, stdvs, dtype=dtype, device=device)
         self.assert_gradcheck(
             impl, y, weights, means, stdvs, dtype=dtype, device=device
         )
@@ -806,7 +811,7 @@ class TestGaussianToMixture(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = GAUSSIAN_TO_MIXTURE[name]
         inverse_impl = MIXTURE_TO_GAUSSIAN[name]
-        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        y = self.get_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)
@@ -837,7 +842,7 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
     ) -> None:
         torch.manual_seed(self.SEED)
         impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD[name]
-        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        y = self.get_full_range(means, stdvs, dtype=dtype, device=device)
         self.assert_gradcheck(
             impl, y, weights, means, stdvs, dtype=dtype, device=device
         )
@@ -854,7 +859,7 @@ class TestGaussianToMixtureValueAndGrad(TestMixture):
         torch.manual_seed(self.SEED)
         forward_impl = GAUSSIAN_TO_MIXTURE_VALUE_AND_GRAD[name]
         inverse_impl = MIXTURE_TO_GAUSSIAN_VALUE_AND_GRAD[name]
-        y = self.make_full_range(means, stdvs, dtype=dtype, device=device)
+        y = self.get_full_range(means, stdvs, dtype=dtype, device=device)
 
         omegas = torch.tensor(weights, dtype=dtype, device=device)
         mus = torch.tensor(means, dtype=dtype, device=device)

@@ -58,9 +58,14 @@ class TestFixpoint(TestSuite):
     def run_check(self, mode: Mode, solver, case: TestCase, /) -> None:
         match mode:
             case Mode.EAGER:
-                y_star = solver(case.fn, case.x, *case.args)
-                loss = y_star.square().sum()
+
+                def forward(y0: Tensor) -> Tensor:
+                    y_star = solver(case.fn, y0, *case.args)
+                    return y_star.square().sum()
+
+                loss = forward(case.x)
                 loss.backward()
+
             case Mode.COMPILE_FORWARD:
 
                 def forward(y0: Tensor) -> Tensor:
@@ -70,6 +75,7 @@ class TestFixpoint(TestSuite):
                 compiled_forward = torch.compile(forward)
                 loss = compiled_forward(case.x)
                 loss.backward()
+
             case Mode.COMPILE_BACKWARD:
 
                 def backward(y0: Tensor) -> None:

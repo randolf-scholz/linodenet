@@ -106,7 +106,7 @@ def compute_linode_error(
     )
 
 
-def make_error_plots(
+def get_error_plots(
     *,
     error_single: NDArray,
     error_double: NDArray,
@@ -243,7 +243,7 @@ def test_make_error_plot(num_samples: int = 100) -> None:  # noqa: PT028
         dtype=np.float64,
     ).T
 
-    make_error_plots(
+    get_error_plots(
         error_single=err_single,
         error_double=err_double,
         logger=logger,

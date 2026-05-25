@@ -185,7 +185,7 @@ class Project:
         r"""Return the `results` directory."""
         return _DirGetter(self.TEST_RESULTS_PATH)
 
-    def make_test_folders(self, *, dry_run: bool = True) -> None:
+    def generate_test_folders(self, *, dry_run: bool = True) -> None:
         r"""Make the tests folder if it does not exist."""
         packages = [
             get_package_structure(root_package) for root_package in self.ROOT_PACKAGES

@@ -135,6 +135,15 @@ hooks = [
             )\w+:[^\n]+$''',
         types = ["python"],
         files = "^src/|^tests/"
+    },
+    {
+        id = "ensure-random-tests-use-seeds",
+        name = "ensure-random-tests-use-seeds",
+        description = "Ensure make_* test builders define a mandatory keyword-only seed argument.",
+        language = "system",
+        entry = ".venv/bin/python tests/testing/ensure_random_tests_use_sees.py",
+        types = ["python"],
+        files = "^tests/"
     }
 ]
 
