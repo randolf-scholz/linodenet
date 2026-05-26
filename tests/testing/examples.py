@@ -11,7 +11,8 @@ from scipy.stats import ortho_group
 from torch import Tensor, nn
 
 from linodenet.distributions import MarchenkoPastur
-from tests.testing import as_seed, as_torch_generator
+
+from .misc import as_seed, as_torch_generator
 
 
 @dataclass(frozen=True)

@@ -27,6 +27,9 @@ def pytest_collection_modifyitems(config, items):  # noqa: ARG001
             item.add_marker(skip)
 
 
+INTERACTIVE_MARK = "interactive"
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     r"""Add options to pytest."""
     parser.addoption(
@@ -41,6 +44,3 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def make_plots(request: pytest.FixtureRequest) -> bool:
     r"""Whether to make plots."""
     return bool(request.config.getoption("--make-plots"))
-
-
-INTERACTIVE_MARK = "interactive"

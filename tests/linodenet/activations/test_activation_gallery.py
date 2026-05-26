@@ -56,11 +56,7 @@ class TestActivationGallery:
         return y
 
     @pytest.mark.parametrize("name", ACTIVATION_FNS)
-    def test_activation_gallery(
-        self,
-        name: str,
-        # make_plots: bool,
-    ) -> None:
+    def test_activation_gallery(self, name: str) -> None:
         fig, ax = plt.subplots(figsize=(self.w, self.h), constrained_layout=True)
         self.plot(ax, name)
         self.fmt_axes(ax)

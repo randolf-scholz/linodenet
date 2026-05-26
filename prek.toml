@@ -35,7 +35,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.12"
+rev = "v0.15.14"
 hooks = [
     {
         id = "ruff-check",
@@ -49,7 +49,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "0.11.14"
+rev = "0.11.16"
 hooks = [
     { id = "uv-lock" },
     {
@@ -136,15 +136,6 @@ hooks = [
         types = ["python"],
         files = "^src/|^tests/"
     },
-    {
-        id = "ensure-random-tests-use-seeds",
-        name = "ensure-random-tests-use-seeds",
-        description = "Ensure make_* test builders define a mandatory keyword-only seed argument.",
-        language = "system",
-        entry = ".venv/bin/python tests/testing/ensure_random_tests_use_sees.py",
-        types = ["python"],
-        files = "^tests/"
-    }
 ]
 
 [[repos]]
