@@ -161,7 +161,14 @@ hooks = [
 [[repos]]
 repo = "https://github.com/randolf-scholz/assorted-hooks.git"
 rev = "v0.7.22"
-hooks = [{ id = "pyright-concise", files = "^src/|^tests/" }]
+hooks = [
+    {
+        id = "pyright-concise",
+        files = "^src/|^tests/",
+        # FIXME: https://github.com/microsoft/pyright/issues/11446
+        ignore = "src/linodenet/domains",
+    }
+]
 
 [[repos]]
 repo = "local"
@@ -174,9 +181,6 @@ hooks = [
         types_or = ["python", "pyi"],
         entry = "pyrefly",
         files = "^src/|^tests/",
-        args = [
-            "check",
-            "--"
-        ]
+        args = ["check", "--"]
     }
 ]

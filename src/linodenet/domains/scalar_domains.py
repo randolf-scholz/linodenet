@@ -11,7 +11,7 @@ from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from math import isnan, nan
 from types import MappingProxyType
-from typing import ClassVar, Final, Self, overload
+from typing import Any, ClassVar, Final, Self, cast, overload
 
 from torch import Tensor
 
@@ -24,8 +24,7 @@ __logger__ = logging.getLogger(__name__)
 class Interval(ScalarDomain):
     r"""A named tuple representing an interval."""
 
-    # pyrefly: ignore [bad-assignment]
-    EMPTY: ClassVar[Final[Interval]] = ...  # pyright: ignore[reportAssignmentType]
+    EMPTY: ClassVar[Final[Interval]] = cast("Any", ...)
 
     lower: Final[float]
     upper: Final[float]
