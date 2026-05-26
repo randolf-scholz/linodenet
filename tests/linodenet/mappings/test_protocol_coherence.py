@@ -59,7 +59,7 @@ class _Transform[X, Y, **P](_Bijection[X, Y, P], Protocol):
     def decode(self, y: Y, /, *args: P.args, **kwargs: P.kwargs) -> X: ...
 
 
-def test_protocol_coherence[X, Y, Z](
+def check_protocol_coherence[X, Y, Z](
     embedding: Embedding[X, Y],
     surjection: Surjection[X, Y],
     projection: Projection[X],
