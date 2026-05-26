@@ -258,7 +258,7 @@ class VectorDomains(VectorDomain, PosetEnum):
     ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Vector()  # top node
-    NONE = Empty()  # bottom node
+    EMPTY = Empty()  # bottom node
 
     REAL = Real()
     DISCRETE = Discrete()
@@ -322,10 +322,10 @@ class VectorDomains(VectorDomain, PosetEnum):
 V = VectorDomains  # temporary alias
 # pyrefly: ignore[bad-assignment]
 V.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
-    (V.NONE, V.NEGATIVE & V.NONNEGATIVE),
-    (V.NONE, V.NONZERO & V.ZERO),
-    (V.NONE, V.POSITIVE & V.NONPOSITIVE),
-    (V.NONE, V.POSITIVE & V.NEGATIVE),
+    (V.EMPTY, V.NEGATIVE & V.NONNEGATIVE),
+    (V.EMPTY, V.NONZERO & V.ZERO),
+    (V.EMPTY, V.POSITIVE & V.NONPOSITIVE),
+    (V.EMPTY, V.POSITIVE & V.NEGATIVE),
     (V.ONE_HOT, V.BOOLEAN & V.STOCHASTIC),
     (V.ONE_HOT, V.STOCHASTIC & V.UNIT_VECTOR),
     (V.ZERO, V.NONNEGATIVE & V.NONPOSITIVE),
@@ -356,9 +356,8 @@ V.ALIASES = MappingProxyType({
     "boolean"        : V.BOOLEAN,
     "complex"        : V.COMPLEX,
     "discrete"       : V.DISCRETE,
-    "empty"          : V.NONE,
+    "empty"          : V.EMPTY,
     "negative"       : V.NEGATIVE,
-    "none"           : V.NONE,
     "nonnegative"    : V.NONNEGATIVE,
     "nonpositive"    : V.NONPOSITIVE,
     "nonzero"        : V.NONZERO,

@@ -707,6 +707,9 @@ class ScalarDomains(ScalarDomain, PosetEnum):
 
     ALIASES: ClassVar[Mapping[str, Self]]
 
+    ANY = Interval("[-inf, +inf]")
+    EMPTY = Interval.EMPTY
+
     ZERO = Interval("[0, 0]")
     ONE = Interval("[1, 1]")
     POS_INF = Interval("[+inf, +inf]")

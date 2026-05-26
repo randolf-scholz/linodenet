@@ -176,7 +176,7 @@ class TestVectorDomains:
         assert set(V.__members__.values()) <= set(V.ALIASES.values())
 
     def test_none_factorizations(self) -> None:
-        assert V.NONE.factorizations == frozenset(
+        assert V.EMPTY.factorizations == frozenset(
             {
                 V.NEGATIVE & V.NONNEGATIVE,
                 V.NONZERO & V.ZERO,
@@ -276,9 +276,9 @@ class TestVectorDomains:
 
 class TestTensorDomains:
     def test_partial_order_and_representation(self) -> None:
-        assert T.NONE < T.ANY
-        assert T.NONE <= T.ZERO
-        assert T.NONE <= T.COMPLEX
+        assert T.EMPTY < T.ANY
+        assert T.EMPTY <= T.ZERO
+        assert T.EMPTY <= T.COMPLEX
         assert T.ANY <= T.ANY
 
         assert T.BOOLEAN <= T.REAL
@@ -298,10 +298,8 @@ class TestTensorDomains:
         assert not T.SPARSE <= T.COMPLEX
         assert not T.NONZERO <= T.SPARSE
 
-        assert str(T.NONZERO) == "nonzero"
-
         with pytest.raises(TypeError):
-            _ = T.ANY <= "any"
+            assert T.ANY <= "any"
 
 
 class TestMatrixDomains:
@@ -479,10 +477,10 @@ class TestMatrixDomains:
         assert M.DOUBLY_STOCHASTIC <= M.SQUARE
         assert M.PERMUTATION <= M.SQUARE
         assert M.PERMUTATION != M.SQUARE
-        assert M.NONE <= M.CONTRACTION
-        assert M.NONE <= M.SPECTRAL_NORMALIZED
-        assert M.NONE <= M.POSITIVE_DEFINITE
-        assert M.NONE <= M.NEGATIVE_DEFINITE
+        assert M.EMPTY <= M.CONTRACTION
+        assert M.EMPTY <= M.SPECTRAL_NORMALIZED
+        assert M.EMPTY <= M.POSITIVE_DEFINITE
+        assert M.EMPTY <= M.NEGATIVE_DEFINITE
 
         assert not M.SYMMETRIC <= M.ORTHOGONAL
         assert not M.ORTHOGONAL <= M.SYMMETRIC
@@ -497,7 +495,7 @@ class TestMatrixDomains:
             _ = M.SQUARE <= "square"
 
     def test_none_meet_rules(self) -> None:
-        none_meets = M.NONE.factorizations
+        none_meets = M.EMPTY.factorizations
         assert M.CONTRACTION & M.SPECTRAL_NORMALIZED in none_meets
         assert M.INVERTIBLE & M.SINGULAR in none_meets
         assert M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE in none_meets

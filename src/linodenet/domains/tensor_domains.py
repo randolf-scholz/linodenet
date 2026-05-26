@@ -142,16 +142,8 @@ class TensorDomains(TensorDomain, PosetEnum):
 
     ALIASES: ClassVar[Mapping[str, Self]]
 
-    def __new__(cls, value: Tensor) -> Self:
-        obj = object.__new__(cls)
-        obj._value_ = value
-        return obj
-
-    def __init__(self, value: Tensor) -> None:
-        del value
-
     ANY = Tensor()  # top node
-    NONE = Empty()  # bottom node
+    EMPTY = Empty()  # bottom node
 
     REAL = Real()
     COMPLEX = Complex()
@@ -209,8 +201,7 @@ T.ALIASES = MappingProxyType({
     "any"     : T.ANY,
     "boolean" : T.BOOLEAN,
     "complex" : T.COMPLEX,
-    "empty"   : T.NONE,
-    "none"    : T.NONE,
+    "empty"   : T.EMPTY,
     "nonzero" : T.NONZERO,
     "one"     : T.ONE,
     "real"    : T.REAL,

@@ -506,8 +506,11 @@ class PosetEnum(Enum, metaclass=_PosetType):
     r"""Reverse dependencies."""
     KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore[intersection]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
-    TOP: ClassVar[Self | None]
-    BOTTOM: ClassVar[Self | None]
+    # TODO: use typing.ReadOnly for covariance.
+    ANY: ClassVar[Self | Any | None]
+    r"""The universal type that all types are subtypes of."""
+    EMPTY: ClassVar[Self | Any | None]
+    r"""The universal bottom type that all types are supertypes of."""
 
     def __init_subclass__(cls) -> None:
         if getattr(cls, "KNOWN_SUPERTYPES", None) is None:
@@ -516,10 +519,10 @@ class PosetEnum(Enum, metaclass=_PosetType):
             cls.KNOWN_SUBTYPES = {}
         if getattr(cls, "KNOWN_MEETS", None) is None:
             cls.KNOWN_MEETS = []
-        if getattr(cls, "TOP", None) is None:
-            cls.TOP = None
-        if getattr(cls, "BOTTOM", None) is None:
-            cls.BOTTOM = None
+        if getattr(cls, "ANY", None) is None:
+            raise TypeError(f"{cls} must have a top node named ANY.")
+        if getattr(cls, "EMPTY", None) is None:
+            raise TypeError(f"{cls} must have a bottom node named EMPTY.")
 
     @classmethod
     @cache
@@ -690,15 +693,13 @@ class PosetEnum(Enum, metaclass=_PosetType):
             for subtype in subtypes:
                 supertypes[subtype].add(node)
 
-        if cls.TOP is not None:
+        if cls.ANY is not None:
             for node in cls:
-                if node is not cls.TOP:
-                    supertypes[node].add(cls.TOP)
+                if node is not cls.ANY:
+                    supertypes[node].add(cls.ANY)
 
-        if cls.BOTTOM is not None:
-            supertypes[cls.BOTTOM].update(
-                node for node in cls if node is not cls.BOTTOM
-            )
+        if cls.EMPTY is not None:
+            supertypes[cls.EMPTY].update(node for node in cls if node is not cls.EMPTY)
 
         return {src: frozenset(targets) for src, targets in supertypes.items()}
 

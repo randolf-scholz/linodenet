@@ -940,7 +940,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Rectangular()  # top node
-    NONE = Empty()  # bottom node
+    EMPTY = Empty()  # bottom node
 
     REAL = Placeholder(name="real")
     COMPLEX = Placeholder(name="complex")
@@ -1109,13 +1109,13 @@ class MatrixDomains(MatrixDomain, PosetEnum):
 M = MatrixDomains  # temporary alias
 # pyrefly: ignore[bad-assignment]
 M.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
-    (M.NONE, M.CONTRACTION & M.SPECTRAL_NORMALIZED),
-    (M.NONE, M.INVERTIBLE & M.SINGULAR),
-    (M.NONE, M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE),
-    (M.NONE, M.NEGATIVE_DEFINITE & M.POSITIVE_SEMIDEFINITE),
-    (M.NONE, M.NEGATIVE_DETERMINANT & M.POSITIVE_DETERMINANT),
-    (M.NONE, M.NEGATIVE_DETERMINANT & M.UNIT_DETERMINANT),
-    (M.NONE, M.NEGATIVE_SEMIDEFINITE & M.POSITIVE_DEFINITE),
+    (M.EMPTY, M.CONTRACTION & M.SPECTRAL_NORMALIZED),
+    (M.EMPTY, M.INVERTIBLE & M.SINGULAR),
+    (M.EMPTY, M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE),
+    (M.EMPTY, M.NEGATIVE_DEFINITE & M.POSITIVE_SEMIDEFINITE),
+    (M.EMPTY, M.NEGATIVE_DETERMINANT & M.POSITIVE_DETERMINANT),
+    (M.EMPTY, M.NEGATIVE_DETERMINANT & M.UNIT_DETERMINANT),
+    (M.EMPTY, M.NEGATIVE_SEMIDEFINITE & M.POSITIVE_DEFINITE),
     (M.ZERO, M.DIAGONAL & M.ZERO_DIAGONAL),
     (M.ZERO, M.NEGATIVE_SEMIDEFINITE & M.POSITIVE_SEMIDEFINITE),
     (M.ZERO, M.NEGATIVE_SEMIDEFINITE & M.SKEW_SYMMETRIC),
@@ -1249,7 +1249,7 @@ M.ALIASES = MappingProxyType({
     "doubly-centered"            : M.DOUBLY_CENTERED,
     "doubly-stochastic"          : M.DOUBLY_STOCHASTIC,
     "efficiently-invertible"     : M.EFFICIENTLY_INVERTIBLE,
-    "empty"                      : M.NONE,
+    "empty"                      : M.EMPTY,
     "even-square"                : M.EVEN_SQUARE,
     "eye"                        : M.EYE,
     "forward-stable"             : M.FORWARD_STABLE,
@@ -1280,7 +1280,7 @@ M.ALIASES = MappingProxyType({
     "negative-diagonal-entries"  : M.NEGATIVE_DIAGONAL_ENTRIES,
     "negative-semidefinite"      : M.NEGATIVE_SEMIDEFINITE,
     "nilpotent"                  : M.NILPOTENT,
-    "none"                       : M.NONE,
+    "none"                       : M.EMPTY,
     "normal"                     : M.NORMAL,
     "one-hot"                    : M.ONE_HOT,
     "ones"                       : M.ONES,
