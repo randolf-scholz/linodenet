@@ -166,7 +166,7 @@ hooks = [
         id = "pyright-concise",
         files = "^src/|^tests/",
         # FIXME: https://github.com/microsoft/pyright/issues/11446
-        ignore = "src/linodenet/domains",
+        exclude = "src/linodenet/domains",
     }
 ]
 
