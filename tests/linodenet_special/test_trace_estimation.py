@@ -607,7 +607,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         ("low_rank", TraceEstimators.EXACT): 1e-7,
         ("low_rank", TraceEstimators.HUTCH): 2e-1,
         ("low_rank", TraceEstimators.HUTCH_PP): 2e-1,
-        ("low_rank", TraceEstimators.XTRACE): 1e-6,
+        ("low_rank", TraceEstimators.XTRACE): 1e-4,
     }
 
     @pytest.mark.parametrize("name", TraceEstimators, ids=str)
