@@ -20,7 +20,14 @@ from linodenet_special.trace_estimation import (
     LogabsdetSeriesEstimator,
     TraceEstimators,
 )
-from tests.testing import DEVICES, PREFER_GPU, PROJECT, TestSuite, as_torch_generator
+from tests.testing import (
+    DEVICES,
+    PREFER_GPU,
+    PROJECT,
+    TestSuite,
+    as_seed,
+    as_torch_generator,
+)
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 type Tolerance = float
@@ -127,12 +134,12 @@ class TestTraceEstimator(TestSuite):
             dtype=work_dtype,
             generator=generator,
         )
-        basis = self._make_orthogonal_batch(
+        basis = self.make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
             dtype=work_dtype,
             device=device,
-            generator=generator,
+            rng=generator,
         )
         matrix = torch.einsum("...ik, ...k, ...jk -> ...ij", basis, spectrum, basis)
         return TraceCase(
@@ -157,12 +164,12 @@ class TestTraceEstimator(TestSuite):
         work_dtype = torch.float64
         scale = 1 / math.sqrt(input_size)
 
-        q = self._make_orthogonal_batch(
+        q = self.make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
             dtype=work_dtype,
             device=device,
-            generator=generator,
+            rng=generator,
         )
         spectrum = scale * torch.randn(
             batch_size,
@@ -193,12 +200,12 @@ class TestTraceEstimator(TestSuite):
         generator = as_torch_generator(rng, device=device)
         work_dtype = torch.float64
 
-        q = self._make_orthogonal_batch(
+        q = self.make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
             dtype=work_dtype,
             device=device,
-            generator=generator,
+            rng=generator,
         )
         num_blocks = input_size // 2
         frequencies = 0.5 + torch.rand(
@@ -248,12 +255,12 @@ class TestTraceEstimator(TestSuite):
         generator = as_torch_generator(rng, device=device)
         work_dtype = torch.float64
 
-        q = self._make_orthogonal_batch(
+        q = self.make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
             dtype=work_dtype,
             device=device,
-            generator=generator,
+            rng=generator,
         )
         spectrum = torch.linspace(0, 2, input_size, device=device, dtype=work_dtype)
         spectrum = spectrum.expand(batch_size, -1)
@@ -279,12 +286,12 @@ class TestTraceEstimator(TestSuite):
         generator = as_torch_generator(rng, device=device)
         work_dtype = torch.float64
 
-        q = self._make_orthogonal_batch(
+        q = self.make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
             dtype=work_dtype,
             device=device,
-            generator=generator,
+            rng=generator,
         )
         exponents = torch.arange(
             -(input_size // 2),
@@ -319,12 +326,12 @@ class TestTraceEstimator(TestSuite):
         if not 0.0 < q < 1.0:
             raise ValueError(f"q must satisfy 0 < q < 1, got {q!r}")
 
-        basis = self._make_orthogonal_batch(
+        basis = self.make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
             dtype=work_dtype,
             device=device,
-            generator=generator,
+            rng=generator,
         )
         magnitudes = q ** (
             1 + torch.arange(input_size, device=device, dtype=work_dtype)
@@ -364,12 +371,12 @@ class TestTraceEstimator(TestSuite):
         generator = as_torch_generator(rng, device=device)
         work_dtype = torch.float64
 
-        q = self._make_orthogonal_batch(
+        q = self.make_orthogonal_batch(
             batch_size=batch_size,
             input_size=input_size,
             dtype=work_dtype,
             device=device,
-            generator=generator,
+            rng=generator,
         )
         spectrum = torch.cat(
             [
@@ -423,7 +430,7 @@ class TestTraceEstimator(TestSuite):
         )
         return self.make_contraction(test_case, c=c)
 
-    def _make_orthogonal_batch(
+    def make_orthogonal_batch(
         self,
         /,
         *,
@@ -431,7 +438,7 @@ class TestTraceEstimator(TestSuite):
         input_size: int,
         dtype: torch.dtype | None,
         device: str | torch.device,
-        generator: torch.Generator,
+        rng: int | torch.Generator,
     ) -> Tensor:
         gaussian = torch.randn(
             batch_size,
@@ -439,7 +446,7 @@ class TestTraceEstimator(TestSuite):
             input_size,
             device=device,
             dtype=torch.float64,
-            generator=generator,
+            generator=as_torch_generator(rng, device=device),
         )
         q, _ = torch.linalg.qr(gaussian)
         return q.to(dtype=dtype)
@@ -450,12 +457,13 @@ class TestTraceEstimator(TestSuite):
         test_case: TraceCase,
         /,
         *,
+        rng: int | torch.Generator,
         eta: Tolerance,
         num_matvecs: int,
         device: str,
         debug: bool = False,
     ) -> None:
-        torch.manual_seed(self.SEED)
+        torch.manual_seed(as_seed(rng))
 
         estimator = TraceEstimators.new(
             name,
@@ -613,6 +621,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         self.assert_trace_close(
             name,
             test_case,
+            rng=self.SEED,
             eta=self.ETAS["diagonal", name],
             num_matvecs=self.NUM_MATVECS,
             device=device,
@@ -629,6 +638,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         self.assert_trace_close(
             name,
             test_case,
+            rng=self.SEED,
             eta=self.ETAS["normal", name],
             num_matvecs=self.NUM_MATVECS,
             device=device,
@@ -646,6 +656,7 @@ class TestTraceCorrectness(TestTraceEstimator):
         self.assert_trace_close(
             name,
             test_case,
+            rng=self.SEED,
             eta=self.ETAS["low_rank", name],
             num_matvecs=self.NUM_MATVECS,
             device=device,
@@ -688,6 +699,7 @@ class TestTraceCorrectness(TestTraceEstimator):
             self.assert_trace_close(
                 name,
                 test_case,
+                rng=self.SEED,
                 eta=self.ETAS[label, name],
                 num_matvecs=self.NUM_MATVECS,
                 device=device,
