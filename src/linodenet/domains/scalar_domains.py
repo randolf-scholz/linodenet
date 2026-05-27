@@ -770,6 +770,8 @@ class ScalarDomains(ScalarDomain, PosetEnum):
 
 S = ScalarDomains  # temporary alias
 S.ALIASES = MappingProxyType({
+    "any"                     : S.ANY,
+    "empty"                   : S.EMPTY,
     "extended-line"           : S.EXTENDED_LINE,
     "half-open-unit-interval" : S.HALF_OPEN_UNIT_INTERVAL,
     "neg-inf"                 : S.NEG_INF,
