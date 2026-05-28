@@ -69,6 +69,7 @@ def assert_all_close(
                 raise AssertionError(
                     f"Tensors at key {ctx.get('key')!r} are not close!"
                 )
+
         case Mapping() as mapping:
             assert isinstance(reference, Mapping)
             assert mapping.keys() == reference.keys()
@@ -82,6 +83,7 @@ def assert_all_close(
                     atol=atol,
                     ctx={"key": ctx.get("key", []).append(key)},
                 )
+
         case Sequence() as sequence:
             assert isinstance(reference, Sequence)
             for i, (output, target) in enumerate(zip(sequence, reference, strict=True)):
@@ -92,6 +94,7 @@ def assert_all_close(
                     atol=atol,
                     ctx={"key": ctx.get("key", []).append(i)},
                 )
+
         case _:
             raise TypeError(f"Unsupported type {type(values)}!")
 
@@ -108,6 +111,7 @@ def all_close(
         case Tensor() as tensor:
             assert isinstance(reference, Tensor)
             return torch.allclose(tensor, reference, rtol=rtol, atol=atol)
+
         case Mapping() as mapping:
             assert isinstance(reference, Mapping)
             assert mapping.keys() == reference.keys()
@@ -115,12 +119,14 @@ def all_close(
                 all_close(mapping[key], reference[key], rtol=rtol, atol=atol)
                 for key in mapping
             )
+
         case Sequence() as sequence:
             assert isinstance(reference, Sequence)
             return all(
                 all_close(output, target, rtol=rtol, atol=atol)
                 for output, target in zip(sequence, reference, strict=True)
             )
+
         case _:
             raise TypeError(f"Unsupported type {type(values)}!")
 
@@ -136,21 +142,6 @@ def all_finite(x: Nested[Tensor], /) -> bool:
             return all(all_finite(item) for item in sequence)
         case _:
             raise TypeError(f"Unsupported type {type(x)}!")
-
-
-# region utility functions for tensors AND scalars -------------------------------------
-
-
-# endregion utility functions for tensors AND scalars ----------------------------------
-
-
-# region utility functions  for outputs (always tensor) --------------------------------
-
-
-# endregion utility functions  for outputs (always tensor) -----------------------------
-
-
-# region check helper functions --------------------------------------------------------
 
 
 def check_initialization[M: Module](

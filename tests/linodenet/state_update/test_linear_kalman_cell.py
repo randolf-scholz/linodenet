@@ -57,14 +57,14 @@ def test_linear_kalman_cell_matches_general_masked_formula_with_diagonal_noise()
         cell.noise_cholesky.copy_(torch.diag(torch.tensor([3.0, 4.0, 5.0])))
 
     y_pred = x @ H.mT
-    innovation = (y - y_pred)[0, observed]
+    innovation = (y_pred - y)[0, observed]
     system = H @ sigma_xx @ H.mT + noise
     expected_correction = (
         sigma_xx
         @ H.mT[:, observed]
         @ torch.linalg.solve(system[observed][:, observed], innovation)
     )
-    expected = x + expected_correction
+    expected = x - expected_correction
 
     torch.testing.assert_close(cell(y, x), expected)
 

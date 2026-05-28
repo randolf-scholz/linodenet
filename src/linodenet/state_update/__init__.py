@@ -42,6 +42,7 @@ __all__ = [
     "LSTMCell",
     # Functions
     "is_state_updater",
+    "is_idempotent_update",
 ]
 
 from torch.nn import GRUCell, LSTMCell, RNNCell
@@ -55,6 +56,7 @@ from .base import (
     StateUpdater,
     StateUpdaterBase,
     StateUpdaterList,
+    is_idempotent_update,
     is_state_updater,
 )
 from .kalman import NonLinearKalmanUpdate, NonLinearUpdate

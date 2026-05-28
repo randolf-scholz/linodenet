@@ -43,6 +43,7 @@ __all__ = [
     "MissingValueCell",
     # functions
     "is_state_updater",
+    "is_idempotent_update",
 ]
 
 from abc import abstractmethod
@@ -62,6 +63,7 @@ from torch import Tensor, nn
 from linodenet.constants import EMPTY_MAP
 from linodenet.nn import ModuleSequence
 from linodenet.nn.rezero import resolve_gate
+from linodenet.testing.utils import get_device
 from signatures import signature
 
 from .imputation import (
@@ -369,3 +371,55 @@ class MissingValueCell(StateUpdaterBase):
             u = torch.cat([u, self.mask], dim=-1)
 
         return self.filter(u, x)
+
+
+def is_idempotent_update(
+    update: StateUpdater,
+    /,
+    *,
+    batch_shape: tuple[int, ...] = (8,),
+    check_sparse_observations: bool = True,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
+) -> bool:
+    r"""Check the square-update idempotency condition on random data.
+
+    This checks the direct-observation criterion $x=y ⟹ F(y, x)=x$ for a
+    square state updater.
+
+    Args:
+        update: The state updater to test. Must satisfy
+            `update.input_size == update.hidden_size`.
+        batch_shape: Optional leading batch dimensions for the random test data.
+        check_sparse_observations: Whether to also test the sparse-observation
+            case where only a random subset of coordinates is observed.
+        rtol: Relative tolerance for the equality check.
+        atol: Absolute tolerance for the equality check.
+
+    Returns:
+        `True` if the update is idempotent on the sampled data, else `False`.
+
+    Raises:
+        ValueError: If the updater is not square.
+    """
+    if update.input_size != update.hidden_size:
+        raise ValueError(
+            "Idempotency requires a square state updater with "
+            f"{update.input_size=} and {update.hidden_size=}."
+        )
+
+    device = get_device(update)
+    x = torch.randn(*batch_shape, update.hidden_size, device=device)
+    with torch.no_grad():
+        # check that y=x ⟹ F(y,x)=x
+        y = x.clone()
+        if not torch.allclose(update(y, x), x, rtol=rtol, atol=atol):
+            return False
+
+        if not check_sparse_observations:
+            return True
+
+        # check that y=x ⟹ F([m ? y : NaN], x)=x for a random binary mask m
+        mask = torch.rand(*batch_shape, update.input_size, device=device) > 0.5
+        y_obs = torch.where(mask, y, torch.nan)
+        return torch.allclose(update(y_obs, x), x, rtol=rtol, atol=atol)

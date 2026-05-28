@@ -19,7 +19,7 @@ from torch.nn import functional as F
 from linodenet.mappings import bijections, surjections
 from linodenet.nn.containers import Constant
 from linodenet.nn.parametrize import register_parametrization
-from linodenet.nn.rezero import resolve_gate
+from linodenet.nn.rezero import ReZero, resolve_gate
 from signatures import signature
 
 from .base import StateUpdaterBase
@@ -28,7 +28,7 @@ from .base import StateUpdaterBase
 class LinearCell(StateUpdaterBase):
     r"""Linear innovation state update.
 
-    .. math:: x' = x - ρ(K(x)(y - h(x)))
+    .. math:: x' = x - ρ(K(x)⋅(h(x) - y))
 
     where $K(x)$ is a learnable innovation gain, $h$ is the observation map, and
     $ρ$ is a gate applied to the innovation correction. By default, $K$ is a
@@ -63,6 +63,66 @@ class LinearCell(StateUpdaterBase):
     r"""MODULE: The observation map used in the innovation term."""
     gate: nn.Module
     r"""MODULE: Optional gate for the innovation term."""
+
+    @classmethod
+    def from_direct_observation_model(
+        cls, /, size: int, *, gate: str | nn.Module | None = "last-value"
+    ) -> LinearCell:
+        r"""Construct a square direct-observation linear cell.
+
+        This constructor fixes $h(x)=x$ and initializes $K(x)=I$, yielding
+
+        .. math:: x' = x - ρ(x - y).
+
+        Special gate presets initialize a learnable ReZero scalar to recover
+        standard observation blends at construction time:
+
+        - ``"last-value"``: initialize with $α=1$, so $x' = y$.
+        - ``"average-value"``: initialize with $α=1/2$, so $x' = (x+y)/2$.
+        - ``"first-value"`` / ``"keep-state"``: initialize with $α=0$, so
+          $x' = x$.
+        """
+        gate_module: str | nn.Module | None
+        initial_gate_value: float | None = None
+
+        match gate:
+            case "last-value":
+                gate_module = "rezero"
+                initial_gate_value = 1.0
+            case "average-value":
+                gate_module = "rezero"
+                initial_gate_value = 0.5
+            case "first-value" | "keep-state":
+                gate_module = "rezero"
+                initial_gate_value = 0.0
+            case None | "identity" | "rezero" | nn.Module():
+                gate_module = gate
+            case str():
+                raise ValueError(
+                    f"Unknown direct-observation gate: {gate!r}. Expected "
+                    "'last-value', 'average-value', 'first-value', 'keep-state', "
+                    "'rezero', 'identity', None, or an nn.Module."
+                )
+            case _:
+                raise TypeError(
+                    f"gate must be a string, nn.Module, or None, got {type(gate)!r}."
+                )
+
+        cell = LinearCell(
+            size,
+            size,
+            gain="constant",
+            gate=gate_module,
+            observation_map="identity",
+        )
+        with torch.no_grad():
+            assert isinstance(cell.gain, Constant)
+            cell.gain.value.copy_(torch.eye(size))
+            if initial_gate_value is not None:
+                assert isinstance(cell.gate, ReZero)
+                cell.gate.scalar.copy_(torch.tensor(initial_gate_value))
+
+        return cell
 
     def __init__(
         self,
@@ -118,7 +178,7 @@ class LinearCell(StateUpdaterBase):
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         y_pred = self.observation_map(x)
-        r = torch.where(y.isnan(), 0.0, y - y_pred)  # (..., input_size)
+        r = torch.where(y.isnan(), 0.0, y_pred - y)  # (..., input_size)
         K = self.gain(x)  # (hidden_size, input_size) or (..., hidden_size, input_size)
         correction = (r.unsqueeze(-2) @ K.mT).squeeze(-2)
         return x - self.gate(correction)
@@ -128,8 +188,8 @@ class KalmanCell(StateUpdaterBase):
     r"""Kalman-style hidden-state update with masked observations.
 
     .. math::
-        x' = x + ρ\left(
-            Σ(x)𝐃h(x)ᵀMᵀ (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹ (y - Mh(x))
+        x' = x - ρ\left(
+            Σ(x)𝐃h(x)ᵀMᵀ (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹ (Mh(x) - y)
         \right)
 
     Here, $h(x)$ is the observation map, $𝐃h(x)$ is its local linearization at
@@ -197,6 +257,7 @@ class KalmanCell(StateUpdaterBase):
         match covariance_factor:
             case nn.Module():
                 self.covariance_factor = covariance_factor
+
             case "constant":
                 self.covariance_factor = Constant((m, m))
                 register_parametrization(
@@ -204,13 +265,16 @@ class KalmanCell(StateUpdaterBase):
                     "value",
                     surjections.CholeskyFactor(),
                 )
+
             case "attention":
                 self.covariance_factor = AttentionCovarianceFactor(m)
+
             case str():
                 raise ValueError(
                     "Unknown covariance_factor: "
                     f"{covariance_factor!r}. Expected 'constant', 'attention', or an nn.Module."
                 )
+
             case _:
                 raise TypeError(
                     "covariance_factor must be a string or nn.Module, "
@@ -220,19 +284,23 @@ class KalmanCell(StateUpdaterBase):
         match observation_map:
             case nn.Module():
                 self.observation_map = observation_map
+
             case "linear":
                 self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
+
             case "identity":
                 if input_size != hidden_size:
                     raise ValueError(
                         "observation_map='identity' requires input_size == hidden_size!"
                     )
                 self.observation_map = nn.Identity()
+
             case str():
                 raise ValueError(
                     f"Unknown observation_map: {observation_map!r}. "
                     "Expected 'linear', 'identity', or an nn.Module."
                 )
+
             case _:
                 raise TypeError(
                     "observation_map must be a string or nn.Module, "
@@ -248,6 +316,7 @@ class KalmanCell(StateUpdaterBase):
                     bijections.PositiveScalarMatrix(size=n),
                     unsafe=True,
                 )
+
             case "diagonal":
                 self.noise_cholesky = nn.Parameter(torch.normal(0, 1, size=(n,)))
                 register_parametrization(
@@ -256,10 +325,12 @@ class KalmanCell(StateUpdaterBase):
                     bijections.PositiveDiagonal(),
                     unsafe=True,
                 )
+
             case str():
                 raise ValueError(
                     f"Unknown noise: {noise!r}. Expected 'scalar' or 'diagonal'."
                 )
+
             case _:
                 raise TypeError(f"noise must be a string, got {type(noise)!r}.")
 
@@ -280,8 +351,8 @@ class KalmanCell(StateUpdaterBase):
         J = torch.where(missing.unsqueeze(-2), self.eye, self.noise_cholesky)
         assert J.shape == (*batch_shape, self.input_size, self.input_size)
 
-        # Restrict the residual r = y_obs - Mh(x) to the observed coordinates.
-        r = torch.where(missing, torch.zeros_like(y_pred), y - y_pred)
+        # Restrict the residual r = Mh(x) - y_obs to the observed coordinates.
+        r = torch.where(missing, torch.zeros_like(y_pred), y_pred - y)
 
         # Push the covariance-factor columns through 𝐃h(x) to obtain 𝐃h(x)L(x).
         batched_jvp_fn = torch.func.vmap(jvp_fn, -1, -1)
@@ -301,7 +372,7 @@ class KalmanCell(StateUpdaterBase):
         # δ = Σₓᵧu = L(x)L(x)ᵀ𝐃h(x)ᵀu
         d = torch.einsum("...n, ...nm, ...km -> ...k", u, MHL, L)  # (..., m)
 
-        return x + self.gate(d)
+        return x - self.gate(d)
 
 
 class LinearRNNCell(StateUpdaterBase):

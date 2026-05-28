@@ -24,7 +24,7 @@ def test_linear_innovation_cell_identity_gate_matches_plain_update() -> None:
 
     assert isinstance(cell.gain, Constant)
     assert isinstance(cell.observation_map, nn.Linear)
-    innovation = y - cell.observation_map(x)
+    innovation = cell.observation_map(x) - y
     expected = x - compute_correction(innovation, cell.gain, x)
 
     torch.testing.assert_close(cell(y, x), expected)
@@ -68,11 +68,25 @@ def test_linear_innovation_cell_identity_observation_map_uses_x_directly() -> No
     x = torch.randn(7, 4)
 
     assert isinstance(cell.observation_map, nn.Identity)
-    innovation = y - x
+    innovation = x - y
 
     torch.testing.assert_close(
         cell(y, x), x - compute_correction(innovation, cell.gain, x)
     )
+
+
+def test_linear_innovation_cell_from_direct_observation_model_recovers_observation() -> (
+    None
+):
+    r"""The direct-observation constructor should recover the observation exactly."""
+    cell = LinearCell.from_direct_observation_model(4, gate="identity")
+    x = torch.randn(7, 4)
+    y = torch.randn(7, 4)
+
+    assert isinstance(cell.gain, Constant)
+    assert isinstance(cell.observation_map, nn.Identity)
+    torch.testing.assert_close(cell.gain.value, torch.eye(4))
+    torch.testing.assert_close(cell(y, x), y)
 
 
 def test_linear_innovation_cell_accepts_custom_gain() -> None:
@@ -88,9 +102,72 @@ def test_linear_innovation_cell_accepts_custom_gain() -> None:
     y = torch.randn(7, 3)
 
     assert cell.gain is gain
-    innovation = y - cell.observation_map(x)
+    innovation = cell.observation_map(x) - y
 
     torch.testing.assert_close(cell(y, x), x - compute_correction(innovation, gain, x))
+
+
+def test_linear_innovation_cell_from_direct_observation_model_last_value_gate() -> None:
+    r"""The last-value preset should initialize ReZero at one."""
+    cell = LinearCell.from_direct_observation_model(4)
+    x = torch.randn(7, 4)
+    y = torch.randn(7, 4)
+
+    assert isinstance(cell.gate, ReZero)
+    torch.testing.assert_close(cell.gate.scalar, torch.tensor(1.0))
+    torch.testing.assert_close(cell(y, x), y)
+
+
+def test_linear_innovation_cell_from_direct_observation_model_average_value_gate() -> (
+    None
+):
+    r"""The average-value preset should initialize ReZero at one half."""
+    cell = LinearCell.from_direct_observation_model(4, gate="average-value")
+    x = torch.randn(7, 4)
+    y = torch.randn(7, 4)
+
+    assert isinstance(cell.gate, ReZero)
+    torch.testing.assert_close(cell.gate.scalar, torch.tensor(0.5))
+    torch.testing.assert_close(cell(y, x), 0.5 * (x + y))
+
+
+def test_linear_innovation_cell_from_direct_observation_model_keep_state_gate() -> None:
+    r"""The keep-state preset should initialize ReZero at zero."""
+    cell = LinearCell.from_direct_observation_model(4, gate="keep-state")
+    x = torch.randn(7, 4)
+    y = torch.randn(7, 4)
+
+    assert isinstance(cell.gate, ReZero)
+    torch.testing.assert_close(cell.gate.scalar, torch.tensor(0.0))
+    torch.testing.assert_close(cell(y, x), x)
+
+
+def test_linear_innovation_cell_from_direct_observation_model_copies_only_observed_values() -> (
+    None
+):
+    r"""The direct-observation constructor should overwrite only observed coordinates."""
+    cell = LinearCell.from_direct_observation_model(4, gate="identity")
+    x = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
+    y = torch.tensor([[10.0, float("nan"), -5.0, float("nan")]])
+
+    expected = torch.tensor([[10.0, 2.0, -5.0, 4.0]])
+
+    torch.testing.assert_close(cell(y, x), expected)
+
+
+def test_linear_innovation_cell_from_direct_observation_model_rejects_unknown_gate() -> (
+    None
+):
+    r"""Unknown direct-observation gate presets should fail explicitly."""
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Unknown direct-observation gate: 'other'. Expected "
+            r"'last-value', 'average-value', 'first-value', 'keep-state', "
+            r"'rezero', 'identity', None, or an nn.Module."
+        ),
+    ):
+        LinearCell.from_direct_observation_model(4, gate="other")
 
 
 def test_linear_innovation_cell_attention_gain_uses_attention_module() -> None:
