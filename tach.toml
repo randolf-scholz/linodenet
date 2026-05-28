@@ -43,6 +43,7 @@ utility = true
 [[modules ]]
 path = "linodenet.testing"
 depends_on = []
+utility = true
 
 [[modules ]]
 path = "linodenet.domains"
