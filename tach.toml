@@ -6,108 +6,155 @@ exclude = [
     "**/tests",
     "**/venv",
 ]
-source_roots = [ "src",
-]
+source_roots = ["src"]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.nn"
-depends_on = [ "linodenet_special"]
+depends_on = ["linodenet_special"]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.utils"
 depends_on = []
 utility = true
 
-[[modules ]]
+[[modules]]
 path = "linodenet.initializations"
 depends_on = ["linodenet.domains"]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.constants"
 depends_on = []
 utility = true
 
-[[modules ]]
+[[modules]]
 path = "linodenet.forecasting"
-depends_on = [ "linodenet.nn", "linodenet_special", "linodenet.mappings", "linodenet.state_update", "linodenet.state_propagation"]
+depends_on = [
+    "linodenet.nn",
+    "linodenet_special",
+    "linodenet.mappings",
+    "linodenet.state_update",
+    "linodenet.state_propagation"
+]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.regularizations"
-depends_on = [ "linodenet.mappings"]
+depends_on = ["linodenet.mappings"]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.types"
 depends_on = []
 utility = true
 
-[[modules ]]
+[[modules]]
 path = "linodenet.testing"
 depends_on = []
 utility = true
 
-[[modules ]]
+[[modules]]
 path = "linodenet.domains"
 depends_on = []
 
-[[modules ]]
+[[modules]]
 path = "linodenet.distributions"
 depends_on = ["linodenet.nn", "linodenet.domains"]
 
-[[modules ]]
+[[modules]]
 path = "blueprint"
 depends_on = []
 utility = true
 
-[[modules ]]
+[[modules]]
 path = "linodenet"
-depends_on = ["linodenet.distributions", "linodenet.initializations", "linodenet_special", "linodenet.state_update", "linodenet.forecasting", "linodenet.nn", "linodenet.testing", "linodenet.parametrizations", "linodenet.regularizations", "linodenet.domains", "linodenet.mappings", "linodenet.state_propagation", "linodenet.state_update.imputation"]
+depends_on = [
+    "linodenet.distributions",
+    "linodenet.initializations",
+    "linodenet_special",
+    "linodenet.state_update",
+    "linodenet.forecasting",
+    "linodenet.nn",
+    "linodenet.parametrizations",
+    "linodenet.regularizations",
+    "linodenet.domains",
+    "linodenet.mappings",
+    "linodenet.state_propagation",
+    "linodenet.state_update.imputation"
+]
 
-[[modules ]]
+[[modules]]
 path = "signatures"
 depends_on = []
 utility = true
 
-[[modules ]]
+[[modules]]
 path = "linodenet_special"
-depends_on = ["linodenet_special.fallbacks", "linodenet_special.kernels", "linodenet_special.interfaces"]
+depends_on = [
+    "linodenet_special.fallbacks",
+    "linodenet_special.kernels",
+    "linodenet_special.interfaces"
+]
 
-[[modules ]]
+[[modules]]
 path = "linodenet_special.fallbacks"
 depends_on = ["linodenet_special.interfaces"]
 
-[[modules ]]
+[[modules]]
 path = "linodenet_special.interfaces"
 depends_on = []
 
-[[modules ]]
+[[modules]]
 path = "linodenet_special.kernels"
-depends_on = [ "linodenet_special.fallbacks", "linodenet_special.compiled", "linodenet_special.interfaces"]
+depends_on = [
+    "linodenet_special.fallbacks",
+    "linodenet_special.compiled",
+    "linodenet_special.interfaces"
+]
 
-[[modules ]]
+[[modules]]
 path = "linodenet_special.compiled"
 depends_on = ["linodenet_special.interfaces"]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.mappings"
-depends_on = ["linodenet_special.fallbacks", "linodenet.nn", "linodenet_special", "linodenet.domains"]
+depends_on = [
+    "linodenet_special.fallbacks",
+    "linodenet.nn",
+    "linodenet_special",
+    "linodenet.domains"
+]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.parametrizations"
-depends_on = ["linodenet.nn", "linodenet.mappings", "linodenet.domains", "linodenet_special"]
+depends_on = [
+    "linodenet.nn",
+    "linodenet.mappings",
+    "linodenet.domains",
+    "linodenet_special"
+]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.registry"
-depends_on = ["linodenet.parametrizations", "linodenet.regularizations", "linodenet.domains", "linodenet.initializations", "linodenet.mappings"]
+depends_on = [
+    "linodenet.parametrizations",
+    "linodenet.regularizations",
+    "linodenet.domains",
+    "linodenet.initializations",
+    "linodenet.mappings"
+]
 utility = true
 
-[[modules ]]
+[[modules]]
 path = "linodenet.state_propagation"
-depends_on = ["linodenet.mappings", "linodenet.initializations"]
+depends_on = ["linodenet.mappings", "linodenet.initializations", "linodenet.nn"]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.state_update"
-depends_on = ["linodenet.distributions", "linodenet.nn", "linodenet.state_update.imputation", "linodenet.mappings"]
+depends_on = [
+    "linodenet.distributions",
+    "linodenet.nn",
+    "linodenet.state_update.imputation",
+    "linodenet.mappings"
+]
 
-[[modules ]]
+[[modules]]
 path = "linodenet.state_update.imputation"
 depends_on = []
