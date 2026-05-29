@@ -5,7 +5,6 @@ __all__ = [
     "RegistryEntry",
     "REGISTRY",
     "get_registry_entry",
-    "normalize_registry_name",
 ]
 
 from collections.abc import Callable as Fn, Iterator, Mapping
@@ -23,6 +22,7 @@ from .regularizations import (
     REGULARIZATION_FNS_WITHOUT_ARGS,
     REGULARIZATIONS,
 )
+from .utils import normalize_name
 
 
 @dataclass(slots=True)
@@ -40,23 +40,6 @@ class RegistryEntry:
     parametrization: type | None = None
 
 
-def _camel_to_snake(name: str, /) -> str:
-    r"""Convert `CamelCase` names to `snake_case`."""
-    return "".join(["_" + c.lower() if c.isupper() else c for c in name]).lstrip("_")
-
-
-def _snake_to_kebab(string: str) -> str:
-    return string.replace("_", "-").lower()
-
-
-def normalize_registry_name(name: str, /) -> str:
-    r"""Normalize names to lowercase kebab-case."""
-    name = name.removeprefix("is_")
-    name = _camel_to_snake(name)
-    name = _snake_to_kebab(name)
-    return name
-
-
 class Registry(Mapping[str, RegistryEntry]):
     r"""Mutable registry keyed by canonical lowercase kebab-case names."""
 
@@ -64,7 +47,7 @@ class Registry(Mapping[str, RegistryEntry]):
         self._entries: dict[str, RegistryEntry] = {}
 
     def _entry_for(self, name: str, /) -> RegistryEntry:
-        canonical_name = normalize_registry_name(name)
+        canonical_name = normalize_name(name)
         if canonical_name not in self._entries:
             self._entries[canonical_name] = RegistryEntry(name=canonical_name)
         return self._entries[canonical_name]
@@ -85,7 +68,7 @@ class Registry(Mapping[str, RegistryEntry]):
     ) -> None:
         r"""Register one or more objects under a canonical name."""
         entry = self._entry_for(name)
-        canonical_name = normalize_registry_name(name)
+        canonical_name = normalize_name(name)
         candidate = RegistryEntry(
             name=canonical_name,
             domain=domain,
@@ -139,7 +122,7 @@ class Registry(Mapping[str, RegistryEntry]):
         parametrization: type | None = None,
     ) -> None:
         r"""Register objects on an existing canonical name."""
-        canonical_name = normalize_registry_name(name)
+        canonical_name = normalize_name(name)
         if canonical_name not in self._entries:
             raise KeyError(f"Registry entry {canonical_name!r} does not exist.")
 
@@ -207,7 +190,7 @@ class Registry(Mapping[str, RegistryEntry]):
             self.register(name, parametrization=parametrization)
 
     def __getitem__(self, key: str) -> RegistryEntry:
-        return self._entries[normalize_registry_name(key)]
+        return self._entries[normalize_name(key)]
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._entries)
@@ -217,7 +200,7 @@ class Registry(Mapping[str, RegistryEntry]):
 
     def get[T = None](self, key: str, default: T = None) -> RegistryEntry | T:  # type: ignore[default]
         r"""Return the entry for `key` if present."""
-        return self._entries.get(normalize_registry_name(key), default)
+        return self._entries.get(normalize_name(key), default)
 
 
 REGISTRY = Registry()

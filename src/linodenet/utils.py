@@ -12,6 +12,8 @@ __all__ = [
     "is_dunder",
     "is_private",
     "unflatten_dict",
+    "normalize_name",
+    "resolve_name",
 ]
 
 from collections.abc import Callable, Iterable, Mapping
@@ -244,3 +246,33 @@ def unflatten_dict[K, K2](
 
 
 r"""Progress bar update interval in milliseconds."""
+
+
+def _camel_to_snake(name: str, /) -> str:
+    r"""Convert `CamelCase` names to `snake_case`."""
+    return "".join(["_" + c.lower() if c.isupper() else c for c in name]).lstrip("_")
+
+
+def _snake_to_kebab(string: str) -> str:
+    return string.replace("_", "-").lower()
+
+
+def normalize_name(name: str, /) -> str:
+    r"""Normalize names to lowercase kebab-case, and removes certain prefixes."""
+    name = name.removeprefix("is_")
+    name = _camel_to_snake(name)
+    name = _snake_to_kebab(name)
+    return name
+
+
+def resolve_name[T](mapping: Mapping[str, T], name: str, /) -> T:
+    canonical = normalize_name(name)
+
+    for key, value in mapping.items():
+        if normalize_name(key) == canonical:
+            return value
+    available = sorted(normalize_name(key) for key in mapping)
+    raise KeyError(
+        f"Item {name!r} ({canonical!r}) not found in mapping."
+        f" Avaible canonical names: {available}."
+    )
