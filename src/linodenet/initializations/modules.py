@@ -7,6 +7,7 @@ Notes:
 """
 
 __all__ = [
+    "Constant",
     "DiagonallyDominant",
     "Gaussian",
     "LowRank",
@@ -26,6 +27,35 @@ from torch import Tensor, nn
 from linodenet.domains import MatrixDomains
 
 from . import functional
+
+
+class Constant(nn.Module):
+    r"""Module wrapper for a constant tensor."""
+
+    value: Tensor
+
+    def __init__(self, value: Tensor, /) -> None:
+        super().__init__()
+        self.register_buffer("value", value)
+
+    def forward(
+        self,
+        size: int | tuple[int, ...] = (),
+        /,
+        *,
+        dtype: Optional[torch.dtype] = None,
+        device: Optional[str | torch.device] = None,
+    ) -> Tensor:
+        tensor = self.value.to(dtype=dtype or self.value.dtype, device=device)
+        match size:
+            case int(num):
+                batch = (num,)
+            case tuple(batch):
+                pass
+            case _:
+                raise TypeError(f"Expected int or tuple[int, ...], got {type(size)!r}")
+
+        return tensor.expand(*batch, *tensor.shape).clone()
 
 
 class Gaussian(nn.Module):

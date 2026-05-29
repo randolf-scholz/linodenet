@@ -47,6 +47,7 @@ r"""Dictionary containing all available initializations (functions)."""
 
 
 INITIALIZATIONS = {
+    "Constant"           : modules.Constant,
     "DiagonallyDominant" : modules.DiagonallyDominant,
     "Gaussian"           : modules.Gaussian,
     "LowRank"            : modules.LowRank,
