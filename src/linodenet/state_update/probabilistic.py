@@ -28,6 +28,7 @@ __all__ = [
     # Classes
     "GradientStepUpdater",
     "NaturalGaussianUpdater",
+    "GaussianLatentStateUpdate",
     "probabilistic_kalman_update",
     "discrete_probabilistic_kalman_update",
 ]
@@ -374,6 +375,7 @@ class GaussianLatentStateUpdate(nn.Module):
         regularization_learnable: bool = True,
     ) -> None:
         super().__init__()
+        raise NotImplementedError
 
     def update_covariance(
         self, theta: tuple[Tensor, Tensor], y_obs: Tensor
