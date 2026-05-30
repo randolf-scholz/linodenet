@@ -46,7 +46,7 @@ INITIALIZATION_FNS: dict[str, InitializationFn] = {
 r"""Dictionary containing all available initializations (functions)."""
 
 
-INITIALIZATIONS = {
+INITIALIZATIONS: dict[str, type[Initialization]] = {
     "Constant"           : modules.Constant,
     "DiagonallyDominant" : modules.DiagonallyDominant,
     "Gaussian"           : modules.Gaussian,

@@ -14,6 +14,9 @@ from numpy.typing import NDArray
 from scipy.integrate import solve_ivp
 from tqdm.autonotebook import trange
 
+from linodenet.domains.matrix_tests import is_skew_symmetric
+from linodenet.initializations import SkewSymmetric
+from linodenet.nn.parametrize import is_parametrized
 from linodenet.state_propagation.flows import LinearFlow
 from linodenet_special import scaled_norm
 from tests.testing import PROJECT, visualize_distribution
@@ -21,6 +24,37 @@ from tests.testing import PROJECT, visualize_distribution
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 logging.getLogger("matplotlib").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
+
+
+def test_linear_flow_registers_kernel_parametrization() -> None:
+    flow = LinearFlow(
+        4,
+        kernel_initialization=torch.randn(4, 4),
+        kernel_parametrization="skew-symmetric",
+    )
+
+    assert is_parametrized(flow, "weight")
+    assert is_skew_symmetric(flow.weight).item() is True
+
+
+def test_linear_flow_skips_kernel_parametrization_by_default() -> None:
+    flow = LinearFlow(4, kernel_initialization=torch.randn(4, 4))
+
+    assert not is_parametrized(flow, "weight")
+
+
+def test_linear_flow_tensor_kernel_initialization_uses_constant() -> None:
+    weight = torch.randn(4, 4)
+
+    flow = LinearFlow(4, kernel_initialization=weight)
+
+    assert torch.equal(flow.weight, weight)
+
+
+def test_linear_flow_module_kernel_initialization() -> None:
+    flow = LinearFlow(4, kernel_initialization=SkewSymmetric(4))
+
+    assert is_skew_symmetric(flow.weight).item() is True
 
 
 def compute_linode_error(
@@ -82,9 +116,8 @@ def compute_linode_error(
 
     flow = LinearFlow(
         input_size=D,
-        kernel_initialization=A,
-        scalar=1.0,
-        scalar_learnable=False,
+        kernel_initialization=torch.as_tensor(A),
+        use_rezero=False,
     )
     flow.to(dtype=torch_dtype, device=device)
     # assert model.cell.scalar == 1.0
@@ -248,7 +281,3 @@ def test_make_error_plot(num_samples: int = 100) -> None:  # noqa: PT028
         error_double=err_double,
         logger=logger,
     )
-
-
-if __name__ == "__main__":
-    test_make_error_plot()

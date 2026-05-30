@@ -2,16 +2,17 @@ r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
 
 __all__ = ["LinearFlow"]
 
-from collections.abc import Callable
 from typing import Final, Optional
 
 import torch
 from torch import Tensor, nn
 
-from linodenet.initializations import INITIALIZATION_FNS, Initialization
-from linodenet.mappings import MATRIX_PROJECTION_FNS
-from linodenet.mappings.functional import identity as identity_map
-from linodenet.types import SelfMap
+from linodenet.initializations import INITIALIZATIONS
+from linodenet.initializations.modules import Constant as ConstantInitialization
+from linodenet.mappings import MATRIX_PROJECTIONS
+from linodenet.nn import ReZero
+from linodenet.nn.parametrize import register_parametrization
+from linodenet.utils import resolve_name
 from signatures import signature
 
 from .base import ContinuousFlowBase
@@ -24,10 +25,10 @@ class LinearFlow(ContinuousFlowBase):
 
     1. parametrization of the kernel, e.g. restricting it to some subset of matrices,
        such as skew-symmetric matrices, which leads to stable dynamics.
-    2. a learnable scalar applied to the kernel, which can be used to improve
+    2. an optional ReZero gate applied to the kernel, which can be used to improve
        the learning dynamics.
 
-    .. math:: e^{ε⋅π(A)∆t}x
+    .. math:: e^{ρ(π(A))∆t}x
     """
 
     # Constants
@@ -35,115 +36,120 @@ class LinearFlow(ContinuousFlowBase):
     r"""CONST: The dimensionality of inputs."""
     output_size: Final[int]
     r"""CONST: The dimensionality of the outputs."""
-    scalar_learnable: Final[bool]
-    r"""CONST: Whether the scalar is learnable or not."""
+    use_rezero: Final[bool]
+    r"""CONST: Whether the kernel is wrapped in ``ReZero``."""
 
     # Parameters
-    scalar: Tensor
-    r"""PARAM: the scalar applied to the kernel."""
     weight: Tensor
     r"""PARAM: The learnable weight-matrix of the linear ODE component."""
+    rezero: nn.Module
+    r"""MODULE: Optional ReZero gate applied to the kernel."""
     # Buffers
     kernel: Tensor
     r"""BUFFER: The system matrix of the linear ODE component."""
+    kernel_initialization: nn.Module
+    r"""MODULE: Optional Initialization of the kernel."""
+    kernel_parametrization: nn.Module | None
+    r"""MODULE: Optional parametrization of the kernel."""
 
     @property
     def config(self) -> dict:
         return {
             "input_size": self.input_size,
-            "kernel_initialization": self.kernel_initialization_spec,
-            "kernel_parametrization": self.kernel_parametrization_spec,
-            "scalar": self.scalar_init,
-            "scalar_learnable": self.scalar_learnable,
+            "kernel_initialization": self.kernel_initialization,
+            "kernel_parametrization": self.kernel_parametrization,
+            "use_rezero": self.use_rezero,
         }
 
     def __init__(
         self,
         input_size: int,
         *,
-        kernel_initialization: str | Tensor | Initialization = "skew-symmetric",
-        kernel_parametrization: Optional[str | SelfMap[Tensor] | nn.Module] = None,
-        scalar: float = 0.0,
-        scalar_learnable: bool = True,
+        kernel_initialization: str | Tensor | nn.Module = "skew-symmetric",
+        kernel_parametrization: Optional[str | nn.Module] = None,
+        use_rezero: bool = True,
     ) -> None:
         r"""Initialize the Linear ODE Cell."""
         super().__init__(input_shape=(input_size,))
-        self.kernel_initialization_spec = kernel_initialization
-        self.kernel_parametrization_spec = kernel_parametrization
-        self.scalar_init = scalar
-
-        def kernel_initialization_dispatch() -> Callable[[], Tensor]:
-            r"""Dispatch the kernel initialization."""
-            match kernel_initialization:
-                case str(key):
-                    init = INITIALIZATION_FNS[key.replace("-", "_")]
-                    return lambda: init(input_size)
-                case Callable() as func:
-                    tensor = Tensor(func(input_size))
-                    if tensor.shape != (input_size, input_size):
-                        raise ValueError(
-                            f"Kernel has bad shape! {tensor.shape} but should be"
-                            f" {(input_size, input_size)}"
-                        )
-                    return lambda: Tensor(func(input_size))
-                case other:
-                    try:
-                        tensor = torch.as_tensor(other)
-                    except Exception as e:
-                        raise TypeError(
-                            f"Cannot convert {other} to a tensor for kernel initialization!"
-                        ) from e
-                    if tensor.shape != (input_size, input_size):
-                        raise ValueError(
-                            f"Kernel has bad shape! {tensor.shape} but should be"
-                            f" {(input_size, input_size)}"
-                        )
-                    return lambda: tensor
-
-        # this looks funny, but it needs to be written that way to be compatible with torchscript
-        def kernel_parametrization_dispatch() -> SelfMap[Tensor]:
-            r"""Dispatch the kernel parametrization."""
-            match kernel_parametrization:
-                case None:
-                    return identity_map
-                case str(key):
-                    return MATRIX_PROJECTION_FNS[key]
-                case Callable() as func:
-                    return func
-                case _:
-                    raise TypeError(f"{type(kernel_parametrization)=} not supported!")
 
         # initialize constants
         self.input_size = input_size
         self.output_size = input_size
-        self.scalar_learnable = scalar_learnable
-        self._kernel_initialization = kernel_initialization_dispatch()
-        self._kernel_parametrization = kernel_parametrization_dispatch()
+        self.use_rezero = use_rezero
+        match kernel_initialization:
+            case nn.Module() as initialization:
+                self.kernel_initialization = initialization
+
+            case Tensor() as tensor:
+                if tensor.shape != (input_size, input_size):
+                    raise ValueError(
+                        f"Kernel has bad shape! {tensor.shape} but should be"
+                        f" {(input_size, input_size)}"
+                    )
+                self.kernel_initialization = ConstantInitialization(tensor)
+
+            case str(key):
+                initialization_cls = resolve_name(INITIALIZATIONS, key)
+
+                try:
+                    initialization = initialization_cls(input_size)  # type: ignore[arg-count]
+                except Exception as exc:
+                    exc.add_note(
+                        f"failed to initialize kernel_initialization {initialization_cls}"
+                    )
+                    raise
+
+                assert isinstance(initialization, nn.Module)
+                self.kernel_initialization = initialization
+
+            case _:
+                raise TypeError(
+                    "kernel_initialization must be a string, tensor, or nn.Module, "
+                    f"got {type(kernel_initialization)!r}."
+                )
 
         # initialize parameters
-        self.scalar = nn.Parameter(
-            torch.tensor(scalar),
-            requires_grad=self.scalar_learnable,
-        )
-        self.weight = nn.Parameter(self._kernel_initialization())
+        self.weight = nn.Parameter(self.kernel_initialization())
+
+        # apply parametrization if given
+        match kernel_parametrization:
+            case None:
+                self.kernel_parametrization = None
+
+            case nn.Module() as parametrization:
+                register_parametrization(self, "weight", parametrization)
+                self.kernel_parametrization = parametrization
+
+            case str(key):
+                parametrization_cls = resolve_name(MATRIX_PROJECTIONS, key)
+
+                try:
+                    parametrization = parametrization_cls()
+                except Exception as exc:
+                    exc.add_note(
+                        f"failed to initialize parametrization {parametrization_cls}"
+                    )
+                    raise
+
+                assert isinstance(parametrization, nn.Module)
+                register_parametrization(self, "weight", parametrization)
+                self.kernel_parametrization = parametrization
+
+            case _:
+                raise TypeError(
+                    "kernel_parametrization must be a string, nn.Module, or None, "
+                    f"got {type(kernel_parametrization)!r}."
+                )
 
         # initialize buffers
-        # NOTE: do we need persistent=False?
-        self.register_buffer("kernel", self.kernel_parametrization(self.weight))
-
-    def kernel_initialization(self) -> Tensor:
-        r"""Draw an initial kernel matrix (random or static)."""
-        return self._kernel_initialization()
-
-    def kernel_parametrization(self, w: Tensor) -> Tensor:
-        r"""Parametrize the Kernel, e.g. by projecting onto skew-symmetric matrices."""
-        return self._kernel_parametrization(w)
+        self.rezero = ReZero() if self.use_rezero else nn.Identity()
+        self.register_buffer("kernel", self.rezero(self.weight))
 
     @signature("[(...), (..., d)] -> (..., d)")
     def step(self, timedeltas: Tensor, x0: Tensor) -> Tensor:
         r"""Propagate the linear ODE for a single time-delta.
 
-        .. math:: step(∆t, x) = e^{ε⋅π(A)∆t}x
+        .. math:: step(∆t, x) = e^{ρ(π(A))∆t}x
         """
         return self.forward(timedeltas.unsqueeze(-1), x0).squeeze(-2)
 
@@ -151,9 +157,9 @@ class LinearFlow(ContinuousFlowBase):
     def forward(self, timedeltas: Tensor, x0: Tensor) -> Tensor:
         r"""Propagate the linear ODE for a sequence of time-deltas.
 
-        .. math:: step(∆tₙ, x) = e^{ε⋅π(A)∆tₙ}x
+        .. math:: step(∆tₙ, x) = e^{ρ(π(A))∆tₙ}x
         """
-        self.kernel = self.scalar * self.kernel_parametrization(self.weight)
+        self.kernel = self.rezero(self.weight)
         Adt = torch.einsum("..., kl -> ...kl", timedeltas, self.kernel)
         expAdt = torch.linalg.matrix_exp(Adt)  # (*bs, n)
         return torch.einsum("...nkl, ...l -> ...nk", expAdt, x0)
@@ -170,6 +176,6 @@ class LinearFlow(ContinuousFlowBase):
 
         .. math::
             ∆tₙ &= tₙ - t₀ \\
-            step(∆tₙ, x) &= e^{ε⋅π(A)∆tₙ}x
+            step(∆tₙ, x) &= e^{ρ(π(A))∆tₙ}x
         """
         return self(timestamps - t0, x0)
