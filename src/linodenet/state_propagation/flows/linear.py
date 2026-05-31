@@ -218,7 +218,7 @@ def linear_flow(
         Mdt = torch.einsum("..., kl -> ...kl", timedeltas, M)
         expMdt = torch.linalg.matrix_exp(Mdt)
         expAdt = expMdt[..., :n, :n]
-        phi1bt = expAdt[..., :n, -1]
+        phi1bt = expMdt[..., :n, -1]
         return torch.einsum("...nkl, ...l -> ...nk", expAdt, x0) + phi1bt
 
 
@@ -243,14 +243,17 @@ class LinearGaussianFlow(ContinuousFlow):
     def forward(
         self, delta_t: Tensor, z_0: tuple[Tensor, Tensor]
     ) -> tuple[Tensor, Tensor]:
+        r"""Propagate the linear-Gaussian system for one or more time-deltas."""
         mu_0, sigma_0 = z_0
         A = self.A
         b = self.b
         Q = self.Q
         zero = torch.zeros_like(A)
         n = A.shape[-1]
+        zero_vec = torch.zeros_like(mu_0)
+        has_bias = b is not None
 
-        if b is None:
+        if not has_bias:
             # [[A, Q], [0, -Aᵀ]]
             # -> [[F, C], [0, F⁻ᵀ]]
             M = torch.cat(
@@ -265,22 +268,23 @@ class LinearGaussianFlow(ContinuousFlow):
             # use augmented block matrix
             # [[A, b, Q], [0, 0, 0], [0, 0, -Aᵀ]]
             # -> [[F, r, C], [0, 1, 0], [0, 0, F⁻ᵀ]]
+            assert b is not None
             b = b.unsqueeze(-1)
-            zero_vec = torch.zeros_like(b)
             M = torch.cat(
                 [
                     torch.cat([A, b, Q], dim=-1),
                     torch.zeros((1, 2 * n + 1), dtype=A.dtype, device=A.device),
-                    torch.cat([zero, zero_vec, -A.mT], dim=-1),
+                    torch.cat([zero, torch.zeros_like(b), -A.mT], dim=-1),
                 ],
                 dim=0,
             )
 
         # exp(M∆t) is a block matrix
-        P = torch.linalg.matrix_exp(M * delta_t)
+        Mdt = torch.einsum("..., kl -> ...kl", delta_t, M)
+        P = torch.linalg.matrix_exp(Mdt)
         F = P[..., :n, :n]
         C = P[..., :n, -n:]
-        r = P[..., :n, n] if b is not None else zero_vec
+        r = P[..., :n, n] if has_bias else zero_vec
 
         mu_t = F @ mu_0 + r
         sigma_t = F @ sigma_0 @ F.mT + C @ F.mT
@@ -289,12 +293,12 @@ class LinearGaussianFlow(ContinuousFlow):
 
 
 def linear_gaussian_flow(
-    A: Tensor,
-    b: Tensor | None,
-    Q: Tensor,
-    delta_t: Tensor,
-    z_0: tuple[Tensor, Tensor],
-) -> tuple[Tensor, Tensor]:
+    A: Tensor,  # (d, d)
+    b: Tensor | None,  # (d,) | None
+    Q: Tensor,  # (d, d)
+    delta_t: Tensor,  # (..., $n)
+    z_0: tuple[Tensor, Tensor],  # (..., d), (..., d, d)
+) -> tuple[Tensor, Tensor]:  # (...., $n, d), (..., $n, d, d)
     r"""Propagate a linear-gaussian system.
 
     .. math:: dZₜ = AZₜdt + bdt + C dWₜ
@@ -302,16 +306,18 @@ def linear_gaussian_flow(
     Given Z₀∼𝓝(μ₀, Σ₀), then Zₜ∼𝓝(μₜ, Σₜ) for all $t$.
     """
     mu_0, sigma_0 = z_0
-    zero = torch.zeros_like(A)
+    zero_mat = torch.zeros_like(sigma_0)
+    zero_vec = torch.zeros_like(mu_0)
     n = A.shape[-1]
+    has_bias = b is not None
 
-    if b is None:
+    if not has_bias:
         # [[A, Q], [0, -Aᵀ]]
         # -> [[F, C], [0, F⁻ᵀ]]
         M = torch.cat(
             [
                 torch.cat([A, Q], dim=-1),
-                torch.cat([zero, -A.mT], dim=-1),
+                torch.cat([zero_mat, -A.mT], dim=-1),
             ],
             dim=0,
         )
@@ -320,22 +326,23 @@ def linear_gaussian_flow(
         # use augmented block matrix
         # [[A, b, Q], [0, 0, 0], [0, 0, -Aᵀ]]
         # -> [[F, r, C], [0, 1, 0], [0, 0, F⁻ᵀ]]
+        assert b is not None
         b = b.unsqueeze(-1)
-        zero_vec = torch.zeros_like(b)
         M = torch.cat(
             [
                 torch.cat([A, b, Q], dim=-1),
                 torch.zeros((1, 2 * n + 1), dtype=A.dtype, device=A.device),
-                torch.cat([zero, zero_vec, -A.mT], dim=-1),
+                torch.cat([zero_mat, torch.zeros_like(b), -A.mT], dim=-1),
             ],
             dim=0,
         )
 
     # exp(M∆t) is a block matrix
-    P = torch.linalg.matrix_exp(M * delta_t)
+    Mdt = torch.einsum("..., kl -> ...kl", delta_t, M)
+    P = torch.linalg.matrix_exp(Mdt)
     F = P[..., :n, :n]
     C = P[..., :n, -n:]
-    r = P[..., :n, n] if b is not None else zero_vec
+    r = P[..., :n, n] if has_bias else zero_vec
 
     mu_t = F @ mu_0 + r
     sigma_t = F @ sigma_0 @ F.mT + C @ F.mT
