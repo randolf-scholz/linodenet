@@ -18,6 +18,7 @@ from linodenet.domains.matrix_tests import is_skew_symmetric
 from linodenet.initializations import SkewSymmetric
 from linodenet.nn.parametrize import is_parametrized
 from linodenet.state_propagation.flows import LinearFlow
+from linodenet.state_propagation.flows.linear import linear_flow
 from linodenet_special import scaled_norm
 from tests.testing import PROJECT, visualize_distribution
 
@@ -55,6 +56,27 @@ def test_linear_flow_module_kernel_initialization() -> None:
     flow = LinearFlow(4, kernel_initialization=SkewSymmetric(4))
 
     assert is_skew_symmetric(flow.weight).item() is True
+
+
+def test_linear_flow_registers_bias_parameter_when_requested() -> None:
+    flow = LinearFlow(4, kernel_initialization=torch.randn(4, 4), use_bias=True)
+
+    assert flow.bias is not None
+    torch.testing.assert_close(flow.bias, torch.zeros(4))
+
+
+def test_linear_flow_with_bias_matches_functional_form() -> None:
+    flow = LinearFlow(4, kernel_initialization=torch.randn(4, 4), use_bias=True)
+    assert flow.bias is not None
+    with torch.no_grad():
+        flow.bias.copy_(torch.randn(4))
+    timedeltas = torch.linspace(0.0, 1.0, 5)
+    x0 = torch.randn(4)
+
+    expected = linear_flow(timedeltas, x0, flow.rezero(flow.weight), flow.bias)
+    actual = flow(timedeltas, x0)
+
+    torch.testing.assert_close(actual, expected)
 
 
 def compute_linode_error(

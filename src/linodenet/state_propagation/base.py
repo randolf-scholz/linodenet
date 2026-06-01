@@ -14,19 +14,19 @@ from torch import Tensor, nn
 from signatures import signature
 
 
-class Propagator(Protocol):
+class Propagator[State](Protocol):
     r"""Protocol for time-indexed state evolution operators."""
 
     input_shape: Final[tuple[int, ...]]
     r"""CONST: The dimensionality of inputs."""
 
     @signature("[(..., $n_deltas), (..., *ds)] -> (..., $n_deltas, *ds)")
-    def __call__(self, delta: Tensor, state: Tensor, /) -> Tensor:
+    def __call__(self, delta: Tensor, state: State, /) -> State:
         r"""Propagate the system state for the requested deltas."""
         ...
 
 
-class PropagatorBase(nn.Module):
+class PropagatorBase[State](nn.Module):
     r"""Abstract base class for time-indexed state evolution operators."""
 
     input_shape: Final[tuple[int, ...]]
@@ -38,6 +38,6 @@ class PropagatorBase(nn.Module):
 
     @abstractmethod
     @signature("[(..., $deltas), (..., *ds)] -> (..., $deltas, *ds)")
-    def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
+    def forward(self, delta: Tensor, state: State, /) -> State:
         r"""Propagate the system state for the requested deltas."""
         ...

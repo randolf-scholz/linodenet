@@ -20,7 +20,7 @@ from linodenet.state_propagation.base import Propagator, PropagatorBase
 from signatures import signature
 
 
-class Flow(Propagator, Protocol):
+class Flow[State: Tensor | tuple[Tensor, ...]](Propagator, Protocol):
     r"""Flows are propagators satisfying a semigoup property.
 
     .. math::
@@ -29,21 +29,21 @@ class Flow(Propagator, Protocol):
     """
 
     @signature("[(..., $n_deltas), (..., *ds)] -> (..., $n_deltas, *ds)")
-    def __call__(self, delta: Tensor, state: Tensor, /) -> Tensor:
+    def __call__(self, delta: Tensor, state: State, /) -> State:
         r"""Propagate the system state for the requested deltas."""
         ...
 
 
-class DiscreteFlow(Flow, Protocol):
+class DiscreteFlow[State: Tensor | tuple[Tensor, ...]](Flow, Protocol):
     r"""Protocol for discrete-time state evolution."""
 
     @signature("[(..., $n_steps), (..., *ds)] -> (..., $n_steps, *ds)")
-    def __call__(self, num_steps: Tensor, state: Tensor, /) -> Tensor:
+    def __call__(self, num_steps: Tensor, state: State, /) -> State:
         r"""Propagate the system for the requested step counts."""
         ...
 
 
-class ContinuousFlow(Flow, Protocol):
+class ContinuousFlow[State: Tensor | tuple[Tensor, ...]](Flow, Protocol):
     r"""Protocol for continuous-time state evolution.
 
     The first argument contains one or more time deltas at which the evolved state
@@ -51,36 +51,36 @@ class ContinuousFlow(Flow, Protocol):
     """
 
     @signature("[(..., $deltas), (..., *ds)] -> (..., $deltas, *ds)")
-    def __call__(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+    def __call__(self, timedeltas: Tensor, state: State, /) -> State:
         r"""Propagate the system for the requested time deltas."""
         ...
 
 
-class FlowBase(PropagatorBase):
+class FlowBase[State: Tensor | tuple[Tensor, ...]](PropagatorBase):
     r"""Abstract base class for time-indexed state evolution operators."""
 
     @abstractmethod
     @signature("[(..., $deltas), (..., *ds)] -> (..., $deltas, *ds)")
-    def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
+    def forward(self, delta: Tensor, state: State, /) -> State:
         r"""Propagate the system state for the requested deltas."""
         ...
 
 
-class DiscreteFlowBase(FlowBase):
+class DiscreteFlowBase[State: Tensor | tuple[Tensor, ...]](FlowBase):
     r"""Abstract base class for discrete-time state evolution."""
 
     @abstractmethod
     @signature("[(..., $n_steps), (..., *ds)] -> (..., $n_steps, *ds)")
-    def forward(self, num_steps: Tensor, state: Tensor, /) -> Tensor:
+    def forward(self, num_steps: Tensor, state: State, /) -> State:
         r"""Propagate the system for the requested step counts."""
         ...
 
 
-class ContinuousFlowBase(FlowBase):
+class ContinuousFlowBase[State: Tensor | tuple[Tensor, ...]](FlowBase):
     r"""Abstract base class for continuous-time state evolution."""
 
     @abstractmethod
     @signature("[(..., $deltas), (..., *ds)] -> (..., $deltas, *ds)")
-    def forward(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+    def forward(self, timedeltas: Tensor, state: State, /) -> State:
         r"""Propagate the system for the requested time deltas."""
         ...
