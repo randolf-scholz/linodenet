@@ -1013,6 +1013,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     NEGATIVE_DEFINITE = NegativeDefinite()  # 𝕊ₙ⁻(ℝ)
     POSITIVE_SEMIDEFINITE = PositiveSemidefinite()  # 𝕊ₙ⁺(ℝ) ∪ {0}
     NEGATIVE_SEMIDEFINITE = NegativeSemidefinite()  # 𝕊ₙ⁻(ℝ) ∪ {0}
+    HURWITZ = Placeholder(name="hurwitz")  # Re(λ) < 0 for all λ ∈ spec(A)
 
     CONTRACTION = Contraction()  # ‖A‖₂ < 1
     SPECTRAL_NORMALIZED = SpectralNormalized()  # ‖A‖₂ = 1
@@ -1162,6 +1163,7 @@ M.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccess
     M.EVEN_SQUARE: {M.SQUARE},
     M.HAMILTONIAN: {M.EVEN_SQUARE, M.TRACELESS},
     M.HANKEL: {M.RECTANGULAR},
+    M.HURWITZ: {M.SQUARE, M.NEGATIVE_DEFINITE},
     M.IDENTITY: {M.POSITIVE_SCALAR_MATRIX},
     M.INVERTIBLE: {M.LEFT_INVERTIBLE, M.RIGHT_INVERTIBLE},
     M.LEFT_INVERTIBLE: {M.TALL},
@@ -1259,6 +1261,7 @@ M.ALIASES = MappingProxyType({
     "hamiltonian"                : M.HAMILTONIAN,
     "hankel"                     : M.HANKEL,
     "householder"                : M.HOUSEHOLDER,
+    "hurwitz"                    : M.HURWITZ,
     "idempotent"                 : M.IDEMPOTENT,
     "identity"                   : M.IDENTITY,
     "intensity"                  : M.INTENSITY,
