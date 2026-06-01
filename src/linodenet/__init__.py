@@ -7,7 +7,6 @@ __all__ = [
     "bijections",
     "distributions",
     "embeddings",
-    "flows",
     "forecasting",
     "initializations",
     "mappings",
@@ -46,6 +45,7 @@ from . import (
     parametrizations,
     registry,
     regularizations,
+    state_propagation,
     state_update,
     testing,
     types,
@@ -59,5 +59,4 @@ from .mappings import (
     surjections,
     transforms,
 )
-from .state_propagation import flows
 from .state_update import imputation

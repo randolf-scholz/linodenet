@@ -15,7 +15,7 @@ from torch import Tensor, nn
 from blueprint import Blueprint, ObjectBlueprint, initialize
 from linodenet.mappings import ConcatEmbedding, ConcatProjection
 from linodenet.nn import ResNet
-from linodenet.state_propagation.flows import LinearFlow
+from linodenet.state_propagation import LinearFlow
 from linodenet_special import pad
 from signatures import signature
 

@@ -7,7 +7,7 @@ import pytest
 import torch
 from scipy.integrate import solve_ivp
 
-from linodenet.state_propagation.flows.linear import (
+from linodenet.state_propagation import (
     linear_flow,
     linear_gaussian_flow,
 )

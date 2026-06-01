@@ -34,7 +34,8 @@ from linodenet.regularizations import (
     Regularization,
     RegularizationBase,
 )
-from linodenet.state_propagation.flows import FLOWS, Flow, FlowBase
+from linodenet.state_propagation import FLOWS
+from linodenet.state_propagation.base import Flow
 from linodenet.state_update.imputation import IMPUTERS, ImputerProtocol
 
 
@@ -55,7 +56,7 @@ CASES: dict[str, Case] = {
     "distributions"       : Case(lib.distributions    , Distribution   , DistributionBase   , DISTRIBUTIONS      ),
     "embeddings"          : Case(lib.embeddings       , Embedding      , nn.Module          , EMBEDDINGS         ),
     "surjections"         : Case(lib.surjections      , Surjection     , nn.Module          , SURJECTIONS        ),
-    "flows"               : Case(lib.flows            , Flow           , FlowBase           , FLOWS              ),
+    "flows"               : Case(lib.state_propagation, Flow           , nn.Module          , FLOWS              ),
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
     "initializations"     : Case(lib.initializations, Initialization, None, INITIALIZATION_FNS),
     # "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_TESTS       ),

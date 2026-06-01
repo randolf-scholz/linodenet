@@ -17,8 +17,7 @@ from tqdm.autonotebook import trange
 from linodenet.domains.matrix_tests import is_skew_symmetric
 from linodenet.initializations import SkewSymmetric
 from linodenet.nn.parametrize import is_parametrized
-from linodenet.state_propagation.flows import LinearFlow
-from linodenet.state_propagation.flows.linear import linear_flow
+from linodenet.state_propagation import LinearFlow, linear_flow
 from linodenet_special import scaled_norm
 from tests.testing import PROJECT, visualize_distribution
 

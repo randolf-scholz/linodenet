@@ -20,7 +20,7 @@ from linodenet.nn.parametrize import register_parametrization
 from linodenet.utils import resolve_name
 from signatures import signature
 
-from .base import ContinuousFlowBase
+from .base import ContinuousFlow
 
 
 @signature("[(..., $n), (..., d), (d, d), (d,)?] -> (..., $n, d)")
@@ -126,7 +126,7 @@ def linear_gaussian_flow(
     return mu_t, sigma_t
 
 
-class LinearFlow(ContinuousFlowBase):
+class LinearFlow(nn.Module, ContinuousFlow):
     r"""Linear Flow, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}xₜ$.
 
     This is augmented by 2 techniques:
@@ -184,7 +184,8 @@ class LinearFlow(ContinuousFlowBase):
         use_bias: bool = False,
     ) -> None:
         r"""Initialize the Linear ODE Cell."""
-        super().__init__(input_shape=(input_size,))
+        super().__init__()
+        ContinuousFlow.__init__(self, input_shape=(input_size,))
 
         # initialize constants
         self.input_size = input_size
@@ -299,7 +300,7 @@ class LinearFlow(ContinuousFlowBase):
         return self(timestamps - t0, x0)
 
 
-class LinearGaussianFlow(ContinuousFlowBase):
+class LinearGaussianFlow(nn.Module, ContinuousFlow):
     r"""Implements the propagation of a Normal distribution under linear ODE/SDE.
 
     That is, $z₀∼𝓝(μ₀, Σ₀)$ is propagated under the linear ODE/SDE
@@ -325,7 +326,9 @@ class LinearGaussianFlow(ContinuousFlowBase):
     Q: Tensor  # C = √Q
 
     def __init__(self, input_size: int) -> None:
-        super().__init__(input_shape=(input_size,))
+        super().__init__()
+        ContinuousFlow.__init__(self, input_shape=(input_size,))
+
         self.input_size = input_size
         self.A = nn.Parameter(torch.randn(input_size, input_size))
         self.Q = nn.Parameter(torch.randn(input_size, input_size))
