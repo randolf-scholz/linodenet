@@ -272,7 +272,7 @@ class ContinuousKalmanFilter(nn.Module):
         posterior_predicted_means: list[Tensor] = []
         posterior_predicted_covariances: list[Tensor] = []
 
-        M = torch.cat(
+        M = torch.cat(  # [[F, Q], [0, -Fᵀ]]
             [  # [2n, 2n]
                 torch.cat([F, Q], dim=-1),
                 torch.cat([torch.zeros_like(F), -F.transpose(-1, -2)], dim=-1),
