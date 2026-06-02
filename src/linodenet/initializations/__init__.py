@@ -21,10 +21,11 @@ __all__ = [
     # extra
     "thomson_initialization",
     "wide_angle_sphere_init",
+    "resolve_kernel_initialization",
 ]
 
 from . import functional, modules
-from .base import Initialization, InitializationFn
+from .base import Initialization, InitializationFn, resolve_kernel_initialization
 from .functional import *
 from .modules import *
 from .thomson_initialization import thomson_initialization, wide_angle_sphere_init

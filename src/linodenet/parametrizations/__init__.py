@@ -11,6 +11,8 @@ __all__ = [
     "MATRIX_PARAMETRIZATIONS",
     "VECTOR_PARAMETRIZATIONS",
     "TENSOR_PARAMETRIZATIONS",
+    # utils
+    "resolve_matrix_parametrization",
 ]
 
 from linodenet.nn import parametrize
@@ -26,6 +28,7 @@ from . import (
 from .exponential_maps import *
 from .matrix_parametrizations import *
 from .tensor_parametrizations import *
+from .utils import resolve_matrix_parametrization
 from .vector_parametrizations import *
 
 __all__ += parametrize.__all__

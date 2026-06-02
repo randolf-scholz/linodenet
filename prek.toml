@@ -104,7 +104,7 @@ hooks = [
         files = "^src/",
         args = [
             "--max-positional-args",
-            "4",
+            "5",
             "--ignore-names",
             "forward",
             "backward",

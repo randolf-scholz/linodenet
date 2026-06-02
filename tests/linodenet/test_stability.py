@@ -8,7 +8,7 @@ import torch
 from linodenet.forecasting import LinODEnet
 from linodenet.mappings import embeddings
 from linodenet.nn import ResNet
-from linodenet.state_propagation import flows
+from linodenet.state_propagation import LinearFlow
 from linodenet.state_update import deprecated
 
 
@@ -26,8 +26,8 @@ def test_model_stability() -> None:
         "embedding_type": "concat",
         "Filter": deprecated.UpdateList,
         "System": {
-            "__module__": flows.LinearFlow.__module__,
-            "__name__": flows.LinearFlow.__qualname__,
+            "__module__": LinearFlow.__module__,
+            "__name__": LinearFlow.__qualname__,
             "kernel_initialization": "skew-symmetric",
         },
         "Encoder": ResNet,

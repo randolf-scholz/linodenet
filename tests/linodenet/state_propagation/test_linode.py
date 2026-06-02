@@ -17,7 +17,7 @@ from tqdm.autonotebook import trange
 from linodenet.domains.matrix_tests import is_skew_symmetric
 from linodenet.initializations import SkewSymmetric
 from linodenet.nn.parametrize import is_parametrized
-from linodenet.state_propagation import LinearFlow, linear_flow
+from linodenet.state_propagation import LinearFlow, LinearGaussianFlow, linear_flow
 from linodenet_special import scaled_norm
 from tests.testing import PROJECT, visualize_distribution
 
@@ -76,6 +76,37 @@ def test_linear_flow_with_bias_matches_functional_form() -> None:
     actual = flow(timedeltas, x0)
 
     torch.testing.assert_close(actual, expected)
+
+
+def test_linear_gaussian_flow_registers_kernel_parametrization() -> None:
+    flow = LinearGaussianFlow(
+        4,
+        kernel_initialization=torch.randn(4, 4),
+        kernel_parametrization="skew-symmetric",
+    )
+
+    assert is_parametrized(flow, "A")
+    assert is_skew_symmetric(flow.A).item() is True
+
+
+def test_linear_gaussian_flow_skips_kernel_parametrization_by_default() -> None:
+    flow = LinearGaussianFlow(4, kernel_initialization=torch.randn(4, 4))
+
+    assert not is_parametrized(flow, "A")
+
+
+def test_linear_gaussian_flow_tensor_kernel_initialization_uses_constant() -> None:
+    weight = torch.randn(4, 4)
+
+    flow = LinearGaussianFlow(4, kernel_initialization=weight)
+
+    assert torch.equal(flow.A, weight)
+
+
+def test_linear_gaussian_flow_module_kernel_initialization() -> None:
+    flow = LinearGaussianFlow(4, kernel_initialization=SkewSymmetric(4))
+
+    assert is_skew_symmetric(flow.A).item() is True
 
 
 def compute_linode_error(

@@ -12,12 +12,11 @@ from typing import Final, Optional
 import torch
 from torch import Tensor, nn
 
-from linodenet.initializations import INITIALIZATIONS
-from linodenet.initializations.modules import Constant as ConstantInitialization
-from linodenet.mappings import MATRIX_PROJECTIONS, PositiveDefinite
+from linodenet.initializations import resolve_kernel_initialization
+from linodenet.mappings import PositiveDefinite
 from linodenet.nn import ReZero
 from linodenet.nn.parametrize import register_parametrization
-from linodenet.utils import resolve_name
+from linodenet.parametrizations import resolve_matrix_parametrization
 from signatures import signature
 
 from .base import ContinuousFlow
@@ -192,37 +191,9 @@ class LinearFlow(nn.Module, ContinuousFlow):
         self.output_size = input_size
         self.use_rezero = use_rezero
         self.use_bias = use_bias
-        match kernel_initialization:
-            case nn.Module() as initialization:
-                self.kernel_initialization = initialization
-
-            case Tensor() as tensor:
-                if tensor.shape != (input_size, input_size):
-                    raise ValueError(
-                        f"Kernel has bad shape! {tensor.shape} but should be"
-                        f" {(input_size, input_size)}"
-                    )
-                self.kernel_initialization = ConstantInitialization(tensor)
-
-            case str(key):
-                initialization_cls = resolve_name(INITIALIZATIONS, key)
-
-                try:
-                    initialization = initialization_cls(input_size)  # type: ignore[arg-count]
-                except Exception as exc:
-                    exc.add_note(
-                        f"failed to initialize kernel_initialization {initialization_cls}"
-                    )
-                    raise
-
-                assert isinstance(initialization, nn.Module)
-                self.kernel_initialization = initialization
-
-            case _:
-                raise TypeError(
-                    "kernel_initialization must be a string, tensor, or nn.Module, "
-                    f"got {type(kernel_initialization)!r}."
-                )
+        self.kernel_initialization = resolve_kernel_initialization(
+            input_size, kernel_initialization
+        )
 
         # initialize parameters
         self.weight = nn.Parameter(self.kernel_initialization())
@@ -232,34 +203,10 @@ class LinearFlow(nn.Module, ContinuousFlow):
         )
 
         # apply parametrization if given
-        match kernel_parametrization:
-            case None:
-                self.kernel_parametrization = None
-
-            case nn.Module() as parametrization:
-                register_parametrization(self, "weight", parametrization)
-                self.kernel_parametrization = parametrization
-
-            case str(key):
-                parametrization_cls = resolve_name(MATRIX_PROJECTIONS, key)
-
-                try:
-                    parametrization = parametrization_cls()
-                except Exception as exc:
-                    exc.add_note(
-                        f"failed to initialize parametrization {parametrization_cls}"
-                    )
-                    raise
-
-                assert isinstance(parametrization, nn.Module)
-                register_parametrization(self, "weight", parametrization)
-                self.kernel_parametrization = parametrization
-
-            case _:
-                raise TypeError(
-                    "kernel_parametrization must be a string, nn.Module, or None, "
-                    f"got {type(kernel_parametrization)!r}."
-                )
+        self.kernel_parametrization = resolve_matrix_parametrization(
+            kernel_parametrization
+        )
+        register_parametrization(self, "weight", self.kernel_parametrization)
 
         # initialize buffers
         self.rezero = ReZero() if self.use_rezero else nn.Identity()
@@ -324,13 +271,39 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
     A: Tensor
     b: Tensor | None
     Q: Tensor  # C = √Q
+    kernel_initialization: nn.Module
+    r"""MODULE: Optional Initialization of the drift kernel."""
+    kernel_parametrization: nn.Module | None
+    r"""MODULE: Optional parametrization of the drift kernel."""
 
-    def __init__(self, input_size: int) -> None:
+    @property
+    def config(self) -> dict:
+        return {
+            "input_size": self.input_size,
+            "kernel_initialization": self.kernel_initialization,
+            "kernel_parametrization": self.kernel_parametrization,
+        }
+
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        kernel_initialization: str | Tensor | nn.Module = "skew-symmetric",
+        kernel_parametrization: Optional[str | nn.Module] = None,
+    ) -> None:
         super().__init__()
         ContinuousFlow.__init__(self, input_shape=(input_size,))
 
         self.input_size = input_size
-        self.A = nn.Parameter(torch.randn(input_size, input_size))
+        self.kernel_initialization = resolve_kernel_initialization(
+            input_size, kernel_initialization
+        )
+
+        self.A = nn.Parameter(self.kernel_initialization())
+        self.kernel_parametrization = resolve_matrix_parametrization(
+            kernel_parametrization
+        )
+        register_parametrization(self, "A", self.kernel_parametrization)
         self.Q = nn.Parameter(torch.randn(input_size, input_size))
         self.b = nn.Parameter(torch.randn(input_size))
         register_parametrization(self, "Q", PositiveDefinite())

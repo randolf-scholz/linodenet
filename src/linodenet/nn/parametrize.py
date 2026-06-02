@@ -206,7 +206,6 @@ def is_parametrized(
     )
 
 
-# region base classes ------------------------------------------------------------------
 class _post_init_hook(type(Protocol)):  # pyrefly: ignore[invalid-inheritance]
     r"""Metclass that adds a ``__post_init__`` hook to class initialization."""
 
@@ -401,14 +400,11 @@ def _insert_right_inverse(arg: nn.Module | None, /) -> nn.Module | None:
     return arg
 
 
-# endregion base classes ---------------------------------------------------------------
-
-
 # region torch replacements  -----------------------------------------------------------
 def register_parametrization(
     module: nn.Module,
     tensor_name: str,
-    parametrization: nn.Module,
+    parametrization: nn.Module | None,
     *,
     unsafe: bool = False,
 ) -> None:
@@ -466,15 +462,13 @@ def register_parametrization(
                 f"Expected a {ParametrizationList!s}, but got {type(other)}!"
             )
 
-    # wrap the parametrization if needed
-    # parametrization = parametrized(original, parametrization, unsafe=unsafe)
-    assert isinstance(parametrization, nn.Module)
-    # assert is_parametrization(parametrization)
-    if not unsafe:
-        assert_is_safe_parametrization(parametrization, original)
+    if isinstance(parametrization, nn.Module):
+        if not unsafe:
+            assert_is_safe_parametrization(parametrization, original)
 
-    # append the parametrization to the list
-    params_list.append(parametrization)
+        # append the parametrization to the list
+        params_list.append(parametrization)
+
     params_list.update_parametrization()
 
     # re-set the buffer
