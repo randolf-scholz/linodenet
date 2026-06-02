@@ -23,7 +23,7 @@ from torch import Tensor, nn
 from linodenet.nn import ModuleSequence
 from signatures import signature
 
-from .base import AbstractStateUpdate, StateUpdaterBase
+from .base import AbstractStateUpdate, VectorStateUpdaterBase
 from .kalman import _Alpha
 
 
@@ -63,7 +63,7 @@ class SquareStateUpdater(AbstractSquareStateUpdate[Tensor], Protocol):
     def __call__(self, y_obs: Tensor, y_pred: Tensor, /) -> Tensor: ...
 
 
-class SquareStateUpdaterBase(StateUpdaterBase):
+class SquareStateUpdaterBase(VectorStateUpdaterBase):
     r"""Base class for square state updaters.
 
     This base class is specialized to the case when X=Y=Tensor, and the arguments
@@ -109,7 +109,7 @@ def is_square_state_updater(arg: object, /) -> TypeIs[SquareStateUpdater]:
     )
 
 
-class UpdateList[C: StateUpdaterBase](SquareStateUpdaterBase, ModuleSequence[C]):
+class UpdateList[C: VectorStateUpdaterBase](SquareStateUpdaterBase, ModuleSequence[C]):
     r"""Base class for deprecated `nn.ModuleList` state updaters.
 
     Note: This class takes care of tricky multiple inheritance issues with nn.Module.
@@ -135,7 +135,7 @@ class UpdateList[C: StateUpdaterBase](SquareStateUpdaterBase, ModuleSequence[C])
     def forward(self, y_obs: Tensor, y_hat: Tensor, /) -> Tensor: ...
 
 
-class UpdateSequence[C: StateUpdaterBase](UpdateList[C]):
+class UpdateSequence[C: VectorStateUpdaterBase](UpdateList[C]):
     r"""Apply multiple deprecated state updaters sequentially."""
 
     def __init__(self, modules: Iterable[C] = ()) -> None:
@@ -166,7 +166,7 @@ class UpdateSequence[C: StateUpdaterBase](UpdateList[C]):
         return y
 
 
-class UpdateResNet[C: StateUpdaterBase](UpdateSequence[C]):
+class UpdateResNet[C: VectorStateUpdaterBase](UpdateSequence[C]):
     r"""Sequential state update with residual connections.
 
     .. math:: yₖ₊₁ = yₖ + Fₖ(y_obs, yₖ)
@@ -179,7 +179,7 @@ class UpdateResNet[C: StateUpdaterBase](UpdateSequence[C]):
         return y
 
 
-class ReZeroUpdate[C: StateUpdaterBase](UpdateSequence[C]):
+class ReZeroUpdate[C: VectorStateUpdaterBase](UpdateSequence[C]):
     r"""Sequential state update with ReZero connections.
 
     .. math:: xₖ₊₁ = xₖ + εₖ⋅Fₖ(y, xₖ)
@@ -221,7 +221,7 @@ class ReZeroUpdate[C: StateUpdaterBase](UpdateSequence[C]):
         return y
 
 
-class PseudoKalmanUpdate(StateUpdaterBase):
+class PseudoKalmanUpdate(VectorStateUpdaterBase):
     r"""A linear, autoregressive state update.
 
     .. math::  x̂' = x̂ - αP∏ₘᵀP⁻¹Πₘ(x̂ - x)

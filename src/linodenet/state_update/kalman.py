@@ -63,7 +63,7 @@ from torch import Tensor, nn
 
 from signatures import signature
 
-from .base import StateUpdaterBase
+from .base import VectorStateUpdate
 
 
 class _Alpha(float, Enum):
@@ -78,7 +78,7 @@ class _Alpha(float, Enum):
         return float(arg)
 
 
-class PseudoKalmanUpdate(StateUpdaterBase):
+class PseudoKalmanUpdate(nn.Module, VectorStateUpdate):
     r"""Implements a Kalman-inspired state update.
 
     This module does not learn a single covariance but two separate matrices $A$
@@ -167,7 +167,7 @@ class PseudoKalmanUpdate(StateUpdaterBase):
         return x - self.alpha * z
 
 
-class NonLinearKalmanUpdate(StateUpdaterBase):
+class NonLinearKalmanUpdate(nn.Module, VectorStateUpdate):
     r"""A Kalman-inspired nonlinear state update.
 
     We assume that $y = h(x)$ and $y = H⋅x$ in the linear case. We adapt  the formula
@@ -267,7 +267,7 @@ class NonLinearKalmanUpdate(StateUpdaterBase):
         return torch.einsum("ij, ...j -> ...i", self.B, q)
 
 
-class NonLinearUpdate(StateUpdaterBase):
+class NonLinearUpdate(nn.Module, VectorStateUpdate):
     r"""Nonlinear layers stacked on top of a linear core."""
 
     # PARAMETERS

@@ -32,30 +32,19 @@ Example:
 __all__ = [
     # Protocols
     "AbstractStateUpdate",
-    "StateUpdater",
-    # ABCs.
-    "StateUpdaterBase",
+    "VectorStateUpdate",
     # classes
-    "StateUpdaterList",
     "CellSequence",
     "ResidualCellSequence",
     "ResidualCell",
     "MissingValueCell",
     # functions
-    "is_state_updater",
+    "is_vector_state_updater",
     "is_idempotent_update",
 ]
 
-from abc import abstractmethod
 from collections.abc import Iterable, Mapping
-from typing import (
-    Any,
-    Final,
-    Protocol,
-    TypeIs,
-    cast,
-    runtime_checkable,
-)
+from typing import Any, Final, Protocol, TypeIs, cast
 
 import torch
 from torch import Tensor, nn
@@ -77,7 +66,6 @@ from .imputation import (
 )
 
 
-@runtime_checkable
 class AbstractStateUpdate[X, Y](Protocol):
     r"""Abstract protocol for state-update callbacks.
 
@@ -87,8 +75,7 @@ class AbstractStateUpdate[X, Y](Protocol):
     def __call__(self, y: Y, x: X, /) -> X: ...
 
 
-@runtime_checkable
-class StateUpdater(AbstractStateUpdate[Tensor, Tensor], Protocol):
+class VectorStateUpdate(AbstractStateUpdate[Tensor, Tensor], Protocol):
     r"""Protocol for vector-valued state updaters.
 
     .. math::  x' = F(y, x)
@@ -98,7 +85,6 @@ class StateUpdater(AbstractStateUpdate[Tensor, Tensor], Protocol):
     hidden_size: Final[int]
 
     def __init__(self, /, input_size: int, hidden_size: int) -> None:
-        super().__init__()
         self.input_size = int(input_size)
         self.hidden_size = int(hidden_size)
 
@@ -106,67 +92,17 @@ class StateUpdater(AbstractStateUpdate[Tensor, Tensor], Protocol):
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor: ...
 
 
-class StateUpdaterBase(nn.Module, StateUpdater):
-    r"""Base class for state updaters.
-
-    This base class is specialized to the case when X=Y=Tensor, and the arguments
-    are vectors.
-
-    .. math::  x' = F(y, x)
-    """
-
-    def __init__(self, /, input_size: int, hidden_size: int) -> None:
-        # ⚠️ multiple inheritance ⚠️
-        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        nn.Module.__init__(self)
-        StateUpdater.__init__(self, input_size, hidden_size)
-
-    @abstractmethod
-    @signature("[(..., d), (..., h)] -> (..., h)")
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the state updater.
-
-        Args:
-            y: The current measurement of the system.
-            x: The current estimation of the hidden state of the system.
-
-        Returns:
-            The updated state of the system.
-        """
-        ...
-
-
-def is_state_updater(arg: object, /) -> TypeIs[StateUpdater]:
+def is_vector_state_updater(arg: object, /) -> TypeIs[VectorStateUpdate]:
     r"""Check whether an object is a state updater."""
-    input_size = getattr(arg, "input_size", None)
-    hidden_size = getattr(arg, "hidden_size", None)
-    return isinstance(input_size, int) and isinstance(hidden_size, int)
+    return (
+        callable(arg)
+        and isinstance(getattr(arg, "input_size", None), int)
+        and isinstance(getattr(arg, "hidden_size", None), int)
+    )
 
 
-class StateUpdaterList[C: StateUpdaterBase](StateUpdaterBase, ModuleSequence[C]):
-    r"""Base class for `nn.ModuleList` of state updaters that is itself a state updater.
-
-    Note: This class takes care of tricky multiple inheritance issues with nn.Module.
-    """
-
-    def __init__(
-        self, modules: Iterable[C] = (), /, *, input_size: int, hidden_size: int
-    ) -> None:
-        # ⚠️ multiple inheritance ⚠️
-        # due to how nn.Module.__init__ works, it should only be ever called once
-        # because it will overwrite internal state otherwise.
-        # Therefore, we need to carefully manually reproduce the __init__ logic here.
-        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[C].__init__(self, modules)
-        # Note: Need to call StateUpdater.__init__, not StateUpdaterBase.__init__
-        #   Otherwise nn.Module.__init__ gets called twice!
-        StateUpdater.__init__(self, input_size, hidden_size)
-
-    @abstractmethod
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor: ...
-
-
-class CellSequence[C: StateUpdaterBase](StateUpdaterList[C]):
+# TODO: use Intersection type
+class CellSequence[C: VectorStateUpdate](ModuleSequence[C], VectorStateUpdate):  # type: ignore[bad-specialization]
     r"""Apply multiple state updaters sequentially.
 
     .. math:: xₖ₊₁ = Fₖ(y, xₖ)
@@ -192,7 +128,13 @@ class CellSequence[C: StateUpdaterBase](StateUpdaterList[C]):
                     f"Expected {hidden_size}, but {module=} has {module.hidden_size}"
                 )
 
-        super().__init__(cells, input_size=input_size, hidden_size=hidden_size)
+        # ⚠️ multiple inheritance ⚠️
+        # due to how nn.Module.__init__ works, it should only be ever called once
+        # because it will overwrite internal state otherwise.
+        # Therefore, we need to carefully manually reproduce the __init__ logic here.
+        assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
+        super().__init__(cells)
+        VectorStateUpdate.__init__(self, input_size, hidden_size)
 
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -201,31 +143,7 @@ class CellSequence[C: StateUpdaterBase](StateUpdaterList[C]):
         return x
 
 
-class ResidualCell[C: StateUpdater](StateUpdaterBase):
-    r"""Residual wrapper for state updaters.
-
-    .. math:: x' = x - ρ(F(y, x))
-
-    where $F$ is a state updater and $ρ$ is an optional gate.
-    """
-
-    cell: C
-    gate: nn.Module
-
-    def __init__(self, cell: C, gate: str | nn.Module | None = None) -> None:
-        super().__init__(
-            input_size=cell.input_size,
-            hidden_size=cell.hidden_size,
-        )
-        self.cell = cell
-        self.gate = resolve_gate(gate)
-
-    @signature("[(..., d), (..., h)] -> (..., h)")
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
-        return x - self.gate(self.cell(y, x))
-
-
-class ResidualCellSequence[C: StateUpdaterBase](CellSequence[C]):
+class ResidualCellSequence[C: VectorStateUpdate](CellSequence[C]):
     r"""Sequential state updater with residual connections.
 
     .. math:: xₖ₊₁ = xₖ - αₖ⋅Fₖ(y, xₖ)
@@ -262,7 +180,31 @@ class ResidualCellSequence[C: StateUpdaterBase](CellSequence[C]):
         return x
 
 
-class MissingValueCell(StateUpdaterBase):
+class ResidualCell[C: VectorStateUpdate](nn.Module, VectorStateUpdate):
+    r"""Residual wrapper for state updaters.
+
+    .. math:: x' = x - ρ(F(y, x))
+
+    where $F$ is a state updater and $ρ$ is an optional gate.
+    """
+
+    cell: C
+    gate: nn.Module
+
+    def __init__(self, cell: C, gate: str | nn.Module | None = None) -> None:
+        super().__init__()
+        VectorStateUpdate.__init__(
+            self, input_size=cell.input_size, hidden_size=cell.hidden_size
+        )
+        self.cell = cell
+        self.gate = resolve_gate(gate)
+
+    @signature("[(..., d), (..., h)] -> (..., h)")
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+        return x - self.gate(self.cell(y, x))
+
+
+class MissingValueCell(nn.Module, VectorStateUpdate):
     r"""Wraps an existing state updater $F$ so that it can handle missing values.
 
     .. math:: x' &= F(u，x)   &   (u, m) = impute(y, x)
@@ -309,12 +251,13 @@ class MissingValueCell(StateUpdaterBase):
         input_size: int,
         hidden_size: int,
         *,
-        filter_type: type[StateUpdater],
+        filter_type: type[VectorStateUpdate],
         filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
         concat_mask: bool = True,
         imputation: str | float | Tensor | nn.Module = "zero",
     ) -> None:
-        super().__init__(input_size=input_size, hidden_size=hidden_size)
+        super().__init__()
+        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
         self.filter_type = filter_type
         self.filter_kwargs = dict(filter_kwargs)
         self.imputation = imputation
@@ -374,7 +317,7 @@ class MissingValueCell(StateUpdaterBase):
 
 
 def is_idempotent_update(
-    update: StateUpdater,
+    update: VectorStateUpdate,
     /,
     *,
     batch_shape: tuple[int, ...] = (8,),

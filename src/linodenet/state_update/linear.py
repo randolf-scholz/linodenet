@@ -22,10 +22,10 @@ from linodenet.nn.parametrize import register_parametrization
 from linodenet.nn.rezero import ReZero, resolve_gate
 from signatures import signature
 
-from .base import StateUpdaterBase
+from .base import VectorStateUpdate
 
 
-class LinearCell(StateUpdaterBase):
+class LinearCell(nn.Module, VectorStateUpdate):
     r"""Linear innovation state update.
 
     .. math:: x' = x - ρ(K(x)⋅(h(x) - y))
@@ -134,7 +134,8 @@ class LinearCell(StateUpdaterBase):
         gate: str | nn.Module | None = "rezero",
         observation_map: str | nn.Module = "linear",
     ) -> None:
-        super().__init__(input_size=input_size, hidden_size=hidden_size)
+        super().__init__()
+        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
         self.gate = resolve_gate(gate)
 
         match gain:
@@ -184,7 +185,7 @@ class LinearCell(StateUpdaterBase):
         return x - self.gate(correction)
 
 
-class KalmanCell(StateUpdaterBase):
+class KalmanCell(nn.Module, VectorStateUpdate):
     r"""Kalman-style hidden-state update with masked observations.
 
     .. math::
@@ -248,7 +249,8 @@ class KalmanCell(StateUpdaterBase):
         gate: str | nn.Module | None = "rezero",
         observation_map: str | nn.Module = "linear",
     ) -> None:
-        super().__init__(input_size=input_size, hidden_size=hidden_size)
+        super().__init__()
+        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
         m = self.hidden_size
         n = self.input_size
         self.gate = resolve_gate(gate)
@@ -375,7 +377,7 @@ class KalmanCell(StateUpdaterBase):
         return x - self.gate(d)
 
 
-class LinearRNNCell(StateUpdaterBase):
+class LinearRNNCell(nn.Module, VectorStateUpdate):
     r"""Linear state update.
 
     .. math:: F(y，x) =  Ux + Vy + b
@@ -399,7 +401,8 @@ class LinearRNNCell(StateUpdaterBase):
         *,
         bias: bool = True,
     ) -> None:
-        super().__init__(input_size, hidden_size)
+        super().__init__()
+        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
         m = self.hidden_size
         n = self.input_size
         self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
