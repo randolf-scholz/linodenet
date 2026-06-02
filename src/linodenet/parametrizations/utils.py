@@ -2,6 +2,7 @@ r"""Utilities for parametrization."""
 
 __all__ = ["resolve_matrix_parametrization"]
 
+import importlib
 from typing import Optional
 
 from torch import nn
@@ -22,7 +23,10 @@ def resolve_matrix_parametrization(
 
         case str(key):
             assert __package__ is not None
-            pkg = __import__(__package__)
+            # __import__("a.b") returns the top-level package ("a") by
+            # default. Use importlib.import_module to get the requested
+            # package/submodule (e.g. "linodenet.parametrizations").
+            pkg = importlib.import_module(__package__)
             parametrization_cls = resolve_name(pkg.MATRIX_PARAMETRIZATIONS, key)
 
             try:

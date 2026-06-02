@@ -6,6 +6,7 @@ __all__ = [
     "resolve_kernel_initialization",
 ]
 
+import importlib
 from collections.abc import Callable
 from typing import Concatenate, Optional, Protocol
 
@@ -54,7 +55,7 @@ def resolve_kernel_initialization(
 
         case str(key):
             assert __package__ is not None
-            pkg = __import__(__package__)
+            pkg = importlib.import_module(__package__)
             initialization_cls = resolve_name(pkg.INITIALIZATIONS, key)
 
             try:

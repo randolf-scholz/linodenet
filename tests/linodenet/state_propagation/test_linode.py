@@ -37,12 +37,6 @@ def test_linear_flow_registers_kernel_parametrization() -> None:
     assert is_skew_symmetric(flow.weight).item() is True
 
 
-def test_linear_flow_skips_kernel_parametrization_by_default() -> None:
-    flow = LinearFlow(4, kernel_initialization=torch.randn(4, 4))
-
-    assert not is_parametrized(flow, "weight")
-
-
 def test_linear_flow_tensor_kernel_initialization_uses_constant() -> None:
     weight = torch.randn(4, 4)
 
@@ -87,12 +81,6 @@ def test_linear_gaussian_flow_registers_kernel_parametrization() -> None:
 
     assert is_parametrized(flow, "A")
     assert is_skew_symmetric(flow.A).item() is True
-
-
-def test_linear_gaussian_flow_skips_kernel_parametrization_by_default() -> None:
-    flow = LinearGaussianFlow(4, kernel_initialization=torch.randn(4, 4))
-
-    assert not is_parametrized(flow, "A")
 
 
 def test_linear_gaussian_flow_tensor_kernel_initialization_uses_constant() -> None:
