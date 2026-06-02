@@ -62,6 +62,7 @@ REGULARIZATION_FNS: dict[str, Regularization | RegularizationWithArgs] = {
 }
 r"""Dictionary of all available regularizations (function)."""
 
+# TODO: Use Intersection type with nn.Module
 REGULARIZATIONS: dict[str, type[Regularization]] = {
     "Banded"               : modules.Banded,
     "Contraction"          : modules.Contraction,

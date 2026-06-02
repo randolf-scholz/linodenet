@@ -6,8 +6,6 @@ Notes:
 """
 
 __all__ = [
-    # ABCs & Protocols
-    "RegularizationBase",
     # Regularizations
     "Banded",
     "Contraction",
@@ -34,7 +32,6 @@ __all__ = [
     "UnitVector",
 ]
 
-from abc import abstractmethod
 from typing import Final
 
 import torch
@@ -43,51 +40,12 @@ from torch import Tensor, nn
 from linodenet.types import BoolTensor
 from signatures import signature
 
-from .functional import (
-    banded,
-    contraction,
-    diagonal,
-    diagonally_dominant,
-    hamiltonian,
-    identity,
-    lipschitz_bounded,
-    log_det_exp,
-    low_rank,
-    lower_triangular,
-    masked,
-    matrix_norm,
-    normal,
-    orthogonal,
-    rank_one,
-    skew_symmetric,
-    spectral_normalized,
-    symmetric,
-    symplectic,
-    traceless,
-    tridiagonal,
-    unit_vector,
-    upper_triangular,
-)
-
-
-class RegularizationBase(nn.Module):
-    r"""Abstract Base Class for Regularization components."""
-
-    @abstractmethod
-    @signature("(..., *ds) -> (...)")
-    def forward(self, x: Tensor, /) -> Tensor:
-        r"""Forward pass of the regularization.
-
-        Args:
-            x: The input tensor to be regularized.
-
-        Returns:
-            r: The (scalar) regularization value .
-        """
+from . import functional as F
+from .functional import Regularization
 
 
 # region regularizations ---------------------------------------------------------------
-class LogDetExp(RegularizationBase):
+class LogDetExp(nn.Module, Regularization):
     r"""Bias $\det(eᴬ)$ towards 1.
 
     By Jacobi's formula
@@ -110,10 +68,10 @@ class LogDetExp(RegularizationBase):
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias $\det(eᴬ)$ towards 1."""
-        return log_det_exp(x, p=self.p, size_normalize=self.size_normalize)
+        return F.log_det_exp(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class MatrixNorm(RegularizationBase):
+class MatrixNorm(nn.Module, Regularization):
     r"""Return the matrix regularization term."""
 
     p: Final[str | int]
@@ -127,11 +85,11 @@ class MatrixNorm(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards zero matrix."""
-        return matrix_norm(x, p=self.p, size_normalize=self.size_normalize)
+        return F.matrix_norm(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # region matrix groups -----------------------------------------------------------------
-class Identity(RegularizationBase):
+class Identity(nn.Module, Regularization):
     r"""Bias the matrix towards the identity matrix."""
 
     p: Final[str | int]
@@ -145,10 +103,10 @@ class Identity(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards the identity matrix."""
-        return identity(x, p=self.p, size_normalize=self.size_normalize)
+        return F.identity(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class DiagonallyDominant(RegularizationBase):
+class DiagonallyDominant(nn.Module, Regularization):
     r"""Bias the matrix towards being diagonally dominant."""
 
     p: Final[float]
@@ -162,10 +120,10 @@ class DiagonallyDominant(RegularizationBase):
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards diagonal dominance."""
-        return diagonally_dominant(x, p=self.p, size_normalize=self.size_normalize)
+        return F.diagonally_dominant(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class LowRank(RegularizationBase):
+class LowRank(nn.Module, Regularization):
     r"""Bias the matrix towards being low-rank.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -188,10 +146,12 @@ class LowRank(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards low-rank matrix."""
-        return low_rank(x, rank=self.rank, p=self.p, size_normalize=self.size_normalize)
+        return F.low_rank(
+            x, rank=self.rank, p=self.p, size_normalize=self.size_normalize
+        )
 
 
-class RankOne(RegularizationBase):
+class RankOne(nn.Module, Regularization):
     r"""Bias the matrix towards being rank-1.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -210,10 +170,10 @@ class RankOne(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards rank-1 matrix."""
-        return rank_one(x, p=self.p, size_normalize=self.size_normalize)
+        return F.rank_one(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Symmetric(RegularizationBase):
+class Symmetric(nn.Module, Regularization):
     r"""Bias the matrix towards being symmetric.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = +X
@@ -230,10 +190,10 @@ class Symmetric(RegularizationBase):
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards symmetric matrix."""
-        return symmetric(x, p=self.p, size_normalize=self.size_normalize)
+        return F.symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class SkewSymmetric(RegularizationBase):
+class SkewSymmetric(nn.Module, Regularization):
     r"""Bias the matrix towards being skew-symmetric.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = -X
@@ -250,10 +210,10 @@ class SkewSymmetric(RegularizationBase):
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards skew-symmetric matrix."""
-        return skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
+        return F.skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Orthogonal(RegularizationBase):
+class Orthogonal(nn.Module, Regularization):
     r"""Bias the matrix towards being orthogonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -272,10 +232,10 @@ class Orthogonal(RegularizationBase):
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards orthogonal matrix."""
-        return orthogonal(x, p=self.p, size_normalize=self.size_normalize)
+        return F.orthogonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Traceless(RegularizationBase):
+class Traceless(nn.Module, Regularization):
     r"""Bias the matrix towards being traceless."""
 
     p: Final[str | int]
@@ -289,10 +249,10 @@ class Traceless(RegularizationBase):
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
-        return traceless(x, p=self.p, size_normalize=self.size_normalize)
+        return F.traceless(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Normal(RegularizationBase):
+class Normal(nn.Module, Regularization):
     r"""Bias the matrix towards being orthogonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -310,10 +270,10 @@ class Normal(RegularizationBase):
 
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
-        return normal(x, p=self.p, size_normalize=self.size_normalize)
+        return F.normal(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Symplectic(RegularizationBase):
+class Symplectic(nn.Module, Regularization):
     r"""Bias the matrix towards being symplectic.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -332,10 +292,10 @@ class Symplectic(RegularizationBase):
     @signature("(..., 2n, 2n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
-        return symplectic(x, p=self.p, size_normalize=self.size_normalize)
+        return F.symplectic(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Hamiltonian(RegularizationBase):
+class Hamiltonian(nn.Module, Regularization):
     r"""Bias the matrix towards being hamiltonian.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -354,14 +314,14 @@ class Hamiltonian(RegularizationBase):
     @signature("(..., 2n, 2n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards normal matrix."""
-        return hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
+        return F.hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion matrix groups --------------------------------------------------------------
 
 
 # region masked projections ------------------------------------------------------------
-class Diagonal(RegularizationBase):
+class Diagonal(nn.Module, Regularization):
     r"""Bias the matrix towards being diagonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -380,10 +340,10 @@ class Diagonal(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards diagonal matrix."""
-        return diagonal(x, p=self.p, size_normalize=self.size_normalize)
+        return F.diagonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class LowerTriangular(RegularizationBase):
+class LowerTriangular(nn.Module, Regularization):
     r"""Bias the matrix towards being lower triangular.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -406,12 +366,12 @@ class LowerTriangular(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards lower triangular matrix."""
-        return lower_triangular(
+        return F.lower_triangular(
             x, lower=self.lower, p=self.p, size_normalize=self.size_normalize
         )
 
 
-class UpperTriangular(RegularizationBase):
+class UpperTriangular(nn.Module, Regularization):
     r"""Bias the matrix towards being upper triangular.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -434,12 +394,12 @@ class UpperTriangular(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards upper triangular matrix."""
-        return upper_triangular(
+        return F.upper_triangular(
             x, upper=self.upper, p=self.p, size_normalize=self.size_normalize
         )
 
 
-class Banded(RegularizationBase):
+class Banded(nn.Module, Regularization):
     r"""Bias the matrix towards being banded.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -469,7 +429,7 @@ class Banded(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards banded matrix."""
-        return banded(
+        return F.banded(
             x,
             lower=self.lower,
             upper=self.upper,
@@ -478,7 +438,7 @@ class Banded(RegularizationBase):
         )
 
 
-class Tridiagonal(RegularizationBase):
+class Tridiagonal(nn.Module, Regularization):
     r"""Bias the matrix towards being tridiagonal.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -497,10 +457,10 @@ class Tridiagonal(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards tridiagonal matrix."""
-        return tridiagonal(x, p=self.p, size_normalize=self.size_normalize)
+        return F.tridiagonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
-class Masked(RegularizationBase):
+class Masked(nn.Module, Regularization):
     r"""Bias the matrix towards being masked.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -527,14 +487,14 @@ class Masked(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards masked matrix."""
-        return masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)
+        return F.masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion masked projections ---------------------------------------------------------
 
 
 # region other regularizations ---------------------------------------------------------
-class Contraction(RegularizationBase):
+class Contraction(nn.Module, Regularization):
     r"""Bias the matrix towards being a contraction.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -562,12 +522,12 @@ class Contraction(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards contraction."""
-        return contraction(
+        return F.contraction(
             x, self.lipschitz_bound, p=self.p, size_normalize=self.size_normalize
         )
 
 
-class LipschitzBounded(RegularizationBase):
+class LipschitzBounded(nn.Module, Regularization):
     r"""Bias the matrix towards having spectral norm at most γ.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -594,7 +554,7 @@ class LipschitzBounded(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards a Lipschitz-bounded matrix."""
-        return lipschitz_bounded(
+        return F.lipschitz_bounded(
             x,
             self.lipschitz_bound,
             p=self.p,
@@ -602,7 +562,7 @@ class LipschitzBounded(RegularizationBase):
         )
 
 
-class SpectralNormalized(RegularizationBase):
+class SpectralNormalized(nn.Module, Regularization):
     r"""Bias the matrix towards having unit spectral norm.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -621,12 +581,12 @@ class SpectralNormalized(RegularizationBase):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards a spectrally normalized matrix."""
-        return spectral_normalized(x, p=self.p, size_normalize=self.size_normalize)
+        return F.spectral_normalized(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion other regularizations ------------------------------------------------------
 # region vector groups -----------------------------------------------------------------
-class UnitVector(RegularizationBase):
+class UnitVector(nn.Module, Regularization):
     r"""Bias the vector towards having unit norm."""
 
     p: Final[float]
@@ -640,7 +600,7 @@ class UnitVector(RegularizationBase):
     @signature("(..., n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards a unit vector."""
-        return unit_vector(x, p=self.p, size_normalize=self.size_normalize)
+        return F.unit_vector(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion vector groups --------------------------------------------------------------

@@ -32,7 +32,6 @@ from linodenet.regularizations import (
     REGULARIZATION_FNS,
     REGULARIZATIONS,
     Regularization,
-    RegularizationBase,
 )
 from linodenet.state_propagation import FLOWS
 from linodenet.state_propagation.base import Flow
@@ -58,12 +57,12 @@ CASES: dict[str, Case] = {
     "surjections"         : Case(lib.surjections      , Surjection     , nn.Module          , SURJECTIONS        ),
     "flows"               : Case(lib.state_propagation, Flow           , nn.Module          , FLOWS              ),
     "imputation"          : Case(lib.imputation       , ImputerProtocol, None               , IMPUTERS           ),
-    "initializations"     : Case(lib.initializations, Initialization, None, INITIALIZATION_FNS),
+    "initializations"     : Case(lib.initializations  , Initialization , None               , INITIALIZATION_FNS ),
     # "matrix_domain_tests" : Case(lib.testing          , None           , None               , MATRIX_TESTS       ),
     # "parametrizations"    : Case(lib.parametrizations , Parametrization, ParametrizationBase, PARAMETRIZATIONS   ),
-    "projections_cls"     : Case(lib.projections      , Projection     , nn.Module     , PROJECTIONS        ),
+    "projections_cls"     : Case(lib.projections      , Projection     , nn.Module          , PROJECTIONS        ),
     "projections_fun"     : Case(lib.projections      , Projection     , None               , PROJECTION_FNS     ),
-    "regularizations_cls" : Case(lib.regularizations  , Regularization , RegularizationBase , REGULARIZATIONS    ),
+    "regularizations_cls" : Case(lib.regularizations  , Regularization , nn.Module          , REGULARIZATIONS    ),
     "regularizations_fun" : Case(lib.regularizations  , Regularization , None               , REGULARIZATION_FNS ),
 }  # fmt: skip
 r"""Dictionary of all available cases."""
