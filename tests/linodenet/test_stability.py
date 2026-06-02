@@ -9,7 +9,7 @@ from linodenet.forecasting import LinODEnet
 from linodenet.mappings import embeddings
 from linodenet.nn import ResNet
 from linodenet.state_propagation import LinearFlow
-from linodenet.state_update import deprecated
+from linodenet.state_update import CellSequence
 
 
 @pytest.mark.skip(reason="Not implemented yet.")
@@ -24,7 +24,7 @@ def test_model_stability() -> None:
         "input_size": D,
         "hidden_size": L,
         "embedding_type": "concat",
-        "Filter": deprecated.UpdateList,
+        "Filter": CellSequence,
         "System": {
             "__module__": LinearFlow.__module__,
             "__name__": LinearFlow.__qualname__,
