@@ -14,20 +14,35 @@ class ELU1P(nn.Module):
         return torch.where(x < 0.0, x.exp(), x + 1.0)
 
 
-def get_activation(name: str) -> nn.Module:
+class Exp(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return x.exp()
+
+
+class Square(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return x.square()
+
+
+class Abs(nn.Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return x.abs()
+
+
+def new_activation(name: str) -> nn.Module:
     match name:
         case "relu":
             return nn.ReLU()
-        case "elu":
-            return nn.ELU()
         case "elup1":
             return ELU1P()
         case "exp":
-            return ...
+            return Exp()
         case "square":
-            return ...
+            return Square()
         case "abs":
-            return ...
+            return Abs()
+        case "tanh":
+            return nn.Tanh()
         case _:
             raise NotImplementedError
 
@@ -146,6 +161,10 @@ class Decoder(nn.Module):
         return self.mean_model(mean), self.variance_model(covariance)
 
 
+type CRU_covariance = tuple[Tensor, Tensor, Tensor]
+r"""Parametrized representation (σᵤ, σₗ, σₛ), Σ = [[diag(σᵤ), diag(σₛ)], [diag(σₛ), diag(σₗ)]]"""
+
+
 class CRU(nn.Module):
     r"""Continuous Recurrent Unit for probabilistic forecasting.
 
@@ -155,12 +174,15 @@ class CRU(nn.Module):
 
     This is combined with an encoder decoder setup:
 
-    .. math::
-        μ_{t₀}⁺, Σ_{t₀}⁺ &= 0, σ₀⋅𝕀                \\
-        yₜ, σₜ^{obs} &= f_θ(xₜ)                    \\
-        μₜ⁻, Σₜ⁻ &= predict(μₛ⁺, Σₛ⁺, t - s)       \\
-        μₜ⁺, Σₜ⁺ &= update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs}) \\
-        oₜ, σₜ^{out} &= g_ϕ(μₜ⁺, Σₜ⁺)              \\
+    .. code-block:: text
+
+        μ_{t₀}⁺, Σ_{t₀}⁺ ← 0, σ₀⋅𝕀
+        for t ∈ {t₁, …, tₙ}:
+            yₜ, σₜ^{obs} ← f_θ(xₜ)
+            μₜ⁻, Σₜ⁻ ← predict(μₛ⁺, Σₛ⁺, t - s)
+            μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
+            oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
+            s ← t
 
     Where:
         - f_θ, the encoder, is a neural network
@@ -191,28 +213,24 @@ class CRU(nn.Module):
     r"""CONST: Whether sequence tensors use shape ``batch × time × dim``."""
     validate_args: Final[bool]
     r"""CONST: Whether forward inputs should be validated before computation."""
-    initial_variance: Final[float]
-    r"""CONST: Initial diagonal covariance value for latent states."""
     variance_floor: Final[float]
     r"""CONST: Minimum variance used for numerical stability."""
-
-    # Parameters
-    initial_mean: Tensor
-    r"""PARAM: Mean of the initial latent state."""
-    initial_log_variance: Tensor
-    r"""PARAM: Unconstrained diagonal variance of the initial latent state."""
 
     # Submodules
     encoder: nn.Module
     r"""MODULE: Maps observations to latent-observation Gaussian parameters."""
-    transition: nn.Module
-    r"""MODULE: Propagates latent Gaussian states through continuous time."""
     decoder: nn.Module
     r"""MODULE: Maps latent Gaussian states to predictive distributions."""
+    transition_coefficient_model: nn.Module
+    r"""MODULE: Maps μₜ to the coefficient vector α(μₜ)."""
 
-    # buffers
+    # Buffers
     block_banded_mask: Tensor
     r"""BUFFER: Block banded mask for transition matrix."""
+    initial_mean: Tensor
+    r"""BUFFER: Initial mean."""
+    initial_covariance: Tensor
+    r"""BUFFER: Initial covariance."""
 
     @property
     def config(self) -> dict[str, object]:
@@ -231,18 +249,15 @@ class CRU(nn.Module):
         self,
         input_size: int,
         latent_size: int,
-        hidden_units: int = 50,  # number of hidden units for the encoder and decoder
         *,
         encoder: nn.Module,
         decoder: nn.Module,
-        output_size: int | None = None,
-        batch_first: bool = True,
-        validate_args: bool = False,
         num_basis: int = 15,  # number of basis matrices for the transition model
         bandwidth: int = 3,  # bandwidth of the blocks of the transition matrix
         initial_variance: float = 10.0,
         variance_floor: float = 1e-6,
         variance_activation: str = "elup1",
+        validate_args: bool = False,
     ) -> None:
         super().__init__()
         if latent_size % 2:
@@ -251,10 +266,18 @@ class CRU(nn.Module):
             raise ValueError("initial_variance must be positive.")
         if variance_floor <= 0:
             raise ValueError("variance_floor must be positive.")
-        if variance_activation != "elup1":
-            raise NotImplementedError
 
-        self.variance_activation = ELU1P()
+        self.input_size = input_size
+        self.latent_size = latent_size
+        self.latent_observation_size = latent_size // 2
+        self.validate_args = validate_args
+        self.initial_variance = initial_variance
+        self.variance_floor = variance_floor
+
+        self.variance_activation = new_activation(variance_activation)
+
+        self.encoder = encoder
+        self.decoder = decoder
 
         # The transition matrix A is parametrized as a linear combination ∑ₖαₖ(μₜ)Aₖ
         # where Aₖ = [[B₁₁, B₁₂], [B₂₁, B₂₂]] and each block is a d×d banded matrix of bandwidth b.
@@ -263,7 +286,7 @@ class CRU(nn.Module):
         assert bandwidth >= 0, "bandwidth must be non-negative"
         assert bandwidth < latent_size, "bandwidth must be smaller than latent_size."
         T = lambda n: n * (n + 1) // 2
-        num_params = latent_size + 2 * (
+        num_params: int = latent_size + 2 * (
             T(latent_size - 1) - T(latent_size - bandwidth - 1)
         )
         self.transition_matrix_parameters = nn.Parameter(
@@ -280,91 +303,157 @@ class CRU(nn.Module):
         ], dim=-2)  # fmt: skip
         self.register_buffer("block_banded_mask", block_banded_mask)
 
-        self.input_size = input_size
-        self.output_size = input_size if output_size is None else output_size
-        self.latent_size = latent_size
-        self.latent_observation_size = latent_size // 2
-        self.batch_first = batch_first
-        self.validate_args = validate_args
-        self.initial_variance = initial_variance
-        self.variance_floor = variance_floor
+        # "For all experiments, we used a transition net with one linear layer and
+        # softmax output."
+        self.transition_coefficient_model = nn.Sequential(
+            nn.Linear(self.latent_size, self.num_basis),
+            nn.Softmax(dim=-1),
+        )
 
-        initial_log_variance = torch.log(torch.expm1(torch.tensor(initial_variance)))
-        self.initial_mean = nn.Parameter(torch.zeros(latent_size))
-        self.initial_log_variance = nn.Parameter(
-            initial_log_variance.expand(latent_size).clone()
+        # NOTE: The reference implementation makes the initial variance trainable.
+        # this however is not mentioned in the paper.
+        # We use fixed buffers instead
+        self.register_buffer("initial_mean", torch.zeros(self.latent_size))
+        self.register_buffer(
+            "initial_covariance", initial_variance * torch.eye(self.latent_size)
         )
 
     def forward(
         self,
-        query_times: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-        *,
-        context_mask: Tensor | None = None,
+        query_times: Tensor,  # [..., Q]
+        context_times: Tensor,  # [..., T]
+        context_values: Tensor,  # [..., T, D]
     ) -> Distribution:
         r"""Return the predictive distribution at ``query_times``.
+
+        To create batches whose members have varying sequence length,
+        use `torch.nn.rnn.utils.pad_sequence` with `padding_value=torch.nan`.
 
         Args:
             query_times: Times at which forecasts are requested.
             context_times: Times of the observed context sequence.
             context_values: Observed context values.
-            context_mask: Boolean mask indicating observed entries in ``context_values``.
 
         Returns:
             Predictive distribution over target values at ``query_times``.
         """
-        raise NotImplementedError
+        # ensure time stamps are sorted
+        *batch_shape, seq_length, n = context_values.shape
+        context_deltas = context_times.diff(prepend=context_times[..., [0]])
+        query_deltas = query_times.diff(prepend=context_times[..., [-1]])
+        assert (context_deltas > 0).all(), "context times not sorted"
+        assert (query_deltas > 0).all(), "query times not sorted"
 
-    def validate_inputs(
-        self,
-        query_times: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-        *,
-        context_mask: Tensor | None = None,
-    ) -> None:
-        r"""Validate public forecasting inputs."""
-        raise NotImplementedError
+        # encode observations
+        y_means, y_variances = self.encoder(context_values)
 
-    def encode_observations(
-        self,
-        observations: Tensor,
-        *,
-        mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Encode observations as latent-observation means and variances."""
-        raise NotImplementedError
+        # prepare initial state μ₀⁺, Σ₀⁺
+        cov_u = self.initial_covariance[:n, :n].diagonal(-2, -1)
+        cov_l = self.initial_covariance[n:, n:].diagonal(-2, -1)
+        cov_s = self.initial_covariance[:n, n:].diagonal(-2, -1)
+        post_mean = self.initial_mean
+        post_cov = (cov_u, cov_l, cov_s)
 
-    def initial_state(
-        self,
-        batch_shape: torch.Size | tuple[int, ...],
-        *,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Return initial latent mean and diagonal covariance."""
-        raise NotImplementedError
+        prior_means = []
+        prior_covariances = []
+        posterior_means = []
+        posterior_covariances = []
+        pred_means = []
+        pred_variances = []
 
-    def filter_context(
+        # forward loop over context
+        for dt, y, y_var in zip(context_deltas, y_means, y_variances, strict=True):
+            prior_mean, prior_cov = self.propagate_state(dt, post_mean, post_cov)
+            post_mean, post_cov = self.update_state(y, y_var, prior_mean, prior_cov)
+
+            prior_means.append(prior_mean)
+            prior_covariances.append(prior_cov)
+            posterior_means.append(post_mean)
+            posterior_covariances.append(post_cov)
+
+        # forward loop over query
+        # μₜ⁻, Σₜ⁻ ← predict(μₛ⁺, Σₛ⁺, t - s)
+        # μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
+        # oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
+        mean, cov = post_mean, post_cov
+        for dt in context_deltas:
+            mean, cov = self.propagate_state(dt, mean, cov)
+            pred_mean, pred_var = self.decoder(mean, cov)
+            pred_means.append(pred_mean)
+            pred_variances.append(pred_var)
+
+        return torch.stack(pred_means, dim=-2), torch.stack(pred_variances, dim=-2)
+
+    def transition_matrix_model(self, mean: Tensor) -> Tensor:
+        """Locally linear transition model.
+
+        Aₜ = ∑ₖαₖ(t)Aₖ, where αₖ(t) = w_ψ(μₜ⁺)
+        Here Aₖ = [Aₖ¹¹, Aₖ¹²; Aₖ²¹, Aₖ²²],
+        where each block is a band-matrix of bandwidth b.
+        """
+        *batch_shape, n = mean.shape
+        alpha = self.transition_coefficient_model(mean)  # (..., k)
+        weighted = torch.einsum(
+            "...k, knb -> ...nb", alpha, self.transition_matrix_parameters
+        )  # (..., 4, p(b))
+
+        # block_banded_mask is (2d, 2d)
+        A = self.block_banded_mask.to(dtype=weighted.dtype).expand(*batch_shape, n, n)
+        A = A.masked_scatter(self.block_banded_mask, weighted)
+        return A
+
+    def propagate_state(
         self,
-        context_times: Tensor,
-        context_values: Tensor,
-        *,
-        context_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Assimilate context observations into a latent posterior state."""
-        raise NotImplementedError
+        delta_time: Tensor,  # (...)
+        posterior_mean: Tensor,  # (..., 2d)
+        posterior_variance: CRU_covariance,  # (...,d), (...,d), (...,d)
+    ) -> tuple[Tensor, CRU_covariance]:
+        r"""Propagate a latent posterior through the continuous transition model."""
+        # reconstruct Σ from σᵤ, σᵥ, σₛ
+        var_u, var_l, var_s = posterior_variance
+        cov_u = torch.diag_embed(var_u)
+        cov_l = torch.diag_embed(var_l)
+        cov_s = torch.diag_embed(var_s)
+        cov = torch.cat([
+            torch.cat([cov_u, cov_s], dim=-1),
+            torch.cat([cov_s, cov_l], dim=-1),
+        ], dim=-2)  # fmt: skip
+
+        A = self.transition_matrix_model(posterior_mean)
+        Q = torch.diag_embed(self.variance_activation(self.q))
+
+        # compute van Loan matrix exponential
+        n = posterior_mean.shape[-1]
+        zero = torch.zeros_like(A)
+        M = torch.cat([
+            torch.cat([A, Q], dim=-1),
+            torch.cat([zero, -A.mT], dim=-1),
+        ], dim=-2)  # fmt: skip
+        exp_Mt = torch.linalg.matrix_exp(M * delta_time)  # [[F, C], [0, -Fᵀ]]
+        exp_At = exp_Mt[..., :n, :n]  # upper left block
+        C = exp_Mt[..., :n, n:]  # upper right block
+
+        # μₜ = eᴬᵗμ₀
+        # Σₜ = eᴬᵗΣ₀eᴬᵀᵗ + Ceᴬᵀᵗ
+        prior_mean = exp_At @ posterior_mean
+        prior_cov = (exp_At @ cov + C) @ exp_At.mT  # [Σᵤ, Σₛ; Σₛ, Σˡ]
+
+        # Note: If X is block-wise diagonal, then exp(X) is also block-wise diagonal.
+        prior_var_u = prior_cov[..., :n, :n].diagonal(-2, -1)
+        prior_var_s = prior_cov[..., :n, n:].diagonal(-2, -1)
+        prior_var_l = prior_cov[..., n:, n:].diagonal(-2, -1)
+
+        return prior_mean, (prior_var_u, prior_var_l, prior_var_s)
 
     def update_state(
         self,
-        prior_mean: Tensor,  # (..., 2d)
-        prior_variance: tuple[Tensor, Tensor, Tensor],  # (..., d), (..., d), (..., d)
         observation_mean: Tensor,  # (..., d)
         observation_variance: Tensor,  # (..., d)
+        prior_mean: Tensor,  # (..., 2d)
+        prior_variance: CRU_covariance,  # (..., d), (..., d), (..., d)
         *,
         observation_mask: Tensor,  # (...,)
-    ) -> tuple[Tensor, tuple[Tensor, Tensor, Tensor]]:  # (..., 2d), (σᵘ, σˡ, σˢ)
+    ) -> tuple[Tensor, CRU_covariance]:  # (..., 2d), (σᵘ, σˡ, σˢ)
         r"""Apply the CRU/Kalman measurement update for one time step."""
         # assumptions:
         # H = [𝕀_d, 0_d]
@@ -403,83 +492,3 @@ class CRU(nn.Module):
             assert (var_u * var_l > var_s**2).all()
 
         return post_mean, post_cov
-
-    def get_transition_model(self, mean):
-        """Locally linear transition model.
-
-        Q = diag(activation(q))
-        Aₜ = ∑ₖαₖ(t)Aₖ, where αₖ(t) = w_ψ(μₜ⁺)
-        Here Aₖ = [Aₖ¹¹, Aₖ¹²; Aₖ²¹, Aₖ²²],
-        where each block is a band-matrix of bandwidth b.
-        """
-        Q = torch.diag_embed(self.variance_activation(self.q))
-        *batch_shape, n = mean.shape
-        alpha = self.transition_coefficient_model(mean)  # (..., k)
-        weighted = torch.einsum(
-            "...k, knb -> ...nb", alpha, self.transition_matrix_parameters
-        )  # (..., 4, p(b))
-
-        # block_banded_mask is (2d, 2d)
-        A = self.block_banded_mask.to(dtype=weighted.dtype).expand(*batch_shape, n, n)
-        A = A.masked_scatter(self.block_banded_mask, weighted)
-        return A, Q
-
-    def predict_state(
-        self,
-        posterior_mean: Tensor,  # (..., 2d)
-        posterior_variance: tuple[Tensor, Tensor, Tensor],  # (...,d), (...,d), (...,d)
-        delta_time: Tensor,
-    ) -> tuple[Tensor, tuple[Tensor, Tensor, Tensor]]:
-        r"""Propagate a latent posterior through the continuous transition model."""
-        # reconstruct Σ from σᵤ, σᵥ, σₛ
-        var_u, var_l, var_s = posterior_variance
-        cov_u = torch.diag_embed(var_u)
-        cov_l = torch.diag_embed(var_l)
-        cov_s = torch.diag_embed(var_s)
-        cov = torch.cat([
-            torch.cat([cov_u, cov_s], dim=-1),
-            torch.cat([cov_s, cov_l], dim=-1),
-        ], dim=-2)  # fmt: skip
-
-        A, Q = self.get_transition_model()
-
-        # compute van Loan matrix exponential
-        n = posterior_mean.shape[-1]
-        zero = torch.zeros_like(A)
-        M = torch.cat([
-            torch.cat([A, Q], dim=-1),
-            torch.cat([zero, -A.mT], dim=-1),
-        ], dim=-2)  # fmt: skip
-        exp_Mt = torch.linalg.matrix_exp(M * delta_time)  # [[F, C], [0, -Fᵀ]]
-        exp_At = exp_Mt[..., :n, :n]  # upper left block
-        C = exp_Mt[..., :n, n:]  # upper right block
-
-        # μₜ = eᴬᵗμ₀
-        # Σₜ = eᴬᵗΣ₀eᴬᵀᵗ + Ceᴬᵀᵗ
-        prior_mean = exp_At @ posterior_mean
-        prior_cov = (exp_At @ cov + C) @ exp_At.mT  # [Σᵤ, Σₛ; Σₛ, Σˡ]
-
-        # Note: If X is block-wise diagonal, then exp(X) is also block-wise diagonal.
-        prior_var_u = prior_cov[..., :n, :n].diagonal(-2, -1)
-        prior_var_s = prior_cov[..., :n, n:].diagonal(-2, -1)
-        prior_var_l = prior_cov[..., n:, n:].diagonal(-2, -1)
-
-        return prior_mean, (prior_var_u, prior_var_l, prior_var_s)
-
-    def predict_query(
-        self,
-        query_times: Tensor,
-        context_times: Tensor,
-        posterior_mean: Tensor,
-        posterior_variance: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Predict latent Gaussian states at query times."""
-        raise NotImplementedError
-
-    def decode_state(
-        self,
-        latent_mean: Tensor,
-        latent_variance: Tensor,
-    ) -> Distribution:
-        r"""Decode latent Gaussian states into a predictive distribution."""
-        raise NotImplementedError
