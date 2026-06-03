@@ -223,6 +223,7 @@ ignore = [
     "E203", # Whitespace before ':'
     "E221", # Multiple spaces before operator
     "E222", # Multiple spaces after operator
+    "E731", # Do not assign a lambda expression, use a def
     "E741", # Ambiguous variable name (like l, O, or I)
     # "E226",   # Missing whitespace around arithmetic operator
     # "E231",   # Missing whitespace after ','
