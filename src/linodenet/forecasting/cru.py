@@ -1,7 +1,15 @@
 r"""Reimplementation of the Continuous Recurrent Unit (CRU)."""
 
-__all__ = ["CRU"]
+__all__ = [
+    "CRU",
+    "CRUConfig",
+    "DecoderConfig",
+    "EncoderConfig",
+    "build_cru",
+]
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Final
 
 import torch
@@ -53,8 +61,8 @@ class Encoder(nn.Module):
     def __init__(
         self,
         input_size: int,
-        hidden_size: int,
         output_size: int,
+        hidden_size: int,
         *,
         num_hidden_layers: int = 2,
         activation_function: str = "relu",
@@ -64,38 +72,37 @@ class Encoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.num_hidden_layers = num_hidden_layers
 
-        if activation_function != "relu":
-            raise NotImplementedError
-        if variance_activation != "elup1":
-            raise NotImplementedError
-
-        self.hidden_layers = self._build_hidden_layers()
+        self.feature_extractor = self._build_hidden_layers(
+            num_hidden_layers,
+            activation_function,
+        )
         self.mean_model = nn.Linear(hidden_size, output_size)
         self.variance_model = nn.Sequential(
             nn.Linear(hidden_size, output_size),
-            ELU1P(),
+            new_activation(variance_activation),
         )
 
-    def _build_hidden_layers(self) -> nn.Module:
+    def _build_hidden_layers(
+        self, num_layers: int, activation_name: str, /
+    ) -> nn.Module:
         hidden_layers = []
-        for _ in range(self.num_hidden_layers):
+        for _ in range(num_layers):
             hidden_layers.extend([
-                nn.Linear(self.input_size, self.hidden_size),
-                nn.ReLU(),
+                nn.Linear(self.hidden_size, self.hidden_size),
+                new_activation(activation_name),
                 nn.LayerNorm(self.hidden_size),
             ])  # fmt: skip
 
         return nn.Sequential(
             nn.Linear(self.input_size, self.hidden_size),
-            nn.ReLU(),
+            new_activation(activation_name),
             nn.LayerNorm(self.hidden_size),
             *hidden_layers,
         )
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        h = self.hidden_layers(x)
+        h = self.feature_extractor(x)
         h = nn.functional.normalize(h, p=2, dim=-1, eps=1e-8)
         return self.mean_model(h), self.variance_model(h)
 
@@ -111,54 +118,116 @@ class Decoder(nn.Module):
         *,
         num_hidden_mean_model_layers: int = 2,
         num_hidden_variance_model_layers: int = 0,
+        activation_function: str = "relu",
+        variance_activation: str = "elup1",
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
-        self.num_hidden_mean_model_layers = num_hidden_mean_model_layers
-        self.num_hidden_variance_model_layers = num_hidden_variance_model_layers
 
-        self.mean_model = self._build_mean_model()
-        self.variance_model = self._build_variance_model()
+        self.mean_model = self._build_mean_model(
+            num_hidden_mean_model_layers,
+            activation_function,
+        )
+        self.variance_model = self._build_variance_model(
+            num_hidden_variance_model_layers,
+            activation_function,
+            variance_activation,
+        )
 
-    def _build_mean_model(self) -> nn.Module:
+    def _build_mean_model(self, num_layers: int, activation_name: str, /) -> nn.Module:
         hidden_layers = []
-        for _ in range(self.num_hidden_mean_model_layers):
+        for _ in range(num_layers):
             hidden_layers.extend([
                 nn.Linear(self.hidden_size, self.hidden_size),
-                nn.ReLU(),
+                new_activation(activation_name),
                 nn.LayerNorm(self.hidden_size),
             ])  # fmt: skip
 
         return nn.Sequential(
             nn.Linear(2 * self.input_size, self.hidden_size),
-            nn.ReLU(),
+            new_activation(activation_name),
             nn.LayerNorm(self.hidden_size),
             *hidden_layers,
             nn.Linear(self.hidden_size, self.output_size),
         )
 
-    def _build_variance_model(self) -> nn.Module:
+    def _build_variance_model(
+        self,
+        num_layers: int,
+        activation_name: str,
+        variance_activation_name: str,
+        /,
+    ) -> nn.Module:
         hidden_layers = []
-        for _ in range(self.num_hidden_variance_model_layers):
+        for _ in range(num_layers):
             hidden_layers.extend([
                 nn.Linear(self.hidden_size, self.hidden_size),
-                nn.ReLU(),
+                new_activation(activation_name),
                 nn.LayerNorm(self.hidden_size),
             ])  # fmt: skip
 
         return nn.Sequential(
             nn.Linear(3 * self.input_size, self.hidden_size),
-            nn.ReLU(),
+            new_activation(activation_name),
             nn.LayerNorm(self.hidden_size),
             *hidden_layers,
             nn.Linear(self.hidden_size, self.output_size),
-            ELU1P(),
+            new_activation(variance_activation_name),
         )
 
-    def forward(self, mean: Tensor, covariance: Tensor) -> tuple[Tensor, Tensor]:
-        return self.mean_model(mean), self.variance_model(covariance)
+    def forward(
+        self,
+        mean: Tensor,  # (..., 2d)
+        covariance: CRU_covariance,  # [(.., d), (..., d), (...,d)]
+    ) -> tuple[Tensor, Tensor]:  # (..., d),
+        # [(.., d), (..., d), (...,d)] -> (..., 3d)
+        cov = torch.cat(covariance, dim=-1)
+        return self.mean_model(mean), self.variance_model(cov)
+
+
+@dataclass(frozen=True, slots=True)
+class EncoderConfig:
+    r"""Configuration for the CRU observation encoder."""
+
+    input_size: int
+    output_size: int
+    hidden_size: int
+    num_hidden_layers: int = 2
+    activation_function: str = "relu"
+    variance_activation: str = "elup1"
+
+
+@dataclass(frozen=True, slots=True)
+class DecoderConfig:
+    r"""Configuration for the CRU output decoder."""
+
+    input_size: int
+    output_size: int
+    hidden_size: int
+    num_hidden_mean_model_layers: int = 2
+    num_hidden_variance_model_layers: int = 0
+    activation_function: str = "relu"
+    variance_activation: str = "elup1"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CRUConfig:
+    r"""Hierarchical configuration for constructing a CRU."""
+
+    input_size: int
+    latent_size: int
+    encoder: EncoderConfig
+    decoder: DecoderConfig
+    output_size: int | None = None
+    num_basis: int = 15
+    bandwidth: int = 3
+    variance_activation: str = "elup1"
+    batch_first: bool = True
+    initial_variance: float = 10.0
+    variance_floor: float = 1e-6
+    validate_args: bool = False
 
 
 type CRU_covariance = tuple[Tensor, Tensor, Tensor]
@@ -250,6 +319,7 @@ class CRU(nn.Module):
         input_size: int,
         latent_size: int,
         *,
+        output_size: int | None = None,
         encoder: nn.Module,
         decoder: nn.Module,
         num_basis: int = 15,  # number of basis matrices for the transition model
@@ -257,6 +327,7 @@ class CRU(nn.Module):
         initial_variance: float = 10.0,
         variance_floor: float = 1e-6,
         variance_activation: str = "elup1",
+        batch_first: bool = True,
         validate_args: bool = False,
     ) -> None:
         super().__init__()
@@ -268,8 +339,17 @@ class CRU(nn.Module):
             raise ValueError("variance_floor must be positive.")
 
         self.input_size = input_size
+        if output_size is None:
+            output_size = getattr(decoder, "output_size", None)
+        if not isinstance(output_size, int):
+            raise TypeError(
+                "output_size must be provided if decoder has no output_size."
+            )
+        self.output_size = output_size
         self.latent_size = latent_size
         self.latent_observation_size = latent_size // 2
+        self.num_basis = num_basis
+        self.batch_first = batch_first
         self.validate_args = validate_args
         self.initial_variance = initial_variance
         self.variance_floor = variance_floor
@@ -311,8 +391,7 @@ class CRU(nn.Module):
         )
 
         # NOTE: The reference implementation makes the initial variance trainable.
-        # this however is not mentioned in the paper.
-        # We use fixed buffers instead
+        # this however is not mentioned in the paper. We use fixed buffers instead.
         self.register_buffer("initial_mean", torch.zeros(self.latent_size))
         self.register_buffer(
             "initial_covariance", initial_variance * torch.eye(self.latent_size)
@@ -338,14 +417,19 @@ class CRU(nn.Module):
             Predictive distribution over target values at ``query_times``.
         """
         # ensure time stamps are sorted
-        *batch_shape, seq_length, n = context_values.shape
-        context_deltas = context_times.diff(prepend=context_times[..., [0]])
-        query_deltas = query_times.diff(prepend=context_times[..., [-1]])
+        *_, n = context_values.shape
+        context_deltas = context_times.diff(prepend=context_times[..., [0]])  # (..., T)
+        query_deltas = query_times.diff(prepend=context_times[..., [-1]])  # (..., Q)
         assert (context_deltas > 0).all(), "context times not sorted"
         assert (query_deltas > 0).all(), "query times not sorted"
 
+        # we assume sequences were batched using NaN-padding.
+        # since the model does not support missing values, we mark any observation vector
+        # that contains any missing value as illegal.
+        observation_valid = context_values.isfinite().all(dim=-1)  # (..., T)
+
         # encode observations
-        y_means, y_variances = self.encoder(context_values)
+        y_means, y_variances = self.encoder(context_values)  # (..., T, D), (..., T, D)
 
         # prepare initial state μ₀⁺, Σ₀⁺
         cov_u = self.initial_covariance[:n, :n].diagonal(-2, -1)
@@ -361,10 +445,18 @@ class CRU(nn.Module):
         pred_means = []
         pred_variances = []
 
-        # forward loop over context
-        for dt, y, y_var in zip(context_deltas, y_means, y_variances, strict=True):
+        # forward loop over sequence length
+        for dt, y, y_var, mask in zip(
+            context_deltas.unbind(dim=-1),
+            y_means.unbind(dim=-2),
+            y_variances.unbind(dim=-2),
+            observation_valid.unbind(dim=-1),
+            strict=True,
+        ):
             prior_mean, prior_cov = self.propagate_state(dt, post_mean, post_cov)
-            post_mean, post_cov = self.update_state(y, y_var, prior_mean, prior_cov)
+            post_mean, post_cov = self.update_state(
+                y, y_var, mask, prior_mean, prior_cov
+            )
 
             prior_means.append(prior_mean)
             prior_covariances.append(prior_cov)
@@ -376,7 +468,7 @@ class CRU(nn.Module):
         # μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
         # oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
         mean, cov = post_mean, post_cov
-        for dt in context_deltas:
+        for dt in context_deltas.unbind(dim=-1):
             mean, cov = self.propagate_state(dt, mean, cov)
             pred_mean, pred_var = self.decoder(mean, cov)
             pred_means.append(pred_mean)
@@ -449,10 +541,9 @@ class CRU(nn.Module):
         self,
         observation_mean: Tensor,  # (..., d)
         observation_variance: Tensor,  # (..., d)
+        observation_mask: Tensor,  # (...,)
         prior_mean: Tensor,  # (..., 2d)
         prior_variance: CRU_covariance,  # (..., d), (..., d), (..., d)
-        *,
-        observation_mask: Tensor,  # (...,)
     ) -> tuple[Tensor, CRU_covariance]:  # (..., 2d), (σᵘ, σˡ, σˢ)
         r"""Apply the CRU/Kalman measurement update for one time step."""
         # assumptions:
@@ -492,3 +583,47 @@ class CRU(nn.Module):
             assert (var_u * var_l > var_s**2).all()
 
         return post_mean, post_cov
+
+
+def build_cru(config: CRUConfig | Mapping[str, object], /) -> CRU:
+    r"""Construct a CRU from a hierarchical configuration object."""
+    if isinstance(config, Mapping):
+        config = dict(config)
+        config["encoder"] = EncoderConfig(**config["encoder"])
+        config["decoder"] = DecoderConfig(**config["decoder"])
+        return CRUConfig(**config)
+
+    encoder = Encoder(
+        config.encoder.input_size,
+        config.encoder.output_size,
+        config.encoder.hidden_size,
+        num_hidden_layers=config.encoder.num_hidden_layers,
+        activation_function=config.encoder.activation_function,
+        variance_activation=config.encoder.variance_activation,
+    )
+    decoder = Decoder(
+        config.decoder.input_size,
+        config.decoder.output_size,
+        config.decoder.hidden_size,
+        num_hidden_mean_model_layers=config.decoder.num_hidden_mean_model_layers,
+        num_hidden_variance_model_layers=(
+            config.decoder.num_hidden_variance_model_layers
+        ),
+        activation_function=config.decoder.activation_function,
+        variance_activation=config.decoder.variance_activation,
+    )
+
+    return CRU(
+        config.input_size,
+        config.latent_size,
+        output_size=config.output_size,
+        encoder=encoder,
+        decoder=decoder,
+        num_basis=config.num_basis,
+        bandwidth=config.bandwidth,
+        initial_variance=config.initial_variance,
+        variance_floor=config.variance_floor,
+        variance_activation=config.variance_activation,
+        batch_first=config.batch_first,
+        validate_args=config.validate_args,
+    )
