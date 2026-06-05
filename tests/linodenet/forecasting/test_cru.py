@@ -21,7 +21,7 @@ from linodenet.forecasting.cru import (
 CRU_CONFIG_YAML = r"""
 input_size: 6
 output_size: 2
-latent_size: 10
+latent_size: 5
 encoder:
   input_size: 6
   output_size: 5
@@ -82,7 +82,7 @@ class TestModel:
     STANDARD_CONFIG: ClassVar[CRUConfig] = CRUConfig(
         input_size=5,
         output_size=3,
-        latent_size=8,
+        latent_size=4,
         encoder=EncoderConfig(
             input_size=5,
             output_size=4,
@@ -248,19 +248,18 @@ class TestModel:
         assert model.input_size == config.input_size
         assert model.output_size == config.output_size
         assert model.latent_size == config.latent_size
-        assert model.latent_observation_size == config.encoder.output_size
         assert model.num_basis == config.num_basis
         assert model.initial_variance == config.initial_variance
         assert model.variance_floor == config.variance_floor
         assert model.batch_first is config.batch_first
         assert model.validate_args is config.validate_args
         assert model.initial_covariance.shape == (
-            config.latent_size,
-            config.latent_size,
+            2 * config.latent_size,
+            2 * config.latent_size,
         )
         assert torch.equal(
             model.initial_covariance,
-            config.initial_variance * torch.eye(config.latent_size),
+            config.initial_variance * torch.eye(2 * config.latent_size),
         )
 
         assert isinstance(model.encoder, Encoder)
@@ -365,16 +364,18 @@ def test_build_cru_instantiates_from_dataclass_config() -> None:
     assert model.input_size == config.input_size
     assert model.output_size == config.output_size
     assert model.latent_size == config.latent_size
-    assert model.latent_observation_size == 4
     assert model.num_basis == config.num_basis
     assert model.initial_variance == config.initial_variance
     assert model.variance_floor == config.variance_floor
     assert model.batch_first is config.batch_first
     assert model.validate_args is config.validate_args
-    assert model.initial_covariance.shape == (config.latent_size, config.latent_size)
+    assert model.initial_covariance.shape == (
+        2 * config.latent_size,
+        2 * config.latent_size,
+    )
     assert torch.equal(
         model.initial_covariance,
-        config.initial_variance * torch.eye(config.latent_size),
+        config.initial_variance * torch.eye(2 * config.latent_size),
     )
 
     assert isinstance(model.encoder, Encoder)
@@ -391,7 +392,7 @@ def test_build_cru_instantiates_from_mapping_config() -> None:
         {
             "input_size": 2,
             "output_size": 1,
-            "latent_size": 4,
+            "latent_size": 2,
             "encoder": {"input_size": 2, "output_size": 2, "hidden_size": 3},
             "decoder": {"input_size": 2, "output_size": 1, "hidden_size": 5},
             "num_basis": 2,
@@ -415,8 +416,7 @@ def test_build_cru_instantiates_from_yaml_file(tmp_path: Path) -> None:
     assert isinstance(model, CRU)
     assert model.input_size == 6
     assert model.output_size == 2
-    assert model.latent_size == 10
-    assert model.latent_observation_size == 5
+    assert model.latent_size == 5
     assert model.encoder.input_size == 6
     assert model.encoder.output_size == 5
     assert model.decoder.input_size == 5

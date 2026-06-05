@@ -275,8 +275,6 @@ class CRU(nn.Module):
     output_size: Final[int]
     r"""CONST: Dimensionality of forecast targets."""
     latent_size: Final[int]
-    r"""CONST: Dimensionality of the full latent Gaussian state."""
-    latent_observation_size: Final[int]
     r"""CONST: Dimensionality of encoded latent observations."""
     batch_first: Final[bool]
     r"""CONST: Whether sequence tensors use shape ``batch × time × dim``."""
@@ -331,8 +329,6 @@ class CRU(nn.Module):
         validate_args: bool = False,
     ) -> None:
         super().__init__()
-        if latent_size % 2:
-            raise ValueError("latent_size must be even.")
         if initial_variance <= 0:
             raise ValueError("initial_variance must be positive.")
         if variance_floor <= 0:
@@ -347,7 +343,6 @@ class CRU(nn.Module):
             )
         self.output_size = output_size
         self.latent_size = latent_size
-        self.latent_observation_size = latent_size // 2
         self.num_basis = num_basis
         self.batch_first = batch_first
         self.validate_args = validate_args
@@ -364,22 +359,20 @@ class CRU(nn.Module):
         # The number of parameters of a banded d×d matrix with bandwidth b is:
         #   d + 2*(T_{d-1} - T_{d-b-1}), where Tₙ is the n-th triangle number
         assert bandwidth >= 0, "bandwidth must be non-negative"
-        assert bandwidth < self.latent_observation_size, (
-            "bandwidth must be smaller than latent_observation_size."
-        )
+        assert bandwidth < latent_size, "bandwidth must be smaller than latent_size."
         T = lambda n: n * (n + 1) // 2
-        num_params: int = self.latent_observation_size + 2 * (
-            T(self.latent_observation_size - 1)
-            - T(self.latent_observation_size - bandwidth - 1)
+        num_params: int = latent_size + 2 * (
+            T(latent_size - 1) - T(latent_size - bandwidth - 1)
         )
         self.transition_matrix_parameters = nn.Parameter(
             torch.zeros(num_basis, 4, num_params)
         )
 
         # create a mask for the transition matrix model
-        d = self.latent_observation_size
         band_mask = (
-            torch.ones((d, d), dtype=torch.bool).triu(-bandwidth).tril(bandwidth)
+            torch.ones((latent_size, latent_size), dtype=torch.bool)
+            .triu(-bandwidth)
+            .tril(bandwidth)
         )
         block_banded_mask = torch.cat([  # [[B, B], [B, B]]
             torch.cat([band_mask, band_mask], dim=-1),
@@ -390,23 +383,23 @@ class CRU(nn.Module):
         # "For all experiments, we used a transition net with one linear layer and
         # softmax output."
         self.transition_coefficient_model = nn.Sequential(
-            nn.Linear(self.latent_size, self.num_basis),
+            nn.Linear(2 * self.latent_size, self.num_basis),
             nn.Softmax(dim=-1),
         )
 
         # NOTE: The reference implementation makes the initial variance trainable.
         # this however is not mentioned in the paper. We use fixed buffers instead.
-        self.register_buffer("initial_mean", torch.zeros(self.latent_size))
+        self.register_buffer("initial_mean", torch.zeros(2 * self.latent_size))
         self.register_buffer(
-            "initial_covariance", initial_variance * torch.eye(self.latent_size)
+            "initial_covariance", initial_variance * torch.eye(2 * self.latent_size)
         )
-        self.register_buffer("q", torch.ones(self.latent_size))
+        self.register_buffer("q", torch.ones(2 * self.latent_size))
 
     def forward(
         self,
         query_times: Tensor,  # [..., Q]
         context_times: Tensor,  # [..., T]
-        context_values: Tensor,  # [..., T, D]
+        context_values: Tensor,  # [..., T, N]
     ) -> Distribution:
         r"""Return the predictive distribution at ``query_times``.
 
@@ -422,7 +415,7 @@ class CRU(nn.Module):
             Predictive distribution over target values at ``query_times``.
         """
         # ensure time stamps are sorted
-        n = self.latent_observation_size
+        d = self.latent_size
         context_deltas = context_times.diff(prepend=context_times[..., [0]])  # (..., T)
         query_deltas = query_times.diff(prepend=context_times[..., [-1]])  # (..., Q)
         assert (context_deltas[..., 1:] > 0).all(), "context times not sorted"
@@ -437,9 +430,9 @@ class CRU(nn.Module):
         y_means, y_variances = self.encoder(context_values)  # (..., T, D), (..., T, D)
 
         # prepare initial state μ₀⁺, Σ₀⁺
-        cov_u = self.initial_covariance[:n, :n].diagonal(dim1=-2, dim2=-1)
-        cov_l = self.initial_covariance[n:, n:].diagonal(dim1=-2, dim2=-1)
-        cov_s = self.initial_covariance[:n, n:].diagonal(dim1=-2, dim2=-1)
+        cov_u = self.initial_covariance[:d, :d].diagonal(dim1=-2, dim2=-1)
+        cov_l = self.initial_covariance[d:, d:].diagonal(dim1=-2, dim2=-1)
+        cov_s = self.initial_covariance[:d, d:].diagonal(dim1=-2, dim2=-1)
         post_mean = self.initial_mean
         post_cov = (cov_u, cov_l, cov_s)
 
