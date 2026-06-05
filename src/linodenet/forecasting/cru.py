@@ -364,18 +364,22 @@ class CRU(nn.Module):
         # The number of parameters of a banded d×d matrix with bandwidth b is:
         #   d + 2*(T_{d-1} - T_{d-b-1}), where Tₙ is the n-th triangle number
         assert bandwidth >= 0, "bandwidth must be non-negative"
-        assert bandwidth < latent_size, "bandwidth must be smaller than latent_size."
+        assert bandwidth < self.latent_observation_size, (
+            "bandwidth must be smaller than latent_observation_size."
+        )
         T = lambda n: n * (n + 1) // 2
-        num_params: int = latent_size + 2 * (
-            T(latent_size - 1) - T(latent_size - bandwidth - 1)
+        num_params: int = self.latent_observation_size + 2 * (
+            T(self.latent_observation_size - 1)
+            - T(self.latent_observation_size - bandwidth - 1)
         )
         self.transition_matrix_parameters = nn.Parameter(
             torch.zeros(num_basis, 4, num_params)
         )
 
         # create a mask for the transition matrix model
+        d = self.latent_observation_size
         band_mask = (
-            torch.ones((latent_size, latent_size)).triu(-bandwidth).tril(bandwidth)
+            torch.ones((d, d), dtype=torch.bool).triu(-bandwidth).tril(bandwidth)
         )
         block_banded_mask = torch.cat([  # [[B, B], [B, B]]
             torch.cat([band_mask, band_mask], dim=-1),
@@ -396,6 +400,7 @@ class CRU(nn.Module):
         self.register_buffer(
             "initial_covariance", initial_variance * torch.eye(self.latent_size)
         )
+        self.register_buffer("q", torch.ones(self.latent_size))
 
     def forward(
         self,
@@ -417,10 +422,10 @@ class CRU(nn.Module):
             Predictive distribution over target values at ``query_times``.
         """
         # ensure time stamps are sorted
-        *_, n = context_values.shape
+        n = self.latent_observation_size
         context_deltas = context_times.diff(prepend=context_times[..., [0]])  # (..., T)
         query_deltas = query_times.diff(prepend=context_times[..., [-1]])  # (..., Q)
-        assert (context_deltas > 0).all(), "context times not sorted"
+        assert (context_deltas[..., 1:] > 0).all(), "context times not sorted"
         assert (query_deltas > 0).all(), "query times not sorted"
 
         # we assume sequences were batched using NaN-padding.
@@ -432,9 +437,9 @@ class CRU(nn.Module):
         y_means, y_variances = self.encoder(context_values)  # (..., T, D), (..., T, D)
 
         # prepare initial state μ₀⁺, Σ₀⁺
-        cov_u = self.initial_covariance[:n, :n].diagonal(-2, -1)
-        cov_l = self.initial_covariance[n:, n:].diagonal(-2, -1)
-        cov_s = self.initial_covariance[:n, n:].diagonal(-2, -1)
+        cov_u = self.initial_covariance[:n, :n].diagonal(dim1=-2, dim2=-1)
+        cov_l = self.initial_covariance[n:, n:].diagonal(dim1=-2, dim2=-1)
+        cov_s = self.initial_covariance[:n, n:].diagonal(dim1=-2, dim2=-1)
         post_mean = self.initial_mean
         post_cov = (cov_u, cov_l, cov_s)
 
@@ -468,7 +473,7 @@ class CRU(nn.Module):
         # μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
         # oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
         mean, cov = post_mean, post_cov
-        for dt in context_deltas.unbind(dim=-1):
+        for dt in query_deltas.unbind(dim=-1):
             mean, cov = self.propagate_state(dt, mean, cov)
             pred_mean, pred_var = self.decoder(mean, cov)
             pred_means.append(pred_mean)
@@ -490,8 +495,9 @@ class CRU(nn.Module):
         )  # (..., 4, p(b))
 
         # block_banded_mask is (2d, 2d)
-        A = self.block_banded_mask.to(dtype=weighted.dtype).expand(*batch_shape, n, n)
-        A = A.masked_scatter(self.block_banded_mask, weighted)
+        mask = self.block_banded_mask.expand(*batch_shape, n, n)
+        A = torch.zeros_like(mask, dtype=weighted.dtype)
+        A = A.masked_scatter(mask, weighted)
         return A
 
     def propagate_state(
@@ -531,9 +537,10 @@ class CRU(nn.Module):
         prior_cov = (exp_At @ cov + C) @ exp_At.mT  # [Σᵤ, Σₛ; Σₛ, Σˡ]
 
         # Note: If X is block-wise diagonal, then exp(X) is also block-wise diagonal.
-        prior_var_u = prior_cov[..., :n, :n].diagonal(-2, -1)
-        prior_var_s = prior_cov[..., :n, n:].diagonal(-2, -1)
-        prior_var_l = prior_cov[..., n:, n:].diagonal(-2, -1)
+        d = var_u.shape[-1]
+        prior_var_u = prior_cov[..., :d, :d].diagonal(dim1=-2, dim2=-1)
+        prior_var_s = prior_cov[..., :d, d:].diagonal(dim1=-2, dim2=-1)
+        prior_var_l = prior_cov[..., d:, d:].diagonal(dim1=-2, dim2=-1)
 
         return prior_mean, (prior_var_u, prior_var_l, prior_var_s)
 
@@ -579,7 +586,7 @@ class CRU(nn.Module):
         if __debug__:
             assert (var_u > 0).all()
             assert (var_l > 0).all()
-            assert (var_s > 0).all()
+            assert (var_s >= 0).all()
             assert (var_u * var_l > var_s**2).all()
 
         return post_mean, post_cov

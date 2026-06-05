@@ -218,6 +218,12 @@ class TestModel:
         query_lengths = query_steps.reshape(batch_shape)
         context_length = int(context_steps.max())
         query_length = int(query_steps.max())
+        context_end_times = torch.take_along_dim(
+            context_times,
+            (context_lengths - 1).unsqueeze(-1),
+            dim=-1,
+        ).squeeze(-1)
+        query_times = query_times + context_end_times[..., None]
 
         assert context_lengths.shape == batch_shape
         assert query_lengths.shape == batch_shape
@@ -332,6 +338,22 @@ class TestModel:
         for times in data.query_times.reshape(-1, query_length):
             finite_times = times[times.isfinite()]
             assert torch.diff(finite_times).ge(0).all()
+
+    def test_unbatched_forward(self) -> None:
+        model = self.make_cru()
+        data = self.make_data(seed=0, batch_shape=(), min_steps=2, max_steps=5)
+
+        pred_mean, pred_var = model(
+            data.query_times,
+            data.context_times,
+            data.context_values,
+        )
+
+        assert pred_mean.shape == data.query_values.shape
+        assert pred_var.shape == data.query_values.shape
+        assert pred_mean.isfinite().all()
+        assert pred_var.isfinite().all()
+        assert pred_var.ge(0).all()
 
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:
