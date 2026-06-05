@@ -354,6 +354,22 @@ class TestModel:
         assert pred_var.isfinite().all()
         assert pred_var.ge(0).all()
 
+    def test_batched_forward(self) -> None:
+        model = self.make_cru()
+        data = self.make_data(seed=0, batch_shape=(4,), min_steps=2, max_steps=5)
+
+        pred_mean, pred_var = model(
+            data.query_times,
+            data.context_times,
+            data.context_values,
+        )
+
+        assert pred_mean.shape == data.query_values.shape
+        assert pred_var.shape == data.query_values.shape
+        assert pred_mean[data.query_mask].isfinite().all()
+        assert pred_var[data.query_mask].isfinite().all()
+        assert pred_var[data.query_mask].ge(0).all()
+
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:
     config = TestModel.STANDARD_CONFIG

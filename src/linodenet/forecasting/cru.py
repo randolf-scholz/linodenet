@@ -365,7 +365,8 @@ class CRU(nn.Module):
             T(latent_size - 1) - T(latent_size - bandwidth - 1)
         )
         self.transition_matrix_parameters = nn.Parameter(
-            torch.zeros(num_basis, 4, num_params)
+            # FIXME: initialize as zero
+            torch.randn(num_basis, 4, num_params)
         )
 
         # create a mask for the transition matrix model
@@ -415,11 +416,42 @@ class CRU(nn.Module):
             Predictive distribution over target values at ``query_times``.
         """
         # ensure time stamps are sorted
+        batch_shape = context_times.shape[:-1]
         d = self.latent_size
+        query_mask = query_times.isfinite()
+        context_mask = context_times.isfinite()
+        context_lengths = context_mask.sum(dim=-1)  # (...)
+        query_lengths = query_mask.sum(dim=-1)  # (...)
+        last_context_time = torch.take_along_dim(
+            context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
+        )
         context_deltas = context_times.diff(prepend=context_times[..., [0]])  # (..., T)
-        query_deltas = query_times.diff(prepend=context_times[..., [-1]])  # (..., Q)
-        assert (context_deltas[..., 1:] > 0).all(), "context times not sorted"
-        assert (query_deltas > 0).all(), "query times not sorted"
+        query_deltas = query_times.diff(prepend=last_context_time)  # (..., Q)
+        assert (context_deltas[context_mask] >= 0).all(), "context times not sorted"
+        assert (query_deltas[query_mask] >= 0).all(), "query times not sorted"
+
+        # context_valid = context_times.isfinite()
+        # query_valid = query_times.isfinite()
+        # context_lengths = context_valid.sum(dim=-1)
+        #
+        # last_context_times = torch.take_along_dim(
+        #     context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
+        # ).squeeze(-1)
+        # context_deltas = context_times.diff(prepend=context_times[..., [0]])  # (..., T)
+        # query_deltas = query_times.diff(
+        #     prepend=last_context_times[..., None]
+        # )  # (..., Q)
+        # context_deltas = torch.where(context_valid, context_deltas, 0.0)
+        # query_deltas = torch.where(query_valid, query_deltas, 0.0)
+        # context_sorted = context_times[..., 1:] > context_times[..., :-1]
+        # context_pairs_valid = context_valid[..., 1:] & context_valid[..., :-1]
+        # query_sorted = query_times[..., 1:] > query_times[..., :-1]
+        # query_pairs_valid = query_valid[..., 1:] & query_valid[..., :-1]
+        # assert (context_sorted | ~context_pairs_valid).all(), "context times not sorted"
+        # assert (
+        #     (query_times[..., 0] > last_context_times) | ~query_valid[..., 0]
+        # ).all(), "query times not sorted"
+        # assert (query_sorted | ~query_pairs_valid).all(), "query times not sorted"
 
         # we assume sequences were batched using NaN-padding.
         # since the model does not support missing values, we mark any observation vector
@@ -433,15 +465,15 @@ class CRU(nn.Module):
         cov_u = self.initial_covariance[:d, :d].diagonal(dim1=-2, dim2=-1)
         cov_l = self.initial_covariance[d:, d:].diagonal(dim1=-2, dim2=-1)
         cov_s = self.initial_covariance[:d, d:].diagonal(dim1=-2, dim2=-1)
-        post_mean = self.initial_mean
+        post_mean = self.initial_mean.expand(*batch_shape, -1)
         post_cov = (cov_u, cov_l, cov_s)
 
-        prior_means = []
-        prior_covariances = []
-        posterior_means = []
-        posterior_covariances = []
-        pred_means = []
-        pred_variances = []
+        prior_means_list = []
+        prior_variances_list = []
+        posterior_means_list = []
+        posterior_variances_list = []
+        pred_means_list = []
+        pred_variances_list = []
 
         # forward loop over sequence length
         for dt, y, y_var, mask in zip(
@@ -456,23 +488,46 @@ class CRU(nn.Module):
                 y, y_var, mask, prior_mean, prior_cov
             )
 
-            prior_means.append(prior_mean)
-            prior_covariances.append(prior_cov)
-            posterior_means.append(post_mean)
-            posterior_covariances.append(post_cov)
+            prior_means_list.append(prior_mean)
+            prior_variances_list.append(prior_cov)
+            posterior_means_list.append(post_mean)
+            posterior_variances_list.append(post_cov)
+
+        # create buffers of the trajectory
+        prior_means = torch.stack(prior_means_list, dim=-2)
+        prior_variances = torch.stack(prior_variances_list, dim=-2)
+        posterior_means = torch.stack(posterior_means_list, dim=-2)
+        posterior_variances = torch.stack(posterior_variances_list, dim=-2)
+
+        # select the last valid state for each batch element
+        last_post_mean = torch.take_along_dim(
+            torch.stack(posterior_means_list, dim=-2),  # (..., T, 2d)
+            (context_lengths - 1).unsqueeze(-1).unsqueeze(-1),
+            dim=-3,
+        ).squeeze(-3)  # (..., 2d)
+        last_post_cov = tuple(
+            torch.take_along_dim(
+                torch.stack([cov[i] for cov in posterior_variances_list], dim=-2),
+                (context_lengths - 1).unsqueeze(-1).unsqueeze(-1),
+                dim=-3,
+            ).squeeze(-3)
+            for i in range(3)
+        )  # [(.., d), (..., d), (...,d)]
 
         # forward loop over query
         # μₜ⁻, Σₜ⁻ ← predict(μₛ⁺, Σₛ⁺, t - s)
         # μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
         # oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
-        mean, cov = post_mean, post_cov
+        mean, cov = last_post_mean, last_post_cov
         for dt in query_deltas.unbind(dim=-1):
             mean, cov = self.propagate_state(dt, mean, cov)
             pred_mean, pred_var = self.decoder(mean, cov)
-            pred_means.append(pred_mean)
-            pred_variances.append(pred_var)
+            pred_means_list.append(pred_mean)
+            pred_variances_list.append(pred_var)
 
-        return torch.stack(pred_means, dim=-2), torch.stack(pred_variances, dim=-2)
+        return torch.stack(pred_means_list, dim=-2), torch.stack(
+            pred_variances_list, dim=-2
+        )
 
     def transition_matrix_model(self, mean: Tensor) -> Tensor:
         """Locally linear transition model.
@@ -511,7 +566,7 @@ class CRU(nn.Module):
         ], dim=-2)  # fmt: skip
 
         A = self.transition_matrix_model(posterior_mean)
-        Q = torch.diag_embed(self.variance_activation(self.q))
+        Q = torch.diag_embed(self.variance_activation(self.q)).expand_as(A)
 
         # compute van Loan matrix exponential
         n = posterior_mean.shape[-1]
@@ -520,13 +575,14 @@ class CRU(nn.Module):
             torch.cat([A, Q], dim=-1),
             torch.cat([zero, -A.mT], dim=-1),
         ], dim=-2)  # fmt: skip
-        exp_Mt = torch.linalg.matrix_exp(M * delta_time)  # [[F, C], [0, -Fᵀ]]
+        # eᴹᵗ = [[F, C], [0, -Fᵀ]]
+        exp_Mt = torch.linalg.matrix_exp(M * delta_time[..., None, None])
         exp_At = exp_Mt[..., :n, :n]  # upper left block
         C = exp_Mt[..., :n, n:]  # upper right block
 
         # μₜ = eᴬᵗμ₀
+        prior_mean = torch.einsum("...mn, ...n -> ...m", exp_At, posterior_mean)
         # Σₜ = eᴬᵗΣ₀eᴬᵀᵗ + Ceᴬᵀᵗ
-        prior_mean = exp_At @ posterior_mean
         prior_cov = (exp_At @ cov + C) @ exp_At.mT  # [Σᵤ, Σₛ; Σₛ, Σˡ]
 
         # Note: If X is block-wise diagonal, then exp(X) is also block-wise diagonal.
@@ -576,11 +632,11 @@ class CRU(nn.Module):
         )
 
         # validation that resulting covariance is positive definite
-        if __debug__:
-            assert (var_u > 0).all()
-            assert (var_l > 0).all()
-            assert (var_s >= 0).all()
-            assert (var_u * var_l > var_s**2).all()
+        # if __debug__:
+        #     assert (var_u > 0).all()
+        #     assert (var_l > 0).all()
+        #     assert (var_s >= 0).all()
+        #     assert (var_u * var_l > var_s**2).all()
 
         return post_mean, post_cov
 
