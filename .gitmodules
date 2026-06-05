@@ -1,0 +1,9 @@
+[submodule "third_party/Continuous-Recurrent-Units"]
+	path = third_party/Continuous-Recurrent-Units
+	url = https://github.com/boschresearch/Continuous-Recurrent-Units.git
+[submodule "third_party/gru_ode_bayes"]
+	path = third_party/gru_ode_bayes
+	url = https://github.com/edebrouwer/gru_ode_bayes.git
+[submodule "third_party/neural-flows-experiments"]
+	path = third_party/neural-flows-experiments
+	url = https://github.com/mbilos/neural-flows-experiments.git
