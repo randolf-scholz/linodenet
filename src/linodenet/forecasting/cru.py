@@ -180,10 +180,9 @@ class Decoder(nn.Module):
     def forward(
         self,
         mean: Tensor,  # (..., 2d)
-        covariance: CRU_covariance,  # [(.., d), (..., d), (...,d)]
+        covariance: Tensor,  # (..., d, 3)
     ) -> tuple[Tensor, Tensor]:  # (..., d),
-        # [(.., d), (..., d), (...,d)] -> (..., 3d)
-        cov = torch.cat(covariance, dim=-1)
+        cov = torch.cat(covariance.unbind(dim=-1), dim=-1)
         return self.mean_model(mean), self.variance_model(cov)
 
 
@@ -228,10 +227,6 @@ class CRUConfig:
     initial_variance: float = 10.0
     variance_floor: float = 1e-6
     validate_args: bool = False
-
-
-type CRU_covariance = tuple[Tensor, Tensor, Tensor]
-r"""Parametrized representation (σᵤ, σₗ, σₛ), Σ = [[diag(σᵤ), diag(σₛ)], [diag(σₛ), diag(σₗ)]]"""
 
 
 class CRU(nn.Module):
@@ -298,6 +293,14 @@ class CRU(nn.Module):
     r"""BUFFER: Initial mean."""
     initial_covariance: Tensor
     r"""BUFFER: Initial covariance."""
+    prior_means: Tensor
+    r"""BUFFER: Prior mean trajectory from the last forward pass."""
+    prior_variances: Tensor
+    r"""BUFFER: Prior covariance trajectory from the last forward pass."""
+    posterior_means: Tensor
+    r"""BUFFER: Posterior mean trajectory from the last forward pass."""
+    posterior_variances: Tensor
+    r"""BUFFER: Posterior covariance trajectory from the last forward pass."""
 
     @property
     def config(self) -> dict[str, object]:
@@ -395,6 +398,10 @@ class CRU(nn.Module):
             "initial_covariance", initial_variance * torch.eye(2 * self.latent_size)
         )
         self.register_buffer("q", torch.ones(2 * self.latent_size))
+        self.register_buffer("prior_means", torch.empty(0), persistent=False)
+        self.register_buffer("prior_variances", torch.empty(0), persistent=False)
+        self.register_buffer("posterior_means", torch.empty(0), persistent=False)
+        self.register_buffer("posterior_variances", torch.empty(0), persistent=False)
 
     def forward(
         self,
@@ -466,7 +473,7 @@ class CRU(nn.Module):
         cov_l = self.initial_covariance[d:, d:].diagonal(dim1=-2, dim2=-1)
         cov_s = self.initial_covariance[:d, d:].diagonal(dim1=-2, dim2=-1)
         post_mean = self.initial_mean.expand(*batch_shape, -1)
-        post_cov = (cov_u, cov_l, cov_s)
+        post_cov = torch.stack([cov_u, cov_l, cov_s], dim=-1)
 
         prior_means_list = []
         prior_variances_list = []
@@ -494,25 +501,22 @@ class CRU(nn.Module):
             posterior_variances_list.append(post_cov)
 
         # create buffers of the trajectory
-        prior_means = torch.stack(prior_means_list, dim=-2)
-        prior_variances = torch.stack(prior_variances_list, dim=-2)
-        posterior_means = torch.stack(posterior_means_list, dim=-2)
-        posterior_variances = torch.stack(posterior_variances_list, dim=-2)
+        self.prior_means = torch.stack(prior_means_list, dim=-2)
+        self.prior_variances = torch.stack(prior_variances_list, dim=-3)
+        self.posterior_means = torch.stack(posterior_means_list, dim=-2)
+        self.posterior_variances = torch.stack(posterior_variances_list, dim=-3)
 
         # select the last valid state for each batch element
         last_post_mean = torch.take_along_dim(
-            torch.stack(posterior_means_list, dim=-2),  # (..., T, 2d)
+            self.posterior_means,  # (..., T, 2d)
             (context_lengths - 1).unsqueeze(-1).unsqueeze(-1),
+            dim=-2,
+        ).squeeze(-2)  # (..., 2d)
+        last_post_cov = torch.take_along_dim(
+            self.posterior_variances,
+            (context_lengths - 1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1),
             dim=-3,
-        ).squeeze(-3)  # (..., 2d)
-        last_post_cov = tuple(
-            torch.take_along_dim(
-                torch.stack([cov[i] for cov in posterior_variances_list], dim=-2),
-                (context_lengths - 1).unsqueeze(-1).unsqueeze(-1),
-                dim=-3,
-            ).squeeze(-3)
-            for i in range(3)
-        )  # [(.., d), (..., d), (...,d)]
+        ).squeeze(-3)  # (..., d, 3)
 
         # forward loop over query
         # μₜ⁻, Σₜ⁻ ← predict(μₛ⁺, Σₛ⁺, t - s)
@@ -525,8 +529,9 @@ class CRU(nn.Module):
             pred_means_list.append(pred_mean)
             pred_variances_list.append(pred_var)
 
-        return torch.stack(pred_means_list, dim=-2), torch.stack(
-            pred_variances_list, dim=-2
+        return (
+            torch.stack(pred_means_list, dim=-2),
+            torch.stack(pred_variances_list, dim=-2),
         )
 
     def transition_matrix_model(self, mean: Tensor) -> Tensor:
@@ -552,11 +557,11 @@ class CRU(nn.Module):
         self,
         delta_time: Tensor,  # (...)
         posterior_mean: Tensor,  # (..., 2d)
-        posterior_variance: CRU_covariance,  # (...,d), (...,d), (...,d)
-    ) -> tuple[Tensor, CRU_covariance]:
+        posterior_variance: Tensor,  # (..., d, 3)
+    ) -> tuple[Tensor, Tensor]:
         r"""Propagate a latent posterior through the continuous transition model."""
         # reconstruct Σ from σᵤ, σᵥ, σₛ
-        var_u, var_l, var_s = posterior_variance
+        var_u, var_l, var_s = posterior_variance.unbind(dim=-1)
         cov_u = torch.diag_embed(var_u)
         cov_l = torch.diag_embed(var_l)
         cov_s = torch.diag_embed(var_s)
@@ -591,7 +596,7 @@ class CRU(nn.Module):
         prior_var_s = prior_cov[..., :d, d:].diagonal(dim1=-2, dim2=-1)
         prior_var_l = prior_cov[..., d:, d:].diagonal(dim1=-2, dim2=-1)
 
-        return prior_mean, (prior_var_u, prior_var_l, prior_var_s)
+        return prior_mean, torch.stack([prior_var_u, prior_var_l, prior_var_s], dim=-1)
 
     def update_state(
         self,
@@ -599,8 +604,8 @@ class CRU(nn.Module):
         observation_variance: Tensor,  # (..., d)
         observation_mask: Tensor,  # (...,)
         prior_mean: Tensor,  # (..., 2d)
-        prior_variance: CRU_covariance,  # (..., d), (..., d), (..., d)
-    ) -> tuple[Tensor, CRU_covariance]:  # (..., 2d), (σᵘ, σˡ, σˢ)
+        prior_variance: Tensor,  # (..., d, 3)
+    ) -> tuple[Tensor, Tensor]:  # (..., 2d), (..., d, 3)
         r"""Apply the CRU/Kalman measurement update for one time step."""
         # assumptions:
         # H = [𝕀_d, 0_d]
@@ -613,7 +618,7 @@ class CRU(nn.Module):
         #   - Kₜˡ = diag(σₜˢ / (σₜᵘ + σₜ^{obs}))
         d = observation_mean.shape[-1]
         mask = observation_mask.unsqueeze(-1)  # (..., 1)
-        var_u, var_l, var_s = prior_variance
+        var_u, var_l, var_s = prior_variance.unbind(dim=-1)
         denominator = var_u + observation_variance
         gain_u = var_u / denominator
         gain_l = var_s / denominator
@@ -625,11 +630,11 @@ class CRU(nn.Module):
             0.0,
         )
         # Σₜ⁺ = (I - KₜH)Σₜ⁻
-        post_cov = (
+        post_cov = torch.stack([
             var_u - torch.where(mask, gain_u * var_u, 0.0),  # (1-Kᵘ)σᵘ
             var_l - torch.where(mask, gain_l * var_s, 0.0),  # σˡ - Kˡσˢ
             var_s - torch.where(mask, gain_u * var_s, 0.0),  # (1-Kᵘ)σˢ
-        )
+        ], dim=-1)  # fmt: skip
 
         # validation that resulting covariance is positive definite
         # if __debug__:
