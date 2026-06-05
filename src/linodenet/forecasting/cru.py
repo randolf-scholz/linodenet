@@ -591,7 +591,7 @@ def build_cru(config: CRUConfig | Mapping[str, object], /) -> CRU:
         config = dict(config)
         config["encoder"] = EncoderConfig(**config["encoder"])
         config["decoder"] = DecoderConfig(**config["decoder"])
-        return CRUConfig(**config)
+        config = CRUConfig(**config)
 
     encoder = Encoder(
         config.encoder.input_size,
