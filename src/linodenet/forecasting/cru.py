@@ -540,14 +540,19 @@ class CRU(nn.Module):
         observation_valid = context_values.isfinite().all(dim=-1)  # (..., T)
 
         # encode observations
-        y_means, y_variances = self.encoder(context_values)  # (..., T, D), (..., T, D)
+        y_means, y_variances = masked_apply(
+            self.encoder, (context_values,), context_mask
+        )  # (..., T, D), (..., T, D)
 
         # prepare initial state μ₀⁺, Σ₀⁺
         cov_u = self.initial_covariance[:d, :d].diagonal(dim1=-2, dim2=-1)
         cov_l = self.initial_covariance[d:, d:].diagonal(dim1=-2, dim2=-1)
         cov_s = self.initial_covariance[:d, d:].diagonal(dim1=-2, dim2=-1)
-        post_mean = self.initial_mean.expand(*batch_shape, -1)
-        post_cov = torch.stack([cov_u, cov_l, cov_s], dim=-1)
+        post_mean = self.initial_mean.expand(*batch_shape, 2 * d)  # (..., 2d)
+        post_cov = torch.stack(
+            [cov_u, cov_l, cov_s],
+            dim=-1,
+        ).expand(*batch_shape, d, 3)  # (..., d, 3)
 
         prior_means_list = []
         prior_variances_list = []
@@ -564,8 +569,8 @@ class CRU(nn.Module):
             observation_valid.unbind(dim=-1),
             strict=True,
         ):
-            prior_mean, prior_cov = self.propagate_state(
-                dt, post_mean, post_cov, mask=mask
+            prior_mean, prior_cov = masked_apply(
+                self.propagate_state, (dt, post_mean, post_cov), mask
             )
             post_mean, post_cov = self.update_state(
                 y, y_var, mask, prior_mean, prior_cov
@@ -604,8 +609,8 @@ class CRU(nn.Module):
             query_mask.unbind(dim=-1),
             strict=True,
         ):
-            mean, cov = self.propagate_state(dt, mean, cov, mask=mask)
-            pred_mean, pred_var = self.decoder(mean, cov)
+            mean, cov = masked_apply(self.propagate_state, (dt, mean, cov), mask)
+            pred_mean, pred_var = masked_apply(self.decoder, (mean, cov), mask)
             pred_means_list.append(pred_mean)
             pred_variances_list.append(pred_var)
 
