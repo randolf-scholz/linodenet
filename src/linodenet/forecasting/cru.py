@@ -224,7 +224,6 @@ class CRUConfig:
     num_basis: int = 15
     bandwidth: int = 3
     variance_activation: str = "elup1"
-    batch_first: bool = True
     initial_variance: float = 10.0
     validate_args: bool = False
 
@@ -312,6 +311,7 @@ class CRU(nn.Module):
               mentioned in the paper.
             - ``latent_size`` corresponds to ``latent_observation_size``.
             - ``bandwidth`` must be in the range ``[0, latent_size - 1]``.
+            - Batch-first layout is used by default.
     """
 
     # Constants
@@ -321,8 +321,6 @@ class CRU(nn.Module):
     r"""CONST: Dimensionality of forecast targets."""
     latent_size: Final[int]
     r"""CONST: Dimensionality of encoded latent observations."""
-    batch_first: Final[bool]
-    r"""CONST: Whether sequence tensors use shape ``batch × time × dim``."""
     validate_args: Final[bool]
     r"""CONST: Whether forward inputs should be validated before computation."""
 
@@ -357,7 +355,6 @@ class CRU(nn.Module):
             "input_size": self.input_size,
             "output_size": self.output_size,
             "latent_size": self.latent_size,
-            "batch_first": self.batch_first,
             "validate_args": self.validate_args,
             "initial_variance": self.initial_variance,
         }
@@ -405,7 +402,6 @@ class CRU(nn.Module):
         bandwidth: int = 3,  # bandwidth of the blocks of the transition matrix
         initial_variance: float = 10.0,
         variance_activation: str = "elup1",
-        batch_first: bool = True,
         validate_args: bool = False,
     ) -> None:
         super().__init__()
@@ -422,7 +418,6 @@ class CRU(nn.Module):
         self.output_size = output_size
         self.latent_size = latent_size
         self.num_basis = num_basis
-        self.batch_first = batch_first
         self.validate_args = validate_args
         self.initial_variance = initial_variance
 
@@ -770,6 +765,5 @@ def build_cru(config: CRUConfig | Mapping[str, object], /) -> CRU:
         bandwidth=config.bandwidth,
         initial_variance=config.initial_variance,
         variance_activation=config.variance_activation,
-        batch_first=config.batch_first,
         validate_args=config.validate_args,
     )
