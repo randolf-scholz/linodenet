@@ -393,7 +393,7 @@ class CRU(nn.Module):
     def __init__(
         self,
         input_size: int,
-        latent_size: int,
+        latent_size: int,  # corresponds to latent_observation_size in CRU reference impl.
         *,
         output_size: int | None = None,
         encoder: nn.Module,
@@ -443,8 +443,7 @@ class CRU(nn.Module):
             T(latent_size - 1) - T(latent_size - bandwidth - 1)
         )
         self.transition_matrix_parameters = nn.Parameter(
-            # FIXME: initialize as zero
-            torch.randn(num_basis, 4, num_params)
+            torch.zeros(num_basis, 4, num_params)
         )
 
         # create a mask for the transition matrix model
