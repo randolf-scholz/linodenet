@@ -6,9 +6,10 @@ __all__ = [
     "DecoderConfig",
     "EncoderConfig",
     "build_cru",
+    "masked_apply",
 ]
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
@@ -229,6 +230,49 @@ class CRUConfig:
     validate_args: bool = False
 
 
+def masked_apply[R: Tensor | tuple[Tensor, ...]](
+    fn: Callable[..., R],  # [*(..., *dᵢ)] -> [*(..., *eᵢ)]
+    args: tuple[Tensor, ...],
+    mask: Tensor,
+    *,
+    fill_value: float = float("nan"),
+) -> R:
+    r"""Apply fn only to selected batch elements.
+
+    Args:
+        fn: Function to apply. Must accept tensors with shared batch shape.
+        args: The arguments to fn. Must all have the same batch shape.
+        mask: The boolean mask indicating which batch elements to apply fn to. Must have the same batch shape as args.
+        fill_value: The value to fill masked out batch elements with.
+    """
+    batch_shape = mask.shape
+    B = batch_shape.numel() if batch_shape else 1
+    mask_flat = mask.reshape(B).bool()  # [B]
+
+    xs_flat = []
+    for x in args:
+        event_shape = x.shape[len(batch_shape) :]
+        assert x.shape == batch_shape + event_shape
+        xs_flat.append(x.reshape(B, *event_shape))
+
+    # apply fn over selected batch elements
+    ys_valid = fn(*(x[mask_flat] for x in xs_flat))
+    returns_tensor = isinstance(ys_valid, Tensor)
+    ys_tuple: tuple[Tensor, ...] = (ys_valid,) if returns_tensor else ys_valid
+
+    y_result = []
+    for y in ys_tuple:
+        y_flat = torch.full(
+            (B, *y.shape[1:]),
+            fill_value,
+            dtype=y.dtype,
+            device=y.device,
+        )
+        y_flat[mask_flat] = y
+        y_result.append(y_flat.reshape(*batch_shape, *y.shape[1:]))
+    return y_result[0] if returns_tensor else tuple(y_result)
+
+
 class CRU(nn.Module):
     r"""Continuous Recurrent Unit for probabilistic forecasting.
 
@@ -314,6 +358,37 @@ class CRU(nn.Module):
             "initial_variance": self.initial_variance,
             "variance_floor": self.variance_floor,
         }
+
+    @staticmethod
+    def nll(values: Tensor, means: Tensor, variances: Tensor) -> Tensor:
+        r"""Return NaN-aware diagonal Gaussian negative log-likelihood.
+
+        The feature dimension is treated as the event dimension. The returned loss
+        sums over features and averages over valid batch/time points.
+        """
+        assert values.shape == means.shape == variances.shape
+
+        value_is_nan = values.isnan()
+        value_is_observed = values.isfinite().all(dim=-1)
+        value_is_missing = value_is_nan.all(dim=-1)
+        assert (value_is_observed | value_is_missing).all()
+
+        prediction_is_nan = means.isnan() & variances.isnan()
+        assert (~prediction_is_nan | value_is_nan).all()
+
+        assert value_is_observed.any()
+        assert means[value_is_observed].isfinite().all()
+        assert variances[value_is_observed].isfinite().all()
+        assert (variances[value_is_observed] > 0).all()
+
+        return (
+            0.5
+            * (
+                (values[value_is_observed] - means[value_is_observed]).square()
+                / variances[value_is_observed]
+                + torch.log(2 * torch.pi * variances[value_is_observed])
+            ).sum(dim=-1)
+        ).mean()
 
     def __init__(
         self,
@@ -428,7 +503,6 @@ class CRU(nn.Module):
         query_mask = query_times.isfinite()
         context_mask = context_times.isfinite()
         context_lengths = context_mask.sum(dim=-1)  # (...)
-        query_lengths = query_mask.sum(dim=-1)  # (...)
         last_context_time = torch.take_along_dim(
             context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
         )
@@ -490,7 +564,9 @@ class CRU(nn.Module):
             observation_valid.unbind(dim=-1),
             strict=True,
         ):
-            prior_mean, prior_cov = self.propagate_state(dt, post_mean, post_cov)
+            prior_mean, prior_cov = self.propagate_state(
+                dt, post_mean, post_cov, mask=mask
+            )
             post_mean, post_cov = self.update_state(
                 y, y_var, mask, prior_mean, prior_cov
             )
@@ -513,7 +589,7 @@ class CRU(nn.Module):
             dim=-2,
         ).squeeze(-2)  # (..., 2d)
         last_post_cov = torch.take_along_dim(
-            self.posterior_variances,
+            self.posterior_variances,  # (..., T, d, 3)
             (context_lengths - 1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1),
             dim=-3,
         ).squeeze(-3)  # (..., d, 3)
@@ -523,8 +599,12 @@ class CRU(nn.Module):
         # μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
         # oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
         mean, cov = last_post_mean, last_post_cov
-        for dt in query_deltas.unbind(dim=-1):
-            mean, cov = self.propagate_state(dt, mean, cov)
+        for dt, mask in zip(
+            query_deltas.unbind(dim=-1),
+            query_mask.unbind(dim=-1),
+            strict=True,
+        ):
+            mean, cov = self.propagate_state(dt, mean, cov, mask=mask)
             pred_mean, pred_var = self.decoder(mean, cov)
             pred_means_list.append(pred_mean)
             pred_variances_list.append(pred_var)

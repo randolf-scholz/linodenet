@@ -15,6 +15,7 @@ from linodenet.forecasting.cru import (
     Encoder,
     EncoderConfig,
     build_cru,
+    masked_apply,
 )
 
 # language=yaml
@@ -45,6 +46,141 @@ initial_variance: 4.0
 variance_floor: 0.0001
 validate_args: true
 """
+
+
+class TestMaskedApply:
+    r"""Tests for applying functions only to valid batch elements."""
+
+    def test_applies_unary_torch_function(self) -> None:
+        x = torch.tensor(
+            [
+                [1.0, -2.0],
+                [torch.nan, torch.nan],
+                [3.0, -4.0],
+            ]
+        )
+        mask = x.isfinite().all(dim=-1)
+
+        result = masked_apply(torch.square, (x,), mask, fill_value=-1.0)
+
+        expected = torch.tensor(
+            [
+                [1.0, 4.0],
+                [-1.0, -1.0],
+                [9.0, 16.0],
+            ]
+        )
+        assert torch.equal(result, expected)
+
+    def test_applies_binary_torch_function(self) -> None:
+        x = torch.tensor(
+            [
+                [1.0, 2.0],
+                [torch.nan, torch.nan],
+                [3.0, 4.0],
+            ]
+        )
+        y = torch.tensor(
+            [
+                [10.0, 20.0],
+                [torch.nan, torch.nan],
+                [30.0, 40.0],
+            ]
+        )
+        mask = x.isfinite().all(dim=-1) & y.isfinite().all(dim=-1)
+
+        result = masked_apply(torch.add, (x, y), mask, fill_value=0.0)
+
+        expected = torch.tensor(
+            [
+                [11.0, 22.0],
+                [0.0, 0.0],
+                [33.0, 44.0],
+            ]
+        )
+        assert torch.equal(result, expected)
+
+    def test_preserves_multi_dimensional_batch_shape(self) -> None:
+        x = torch.arange(24.0).reshape(2, 3, 4)
+        x[0, 1] = torch.nan
+        x[1, 2] = torch.nan
+        mask = x.isfinite().all(dim=-1)
+
+        result = masked_apply(torch.sin, (x,), mask)
+
+        assert result.shape == x.shape
+        assert torch.allclose(result[mask], torch.sin(x[mask]))
+        assert torch.isnan(result[~mask]).all()
+
+    def test_torch_compile_fullgraph(self) -> None:
+        x = torch.arange(12.0).reshape(3, 4)
+        x[1] = torch.nan
+
+        compiled = torch.compile(
+            lambda values: masked_apply(
+                torch.sin,
+                (values,),
+                values.isfinite().all(dim=-1),
+            ),
+            fullgraph=True,
+        )
+
+        result = compiled(x)
+        expected = masked_apply(torch.sin, (x,), x.isfinite().all(dim=-1))
+        mask = x.isfinite().all(dim=-1)
+        assert result.shape == x.shape
+        assert torch.allclose(result[mask], expected[mask])
+        assert torch.isnan(result[~mask]).all()
+
+    def test_torch_export_with_linear_module(self) -> None:
+        class MaskedLinear(torch.nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.linear = torch.nn.Linear(4, 3)
+
+            def forward(self, values: torch.Tensor) -> torch.Tensor:
+                return masked_apply(
+                    self.linear,
+                    (values,),
+                    values.isfinite().all(dim=-1),
+                    fill_value=0.0,
+                )
+
+        torch.manual_seed(0)
+        model = MaskedLinear()
+        x = torch.randn(5, 4)
+        x[1] = torch.nan
+        x[3] = torch.nan
+
+        exported = torch.export.export(model, (x,))
+        result = exported.module()(x)
+        expected = model(x)
+
+        assert result.shape == (5, 3)
+        assert result.isfinite().all()
+        assert torch.allclose(result, expected)
+
+    def test_linear_forward_backward_with_nan_only_batch_elements(self) -> None:
+        torch.manual_seed(0)
+        linear = torch.nn.Linear(4, 3)
+        x = torch.randn(5, 4)
+        x[1] = torch.nan
+        x[3] = torch.nan
+        x.requires_grad_()
+        mask = x.isfinite().all(dim=-1)
+
+        result = masked_apply(linear, (x,), mask, fill_value=0.0)
+        loss = result.sum()
+        loss.backward()
+
+        assert result.shape == (5, 3)
+        assert result.isfinite().all()
+        assert x.grad is not None
+        assert x.grad.isfinite().all()
+        assert torch.equal(x.grad[~mask], torch.zeros_like(x.grad[~mask]))
+        for parameter in linear.parameters():
+            assert parameter.grad is not None
+            assert parameter.grad.isfinite().all()
 
 
 class CRUData(NamedTuple):
@@ -369,6 +505,98 @@ class TestModel:
         assert pred_mean[data.query_mask].isfinite().all()
         assert pred_var[data.query_mask].isfinite().all()
         assert pred_var[data.query_mask].ge(0).all()
+
+    def test_training_unbatched(self) -> None:
+        torch.manual_seed(0)
+        model = self.make_cru()
+        data = self.make_data(seed=0, batch_shape=(), min_steps=5, max_steps=5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+        initial_parameters = {
+            name: parameter.detach().clone()
+            for name, parameter in model.named_parameters()
+        }
+
+        pred_mean, pred_var = model(
+            data.query_times,
+            data.context_times,
+            data.context_values,
+        )
+
+        initial_loss = CRU.nll(data.query_values, pred_mean, pred_var)
+
+        for _ in range(3):
+            optimizer.zero_grad()
+            pred_mean, pred_var = model(
+                data.query_times,
+                data.context_times,
+                data.context_values,
+            )
+            loss = CRU.nll(data.query_values, pred_mean, pred_var)
+            loss.backward()
+
+            for name, parameter in model.named_parameters():
+                assert parameter.grad is not None, name
+                assert parameter.grad.isfinite().all(), name
+                assert parameter.grad.abs().sum() > 0, name
+
+            optimizer.step()
+
+        pred_mean, pred_var = model(
+            data.query_times,
+            data.context_times,
+            data.context_values,
+        )
+        final_loss = CRU.nll(data.query_values, pred_mean, pred_var)
+
+        for name, parameter in model.named_parameters():
+            assert not torch.equal(parameter, initial_parameters[name]), name
+        assert final_loss < initial_loss
+
+    def test_training_batched(self) -> None:
+        torch.manual_seed(0)
+        model = self.make_cru()
+        data = self.make_data(seed=0, batch_shape=(8,), min_steps=2, max_steps=5)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+        initial_parameters = {
+            name: parameter.detach().clone()
+            for name, parameter in model.named_parameters()
+        }
+
+        pred_mean, pred_var = model(
+            data.query_times,
+            data.context_times,
+            data.context_values,
+        )
+
+        initial_loss = CRU.nll(data.query_values, pred_mean, pred_var)
+
+        for _ in range(3):
+            optimizer.zero_grad()
+            pred_mean, pred_var = model(
+                data.query_times,
+                data.context_times,
+                data.context_values,
+            )
+            loss = CRU.nll(data.query_values, pred_mean, pred_var)
+            loss.backward()
+
+            for name, parameter in model.named_parameters():
+                assert parameter.grad is not None, name
+                assert parameter.grad.isfinite().all(), name
+                assert parameter.grad.abs().sum() > 0, name
+
+            optimizer.step()
+
+        pred_mean, pred_var = model(
+            data.query_times,
+            data.context_times,
+            data.context_values,
+        )
+        final_loss = CRU.nll(data.query_values, pred_mean, pred_var)
+
+        for name, parameter in model.named_parameters():
+            assert not torch.equal(parameter, initial_parameters[name]), name
+        assert final_loss < initial_loss
 
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:
