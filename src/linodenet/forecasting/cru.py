@@ -503,34 +503,11 @@ class CRU(nn.Module):
         query_deltas = query_times.diff(prepend=last_context_time)  # (..., Q)
         assert (context_deltas[context_mask] >= 0).all(), "context times not sorted"
         assert (query_deltas[query_mask] >= 0).all(), "query times not sorted"
-
-        # context_valid = context_times.isfinite()
-        # query_valid = query_times.isfinite()
-        # context_lengths = context_valid.sum(dim=-1)
-        #
-        # last_context_times = torch.take_along_dim(
-        #     context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
-        # ).squeeze(-1)
-        # context_deltas = context_times.diff(prepend=context_times[..., [0]])  # (..., T)
-        # query_deltas = query_times.diff(
-        #     prepend=last_context_times[..., None]
-        # )  # (..., Q)
-        # context_deltas = torch.where(context_valid, context_deltas, 0.0)
-        # query_deltas = torch.where(query_valid, query_deltas, 0.0)
-        # context_sorted = context_times[..., 1:] > context_times[..., :-1]
-        # context_pairs_valid = context_valid[..., 1:] & context_valid[..., :-1]
-        # query_sorted = query_times[..., 1:] > query_times[..., :-1]
-        # query_pairs_valid = query_valid[..., 1:] & query_valid[..., :-1]
-        # assert (context_sorted | ~context_pairs_valid).all(), "context times not sorted"
-        # assert (
-        #     (query_times[..., 0] > last_context_times) | ~query_valid[..., 0]
-        # ).all(), "query times not sorted"
-        # assert (query_sorted | ~query_pairs_valid).all(), "query times not sorted"
-
         # we assume sequences were batched using NaN-padding.
         # since the model does not support missing values, we mark any observation vector
         # that contains any missing value as illegal.
         observation_valid = context_values.isfinite().all(dim=-1)  # (..., T)
+        assert (context_mask == observation_valid).all()
 
         # encode observations
         y_means, y_variances = masked_apply(
@@ -559,7 +536,7 @@ class CRU(nn.Module):
             context_deltas.unbind(dim=-1),
             y_means.unbind(dim=-2),
             y_variances.unbind(dim=-2),
-            observation_valid.unbind(dim=-1),
+            context_mask.unbind(dim=-1),
             strict=True,
         ):
             prior_mean, prior_cov = masked_apply(
