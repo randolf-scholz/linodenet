@@ -3,6 +3,7 @@ r"""Tests for CRU model construction."""
 from pathlib import Path
 from typing import ClassVar, NamedTuple
 
+import pytest
 import torch
 import yaml
 from torch.nn.utils.rnn import pad_sequence
@@ -502,6 +503,26 @@ class TestModel:
         assert pred_mean[data.query_mask].isfinite().all()
         assert pred_var[data.query_mask].isfinite().all()
         assert pred_var[data.query_mask].ge(0).all()
+
+    def test_rejects_finite_context_time_with_missing_value(self) -> None:
+        model = self.make_cru()
+        data = self.make_data(seed=0, batch_shape=(), min_steps=3, max_steps=3)
+        context_values = data.context_values.clone()
+        context_values[1, 0] = torch.nan
+
+        with pytest.raises(AssertionError):
+            model(data.query_times, data.context_times, context_values)
+
+    def test_rejects_padded_context_time_with_finite_value(self) -> None:
+        model = self.make_cru()
+        context_times = torch.tensor([[0.0, 1.0, torch.nan]])
+        context_values = torch.full((1, 3, self.STANDARD_CONFIG.input_size), torch.nan)
+        context_values[:, :2] = torch.randn(1, 2, self.STANDARD_CONFIG.input_size)
+        context_values[:, 2] = 0.0
+        query_times = torch.tensor([[2.0]])
+
+        with pytest.raises(AssertionError):
+            model(query_times, context_times, context_values)
 
     def test_training_unbatched(self) -> None:
         torch.manual_seed(0)
