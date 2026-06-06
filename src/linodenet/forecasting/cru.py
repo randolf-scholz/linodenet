@@ -443,7 +443,7 @@ class CRU(nn.Module):
             T(latent_size - 1) - T(latent_size - bandwidth - 1)
         )
         self.transition_matrix_parameters = nn.Parameter(
-            torch.zeros(num_basis, 4, num_params)
+            torch.zeros(num_basis, 2, 2, num_params)
         )
 
         # create a mask for the transition matrix model
@@ -452,11 +452,10 @@ class CRU(nn.Module):
             .triu(-bandwidth)
             .tril(bandwidth)
         )
-        block_banded_mask = torch.cat([  # [[B, B], [B, B]]
-            torch.cat([band_mask, band_mask], dim=-1),
-            torch.cat([band_mask, band_mask], dim=-1),
-        ], dim=-2)  # fmt: skip
-        self.register_buffer("block_banded_mask", block_banded_mask)
+        self.register_buffer(
+            "block_banded_mask",
+            band_mask.expand(2, 2, latent_size, latent_size),
+        )
 
         # "For all experiments, we used a transition net with one linear layer and
         # softmax output."
@@ -625,17 +624,20 @@ class CRU(nn.Module):
         Here Aₖ = [Aₖ¹¹, Aₖ¹²; Aₖ²¹, Aₖ²²],
         where each block is a band-matrix of bandwidth b.
         """
-        *batch_shape, n = mean.shape
+        *batch_shape, _ = mean.shape
+        d = self.latent_size
         alpha = self.transition_coefficient_model(mean)  # (..., k)
         weighted = torch.einsum(
-            "...k, knb -> ...nb", alpha, self.transition_matrix_parameters
-        )  # (..., 4, p(b))
+            "...k, kijp -> ...ijp", alpha, self.transition_matrix_parameters
+        )  # (..., 2, 2, p(b))
 
-        # block_banded_mask is (2d, 2d)
-        mask = self.block_banded_mask.expand(*batch_shape, n, n)
-        A = torch.zeros_like(mask, dtype=weighted.dtype)
-        A = A.masked_scatter(mask, weighted)
-        return A
+        mask = self.block_banded_mask.expand(*batch_shape, 2, 2, d, d)
+        blocks = weighted.new_zeros(*batch_shape, 2, 2, d, d)
+        blocks = blocks.masked_scatter(mask, weighted)
+        return torch.cat([
+            torch.cat([blocks[..., 0, 0, :, :], blocks[..., 0, 1, :, :]], dim=-1),
+            torch.cat([blocks[..., 1, 0, :, :], blocks[..., 1, 1, :, :]], dim=-1),
+        ], dim=-2)  # fmt: skip
 
     def propagate_state(
         self,

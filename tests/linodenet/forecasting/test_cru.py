@@ -39,7 +39,7 @@ decoder:
   activation_function: tanh
   variance_activation: square
 num_basis: 3
-bandwidth: 2
+bandwidth: 1
 variance_activation: abs
 batch_first: true
 initial_variance: 4.0
@@ -237,7 +237,7 @@ class TestModel:
             variance_activation="square",
         ),
         num_basis=4,
-        bandwidth=2,
+        bandwidth=1,
         variance_activation="abs",
         initial_variance=2.0,
         variance_floor=1e-5,
@@ -268,7 +268,7 @@ class TestModel:
             activation_function=config.decoder.activation_function,
             variance_activation=config.decoder.variance_activation,
         )
-        return CRU(
+        model = CRU(
             config.input_size,
             config.latent_size,
             output_size=config.output_size,
@@ -282,6 +282,11 @@ class TestModel:
             batch_first=config.batch_first,
             validate_args=config.validate_args,
         )
+        with torch.no_grad():
+            model.transition_matrix_parameters.copy_(
+                torch.randn_like(model.transition_matrix_parameters)
+            )
+        return model
 
     @classmethod
     def make_data(
@@ -648,6 +653,40 @@ def test_build_cru_instantiates_from_mapping_config() -> None:
     assert model.encoder.output_size == 2
     assert model.decoder.input_size == 2
     assert model.transition_matrix_parameters.shape[0] == 2
+
+
+def test_transition_matrix_model_packs_banded_blocks_in_quadrants() -> None:
+    model = build_cru(
+        {
+            "input_size": 2,
+            "output_size": 1,
+            "latent_size": 3,
+            "encoder": {"input_size": 2, "output_size": 3, "hidden_size": 5},
+            "decoder": {"input_size": 3, "output_size": 1, "hidden_size": 7},
+            "num_basis": 1,
+            "bandwidth": 0,
+        }
+    )
+
+    parameters = 1 + torch.arange(
+        model.transition_matrix_parameters.numel(),
+        dtype=model.transition_matrix_parameters.dtype,
+    ).reshape_as(model.transition_matrix_parameters)
+    with torch.no_grad():
+        model.transition_matrix_parameters.copy_(parameters)
+
+    actual = model.transition_matrix_model(torch.zeros(2 * model.latent_size))
+
+    expected = torch.tensor([
+        [ 1,  0,  0,  4,  0,  0],
+        [ 0,  2,  0,  0,  5,  0],
+        [ 0,  0,  3,  0,  0,  6],
+        [ 7,  0,  0, 10,  0,  0],
+        [ 0,  8,  0,  0, 11,  0],
+        [ 0,  0,  9,  0,  0, 12],
+    ], dtype=actual.dtype)  # fmt: skip
+
+    assert torch.equal(actual, expected)
 
 
 def test_build_cru_instantiates_from_yaml_file(tmp_path: Path) -> None:
