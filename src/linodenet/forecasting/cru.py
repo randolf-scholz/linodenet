@@ -226,7 +226,6 @@ class CRUConfig:
     variance_activation: str = "elup1"
     batch_first: bool = True
     initial_variance: float = 10.0
-    variance_floor: float = 1e-6
     validate_args: bool = False
 
 
@@ -306,6 +305,13 @@ class CRU(nn.Module):
         - Hence, the kalman gain takes the form Kₜ=[Kₜᵘ; Kₜˡ], where
           - Kₜᵘ = diag(σₜᵘ / (σₜᵘ + σₜ^{obs}))
           - Kₜˡ = diag(σₜˢ / (σₜᵘ + σₜ^{obs}))
+
+    Note:
+        Differences to the reference implementation:
+            - We do not make the initial covariance trainable, as this is not
+              mentioned in the paper.
+            - ``latent_size`` corresponds to ``latent_observation_size``.
+            - ``bandwidth`` must be in the range ``[0, latent_size - 1]``.
     """
 
     # Constants
@@ -319,8 +325,6 @@ class CRU(nn.Module):
     r"""CONST: Whether sequence tensors use shape ``batch × time × dim``."""
     validate_args: Final[bool]
     r"""CONST: Whether forward inputs should be validated before computation."""
-    variance_floor: Final[float]
-    r"""CONST: Minimum variance used for numerical stability."""
 
     # Submodules
     encoder: nn.Module
@@ -356,7 +360,6 @@ class CRU(nn.Module):
             "batch_first": self.batch_first,
             "validate_args": self.validate_args,
             "initial_variance": self.initial_variance,
-            "variance_floor": self.variance_floor,
         }
 
     @staticmethod
@@ -401,7 +404,6 @@ class CRU(nn.Module):
         num_basis: int = 15,  # number of basis matrices for the transition model
         bandwidth: int = 3,  # bandwidth of the blocks of the transition matrix
         initial_variance: float = 10.0,
-        variance_floor: float = 1e-6,
         variance_activation: str = "elup1",
         batch_first: bool = True,
         validate_args: bool = False,
@@ -409,8 +411,6 @@ class CRU(nn.Module):
         super().__init__()
         if initial_variance <= 0:
             raise ValueError("initial_variance must be positive.")
-        if variance_floor <= 0:
-            raise ValueError("variance_floor must be positive.")
 
         self.input_size = input_size
         if output_size is None:
@@ -425,7 +425,6 @@ class CRU(nn.Module):
         self.batch_first = batch_first
         self.validate_args = validate_args
         self.initial_variance = initial_variance
-        self.variance_floor = variance_floor
 
         self.variance_activation = new_activation(variance_activation)
 
@@ -436,6 +435,7 @@ class CRU(nn.Module):
         # where Aₖ = [[B₁₁, B₁₂], [B₂₁, B₂₂]] and each block is a d×d banded matrix of bandwidth b.
         # The number of parameters of a banded d×d matrix with bandwidth b is:
         #   d + 2*(T_{d-1} - T_{d-b-1}), where Tₙ is the n-th triangle number
+        # note: reference allows bandwidth=latent_size, which is a bug.
         assert bandwidth >= 0, "bandwidth must be non-negative"
         assert bandwidth < latent_size, "bandwidth must be smaller than latent_size."
         T = lambda n: n * (n + 1) // 2
@@ -769,7 +769,6 @@ def build_cru(config: CRUConfig | Mapping[str, object], /) -> CRU:
         num_basis=config.num_basis,
         bandwidth=config.bandwidth,
         initial_variance=config.initial_variance,
-        variance_floor=config.variance_floor,
         variance_activation=config.variance_activation,
         batch_first=config.batch_first,
         validate_args=config.validate_args,

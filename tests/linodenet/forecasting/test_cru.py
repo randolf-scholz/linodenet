@@ -43,7 +43,6 @@ bandwidth: 1
 variance_activation: abs
 batch_first: true
 initial_variance: 4.0
-variance_floor: 0.0001
 validate_args: true
 """
 
@@ -240,7 +239,6 @@ class TestModel:
         bandwidth=1,
         variance_activation="abs",
         initial_variance=2.0,
-        variance_floor=1e-5,
         batch_first=True,
         validate_args=True,
     )
@@ -277,7 +275,6 @@ class TestModel:
             num_basis=config.num_basis,
             bandwidth=config.bandwidth,
             initial_variance=config.initial_variance,
-            variance_floor=config.variance_floor,
             variance_activation=config.variance_activation,
             batch_first=config.batch_first,
             validate_args=config.validate_args,
@@ -391,7 +388,6 @@ class TestModel:
         assert model.latent_size == config.latent_size
         assert model.num_basis == config.num_basis
         assert model.initial_variance == config.initial_variance
-        assert model.variance_floor == config.variance_floor
         assert model.batch_first is config.batch_first
         assert model.validate_args is config.validate_args
         assert model.initial_covariance.shape == (
@@ -615,7 +611,6 @@ def test_build_cru_instantiates_from_dataclass_config() -> None:
     assert model.latent_size == config.latent_size
     assert model.num_basis == config.num_basis
     assert model.initial_variance == config.initial_variance
-    assert model.variance_floor == config.variance_floor
     assert model.batch_first is config.batch_first
     assert model.validate_args is config.validate_args
     assert model.initial_covariance.shape == (
