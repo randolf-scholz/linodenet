@@ -305,13 +305,18 @@ class CRU(nn.Module):
           - Kₜᵘ = diag(σₜᵘ / (σₜᵘ + σₜ^{obs}))
           - Kₜˡ = diag(σₜˢ / (σₜᵘ + σₜ^{obs}))
 
+    Note: Differences to the reference implementation.
+        - We do not make the initial covariance trainable, as this is not
+          mentioned in the paper.
+        - ``latent_size`` corresponds to ``latent_observation_size``.
+        - ``bandwidth`` must be in the range ``[0, latent_size - 1]``.
+        - Batch-first layout is used by default.
+
     Note:
-        Differences to the reference implementation:
-            - We do not make the initial covariance trainable, as this is not
-              mentioned in the paper.
-            - ``latent_size`` corresponds to ``latent_observation_size``.
-            - ``bandwidth`` must be in the range ``[0, latent_size - 1]``.
-            - Batch-first layout is used by default.
+        CRU does not support input missingness. In their experiments, for instance
+        on PhysioNet, missing features are simply imputed with zeros. The mask
+        is not forwarded to the model, so it cannot distinguish between
+        observed zeros and missing values.
     """
 
     # Constants
