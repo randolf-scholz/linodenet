@@ -9,13 +9,14 @@ __all__ = [
     "masked_apply",
 ]
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
 import torch
 from torch import Tensor, nn
 from torch.distributions import Distribution
+from torch.nn.utils.rnn import pad_sequence
 
 
 class ELU1P(nn.Module):
@@ -475,6 +476,27 @@ class CRU(nn.Module):
         self.register_buffer("prior_variances", torch.empty(0), persistent=False)
         self.register_buffer("posterior_means", torch.empty(0), persistent=False)
         self.register_buffer("posterior_variances", torch.empty(0), persistent=False)
+
+    def forecast_unbatched(
+        self, args: Iterable[tuple[Tensor, Tensor, Tensor]], /
+    ) -> Distribution:
+        # convert list of tuples to tuples of tensors
+        query_times: tuple[Tensor, ...]
+        context_times: tuple[Tensor, ...]
+        context_values: tuple[Tensor, ...]
+        query_times, context_times, context_values = zip(*args, strict=True)
+
+        # pad with NaN
+        context_times_tensor = pad_sequence(
+            context_times, batch_first=True, padding_value=torch.nan
+        )
+        context_values_tensor = pad_sequence(
+            context_values, batch_first=True, padding_value=torch.nan
+        )
+        query_times_tensor = pad_sequence(
+            query_times, batch_first=True, padding_value=torch.nan
+        )
+        return self(query_times_tensor, context_times_tensor, context_values_tensor)
 
     def forward(
         self,
