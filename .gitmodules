@@ -7,3 +7,12 @@
 [submodule "third_party/neural-flows-experiments"]
 	path = third_party/neural-flows-experiments
 	url = https://github.com/mbilos/neural-flows-experiments.git
+[submodule "third_party/diffrax"]
+	path = third_party/diffrax
+	url = https://github.com/patrick-kidger/diffrax.git
+[submodule "third_party/torchode"]
+	path = third_party/torchode
+	url = https://github.com/martenlienen/torchode.git
+[submodule "third_party/torchdiffeq"]
+	path = third_party/torchdiffeq
+	url = https://github.com/rtqichen/torchdiffeq.git
