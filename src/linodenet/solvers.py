@@ -7,25 +7,48 @@ products from the stored no-grad trajectory.
 """
 
 __all__ = [
-    "OdeintLoopState",
+    "ODESolver",
+    "ODESolverState",
     "euler_step",
     "heun_step",
     "midpoint_step",
-    "odeint",
     "odeint_forward",
+    "solve_ivp",
 ]
 
 from collections.abc import Callable
+from enum import StrEnum
 from typing import Any, Final, Literal, NamedTuple
 
 import torch
 from torch import Tensor
 
-ODESolverMethod = Literal["euler", "midpoint", "heun"]
 _MIN_STEPS: Final[int] = 1
 
 
-class OdeintLoopState(NamedTuple):
+class ODESolver(StrEnum):
+    r"""Explicit one-step ODE solver methods."""
+
+    EULER = "euler"
+    MIDPOINT = "midpoint"
+    HEUN = "heun"
+
+    @property
+    def step_fn(self) -> Callable[..., Tensor]:
+        r"""Return the one-step update function."""
+        match self:
+            case ODESolver.EULER:
+                return euler_step
+            case ODESolver.MIDPOINT:
+                return midpoint_step
+            case ODESolver.HEUN:
+                return heun_step
+
+
+ODESolverMethod = ODESolver | Literal["euler", "midpoint", "heun"]
+
+
+class ODESolverState(NamedTuple):
     r"""Loop state for fixed-step ODE integration."""
 
     step_index: Tensor
@@ -75,25 +98,6 @@ def heun_step(
     return state + 0.5 * step_size * (slope_start + slope_end)
 
 
-def _step(
-    method: ODESolverMethod,
-    vector_field: Callable[..., Tensor],
-    time: Tensor,
-    state: Tensor,
-    step_size: Tensor,
-    *args: Tensor,
-) -> Tensor:
-    match method:
-        case "euler":
-            return euler_step(vector_field, time, state, step_size, *args)
-        case "midpoint":
-            return midpoint_step(vector_field, time, state, step_size, *args)
-        case "heun":
-            return heun_step(vector_field, time, state, step_size, *args)
-        case _:
-            raise NotImplementedError(f"Unknown ODE solver method {method!r}.")
-
-
 def _num_steps(t0: Tensor, t1: Tensor, step_size: float) -> int:
     interval = float((t1 - t0).detach().cpu())
     if interval < 0:
@@ -137,15 +141,17 @@ def odeint_forward(
     history = torch.empty((num_steps + 1, *y0.shape), device=y0.device, dtype=y0.dtype)
     history[0] = y0
 
-    def cond_fn(loop_state: OdeintLoopState, /) -> Tensor:
+    step_fn = ODESolver(method).step_fn
+
+    def cond_fn(loop_state: ODESolverState, /) -> Tensor:
         step_index, _, _, _ = loop_state
         return step_index < num_steps
 
-    def body_fn(loop_state: OdeintLoopState, /) -> OdeintLoopState:
+    def body_fn(loop_state: ODESolverState, /) -> ODESolverState:
         step_index, time, state, history = loop_state
         remaining = t1 - time
         dt = torch.minimum(step_size_t, remaining)
-        next_state = _step(method, vector_field, time, state, dt, *args)
+        next_state = step_fn(vector_field, time, state, dt, *args)
         next_index = step_index + 1
         next_time = time + dt
         next_history = history.clone().index_copy(
@@ -153,15 +159,15 @@ def odeint_forward(
             next_index.reshape(1),
             next_state.unsqueeze(0),
         )
-        return OdeintLoopState(next_index, next_time, next_state, next_history)
+        return ODESolverState(next_index, next_time, next_state, next_history)
 
     step_index = torch.zeros((), device=y0.device, dtype=torch.int64)
-    initial_state = OdeintLoopState(step_index, t0.clone(), y0.clone(), history)
+    initial_state = ODESolverState(step_index, t0.clone(), y0.clone(), history)
     final_state = torch.while_loop(cond_fn, body_fn, (initial_state,))
     return final_state.history
 
 
-class _OdeintDiscreteAdjoint(torch.autograd.Function):
+class _DiscreteAdjoint(torch.autograd.Function):
     r"""ODE integration with custom discrete-adjoint backward."""
 
     @staticmethod
@@ -186,7 +192,7 @@ class _OdeintDiscreteAdjoint(torch.autograd.Function):
         )
         ctx.vector_field = vector_field
         ctx.step_size = step_size
-        ctx.method = method
+        ctx.step_fn = ODESolver(method).step_fn
         ctx.save_for_backward(history, t0, t1, *args)
         return history[-1]
 
@@ -219,8 +225,7 @@ class _OdeintDiscreteAdjoint(torch.autograd.Function):
                 active_args = tuple(
                     arg.detach().requires_grad_(arg.requires_grad) for arg in args
                 )
-                next_state = _step(
-                    ctx.method,
+                next_state = ctx.step_fn(
                     ctx.vector_field,
                     previous_time,
                     state,
@@ -244,7 +249,7 @@ class _OdeintDiscreteAdjoint(torch.autograd.Function):
         return None, grad_y, None, None, None, None, *grad_args
 
 
-def odeint(
+def solve_ivp(
     vector_field: Callable[..., Tensor],
     y0: Tensor,
     t0: float | Tensor,
@@ -261,7 +266,7 @@ def odeint(
     """
     t0_t = torch.as_tensor(t0, device=y0.device, dtype=y0.dtype)
     t1_t = torch.as_tensor(t1, device=y0.device, dtype=y0.dtype)
-    return _OdeintDiscreteAdjoint.apply(
+    return _DiscreteAdjoint.apply(
         vector_field,
         y0,
         t0_t,

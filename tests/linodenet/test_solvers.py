@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet.solvers import ODESolverMethod, odeint
+from linodenet.solvers import ODESolverMethod, solve_ivp
 
 
 class UnivariateLinearSystem(NamedTuple):
@@ -24,10 +24,10 @@ class UnivariateLinearSystem(NamedTuple):
 
     def vector_field(
         self,
-        time: Tensor,
+        _time: Tensor,
         state: Tensor,
         rate: Tensor,
-        /,  # noqa: ARG002
+        /,
     ) -> Tensor:
         r"""Return ``dx/dt = λx``."""
         return rate * state
@@ -52,10 +52,10 @@ class MultivariateLinearSystem(NamedTuple):
 
     def vector_field(
         self,
-        time: Tensor,
+        _time: Tensor,
         state: Tensor,
         matrix: Tensor,
-        /,  # noqa: ARG002
+        /,
     ) -> Tensor:
         r"""Return ``dx/dt = Ax``."""
         return matrix @ state
@@ -92,10 +92,10 @@ class HarmonicOscillator(NamedTuple):
 
     def vector_field(
         self,
-        time: Tensor,
+        _time: Tensor,
         state: Tensor,
         frequency: Tensor,
-        /,  # noqa: ARG002
+        /,
     ) -> Tensor:
         r"""Return ``dq/dt=p`` and ``dp/dt=-ω²q``."""
         return self.matrix(frequency) @ state
@@ -150,7 +150,7 @@ class TestSolver:
     def test_forward_and_backward_runs(self, method: ODESolverMethod) -> None:
         r"""Check that forward and backward execute and produce finite gradients."""
         case = self.make_univariate_linear_system()
-        actual = odeint(
+        actual = solve_ivp(
             case.vector_field,
             case.x0,
             case.t0,
@@ -182,7 +182,7 @@ class TestSolver:
     ) -> None:
         r"""Compare ``dx/dt = λx`` solution with ``x₀ exp(λt)``."""
         case = self.make_univariate_linear_system()
-        actual = odeint(
+        actual = solve_ivp(
             case.vector_field,
             case.x0,
             case.t0,
@@ -208,7 +208,7 @@ class TestSolver:
     ) -> None:
         r"""Compare ``dx/dt = Ax`` solution with ``exp(At)x₀``."""
         case = self.make_multivariate_linear_system()
-        actual = odeint(
+        actual = solve_ivp(
             case.vector_field,
             case.x0,
             case.t0,
@@ -234,7 +234,7 @@ class TestSolver:
     ) -> None:
         r"""Compare harmonic oscillator solution with matrix exponential."""
         case = self.make_harmonic_oscillator()
-        actual = odeint(
+        actual = solve_ivp(
             case.vector_field,
             case.x0,
             case.t0,
