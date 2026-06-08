@@ -3,7 +3,10 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/Continuous-Recurrent-Units" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/diffrax" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/gru_ode_bayes" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/neural-flows-experiments" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/torchdiffeq" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/torchode" vcs="Git" />
   </component>
 </project>
