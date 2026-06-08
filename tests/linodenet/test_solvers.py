@@ -15,7 +15,7 @@ class UnivariateLinearSystem(NamedTuple):
     x0: Tensor
     rate: Tensor
     t0: Tensor
-    t1: Tensor
+    t_eval: Tensor
 
     @property
     def args(self) -> tuple[Tensor]:
@@ -33,8 +33,8 @@ class UnivariateLinearSystem(NamedTuple):
         return rate * state
 
     def analytic_solution(self) -> Tensor:
-        r"""Return the exact terminal state ``x₀ exp(λ(t₁-t₀))``."""
-        return self.x0 * torch.exp(self.rate * (self.t1 - self.t0))
+        r"""Return the exact states ``x₀ exp(λ(t-t₀))`` at ``t_eval``."""
+        return self.x0 * torch.exp(self.rate * (self.t_eval - self.t0))
 
 
 class MultivariateLinearSystem(NamedTuple):
@@ -43,7 +43,7 @@ class MultivariateLinearSystem(NamedTuple):
     x0: Tensor
     matrix: Tensor
     t0: Tensor
-    t1: Tensor
+    t_eval: Tensor
 
     @property
     def args(self) -> tuple[Tensor]:
@@ -61,9 +61,13 @@ class MultivariateLinearSystem(NamedTuple):
         return matrix @ state
 
     def analytic_solution(self) -> Tensor:
-        r"""Return the exact terminal state ``exp(A(t₁-t₀))x₀``."""
-        transition = torch.linalg.matrix_exp((self.t1 - self.t0) * self.matrix)
-        return transition @ self.x0
+        r"""Return the exact states ``exp(A(t-t₀))x₀`` at ``t_eval``."""
+        return torch.stack(
+            [
+                torch.linalg.matrix_exp((time - self.t0) * self.matrix) @ self.x0
+                for time in self.t_eval
+            ]
+        )
 
 
 class HarmonicOscillator(NamedTuple):
@@ -72,7 +76,7 @@ class HarmonicOscillator(NamedTuple):
     x0: Tensor
     frequency: Tensor
     t0: Tensor
-    t1: Tensor
+    t_eval: Tensor
 
     @property
     def args(self) -> tuple[Tensor]:
@@ -101,11 +105,14 @@ class HarmonicOscillator(NamedTuple):
         return self.matrix(frequency) @ state
 
     def analytic_solution(self) -> Tensor:
-        r"""Return the exact terminal state via matrix exponential."""
-        transition = torch.linalg.matrix_exp(
-            (self.t1 - self.t0) * self.matrix(self.frequency)
+        r"""Return the exact states at ``t_eval`` via matrix exponential."""
+        matrix = self.matrix(self.frequency)
+        return torch.stack(
+            [
+                torch.linalg.matrix_exp((time - self.t0) * matrix) @ self.x0
+                for time in self.t_eval
+            ]
         )
-        return transition @ self.x0
 
 
 class TestSolver:
@@ -118,7 +125,7 @@ class TestSolver:
             x0=torch.tensor(1.25, dtype=torch.float64, requires_grad=True),
             rate=torch.tensor(-0.4, dtype=torch.float64, requires_grad=True),
             t0=torch.tensor(0.0, dtype=torch.float64),
-            t1=torch.tensor(0.5, dtype=torch.float64),
+            t_eval=torch.tensor([0.0, 0.25, 0.5], dtype=torch.float64),
         )
 
     @staticmethod
@@ -133,7 +140,7 @@ class TestSolver:
             x0=torch.tensor([1.0, -0.5], dtype=torch.float64, requires_grad=True),
             matrix=matrix,
             t0=torch.tensor(0.0, dtype=torch.float64),
-            t1=torch.tensor(0.5, dtype=torch.float64),
+            t_eval=torch.tensor([0.0, 0.25, 0.5], dtype=torch.float64),
         )
 
     @staticmethod
@@ -143,7 +150,7 @@ class TestSolver:
             x0=torch.tensor([1.0, 0.25], dtype=torch.float64, requires_grad=True),
             frequency=torch.tensor(1.7, dtype=torch.float64, requires_grad=True),
             t0=torch.tensor(0.0, dtype=torch.float64),
-            t1=torch.tensor(0.5, dtype=torch.float64),
+            t_eval=torch.tensor([0.0, 0.25, 0.5], dtype=torch.float64),
         )
 
     @pytest.mark.parametrize("method", ["euler", "midpoint", "heun"])
@@ -154,13 +161,13 @@ class TestSolver:
             case.vector_field,
             case.x0,
             case.t0,
-            case.t1,
+            case.t_eval,
             step_size=0.05,
             method=method,
             args=case.args,
         )
 
-        loss = actual.square()
+        loss = actual.square().sum()
         loss.backward()
 
         assert actual.isfinite().all()
@@ -186,7 +193,7 @@ class TestSolver:
             case.vector_field,
             case.x0,
             case.t0,
-            case.t1,
+            case.t_eval,
             step_size=0.005,
             method=method,
             args=case.args,
@@ -212,7 +219,7 @@ class TestSolver:
             case.vector_field,
             case.x0,
             case.t0,
-            case.t1,
+            case.t_eval,
             step_size=0.005,
             method=method,
             args=case.args,
@@ -238,7 +245,7 @@ class TestSolver:
             case.vector_field,
             case.x0,
             case.t0,
-            case.t1,
+            case.t_eval,
             step_size=0.005,
             method=method,
             args=case.args,
