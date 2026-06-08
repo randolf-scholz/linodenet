@@ -46,23 +46,23 @@ ODESolverMethod = ODESolver | Literal["euler", "midpoint", "heun"]
 
 
 def euler_step(
-    vector_field: Callable[..., Tensor],  # ((), (..., D), *args) -> (..., D)
-    time: Tensor,  # ()
+    vector_field: Callable[..., Tensor],  # [(...), (..., D), *args] -> (..., D)
+    time: Tensor,  # (...)
     state: Tensor,  # (..., D)
-    step_size: Tensor,  # ()
-    *args: Tensor,  # arbitrary tensor parameters
-) -> Tensor:
+    step_size: Tensor,  # (...)
+    args: tuple[Tensor, ...] = (),  # arbitrary tensor parameters
+) -> Tensor:  # (..., D)
     r"""Return one explicit Euler step."""
     return state + step_size * vector_field(time, state, *args)
 
 
 def midpoint_step(
-    vector_field: Callable[..., Tensor],  # ((), (..., D), *args) -> (..., D)
-    time: Tensor,  # ()
+    vector_field: Callable[..., Tensor],  # [(...), (..., D), *args] -> (..., D)
+    time: Tensor,  # (...)
     state: Tensor,  # (..., D)
-    step_size: Tensor,  # ()
-    *args: Tensor,  # arbitrary tensor parameters
-) -> Tensor:
+    step_size: Tensor,  # (...)
+    args: tuple[Tensor, ...] = (),  # arbitrary tensor parameters
+) -> Tensor:  # (..., D)
     r"""Return one explicit midpoint step."""
     half_step = 0.5 * step_size
     midpoint = state + half_step * vector_field(time, state, *args)
@@ -70,12 +70,12 @@ def midpoint_step(
 
 
 def heun_step(
-    vector_field: Callable[..., Tensor],  # ((), (..., D), *args) -> (..., D)
-    time: Tensor,  # ()
+    vector_field: Callable[..., Tensor],  # [(...), (..., D), *args] -> (..., D)
+    time: Tensor,  # (...)
     state: Tensor,  # (..., D)
-    step_size: Tensor,  # ()
-    *args: Tensor,  # arbitrary tensor parameters
-) -> Tensor:
+    step_size: Tensor,  # (...)
+    args: tuple[Tensor, ...] = (),  # arbitrary tensor parameters
+) -> Tensor:  # (..., D)
     r"""Return one explicit trapezoidal/Heun step."""
     slope_start = vector_field(time, state, *args)
     slope_end = vector_field(
@@ -138,7 +138,7 @@ def odeint_forward(
         for _ in range(num_steps):
             remaining = target_time - time
             dt = torch.minimum(step_size_t, remaining)
-            state = step_fn(vector_field, time, state, dt, *args)
+            state = step_fn(vector_field, time, state, dt, args=args)
             time = time + dt
             history.append(state)
             times.append(time)
@@ -224,7 +224,7 @@ class _DiscreteAdjoint(torch.autograd.Function):
                     previous_time,
                     state,
                     dt,
-                    *active_args,
+                    args=active_args,
                 )
                 grads = torch.autograd.grad(
                     next_state,
