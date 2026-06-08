@@ -52,7 +52,10 @@ def euler_step(
     step_size: Tensor,  # (...)
     args: tuple[Tensor, ...] = (),  # arbitrary tensor parameters
 ) -> Tensor:  # (..., D)
-    r"""Return one explicit Euler step."""
+    r"""Return one explicit Euler step.
+
+    .. math:: yₙ₊₁ = yₙ + Δt⋅f(tₙ, yₙ, θ)
+    """
     return state + step_size * vector_field(time, state, *args)
 
 
@@ -63,7 +66,12 @@ def midpoint_step(
     step_size: Tensor,  # (...)
     args: tuple[Tensor, ...] = (),  # arbitrary tensor parameters
 ) -> Tensor:  # (..., D)
-    r"""Return one explicit midpoint step."""
+    r"""Return one explicit midpoint step.
+
+    .. math::
+        k₁   &= f(tₙ, yₙ, θ) \\
+        yₙ₊₁ &= yₙ + Δt⋅f(tₙ + ½Δt, yₙ + ½k₁Δt, θ)
+    """
     half_step = 0.5 * step_size
     midpoint = state + half_step * vector_field(time, state, *args)
     return state + step_size * vector_field(time + half_step, midpoint, *args)
@@ -76,7 +84,13 @@ def heun_step(
     step_size: Tensor,  # (...)
     args: tuple[Tensor, ...] = (),  # arbitrary tensor parameters
 ) -> Tensor:  # (..., D)
-    r"""Return one explicit trapezoidal/Heun step."""
+    r"""Return one explicit trapezoidal/Heun step.
+
+    .. math::
+        k₁ &= f(tₙ, yₙ, θ) \\
+        k₂ &= f(tₙ + Δt, yₙ + k₁Δt, θ) \\
+        yₙ₊₁ &= yₙ + ½Δt(k₁ + k₂)
+    """
     slope_start = vector_field(time, state, *args)
     slope_end = vector_field(
         time + step_size,
