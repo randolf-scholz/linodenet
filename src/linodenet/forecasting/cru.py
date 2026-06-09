@@ -6,7 +6,7 @@ __all__ = [
     "DecoderConfig",
     "EncoderConfig",
     "build_cru",
-    "masked_apply",
+    "apply_masked",
 ]
 
 from collections.abc import Callable, Iterable, Mapping
@@ -229,7 +229,7 @@ class CRUConfig:
     validate_args: bool = False
 
 
-def masked_apply[R: Tensor | tuple[Tensor, ...]](
+def apply_masked[R: Tensor | tuple[Tensor, ...]](
     fn: Callable[..., R],  # [*(..., *dᵢ)] -> [*(..., *eᵢ)]
     args: tuple[Tensor, ...],
     mask: Tensor,
@@ -252,12 +252,12 @@ def masked_apply[R: Tensor | tuple[Tensor, ...]](
     for x in args:
         event_shape = x.shape[len(batch_shape) :]
         assert x.shape == batch_shape + event_shape
-        xs_flat.append(x.reshape(B, *event_shape))
+        xs_flat.append(x.reshape(-1, *event_shape))
 
     # apply fn over selected batch elements
-    ys_valid = fn(*(x[mask_flat] for x in xs_flat))
-    returns_tensor = isinstance(ys_valid, Tensor)
-    ys_tuple: tuple[Tensor, ...] = (ys_valid,) if returns_tensor else ys_valid
+    ys_flat = fn(*(x[mask_flat] for x in xs_flat))
+    returns_tensor = isinstance(ys_flat, Tensor)
+    ys_tuple: tuple[Tensor, ...] = (ys_flat,) if returns_tensor else ys_flat
 
     y_result = []
     for y in ys_tuple:
@@ -537,7 +537,7 @@ class CRU(nn.Module):
         assert (context_mask == observation_valid).all()
 
         # encode observations
-        y_means, y_variances = masked_apply(
+        y_means, y_variances = apply_masked(
             self.encoder, (context_values,), context_mask
         )  # (..., T, D), (..., T, D)
 
@@ -566,7 +566,7 @@ class CRU(nn.Module):
             context_mask.unbind(dim=-1),
             strict=True,
         ):
-            prior_mean, prior_cov = masked_apply(
+            prior_mean, prior_cov = apply_masked(
                 self.propagate_state, (dt, post_mean, post_cov), mask
             )
             post_mean, post_cov = self.update_state(
@@ -606,8 +606,8 @@ class CRU(nn.Module):
             query_mask.unbind(dim=-1),
             strict=True,
         ):
-            mean, cov = masked_apply(self.propagate_state, (dt, mean, cov), mask)
-            pred_mean, pred_var = masked_apply(self.decoder, (mean, cov), mask)
+            mean, cov = apply_masked(self.propagate_state, (dt, mean, cov), mask)
+            pred_mean, pred_var = apply_masked(self.decoder, (mean, cov), mask)
             pred_means_list.append(pred_mean)
             pred_variances_list.append(pred_var)
 

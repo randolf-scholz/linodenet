@@ -15,8 +15,8 @@ from linodenet.forecasting.cru import (
     DecoderConfig,
     Encoder,
     EncoderConfig,
+    apply_masked,
     build_cru,
-    masked_apply,
 )
 
 # language=yaml
@@ -60,7 +60,7 @@ class TestMaskedApply:
         )
         mask = x.isfinite().all(dim=-1)
 
-        result = masked_apply(torch.square, (x,), mask, fill_value=-1.0)
+        result = apply_masked(torch.square, (x,), mask, fill_value=-1.0)
 
         expected = torch.tensor(
             [
@@ -88,7 +88,7 @@ class TestMaskedApply:
         )
         mask = x.isfinite().all(dim=-1) & y.isfinite().all(dim=-1)
 
-        result = masked_apply(torch.add, (x, y), mask, fill_value=0.0)
+        result = apply_masked(torch.add, (x, y), mask, fill_value=0.0)
 
         expected = torch.tensor(
             [
@@ -105,7 +105,7 @@ class TestMaskedApply:
         x[1, 2] = torch.nan
         mask = x.isfinite().all(dim=-1)
 
-        result = masked_apply(torch.sin, (x,), mask)
+        result = apply_masked(torch.sin, (x,), mask)
 
         assert result.shape == x.shape
         assert torch.allclose(result[mask], torch.sin(x[mask]))
@@ -116,7 +116,7 @@ class TestMaskedApply:
         x[1] = torch.nan
 
         compiled = torch.compile(
-            lambda values: masked_apply(
+            lambda values: apply_masked(
                 torch.sin,
                 (values,),
                 values.isfinite().all(dim=-1),
@@ -125,7 +125,7 @@ class TestMaskedApply:
         )
 
         result = compiled(x)
-        expected = masked_apply(torch.sin, (x,), x.isfinite().all(dim=-1))
+        expected = apply_masked(torch.sin, (x,), x.isfinite().all(dim=-1))
         mask = x.isfinite().all(dim=-1)
         assert result.shape == x.shape
         assert torch.allclose(result[mask], expected[mask])
@@ -138,7 +138,7 @@ class TestMaskedApply:
                 self.linear = torch.nn.Linear(4, 3)
 
             def forward(self, values: torch.Tensor) -> torch.Tensor:
-                return masked_apply(
+                return apply_masked(
                     self.linear,
                     (values,),
                     values.isfinite().all(dim=-1),
@@ -168,7 +168,7 @@ class TestMaskedApply:
         x.requires_grad_()
         mask = x.isfinite().all(dim=-1)
 
-        result = masked_apply(linear, (x,), mask, fill_value=0.0)
+        result = apply_masked(linear, (x,), mask, fill_value=0.0)
         loss = result.sum()
         loss.backward()
 
