@@ -162,7 +162,7 @@ class _FixpointSolve_Impl(torch.autograd.Function):
             z = ctx.fn(x_star, *params)
             z0 = z.clone().detach().requires_grad_(True)
             f0 = ctx.fn(z0, *params)
-            vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
+            vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)
 
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
         sol = _fallback_solve_impl(
@@ -265,7 +265,7 @@ def fixpoint_solve(
             # we also need ∂f/∂x for the backward pass
             z0 = sol.x.clone().detach().requires_grad_(True)
             f0 = fn(z0, *args)
-            vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)  # noqa: E731
+            vjp_fn = lambda u: torch.autograd.grad(f0, z0, u, retain_graph=True)
 
         # SEC: solve u = g + (∂f/∂x)ᵀu by fixed point iteration
         # FIXME: vjp_fn doesn't compose with while_loop when compiling.

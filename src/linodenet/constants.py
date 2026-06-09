@@ -67,7 +67,7 @@ EMPTY_SET: Final[frozenset[Any]] = frozenset()
 r"""Constant: Immutable empty `Set`, use as default in function signatures."""
 EMPTY_SIZE: Final[torch.Size] = torch.Size([])
 r"""Constant: Empty shape."""
-EMPTY_FN: Final[Callable[..., None]] = lambda *_, **__: None  # noqa: E731
+EMPTY_FN: Final[Callable[..., None]] = lambda *_, **__: None
 r"""Constant: Empty function, use as default in function signatures."""
 UNDEFINED: Final[Any] = object()
 r"""Constant: Sentinel value for unspecified arguments."""

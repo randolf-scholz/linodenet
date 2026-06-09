@@ -701,9 +701,9 @@ class TraceEstimator(nn.Module):
         `estimate`. This is mainly a compatibility fallback; specialized estimators can
         usually implement this more efficiently and more accurately.
         """
-        power_op: Fn[[Tensor], Tensor] = lambda z: z  # noqa: E731
+        power_op: Fn[[Tensor], Tensor] = lambda z: z
         for _ in range(max_power):
-            power_op = lambda z, g=power_op, /: op(g(z))  # noqa: E731
+            power_op = lambda z, g=power_op, /: op(g(z))
             yield self(power_op, x)
 
 
