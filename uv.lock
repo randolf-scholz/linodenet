@@ -1175,7 +1175,7 @@ dependencies = [
     { name = "numpy" },
     { name = "scipy" },
     { name = "torch" },
-    { name = "torchdiffeq" },
+    { name = "torchode" },
     { name = "typing-extensions" },
 ]
 
@@ -1227,6 +1227,7 @@ dev = [
     { name = "sphinx-togglebutton" },
     { name = "sphinx-typo3-theme" },
     { name = "tach" },
+    { name = "torchdiffeq" },
     { name = "torchinfo" },
     { name = "tqdm" },
     { name = "ty" },
@@ -1287,6 +1288,7 @@ tests = [
     { name = "pytest-repeat" },
     { name = "pytest-rerunfailures" },
     { name = "pytest-xdist" },
+    { name = "torchdiffeq" },
     { name = "torchinfo" },
     { name = "tqdm" },
 ]
@@ -1320,7 +1322,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "torch", specifier = ">=2.12.0" },
-    { name = "torchdiffeq", specifier = ">=0.2.5" },
+    { name = "torchode", specifier = ">=1.0.1" },
     { name = "typing-extensions", specifier = ">=4.15.0" },
 ]
 
@@ -1372,6 +1374,7 @@ dev = [
     { name = "sphinx-togglebutton", specifier = ">=0.4.5" },
     { name = "sphinx-typo3-theme", specifier = ">=4.9.0" },
     { name = "tach", specifier = ">=0.35.0" },
+    { name = "torchdiffeq", specifier = ">=0.2.5" },
     { name = "torchinfo", specifier = ">=1.8.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
     { name = "ty", specifier = ">=0.0.38" },
@@ -1432,6 +1435,7 @@ tests = [
     { name = "pytest-repeat", specifier = ">=0.9.4" },
     { name = "pytest-rerunfailures", specifier = ">=16.2" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "torchdiffeq", specifier = ">=0.2.5" },
     { name = "torchinfo", specifier = ">=1.8.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
@@ -3088,6 +3092,33 @@ wheels = [
 ]
 
 [[package]]
+name = "torchode"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sympy" },
+    { name = "torch" },
+    { name = "torchtyping" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9e/aa/36cbb79022a17f0cf0127e22693201ed01a8bbfa5efb1f854fe90739ad22/torchode-1.0.1.tar.gz", hash = "sha256:c0faea451a416dc027fa5d93562d661b6f8dbd1da174cd2b38d3377e77a5acee", size = 37324, upload-time = "2026-03-17T15:35:05.832Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/3a/1ec5df4e4301f50d05112a12f5c8f11ebc1b1da03b3250d8889de4ffd04a/torchode-1.0.1-py3-none-any.whl", hash = "sha256:edbd2f91997a348b85ead40b276e04cd04d6bf3ec1df3e8af4128560c772a953", size = 30402, upload-time = "2026-03-17T15:35:04.611Z" },
+]
+
+[[package]]
+name = "torchtyping"
+version = "0.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "torch" },
+    { name = "typeguard" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0c/b2/9099ac2d76ebe538d527ef73844bcfa1296a5c75bd9f2d489e862d47bb42/torchtyping-0.1.5.tar.gz", hash = "sha256:fb51e1792536223e2497b1e106ed0cbe681f7324044599cb718d03be3f2b3851", size = 23067, upload-time = "2024-08-01T02:44:53.579Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/33/3915d3a985bf3914aadfc4e24438a8499c0cd91af0c6d251ad5b773bc310/torchtyping-0.1.5-py3-none-any.whl", hash = "sha256:429d76e16b08a2409226320565d557d4ba3d0d6f544db3e5dc4cf690ffa2a3bd", size = 17992, upload-time = "2024-08-01T02:44:51.857Z" },
+]
+
+[[package]]
 name = "tornado"
 version = "6.5.5"
 source = { registry = "https://pypi.org/simple" }
@@ -3159,6 +3190,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0e/4a/beefade12d109b4f7793d61b04b4478b1ad4d1465a719e7ff55b2d42461a/ty-0.0.38-py3-none-win32.whl", hash = "sha256:36fc5dd5dc09207ff3004b1560a79a3fb8d12456daeec914a7b802a918da654c", size = 10548583, upload-time = "2026-05-20T00:15:07.892Z" },
     { url = "https://files.pythonhosted.org/packages/15/64/941b205e2e46cc2297c245c64aa7691410b7454fa4d07a6cb3cf59487833/ty-0.0.38-py3-none-win_amd64.whl", hash = "sha256:eef0a8956ba14514076b1a963d13eb32986d9ebad7f0527b3cc01cb68bf35147", size = 11650542, upload-time = "2026-05-20T00:15:01.441Z" },
     { url = "https://files.pythonhosted.org/packages/59/02/c1c4f9ec4b94d95190636fa13f79c32f65165fbe3a0503882d4df164d2ac/ty-0.0.38-py3-none-win_arm64.whl", hash = "sha256:79abfc8658a026c30b1c955613437dab3ef4b12feca56a3e6df50903cc39e07f", size = 11010307, upload-time = "2026-05-20T00:15:04.567Z" },
+]
+
+[[package]]
+name = "typeguard"
+version = "2.13.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/38/c61bfcf62a7b572b5e9363a802ff92559cb427ee963048e1442e3aef7490/typeguard-2.13.3.tar.gz", hash = "sha256:00edaa8da3a133674796cf5ea87d9f4b4c367d77476e185e80251cc13dfbb8c4", size = 40604, upload-time = "2021-12-10T21:09:39.158Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/bb/d43e5c75054e53efce310e79d63df0ac3f25e34c926be5dffb7d283fb2a8/typeguard-2.13.3-py3-none-any.whl", hash = "sha256:5e3e3be01e887e7eafae5af63d1f36c849aaa94e3a0112097312aabfa16284f1", size = 17605, upload-time = "2021-12-10T21:09:37.844Z" },
 ]
 
 [[package]]

@@ -65,21 +65,26 @@ nvidia-nvshmem-cu13==3.4.5 ; sys_platform == 'linux'
 nvidia-nvtx==13.0.85 ; sys_platform == 'linux'
     # via cuda-toolkit
 scipy==1.17.1
-    # via
-    #   linodenet
-    #   torchdiffeq
+    # via linodenet
 setuptools==81.0.0
     # via torch
 sympy==1.14.0
-    # via torch
+    # via
+    #   torch
+    #   torchode
 torch==2.12.0
     # via
     #   linodenet
-    #   torchdiffeq
-torchdiffeq==0.2.5
+    #   torchode
+    #   torchtyping
+torchode==1.0.1
     # via linodenet
+torchtyping==0.1.5
+    # via torchode
 triton==3.7.0 ; sys_platform == 'linux'
     # via torch
+typeguard==2.13.3
+    # via torchtyping
 typing-extensions==4.15.0
     # via
     #   linodenet
