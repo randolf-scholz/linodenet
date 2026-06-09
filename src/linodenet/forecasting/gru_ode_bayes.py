@@ -12,32 +12,56 @@ Bayesian jumps.
 """
 
 __all__ = [
-    "Euler",
     "FullGRUODECellAutonomous",
     "GRUObservationCellLogvar",
     "GRU_ODE_Bayes",
-    "Heun",
-    "Midpoint",
+    "TorchODESolver",
 ]
 
 import math
-from collections.abc import Callable
 from typing import Final
 
 import torch
+import torchode as to  # pyright: ignore[reportMissingImports]
 from torch import Tensor, nn
 
 
-class _FixedStepODESolver(nn.Module):
-    r"""Base class for fixed-step ODE solvers with exact final-time landing."""
+class TorchODESolver(nn.Module):
+    r"""Torchode-backed ODE solver adapter with exact final-time landing."""
 
+    method: Final[str]
     step_size: Final[float | None]
 
-    def __init__(self, *, step_size: float | None = None) -> None:
+    def __init__(
+        self, method: str = "euler", *, step_size: float | None = None
+    ) -> None:
         super().__init__()
         if step_size is not None and step_size <= 0:
             raise ValueError("step_size must be positive when provided.")
+        match method:
+            case "euler" | "heun" | "dopri5" | "tsit5":
+                self.method = method
+            case "midpoint":
+                raise NotImplementedError(
+                    "torchode does not provide a midpoint solver."
+                )
+            case _:
+                raise NotImplementedError(f"Unknown torchode solver {method!r}.")
         self.step_size = step_size
+
+    def step_method(self, term: to.ODETerm, /) -> nn.Module:
+        r"""Return the torchode step method for ``term``."""
+        match self.method:
+            case "euler":
+                return to.Euler(term)
+            case "heun":
+                return to.Heun(term)
+            case "dopri5":
+                return to.Dopri5(term)
+            case "tsit5":
+                return to.Tsit5(term)
+            case _:
+                raise AssertionError("unreachable")
 
     def forward(
         self,
@@ -45,89 +69,42 @@ class _FixedStepODESolver(nn.Module):
         delta_time: Tensor,  # (...)
         state: Tensor,  # (..., H)
     ) -> Tensor:  # (..., H)
-        r"""Propagate ``state`` for exactly ``delta_time``."""
+        r"""Propagate ``state`` independently for exactly ``delta_time``."""
         target_time = torch.as_tensor(
             delta_time, device=state.device, dtype=state.dtype
         )
         if bool((target_time < 0).any()):
             raise ValueError("delta_time must be non-negative.")
+        if target_time.shape != state.shape[:-1]:
+            raise ValueError("delta_time shape must match state batch shape.")
         if not bool((target_time > 0).any()):
             return state
 
-        time = torch.zeros_like(target_time)
-        if self.step_size is None:
-            return self.step(vector_field, time, target_time, state)
+        batch_shape = state.shape[:-1]
+        hidden_size = state.shape[-1]
+        y0 = state.reshape(-1, hidden_size)
+        t_end = target_time.reshape(-1)
+        t_start = torch.zeros_like(t_end)
+        t_eval = torch.stack([t_start, t_end], dim=-1)
 
-        step_size = torch.as_tensor(
-            self.step_size, device=state.device, dtype=state.dtype
+        dt0 = (
+            t_end if self.step_size is None else torch.full_like(t_end, self.step_size)
         )
-        remaining = target_time.clone()
-        while bool((remaining > 0).any()):
-            step_time = torch.minimum(remaining, step_size)
-            state = self.step(vector_field, time, step_time, state)
-            time = time + step_time
-            remaining = remaining - step_time
 
-        return state
+        term = to.ODETerm(vector_field)
+        solver = to.AutoDiffAdjoint(
+            self.step_method(term),
+            to.FixedStepController(),
+        )
+        solution = solver.solve(
+            to.InitialValueProblem(y0=y0, t_eval=t_eval),
+            term,
+            dt0=dt0,
+        )
 
-    def step(
-        self,
-        vector_field: Callable[[Tensor, Tensor], Tensor],
-        time: Tensor,  # (...)
-        step_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
-    ) -> Tensor:  # (..., H)
-        r"""Propagate ``state`` by a single solver step."""
-        raise NotImplementedError
-
-
-class Euler(_FixedStepODESolver):
-    r"""Forward Euler method for ODE propagation."""
-
-    def step(
-        self,
-        vector_field: Callable[[Tensor, Tensor], Tensor],
-        time: Tensor,  # (...)
-        step_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
-    ) -> Tensor:  # (..., H)
-        r"""Return ``state + Δt⋅f(t, state)``."""
-        delta = step_time.unsqueeze(-1)
-        return state + delta * vector_field(time, state)
-
-
-class Midpoint(_FixedStepODESolver):
-    r"""Explicit midpoint method for ODE propagation."""
-
-    def step(
-        self,
-        vector_field: Callable[[Tensor, Tensor], Tensor],
-        time: Tensor,  # (...)
-        step_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
-    ) -> Tensor:  # (..., H)
-        r"""Return one second-order explicit midpoint step."""
-        delta = step_time.unsqueeze(-1)
-        half_delta = 0.5 * delta
-        midpoint = state + half_delta * vector_field(time, state)
-        return state + delta * vector_field(time + 0.5 * step_time, midpoint)
-
-
-class Heun(_FixedStepODESolver):
-    r"""Explicit trapezoidal/Heun method for ODE propagation."""
-
-    def step(
-        self,
-        vector_field: Callable[[Tensor, Tensor], Tensor],
-        time: Tensor,  # (...)
-        step_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
-    ) -> Tensor:  # (..., H)
-        r"""Return one explicit trapezoidal/Heun step."""
-        delta = step_time.unsqueeze(-1)
-        slope_start = vector_field(time, state)
-        slope_end = vector_field(time + step_time, state + delta * slope_start)
-        return state + 0.5 * delta * (slope_start + slope_end)
+        if not bool((solution.status == to.Status.SUCCESS.value).all()):
+            raise RuntimeError(f"torchode solve failed with status {solution.status}.")
+        return solution.ys[:, -1].reshape(*batch_shape, hidden_size)
 
 
 class FullGRUODECellAutonomous(nn.Module):
@@ -307,16 +284,7 @@ class GRU_ODE_Bayes(nn.Module):
         r"""Return an ODE solver module from a name or custom module."""
         if isinstance(solver, nn.Module):
             return solver
-
-        match solver:
-            case "euler":
-                return Euler(step_size=step_size)
-            case "midpoint":
-                return Midpoint(step_size=step_size)
-            case "heun":
-                return Heun(step_size=step_size)
-            case _:
-                raise NotImplementedError(f"Unknown solver {solver!r}.")
+        return TorchODESolver(solver, step_size=step_size)
 
     @staticmethod
     def _init_weights(module: nn.Module) -> None:

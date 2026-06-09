@@ -11,7 +11,7 @@ __all__ = [
     "euler_step",
     "heun_step",
     "midpoint_step",
-    "odeint_forward",
+    "_odeint_forward",
     "solve_ivp",
 ]
 
@@ -100,21 +100,12 @@ def heun_step(
     return state + 0.5 * step_size * (slope_start + slope_end)
 
 
-def _num_steps(start_time: Tensor, target_time: Tensor, step_size: float) -> int:
-    interval = float((target_time - start_time).detach().cpu())
-    if interval < 0:
-        raise ValueError("t_eval must be sorted and greater than or equal to t0.")
-    if step_size <= 0:
-        raise ValueError("step_size must be positive.")
-    return int(torch.ceil(torch.tensor(interval / step_size)).item())
-
-
 @torch.no_grad()
-def odeint_forward(
+def _odeint_forward(
     vector_field: Callable[..., Tensor],
-    y0: Tensor,
-    t0: Tensor,
-    t_eval: Tensor,
+    y0: Tensor,  # (..., D)
+    t0: Tensor,  # (...,)
+    t_eval: Tensor,  # (..., $N)
     *,
     step_size: float,
     method: ODESolverMethod = "euler",
@@ -148,7 +139,8 @@ def odeint_forward(
     output_indices: list[int] = []
 
     for target_time in t_eval:
-        num_steps = _num_steps(time, target_time, step_size)
+        interval = (target_time - time).detach().cpu()
+        num_steps = int(torch.ceil(interval / step_size).item())
         for _ in range(num_steps):
             remaining = target_time - time
             dt = torch.minimum(step_size_t, remaining)
@@ -187,7 +179,7 @@ class _DiscreteAdjoint(torch.autograd.Function):
         method: ODESolverMethod,
         *args: Tensor,
     ) -> Tensor:
-        solution, history, times, output_indices = odeint_forward(
+        solution, history, times, output_indices = _odeint_forward(
             vector_field,
             y0,
             t0,
@@ -275,6 +267,13 @@ def solve_ivp(
     """
     t0_t = torch.as_tensor(t0, device=y0.device, dtype=y0.dtype)
     t_eval_t = torch.as_tensor(t_eval, device=y0.device, dtype=y0.dtype)
+    t_eval_flat = t_eval_t.reshape(-1)
+
+    if step_size <= 0:
+        raise ValueError("step_size must be positive.")
+    if torch.any(t_eval_flat < t0_t) or torch.any(t_eval_flat[1:] < t_eval_flat[:-1]):
+        raise ValueError("t_eval must be sorted and greater than or equal to t0.")
+
     return _DiscreteAdjoint.apply(
         vector_field,
         y0,

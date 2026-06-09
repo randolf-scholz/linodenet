@@ -234,6 +234,29 @@ class TestSolvers:
         self.assert_finite_gradients(system, y0, actual)
 
     @pytest.mark.parametrize(("solver", "method"), CASES)
+    def test_compile_unbatched(self, solver: SolverName, method: SolverMethod) -> None:
+        r"""Check that ``torch.compile`` supports the unbatched solver path."""
+        system = LinearSystem(self.NUM_DIM)
+        y0 = torch.tensor([1.0, -0.5, 0.25], dtype=torch.float64, requires_grad=True)
+        t_eval = self.make_times()[0].squeeze(0)
+
+        def compiled_solve(state: Tensor, times: Tensor, /) -> Tensor:
+            return solve(
+                solver,
+                system,
+                state,
+                times,
+                method=method,
+                step_size=self.STEP_SIZE,
+            )
+
+        actual = torch.compile(compiled_solve)(y0, t_eval)
+        expected = system.solve_analytic(y0, t_eval)
+
+        torch.testing.assert_close(actual, expected, atol=5e-4, rtol=5e-4)
+        self.assert_finite_gradients(system, y0, actual)
+
+    @pytest.mark.parametrize(("solver", "method"), CASES)
     def test_batched(self, solver: SolverName, method: SolverMethod) -> None:
         r"""Check batched forward accuracy and gradients on heterogeneous time grids."""
         system = LinearSystem(self.NUM_DIM)
