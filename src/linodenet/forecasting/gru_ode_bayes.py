@@ -12,8 +12,9 @@ Bayesian jumps.
 """
 
 __all__ = [
+    "Decoder",
     "GRU_ODE",
-    "GRUObservationCellLogvar",
+    "GRU_Bayes",
     "GRU_ODE_Bayes",
     "TorchODESolver",
 ]
@@ -22,7 +23,7 @@ import math
 from typing import Final
 
 import torch
-import torchode as to  # pyright: ignore[reportMissingImports]
+import torchode as to
 from torch import Tensor, nn
 
 
@@ -124,7 +125,7 @@ class GRU_ODE(nn.Module):
         self.lin_hz = nn.Linear(hidden_size, hidden_size, bias=bias)
         self.lin_hr = nn.Linear(hidden_size, hidden_size, bias=bias)
 
-    def forward(self, _time: Tensor, state: Tensor, /) -> Tensor:  # noqa: ARG002
+    def forward(self, _time: Tensor, state: Tensor, /) -> Tensor:
         r"""Return the ODE derivative for ``state``."""
         reset = torch.sigmoid(self.lin_hr(state))
         update = torch.sigmoid(self.lin_hz(state))
@@ -132,12 +133,50 @@ class GRU_ODE(nn.Module):
         return (1 - update) * (candidate - state)
 
 
-class GRUObservationCellLogvar(nn.Module):
-    r"""Bayesian jump update for partially observed Gaussian observations.
+class Decoder(nn.Module):
+    r"""Decode latent states into diagonal Gaussian observation parameters."""
 
-    The prediction tensor stores ``[mean, logvar]`` along the feature dimension.
-    Missing features are excluded from both the negative log-likelihood and the
-    GRU update input.
+    input_size: Final[int]
+    hidden_size: Final[int]
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        p_hidden: int,
+        *,
+        bias: bool = True,
+        dropout_rate: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.net = nn.Sequential(
+            nn.Linear(hidden_size, p_hidden, bias=bias),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_rate),
+            nn.Linear(p_hidden, 2 * input_size, bias=bias),
+        )
+
+    def forward(self, state: Tensor, /) -> tuple[Tensor, Tensor]:
+        r"""Return Gaussian observation parameters ``(mean, logvar)``."""
+        mean, logvar = self.net(state).chunk(2, dim=-1)
+        return mean, logvar
+
+
+class GRU_Bayes(nn.Module):
+    r"""Bayesian jump update network for partially observed Gaussian data.
+
+    .. math::
+        h₊ = GRU(h₋, f_{prep}(y, m, h₋))
+        μ, log(σ) = Decoder(h₋)
+        s = (y - μ)/σ
+        q = [y, μ, σ, s]
+        f = m⊙relu(Wq)
+
+    The decoder provides ``(mean, logvar)``. This module only computes the
+    normalized residual features needed for the GRU update; it does not compute
+    or return objective terms.
     """
 
     input_size: Final[int]
@@ -146,60 +185,57 @@ class GRUObservationCellLogvar(nn.Module):
     bias: Final[bool]
 
     def __init__(
-        self, input_size: int, hidden_size: int, prep_hidden: int, *, bias: bool = True
+        self,
+        input_size: int,
+        hidden_size: int,
+        prep_hidden: int,
+        *,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.prep_hidden = prep_hidden
         self.bias = bias
-
         self.gru = nn.GRUCell(prep_hidden * input_size, hidden_size, bias=bias)
 
         std = math.sqrt(2.0 / (4 + prep_hidden))
-        self.prep_weight = nn.Parameter(std * torch.randn(input_size, 4, prep_hidden))
-        self.prep_bias = nn.Parameter(0.1 + torch.zeros(input_size, prep_hidden))
+        self.weight = nn.Parameter(std * torch.randn(input_size, 4, prep_hidden))
+        self.bias = nn.Parameter(0.1 + torch.zeros(input_size, prep_hidden))
 
     def forward(
         self,
-        state: Tensor,  # (B, H)
-        prediction: Tensor,  # (B, 2N)
-        observation: Tensor,  # (B, N)
-        observation_mask: Tensor,  # (B, N)
-    ) -> tuple[Tensor, Tensor]:  # (B, H), (B, N)
+        state: Tensor,  # (..., H)
+        observation: Tensor,  # (..., D), may contain NaNs
+        mean: Tensor,  # (..., D)
+        logvar: Tensor,  # (..., D)
+    ) -> Tensor:  # (..., H)
         r"""Apply one discrete Bayesian jump update."""
-        if state.ndim != 2:
-            raise ValueError("state must have shape (batch, hidden_size).")
-        if prediction.shape != (*state.shape[:-1], 2 * self.input_size):
-            raise ValueError("prediction must have shape (batch, 2 * input_size).")
-        if observation.shape != observation_mask.shape:
-            raise ValueError("observation and observation_mask must have equal shapes.")
-        if observation.shape != (*state.shape[:-1], self.input_size):
-            raise ValueError("observation must have shape (batch, input_size).")
+        assert mean.shape == logvar.shape == observation.shape
 
-        mask = observation_mask.bool()
-        values = observation.nan_to_num(0.0)
-        mean, logvar = prediction.chunk(2, dim=-1)
-        error = torch.where(mask, (values - mean) * torch.exp(-0.5 * logvar), 0.0)
+        # compute u = f_{prep}(y, m, h₋)
+        feature_mask = observation.isfinite()  # (..., D)
+        has_obs = feature_mask.any(dim=-1)  # (...,)
 
-        nll = 0.5 * (error.square() + logvar + math.log(2 * math.pi))
-        nll = torch.where(mask, nll, 0.0)
+        # this step is not properly explained in the paper,
+        # but done in their experimental code; NaNs need to be removed at this stage.
+        values = torch.where(feature_mask, observation, 0.0)
+        sigma = torch.exp(0.5 * logvar)
+        error = (values - mean) / sigma
 
-        gru_input = torch.stack([values, mean, logvar, error], dim=-1)
-        gru_input = (
-            torch.einsum("bnc,ncp->bnp", gru_input, self.prep_weight) + self.prep_bias
+        q = torch.stack([values, mean, logvar, error], dim=-1)  # (..., D, 4)
+        # r_d ≔ ϕ(W_d q_d + b_d)
+        r = torch.relu(  # (..., D, P)
+            torch.einsum("...dn, dnp -> ...dp", q, self.weight) + self.bias
         )
-        gru_input = gru_input.relu() * mask.unsqueeze(-1)
-        gru_input = gru_input.reshape(
-            state.shape[0], self.prep_hidden * self.input_size
-        )
+        # f_pred = flatten(m_d ⊙ r_d) (see Appendix D)
+        u = torch.where(feature_mask, r, 0.0)
+        f_prep = u.reshape(u.shape[:-2], -1)  # (..., D*P)
+        # compute new state
+        new_state = self.gru(f_prep, state)
 
-        active = mask.any(dim=-1)
-        updated = state.clone()
-        if active.any():
-            updated[active] = self.gru(gru_input[active], state[active])
-
-        return updated, nll
+        # keep old state if no observation at all.
+        return torch.where(has_obs, new_state, state)
 
 
 class GRU_ODE_Bayes(nn.Module):
@@ -253,16 +289,15 @@ class GRU_ODE_Bayes(nn.Module):
         self.step_size = step_size
         self.solver = self.new_solver(solver, step_size=step_size)
 
-        self.prediction_model = nn.Sequential(
-            nn.Linear(hidden_size, p_hidden, bias=bias),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_rate),
-            nn.Linear(p_hidden, 2 * input_size, bias=bias),
+        self.decoder = Decoder(
+            input_size,
+            hidden_size,
+            p_hidden,
+            bias=bias,
+            dropout_rate=dropout_rate,
         )
         self.vector_field = GRU_ODE(hidden_size, bias=bias)
-        self.observation_cell = GRUObservationCellLogvar(
-            input_size, hidden_size, prep_hidden, bias=bias
-        )
+        self.gru_bayes = GRU_Bayes(input_size, hidden_size, prep_hidden, bias=bias)
 
         if cov_size is None:
             self.covariates_map = None
@@ -319,7 +354,31 @@ class GRU_ODE_Bayes(nn.Module):
 
     def predict_observation(self, state: Tensor) -> tuple[Tensor, Tensor]:
         r"""Return Gaussian observation parameters ``(mean, logvar)``."""
-        return self.prediction_model(state).chunk(2, dim=-1)
+        return self.decoder(state)
+
+    decode = predict_observation
+
+    @staticmethod
+    def nll_logvar(
+        values: Tensor,
+        mean: Tensor,
+        logvar: Tensor,
+        mask: Tensor | None = None,
+    ) -> Tensor:
+        r"""Return elementwise diagonal Gaussian NLL from log-variances."""
+        if values.shape != mean.shape or values.shape != logvar.shape:
+            raise ValueError("values, mean, and logvar must have equal shapes.")
+        if mask is None:
+            mask = values.isfinite()
+        elif mask.shape != values.shape:
+            raise ValueError("mask must match values shape.")
+
+        valid = mask.bool()
+        centered = torch.where(valid, values.nan_to_num(0.0) - mean, 0.0)
+        nll = 0.5 * (
+            centered.square() * torch.exp(-logvar) + logvar + math.log(2 * math.pi)
+        )
+        return torch.where(valid, nll, 0.0)
 
     def propagate_state(
         self,
@@ -334,7 +393,7 @@ class GRU_ODE_Bayes(nn.Module):
         observation: Tensor,  # (..., N)
         observation_mask: Tensor,  # (..., N)
         prior_state: Tensor,  # (..., H)
-    ) -> tuple[Tensor, Tensor]:  # (..., H), (..., N)
+    ) -> Tensor:  # (..., H)
         r"""Apply one Bayesian jump update to a prior latent state."""
         batch_shape = prior_state.shape[:-1]
         assert observation.shape == (*batch_shape, self.input_size)
@@ -344,15 +403,12 @@ class GRU_ODE_Bayes(nn.Module):
         state_flat = prior_state.reshape(batch_size, self.hidden_size)
         observation_flat = observation.reshape(batch_size, self.input_size)
         mask_flat = observation_mask.reshape(batch_size, self.input_size)
-        prediction_flat = self.prediction_model(state_flat)
+        mean_flat, logvar_flat = self.decoder(state_flat)
 
-        state_flat, nll_flat = self.observation_cell(
-            state_flat, prediction_flat, observation_flat, mask_flat
+        state_flat = self.gru_bayes(
+            state_flat, observation_flat, mask_flat, mean_flat, logvar_flat
         )
-        return (
-            state_flat.reshape(*batch_shape, self.hidden_size),
-            nll_flat.reshape(*batch_shape, self.input_size),
-        )
+        return state_flat.reshape(*batch_shape, self.hidden_size)
 
     def forward(
         self,
