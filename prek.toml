@@ -3,13 +3,13 @@
 #:schema https://www.schemastore.org/prek.json
 
 exclude = ".idea/|.vscode/|bugs/|dev/"
-minimum_prek_version = "0.3.8"
-default_language_version = { python = "3.14", node = "24.13.0" }
+minimum_prek_version = "0.4.4"
+default_language_version = { python = "3.14", node = "26.3.0" }
 
 [[repos]]
 repo = "builtin"
 hooks = [
-    { id = "trailing-whitespace" },
+    { id = "trailing-whitespace", exclude_types = ["tsv"] },
     { id = "check-added-large-files" },
     { id = "check-case-conflict" },
     { id = "check-illegal-windows-names" },
