@@ -17,6 +17,8 @@ __all__ = [
     "GRU_Bayes",
     "GRU_ODE_Bayes",
     "TorchODESolver",
+    "gaussian_kl",
+    "gaussian_kl_logsigma",
 ]
 
 import math
@@ -32,6 +34,13 @@ class TorchODESolver(nn.Module):
 
     method: Final[str]
     step_size: Final[float | None]
+
+    @staticmethod
+    def new(solver: str | nn.Module, /, *, step_size: float | None = None) -> nn.Module:
+        r"""Return an ODE solver module from a name or custom module."""
+        if isinstance(solver, nn.Module):
+            return solver
+        return TorchODESolver(solver, step_size=step_size)
 
     def __init__(
         self, method: str = "euler", *, step_size: float | None = None
@@ -125,6 +134,7 @@ class GRU_ODE(nn.Module):
         self.lin_hz = nn.Linear(hidden_size, hidden_size, bias=bias)
         self.lin_hr = nn.Linear(hidden_size, hidden_size, bias=bias)
 
+    # (..., ), (..., H) -> (..., H)
     def forward(self, _time: Tensor, state: Tensor, /) -> Tensor:
         r"""Return the ODE derivative for ``state``."""
         reset = torch.sigmoid(self.lin_hr(state))
@@ -158,6 +168,7 @@ class Decoder(nn.Module):
             nn.Linear(p_hidden, 2 * input_size, bias=bias),
         )
 
+    # (..., H) -> (..., D), (..., D)
     def forward(self, state: Tensor, /) -> tuple[Tensor, Tensor]:
         r"""Return Gaussian observation parameters ``(mean, logvar)``."""
         mean, logvar = self.net(state).chunk(2, dim=-1)
@@ -287,7 +298,7 @@ class GRU_ODE_Bayes(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.step_size = step_size
-        self.solver = self.new_solver(solver, step_size=step_size)
+        self.solver = TorchODESolver.new(solver, step_size=step_size)
 
         self.decoder = Decoder(
             input_size,
@@ -319,15 +330,6 @@ class GRU_ODE_Bayes(nn.Module):
         self.apply(self._init_weights)
 
     @staticmethod
-    def new_solver(
-        solver: str | nn.Module, /, *, step_size: float | None = None
-    ) -> nn.Module:
-        r"""Return an ODE solver module from a name or custom module."""
-        if isinstance(solver, nn.Module):
-            return solver
-        return TorchODESolver(solver, step_size=step_size)
-
-    @staticmethod
     def _init_weights(module: nn.Module) -> None:
         if type(module) is nn.Linear:
             nn.init.xavier_uniform_(module.weight)
@@ -351,12 +353,6 @@ class GRU_ODE_Bayes(nn.Module):
         if covariates.shape[:-1] != tuple(batch_shape):
             raise ValueError("covariates batch shape does not match batch_shape.")
         return self.covariates_map(covariates)
-
-    def predict_observation(self, state: Tensor) -> tuple[Tensor, Tensor]:
-        r"""Return Gaussian observation parameters ``(mean, logvar)``."""
-        return self.decoder(state)
-
-    decode = predict_observation
 
     @staticmethod
     def nll_logvar(
@@ -390,25 +386,16 @@ class GRU_ODE_Bayes(nn.Module):
 
     def update_state(
         self,
-        observation: Tensor,  # (..., N)
-        observation_mask: Tensor,  # (..., N)
         prior_state: Tensor,  # (..., H)
+        observation: Tensor,  # (..., N)
     ) -> Tensor:  # (..., H)
         r"""Apply one Bayesian jump update to a prior latent state."""
         batch_shape = prior_state.shape[:-1]
         assert observation.shape == (*batch_shape, self.input_size)
-        assert observation_mask.shape == observation.shape
 
-        batch_size = math.prod(batch_shape) if batch_shape else 1
-        state_flat = prior_state.reshape(batch_size, self.hidden_size)
-        observation_flat = observation.reshape(batch_size, self.input_size)
-        mask_flat = observation_mask.reshape(batch_size, self.input_size)
-        mean_flat, logvar_flat = self.decoder(state_flat)
+        mean, logvar = self.decoder(prior_state)
 
-        state_flat = self.gru_bayes(
-            state_flat, observation_flat, mask_flat, mean_flat, logvar_flat
-        )
-        return state_flat.reshape(*batch_shape, self.hidden_size)
+        return self.gru_bayes(prior_state, observation, mean, logvar)
 
     def forward(
         self,
@@ -426,3 +413,46 @@ class GRU_ODE_Bayes(nn.Module):
         training loop.
         """
         raise NotImplementedError
+
+
+def gaussian_kl(
+    left: tuple[Tensor, Tensor],  # (..., d), (..., d)
+    right: tuple[Tensor, Tensor],  # (..., d), (..., d)
+    /,
+) -> Tensor:  # (...)
+    r"""Return the KL divergence between two diagonal Gaussians.
+
+    .. math::
+        Dₖₗ(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²))
+        = ½(log(σ₂²) - log(σ₁²) + (σ₁² + (μ₁ - μ₂)²) / σ₂² - 1)
+    """
+    mu_1, var_1 = left  # μ₁, σ₁²
+    mu_2, var_2 = right  # μ₂, σ₂²
+    return 0.5 * (
+        torch.log(var_2)
+        - torch.log(var_1)
+        + (var_1 + torch.pow(mu_1 - mu_2, 2)) / var_2
+        - 1
+    )
+
+
+def gaussian_kl_logsigma(
+    left: tuple[Tensor, Tensor],  # μ, log(σ) (..., d), (..., d)
+    right: tuple[Tensor, Tensor],  # μ, log(σ) (..., d), (..., d)
+    /,
+) -> Tensor:  # (...)
+    r"""Return the KL divergence between two diagonal Gaussians.
+
+    .. math::
+        Dₖₗ(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²))
+        = log(σ₂/σ₁) + ½(exp(-2(log(σ₂/σ₁))) + (μ₁ - μ₂)² exp(-2log(σ₂))) - ½
+    """
+    mu_1, logsigma_1 = left
+    mu_2, logsigma_2 = right
+    log_ratio = logsigma_2 - logsigma_1
+    return 0.5 * (
+        2 * log_ratio
+        + torch.exp(-2 * log_ratio)
+        + torch.exp(-2 * logsigma_2) * (mu_1 - mu_2) ** 2
+        - 1
+    )  # fmt: skip
