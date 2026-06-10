@@ -283,8 +283,6 @@ class GRU_ODE_Bayes(nn.Module):
         p_hidden: int,
         *,
         prep_hidden: int,
-        cov_size: int | None = None,
-        cov_hidden: int | None = None,
         bias: bool = True,
         dropout_rate: float = 0.0,
         step_size: float | None = None,
@@ -310,22 +308,10 @@ class GRU_ODE_Bayes(nn.Module):
         self.vector_field = GRU_ODE(hidden_size, bias=bias)
         self.gru_bayes = GRU_Bayes(input_size, hidden_size, prep_hidden, bias=bias)
 
-        if cov_size is None:
-            self.covariates_map = None
-            self.initial_state = nn.Parameter(torch.zeros(hidden_size))
-        else:
-            if cov_hidden is None:
-                raise TypeError(
-                    "cov_hidden must be provided when cov_size is provided."
-                )
-            self.covariates_map = nn.Sequential(
-                nn.Linear(cov_size, cov_hidden, bias=bias),
-                nn.ReLU(),
-                nn.Dropout(p=dropout_rate),
-                nn.Linear(cov_hidden, hidden_size, bias=bias),
-                nn.Tanh(),
-            )
-            self.register_parameter("initial_state", None)
+        # The paper does not specify how h₀ is initialized. The reference code
+        # supports h₀ = NN(static_covariates), but its experiments use fixed
+        # static_covariates = 0, making this equivalent to a learned global h₀.
+        self.initial_state = nn.Parameter(torch.zeros(hidden_size))
 
         self.apply(self._init_weights)
 
@@ -335,24 +321,6 @@ class GRU_ODE_Bayes(nn.Module):
             nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
                 module.bias.data.fill_(0.05)
-
-    def initialize_state(
-        self,
-        batch_shape: torch.Size | tuple[int, ...],
-        *,
-        covariates: Tensor | None = None,
-    ) -> Tensor:
-        r"""Return the initial latent state for a batch."""
-        if self.covariates_map is None:
-            if covariates is not None:
-                raise ValueError("covariates were provided but cov_size is None.")
-            return self.initial_state.expand(*batch_shape, self.hidden_size)
-
-        if covariates is None:
-            raise ValueError("covariates are required when cov_size is provided.")
-        if covariates.shape[:-1] != tuple(batch_shape):
-            raise ValueError("covariates batch shape does not match batch_shape.")
-        return self.covariates_map(covariates)
 
     @staticmethod
     def nll_logvar(
@@ -402,15 +370,11 @@ class GRU_ODE_Bayes(nn.Module):
         query_times: Tensor,
         context_times: Tensor,
         context_values: Tensor,
-        *,
-        covariates: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
         r"""Return forecasts at ``query_times``.
 
         The full CRU-style padded-sequence loop is intentionally left for the
-        next implementation step. Use ``initialize_state``, ``propagate_state``,
-        ``update_state``, and ``predict_observation`` directly while wiring the
-        training loop.
+        next implementation step.
         """
         raise NotImplementedError
 
