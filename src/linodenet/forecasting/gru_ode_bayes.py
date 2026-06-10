@@ -12,7 +12,7 @@ Bayesian jumps.
 """
 
 __all__ = [
-    "FullGRUODECellAutonomous",
+    "GRU_ODE",
     "GRUObservationCellLogvar",
     "GRU_ODE_Bayes",
     "TorchODESolver",
@@ -107,27 +107,28 @@ class TorchODESolver(nn.Module):
         return solution.ys[:, -1].reshape(*batch_shape, hidden_size)
 
 
-class FullGRUODECellAutonomous(nn.Module):
-    r"""Autonomous full GRU-ODE vector field $dh/dt=f_θ(h)$."""
+class GRU_ODE(nn.Module):
+    r"""GRU-ODE $d𝐡(t)/dt = (1-𝐳(t))⊙(𝐠(t)-𝐡(t)).
 
-    hidden_size: Final[int]
-    bias: Final[bool]
+    .. note:: we assume $𝐱ₜ=0$ (autonomous case)
+
+    .. math::
+        𝐫(t) = σ(Wᵣ𝐱ₜ + Uᵣ𝐡ₜ₋₁ + bᵣ)
+        𝐳(t) = σ(W₟𝐱ₜ + U₟𝐡ₜ₋₁ + b₟)
+        𝐠(t) = tanh(Wₕ𝐱ₜ + Uₕ(𝐫(t)⊙𝐡ₜ₋₁) + bₕ)
+    """
 
     def __init__(self, hidden_size: int, *, bias: bool = True) -> None:
         super().__init__()
-        self.hidden_size = hidden_size
-        self.bias = bias
+        self.lin_hh = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.lin_hz = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.lin_hr = nn.Linear(hidden_size, hidden_size, bias=bias)
 
-        self.lin_hh = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.lin_hz = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.lin_hr = nn.Linear(hidden_size, hidden_size, bias=False)
-
-    def forward(self, time: Tensor, state: Tensor) -> Tensor:  # noqa: ARG002
+    def forward(self, _time: Tensor, state: Tensor, /) -> Tensor:  # noqa: ARG002
         r"""Return the ODE derivative for ``state``."""
-        zeros = torch.zeros_like(state)
-        reset = torch.sigmoid(zeros + self.lin_hr(state))
-        update = torch.sigmoid(zeros + self.lin_hz(state))
-        candidate = torch.tanh(zeros + self.lin_hh(reset * state))
+        reset = torch.sigmoid(self.lin_hr(state))
+        update = torch.sigmoid(self.lin_hz(state))
+        candidate = torch.tanh(self.lin_hh(reset * state))
         return (1 - update) * (candidate - state)
 
 
@@ -204,6 +205,11 @@ class GRUObservationCellLogvar(nn.Module):
 class GRU_ODE_Bayes(nn.Module):
     r"""GRU-ODE-Bayes as a state-space model.
 
+    Assumptions:
+        - Latent Gaussian-linear system with diagonal covariance.
+        - autonomous ODE for μ(t) and \log σ²(t)
+        - latent ODE: dh/dt = (1-zₜ)⊙(gₜ - hₜ)
+
     State:
         ``hₜ`` is the latent recurrent state.
 
@@ -253,7 +259,7 @@ class GRU_ODE_Bayes(nn.Module):
             nn.Dropout(p=dropout_rate),
             nn.Linear(p_hidden, 2 * input_size, bias=bias),
         )
-        self.vector_field = FullGRUODECellAutonomous(hidden_size, bias=bias)
+        self.vector_field = GRU_ODE(hidden_size, bias=bias)
         self.observation_cell = GRUObservationCellLogvar(
             input_size, hidden_size, prep_hidden, bias=bias
         )
