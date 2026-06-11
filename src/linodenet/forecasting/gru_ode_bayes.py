@@ -124,21 +124,16 @@ class TorchODESolver(nn.Module):
         state: Tensor,  # (..., H)
     ) -> Tensor:  # (..., H)
         r"""Propagate ``state`` independently for exactly ``delta_time``."""
-        target_time = torch.as_tensor(
-            delta_time, device=state.device, dtype=state.dtype
-        )
-        if bool((target_time < 0).any()):
-            raise ValueError("delta_time must be non-negative.")
-        if target_time.shape != state.shape[:-1]:
-            raise ValueError("delta_time shape must match state batch shape.")
-        positive = target_time > 0
-        if not bool(positive.any()):
+        assert (delta_time >= 0).all(), "delta_time must be non-negative."
+        assert delta_time.shape == state.shape[:-1]
+        positive = delta_time > 0
+        if not positive.any():
             return state
 
         batch_shape = state.shape[:-1]
         hidden_size = state.shape[-1]
         y0 = state[positive].reshape(-1, hidden_size)
-        t_end = target_time[positive].reshape(-1)
+        t_end = delta_time[positive].reshape(-1)
         t_start = torch.zeros_like(t_end)
         t_eval = torch.stack([t_start, t_end], dim=-1)
 
@@ -157,7 +152,7 @@ class TorchODESolver(nn.Module):
             dt0=dt0,
         )
 
-        if not bool((solution.status == to.Status.SUCCESS.value).all()):
+        if not (solution.status == to.Status.SUCCESS).all():
             raise RuntimeError(f"torchode solve failed with status {solution.status}.")
 
         result = state.clone()
