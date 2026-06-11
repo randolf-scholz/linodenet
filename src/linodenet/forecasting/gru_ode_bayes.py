@@ -152,7 +152,7 @@ class TorchODESolver(nn.Module):
             dt0=dt0,
         )
 
-        if not (solution.status == to.Status.SUCCESS).all():
+        if (solution.status != to.Status.SUCCESS.value).any():
             raise RuntimeError(f"torchode solve failed with status {solution.status}.")
 
         result = state.clone()
@@ -500,10 +500,6 @@ class GRU_ODE_Bayes(nn.Module):
             pred_mean, pred_logvar = apply_masked(self.decoder, (state,), mask)
             pred_means_list.append(pred_mean)
             pred_logvars_list.append(pred_logvar)
-
-        if query_times.shape[-1] == 0:
-            empty = self.initial_state.new_empty(*batch_shape, 0, self.input_size)
-            return empty, empty
 
         return (
             torch.stack(pred_means_list, dim=-2),
