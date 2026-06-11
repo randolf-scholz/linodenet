@@ -28,7 +28,6 @@ from typing import Final
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torchdiffeq import odeint
 
 
 class GRUODECell(nn.Module):
