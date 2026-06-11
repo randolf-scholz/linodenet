@@ -22,11 +22,55 @@ __all__ = [
 ]
 
 import math
+from collections.abc import Callable
 from typing import Final
 
 import torch
 import torchode as to
 from torch import Tensor, nn
+
+
+def apply_masked[R: Tensor | tuple[Tensor, ...]](
+    fn: Callable[..., R],  # [*(..., *dᵢ)] -> [*(..., *eᵢ)]
+    args: tuple[Tensor, ...],
+    mask: Tensor,  # (...)
+    *,
+    fill_value: float = float("nan"),
+) -> R:  # *(..., *eᵢ)
+    r"""Apply fn only to selected batch elements.
+
+    Args:
+        fn: Function to apply. Must accept tensors with shared batch shape.
+        args: The arguments to fn. Must all have the same batch shape.
+        mask: The boolean mask indicating which batch elements to apply fn to. Must have the same batch shape as args.
+        fill_value: The value to fill masked out batch elements with.
+    """
+    batch_shape = mask.shape
+    B = batch_shape.numel() if batch_shape else 1
+    mask_flat = mask.reshape(B).bool()  # [B]
+
+    xs_flat = []
+    for x in args:
+        event_shape = x.shape[len(batch_shape) :]
+        assert x.shape == batch_shape + event_shape
+        xs_flat.append(x.reshape(-1, *event_shape))
+
+    # apply fn over selected batch elements
+    ys_flat = fn(*(x[mask_flat] for x in xs_flat))
+    returns_tensor = isinstance(ys_flat, Tensor)
+    ys_tuple: tuple[Tensor, ...] = (ys_flat,) if returns_tensor else ys_flat
+
+    y_result = []
+    for y in ys_tuple:
+        y_flat = torch.full(
+            (B, *y.shape[1:]),
+            fill_value,
+            dtype=y.dtype,
+            device=y.device,
+        )
+        y_flat[mask_flat] = y
+        y_result.append(y_flat.reshape(*batch_shape, *y.shape[1:]))
+    return y_result[0] if returns_tensor else tuple(y_result)
 
 
 class TorchODESolver(nn.Module):
@@ -75,7 +119,7 @@ class TorchODESolver(nn.Module):
 
     def forward(
         self,
-        vector_field: nn.Module,
+        vector_field: nn.Module,  # [(...), (..., H)] -> (..., H)
         delta_time: Tensor,  # (...)
         state: Tensor,  # (..., H)
     ) -> Tensor:  # (..., H)
@@ -87,13 +131,14 @@ class TorchODESolver(nn.Module):
             raise ValueError("delta_time must be non-negative.")
         if target_time.shape != state.shape[:-1]:
             raise ValueError("delta_time shape must match state batch shape.")
-        if not bool((target_time > 0).any()):
+        positive = target_time > 0
+        if not bool(positive.any()):
             return state
 
         batch_shape = state.shape[:-1]
         hidden_size = state.shape[-1]
-        y0 = state.reshape(-1, hidden_size)
-        t_end = target_time.reshape(-1)
+        y0 = state[positive].reshape(-1, hidden_size)
+        t_end = target_time[positive].reshape(-1)
         t_start = torch.zeros_like(t_end)
         t_eval = torch.stack([t_start, t_end], dim=-1)
 
@@ -114,7 +159,10 @@ class TorchODESolver(nn.Module):
 
         if not bool((solution.status == to.Status.SUCCESS.value).all()):
             raise RuntimeError(f"torchode solve failed with status {solution.status}.")
-        return solution.ys[:, -1].reshape(*batch_shape, hidden_size)
+
+        result = state.clone()
+        result[positive] = solution.ys[:, -1].reshape(-1, hidden_size)
+        return result.reshape(*batch_shape, hidden_size)
 
 
 class GRU_ODE(nn.Module):
@@ -193,7 +241,6 @@ class GRU_Bayes(nn.Module):
     input_size: Final[int]
     hidden_size: Final[int]
     prep_hidden: Final[int]
-    bias: Final[bool]
 
     def __init__(
         self,
@@ -207,12 +254,11 @@ class GRU_Bayes(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.prep_hidden = prep_hidden
-        self.bias = bias
         self.gru = nn.GRUCell(prep_hidden * input_size, hidden_size, bias=bias)
 
         std = math.sqrt(2.0 / (4 + prep_hidden))
         self.weight = nn.Parameter(std * torch.randn(input_size, 4, prep_hidden))
-        self.bias = nn.Parameter(0.1 + torch.zeros(input_size, prep_hidden))
+        self.bias_prep = nn.Parameter(0.1 + torch.zeros(input_size, prep_hidden))
 
     def forward(
         self,
@@ -237,16 +283,16 @@ class GRU_Bayes(nn.Module):
         q = torch.stack([values, mean, logvar, error], dim=-1)  # (..., D, 4)
         # r_d ≔ ϕ(W_d q_d + b_d)
         r = torch.relu(  # (..., D, P)
-            torch.einsum("...dn, dnp -> ...dp", q, self.weight) + self.bias
+            torch.einsum("...dn, dnp -> ...dp", q, self.weight) + self.bias_prep
         )
         # f_pred = flatten(m_d ⊙ r_d) (see Appendix D)
-        u = torch.where(feature_mask, r, 0.0)
-        f_prep = u.reshape(u.shape[:-2], -1)  # (..., D*P)
+        u = torch.where(feature_mask.unsqueeze(-1), r, 0.0)
+        f_prep = u.reshape(*u.shape[:-2], -1)  # (..., D*P)
         # compute new state
         new_state = self.gru(f_prep, state)
 
         # keep old state if no observation at all.
-        return torch.where(has_obs, new_state, state)
+        return torch.where(has_obs.unsqueeze(-1), new_state, state)
 
 
 class GRU_ODE_Bayes(nn.Module):
@@ -275,6 +321,19 @@ class GRU_ODE_Bayes(nn.Module):
     input_size: Final[int]
     hidden_size: Final[int]
     step_size: Final[float | None]
+
+    prior_states: Tensor
+    r"""BUFFER: Prior hidden states from the last forward pass."""
+    posterior_states: Tensor
+    r"""BUFFER: Posterior hidden states from the last forward pass."""
+    prior_means: Tensor
+    r"""BUFFER: Prior predictive means from the last forward pass."""
+    prior_logvars: Tensor
+    r"""BUFFER: Prior predictive log-variances from the last forward pass."""
+    posterior_means: Tensor
+    r"""BUFFER: Posterior predictive means from the last forward pass."""
+    posterior_logvars: Tensor
+    r"""BUFFER: Posterior predictive log-variances from the last forward pass."""
 
     def __init__(
         self,
@@ -313,6 +372,12 @@ class GRU_ODE_Bayes(nn.Module):
         # static_covariates = 0, making this equivalent to a learned global h₀.
         self.initial_state = nn.Parameter(torch.zeros(hidden_size))
 
+        self.register_buffer("prior_means", torch.empty(0), persistent=False)
+        self.register_buffer("prior_logvars", torch.empty(0), persistent=False)
+        self.register_buffer("posterior_means", torch.empty(0), persistent=False)
+        self.register_buffer("posterior_logvars", torch.empty(0), persistent=False)
+
+        # initialize weight (carried over from reference implementation)
         self.apply(self._init_weights)
 
     @staticmethod
@@ -367,16 +432,88 @@ class GRU_ODE_Bayes(nn.Module):
 
     def forward(
         self,
-        query_times: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Return forecasts at ``query_times``.
+        query_times: Tensor,  # (..., $K), possibly with trailing NaNs (padding)
+        context_times: Tensor,  # (..., $N), possibly with trailing NaNs (padding)
+        context_values: Tensor,  # (..., $N, D), possibly with NaNs
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+        r"""Return predictive distribution parameters at ``query_times``.
 
-        The full CRU-style padded-sequence loop is intentionally left for the
-        next implementation step.
+        Padded time steps are represented by ``NaN`` times. Context values may
+        contain feature-level ``NaN`` entries; finite entries are used in the
+        Bayesian jump, missing entries are ignored.
         """
-        raise NotImplementedError
+        *batch_shape, num_steps = context_times.shape
+        assert context_values.shape == (*batch_shape, num_steps, self.input_size)
+
+        query_mask = query_times.isfinite()
+        context_mask = context_times.isfinite()
+
+        context_lengths = context_mask.sum(dim=-1)  # (...)
+        last_context_time = torch.take_along_dim(
+            context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
+        )
+        context_deltas = context_times.diff(prepend=context_times[..., [0]])
+        query_deltas = query_times.diff(prepend=last_context_time)
+        assert (context_deltas[context_mask] >= 0).all(), "context times not sorted"
+        assert (query_deltas[query_mask] >= 0).all(), "query times not sorted"
+
+        # initialize 𝐡₀
+        post_state = self.initial_state.expand(*batch_shape, self.hidden_size)
+
+        prior_means_list = []
+        prior_logvars_list = []
+        posterior_means_list = []
+        posterior_logvars_list = []
+
+        for dt, observation, mask in zip(
+            context_deltas.unbind(dim=-1),
+            context_values.unbind(dim=-2),
+            context_mask.unbind(dim=-1),
+            strict=True,
+        ):
+            prior_state = apply_masked(self.propagate_state, (dt, post_state), mask)
+            prior_mean, prior_logvar = apply_masked(self.decoder, (prior_state,), mask)
+
+            updated_state = apply_masked(
+                self.update_state, (prior_state, observation), mask
+            )
+            post_state = torch.where(mask.unsqueeze(-1), updated_state, post_state)
+            posterior_mean, posterior_logvar = apply_masked(
+                self.decoder, (post_state,), mask
+            )
+
+            prior_means_list.append(prior_mean)
+            prior_logvars_list.append(prior_logvar)
+            posterior_means_list.append(posterior_mean)
+            posterior_logvars_list.append(posterior_logvar)
+
+        self.prior_means = torch.stack(prior_means_list, dim=-2)
+        self.prior_logvars = torch.stack(prior_logvars_list, dim=-2)
+        self.posterior_means = torch.stack(posterior_means_list, dim=-2)
+        self.posterior_logvars = torch.stack(posterior_logvars_list, dim=-2)
+
+        pred_means_list = []
+        pred_logvars_list = []
+        state = post_state
+        for dt, mask in zip(
+            query_deltas.unbind(dim=-1),
+            query_mask.unbind(dim=-1),
+            strict=True,
+        ):
+            next_state = apply_masked(self.propagate_state, (dt, state), mask)
+            state = torch.where(mask.unsqueeze(-1), next_state, state)
+            pred_mean, pred_logvar = apply_masked(self.decoder, (state,), mask)
+            pred_means_list.append(pred_mean)
+            pred_logvars_list.append(pred_logvar)
+
+        if query_times.shape[-1] == 0:
+            empty = self.initial_state.new_empty(*batch_shape, 0, self.input_size)
+            return empty, empty
+
+        return (
+            torch.stack(pred_means_list, dim=-2),
+            torch.stack(pred_logvars_list, dim=-2),
+        )
 
 
 def gaussian_kl(
