@@ -232,10 +232,10 @@ class CRUConfig:
 def apply_masked[R: Tensor | tuple[Tensor, ...]](
     fn: Callable[..., R],  # [*(..., *dᵢ)] -> [*(..., *eᵢ)]
     args: tuple[Tensor, ...],
-    mask: Tensor,
+    mask: Tensor,  # (...)
     *,
     fill_value: float = float("nan"),
-) -> R:
+) -> R:  # *(..., *eᵢ)
     r"""Apply fn only to selected batch elements.
 
     Args:
@@ -478,8 +478,10 @@ class CRU(nn.Module):
         self.register_buffer("posterior_variances", torch.empty(0), persistent=False)
 
     def forecast_unbatched(
-        self, args: Iterable[tuple[Tensor, Tensor, Tensor]], /
-    ) -> Distribution:
+        self,
+        args: Iterable[tuple[Tensor, Tensor, Tensor]],  # ($K), ($N), ($N, D)
+        /,
+    ) -> list[Distribution]:  # ($K)
         # convert list of tuples to tuples of tensors
         query_times: tuple[Tensor, ...]
         context_times: tuple[Tensor, ...]
