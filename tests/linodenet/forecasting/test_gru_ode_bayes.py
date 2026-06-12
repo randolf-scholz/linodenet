@@ -6,9 +6,13 @@ import pytest
 import torch
 
 from linodenet.forecasting.gru_ode_bayes import (
+    GRU_ODE,
+    Decoder,
+    GRU_Bayes,
     GRU_ODE_Bayes,
     GRUODEBayesConfig,
-    build_gru_ode_bayes,
+    ODE_Flow,
+    TorchODESolver,
     gaussian_kl,
     gaussian_kl_logvar,
 )
@@ -23,8 +27,8 @@ class TestModel(TestForecastingModel):
     STANDARD_CONFIG: ClassVar[GRUODEBayesConfig] = GRUODEBayesConfig(
         input_size=CONTEXT_SHAPE[0],
         hidden_size=7,
-        p_hidden=11,
-        prep_hidden=3,
+        decoder_hidden_size=11,
+        feature_embedding_size=3,
         bias=True,
         dropout_rate=0.0,
         step_size=0.1,
@@ -41,15 +45,29 @@ class TestModel(TestForecastingModel):
         if not isinstance(model_config, GRUODEBayesConfig):
             raise TypeError("model_config must be a GRUODEBayesConfig.")
         config = model_config
+        decoder = Decoder(
+            config.input_size,
+            config.hidden_size,
+            config.decoder_hidden_size,
+            bias=config.bias,
+            dropout_rate=config.dropout_rate,
+        )
+        flow = ODE_Flow(
+            GRU_ODE(config.hidden_size, bias=config.bias),
+            TorchODESolver.new(config.solver, step_size=config.step_size),
+        )
+        update_cell = GRU_Bayes(
+            config.input_size,
+            config.hidden_size,
+            config.feature_embedding_size,
+            bias=config.bias,
+        )
         return GRU_ODE_Bayes(
             config.input_size,
             config.hidden_size,
-            config.p_hidden,
-            prep_hidden=config.prep_hidden,
-            bias=config.bias,
-            dropout_rate=config.dropout_rate,
-            step_size=config.step_size,
-            solver=config.solver,
+            decoder=decoder,
+            flow=flow,
+            update_cell=update_cell,
         )
 
     def make_cru(self) -> GRU_ODE_Bayes:
@@ -76,27 +94,59 @@ class TestModel(TestForecastingModel):
         assert isinstance(model, GRU_ODE_Bayes)
         assert model.input_size == config.input_size
         assert model.hidden_size == config.hidden_size
-        assert model.step_size == config.step_size
         assert model.decoder.input_size == config.input_size
         assert model.decoder.hidden_size == config.hidden_size
-        assert model.vector_field.lin_hh.in_features == config.hidden_size
-        assert model.gru_bayes.input_size == config.input_size
-        assert model.gru_bayes.hidden_size == config.hidden_size
-        assert model.gru_bayes.prep_hidden == config.prep_hidden
+        assert isinstance(model.flow, ODE_Flow)
+        assert isinstance(model.flow.vector_field, GRU_ODE)
+        assert isinstance(model.flow.solver, TorchODESolver)
+        assert model.flow.solver.step_size == config.step_size
+        assert model.flow.vector_field.lin_hh.in_features == config.hidden_size
+        assert isinstance(model.update_cell, GRU_Bayes)
+        assert model.update_cell.input_size == config.input_size
+        assert model.update_cell.hidden_size == config.hidden_size
+        assert model.update_cell.feature_embedding_size == config.feature_embedding_size
         assert model.initial_state.shape == (config.hidden_size,)
 
     def test_instantiation_from_config(self) -> None:
         config = self.STANDARD_CONFIG
 
-        model = build_gru_ode_bayes(config)
+        model = GRU_ODE_Bayes.from_config(config)
 
         assert isinstance(model, GRU_ODE_Bayes)
         assert model.input_size == config.input_size
         assert model.hidden_size == config.hidden_size
-        assert model.step_size == config.step_size
         assert model.decoder.input_size == config.input_size
         assert model.decoder.hidden_size == config.hidden_size
-        assert model.gru_bayes.prep_hidden == config.prep_hidden
+        assert isinstance(model.flow, ODE_Flow)
+        assert isinstance(model.flow.solver, TorchODESolver)
+        assert model.flow.solver.step_size == config.step_size
+        assert isinstance(model.update_cell, GRU_Bayes)
+        assert model.update_cell.feature_embedding_size == config.feature_embedding_size
+
+    def test_instantiation_from_parameters(self) -> None:
+        config = self.STANDARD_CONFIG
+
+        model = GRU_ODE_Bayes.from_parameters(
+            input_size=config.input_size,
+            hidden_size=config.hidden_size,
+            decoder_hidden_size=config.decoder_hidden_size,
+            feature_embedding_size=config.feature_embedding_size,
+            bias=config.bias,
+            dropout_rate=config.dropout_rate,
+            step_size=config.step_size,
+            solver=config.solver,
+        )
+
+        assert isinstance(model, GRU_ODE_Bayes)
+        assert model.input_size == config.input_size
+        assert model.hidden_size == config.hidden_size
+        assert model.decoder.input_size == config.input_size
+        assert model.decoder.hidden_size == config.hidden_size
+        assert isinstance(model.flow, ODE_Flow)
+        assert isinstance(model.flow.solver, TorchODESolver)
+        assert model.flow.solver.step_size == config.step_size
+        assert isinstance(model.update_cell, GRU_Bayes)
+        assert model.update_cell.feature_embedding_size == config.feature_embedding_size
 
 
 class TestGRUODEBayes:
@@ -104,12 +154,22 @@ class TestGRUODEBayes:
 
     def test_forward_with_padded_partial_observations(self) -> None:
         torch.manual_seed(0)
+        decoder = Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7)
+        flow = ODE_Flow(
+            GRU_ODE(5),
+            TorchODESolver.new("euler", step_size=0.1),
+        )
+        update_cell = GRU_Bayes(
+            input_size=3,
+            hidden_size=5,
+            feature_embedding_size=2,
+        )
         model = GRU_ODE_Bayes(
             input_size=3,
             hidden_size=5,
-            p_hidden=7,
-            prep_hidden=2,
-            step_size=0.1,
+            decoder=decoder,
+            flow=flow,
+            update_cell=update_cell,
         )
 
         context_times = torch.tensor(

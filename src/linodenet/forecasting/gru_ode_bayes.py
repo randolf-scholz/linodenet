@@ -17,16 +17,17 @@ __all__ = [
     "GRU_ODE",
     "GRU_Bayes",
     "GRU_ODE_Bayes",
+    "ODE_Flow",
     "TorchODESolver",
-    "build_gru_ode_bayes",
     "gaussian_kl",
     "gaussian_kl_logvar",
+    "apply_masked",
 ]
 
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 import torch
 import torchode as to
@@ -60,11 +61,20 @@ def apply_masked[R: Tensor | tuple[Tensor, ...]](
 
     # apply fn over selected batch elements
     ys_flat = fn(*(x[mask_flat] for x in xs_flat))
-    returns_tensor = isinstance(ys_flat, Tensor)
-    ys_tuple: tuple[Tensor, ...] = (ys_flat,) if returns_tensor else ys_flat
 
-    y_result = []
-    for y in ys_tuple:
+    if isinstance(ys_flat, Tensor):
+        result = torch.full(
+            (B, *ys_flat.shape[1:]),
+            fill_value,
+            dtype=ys_flat.dtype,
+            device=ys_flat.device,
+        )
+        result[mask_flat] = ys_flat
+        result = result.reshape(*batch_shape, *result.shape[1:])
+        return result  # type: ignore[return-value]
+
+    y_result: list[Tensor] = []
+    for y in ys_flat:
         y_flat = torch.full(
             (B, *y.shape[1:]),
             fill_value,
@@ -73,7 +83,7 @@ def apply_masked[R: Tensor | tuple[Tensor, ...]](
         )
         y_flat[mask_flat] = y
         y_result.append(y_flat.reshape(*batch_shape, *y.shape[1:]))
-    return y_result[0] if returns_tensor else tuple(y_result)
+    return tuple(y_result)  # type: ignore[return-value]
 
 
 class TorchODESolver(nn.Module):
@@ -163,6 +173,26 @@ class TorchODESolver(nn.Module):
         return result.reshape(*batch_shape, hidden_size)
 
 
+class ODE_Flow(nn.Module):
+    r"""Flow wrapper that evolves states with a vector field and ODE solver."""
+
+    vector_field: nn.Module
+    solver: nn.Module
+
+    def __init__(self, vector_field: nn.Module, solver: nn.Module, /) -> None:
+        super().__init__()
+        self.vector_field = vector_field
+        self.solver = solver
+
+    def forward(
+        self,
+        delta_time: Tensor,  # (...)
+        state: Tensor,  # (..., H)
+    ) -> Tensor:  # (..., H)
+        r"""Propagate ``state`` for ``delta_time``."""
+        return self.solver(self.vector_field, delta_time, state)
+
+
 class GRU_ODE(nn.Module):
     r"""GRU-ODE $d𝐡(t)/dt = (1-𝐳(t))⊙(𝐠(t)-𝐡(t)).
 
@@ -199,7 +229,7 @@ class Decoder(nn.Module):
         self,
         input_size: int,
         hidden_size: int,
-        p_hidden: int,
+        decoder_hidden_size: int,
         *,
         bias: bool = True,
         dropout_rate: float = 0.0,
@@ -208,10 +238,10 @@ class Decoder(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.net = nn.Sequential(
-            nn.Linear(hidden_size, p_hidden, bias=bias),
+            nn.Linear(hidden_size, decoder_hidden_size, bias=bias),
             nn.ReLU(),
             nn.Dropout(p=dropout_rate),
-            nn.Linear(p_hidden, 2 * input_size, bias=bias),
+            nn.Linear(decoder_hidden_size, 2 * input_size, bias=bias),
         )
 
     # (..., H) -> (..., D), (..., D)
@@ -225,7 +255,7 @@ class GRU_Bayes(nn.Module):
     r"""Bayesian jump update network for partially observed Gaussian data.
 
     .. math::
-        h₊ = GRU(h₋, f_{prep}(y, m, h₋))
+        h₊ = GRU(h₋, f_{feat}(y, m, h₋))
         μ, log(σ²) = Decoder(h₋)
         s = (y - μ)/σ
         q = [y, μ, σ, s]
@@ -238,25 +268,33 @@ class GRU_Bayes(nn.Module):
 
     input_size: Final[int]
     hidden_size: Final[int]
-    prep_hidden: Final[int]
+    feature_embedding_size: Final[int]
 
     def __init__(
         self,
         input_size: int,
         hidden_size: int,
-        prep_hidden: int,
+        feature_embedding_size: int,
         *,
         bias: bool = True,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.prep_hidden = prep_hidden
-        self.gru = nn.GRUCell(prep_hidden * input_size, hidden_size, bias=bias)
+        self.feature_embedding_size = feature_embedding_size
+        self.gru = nn.GRUCell(
+            feature_embedding_size * input_size,
+            hidden_size,
+            bias=bias,
+        )
 
-        std = math.sqrt(2.0 / (4 + prep_hidden))
-        self.weight = nn.Parameter(std * torch.randn(input_size, 4, prep_hidden))
-        self.bias_prep = nn.Parameter(0.1 + torch.zeros(input_size, prep_hidden))
+        std = math.sqrt(2.0 / (4 + feature_embedding_size))
+        self.weight = nn.Parameter(
+            std * torch.randn(input_size, 4, feature_embedding_size)
+        )
+        self.bias_prep = nn.Parameter(
+            0.1 + torch.zeros(input_size, feature_embedding_size)
+        )
 
     def forward(
         self,
@@ -268,7 +306,7 @@ class GRU_Bayes(nn.Module):
         r"""Apply one discrete Bayesian jump update."""
         assert mean.shape == logvar.shape == observation.shape
 
-        # compute u = f_{prep}(y, m, h₋)
+        # compute u = f_feat(y, m, h₋)
         feature_mask = observation.isfinite()  # (..., D)
         has_obs = feature_mask.any(dim=-1)  # (...,)
 
@@ -285,9 +323,9 @@ class GRU_Bayes(nn.Module):
         )
         # f_pred = flatten(m_d ⊙ r_d) (see Appendix D)
         u = torch.where(feature_mask.unsqueeze(-1), r, 0.0)
-        f_prep = u.reshape(*u.shape[:-2], -1)  # (..., D*P)
+        prepared_features = u.reshape(*u.shape[:-2], -1)  # (..., D*P)
         # compute new state
-        new_state = self.gru(f_prep, state)
+        new_state = self.gru(prepared_features, state)
 
         # keep old state if no observation at all.
         return torch.where(has_obs.unsqueeze(-1), new_state, state)
@@ -299,8 +337,8 @@ class GRUODEBayesConfig:
 
     input_size: int
     hidden_size: int
-    p_hidden: int
-    prep_hidden: int
+    decoder_hidden_size: int
+    feature_embedding_size: int
     bias: bool = True
     dropout_rate: float = 0.0
     step_size: float | None = None
@@ -332,12 +370,7 @@ class GRU_ODE_Bayes(nn.Module):
 
     input_size: Final[int]
     hidden_size: Final[int]
-    step_size: Final[float | None]
 
-    prior_states: Tensor
-    r"""BUFFER: Prior hidden states from the last forward pass."""
-    posterior_states: Tensor
-    r"""BUFFER: Posterior hidden states from the last forward pass."""
     prior_means: Tensor
     r"""BUFFER: Prior predictive means from the last forward pass."""
     prior_logvars: Tensor
@@ -347,37 +380,88 @@ class GRU_ODE_Bayes(nn.Module):
     posterior_logvars: Tensor
     r"""BUFFER: Posterior predictive log-variances from the last forward pass."""
 
-    def __init__(
-        self,
+    @classmethod
+    def from_config(
+        cls,
+        config: GRUODEBayesConfig | Mapping[str, Any],
+        /,
+    ) -> GRU_ODE_Bayes:
+        r"""Construct a GRU-ODE-Bayes model from a configuration object."""
+        if isinstance(config, Mapping):
+            config = GRUODEBayesConfig(**config)
+
+        decoder = Decoder(
+            config.input_size,
+            config.hidden_size,
+            config.decoder_hidden_size,
+            bias=config.bias,
+            dropout_rate=config.dropout_rate,
+        )
+        if config.step_size is not None and config.step_size <= 0:
+            raise ValueError("step_size must be positive when provided.")
+        flow = ODE_Flow(
+            GRU_ODE(config.hidden_size, bias=config.bias),
+            TorchODESolver.new(config.solver, step_size=config.step_size),
+        )
+        update_cell = GRU_Bayes(
+            config.input_size,
+            config.hidden_size,
+            config.feature_embedding_size,
+            bias=config.bias,
+        )
+        return GRU_ODE_Bayes(
+            config.input_size,
+            config.hidden_size,
+            decoder=decoder,
+            flow=flow,
+            update_cell=update_cell,
+        )
+
+    @classmethod
+    def from_parameters(
+        cls,
+        *,
         input_size: int,
         hidden_size: int,
-        p_hidden: int,
-        *,
-        prep_hidden: int,
+        decoder_hidden_size: int,
+        feature_embedding_size: int,
         bias: bool = True,
         dropout_rate: float = 0.0,
         step_size: float | None = None,
         solver: str | nn.Module = "euler",
+    ) -> GRU_ODE_Bayes:
+        r"""Construct a GRU-ODE-Bayes model from explicit hyperparameters."""
+        return cls.from_config(
+            GRUODEBayesConfig(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                decoder_hidden_size=decoder_hidden_size,
+                feature_embedding_size=feature_embedding_size,
+                bias=bias,
+                dropout_rate=dropout_rate,
+                step_size=step_size,
+                solver=solver,
+            )
+        )
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        decoder: nn.Module,
+        flow: nn.Module,
+        update_cell: nn.Module,
     ) -> None:
         r"""Initialize the experiment-aligned GRU-ODE-Bayes scaffold."""
         super().__init__()
-        if step_size is not None and step_size <= 0:
-            raise ValueError("step_size must be positive when provided.")
 
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.step_size = step_size
-        self.solver = TorchODESolver.new(solver, step_size=step_size)
 
-        self.decoder = Decoder(
-            input_size,
-            hidden_size,
-            p_hidden,
-            bias=bias,
-            dropout_rate=dropout_rate,
-        )
-        self.vector_field = GRU_ODE(hidden_size, bias=bias)
-        self.gru_bayes = GRU_Bayes(input_size, hidden_size, prep_hidden, bias=bias)
+        self.decoder = decoder
+        self.flow = flow
+        self.update_cell = update_cell
 
         # The paper does not specify how h₀ is initialized. The reference code
         # supports h₀ = NN(static_covariates), but its experiments use fixed
@@ -484,7 +568,7 @@ class GRU_ODE_Bayes(nn.Module):
         posterior_state: Tensor,  # (..., H)
     ) -> Tensor:  # (..., H)
         r"""Propagate a posterior state through the continuous GRU-ODE dynamics."""
-        return self.solver(self.vector_field, delta_time, posterior_state)
+        return self.flow(delta_time, posterior_state)
 
     def update_state(
         self,
@@ -497,7 +581,7 @@ class GRU_ODE_Bayes(nn.Module):
 
         mean, logvar = self.decoder(prior_state)
 
-        return self.gru_bayes(prior_state, observation, mean, logvar)
+        return self.update_cell(prior_state, observation, mean, logvar)
 
     def forward(
         self,
@@ -622,22 +706,3 @@ def gaussian_kl_logvar(
             + torch.exp(-logvar_2) * (mu_1 - mu_2) ** 2
             - 1
     )  # fmt: skip
-
-
-def build_gru_ode_bayes(
-    config: GRUODEBayesConfig | Mapping[str, object], /
-) -> GRU_ODE_Bayes:
-    r"""Construct a GRU-ODE-Bayes model from a configuration object."""
-    if isinstance(config, Mapping):
-        config = GRUODEBayesConfig(**config)
-
-    return GRU_ODE_Bayes(
-        config.input_size,
-        config.hidden_size,
-        config.p_hidden,
-        prep_hidden=config.prep_hidden,
-        bias=config.bias,
-        dropout_rate=config.dropout_rate,
-        step_size=config.step_size,
-        solver=config.solver,
-    )
