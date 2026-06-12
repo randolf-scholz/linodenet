@@ -13,16 +13,19 @@ Bayesian jumps.
 
 __all__ = [
     "Decoder",
+    "GRUODEBayesConfig",
     "GRU_ODE",
     "GRU_Bayes",
     "GRU_ODE_Bayes",
     "TorchODESolver",
+    "build_gru_ode_bayes",
     "gaussian_kl",
     "gaussian_kl_logvar",
 ]
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Final
 
 import torch
@@ -288,6 +291,20 @@ class GRU_Bayes(nn.Module):
 
         # keep old state if no observation at all.
         return torch.where(has_obs.unsqueeze(-1), new_state, state)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GRUODEBayesConfig:
+    r"""Configuration for constructing a GRU-ODE-Bayes model."""
+
+    input_size: int
+    hidden_size: int
+    p_hidden: int
+    prep_hidden: int
+    bias: bool = True
+    dropout_rate: float = 0.0
+    step_size: float | None = None
+    solver: str | nn.Module = "euler"
 
 
 class GRU_ODE_Bayes(nn.Module):
@@ -605,3 +622,22 @@ def gaussian_kl_logvar(
             + torch.exp(-logvar_2) * (mu_1 - mu_2) ** 2
             - 1
     )  # fmt: skip
+
+
+def build_gru_ode_bayes(
+    config: GRUODEBayesConfig | Mapping[str, object], /
+) -> GRU_ODE_Bayes:
+    r"""Construct a GRU-ODE-Bayes model from a configuration object."""
+    if isinstance(config, Mapping):
+        config = GRUODEBayesConfig(**config)
+
+    return GRU_ODE_Bayes(
+        config.input_size,
+        config.hidden_size,
+        config.p_hidden,
+        prep_hidden=config.prep_hidden,
+        bias=config.bias,
+        dropout_rate=config.dropout_rate,
+        step_size=config.step_size,
+        solver=config.solver,
+    )
