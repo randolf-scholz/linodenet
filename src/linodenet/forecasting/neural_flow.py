@@ -1,0 +1,571 @@
+r"""Neural Flow state propagation operators.
+
+This module reimplements the flow operators used in the Neural Flows
+experiments without depending on :mod:`stribor` or importing from
+:mod:`linodenet`.  The modules follow the structural state-propagation
+protocol used by ``linodenet.state_propagation``:
+
+``forward(timedeltas, state) -> trajectory``
+
+where ``timedeltas`` has shape ``(..., T)``, ``state`` has shape ``(..., D)``,
+and the returned trajectory has shape ``(..., T, D)``.
+"""
+
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from itertools import pairwise
+from typing import TYPE_CHECKING, Final, Literal, overload
+
+import torch
+from torch import Tensor, nn
+from torch.nn.utils import spectral_norm
+
+__all__ = [
+    "CouplingFlow",
+    "GRUFlow",
+    "GRUFlowBlock",
+    "ResNetFlow",
+]
+
+
+TimeNetName = Literal[
+    "TimeLinear",
+    "TimeTanh",
+    "TimeFourier",
+    "TimeFourierBounded",
+]
+
+
+class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
+    r"""Wrapper for ModuleList to make it a generic Sequence type."""
+
+    @classmethod
+    def from_iterable(cls, modules: Iterable[M], /) -> ModuleSequence[M]:
+        r"""Initialize from an iterable of modules."""
+        return ModuleSequence(modules)
+
+    if TYPE_CHECKING:
+        _modules: Mapping[str, M]  # type: ignore[override]
+
+        def __init__(self, modules: Iterable[M] = (), /) -> None: ...
+        def __iter__(self) -> Iterator[M]: ...
+
+    @overload
+    def __getitem__(self, index: int, /) -> M: ...
+    @overload
+    def __getitem__(self, index: slice, /) -> ModuleSequence[M]: ...
+    def __getitem__(self, index: int | slice, /) -> M | ModuleSequence[M]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(index, slice):
+            modules = list(self._modules.values())
+            selection = modules[index]
+            return ModuleSequence(selection)
+        return self._modules[self._get_abs_string_index(index)]
+
+
+def _make_mlp(
+    input_size: int,
+    hidden_dims: Sequence[int],
+    output_size: int,
+    *,
+    activation: type[nn.Module] = nn.ReLU,
+    final_activation: nn.Module | None = None,
+    spectral: bool = False,
+) -> nn.Sequential:
+    r"""Return a feed-forward network used by the flow blocks."""
+    layers: list[nn.Module] = []
+    sizes = [input_size, *hidden_dims, output_size]
+    for k, (in_features, out_features) in enumerate(pairwise(sizes)):
+        layer = nn.Linear(in_features, out_features)
+        layers.append(spectral_norm(layer, n_power_iterations=5) if spectral else layer)
+        if k < len(sizes) - 2:
+            layers.append(activation())
+    if final_activation is not None:
+        layers.append(final_activation)
+    return nn.Sequential(*layers)
+
+
+class TimeEmbedding(nn.Module):
+    r"""Time embedding with value zero at ``t = 0``.
+
+    Neural flows should start as the identity at zero elapsed time.  Each
+    embedding therefore omits additive biases and uses features that vanish at
+    the origin.
+    """
+
+    output_size: Final[int]
+    hidden_size: Final[int | None]
+    kind: Final[TimeNetName]
+    weight: Tensor
+    frequencies: Tensor
+
+    def __init__(
+        self,
+        output_size: int,
+        *,
+        kind: TimeNetName = "TimeLinear",
+        hidden_size: int | None = None,
+    ) -> None:
+        super().__init__()
+        self.output_size = output_size
+        self.hidden_size = hidden_size
+        self.kind = kind
+
+        match kind:
+            case "TimeLinear":
+                self.weight = nn.Parameter(torch.ones(output_size))
+                self.register_buffer("frequencies", torch.empty(0), persistent=False)
+            case "TimeTanh":
+                self.weight = nn.Parameter(torch.ones(output_size))
+                self.register_buffer("frequencies", torch.empty(0), persistent=False)
+            case "TimeFourier" | "TimeFourierBounded":
+                if hidden_size is None:
+                    hidden_size = output_size
+                self.weight = nn.Parameter(torch.empty(output_size, 2 * hidden_size))
+                nn.init.xavier_uniform_(self.weight)
+                frequencies = torch.arange(1, hidden_size + 1, dtype=torch.float32)
+                self.register_buffer("frequencies", frequencies, persistent=True)
+            case _:
+                raise ValueError(f"Unknown time network {kind!r}.")
+
+    def forward(self, timedeltas: Tensor, /) -> Tensor:
+        r"""Return a time-dependent multiplicative gate."""
+        if timedeltas.shape[-1] != 1:
+            raise ValueError("timedeltas must have a trailing singleton dimension.")
+
+        match self.kind:
+            case "TimeLinear":
+                return timedeltas * self.weight
+            case "TimeTanh":
+                return torch.tanh(timedeltas * self.weight)
+            case "TimeFourier" | "TimeFourierBounded":
+                angles = timedeltas * self.frequencies.to(timedeltas)
+                features = torch.cat([torch.sin(angles), torch.cos(angles) - 1], dim=-1)
+                output = torch.einsum("...h, oh -> ...o", features, self.weight)
+                if self.kind == "TimeFourierBounded":
+                    return torch.tanh(output)
+                return output
+            case _:
+                raise AssertionError("unreachable")
+
+
+def _prepare_inputs(
+    timedeltas: Tensor, state: Tensor, input_size: int
+) -> tuple[Tensor, Tensor]:
+    r"""Broadcast ``timedeltas`` and ``state`` to trajectory tensors."""
+    if state.shape[-1] != input_size:
+        raise ValueError(
+            f"state has incompatible last dimension: expected {input_size}, "
+            f"got {state.shape[-1]}."
+        )
+    if timedeltas.ndim < 1:
+        raise ValueError("timedeltas must have at least one dimension.")
+
+    batch_shape = torch.broadcast_shapes(timedeltas.shape[:-1], state.shape[:-1])
+    num_steps = timedeltas.shape[-1]
+    timedeltas = timedeltas.expand(*batch_shape, num_steps).unsqueeze(-1)
+    state = state.expand(*batch_shape, input_size).unsqueeze(-2)
+    state = state.expand(*batch_shape, num_steps, input_size)
+    return timedeltas, state
+
+
+def _ordered_mask(input_size: int, layer_index: int, /) -> Tensor:
+    r"""Return the alternating ordered mask used by coupling layers."""
+    if input_size == 1:
+        return torch.zeros(input_size, dtype=torch.bool)
+    split = (input_size + 1) // 2
+    mask = torch.zeros(input_size, dtype=torch.bool)
+    if layer_index % 2 == 0:
+        mask[:split] = True
+    else:
+        mask[split:] = True
+    return mask
+
+
+class CouplingFlowBlock(nn.Module):
+    r"""Continuous affine coupling block.
+
+    The block uses an affine update whose shift and log-scale vanish at
+    ``t = 0`` through a time gate:
+
+    ``y_B = exp(s(x_A, t)) * x_B + b(x_A, t)``.
+    """
+
+    input_size: Final[int]
+    mask: Tensor
+    net: nn.Sequential
+    time_net: TimeEmbedding
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_dims: Sequence[int],
+        *,
+        layer_index: int,
+        time_net: TimeNetName,
+        time_hidden_size: int | None,
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.net = _make_mlp(input_size + 1, hidden_dims, 2 * input_size)
+        self.time_net = TimeEmbedding(
+            2 * input_size,
+            kind=time_net,
+            hidden_size=time_hidden_size,
+        )
+        self.register_buffer(
+            "mask",
+            _ordered_mask(input_size, layer_index),
+            persistent=True,
+        )
+
+    def _affine_parameters(
+        self, x: Tensor, timedeltas: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        mask = self.mask.to(device=x.device)
+        conditioner = torch.where(mask, x, torch.zeros_like(x))
+        params = self.net(torch.cat([conditioner, timedeltas], dim=-1))
+        params = params * self.time_net(timedeltas)
+        shift, log_scale = params.chunk(2, dim=-1)
+        log_scale = 0.8 * torch.tanh(log_scale)
+        active = ~mask
+        shift = torch.where(active, shift, torch.zeros_like(shift))
+        log_scale = torch.where(active, log_scale, torch.zeros_like(log_scale))
+        return shift, log_scale
+
+    def forward(self, x: Tensor, timedeltas: Tensor, /) -> Tensor:
+        shift, log_scale = self._affine_parameters(x, timedeltas)
+        return torch.exp(log_scale) * x + shift
+
+    def inverse(self, y: Tensor, timedeltas: Tensor, /) -> Tensor:
+        shift, log_scale = self._affine_parameters(y, timedeltas)
+        return (y - shift) * torch.exp(-log_scale)
+
+
+class CouplingFlow(ModuleSequence[CouplingFlowBlock]):
+    r"""Affine coupling neural flow.
+
+    Args:
+        input_size: State dimension.
+        num_layers: Number of coupling blocks.
+        hidden_dims: Hidden dimensions of each coupling network.
+        time_net: Time embedding family.
+        time_hidden_size: Number of Fourier frequencies for Fourier time nets.
+    """
+
+    input_shape: Final[tuple[int, ...]]
+    input_size: Final[int]
+    output_size: Final[int]
+    num_layers: Final[int]
+
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        num_layers: int | None = None,
+        hidden_dims: Sequence[int] = (),
+        time_net: TimeNetName = "TimeLinear",
+        time_hidden_size: int | None = None,
+        n_layers: int | None = None,
+        time_hidden_dim: int | None = None,
+    ) -> None:
+        if num_layers is None:
+            if n_layers is None:
+                raise TypeError("Either num_layers or n_layers must be provided.")
+            num_layers = n_layers
+        if time_hidden_size is None:
+            time_hidden_size = time_hidden_dim
+
+        blocks = [
+            CouplingFlowBlock(
+                input_size,
+                hidden_dims,
+                layer_index=k,
+                time_net=time_net,
+                time_hidden_size=time_hidden_size,
+            )
+            for k in range(num_layers)
+        ]
+        super().__init__(blocks)
+        self.input_shape = (input_size,)
+        self.input_size = input_size
+        self.output_size = input_size
+        self.num_layers = num_layers
+
+    def step(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for a single time delta."""
+        return self.forward(timedeltas.unsqueeze(-1), state).squeeze(-2)
+
+    def forward(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for each requested time delta."""
+        timedeltas, x = _prepare_inputs(timedeltas, state, self.input_size)
+        for block in self:
+            x = block(x, timedeltas)
+        return x
+
+    def inverse(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+        r"""Apply the inverse flow for each requested time delta."""
+        timedeltas, x = _prepare_inputs(timedeltas, state, self.input_size)
+        for block in reversed(self):
+            x = block.inverse(x, timedeltas)
+        return x
+
+
+class ResNetFlowBlock(nn.Module):
+    r"""Time-gated residual flow block."""
+
+    input_size: Final[int]
+    residual: nn.Sequential
+    time_net: TimeEmbedding
+
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        hidden_dims: Sequence[int],
+        time_net: TimeNetName,
+        time_hidden_size: int | None,
+        invertible: bool,
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.residual = _make_mlp(
+            input_size + 1,
+            hidden_dims,
+            input_size,
+            spectral=invertible,
+        )
+        self.time_net = TimeEmbedding(
+            input_size,
+            kind=time_net,
+            hidden_size=time_hidden_size,
+        )
+        self.residual_scale = 0.8 if invertible else 1.0
+
+    def forward(self, x: Tensor, timedeltas: Tensor, /) -> Tensor:
+        residual = self.residual(torch.cat([x, timedeltas], dim=-1))
+        residual = self.residual_scale * torch.tanh(residual)
+        return x + self.time_net(timedeltas) * residual
+
+    def inverse(
+        self, y: Tensor, timedeltas: Tensor, /, *, iterations: int = 100
+    ) -> Tensor:
+        x = y
+        for _ in range(iterations):
+            residual = self.residual(torch.cat([x, timedeltas], dim=-1))
+            residual = self.residual_scale * torch.tanh(residual)
+            x = y - self.time_net(timedeltas) * residual
+        return x
+
+
+class ResNetFlow(ModuleSequence[ResNetFlowBlock]):
+    r"""Residual neural flow."""
+
+    input_shape: Final[tuple[int, ...]]
+    input_size: Final[int]
+    output_size: Final[int]
+    num_layers: Final[int]
+
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        num_layers: int | None = None,
+        hidden_dims: Sequence[int] = (),
+        time_net: TimeNetName = "TimeLinear",
+        time_hidden_size: int | None = None,
+        n_layers: int | None = None,
+        time_hidden_dim: int | None = None,
+        invertible: bool = True,
+    ) -> None:
+        if num_layers is None:
+            if n_layers is None:
+                raise TypeError("Either num_layers or n_layers must be provided.")
+            num_layers = n_layers
+        if time_hidden_size is None:
+            time_hidden_size = time_hidden_dim
+
+        blocks = [
+            ResNetFlowBlock(
+                input_size,
+                hidden_dims=hidden_dims,
+                time_net=time_net,
+                time_hidden_size=time_hidden_size,
+                invertible=invertible,
+            )
+            for _ in range(num_layers)
+        ]
+        super().__init__(blocks)
+        self.input_shape = (input_size,)
+        self.input_size = input_size
+        self.output_size = input_size
+        self.num_layers = num_layers
+
+    def step(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for a single time delta."""
+        return self.forward(timedeltas.unsqueeze(-1), state).squeeze(-2)
+
+    def forward(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for each requested time delta."""
+        timedeltas, x = _prepare_inputs(timedeltas, state, self.input_size)
+        for block in self:
+            x = block(x, timedeltas)
+        return x
+
+    def inverse(
+        self,
+        timedeltas: Tensor,
+        state: Tensor,
+        /,
+        *,
+        iterations: int = 100,
+    ) -> Tensor:
+        r"""Apply the fixed-point inverse for each requested time delta."""
+        timedeltas, x = _prepare_inputs(timedeltas, state, self.input_size)
+        for block in reversed(self):
+            x = block.inverse(x, timedeltas, iterations=iterations)
+        return x
+
+
+class GRUFlowBlock(nn.Module):
+    r"""Single invertible GRU-flow block."""
+
+    input_size: Final[int]
+    alpha: Final[float]
+    beta: Final[float]
+    lin_hh: nn.Module
+    lin_hz: nn.Module
+    lin_hr: nn.Module
+    time_net: TimeEmbedding
+
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        time_net: TimeNetName,
+        time_hidden_size: int | None,
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.lin_hh = spectral_norm(
+            nn.Linear(input_size + 1, input_size),
+            n_power_iterations=5,
+        )
+        self.lin_hz = spectral_norm(
+            nn.Linear(input_size + 1, input_size),
+            n_power_iterations=5,
+        )
+        self.lin_hr = spectral_norm(
+            nn.Linear(input_size + 1, input_size),
+            n_power_iterations=5,
+        )
+        self.time_net = TimeEmbedding(
+            input_size,
+            kind=time_net,
+            hidden_size=time_hidden_size,
+        )
+        self.alpha = 2 / 5
+        self.beta = 4 / 5
+
+    def residual(self, state: Tensor, timedeltas: Tensor, /) -> Tensor:
+        r"""Return the GRU-style residual update."""
+        inp = torch.cat([state, timedeltas], dim=-1)
+        reset = self.beta * torch.sigmoid(self.lin_hr(inp))
+        update = self.alpha * torch.sigmoid(self.lin_hz(inp))
+        candidate = torch.tanh(
+            self.lin_hh(torch.cat([reset * state, timedeltas], dim=-1))
+        )
+        return update * (candidate - state)
+
+    def forward(self, state: Tensor, timedeltas: Tensor, /) -> Tensor:
+        r"""Apply one GRU-flow block."""
+        return state + self.time_net(timedeltas) * self.residual(state, timedeltas)
+
+    def inverse(
+        self,
+        state: Tensor,
+        timedeltas: Tensor,
+        /,
+        *,
+        iterations: int = 100,
+    ) -> Tensor:
+        r"""Invert the block by fixed-point iteration."""
+        x = state
+        for _ in range(iterations):
+            x = state - self.time_net(timedeltas) * self.residual(x, timedeltas)
+        return x
+
+
+class GRUFlow(ModuleSequence[GRUFlowBlock]):
+    r"""GRU neural flow."""
+
+    input_shape: Final[tuple[int, ...]]
+    input_size: Final[int]
+    output_size: Final[int]
+    num_layers: Final[int]
+
+    def __init__(
+        self,
+        input_size: int,
+        *,
+        num_layers: int | None = None,
+        hidden_dims: Sequence[int] | TimeNetName | None = None,
+        time_net: TimeNetName | int | None = "TimeLinear",
+        time_hidden_size: int | None = None,
+        n_layers: int | None = None,
+        time_hidden_dim: int | None = None,
+    ) -> None:
+        if num_layers is None:
+            if n_layers is None:
+                raise TypeError("Either num_layers or n_layers must be provided.")
+            num_layers = n_layers
+        if time_hidden_size is None:
+            time_hidden_size = time_hidden_dim
+
+        # The original experiment code passes ``hidden_dims`` positionally for
+        # all flow classes, although GRUFlow does not use it.
+        if isinstance(hidden_dims, str):
+            if not isinstance(time_net, str) and time_hidden_size is None:
+                time_hidden_size = None if time_net is None else int(time_net)
+            time_net_name = hidden_dims
+        elif isinstance(time_net, str):
+            time_net_name = time_net
+        else:
+            raise TypeError("time_net must be a TimeNetName string.")
+
+        blocks = [
+            GRUFlowBlock(
+                input_size,
+                time_net=time_net_name,
+                time_hidden_size=time_hidden_size,
+            )
+            for _ in range(num_layers)
+        ]
+        super().__init__(blocks)
+        self.input_shape = (input_size,)
+        self.input_size = input_size
+        self.output_size = input_size
+        self.num_layers = num_layers
+
+    def step(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for a single time delta."""
+        return self.forward(timedeltas.unsqueeze(-1), state).squeeze(-2)
+
+    def forward(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for each requested time delta."""
+        timedeltas, x = _prepare_inputs(timedeltas, state, self.input_size)
+        for block in self:
+            x = block(x, timedeltas)
+        return x
+
+    def inverse(
+        self,
+        timedeltas: Tensor,
+        state: Tensor,
+        /,
+        *,
+        iterations: int = 100,
+    ) -> Tensor:
+        r"""Apply the fixed-point inverse for each requested time delta."""
+        timedeltas, x = _prepare_inputs(timedeltas, state, self.input_size)
+        for block in reversed(self):
+            x = block.inverse(x, timedeltas, iterations=iterations)
+        return x
