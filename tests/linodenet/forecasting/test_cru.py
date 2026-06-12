@@ -1,12 +1,11 @@
 r"""Tests for CRU model construction."""
 
 from pathlib import Path
-from typing import ClassVar, NamedTuple
+from typing import ClassVar
 
 import pytest
 import torch
 import yaml
-from torch.nn.utils.rnn import pad_sequence
 
 from linodenet.forecasting.cru import (
     CRU,
@@ -18,6 +17,8 @@ from linodenet.forecasting.cru import (
     apply_masked,
     build_cru,
 )
+
+from .base import TestForecastingModel
 
 # language=yaml
 CRU_CONFIG_YAML = r"""
@@ -182,44 +183,17 @@ class TestMaskedApply:
             assert parameter.grad.isfinite().all()
 
 
-class CRUData(NamedTuple):
-    r"""Random CRU input/output data with original sequence lengths."""
-
-    context_times: torch.Tensor
-    context_values: torch.Tensor
-    context_lengths: torch.Tensor
-    query_times: torch.Tensor
-    query_values: torch.Tensor
-    query_lengths: torch.Tensor
-
-    @property
-    def context_mask(self) -> torch.Tensor:
-        r"""Boolean mask for valid context sequence entries."""
-        return (
-            torch.arange(
-                self.context_times.shape[-1], device=self.context_lengths.device
-            )
-            < self.context_lengths[..., None]
-        )
-
-    @property
-    def query_mask(self) -> torch.Tensor:
-        r"""Boolean mask for valid query sequence entries."""
-        return (
-            torch.arange(self.query_times.shape[-1], device=self.query_lengths.device)
-            < self.query_lengths[..., None]
-        )
-
-
-class TestModel:
+class TestModel(TestForecastingModel):
     r"""Tests for direct CRU model construction."""
 
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     STANDARD_CONFIG: ClassVar[CRUConfig] = CRUConfig(
-        input_size=5,
-        output_size=3,
+        input_size=CONTEXT_SHAPE[0],
+        output_size=OUTPUT_SHAPE[0],
         latent_size=4,
         encoder=EncoderConfig(
-            input_size=5,
+            input_size=CONTEXT_SHAPE[0],
             output_size=4,
             hidden_size=7,
             num_hidden_layers=1,
@@ -228,7 +202,7 @@ class TestModel:
         ),
         decoder=DecoderConfig(
             input_size=4,
-            output_size=3,
+            output_size=OUTPUT_SHAPE[0],
             hidden_size=11,
             num_hidden_mean_model_layers=1,
             num_hidden_variance_model_layers=1,
@@ -242,10 +216,16 @@ class TestModel:
         validate_args=True,
     )
 
-    @classmethod
-    def make_cru(cls) -> CRU:
+    @pytest.fixture
+    def model_config(self) -> CRUConfig:
+        r"""Configuration used to instantiate the CRU under test."""
+        return self.STANDARD_CONFIG
+
+    def make_model(self, model_config: object, /) -> CRU:
         r"""Instantiate a CRU from :attr:`STANDARD_CONFIG` without ``build_cru``."""
-        config = cls.STANDARD_CONFIG
+        if not isinstance(model_config, CRUConfig):
+            raise TypeError("model_config must be a CRUConfig.")
+        config = model_config
         encoder = Encoder(
             config.encoder.input_size,
             config.encoder.output_size,
@@ -283,98 +263,19 @@ class TestModel:
             )
         return model
 
-    @classmethod
-    def make_data(
-        cls,
-        *,
-        seed: int,
-        batch_shape: int | tuple[int, ...],
-        min_steps: int,
-        max_steps: int,
-    ) -> CRUData:
-        r"""Sample random CRU context and query data."""
-        if min_steps < 1:
-            raise ValueError("min_steps must be positive.")
-        if max_steps < min_steps:
-            raise ValueError("max_steps must be greater than or equal to min_steps.")
+    def make_cru(self) -> CRU:
+        r"""Instantiate a CRU from :attr:`STANDARD_CONFIG` without ``build_cru``."""
+        return self.make_model(self.STANDARD_CONFIG)
 
-        config = cls.STANDARD_CONFIG
-        generator = torch.Generator().manual_seed(seed)
-        batch_shape = torch.Size(
-            (batch_shape,) if isinstance(batch_shape, int) else batch_shape
-        )
-        if any(size < 1 for size in batch_shape):
-            raise ValueError("batch_shape entries must be positive.")
-
-        num_batches = max(batch_shape.numel(), 1)
-        context_steps = torch.randint(
-            min_steps, max_steps + 1, (num_batches,), generator=generator
-        )
-        query_steps = torch.randint(
-            min_steps, max_steps + 1, (num_batches,), generator=generator
-        )
-
-        times = []
-        values = []
-        for steps, dim in (
-            (context_steps, config.input_size),
-            (query_steps, config.output_size),
-        ):
-            time_sequences = [
-                torch.sort(torch.rand(int(num_steps), generator=generator)).values
-                for num_steps in steps
-            ]
-            value_sequences = [
-                torch.randn(int(num_steps), dim, generator=generator)
-                for num_steps in steps
-            ]
-
-            if batch_shape == ():
-                times.append(time_sequences[0])
-                values.append(value_sequences[0])
-            else:
-                times.append(
-                    pad_sequence(
-                        time_sequences,
-                        batch_first=True,
-                        padding_value=torch.nan,
-                    ).reshape(*batch_shape, -1)
-                )
-                values.append(
-                    pad_sequence(
-                        value_sequences,
-                        batch_first=True,
-                        padding_value=torch.nan,
-                    ).reshape(*batch_shape, -1, dim)
-                )
-
-        context_times, query_times = times
-        context_values, query_values = values
-        context_lengths = context_steps.reshape(batch_shape)
-        query_lengths = query_steps.reshape(batch_shape)
-        context_length = int(context_steps.max())
-        query_length = int(query_steps.max())
-        context_end_times = torch.take_along_dim(
-            context_times,
-            (context_lengths - 1).unsqueeze(-1),
-            dim=-1,
-        ).squeeze(-1)
-        query_times = query_times + context_end_times[..., None]
-
-        assert context_lengths.shape == batch_shape
-        assert query_lengths.shape == batch_shape
-        assert context_times.shape == (*batch_shape, context_length)
-        assert context_values.shape == (*batch_shape, context_length, config.input_size)
-        assert query_times.shape == (*batch_shape, query_length)
-        assert query_values.shape == (*batch_shape, query_length, config.output_size)
-        return CRUData(
-            context_times=context_times,
-            context_values=context_values,
-            context_lengths=context_lengths,
-            query_times=query_times,
-            query_values=query_values,
-            query_lengths=query_lengths,
-        )
+    def loss(
+        self,
+        model: CRU,
+        predictions: tuple[torch.Tensor, ...],
+        targets: torch.Tensor,
+    ) -> torch.Tensor:
+        r"""Return CRU negative log-likelihood for predictions."""
+        pred_mean, pred_var = predictions
+        return model.nll(targets, pred_mean, pred_var)
 
     def test_make_cru_instantiates_standard_model(self) -> None:
         config = self.STANDARD_CONFIG
@@ -405,108 +306,16 @@ class TestModel:
         assert model.decoder.output_size == config.decoder.output_size
         assert model.decoder.hidden_size == config.decoder.hidden_size
 
-    def test_make_data_samples_unbatched_sequences(self) -> None:
-        min_steps, max_steps = 2, 5
-        data = self.make_data(
-            seed=0,
-            batch_shape=(),
-            min_steps=min_steps,
-            max_steps=max_steps,
-        )
-
-        assert data.context_times.ndim == 1
-        assert data.query_times.ndim == 1
-        assert data.context_lengths.shape == ()
-        assert data.query_lengths.shape == ()
-        assert min_steps <= int(data.context_lengths) <= max_steps
-        assert min_steps <= int(data.query_lengths) <= max_steps
-        assert data.context_values.shape == (
-            data.context_times.shape[-1],
-            self.STANDARD_CONFIG.input_size,
-        )
-        assert data.query_values.shape == (
-            data.query_times.shape[-1],
-            self.STANDARD_CONFIG.output_size,
-        )
-        assert data.context_times.shape == (int(data.context_lengths),)
-        assert data.query_times.shape == (int(data.query_lengths),)
-        assert data.context_mask.shape == data.context_times.shape
-        assert data.query_mask.shape == data.query_times.shape
-        assert data.context_mask.all()
-        assert data.query_mask.all()
-        assert torch.diff(data.context_times).ge(0).all()
-        assert torch.diff(data.query_times).ge(0).all()
-
-    def test_make_data_samples_padded_batched_sequences(self) -> None:
-        batch_shape = (2, 3)
-        data = self.make_data(
-            seed=0,
-            batch_shape=batch_shape,
-            min_steps=2,
-            max_steps=5,
-        )
-        context_length = int(data.context_lengths.max())
-        query_length = int(data.query_lengths.max())
-        input_size = self.STANDARD_CONFIG.input_size
-        output_size = self.STANDARD_CONFIG.output_size
-
-        assert data.context_lengths.shape == batch_shape
-        assert data.query_lengths.shape == batch_shape
-        assert data.context_times.shape == (*batch_shape, context_length)
-        assert data.query_times.shape == (*batch_shape, query_length)
-        assert data.context_values.shape == (*batch_shape, context_length, input_size)
-        assert data.query_values.shape == (*batch_shape, query_length, output_size)
-        assert data.context_mask.shape == data.context_times.shape
-        assert data.query_mask.shape == data.query_times.shape
-        assert torch.equal(data.context_mask.sum(dim=-1), data.context_lengths)
-        assert torch.equal(data.query_mask.sum(dim=-1), data.query_lengths)
-        assert torch.isnan(data.context_times).any()
-        assert torch.isnan(data.query_times).any()
-        assert data.context_values[data.context_mask].isfinite().all()
-        assert data.query_values[data.query_mask].isfinite().all()
-
-        for times in data.context_times.reshape(-1, context_length):
-            finite_times = times[times.isfinite()]
-            assert torch.diff(finite_times).ge(0).all()
-        for times in data.query_times.reshape(-1, query_length):
-            finite_times = times[times.isfinite()]
-            assert torch.diff(finite_times).ge(0).all()
-
-    def test_unbatched_forward(self) -> None:
-        model = self.make_cru()
-        data = self.make_data(seed=0, batch_shape=(), min_steps=2, max_steps=5)
-
-        pred_mean, pred_var = model(
-            data.query_times,
-            data.context_times,
-            data.context_values,
-        )
-
-        assert pred_mean.shape == data.query_values.shape
-        assert pred_var.shape == data.query_values.shape
-        assert pred_mean.isfinite().all()
-        assert pred_var.isfinite().all()
-        assert pred_var.ge(0).all()
-
-    def test_batched_forward(self) -> None:
-        model = self.make_cru()
-        data = self.make_data(seed=0, batch_shape=(4,), min_steps=2, max_steps=5)
-
-        pred_mean, pred_var = model(
-            data.query_times,
-            data.context_times,
-            data.context_values,
-        )
-
-        assert pred_mean.shape == data.query_values.shape
-        assert pred_var.shape == data.query_values.shape
-        assert pred_mean[data.query_mask].isfinite().all()
-        assert pred_var[data.query_mask].isfinite().all()
-        assert pred_var[data.query_mask].ge(0).all()
-
     def test_rejects_finite_context_time_with_missing_value(self) -> None:
         model = self.make_cru()
-        data = self.make_data(seed=0, batch_shape=(), min_steps=3, max_steps=3)
+        data = self.make_sequential_data(
+            seed=self.SEED,
+            batch_shape=(),
+            min_steps=3,
+            max_steps=3,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+        )
         context_values = data.context_values.clone()
         context_values[1, 0] = torch.nan
 
@@ -523,98 +332,6 @@ class TestModel:
 
         with pytest.raises(AssertionError):
             model(query_times, context_times, context_values)
-
-    def test_training_unbatched(self) -> None:
-        torch.manual_seed(0)
-        model = self.make_cru()
-        data = self.make_data(seed=0, batch_shape=(), min_steps=5, max_steps=5)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
-        initial_parameters = {
-            name: parameter.detach().clone()
-            for name, parameter in model.named_parameters()
-        }
-
-        pred_mean, pred_var = model(
-            data.query_times,
-            data.context_times,
-            data.context_values,
-        )
-
-        initial_loss = CRU.nll(data.query_values, pred_mean, pred_var)
-
-        for _ in range(3):
-            optimizer.zero_grad()
-            pred_mean, pred_var = model(
-                data.query_times,
-                data.context_times,
-                data.context_values,
-            )
-            loss = CRU.nll(data.query_values, pred_mean, pred_var)
-            loss.backward()
-
-            for name, parameter in model.named_parameters():
-                assert parameter.grad is not None, name
-                assert parameter.grad.isfinite().all(), name
-                assert parameter.grad.abs().sum() > 0, name
-
-            optimizer.step()
-
-        pred_mean, pred_var = model(
-            data.query_times,
-            data.context_times,
-            data.context_values,
-        )
-        final_loss = CRU.nll(data.query_values, pred_mean, pred_var)
-
-        for name, parameter in model.named_parameters():
-            assert not torch.equal(parameter, initial_parameters[name]), name
-        assert final_loss < initial_loss
-
-    def test_training_batched(self) -> None:
-        torch.manual_seed(0)
-        model = self.make_cru()
-        data = self.make_data(seed=0, batch_shape=(8,), min_steps=2, max_steps=5)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
-        initial_parameters = {
-            name: parameter.detach().clone()
-            for name, parameter in model.named_parameters()
-        }
-
-        pred_mean, pred_var = model(
-            data.query_times,
-            data.context_times,
-            data.context_values,
-        )
-
-        initial_loss = CRU.nll(data.query_values, pred_mean, pred_var)
-
-        for _ in range(3):
-            optimizer.zero_grad()
-            pred_mean, pred_var = model(
-                data.query_times,
-                data.context_times,
-                data.context_values,
-            )
-            loss = CRU.nll(data.query_values, pred_mean, pred_var)
-            loss.backward()
-
-            for name, parameter in model.named_parameters():
-                assert parameter.grad is not None, name
-                assert parameter.grad.isfinite().all(), name
-                assert parameter.grad.abs().sum() > 0, name
-
-            optimizer.step()
-
-        pred_mean, pred_var = model(
-            data.query_times,
-            data.context_times,
-            data.context_values,
-        )
-        final_loss = CRU.nll(data.query_values, pred_mean, pred_var)
-
-        for name, parameter in model.named_parameters():
-            assert not torch.equal(parameter, initial_parameters[name]), name
-        assert final_loss < initial_loss
 
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:
