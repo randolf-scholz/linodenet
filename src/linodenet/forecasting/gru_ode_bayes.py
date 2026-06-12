@@ -18,7 +18,7 @@ __all__ = [
     "GRU_ODE_Bayes",
     "TorchODESolver",
     "gaussian_kl",
-    "gaussian_kl_logsigma",
+    "gaussian_kl_logvar",
 ]
 
 import math
@@ -223,7 +223,7 @@ class GRU_Bayes(nn.Module):
 
     .. math::
         h₊ = GRU(h₋, f_{prep}(y, m, h₋))
-        μ, log(σ) = Decoder(h₋)
+        μ, log(σ²) = Decoder(h₋)
         s = (y - μ)/σ
         q = [y, μ, σ, s]
         f = m⊙relu(Wq)
@@ -404,6 +404,63 @@ class GRU_ODE_Bayes(nn.Module):
         )
         return torch.where(valid, nll, 0.0)
 
+    @staticmethod
+    def gaussian_bayes_kl_logvar(
+        p_pre: tuple[Tensor, Tensor],  # μ_pre, log(σ²_pre) (..., d), (..., d)
+        p_post: tuple[Tensor, Tensor],  # μ_post, log(σ²_post) (..., d), (..., d)
+        p_obs: tuple[Tensor, Tensor],  # μ_obs, log(σ²_obs) (..., d), (..., d)
+        /,
+    ) -> Tensor:  # (...)
+        r"""Return the KL divergence D_KL(p_bayes || p_post).
+
+        Args:
+            p_pre: the prior predictive distribution parameters (μ, log σ²)
+            p_post: the posterior predictive distribution parameters (μ, log σ²)
+            p_obs: the observational distribution. Allowed to contain NaNs.
+
+        .. math::
+            Dₖₗ(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²))
+            = ½(log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² - 1)
+        """
+        # Note: the reference code contains a deviation from the description in the paper:
+        #   The publication specifies the KL term as d_KL(p_bayes || p_post), p_bayes ∝ p_pre ⋅ p_obs
+        #   however, in the code they compute
+        #   compute_KL_loss(p_obs = p[i_obs], X_obs = Xf_batch, M_obs = Mf_batch, obs_noise_std=self.obs_noise_std)
+        #   but here, p_obs is the posterior predictive distribution.
+        #   so actually the reference code ends up computing D_KL(p_post || p_obs)
+        mu_pre, logvar_pre = p_pre
+        mu_post, logvar_post = p_post
+        mu_obs, logvar_obs = p_obs
+        assert mu_pre.isfinite().all()
+        assert logvar_pre.isfinite().all()
+        assert mu_post.isfinite().all()
+        assert logvar_post.isfinite().all()
+        valid = mu_obs.isfinite() & logvar_obs.isfinite()
+
+        # 1. compute μ_bayes = (σ²_obs / (σ²_pre + σ²_obs)) * μ_pre + (σ²_pre / (σ²_pre + σ²_obs)) * μ_obs
+        #    log-space: compute normalized precisions wᵢ = τᵢ / (τ_pre + τ_obs), where τᵢ = 1 / σ²ᵢ.
+        logprec_pre = -logvar_pre
+        logprec_obs = -logvar_obs
+        logprec_bayes = torch.logaddexp(logprec_pre, logprec_obs)
+        weight_pre = torch.exp(logprec_pre - logprec_bayes)
+        weight_obs = torch.exp(logprec_obs - logprec_bayes)
+        mu_bayes = weight_pre * mu_pre + weight_obs * mu_obs
+
+        # 2. compute σ²_bayes = (σ²_pre * σ²_obs) / (σ²_pre + σ²_obs)
+        #    log-space: σ²_bayes = 1 / (τ_pre + τ_obs).
+        logvar_bayes = -logprec_bayes
+
+        # 3. compute marginal KL-divergence
+        #  KL(N(μ₁, σ₁²), N(μ₂, σ₂²)) = ½(log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² - 1)
+        kl = 0.5 * (
+            logvar_post
+            - logvar_bayes
+            + torch.exp(logvar_bayes - logvar_post)
+            + (mu_bayes - mu_post).square() * torch.exp(-logvar_post)
+            - 1
+        )
+        return torch.where(valid, kl, 0.0).sum(dim=-1)
+
     def propagate_state(
         self,
         delta_time: Tensor,  # (...)
@@ -528,23 +585,23 @@ def gaussian_kl(
     )
 
 
-def gaussian_kl_logsigma(
-    left: tuple[Tensor, Tensor],  # μ, log(σ) (..., d), (..., d)
-    right: tuple[Tensor, Tensor],  # μ, log(σ) (..., d), (..., d)
+def gaussian_kl_logvar(
+    left: tuple[Tensor, Tensor],  # μ, log(σ²) (..., d), (..., d)
+    right: tuple[Tensor, Tensor],  # μ, log(σ²) (..., d), (..., d)
     /,
 ) -> Tensor:  # (...)
     r"""Return the KL divergence between two diagonal Gaussians.
 
     .. math::
         Dₖₗ(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²))
-        = log(σ₂/σ₁) + ½(exp(-2(log(σ₂/σ₁))) + (μ₁ - μ₂)² exp(-2log(σ₂))) - ½
+        = ½(log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² - 1)
     """
-    mu_1, logsigma_1 = left
-    mu_2, logsigma_2 = right
-    log_ratio = logsigma_2 - logsigma_1
+    mu_1, logvar_1 = left
+    mu_2, logvar_2 = right
     return 0.5 * (
-        2 * log_ratio
-        + torch.exp(-2 * log_ratio)
-        + torch.exp(-2 * logsigma_2) * (mu_1 - mu_2) ** 2
-        - 1
+            logvar_2
+            - logvar_1
+            + torch.exp(logvar_1 - logvar_2)
+            + torch.exp(-logvar_2) * (mu_1 - mu_2) ** 2
+            - 1
     )  # fmt: skip
