@@ -11,14 +11,6 @@ where ``timedeltas`` has shape ``(..., T)``, ``state`` has shape ``(..., D)``,
 and the returned trajectory has shape ``(..., T, D)``.
 """
 
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from itertools import pairwise
-from typing import TYPE_CHECKING, Final, Literal, overload
-
-import torch
-from torch import Tensor, nn
-from torch.nn.utils import spectral_norm
-
 __all__ = [
     "CouplingFlow",
     "GRUFlow",
@@ -26,6 +18,14 @@ __all__ = [
     "ResNetFlow",
 ]
 
+
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from itertools import pairwise
+from typing import TYPE_CHECKING, Final, Literal, overload
+
+import torch
+from torch import Tensor, nn
+from torch.nn.utils import spectral_norm
 
 TimeNetName = Literal[
     "TimeLinear",
@@ -38,11 +38,6 @@ TimeNetName = Literal[
 class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
 
-    @classmethod
-    def from_iterable(cls, modules: Iterable[M], /) -> ModuleSequence[M]:
-        r"""Initialize from an iterable of modules."""
-        return ModuleSequence(modules)
-
     if TYPE_CHECKING:
         _modules: Mapping[str, M]  # type: ignore[override]
 
@@ -50,7 +45,7 @@ class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
         def __iter__(self) -> Iterator[M]: ...
 
     @overload
-    def __getitem__(self, index: int, /) -> M: ...
+    def __getitem__(self, index: int, /) -> M: ...  # pyrefly: ignore[bad-override]
     @overload
     def __getitem__(self, index: slice, /) -> ModuleSequence[M]: ...
     def __getitem__(self, index: int | slice, /) -> M | ModuleSequence[M]:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -92,7 +87,7 @@ class TimeEmbedding(nn.Module):
     """
 
     output_size: Final[int]
-    hidden_size: Final[int | None]
+    num_frequencies: Final[int | None]
     kind: Final[TimeNetName]
     weight: Tensor
     frequencies: Tensor
@@ -102,11 +97,11 @@ class TimeEmbedding(nn.Module):
         output_size: int,
         *,
         kind: TimeNetName = "TimeLinear",
-        hidden_size: int | None = None,
+        num_frequencies: int | None = None,
     ) -> None:
         super().__init__()
         self.output_size = output_size
-        self.hidden_size = hidden_size
+        self.num_frequencies = num_frequencies
         self.kind = kind
 
         match kind:
@@ -117,11 +112,17 @@ class TimeEmbedding(nn.Module):
                 self.weight = nn.Parameter(torch.ones(output_size))
                 self.register_buffer("frequencies", torch.empty(0), persistent=False)
             case "TimeFourier" | "TimeFourierBounded":
-                if hidden_size is None:
-                    hidden_size = output_size
-                self.weight = nn.Parameter(torch.empty(output_size, 2 * hidden_size))
+                if num_frequencies is None:
+                    num_frequencies = output_size
+                self.weight = nn.Parameter(
+                    torch.empty(output_size, 2 * num_frequencies)
+                )
                 nn.init.xavier_uniform_(self.weight)
-                frequencies = torch.arange(1, hidden_size + 1, dtype=torch.float32)
+                frequencies = torch.arange(
+                    1,
+                    num_frequencies + 1,
+                    dtype=torch.float32,
+                )
                 self.register_buffer("frequencies", frequencies, persistent=True)
             case _:
                 raise ValueError(f"Unknown time network {kind!r}.")
@@ -209,7 +210,7 @@ class CouplingFlowBlock(nn.Module):
         self.time_net = TimeEmbedding(
             2 * input_size,
             kind=time_net,
-            hidden_size=time_hidden_size,
+            num_frequencies=time_hidden_size,
         )
         self.register_buffer(
             "mask",
@@ -253,27 +254,17 @@ class CouplingFlow(ModuleSequence[CouplingFlowBlock]):
 
     input_shape: Final[tuple[int, ...]]
     input_size: Final[int]
-    output_size: Final[int]
     num_layers: Final[int]
 
     def __init__(
         self,
         input_size: int,
         *,
-        num_layers: int | None = None,
+        num_layers: int,
         hidden_dims: Sequence[int] = (),
         time_net: TimeNetName = "TimeLinear",
         time_hidden_size: int | None = None,
-        n_layers: int | None = None,
-        time_hidden_dim: int | None = None,
     ) -> None:
-        if num_layers is None:
-            if n_layers is None:
-                raise TypeError("Either num_layers or n_layers must be provided.")
-            num_layers = n_layers
-        if time_hidden_size is None:
-            time_hidden_size = time_hidden_dim
-
         blocks = [
             CouplingFlowBlock(
                 input_size,
@@ -287,7 +278,6 @@ class CouplingFlow(ModuleSequence[CouplingFlowBlock]):
         super().__init__(blocks)
         self.input_shape = (input_size,)
         self.input_size = input_size
-        self.output_size = input_size
         self.num_layers = num_layers
 
     def step(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
@@ -336,7 +326,7 @@ class ResNetFlowBlock(nn.Module):
         self.time_net = TimeEmbedding(
             input_size,
             kind=time_net,
-            hidden_size=time_hidden_size,
+            num_frequencies=time_hidden_size,
         )
         self.residual_scale = 0.8 if invertible else 1.0
 
@@ -361,28 +351,18 @@ class ResNetFlow(ModuleSequence[ResNetFlowBlock]):
 
     input_shape: Final[tuple[int, ...]]
     input_size: Final[int]
-    output_size: Final[int]
     num_layers: Final[int]
 
     def __init__(
         self,
         input_size: int,
         *,
-        num_layers: int | None = None,
+        num_layers: int,
         hidden_dims: Sequence[int] = (),
         time_net: TimeNetName = "TimeLinear",
         time_hidden_size: int | None = None,
-        n_layers: int | None = None,
-        time_hidden_dim: int | None = None,
         invertible: bool = True,
     ) -> None:
-        if num_layers is None:
-            if n_layers is None:
-                raise TypeError("Either num_layers or n_layers must be provided.")
-            num_layers = n_layers
-        if time_hidden_size is None:
-            time_hidden_size = time_hidden_dim
-
         blocks = [
             ResNetFlowBlock(
                 input_size,
@@ -396,7 +376,6 @@ class ResNetFlow(ModuleSequence[ResNetFlowBlock]):
         super().__init__(blocks)
         self.input_shape = (input_size,)
         self.input_size = input_size
-        self.output_size = input_size
         self.num_layers = num_layers
 
     def step(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
@@ -460,7 +439,7 @@ class GRUFlowBlock(nn.Module):
         self.time_net = TimeEmbedding(
             input_size,
             kind=time_net,
-            hidden_size=time_hidden_size,
+            num_frequencies=time_hidden_size,
         )
         self.alpha = 2 / 5
         self.beta = 4 / 5
@@ -499,42 +478,20 @@ class GRUFlow(ModuleSequence[GRUFlowBlock]):
 
     input_shape: Final[tuple[int, ...]]
     input_size: Final[int]
-    output_size: Final[int]
     num_layers: Final[int]
 
     def __init__(
         self,
         input_size: int,
         *,
-        num_layers: int | None = None,
-        hidden_dims: Sequence[int] | TimeNetName | None = None,
-        time_net: TimeNetName | int | None = "TimeLinear",
+        num_layers: int,
+        time_net: TimeNetName = "TimeLinear",
         time_hidden_size: int | None = None,
-        n_layers: int | None = None,
-        time_hidden_dim: int | None = None,
     ) -> None:
-        if num_layers is None:
-            if n_layers is None:
-                raise TypeError("Either num_layers or n_layers must be provided.")
-            num_layers = n_layers
-        if time_hidden_size is None:
-            time_hidden_size = time_hidden_dim
-
-        # The original experiment code passes ``hidden_dims`` positionally for
-        # all flow classes, although GRUFlow does not use it.
-        if isinstance(hidden_dims, str):
-            if not isinstance(time_net, str) and time_hidden_size is None:
-                time_hidden_size = None if time_net is None else int(time_net)
-            time_net_name = hidden_dims
-        elif isinstance(time_net, str):
-            time_net_name = time_net
-        else:
-            raise TypeError("time_net must be a TimeNetName string.")
-
         blocks = [
             GRUFlowBlock(
                 input_size,
-                time_net=time_net_name,
+                time_net=time_net,
                 time_hidden_size=time_hidden_size,
             )
             for _ in range(num_layers)
@@ -542,7 +499,6 @@ class GRUFlow(ModuleSequence[GRUFlowBlock]):
         super().__init__(blocks)
         self.input_shape = (input_size,)
         self.input_size = input_size
-        self.output_size = input_size
         self.num_layers = num_layers
 
     def step(self, timedeltas: Tensor, state: Tensor, /) -> Tensor:
