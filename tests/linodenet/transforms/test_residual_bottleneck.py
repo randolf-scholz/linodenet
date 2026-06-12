@@ -6,7 +6,7 @@ from linodenet.mappings import LinearContraction, ResidualBottleneck
 from linodenet.nn.parametrize import update_parametrizations
 from tests.testing import DEVICES, SEEDS_5
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 
 @pytest.mark.parametrize("dtype", [torch.float32], ids=str)

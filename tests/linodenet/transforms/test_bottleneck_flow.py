@@ -4,7 +4,7 @@ import torch
 from linodenet.mappings.transforms import BottleneckFlow, ResidualBottleneck
 from tests.testing import DEVICES
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 
 @pytest.mark.parametrize("dtype", [torch.float32], ids=str)

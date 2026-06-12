@@ -10,7 +10,7 @@ from linodenet.mappings.transforms import (
 )
 from tests.testing import SEEDS_5, as_torch_generator
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 
 @pytest.mark.parametrize("seed", SEEDS_5, ids="seed={}".format)

@@ -14,7 +14,7 @@ from linodenet.mappings.transforms.scalar import (
     Tanhshrink,
 )
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 SCALAR_TRANSFORMS = {
     "sigmoid": Sigmoid(),

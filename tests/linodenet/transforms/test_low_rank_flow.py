@@ -4,7 +4,7 @@ import torch
 from linodenet.mappings.transforms import LowRankTransform
 from tests.testing import SEEDS_10
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 
 class TestLowRankFlow(TestTransform):

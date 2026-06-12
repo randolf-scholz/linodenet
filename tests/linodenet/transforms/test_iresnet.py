@@ -13,7 +13,7 @@ from linodenet.nn.parametrize import update_parametrizations
 from linodenet.nn.rezero import ReZero
 from tests.testing import DEVICES, PROJECT, visualize_distribution
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

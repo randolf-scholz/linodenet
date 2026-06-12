@@ -5,7 +5,7 @@ import torch
 from linodenet.mappings.transforms import SplineTransform
 from tests.testing import PROJECT, SEEDS_5
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 

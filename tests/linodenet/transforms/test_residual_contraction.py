@@ -13,7 +13,7 @@ from linodenet.nn.parametrize import update_parametrizations
 from linodenet.nn.rezero import ReZero
 from tests.testing import DEVICES, SEEDS_5, TestSuite, as_seed, pytest_xfail
 
-from .test_transform import TestTransform
+from .base import TestTransform
 
 
 class ShiftedHalfContraction(nn.Module):
