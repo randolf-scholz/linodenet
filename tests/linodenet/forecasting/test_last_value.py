@@ -169,7 +169,12 @@ def test_last_value_visual_forecast() -> None:
         context_values[indices, channel] = sample_values[channel]
 
     query_times = torch.linspace(0.0, horizon, 1000)
-    forecast = model(query_times, context_times, context_values)
+    forecast = model(
+        query_times,
+        context_times,
+        context_values,
+        initial_state=torch.randn(num_channels),
+    )
 
     tab10 = plt.colormaps["tab10"]
     colors = [tab10(index) for index in range(num_channels)]
