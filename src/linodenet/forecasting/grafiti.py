@@ -1,167 +1,19 @@
 r"""GraFITi layers for irregular time-series forecasting."""
 
 __all__ = [
-    "GraFITi",
-    "IMAB",
     "MAB",
-    "MAB2",
-    "MultiHeadAttention",
-    "ScaledDotProductAttention",
+    "Grafiti",
 ]
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
 
-class ScaledDotProductAttention(nn.Module):
-    r"""Scaled dot-product attention."""
-
-    def forward(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Apply attention to a query, key, and value tensor.
-
-        Args:
-            query: Query tensor with shape ``(batch, query_len, dim)``.
-            key: Key tensor with shape ``(batch, key_len, dim)``.
-            value: Value tensor with shape ``(batch, key_len, dim)``.
-            mask: Optional attention mask with shape ``(batch, query_len, key_len)``.
-
-        Returns:
-            Tuple containing the attended values and attention weights.
-        """
-        dk = query.size()[-1]
-        scores = query.matmul(key.transpose(-2, -1)) / math.sqrt(dk)
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, -10e9)
-
-        attention = F.softmax(scores, dim=-1)
-        return attention.matmul(value), attention
-
-
-class MultiHeadAttention(nn.Module):
-    r"""Multi-head attention layer."""
-
-    def __init__(
-        self,
-        in_features: int,
-        head_num: int,
-        bias: bool = True,
-        activation: Callable[[Tensor], Tensor] | None = F.relu,
-    ) -> None:
-        r"""Initialize the attention projections.
-
-        Args:
-            in_features: Feature dimension of each input token.
-            head_num: Number of attention heads.
-            bias: Whether linear projections include bias terms.
-            activation: Optional activation applied after each linear projection.
-
-        Raises:
-            ValueError: If ``in_features`` is not divisible by ``head_num``.
-        """
-        super().__init__()
-        if in_features % head_num != 0:
-            raise ValueError(
-                f"`in_features`({in_features}) should be divisible by "
-                f"`head_num`({head_num})"
-            )
-        self.in_features = in_features
-        self.head_num = head_num
-        self.activation = activation
-        self.bias = bias
-        self.linear_q = nn.Linear(in_features, in_features, bias)
-        self.linear_k = nn.Linear(in_features, in_features, bias)
-        self.linear_v = nn.Linear(in_features, in_features, bias)
-        self.linear_o = nn.Linear(in_features, in_features, bias)
-
-    def forward(
-        self,
-        q: Tensor,
-        k: Tensor,
-        v: Tensor,
-        mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Apply multi-head attention.
-
-        Args:
-            q: Query tensor with shape ``(batch, query_len, in_features)``.
-            k: Key tensor with shape ``(batch, key_len, in_features)``.
-            v: Value tensor with shape ``(batch, key_len, in_features)``.
-            mask: Optional attention mask with shape ``(batch, query_len, key_len)``.
-
-        Returns:
-            Tuple containing the attended values and attention weights.
-        """
-        q, k, v = self.linear_q(q), self.linear_k(k), self.linear_v(v)
-        if self.activation is not None:
-            q = self.activation(q)
-            k = self.activation(k)
-            v = self.activation(v)
-        q = self._reshape_to_batches(q)
-        k = self._reshape_to_batches(k)
-        v = self._reshape_to_batches(v)
-        if mask is not None:
-            mask = mask.repeat(self.head_num, 1, 1)
-        y, attn = ScaledDotProductAttention()(q, k, v, mask)
-        y = self._reshape_from_batches(y)
-        y = self.linear_o(y)
-        if self.activation is not None:
-            y = self.activation(y)
-        return y, attn
-
-    @staticmethod
-    def gen_history_mask(x: Tensor) -> Tensor:
-        r"""Generate a causal mask for history-only attention.
-
-        Args:
-            x: Input tensor with shape ``(batch, seq_len, dim)``.
-
-        Returns:
-            Lower-triangular mask with shape ``(batch, seq_len, seq_len)``.
-        """
-        batch_size, seq_len, _ = x.size()
-        return (
-            torch.tril(torch.ones(seq_len, seq_len, device=x.device))
-            .view(1, seq_len, seq_len)
-            .repeat(batch_size, 1, 1)
-        )
-
-    def _reshape_to_batches(self, x: Tensor) -> Tensor:
-        batch_size, seq_len, in_feature = x.size()
-        sub_dim = in_feature // self.head_num
-        return (
-            x.reshape(batch_size, seq_len, self.head_num, sub_dim)
-            .permute(0, 2, 1, 3)
-            .reshape(batch_size * self.head_num, seq_len, sub_dim)
-        )
-
-    def _reshape_from_batches(self, x: Tensor) -> Tensor:
-        batch_size, seq_len, in_feature = x.size()
-        batch_size //= self.head_num
-        out_dim = in_feature * self.head_num
-        return (
-            x.reshape(batch_size, self.head_num, seq_len, in_feature)
-            .permute(0, 2, 1, 3)
-            .reshape(batch_size, seq_len, out_dim)
-        )
-
-    def extra_repr(self) -> str:
-        return (
-            f"in_features={self.in_features}, head_num={self.head_num}, "
-            f"bias={self.bias}, activation={self.activation}"
-        )
-
-
-class MAB2(nn.Module):
+class MAB(nn.Module):
     r"""Multi-head attention block with configurable hidden dimension."""
 
     def __init__(
@@ -212,146 +64,6 @@ class MAB2(nn.Module):
         O = O if getattr(self, "ln0", None) is None else self.ln0(O)
         O = O + F.relu(self.fc_o(O))
         return O if getattr(self, "ln1", None) is None else self.ln1(O)
-
-
-class MAB(nn.Module):
-    r"""Multi-head attention block."""
-
-    def __init__(
-        self,
-        dim_Q: int,
-        dim_K: int,
-        dim_V: int,
-        num_heads: int,
-        ln: bool = False,
-    ) -> None:
-        super().__init__()
-        self.dim_V = dim_V
-        self.num_heads = num_heads
-        self.fc_q = nn.Linear(dim_Q, dim_V)
-        self.fc_k = nn.Linear(dim_K, dim_V)
-        self.fc_v = nn.Linear(dim_K, dim_V)
-        if ln:
-            self.ln0 = nn.LayerNorm(dim_V)
-            self.ln1 = nn.LayerNorm(dim_V)
-        self.fc_o = nn.Linear(dim_V, dim_V)
-
-    def forward(self, Q: Tensor, K: Tensor, mask: Tensor | None = None) -> Tensor:
-        r"""Apply the attention block.
-
-        Args:
-            Q: Query tensor with shape ``(batch, query_len, dim_Q)``.
-            K: Key/value tensor with shape ``(batch, key_len, dim_K)``.
-            mask: Optional attention mask.
-
-        Returns:
-            Updated query embeddings with shape ``(batch, query_len, dim_V)``.
-        """
-        Q = self.fc_q(Q)
-        K, V = self.fc_k(K), self.fc_v(K)
-
-        dim_split = self.dim_V // self.num_heads
-        Q_ = torch.cat(Q.split(dim_split, 2), 0)
-        K_ = torch.cat(K.split(dim_split, 2), 0)
-        V_ = torch.cat(V.split(dim_split, 2), 0)
-        Att_mat = Q_.bmm(K_.transpose(1, 2)) / math.sqrt(self.dim_V)
-        if mask is not None:
-            Att_mat = Att_mat.masked_fill(mask == 0, -10e9)
-        A = torch.softmax(Att_mat, 2)
-        O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
-        O = O if getattr(self, "ln0", None) is None else self.ln0(O)
-        O = O + F.relu(self.fc_o(O))
-        return O if getattr(self, "ln1", None) is None else self.ln1(O)
-
-
-class indMAB(nn.Module):
-    r"""Induced multi-head attention block."""
-
-    def __init__(
-        self,
-        induced_dims: int,
-        value_dims: int,
-        hidden_dims: int,
-        num_heads: int,
-        ln: bool = False,
-    ) -> None:
-        super().__init__()
-        self.mab0 = MAB(induced_dims, value_dims, hidden_dims, num_heads, ln=ln)
-        self.mab1 = MAB(value_dims, hidden_dims, hidden_dims, num_heads, ln=ln)
-        self.head_num = num_heads
-
-    def forward(
-        self,
-        X: Tensor,
-        Y: Tensor,
-        att_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Apply induced attention from ``X`` to ``Y``.
-
-        Args:
-            X: Inducing point tensor.
-            Y: Value tensor.
-            att_mask: Optional attention mask.
-
-        Returns:
-            Tuple containing induced and output embeddings.
-        """
-        mask_r: Tensor | None = None
-        mask_o: Tensor | None = None
-        induced_points = X.shape[-2]
-        if att_mask is not None:
-            mask_r = att_mask.unsqueeze(-2).repeat(self.head_num, induced_points, 1)
-            mask_o = att_mask.unsqueeze(-1).repeat(self.head_num, 1, induced_points)
-        I = self.mab0(X, Y, mask_r)
-        H = self.mab1(Y, I, mask_o)
-        return I, H
-
-
-class IMAB(nn.Module):
-    r"""Induced multi-head attention block with learned inducing points."""
-
-    def __init__(
-        self,
-        dim_in: int,
-        dim_out: int,
-        num_heads: int,
-        num_inds: int,
-        ln: bool = False,
-    ) -> None:
-        super().__init__()
-        self.I = nn.Parameter(torch.tensor(1, num_inds, dim_out))
-        nn.init.xavier_uniform_(self.I)
-        self.mab0 = MAB(dim_out, dim_in, dim_out, num_heads, ln=ln)
-        self.mab1 = MAB(dim_in, dim_out, dim_out, num_heads, ln=ln)
-        self.head_num = num_heads
-        self.num_inds = num_inds
-
-    def forward(
-        self,
-        X: Tensor,
-        Y: Tensor,
-        mask1: Tensor | None = None,
-        mask2: Tensor | None = None,
-    ) -> Tensor:
-        r"""Apply induced attention from learned inducing points.
-
-        Args:
-            X: Query tensor.
-            Y: Key/value tensor.
-            mask1: Optional mask for the inducing-to-value attention.
-            mask2: Optional mask for the query-to-inducing attention.
-
-        Returns:
-            Updated query embeddings.
-        """
-        mask_r: Tensor | None = None
-        mask_o: Tensor | None = None
-        if mask1 is not None:
-            mask_r = mask1.unsqueeze(-2).repeat(self.head_num, self.num_inds, 1)
-        H = self.mab0(self.I.repeat(X.size(0), 1, 1), Y, mask_r)
-        if mask2 is not None:
-            mask_o = mask2.unsqueeze(-1).repeat(self.head_num, 1, self.num_inds)
-        return self.mab1(X, H, mask_o)
 
 
 def batch_flatten(x_list: Sequence[Tensor], mask: Tensor) -> list[Tensor]:
@@ -440,7 +152,7 @@ def gather(x: Tensor, inds: Tensor) -> Tensor:
     return x.gather(1, inds[:, :, None].repeat(1, 1, x.shape[-1]))
 
 
-class grafiti_(nn.Module):
+class Grafiti(nn.Module):
     r"""GraFITi encoder for observed and target time-series entries."""
 
     def __init__(
@@ -472,13 +184,13 @@ class grafiti_(nn.Module):
 
         self.channel_time_attn = nn.ModuleList(
             [
-                MAB2(nkernel, 2 * nkernel, 2 * nkernel, nkernel, attn_head)
+                MAB(nkernel, 2 * nkernel, 2 * nkernel, nkernel, attn_head)
                 for _ in range(n_layers)
             ]
         )
         self.time_channel_attn = nn.ModuleList(
             [
-                MAB2(nkernel, 2 * nkernel, 2 * nkernel, nkernel, attn_head)
+                MAB(nkernel, 2 * nkernel, 2 * nkernel, nkernel, attn_head)
                 for _ in range(n_layers)
             ]
         )
@@ -677,45 +389,3 @@ class grafiti_(nn.Module):
             )  # (B, K', M)
 
         return hembed(edge_emb, tgt_mask_f)  # (B, K, M)
-
-
-class GraFITi(nn.Module):
-    r"""GraFITi conditioning encoder for ProFITi-style models."""
-
-    def __init__(
-        self,
-        input_dim: int = 41,
-        attn_head: int = 4,
-        latent_dim: int = 128,
-        n_layers: int = 2,
-        device: str = "cuda",
-    ) -> None:
-        super().__init__()
-        self.dim = input_dim
-        self.attn_head = attn_head
-        self.latent_dim = latent_dim
-        self.n_layers = n_layers
-        self.device = device
-        self.grafiti_ = grafiti_(
-            self.dim, self.latent_dim, self.n_layers, self.attn_head, device=device
-        )
-
-    def forward(
-        self,
-        x_time: Tensor,
-        x_vals: Tensor,
-        x_mask: Tensor,
-        y_mask: Tensor,
-    ) -> Tensor:
-        r"""Encode observations into target conditioning embeddings.
-
-        Args:
-            x_time: Observation and query times with shape ``(batch, time)``.
-            x_vals: Observed values with shape ``(batch, time, dim)``.
-            x_mask: Observation mask with shape ``(batch, time, dim)``.
-            y_mask: Query mask with shape ``(batch, time, dim)``.
-
-        Returns:
-            Conditioning embeddings with shape ``(batch, max_targets, latent_dim)``.
-        """
-        return self.grafiti_(x_time, x_vals, x_mask, y_mask)
