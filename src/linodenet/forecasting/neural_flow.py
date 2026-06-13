@@ -1,32 +1,41 @@
-r"""Neural Flow state propagation operators.
+r"""Neural Flow state propagation operators and forecasting model.
 
 This module reimplements the flow operators used in the Neural Flows
-experiments without depending on :mod:`stribor` or importing from
-:mod:`linodenet`.  The modules follow the structural state-propagation
-protocol used by ``linodenet.state_propagation``:
+experiments without depending on :mod:`stribor`. The operator modules follow
+the structural state-propagation protocol used by ``linodenet.state_propagation``:
 
 ``forward(timedeltas, state) -> trajectory``
 
 where ``timedeltas`` has shape ``(..., T)``, ``state`` has shape ``(..., D)``,
-and the returned trajectory has shape ``(..., T, D)``.
+and the returned trajectory has shape ``(..., T, D)``. The ``NeuralFlow``
+forecasting model adapts these operators to the GRU-ODE-Bayes forecasting
+interface.
 """
 
 __all__ = [
     "CouplingFlow",
+    "FlowModelName",
     "GRUFlow",
     "GRUFlowBlock",
+    "NeuralFlow",
+    "NeuralFlowConfig",
     "ResNetFlow",
+    "TimeNetName",
 ]
 
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from itertools import pairwise
-from typing import TYPE_CHECKING, Final, Literal, overload
+from typing import TYPE_CHECKING, Any, Final, Literal, overload
 
 import torch
 from torch import Tensor, nn
 from torch.nn.utils import spectral_norm
 
+from .gru_ode_bayes import Decoder, GRU_Bayes, GRU_ODE_Bayes
+
+FlowModelName = Literal["coupling", "resnet", "gru"]
 TimeNetName = Literal[
     "TimeLinear",
     "TimeTanh",
@@ -525,3 +534,158 @@ class GRUFlow(ModuleSequence[GRUFlowBlock]):
         for block in reversed(self):
             x = block.inverse(x, timedeltas, iterations=iterations)
         return x
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NeuralFlowConfig:
+    r"""Configuration for constructing a neural-flow forecasting model."""
+
+    input_size: int
+    hidden_size: int
+    decoder_hidden_size: int
+    feature_embedding_size: int
+    flow_model: FlowModelName = "gru"
+    flow_layers: int = 1
+    flow_hidden_layers: int = 1
+    time_net: TimeNetName = "TimeLinear"
+    time_hidden_size: int | None = 1
+    invertible: bool = True
+    bias: bool = True
+    dropout_rate: float = 0.0
+
+
+class NeuralFlow(GRU_ODE_Bayes):
+    r"""GRU-ODE-Bayes forecasting model with neural-flow state propagation.
+
+    This matches the forecasting setup in the Neural Flows experiments: the
+    decoder and Bayesian GRU jump are unchanged from GRU-ODE-Bayes, while the
+    continuous ODE solver is replaced by a learned flow on the latent state.
+    """
+
+    @classmethod
+    def from_config(
+        cls,
+        config: NeuralFlowConfig | Mapping[str, Any],
+        /,
+    ) -> NeuralFlow:
+        r"""Construct a neural-flow forecasting model from a configuration."""
+        if isinstance(config, Mapping):
+            config = NeuralFlowConfig(**config)
+
+        if config.flow_layers < 1:
+            raise ValueError("flow_layers must be positive.")
+        if config.flow_hidden_layers < 0:
+            raise ValueError("flow_hidden_layers must be non-negative.")
+
+        decoder = Decoder(
+            config.input_size,
+            config.hidden_size,
+            config.decoder_hidden_size,
+            bias=config.bias,
+            dropout_rate=config.dropout_rate,
+        )
+        update_cell = GRU_Bayes(
+            config.input_size,
+            config.hidden_size,
+            config.feature_embedding_size,
+            bias=config.bias,
+        )
+        hidden_dims = [config.hidden_size] * config.flow_hidden_layers
+
+        match config.flow_model:
+            case "coupling":
+                flow = CouplingFlow(
+                    config.hidden_size,
+                    num_layers=config.flow_layers,
+                    hidden_dims=hidden_dims,
+                    time_net=config.time_net,
+                    time_hidden_size=config.time_hidden_size,
+                )
+            case "resnet":
+                flow = ResNetFlow(
+                    config.hidden_size,
+                    num_layers=config.flow_layers,
+                    hidden_dims=hidden_dims,
+                    time_net=config.time_net,
+                    time_hidden_size=config.time_hidden_size,
+                    invertible=config.invertible,
+                )
+            case "gru":
+                flow = GRUFlow(
+                    config.hidden_size,
+                    num_layers=config.flow_layers,
+                    time_net=config.time_net,
+                    time_hidden_size=config.time_hidden_size,
+                )
+            case _:
+                raise ValueError(f"Unknown neural flow model {config.flow_model!r}.")
+
+        return NeuralFlow(
+            config.input_size,
+            config.hidden_size,
+            decoder=decoder,
+            flow=flow,
+            update_cell=update_cell,
+        )
+
+    @classmethod
+    def from_parameters(
+        cls,
+        *,
+        input_size: int,
+        hidden_size: int,
+        decoder_hidden_size: int,
+        feature_embedding_size: int,
+        flow_model: FlowModelName = "gru",
+        flow_layers: int = 1,
+        flow_hidden_layers: int = 1,
+        time_net: TimeNetName = "TimeLinear",
+        time_hidden_size: int | None = 1,
+        invertible: bool = True,
+        bias: bool = True,
+        dropout_rate: float = 0.0,
+    ) -> NeuralFlow:
+        r"""Construct a neural-flow forecasting model from hyperparameters."""
+        return NeuralFlow.from_config(
+            NeuralFlowConfig(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                decoder_hidden_size=decoder_hidden_size,
+                feature_embedding_size=feature_embedding_size,
+                flow_model=flow_model,
+                flow_layers=flow_layers,
+                flow_hidden_layers=flow_hidden_layers,
+                time_net=time_net,
+                time_hidden_size=time_hidden_size,
+                invertible=invertible,
+                bias=bias,
+                dropout_rate=dropout_rate,
+            )
+        )
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        decoder: nn.Module,
+        flow: CouplingFlow | ResNetFlow | GRUFlow,
+        update_cell: nn.Module,
+    ) -> None:
+        r"""Initialize the neural-flow forecasting model."""
+        super().__init__(
+            input_size,
+            hidden_size,
+            decoder=decoder,
+            flow=flow,
+            update_cell=update_cell,
+        )
+
+    def propagate_state(
+        self,
+        delta_time: Tensor,
+        posterior_state: Tensor,
+    ) -> Tensor:
+        r"""Propagate a posterior state through the neural flow."""
+        trajectory = self.flow.forward(delta_time.unsqueeze(-1), posterior_state)
+        return trajectory.squeeze(-2)
