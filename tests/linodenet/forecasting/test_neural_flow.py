@@ -18,7 +18,7 @@ from linodenet.forecasting.neural_flow import (
 from .base import TestForecastingModel
 
 
-class TestModel(TestForecastingModel[NeuralFlow]):
+class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
     r"""Shared forecasting-model tests for NeuralFlow."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)
@@ -110,7 +110,7 @@ class TestModel(TestForecastingModel[NeuralFlow]):
         ("coupling", CouplingFlow),
     ],
 )
-def test_neural_flow_variants(
+def test_flow_layers(
     flow_model: FlowModelName,
     flow_type: type[GRUFlow | ResNetFlow | CouplingFlow],
 ) -> None:
