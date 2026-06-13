@@ -16,3 +16,9 @@
 [submodule "third_party/torchdiffeq"]
 	path = third_party/torchdiffeq
 	url = https://github.com/rtqichen/torchdiffeq.git
+[submodule "third_party/separable_flows"]
+	path = third_party/separable_flows
+	url = git@github.com:yalavarthivk/separable_flows.git
+[submodule "third_party/ProFITi"]
+	path = third_party/ProFITi
+	url = git@github.com:yalavarthivk/ProFITi.git
