@@ -179,26 +179,27 @@ def gather_target_embeddings(
 
 def reconstruct_y(
     *,
-    y_mask: Tensor,
-    y_flat: Tensor,
-    mask_flat: Tensor,
-) -> Tensor:
+    y_flat: Tensor,  # (..., K')
+    y_mask: Tensor,  # (..., T, D), bool
+    flat_edge_mask: Tensor,  # (..., K'), bool
+) -> Tensor:  # (..., T, D)
     r"""Reconstruct a dense tensor from flattened masked values.
 
     Args:
-        y_mask: Boolean mask with shape ``(batch, time, dim)``. True entries mark
+        y_flat: Flattened values with shape ``(..., max_observed)``.
+        y_mask: Boolean mask with shape ``(..., time, dim)``. True entries mark
             dense positions that should be filled.
-        y_flat: Flattened values with shape ``(batch, max_observed)``.
-        mask_flat: Boolean mask selecting valid entries from ``y_flat``.
+        flat_edge_mask: Boolean mask selecting valid entries from ``y_flat``.
 
     Returns:
-        Reconstructed tensor with shape ``(batch, time, dim)``.
+        Reconstructed tensor with shape ``(..., time, dim)``.
     """
-    y_reconstructed = torch.zeros_like(y_mask, dtype=y_flat.dtype)
-    # Dense coordinates of all True values in y_mask.
-    true_indices = torch.nonzero(y_mask, as_tuple=True)
-    y_reconstructed[true_indices] = y_flat[mask_flat.bool()]
-    return y_reconstructed
+    assert y_mask.dtype == torch.bool
+    assert flat_edge_mask.dtype == torch.bool
+
+    y_reconstructed = torch.zeros_like(y_mask, dtype=y_flat.dtype)  # (..., T, D)
+    y_reconstructed[y_mask] = y_flat[flat_edge_mask]  # (sum(K_...))
+    return y_reconstructed  # (..., T, D)
 
 
 def gather(x: Tensor, indices: Tensor) -> Tensor:
