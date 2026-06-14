@@ -425,25 +425,30 @@ class Grafiti(nn.Module):
             [t_inds, values, target_mask, c_inds, mask], mask=mask
         )
 
-        target_indicator = (1 - mask_f.float()) + tgt_mask_f  # (B, K')
-        edge_input = torch.cat([  # (B, K', 2)
-            obs_vals.unsqueeze(-1),
-            target_indicator.unsqueeze(-1)
+        # Encode whether an edge should be treated as a prediction target:
+        # mask_f => tgt_mask_f, i.e. every padded edge is a target and every
+        # valid edge is a target exactly when it came from target_mask.
+        target_indicator = ~mask_f | tgt_mask_f  # (..., K')
+        edge_input = torch.stack([  # (..., K', 2)
+            obs_vals,
+            target_indicator.to(dtype=obs_vals.dtype),
         ], dim=-1)  # fmt: skip
 
         # Masks route each flattened edge to its incident time and channel nodes.
-        t_mask, c_mask = self._create_masks(
+        t_mask, c_mask = self._create_masks(  # (..., T, K'), (..., D, K')
             num_steps=time_points.shape[-1],
             num_channels=num_channels,
             t_inds_flat=t_inds_f,
             c_inds_flat=c_inds_f,
             valid_edge_mask=mask_f,
-        )  # (..., T, K'), (..., D, K')
-        edge_emb, t_emb, c_emb = self._encode_features(
-            t=time_points,
-            u_raw=edge_input,
-            c_onehot=c_onehot,
-            mask=mask_f,
+        )
+        edge_emb, t_emb, c_emb = (
+            self._encode_features(  # (..., K', M), (..., T, M), (..., D, M)
+                t=time_points,
+                u_raw=edge_input,
+                c_onehot=c_onehot,
+                mask=mask_f,
+            )
         )
 
         for channel_time_attn, time_channel_attn, edge_nn in zip(
