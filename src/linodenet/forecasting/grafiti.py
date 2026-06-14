@@ -6,7 +6,7 @@ __all__ = [
 ]
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable
 
 import torch
 import torch.nn.functional as F
@@ -103,34 +103,41 @@ class MAB(nn.Module):
         return Y  # (..., Nq, M)
 
 
-def batch_flatten(x_list: Sequence[Tensor], *, mask: Tensor) -> list[Tensor]:
+def batch_flatten(
+    tensors: Iterable[Tensor],  # iterable[(B, T, D)]
+    *,
+    mask: Tensor,  # (B, T, D)
+) -> list[Tensor]:  # list[(B, K')]
     r"""Flatten batched time-series tensors according to an observation mask.
 
     Args:
-        x_list: Tensors with shape ``(batch, time, dim)``.
-        mask: Mask tensor with shape ``(batch, time, dim)``.
+        tensors: Tensors with shape ``(batch, time, dim)``.
+        mask: Boolean mask tensor with shape ``(batch, time, dim)``.
 
     Returns:
         List of padded flattened tensors, each with shape ``(batch, max_observed)``.
     """
-    b, t, d = x_list[0].shape
-    m_flat = mask.bool().view(b, t * d)
+    assert mask.dtype == torch.bool
 
-    observed_counts = m_flat.sum(dim=1)
-    k = int(observed_counts.max().to(torch.int64).item())
+    b, t, d = mask.shape
+    device = mask.device
+    m_flat = mask.view(b, t * d)  # (B, T*D)
 
-    indices = torch.arange(k, device=mask.device).expand(b, k)
-    mask_indices = indices < observed_counts.unsqueeze(1)
+    observed_counts = m_flat.sum(dim=1)  # (B)
+    k = int(observed_counts.max().item())
+
+    indices = torch.arange(k, device=device).expand(b, k)  # (B, K')
+    mask_indices = indices < observed_counts.unsqueeze(1)  # (B, K')
 
     y_padded: list[Tensor] = []
-    for x in x_list:
-        x_flat = x.reshape(b, t * d)
-        observed_values = x_flat[m_flat]
-        y_padded_ = torch.full((b, k), 0, device=mask.device, dtype=x_flat.dtype)
+    for x in tensors:
+        x_flat = x.reshape(b, t * d)  # (B, T*D)
+        observed_values = x_flat[m_flat]  # (sum(K'_b))
+        y_padded_ = torch.full((b, k), 0, device=device, dtype=x_flat.dtype)  # (B, K')
         y_padded_[mask_indices] = observed_values
         y_padded.append(y_padded_)
 
-    return y_padded
+    return y_padded  # list[(B, K')]
 
 
 def gather_target_embeddings(x: Tensor, *, mask: Tensor) -> Tensor:
