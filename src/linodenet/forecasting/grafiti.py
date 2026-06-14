@@ -339,27 +339,27 @@ class Grafiti(nn.Module):
     def _encode_features(
         self,
         *,
-        u_raw: Tensor,  # (B, K', 2)
-        time_points: Tensor,  # (B, T)
-        c_onehot: Tensor,  # (B, D, D)
-        mask: Tensor,  # (B, K')
-    ) -> tuple[Tensor, Tensor, Tensor]:  # (B, K', M), (B, T, M), (B, D, M)
+        t: Tensor,  # (..., T)
+        c_onehot: Tensor,  # (..., D, D)
+        u_raw: Tensor,  # (..., K', 2)
+        mask: Tensor,  # (..., K')
+    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., K', M), (..., T, M), (..., D, M)
         r"""Encode edge, time-node, and channel-node features.
 
         Args:
-            u_raw: Edge features with shape ``(batch, edges, 2)``.
-            time_points: Time-node features with shape ``(batch, time)``.
-            c_onehot: Channel-node features with shape ``(batch, dim, dim)``.
-            mask: Flattened observation/target mask with shape ``(batch, edges)``.
+            u_raw: Edge features with shape ``(..., edges, 2)``.
+            t: Time-node features with shape ``(..., time)``.
+            c_onehot: Channel-node features with shape ``(..., dim, dim)``.
+            mask: Flattened observation/target mask with shape ``(..., edges)``.
 
         Returns:
             Encoded edge, time, and channel features.
         """
-        t = time_points.unsqueeze(-1)  # (B, T, 1)
-        u_encoded = torch.relu(self.edge_init(u_raw)) * mask[:, :, None]  # (B, K', M)
-        t_encoded = torch.sin(self.time_init(t))  # (B, T, M)
-        c_encoded = torch.relu(self.chan_init(c_onehot))  # (B, D, M)
-        return u_encoded, t_encoded, c_encoded
+        u_encoded = torch.relu(self.edge_init(u_raw))  # (..., K', M)
+        u_encoded = u_encoded * mask.unsqueeze(dim=-1)  # (..., K', M)
+        t_encoded = torch.sin(self.time_init(t.unsqueeze(dim=-1)))  # (..., T, M)
+        c_encoded = torch.relu(self.chan_init(c_onehot))  # (..., D, M)
+        return u_encoded, t_encoded, c_encoded  # (..., K', M), (..., T, M), (..., D, M)
 
     def forward(
         self,
@@ -409,7 +409,7 @@ class Grafiti(nn.Module):
             valid_edge_mask=mask_f,
         )  # (..., T, K'), (..., D, K')
         edge_emb, t_emb, c_emb = self._encode_features(
-            u_raw=edge_input, time_points=time_points, c_onehot=c_onehot, mask=mask_f
+            u_raw=edge_input, t=time_points, c_onehot=c_onehot, mask=mask_f
         )
 
         for i in range(self.num_layers):
