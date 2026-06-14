@@ -104,40 +104,47 @@ class MAB(nn.Module):
 
 
 def batch_flatten(
-    tensors: Iterable[Tensor],  # iterable[(B, T, D)]
+    tensors: Iterable[Tensor],  # iterable[(..., T, D)]
     *,
-    mask: Tensor,  # (B, T, D)
-) -> list[Tensor]:  # list[(B, K')]
+    mask: Tensor,  # (..., T, D)
+) -> list[Tensor]:  # list[(..., K')]
     r"""Flatten batched time-series tensors according to an observation mask.
 
     Args:
-        tensors: Tensors with shape ``(batch, time, dim)``.
-        mask: Boolean mask tensor with shape ``(batch, time, dim)``.
+        tensors: Tensors with shape ``(..., time, dim)``.
+        mask: Boolean mask tensor with shape ``(..., time, dim)``.
 
     Returns:
-        List of padded flattened tensors, each with shape ``(batch, max_observed)``.
+        List of padded flattened tensors, each with shape ``(..., max_observed)``.
     """
     assert mask.dtype == torch.bool
 
-    b, t, d = mask.shape
+    *batch_shape, num_steps, num_channels = mask.shape
+    num_batch = math.prod(batch_shape)
+    num_edges = num_steps * num_channels
     device = mask.device
-    m_flat = mask.view(b, t * d)  # (B, T*D)
+    mask_flat = mask.reshape(num_batch, num_edges)  # (B_flat, T*D)
 
-    observed_counts = m_flat.sum(dim=1)  # (B)
-    k = int(observed_counts.max().item())
+    observed_counts = mask_flat.sum(dim=1)  # (B_flat)
+    k = int(observed_counts.max().item())  # K'
 
-    indices = torch.arange(k, device=device).expand(b, k)  # (B, K')
-    mask_indices = indices < observed_counts.unsqueeze(1)  # (B, K')
+    indices = torch.arange(k, device=device).expand(num_batch, k)  # (B_flat, K')
+    mask_indices = indices < observed_counts.unsqueeze(dim=-1)  # (B_flat, K')
 
     y_padded: list[Tensor] = []
     for x in tensors:
-        x_flat = x.reshape(b, t * d)  # (B, T*D)
-        observed_values = x_flat[m_flat]  # (sum(K'_b))
-        y_padded_ = torch.full((b, k), 0, device=device, dtype=x_flat.dtype)  # (B, K')
-        y_padded_[mask_indices] = observed_values
-        y_padded.append(y_padded_)
+        x_flat = x.reshape(num_batch, num_edges)  # (B_flat, T*D)
+        observed_values = x_flat[mask_flat]  # (sum(K'_b))
+        y_padded_flat = torch.full(  # (B_flat, K')
+            (num_batch, k),
+            0,
+            device=device,
+            dtype=x.dtype,
+        )
+        y_padded_flat[mask_indices] = observed_values
+        y_padded.append(y_padded_flat.reshape(*batch_shape, k))  # (..., K')
 
-    return y_padded  # list[(B, K')]
+    return y_padded  # list[(..., K')]
 
 
 def gather_target_embeddings(x: Tensor, *, mask: Tensor) -> Tensor:
