@@ -133,7 +133,7 @@ def batch_flatten(*, x_list: Sequence[Tensor], mask: Tensor) -> list[Tensor]:
     return y_padded
 
 
-def hembed(*, x: Tensor, mask: Tensor) -> Tensor:
+def gather_target_embeddings(x: Tensor, *, mask: Tensor) -> Tensor:
     r"""Select and pad edge embeddings at target positions.
 
     Args:
@@ -220,36 +220,34 @@ class Grafiti(nn.Module):
         self.chan_init = nn.Linear(input_dim, hidden_dim)
         self.time_init = nn.Linear(1, hidden_dim)
 
-        self.channel_time_attn = nn.ModuleList(
-            [
-                MAB(
-                    dim_Q=hidden_dim,
-                    dim_K=2 * hidden_dim,
-                    dim_V=2 * hidden_dim,
-                    dim_hidden=hidden_dim,
-                    num_heads=num_heads,
-                )
-                for _ in range(num_layers)
-            ]
-        )
-        self.time_channel_attn = nn.ModuleList(
-            [
-                MAB(
-                    dim_Q=hidden_dim,
-                    dim_K=2 * hidden_dim,
-                    dim_V=2 * hidden_dim,
-                    dim_hidden=hidden_dim,
-                    num_heads=num_heads,
-                )
-                for _ in range(num_layers)
-            ]
-        )
-        self.edge_nn = nn.ModuleList(
-            [nn.Linear(3 * hidden_dim, hidden_dim) for _ in range(num_layers)]
-        )
+        self.channel_time_attn = nn.ModuleList([
+            MAB(
+                dim_Q=hidden_dim,
+                dim_K=2 * hidden_dim,
+                dim_V=2 * hidden_dim,
+                dim_hidden=hidden_dim,
+                num_heads=num_heads,
+            )
+            for _ in range(num_layers)
+        ])  # fmt: skip
+
+        self.time_channel_attn = nn.ModuleList([
+            MAB(
+                dim_Q=hidden_dim,
+                dim_K=2 * hidden_dim,
+                dim_V=2 * hidden_dim,
+                dim_hidden=hidden_dim,
+                num_heads=num_heads,
+            )
+            for _ in range(num_layers)
+        ])  # fmt: skip
+
+        self.edge_nn = nn.ModuleList([
+            nn.Linear(3 * hidden_dim, hidden_dim)
+            for _ in range(num_layers)
+        ])  # fmt: skip
 
         self.output = nn.Linear(3 * hidden_dim, hidden_dim)
-        self.relu = nn.ReLU()
 
     def _one_hot_channels(
         self, *, batch_size: int, num_channels: int, device: torch.device
@@ -271,113 +269,96 @@ class Grafiti(nn.Module):
 
     def _build_indices(
         self,
+        t: Tensor,  # (..., T)
         *,
-        time_steps: Tensor,  # (B, T)
-        num_channels: int,
-        device: torch.device,
-    ) -> tuple[Tensor, Tensor]:
+        num_channels: int,  # D
+    ) -> tuple[Tensor, Tensor]:  # (..., T, D), (..., T, D)
         r"""Build dense time and channel index tensors.
 
         Args:
-            time_steps: Time tensor with shape ``(batch, time)``.
+            t: Time tensor with shape ``(..., time)``.
             num_channels: Number of channels.
-            device: Device for the resulting tensors.
 
         Returns:
             Tuple containing time indices and channel indices, both with shape
-            ``(batch, time, dim)``.
+            ``(..., time, dim)``.
         """
-        b, t = time_steps.shape[0], time_steps.shape[1]
+        *batch_shape, num_steps = t.shape
 
         # Time indices identify the time node attached to each dense edge.
-        t_inds = (
-            torch.arange(t, device=device).expand(b, num_channels, -1).permute(0, 2, 1)
-        )  # (B, T, D)
+        t_inds = torch.arange(num_steps, device=t.device).unsqueeze(-1)  # (T, 1)
+        t_inds = t_inds.expand(*batch_shape, num_steps, num_channels)  # (..., T, D)
 
         # Channel indices identify the channel node attached to each dense edge.
-        c_inds = torch.arange(num_channels, device=device).expand(b, t, -1)  # (B, T, D)
+        c_inds = torch.arange(num_channels, device=t.device)  # (D)
+        c_inds = c_inds.expand(*batch_shape, num_steps, num_channels)  # (..., T, D)
         return t_inds, c_inds
 
     def _create_masks(
         self,
         *,
-        mk: Tensor,
-        t_inds_flat: Tensor,
-        c_inds_flat: Tensor,
-        t: Tensor,
-        c: Tensor,
-        device: torch.device,
-    ) -> tuple[Tensor, Tensor]:
+        time_points: Tensor,  # (B, T)
+        c: Tensor,  # (B, D, D)
+        t_inds_flat: Tensor,  # (B, K')
+        c_inds_flat: Tensor,  # (B, K')
+        valid_edge_mask: Tensor,  # (B, K')
+    ) -> tuple[Tensor, Tensor]:  # (B, T, K'), (B, D, K')
         r"""Create masks for time and channel attention.
 
         Args:
-            mk: Boolean flattened observation/target mask with shape
-                ``(batch, edges)``.
+            time_points: Time tensor with shape ``(batch, time)``.
+            c: One-hot channel encoding with shape ``(batch, dim, dim)``.
             t_inds_flat: Flattened time indices with shape ``(batch, edges)``.
             c_inds_flat: Flattened channel indices with shape ``(batch, edges)``.
-            t: Time tensor with shape ``(batch, time, 1)``.
-            c: One-hot channel encoding with shape ``(batch, dim, dim)``.
-            device: Device for generated channel indices.
+            valid_edge_mask: Boolean mask for real entries in the padded flattened
+                edge list with shape ``(batch, edges)``.
 
         Returns:
             Tuple containing boolean time and channel masks with shapes
             ``(batch, time, edges)`` and ``(batch, dim, edges)``.
         """
+        device = valid_edge_mask.device
+        t = time_points.unsqueeze(-1)  # (B, T, 1)
         b, t_len = t.shape[:2]
         num_channels = c.shape[1]
+
         indices = torch.arange(num_channels, device=device).expand(b, num_channels)
-        c_mask = (indices[:, :, None] == c_inds_flat[:, None, :]) & mk[:, None, :]
-        t_seq = torch.arange(t_len, device=t.device)[None, :, None]
-        t_mask = (t_inds_flat[:, None, :] == t_seq) & mk[:, None, :]
+        # (B, D)
+
+        c_mask = (indices[:, :, None] == c_inds_flat[:, None, :]) & valid_edge_mask[
+            :, None, :
+        ]  # (B, D, K')
+        t_seq = torch.arange(t_len, device=device)[None, :, None]
+        # (1, T, 1)
+        t_mask = (t_inds_flat[:, None, :] == t_seq) & valid_edge_mask[
+            :, None, :
+        ]  # (B, T, K')
         return t_mask, c_mask
 
     def _encode_features(
         self,
         *,
-        u_raw: Tensor,
-        t: Tensor,
-        c_onehot: Tensor,
-        mask: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
+        u_raw: Tensor,  # (B, K', 2)
+        time_points: Tensor,  # (B, T)
+        c_onehot: Tensor,  # (B, D, D)
+        mask: Tensor,  # (B, K')
+    ) -> tuple[Tensor, Tensor, Tensor]:  # (B, K', M), (B, T, M), (B, D, M)
         r"""Encode edge, time-node, and channel-node features.
 
         Args:
             u_raw: Edge features with shape ``(batch, edges, 2)``.
-            t: Time-node features with shape ``(batch, time, 1)``.
+            time_points: Time-node features with shape ``(batch, time)``.
             c_onehot: Channel-node features with shape ``(batch, dim, dim)``.
             mask: Flattened observation/target mask with shape ``(batch, edges)``.
 
         Returns:
             Encoded edge, time, and channel features.
         """
-        u_encoded = self.relu(self.edge_init(u_raw)) * mask[:, :, None]  # (B, K', M)
+        t = time_points.unsqueeze(-1)  # (B, T, 1)
+        u_encoded = torch.relu(self.edge_init(u_raw)) * mask[:, :, None]  # (B, K', M)
         t_encoded = torch.sin(self.time_init(t))  # (B, T, M)
-        c_encoded = self.relu(self.chan_init(c_onehot))  # (B, D, M)
+        c_encoded = torch.relu(self.chan_init(c_onehot))  # (B, D, M)
         return u_encoded, t_encoded, c_encoded
-
-    def gatherhedge(
-        self,
-        *,
-        U_: Tensor,
-        indices: tuple[Tensor, ...],
-        mk_: Tensor,
-        shapes: tuple[int, int, int],
-    ) -> Tensor:
-        r"""Scatter flattened edge embeddings back into a dense hedge tensor.
-
-        Args:
-            U_: Flattened edge embeddings.
-            indices: Dense indices produced by ``torch.where``.
-            mk_: Mask selecting valid flattened entries.
-            shapes: Leading dense output shape ``(batch, time, dim)``.
-
-        Returns:
-            Dense hedge tensor with shape ``(*shapes, hidden_dim)``.
-        """
-        X = torch.zeros((*shapes, U_.shape[-1]), device=U_.device, dtype=U_.dtype)
-        values = U_[mk_.to(torch.bool)]
-        X[indices] = values
-        return X
 
     def forward(
         self,
@@ -399,14 +380,11 @@ class Grafiti(nn.Module):
             Target edge embeddings with shape ``(batch, max_targets, hidden_dim)``.
         """
         b, _, d = values.shape
-        t = time_points.unsqueeze(-1)  # (B, T, 1)
         c_onehot = self._one_hot_channels(
-            batch_size=b, num_channels=d, device=t.device
+            batch_size=b, num_channels=d, device=time_points.device
         )  # (B, D, D)
 
-        t_inds, c_inds = self._build_indices(
-            time_steps=time_points, num_channels=d, device=t.device
-        )  # (B, T, D)
+        t_inds, c_inds = self._build_indices(time_points, num_channels=d)  # (B, T, D)
         mask = obs_mask + target_mask
         mask_bool = mask.bool()  # (B, T, D)
 
@@ -423,15 +401,14 @@ class Grafiti(nn.Module):
 
         # Masks route each flattened edge to its incident time and channel nodes.
         t_mask, c_mask = self._create_masks(
-            mk=mask_f,
+            time_points=time_points,
+            c=c_onehot,
             t_inds_flat=t_inds_f,
             c_inds_flat=c_inds_f,
-            t=t,
-            c=c_onehot,
-            device=t.device,
+            valid_edge_mask=mask_f,
         )  # t_mask: (B, T, K'), c_mask: (B, D, K')
         edge_emb, t_emb, c_emb = self._encode_features(
-            u_raw=edge_input, t=t, c_onehot=c_onehot, mask=mask_f
+            u_raw=edge_input, time_points=time_points, c_onehot=c_onehot, mask=mask_f
         )
 
         for i in range(self.num_layers):
@@ -451,7 +428,7 @@ class Grafiti(nn.Module):
                 [edge_emb, t_gathered, c_gathered], dim=-1
             )  # (B, K', 3*M)
             edge_emb = (
-                self.relu(edge_emb + self.edge_nn[i](edge_update)) * mask_f[:, :, None]
+                torch.relu(edge_emb + self.edge_nn[i](edge_update)) * mask_f[:, :, None]
             )  # (B, K', M)
 
-        return hembed(x=edge_emb, mask=tgt_mask_f)  # (B, K, M)
+        return gather_target_embeddings(edge_emb, mask=tgt_mask_f)  # (B, K, M)
