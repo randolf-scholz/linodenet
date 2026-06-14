@@ -387,22 +387,21 @@ class Grafiti(nn.Module):
 
     def forward(
         self,
-        time_points: Tensor,  # (B, T)
-        values: Tensor,  # (B, T, D)
-        obs_mask: Tensor,  # (B, T, D)
-        target_mask: Tensor,  # (B, T, D)
-    ) -> Tensor:  # (B, K, M)
+        time_points: Tensor,  # (..., T)
+        values: Tensor,  # (..., T, D)
+        obs_mask: Tensor,  # (..., T, D)
+        target_mask: Tensor,  # (..., T, D)
+    ) -> Tensor:  # (..., K, M)
         r"""Encode observed values and target queries.
 
         Args:
-            time_points: Times for observed and target entries with shape
-                ``(batch, time)``.
-            values: Observed values with shape ``(batch, time, dim)``.
-            obs_mask: Boolean observed-value mask with shape ``(batch, time, dim)``.
-            target_mask: Boolean target-query mask with shape ``(batch, time, dim)``.
+            time_points: Times for observed and target entries with shape ``(..., time)``.
+            values: Observed values with shape ``(..., time, dim)``.
+            obs_mask: Boolean observed-value mask with shape ``(..., time, dim)``.
+            target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
 
         Returns:
-            Target edge embeddings with shape ``(batch, max_targets, hidden_dim)``.
+            Target edge embeddings with shape ``(..., max_targets, hidden_dim)``.
         """
         assert obs_mask.dtype == torch.bool
         assert target_mask.dtype == torch.bool
@@ -410,17 +409,17 @@ class Grafiti(nn.Module):
         *batch_shape, _, num_channels = values.shape
         device = time_points.device
 
-        c_onehot = self._one_hot_channels(  # (B, D, D)
+        c_onehot = self._one_hot_channels(  # (..., D, D)
             *batch_shape, num_channels=num_channels, device=device
         )
 
-        t_inds, c_inds = self._build_indices(  # (B, T, D)
+        t_inds, c_inds = self._build_indices(  # (..., T, D)
             time_points, num_channels=num_channels
         )
-        mask = obs_mask | target_mask  # (B, T, D)
+        mask = obs_mask | target_mask  # (..., T, D)
 
         # Flatten observed and target edges into padded edge lists. All outputs
-        # have shape (B, K'), where K' is the max observed+target edge count.
+        # have shape (..., K'), where K' is the max observed+target edge count.
         t_inds_f, obs_vals, tgt_mask_f, c_inds_f, mask_f = batch_flatten(
             [t_inds, values, target_mask, c_inds, mask], mask=mask
         )
@@ -442,8 +441,8 @@ class Grafiti(nn.Module):
             c_inds_flat=c_inds_f,
             valid_edge_mask=mask_f,
         )
-        edge_emb, t_emb, c_emb = (
-            self._encode_features(  # (..., K', M), (..., T, M), (..., D, M)
+        edge_emb, t_emb, c_emb = (  # (..., K', M), (..., T, M), (..., D, M)
+            self._encode_features(
                 t=time_points,
                 u_raw=edge_input,
                 c_onehot=c_onehot,
@@ -464,16 +463,15 @@ class Grafiti(nn.Module):
                 c_emb, c_inds_f.unsqueeze(dim=-1), dim=-2
             )
 
-            channel_context = torch.cat([  # (..., K', 2*M)
-                t_gathered,
-                edge_emb,
-            ], dim=-1)  # fmt: skip
+            # (..., K', 2*M)
+            channel_context = torch.cat([t_gathered, edge_emb], dim=-1)
             c_emb = channel_time_attn(  # (..., D, M)
                 c_emb,
                 channel_context,
                 channel_context,
                 mask=c_mask,
             )
+
             time_context = torch.cat([c_gathered, edge_emb], dim=-1)  # (..., K', 2*M)
             t_emb = time_channel_attn(  # (..., T, M)
                 t_emb,
@@ -488,10 +486,10 @@ class Grafiti(nn.Module):
                 c_gathered,
             ], dim=-1)  # fmt: skip
 
-            edge_emb = torch.where(
+            edge_emb = torch.where(  # (..., K', M)
                 mask_f.unsqueeze(dim=-1),
                 torch.relu(edge_emb + edge_nn(edge_update)),
                 0.0,
-            )  # (..., K', M)
+            )
 
         return gather_target_embeddings(edge_emb, mask=tgt_mask_f)  # (..., K, M)
