@@ -147,31 +147,42 @@ def batch_flatten(
     return y_padded  # list[(..., K')]
 
 
-def gather_target_embeddings(x: Tensor, *, mask: Tensor) -> Tensor:
+def gather_target_embeddings(
+    x: Tensor,  # (B, K', M)
+    *,
+    mask: Tensor,  # (B, K'), bool
+) -> Tensor:  # (B, K, M)
     r"""Select and pad edge embeddings at target positions.
 
     Args:
         x: Input tensor with shape ``(batch, padded_edges, hidden_dim)``.
-        mask: Target mask with shape ``(batch, padded_edges)``.
+        mask: Boolean target mask with shape ``(batch, padded_edges)``.
 
     Returns:
         Target embeddings with shape ``(batch, max_targets, hidden_dim)``.
     """
+    assert mask.dtype == torch.bool
+
     b, _, d = x.shape
 
-    observed_counts = mask.sum(dim=1)
+    observed_counts = mask.sum(dim=1)  # (B)
     k = int(observed_counts.max().to(torch.int64).item())
 
-    indices = torch.arange(k, device=mask.device).expand(b, k)
-    mask_indices = indices < observed_counts.unsqueeze(1)
+    indices = torch.arange(k, device=mask.device).expand(b, k)  # (B, K)
+    mask_indices = indices < observed_counts.unsqueeze(1)  # (B, K)
 
-    observed_values = x[mask.bool()]
-    y_padded = torch.full((b, k, d), 0, device=mask.device, dtype=x.dtype)
+    observed_values = x[mask]  # (sum(K_b), M)
+    y_padded = torch.full((b, k, d), 0, device=mask.device, dtype=x.dtype)  # (B, K, M)
     y_padded[mask_indices] = observed_values
-    return y_padded
+    return y_padded  # (B, K, M)
 
 
-def reconstruct_y(*, y_mask: Tensor, y_flat: Tensor, mask_flat: Tensor) -> Tensor:
+def reconstruct_y(
+    *,
+    y_mask: Tensor,
+    y_flat: Tensor,
+    mask_flat: Tensor,
+) -> Tensor:
     r"""Reconstruct a dense tensor from flattened masked values.
 
     Args:
@@ -190,17 +201,17 @@ def reconstruct_y(*, y_mask: Tensor, y_flat: Tensor, mask_flat: Tensor) -> Tenso
     return y_reconstructed
 
 
-def gather(x: Tensor, inds: Tensor) -> Tensor:
+def gather(x: Tensor, indices: Tensor) -> Tensor:
     r"""Gather rows from a batched tensor.
 
     Args:
         x: Tensor with shape ``(batch, points, hidden_dim)``.
-        inds: Indices with shape ``(batch, selected_points)``.
+        indices: Indices with shape ``(batch, selected_points)``.
 
     Returns:
         Gathered tensor with shape ``(batch, selected_points, hidden_dim)``.
     """
-    return x.gather(1, inds[:, :, None].repeat(1, 1, x.shape[-1]))
+    return x.gather(1, indices[:, :, None].repeat(1, 1, x.shape[-1]))
 
 
 class Grafiti(nn.Module):
