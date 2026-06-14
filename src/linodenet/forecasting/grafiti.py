@@ -3,6 +3,9 @@ r"""GraFITi layers for irregular time-series forecasting."""
 __all__ = [
     "MAB",
     "Grafiti",
+    "batch_flatten",
+    "gather_target_embeddings",
+    "reconstruct_y",
 ]
 
 import math
@@ -148,33 +151,38 @@ def batch_flatten(
 
 
 def gather_target_embeddings(
-    x: Tensor,  # (B, K', M)
+    x: Tensor,  # (..., K', M)
     *,
-    mask: Tensor,  # (B, K'), bool
-) -> Tensor:  # (B, K, M)
+    mask: Tensor,  # (..., K'), bool
+) -> Tensor:  # (..., K, M)
     r"""Select and pad edge embeddings at target positions.
 
     Args:
-        x: Input tensor with shape ``(batch, padded_edges, hidden_dim)``.
-        mask: Boolean target mask with shape ``(batch, padded_edges)``.
+        x: Input tensor with shape ``(..., padded_edges, hidden_dim)``.
+        mask: Boolean target mask with shape ``(..., padded_edges)``.
 
     Returns:
-        Target embeddings with shape ``(batch, max_targets, hidden_dim)``.
+        Target embeddings with shape ``(..., max_targets, hidden_dim)``.
     """
     assert mask.dtype == torch.bool
 
-    b, _, d = x.shape
+    *batch_shape, num_edges, hidden_dim = x.shape
+    num_batches = math.prod(batch_shape)
+    mask_flat = mask.reshape(num_batches, num_edges)  # (B_flat, K')
+    x_flat = x.reshape(num_batches, num_edges, hidden_dim)  # (B_flat, K', M)
 
-    observed_counts = mask.sum(dim=1)  # (B)
-    k = int(observed_counts.max().to(torch.int64).item())
+    observed_counts = mask_flat.sum(dim=-1)  # (B_flat)
+    k = int(observed_counts.max().to(torch.int64).item())  # K
 
-    indices = torch.arange(k, device=mask.device).expand(b, k)  # (B, K)
-    mask_indices = indices < observed_counts.unsqueeze(1)  # (B, K)
+    indices = torch.arange(k, device=mask.device).expand(num_batches, k)  # (B_flat, K)
+    mask_indices = indices < observed_counts.unsqueeze(dim=-1)  # (B_flat, K)
 
-    observed_values = x[mask]  # (sum(K_b), M)
-    y_padded = torch.full((b, k, d), 0, device=mask.device, dtype=x.dtype)  # (B, K, M)
+    observed_values = x_flat[mask_flat]  # (sum(K_...), M)
+    y_padded = torch.zeros(
+        num_batches, k, hidden_dim, device=mask.device, dtype=x.dtype
+    )
     y_padded[mask_indices] = observed_values
-    return y_padded  # (B, K, M)
+    return y_padded.reshape(*batch_shape, k, hidden_dim)  # (..., K, M)
 
 
 def reconstruct_y(
@@ -200,19 +208,6 @@ def reconstruct_y(
     y_reconstructed = torch.zeros_like(y_mask, dtype=y_flat.dtype)  # (..., T, D)
     y_reconstructed[y_mask] = y_flat[flat_edge_mask]  # (sum(K_...))
     return y_reconstructed  # (..., T, D)
-
-
-def gather(x: Tensor, indices: Tensor) -> Tensor:
-    r"""Gather rows from a batched tensor.
-
-    Args:
-        x: Tensor with shape ``(batch, points, hidden_dim)``.
-        indices: Indices with shape ``(batch, selected_points)``.
-
-    Returns:
-        Gathered tensor with shape ``(batch, selected_points, hidden_dim)``.
-    """
-    return x.gather(1, indices[:, :, None].repeat(1, 1, x.shape[-1]))
 
 
 class Grafiti(nn.Module):
@@ -448,23 +443,29 @@ class Grafiti(nn.Module):
         )
 
         for i in range(self.num_layers):
-            t_gathered = gather(t_emb, t_inds_f)  # (B, K', M)
-            c_gathered = gather(c_emb, c_inds_f)  # (B, K', M)
+            t_gathered = torch.take_along_dim(
+                t_emb, t_inds_f.unsqueeze(dim=-1), dim=-2
+            )  # (..., K', M)
+            c_gathered = torch.take_along_dim(
+                c_emb, c_inds_f.unsqueeze(dim=-1), dim=-2
+            )  # (..., K', M)
 
-            channel_context = torch.cat([t_gathered, edge_emb], dim=-1)  # (B, K', 2*M)
+            channel_context = torch.cat(
+                [t_gathered, edge_emb], dim=-1
+            )  # (..., K', 2*M)
             c_emb = self.channel_time_attn[i](
                 c_emb, channel_context, channel_context, mask=c_mask
-            )  # (B, D, M)
-            time_context = torch.cat([c_gathered, edge_emb], dim=-1)  # (B, K', 2*M)
+            )  # (..., D, M)
+            time_context = torch.cat([c_gathered, edge_emb], dim=-1)  # (..., K', 2*M)
             t_emb = self.time_channel_attn[i](
                 t_emb, time_context, time_context, mask=t_mask
-            )  # (B, T, M)
+            )  # (..., T, M)
 
             edge_update = torch.cat(
                 [edge_emb, t_gathered, c_gathered], dim=-1
-            )  # (B, K', 3*M)
-            edge_emb = (
-                torch.relu(edge_emb + self.edge_nn[i](edge_update)) * mask_f[:, :, None]
-            )  # (B, K', M)
+            )  # (..., K', 3*M)
+            edge_emb = torch.relu(
+                edge_emb + self.edge_nn[i](edge_update)
+            ) * mask_f.unsqueeze(dim=-1)  # (..., K', M)
 
-        return gather_target_embeddings(edge_emb, mask=tgt_mask_f)  # (B, K, M)
+        return gather_target_embeddings(edge_emb, mask=tgt_mask_f)  # (..., K, M)
