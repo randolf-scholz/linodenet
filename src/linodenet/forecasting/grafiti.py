@@ -376,7 +376,11 @@ class Grafiti(nn.Module):
             Encoded edge, time, and channel features.
         """
         u_encoded = torch.relu(self.edge_init(u_raw))  # (..., K', M)
-        u_encoded = u_encoded * mask.unsqueeze(dim=-1)  # (..., K', M)
+        u_encoded = torch.where(
+            mask.unsqueeze(dim=-1),
+            u_encoded,
+            0.0,
+        )  # (..., K', M)
         t_encoded = torch.sin(self.time_init(t.unsqueeze(dim=-1)))  # (..., T, M)
         c_encoded = torch.relu(self.channel_init(c_onehot))  # (..., D, M)
         return u_encoded, t_encoded, c_encoded  # (..., K', M), (..., T, M), (..., D, M)
@@ -442,30 +446,47 @@ class Grafiti(nn.Module):
             mask=mask_f,
         )
 
-        for i in range(self.num_layers):
-            t_gathered = torch.take_along_dim(
+        for channel_time_attn, time_channel_attn, edge_nn in zip(
+            self.channel_time_attn,
+            self.time_channel_attn,
+            self.edge_nn,
+            strict=True,
+        ):
+            t_gathered = torch.take_along_dim(  # (..., K', M)
                 t_emb, t_inds_f.unsqueeze(dim=-1), dim=-2
-            )  # (..., K', M)
-            c_gathered = torch.take_along_dim(
+            )
+            c_gathered = torch.take_along_dim(  # (..., K', M)
                 c_emb, c_inds_f.unsqueeze(dim=-1), dim=-2
-            )  # (..., K', M)
+            )
 
-            channel_context = torch.cat(
-                [t_gathered, edge_emb], dim=-1
-            )  # (..., K', 2*M)
-            c_emb = self.channel_time_attn[i](
-                c_emb, channel_context, channel_context, mask=c_mask
-            )  # (..., D, M)
+            channel_context = torch.cat([  # (..., K', 2*M)
+                t_gathered,
+                edge_emb,
+            ], dim=-1)  # fmt: skip
+            c_emb = channel_time_attn(  # (..., D, M)
+                c_emb,
+                channel_context,
+                channel_context,
+                mask=c_mask,
+            )
             time_context = torch.cat([c_gathered, edge_emb], dim=-1)  # (..., K', 2*M)
-            t_emb = self.time_channel_attn[i](
-                t_emb, time_context, time_context, mask=t_mask
-            )  # (..., T, M)
+            t_emb = time_channel_attn(  # (..., T, M)
+                t_emb,
+                time_context,
+                time_context,
+                mask=t_mask,
+            )
 
-            edge_update = torch.cat(
-                [edge_emb, t_gathered, c_gathered], dim=-1
-            )  # (..., K', 3*M)
-            edge_emb = torch.relu(
-                edge_emb + self.edge_nn[i](edge_update)
-            ) * mask_f.unsqueeze(dim=-1)  # (..., K', M)
+            edge_update = torch.cat([  # (..., K', 3*M)
+                edge_emb,
+                t_gathered,
+                c_gathered,
+            ], dim=-1)  # fmt: skip
+
+            edge_emb = torch.where(
+                mask_f.unsqueeze(dim=-1),
+                torch.relu(edge_emb + edge_nn(edge_update)),
+                0.0,
+            )  # (..., K', M)
 
         return gather_target_embeddings(edge_emb, mask=tgt_mask_f)  # (..., K, M)
