@@ -250,22 +250,24 @@ class Grafiti(nn.Module):
         self.output = nn.Linear(3 * hidden_dim, hidden_dim)
 
     def _one_hot_channels(
-        self, *, batch_size: int, num_channels: int, device: torch.device
-    ) -> Tensor:
+        self,
+        *size: int,
+        num_channels: int,
+        device: torch.device,
+    ) -> Tensor:  # (..., D, D)
         r"""Build one-hot channel identifiers.
 
         Args:
-            batch_size: Batch size.
+            size: Leading batch shape.
             num_channels: Number of channels.
             device: Device for the resulting tensor.
 
         Returns:
-            One-hot channel encoding with shape ``(batch, dim, dim)``.
+            One-hot channel encoding with shape ``(*size, dim, dim)``.
         """
-        indices = torch.arange(num_channels, device=device).expand(
-            batch_size, num_channels
-        )
-        return F.one_hot(indices, num_classes=num_channels).float()
+        indices = torch.arange(num_channels, device=device)  # (D)
+        one_hot = F.one_hot(indices, num_classes=num_channels).float()  # (D, D)
+        return one_hot.expand(*size, num_channels, num_channels)  # (..., D, D)
 
     def _build_indices(
         self,
@@ -363,11 +365,11 @@ class Grafiti(nn.Module):
 
     def forward(
         self,
-        time_points: Tensor,
-        values: Tensor,
-        obs_mask: Tensor,
-        target_mask: Tensor,
-    ) -> Tensor:
+        time_points: Tensor,  # (B, T)
+        values: Tensor,  # (B, T, D)
+        obs_mask: Tensor,  # (B, T, D)
+        target_mask: Tensor,  # (B, T, D)
+    ) -> Tensor:  # (B, K, M)
         r"""Encode observed values and target queries.
 
         Args:
@@ -380,9 +382,9 @@ class Grafiti(nn.Module):
         Returns:
             Target edge embeddings with shape ``(batch, max_targets, hidden_dim)``.
         """
-        b, _, d = values.shape
+        *batch_shape, _, d = values.shape
         c_onehot = self._one_hot_channels(
-            batch_size=b, num_channels=d, device=time_points.device
+            *batch_shape, num_channels=d, device=time_points.device
         )  # (B, D, D)
 
         t_inds, c_inds = self._build_indices(time_points, num_channels=d)  # (B, T, D)
