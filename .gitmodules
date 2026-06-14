@@ -22,3 +22,6 @@
 [submodule "third_party/ProFITi"]
 	path = third_party/ProFITi
 	url = git@github.com:yalavarthivk/ProFITi.git
+[submodule "third_party/set_transformer"]
+	path = third_party/set_transformer
+	url = git@github.com:juho-lee/set_transformer.git
