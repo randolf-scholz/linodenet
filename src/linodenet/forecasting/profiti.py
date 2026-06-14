@@ -1,8 +1,10 @@
+r"""ProFITi-style forecasting components."""
+
 __all__ = ["GrafitiEncoder"]
 
 from torch import Tensor, nn
 
-from linodenet.forecasting.grafiti import Grafiti
+from .grafiti import Grafiti
 
 
 class GrafitiEncoder(nn.Module):
@@ -10,23 +12,24 @@ class GrafitiEncoder(nn.Module):
 
     def __init__(
         self,
+        *,
         input_dim: int = 41,
-        attn_head: int = 4,
+        num_heads: int = 4,
         latent_dim: int = 128,
-        n_layers: int = 2,
+        num_layers: int = 2,
         device: str = "cuda",
     ) -> None:
         super().__init__()
-        self.dim = input_dim
-        self.attn_head = attn_head
+        self.input_dim = input_dim
+        self.num_heads = num_heads
         self.latent_dim = latent_dim
-        self.n_layers = n_layers
+        self.num_layers = num_layers
         self.device = device
         self.grafiti_ = Grafiti(
-            self.dim,
-            self.latent_dim,
-            self.n_layers,
-            self.attn_head,
+            input_dim=input_dim,
+            hidden_dim=latent_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
             device=device,
         )
 
