@@ -8,6 +8,7 @@ __all__ = [
     "UnbatchedDenseArgs",
     "UnbatchedTripletArgs",
     "TripletArg",
+    "DenseArg",
 ]
 
 
@@ -17,6 +18,49 @@ from dataclasses import dataclass
 import torch
 from torch import Tensor
 from torch.nn.utils.rnn import pad_sequence, unpad_sequence
+
+
+@dataclass(frozen=True)
+class DenseArg:
+    r"""Dense representation of forecasting arguments."""
+
+    context_times: Tensor  # Float[(N)], finite
+    context_values: Tensor  # Float[(N, D)], sparse
+
+    query_times: Tensor  # Float[(K)], finite
+    query_mask: Tensor | None = None  # Bool[(K, F)]
+    query_values: Tensor | None = None  # Float[(K, F)], sparse
+
+    static_covariates: Tensor | None = None  # Float[(M)]
+
+    def __post_init__(self) -> None:
+        T = self.context_times
+        X = self.context_values
+
+        *_, context_size, context_dim = X.shape
+        assert T.shape == (context_size,)
+        assert X.shape == (context_size, context_dim)
+        assert T.isfinite().all()
+        assert X.isfinite().any(dim=-1).all()  # at least one value observed per time
+
+        Q = self.query_times
+        *_, query_size = Q.shape
+        assert Q.shape == (query_size,)
+        assert Q.isfinite().all()
+
+        if self.query_mask is not None:
+            *_, query_dim = self.query_mask.shape
+            assert self.query_mask.dtype == torch.bool
+            assert self.query_mask.shape == (query_size, query_dim)
+
+        if self.query_values is not None:
+            *_, query_dim = self.query_values.shape
+            assert self.query_values.shape == (query_size, query_dim)
+
+            if self.query_mask is None:
+                assert self.query_values.isfinite().all()
+            else:
+                assert self.query_values[self.query_mask].isfinite().all()
 
 
 @dataclass(frozen=True)
