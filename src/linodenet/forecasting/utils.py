@@ -13,7 +13,9 @@ __all__ = [
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import torch
 from torch import Tensor
+from torch.nn.utils.rnn import pad_sequence, unpad_sequence
 
 
 @dataclass(frozen=True)
@@ -37,7 +39,37 @@ class UnbatchedDenseArgs:
     static_covariates: Sequence[Tensor] | None = None  # Float[(M)]
 
     def batch(self) -> BatchedDenseArgs:
-        raise NotImplementedError
+        return BatchedDenseArgs(
+            context_times=pad_sequence(
+                self.context_times,  # type: ignore[arg-type]
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            context_values=pad_sequence(
+                self.context_values,  # type: ignore[arg-type]
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            query_times=pad_sequence(
+                self.query_times,  # type: ignore[arg-type]
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            query_mask=(
+                None
+                if self.query_mask is None
+                else pad_sequence(
+                    self.query_mask,  # type: ignore[arg-type]
+                    batch_first=True,
+                    padding_value=False,
+                )
+            ),
+            static_covariates=(
+                None
+                if self.static_covariates is None
+                else torch.stack(self.static_covariates)  # type: ignore[arg-type]
+            ),
+        )
 
     def to_triplet(self) -> UnbatchedTripletArgs:
         raise NotImplementedError
@@ -59,15 +91,84 @@ class BatchedDenseArgs:
     """
 
     context_times: Tensor  # Float[(..., N)], padded
-    context_values: Tensor  # Float[(..., N, D)], sparse
+    context_values: Tensor  # Float[(..., N, D)], padded, sparse
 
     query_times: Tensor  # Float[(..., K)], padded
-    query_mask: Tensor | None = None  # Bool[(..., K, F)]
+    query_mask: Tensor | None = None  # Bool[(..., K, F)]  padded
 
-    static_covariates: Tensor | None = None  # Float[(..., M)]
+    static_covariates: Tensor | None = None  # Float[(..., M)]  padded
+
+    def __post_init__(self) -> None:
+        T = self.context_times
+        Q = self.query_times
+        X = self.context_values
+
+        # check shapes
+        *batch_shape, context_size, _ = X.shape
+        *_, query_size = T.shape
+        assert T.shape == (*batch_shape, context_size)
+        assert Q.shape == (*batch_shape, query_size)
+
+        if self.query_mask is not None:
+            *_, query_dim = self.query_mask.shape
+            assert self.query_mask.dtype == torch.bool
+            assert self.query_mask.shape == (*batch_shape, query_size, query_dim)
+
+        if self.static_covariates is not None:
+            *_, static_dim = self.static_covariates.shape
+            assert self.static_covariates.shape == (*batch_shape, static_dim)
+
+        # check that non-valid values are at the tail
+        T_valid = T.isfinite()
+        Q_valid = Q.isfinite()
+        X_valid = X.isfinite().any(dim=-1)  # at least one value observed
+        assert (Q_valid[..., :-1] | ~Q_valid[..., 1:]).all(dim=-1).all()
+        assert (T_valid[..., :-1] | ~T_valid[..., 1:]).all(dim=-1).all()
+        assert (X_valid[..., :-1] | ~X_valid[..., 1:]).all(dim=-1).all()
+        # check that valid values are increasing
+        ΔQ = Q.diff(dim=-1, prepend=torch.full_like(Q[..., [0]], -torch.inf))
+        ΔT = T.diff(dim=-1, prepend=torch.full_like(T[..., [0]], -torch.inf))
+        assert (~Q_valid | (ΔQ >= 0)).all(dim=-1).all()
+        assert (~T_valid | (ΔT >= 0)).all(dim=-1).all()
+
+        # check padding
+        context_lengths = T.isnan().sum(dim=-1)
+        assert torch.equal(X.isnan().all(dim=-1).sum(dim=-1), context_lengths)
 
     def unbatch(self) -> UnbatchedDenseArgs:
-        raise NotImplementedError
+        # 1. flatten batch dimensions.
+        batch_dims = self.context_times.ndim - 1
+        T = self.context_times.flatten(end_dim=batch_dims)  # (B, N)
+        X = self.context_values.flatten(end_dim=batch_dims)  # (B, N, D)
+        Q = self.query_times.flatten(end_dim=batch_dims)  # (B, K)
+        query_mask = (  # (B, K, F)
+            None
+            if self.query_mask is None
+            else self.query_mask.flatten(end_dim=batch_dims)
+        )
+        static_covariates = (  # (B, M)
+            None
+            if self.static_covariates is None
+            else self.static_covariates.flatten(end_dim=batch_dims)
+        )
+
+        # 2. determine batch lengths from padding of time stamps
+        lengths = (~T.isnan()).sum(dim=-1)
+
+        # 3. perform unpadding
+        return UnbatchedDenseArgs(
+            context_times=unpad_sequence(T, lengths, batch_first=True),
+            context_values=unpad_sequence(X, lengths, batch_first=True),
+            query_times=unpad_sequence(Q, lengths, batch_first=True),
+            query_mask=(  # (B, K, F)
+                None
+                if query_mask is None
+                else unpad_sequence(query_mask, lengths, batch_first=True)
+            ),
+            static_covariates=(
+                None if static_covariates is None else static_covariates.unbind(dim=0)
+            ),
+        )
 
     def to_triplet(self) -> BatchedTripletArgs:
         raise NotImplementedError
@@ -111,8 +212,8 @@ class BatchedTripletArgs:
     r"""Triplet representation of forecasting arguments.
 
     Shapes:
-        Q = max(Qᵢ): number of query values
-        O = max(Oᵢ): number of observed values
+        Q: max(Qᵢ) number of query values
+        O: max(Oᵢ) number of observed values
         M: static covariate dimensionality
     """
 
@@ -169,8 +270,8 @@ class BatchedCombinedArgs:
     r"""Representation with concatenated context and query tensors.
 
     Shapes:
-        N = max(Nᵢ): context size
-        K = max(Kᵢ): query size
+        N: max(Nᵢ) context size
+        K: max(Kᵢ) query size
         E: combined data dimensionality
         M: static covariate dimensionality
     """
