@@ -6,6 +6,7 @@ __all__ = [
     "BatchedTripletArgs",
     "TripletArg",
     "DenseArg",
+    "CombinedArg",
     "all_or_none",
 ]
 
@@ -30,6 +31,10 @@ class DenseArg:
     query_values: Tensor | None = None  # Float[(K, F)], sparse
 
     static_covariates: Tensor | None = None  # Float[(M)]
+
+    @classmethod
+    def from_triplet(cls, arg: TripletArg, /) -> DenseArg:
+        return arg.to_dense()
 
     def __post_init__(self) -> None:
         T = self.context_times
@@ -99,10 +104,6 @@ class DenseArg:
             query_values=None if Y is None else Y[query_mask],
             static_covariates=self.static_covariates,
         )
-
-    @classmethod
-    def from_triplet(cls, arg: TripletArg, /) -> DenseArg:
-        return arg.to_dense()
 
 
 def all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
@@ -181,6 +182,10 @@ class BatchedDenseArgs:
         # check padding
         context_lengths = T.isnan().sum(dim=-1)
         assert torch.equal(X.isnan().all(dim=-1).sum(dim=-1), context_lengths)
+
+    @classmethod
+    def from_triplet(cls, arg: BatchedTripletArgs, /) -> BatchedDenseArgs:
+        return arg.to_dense()
 
     @classmethod
     def from_unbatched(cls, args: Sequence[DenseArg]) -> BatchedDenseArgs:
@@ -394,6 +399,10 @@ class TripletArg:
 
     static_covariates: Tensor | None = None  # Float[(M)]
 
+    @classmethod
+    def from_dense(cls, arg: DenseArg, /) -> TripletArg:
+        return arg.to_triplet()
+
     def __post_init__(self) -> None:
         T = self.context_times
         C = self.context_channels
@@ -492,10 +501,6 @@ class TripletArg:
             static_covariates=self.static_covariates,
         )
 
-    @classmethod
-    def from_dense(cls, arg: DenseArg, /) -> TripletArg:
-        return arg.to_triplet()
-
 
 @dataclass(frozen=True)
 class BatchedTripletArgs:
@@ -533,6 +538,10 @@ class BatchedTripletArgs:
         assert M.shape == (*batch_shape, num_query)
 
     @classmethod
+    def from_dense(cls, arg: BatchedDenseArgs, /) -> BatchedTripletArgs:
+        return arg.to_triplet()
+
+    @classmethod
     def from_unbatched(cls, args: Sequence[TripletArg]) -> BatchedTripletArgs:
         raise NotImplementedError
 
@@ -547,6 +556,18 @@ class BatchedTripletArgs:
 
 
 @dataclass(frozen=True)
+class CombinedArg:
+    r"""Representation with concatenated context and query tensors."""
+
+    times: Tensor  # Float[(N + K)], finite
+    values: Tensor  # Float[(N + K, E)], sparse
+    context_mask: Tensor  # Bool[(N + K, E)]
+    query_mask: Tensor  # Bool[(N + K, E)]
+
+    static_covariates: Tensor | None = None  # Float[(M)], sparse
+
+
+@dataclass(frozen=True)
 class BatchedCombinedArgs:
     r"""Representation with concatenated context and query tensors.
 
@@ -557,12 +578,27 @@ class BatchedCombinedArgs:
         M: static covariate dimensionality
     """
 
-    times: Tensor  # Float[(..., N + K)], finite
-    values: Tensor  # Float[(..., N + K, E)], finite
+    times: Tensor  # Float[(..., N + K)], padded
+    values: Tensor  # Float[(..., N + K, E)], padded, sparse
     context_mask: Tensor  # Bool[(..., N + K, E)]
     query_mask: Tensor  # Bool[(..., N + K, E)]
 
-    static_covariates: Tensor | None = None  # Float[(..., M)]
+    static_covariates: Tensor | None = None  # Float[(..., M)], padded, sparse
+
+    @classmethod
+    def from_unbatched(cls, args: Sequence[CombinedArg], /) -> BatchedCombinedArgs:
+        raise NotImplementedError
+
+    @classmethod
+    def from_dense(cls, arg: BatchedDenseArgs, /) -> BatchedCombinedArgs:
+        return arg.to_combined()
+
+    @classmethod
+    def from_triplet(cls, arg: BatchedTripletArgs, /) -> BatchedCombinedArgs:
+        return arg.to_combined()
+
+    def unbatch(self) -> list[CombinedArg]:
+        raise NotImplementedError
 
     def to_dense(self) -> BatchedDenseArgs:
         raise NotImplementedError
