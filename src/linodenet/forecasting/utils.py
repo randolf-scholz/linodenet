@@ -186,82 +186,47 @@ class BatchedDenseArgs:
         )
 
     def unbatch(self) -> list[DenseArg]:
-        batch_shape = self.context_times.shape[:-1]
-        if batch_shape:
-            end_dim = len(batch_shape) - 1
-            T = self.context_times.flatten(end_dim=end_dim)  # (B, N)
-            X = self.context_values.flatten(end_dim=end_dim)  # (B, N, D)
-            Q = self.query_times.flatten(end_dim=end_dim)  # (B, K)
-            query_mask = (
-                None
-                if self.query_mask is None
-                else self.query_mask.flatten(end_dim=end_dim)
-            )
-            query_values = (
-                None
-                if self.query_values is None
-                else self.query_values.flatten(end_dim=end_dim)
-            )
-            static_covariates = (
-                None
-                if self.static_covariates is None
-                else self.static_covariates.flatten(end_dim=end_dim)
-            )
-        else:
-            T = self.context_times.unsqueeze(0)
-            X = self.context_values.unsqueeze(0)
-            Q = self.query_times.unsqueeze(0)
-            query_mask = (
-                None if self.query_mask is None else self.query_mask.unsqueeze(0)
-            )
-            query_values = (
-                None if self.query_values is None else self.query_values.unsqueeze(0)
-            )
-            static_covariates = (
-                None
-                if self.static_covariates is None
-                else self.static_covariates.unsqueeze(0)
-            )
+        T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
+        X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
+        Q = self.query_times.unsqueeze(0).flatten(end_dim=-2)
+        query_mask = (
+            None
+            if self.query_mask is None
+            else self.query_mask.unsqueeze(0).flatten(end_dim=-3)
+        )
+        query_values = (
+            None
+            if self.query_values is None
+            else self.query_values.unsqueeze(0).flatten(end_dim=-3)
+        )
+        static_covariates = (
+            None
+            if self.static_covariates is None
+            else self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+        )
 
         context_lengths = (~T.isnan()).sum(dim=-1)
         query_lengths = (~Q.isnan()).sum(dim=-1)
+        num_samples = T.shape[0]
+
         context_times = unpad_sequence(T, context_lengths, batch_first=True)
         context_values = unpad_sequence(X, context_lengths, batch_first=True)
         query_times = unpad_sequence(Q, query_lengths, batch_first=True)
         query_masks = (
-            None
+            [None] * num_samples
             if query_mask is None
             else unpad_sequence(query_mask, query_lengths, batch_first=True)
         )
         query_values = (
-            None
+            [None] * num_samples
             if query_values is None
             else unpad_sequence(query_values, query_lengths, batch_first=True)
         )
         static_args = (
-            [None] * T.shape[0]
+            [None] * num_samples
             if static_covariates is None
             else list(static_covariates.unbind(dim=0))
         )
-
-        if query_masks is None:
-            return [
-                DenseArg(
-                    context_times=context_time,
-                    context_values=context_value,
-                    query_times=query_time,
-                    query_values=query_value,
-                    static_covariates=static_arg,
-                )
-                for context_time, context_value, query_time, query_value, static_arg in zip(
-                    context_times,
-                    context_values,
-                    query_times,
-                    ([None] * T.shape[0] if query_values is None else query_values),
-                    static_args,
-                    strict=True,
-                )
-            ]
 
         return [
             DenseArg(
@@ -277,7 +242,7 @@ class BatchedDenseArgs:
                 context_values,
                 query_times,
                 query_masks,
-                ([None] * T.shape[0] if query_values is None else query_values),
+                query_values,
                 static_args,
                 strict=True,
             )
