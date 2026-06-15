@@ -61,6 +61,49 @@ class DenseArg:
                 assert self.query_values.shape == self.query_mask.shape
                 assert self.query_values[self.query_mask].isfinite().all()
 
+    def to_triplet(self) -> TripletArg:
+        T = self.context_times
+        X = self.context_values
+        Q = self.query_times
+        Y = self.query_values
+        _, input_dim = X.shape
+
+        # Flatten row-major, matching a DataFrame melt over time and channel.
+        context_mask = X.isfinite().flatten()
+        flat_indices = context_mask.nonzero(as_tuple=True)[0]
+        time_indices = flat_indices.div(input_dim, rounding_mode="floor")
+        context_channels = flat_indices.remainder(input_dim)
+
+        if self.query_mask is None:
+            query_dim = input_dim if Y is None else Y.shape[-1]
+            query_mask = torch.ones(
+                (Q.shape[0], query_dim),
+                dtype=torch.bool,
+                device=Q.device,
+            )
+        else:
+            query_dim = self.query_mask.shape[-1]
+            query_mask = self.query_mask
+
+        query_flat = query_mask.flatten()
+        flat_indices = query_flat.nonzero(as_tuple=True)[0]
+        query_time_indices = flat_indices.div(query_dim, rounding_mode="floor")
+        query_channels = flat_indices.remainder(query_dim)
+
+        return TripletArg(
+            context_times=T[time_indices],
+            context_channels=context_channels,
+            context_values=X.flatten()[context_mask],
+            query_times=Q[query_time_indices],
+            query_channels=query_channels,
+            query_values=None if Y is None else Y[query_mask],
+            static_covariates=self.static_covariates,
+        )
+
+    @classmethod
+    def from_triplet(cls, arg: TripletArg, /) -> DenseArg:
+        return arg.to_dense()
+
 
 def all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
     result = []
@@ -377,6 +420,82 @@ class TripletArg:
             assert self.query_values.shape == (num_query,)
             assert self.query_values.isfinite().all()
 
+    def to_dense(self) -> DenseArg:
+        if (self.context_channels < 0).any():
+            raise ValueError("Expected non-negative context channel indices.")
+        if self.context_channels.numel() == 0:
+            raise ValueError(
+                "Cannot infer dense context dimension from empty triplets."
+            )
+
+        context_dim = int(self.context_channels.max().item()) + 1
+        context_times, context_inverse = torch.unique_consecutive(
+            self.context_times,
+            return_inverse=True,
+        )
+        context_values = self.context_values.new_full(
+            (context_times.shape[0], context_dim),
+            torch.nan,
+        )
+        # Triplets with the same consecutive time are written into one dense row.
+        context_values[context_inverse, self.context_channels.long()] = (
+            self.context_values
+        )
+
+        if self.query_channels is None:
+            query_values = (
+                None
+                if self.query_values is None
+                else self.query_values.unsqueeze(dim=-1)
+            )
+            return DenseArg(
+                context_times=context_times,
+                context_values=context_values,
+                query_times=self.query_times,
+                query_values=query_values,
+                static_covariates=self.static_covariates,
+            )
+
+        if (self.query_channels < 0).any():
+            raise ValueError("Expected non-negative query channel indices.")
+
+        query_dim = (
+            context_dim
+            if self.query_channels.numel() == 0
+            else int(self.query_channels.max().item()) + 1
+        )
+        query_times, query_inverse = torch.unique_consecutive(
+            self.query_times,
+            return_inverse=True,
+        )
+        query_mask = torch.zeros(
+            (query_times.shape[0], query_dim),
+            dtype=torch.bool,
+            device=self.query_times.device,
+        )
+        query_mask[query_inverse, self.query_channels.long()] = True
+
+        query_values = None
+        if self.query_values is not None:
+            query_values = self.query_values.new_full(
+                (query_times.shape[0], query_dim),
+                torch.nan,
+            )
+            query_values[query_inverse, self.query_channels.long()] = self.query_values
+
+        return DenseArg(
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=None if bool(query_mask.all().item()) else query_mask,
+            query_values=query_values,
+            static_covariates=self.static_covariates,
+        )
+
+    @classmethod
+    def from_dense(cls, arg: DenseArg, /) -> TripletArg:
+        return arg.to_triplet()
+
 
 @dataclass(frozen=True)
 class BatchedTripletArgs:
@@ -412,6 +531,10 @@ class BatchedTripletArgs:
         *_, num_query = self.query_times.shape
         assert Q.shape == (*batch_shape, num_query)
         assert M.shape == (*batch_shape, num_query)
+
+    @classmethod
+    def from_unbatched(cls, args: Sequence[TripletArg]) -> BatchedTripletArgs:
+        raise NotImplementedError
 
     def unbatch(self) -> list[TripletArg]:
         raise NotImplementedError
