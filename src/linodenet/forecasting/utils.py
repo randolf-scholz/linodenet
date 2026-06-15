@@ -4,8 +4,6 @@ __all__ = [
     "BatchedCombinedArgs",
     "BatchedDenseArgs",
     "BatchedTripletArgs",
-    "UnbatchedCombinedArgs",
-    "UnbatchedTripletArgs",
     "TripletArg",
     "DenseArg",
     "all_or_none",
@@ -381,36 +379,6 @@ class TripletArg:
 
 
 @dataclass(frozen=True)
-class UnbatchedTripletArgs:
-    r"""Batched forecasting arguments with covariates.
-
-    Shapes:
-        Qᵢ: number of query values
-        Oᵢ: number of observed values
-        M: static covariate dimensionality
-    """
-
-    context_times: Sequence[Tensor]  # Float[(Oᵢ)], finite
-    context_channels: Sequence[Tensor]  # Long[(Oᵢ)]
-    context_values: Sequence[Tensor]  # Float[(Oᵢ)], finite
-
-    query_times: Sequence[Tensor]  # Float[(Qᵢ)], finite
-    query_channels: Sequence[Tensor] | None = None  # Long[(Qᵢ)]
-    query_values: Sequence[Tensor] | None = None  # Float[(Qᵢ)], finite
-
-    static_covariates: Sequence[Tensor] | None = None  # Float[(M)]
-
-    def batch(self) -> BatchedTripletArgs:
-        raise NotImplementedError
-
-    def to_dense(self) -> list[DenseArg]:
-        raise NotImplementedError
-
-    def to_combined(self) -> UnbatchedCombinedArgs:
-        raise NotImplementedError
-
-
-@dataclass(frozen=True)
 class BatchedTripletArgs:
     r"""Triplet representation of forecasting arguments.
 
@@ -445,41 +413,13 @@ class BatchedTripletArgs:
         assert Q.shape == (*batch_shape, num_query)
         assert M.shape == (*batch_shape, num_query)
 
-    def unbatch(self) -> UnbatchedTripletArgs:
+    def unbatch(self) -> list[TripletArg]:
         raise NotImplementedError
 
     def to_dense(self) -> BatchedDenseArgs:
         raise NotImplementedError
 
     def to_combined(self) -> BatchedCombinedArgs:
-        raise NotImplementedError
-
-
-@dataclass(frozen=True)
-class UnbatchedCombinedArgs:
-    r"""Representation with concatenated context and query tensors.
-
-    Shapes:
-        Nᵢ: context size
-        Kᵢ: query size
-        E: combined data dimensionality
-        M: static covariate dimensionality
-    """
-
-    times: Sequence[Tensor]  # Float[(Nᵢ + Kᵢ)], finite
-    values: Sequence[Tensor]  # Float[(Nᵢ + Kᵢ, E)], finite
-    context_mask: Sequence[Tensor]  # Bool[(Nᵢ + Kᵢ, E)]
-    query_mask: Sequence[Tensor]  # Bool[(Nᵢ + Kᵢ, E)]
-
-    static_covariates: Sequence[Tensor] | None = None  # Float[(M)]
-
-    def batch(self) -> BatchedCombinedArgs:
-        raise NotImplementedError
-
-    def to_dense(self) -> list[DenseArg]:
-        raise NotImplementedError
-
-    def to_triplet(self) -> UnbatchedTripletArgs:
         raise NotImplementedError
 
 
@@ -500,9 +440,6 @@ class BatchedCombinedArgs:
     query_mask: Tensor  # Bool[(..., N + K, E)]
 
     static_covariates: Tensor | None = None  # Float[(..., M)]
-
-    def unbatch(self) -> UnbatchedCombinedArgs:
-        raise NotImplementedError
 
     def to_dense(self) -> BatchedDenseArgs:
         raise NotImplementedError
