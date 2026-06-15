@@ -7,6 +7,7 @@ __all__ = [
     "UnbatchedCombinedArgs",
     "UnbatchedDenseArgs",
     "UnbatchedTripletArgs",
+    "TripletArg",
 ]
 
 
@@ -105,7 +106,7 @@ class BatchedDenseArgs:
 
         # check shapes
         *batch_shape, context_size, _ = X.shape
-        *_, query_size = T.shape
+        *_, query_size = Q.shape
         assert T.shape == (*batch_shape, context_size)
         assert Q.shape == (*batch_shape, query_size)
 
@@ -171,10 +172,129 @@ class BatchedDenseArgs:
         )
 
     def to_triplet(self) -> BatchedTripletArgs:
-        raise NotImplementedError
+        T = self.context_times
+        X = self.context_values
+        Q = self.query_times
+        batch_shape = T.shape[:-1]
+        context_size, input_dim = X.shape[-2:]
+        query_size = Q.shape[-1]
+
+        T_flat = T.reshape(-1, context_size)
+        X_flat = X.reshape(-1, context_size, input_dim)
+        Q_flat = Q.reshape(-1, query_size)
+
+        X_valid = X_flat.isfinite() & T_flat.isfinite().unsqueeze(-1)
+        context_mask = X_valid.flatten(start_dim=1)
+        context_counts = context_mask.sum(dim=-1)
+        num_context = int(context_counts.max().item())
+        context_positions = context_mask.long().cumsum(dim=-1) - 1
+
+        context_times = T.new_full((T_flat.shape[0], num_context), torch.nan)
+        context_channels = torch.full(
+            (T_flat.shape[0], num_context),
+            -1,
+            dtype=torch.long,
+            device=X.device,
+        )
+        context_values = X.new_full((T_flat.shape[0], num_context), torch.nan)
+
+        batch_indices, flat_indices = context_mask.nonzero(as_tuple=True)
+        target_indices = context_positions[batch_indices, flat_indices]
+        time_indices = flat_indices.div(input_dim, rounding_mode="floor")
+        channel_indices = flat_indices.remainder(input_dim)
+
+        context_times[batch_indices, target_indices] = T_flat[
+            batch_indices, time_indices
+        ]
+        context_channels[batch_indices, target_indices] = channel_indices
+        context_values[batch_indices, target_indices] = X_flat[
+            batch_indices, time_indices, channel_indices
+        ]
+
+        if self.query_mask is None:
+            query_dim = input_dim
+            query_valid = Q_flat.isfinite().unsqueeze(-1).expand(-1, -1, query_dim)
+        else:
+            query_dim = self.query_mask.shape[-1]
+            query_valid = self.query_mask.reshape(
+                -1, query_size, query_dim
+            ) & Q_flat.isfinite().unsqueeze(-1)
+
+        query_mask = query_valid.flatten(start_dim=1)
+        query_counts = query_mask.sum(dim=-1)
+        num_query = int(query_counts.max().item())
+        query_positions = query_mask.long().cumsum(dim=-1) - 1
+
+        query_times = Q.new_full((Q_flat.shape[0], num_query), torch.nan)
+        query_channels = torch.full(
+            (Q_flat.shape[0], num_query),
+            -1,
+            dtype=torch.long,
+            device=Q.device,
+        )
+        query_values = Q.new_full((Q_flat.shape[0], num_query), torch.nan)
+
+        batch_indices, flat_indices = query_mask.nonzero(as_tuple=True)
+        target_indices = query_positions[batch_indices, flat_indices]
+        time_indices = flat_indices.div(query_dim, rounding_mode="floor")
+        channel_indices = flat_indices.remainder(query_dim)
+
+        query_times[batch_indices, target_indices] = Q_flat[batch_indices, time_indices]
+        query_channels[batch_indices, target_indices] = channel_indices
+
+        return BatchedTripletArgs(
+            context_times=context_times.reshape(*batch_shape, num_context),
+            context_channels=context_channels.reshape(*batch_shape, num_context),
+            context_values=context_values.reshape(*batch_shape, num_context),
+            query_times=query_times.reshape(*batch_shape, num_query),
+            query_channels=query_channels.reshape(*batch_shape, num_query),
+            query_values=query_values.reshape(*batch_shape, num_query),
+            static_covariates=self.static_covariates,
+        )
 
     def to_combined(self) -> BatchedCombinedArgs:
         raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class TripletArg:
+    r"""Triplet representation of forecasting arguments."""
+
+    context_times: Tensor  # Float[(Oᵢ)], finite
+    context_channels: Tensor  # Long[(Oᵢ)]
+    context_values: Tensor  # Float[(Oᵢ)], finite
+
+    query_times: Tensor  # Float[(Qᵢ)], finite
+    query_channels: Tensor | None = None  # Long[(Qᵢ)]
+    query_values: Tensor | None = None  # Float[(Qᵢ)], finite
+
+    static_covariates: Tensor | None = None  # Float[(M)]
+
+    def __post_init__(self) -> None:
+        T = self.context_times
+        C = self.context_channels
+        V = self.context_values
+
+        *_, num_context = T.shape
+        assert T.shape == (num_context,)
+        assert C.shape == (num_context,)
+        assert V.shape == (num_context,)
+        assert T.isfinite().all()
+        assert C.isfinite().all()
+        assert V.isfinite().all()
+
+        Q = self.query_times
+        *_, num_query = Q.shape
+        assert Q.shape == (num_query,)
+        assert Q.isfinite().all()
+
+        if self.query_channels is not None:
+            assert self.query_channels.shape == (num_query,)
+            assert self.query_channels.isfinite().all()
+
+        if self.query_values is not None:
+            assert self.query_values.shape == (num_query,)
+            assert self.query_values.isfinite().all()
 
 
 @dataclass(frozen=True)
@@ -226,6 +346,21 @@ class BatchedTripletArgs:
     query_values: Tensor  # Float[(..., Q)], padded
 
     static_covariates: Tensor | None = None  # Float[(..., M)]
+
+    def __post_init__(self) -> None:
+        T = self.context_times
+        C = self.context_channels
+        V = self.context_values
+        *batch_shape, num_context = T.shape
+        assert T.shape == (*batch_shape, num_context)
+        assert C.shape == (*batch_shape, num_context)
+        assert V.shape == (*batch_shape, num_context)
+
+        Q = self.query_times
+        M = self.query_channels
+        *_, num_query = self.query_times.shape
+        assert Q.shape == (*batch_shape, num_query)
+        assert M.shape == (*batch_shape, num_query)
 
     def unbatch(self) -> UnbatchedTripletArgs:
         raise NotImplementedError
