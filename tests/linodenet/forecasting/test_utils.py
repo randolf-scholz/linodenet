@@ -40,8 +40,14 @@ def test_dense_arg_to_triplet() -> None:
     assert torch.equal(actual.context_channels, expected.context_channels)
     assert torch.equal(actual.context_values, expected.context_values)
     assert torch.equal(actual.query_times, expected.query_times)
+    assert actual.query_channels is not None
+    assert expected.query_channels is not None
     assert torch.equal(actual.query_channels, expected.query_channels)
+    assert actual.query_values is not None
+    assert expected.query_values is not None
     assert torch.equal(actual.query_values, expected.query_values)
+    assert actual.static_covariates is not None
+    assert expected.static_covariates is not None
     assert torch.equal(actual.static_covariates, expected.static_covariates)
 
 
@@ -78,10 +84,16 @@ def test_triplet_arg_to_dense() -> None:
         equal_nan=True,
     )
     assert_close(actual.query_times, expected.query_times, atol=0.0, rtol=0.0)
+    assert actual.query_mask is not None
+    assert expected.query_mask is not None
     assert torch.equal(actual.query_mask, expected.query_mask)
+    assert actual.query_values is not None
+    assert expected.query_values is not None
     assert_close(
         actual.query_values, expected.query_values, atol=0.0, rtol=0.0, equal_nan=True
     )
+    assert actual.static_covariates is not None
+    assert expected.static_covariates is not None
     assert_close(
         actual.static_covariates, expected.static_covariates, atol=0.0, rtol=0.0
     )
@@ -113,7 +125,11 @@ def test_dense_triplet_dense_roundtrip() -> None:
     )
     assert_close(actual.query_times, original.query_times, atol=0.0, rtol=0.0)
     assert actual.query_mask is None
+    assert actual.query_values is not None
+    assert original.query_values is not None
     assert_close(actual.query_values, original.query_values, atol=0.0, rtol=0.0)
+    assert actual.static_covariates is not None
+    assert original.static_covariates is not None
     assert_close(
         actual.static_covariates, original.static_covariates, atol=0.0, rtol=0.0
     )
@@ -127,7 +143,11 @@ def test_dense_triplet_dense_roundtrip() -> None:
         triplet_result.context_values, triplet.context_values, atol=0.0, rtol=0.0
     )
     assert_close(triplet_result.query_times, triplet.query_times, atol=0.0, rtol=0.0)
+    assert triplet_result.query_channels is not None
+    assert triplet.query_channels is not None
     assert torch.equal(triplet_result.query_channels, triplet.query_channels)
+    assert triplet_result.query_values is not None
+    assert triplet.query_values is not None
     assert_close(triplet_result.query_values, triplet.query_values, atol=0.0, rtol=0.0)
 
 
@@ -189,10 +209,16 @@ def test_batched_dense_args_from_unbatched_and_unbatch_roundtrip() -> None:
     assert_close(
         actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
+    assert actual.query_mask is not None
+    assert expected.query_mask is not None
     assert torch.equal(actual.query_mask, expected.query_mask)
+    assert actual.query_values is not None
+    assert expected.query_values is not None
     assert_close(
         actual.query_values, expected.query_values, atol=0.0, rtol=0.0, equal_nan=True
     )
+    assert actual.static_covariates is not None
+    assert expected.static_covariates is not None
     assert_close(
         actual.static_covariates, expected.static_covariates, atol=0.0, rtol=0.0
     )
@@ -211,7 +237,11 @@ def test_batched_dense_args_from_unbatched_and_unbatch_roundtrip() -> None:
             equal_nan=True,
         )
         assert_close(actual.query_times, expected.query_times, atol=0.0, rtol=0.0)
+        assert actual.query_mask is not None
+        assert expected.query_mask is not None
         assert torch.equal(actual.query_mask, expected.query_mask)
+        assert actual.query_values is not None
+        assert expected.query_values is not None
         assert_close(
             actual.query_values,
             expected.query_values,
@@ -219,6 +249,8 @@ def test_batched_dense_args_from_unbatched_and_unbatch_roundtrip() -> None:
             rtol=0.0,
             equal_nan=True,
         )
+        assert actual.static_covariates is not None
+        assert expected.static_covariates is not None
         assert_close(
             actual.static_covariates, expected.static_covariates, atol=0.0, rtol=0.0
         )
@@ -295,6 +327,8 @@ def test_batched_dense_args_to_triplet_with_query_mask() -> None:
         actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
     assert torch.equal(actual.query_channels, expected.query_channels)
+    assert actual.query_values is not None
+    assert expected.query_values is not None
     assert_close(
         actual.query_values, expected.query_values, atol=0.0, rtol=0.0, equal_nan=True
     )
@@ -336,6 +370,8 @@ def test_batched_dense_args_to_triplet_without_query_mask() -> None:
         actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
     assert torch.equal(actual.query_channels, expected.query_channels)
+    assert actual.query_values is not None
+    assert expected.query_values is not None
     assert_close(
         actual.query_values, expected.query_values, atol=0.0, rtol=0.0, equal_nan=True
     )
