@@ -5,14 +5,14 @@ __all__ = [
     "BatchedDenseArgs",
     "BatchedTripletArgs",
     "UnbatchedCombinedArgs",
-    "UnbatchedDenseArgs",
     "UnbatchedTripletArgs",
     "TripletArg",
     "DenseArg",
+    "all_or_none",
 ]
 
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 import torch
@@ -60,67 +60,21 @@ class DenseArg:
             if self.query_mask is None:
                 assert self.query_values.isfinite().all()
             else:
+                assert self.query_values.shape == self.query_mask.shape
                 assert self.query_values[self.query_mask].isfinite().all()
 
 
-@dataclass(frozen=True)
-class UnbatchedDenseArgs:
-    r"""Unbatched forecasting arguments.
-
-    Shapes:
-        Nᵢ: context size
-        Kᵢ: query size
-        D: input dimensionality
-        F: output dimensionality
-        M: static covariate dimensionality
-    """
-
-    context_times: Sequence[Tensor]  # Float[(Nᵢ)], finite
-    context_values: Sequence[Tensor]  # Float[(Nᵢ, D)], sparse
-
-    query_times: Sequence[Tensor]  # Float[(Kᵢ)], finite
-    query_mask: Sequence[Tensor] | None = None  # Bool[(Kᵢ, F)]
-
-    static_covariates: Sequence[Tensor] | None = None  # Float[(M)]
-
-    def batch(self) -> BatchedDenseArgs:
-        return BatchedDenseArgs(
-            context_times=pad_sequence(
-                self.context_times,  # type: ignore[arg-type]
-                batch_first=True,
-                padding_value=torch.nan,
-            ),
-            context_values=pad_sequence(
-                self.context_values,  # type: ignore[arg-type]
-                batch_first=True,
-                padding_value=torch.nan,
-            ),
-            query_times=pad_sequence(
-                self.query_times,  # type: ignore[arg-type]
-                batch_first=True,
-                padding_value=torch.nan,
-            ),
-            query_mask=(
-                None
-                if self.query_mask is None
-                else pad_sequence(
-                    self.query_mask,  # type: ignore[arg-type]
-                    batch_first=True,
-                    padding_value=False,
-                )
-            ),
-            static_covariates=(
-                None
-                if self.static_covariates is None
-                else torch.stack(self.static_covariates)  # type: ignore[arg-type]
-            ),
-        )
-
-    def to_triplet(self) -> UnbatchedTripletArgs:
-        raise NotImplementedError
-
-    def to_combined(self) -> UnbatchedCombinedArgs:
-        raise NotImplementedError
+def all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
+    result = []
+    has_none = False
+    for arg in vals:
+        if arg is None:
+            has_none = True
+        else:
+            result.append(arg)
+    if has_none and result:
+        raise ValueError("Either all or none of the given values must be None.")
+    return None if has_none else result
 
 
 @dataclass(frozen=True)
@@ -140,6 +94,7 @@ class BatchedDenseArgs:
 
     query_times: Tensor  # Float[(..., K)], padded
     query_mask: Tensor | None = None  # Bool[(..., K, F)]  padded
+    query_values: Tensor | None = None  # Float[(..., K, F)]  padded, sparse
 
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded
 
@@ -158,6 +113,12 @@ class BatchedDenseArgs:
             *_, query_dim = self.query_mask.shape
             assert self.query_mask.dtype == torch.bool
             assert self.query_mask.shape == (*batch_shape, query_size, query_dim)
+
+        if self.query_values is not None:
+            *_, query_dim = self.query_values.shape
+            assert self.query_values.shape == (*batch_shape, query_size, query_dim)
+            if self.query_mask is not None:
+                assert self.query_mask.shape == self.query_values.shape
 
         if self.static_covariates is not None:
             *_, static_dim = self.static_covariates.shape
@@ -180,45 +141,153 @@ class BatchedDenseArgs:
         context_lengths = T.isnan().sum(dim=-1)
         assert torch.equal(X.isnan().all(dim=-1).sum(dim=-1), context_lengths)
 
-    def unbatch(self) -> UnbatchedDenseArgs:
-        # 1. flatten batch dimensions.
-        batch_dims = self.context_times.ndim - 1
-        T = self.context_times.flatten(end_dim=batch_dims)  # (B, N)
-        X = self.context_values.flatten(end_dim=batch_dims)  # (B, N, D)
-        Q = self.query_times.flatten(end_dim=batch_dims)  # (B, K)
-        query_mask = (  # (B, K, F)
+    @classmethod
+    def from_unbatched(cls, args: Sequence[DenseArg]) -> BatchedDenseArgs:
+        if not args:
+            raise ValueError("Expected at least one DenseArg.")
+
+        query_mask = (
             None
-            if self.query_mask is None
-            else self.query_mask.flatten(end_dim=batch_dims)
-        )
-        static_covariates = (  # (B, M)
-            None
-            if self.static_covariates is None
-            else self.static_covariates.flatten(end_dim=batch_dims)
+            if (M := all_or_none(arg.query_mask for arg in args)) is None
+            else pad_sequence(M, batch_first=True, padding_value=False)
         )
 
-        # 2. determine batch lengths from padding of time stamps
-        lengths = (~T.isnan()).sum(dim=-1)
+        query_values = (
+            None
+            if (V := all_or_none(arg.query_values for arg in args)) is None
+            else pad_sequence(V, batch_first=True, padding_value=torch.nan)
+        )
 
-        # 3. perform unpadding
-        return UnbatchedDenseArgs(
-            context_times=unpad_sequence(T, lengths, batch_first=True),
-            context_values=unpad_sequence(X, lengths, batch_first=True),
-            query_times=unpad_sequence(Q, lengths, batch_first=True),
-            query_mask=(  # (B, K, F)
+        static_covariates = (
+            None
+            if (S := all_or_none(arg.static_covariates for arg in args)) is None
+            else torch.stack(S)
+        )
+
+        return cls(
+            context_times=pad_sequence(
+                [arg.context_times for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            context_values=pad_sequence(
+                [arg.context_values for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            query_times=pad_sequence(
+                [arg.query_times for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            query_mask=query_mask,
+            query_values=query_values,
+            static_covariates=static_covariates,
+        )
+
+    def unbatch(self) -> list[DenseArg]:
+        batch_shape = self.context_times.shape[:-1]
+        if batch_shape:
+            end_dim = len(batch_shape) - 1
+            T = self.context_times.flatten(end_dim=end_dim)  # (B, N)
+            X = self.context_values.flatten(end_dim=end_dim)  # (B, N, D)
+            Q = self.query_times.flatten(end_dim=end_dim)  # (B, K)
+            query_mask = (
                 None
-                if query_mask is None
-                else unpad_sequence(query_mask, lengths, batch_first=True)
-            ),
-            static_covariates=(
-                None if static_covariates is None else static_covariates.unbind(dim=0)
-            ),
+                if self.query_mask is None
+                else self.query_mask.flatten(end_dim=end_dim)
+            )
+            query_values = (
+                None
+                if self.query_values is None
+                else self.query_values.flatten(end_dim=end_dim)
+            )
+            static_covariates = (
+                None
+                if self.static_covariates is None
+                else self.static_covariates.flatten(end_dim=end_dim)
+            )
+        else:
+            T = self.context_times.unsqueeze(0)
+            X = self.context_values.unsqueeze(0)
+            Q = self.query_times.unsqueeze(0)
+            query_mask = (
+                None if self.query_mask is None else self.query_mask.unsqueeze(0)
+            )
+            query_values = (
+                None if self.query_values is None else self.query_values.unsqueeze(0)
+            )
+            static_covariates = (
+                None
+                if self.static_covariates is None
+                else self.static_covariates.unsqueeze(0)
+            )
+
+        context_lengths = (~T.isnan()).sum(dim=-1)
+        query_lengths = (~Q.isnan()).sum(dim=-1)
+        context_times = unpad_sequence(T, context_lengths, batch_first=True)
+        context_values = unpad_sequence(X, context_lengths, batch_first=True)
+        query_times = unpad_sequence(Q, query_lengths, batch_first=True)
+        query_masks = (
+            None
+            if query_mask is None
+            else unpad_sequence(query_mask, query_lengths, batch_first=True)
         )
+        query_values = (
+            None
+            if query_values is None
+            else unpad_sequence(query_values, query_lengths, batch_first=True)
+        )
+        static_args = (
+            [None] * T.shape[0]
+            if static_covariates is None
+            else list(static_covariates.unbind(dim=0))
+        )
+
+        if query_masks is None:
+            return [
+                DenseArg(
+                    context_times=context_time,
+                    context_values=context_value,
+                    query_times=query_time,
+                    query_values=query_value,
+                    static_covariates=static_arg,
+                )
+                for context_time, context_value, query_time, query_value, static_arg in zip(
+                    context_times,
+                    context_values,
+                    query_times,
+                    ([None] * T.shape[0] if query_values is None else query_values),
+                    static_args,
+                    strict=True,
+                )
+            ]
+
+        return [
+            DenseArg(
+                context_times=context_time,
+                context_values=context_value,
+                query_times=query_time,
+                query_mask=query_mask,
+                query_values=query_value,
+                static_covariates=static_arg,
+            )
+            for context_time, context_value, query_time, query_mask, query_value, static_arg in zip(
+                context_times,
+                context_values,
+                query_times,
+                query_masks,
+                ([None] * T.shape[0] if query_values is None else query_values),
+                static_args,
+                strict=True,
+            )
+        ]
 
     def to_triplet(self) -> BatchedTripletArgs:
         T = self.context_times
         X = self.context_values
         Q = self.query_times
+        Y = self.query_values
         batch_shape = T.shape[:-1]
         context_size, input_dim = X.shape[-2:]
         query_size = Q.shape[-1]
@@ -226,6 +295,7 @@ class BatchedDenseArgs:
         T_flat = T.reshape(-1, context_size)
         X_flat = X.reshape(-1, context_size, input_dim)
         Q_flat = Q.reshape(-1, query_size)
+        Y_flat = None if Y is None else Y.reshape(-1, query_size, Y.shape[-1])
 
         X_valid = X_flat.isfinite() & T_flat.isfinite().unsqueeze(-1)
         context_mask = X_valid.flatten(start_dim=1)
@@ -256,7 +326,7 @@ class BatchedDenseArgs:
         ]
 
         if self.query_mask is None:
-            query_dim = input_dim
+            query_dim = input_dim if Y is None else Y.shape[-1]
             query_valid = Q_flat.isfinite().unsqueeze(-1).expand(-1, -1, query_dim)
         else:
             query_dim = self.query_mask.shape[-1]
@@ -285,6 +355,10 @@ class BatchedDenseArgs:
 
         query_times[batch_indices, target_indices] = Q_flat[batch_indices, time_indices]
         query_channels[batch_indices, target_indices] = channel_indices
+        if Y_flat is not None:
+            query_values[batch_indices, target_indices] = Y_flat[
+                batch_indices, time_indices, channel_indices
+            ]
 
         return BatchedTripletArgs(
             context_times=context_times.reshape(*batch_shape, num_context),
@@ -364,7 +438,7 @@ class UnbatchedTripletArgs:
     def batch(self) -> BatchedTripletArgs:
         raise NotImplementedError
 
-    def to_dense(self) -> UnbatchedDenseArgs:
+    def to_dense(self) -> list[DenseArg]:
         raise NotImplementedError
 
     def to_combined(self) -> UnbatchedCombinedArgs:
@@ -437,7 +511,7 @@ class UnbatchedCombinedArgs:
     def batch(self) -> BatchedCombinedArgs:
         raise NotImplementedError
 
-    def to_dense(self) -> UnbatchedDenseArgs:
+    def to_dense(self) -> list[DenseArg]:
         raise NotImplementedError
 
     def to_triplet(self) -> UnbatchedTripletArgs:
