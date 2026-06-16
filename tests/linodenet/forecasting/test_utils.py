@@ -352,7 +352,6 @@ def test_batched_dense_args_to_triplet_without_query_mask() -> None:
         context_values=torch.tensor([[[1.0, nan], [2.0, 3.0]]]),
         query_times=torch.tensor([[[4.0, 4.0, nan, nan], [5.0, 5.0, 6.0, 6.0]]]),
         query_channels=torch.tensor([[[0, 1, -1, -1], [0, 1, 0, 1]]]),
-        query_values=torch.full((1, 2, 4), nan),
     )
 
     assert_close(
@@ -370,8 +369,5 @@ def test_batched_dense_args_to_triplet_without_query_mask() -> None:
         actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
     assert torch.equal(actual.query_channels, expected.query_channels)
-    assert actual.query_values is not None
-    assert expected.query_values is not None
-    assert_close(
-        actual.query_values, expected.query_values, atol=0.0, rtol=0.0, equal_nan=True
-    )
+    assert actual.query_values is None
+    assert expected.query_values is None

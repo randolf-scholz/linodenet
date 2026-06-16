@@ -408,7 +408,11 @@ class BatchedDenseArgs:
             dtype=torch.long,
             device=Q.device,
         )
-        query_values = Q.new_full((Q_flat.shape[0], num_query), torch.nan)
+        query_values = (
+            None
+            if Y_flat is None
+            else Q.new_full((Q_flat.shape[0], num_query), torch.nan)
+        )
 
         batch_indices, flat_indices = query_mask.nonzero(as_tuple=True)
         target_indices = query_positions[batch_indices, flat_indices]
@@ -417,7 +421,7 @@ class BatchedDenseArgs:
 
         query_times[batch_indices, target_indices] = Q_flat[batch_indices, time_indices]
         query_channels[batch_indices, target_indices] = channel_indices
-        if Y_flat is not None:
+        if query_values is not None and Y_flat is not None:
             query_values[batch_indices, target_indices] = Y_flat[
                 batch_indices, time_indices, channel_indices
             ]
@@ -428,7 +432,11 @@ class BatchedDenseArgs:
             context_values=context_values.reshape(*batch_shape, num_context),
             query_times=query_times.reshape(*batch_shape, num_query),
             query_channels=query_channels.reshape(*batch_shape, num_query),
-            query_values=query_values.reshape(*batch_shape, num_query),
+            query_values=(
+                None
+                if query_values is None
+                else query_values.reshape(*batch_shape, num_query)
+            ),
             static_covariates=self.static_covariates,
         )
 
@@ -609,8 +617,7 @@ class BatchedTripletArgs:
         if (V := self.query_values) is not None:
             V_valid = V.isfinite()
             assert V.shape == (*batch_shape, num_query)
-            assert is_prefix_mask(V_valid).all()
-            assert V_valid[M_valid].all()
+            assert torch.equal(V_valid, M_valid)
 
     @classmethod
     def from_combined(cls, arg: BatchedCombinedArgs, /) -> BatchedTripletArgs:
