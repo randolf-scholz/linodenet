@@ -2,7 +2,7 @@ r"""Tests for forecasting utility containers."""
 
 import pytest
 import torch
-from torch import nan
+from torch import Tensor, nan
 from torch.testing import assert_close
 
 from linodenet.forecasting.utils import (
@@ -11,6 +11,32 @@ from linodenet.forecasting.utils import (
     DenseArg,
     TripletArg,
 )
+
+
+def _assert_query_mask_equal(
+    actual: Tensor | None,
+    expected: Tensor | None,
+    /,
+    *,
+    query_times: Tensor,
+) -> None:
+    if actual is None and expected is None:
+        return
+
+    if actual is None:
+        assert expected is not None
+        assert torch.equal(
+            expected, query_times.isfinite().unsqueeze(-1).expand_as(expected)
+        )
+        return
+
+    if expected is None:
+        assert torch.equal(
+            actual, query_times.isfinite().unsqueeze(-1).expand_as(actual)
+        )
+        return
+
+    assert torch.equal(actual, expected)
 
 
 def _assert_dense_equal(actual: DenseArg, expected: DenseArg, /) -> None:
@@ -28,10 +54,11 @@ def _assert_dense_equal(actual: DenseArg, expected: DenseArg, /) -> None:
         actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
 
-    if actual.query_mask is None or expected.query_mask is None:
-        assert actual.query_mask is expected.query_mask
-    else:
-        assert torch.equal(actual.query_mask, expected.query_mask)
+    _assert_query_mask_equal(
+        actual.query_mask,
+        expected.query_mask,
+        query_times=actual.query_times,
+    )
 
     if actual.query_values is None or expected.query_values is None:
         assert actual.query_values is expected.query_values
@@ -75,10 +102,11 @@ def _assert_batched_dense_equal(
         actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
 
-    if actual.query_mask is None or expected.query_mask is None:
-        assert actual.query_mask is expected.query_mask
-    else:
-        assert torch.equal(actual.query_mask, expected.query_mask)
+    _assert_query_mask_equal(
+        actual.query_mask,
+        expected.query_mask,
+        query_times=actual.query_times,
+    )
 
     if actual.query_values is None or expected.query_values is None:
         assert actual.query_values is expected.query_values
@@ -575,6 +603,76 @@ class TestDense:
         )
 
         _assert_batched_triplet_equal(actual, expected)
+
+    def test_to_triplet_roundtrip_batched_duplicates(self) -> None:
+        original = BatchedDenseArgs(
+            context_times=torch.tensor([
+                [1.0, 1.0, 2.0],
+                [0.0, 0.0, nan],
+            ]),
+            context_values=torch.tensor([
+                [[10.0,  nan,  nan],
+                 [ nan, 11.0,  nan],
+                 [20.0,  nan, 22.0]],
+                [[ 1.0,  nan,  nan],
+                 [ nan,  2.0,  3.0],
+                 [ nan,  nan,  nan]],
+            ]),
+            query_times=torch.tensor([
+                [5.0, 5.0, 6.0],
+                [7.0, 7.0, nan],
+            ]),
+            query_mask=torch.tensor([
+                [[ True, False, False],
+                 [False,  True, False],
+                 [ True, False,  True]],
+                [[ True, False, False],
+                 [False,  True,  True],
+                 [False, False, False]],
+            ]),
+            query_values=torch.tensor([
+                [[50.0,  nan,  nan],
+                 [ nan, 51.0,  nan],
+                 [60.0,  nan, 62.0]],
+                [[70.0,  nan,  nan],
+                 [ nan, 71.0, 72.0],
+                 [ nan,  nan,  nan]],
+            ]),
+        )  # fmt: skip
+
+        triplet = original.to_triplet()
+        actual = triplet.to_dense(context_dim=3, query_dim=3)
+        expected = BatchedDenseArgs(
+            context_times=torch.tensor([
+                [1.0, 2.0],
+                [0.0, nan],
+            ]),
+            context_values=torch.tensor([
+                [[10.0, 11.0,  nan],
+                 [20.0,  nan, 22.0]],
+                [[ 1.0,  2.0,  3.0],
+                 [ nan,  nan,  nan]],
+            ]),
+            query_times=torch.tensor([
+                [5.0, 6.0],
+                [7.0, nan],
+            ]),
+            query_mask=torch.tensor([
+                [[ True,  True, False],
+                 [ True, False,  True]],
+                [[ True,  True,  True],
+                 [False, False, False]],
+            ]),
+            query_values=torch.tensor([
+                [[50.0, 51.0,  nan],
+                 [60.0,  nan, 62.0]],
+                [[70.0, 71.0, 72.0],
+                 [ nan,  nan,  nan]],
+            ]),
+        )  # fmt: skip
+
+        _assert_batched_dense_equal(actual, expected)
+        _assert_batched_triplet_equal(actual.to_triplet(), triplet)
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3), (1, 2, 3)])
     def test_to_triplet_roundtrip_batched_random(
