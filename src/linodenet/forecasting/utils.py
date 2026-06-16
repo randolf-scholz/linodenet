@@ -8,7 +8,7 @@ __all__ = [
     "DenseArg",
     "CombinedArg",
     "all_or_none",
-    "is_valid_up_to_tail",
+    "is_prefix_mask",
 ]
 
 
@@ -33,9 +33,9 @@ def all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
     return None if has_none else result
 
 
-def is_valid_up_to_tail(x: Tensor, /, *, dim: int = -1) -> Tensor:
+def is_prefix_mask(x: Tensor, /, *, dim: int = -1) -> Tensor:
     r"""Check that the given boolean tensor is valid up to the tail."""
-    # simply test that a False value cannot follow a True value
+    # check that a True value cannot follow a False value
     return (x[..., :-1] | ~x[..., 1:]).all(dim=dim)
 
 
@@ -641,11 +641,21 @@ class CombinedArg:
     def __post_init__(self) -> None:
         T = self.times
         V = self.values
-        *_, num_context, num_dim = V.shape
-        assert T.shape == (num_context,)
-        assert V.shape == (num_context, num_dim)
+        M = self.context_mask
+        Q = self.query_mask
+        *_, num_combined, num_dim = V.shape
+        assert T.shape == (num_combined,)
         assert T.isfinite().all()
+        assert T.diff(dim=-1).ge(0.0).all()  # sorted in ascending order
+
+        assert V.shape == (num_combined, num_dim)
         assert V.isfinite().any(dim=-1).all()  # at least one value per step
+
+        assert M.dtype == torch.bool
+        assert Q.dtype == torch.bool
+        assert M.shape == (num_combined, num_dim)
+        assert Q.shape == (num_combined, num_dim)
+        assert (M.any(dim=-1) | Q.any(dim=-1)).all()  # at least one value per step
 
     @classmethod
     def from_dense(cls, arg: DenseArg, /) -> CombinedArg:
@@ -685,7 +695,27 @@ class BatchedCombinedArgs:
     static_covariates: Tensor | None = None  # Float[(..., M)], padded, sparse
 
     def __post_init__(self) -> None:
-        pass
+        T = self.times
+        V = self.values
+        M = self.context_mask
+        Q = self.query_mask
+        *batch_shape, num_combined, num_dim = V.shape
+        T_valid = T.isfinite()
+        T_ascending = T.diff(dim=-1).ge(0.0)
+        assert T.shape == (*batch_shape, num_combined)
+        assert is_prefix_mask(T_valid)
+        assert is_prefix_mask(T_ascending).all()  # sorted in ascending order
+
+        V_valid = V.isfinite().any(dim=-1)
+        assert V.shape == (*batch_shape, num_combined, num_dim)
+        assert is_prefix_mask(V_valid).all()  # at least one value per step
+
+        mask_valid = M.any(dim=-1) | Q.any(dim=-1)
+        assert M.dtype == torch.bool
+        assert Q.dtype == torch.bool
+        assert M.shape == (*batch_shape, num_combined, num_dim)
+        assert Q.shape == (*batch_shape, num_combined, num_dim)
+        assert is_prefix_mask(mask_valid).all()  # at least one value per step
 
     @classmethod
     def from_unbatched(cls, args: Sequence[CombinedArg], /) -> BatchedCombinedArgs:
