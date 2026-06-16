@@ -60,7 +60,7 @@ class DenseArg:
     query_mask: Tensor | None = None  # Bool[(K, F)]
     query_values: Tensor | None = None  # Float[(K, F)], sparse
 
-    static_covariates: Tensor | None = None  # Float[(M)]
+    static_covariates: Tensor | None = None  # Float[(M)], sparse
 
     @classmethod
     def from_triplet(cls, arg: TripletArg, /) -> DenseArg:
@@ -82,14 +82,14 @@ class DenseArg:
         *_, context_size, context_dim = X.shape
         assert T.shape == (context_size,)
         assert T.isfinite().all()
-        assert (T.diff(dim=-1) >= 0.0).all()
+        assert (T.diff(dim=-1) >= 0.0).all()  # increasing
         assert X.shape == (context_size, context_dim)
         assert X.isfinite().any(dim=-1).all()  # at least one value per step
 
         *_, query_size = Q.shape
         assert Q.shape == (query_size,)
         assert Q.isfinite().all()
-        assert (Q.diff(dim=-1) >= 0.0).all()
+        assert (Q.diff(dim=-1) >= 0.0).all()  # increasing
 
         if (M := self.query_mask) is not None:
             *_, query_dim = M.shape
@@ -171,14 +171,14 @@ class BatchedDenseArgs:
         - there is at least one query value observed per time stamp
     """
 
-    context_times: Tensor  # Float[(..., N)], padded
-    context_values: Tensor  # Float[(..., N, D)], padded, sparse
+    context_times: Tensor  # Float[(..., N)], padded NaN
+    context_values: Tensor  # Float[(..., N, D)], padded NaN, sparse
 
-    query_times: Tensor  # Float[(..., K)], padded
-    query_mask: Tensor | None = None  # Bool[(..., K, F)]  padded
-    query_values: Tensor | None = None  # Float[(..., K, F)]  padded, sparse
+    query_times: Tensor  # Float[(..., K)], padded NaN
+    query_mask: Tensor | None = None  # Bool[(..., K, F)]  padded False
+    query_values: Tensor | None = None  # Float[(..., K, F)]  padded NaN, sparse
 
-    static_covariates: Tensor | None = None  # Float[(..., M)]  padded
+    static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
 
     @classmethod
     def from_combined(cls, arg: BatchedCombinedArgs, /) -> BatchedDenseArgs:
@@ -203,14 +203,14 @@ class BatchedDenseArgs:
         T_valid = T.isfinite()
         Q_valid = Q.isfinite()
         X_valid = X.isfinite().any(dim=-1)  # at least one value per step
-        assert (Q_valid[..., :-1] | ~Q_valid[..., 1:]).all(dim=-1).all()
-        assert (T_valid[..., :-1] | ~T_valid[..., 1:]).all(dim=-1).all()
-        assert (X_valid[..., :-1] | ~X_valid[..., 1:]).all(dim=-1).all()
+        assert is_prefix_mask(Q_valid).all()
+        assert is_prefix_mask(T_valid).all()
+        assert is_prefix_mask(X_valid).all()
         # check that valid values are increasing
-        ΔQ = Q.diff(dim=-1, prepend=torch.full_like(Q[..., [0]], -torch.inf))
-        ΔT = T.diff(dim=-1, prepend=torch.full_like(T[..., [0]], -torch.inf))
-        assert (~Q_valid | (ΔQ >= 0)).all(dim=-1).all()
-        assert (~T_valid | (ΔT >= 0)).all(dim=-1).all()
+        Q_increasing = Q.diff(dim=-1).ge(0.0)
+        T_increasing = T.diff(dim=-1).ge(0.0)
+        assert is_prefix_mask(Q_increasing).all()
+        assert is_prefix_mask(T_increasing).all()
 
         # check padding
         context_lengths = T.isnan().sum(dim=-1)
@@ -221,18 +221,18 @@ class BatchedDenseArgs:
             assert M.dtype == torch.bool
             assert M.shape == (*batch_shape, query_size, query_dim)
             M_valid = M.isfinite().all(dim=-1)  # at least one value per step
-            assert (M_valid[..., :-1] | ~M_valid[..., 1:]).all(dim=-1).all()
+            assert is_prefix_mask(M_valid).all()
 
         if (V := self.query_values) is not None:
             *_, query_dim = V.shape
             assert V.shape == (*batch_shape, query_size, query_dim)
-            V_valid = V.isfinite().any(dim=-1)  # at least one value per step
-            assert (V_valid[..., :-1] | ~V_valid[..., 1:]).all(dim=-1).all()
+            V_valid = V.isfinite()
 
-            if (mask := self.query_mask) is not None:
-                assert mask.shape == V.shape
+            if (mask := self.query_mask) is None:
+                assert V_valid.all()
             else:
-                assert V[mask].isfinite().all()
+                assert mask.shape == V.shape
+                assert V_valid[mask].all()
 
         if (S := self.static_covariates) is not None:
             *_, static_dim = S.shape
@@ -445,10 +445,10 @@ class TripletArg:
     context_values: Tensor  # Float[(Oᵢ)], finite
 
     query_times: Tensor  # Float[(Qᵢ)], finite
-    query_channels: Tensor | None = None  # Long[(Qᵢ)]
+    query_channels: Tensor  # Long[(Qᵢ)]
     query_values: Tensor | None = None  # Float[(Qᵢ)], finite
 
-    static_covariates: Tensor | None = None  # Float[(M)]
+    static_covariates: Tensor | None = None  # Float[(M)], sparse
 
     @classmethod
     def from_dense(cls, arg: DenseArg, /) -> TripletArg:
@@ -465,28 +465,28 @@ class TripletArg:
     def __post_init__(self) -> None:
         T = self.context_times
         C = self.context_channels
-        V = self.context_values
+        X = self.context_values
+        Q = self.query_times
 
         *_, num_context = T.shape
         assert T.shape == (num_context,)
         assert C.shape == (num_context,)
-        assert V.shape == (num_context,)
+        assert X.shape == (num_context,)
         assert T.isfinite().all()
         assert C.isfinite().all()
-        assert V.isfinite().all()
+        assert X.isfinite().all()
 
-        Q = self.query_times
         *_, num_query = Q.shape
         assert Q.shape == (num_query,)
         assert Q.isfinite().all()
 
-        if self.query_channels is not None:
-            assert self.query_channels.shape == (num_query,)
-            assert self.query_channels.isfinite().all()
+        if (M := self.query_channels) is not None:
+            assert M.shape == (num_query,)
+            assert M.isfinite().all()
 
-        if self.query_values is not None:
-            assert self.query_values.shape == (num_query,)
-            assert self.query_values.isfinite().all()
+        if (V := self.query_values) is not None:
+            assert V.shape == (num_query,)
+            assert V.isfinite().all()
 
     def to_dense(self) -> DenseArg:
         if (self.context_channels < 0).any():
@@ -574,30 +574,42 @@ class BatchedTripletArgs:
         M: static covariate dimensionality
     """
 
-    context_times: Tensor  # Float[(..., O)], padded
-    context_channels: Tensor  # Long[(..., O)], padded
-    context_values: Tensor  # Float[(..., O)], padded
+    context_times: Tensor  # Float[(..., O)], padded NaN
+    context_channels: Tensor  # Long[(..., O)], padded -1
+    context_values: Tensor  # Float[(..., O)], padded NaN
 
-    query_times: Tensor  # Float[(..., Q)], padded
-    query_channels: Tensor  # Long[(..., Q)], padded
-    query_values: Tensor  # Float[(..., Q)], padded
+    query_times: Tensor  # Float[(..., Q)], padded NaN
+    query_channels: Tensor  # Long[(..., Q)], padded -1
+    query_values: Tensor | None = None  # Float[(..., Q)], padded NaN
 
-    static_covariates: Tensor | None = None  # Float[(..., M)]
+    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
     def __post_init__(self) -> None:
         T = self.context_times
         C = self.context_channels
-        V = self.context_values
+        X = self.context_values
+        Q = self.query_times
+        M = self.query_channels
+
         *batch_shape, num_context = T.shape
         assert T.shape == (*batch_shape, num_context)
         assert C.shape == (*batch_shape, num_context)
-        assert V.shape == (*batch_shape, num_context)
+        assert X.shape == (*batch_shape, num_context)
+        assert is_prefix_mask(T.isfinite()).all()
+        assert is_prefix_mask(X.isfinite()).all()
 
-        Q = self.query_times
-        M = self.query_channels
         *_, num_query = self.query_times.shape
         assert Q.shape == (*batch_shape, num_query)
+        assert is_prefix_mask(Q.isfinite()).all()
+
         assert M.shape == (*batch_shape, num_query)
+        assert is_prefix_mask(M >= 0).all()
+
+        if (V := self.query_values) is not None:
+            V_valid = V.isfinite()
+            assert V.shape == (*batch_shape, num_query)
+            assert is_prefix_mask(V_valid).all()
+            assert (V_valid & (M >= 0)).all()
 
     @classmethod
     def from_combined(cls, arg: BatchedCombinedArgs, /) -> BatchedTripletArgs:
@@ -687,12 +699,12 @@ class BatchedCombinedArgs:
         M: static covariate dimensionality
     """
 
-    times: Tensor  # Float[(..., N + K)], padded
-    values: Tensor  # Float[(..., N + K, E)], padded, sparse
-    context_mask: Tensor  # Bool[(..., N + K, E)]
-    query_mask: Tensor  # Bool[(..., N + K, E)]
+    times: Tensor  # Float[(..., N + K)], padded NaN
+    values: Tensor  # Float[(..., N + K, E)], padded NaN, sparse
+    context_mask: Tensor  # Bool[(..., N + K, E)], padded False
+    query_mask: Tensor  # Bool[(..., N + K, E)], padded False
 
-    static_covariates: Tensor | None = None  # Float[(..., M)], padded, sparse
+    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
     def __post_init__(self) -> None:
         T = self.times
