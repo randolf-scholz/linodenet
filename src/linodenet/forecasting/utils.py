@@ -602,14 +602,15 @@ class BatchedTripletArgs:
         assert Q.shape == (*batch_shape, num_query)
         assert is_prefix_mask(Q.isfinite()).all()
 
+        M_valid = M >= 0
         assert M.shape == (*batch_shape, num_query)
-        assert is_prefix_mask(M >= 0).all()
+        assert is_prefix_mask(M_valid).all()
 
         if (V := self.query_values) is not None:
             V_valid = V.isfinite()
             assert V.shape == (*batch_shape, num_query)
             assert is_prefix_mask(V_valid).all()
-            assert (V_valid & (M >= 0)).all()
+            assert V_valid[M_valid].all()
 
     @classmethod
     def from_combined(cls, arg: BatchedCombinedArgs, /) -> BatchedTripletArgs:
