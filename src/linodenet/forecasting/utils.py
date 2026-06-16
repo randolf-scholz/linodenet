@@ -136,20 +136,11 @@ def _consecutive_group_indices(
     return inverse.masked_fill(~mask, -1), is_new.sum(dim=-1)
 
 
-def _ragged_indices(
-    mask: Tensor,
-    /,
-) -> tuple[tuple[Tensor, Tensor], tuple[Tensor, ...], int]:
-    r"""Convert a batched boolean mask to compact ragged indices."""
+def _compact_positions(mask: Tensor, /) -> Tensor:
+    r"""Map true entries in a batched mask to compact positions per batch item."""
     flat_mask = mask.flatten(start_dim=1)
-    counts = flat_mask.sum(dim=-1)
     positions = flat_mask.cumsum(dim=-1) - 1
-    batch_indices, flat_indices = flat_mask.nonzero(as_tuple=True)
-    return (
-        (batch_indices, positions[batch_indices, flat_indices]),
-        mask.nonzero(as_tuple=True),
-        int(counts.max().item()),
-    )
+    return positions[flat_mask]
 
 
 def scatter_fill(
@@ -483,28 +474,27 @@ class BatchedDenseArgs:
 
         X_valid = X_flat.isfinite() & T_flat.isfinite().unsqueeze(-1)
 
-        (
-            context_indices,
-            (batch_indices, time_indices, channel_indices),
-            num_context,
-        ) = _ragged_indices(X_valid)
+        batch_indices, t_indices, c_indices = X_valid.nonzero(as_tuple=True)
+        positions = _compact_positions(X_valid)
+        num_context = int(X_valid.flatten(start_dim=1).sum(dim=-1).max().item())
+        context_indices = (batch_indices, positions)
 
         context_times = scatter_fill(
             (T_flat.shape[0], num_context),
             context_indices,
-            T_flat[batch_indices, time_indices],
+            T_flat[batch_indices, t_indices],
             fill_value=torch.nan,
         )
         context_channels = scatter_fill(
             (T_flat.shape[0], num_context),
             context_indices,
-            channel_indices,
+            c_indices,
             fill_value=-1,
         )
         context_values = scatter_fill(
             (T_flat.shape[0], num_context),
             context_indices,
-            X_flat[batch_indices, time_indices, channel_indices],
+            X_flat[batch_indices, t_indices, c_indices],
             fill_value=torch.nan,
         )
 
@@ -517,23 +507,21 @@ class BatchedDenseArgs:
                 M.reshape(-1, query_size, M.shape[-1]) & Q_flat.isfinite().unsqueeze(-1)
             )
         )
-
-        (
-            query_indices,
-            (batch_indices, time_indices, channel_indices),
-            num_query,
-        ) = _ragged_indices(query_valid)
+        batch_indices, t_indices, c_indices = query_valid.nonzero(as_tuple=True)
+        positions = _compact_positions(query_valid)
+        num_query = int(query_valid.flatten(start_dim=1).sum(dim=-1).max().item())
+        query_indices = (batch_indices, positions)
 
         query_times = scatter_fill(
             (Q_flat.shape[0], num_query),
             query_indices,
-            Q_flat[batch_indices, time_indices],
+            Q_flat[batch_indices, t_indices],
             fill_value=torch.nan,
         )
         query_channels = scatter_fill(
             (Q_flat.shape[0], num_query),
             query_indices,
-            channel_indices,
+            c_indices,
             fill_value=-1,
         )
         query_values = (
@@ -542,7 +530,7 @@ class BatchedDenseArgs:
             else scatter_fill(
                 (Q_flat.shape[0], num_query),
                 query_indices,
-                Y_flat[batch_indices, time_indices, channel_indices],
+                Y_flat[batch_indices, t_indices, c_indices],
                 fill_value=torch.nan,
             )
         )
