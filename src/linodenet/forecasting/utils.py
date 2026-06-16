@@ -8,6 +8,7 @@ __all__ = [
     "DenseArg",
     "CombinedArg",
     "all_or_none",
+    "unique_count",
     "is_prefix_mask",
     "scatter_fill",
 ]
@@ -38,6 +39,62 @@ def is_prefix_mask(x: Tensor, /, *, dim: int = -1) -> Tensor:
     r"""Check that the given boolean tensor is valid up to the tail."""
     # check that a True value cannot follow a False value
     return (x[..., :-1] | ~x[..., 1:]).all(dim=dim)
+
+
+def unique_count(x: Tensor, /) -> Tensor:
+    r"""Count unique non-NaN rows in each batch item."""
+    *batch_shape, num_items, num_dims = x.shape
+    rows = x.reshape(-1, num_items, num_dims)
+    num_batches = rows.shape[0]
+
+    batch_ids = torch.arange(num_batches, device=x.device)
+    batch_ids = batch_ids.reshape(-1, 1).expand(-1, num_items)
+
+    if rows.is_complex():
+        valid = ~torch.isnan(rows).any(dim=-1)
+
+        # Promote to complex128 so batch ids are stored in float64 precision.
+        keys = rows.to(torch.complex128)
+        batch_keys = torch.complex(
+            batch_ids.to(torch.float64),
+            torch.zeros_like(batch_ids, dtype=torch.float64),
+        )
+
+    elif rows.is_floating_point():
+        valid = ~torch.isnan(rows).any(dim=-1)
+
+        # Promoting floats is fine and helps standardize dtype.
+        keys = rows.to(torch.float64)
+        batch_keys = batch_ids.to(torch.float64)
+
+    elif rows.dtype == torch.bool:
+        valid = torch.ones_like(batch_ids, dtype=torch.bool)
+
+        keys = rows.to(torch.int64)
+        batch_keys = batch_ids.to(torch.int64)
+
+    else:
+        valid = torch.ones_like(batch_ids, dtype=torch.bool)
+
+        # Preserve integer exactness.
+        # Caveat: uint64 values above int64 max cannot be represented exactly here.
+        keys = rows.to(torch.int64)
+        batch_keys = batch_ids.to(torch.int64)
+
+    if not valid.any():
+        return torch.zeros(batch_shape, dtype=torch.long, device=x.device)
+
+    augmented = torch.cat(
+        [batch_keys[valid].unsqueeze(-1), keys[valid]],
+        dim=-1,
+    )
+
+    unique_rows = torch.unique(augmented, dim=0)
+
+    return torch.bincount(
+        unique_rows[:, 0].real.to(torch.long),
+        minlength=num_batches,
+    ).reshape(batch_shape)
 
 
 def scatter_fill(
@@ -173,7 +230,7 @@ class BatchedDenseArgs:
 
     Assumptions: (up to tail padding)
         - context time stamps are finite and non-decreasing
-        - query time stamps are finite and non-decreasing
+        - query time stamps are finite and strictly increasing
         - if query mask is not given, it is assumed to be a full true tensor
         - if query values are given, they are finite at entries selected by the query mask
         - there is at least one context value observed per time stamp
@@ -215,9 +272,8 @@ class BatchedDenseArgs:
         assert is_prefix_mask(Q_valid).all()
         assert is_prefix_mask(T_valid).all()
         assert is_prefix_mask(X_valid).all()
-        # check that valid values are increasing
-        Q_increasing = Q.diff(dim=-1).ge(0.0)
-        T_increasing = T.diff(dim=-1).ge(0.0)
+        Q_increasing = Q.diff(dim=-1).gt(0.0)  # query times are strictly increasing
+        T_increasing = T.diff(dim=-1).ge(0.0)  # context times are non-decreasing
         assert is_prefix_mask(Q_increasing).all()
         assert is_prefix_mask(T_increasing).all()
 
@@ -455,13 +511,24 @@ class BatchedDenseArgs:
 
 @dataclass(frozen=True)
 class TripletArg:
-    r"""Triplet representation of forecasting arguments."""
+    r"""Triplet representation of forecasting arguments.
 
-    context_times: Tensor  # Float[(Oᵢ)], finite
+    Assumptions:
+        - context time stamps are finite, non-decreasing
+        - context channels are non-negative integers
+        - context values are finite
+        - (context_time, context_channel) pairs are not necessarily unique
+        - query time stamps are finite, non-decreasing
+        - query channels are non-negative integers
+        - (query_time, query_channel) pairs are unique
+        - if query values are given, they are finite
+    """
+
+    context_times: Tensor  # Float[(Oᵢ)], finite, non-decreasing
     context_channels: Tensor  # Long[(Oᵢ)]
     context_values: Tensor  # Float[(Oᵢ)], finite
 
-    query_times: Tensor  # Float[(Qᵢ)], finite
+    query_times: Tensor  # Float[(Qᵢ)], finite, non-decreasing
     query_channels: Tensor  # Long[(Qᵢ)]
     query_values: Tensor | None = None  # Float[(Qᵢ)], finite
 
@@ -495,15 +562,19 @@ class TripletArg:
         assert C.isfinite().all()
         assert X.isfinite().all()
         assert C.ge(0).all()  # channels non-negative
+        assert T.diff(dim=-1).ge(0.0).all()  # non-decreasing
 
         *_, num_query = Q.shape
         assert Q.shape == (num_query,)
         assert Q.isfinite().all()
+        assert Q.diff(dim=-1).ge(0.0).all()
 
         assert M.dtype == torch.long
         assert M.shape == (num_query,)
         assert M.isfinite().all()
         assert M.ge(0).all()
+        query_pairs = torch.stack([Q, M], dim=-1)  # (Q, 2)
+        assert (unique_count(query_pairs.unsqueeze(0)) == num_query).all()
 
         if (V := self.query_values) is not None:
             assert V.shape == (num_query,)
@@ -580,13 +651,22 @@ class BatchedTripletArgs:
         Q: max(Qᵢ) number of query values
         O: max(Oᵢ) number of observed values
         M: static covariate dimensionality
+
+    Assumptions: (up to tail padding)
+        - context time stamps are finite, non-decreasing
+        - context channels are non-negative integers
+        - context values are finite
+        - query time stamps are finite, non-decreasing
+        - query channels are non-negative integers
+        - per sample, (query_time, query_channel) pairs are unique
+        - if query values are given, they are finite
     """
 
-    context_times: Tensor  # Float[(..., O)], padded NaN
+    context_times: Tensor  # Float[(..., O)], padded NaN, non-decreasing
     context_channels: Tensor  # Long[(..., O)], padded -1
     context_values: Tensor  # Float[(..., O)], padded NaN
 
-    query_times: Tensor  # Float[(..., Q)], padded NaN
+    query_times: Tensor  # Float[(..., Q)], padded NaN, non-decreasing
     query_channels: Tensor  # Long[(..., Q)], padded -1
     query_values: Tensor | None = None  # Float[(..., Q)], padded NaN
 
@@ -605,14 +685,19 @@ class BatchedTripletArgs:
         assert X.shape == (*batch_shape, num_context)
         assert is_prefix_mask(T.isfinite()).all()
         assert is_prefix_mask(X.isfinite()).all()
+        assert is_prefix_mask(T.diff(dim=-1).ge(0.0)).all()
 
         *_, num_query = self.query_times.shape
         assert Q.shape == (*batch_shape, num_query)
         assert is_prefix_mask(Q.isfinite()).all()
+        assert is_prefix_mask(Q.diff(dim=-1).ge(0.0)).all()
 
         M_valid = M >= 0
         assert M.shape == (*batch_shape, num_query)
         assert is_prefix_mask(M_valid).all()
+        query_pairs = torch.stack([Q, M], dim=-1)
+        query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), torch.nan)
+        assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
 
         if (V := self.query_values) is not None:
             V_valid = V.isfinite()

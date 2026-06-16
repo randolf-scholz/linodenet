@@ -322,20 +322,22 @@ def _make_random_batched_triplet(
 def _make_random_batched_dense(
     batch_shape: tuple[int, ...],
     /,
+    *,
+    seed: int = 3141,
+    num_context_steps: int = 4,
+    num_query_steps: int = 3,
+    context_dim: int = 3,
+    query_dim: int = 4,
 ) -> BatchedDenseArgs:
     num_samples = 1
     for size in batch_shape:
         num_samples *= size
 
     generator = torch.Generator().manual_seed(
-        3141 + sum((k + 1) * size for k, size in enumerate(batch_shape))
+        seed + sum((k + 1) * size for k, size in enumerate(batch_shape))
     )
-    context_dim = 3
-    query_dim = 4
-    active_context_dim = context_dim - 1
-    active_query_dim = query_dim - 1
-    num_context_steps = 4
-    num_query_steps = 3
+    active_context_dim = max(context_dim - 1, 1)
+    active_query_dim = max(query_dim - 1, 1)
 
     context_times = torch.full((num_samples, num_context_steps), nan)
     context_values = torch.full((num_samples, num_context_steps, context_dim), nan)
@@ -359,7 +361,8 @@ def _make_random_batched_dense(
         )
         for step in range(context_steps):
             if sample == 0:
-                mask = torch.tensor([True, True, False])
+                mask = torch.zeros(context_dim, dtype=torch.bool)
+                mask[:active_context_dim] = True
             else:
                 mask = torch.zeros(context_dim, dtype=torch.bool)
                 mask[:active_context_dim] = (
@@ -387,7 +390,8 @@ def _make_random_batched_dense(
         )
         for step in range(query_steps):
             if sample == 0:
-                mask = torch.tensor([True, True, True, False])
+                mask = torch.zeros(query_dim, dtype=torch.bool)
+                mask[:active_query_dim] = True
             else:
                 mask = torch.zeros(query_dim, dtype=torch.bool)
                 mask[:active_query_dim] = (
@@ -462,7 +466,7 @@ class TestDense:
         triplet = original.to_triplet()
         actual = triplet.to_dense(
             context_dim=original.context_values.shape[-1],
-            query_dim=original.query_values.shape[-1],
+            query_dim=2,
         )
 
         _assert_dense_equal(actual, original)
@@ -619,8 +623,8 @@ class TestDense:
                  [ nan,  nan,  nan]],
             ]),
             query_times=torch.tensor([
-                [5.0, 5.0, 6.0],
-                [7.0, 7.0, nan],
+                [5.0, 6.0, 7.0],
+                [8.0, 9.0, nan],
             ]),
             query_mask=torch.tensor([
                 [[ True, False, False],
@@ -632,10 +636,10 @@ class TestDense:
             ]),
             query_values=torch.tensor([
                 [[50.0,  nan,  nan],
-                 [ nan, 51.0,  nan],
-                 [60.0,  nan, 62.0]],
-                [[70.0,  nan,  nan],
-                 [ nan, 71.0, 72.0],
+                 [ nan, 61.0,  nan],
+                 [70.0,  nan, 72.0]],
+                [[80.0,  nan,  nan],
+                 [ nan, 91.0, 92.0],
                  [ nan,  nan,  nan]],
             ]),
         )  # fmt: skip
@@ -654,19 +658,23 @@ class TestDense:
                  [ nan,  nan,  nan]],
             ]),
             query_times=torch.tensor([
-                [5.0, 6.0],
-                [7.0, nan],
+                [5.0, 6.0, 7.0],
+                [8.0, 9.0, nan],
             ]),
             query_mask=torch.tensor([
-                [[ True,  True, False],
+                [[ True, False, False],
+                 [False,  True, False],
                  [ True, False,  True]],
-                [[ True,  True,  True],
+                [[ True, False, False],
+                 [False,  True,  True],
                  [False, False, False]],
             ]),
             query_values=torch.tensor([
-                [[50.0, 51.0,  nan],
-                 [60.0,  nan, 62.0]],
-                [[70.0, 71.0, 72.0],
+                [[50.0,  nan,  nan],
+                 [ nan, 61.0,  nan],
+                 [70.0,  nan, 72.0]],
+                [[80.0,  nan,  nan],
+                 [ nan, 91.0, 92.0],
                  [ nan,  nan,  nan]],
             ]),
         )  # fmt: skip
@@ -679,17 +687,36 @@ class TestDense:
         self,
         batch_shape: tuple[int, ...],
     ) -> None:
-        original = _make_random_batched_dense(batch_shape)
+        original = _make_random_batched_dense(batch_shape, query_dim=3)
 
         actual = original.to_triplet().to_dense(
             context_dim=original.context_values.shape[-1],
-            query_dim=original.query_mask.shape[-1],
+            query_dim=3,
         )
 
         _assert_batched_dense_equal(actual, original)
 
 
 class TestTriplet:
+    def test_rejects_duplicate_queries(self) -> None:
+        with pytest.raises(AssertionError):
+            TripletArg(
+                context_times=torch.tensor([1.0]),
+                context_channels=torch.tensor([0]),
+                context_values=torch.tensor([10.0]),
+                query_times=torch.tensor([2.0, 2.0]),
+                query_channels=torch.tensor([1, 1]),
+            )
+
+        with pytest.raises(AssertionError):
+            BatchedTripletArgs(
+                context_times=torch.tensor([[1.0]]),
+                context_channels=torch.tensor([[0]]),
+                context_values=torch.tensor([[10.0]]),
+                query_times=torch.tensor([[2.0, 2.0]]),
+                query_channels=torch.tensor([[1, 1]]),
+            )
+
     def test_to_dense_unbatched(self) -> None:
         original = TripletArg(
             context_times=torch.tensor([1.0, 1.0, 2.0, 2.0]),
