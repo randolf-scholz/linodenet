@@ -34,7 +34,16 @@ def all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
 
 @dataclass(frozen=True)
 class DenseArg:
-    r"""Dense representation of forecasting arguments."""
+    r"""Dense representation of forecasting arguments.
+
+    Assumptions:
+        - context time stamps are finite and non-decreasing
+        - query time stamps are finite and non-decreasing
+        - if query mask is not given, it is assumed to be a full true tensor
+        - if query values are given, they are finite at entries selected by the query mask
+        - there is at least one context value observed per time stamp
+        - there is at least one query value observed per time stamp
+    """
 
     context_times: Tensor  # Float[(N)], finite
     context_values: Tensor  # Float[(N, D)], sparse
@@ -60,32 +69,35 @@ class DenseArg:
     def __post_init__(self) -> None:
         T = self.context_times
         X = self.context_values
+        Q = self.query_times
 
         *_, context_size, context_dim = X.shape
         assert T.shape == (context_size,)
-        assert X.shape == (context_size, context_dim)
         assert T.isfinite().all()
-        assert X.isfinite().any(dim=-1).all()  # at least one value observed per time
+        assert (T.diff(dim=-1) >= 0.0).all()
+        assert X.shape == (context_size, context_dim)
+        assert X.isfinite().any(dim=-1).all()  # at least one value per step
 
-        Q = self.query_times
         *_, query_size = Q.shape
         assert Q.shape == (query_size,)
         assert Q.isfinite().all()
+        assert (Q.diff(dim=-1) >= 0.0).all()
 
-        if self.query_mask is not None:
-            *_, query_dim = self.query_mask.shape
-            assert self.query_mask.dtype == torch.bool
-            assert self.query_mask.shape == (query_size, query_dim)
+        if (M := self.query_mask) is not None:
+            *_, query_dim = M.shape
+            assert M.dtype == torch.bool
+            assert M.shape == (query_size, query_dim)
 
-        if self.query_values is not None:
-            *_, query_dim = self.query_values.shape
-            assert self.query_values.shape == (query_size, query_dim)
+        if (V := self.query_values) is not None:
+            *_, query_dim = V.shape
+            assert V.shape == (query_size, query_dim)
+            assert V.isfinite().any(dim=-1).all()  # at least one value per step
 
-            if self.query_mask is None:
-                assert self.query_values.isfinite().all()
+            if (mask := self.query_mask) is None:
+                assert V.isfinite().all()
             else:
-                assert self.query_values.shape == self.query_mask.shape
-                assert self.query_values[self.query_mask].isfinite().all()
+                assert V.shape == mask.shape
+                assert V[mask].isfinite().all()
 
     def to_triplet(self) -> TripletArg:
         T = self.context_times
