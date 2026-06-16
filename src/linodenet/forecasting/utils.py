@@ -8,6 +8,7 @@ __all__ = [
     "DenseArg",
     "CombinedArg",
     "all_or_none",
+    "is_valid_up_to_tail",
 ]
 
 
@@ -32,6 +33,12 @@ def all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
     return None if has_none else result
 
 
+def is_valid_up_to_tail(x: Tensor, /, *, dim: int = -1) -> Tensor:
+    r"""Check that the given boolean tensor is valid up to the tail."""
+    # simply test that a False value cannot follow a True value
+    return (x[..., :-1] | ~x[..., 1:]).all(dim=dim)
+
+
 @dataclass(frozen=True)
 class DenseArg:
     r"""Dense representation of forecasting arguments.
@@ -43,6 +50,7 @@ class DenseArg:
         - if query values are given, they are finite at entries selected by the query mask
         - there is at least one context value observed per time stamp
         - there is at least one query value observed per time stamp
+        - there is at least on query mask selected per time stamp
     """
 
     context_times: Tensor  # Float[(N)], finite
@@ -87,6 +95,7 @@ class DenseArg:
             *_, query_dim = M.shape
             assert M.dtype == torch.bool
             assert M.shape == (query_size, query_dim)
+            assert M.any(dim=-1).all()  # at least one value per step
 
         if (V := self.query_values) is not None:
             *_, query_dim = V.shape
@@ -193,7 +202,7 @@ class BatchedDenseArgs:
         # check that non-valid values are at the tail
         T_valid = T.isfinite()
         Q_valid = Q.isfinite()
-        X_valid = X.isfinite().any(dim=-1)  # at least one value observed
+        X_valid = X.isfinite().any(dim=-1)  # at least one value per step
         assert (Q_valid[..., :-1] | ~Q_valid[..., 1:]).all(dim=-1).all()
         assert (T_valid[..., :-1] | ~T_valid[..., 1:]).all(dim=-1).all()
         assert (X_valid[..., :-1] | ~X_valid[..., 1:]).all(dim=-1).all()
@@ -211,12 +220,19 @@ class BatchedDenseArgs:
             *_, query_dim = M.shape
             assert M.dtype == torch.bool
             assert M.shape == (*batch_shape, query_size, query_dim)
+            M_valid = M.isfinite().all(dim=-1)  # at least one value per step
+            assert (M_valid[..., :-1] | ~M_valid[..., 1:]).all(dim=-1).all()
 
         if (V := self.query_values) is not None:
             *_, query_dim = V.shape
             assert V.shape == (*batch_shape, query_size, query_dim)
-            if self.query_mask is not None:
-                assert self.query_mask.shape == V.shape
+            V_valid = V.isfinite().any(dim=-1)  # at least one value per step
+            assert (V_valid[..., :-1] | ~V_valid[..., 1:]).all(dim=-1).all()
+
+            if (mask := self.query_mask) is not None:
+                assert mask.shape == V.shape
+            else:
+                assert V[mask].isfinite().all()
 
         if (S := self.static_covariates) is not None:
             *_, static_dim = S.shape
@@ -607,17 +623,29 @@ class BatchedTripletArgs:
 
 @dataclass(frozen=True)
 class CombinedArg:
-    r"""Representation with concatenated context and query tensors."""
+    r"""Representation with concatenated context and query tensors.
+
+    Shapes:
+        N: context size
+        K: query size
+        D: data dimensionality
+    """
 
     times: Tensor  # Float[(N + K)], finite
-    values: Tensor  # Float[(N + K, E)], sparse
-    context_mask: Tensor  # Bool[(N + K, E)]
-    query_mask: Tensor  # Bool[(N + K, E)]
+    values: Tensor  # Float[(N + K, D)], sparse
+    context_mask: Tensor  # Bool[(N + K, D)]
+    query_mask: Tensor  # Bool[(N + K, D)]
 
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
     def __post_init__(self) -> None:
-        pass
+        T = self.times
+        V = self.values
+        *_, num_context, num_dim = V.shape
+        assert T.shape == (num_context,)
+        assert V.shape == (num_context, num_dim)
+        assert T.isfinite().all()
+        assert V.isfinite().any(dim=-1).all()  # at least one value per step
 
     @classmethod
     def from_dense(cls, arg: DenseArg, /) -> CombinedArg:
