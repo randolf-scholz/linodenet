@@ -97,6 +97,15 @@ def unique_count(x: Tensor, /) -> Tensor:
     ).reshape(batch_shape)
 
 
+def consecutive_group_indices(times: Tensor, valid: Tensor, /) -> tuple[Tensor, Tensor]:
+    r"""Compute group indices for consecutive equal time stamps."""
+    is_new = torch.ones_like(valid)
+    is_new[..., 1:] = times[..., 1:] != times[..., :-1]
+    is_new &= valid
+    inverse = is_new.cumsum(dim=-1) - 1
+    return inverse.masked_fill(~valid, -1), is_new.sum(dim=-1)
+
+
 def scatter_fill(
     shape: Sequence[int],
     indices: tuple[Tensor, ...],
@@ -428,7 +437,7 @@ class BatchedDenseArgs:
         context_mask = X_valid.flatten(start_dim=1)
         context_counts = context_mask.sum(dim=-1)
         num_context = int(context_counts.max().item())
-        context_positions = context_mask.long().cumsum(dim=-1) - 1
+        context_positions = context_mask.cumsum(dim=-1) - 1
 
         context_times = T.new_full((T_flat.shape[0], num_context), torch.nan)
         context_channels = torch.full(
@@ -464,7 +473,7 @@ class BatchedDenseArgs:
         query_mask = query_valid.flatten(start_dim=1)
         query_counts = query_mask.sum(dim=-1)
         num_query = int(query_counts.max().item())
-        query_positions = query_mask.long().cumsum(dim=-1) - 1
+        query_positions = query_mask.cumsum(dim=-1) - 1
 
         query_times = Q.new_full((Q_flat.shape[0], num_query), torch.nan)
         query_channels = torch.full(
@@ -838,8 +847,8 @@ class BatchedTripletArgs:
         Y = self.query_values
 
         batch_shape = T.shape[:-1]
-        num_context = T.shape[-1]
-        num_query = Q.shape[-1]
+        *_, num_context = T.shape
+        *_, num_query = Q.shape
 
         T_flat = T.reshape(-1, num_context)
         C_flat = C.reshape(-1, num_context)
@@ -847,141 +856,85 @@ class BatchedTripletArgs:
         Q_flat = Q.reshape(-1, num_query)
         M_flat = M.reshape(-1, num_query)
         Y_flat = None if Y is None else Y.reshape(-1, num_query)
-
+        num_batches = T_flat.shape[0]
+        query_valid = Q_flat.isfinite() & M_flat.ge(0)
         context_valid = T_flat.isfinite() & C_flat.ge(0) & X_flat.isfinite()
-        if context_dim is None and not context_valid.any():
-            raise ValueError(
-                "Cannot infer dense context dimension from empty triplets."
-            )
 
         context_dim = (
             int(C_flat[context_valid].max().item()) + 1
             if context_dim is None
             else context_dim
         )
-        if (context_valid & C_flat.ge(context_dim)).any():
-            raise ValueError("Expected context channel indices below context_dim.")
-
-        context_times_list: list[Tensor] = []
-        context_inverse_list: list[Tensor] = []
-        context_channels_list: list[Tensor] = []
-        context_values_list: list[Tensor] = []
-        for times, channels, values, valid in zip(
-            T_flat, C_flat, X_flat, context_valid, strict=True
-        ):
-            context_times, context_inverse = torch.unique_consecutive(
-                times[valid],
-                return_inverse=True,
-            )
-            context_times_list.append(context_times)
-            context_inverse_list.append(context_inverse)
-            context_channels_list.append(channels[valid].long())
-            context_values_list.append(values[valid])
-
-        context_size = max(times.shape[0] for times in context_times_list)
-        context_times = pad_sequence(
-            context_times_list,
-            batch_first=True,
-            padding_value=torch.nan,
-        )
-        context_values = torch.stack(
-            [
-                scatter_fill(
-                    (context_size, context_dim),
-                    (inverse, channels),
-                    values,
-                    torch.nan,
-                )
-                for inverse, channels, values in zip(
-                    context_inverse_list,
-                    context_channels_list,
-                    context_values_list,
-                    strict=True,
-                )
-            ],
-            dim=0,
-        )
-
-        query_valid = Q_flat.isfinite() & M_flat.ge(0)
         query_dim = (
-            (
-                int(M_flat[query_valid].max().item()) + 1
-                if query_valid.any()
-                else context_dim
-            )
+            int(M_flat[query_valid].max().item()) + 1
             if query_dim is None
             else query_dim
         )
-        if (query_valid & M_flat.ge(query_dim)).any():
+        if (self.context_channels >= context_dim).any():
+            raise ValueError("Expected context channel indices below context_dim.")
+        if (self.query_channels >= query_dim).any():
             raise ValueError("Expected query channel indices below query_dim.")
 
-        query_times_list: list[Tensor] = []
-        query_inverse_list: list[Tensor] = []
-        query_channels_list: list[Tensor] = []
-        query_values_list: list[Tensor] | None = [] if Y_flat is not None else None
-        for k, (times, channels, valid) in enumerate(
-            zip(Q_flat, M_flat, query_valid, strict=True)
-        ):
-            query_times, query_inverse = torch.unique_consecutive(
-                times[valid],
-                return_inverse=True,
-            )
-            query_times_list.append(query_times)
-            query_inverse_list.append(query_inverse)
-            query_channels_list.append(channels[valid].long())
-            if query_values_list is not None and Y_flat is not None:
-                query_values_list.append(Y_flat[k, valid])
-
-        query_size = max(times.shape[0] for times in query_times_list)
-        query_times = pad_sequence(
-            query_times_list,
-            batch_first=True,
-            padding_value=torch.nan,
+        context_inverse, context_lengths = consecutive_group_indices(
+            T_flat,
+            context_valid,
         )
-        query_mask = torch.stack(
-            [
-                scatter_fill(
-                    (query_size, query_dim),
-                    (inverse, channels),
-                    torch.ones_like(channels, dtype=torch.bool),
-                    False,
-                )
-                for inverse, channels in zip(
-                    query_inverse_list,
-                    query_channels_list,
-                    strict=True,
-                )
-            ],
-            dim=0,
+        context_size = int(context_lengths.max().item())
+        context_batch = torch.arange(num_batches, device=T.device)
+        context_batch = context_batch.reshape(-1, 1).expand(-1, num_context)
+        context_indices = (
+            context_batch[context_valid],
+            context_inverse[context_valid],
+        )
+        context_times = scatter_fill(
+            (num_batches, context_size),
+            context_indices,
+            T_flat[context_valid],
+            torch.nan,
+        )
+        context_values = scatter_fill(
+            (num_batches, context_size, context_dim),
+            (*context_indices, C_flat[context_valid]),
+            X_flat[context_valid],
+            torch.nan,
+        )
+
+        query_inverse, query_lengths = consecutive_group_indices(Q_flat, query_valid)
+        query_size = int(query_lengths.max().item())
+        query_batch = torch.arange(num_batches, device=Q.device)
+        query_batch = query_batch.reshape(-1, 1).expand(-1, num_query)
+        query_indices = (
+            query_batch[query_valid],
+            query_inverse[query_valid],
+        )
+        query_channels = M_flat[query_valid]
+        query_times = scatter_fill(
+            (num_batches, query_size),
+            query_indices,
+            Q_flat[query_valid],
+            torch.nan,
+        )
+        query_mask = scatter_fill(
+            (num_batches, query_size, query_dim),
+            (*query_indices, query_channels),
+            torch.ones_like(query_channels, dtype=torch.bool),
+            False,
         )
         query_values = (
             None
-            if query_values_list is None
-            else torch.stack(
-                [
-                    scatter_fill(
-                        (query_size, query_dim),
-                        (inverse, channels),
-                        values,
-                        torch.nan,
-                    )
-                    for inverse, channels, values in zip(
-                        query_inverse_list,
-                        query_channels_list,
-                        query_values_list,
-                        strict=True,
-                    )
-                ],
-                dim=0,
+            if Y_flat is None
+            else scatter_fill(
+                (num_batches, query_size, query_dim),
+                (*query_indices, query_channels),
+                Y_flat[query_valid],
+                torch.nan,
             )
         )
 
         return BatchedDenseArgs(
             context_times=context_times.reshape(*batch_shape, context_size),
             context_values=context_values.reshape(
-                *batch_shape,
-                context_size,
-                context_dim,
+                *batch_shape, context_size, context_dim
             ),
             query_times=query_times.reshape(*batch_shape, query_size),
             query_mask=query_mask.reshape(*batch_shape, query_size, query_dim),
