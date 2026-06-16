@@ -14,11 +14,7 @@ from linodenet.forecasting.utils import (
 
 def _assert_dense_equal(actual: DenseArg, expected: DenseArg, /) -> None:
     assert_close(
-        actual.context_times,
-        expected.context_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
+        actual.context_times, expected.context_times, atol=0.0, rtol=0.0, equal_nan=True
     )
     assert_close(
         actual.context_values,
@@ -28,11 +24,7 @@ def _assert_dense_equal(actual: DenseArg, expected: DenseArg, /) -> None:
         equal_nan=True,
     )
     assert_close(
-        actual.query_times,
-        expected.query_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
+        actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
 
     if actual.query_mask is None or expected.query_mask is None:
@@ -69,11 +61,7 @@ def _assert_batched_dense_equal(
     /,
 ) -> None:
     assert_close(
-        actual.context_times,
-        expected.context_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
+        actual.context_times, expected.context_times, atol=0.0, rtol=0.0, equal_nan=True
     )
     assert_close(
         actual.context_values,
@@ -83,11 +71,7 @@ def _assert_batched_dense_equal(
         equal_nan=True,
     )
     assert_close(
-        actual.query_times,
-        expected.query_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
+        actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
     )
 
     if actual.query_mask is None or expected.query_mask is None:
