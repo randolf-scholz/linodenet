@@ -629,10 +629,113 @@ class BatchedTripletArgs:
 
     @classmethod
     def from_unbatched(cls, args: Sequence[TripletArg]) -> BatchedTripletArgs:
-        raise NotImplementedError
+        if not args:
+            raise ValueError("Expected at least one TripletArg.")
+
+        query_channels = all_or_none(arg.query_channels for arg in args)
+        if query_channels is None:
+            raise ValueError("Expected query channels for batched triplet arguments.")
+
+        query_values = (
+            None
+            if (V := all_or_none(arg.query_values for arg in args)) is None
+            else pad_sequence(V, batch_first=True, padding_value=torch.nan)
+        )
+
+        static_covariates = (
+            None
+            if (S := all_or_none(arg.static_covariates for arg in args)) is None
+            else torch.stack(S)
+        )
+
+        return cls(
+            context_times=pad_sequence(
+                [arg.context_times for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            context_channels=pad_sequence(
+                [arg.context_channels for arg in args],
+                batch_first=True,
+                padding_value=-1,
+            ),
+            context_values=pad_sequence(
+                [arg.context_values for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            query_times=pad_sequence(
+                [arg.query_times for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            query_channels=pad_sequence(
+                query_channels,
+                batch_first=True,
+                padding_value=-1,
+            ),
+            query_values=query_values,
+            static_covariates=static_covariates,
+        )
 
     def unbatch(self) -> list[TripletArg]:
-        raise NotImplementedError
+        T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
+        C = self.context_channels.unsqueeze(0).flatten(end_dim=-2)
+        X = self.context_values.unsqueeze(0).flatten(end_dim=-2)
+        Q = self.query_times.unsqueeze(0).flatten(end_dim=-2)
+        M = self.query_channels.unsqueeze(0).flatten(end_dim=-2)
+        query_values = (
+            None
+            if self.query_values is None
+            else self.query_values.unsqueeze(0).flatten(end_dim=-2)
+        )
+        static_covariates = (
+            None
+            if self.static_covariates is None
+            else self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+        )
+
+        context_lengths = T.isfinite().sum(dim=-1)
+        query_lengths = M.ge(0).sum(dim=-1)
+        num_samples = T.shape[0]
+
+        context_times = unpad_sequence(T, context_lengths, batch_first=True)
+        context_channels = unpad_sequence(C, context_lengths, batch_first=True)
+        context_values = unpad_sequence(X, context_lengths, batch_first=True)
+        query_times = unpad_sequence(Q, query_lengths, batch_first=True)
+        query_channels = unpad_sequence(M, query_lengths, batch_first=True)
+        query_values = (
+            [None] * num_samples
+            if query_values is None
+            else unpad_sequence(query_values, query_lengths, batch_first=True)
+        )
+        static_args = (
+            [None] * num_samples
+            if static_covariates is None
+            else list(static_covariates.unbind(dim=0))
+        )
+
+        return [
+            TripletArg(
+                context_times=context_time,
+                context_channels=context_channel,
+                context_values=context_value,
+                query_times=query_time,
+                query_channels=query_channel,
+                query_values=query_value,
+                static_covariates=static_arg,
+            )
+            for context_time, context_channel, context_value, query_time, query_channel, query_value, static_arg in zip(
+                context_times,
+                context_channels,
+                context_values,
+                query_times,
+                query_channels,
+                query_values,
+                static_args,
+                strict=True,
+            )
+        ]
 
     def to_dense(self) -> BatchedDenseArgs:
         raise NotImplementedError
