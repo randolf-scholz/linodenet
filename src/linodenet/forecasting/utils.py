@@ -620,15 +620,16 @@ class TripletArg:
             False,
         )
 
-        if self.query_values is not None:
-            query_values = scatter_fill(
+        query_values = (
+            None
+            if self.query_values is None
+            else scatter_fill(
                 (query_times.shape[0], query_dim),
                 (query_inverse, self.query_channels),
                 self.query_values,
                 torch.nan,
             )
-        else:
-            query_values = None
+        )
 
         return DenseArg(
             context_times=context_times,
