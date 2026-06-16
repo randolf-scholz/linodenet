@@ -1,5 +1,6 @@
 r"""Tests for forecasting utility containers."""
 
+import pytest
 import torch
 from torch import nan
 from torch.testing import assert_close
@@ -204,6 +205,182 @@ def _assert_batched_triplet_equal(
         )
 
 
+def _make_random_batched_triplet(
+    batch_shape: tuple[int, ...],
+    /,
+) -> BatchedTripletArgs:
+    num_samples = 1
+    for size in batch_shape:
+        num_samples *= size
+
+    generator = torch.Generator().manual_seed(
+        1729 + sum((k + 1) * size for k, size in enumerate(batch_shape))
+    )
+    context_dim = 3
+    query_dim = 4
+    num_context_steps = 4
+    num_query_steps = 3
+    num_context = num_context_steps * context_dim
+    num_query = num_query_steps * query_dim
+
+    context_times = torch.full((num_samples, num_context), nan)
+    context_channels = torch.full((num_samples, num_context), -1, dtype=torch.long)
+    context_values = torch.full((num_samples, num_context), nan)
+    query_times = torch.full((num_samples, num_query), nan)
+    query_channels = torch.full((num_samples, num_query), -1, dtype=torch.long)
+    query_values = torch.full((num_samples, num_query), nan)
+
+    for sample in range(num_samples):
+        context_steps = (
+            num_context_steps
+            if sample == 0
+            else int(torch.randint(1, num_context_steps + 1, (), generator=generator))
+        )
+        index = 0
+        for step in range(context_steps):
+            if sample == 0:
+                channels = torch.arange(context_dim)
+            else:
+                mask = torch.rand(context_dim, generator=generator) < 0.7
+                if not mask.any():
+                    mask[int(torch.randint(context_dim, (), generator=generator))] = (
+                        True
+                    )
+                channels = mask.nonzero(as_tuple=True)[0]
+
+            for channel in channels:
+                context_times[sample, index] = float(step + 1)
+                context_channels[sample, index] = channel
+                context_values[sample, index] = float(
+                    sample * 100 + step * 10 + channel
+                )
+                index += 1
+
+        query_steps = (
+            num_query_steps
+            if sample == 0
+            else int(torch.randint(1, num_query_steps + 1, (), generator=generator))
+        )
+        index = 0
+        for step in range(query_steps):
+            if sample == 0:
+                channels = torch.arange(query_dim)
+            else:
+                mask = torch.rand(query_dim, generator=generator) < 0.7
+                if not mask.any():
+                    mask[int(torch.randint(query_dim, (), generator=generator))] = True
+                channels = mask.nonzero(as_tuple=True)[0]
+
+            for channel in channels:
+                query_times[sample, index] = float(10 + step)
+                query_channels[sample, index] = channel
+                query_values[sample, index] = float(
+                    1000 + sample * 100 + step * 10 + channel
+                )
+                index += 1
+
+    static_covariates = torch.randn((num_samples, 2), generator=generator)
+    return BatchedTripletArgs(
+        context_times=context_times.reshape(*batch_shape, num_context),
+        context_channels=context_channels.reshape(*batch_shape, num_context),
+        context_values=context_values.reshape(*batch_shape, num_context),
+        query_times=query_times.reshape(*batch_shape, num_query),
+        query_channels=query_channels.reshape(*batch_shape, num_query),
+        query_values=query_values.reshape(*batch_shape, num_query),
+        static_covariates=static_covariates.reshape(*batch_shape, 2),
+    )
+
+
+def _make_random_batched_dense(
+    batch_shape: tuple[int, ...],
+    /,
+) -> BatchedDenseArgs:
+    num_samples = 1
+    for size in batch_shape:
+        num_samples *= size
+
+    generator = torch.Generator().manual_seed(
+        3141 + sum((k + 1) * size for k, size in enumerate(batch_shape))
+    )
+    context_dim = 3
+    query_dim = 4
+    num_context_steps = 4
+    num_query_steps = 3
+
+    context_times = torch.full((num_samples, num_context_steps), nan)
+    context_values = torch.full((num_samples, num_context_steps, context_dim), nan)
+    query_times = torch.full((num_samples, num_query_steps), nan)
+    query_mask = torch.zeros(
+        (num_samples, num_query_steps, query_dim),
+        dtype=torch.bool,
+    )
+    query_values = torch.full((num_samples, num_query_steps, query_dim), nan)
+
+    for sample in range(num_samples):
+        context_steps = (
+            num_context_steps
+            if sample == 0
+            else int(torch.randint(1, num_context_steps + 1, (), generator=generator))
+        )
+        context_times[sample, :context_steps] = torch.arange(
+            1,
+            context_steps + 1,
+            dtype=context_times.dtype,
+        )
+        for step in range(context_steps):
+            if sample == 0:
+                mask = torch.ones(context_dim, dtype=torch.bool)
+            else:
+                mask = torch.rand(context_dim, generator=generator) < 0.7
+                if not mask.any():
+                    mask[int(torch.randint(context_dim, (), generator=generator))] = (
+                        True
+                    )
+
+            for channel in mask.nonzero(as_tuple=True)[0]:
+                context_values[sample, step, channel] = float(
+                    sample * 100 + step * 10 + channel
+                )
+
+        query_steps = (
+            num_query_steps
+            if sample == 0
+            else int(torch.randint(1, num_query_steps + 1, (), generator=generator))
+        )
+        query_times[sample, :query_steps] = torch.arange(
+            10,
+            10 + query_steps,
+            dtype=query_times.dtype,
+        )
+        for step in range(query_steps):
+            if sample == 0:
+                mask = torch.ones(query_dim, dtype=torch.bool)
+            else:
+                mask = torch.rand(query_dim, generator=generator) < 0.7
+                if not mask.any():
+                    mask[int(torch.randint(query_dim, (), generator=generator))] = True
+
+            query_mask[sample, step, mask] = True
+            for channel in mask.nonzero(as_tuple=True)[0]:
+                query_values[sample, step, channel] = float(
+                    1000 + sample * 100 + step * 10 + channel
+                )
+
+    static_covariates = torch.randn((num_samples, 2), generator=generator)
+    return BatchedDenseArgs(
+        context_times=context_times.reshape(*batch_shape, num_context_steps),
+        context_values=context_values.reshape(
+            *batch_shape,
+            num_context_steps,
+            context_dim,
+        ),
+        query_times=query_times.reshape(*batch_shape, num_query_steps),
+        query_mask=query_mask.reshape(*batch_shape, num_query_steps, query_dim),
+        query_values=query_values.reshape(*batch_shape, num_query_steps, query_dim),
+        static_covariates=static_covariates.reshape(*batch_shape, 2),
+    )
+
+
 class TestDense:
     def test_to_triplet_unbatched(self) -> None:
         original = DenseArg(
@@ -386,6 +563,17 @@ class TestDense:
 
         _assert_batched_triplet_equal(actual, expected)
 
+    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3), (1, 2, 3)])
+    def test_to_triplet_roundtrip_batched_random(
+        self,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        original = _make_random_batched_dense(batch_shape)
+
+        actual = original.to_triplet().to_dense()
+
+        _assert_batched_dense_equal(actual, original)
+
 
 class TestTriplet:
     def test_to_dense_unbatched(self) -> None:
@@ -525,3 +713,122 @@ class TestTriplet:
         assert len(unbatched) == len(args)
         for actual, expected in zip(unbatched, args, strict=True):
             _assert_triplet_equal(actual, expected)
+
+    def test_to_dense_batched(self) -> None:
+        original = BatchedTripletArgs(
+            context_times=torch.tensor([
+                [1.0, 1.0, 2.0, nan],
+                [0.0, 1.0, 1.0, 2.0],
+            ]),
+            context_channels=torch.tensor([
+                [0, 1,  0, -1],
+                [1, 0,  1,  0],
+            ]),
+            context_values=torch.tensor([
+                [10.0, 11.0, 20.0,  nan],
+                [ 1.0,  2.0,  3.0,  4.0],
+            ]),
+            query_times=torch.tensor([
+                [3.0, 4.0, nan],
+                [5.0, 5.0, 6.0],
+            ]),
+            query_channels=torch.tensor([
+                [0, 1, -1],
+                [1, 0,  1],
+            ]),
+            query_values=torch.tensor([
+                [30.0, 40.0,  nan],
+                [51.0, 50.0, 61.0],
+            ]),
+            static_covariates=torch.tensor([
+                [7.0, 8.0],
+                [9.0, 10.0],
+            ]),
+        )  # fmt: skip
+
+        actual = original.to_dense()
+        expected = BatchedDenseArgs(
+            context_times=torch.tensor([
+                [1.0, 2.0, nan],
+                [0.0, 1.0, 2.0],
+            ]),
+            context_values=torch.tensor([
+                [[10.0, 11.0], [20.0,  nan], [ nan,  nan]],
+                [[ nan,  1.0], [ 2.0,  3.0], [ 4.0,  nan]],
+            ]),
+            query_times=torch.tensor([
+                [3.0, 4.0],
+                [5.0, 6.0],
+            ]),
+            query_mask=torch.tensor([
+                [[ True, False], [False,  True]],
+                [[ True,  True], [False,  True]],
+            ]),
+            query_values=torch.tensor([
+                [[30.0,  nan], [ nan, 40.0]],
+                [[50.0, 51.0], [ nan, 61.0]],
+            ]),
+            static_covariates=torch.tensor([
+                [7.0, 8.0],
+                [9.0, 10.0],
+            ]),
+        )  # fmt: skip
+
+        _assert_batched_dense_equal(actual, expected)
+
+    def test_to_dense_batched_without_values(self) -> None:
+        original = BatchedTripletArgs(
+            context_times=torch.tensor([
+                [1.0, nan],
+                [2.0, 2.0],
+            ]),
+            context_channels=torch.tensor([
+                [0, -1],
+                [0,  1],
+            ]),
+            context_values=torch.tensor([
+                [10.0,  nan],
+                [20.0, 21.0],
+            ]),
+            query_times=torch.tensor([
+                [3.0, 4.0],
+                [5.0, nan],
+            ]),
+            query_channels=torch.tensor([
+                [0,  1],
+                [1, -1],
+            ]),
+        )  # fmt: skip
+
+        actual = original.to_dense()
+        expected = BatchedDenseArgs(
+            context_times=torch.tensor([
+                [1.0],
+                [2.0],
+            ]),
+            context_values=torch.tensor([
+                [[10.0,  nan]],
+                [[20.0, 21.0]],
+            ]),
+            query_times=torch.tensor([
+                [3.0, 4.0],
+                [5.0, nan],
+            ]),
+            query_mask=torch.tensor([
+                [[ True, False], [False,  True]],
+                [[False,  True], [False, False]],
+            ]),
+        )  # fmt: skip
+
+        _assert_batched_dense_equal(actual, expected)
+
+    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3), (1, 2, 3)])
+    def test_to_dense_roundtrip_batched_random(
+        self,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        original = _make_random_batched_triplet(batch_shape)
+
+        actual = original.to_dense().to_triplet()
+
+        _assert_batched_triplet_equal(actual, original)

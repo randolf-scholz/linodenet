@@ -112,38 +112,33 @@ class DenseArg:
         T = self.context_times
         X = self.context_values
         Q = self.query_times
+        M = self.query_mask
         Y = self.query_values
-        _, input_dim = X.shape
 
-        # Flatten row-major, matching a DataFrame melt over time and channel.
-        context_mask = X.isfinite().flatten()
-        flat_indices = context_mask.nonzero(as_tuple=True)[0]
-        time_indices = flat_indices.div(input_dim, rounding_mode="floor")
-        context_channels = flat_indices.remainder(input_dim)
+        time_indices, context_channels = X.isfinite().nonzero(as_tuple=True)  # O×2
+        context_times = T[time_indices]
+        context_values = X[time_indices, context_channels]
 
-        if self.query_mask is None:
-            query_dim = input_dim if Y is None else Y.shape[-1]
-            query_mask = torch.ones(
-                (Q.shape[0], query_dim),
+        query_mask = (
+            M
+            if M is not None
+            else torch.ones(
+                (Q.shape[0], Y.shape[-1] if Y is not None else X.shape[-1]),
                 dtype=torch.bool,
                 device=Q.device,
             )
-        else:
-            query_dim = self.query_mask.shape[-1]
-            query_mask = self.query_mask
-
-        query_flat = query_mask.flatten()
-        flat_indices = query_flat.nonzero(as_tuple=True)[0]
-        query_time_indices = flat_indices.div(query_dim, rounding_mode="floor")
-        query_channels = flat_indices.remainder(query_dim)
+        )
+        query_indices, query_channels = query_mask.nonzero(as_tuple=True)
+        query_times = Q[query_indices]
+        query_values = Y[query_indices, query_channels] if Y is not None else None
 
         return TripletArg(
-            context_times=T[time_indices],
+            context_times=context_times,
             context_channels=context_channels,
-            context_values=X.flatten()[context_mask],
-            query_times=Q[query_time_indices],
+            context_values=context_values,
+            query_times=query_times,
             query_channels=query_channels,
-            query_values=None if Y is None else Y[query_mask],
+            query_values=query_values,
             static_covariates=self.static_covariates,
         )
 
@@ -738,7 +733,124 @@ class BatchedTripletArgs:
         ]
 
     def to_dense(self) -> BatchedDenseArgs:
-        raise NotImplementedError
+        T = self.context_times
+        C = self.context_channels
+        X = self.context_values
+        Q = self.query_times
+        M = self.query_channels
+        Y = self.query_values
+
+        batch_shape = T.shape[:-1]
+        num_context = T.shape[-1]
+        num_query = Q.shape[-1]
+
+        T_flat = T.reshape(-1, num_context)
+        C_flat = C.reshape(-1, num_context)
+        X_flat = X.reshape(-1, num_context)
+        Q_flat = Q.reshape(-1, num_query)
+        M_flat = M.reshape(-1, num_query)
+        Y_flat = None if Y is None else Y.reshape(-1, num_query)
+
+        context_valid = T_flat.isfinite() & C_flat.ge(0) & X_flat.isfinite()
+        if not context_valid.any():
+            raise ValueError(
+                "Cannot infer dense context dimension from empty triplets."
+            )
+
+        context_dim = int(C_flat[context_valid].max().item()) + 1
+        context_times_list: list[Tensor] = []
+        context_inverse_list: list[Tensor] = []
+        context_channels_list: list[Tensor] = []
+        context_values_list: list[Tensor] = []
+        for times, channels, values, valid in zip(
+            T_flat, C_flat, X_flat, context_valid, strict=True
+        ):
+            context_times, context_inverse = torch.unique_consecutive(
+                times[valid],
+                return_inverse=True,
+            )
+            context_times_list.append(context_times)
+            context_inverse_list.append(context_inverse)
+            context_channels_list.append(channels[valid].long())
+            context_values_list.append(values[valid])
+
+        context_size = max(times.shape[0] for times in context_times_list)
+        context_times = T.new_full((T_flat.shape[0], context_size), torch.nan)
+        context_values = X.new_full(
+            (T_flat.shape[0], context_size, context_dim),
+            torch.nan,
+        )
+        for k, (times, inverse, channels, values) in enumerate(
+            zip(
+                context_times_list,
+                context_inverse_list,
+                context_channels_list,
+                context_values_list,
+                strict=True,
+            )
+        ):
+            context_times[k, : times.shape[0]] = times
+            context_values[k, inverse, channels] = values
+
+        query_valid = Q_flat.isfinite() & M_flat.ge(0)
+        query_dim = (
+            int(M_flat[query_valid].max().item()) + 1
+            if query_valid.any()
+            else context_dim
+        )
+        query_times_list: list[Tensor] = []
+        query_inverse_list: list[Tensor] = []
+        query_channels_list: list[Tensor] = []
+        query_values_list: list[Tensor] | None = [] if Y_flat is not None else None
+        for k, (times, channels, valid) in enumerate(
+            zip(Q_flat, M_flat, query_valid, strict=True)
+        ):
+            query_times, query_inverse = torch.unique_consecutive(
+                times[valid],
+                return_inverse=True,
+            )
+            query_times_list.append(query_times)
+            query_inverse_list.append(query_inverse)
+            query_channels_list.append(channels[valid].long())
+            if query_values_list is not None and Y_flat is not None:
+                query_values_list.append(Y_flat[k, valid])
+
+        query_size = max(times.shape[0] for times in query_times_list)
+        query_times = Q.new_full((Q_flat.shape[0], query_size), torch.nan)
+        query_mask = torch.zeros(
+            (Q_flat.shape[0], query_size, query_dim),
+            dtype=torch.bool,
+            device=M.device,
+        )
+        query_values = (
+            None
+            if query_values_list is None
+            else Q.new_full((Q_flat.shape[0], query_size, query_dim), torch.nan)
+        )
+        for k, (times, inverse, channels) in enumerate(
+            zip(query_times_list, query_inverse_list, query_channels_list, strict=True)
+        ):
+            query_times[k, : times.shape[0]] = times
+            query_mask[k, inverse, channels] = True
+            if query_values is not None and query_values_list is not None:
+                query_values[k, inverse, channels] = query_values_list[k]
+
+        return BatchedDenseArgs(
+            context_times=context_times.reshape(*batch_shape, context_size),
+            context_values=context_values.reshape(
+                *batch_shape,
+                context_size,
+                context_dim,
+            ),
+            query_times=query_times.reshape(*batch_shape, query_size),
+            query_mask=query_mask.reshape(*batch_shape, query_size, query_dim),
+            query_values=(
+                None
+                if query_values is None
+                else query_values.reshape(*batch_shape, query_size, query_dim)
+            ),
+            static_covariates=self.static_covariates,
+        )
 
     def to_combined(self) -> BatchedCombinedArgs:
         raise NotImplementedError
