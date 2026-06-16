@@ -466,13 +466,23 @@ class BatchedDenseArgs:
         batch_shape = T.shape[:-1]
         context_size, input_dim = X.shape[-2:]
         query_size = Q.shape[-1]
+        query_dim = (
+            M.shape[-1]
+            if M is not None
+            else (Y.shape[-1] if Y is not None else input_dim)
+        )
 
         T_flat = T.reshape(-1, context_size)
         X_flat = X.reshape(-1, context_size, input_dim)
         Q_flat = Q.reshape(-1, query_size)
         Y_flat = None if Y is None else Y.reshape(-1, query_size, Y.shape[-1])
-
-        X_valid = X_flat.isfinite() & T_flat.isfinite().unsqueeze(-1)
+        Q_valid = Q_flat.isfinite()
+        M_flat = (
+            Q_valid.unsqueeze(-1).expand(*Q_valid.shape, query_dim)
+            if M is None
+            else M.reshape(-1, query_size, query_dim)
+        )
+        X_valid = X_flat.isfinite()
 
         batch_indices, t_indices, c_indices = X_valid.nonzero(as_tuple=True)
         positions = _compact_positions(X_valid)
@@ -498,18 +508,9 @@ class BatchedDenseArgs:
             fill_value=torch.nan,
         )
 
-        query_valid = (
-            Q_flat.isfinite()
-            .unsqueeze(-1)
-            .expand(-1, -1, Y.shape[-1] if Y is not None else input_dim)
-            if M is None
-            else (
-                M.reshape(-1, query_size, M.shape[-1]) & Q_flat.isfinite().unsqueeze(-1)
-            )
-        )
-        batch_indices, t_indices, c_indices = query_valid.nonzero(as_tuple=True)
-        positions = _compact_positions(query_valid)
-        num_query = int(query_valid.flatten(start_dim=1).sum(dim=-1).max().item())
+        batch_indices, t_indices, c_indices = M_flat.nonzero(as_tuple=True)
+        positions = _compact_positions(M_flat)
+        num_query = int(M_flat.flatten(start_dim=1).sum(dim=-1).max().item())
         query_indices = (batch_indices, positions)
 
         query_times = scatter_fill(
