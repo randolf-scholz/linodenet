@@ -110,8 +110,9 @@ def scatter_fill(
     shape: Sequence[int],
     indices: tuple[Tensor, ...],
     reference: Tensor,
-    fill_value: bool | float,
     /,
+    *,
+    fill_value: bool | float,
 ) -> Tensor:
     r"""Create a filled tensor and write reference values at the given indices."""
     result = reference.new_full(shape, fill_value)
@@ -615,7 +616,7 @@ class TripletArg:
             (context_times.shape[0], context_dim),
             (context_inverse, self.context_channels),
             self.context_values,
-            torch.nan,
+            fill_value=torch.nan,
         )
 
         query_times, query_inverse = torch.unique_consecutive(
@@ -626,7 +627,7 @@ class TripletArg:
             (query_times.shape[0], query_dim),
             (query_inverse, self.query_channels),
             torch.ones_like(self.query_channels, dtype=torch.bool),
-            False,
+            fill_value=False,
         )
 
         query_values = (
@@ -636,7 +637,7 @@ class TripletArg:
                 (query_times.shape[0], query_dim),
                 (query_inverse, self.query_channels),
                 self.query_values,
-                torch.nan,
+                fill_value=torch.nan,
             )
         )
 
@@ -890,13 +891,13 @@ class BatchedTripletArgs:
             (num_batches, context_size),
             context_indices,
             T_flat[context_valid],
-            torch.nan,
+            fill_value=torch.nan,
         )
         context_values = scatter_fill(
             (num_batches, context_size, context_dim),
             (*context_indices, C_flat[context_valid]),
             X_flat[context_valid],
-            torch.nan,
+            fill_value=torch.nan,
         )
 
         query_inverse, query_lengths = consecutive_group_indices(Q_flat, query_valid)
@@ -912,13 +913,13 @@ class BatchedTripletArgs:
             (num_batches, query_size),
             query_indices,
             Q_flat[query_valid],
-            torch.nan,
+            fill_value=torch.nan,
         )
         query_mask = scatter_fill(
             (num_batches, query_size, query_dim),
             (*query_indices, query_channels),
             torch.ones_like(query_channels, dtype=torch.bool),
-            False,
+            fill_value=False,
         )
         query_values = (
             None
@@ -927,7 +928,7 @@ class BatchedTripletArgs:
                 (num_batches, query_size, query_dim),
                 (*query_indices, query_channels),
                 Y_flat[query_valid],
-                torch.nan,
+                fill_value=torch.nan,
             )
         )
 
