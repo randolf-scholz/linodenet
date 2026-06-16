@@ -304,6 +304,8 @@ def _make_random_batched_dense(
     )
     context_dim = 3
     query_dim = 4
+    active_context_dim = context_dim - 1
+    active_query_dim = query_dim - 1
     num_context_steps = 4
     num_query_steps = 3
 
@@ -329,13 +331,16 @@ def _make_random_batched_dense(
         )
         for step in range(context_steps):
             if sample == 0:
-                mask = torch.ones(context_dim, dtype=torch.bool)
+                mask = torch.tensor([True, True, False])
             else:
-                mask = torch.rand(context_dim, generator=generator) < 0.7
+                mask = torch.zeros(context_dim, dtype=torch.bool)
+                mask[:active_context_dim] = (
+                    torch.rand(active_context_dim, generator=generator) < 0.7
+                )
                 if not mask.any():
-                    mask[int(torch.randint(context_dim, (), generator=generator))] = (
-                        True
-                    )
+                    mask[
+                        int(torch.randint(active_context_dim, (), generator=generator))
+                    ] = True
 
             for channel in mask.nonzero(as_tuple=True)[0]:
                 context_values[sample, step, channel] = float(
@@ -354,11 +359,16 @@ def _make_random_batched_dense(
         )
         for step in range(query_steps):
             if sample == 0:
-                mask = torch.ones(query_dim, dtype=torch.bool)
+                mask = torch.tensor([True, True, True, False])
             else:
-                mask = torch.rand(query_dim, generator=generator) < 0.7
+                mask = torch.zeros(query_dim, dtype=torch.bool)
+                mask[:active_query_dim] = (
+                    torch.rand(active_query_dim, generator=generator) < 0.7
+                )
                 if not mask.any():
-                    mask[int(torch.randint(query_dim, (), generator=generator))] = True
+                    mask[
+                        int(torch.randint(active_query_dim, (), generator=generator))
+                    ] = True
 
             query_mask[sample, step, mask] = True
             for channel in mask.nonzero(as_tuple=True)[0]:
@@ -422,7 +432,10 @@ class TestDense:
         )  # fmt: skip
 
         triplet = original.to_triplet()
-        actual = triplet.to_dense()
+        actual = triplet.to_dense(
+            context_dim=original.context_values.shape[-1],
+            query_dim=original.query_values.shape[-1],
+        )
 
         _assert_dense_equal(actual, original)
 
@@ -570,7 +583,10 @@ class TestDense:
     ) -> None:
         original = _make_random_batched_dense(batch_shape)
 
-        actual = original.to_triplet().to_dense()
+        actual = original.to_triplet().to_dense(
+            context_dim=original.context_values.shape[-1],
+            query_dim=original.query_mask.shape[-1],
+        )
 
         _assert_batched_dense_equal(actual, original)
 
@@ -598,6 +614,30 @@ class TestTriplet:
             query_mask=torch.tensor([[True, False], [True, True]]),
             query_values=torch.tensor([[30.0, nan], [40.0, 41.0]]),
             static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        _assert_dense_equal(actual, expected)
+
+    def test_to_dense_unbatched_with_dims(self) -> None:
+        original = TripletArg(
+            context_times=torch.tensor([1.0, 2.0]),
+            context_channels=torch.tensor([0, 1]),
+            context_values=torch.tensor([10.0, 20.0]),
+            query_times=torch.tensor([3.0]),
+            query_channels=torch.tensor([1]),
+            query_values=torch.tensor([30.0]),
+        )
+
+        actual = original.to_dense(context_dim=3, query_dim=4)
+        expected = DenseArg(
+            context_times=torch.tensor([1.0, 2.0]),
+            context_values=torch.tensor([
+                [10.0,  nan, nan],
+                [ nan, 20.0, nan],
+            ]),
+            query_times=torch.tensor([3.0]),
+            query_mask=torch.tensor([[False, True, False, False]]),
+            query_values=torch.tensor([[nan, 30.0, nan, nan]]),
         )  # fmt: skip
 
         _assert_dense_equal(actual, expected)
@@ -746,7 +786,7 @@ class TestTriplet:
             ]),
         )  # fmt: skip
 
-        actual = original.to_dense()
+        actual = original.to_dense(context_dim=2, query_dim=2)
         expected = BatchedDenseArgs(
             context_times=torch.tensor([
                 [1.0, 2.0, nan],
@@ -800,7 +840,7 @@ class TestTriplet:
             ]),
         )  # fmt: skip
 
-        actual = original.to_dense()
+        actual = original.to_dense(context_dim=2, query_dim=2)
         expected = BatchedDenseArgs(
             context_times=torch.tensor([
                 [1.0],
@@ -829,6 +869,6 @@ class TestTriplet:
     ) -> None:
         original = _make_random_batched_triplet(batch_shape)
 
-        actual = original.to_dense().to_triplet()
+        actual = original.to_dense(context_dim=3, query_dim=4).to_triplet()
 
         _assert_batched_triplet_equal(actual, original)

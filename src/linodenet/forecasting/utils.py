@@ -470,36 +470,52 @@ class TripletArg:
         C = self.context_channels
         X = self.context_values
         Q = self.query_times
+        M = self.query_channels
 
         *_, num_context = T.shape
+        assert C.dtype == torch.long
         assert T.shape == (num_context,)
         assert C.shape == (num_context,)
         assert X.shape == (num_context,)
         assert T.isfinite().all()
         assert C.isfinite().all()
         assert X.isfinite().all()
+        assert C.ge(0).all()  # channels non-negative
 
         *_, num_query = Q.shape
         assert Q.shape == (num_query,)
         assert Q.isfinite().all()
 
-        if (M := self.query_channels) is not None:
-            assert M.shape == (num_query,)
-            assert M.isfinite().all()
+        assert M.dtype == torch.long
+        assert M.shape == (num_query,)
+        assert M.isfinite().all()
+        assert M.ge(0).all()
 
         if (V := self.query_values) is not None:
             assert V.shape == (num_query,)
             assert V.isfinite().all()
 
-    def to_dense(self) -> DenseArg:
-        if (self.context_channels < 0).any():
-            raise ValueError("Expected non-negative context channel indices.")
-        if self.context_channels.numel() == 0:
-            raise ValueError(
-                "Cannot infer dense context dimension from empty triplets."
-            )
+    def to_dense(
+        self,
+        /,
+        *,
+        context_dim: int | None = None,
+        query_dim: int | None = None,
+    ) -> DenseArg:
+        T = self.context_times
+        C = self.context_channels
+        X = self.context_values
+        Q = self.query_times
+        M = self.query_channels
 
-        context_dim = int(self.context_channels.max().item()) + 1
+        context_dim = int(C.max().item()) + 1 if context_dim is None else context_dim
+        query_dim = int(M.max().item()) + 1 if query_dim is None else query_dim
+
+        if (self.context_channels >= context_dim).any():
+            raise ValueError("Expected context channel indices below context_dim.")
+        if (self.query_channels >= query_dim).any():
+            raise ValueError("Expected query channel indices below query_dim.")
+
         context_times, context_inverse = torch.unique_consecutive(
             self.context_times,
             return_inverse=True,
@@ -508,33 +524,8 @@ class TripletArg:
             (context_times.shape[0], context_dim),
             torch.nan,
         )
-        # Triplets with the same consecutive time are written into one dense row.
-        context_values[context_inverse, self.context_channels.long()] = (
-            self.context_values
-        )
+        context_values[context_inverse, self.context_channels] = self.context_values
 
-        if self.query_channels is None:
-            query_values = (
-                None
-                if self.query_values is None
-                else self.query_values.unsqueeze(dim=-1)
-            )
-            return DenseArg(
-                context_times=context_times,
-                context_values=context_values,
-                query_times=self.query_times,
-                query_values=query_values,
-                static_covariates=self.static_covariates,
-            )
-
-        if (self.query_channels < 0).any():
-            raise ValueError("Expected non-negative query channel indices.")
-
-        query_dim = (
-            context_dim
-            if self.query_channels.numel() == 0
-            else int(self.query_channels.max().item()) + 1
-        )
         query_times, query_inverse = torch.unique_consecutive(
             self.query_times,
             return_inverse=True,
@@ -544,21 +535,22 @@ class TripletArg:
             dtype=torch.bool,
             device=self.query_times.device,
         )
-        query_mask[query_inverse, self.query_channels.long()] = True
+        query_mask[query_inverse, self.query_channels] = True
 
-        query_values = None
         if self.query_values is not None:
             query_values = self.query_values.new_full(
                 (query_times.shape[0], query_dim),
                 torch.nan,
             )
-            query_values[query_inverse, self.query_channels.long()] = self.query_values
+            query_values[query_inverse, self.query_channels] = self.query_values
+        else:
+            query_values = None
 
         return DenseArg(
             context_times=context_times,
             context_values=context_values,
             query_times=query_times,
-            query_mask=None if bool(query_mask.all().item()) else query_mask,
+            query_mask=query_mask,
             query_values=query_values,
             static_covariates=self.static_covariates,
         )
@@ -732,7 +724,13 @@ class BatchedTripletArgs:
             )
         ]
 
-    def to_dense(self) -> BatchedDenseArgs:
+    def to_dense(
+        self,
+        /,
+        *,
+        context_dim: int | None = None,
+        query_dim: int | None = None,
+    ) -> BatchedDenseArgs:
         T = self.context_times
         C = self.context_channels
         X = self.context_values
@@ -752,12 +750,19 @@ class BatchedTripletArgs:
         Y_flat = None if Y is None else Y.reshape(-1, num_query)
 
         context_valid = T_flat.isfinite() & C_flat.ge(0) & X_flat.isfinite()
-        if not context_valid.any():
+        if context_dim is None and not context_valid.any():
             raise ValueError(
                 "Cannot infer dense context dimension from empty triplets."
             )
 
-        context_dim = int(C_flat[context_valid].max().item()) + 1
+        context_dim = (
+            int(C_flat[context_valid].max().item()) + 1
+            if context_dim is None
+            else context_dim
+        )
+        if (context_valid & C_flat.ge(context_dim)).any():
+            raise ValueError("Expected context channel indices below context_dim.")
+
         context_times_list: list[Tensor] = []
         context_inverse_list: list[Tensor] = []
         context_channels_list: list[Tensor] = []
@@ -794,10 +799,17 @@ class BatchedTripletArgs:
 
         query_valid = Q_flat.isfinite() & M_flat.ge(0)
         query_dim = (
-            int(M_flat[query_valid].max().item()) + 1
-            if query_valid.any()
-            else context_dim
+            (
+                int(M_flat[query_valid].max().item()) + 1
+                if query_valid.any()
+                else context_dim
+            )
+            if query_dim is None
+            else query_dim
         )
+        if (query_valid & M_flat.ge(query_dim)).any():
+            raise ValueError("Expected query channel indices below query_dim.")
+
         query_times_list: list[Tensor] = []
         query_inverse_list: list[Tensor] = []
         query_channels_list: list[Tensor] = []
