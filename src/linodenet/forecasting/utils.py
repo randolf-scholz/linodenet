@@ -97,13 +97,43 @@ def unique_count(x: Tensor, /) -> Tensor:
     ).reshape(batch_shape)
 
 
-def consecutive_group_indices(times: Tensor, valid: Tensor, /) -> tuple[Tensor, Tensor]:
-    r"""Compute group indices for consecutive equal time stamps."""
-    is_new = torch.ones_like(valid)
-    is_new[..., 1:] = times[..., 1:] != times[..., :-1]
-    is_new &= valid
+def _consecutive_group_indices(
+    values: Tensor, mask: Tensor, /
+) -> tuple[Tensor, Tensor]:
+    r"""Compute group indices for runs of consecutive equal values.
+
+    The last dimension of `values` is interpreted as a sequence. For each batch
+    item, every valid element starts a new group when it is the first valid
+    element or when its value differs from the previous element. Invalid elements
+    are ignored and get group index `-1`.
+
+    This is similar to `torch.unique_consecutive(..., return_inverse=True)`,
+    but computed for all batch items at once and with explicit masking.
+
+    Args:
+        values: Values with shape `(..., N)`.
+        mask: Boolean mask with shape `(..., N)`.
+
+    Returns:
+        A pair `(inverse, counts)`, where `inverse` has shape `(..., N)` and
+        gives each valid element's consecutive group index, and `counts` has
+        shape `(...)` with the number of valid groups per batch item.
+
+    Example:
+        >>> values = torch.tensor([[1.0, 1.0, 2.0, float("nan")], [3.0, 4.0, 4.0, 5.0]])
+        >>> mask = torch.isfinite(values)
+        >>> inverse, counts = _consecutive_group_indices(values, mask)
+        >>> inverse
+        tensor([[ 0,  0,  1, -1],
+                [ 0,  1,  1,  2]])
+        >>> counts
+        tensor([2, 3])
+    """
+    is_new = torch.ones_like(mask, dtype=torch.bool)
+    is_new[..., 1:] = values[..., 1:] != values[..., :-1]
+    is_new &= mask
     inverse = is_new.cumsum(dim=-1) - 1
-    return inverse.masked_fill(~valid, -1), is_new.sum(dim=-1)
+    return inverse.masked_fill(~mask, -1), is_new.sum(dim=-1)
 
 
 def scatter_fill(
@@ -876,17 +906,13 @@ class BatchedTripletArgs:
         if (self.query_channels >= query_dim).any():
             raise ValueError("Expected query channel indices below query_dim.")
 
-        context_inverse, context_lengths = consecutive_group_indices(
-            T_flat,
-            context_valid,
+        context_inverse, context_lengths = _consecutive_group_indices(
+            T_flat, context_valid
         )
         context_size = int(context_lengths.max().item())
         context_batch = torch.arange(num_batches, device=T.device)
         context_batch = context_batch.reshape(-1, 1).expand(-1, num_context)
-        context_indices = (
-            context_batch[context_valid],
-            context_inverse[context_valid],
-        )
+        context_indices = (context_batch[context_valid], context_inverse[context_valid])
         context_times = scatter_fill(
             (num_batches, context_size),
             context_indices,
@@ -900,14 +926,11 @@ class BatchedTripletArgs:
             fill_value=torch.nan,
         )
 
-        query_inverse, query_lengths = consecutive_group_indices(Q_flat, query_valid)
+        query_inverse, query_lengths = _consecutive_group_indices(Q_flat, query_valid)
         query_size = int(query_lengths.max().item())
         query_batch = torch.arange(num_batches, device=Q.device)
         query_batch = query_batch.reshape(-1, 1).expand(-1, num_query)
-        query_indices = (
-            query_batch[query_valid],
-            query_inverse[query_valid],
-        )
+        query_indices = (query_batch[query_valid], query_inverse[query_valid])
         query_channels = M_flat[query_valid]
         query_times = scatter_fill(
             (num_batches, query_size),
