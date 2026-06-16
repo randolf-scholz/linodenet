@@ -136,6 +136,22 @@ def _consecutive_group_indices(
     return inverse.masked_fill(~mask, -1), is_new.sum(dim=-1)
 
 
+def _ragged_indices(
+    mask: Tensor,
+    /,
+) -> tuple[tuple[Tensor, Tensor], tuple[Tensor, ...], int]:
+    r"""Convert a batched boolean mask to compact ragged indices."""
+    flat_mask = mask.flatten(start_dim=1)
+    counts = flat_mask.sum(dim=-1)
+    positions = flat_mask.cumsum(dim=-1) - 1
+    batch_indices, flat_indices = flat_mask.nonzero(as_tuple=True)
+    return (
+        (batch_indices, positions[batch_indices, flat_indices]),
+        mask.nonzero(as_tuple=True),
+        int(counts.max().item()),
+    )
+
+
 def scatter_fill(
     shape: Sequence[int],
     indices: tuple[Tensor, ...],
@@ -455,6 +471,7 @@ class BatchedDenseArgs:
         X = self.context_values
         Q = self.query_times
         Y = self.query_values
+        M = self.query_mask
         batch_shape = T.shape[:-1]
         context_size, input_dim = X.shape[-2:]
         query_size = Q.shape[-1]
@@ -465,71 +482,70 @@ class BatchedDenseArgs:
         Y_flat = None if Y is None else Y.reshape(-1, query_size, Y.shape[-1])
 
         X_valid = X_flat.isfinite() & T_flat.isfinite().unsqueeze(-1)
-        context_mask = X_valid.flatten(start_dim=1)
-        context_counts = context_mask.sum(dim=-1)
-        num_context = int(context_counts.max().item())
-        context_positions = context_mask.cumsum(dim=-1) - 1
 
-        context_times = T.new_full((T_flat.shape[0], num_context), torch.nan)
-        context_channels = torch.full(
+        (
+            context_indices,
+            (batch_indices, time_indices, channel_indices),
+            num_context,
+        ) = _ragged_indices(X_valid)
+
+        context_times = scatter_fill(
             (T_flat.shape[0], num_context),
-            -1,
-            dtype=torch.long,
-            device=X.device,
+            context_indices,
+            T_flat[batch_indices, time_indices],
+            fill_value=torch.nan,
         )
-        context_values = X.new_full((T_flat.shape[0], num_context), torch.nan)
+        context_channels = scatter_fill(
+            (T_flat.shape[0], num_context),
+            context_indices,
+            channel_indices,
+            fill_value=-1,
+        )
+        context_values = scatter_fill(
+            (T_flat.shape[0], num_context),
+            context_indices,
+            X_flat[batch_indices, time_indices, channel_indices],
+            fill_value=torch.nan,
+        )
 
-        batch_indices, flat_indices = context_mask.nonzero(as_tuple=True)
-        target_indices = context_positions[batch_indices, flat_indices]
-        time_indices = flat_indices.div(input_dim, rounding_mode="floor")
-        channel_indices = flat_indices.remainder(input_dim)
+        query_valid = (
+            Q_flat.isfinite()
+            .unsqueeze(-1)
+            .expand(-1, -1, Y.shape[-1] if Y is not None else input_dim)
+            if M is None
+            else (
+                M.reshape(-1, query_size, M.shape[-1]) & Q_flat.isfinite().unsqueeze(-1)
+            )
+        )
 
-        context_times[batch_indices, target_indices] = T_flat[
-            batch_indices, time_indices
-        ]
-        context_channels[batch_indices, target_indices] = channel_indices
-        context_values[batch_indices, target_indices] = X_flat[
-            batch_indices, time_indices, channel_indices
-        ]
+        (
+            query_indices,
+            (batch_indices, time_indices, channel_indices),
+            num_query,
+        ) = _ragged_indices(query_valid)
 
-        if self.query_mask is None:
-            query_dim = input_dim if Y is None else Y.shape[-1]
-            query_valid = Q_flat.isfinite().unsqueeze(-1).expand(-1, -1, query_dim)
-        else:
-            query_dim = self.query_mask.shape[-1]
-            query_valid = self.query_mask.reshape(
-                -1, query_size, query_dim
-            ) & Q_flat.isfinite().unsqueeze(-1)
-
-        query_mask = query_valid.flatten(start_dim=1)
-        query_counts = query_mask.sum(dim=-1)
-        num_query = int(query_counts.max().item())
-        query_positions = query_mask.cumsum(dim=-1) - 1
-
-        query_times = Q.new_full((Q_flat.shape[0], num_query), torch.nan)
-        query_channels = torch.full(
+        query_times = scatter_fill(
             (Q_flat.shape[0], num_query),
-            -1,
-            dtype=torch.long,
-            device=Q.device,
+            query_indices,
+            Q_flat[batch_indices, time_indices],
+            fill_value=torch.nan,
+        )
+        query_channels = scatter_fill(
+            (Q_flat.shape[0], num_query),
+            query_indices,
+            channel_indices,
+            fill_value=-1,
         )
         query_values = (
             None
             if Y_flat is None
-            else Q.new_full((Q_flat.shape[0], num_query), torch.nan)
+            else scatter_fill(
+                (Q_flat.shape[0], num_query),
+                query_indices,
+                Y_flat[batch_indices, time_indices, channel_indices],
+                fill_value=torch.nan,
+            )
         )
-
-        batch_indices, flat_indices = query_mask.nonzero(as_tuple=True)
-        target_indices = query_positions[batch_indices, flat_indices]
-        time_indices = flat_indices.div(query_dim, rounding_mode="floor")
-        channel_indices = flat_indices.remainder(query_dim)
-
-        query_times[batch_indices, target_indices] = Q_flat[batch_indices, time_indices]
-        query_channels[batch_indices, target_indices] = channel_indices
-        if query_values is not None and Y_flat is not None:
-            query_values[batch_indices, target_indices] = Y_flat[
-                batch_indices, time_indices, channel_indices
-            ]
 
         return BatchedTripletArgs(
             context_times=context_times.reshape(*batch_shape, num_context),
