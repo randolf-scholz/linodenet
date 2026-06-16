@@ -152,6 +152,14 @@ class BatchedDenseArgs:
         D: input dimensionality
         F: output dimensionality
         M: static covariate dimensionality
+
+    Assumptions: (up to tail padding)
+        - context time stamps are finite and non-decreasing
+        - query time stamps are finite and non-decreasing
+        - if query mask is not given, it is assumed to be a full true tensor
+        - if query values are given, they are finite at entries selected by the query mask
+        - there is at least one context value observed per time stamp
+        - there is at least one query value observed per time stamp
     """
 
     context_times: Tensor  # Float[(..., N)], padded
@@ -173,29 +181,14 @@ class BatchedDenseArgs:
 
     def __post_init__(self) -> None:
         T = self.context_times
-        Q = self.query_times
         X = self.context_values
+        Q = self.query_times
 
         # check shapes
         *batch_shape, context_size, _ = X.shape
         *_, query_size = Q.shape
         assert T.shape == (*batch_shape, context_size)
         assert Q.shape == (*batch_shape, query_size)
-
-        if self.query_mask is not None:
-            *_, query_dim = self.query_mask.shape
-            assert self.query_mask.dtype == torch.bool
-            assert self.query_mask.shape == (*batch_shape, query_size, query_dim)
-
-        if self.query_values is not None:
-            *_, query_dim = self.query_values.shape
-            assert self.query_values.shape == (*batch_shape, query_size, query_dim)
-            if self.query_mask is not None:
-                assert self.query_mask.shape == self.query_values.shape
-
-        if self.static_covariates is not None:
-            *_, static_dim = self.static_covariates.shape
-            assert self.static_covariates.shape == (*batch_shape, static_dim)
 
         # check that non-valid values are at the tail
         T_valid = T.isfinite()
@@ -213,6 +206,21 @@ class BatchedDenseArgs:
         # check padding
         context_lengths = T.isnan().sum(dim=-1)
         assert torch.equal(X.isnan().all(dim=-1).sum(dim=-1), context_lengths)
+
+        if (M := self.query_mask) is not None:
+            *_, query_dim = M.shape
+            assert M.dtype == torch.bool
+            assert M.shape == (*batch_shape, query_size, query_dim)
+
+        if (V := self.query_values) is not None:
+            *_, query_dim = V.shape
+            assert V.shape == (*batch_shape, query_size, query_dim)
+            if self.query_mask is not None:
+                assert self.query_mask.shape == V.shape
+
+        if (S := self.static_covariates) is not None:
+            *_, static_dim = S.shape
+            assert S.shape == (*batch_shape, static_dim)
 
     @classmethod
     def from_unbatched(cls, args: Sequence[DenseArg], /) -> BatchedDenseArgs:
