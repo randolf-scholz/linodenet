@@ -7,10 +7,10 @@ __all__ = [
     "TripletArg",
     "DenseArg",
     "CombinedArg",
-    "all_or_none",
-    "unique_count",
+    # functions
     "is_prefix_mask",
     "scatter_fill",
+    "unique_count",
 ]
 
 
@@ -22,7 +22,7 @@ from torch import Tensor
 from torch.nn.utils.rnn import pad_sequence, unpad_sequence
 
 
-def all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
+def _all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
     result = []
     has_none = False
     for arg in vals:
@@ -394,19 +394,19 @@ class BatchedDenseArgs:
 
         query_mask = (
             None
-            if (M := all_or_none(arg.query_mask for arg in args)) is None
+            if (M := _all_or_none(arg.query_mask for arg in args)) is None
             else pad_sequence(M, batch_first=True, padding_value=False)
         )
 
         query_values = (
             None
-            if (V := all_or_none(arg.query_values for arg in args)) is None
+            if (V := _all_or_none(arg.query_values for arg in args)) is None
             else pad_sequence(V, batch_first=True, padding_value=torch.nan)
         )
 
         static_covariates = (
             None
-            if (S := all_or_none(arg.static_covariates for arg in args)) is None
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is None
             else torch.stack(S)
         )
 
@@ -856,19 +856,19 @@ class BatchedTripletArgs:
         if not args:
             raise ValueError("Expected at least one TripletArg.")
 
-        query_channels = all_or_none(arg.query_channels for arg in args)
+        query_channels = _all_or_none(arg.query_channels for arg in args)
         if query_channels is None:
             raise ValueError("Expected query channels for batched triplet arguments.")
 
         query_values = (
             None
-            if (V := all_or_none(arg.query_values for arg in args)) is None
+            if (V := _all_or_none(arg.query_values for arg in args)) is None
             else pad_sequence(V, batch_first=True, padding_value=torch.nan)
         )
 
         static_covariates = (
             None
-            if (S := all_or_none(arg.static_covariates for arg in args)) is None
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is None
             else torch.stack(S)
         )
 
@@ -1232,7 +1232,7 @@ class BatchedCombinedArgs:
 
         static_covariates = (
             None
-            if (S := all_or_none(arg.static_covariates for arg in args)) is None
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is None
             else torch.stack(S)
         )
 
