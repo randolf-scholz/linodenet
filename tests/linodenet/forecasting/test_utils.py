@@ -1063,6 +1063,52 @@ class TestCombined:
 
         _assert_batched_combined_equal(actual, original)
 
+    def test_to_triplet_roundtrip_batched(self) -> None:
+        original = BatchedCombinedArgs(
+            times=torch.tensor([
+                [1.0, 2.0, 3.0, 4.0],
+                [0.0, 5.0, nan, nan],
+            ]),
+            values=torch.tensor([
+                [[10.0,  nan, 12.0],
+                 [20.0,  nan, 22.0],
+                 [ nan, 30.0, 32.0],
+                 [40.0, 41.0, 42.0]],
+                [[ nan,  1.0,  2.0],
+                 [ nan, 51.0, 52.0],
+                 [ nan,  nan,  nan],
+                 [ nan,  nan,  nan]],
+            ]),
+            context_mask=torch.tensor([
+                [[ True, False,  True],
+                 [False, False, False],
+                 [False,  True,  True],
+                 [False, False, False]],
+                [[False,  True,  True],
+                 [False, False, False],
+                 [False, False, False],
+                 [False, False, False]],
+            ]),
+            query_mask=torch.tensor([
+                [[False, False, False],
+                 [ True, False,  True],
+                 [False, False, False],
+                 [ True,  True,  True]],
+                [[False, False, False],
+                 [False,  True,  True],
+                 [False, False, False],
+                 [False, False, False]],
+            ]),
+            static_covariates=torch.tensor([
+                [5.0, 6.0],
+                [7.0, 8.0],
+            ]),
+        )  # fmt: skip
+
+        actual = original.to_triplet().to_combined()
+
+        _assert_batched_combined_equal(actual, original)
+
 
 class TestTriplet:
     def test_rejects_duplicate_queries(self) -> None:
@@ -1368,6 +1414,42 @@ class TestTriplet:
         )  # fmt: skip
 
         _assert_batched_dense_equal(actual, expected)
+
+    def test_to_combined_roundtrip_batched(self) -> None:
+        original = BatchedTripletArgs(
+            context_times=torch.tensor([
+                [1.0, 1.0, 3.0, 3.0],
+                [0.0, 0.0, nan, nan],
+            ]),
+            context_channels=torch.tensor([
+                [0, 2, 1, 2],
+                [1, 2, -1, -1],
+            ]),
+            context_values=torch.tensor([
+                [10.0, 12.0, 30.0, 32.0],
+                [ 1.0,  2.0,  nan,  nan],
+            ]),
+            query_times=torch.tensor([
+                [2.0, 2.0, 4.0, 4.0, 4.0],
+                [5.0, 5.0, nan, nan, nan],
+            ]),
+            query_channels=torch.tensor([
+                [0, 2, 0, 1, 2],
+                [1, 2, -1, -1, -1],
+            ]),
+            query_values=torch.tensor([
+                [20.0, 22.0, 40.0, 41.0, 42.0],
+                [51.0, 52.0,  nan,  nan,  nan],
+            ]),
+            static_covariates=torch.tensor([
+                [5.0, 6.0],
+                [7.0, 8.0],
+            ]),
+        )  # fmt: skip
+
+        actual = original.to_combined().to_triplet()
+
+        _assert_batched_triplet_equal(actual, original)
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3), (1, 2, 3)])
     def test_to_dense_roundtrip_batched_random(

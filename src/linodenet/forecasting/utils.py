@@ -1069,7 +1069,7 @@ class BatchedTripletArgs:
         )
 
     def to_combined(self) -> BatchedCombinedArgs:
-        raise NotImplementedError
+        return self.to_dense().to_combined()
 
 
 @dataclass(frozen=True)
@@ -1306,4 +1306,4 @@ class BatchedCombinedArgs:
         )
 
     def to_triplet(self) -> BatchedTripletArgs:
-        raise NotImplementedError
+        return self.to_dense().to_triplet()
