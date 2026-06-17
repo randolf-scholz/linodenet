@@ -1085,10 +1085,8 @@ class CombinedArg:
         - time stamps are finite and non-decreasing
         - context time stamps are finite and non-decreasing
         - query time stamps are finite and strictly increasing
-        - if query values are available, all values selected by the query mask
-          are finite
-        - if query values are not available, all values selected by the query
-          mask are NaN
+        - if query values are available, all values selected by the query mask are finite
+        - if query values are not available, all values selected by the query mask are NaN
         - each time stamp has at least one context or query mask entry
         - each value row has at least one finite value
     """
@@ -1165,10 +1163,8 @@ class BatchedCombinedArgs:
         - time stamps are finite and non-decreasing
         - context time stamps are finite and non-decreasing
         - query time stamps are finite and strictly increasing
-        - if query values are available, all values selected by the query mask
-          are finite
-        - if query values are not available, all values selected by the query
-          mask are NaN
+        - if query values are available, all values selected by the query mask are finite
+        - if query values are not available, all values selected by the query mask are NaN
         - each valid time stamp has at least one context or query mask entry
         - each valid value row has at least one finite value
     """
