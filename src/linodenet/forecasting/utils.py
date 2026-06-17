@@ -1057,7 +1057,16 @@ class CombinedArg:
         return arg.unbatch()
 
     def to_dense(self) -> DenseArg:
-        raise NotImplementedError
+        context_filter = self.context_mask.any(dim=-1)
+        query_filter = self.query_mask.any(dim=-1)
+        return DenseArg(
+            context_times=self.times[..., context_filter],
+            context_values=self.values[..., context_filter],
+            query_times=self.times[..., query_filter],
+            query_mask=self.query_mask[..., query_filter],
+            query_values=self.values[..., query_filter],
+            static_covariates=self.static_covariates,
+        )
 
     def to_triplet(self) -> TripletArg:
         raise NotImplementedError
