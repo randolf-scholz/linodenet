@@ -14,6 +14,7 @@ __all__ = [
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from itertools import chain
 from typing import Any, Final
 
 import torch
@@ -235,19 +236,59 @@ class ProFITiBlock(nn.Module):
     scale_net: nn.Module
     shift_net: nn.Module
     attention: TriangularAttention
-    activation: nn.Module
+    shiesh: Shiesh
 
-    def forward(self, x: Tensor, context: Tensor, /) -> Tensor:
+    def __init__(self, *, latent_dim: int, num_layers: int = 2) -> None:
+        super().__init__()
+
+        self.attention = TriangularAttention(
+            dim_context=latent_dim,
+            dim_hidden=latent_dim,
+        )
+        self.shiesh = Shiesh(t=1.0, a=1.0)
+
+        self.scale_net = nn.Sequential(
+            *chain.from_iterable(
+                (
+                    nn.Linear(latent_dim, latent_dim),
+                    nn.ReLU(),
+                )
+                for _ in range(num_layers)
+            ),
+            nn.Linear(latent_dim, 1),
+            nn.Tanh(),  # always end with tanh
+        )
+
+        self.shift_net = nn.Sequential(
+            *chain.from_iterable(
+                (
+                    nn.Linear(latent_dim, latent_dim),
+                    nn.ReLU(),
+                )
+                for _ in range(num_layers)
+            ),
+            nn.Linear(latent_dim, 1),
+        )
+
+    def encode_and_logabsdet(
+        self,
+        x: Tensor,
+        context: Tensor,
+        /,
+    ) -> tuple[Tensor, Tensor]:
         # 1. compute sita
-        self.attention(x, context)
+        y, ldj_sita = self.attention.encode_and_logabsdet(x, context)
 
-        # 2. compute EL
-        self.scale_net(context)
-        self.shift_net(context)
+        # 2. compute elementwise linear transformation
+        scale = self.scale_net(context)
+        shift = self.shift_net(context)
+        y = scale.exp() * y + shift
+        ldj_scale = scale.sum(dim=-1)
 
         # 3. apply Shiesh
-        y = self.activation(x)
-        return y
+        y, ldj_shiesh = self.shiesh.encode_and_logabsdet(y)
+
+        return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
 
 class ProFITiConditioning(nn.Module):
