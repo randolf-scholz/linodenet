@@ -99,6 +99,131 @@ class Shiesh(nn.Module):
         return self._transform_and_logabsdet(y, -self.t)
 
 
+class TriangularAttention(nn.Module):
+    r"""Implements (sorted) invertible triangular attention (equation 10).
+
+    .. math:: σ(QKᵀ)V = A(H, H)⋅X
+    """
+
+    def __init__(self, *, dim_context: int, dim_hidden: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.q_proj = nn.Linear(dim_context, dim_hidden)
+        self.k_proj = nn.Linear(dim_context, dim_hidden)
+        self.dim_hidden = dim_hidden
+        self.scale = dim_hidden**-0.5
+        self.eps = eps
+
+    def _scores(self, context: Tensor) -> tuple[Tensor, Tensor]:
+        Q = self.q_proj(context)  # (..., N, L)
+        K = self.k_proj(context)  # (..., N, L)
+
+        scores = torch.einsum("...ML, ...NL -> ...MN", Q, K / self.scale)  # (..., N, N)
+        diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., N)
+        diagonal = F.softplus(diagonal) + self.eps
+        # overwrite the diagonal with the new values
+        scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
+        scores = scores.tril()
+
+        # for a linear transform x -> Ax, the logabsdet is |A|
+        # since A is triangular with positive diagonal, log|A| = sum(log(diag(A)))
+        logabsdet = diagonal.log().sum(dim=-1)  # (...)
+        return scores, logabsdet
+
+    def encode_and_logabsdet(
+        self,
+        x: Tensor,  # (..., K, D)
+        context: Tensor,  # (..., N, E)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (...)
+        scores, logabsdet = self._scores(context)
+        y = torch.einsum("...MN, ...NL -> ...ML", scores, x)
+        return y, logabsdet
+
+    def decode_and_logabsdet(
+        self,
+        y: Tensor,  # (..., K, D)
+        context: Tensor,  # (..., N, E)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (...)
+        scores, logabsdet = self._scores(context)
+        # solve Ax = y for x
+        x = torch.linalg.solve_triangular(scores, y, upper=False)
+        # note: log|det(A⁻¹)| = log|1/det(A)| = -log|det(A)|
+        return x, -logabsdet
+
+
+class ProFITiBlock(nn.Module):
+    r"""Implements profiti-block (equation 15).
+
+    .. math:: shiesh(el(sita(y, x), x)
+    """
+
+    scale_net: nn.Module
+    shift_net: nn.Module
+    attention: TriangularAttention
+    shiesh: Shiesh
+
+    def __init__(self, *, latent_dim: int, num_layers: int = 2) -> None:
+        super().__init__()
+
+        self.attention = TriangularAttention(
+            dim_context=latent_dim,
+            dim_hidden=latent_dim,
+        )
+        self.shiesh = Shiesh(t=1.0, a=1.0)
+
+        self.scale_net = nn.Sequential(
+            *chain.from_iterable(
+                (
+                    nn.Linear(latent_dim, latent_dim),
+                    nn.ReLU(),
+                )
+                for _ in range(num_layers)
+            ),
+            nn.Linear(latent_dim, 1),
+            nn.Tanh(),  # always end with tanh
+        )
+
+        self.shift_net = nn.Sequential(
+            *chain.from_iterable(
+                (
+                    nn.Linear(latent_dim, latent_dim),
+                    nn.ReLU(),
+                )
+                for _ in range(num_layers)
+            ),
+            nn.Linear(latent_dim, 1),
+        )
+
+    def encode_and_logabsdet(
+        self,
+        x: Tensor,  # (..., K, D)
+        context: Tensor,  # (..., N, E)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (...)
+        # 1. compute sita
+        y, ldj_sita = self.attention.encode_and_logabsdet(x, context)
+
+        # 2. compute elementwise linear transformation
+        scale = self.scale_net(context)
+        shift = self.shift_net(context)
+        y = scale.exp() * y + shift
+        ldj_scale = scale.sum(dim=-1)
+
+        # 3. apply Shiesh
+        y, ldj_shiesh = self.shiesh.encode_and_logabsdet(y)
+
+        return y, (ldj_sita + ldj_scale + ldj_shiesh)
+
+    def decode_and_logabsdet(
+        self,
+        y: Tensor,  # (..., K, D)
+        context: Tensor,  # (..., N, E)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (...)
+        raise NotImplementedError
+
+
 @dataclass(frozen=True)
 class ProFITiConfig:
     r"""Configuration for constructing a ProFITi model."""
@@ -172,123 +297,6 @@ class ProFITi(nn.Module):
         query_mask: Tensor | None = None,
     ) -> Tensor:
         raise NotImplementedError
-
-
-class TriangularAttention(nn.Module):
-    r"""Implements (sorted) invertible triangular attention (equation 10).
-
-    .. math:: σ(QKᵀ)V = A(H, H)⋅X
-    """
-
-    def __init__(self, *, dim_context: int, dim_hidden: int, eps: float = 1e-6) -> None:
-        super().__init__()
-        self.q_proj = nn.Linear(dim_context, dim_hidden)
-        self.k_proj = nn.Linear(dim_context, dim_hidden)
-        self.dim_hidden = dim_hidden
-        self.scale = dim_hidden**-0.5
-        self.eps = eps
-
-    def _scores(self, context: Tensor) -> tuple[Tensor, Tensor]:
-        Q = self.q_proj(context)  # (..., N, L)
-        K = self.k_proj(context)  # (..., N, L)
-
-        scores = torch.einsum("...ML, ...NL -> ...MN", Q, K / self.scale)  # (..., N, N)
-        diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., N)
-        diagonal = F.softplus(diagonal) + self.eps
-        # overwrite the diagonal with the new values
-        scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
-        scores = scores.tril()
-
-        # for a linear transform x -> Ax, the logabsdet is |A|
-        # since A is triangular with positive diagonal, log|A| = sum(log(diag(A)))
-        logabsdet = diagonal.log().sum(dim=-1)  # (...)
-        return scores, logabsdet
-
-    def encode_and_logabsdet(
-        self,
-        x: Tensor,  # (..., N, D)
-        context: Tensor,  # (..., N, E)
-        /,
-    ) -> tuple[Tensor, Tensor]:  # (..., N, D), (...)
-        scores, logabsdet = self._scores(context)
-        y = torch.einsum("...MN, ...NL -> ...ML", scores, x)
-        return y, logabsdet
-
-    def decode_and_logabsdet(
-        self,
-        y: Tensor,  # (..., N, D)
-        context: Tensor,  # (..., N, E)
-        /,
-    ) -> tuple[Tensor, Tensor]:  # (..., N, D), (...)
-        scores, logabsdet = self._scores(context)
-        # solve Ax = y for x
-        x = torch.linalg.solve_triangular(scores, y, upper=False)
-        # note: log|det(A⁻¹)| = log|1/det(A)| = -log|det(A)|
-        return x, -logabsdet
-
-
-class ProFITiBlock(nn.Module):
-    r"""Implements profiti-block (equation 15).
-
-    .. math:: shiesh(el(sita(y, x), x)
-    """
-
-    scale_net: nn.Module
-    shift_net: nn.Module
-    attention: TriangularAttention
-    shiesh: Shiesh
-
-    def __init__(self, *, latent_dim: int, num_layers: int = 2) -> None:
-        super().__init__()
-
-        self.attention = TriangularAttention(
-            dim_context=latent_dim,
-            dim_hidden=latent_dim,
-        )
-        self.shiesh = Shiesh(t=1.0, a=1.0)
-
-        self.scale_net = nn.Sequential(
-            *chain.from_iterable(
-                (
-                    nn.Linear(latent_dim, latent_dim),
-                    nn.ReLU(),
-                )
-                for _ in range(num_layers)
-            ),
-            nn.Linear(latent_dim, 1),
-            nn.Tanh(),  # always end with tanh
-        )
-
-        self.shift_net = nn.Sequential(
-            *chain.from_iterable(
-                (
-                    nn.Linear(latent_dim, latent_dim),
-                    nn.ReLU(),
-                )
-                for _ in range(num_layers)
-            ),
-            nn.Linear(latent_dim, 1),
-        )
-
-    def encode_and_logabsdet(
-        self,
-        x: Tensor,
-        context: Tensor,
-        /,
-    ) -> tuple[Tensor, Tensor]:
-        # 1. compute sita
-        y, ldj_sita = self.attention.encode_and_logabsdet(x, context)
-
-        # 2. compute elementwise linear transformation
-        scale = self.scale_net(context)
-        shift = self.shift_net(context)
-        y = scale.exp() * y + shift
-        ldj_scale = scale.sum(dim=-1)
-
-        # 3. apply Shiesh
-        y, ldj_shiesh = self.shiesh.encode_and_logabsdet(y)
-
-        return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
 
 class ProFITiConditioning(nn.Module):
