@@ -588,7 +588,63 @@ class BatchedDenseArgs:
         )
 
     def to_combined(self) -> BatchedCombinedArgs:
-        raise NotImplementedError
+        T = self.context_times
+        X = self.context_values
+        Q = self.query_times
+        M = self.query_mask
+        Y = self.query_values
+
+        *batch_shape, context_size, context_dim = X.shape
+        *_, query_size = Q.shape
+        Y = (
+            Y
+            if Y is not None
+            else X.new_full((*batch_shape, query_size, context_dim), torch.nan)
+        )
+        if Y.shape[-1] != context_dim:
+            raise ValueError(
+                "Expected query_values and context_values dimensions to match."
+            )
+        if M is not None and M.shape[-1] != context_dim:
+            raise ValueError(
+                "Expected query_mask and context_values dimensions to match."
+            )
+
+        times = torch.cat([T, Q], dim=-1)
+        values = torch.cat([X, Y], dim=-2)
+
+        context_mask = X.isfinite()
+        context_mask = torch.cat(
+            [
+                context_mask,
+                context_mask.new_zeros((*batch_shape, query_size, context_dim)),
+            ],
+            dim=-2,
+        )
+
+        query_mask = (
+            Q.isfinite().unsqueeze(-1).expand(*batch_shape, query_size, context_dim)
+            if M is None
+            else M
+        )
+        query_mask = torch.cat(
+            [
+                query_mask.new_zeros((*batch_shape, context_size, context_dim)),
+                query_mask,
+            ],
+            dim=-2,
+        )
+
+        indices = torch.argsort(times.nan_to_num(nan=torch.inf), dim=-1, stable=True)
+        return BatchedCombinedArgs(
+            times=torch.take_along_dim(times, indices, dim=-1),
+            values=torch.take_along_dim(values, indices.unsqueeze(-1), dim=-2),
+            context_mask=torch.take_along_dim(
+                context_mask, indices.unsqueeze(-1), dim=-2
+            ),
+            query_mask=torch.take_along_dim(query_mask, indices.unsqueeze(-1), dim=-2),
+            static_covariates=self.static_covariates,
+        )
 
 
 @dataclass(frozen=True)
@@ -1051,6 +1107,8 @@ class CombinedArg:
         assert M.shape == (num_combined, num_dim)
         assert Q.shape == (num_combined, num_dim)
         assert (M.any(dim=-1) | Q.any(dim=-1)).all()  # at least one value per step
+        query_values_nan = V[Q].isnan()
+        assert query_values_nan.all() or ~query_values_nan.any()
 
     @classmethod
     def from_dense(cls, arg: DenseArg, /) -> CombinedArg:
@@ -1107,7 +1165,7 @@ class BatchedCombinedArgs:
         T_valid = T.isfinite()
         T_ascending = T.diff(dim=-1).ge(0.0)
         assert T.shape == (*batch_shape, num_combined)
-        assert is_prefix_mask(T_valid)
+        assert is_prefix_mask(T_valid).all()
         assert is_prefix_mask(T_ascending).all()  # sorted in ascending order
 
         V_valid = V.isfinite().any(dim=-1)
@@ -1120,6 +1178,8 @@ class BatchedCombinedArgs:
         assert M.shape == (*batch_shape, num_combined, num_dim)
         assert Q.shape == (*batch_shape, num_combined, num_dim)
         assert is_prefix_mask(mask_valid).all()  # at least one value per step
+        query_values_nan = V[Q].isnan()
+        assert query_values_nan.all() or ~query_values_nan.any()
 
     @classmethod
     def from_unbatched(cls, args: Sequence[CombinedArg], /) -> BatchedCombinedArgs:
@@ -1137,7 +1197,77 @@ class BatchedCombinedArgs:
         raise NotImplementedError
 
     def to_dense(self) -> BatchedDenseArgs:
-        raise NotImplementedError
+        T = self.times
+        V = self.values
+        C = self.context_mask
+        M = self.query_mask
+
+        batch_shape = T.shape[:-1]
+        num_combined, num_dim = V.shape[-2:]
+        T_flat = T.reshape(-1, num_combined)
+        V_flat = V.reshape(-1, num_combined, num_dim)
+        C_flat = C.reshape(-1, num_combined, num_dim)
+        M_flat = M.reshape(-1, num_combined, num_dim)
+        num_batches = T_flat.shape[0]
+
+        context_filter = C_flat.any(dim=-1)
+        query_filter = M_flat.any(dim=-1)
+        context_size = int(context_filter.sum(dim=-1).max().item())
+        query_size = int(query_filter.sum(dim=-1).max().item())
+
+        batch_indices = torch.arange(num_batches, device=T.device)
+        batch_indices = batch_indices.reshape(-1, 1).expand(-1, num_combined)
+
+        context_positions = context_filter.cumsum(dim=-1) - 1
+        context_indices = (
+            batch_indices[context_filter],
+            context_positions[context_filter],
+        )
+        context_times = scatter_fill(
+            (num_batches, context_size),
+            context_indices,
+            T_flat[context_filter],
+            fill_value=torch.nan,
+        )
+        context_values = scatter_fill(
+            (num_batches, context_size, num_dim),
+            context_indices,
+            V_flat[context_filter],
+            fill_value=torch.nan,
+        )
+
+        query_positions = query_filter.cumsum(dim=-1) - 1
+        query_indices = (
+            batch_indices[query_filter],
+            query_positions[query_filter],
+        )
+        query_times = scatter_fill(
+            (num_batches, query_size),
+            query_indices,
+            T_flat[query_filter],
+            fill_value=torch.nan,
+        )
+        query_mask = scatter_fill(
+            (num_batches, query_size, num_dim),
+            query_indices,
+            M_flat[query_filter],
+            fill_value=False,
+        )
+        query_values = scatter_fill(
+            (num_batches, query_size, num_dim),
+            query_indices,
+            V_flat[query_filter],
+            fill_value=torch.nan,
+        )
+
+        return BatchedDenseArgs(
+            context_times=context_times.reshape(*batch_shape, context_size),
+            context_values=context_values.reshape(*batch_shape, context_size, num_dim),
+            query_times=query_times.reshape(*batch_shape, query_size),
+            query_mask=query_mask.reshape(*batch_shape, query_size, num_dim),
+            query_values=query_values.reshape(*batch_shape, query_size, num_dim),
+            static_covariates=self.static_covariates,
+        )
 
     def to_triplet(self) -> BatchedTripletArgs:
         raise NotImplementedError
