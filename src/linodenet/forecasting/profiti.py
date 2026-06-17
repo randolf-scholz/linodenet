@@ -305,12 +305,12 @@ class ProFITi(nn.Module):
     r"""Stub for a streamlined ProFITi re-implementation.
 
     Args:
-        conditioning_module: Module that maps context and query data to flow
+        context_embedding: Module that maps context and query data to flow
             conditioning states.
-        flow: Conditional normalizing flow over target values.
+        conditional_flow: Conditional normalizing flow over target values.
     """
 
-    conditioning_module: nn.Module
+    context_embedding: nn.Module
     conditional_flow: nn.Module
 
     @classmethod
@@ -337,17 +337,20 @@ class ProFITi(nn.Module):
             ]
         )
 
-        return cls(conditioning_module=conditioning_module, flow=flow)
+        return cls(
+            context_embedding=conditioning_module,
+            conditional_flow=flow,
+        )
 
     def __init__(
         self,
         *,
-        conditioning_module: nn.Module,
-        flow: nn.Module,
+        context_embedding: nn.Module,
+        conditional_flow: nn.Module,
     ) -> None:
         super().__init__()
-        self.conditioning_module = conditioning_module
-        self.conditional_flow = flow
+        self.context_embedding = context_embedding
+        self.conditional_flow = conditional_flow
 
     def sample(
         self,

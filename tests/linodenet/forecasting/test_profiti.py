@@ -197,11 +197,11 @@ def test_profiti_from_config_uses_grafiti_and_flow_sequence() -> None:
 
     model = ProFITi.from_config(config)
 
-    assert isinstance(model.conditioning_module, Grafiti)
-    assert model.conditioning_module.channel_init.in_features == config.input_dim
-    assert model.conditioning_module.hidden_dim == config.latent_dim
-    assert model.conditioning_module.num_heads == config.num_heads
-    assert model.conditioning_module.num_layers == config.num_layers
+    assert isinstance(model.context_embedding, Grafiti)
+    assert model.context_embedding.channel_init.in_features == config.input_dim
+    assert model.context_embedding.hidden_dim == config.latent_dim
+    assert model.context_embedding.num_heads == config.num_heads
+    assert model.context_embedding.num_layers == config.num_layers
     assert isinstance(model.conditional_flow, ConditionalFlowSequence)
     assert not isinstance(model.conditional_flow, nn.Identity)
     assert len(model.conditional_flow) == config.num_layers
