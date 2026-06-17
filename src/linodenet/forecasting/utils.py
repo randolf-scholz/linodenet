@@ -273,15 +273,23 @@ class DenseArg:
             if self.query_values is not None
             else self.context_values.new_full((query_size, context_dim), torch.nan)
         )
+        if Y.shape[-1] != context_dim:
+            raise ValueError(
+                "Expected query_values and context_values dimensions to match."
+            )
+        if M is not None and M.shape[-1] != context_dim:
+            raise ValueError(
+                "Expected query_mask and context_values dimensions to match."
+            )
 
         # 1. combine context and query values
         T = torch.cat([T, Q], dim=-1)
         V = torch.cat([X, Y], dim=-2)
         # 2. pad context and query masks
         C = X.isfinite()
-        C = torch.cat([C, C.new_zeros(query_size, context_dim)], dim=-1)
+        C = torch.cat([C, C.new_zeros(query_size, context_dim)], dim=-2)
         M = M if M is not None else C.new_ones((query_size, context_dim))
-        M = torch.cat([M.new_zeros(context_size), M], dim=-1)
+        M = torch.cat([M.new_zeros((context_size, context_dim)), M], dim=-2)
         # 2. sort by time
         indices = torch.argsort(T, dim=-1, stable=True)
         return CombinedArg(
@@ -1061,10 +1069,10 @@ class CombinedArg:
         query_filter = self.query_mask.any(dim=-1)
         return DenseArg(
             context_times=self.times[..., context_filter],
-            context_values=self.values[..., context_filter],
+            context_values=self.values[..., context_filter, :],
             query_times=self.times[..., query_filter],
-            query_mask=self.query_mask[..., query_filter],
-            query_values=self.values[..., query_filter],
+            query_mask=self.query_mask[..., query_filter, :],
+            query_values=self.values[..., query_filter, :],
             static_covariates=self.static_covariates,
         )
 

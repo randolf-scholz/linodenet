@@ -8,6 +8,7 @@ from torch.testing import assert_close
 from linodenet.forecasting.utils import (
     BatchedDenseArgs,
     BatchedTripletArgs,
+    CombinedArg,
     DenseArg,
     TripletArg,
 )
@@ -168,6 +169,24 @@ def _assert_triplet_equal(actual: TripletArg, expected: TripletArg, /) -> None:
             rtol=0.0,
             equal_nan=True,
         )
+
+    if actual.static_covariates is None or expected.static_covariates is None:
+        assert actual.static_covariates is expected.static_covariates
+    else:
+        assert_close(
+            actual.static_covariates,
+            expected.static_covariates,
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+
+
+def _assert_combined_equal(actual: CombinedArg, expected: CombinedArg, /) -> None:
+    assert_close(actual.times, expected.times, atol=0.0, rtol=0.0, equal_nan=True)
+    assert_close(actual.values, expected.values, atol=0.0, rtol=0.0, equal_nan=True)
+    assert torch.equal(actual.context_mask, expected.context_mask)
+    assert torch.equal(actual.query_mask, expected.query_mask)
 
     if actual.static_covariates is None or expected.static_covariates is None:
         assert actual.static_covariates is expected.static_covariates
@@ -474,6 +493,74 @@ class TestDense:
         triplet_result = actual.to_triplet()
         _assert_triplet_equal(triplet_result, triplet)
 
+    def test_to_combined_unbatched(self) -> None:
+        original = DenseArg(
+            context_times=torch.tensor([1.0, 3.0]),
+            context_values=torch.tensor([
+                [10.0,  nan],
+                [ nan, 30.0],
+            ]),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([
+                [True, False],
+                [True,  True],
+            ]),
+            query_values=torch.tensor([
+                [20.0,  nan],
+                [40.0, 41.0],
+            ]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        actual = original.to_combined()
+        expected = CombinedArg(
+            times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
+            values=torch.tensor([
+                [10.0,  nan],
+                [20.0,  nan],
+                [ nan, 30.0],
+                [40.0, 41.0],
+            ]),
+            context_mask=torch.tensor([
+                [ True, False],
+                [False, False],
+                [False,  True],
+                [False, False],
+            ]),
+            query_mask=torch.tensor([
+                [False, False],
+                [ True, False],
+                [False, False],
+                [ True,  True],
+            ]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        _assert_combined_equal(actual, expected)
+
+    def test_to_combined_roundtrip_unbatched(self) -> None:
+        original = DenseArg(
+            context_times=torch.tensor([1.0, 3.0]),
+            context_values=torch.tensor([
+                [10.0,  nan],
+                [ nan, 30.0],
+            ]),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([
+                [True, False],
+                [True,  True],
+            ]),
+            query_values=torch.tensor([
+                [20.0,  nan],
+                [40.0, 41.0],
+            ]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        actual = original.to_combined().to_dense()
+
+        _assert_dense_equal(actual, original)
+
     def test_batched_roundtrip(self) -> None:
         args = [
             DenseArg(
@@ -695,6 +782,81 @@ class TestDense:
         )
 
         _assert_batched_dense_equal(actual, original)
+
+
+class TestCombined:
+    def test_to_dense_unbatched(self) -> None:
+        original = CombinedArg(
+            times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
+            values=torch.tensor([
+                [10.0,  nan],
+                [20.0,  nan],
+                [ nan, 30.0],
+                [40.0, 41.0],
+            ]),
+            context_mask=torch.tensor([
+                [ True, False],
+                [False, False],
+                [False,  True],
+                [False, False],
+            ]),
+            query_mask=torch.tensor([
+                [False, False],
+                [ True, False],
+                [False, False],
+                [ True,  True],
+            ]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        actual = original.to_dense()
+        expected = DenseArg(
+            context_times=torch.tensor([1.0, 3.0]),
+            context_values=torch.tensor([
+                [10.0,  nan],
+                [ nan, 30.0],
+            ]),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([
+                [True, False],
+                [True,  True],
+            ]),
+            query_values=torch.tensor([
+                [20.0,  nan],
+                [40.0, 41.0],
+            ]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        _assert_dense_equal(actual, expected)
+
+    def test_to_dense_roundtrip_unbatched(self) -> None:
+        original = CombinedArg(
+            times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
+            values=torch.tensor([
+                [10.0,  nan],
+                [20.0,  nan],
+                [ nan, 30.0],
+                [40.0, 41.0],
+            ]),
+            context_mask=torch.tensor([
+                [ True, False],
+                [False, False],
+                [False,  True],
+                [False, False],
+            ]),
+            query_mask=torch.tensor([
+                [False, False],
+                [ True, False],
+                [False, False],
+                [ True,  True],
+            ]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        actual = original.to_dense().to_combined()
+
+        _assert_combined_equal(actual, original)
 
 
 class TestTriplet:
