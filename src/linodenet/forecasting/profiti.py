@@ -7,6 +7,8 @@ __all__ = [
     "ProFITiFlow",
     "ProFITiFlowLayer",
     "Shiesh",
+    "TriangularAttention",
+    "ProFITiBlock",
 ]
 
 import math
@@ -65,12 +67,7 @@ class Shiesh(nn.Module):
         y1 = x1 + torch.log1p(torch.sqrt(1.0 + torch.exp(-2.0 * x1)))
         return torch.where(m, y0, y1)
 
-    def _transform_and_logabsdet(
-        self,
-        x: Tensor,
-        *,
-        t: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+    def _transform_and_logabsdet(self, x: Tensor, t: Tensor) -> tuple[Tensor, Tensor]:
         a = self.a.to(device=x.device, dtype=x.dtype)
         t = t.to(device=x.device, dtype=x.dtype)
         # u=a⋅x, s=a⋅t, v=log|ℯˢsinh(u)|;
@@ -94,25 +91,11 @@ class Shiesh(nn.Module):
 
         return torch.where(m, y0, y1), torch.where(m, j0, j1)
 
-    def forward(self, x: Tensor, /) -> Tensor:
-        return self.encode(x)
-
-    def inverse(self, y: Tensor, /) -> Tensor:
-        return self.decode(y)
-
-    def encode(self, x: Tensor, /) -> Tensor:
-        y, _ = self.encode_and_logabsdet(x)
-        return y
-
-    def decode(self, y: Tensor, /) -> Tensor:
-        x, _ = self.decode_and_logabsdet(y)
-        return x
-
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        return self._transform_and_logabsdet(x, t=self.t)
+        return self._transform_and_logabsdet(x, self.t)
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
-        return self._transform_and_logabsdet(y, t=-self.t)
+        return self._transform_and_logabsdet(y, -self.t)
 
 
 @dataclass(frozen=True)
@@ -188,6 +171,83 @@ class ProFITi(nn.Module):
         query_mask: Tensor | None = None,
     ) -> Tensor:
         raise NotImplementedError
+
+
+class TriangularAttention(nn.Module):
+    r"""Implements (sorted) invertible triangular attention (equation 10).
+
+    .. math:: σ(QKᵀ)V = A(H, H)⋅X
+    """
+
+    def __init__(self, *, dim_context: int, dim_hidden: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.q_proj = nn.Linear(dim_context, dim_hidden)
+        self.k_proj = nn.Linear(dim_context, dim_hidden)
+        self.dim_hidden = dim_hidden
+        self.scale = dim_hidden**-0.5
+        self.eps = eps
+
+    def _scores(self, context: Tensor) -> tuple[Tensor, Tensor]:
+        Q = self.q_proj(context)  # (..., N, L)
+        K = self.k_proj(context)  # (..., N, L)
+
+        scores = torch.einsum("...ML, ...NL -> ...MN", Q, K / self.scale)  # (..., N, N)
+        diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., N)
+        diagonal = F.softplus(diagonal) + self.eps
+        # overwrite the diagonal with the new values
+        scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
+        scores = scores.tril()
+
+        # for a linear transform x -> Ax, the logabsdet is |A|
+        # since A is triangular with positive diagonal, log|A| = sum(log(diag(A)))
+        logabsdet = diagonal.log().sum(dim=-1)  # (...)
+        return scores, logabsdet
+
+    def encode_and_logabsdet(
+        self,
+        x: Tensor,  # (..., N, D)
+        context: Tensor,  # (..., N, E)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., N, D), (...)
+        scores, logabsdet = self._scores(context)
+        y = torch.einsum("...MN, ...NL -> ...ML", scores, x)
+        return y, logabsdet
+
+    def decode_and_logabsdet(
+        self,
+        y: Tensor,  # (..., N, D)
+        context: Tensor,  # (..., N, E)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., N, D), (...)
+        scores, logabsdet = self._scores(context)
+        # solve Ax = y for x
+        x = torch.linalg.solve_triangular(scores, y, upper=False)
+        # note: log|det(A⁻¹)| = log|1/det(A)| = -log|det(A)|
+        return x, -logabsdet
+
+
+class ProFITiBlock(nn.Module):
+    r"""Implements profiti-block (equation 15).
+
+    .. math:: shiesh(el(sita(y, x), x)
+    """
+
+    scale_net: nn.Module
+    shift_net: nn.Module
+    attention: TriangularAttention
+    activation: nn.Module
+
+    def forward(self, x: Tensor, context: Tensor, /) -> Tensor:
+        # 1. compute sita
+        self.attention(x, context)
+
+        # 2. compute EL
+        self.scale_net(context)
+        self.shift_net(context)
+
+        # 3. apply Shiesh
+        y = self.activation(x)
+        return y
 
 
 class ProFITiConditioning(nn.Module):
