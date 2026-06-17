@@ -12,6 +12,8 @@ __all__ = [
     "ContinuousKalmanFilter",
     "DiscreteKalmanFilter",
     "LastValue",
+    "ProFITi",
+    "Shiesh",
 ]
 
 from .base import PointForecastingModel, ProbabilisticForecastingModel
@@ -20,6 +22,7 @@ from .discrete_kalman_filter import DiscreteKalmanFilter
 from .last_value import LastValue
 from .linodenet import LinODEnet
 from .lssm import LatentStateSpaceModel
+from .profiti import ProFITi, Shiesh
 
 FORECASTING_MODELS: dict[str, type[PointForecastingModel]] = {}
 r"""Dictionary containing all available forecasting models."""
