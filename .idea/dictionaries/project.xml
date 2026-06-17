@@ -7,6 +7,7 @@
       <w>Horner</w>
       <w>Marchenko</w>
       <w>Pastur</w>
+      <w>Shiesh</w>
       <w>arglist</w>
       <w>coeffs</w>
       <w>covs</w>
@@ -38,6 +39,7 @@
       <w>pred</w>
       <w>qquad</w>
       <w>rsamples</w>
+      <w>shiesh</w>
       <w>twosided</w>
       <w>unbatch</w>
       <w>vecdot</w>
