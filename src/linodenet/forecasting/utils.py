@@ -171,10 +171,10 @@ class DenseArg:
         - there is at least on query mask selected per time stamp
     """
 
-    context_times: Tensor  # Float[(N)], finite
+    context_times: Tensor  # Float[(N)], finite, non-decreasing
     context_values: Tensor  # Float[(N, D)], sparse
 
-    query_times: Tensor  # Float[(K)], finite
+    query_times: Tensor  # Float[(K)], finite, strictly increasing
     query_mask: Tensor | None = None  # Bool[(K, F)]
     query_values: Tensor | None = None  # Float[(K, F)], sparse
 
@@ -261,7 +261,36 @@ class DenseArg:
         )
 
     def to_combined(self) -> CombinedArg:
-        raise NotImplementedError
+        X = self.context_values
+        M = self.query_mask
+        T = self.context_times
+        Q = self.query_times
+
+        *_, context_size, context_dim = X.shape
+        *_, query_size = Q.shape
+        Y = (
+            self.query_values
+            if self.query_values is not None
+            else self.context_values.new_full((query_size, context_dim), torch.nan)
+        )
+
+        # 1. combine context and query values
+        T = torch.cat([T, Q], dim=-1)
+        V = torch.cat([X, Y], dim=-2)
+        # 2. pad context and query masks
+        C = X.isfinite()
+        C = torch.cat([C, C.new_zeros(query_size, context_dim)], dim=-1)
+        M = M if M is not None else C.new_ones((query_size, context_dim))
+        M = torch.cat([M.new_zeros(context_size), M], dim=-1)
+        # 2. sort by time
+        indices = torch.argsort(T, dim=-1, stable=True)
+        return CombinedArg(
+            times=T[..., indices],
+            values=V[..., indices, :],
+            context_mask=C[..., indices, :],
+            query_mask=M[..., indices, :],
+            static_covariates=self.static_covariates,
+        )
 
 
 @dataclass(frozen=True)
@@ -284,10 +313,10 @@ class BatchedDenseArgs:
         - there is at least one query value observed per time stamp
     """
 
-    context_times: Tensor  # Float[(..., N)], padded NaN
+    context_times: Tensor  # Float[(..., N)], padded NaN, non-decreasing
     context_values: Tensor  # Float[(..., N, D)], padded NaN, sparse
 
-    query_times: Tensor  # Float[(..., K)], padded NaN
+    query_times: Tensor  # Float[(..., K)], padded NaN, strictly increasing
     query_mask: Tensor | None = None  # Bool[(..., K, F)]  padded False
     query_values: Tensor | None = None  # Float[(..., K, F)]  padded NaN, sparse
 
