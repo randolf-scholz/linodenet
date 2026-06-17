@@ -1218,10 +1218,6 @@ class BatchedCombinedArgs:
         assert query_values_nan.all() or ~query_values_nan.any()
 
     @classmethod
-    def from_unbatched(cls, args: Sequence[CombinedArg], /) -> BatchedCombinedArgs:
-        raise NotImplementedError
-
-    @classmethod
     def from_dense(cls, arg: BatchedDenseArgs, /) -> BatchedCombinedArgs:
         return arg.to_combined()
 
@@ -1229,8 +1225,82 @@ class BatchedCombinedArgs:
     def from_triplet(cls, arg: BatchedTripletArgs, /) -> BatchedCombinedArgs:
         return arg.to_combined()
 
+    @classmethod
+    def from_unbatched(cls, args: Sequence[CombinedArg], /) -> BatchedCombinedArgs:
+        if not args:
+            raise ValueError("Expected at least one CombinedArg.")
+
+        static_covariates = (
+            None
+            if (S := all_or_none(arg.static_covariates for arg in args)) is None
+            else torch.stack(S)
+        )
+
+        return cls(
+            times=pad_sequence(
+                [arg.times for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            values=pad_sequence(
+                [arg.values for arg in args],
+                batch_first=True,
+                padding_value=torch.nan,
+            ),
+            context_mask=pad_sequence(
+                [arg.context_mask for arg in args],
+                batch_first=True,
+                padding_value=False,
+            ),
+            query_mask=pad_sequence(
+                [arg.query_mask for arg in args],
+                batch_first=True,
+                padding_value=False,
+            ),
+            static_covariates=static_covariates,
+        )
+
     def unbatch(self) -> list[CombinedArg]:
-        raise NotImplementedError
+        T = self.times.unsqueeze(0).flatten(end_dim=-2)
+        V = self.values.unsqueeze(0).flatten(end_dim=-3)
+        C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
+        M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
+        static_covariates = (
+            None
+            if self.static_covariates is None
+            else self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+        )
+
+        lengths = T.isfinite().sum(dim=-1)
+        num_samples = T.shape[0]
+
+        times = unpad_sequence(T, lengths, batch_first=True)
+        values = unpad_sequence(V, lengths, batch_first=True)
+        context_masks = unpad_sequence(C, lengths, batch_first=True)
+        query_masks = unpad_sequence(M, lengths, batch_first=True)
+        static_args = (
+            [None] * num_samples
+            if static_covariates is None
+            else list(static_covariates.unbind(dim=0))
+        )
+
+        return [
+            CombinedArg(
+                times=time,
+                values=value,
+                context_mask=context_mask,
+                query_mask=query_mask,
+                static_covariates=static_arg,
+            )
+            for time, value, context_mask, query_mask, static_arg in zip(
+                times,
+                values,
+                context_masks,
+                query_masks,
+                static_args,
+                strict=True,
+            )
+        ]
 
     def to_dense(self) -> BatchedDenseArgs:
         T = self.times

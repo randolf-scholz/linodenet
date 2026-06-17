@@ -916,6 +916,98 @@ class TestCombined:
                 ]]),
             )  # fmt: skip
 
+    def test_batched_roundtrip(self) -> None:
+        args = [
+            CombinedArg(
+                times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
+                values=torch.tensor([
+                    [10.0,  nan, 12.0],
+                    [20.0,  nan, 22.0],
+                    [ nan, 30.0, 32.0],
+                    [40.0, 41.0, 42.0],
+                ]),
+                context_mask=torch.tensor([
+                    [ True, False,  True],
+                    [False, False, False],
+                    [False,  True,  True],
+                    [False, False, False],
+                ]),
+                query_mask=torch.tensor([
+                    [False, False, False],
+                    [ True, False,  True],
+                    [False, False, False],
+                    [ True,  True,  True],
+                ]),
+                static_covariates=torch.tensor([5.0, 6.0]),
+            ),
+            CombinedArg(
+                times=torch.tensor([0.0, 5.0]),
+                values=torch.tensor([
+                    [ nan,  1.0,  2.0],
+                    [ nan, 51.0, 52.0],
+                ]),
+                context_mask=torch.tensor([
+                    [False,  True,  True],
+                    [False, False, False],
+                ]),
+                query_mask=torch.tensor([
+                    [False, False, False],
+                    [False,  True,  True],
+                ]),
+                static_covariates=torch.tensor([7.0, 8.0]),
+            ),
+        ]  # fmt: skip
+
+        actual = BatchedCombinedArgs.from_unbatched(args)
+        expected = BatchedCombinedArgs(
+            times=torch.tensor([
+                [1.0, 2.0, 3.0, 4.0],
+                [0.0, 5.0, nan, nan],
+            ]),
+            values=torch.tensor([
+                [[10.0,  nan, 12.0],
+                 [20.0,  nan, 22.0],
+                 [ nan, 30.0, 32.0],
+                 [40.0, 41.0, 42.0]],
+                [[ nan,  1.0,  2.0],
+                 [ nan, 51.0, 52.0],
+                 [ nan,  nan,  nan],
+                 [ nan,  nan,  nan]],
+            ]),
+            context_mask=torch.tensor([
+                [[ True, False,  True],
+                 [False, False, False],
+                 [False,  True,  True],
+                 [False, False, False]],
+                [[False,  True,  True],
+                 [False, False, False],
+                 [False, False, False],
+                 [False, False, False]],
+            ]),
+            query_mask=torch.tensor([
+                [[False, False, False],
+                 [ True, False,  True],
+                 [False, False, False],
+                 [ True,  True,  True]],
+                [[False, False, False],
+                 [False,  True,  True],
+                 [False, False, False],
+                 [False, False, False]],
+            ]),
+            static_covariates=torch.tensor([
+                [5.0, 6.0],
+                [7.0, 8.0],
+            ]),
+        )  # fmt: skip
+
+        _assert_batched_combined_equal(actual, expected)
+
+        unbatched = actual.unbatch()
+        assert isinstance(unbatched, list)
+        assert len(unbatched) == len(args)
+        for actual, expected in zip(unbatched, args, strict=True):
+            _assert_combined_equal(actual, expected)
+
     def test_to_dense_unbatched(self) -> None:
         original = CombinedArg(
             times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
