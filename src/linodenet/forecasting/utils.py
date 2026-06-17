@@ -1080,9 +1080,20 @@ class CombinedArg:
         N: context size
         K: query size
         D: data dimensionality
+
+    Assumptions:
+        - time stamps are finite and non-decreasing
+        - context time stamps are finite and non-decreasing
+        - query time stamps are finite and strictly increasing
+        - if query values are available, all values selected by the query mask
+          are finite
+        - if query values are not available, all values selected by the query
+          mask are NaN
+        - each time stamp has at least one context or query mask entry
+        - each value row has at least one finite value
     """
 
-    times: Tensor  # Float[(N + K)], finite
+    times: Tensor  # Float[(N + K)], finite, non-decreasing
     values: Tensor  # Float[(N + K, D)], sparse
     context_mask: Tensor  # Bool[(N + K, D)]
     query_mask: Tensor  # Bool[(N + K, D)]
@@ -1107,6 +1118,8 @@ class CombinedArg:
         assert M.shape == (num_combined, num_dim)
         assert Q.shape == (num_combined, num_dim)
         assert (M.any(dim=-1) | Q.any(dim=-1)).all()  # at least one value per step
+        assert T[M.any(dim=-1)].diff(dim=-1).ge(0.0).all()
+        assert T[Q.any(dim=-1)].diff(dim=-1).gt(0.0).all()
         query_values_nan = V[Q].isnan()
         assert query_values_nan.all() or ~query_values_nan.any()
 
@@ -1147,9 +1160,20 @@ class BatchedCombinedArgs:
         K: max(Kᵢ) query size
         E: combined data dimensionality
         M: static covariate dimensionality
+
+    Assumptions: (up to tail padding)
+        - time stamps are finite and non-decreasing
+        - context time stamps are finite and non-decreasing
+        - query time stamps are finite and strictly increasing
+        - if query values are available, all values selected by the query mask
+          are finite
+        - if query values are not available, all values selected by the query
+          mask are NaN
+        - each valid time stamp has at least one context or query mask entry
+        - each valid value row has at least one finite value
     """
 
-    times: Tensor  # Float[(..., N + K)], padded NaN
+    times: Tensor  # Float[(..., N + K)], padded NaN, non-decreasing
     values: Tensor  # Float[(..., N + K, E)], padded NaN, sparse
     context_mask: Tensor  # Bool[(..., N + K, E)], padded False
     query_mask: Tensor  # Bool[(..., N + K, E)], padded False
@@ -1178,6 +1202,18 @@ class BatchedCombinedArgs:
         assert M.shape == (*batch_shape, num_combined, num_dim)
         assert Q.shape == (*batch_shape, num_combined, num_dim)
         assert is_prefix_mask(mask_valid).all()  # at least one value per step
+
+        context_filter = M.any(dim=-1)
+        query_filter = Q.any(dim=-1)
+        for times, context, query in zip(
+            T.reshape(-1, num_combined),
+            context_filter.reshape(-1, num_combined),
+            query_filter.reshape(-1, num_combined),
+            strict=True,
+        ):
+            assert times[context].diff(dim=-1).ge(0.0).all()
+            assert times[query].diff(dim=-1).gt(0.0).all()
+
         query_values_nan = V[Q].isnan()
         assert query_values_nan.all() or ~query_values_nan.any()
 

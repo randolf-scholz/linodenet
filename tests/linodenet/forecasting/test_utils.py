@@ -846,6 +846,41 @@ class TestDense:
 
 
 class TestCombined:
+    def test_rejects_non_increasing_query_times(self) -> None:
+        with pytest.raises(AssertionError):
+            CombinedArg(
+                times=torch.tensor([1.0, 1.0]),
+                values=torch.tensor([
+                    [1.0, nan],
+                    [2.0, 3.0],
+                ]),
+                context_mask=torch.tensor([
+                    [ True, False],
+                    [False, False],
+                ]),
+                query_mask=torch.tensor([
+                    [False,  True],
+                    [ True, False],
+                ]),
+            )  # fmt: skip
+
+        with pytest.raises(AssertionError):
+            BatchedCombinedArgs(
+                times=torch.tensor([[1.0, 1.0]]),
+                values=torch.tensor([[
+                    [1.0, nan],
+                    [2.0, 3.0],
+                ]]),
+                context_mask=torch.tensor([[
+                    [ True, False],
+                    [False, False],
+                ]]),
+                query_mask=torch.tensor([[
+                    [False,  True],
+                    [ True, False],
+                ]]),
+            )  # fmt: skip
+
     def test_rejects_mixed_query_value_availability(self) -> None:
         with pytest.raises(AssertionError):
             CombinedArg(
