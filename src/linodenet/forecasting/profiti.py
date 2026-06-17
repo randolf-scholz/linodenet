@@ -3,17 +3,19 @@ r"""ProFITi-style forecasting components."""
 __all__ = [
     "ProFITi",
     "ProFITiConfig",
-    "FlowSequence",
+    "ConditionalFlowSequence",
     "Shiesh",
     "TriangularAttention",
     "ProFITiBlock",
+    "Transform",
+    "ConditionalTransform",
 ]
 
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import chain
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 import torch
 from torch import Tensor, nn
@@ -23,8 +25,26 @@ from torch.nn import functional as F
 from .grafiti import Grafiti
 
 
+class Transform(Protocol):
+    r"""Protocol for invertible transforms."""
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]: ...
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]: ...
+
+
+class ConditionalTransform(Protocol):
+    r"""Protocol for invertible conditional transforms."""
+
+    def encode_and_logabsdet(
+        self, x: Tensor, context: Tensor, /
+    ) -> tuple[Tensor, Tensor]: ...
+    def decode_and_logabsdet(
+        self, y: Tensor, context: Tensor, /
+    ) -> tuple[Tensor, Tensor]: ...
+
+
 # implements Transform protocol
-class Shiesh(nn.Module):
+class Shiesh(nn.Module, Transform):
     r"""Elementwise Shiesh transform used by ProFITi flows.
 
     .. math:: fₜ(x) = (1/a)\sinh⁻¹(ℯᵃᵗ\sinh(a⋅x))
@@ -98,7 +118,7 @@ class Shiesh(nn.Module):
         return self._transform_and_logabsdet(y, -self.t)
 
 
-class TriangularAttention(nn.Module):
+class TriangularAttention(nn.Module, ConditionalTransform):
     r"""Implements (sorted) invertible triangular attention (equation 10).
 
     .. math:: σ(QKᵀ)V = A(H, H)⋅X
@@ -150,7 +170,7 @@ class TriangularAttention(nn.Module):
         return x, logabsdet
 
 
-class ProFITiBlock(nn.Module):
+class ProFITiBlock(nn.Module, ConditionalTransform):
     r"""Implements profiti-block (equation 15).
 
     .. math:: shiesh(el(sita(y, x), x)
@@ -238,26 +258,35 @@ class ProFITiBlock(nn.Module):
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
 
-class FlowSequence(nn.ModuleList):
+class ConditionalFlowSequence(nn.ModuleList):
     r"""Implements a sequence of flow layers."""
 
-    def __init__(self, layers: list[nn.Module], /, event_ndim: int = 1) -> None:
-        super().__init__(layers)
-        self.event_ndim = event_ndim
+    def __init__(self, layers: list[ConditionalTransform], /) -> None:
+        super().__init__(layers)  # type: ignore[arg-type]
 
-    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        batch_shape = x.shape[: -self.event_ndim]
+    def encode_and_logabsdet(
+        self,
+        x: Tensor,
+        context: Tensor,
+        /,
+    ) -> tuple[Tensor, Tensor]:
+        batch_shape = x.shape[:-1]
         logabsdet = torch.zeros(batch_shape, dtype=x.dtype, device=x.device)
         for layer in self:
-            x, ldj = layer.encode_and_logabsdet(x)  # type: ignore[arg-type]
+            x, ldj = layer.encode_and_logabsdet(x, context)  # type: ignore[arg-type]
             logabsdet = logabsdet + ldj
         return x, logabsdet
 
-    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
-        batch_shape = y.shape[: -self.event_ndim]
+    def decode_and_logabsdet(
+        self,
+        y: Tensor,
+        context: Tensor,
+        /,
+    ) -> tuple[Tensor, Tensor]:
+        batch_shape = y.shape[:-1]
         logabsdet = torch.zeros(batch_shape, dtype=y.dtype, device=y.device)
         for layer in reversed(self):
-            y, ldj = layer.decode_and_logabsdet(y)  # type: ignore[arg-type]
+            y, ldj = layer.decode_and_logabsdet(y, context)  # type: ignore[arg-type]
             logabsdet = logabsdet + ldj
         return y, logabsdet
 
@@ -300,7 +329,15 @@ class ProFITi(nn.Module):
             num_layers=config.num_layers,
             num_heads=config.num_heads,
         )
-        return cls(conditioning_module=conditioning_module, flow=nn.Identity())
+
+        flow = ConditionalFlowSequence(
+            [
+                ProFITiBlock(latent_dim=config.latent_dim)
+                for _ in range(config.num_layers)
+            ]
+        )
+
+        return cls(conditioning_module=conditioning_module, flow=flow)
 
     def __init__(
         self,
