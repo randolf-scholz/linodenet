@@ -120,10 +120,10 @@ def _consecutive_group_indices(
         shape `(...)` with the number of valid groups per batch item.
 
     Example:
-        >>> values = torch.tensor([[1.0, 1.0, 2.0, float("nan")], [3.0, 4.0, 4.0, 5.0]])
-        >>> mask = torch.isfinite(values)
-        >>> inverse, counts = _consecutive_group_indices(values, mask)
-        >>> inverse
+        >>> vals = torch.tensor([[1.0, 1.0, 2.0, float("nan")], [3.0, 4.0, 4.0, 5.0]])
+        >>> m = torch.isfinite(vals)
+        >>> inv, counts = _consecutive_group_indices(vals, m)
+        >>> inv
         tensor([[ 0,  0,  1, -1],
                 [ 0,  1,  1,  2]])
         >>> counts
