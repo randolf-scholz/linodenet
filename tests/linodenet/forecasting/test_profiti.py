@@ -202,7 +202,7 @@ def test_profiti_from_config_uses_grafiti_and_flow_sequence() -> None:
     assert model.conditioning_module.hidden_dim == config.latent_dim
     assert model.conditioning_module.num_heads == config.num_heads
     assert model.conditioning_module.num_layers == config.num_layers
-    assert isinstance(model.flow, ConditionalFlowSequence)
-    assert not isinstance(model.flow, nn.Identity)
-    assert len(model.flow) == config.num_layers
-    assert all(isinstance(layer, ProFITiBlock) for layer in model.flow)
+    assert isinstance(model.conditional_flow, ConditionalFlowSequence)
+    assert not isinstance(model.conditional_flow, nn.Identity)
+    assert len(model.conditional_flow) == config.num_layers
+    assert all(isinstance(layer, ProFITiBlock) for layer in model.conditional_flow)

@@ -311,7 +311,7 @@ class ProFITi(nn.Module):
     """
 
     conditioning_module: nn.Module
-    flow: nn.Module
+    conditional_flow: nn.Module
 
     @classmethod
     def from_config(
@@ -347,7 +347,7 @@ class ProFITi(nn.Module):
     ) -> None:
         super().__init__()
         self.conditioning_module = conditioning_module
-        self.flow = flow
+        self.conditional_flow = flow
 
     def sample(
         self,
