@@ -3,9 +3,7 @@ r"""ProFITi-style forecasting components."""
 __all__ = [
     "ProFITi",
     "ProFITiConfig",
-    "ProFITiConditioning",
-    "ProFITiFlow",
-    "ProFITiFlowLayer",
+    "FlowSequence",
     "Shiesh",
     "TriangularAttention",
     "ProFITiBlock",
@@ -240,6 +238,30 @@ class ProFITiBlock(nn.Module):
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
 
+class FlowSequence(nn.ModuleList):
+    r"""Implements a sequence of flow layers."""
+
+    def __init__(self, layers: list[nn.Module], /, event_ndim: int = 1) -> None:
+        super().__init__(layers)
+        self.event_ndim = event_ndim
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        batch_shape = x.shape[: -self.event_ndim]
+        logabsdet = torch.zeros(batch_shape, dtype=x.dtype, device=x.device)
+        for layer in self:
+            x, ldj = layer.encode_and_logabsdet(x)  # type: ignore[arg-type]
+            logabsdet = logabsdet + ldj
+        return x, logabsdet
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        batch_shape = y.shape[: -self.event_ndim]
+        logabsdet = torch.zeros(batch_shape, dtype=y.dtype, device=y.device)
+        for layer in reversed(self):
+            y, ldj = layer.decode_and_logabsdet(y)  # type: ignore[arg-type]
+            logabsdet = logabsdet + ldj
+        return y, logabsdet
+
+
 @dataclass(frozen=True)
 class ProFITiConfig:
     r"""Configuration for constructing a ProFITi model."""
@@ -312,63 +334,4 @@ class ProFITi(nn.Module):
         context_mask: Tensor | None = None,
         query_mask: Tensor | None = None,
     ) -> Tensor:
-        raise NotImplementedError
-
-
-class ProFITiConditioning(nn.Module):
-    r"""Stub for ProFITi conditioning modules."""
-
-    def forward(
-        self,
-        context_times: Tensor,
-        context_values: Tensor,
-        query_times: Tensor,
-        *,
-        context_mask: Tensor | None = None,
-        query_mask: Tensor | None = None,
-    ) -> Tensor:
-        raise NotImplementedError
-
-
-class ProFITiFlow(nn.Module):
-    r"""Stub for ProFITi conditional normalizing flows."""
-
-    def forward(
-        self,
-        value: Tensor,
-        conditioning: Tensor,
-        *,
-        mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
-
-    def inverse(
-        self,
-        latent: Tensor,
-        conditioning: Tensor,
-        *,
-        mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
-
-
-class ProFITiFlowLayer(nn.Module):
-    r"""Stub for a single ProFITi flow layer."""
-
-    def forward(
-        self,
-        value: Tensor,
-        conditioning: Tensor,
-        *,
-        mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
-
-    def inverse(
-        self,
-        latent: Tensor,
-        conditioning: Tensor,
-        *,
-        mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
         raise NotImplementedError
