@@ -858,6 +858,34 @@ class TestCombined:
 
         _assert_combined_equal(actual, original)
 
+    def test_to_triplet_roundtrip_unbatched(self) -> None:
+        original = CombinedArg(
+            times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
+            values=torch.tensor([
+                [10.0,  nan, 12.0],
+                [20.0,  nan, 22.0],
+                [ nan, 30.0, 32.0],
+                [40.0, 41.0, 42.0],
+            ]),
+            context_mask=torch.tensor([
+                [ True, False,  True],
+                [False, False, False],
+                [False,  True,  True],
+                [False, False, False],
+            ]),
+            query_mask=torch.tensor([
+                [False, False, False],
+                [ True, False,  True],
+                [False, False, False],
+                [ True,  True,  True],
+            ]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )  # fmt: skip
+
+        actual = original.to_triplet().to_combined()
+
+        _assert_combined_equal(actual, original)
+
 
 class TestTriplet:
     def test_rejects_duplicate_queries(self) -> None:
@@ -928,6 +956,21 @@ class TestTriplet:
         )  # fmt: skip
 
         _assert_dense_equal(actual, expected)
+
+    def test_to_combined_roundtrip_unbatched(self) -> None:
+        original = TripletArg(
+            context_times=torch.tensor([1.0, 1.0, 3.0, 3.0]),
+            context_channels=torch.tensor([0, 2, 1, 2]),
+            context_values=torch.tensor([10.0, 12.0, 30.0, 32.0]),
+            query_times=torch.tensor([2.0, 2.0, 4.0, 4.0, 4.0]),
+            query_channels=torch.tensor([0, 2, 0, 1, 2]),
+            query_values=torch.tensor([20.0, 22.0, 40.0, 41.0, 42.0]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )
+
+        actual = original.to_combined().to_triplet()
+
+        _assert_triplet_equal(actual, original)
 
     def test_batched_roundtrip(self) -> None:
         args = [

@@ -723,7 +723,7 @@ class TripletArg:
         )
 
     def to_combined(self) -> CombinedArg:
-        raise NotImplementedError
+        return self.to_dense().to_combined()
 
 
 @dataclass(frozen=True)
@@ -1077,7 +1077,7 @@ class CombinedArg:
         )
 
     def to_triplet(self) -> TripletArg:
-        raise NotImplementedError
+        return self.to_dense().to_triplet()
 
 
 @dataclass(frozen=True)
