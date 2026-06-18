@@ -210,27 +210,6 @@ def reconstruct_y(
     return y_reconstructed  # (..., T, D)
 
 
-def _consecutive_time_nodes(
-    times: Tensor,  # (B, N)
-    valid: Tensor,  # (B, N)
-    /,
-) -> tuple[Tensor, Tensor, int]:  # (B, T), (B, N), T
-    r"""Group consecutive equal valid times and return one node per group."""
-    is_new = torch.ones_like(valid, dtype=torch.bool)  # (B, N)
-    is_new[:, 1:] = times[:, 1:] != times[:, :-1]
-    is_new &= valid
-
-    group = is_new.cumsum(dim=-1) - 1  # (B, N)
-    group = group.masked_fill(~valid, -1)  # (B, N)
-    num_steps = int(is_new.sum(dim=-1).max().item())
-
-    batch = torch.arange(times.shape[0], device=times.device).unsqueeze(dim=-1)
-    batch = batch.expand_as(times)  # (B, N)
-    step_times = times.new_full((times.shape[0], num_steps), torch.nan)  # (B, T)
-    step_times[batch[is_new], group[is_new]] = times[is_new]
-    return step_times, group, num_steps
-
-
 class Grafiti(nn.Module):
     r"""GraFITi encoder for observed and target time-series entries."""
 
@@ -458,67 +437,46 @@ class Grafiti(nn.Module):
         if (query_channels_flat[query_valid] >= num_channels).any():
             raise ValueError("Expected query channel indices below input_dim.")
 
-        context_step_times, context_group, num_context_steps = _consecutive_time_nodes(
-            context_times_flat, context_valid
-        )  # (B, Tc), (B, O), Tc
-        query_step_times, query_group, _ = _consecutive_time_nodes(
-            query_times_flat, query_valid
-        )  # (B, Tq), (B, Q), Tq
-
-        time_points_unsorted = torch.cat([context_step_times, query_step_times], dim=-1)
-        sort_indices = torch.argsort(  # (B, T')
-            time_points_unsorted.nan_to_num(nan=torch.inf),
+        edge_times = torch.cat([context_times_flat, query_times_flat], dim=-1)  # (B, E)
+        edge_valid_mask = torch.cat([context_valid, query_valid], dim=-1)  # (B, E)
+        sort_indices = torch.argsort(  # (B, E)
+            edge_times.nan_to_num(nan=torch.inf),
             dim=-1,
             stable=True,
         )
-        time_points_flat = torch.take_along_dim(  # (B, T')
-            time_points_unsorted,
-            sort_indices,
-            dim=-1,
-        )
-        num_steps = time_points_flat.shape[-1]
-        unsort_indices = torch.argsort(sort_indices, dim=-1)  # (B, T')
-
-        context_time_indices, query_time_indices = [
-            torch.take_along_dim(unsort_indices, index.clamp_min(0), dim=-1)
-            for index in (context_group, num_context_steps + query_group)
-        ]  # (B, O), (B, Q)
-
-        edge_valid_mask = torch.cat([context_valid, query_valid], dim=-1)  # (B, O+Q)
-        edge_time_indices = torch.cat(  # (B, O+Q)
-            [context_time_indices, query_time_indices], dim=-1
-        ).masked_fill(~edge_valid_mask, 0)
-        edge_channel_indices = torch.cat(  # (B, O+Q)
+        edge_channel_indices = torch.cat(  # (B, E)
             [context_channels_flat, query_channels_flat], dim=-1
-        ).masked_fill(~edge_valid_mask, 0)
-        edge_values = torch.cat(  # (B, O+Q)
+        )
+        edge_values = torch.cat(  # (B, E)
             [context_values_flat, torch.zeros_like(query_times_flat)], dim=-1
-        ).masked_fill(~edge_valid_mask, 0.0)
+        )
         edge_target_mask = torch.cat(
             [torch.zeros_like(context_valid), query_valid], dim=-1
-        )  # (B, O+Q)
+        )  # (B, E)
 
-        edge_sort_key = torch.where(  # (B, O+Q)
-            edge_valid_mask,
-            edge_time_indices * num_channels + edge_channel_indices,
-            torch.full_like(edge_time_indices, num_steps * num_channels),
-        )
-        edge_order = torch.argsort(edge_sort_key, dim=-1, stable=True)  # (B, O+Q)
-
-        time_points = time_points_flat.reshape(*batch_shape, num_steps)  # (..., T')
         num_edges = num_context + num_query
-        t_inds_f, c_inds_f, obs_vals, tgt_mask_f, mask_f = [
-            torch.take_along_dim(tensor, edge_order, dim=-1).reshape(
+        num_steps = num_edges
+        time_points, c_inds_f, obs_vals, tgt_mask_f, mask_f = [
+            torch.take_along_dim(tensor, sort_indices, dim=-1).reshape(
                 *batch_shape, num_edges
             )
             for tensor in (
-                edge_time_indices,
+                edge_times,
                 edge_channel_indices,
                 edge_values,
                 edge_target_mask,
                 edge_valid_mask,
             )
-        ]  # (..., O+Q)
+        ]  # (..., E)
+        t_inds_f = (
+            torch.arange(num_edges, device=device)
+            .expand(num_batches, num_edges)
+            .reshape(*batch_shape, num_edges)
+        )  # (..., E)
+        c_inds_f = c_inds_f.masked_fill(~mask_f, 0)
+        t_inds_f = t_inds_f.masked_fill(~mask_f, 0)
+        obs_vals = obs_vals.masked_fill(~mask_f, 0.0)
+        tgt_mask_f = tgt_mask_f & mask_f
 
         c_onehot = self._one_hot_channels(  # (..., D, D)
             *batch_shape,
@@ -594,25 +552,22 @@ class Grafiti(nn.Module):
     def forward_combined(
         self,
         time_points: Tensor,  # (..., T)
-        values: Tensor,  # (..., T, D)
-        obs_mask: Tensor,  # (..., T, D)
+        context_values: Tensor,  # (..., T, D)
         target_mask: Tensor,  # (..., T, D)
     ) -> Tensor:  # (..., K, M)
         r"""Encode observed values and target queries.
 
         Args:
             time_points: Times for observed and target entries with shape ``(..., time)``.
-            values: Observed values with shape ``(..., time, dim)``.
-            obs_mask: Boolean observed-value mask with shape ``(..., time, dim)``.
+            context_values: Observed values with shape ``(..., time, dim)``.
             target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
 
         Returns:
             Target edge embeddings with shape ``(..., max_targets, hidden_dim)``.
         """
-        assert obs_mask.dtype == torch.bool
         assert target_mask.dtype == torch.bool
 
-        *batch_shape, _, num_channels = values.shape
+        *batch_shape, _, num_channels = context_values.shape
         device = time_points.device
 
         c_onehot = self._one_hot_channels(  # (..., D, D)
@@ -622,12 +577,13 @@ class Grafiti(nn.Module):
         t_inds, c_inds = self._build_indices(  # (..., T, D)
             time_points, num_channels=num_channels
         )
+        obs_mask = context_values.isfinite()  # (..., T, D)
         mask = obs_mask | target_mask  # (..., T, D)
 
         # Flatten observed and target edges into padded edge lists. All outputs
         # have shape (..., K'), where K' is the max observed+target edge count.
         t_inds_f, obs_vals, tgt_mask_f, c_inds_f, mask_f = batch_flatten(
-            [t_inds, values, target_mask, c_inds, mask], mask=mask
+            [t_inds, context_values, target_mask, c_inds, mask], mask=mask
         )
 
         # Encode whether an edge should be treated as a prediction target:
