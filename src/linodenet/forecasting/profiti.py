@@ -352,26 +352,35 @@ class ProFITi(nn.Module):
         self.context_embedding = context_embedding
         self.conditional_flow = conditional_flow
 
-    def sample(
+    def sample_and_log_prob(
         self,
+        num_samples: int = 1,
+        *,
         context_times: Tensor,
         context_values: Tensor,
         query_times: Tensor,
-        *,
-        context_mask: Tensor | None = None,
         query_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        raise NotImplementedError
+
+    def sample(
+        self,
         num_samples: int = 1,
+        *,
+        context_times: Tensor,
+        context_values: Tensor,
+        query_times: Tensor,
+        query_mask: Tensor | None = None,
     ) -> Tensor:
         raise NotImplementedError
 
     def log_prob(
         self,
         value: Tensor,
+        *,
         context_times: Tensor,
         context_values: Tensor,
         query_times: Tensor,
-        *,
-        context_mask: Tensor | None = None,
         query_mask: Tensor | None = None,
     ) -> Tensor:
         raise NotImplementedError
