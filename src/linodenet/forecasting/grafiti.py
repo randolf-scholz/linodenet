@@ -3,13 +3,11 @@ r"""GraFITi layers for irregular time-series forecasting."""
 __all__ = [
     "MAB",
     "Grafiti",
-    "batch_flatten",
     "gather_target_embeddings",
     "reconstruct_y",
 ]
 
 import math
-from collections.abc import Iterable
 
 import torch
 import torch.nn.functional as F
@@ -104,50 +102,6 @@ class MAB(nn.Module):
             Y = self.layer_norm1(Y)  # (..., Nq, M)
 
         return Y  # (..., Nq, M)
-
-
-def batch_flatten(
-    tensors: Iterable[Tensor],  # iterable[(..., T, D)]
-    *,
-    mask: Tensor,  # (..., T, D)
-) -> list[Tensor]:  # list[(..., K')]
-    r"""Flatten batched time-series tensors according to an observation mask.
-
-    Args:
-        tensors: Tensors with shape ``(..., time, dim)``.
-        mask: Boolean mask tensor with shape ``(..., time, dim)``.
-
-    Returns:
-        List of padded flattened tensors, each with shape ``(..., max_observed)``.
-    """
-    assert mask.dtype == torch.bool
-
-    *batch_shape, num_steps, num_channels = mask.shape
-    num_batch = math.prod(batch_shape)
-    num_edges = num_steps * num_channels
-    device = mask.device
-    mask_flat = mask.reshape(num_batch, num_edges)  # (B_flat, T*D)
-
-    observed_counts = mask_flat.sum(dim=1)  # (B_flat)
-    k = int(observed_counts.max().item())  # K'
-
-    indices = torch.arange(k, device=device).expand(num_batch, k)  # (B_flat, K')
-    mask_indices = indices < observed_counts.unsqueeze(dim=-1)  # (B_flat, K')
-
-    y_padded: list[Tensor] = []
-    for x in tensors:
-        x_flat = x.reshape(num_batch, num_edges)  # (B_flat, T*D)
-        observed_values = x_flat[mask_flat]  # (sum(K'_b))
-        y_padded_flat = torch.full(  # (B_flat, K')
-            (num_batch, k),
-            0,
-            device=device,
-            dtype=x.dtype,
-        )
-        y_padded_flat[mask_indices] = observed_values
-        y_padded.append(y_padded_flat.reshape(*batch_shape, k))  # (..., K')
-
-    return y_padded  # list[(..., K')]
 
 
 def gather_target_embeddings(
@@ -289,33 +243,6 @@ class Grafiti(nn.Module):
         indices = torch.arange(num_channels, device=device)  # (D)
         one_hot = F.one_hot(indices, num_classes=num_channels).float()  # (D, D)
         return one_hot.expand(*size, num_channels, num_channels)  # (..., D, D)
-
-    def _build_indices(
-        self,
-        t: Tensor,  # (..., T)
-        *,
-        num_channels: int,  # D
-    ) -> tuple[Tensor, Tensor]:  # (..., T, D), (..., T, D)
-        r"""Build dense time and channel index tensors.
-
-        Args:
-            t: Time tensor with shape ``(..., time)``.
-            num_channels: Number of channels.
-
-        Returns:
-            Tuple containing time indices and channel indices, both with shape
-            ``(..., time, dim)``.
-        """
-        *batch_shape, num_steps = t.shape
-
-        # Time indices identify the time node attached to each dense edge.
-        t_inds = torch.arange(num_steps, device=t.device).unsqueeze(-1)  # (T, 1)
-        t_inds = t_inds.expand(*batch_shape, num_steps, num_channels)  # (..., T, D)
-
-        # Channel indices identify the channel node attached to each dense edge.
-        c_inds = torch.arange(num_channels, device=t.device)  # (D)
-        c_inds = c_inds.expand(*batch_shape, num_steps, num_channels)  # (..., T, D)
-        return t_inds, c_inds
 
     def _create_masks(
         self,
@@ -567,24 +494,51 @@ class Grafiti(nn.Module):
         """
         assert target_mask.dtype == torch.bool
 
-        *batch_shape, _, num_channels = context_values.shape
+        *batch_shape, num_steps, num_channels = context_values.shape
+        B = math.prod(batch_shape)
         device = time_points.device
 
         c_onehot = self._one_hot_channels(  # (..., D, D)
             *batch_shape, num_channels=num_channels, device=device
         )
 
-        t_inds, c_inds = self._build_indices(  # (..., T, D)
-            time_points, num_channels=num_channels
-        )
         obs_mask = context_values.isfinite()  # (..., T, D)
         mask = obs_mask | target_mask  # (..., T, D)
 
-        # Flatten observed and target edges into padded edge lists. All outputs
-        # have shape (..., K'), where K' is the max observed+target edge count.
-        t_inds_f, obs_vals, tgt_mask_f, c_inds_f, mask_f = batch_flatten(
-            [t_inds, context_values, target_mask, c_inds, mask], mask=mask
+        # flatten the batch dimensions
+        mask_flat = mask.reshape(B, num_steps, num_channels)  # (B, T, D)
+        values_flat = context_values.reshape(B, num_steps, num_channels)  # (B, T, D)
+        target_flat = target_mask.reshape(B, num_steps, num_channels)  # (B, T, D)
+
+        edge_counts = mask_flat.sum(dim=(-2, -1))  # (B)
+        num_edges = int(edge_counts.max().item())  # K'
+        batch_indices, t_indices, c_indices = mask_flat.nonzero(as_tuple=True)  # (E)
+        edge_offsets = edge_counts.cumsum(dim=0) - edge_counts  # (B)
+        edge_positions = (  # (E)
+            torch.arange(batch_indices.numel(), device=device)
+            - edge_offsets.repeat_interleave(edge_counts)
         )
+        edge_indices = (batch_indices, edge_positions)
+
+        # collect the results
+        t_inds_f = t_indices.new_zeros(B, num_edges)  # (B, K')
+        c_inds_f = c_indices.new_zeros(B, num_edges)  # (B, K')
+        obs_vals = context_values.new_zeros(B, num_edges)  # (B, K')
+        tgt_mask_f = target_flat.new_zeros(B, num_edges)  # (B, K')
+        mask_f = target_flat.new_zeros(B, num_edges)  # (B, K')
+
+        t_inds_f[edge_indices] = t_indices
+        c_inds_f[edge_indices] = c_indices
+        obs_vals[edge_indices] = values_flat[batch_indices, t_indices, c_indices]
+        tgt_mask_f[edge_indices] = target_flat[batch_indices, t_indices, c_indices]
+        mask_f[edge_indices] = True
+
+        # reshape flattened tensors back into batch_shape
+        t_inds_f = t_inds_f.reshape(*batch_shape, num_edges)  # (..., K')
+        c_inds_f = c_inds_f.reshape(*batch_shape, num_edges)  # (..., K')
+        obs_vals = obs_vals.reshape(*batch_shape, num_edges)  # (..., K')
+        tgt_mask_f = tgt_mask_f.reshape(*batch_shape, num_edges)  # (..., K')
+        mask_f = mask_f.reshape(*batch_shape, num_edges)  # (..., K')
 
         # Encode whether an edge should be treated as a prediction target:
         # mask_f => tgt_mask_f, i.e. every padded edge is a target and every
@@ -598,7 +552,7 @@ class Grafiti(nn.Module):
 
         # Masks route each flattened edge to its incident time and channel nodes.
         t_mask, c_mask = self._create_masks(  # (..., T, K'), (..., D, K')
-            num_steps=time_points.shape[-1],
+            num_steps=num_steps,
             num_channels=num_channels,
             t_inds_flat=t_inds_f,
             c_inds_flat=c_inds_f,
