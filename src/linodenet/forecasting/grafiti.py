@@ -509,7 +509,7 @@ class Grafiti(nn.Module):
         # Subtract each batch item's global start offset to get its local slot in E.
         *batch_idx, t_idx, c_idx = dense_edge_mask.nonzero(as_tuple=True)  # (N)
         edge_offsets = (  # (...)
-            -edge_counts + edge_counts.flatten().cumsum(dim=0).reshape(batch_shape)
+            edge_counts.flatten().cumsum(dim=0).reshape(batch_shape) - edge_counts
         )
         edge_positions = (  # (N)
             torch.arange(t_idx.numel(), device=device) - edge_offsets[*batch_idx]
