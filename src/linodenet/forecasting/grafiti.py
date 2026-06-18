@@ -509,71 +509,48 @@ class Grafiti(nn.Module):
         assert target_mask.dtype == torch.bool
 
         *batch_shape, num_steps, num_channels = context_values.shape
-        num_batches = math.prod(batch_shape)
         device = time_points.device
 
-        c_onehot = self._one_hot_channels(  # (..., D, D)
-            *batch_shape, num_channels=num_channels, device=device
-        )
+        channel_indices = torch.arange(num_channels, device=device)  # (D)
+        c_onehot = F.one_hot(channel_indices, num_classes=num_channels).float()
+        c_onehot = c_onehot.expand(
+            *batch_shape, num_channels, num_channels
+        )  # (..., D, D)
 
         context_mask = context_values.isfinite()  # (..., T, D)
         dense_edge_mask = context_mask | target_mask  # (..., T, D)
 
-        # flatten the batch dimensions
-        dense_edge_mask_flat = dense_edge_mask.reshape(  # (B, T, D)
-            num_batches, num_steps, num_channels
-        )
-        context_values_flat = context_values.reshape(  # (B, T, D)
-            num_batches, num_steps, num_channels
-        )
-        target_mask_flat = target_mask.reshape(  # (B, T, D)
-            num_batches, num_steps, num_channels
-        )
+        edge_counts = dense_edge_mask.sum(dim=(-2, -1))  # (...)
+        max_edges = int(edge_counts.max().item())  # E
 
-        edge_counts = dense_edge_mask_flat.sum(dim=(-2, -1))  # (B)
-        num_edges = int(edge_counts.max().item())  # E
-        edge_batch_indices, selected_time_indices, selected_channel_indices = (
-            dense_edge_mask_flat.nonzero(as_tuple=True)
-        )  # (N)
-        edge_offsets = edge_counts.cumsum(dim=0) - edge_counts  # (B)
+        # nonzero returns one global list of N true entries in row-major batch order.
+        # Subtract each batch item's global start offset to get its local slot in E.
+        *batch_idx, t_idx, c_idx = dense_edge_mask.nonzero(as_tuple=True)  # (N)
+        edge_offsets = (  # (...)
+            -edge_counts + edge_counts.flatten().cumsum(dim=0).reshape(batch_shape)
+        )
         edge_positions = (  # (N)
-            torch.arange(edge_batch_indices.numel(), device=device)
-            - edge_offsets.repeat_interleave(edge_counts)
+            torch.arange(t_idx.numel(), device=device) - edge_offsets[*batch_idx]
         )
-        edge_indices = (edge_batch_indices, edge_positions)
+        edge_indices = (*batch_idx, edge_positions)
 
-        # collect the results
-        edge_t_indices = selected_time_indices.new_zeros(num_batches, num_edges)
-        edge_c_indices = selected_channel_indices.new_zeros(num_batches, num_edges)
-        edge_values = context_values.new_zeros(num_batches, num_edges)
-        edge_target_mask = target_mask_flat.new_zeros(num_batches, num_edges)
-        valid_edge_mask = target_mask_flat.new_zeros(num_batches, num_edges)
+        # collect the results in tensors of shape (..., E)
+        edge_t_indices = t_idx.new_zeros(*batch_shape, max_edges)
+        edge_c_indices = c_idx.new_zeros(*batch_shape, max_edges)
+        edge_values = context_values.new_zeros(*batch_shape, max_edges)
+        edge_target_mask = dense_edge_mask.new_zeros(*batch_shape, max_edges)
+        edge_mask = dense_edge_mask.new_zeros(*batch_shape, max_edges)
 
-        edge_t_indices[edge_indices] = selected_time_indices
-        edge_c_indices[edge_indices] = selected_channel_indices
-        edge_values[edge_indices] = context_values_flat[
-            edge_batch_indices,
-            selected_time_indices,
-            selected_channel_indices,
-        ]
-        edge_target_mask[edge_indices] = target_mask_flat[
-            edge_batch_indices,
-            selected_time_indices,
-            selected_channel_indices,
-        ]
-        valid_edge_mask[edge_indices] = True
-
-        # reshape flattened tensors back into batch_shape
-        edge_t_indices = edge_t_indices.reshape(*batch_shape, num_edges)
-        edge_c_indices = edge_c_indices.reshape(*batch_shape, num_edges)
-        edge_values = edge_values.reshape(*batch_shape, num_edges)
-        edge_target_mask = edge_target_mask.reshape(*batch_shape, num_edges)
-        valid_edge_mask = valid_edge_mask.reshape(*batch_shape, num_edges)
+        edge_t_indices[edge_indices] = t_idx
+        edge_c_indices[edge_indices] = c_idx
+        edge_values[edge_indices] = context_values[*batch_idx, t_idx, c_idx]
+        edge_target_mask[edge_indices] = target_mask[*batch_idx, t_idx, c_idx]
+        edge_mask[edge_indices] = True
 
         # Encode whether an edge should be treated as a prediction target:
         # valid_edge_mask => edge_target_mask, i.e. every padded edge is a target and every
         # valid edge is a target exactly when it came from target_mask.
-        target_indicator = ~valid_edge_mask | edge_target_mask  # (..., E)
+        target_indicator = ~edge_mask | edge_target_mask  # (..., E)
         edge_values = torch.where(edge_target_mask, 0.0, edge_values)
         edge_input = torch.stack([  # (..., E, 2)
             edge_values,
@@ -587,7 +564,7 @@ class Grafiti(nn.Module):
                 num_channels=num_channels,
                 edge_time_indices=edge_t_indices,
                 edge_channel_indices=edge_c_indices,
-                valid_edge_mask=valid_edge_mask,
+                valid_edge_mask=edge_mask,
             )
         )
         h_edge, h_time, h_channel = (  # (..., E, M), (..., T, M), (..., D, M)
@@ -595,7 +572,7 @@ class Grafiti(nn.Module):
                 t=time_points,
                 u_raw=edge_input,
                 c_onehot=c_onehot,
-                mask=valid_edge_mask,
+                mask=edge_mask,
             )
         )
 
@@ -630,7 +607,7 @@ class Grafiti(nn.Module):
 
             edge_context = torch.cat([h_edge, h_start, h_stop], dim=-1)  # (..., E, 3M)
             h_edge = torch.where(  # (..., E, M)
-                valid_edge_mask.unsqueeze(dim=-1),
+                edge_mask.unsqueeze(dim=-1),
                 torch.relu(h_edge + edge_nn(edge_context)),
                 0.0,
             )
