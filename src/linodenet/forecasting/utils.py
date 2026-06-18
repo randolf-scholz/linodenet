@@ -515,8 +515,11 @@ class BatchedDenseArgs:
         context_offsets = (
             context_counts.flatten().cumsum(dim=0).reshape(batch_shape) - context_counts
         )
-        positions = torch.arange(t_idx.numel(), device=t_idx.device)
-        context_indices = (*batch_idx, positions - context_offsets[*batch_idx])
+        positions = (
+            torch.arange(t_idx.numel(), device=t_idx.device)
+            - context_offsets[*batch_idx]
+        )
+        context_indices = (*batch_idx, positions)
 
         context_times = scatter_fill(
             (*batch_shape, num_context),
@@ -550,8 +553,10 @@ class BatchedDenseArgs:
         query_offsets = (
             query_counts.flatten().cumsum(dim=0).reshape(batch_shape) - query_counts
         )
-        positions = torch.arange(t_idx.numel(), device=t_idx.device)
-        query_indices = (*batch_idx, positions - query_offsets[*batch_idx])
+        positions = (
+            torch.arange(t_idx.numel(), device=t_idx.device) - query_offsets[*batch_idx]
+        )
+        query_indices = (*batch_idx, positions)
 
         query_times = scatter_fill(
             (*batch_shape, num_query),
