@@ -18,7 +18,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 import torch
-from torch import Tensor
+from torch import Tensor, nan
 from torch.nn.utils.rnn import pad_sequence, unpad_sequence
 
 
@@ -285,19 +285,20 @@ class DenseArg:
         )
         T = torch.cat([T, Q], dim=-1)
         X = torch.cat(
-            [X, X.new_full((query_size, context_dim), torch.nan)],
+            [X, X.new_full((query_size, context_dim), nan)],
             dim=-2,
         )
         Y = (
             None
             if Y is None
             else torch.cat(
-                [Y.new_full((context_size, context_dim), torch.nan), Y],
+                [Y.new_full((context_size, context_dim), nan), Y],
                 dim=-2,
             )
         )
         M = torch.cat(
-            [query_mask.new_zeros((context_size, context_dim)), query_mask], dim=-2
+            [query_mask.new_zeros((context_size, context_dim)), query_mask],
+            dim=-2,
         )
         indices = torch.argsort(T, dim=-1, stable=True)
         return CombinedArg(
@@ -408,7 +409,7 @@ class BatchedDenseArgs:
         query_values = (
             None
             if (V := _all_or_none(arg.query_values for arg in args)) is None
-            else pad_sequence(V, batch_first=True, padding_value=torch.nan)
+            else pad_sequence(V, batch_first=True, padding_value=nan)
         )
 
         static_covariates = (
@@ -421,17 +422,17 @@ class BatchedDenseArgs:
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             context_values=pad_sequence(
                 [arg.context_values for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             query_times=pad_sequence(
                 [arg.query_times for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             query_mask=query_mask,
             query_values=query_values,
@@ -537,7 +538,7 @@ class BatchedDenseArgs:
             (T_flat.shape[0], num_context),
             context_indices,
             T_flat[batch_indices, t_indices],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
         context_channels = scatter_fill(
             (T_flat.shape[0], num_context),
@@ -549,7 +550,7 @@ class BatchedDenseArgs:
             (T_flat.shape[0], num_context),
             context_indices,
             X_flat[batch_indices, t_indices, c_indices],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
 
         batch_indices, t_indices, c_indices = M_flat.nonzero(as_tuple=True)
@@ -561,7 +562,7 @@ class BatchedDenseArgs:
             (Q_flat.shape[0], num_query),
             query_indices,
             Q_flat[batch_indices, t_indices],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
         query_channels = scatter_fill(
             (Q_flat.shape[0], num_query),
@@ -576,7 +577,7 @@ class BatchedDenseArgs:
                 (Q_flat.shape[0], num_query),
                 query_indices,
                 Y_flat[batch_indices, t_indices, c_indices],
-                fill_value=torch.nan,
+                fill_value=nan,
             )
         )
 
@@ -620,13 +621,13 @@ class BatchedDenseArgs:
         )
         context_values = torch.cat([
             X,
-            X.new_full((*batch_shape, query_size, context_dim), torch.nan),
+            X.new_full((*batch_shape, query_size, context_dim), nan),
         ], dim=-2)  # fmt: skip
         query_values = (
             None
             if Y is None
             else torch.cat([
-                Y.new_full((*batch_shape, context_size, context_dim), torch.nan),
+                Y.new_full((*batch_shape, context_size, context_dim), nan),
                 Y,
             ], dim=-2)
         )  # fmt: skip
@@ -748,7 +749,7 @@ class TripletArg:
             (context_times.shape[0], context_dim),
             (context_inverse, self.context_channels),
             self.context_values,
-            fill_value=torch.nan,
+            fill_value=nan,
         )
 
         query_times, query_inverse = torch.unique_consecutive(
@@ -769,7 +770,7 @@ class TripletArg:
                 (query_times.shape[0], query_dim),
                 (query_inverse, self.query_channels),
                 self.query_values,
-                fill_value=torch.nan,
+                fill_value=nan,
             )
         )
 
@@ -839,7 +840,7 @@ class BatchedTripletArgs:
         assert M.shape == (*batch_shape, num_query)
         assert is_prefix_mask(M_valid).all()
         query_pairs = torch.stack([Q, M], dim=-1)
-        query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), torch.nan)
+        query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
         assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
 
         if (V := self.query_values) is not None:
@@ -867,7 +868,7 @@ class BatchedTripletArgs:
         query_values = (
             None
             if (V := _all_or_none(arg.query_values for arg in args)) is None
-            else pad_sequence(V, batch_first=True, padding_value=torch.nan)
+            else pad_sequence(V, batch_first=True, padding_value=nan)
         )
 
         static_covariates = (
@@ -880,7 +881,7 @@ class BatchedTripletArgs:
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             context_channels=pad_sequence(
                 [arg.context_channels for arg in args],
@@ -890,12 +891,12 @@ class BatchedTripletArgs:
             context_values=pad_sequence(
                 [arg.context_values for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             query_times=pad_sequence(
                 [arg.query_times for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             query_channels=pad_sequence(
                 query_channels,
@@ -1019,13 +1020,13 @@ class BatchedTripletArgs:
             (num_batches, context_size),
             context_indices,
             T_flat[context_valid],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
         context_values = scatter_fill(
             (num_batches, context_size, context_dim),
             (*context_indices, C_flat[context_valid]),
             X_flat[context_valid],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
 
         query_inverse, query_lengths = _consecutive_group_indices(Q_flat, query_valid)
@@ -1038,7 +1039,7 @@ class BatchedTripletArgs:
             (num_batches, query_size),
             query_indices,
             Q_flat[query_valid],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
         query_mask = scatter_fill(
             (num_batches, query_size, query_dim),
@@ -1053,7 +1054,7 @@ class BatchedTripletArgs:
                 (num_batches, query_size, query_dim),
                 (*query_indices, query_channels),
                 Y_flat[query_valid],
-                fill_value=torch.nan,
+                fill_value=nan,
             )
         )
 
@@ -1236,19 +1237,19 @@ class BatchedCombinedArgs:
         query_values = (
             None
             if (V := _all_or_none(arg.query_values for arg in args)) is None
-            else pad_sequence(V, batch_first=True, padding_value=torch.nan)
+            else pad_sequence(V, batch_first=True, padding_value=nan)
         )
 
         return cls(
             times=pad_sequence(
                 [arg.times for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             context_values=pad_sequence(
                 [arg.context_values for arg in args],
                 batch_first=True,
-                padding_value=torch.nan,
+                padding_value=nan,
             ),
             query_mask=pad_sequence(
                 [arg.query_mask for arg in args],
@@ -1340,13 +1341,13 @@ class BatchedCombinedArgs:
             (num_batches, context_size),
             context_indices,
             T_flat[context_filter],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
         context_values = scatter_fill(
             (num_batches, context_size, num_dim),
             context_indices,
             X_flat[context_filter],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
 
         query_positions = query_filter.cumsum(dim=-1) - 1
@@ -1358,7 +1359,7 @@ class BatchedCombinedArgs:
             (num_batches, query_size),
             query_indices,
             T_flat[query_filter],
-            fill_value=torch.nan,
+            fill_value=nan,
         )
         query_mask = scatter_fill(
             (num_batches, query_size, num_dim),
@@ -1373,7 +1374,7 @@ class BatchedCombinedArgs:
                 (num_batches, query_size, num_dim),
                 query_indices,
                 Y_flat[query_filter],
-                fill_value=torch.nan,
+                fill_value=nan,
             )
         )
 
