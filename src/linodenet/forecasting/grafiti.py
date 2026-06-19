@@ -11,7 +11,7 @@ import math
 
 import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor, nan, nn
 
 
 class MAB(nn.Module):
@@ -107,36 +107,29 @@ class MAB(nn.Module):
 def gather_target_embeddings(
     x: Tensor,  # (..., K', M)
     *,
-    mask: Tensor,  # (..., K'), bool
+    target_mask: Tensor,  # (..., K'), bool
 ) -> Tensor:  # (..., K, M)
     r"""Select and pad edge embeddings at target positions.
 
     Args:
         x: Input tensor with shape ``(..., padded_edges, hidden_dim)``.
-        mask: Boolean target mask with shape ``(..., padded_edges)``.
+        target_mask: Boolean target mask with shape ``(..., padded_edges)``.
 
     Returns:
         Target embeddings with shape ``(..., max_targets, hidden_dim)``.
     """
-    assert mask.dtype == torch.bool
+    assert target_mask.dtype == torch.bool
 
-    *batch_shape, num_edges, hidden_dim = x.shape
-    num_batches = math.prod(batch_shape)
-    mask_flat = mask.reshape(num_batches, num_edges)  # (B_flat, K')
-    x_flat = x.reshape(num_batches, num_edges, hidden_dim)  # (B_flat, K', M)
+    *batch_shape, _, hidden_dim = x.shape
+    num_targets = int(target_mask.sum(dim=-1).max().item())
 
-    observed_counts = mask_flat.sum(dim=-1)  # (B_flat)
-    k = int(observed_counts.max().to(torch.int64).item())  # K
+    *batch_indices, edge_indices = target_mask.nonzero(as_tuple=True)
+    offsets = target_mask.cumsum(dim=-1) - 1
+    target_indices = offsets[*batch_indices, edge_indices]
 
-    indices = torch.arange(k, device=mask.device).expand(num_batches, k)  # (B_flat, K)
-    mask_indices = indices < observed_counts.unsqueeze(dim=-1)  # (B_flat, K)
-
-    observed_values = x_flat[mask_flat]  # (sum(K_...), M)
-    y_padded = torch.zeros(
-        num_batches, k, hidden_dim, device=mask.device, dtype=x.dtype
-    )
-    y_padded[mask_indices] = observed_values
-    return y_padded.reshape(*batch_shape, k, hidden_dim)  # (..., K, M)
+    y_padded = x.new_full((*batch_shape, num_targets, hidden_dim), nan)
+    y_padded[*batch_indices, target_indices] = x[*batch_indices, edge_indices]
+    return y_padded
 
 
 def reconstruct_y(
@@ -476,13 +469,15 @@ class Grafiti(nn.Module):
                 0.0,
             )
 
-        return gather_target_embeddings(edge_emb, mask=edge_target_mask)  # (..., K, M)
+        return gather_target_embeddings(
+            edge_emb, target_mask=edge_target_mask
+        )  # (..., K, M)
 
     def forward(
         self,
-        time_points: Tensor,  # (..., T)
-        context_values: Tensor,  # (..., T, D)
-        target_mask: Tensor,  # (..., T, D)
+        time_points: Tensor,  # (..., T), float, padded NaN
+        context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
+        target_mask: Tensor,  # (..., T, D), bool, padded False
     ) -> Tensor:  # (..., K, M)
         r"""Encode observed values and target queries.
 
@@ -586,4 +581,6 @@ class Grafiti(nn.Module):
             )
 
         # paper eq 7
-        return gather_target_embeddings(h_edge, mask=edge_target_mask)  # (..., K, M)
+        return gather_target_embeddings(
+            h_edge, target_mask=edge_target_mask
+        )  # (..., K, M)

@@ -4,10 +4,11 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
+from torch import nan
 from torch.nn import functional as F
 from torch.testing import assert_close
 
-from linodenet.forecasting.grafiti import Grafiti
+from linodenet.forecasting.grafiti import Grafiti, gather_target_embeddings
 from linodenet.forecasting.utils import BatchedTripletArgs
 
 from .base import SequentialData, TestForecastingModel
@@ -62,7 +63,7 @@ class TestModel(TestForecastingModel[Grafiti]):
         time_points = time_points.nan_to_num(0.0)
         context_nan = inputs.context_values.new_full(
             (*inputs.query_times.shape, inputs.context_values.shape[-1]),
-            torch.nan,
+            nan,
         )
         context_values = torch.cat([inputs.context_values, context_nan], dim=-2)
         target_mask = torch.cat(
@@ -93,6 +94,38 @@ class TestModel(TestForecastingModel[Grafiti]):
         return F.mse_loss(embeddings[mask], targets[mask]) + 1e-3 * regularizer
 
 
+def test_gather_target_embeddings_unbatched() -> None:
+    r"""Check target embedding gathering for an unbatched edge list."""
+    x = torch.arange(10.0).reshape(5, 2)
+    target_mask = torch.tensor([True, False, True, True, False])
+
+    actual = gather_target_embeddings(x, target_mask=target_mask)
+    expected = torch.stack([x[0], x[2], x[3]])
+
+    assert_close(actual, expected)
+
+
+def test_gather_target_embeddings_batched_pads_to_max_targets() -> None:
+    r"""Check batched target gathering pads shorter target lists with NaNs."""
+    x = torch.arange(16.0).reshape(2, 4, 2)
+    target_mask = torch.tensor(
+        [
+            [True, False, True, False],
+            [False, True, False, False],
+        ]
+    )
+
+    actual = gather_target_embeddings(x, target_mask=target_mask)
+    expected = torch.stack(
+        [
+            torch.stack([x[0, 0], x[0, 2]]),
+            torch.stack([x[1, 1], x.new_full((2,), nan)]),
+        ]
+    )
+
+    assert_close(actual, expected, equal_nan=True)
+
+
 def test_grafiti_triplet_matches_combined_forward() -> None:
     r"""Check that sparse and combined GraFITi inputs produce the same embeddings."""
     torch.manual_seed(0)
@@ -100,8 +133,8 @@ def test_grafiti_triplet_matches_combined_forward() -> None:
     args = BatchedTripletArgs(
         context_times=torch.tensor(
             [
-                [1.0, 3.0, 5.0, 7.0, torch.nan],
-                [0.0, 2.0, 4.0, torch.nan, torch.nan],
+                [1.0, 3.0, 5.0, 7.0, nan],
+                [0.0, 2.0, 4.0, nan, nan],
             ]
         ),
         context_channels=torch.tensor(
@@ -112,13 +145,13 @@ def test_grafiti_triplet_matches_combined_forward() -> None:
         ),
         context_values=torch.tensor(
             [
-                [10.0, 32.0, 51.0, 70.0, torch.nan],
-                [1.0, 20.0, 22.0, torch.nan, torch.nan],
+                [10.0, 32.0, 51.0, 70.0, nan],
+                [1.0, 20.0, 22.0, nan, nan],
             ]
         ),
         query_times=torch.tensor(
             [
-                [2.0, 4.0, 6.0, torch.nan],
+                [2.0, 4.0, 6.0, nan],
                 [1.0, 3.0, 5.0, 7.0],
             ]
         ),
@@ -130,7 +163,7 @@ def test_grafiti_triplet_matches_combined_forward() -> None:
         ),
         query_values=torch.tensor(
             [
-                [200.0, 410.0, 620.0, torch.nan],
+                [200.0, 410.0, 620.0, nan],
                 [100.0, 310.0, 520.0, 710.0],
             ]
         ),
@@ -150,4 +183,61 @@ def test_grafiti_triplet_matches_combined_forward() -> None:
         args.query_channels,
     )
 
+    assert_close(actual, expected, equal_nan=True)
+
+
+def test_grafiti_batched_forward_allows_missing_context_values() -> None:
+    r"""Check batched GraFITi handles sparse dense context values."""
+    torch.manual_seed(0)
+    model = Grafiti(input_dim=3, hidden_dim=8, num_layers=2, num_heads=2)
+    time_points = torch.tensor(
+        [
+            [0.0, 1.0, 2.0, 3.0],
+            [0.0, 1.5, 2.5, 4.0],
+        ]
+    )
+    context_values = torch.tensor(
+        [
+            [
+                [1.0, nan, 3.0],
+                [nan, 5.0, nan],
+                [7.0, nan, nan],
+                [nan, 8.0, nan],
+            ],
+            [
+                [nan, 10.0, nan],
+                [11.0, nan, 13.0],
+                [nan, nan, 14.0],
+                [15.0, nan, nan],
+            ],
+        ]
+    )
+    target_mask = torch.tensor(
+        [
+            [
+                [False, False, False],
+                [True, False, False],
+                [False, False, True],
+                [True, False, False],
+            ],
+            [
+                [False, False, False],
+                [False, False, False],
+                [False, True, False],
+                [False, True, True],
+            ],
+        ]
+    )
+
+    actual = model(time_points, context_values, target_mask)
+    expected = torch.stack(
+        [
+            model(time_points[k], context_values[k], target_mask[k])
+            for k in range(time_points.shape[0])
+        ],
+        dim=0,
+    )
+
+    assert actual.shape == (2, 3, model.hidden_dim)
+    assert actual.isfinite().all()
     assert_close(actual, expected)
