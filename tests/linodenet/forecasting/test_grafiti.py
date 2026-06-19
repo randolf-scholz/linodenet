@@ -27,11 +27,11 @@ class TestModel(TestForecastingModel[Grafiti]):
     r"""Shared forecasting-model tests for GraFITi."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (8,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     BATCH_SHAPE: ClassVar[tuple[int, ...]] = (4,)
     STANDARD_CONFIG: ClassVar[GrafitiTestConfig] = GrafitiTestConfig(
         input_dim=CONTEXT_SHAPE[0],
-        hidden_dim=OUTPUT_SHAPE[0],
+        hidden_dim=8,
         num_layers=2,
         num_heads=2,
     )
@@ -58,7 +58,7 @@ class TestModel(TestForecastingModel[Grafiti]):
         inputs: SequentialData,
         /,
     ) -> tuple[torch.Tensor, ...]:
-        r"""Return GraFITi target embeddings for sequential forecasting inputs."""
+        r"""Return GraFITi predictions for sequential forecasting inputs."""
         time_points = torch.cat([inputs.context_times, inputs.query_times], dim=-1)
         time_points = time_points.nan_to_num(0.0)
         context_nan = inputs.context_values.new_full(
@@ -73,11 +73,12 @@ class TestModel(TestForecastingModel[Grafiti]):
             ],
             dim=-2,
         )
-        embeddings = model(time_points, context_values, target_mask)
+        forecasts = model(time_points, context_values, target_mask)
+        predictions = forecasts[..., inputs.context_values.shape[-2] :, :]
 
-        assert embeddings.shape == inputs.query_values.shape
-        assert embeddings[inputs.query_mask].isfinite().all()
-        return (embeddings,)
+        assert predictions.shape == inputs.query_values.shape
+        assert predictions[inputs.query_mask].isfinite().all()
+        return (predictions,)
 
     def loss(
         self,
@@ -85,13 +86,13 @@ class TestModel(TestForecastingModel[Grafiti]):
         predictions: tuple[torch.Tensor, ...],
         targets: torch.Tensor,
     ) -> torch.Tensor:
-        r"""Return mean squared error for GraFITi target embeddings."""
-        (embeddings,) = predictions
+        r"""Return mean squared error for GraFITi predictions."""
+        (forecast,) = predictions
         mask = targets.isfinite()
-        regularizer = embeddings.new_zeros(())
+        regularizer = forecast.new_zeros(())
         for parameter in model.parameters():
             regularizer = regularizer + parameter.sum()
-        return F.mse_loss(embeddings[mask], targets[mask]) + 1e-3 * regularizer
+        return F.mse_loss(forecast[mask], targets[mask]) + 1e-3 * regularizer
 
 
 def test_gather_target_embeddings_unbatched() -> None:
@@ -126,7 +127,7 @@ def test_gather_target_embeddings_batched_pads_to_max_targets() -> None:
     assert_close(actual, expected, equal_nan=True)
 
 
-def test_grafiti_triplet_matches_combined_forward() -> None:
+def test_grafiti_triplet_matches_combined_embeddings() -> None:
     r"""Check that sparse and combined GraFITi inputs produce the same embeddings."""
     torch.manual_seed(0)
     model = Grafiti(input_dim=3, hidden_dim=8, num_layers=2, num_heads=2)
@@ -170,7 +171,7 @@ def test_grafiti_triplet_matches_combined_forward() -> None:
     )
     combined = args.to_combined()
 
-    expected = model(
+    expected = model.compute_embeddings(
         combined.times,
         combined.context_values,
         combined.query_mask,
@@ -190,54 +191,25 @@ def test_grafiti_batched_forward_allows_missing_context_values() -> None:
     r"""Check batched GraFITi handles sparse dense context values."""
     torch.manual_seed(0)
     model = Grafiti(input_dim=3, hidden_dim=8, num_layers=2, num_heads=2)
-    time_points = torch.tensor(
-        [
-            [0.0, 1.0, 2.0, 3.0],
-            [0.0, 1.5, 2.5, 4.0],
-        ]
-    )
-    context_values = torch.tensor(
-        [
-            [
-                [1.0, nan, 3.0],
-                [nan, 5.0, nan],
-                [7.0, nan, nan],
-                [nan, 8.0, nan],
-            ],
-            [
-                [nan, 10.0, nan],
-                [11.0, nan, 13.0],
-                [nan, nan, 14.0],
-                [15.0, nan, nan],
-            ],
-        ]
-    )
-    target_mask = torch.tensor(
-        [
-            [
-                [False, False, False],
-                [True, False, False],
-                [False, False, True],
-                [True, False, False],
-            ],
-            [
-                [False, False, False],
-                [False, False, False],
-                [False, True, False],
-                [False, True, True],
-            ],
-        ]
-    )
+    time_points = torch.tensor([
+        [0.0, 1.0, 2.0, 3.0],
+        [0.0, 1.5, 2.5, 4.0],
+    ])  # fmt: skip
+    context_values = torch.tensor([
+        [[1.0,  nan,  3.0], [nan,  5.0,  nan], [7.0,  nan,  nan], [nan,  8.0,  nan]],
+        [[nan, 10.0,  nan], [11.0, nan, 13.0], [nan,  nan, 14.0], [15.0, nan,  nan]],
+    ])  # fmt: skip
+    target_mask = torch.tensor([
+        [[False, False, False], [ True, False, False], [False, False,  True], [ True, False, False]],
+        [[False, False, False], [False, False, False], [False,  True, False], [False, False,  True]],
+    ])  # fmt: skip
 
     actual = model(time_points, context_values, target_mask)
-    expected = torch.stack(
-        [
-            model(time_points[k], context_values[k], target_mask[k])
-            for k in range(time_points.shape[0])
-        ],
-        dim=0,
-    )
+    expected = actual.new_full(actual.shape, nan)
+    for k in range(time_points.shape[0]):
+        output = model(time_points[k], context_values[k], target_mask[k])
+        expected[k] = output
 
-    assert actual.shape == (2, 3, model.hidden_dim)
-    assert actual.isfinite().all()
-    assert_close(actual, expected)
+    assert actual.shape == target_mask.shape
+    assert actual[target_mask].isfinite().all()
+    assert_close(actual, expected, equal_nan=True)

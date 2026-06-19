@@ -105,60 +105,60 @@ class MAB(nn.Module):
 
 
 def gather_target_embeddings(
-    x: Tensor,  # (..., K', M)
+    h_edge: Tensor,  # (..., E, M)
     *,
-    target_mask: Tensor,  # (..., K'), bool
+    target_mask: Tensor,  # (..., E), bool
 ) -> Tensor:  # (..., K, M)
     r"""Select and pad edge embeddings at target positions.
 
     Args:
-        x: Input tensor with shape ``(..., padded_edges, hidden_dim)``.
-        target_mask: Boolean target mask with shape ``(..., padded_edges)``.
+        h_edge: Edge embeddings with shape ``(..., max_edges, hidden_dim)``.
+        target_mask: Boolean target mask with shape ``(..., max_edges)``.
 
     Returns:
         Target embeddings with shape ``(..., max_targets, hidden_dim)``.
     """
     assert target_mask.dtype == torch.bool
 
-    *batch_shape, _, hidden_dim = x.shape
-    num_targets = int(target_mask.sum(dim=-1).max().item())
+    *batch_shape, _, hidden_dim = h_edge.shape
+    max_targets = int(target_mask.sum(dim=-1).max().item())
 
     *batch_indices, edge_indices = target_mask.nonzero(as_tuple=True)
     offsets = target_mask.cumsum(dim=-1) - 1
     target_indices = offsets[*batch_indices, edge_indices]
 
-    y_padded = x.new_full((*batch_shape, num_targets, hidden_dim), nan)
-    y_padded[*batch_indices, target_indices] = x[*batch_indices, edge_indices]
+    y_padded = h_edge.new_full((*batch_shape, max_targets, hidden_dim), nan)
+    y_padded[*batch_indices, target_indices] = h_edge[*batch_indices, edge_indices]
     return y_padded
 
 
 def reconstruct_y(
     *,
-    y_flat: Tensor,  # (..., K')
+    y_flat: Tensor,  # (..., E)
     y_mask: Tensor,  # (..., T, D), bool
-    flat_edge_mask: Tensor,  # (..., K'), bool
+    target_mask: Tensor,  # (..., E), bool
 ) -> Tensor:  # (..., T, D)
     r"""Reconstruct a dense tensor from flattened masked values.
 
     Args:
-        y_flat: Flattened values with shape ``(..., max_observed)``.
+        y_flat: Flattened values with shape ``(..., max_edges)``.
         y_mask: Boolean mask with shape ``(..., time, dim)``. True entries mark
             dense positions that should be filled.
-        flat_edge_mask: Boolean mask selecting valid entries from ``y_flat``.
+        target_mask: Boolean mask selecting valid entries from ``y_flat``.
 
     Returns:
         Reconstructed tensor with shape ``(..., time, dim)``.
     """
     assert y_mask.dtype == torch.bool
-    assert flat_edge_mask.dtype == torch.bool
+    assert target_mask.dtype == torch.bool
 
-    y_reconstructed = torch.zeros_like(y_mask, dtype=y_flat.dtype)  # (..., T, D)
-    y_reconstructed[y_mask] = y_flat[flat_edge_mask]  # (sum(K_...))
+    y_reconstructed = y_flat.new_full(y_mask.shape, nan)  # (..., T, D)
+    y_reconstructed[y_mask] = y_flat[target_mask]  # (sum(E_...))
     return y_reconstructed  # (..., T, D)
 
 
 class Grafiti(nn.Module):
-    r"""GraFITi encoder for observed and target time-series entries."""
+    r"""GraFITi forecaster for observed and target time-series entries."""
 
     def __init__(
         self,
@@ -167,21 +167,18 @@ class Grafiti(nn.Module):
         hidden_dim: int = 128,
         num_layers: int = 3,
         num_heads: int = 4,
-        device: str = "cuda",
     ) -> None:
-        r"""Initialize the GraFITi encoder.
+        r"""Initialize the GraFITi forecaster.
 
         Args:
             input_dim: Number of channels.
             hidden_dim: Latent embedding size.
             num_layers: Number of GraFITi layers.
             num_heads: Number of attention heads.
-            device: Device name retained for compatibility with the reference API.
         """
         super().__init__()
         self.hidden_dim = hidden_dim
         self.num_heads = num_heads
-        self.device = device
         self.num_layers = num_layers
 
         self.time_init = nn.Linear(1, hidden_dim)
@@ -215,7 +212,7 @@ class Grafiti(nn.Module):
             for _ in range(num_layers)
         ])  # fmt: skip
 
-        self.output = nn.Linear(3 * hidden_dim, hidden_dim)
+        self.output = nn.Linear(3 * hidden_dim, 1)
 
     def _create_masks(
         self,
@@ -473,13 +470,13 @@ class Grafiti(nn.Module):
             edge_emb, target_mask=edge_target_mask
         )  # (..., K, M)
 
-    def forward(
+    def _compute_edge_context(
         self,
         time_points: Tensor,  # (..., T), float, padded NaN
         context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
         target_mask: Tensor,  # (..., T, D), bool, padded False
-    ) -> Tensor:  # (..., K, M)
-        r"""Encode observed values and target queries.
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+        r"""Compute edge, time, and channel embeddings for dense GraFITi inputs.
 
         Args:
             time_points: Times for observed and target entries with shape ``(..., time)``.
@@ -487,7 +484,8 @@ class Grafiti(nn.Module):
             target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
 
         Returns:
-            Target edge embeddings with shape ``(..., max_targets, hidden_dim)``.
+            Tuple containing edge, time, and channel embeddings; edge time and
+            channel indices; and the flattened target mask.
         """
         assert target_mask.dtype == torch.bool
 
@@ -580,7 +578,77 @@ class Grafiti(nn.Module):
                 0.0,
             )
 
+        return (
+            h_edge,
+            h_time,
+            h_channel,
+            edge_t_indices,
+            edge_c_indices,
+            edge_target_mask,
+        )
+
+    def compute_embeddings(
+        self,
+        time_points: Tensor,  # (..., T), float, padded NaN
+        context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
+        target_mask: Tensor,  # (..., T, D), bool, padded False
+    ) -> Tensor:  # (..., K, M), K=max_targets, M=latent_dim
+        r"""Encode observed values and target queries.
+
+        Args:
+            time_points: Times for observed and target entries with shape ``(..., time)``.
+            context_values: Observed values with shape ``(..., time, dim)``.
+            target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
+
+        Returns:
+            Target edge embeddings with shape ``(..., max_targets, hidden_dim)``.
+        """
+        h_edge, _, _, _, _, edge_target_mask = self._compute_edge_context(
+            time_points,
+            context_values,
+            target_mask,
+        )
+
         # paper eq 7
         return gather_target_embeddings(
             h_edge, target_mask=edge_target_mask
         )  # (..., K, M)
+
+    def forward(
+        self,
+        time_points: Tensor,  # (..., T), float, padded NaN
+        context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
+        target_mask: Tensor,  # (..., T, D), bool, padded False
+    ) -> Tensor:  # (..., T, D)
+        r"""Forecast target values on the dense time-channel grid.
+
+        Args:
+            time_points: Times for observed and target entries with shape ``(..., time)``.
+            context_values: Observed values with shape ``(..., time, dim)``.
+            target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
+
+        Returns:
+            Dense predictions with shape ``(..., time, dim)``.
+        """
+        (
+            h_edge,
+            h_time,
+            h_channel,
+            edge_t_indices,
+            edge_c_indices,
+            edge_target_mask,
+        ) = self._compute_edge_context(time_points, context_values, target_mask)
+        h_start = torch.take_along_dim(  # (..., E, M)
+            h_time, edge_t_indices.unsqueeze(dim=-1), dim=-2
+        )
+        h_stop = torch.take_along_dim(  # (..., E, M)
+            h_channel, edge_c_indices.unsqueeze(dim=-1), dim=-2
+        )
+        y_flat = self.output(  # (..., E)
+            torch.cat([h_edge, h_start, h_stop], dim=-1)
+        ).squeeze(dim=-1)
+        return reconstruct_y(
+            y_flat=y_flat,
+            y_mask=target_mask,
+            target_mask=edge_target_mask,
+        )
