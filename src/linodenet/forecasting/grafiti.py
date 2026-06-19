@@ -134,27 +134,27 @@ def gather_target_embeddings(
 
 
 def reconstruct_y(
+    y_at_edge: Tensor,  # (..., E)
     *,
-    y_flat: Tensor,  # (..., E)
-    y_mask: Tensor,  # (..., T, D), bool
-    target_mask: Tensor,  # (..., E), bool
+    edge_mask: Tensor,  # (..., E), bool
+    target_mask: Tensor,  # (..., T, D), bool
 ) -> Tensor:  # (..., T, D)
     r"""Reconstruct a dense tensor from flattened masked values.
 
     Args:
-        y_flat: Flattened values with shape ``(..., max_edges)``.
-        y_mask: Boolean mask with shape ``(..., time, dim)``. True entries mark
+        y_at_edge: Flattened values with shape ``(..., max_edges)``.
+        edge_mask: Boolean mask selecting valid entries from ``y_flat``.
+        target_mask: Boolean mask with shape ``(..., time, dim)``. True entries mark
             dense positions that should be filled.
-        target_mask: Boolean mask selecting valid entries from ``y_flat``.
 
     Returns:
         Reconstructed tensor with shape ``(..., time, dim)``.
     """
-    assert y_mask.dtype == torch.bool
     assert target_mask.dtype == torch.bool
+    assert edge_mask.dtype == torch.bool
 
-    y_reconstructed = y_flat.new_full(y_mask.shape, nan)  # (..., T, D)
-    y_reconstructed[y_mask] = y_flat[target_mask]  # (sum(E_...))
+    y_reconstructed = y_at_edge.new_full(target_mask.shape, nan)  # (..., T, D)
+    y_reconstructed[target_mask] = y_at_edge[edge_mask]  # (sum(E_...))
     return y_reconstructed  # (..., T, D)
 
 
@@ -223,10 +223,10 @@ class Grafiti(nn.Module):
         *,
         num_steps: int,  # T
         num_channels: int,  # D
-        edge_time_indices: Tensor,  # (..., K')
-        edge_channel_indices: Tensor,  # (..., K')
-        edge_mask: Tensor,  # (..., K')
-    ) -> tuple[Tensor, Tensor]:  # (..., T, K'), (..., D, K')
+        edge_time_indices: Tensor,  # (..., E)
+        edge_channel_indices: Tensor,  # (..., E)
+        edge_mask: Tensor,  # (..., E)
+    ) -> tuple[Tensor, Tensor]:  # (..., T, E), (..., D, E)
         r"""Create masks for time and channel attention.
 
         Args:
@@ -246,30 +246,30 @@ class Grafiti(nn.Module):
         time_index = torch.arange(num_steps, device=device)  # (T)
         channel_index = torch.arange(num_channels, device=device)  # (D)
 
-        time_edge_mask = (  # (..., T, K')
-            edge_mask.unsqueeze(dim=-2)  # (..., 1, K')
-            # (..., 1, K') == (..., T, 1) -> (..., T, K')
+        time_edge_mask = (  # (..., T, E)
+            edge_mask.unsqueeze(dim=-2)  # (..., 1, E)
+            # (..., 1, E) == (..., T, 1) -> (..., T, E)
             & (edge_time_indices.unsqueeze(dim=-2) == time_index.unsqueeze(dim=-1))
         )
-        channel_edge_mask = (  # (..., D, K')
-            edge_mask.unsqueeze(dim=-2)  # (..., 1, K')
-            # (..., 1, K') == (..., D, 1) -> (..., D, K')
+        channel_edge_mask = (  # (..., D, E)
+            edge_mask.unsqueeze(dim=-2)  # (..., 1, E)
+            # (..., 1, E) == (..., D, 1) -> (..., D, E)
             & (
                 edge_channel_indices.unsqueeze(dim=-2)
                 == channel_index.unsqueeze(dim=-1)
             )
         )
-        return time_edge_mask, channel_edge_mask  # (..., T, K'), (..., D, K')
+        return time_edge_mask, channel_edge_mask  # (..., T, E), (..., D, E)
 
     def _encode_features(
         self,
         *,
         t: Tensor,  # (..., T)
         num_channels: int,
-        edge_values: Tensor,  # (..., K')
-        edge_target_mask: Tensor,  # (..., K')
-        edge_mask: Tensor,  # (..., K')
-    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., K', M), (..., T, M), (..., D, M)
+        edge_values: Tensor,  # (..., E)
+        edge_target_mask: Tensor,  # (..., E)
+        edge_mask: Tensor,  # (..., E)
+    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., E, M), (..., T, M), (..., D, M)
         r"""Encode edge, time-node, and channel-node features.
 
         Args:
@@ -296,18 +296,18 @@ class Grafiti(nn.Module):
         # Encode whether an edge should be treated as a prediction target:
         # valid_edge_mask => edge_target_mask, i.e. every padded edge is a target and every
         # valid edge is a target exactly when it came from target_mask.
-        target_indicator = ~edge_mask | edge_target_mask  # (..., K')
+        target_indicator = ~edge_mask | edge_target_mask  # (..., E)
         edge_values = torch.where(edge_target_mask, 0.0, edge_values)
-        edge_input = torch.stack(  # (..., K', 2)
+        edge_input = torch.stack(  # (..., E, 2)
             [edge_values, target_indicator.to(dtype=edge_values.dtype)],
             dim=-1,
         )
-        e_encoded = torch.where(  # (..., K', M)
+        e_encoded = torch.where(  # (..., E, M)
             edge_mask.unsqueeze(dim=-1),
             torch.relu(self.edge_init(edge_input)),
             0.0,
         )
-        return e_encoded, t_encoded, c_encoded  # (..., K', M), (..., T, M), (..., D, M)
+        return e_encoded, t_encoded, c_encoded  # (..., E, M), (..., T, M), (..., D, M)
 
     def forward_triplet(
         self,
@@ -320,14 +320,11 @@ class Grafiti(nn.Module):
         r"""Encode observed values and target queries from sparse triplets.
 
         Args:
-            context_times: Times for observed values with shape
-                ``(..., num_context)``.
-            context_channels: Channel indices for observed values with shape
-                ``(..., num_context)``.
+            context_times: Times for observed values with shape ``(..., num_context)``.
+            context_channels: Channel indices for observed values with shape ``(..., num_context)``.
             context_values: Observed values with shape ``(..., num_context)``.
             query_times: Times for target queries with shape ``(..., num_query)``.
-            query_channels: Channel indices for target queries with shape
-                ``(..., num_query)``.
+            query_channels: Channel indices for target queries with shape ``(..., num_query)``.
 
         Returns:
             Target edge embeddings with shape ``(..., max_targets, hidden_dim)``.
@@ -337,17 +334,15 @@ class Grafiti(nn.Module):
 
         *batch_shape, num_context = context_times.shape
         *_, num_query = query_times.shape
-        num_batches = math.prod(batch_shape)
+        B = math.prod(batch_shape)
         num_channels = self.channel_init.in_features
         device = context_times.device
 
-        context_times_flat = context_times.reshape(num_batches, num_context)  # (B, O)
-        context_channels_flat = context_channels.reshape(
-            num_batches, num_context
-        )  # (B, O)
-        context_values_flat = context_values.reshape(num_batches, num_context)  # (B, O)
-        query_times_flat = query_times.reshape(num_batches, num_query)  # (B, Q)
-        query_channels_flat = query_channels.reshape(num_batches, num_query)  # (B, Q)
+        context_times_flat = context_times.reshape(B, num_context)  # (B, O)
+        context_channels_flat = context_channels.reshape(B, num_context)  # (B, O)
+        context_values_flat = context_values.reshape(B, num_context)  # (B, O)
+        query_times_flat = query_times.reshape(B, num_query)  # (B, Q)
+        query_channels_flat = query_channels.reshape(B, num_query)  # (B, Q)
 
         context_valid = (  # (B, O)
             context_times_flat.isfinite()
@@ -400,7 +395,7 @@ class Grafiti(nn.Module):
         ]  # (..., E)
         edge_time_indices = (
             torch.arange(num_edges, device=device)
-            .expand(num_batches, num_edges)
+            .expand(B, num_edges)
             .reshape(*batch_shape, num_edges)
         )  # (..., E)
         edge_channel_indices = edge_channel_indices.masked_fill(~valid_edge_mask, 0)
@@ -553,14 +548,14 @@ class Grafiti(nn.Module):
             self.edge_nn,
             strict=True,
         ):
-            h_start = torch.take_along_dim(  # (..., E, M)
+            h_t_at_edge = torch.take_along_dim(  # (..., E, M)
                 h_time, edge_t_indices.unsqueeze(dim=-1), dim=-2
             )
-            h_stop = torch.take_along_dim(  # (..., E, M)
+            h_c_at_edge = torch.take_along_dim(  # (..., E, M)
                 h_channel, edge_c_indices.unsqueeze(dim=-1), dim=-2
             )
 
-            time_context = torch.cat([h_stop, h_edge], dim=-1)  # (..., E, 2M)
+            time_context = torch.cat([h_c_at_edge, h_edge], dim=-1)  # (..., E, 2M)
             h_time = time_channel_attn(  # (..., T, M)
                 h_time,
                 time_context,
@@ -568,7 +563,7 @@ class Grafiti(nn.Module):
                 mask=time_edge_mask,
             )
 
-            channel_context = torch.cat([h_start, h_edge], dim=-1)  # (..., E, 2M)
+            channel_context = torch.cat([h_t_at_edge, h_edge], dim=-1)  # (..., E, 2M)
             h_channel = channel_time_attn(  # (..., D, M)
                 h_channel,
                 channel_context,
@@ -576,7 +571,10 @@ class Grafiti(nn.Module):
                 mask=channel_edge_mask,
             )
 
-            edge_context = torch.cat([h_edge, h_start, h_stop], dim=-1)  # (..., E, 3M)
+            edge_context = torch.cat(  # (..., E, 3M)
+                [h_edge, h_t_at_edge, h_c_at_edge],
+                dim=-1,
+            )
             h_edge = torch.where(  # (..., E, M)
                 edge_mask.unsqueeze(dim=-1),
                 torch.relu(h_edge + edge_nn(edge_context)),
@@ -588,17 +586,17 @@ class Grafiti(nn.Module):
                 h_edge, target_mask=edge_target_mask
             )  # (..., K, M)
 
-        h_start = torch.take_along_dim(  # (..., E, M)
+        h_t_at_edge = torch.take_along_dim(  # (..., E, M)
             h_time, edge_t_indices.unsqueeze(dim=-1), dim=-2
         )
-        h_stop = torch.take_along_dim(  # (..., E, M)
+        h_c_at_edge = torch.take_along_dim(  # (..., E, M)
             h_channel, edge_c_indices.unsqueeze(dim=-1), dim=-2
         )
-        y_flat = self.output(  # (..., E)
-            torch.cat([h_edge, h_start, h_stop], dim=-1)
+        y_at_edge = self.output(  # (..., E)
+            torch.cat([h_edge, h_t_at_edge, h_c_at_edge], dim=-1)
         ).squeeze(dim=-1)
         return reconstruct_y(
-            y_flat=y_flat,
-            y_mask=target_mask,
-            target_mask=edge_target_mask,
+            y_at_edge,
+            target_mask=target_mask,
+            edge_mask=edge_target_mask,
         )
