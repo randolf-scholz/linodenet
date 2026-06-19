@@ -47,7 +47,7 @@ class TestModel(TestForecastingModel[Grafiti]):
             raise TypeError("model_config must be a GrafitiTestConfig.")
         return Grafiti(
             input_dim=model_config.input_dim,
-            hidden_dim=model_config.hidden_dim,
+            latent_dim=model_config.hidden_dim,
             num_layers=model_config.num_layers,
             num_heads=model_config.num_heads,
         )
@@ -132,7 +132,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
     torch.manual_seed(0)
     model = Grafiti(
         input_dim=3,
-        hidden_dim=8,
+        latent_dim=8,
         num_layers=2,
         num_heads=2,
         output_mode="embeddings",
@@ -196,7 +196,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
 def test_grafiti_batched_forward_allows_missing_context_values() -> None:
     r"""Check batched GraFITi handles sparse dense context values."""
     torch.manual_seed(0)
-    model = Grafiti(input_dim=3, hidden_dim=8, num_layers=2, num_heads=2)
+    model = Grafiti(input_dim=3, latent_dim=8, num_layers=2, num_heads=2)
     time_points = torch.tensor([
         [0.0, 1.0, 2.0, 3.0],
         [0.0, 1.5, 2.5, 4.0],

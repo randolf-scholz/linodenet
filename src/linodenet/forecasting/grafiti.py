@@ -165,7 +165,7 @@ class Grafiti(nn.Module):
         self,
         *,
         input_dim: int = 41,
-        hidden_dim: int = 128,
+        latent_dim: int = 128,
         num_layers: int = 3,
         num_heads: int = 4,
         output_mode: Literal["forecast", "embeddings"] = "forecast",
@@ -174,28 +174,28 @@ class Grafiti(nn.Module):
 
         Args:
             input_dim: Number of channels.
-            hidden_dim: Latent embedding size.
+            latent_dim: Latent embedding size.
             num_layers: Number of GraFITi layers.
             num_heads: Number of attention heads.
             output_mode: Whether :meth:`forward` returns dense forecasts or
                 target-edge embeddings.
         """
         super().__init__()
-        self.hidden_dim = hidden_dim
+        self.latent_dim = latent_dim
         self.num_heads = num_heads
         self.num_layers = num_layers
         self.output_mode = output_mode
 
-        self.time_init = nn.Linear(1, hidden_dim)
-        self.edge_init = nn.Linear(2, hidden_dim)
-        self.channel_init = nn.Linear(input_dim, hidden_dim)
+        self.time_init = nn.Linear(1, latent_dim)
+        self.edge_init = nn.Linear(2, latent_dim)
+        self.channel_init = nn.Linear(input_dim, latent_dim)
 
         self.channel_time_attn = nn.ModuleList([
             MAB(
-                dim_Q=hidden_dim,
-                dim_K=2 * hidden_dim,
-                dim_V=2 * hidden_dim,
-                dim_hidden=hidden_dim,
+                dim_Q=latent_dim,
+                dim_K=2 * latent_dim,
+                dim_V=2 * latent_dim,
+                dim_hidden=latent_dim,
                 num_heads=num_heads,
             )
             for _ in range(num_layers)
@@ -203,20 +203,20 @@ class Grafiti(nn.Module):
 
         self.time_channel_attn = nn.ModuleList([
             MAB(
-                dim_Q=hidden_dim,
-                dim_K=2 * hidden_dim,
-                dim_V=2 * hidden_dim,
-                dim_hidden=hidden_dim,
+                dim_Q=latent_dim,
+                dim_K=2 * latent_dim,
+                dim_V=2 * latent_dim,
+                dim_hidden=latent_dim,
                 num_heads=num_heads,
             )
             for _ in range(num_layers)
         ])  # fmt: skip
 
         self.edge_nn = nn.ModuleList([
-            nn.Linear(3 * hidden_dim, hidden_dim)
+            nn.Linear(3 * latent_dim, latent_dim)
             for _ in range(num_layers)
         ])  # fmt: skip
-        self.output = nn.Linear(3 * hidden_dim, 1)
+        self.output = nn.Linear(3 * latent_dim, 1)
 
     def _create_masks(
         self,
