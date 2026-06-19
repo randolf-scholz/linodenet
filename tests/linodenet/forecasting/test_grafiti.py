@@ -51,7 +51,7 @@ def test_grafiti_triplet_matches_combined_forward() -> None:
     )
     combined = args.to_combined()
 
-    expected = model.forward_combined(
+    expected = model(
         combined.times,
         combined.context_values,
         combined.query_mask,

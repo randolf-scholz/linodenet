@@ -478,7 +478,7 @@ class Grafiti(nn.Module):
 
         return gather_target_embeddings(edge_emb, mask=edge_target_mask)  # (..., K, M)
 
-    def forward_combined(
+    def forward(
         self,
         time_points: Tensor,  # (..., T)
         context_values: Tensor,  # (..., T, D)
