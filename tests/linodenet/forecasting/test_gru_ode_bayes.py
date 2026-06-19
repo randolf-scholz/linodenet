@@ -17,7 +17,7 @@ from linodenet.forecasting.gru_ode_bayes import (
     gaussian_kl_logvar,
 )
 
-from .base import TestForecastingModel
+from .base import SequentialData, TestForecastingModel
 
 
 class TestModel(TestForecastingModel):
@@ -73,6 +73,22 @@ class TestModel(TestForecastingModel):
     def make_cru(self) -> GRU_ODE_Bayes:
         r"""Instantiate a GRU-ODE-Bayes model from :attr:`STANDARD_CONFIG`."""
         return self.make_model(self.STANDARD_CONFIG)
+
+    def forecast(
+        self, model: GRU_ODE_Bayes, inputs: SequentialData, /
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return GRU-ODE-Bayes predictions for sequential forecasting inputs."""
+        pred_mean, pred_logvar = model(
+            inputs.query_times,
+            inputs.context_times,
+            inputs.context_values,
+        )
+
+        assert pred_mean.shape == inputs.query_values.shape
+        assert pred_logvar.shape == inputs.query_values.shape
+        assert pred_mean[inputs.query_mask].isfinite().all()
+        assert pred_logvar[inputs.query_mask].isfinite().all()
+        return pred_mean, pred_logvar
 
     def loss(
         self,

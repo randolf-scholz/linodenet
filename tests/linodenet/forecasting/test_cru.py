@@ -18,7 +18,7 @@ from linodenet.forecasting.cru import (
     build_cru,
 )
 
-from .base import TestForecastingModel
+from .base import SequentialData, TestForecastingModel
 
 # language=yaml
 CRU_CONFIG_YAML = r"""
@@ -187,7 +187,7 @@ class TestModel(TestForecastingModel):
     r"""Tests for direct CRU model construction."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (3,)  # pyright: ignore[reportIncompatibleVariableOverride]
     STANDARD_CONFIG: ClassVar[CRUConfig] = CRUConfig(
         input_size=CONTEXT_SHAPE[0],
         output_size=OUTPUT_SHAPE[0],
@@ -266,6 +266,22 @@ class TestModel(TestForecastingModel):
     def make_cru(self) -> CRU:
         r"""Instantiate a CRU from :attr:`STANDARD_CONFIG` without ``build_cru``."""
         return self.make_model(self.STANDARD_CONFIG)
+
+    def forecast(
+        self, model: CRU, inputs: SequentialData, /
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return CRU predictions for sequential forecasting inputs."""
+        pred_mean, pred_var = model(
+            inputs.query_times,
+            inputs.context_times,
+            inputs.context_values,
+        )
+
+        assert pred_mean.shape == inputs.query_values.shape
+        assert pred_var.shape == inputs.query_values.shape
+        assert pred_mean[inputs.query_mask].isfinite().all()
+        assert pred_var[inputs.query_mask].isfinite().all()
+        return pred_mean, pred_var
 
     def loss(
         self,

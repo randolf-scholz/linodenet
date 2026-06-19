@@ -15,7 +15,7 @@ from linodenet.forecasting.neural_flow import (
     ResNetFlow,
 )
 
-from .base import TestForecastingModel
+from .base import SequentialData, TestForecastingModel
 
 
 class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
@@ -48,6 +48,24 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         if not isinstance(model_config, NeuralFlowConfig):
             raise TypeError("model_config must be a NeuralFlowConfig.")
         return NeuralFlow.from_config(model_config)
+
+    def forecast(
+        self, model: NeuralFlow, inputs: SequentialData, /
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return NeuralFlow predictions for sequential forecasting inputs."""
+        if not isinstance(model, NeuralFlow):
+            raise TypeError("model must be a NeuralFlow.")
+        pred_mean, pred_logvar = model(
+            inputs.query_times,
+            inputs.context_times,
+            inputs.context_values,
+        )
+
+        assert pred_mean.shape == inputs.query_values.shape
+        assert pred_logvar.shape == inputs.query_values.shape
+        assert pred_mean[inputs.query_mask].isfinite().all()
+        assert pred_logvar[inputs.query_mask].isfinite().all()
+        return pred_mean, pred_logvar
 
     def loss(
         self,
