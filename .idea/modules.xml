@@ -4,7 +4,9 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/diffrax.iml" filepath="$PROJECT_DIR$/.idea/diffrax.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/linodenet.iml" filepath="$PROJECT_DIR$/.idea/linodenet.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/linodenet@1.iml" filepath="$PROJECT_DIR$/.idea/linodenet@1.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/torchode.iml" filepath="$PROJECT_DIR$/.idea/torchode.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/tsdm.iml" filepath="$PROJECT_DIR$/.idea/tsdm.iml" />
     </modules>
   </component>
 </project>

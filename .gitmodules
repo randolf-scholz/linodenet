@@ -25,3 +25,6 @@
 [submodule "third_party/set_transformer"]
 	path = third_party/set_transformer
 	url = git@github.com:juho-lee/set_transformer.git
+[submodule "third_party/GraFITi"]
+	path = third_party/GraFITi
+	url = git@github.com:yalavarthivk/GraFITi.git
