@@ -489,6 +489,11 @@ class Grafiti(nn.Module):
         """
         assert target_mask.dtype == torch.bool
 
+        # Shape legend for the dense GraFITi path:
+        # T: total time nodes, D: total channel nodes, M: latent embedding dimension.
+        # N: total edges (context or target) across all batch elements.
+        # E: max edges (context or target) across all batch elements.
+        # K: max edges (target only) across all batch elements.
         *batch_shape, num_steps, num_channels = context_values.shape
         device = time_points.device
 
