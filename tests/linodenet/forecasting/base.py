@@ -45,7 +45,7 @@ class TestForecastingModel[M: nn.Module](ABC):
     MIN_STEPS: ClassVar[int] = 2
     MAX_STEPS: ClassVar[int] = 5
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...] | None] = None
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     BATCH_SHAPE: ClassVar[tuple[int, ...]] = (8,)
 
     @abstractmethod
