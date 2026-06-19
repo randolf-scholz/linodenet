@@ -323,7 +323,7 @@ class GRU_Bayes(nn.Module):
         )
         # f_pred = flatten(m_d ⊙ r_d) (see Appendix D)
         u = torch.where(feature_mask.unsqueeze(-1), r, 0.0)
-        prepared_features = u.reshape(*u.shape[:-2], -1)  # (..., D*P)
+        prepared_features = u.flatten(start_dim=-2)  # (..., D*P)
         # compute new state
         new_state = self.gru(prepared_features, state)
 

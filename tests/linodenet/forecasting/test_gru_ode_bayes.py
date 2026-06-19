@@ -13,6 +13,7 @@ from linodenet.forecasting.gru_ode_bayes import (
     GRUODEBayesConfig,
     ODE_Flow,
     TorchODESolver,
+    apply_masked,
     gaussian_kl,
     gaussian_kl_logvar,
 )
@@ -223,6 +224,32 @@ class TestGRUODEBayes:
         assert model.posterior_logvars[context_mask].isfinite().all()
         assert model.prior_means[~context_mask].isnan().all()
         assert model.posterior_logvars[~context_mask].isnan().all()
+
+    def test_apply_masked_update_state_with_empty_selection(self) -> None:
+        r"""Check all-padding masks do not require forward-loop special cases."""
+        torch.manual_seed(0)
+        model = GRU_ODE_Bayes(
+            input_size=3,
+            hidden_size=5,
+            decoder=Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7),
+            flow=ODE_Flow(
+                GRU_ODE(5),
+                TorchODESolver.new("euler", step_size=0.1),
+            ),
+            update_cell=GRU_Bayes(
+                input_size=3,
+                hidden_size=5,
+                feature_embedding_size=2,
+            ),
+        )
+        state = torch.randn(2, 5)
+        observation = torch.full((2, 3), torch.nan)
+        mask = torch.zeros(2, dtype=torch.bool)
+
+        result = apply_masked(model.update_state, (state, observation), mask)
+
+        assert result.shape == state.shape
+        assert result.isnan().all()
 
     def test_gaussian_bayes_kl_logvar_matches_variance_formula(self) -> None:
         r"""Test the paper-side KL term against the direct variance formula."""

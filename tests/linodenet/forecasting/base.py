@@ -333,6 +333,95 @@ class TestForecastingModel[M: nn.Module](ABC):
                 atol=1e-4,
             )
 
+    def test_padding_invariance(
+        self,
+        model_config: object,
+        seed: int,
+        min_steps: int,
+        max_steps: int,
+        context_shape: tuple[int, ...],
+        output_shape: tuple[int, ...],
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Check predictions are unchanged by extra NaN tail padding."""
+        data = self.make_sequential_data(
+            seed=seed,
+            batch_shape=batch_shape,
+            min_steps=min_steps,
+            max_steps=max_steps,
+            context_shape=context_shape,
+            output_shape=output_shape,
+        )
+        padding = 32
+        batch_dims = data.context_times.shape[:-1]
+        query_size = data.query_times.shape[-1]
+
+        padded_data = SequentialData(
+            context_times=torch.cat(
+                [
+                    data.context_times,
+                    data.context_times.new_full((*batch_dims, padding), torch.nan),
+                ],
+                dim=-1,
+            ),
+            context_values=torch.cat(
+                [
+                    data.context_values,
+                    data.context_values.new_full(
+                        (*batch_dims, padding, *context_shape),
+                        torch.nan,
+                    ),
+                ],
+                dim=-1 - len(context_shape),
+            ),
+            context_lengths=data.context_lengths,
+            query_times=torch.cat(
+                [
+                    data.query_times,
+                    data.query_times.new_full((*batch_dims, padding), torch.nan),
+                ],
+                dim=-1,
+            ),
+            query_values=torch.cat(
+                [
+                    data.query_values,
+                    data.query_values.new_full(
+                        (*batch_dims, padding, *output_shape),
+                        torch.nan,
+                    ),
+                ],
+                dim=-1 - len(output_shape),
+            ),
+            query_lengths=data.query_lengths,
+        )
+
+        torch.manual_seed(seed)
+        model = self.make_model(model_config)
+        predictions = self.forecast(model, data)
+        padded_predictions = self.forecast(model, padded_data)
+
+        query_mask = data.query_mask
+        for prediction, padded_prediction in zip(
+            predictions,
+            padded_predictions,
+            strict=True,
+        ):
+            query_axis = prediction.ndim - len(output_shape) - 1
+            index = [slice(None)] * padded_prediction.ndim
+            index[query_axis] = slice(None, query_size)
+            padded_window = padded_prediction[tuple(index)]
+            mask = query_mask
+            while mask.ndim < prediction.ndim:
+                mask = mask.unsqueeze(dim=-1)
+            mask = mask.expand_as(prediction)
+            assert_close(
+                prediction.masked_fill(~mask, torch.nan),
+                padded_window.masked_fill(~mask, torch.nan),
+                equal_nan=True,
+                rtol=0.0,
+                atol=1e-4,
+            )
+
     def test_training_unbatched(
         self,
         model_config: object,
