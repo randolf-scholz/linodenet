@@ -8,6 +8,7 @@ __all__ = [
 ]
 
 import math
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
@@ -167,6 +168,7 @@ class Grafiti(nn.Module):
         hidden_dim: int = 128,
         num_layers: int = 3,
         num_heads: int = 4,
+        output_mode: Literal["forecast", "embeddings"] = "forecast",
     ) -> None:
         r"""Initialize the GraFITi forecaster.
 
@@ -175,11 +177,14 @@ class Grafiti(nn.Module):
             hidden_dim: Latent embedding size.
             num_layers: Number of GraFITi layers.
             num_heads: Number of attention heads.
+            output_mode: Whether :meth:`forward` returns dense forecasts or
+                target-edge embeddings.
         """
         super().__init__()
         self.hidden_dim = hidden_dim
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.output_mode = output_mode
 
         self.time_init = nn.Linear(1, hidden_dim)
         self.edge_init = nn.Linear(2, hidden_dim)
@@ -211,7 +216,6 @@ class Grafiti(nn.Module):
             nn.Linear(3 * hidden_dim, hidden_dim)
             for _ in range(num_layers)
         ])  # fmt: skip
-
         self.output = nn.Linear(3 * hidden_dim, 1)
 
     def _create_masks(
@@ -470,13 +474,13 @@ class Grafiti(nn.Module):
             edge_emb, target_mask=edge_target_mask
         )  # (..., K, M)
 
-    def _compute_edge_context(
+    def forward(
         self,
         time_points: Tensor,  # (..., T), float, padded NaN
         context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
         target_mask: Tensor,  # (..., T, D), bool, padded False
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
-        r"""Compute edge, time, and channel embeddings for dense GraFITi inputs.
+    ) -> Tensor:  # (..., T, D) if forecast, (..., K, M) if embeddings
+        r"""Process observed values and target queries with GraFITi.
 
         Args:
             time_points: Times for observed and target entries with shape ``(..., time)``.
@@ -484,8 +488,9 @@ class Grafiti(nn.Module):
             target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
 
         Returns:
-            Tuple containing edge, time, and channel embeddings; edge time and
-            channel indices; and the flattened target mask.
+            Dense predictions with shape ``(..., time, dim)`` in forecast mode,
+            or target embeddings with shape ``(..., max_targets, hidden_dim)``
+            in embeddings mode.
         """
         assert target_mask.dtype == torch.bool
 
@@ -578,66 +583,11 @@ class Grafiti(nn.Module):
                 0.0,
             )
 
-        return (
-            h_edge,
-            h_time,
-            h_channel,
-            edge_t_indices,
-            edge_c_indices,
-            edge_target_mask,
-        )
+        if self.output_mode == "embeddings":
+            return gather_target_embeddings(
+                h_edge, target_mask=edge_target_mask
+            )  # (..., K, M)
 
-    def compute_embeddings(
-        self,
-        time_points: Tensor,  # (..., T), float, padded NaN
-        context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
-        target_mask: Tensor,  # (..., T, D), bool, padded False
-    ) -> Tensor:  # (..., K, M), K=max_targets, M=latent_dim
-        r"""Encode observed values and target queries.
-
-        Args:
-            time_points: Times for observed and target entries with shape ``(..., time)``.
-            context_values: Observed values with shape ``(..., time, dim)``.
-            target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
-
-        Returns:
-            Target edge embeddings with shape ``(..., max_targets, hidden_dim)``.
-        """
-        h_edge, _, _, _, _, edge_target_mask = self._compute_edge_context(
-            time_points,
-            context_values,
-            target_mask,
-        )
-
-        # paper eq 7
-        return gather_target_embeddings(
-            h_edge, target_mask=edge_target_mask
-        )  # (..., K, M)
-
-    def forward(
-        self,
-        time_points: Tensor,  # (..., T), float, padded NaN
-        context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
-        target_mask: Tensor,  # (..., T, D), bool, padded False
-    ) -> Tensor:  # (..., T, D)
-        r"""Forecast target values on the dense time-channel grid.
-
-        Args:
-            time_points: Times for observed and target entries with shape ``(..., time)``.
-            context_values: Observed values with shape ``(..., time, dim)``.
-            target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
-
-        Returns:
-            Dense predictions with shape ``(..., time, dim)``.
-        """
-        (
-            h_edge,
-            h_time,
-            h_channel,
-            edge_t_indices,
-            edge_c_indices,
-            edge_target_mask,
-        ) = self._compute_edge_context(time_points, context_values, target_mask)
         h_start = torch.take_along_dim(  # (..., E, M)
             h_time, edge_t_indices.unsqueeze(dim=-1), dim=-2
         )

@@ -130,7 +130,13 @@ def test_gather_target_embeddings_batched_pads_to_max_targets() -> None:
 def test_grafiti_triplet_matches_combined_embeddings() -> None:
     r"""Check that sparse and combined GraFITi inputs produce the same embeddings."""
     torch.manual_seed(0)
-    model = Grafiti(input_dim=3, hidden_dim=8, num_layers=2, num_heads=2)
+    model = Grafiti(
+        input_dim=3,
+        hidden_dim=8,
+        num_layers=2,
+        num_heads=2,
+        output_mode="embeddings",
+    )
     args = BatchedTripletArgs(
         context_times=torch.tensor(
             [
@@ -171,7 +177,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
     )
     combined = args.to_combined()
 
-    expected = model.compute_embeddings(
+    expected = model(
         combined.times,
         combined.context_values,
         combined.query_mask,
