@@ -7,6 +7,7 @@ import pytest
 import torch
 from torch import Tensor, nn
 from torch.nn.utils.rnn import pad_sequence
+from torch.testing import assert_close
 
 
 class SequentialData(NamedTuple):
@@ -45,7 +46,7 @@ class TestForecastingModel[M: nn.Module](ABC):
     MIN_STEPS: ClassVar[int] = 2
     MAX_STEPS: ClassVar[int] = 5
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...] | None] = None
     BATCH_SHAPE: ClassVar[tuple[int, ...]] = (8,)
 
     @abstractmethod
@@ -88,7 +89,7 @@ class TestForecastingModel[M: nn.Module](ABC):
     @pytest.fixture
     def output_shape(self, context_shape: tuple[int, ...]) -> tuple[int, ...]:
         r"""Query value event shape."""
-        return self.OUTPUT_SHAPE or context_shape
+        return context_shape if self.OUTPUT_SHAPE is None else self.OUTPUT_SHAPE
 
     @pytest.fixture
     def batch_shape(self) -> tuple[int, ...]:
@@ -238,6 +239,99 @@ class TestForecastingModel[M: nn.Module](ABC):
         torch.manual_seed(seed)
         model = self.make_model(model_config)
         self.forecast(model, data)
+
+    def test_forward_batched_matches_forward_unbatched(
+        self,
+        model_config: object,
+        seed: int,
+        context_shape: tuple[int, ...],
+        output_shape: tuple[int, ...],
+    ) -> None:
+        r"""Check batched predictions do not depend on sequence padding."""
+        generator = torch.Generator().manual_seed(seed)
+        context_lengths = torch.tensor([2, 17])
+        query_lengths = torch.tensor([17, 2])
+        context_size = int(context_lengths.max().item())
+        query_size = int(query_lengths.max().item())
+
+        context_times = torch.full((2, context_size), torch.nan)
+        query_times = torch.full((2, query_size), torch.nan)
+        context_values = torch.full((2, context_size, *context_shape), torch.nan)
+        query_values = torch.full((2, query_size, *output_shape), torch.nan)
+
+        for k, (context_length_tensor, query_length_tensor) in enumerate(
+            zip(context_lengths, query_lengths, strict=True)
+        ):
+            context_length = int(context_length_tensor.item())
+            query_length = int(query_length_tensor.item())
+            context_times[k, :context_length] = torch.linspace(0.0, 1.0, context_length)
+            query_times[k, :query_length] = torch.linspace(1.1, 2.1, query_length)
+            context_values[k, :context_length] = torch.randn(
+                context_length,
+                *context_shape,
+                generator=generator,
+            )
+            query_values[k, :query_length] = torch.randn(
+                query_length,
+                *output_shape,
+                generator=generator,
+            )
+
+        data = SequentialData(
+            context_times=context_times,
+            context_values=context_values,
+            context_lengths=context_lengths,
+            query_times=query_times,
+            query_values=query_values,
+            query_lengths=query_lengths,
+        )
+
+        torch.manual_seed(seed)
+        model = self.make_model(model_config)
+        batched_predictions = self.forecast(model, data)
+        expected_predictions = [
+            prediction.new_full(prediction.shape, torch.nan)
+            for prediction in batched_predictions
+        ]
+
+        for k, (context_length_tensor, query_length_tensor) in enumerate(
+            zip(context_lengths, query_lengths, strict=True)
+        ):
+            context_length = int(context_length_tensor.item())
+            query_length = int(query_length_tensor.item())
+            single_data = SequentialData(
+                context_times=context_times[k : k + 1, :context_length],
+                context_values=context_values[k : k + 1, :context_length],
+                context_lengths=context_lengths[k : k + 1],
+                query_times=query_times[k : k + 1, :query_length],
+                query_values=query_values[k : k + 1, :query_length],
+                query_lengths=query_lengths[k : k + 1],
+            )
+
+            for prediction, single_prediction in zip(
+                expected_predictions,
+                self.forecast(model, single_data),
+                strict=True,
+            ):
+                prediction[k : k + 1, :query_length] = single_prediction
+
+        query_mask = data.query_mask
+        for prediction, expected in zip(
+            batched_predictions,
+            expected_predictions,
+            strict=True,
+        ):
+            mask = query_mask
+            while mask.ndim < prediction.ndim:
+                mask = mask.unsqueeze(dim=-1)
+            mask = mask.expand_as(prediction)
+            assert_close(
+                prediction.masked_fill(~mask, torch.nan),
+                expected,
+                equal_nan=True,
+                rtol=0.0,
+                atol=1e-4,
+            )
 
     def test_training_unbatched(
         self,
