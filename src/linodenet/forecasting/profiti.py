@@ -135,16 +135,44 @@ class TriangularAttention(nn.Module):
         self.eps = eps
 
     # (..., $K, D) -> (..., $K, $K)
-    def _scores(self, query: Tensor, key: Tensor, /) -> Tensor:
+    def _scores(
+        self,
+        query: Tensor,
+        key: Tensor,
+        /,
+        *,
+        valid_mask: Tensor | None = None,  # (..., $K), bool
+    ) -> Tensor:
+        if valid_mask is not None:
+            assert valid_mask.dtype == torch.bool
+            assert valid_mask.shape == query.shape[:-1]
+            assert valid_mask.shape == key.shape[:-1]
+            query = torch.where(valid_mask.unsqueeze(-1), query, 0.0)
+            key = torch.where(valid_mask.unsqueeze(-1), key, 0.0)
+
         Q = self.q_proj(query)  # (..., $K, L)
         K = self.k_proj(key)  # (..., $K, L)
 
-        scores = torch.einsum("...ML, ...NL -> ...MN", Q, K / self.scale)  # (..., K, K)
-        diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., K)
+        scores = torch.einsum(
+            "...ML, ...NL -> ...MN", Q, K / self.scale
+        )  # (..., $K, $K)
+        diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., $K)
         diagonal = F.softplus(diagonal) + self.eps
         # overwrite the diagonal with the new values
         scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
-        return scores.tril()
+        scores = scores.tril()
+
+        if valid_mask is not None:
+            active = valid_mask.unsqueeze(-1) & valid_mask.unsqueeze(-2)
+            scores = torch.where(active, scores, 0.0)
+            diagonal = torch.where(
+                valid_mask,
+                scores.diagonal(dim1=-2, dim2=-1),
+                1.0,
+            )
+            scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
+
+        return scores
 
     def encode_and_logabsdet(
         self,
@@ -152,8 +180,12 @@ class TriangularAttention(nn.Module):
         key: Tensor,  # (..., $K, D)
         value: Tensor,  # (..., $K, F)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # (..., $K), bool
     ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
-        scores = self._scores(query, key)  # (..., $K, $K)
+        scores = self._scores(query, key, valid_mask=valid_mask)  # (..., $K, $K)
+        if valid_mask is not None:
+            value = torch.where(valid_mask.unsqueeze(-1), value, 0.0)
         y = torch.einsum("...MN, ...NF -> ...MF", scores, value)
         # for a linear transform x -> Ax, the logabsdet is |A|
         # since A is triangular with positive diagonal, log|A| = sum(log(diag(A)))
@@ -166,8 +198,12 @@ class TriangularAttention(nn.Module):
         key: Tensor,  # (..., $K, D)
         value: Tensor,  # (..., $K, F)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # (..., $K), bool
     ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
-        scores = self._scores(query, key)  # (..., $K, $K)
+        scores = self._scores(query, key, valid_mask=valid_mask)  # (..., $K, $K)
+        if valid_mask is not None:
+            value = torch.where(valid_mask.unsqueeze(-1), value, 0.0)
         # solve Ax = y for x
         x = solve_triangular(scores, value, upper=False)
         logabsdet = -scores.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)

@@ -141,6 +141,53 @@ def test_triangular_attention_logabsdet_matches_dense_jacobian() -> None:
     assert_close(actual, expected, atol=1e-12, rtol=1e-12)
 
 
+def test_triangular_attention_padding_invariance_with_nan_padding() -> None:
+    r"""Check masked NaN padding does not affect valid attention outputs."""
+    torch.manual_seed(0)
+    attention = TriangularAttention(dim_context=4, dim_hidden=3).to(dtype=torch.float64)
+    context = torch.randn(5, 4, dtype=torch.float64)
+    value = torch.randn(5, 1, dtype=torch.float64)
+
+    expected, expected_logabsdet = attention.encode_and_logabsdet(
+        context,
+        context,
+        value,
+    )
+
+    padded_context = torch.cat(
+        [
+            context,
+            context.new_full((2, 4), torch.nan),
+        ]
+    ).requires_grad_()
+    padded_value = torch.cat(
+        [
+            value,
+            value.new_full((2, 1), torch.nan),
+        ]
+    ).requires_grad_()
+    attn_mask = padded_context.isfinite().any(dim=-1)
+
+    actual, actual_logabsdet = attention.encode_and_logabsdet(
+        padded_context,
+        padded_context,
+        padded_value,
+        valid_mask=attn_mask,
+    )
+
+    assert_close(actual[:5], expected, atol=1e-12, rtol=1e-12)
+    assert_close(actual_logabsdet, expected_logabsdet, atol=1e-12, rtol=1e-12)
+
+    (actual.nansum() + actual_logabsdet.nansum()).backward()
+    assert padded_context.grad is not None
+    assert padded_value.grad is not None
+    assert padded_context.grad.isfinite().all()
+    assert padded_value.grad.isfinite().all()
+    for parameter in attention.parameters():
+        assert parameter.grad is not None
+        assert parameter.grad.isfinite().all()
+
+
 def test_profiti_block_encode_decode_roundtrip_with_logabsdet() -> None:
     r"""Check that a ProFITi block encode/decode are inverse maps."""
     torch.manual_seed(0)
