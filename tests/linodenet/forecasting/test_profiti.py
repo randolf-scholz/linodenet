@@ -392,7 +392,7 @@ def test_profiti_sample_and_log_prob_uses_standard_normal_latent() -> None:
 
     assert sample.shape == query_mask.shape
     assert log_prob.shape == ()
-    assert torch.equal(sample.isfinite(), query_mask.expand_as(samples))
+    assert torch.equal(sample.isfinite(), query_mask)
 
     latent = sample[query_mask] / scale
     expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()

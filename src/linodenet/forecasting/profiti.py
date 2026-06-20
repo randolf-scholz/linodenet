@@ -18,7 +18,7 @@ from itertools import chain
 from typing import Any, Final, Protocol
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor, nan, nn
 from torch.linalg import solve_triangular
 from torch.nn import functional as F
 
@@ -266,7 +266,7 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         # 3. apply Shiesh
         y, ldj_shiesh = self.shiesh.encode_and_logabsdet(y)
         ldj_shiesh = torch.where(valid_mask, ldj_shiesh, 0.0).sum(dim=-1)
-        y = torch.where(valid_mask, y, torch.nan)
+        y = torch.where(valid_mask, y, nan)
 
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
@@ -298,7 +298,7 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
             context, context, y.unsqueeze(-1), valid_mask=valid_mask
         )
         y = y.squeeze(-1)
-        y = torch.where(valid_mask, y, torch.nan)
+        y = torch.where(valid_mask, y, nan)
 
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
@@ -427,7 +427,7 @@ class ProFITi(nn.Module):
         assert M.shape == (*batch_shape, query_size, context_dim)
 
         # (..., $K, D)
-        Y = X.new_full((*batch_shape, query_size, context_dim), torch.nan)
+        Y = X.new_full((*batch_shape, query_size, context_dim), nan)
 
         # use grafiti as an encoder (eq 16)
         H = self.context_embedding(
@@ -449,12 +449,9 @@ class ProFITi(nn.Module):
             device=H.device,
         )  # (*S, ..., P)
 
-        # mark samples as NaN if correspond to non-query values
-        Z = torch.where(
-            H.isfinite().all(dim=-1).expand(*Z.shape),
-            Z,
-            torch.nan,
-        )
+        # mark samples as NaN if they correspond to non-query values
+        valid_mask = H.isfinite().all(dim=-1)  # (..., P)
+        Z = torch.where(valid_mask.expand(*Z.shape), Z, nan)
 
         # apply the conditional flow
         samples_flat, logabsdet = self.conditional_flow.decode_and_logabsdet(
@@ -464,20 +461,11 @@ class ProFITi(nn.Module):
 
         log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1) - logabsdet  # (*S, ...)
 
-        target_counts_by_time = M.sum(dim=-1)  # (..., $K)
-        channel_offsets = M.cumsum(dim=-1) - 1  # (..., $K, D)
-        time_offsets = target_counts_by_time.cumsum(dim=-1) - target_counts_by_time
-        sample_positions = channel_offsets + time_offsets.unsqueeze(dim=-1)
-
-        *batch_indices, time_indices, channel_indices = M.nonzero(as_tuple=True)
-        sample_indices = sample_positions[*batch_indices, time_indices, channel_indices]
-
+        # reshape sample to (..., $K, D) and fill non-query positions with NaN
         samples = samples_flat.new_full(
-            (*sample_shape, *M.shape), torch.nan
+            (*sample_shape, *M.shape), nan
         )  # (*S, ..., $K, D)
-        samples[..., *batch_indices, time_indices, channel_indices] = samples_flat[
-            ..., *batch_indices, sample_indices
-        ]
+        samples[..., M] = samples_flat[..., valid_mask]
 
         return samples, log_prob
 
