@@ -143,15 +143,6 @@ class TriangularAttention(nn.Module):
         *,
         valid_mask: Tensor | None = None,  # (..., $K), bool
     ) -> Tensor:
-        if valid_mask is not None:
-            assert valid_mask.dtype == torch.bool
-            assert valid_mask.shape == query.shape[:-1]
-            assert valid_mask.shape == key.shape[:-1]
-            # replace NaN with dummy values to prevent NaN gradients.
-            # these values in principal are unused but poison the gradients
-            query = torch.where(valid_mask.unsqueeze(-1), query, 0.0)
-            key = torch.where(valid_mask.unsqueeze(-1), key, 0.0)
-
         Q = self.q_proj(query)  # (..., $K, L)
         K = self.k_proj(key)  # (..., $K, L)
 
@@ -223,7 +214,6 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
             dim_context=latent_dim,
             dim_hidden=latent_dim,
         )
-        self.shiesh = Shiesh(t=1.0, a=1.0)
 
         self.scale_net = nn.Sequential(
             *chain.from_iterable(
@@ -250,17 +240,23 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
             nn.Flatten(start_dim=-2),
         )
 
+        self.shiesh = Shiesh(t=1.0, a=1.0)
+
     def encode_and_logabsdet(
         self,
         x: Tensor,  # (..., K)
         context: Tensor,  # (..., K, D)
         /,
     ) -> tuple[Tensor, Tensor]:  # (..., K), (...)
+        # zero out NaN values (prevents NaN poisioning)
+        # this is OK because the operations are either element-wise, or account for masking
+        # nevertheless, in the unit tests we check padding invariance explictly
+        valid_mask = context.isfinite().all(dim=-1)  # (..., K), bool
+        context = torch.where(valid_mask.unsqueeze(-1), context, 0.0)
+
         # 1. compute sita
         y, ldj_sita = self.attention.encode_and_logabsdet(
-            context,
-            context,
-            x.unsqueeze(-1),
+            context, context, x.unsqueeze(-1), valid_mask=valid_mask
         )
         y = y.squeeze(-1)
 
@@ -282,6 +278,12 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         context: Tensor,  # (..., K, D)
         /,
     ) -> tuple[Tensor, Tensor]:  # (..., K), (...)
+        # zero out NaN values (prevents NaN poisioning)
+        # this is OK because the operations are either element-wise, or account for masking
+        # nevertheless, in the unit tests we check padding invariance explictly
+        valid_mask = context.isfinite().all(dim=-1)  # (..., K), bool
+        context = torch.where(valid_mask.unsqueeze(-1), context, 0.0)
+
         # 1. reverse shiesh
         y, ldj_shiesh = self.shiesh.decode_and_logabsdet(y)
         ldj_shiesh = ldj_shiesh.sum(dim=-1)
@@ -294,9 +296,7 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
 
         # 3. reverse sita
         y, ldj_sita = self.attention.decode_and_logabsdet(
-            context,
-            context,
-            y.unsqueeze(-1),
+            context, context, y.unsqueeze(-1), valid_mask=valid_mask
         )
         y = y.squeeze(-1)
 
@@ -425,18 +425,6 @@ class ProFITi(nn.Module):
 
         assert M.dtype == torch.bool
         assert M.shape == (*batch_shape, query_size, context_dim)
-
-        target_counts = M.sum(dim=(-2, -1))  # (...)
-        min_target_count = int(target_counts.min().item())
-        max_target_count = int(target_counts.max().item())
-        if min_target_count == 0:
-            raise ValueError("query_mask must select at least one target value.")
-
-        if min_target_count != max_target_count:
-            raise ValueError(
-                "sample_and_log_prob requires the same number of target values "
-                "for each batch item."
-            )
 
         # (..., $K, D)
         Y = X.new_full((*batch_shape, query_size, context_dim), torch.nan)

@@ -232,6 +232,49 @@ def test_profiti_block_logabsdet_matches_dense_jacobian() -> None:
     assert_close(actual, expected, atol=1e-10, rtol=1e-10)
 
 
+def test_profiti_block_variable_target_count_nan_padding_has_finite_gradients() -> None:
+    r"""Check batches with NaN-padded target embeddings have finite gradients."""
+    torch.manual_seed(0)
+    max_targets = 5
+    latent_dim = 4
+    block = ProFITiBlock(latent_dim=latent_dim, num_layers=1).to(dtype=torch.float64)
+    valid_mask = torch.tensor(
+        [
+            [True, True, True, True, True],
+            [True, True, True, False, False],
+        ]
+    )
+    raw_context = torch.randn(
+        2,
+        max_targets,
+        latent_dim,
+        dtype=torch.float64,
+        requires_grad=True,
+    )
+    context = torch.where(
+        valid_mask.unsqueeze(-1),
+        raw_context,
+        torch.nan,
+    )
+    z = torch.randn(2, max_targets, dtype=torch.float64, requires_grad=True)
+
+    y, logabsdet = block.encode_and_logabsdet(z, context)
+    loss = y.nansum() + logabsdet.nansum()
+    loss.backward()
+
+    assert y.shape == z.shape
+    assert logabsdet.shape == (2,)
+
+    for name, parameter in block.named_parameters():
+        if parameter.grad is not None:
+            assert parameter.grad.isfinite().all(), name
+
+    assert z.grad is not None
+    assert z.grad.isfinite().all()
+    assert raw_context.grad is not None
+    assert raw_context.grad.isfinite().all()
+
+
 def test_flow_sequence_encode_decode_roundtrip_with_logabsdet() -> None:
     r"""Check that a sequence of ProFITi blocks is invertible."""
     torch.manual_seed(0)
