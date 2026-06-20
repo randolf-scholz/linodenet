@@ -153,9 +153,7 @@ class TriangularAttention(nn.Module):
         Q = self.q_proj(query)  # (..., $K, L)
         K = self.k_proj(key)  # (..., $K, L)
 
-        scores = torch.einsum(
-            "...ML, ...NL -> ...MN", Q, K * self.scale
-        )  # (..., $K, $K)
+        scores = torch.einsum("...ML, ...NL -> ...MN", Q, K * self.scale)  # (..., K, K)
         diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., $K)
         diagonal = F.softplus(diagonal) + self.eps
 
