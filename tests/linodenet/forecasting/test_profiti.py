@@ -148,25 +148,22 @@ def test_triangular_attention_padding_invariance_with_nan_padding() -> None:
     context = torch.randn(5, 4, dtype=torch.float64)
     value = torch.randn(5, 1, dtype=torch.float64)
 
+    DUMMY_VALUE = 123456.789
+
     expected, expected_logabsdet = attention.encode_and_logabsdet(
-        context,
-        context,
-        value,
+        context, context, value
     )
 
-    padded_context = torch.cat(
-        [
-            context,
-            context.new_full((2, 4), torch.nan),
-        ]
-    ).requires_grad_()
-    padded_value = torch.cat(
-        [
-            value,
-            value.new_full((2, 1), torch.nan),
-        ]
-    ).requires_grad_()
+    padded_context = torch.cat([context, context.new_full((2, 4), torch.nan)])
+    padded_value = torch.cat([value, value.new_full((2, 1), torch.nan)])
+
     attn_mask = padded_context.isfinite().any(dim=-1)
+
+    padded_context = torch.where(attn_mask.unsqueeze(-1), padded_context, DUMMY_VALUE)
+    padded_value = torch.where(attn_mask.unsqueeze(-1), padded_value, DUMMY_VALUE)
+
+    padded_context = padded_context.requires_grad_()
+    padded_value = padded_value.requires_grad_()
 
     actual, actual_logabsdet = attention.encode_and_logabsdet(
         padded_context,
