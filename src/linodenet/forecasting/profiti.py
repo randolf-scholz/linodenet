@@ -154,25 +154,19 @@ class TriangularAttention(nn.Module):
         K = self.k_proj(key)  # (..., $K, L)
 
         scores = torch.einsum(
-            "...ML, ...NL -> ...MN", Q, K / self.scale
+            "...ML, ...NL -> ...MN", Q, K * self.scale
         )  # (..., $K, $K)
         diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., $K)
         diagonal = F.softplus(diagonal) + self.eps
-        # overwrite the diagonal with the new values
-        scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
-        scores = scores.tril()
 
         if valid_mask is not None:
             active = valid_mask.unsqueeze(-1) & valid_mask.unsqueeze(-2)
             scores = torch.where(active, scores, 0.0)
-            diagonal = torch.where(
-                valid_mask,
-                scores.diagonal(dim1=-2, dim2=-1),
-                1.0,
-            )
-            scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
+            diagonal = torch.where(valid_mask, diagonal, 1.0)
 
-        return scores
+        # overwrite the diagonal with the new values
+        scores = torch.diagonal_scatter(scores, diagonal, dim1=-2, dim2=-1)
+        return scores.tril()
 
     def encode_and_logabsdet(
         self,
