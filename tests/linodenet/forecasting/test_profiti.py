@@ -288,3 +288,45 @@ def test_profiti_sample_and_log_prob_uses_standard_normal_latent() -> None:
     expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
     expected = expected - query_mask.sum() * math.log(scale)
     assert_close(log_prob, expected)
+
+
+def test_profiti_sample_and_log_prob_handles_batch_dimensions() -> None:
+    r"""Check ProFITi scatters flattened flow samples through batch dimensions."""
+    torch.manual_seed(0)
+    scale = 2.0
+    model = ProFITi(
+        context_embedding=_TargetContext(hidden_dim=3),
+        conditional_flow=_ScaleDecodeFlow(scale=scale),
+    )
+    context_times = torch.tensor([[0.0, 1.0], [0.0, 1.0]])
+    context_values = torch.tensor(
+        [
+            [[1.0, torch.nan], [2.0, 3.0]],
+            [[4.0, 5.0], [torch.nan, 6.0]],
+        ]
+    )
+    query_times = torch.tensor([[2.0, 3.0, 4.0], [2.0, 3.0, 4.0]])
+    query_mask = torch.tensor(
+        [
+            [[True, False], [True, True], [False, True]],
+            [[False, True], [True, False], [True, True]],
+        ]
+    )
+
+    samples, log_prob = model.sample_and_log_prob(
+        5,
+        context_times=context_times,
+        context_values=context_values,
+        query_times=query_times,
+        query_mask=query_mask,
+    )
+
+    assert samples.shape == (5, *query_mask.shape)
+    assert log_prob.shape == (5, 2)
+    assert samples[:, query_mask].isfinite().all()
+    assert samples[:, ~query_mask].isnan().all()
+
+    latents = torch.stack([samples[:, k, query_mask[k]] / scale for k in range(2)])
+    expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
+    expected = expected - query_mask[0].sum() * math.log(scale)
+    assert_close(log_prob, expected.mT)

@@ -24,6 +24,8 @@ from torch.nn import functional as F
 
 from .grafiti import Grafiti
 
+_LOG2PI = math.log(2.0 * math.pi)
+
 
 class Transform(Protocol):
     r"""Protocol for invertible transforms."""
@@ -362,12 +364,18 @@ class ProFITi(nn.Module):
         query_times: Tensor,  # (..., T)
         query_mask: Tensor,  # (..., T, D), bool
     ) -> tuple[Tensor, Tensor]:  # (S, ..., T, D), (S, ...)
-        *batch_shape, context_size, context_dim = context_values.shape  # B, N, D
-        query_size = query_times.shape[-1]  # T
-        assert query_mask.dtype == torch.bool
-        assert query_mask.shape == (*batch_shape, query_size, context_dim)
+        T = context_times
+        X = context_values
+        Q = query_times
+        M = query_mask
 
-        target_counts = query_mask.sum(dim=(-2, -1)).reshape(-1)  # (∏B)
+        *batch_shape, context_size, context_dim = X.shape  # B, N, D
+        query_size = Q.shape[-1]  # T
+
+        assert M.dtype == torch.bool
+        assert M.shape == (*batch_shape, query_size, context_dim)
+
+        target_counts = M.sum(dim=(-2, -1)).reshape(-1)  # (∏B)
         if int(target_counts[0].item()) == 0:
             raise ValueError("query_mask must select at least one target value.")
 
@@ -377,17 +385,17 @@ class ProFITi(nn.Module):
                 "for each batch item."
             )
 
-        time_points = torch.cat([context_times, query_times], dim=-1).nan_to_num(0.0)
+        time_points = torch.cat([T, Q], dim=-1).nan_to_num(0.0)
         # time_points: (..., N + T)
-        query_values = context_values.new_full(
+        query_values = X.new_full(
             (*batch_shape, query_size, context_dim),
             torch.nan,
         )  # (..., T, D)
-        conditioning_values = torch.cat([context_values, query_values], dim=-2)
+        conditioning_values = torch.cat([X, query_values], dim=-2)
         # conditioning_values: (..., N + T, D)
         target_mask = torch.cat([  # (..., N + T, D)
-            query_mask.new_zeros((*batch_shape, context_size, context_dim)),
-            query_mask,
+            M.new_zeros((*batch_shape, context_size, context_dim)),
+            M,
         ], dim=-2)  # fmt: skip
 
         context = self.context_embedding(
@@ -410,25 +418,25 @@ class ProFITi(nn.Module):
         )  # (S, ..., K), (S, ...)
 
         log_prob = (
-            -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1) - logabsdet
+            -0.5 * (latents.square() + _LOG2PI).sum(dim=-1) - logabsdet
         )  # (S, ...)
 
-        num_batches = math.prod(batch_shape)  # ∏B
-        mask_flat = query_mask.reshape(num_batches, query_size * context_dim)
         samples = samples_flat.new_full(
-            (num_samples, *query_mask.shape),
+            (num_samples, *M.shape),
             torch.nan,
         )  # (S, ..., T, D)
-        sample_rows = samples.reshape(
-            num_samples, num_batches, query_size * context_dim
-        )  # (S, ∏B, T⋅D)
-        sample_positions = mask_flat.cumsum(dim=-1) - 1  # (∏B, T⋅D)
-        batch_indices, value_indices = mask_flat.nonzero(as_tuple=True)
-        sample_rows[:, batch_indices, value_indices] = samples_flat.reshape(
-            num_samples,
-            num_batches,
-            -1,
-        )[:, batch_indices, sample_positions[batch_indices, value_indices]]
+        target_counts_by_time = M.sum(dim=-1)  # (..., T)
+        time_offsets = target_counts_by_time.cumsum(dim=-1) - target_counts_by_time
+        channel_offsets = M.cumsum(dim=-1) - 1  # (..., T, D)
+        sample_positions = channel_offsets + time_offsets.unsqueeze(dim=-1)
+        *batch_indices, time_indices, channel_indices = M.nonzero(as_tuple=True)
+        flow_indices = (
+            *batch_indices,
+            sample_positions[*batch_indices, time_indices, channel_indices],
+        )
+        samples[:, *batch_indices, time_indices, channel_indices] = samples_flat[
+            :, *flow_indices
+        ]
 
         return samples, log_prob
 
