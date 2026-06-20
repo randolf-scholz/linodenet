@@ -289,6 +289,23 @@ def test_profiti_sample_and_log_prob_uses_standard_normal_latent() -> None:
     expected = expected - query_mask.sum() * math.log(scale)
     assert_close(log_prob, expected)
 
+    sample, log_prob = model.sample_and_log_prob(
+        context_times=context_times,
+        context_values=context_values,
+        query_times=query_times,
+        query_mask=query_mask,
+    )
+
+    assert sample.shape == query_mask.shape
+    assert log_prob.shape == ()
+    assert sample[query_mask].isfinite().all()
+    assert sample[~query_mask].isnan().all()
+
+    latent = sample[query_mask] / scale
+    expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
+    expected = expected - query_mask.sum() * math.log(scale)
+    assert_close(log_prob, expected)
+
 
 def test_profiti_sample_and_log_prob_handles_batch_dimensions() -> None:
     r"""Check ProFITi scatters flattened flow samples through batch dimensions."""
@@ -314,19 +331,22 @@ def test_profiti_sample_and_log_prob_handles_batch_dimensions() -> None:
     )
 
     samples, log_prob = model.sample_and_log_prob(
-        5,
+        (2, 3),
         context_times=context_times,
         context_values=context_values,
         query_times=query_times,
         query_mask=query_mask,
     )
 
-    assert samples.shape == (5, *query_mask.shape)
-    assert log_prob.shape == (5, 2)
-    assert samples[:, query_mask].isfinite().all()
-    assert samples[:, ~query_mask].isnan().all()
+    assert samples.shape == (2, 3, *query_mask.shape)
+    assert log_prob.shape == (2, 3, 2)
+    assert samples[..., query_mask].isfinite().all()
+    assert samples[..., ~query_mask].isnan().all()
 
-    latents = torch.stack([samples[:, k, query_mask[k]] / scale for k in range(2)])
+    latents = torch.stack(
+        [samples[..., k, :, :][..., query_mask[k]] / scale for k in range(2)],
+        dim=-2,
+    )
     expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
     expected = expected - query_mask[0].sum() * math.log(scale)
-    assert_close(log_prob, expected.mT)
+    assert_close(log_prob, expected)

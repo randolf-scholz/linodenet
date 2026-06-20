@@ -357,17 +357,18 @@ class ProFITi(nn.Module):
 
     def sample_and_log_prob(
         self,
-        num_samples: int = 1,  # S
+        size: int | tuple[int, ...] = (),  # *S
         *,
         context_times: Tensor,  # (..., N)
         context_values: Tensor,  # (..., N, D)
         query_times: Tensor,  # (..., T)
         query_mask: Tensor,  # (..., T, D), bool
-    ) -> tuple[Tensor, Tensor]:  # (S, ..., T, D), (S, ...)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., T, D), (*S, ...)
         T = context_times
         X = context_values
         Q = query_times
         M = query_mask
+        sample_shape = (size,) if isinstance(size, int) else size
 
         *batch_shape, context_size, context_dim = X.shape  # B, N, D
         query_size = Q.shape[-1]  # T
@@ -385,46 +386,44 @@ class ProFITi(nn.Module):
                 "for each batch item."
             )
 
-        time_points = torch.cat([T, Q], dim=-1).nan_to_num(0.0)
-        # time_points: (..., N + T)
         query_values = X.new_full(
             (*batch_shape, query_size, context_dim),
             torch.nan,
         )  # (..., T, D)
-        conditioning_values = torch.cat([X, query_values], dim=-2)
-        # conditioning_values: (..., N + T, D)
-        target_mask = torch.cat([  # (..., N + T, D)
-            M.new_zeros((*batch_shape, context_size, context_dim)),
-            M,
-        ], dim=-2)  # fmt: skip
 
         context = self.context_embedding(
-            time_points,
-            conditioning_values,
-            target_mask,
+            torch.cat([T, Q], dim=-1).nan_to_num(0.0),  # (..., N + T)
+            torch.cat([X, query_values], dim=-2),  # (..., N + T, D)
+            torch.cat(
+                [  # (..., N + T, D)
+                    M.new_zeros((*batch_shape, context_size, context_dim)),
+                    M,
+                ],
+                dim=-2,
+            ),  # fmt: skip,
         )  # (..., K, M), K = target_counts[0]
 
         # sample from the latent distribution
         latents = torch.randn(
-            (num_samples, *context.shape[:-1]),
+            (*sample_shape, *context.shape[:-1]),
             dtype=context.dtype,
             device=context.device,
-        )  # (S, ..., K)
+        )  # (*S, ..., K)
 
         # apply the conditional flow
         samples_flat, logabsdet = self.conditional_flow.decode_and_logabsdet(
             latents,
-            context.unsqueeze(dim=0).expand(num_samples, *context.shape),
-        )  # (S, ..., K), (S, ...)
+            context.expand(*sample_shape, *context.shape),
+        )  # (*S, ..., K), (*S, ...)
 
         log_prob = (
             -0.5 * (latents.square() + _LOG2PI).sum(dim=-1) - logabsdet
-        )  # (S, ...)
+        )  # (*S, ...)
 
         samples = samples_flat.new_full(
-            (num_samples, *M.shape),
+            (*sample_shape, *M.shape),
             torch.nan,
-        )  # (S, ..., T, D)
+        )  # (*S, ..., T, D)
         target_counts_by_time = M.sum(dim=-1)  # (..., T)
         time_offsets = target_counts_by_time.cumsum(dim=-1) - target_counts_by_time
         channel_offsets = M.cumsum(dim=-1) - 1  # (..., T, D)
@@ -434,8 +433,8 @@ class ProFITi(nn.Module):
             *batch_indices,
             sample_positions[*batch_indices, time_indices, channel_indices],
         )
-        samples[:, *batch_indices, time_indices, channel_indices] = samples_flat[
-            :, *flow_indices
+        samples[..., *batch_indices, time_indices, channel_indices] = samples_flat[
+            ..., *flow_indices
         ]
 
         return samples, log_prob
