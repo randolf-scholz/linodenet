@@ -147,6 +147,8 @@ class TriangularAttention(nn.Module):
             assert valid_mask.dtype == torch.bool
             assert valid_mask.shape == query.shape[:-1]
             assert valid_mask.shape == key.shape[:-1]
+            # replace NaN with dummy values to prevent NaN gradients.
+            # these values in principal are unused but poison the gradients
             query = torch.where(valid_mask.unsqueeze(-1), query, 0.0)
             key = torch.where(valid_mask.unsqueeze(-1), key, 0.0)
 
