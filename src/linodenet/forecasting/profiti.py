@@ -249,6 +249,7 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         # nevertheless, in the unit tests we check padding invariance explictly
         valid_mask = context.isfinite().all(dim=-1)  # (..., K), bool
         context = torch.where(valid_mask.unsqueeze(-1), context, 0.0)
+        x = torch.where(valid_mask, x, 0.0)
 
         # 1. compute sita
         y, ldj_sita = self.attention.encode_and_logabsdet(
@@ -260,11 +261,12 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         scale = self.scale_net(context)
         shift = self.shift_net(context)
         y = scale.exp() * y + shift
-        ldj_scale = scale.sum(dim=-1)
+        ldj_scale = torch.where(valid_mask, scale, 0.0).sum(dim=-1)
 
         # 3. apply Shiesh
         y, ldj_shiesh = self.shiesh.encode_and_logabsdet(y)
-        ldj_shiesh = ldj_shiesh.sum(dim=-1)
+        ldj_shiesh = torch.where(valid_mask, ldj_shiesh, 0.0).sum(dim=-1)
+        y = torch.where(valid_mask, y, torch.nan)
 
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
@@ -279,22 +281,24 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         # nevertheless, in the unit tests we check padding invariance explictly
         valid_mask = context.isfinite().all(dim=-1)  # (..., K), bool
         context = torch.where(valid_mask.unsqueeze(-1), context, 0.0)
+        y = torch.where(valid_mask, y, 0.0)
 
         # 1. reverse shiesh
         y, ldj_shiesh = self.shiesh.decode_and_logabsdet(y)
-        ldj_shiesh = ldj_shiesh.sum(dim=-1)
+        ldj_shiesh = torch.where(valid_mask, ldj_shiesh, 0.0).sum(dim=-1)
 
         # 2. reverse elementwise linear transformation
         scale = self.scale_net(context)
         shift = self.shift_net(context)
         y = (y - shift) / scale.exp()
-        ldj_scale = -scale.sum(dim=-1)
+        ldj_scale = -torch.where(valid_mask, scale, 0.0).sum(dim=-1)
 
         # 3. reverse sita
         y, ldj_sita = self.attention.decode_and_logabsdet(
             context, context, y.unsqueeze(-1), valid_mask=valid_mask
         )
         y = y.squeeze(-1)
+        y = torch.where(valid_mask, y, torch.nan)
 
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
@@ -445,13 +449,20 @@ class ProFITi(nn.Module):
             device=H.device,
         )  # (*S, ..., P)
 
+        # mark samples as NaN if correspond to non-query values
+        Z = torch.where(
+            H.isfinite().all(dim=-1).expand(*Z.shape),
+            Z,
+            torch.nan,
+        )
+
         # apply the conditional flow
         samples_flat, logabsdet = self.conditional_flow.decode_and_logabsdet(
             Z,
             H.expand(*sample_shape, *H.shape),
         )  # (*S, ..., P), (*S, ...)
 
-        log_prob = -0.5 * (Z.square() + _LOG2PI).sum(dim=-1) - logabsdet  # (*S, ...)
+        log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1) - logabsdet  # (*S, ...)
 
         target_counts_by_time = M.sum(dim=-1)  # (..., $K)
         channel_offsets = M.cumsum(dim=-1) - 1  # (..., $K, D)

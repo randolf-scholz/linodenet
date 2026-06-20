@@ -376,8 +376,7 @@ def test_profiti_sample_and_log_prob_uses_standard_normal_latent() -> None:
 
     assert samples.shape == (5, *query_mask.shape)
     assert log_prob.shape == (5,)
-    assert samples[:, query_mask].isfinite().all()
-    assert samples[:, ~query_mask].isnan().all()
+    assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
 
     latents = samples[:, query_mask] / scale
     expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
@@ -393,8 +392,7 @@ def test_profiti_sample_and_log_prob_uses_standard_normal_latent() -> None:
 
     assert sample.shape == query_mask.shape
     assert log_prob.shape == ()
-    assert sample[query_mask].isfinite().all()
-    assert sample[~query_mask].isnan().all()
+    assert torch.equal(sample.isfinite(), query_mask.expand_as(samples))
 
     latent = sample[query_mask] / scale
     expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
@@ -435,8 +433,7 @@ def test_profiti_sample_and_log_prob_handles_batch_dimensions() -> None:
 
     assert samples.shape == (2, 3, *query_mask.shape)
     assert log_prob.shape == (2, 3, 2)
-    assert samples[..., query_mask].isfinite().all()
-    assert samples[..., ~query_mask].isnan().all()
+    assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
 
     latents = torch.stack(
         [samples[..., k, :, :][..., query_mask[k]] / scale for k in range(2)],
@@ -488,8 +485,7 @@ def test_profiti_variable_target_count_nan_padding_has_finite_gradients() -> Non
 
     assert samples.shape == (3, *query_mask.shape)
     assert log_prob.shape == (3, 2)
-    assert samples[:, query_mask].isfinite().all()
-    assert samples[:, ~query_mask].isnan().all()
+    assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
     assert context_values.grad is not None
     assert context_values.grad.isfinite().all()
     for name, parameter in model.named_parameters():
