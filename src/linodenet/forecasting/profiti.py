@@ -135,9 +135,9 @@ class TriangularAttention(nn.Module):
         self.eps = eps
 
     # (..., $K, D) -> (..., $K, $K)
-    def _scores(self, context: Tensor, /) -> Tensor:
-        Q = self.q_proj(context)  # (..., K, L)
-        K = self.k_proj(context)  # (..., K, L)
+    def _scores(self, query: Tensor, key: Tensor, /) -> Tensor:
+        Q = self.q_proj(query)  # (..., $K, L)
+        K = self.k_proj(key)  # (..., $K, L)
 
         scores = torch.einsum("...ML, ...NL -> ...MN", Q, K / self.scale)  # (..., K, K)
         diagonal = scores.diagonal(dim1=-2, dim2=-1)  # (..., K)
@@ -148,12 +148,13 @@ class TriangularAttention(nn.Module):
 
     def encode_and_logabsdet(
         self,
-        x: Tensor,  # (..., $K)
-        context: Tensor,  # (..., $K, D)
+        query: Tensor,  # (..., $K, D)
+        key: Tensor,  # (..., $K, D)
+        value: Tensor,  # (..., $K, F)
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., $K), (...)
-        scores = self._scores(context)
-        y = torch.einsum("...MN, ...N -> ...M", scores, x)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
+        scores = self._scores(query, key)  # (..., $K, $K)
+        y = torch.einsum("...MN, ...NF -> ...MF", scores, value)
         # for a linear transform x -> Ax, the logabsdet is |A|
         # since A is triangular with positive diagonal, log|A| = sum(log(diag(A)))
         logabsdet = scores.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
@@ -161,13 +162,14 @@ class TriangularAttention(nn.Module):
 
     def decode_and_logabsdet(
         self,
-        y: Tensor,  # (..., $K)
-        context: Tensor,  # (..., $K, D)
+        query: Tensor,  # (..., $K, D)
+        key: Tensor,  # (..., $K, D)
+        value: Tensor,  # (..., $K, F)
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., $K), (...)
-        scores = self._scores(context)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
+        scores = self._scores(query, key)  # (..., $K, $K)
         # solve Ax = y for x
-        x = solve_triangular(scores, y.unsqueeze(-1), upper=False).squeeze(-1)
+        x = solve_triangular(scores, value, upper=False)
         logabsdet = -scores.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
         # note: log|det(A⁻¹)| = log|1/det(A)| = -log|det(A)|
         return x, logabsdet
@@ -225,7 +227,12 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         /,
     ) -> tuple[Tensor, Tensor]:  # (..., K), (...)
         # 1. compute sita
-        y, ldj_sita = self.attention.encode_and_logabsdet(x, context)
+        y, ldj_sita = self.attention.encode_and_logabsdet(
+            context,
+            context,
+            x.unsqueeze(-1),
+        )
+        y = y.squeeze(-1)
 
         # 2. compute elementwise linear transformation
         scale = self.scale_net(context)
@@ -256,7 +263,12 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         ldj_scale = -scale.sum(dim=-1)
 
         # 3. reverse sita
-        y, ldj_sita = self.attention.decode_and_logabsdet(y, context)
+        y, ldj_sita = self.attention.decode_and_logabsdet(
+            context,
+            context,
+            y.unsqueeze(-1),
+        )
+        y = y.squeeze(-1)
 
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 

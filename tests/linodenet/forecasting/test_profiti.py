@@ -98,8 +98,13 @@ def test_triangular_attention_encode_decode_roundtrip_with_logabsdet() -> None:
     context = torch.randn(5, 4, dtype=torch.float64)
     x = torch.randn(5, dtype=torch.float64)
 
-    y, forward_logabsdet = attention.encode_and_logabsdet(x, context)
-    xhat, inverse_logabsdet = attention.decode_and_logabsdet(y, context)
+    y, forward_logabsdet = attention.encode_and_logabsdet(
+        context,
+        context,
+        x.unsqueeze(-1),
+    )
+    xhat, inverse_logabsdet = attention.decode_and_logabsdet(context, context, y)
+    xhat = xhat.squeeze(-1)
 
     assert_close(xhat, x, atol=1e-12, rtol=1e-12)
     assert_close(
@@ -118,10 +123,14 @@ def test_triangular_attention_logabsdet_matches_dense_jacobian() -> None:
     context = torch.randn(num_steps, 4, dtype=torch.float64)
     x = torch.randn(num_steps, dtype=torch.float64)
 
-    _, actual = attention.encode_and_logabsdet(x, context)
+    _, actual = attention.encode_and_logabsdet(context, context, x.unsqueeze(-1))
 
     def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
-        y, _ = attention.encode_and_logabsdet(z.reshape(num_steps), context)
+        y, _ = attention.encode_and_logabsdet(
+            context,
+            context,
+            z.reshape(num_steps, 1),
+        )
         return y.reshape(-1)
 
     jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
