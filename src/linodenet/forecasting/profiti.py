@@ -120,7 +120,7 @@ class Shiesh(nn.Module, Transform):
         return self._transform_and_logabsdet(y, -self.t)
 
 
-class TriangularAttention(nn.Module, ConditionalTransform):
+class TriangularAttention(nn.Module):
     r"""Implements (sorted) invertible triangular attention (equation 10).
 
     .. math:: σ(QKᵀ)V = A(H, H)⋅X
@@ -134,6 +134,7 @@ class TriangularAttention(nn.Module, ConditionalTransform):
         self.scale = dim_hidden**-0.5
         self.eps = eps
 
+    # (..., $K, D) -> (..., $K, $K)
     def _scores(self, context: Tensor, /) -> Tensor:
         Q = self.q_proj(context)  # (..., K, L)
         K = self.k_proj(context)  # (..., K, L)
@@ -147,10 +148,10 @@ class TriangularAttention(nn.Module, ConditionalTransform):
 
     def encode_and_logabsdet(
         self,
-        x: Tensor,  # (..., K)
-        context: Tensor,  # (..., K, D)
+        x: Tensor,  # (..., $K)
+        context: Tensor,  # (..., $K, D)
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., K), (...)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K), (...)
         scores = self._scores(context)
         y = torch.einsum("...MN, ...N -> ...M", scores, x)
         # for a linear transform x -> Ax, the logabsdet is |A|
@@ -160,10 +161,10 @@ class TriangularAttention(nn.Module, ConditionalTransform):
 
     def decode_and_logabsdet(
         self,
-        y: Tensor,  # (..., K)
-        context: Tensor,  # (..., K, D)
+        y: Tensor,  # (..., $K)
+        context: Tensor,  # (..., $K, D)
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., K), (...)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K), (...)
         scores = self._scores(context)
         # solve Ax = y for x
         x = solve_triangular(scores, y.unsqueeze(-1), upper=False).squeeze(-1)
