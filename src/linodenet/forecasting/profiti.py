@@ -452,6 +452,7 @@ class ProFITi(nn.Module):
         # mark samples as NaN if they correspond to non-query values
         valid_mask = H.isfinite().all(dim=-1)  # (..., P)
         Z = torch.where(valid_mask.expand(*Z.shape), Z, nan)
+        log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1)  # (*S, ...)
 
         # apply the conditional flow
         samples_flat, logabsdet = self.conditional_flow.decode_and_logabsdet(
@@ -459,15 +460,13 @@ class ProFITi(nn.Module):
             H.expand(*sample_shape, *H.shape),
         )  # (*S, ..., P), (*S, ...)
 
-        log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1) - logabsdet  # (*S, ...)
-
         # reshape sample to (..., $K, D) and fill non-query positions with NaN
         samples = samples_flat.new_full(
             (*sample_shape, *M.shape), nan
         )  # (*S, ..., $K, D)
         samples[..., M] = samples_flat[..., valid_mask]
 
-        return samples, log_prob
+        return samples, log_prob - logabsdet
 
     def sample(
         self,
@@ -482,11 +481,45 @@ class ProFITi(nn.Module):
 
     def log_prob(
         self,
-        value: Tensor,
+        value: Tensor,  # (..., $K, D)
+        /,
         *,
-        context_times: Tensor,
-        context_values: Tensor,
-        query_times: Tensor,
-        query_mask: Tensor | None = None,
+        context_times: Tensor,  # (..., $N), padded NaN
+        context_values: Tensor,  # (..., $N, D), padded NaN, sparse
+        query_times: Tensor,  # (..., $K), padded NaN
     ) -> Tensor:
-        raise NotImplementedError
+        T = context_times
+        X = context_values
+        Q = query_times
+        M = value.isfinite()
+
+        *batch_shape, context_size, context_dim = X.shape
+        query_size = Q.shape[-1]
+
+        assert value.shape == (*batch_shape, query_size, context_dim)
+
+        Y = X.new_full((*batch_shape, query_size, context_dim), nan)
+
+        H = self.context_embedding(
+            torch.cat([T, Q], dim=-1),
+            torch.cat([X, Y], dim=-2),
+            torch.cat(
+                [
+                    M.new_zeros((*batch_shape, context_size, context_dim)),
+                    M,
+                ],
+                dim=-2,
+            ),
+        )  # (..., P, H), P = max_target_count
+
+        target_counts = M.sum(dim=(-2, -1))
+        target_slots = torch.arange(H.shape[-2], device=H.device)
+        valid_mask = target_slots < target_counts.unsqueeze(dim=-1)
+        H = torch.where(valid_mask.unsqueeze(dim=-1), H, nan)
+
+        value_flat = value.new_full(H.shape[:-1], nan)
+        value_flat[valid_mask] = value[M]
+
+        Z, logabsdet = self.conditional_flow.encode_and_logabsdet(value_flat, H)
+        log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1)
+        return log_prob + logabsdet

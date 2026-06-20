@@ -444,6 +444,39 @@ def test_profiti_sample_and_log_prob_handles_batch_dimensions() -> None:
     assert_close(log_prob, expected)
 
 
+def test_profiti_log_prob_uses_finite_value_mask() -> None:
+    r"""Check ProFITi log_prob infers the target mask from finite values."""
+    scale = 2.0
+    model = ProFITi(
+        context_embedding=_TargetContext(hidden_dim=3),
+        conditional_flow=_ScaleDecodeFlow(scale=scale),
+    )
+    context_times = torch.tensor([0.0, 1.0])
+    context_values = torch.tensor([[1.0, torch.nan], [2.0, 3.0]])
+    query_times = torch.tensor([2.0, 3.0, 4.0])
+    value = torch.tensor(
+        [
+            [1.0, torch.nan],
+            [2.0, 3.0],
+            [torch.nan, 4.0],
+        ]
+    )
+
+    log_prob = model.log_prob(
+        value,
+        context_times=context_times,
+        context_values=context_values,
+        query_times=query_times,
+    )
+
+    query_mask = value.isfinite()
+    latent = value[query_mask] / scale
+    expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
+    expected = expected - query_mask.sum() * math.log(scale)
+    assert log_prob.shape == ()
+    assert_close(log_prob, expected)
+
+
 def test_profiti_variable_target_count_nan_padding_has_finite_gradients() -> None:
     r"""Check ProFITi handles batches with variable target counts."""
     torch.manual_seed(0)
@@ -480,12 +513,20 @@ def test_profiti_variable_target_count_nan_padding_has_finite_gradients() -> Non
         query_times=query_times,
         query_mask=query_mask,
     )
-    loss = samples.nansum() + log_prob.nansum()
+    value_log_prob = model.log_prob(
+        samples[0].detach(),
+        context_times=context_times,
+        context_values=context_values,
+        query_times=query_times,
+    )
+    loss = samples.nansum() + log_prob.nansum() + value_log_prob.nansum()
     loss.backward()
 
     assert samples.shape == (3, *query_mask.shape)
     assert log_prob.shape == (3, 2)
+    assert value_log_prob.shape == (2,)
     assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
+    assert value_log_prob.isfinite().all()
     assert context_values.grad is not None
     assert context_values.grad.isfinite().all()
     for name, parameter in model.named_parameters():
