@@ -359,74 +359,80 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        context_times: Tensor,  # (..., N)
-        context_values: Tensor,  # (..., N, D)
-        query_times: Tensor,  # (..., T)
-        query_mask: Tensor,  # (..., T, D), bool
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., T, D), (*S, ...)
+        context_times: Tensor,  # (..., $N)
+        context_values: Tensor,  # (..., $N, D)
+        query_times: Tensor,  # (..., $K)
+        query_mask: Tensor,  # (..., $K, D), bool
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
+        # Note: Shape legend for the dense ProFITi sampling path
+        #   *S: sample shape (variadic, dynamic)
+        #   $N: context time steps (dynamic)
+        #   $K: query time steps (dynamic)
+        #   D: channels.
+        #   P: selected target values per batch item
+        #   H: latent embedding dimension.
         T = context_times
         X = context_values
         Q = query_times
         M = query_mask
         sample_shape = (size,) if isinstance(size, int) else size
 
-        *batch_shape, context_size, context_dim = X.shape  # B, N, D
-        query_size = Q.shape[-1]  # T
+        *batch_shape, context_size, context_dim = X.shape  # ..., $N, D
+        query_size = Q.shape[-1]  # $K
 
         assert M.dtype == torch.bool
         assert M.shape == (*batch_shape, query_size, context_dim)
 
-        target_counts = M.sum(dim=(-2, -1)).reshape(-1)  # (∏B)
-        if int(target_counts[0].item()) == 0:
+        target_counts = M.sum(dim=(-2, -1))  # (...)
+        min_target_count = int(target_counts.min().item())
+        max_target_count = int(target_counts.max().item())
+        if min_target_count == 0:
             raise ValueError("query_mask must select at least one target value.")
 
-        if not (target_counts == target_counts[0]).all().item():
+        if min_target_count != max_target_count:
             raise ValueError(
                 "sample_and_log_prob requires the same number of target values "
                 "for each batch item."
             )
 
-        query_values = X.new_full(
-            (*batch_shape, query_size, context_dim),
-            torch.nan,
-        )  # (..., T, D)
+        # (..., $K, D)
+        Y = X.new_full((*batch_shape, query_size, context_dim), torch.nan)
 
-        context = self.context_embedding(
-            torch.cat([T, Q], dim=-1),  # (..., N + T)
-            torch.cat([X, query_values], dim=-2),  # (..., N + T, D)
+        # use grafiti as an encoder (eq 16)
+        H = self.context_embedding(
+            torch.cat([T, Q], dim=-1),  # (..., $N + $K)
+            torch.cat([X, Y], dim=-2),  # (..., $N + $K, D)
             torch.cat(
-                [  # (..., N + T, D)
+                [  # (..., $N + $K, D)
                     M.new_zeros((*batch_shape, context_size, context_dim)),
                     M,
                 ],
                 dim=-2,
             ),  # fmt: skip,
-        )  # (..., K, M), K = target_counts[0]
+        )  # (..., P, H), P = max_target_count
 
         # sample from the latent distribution
-        latents = torch.randn(
-            (*sample_shape, *context.shape[:-1]),
-            dtype=context.dtype,
-            device=context.device,
-        )  # (*S, ..., K)
+        Z = torch.randn(
+            (*sample_shape, *H.shape[:-1]),
+            dtype=H.dtype,
+            device=H.device,
+        )  # (*S, ..., P)
 
         # apply the conditional flow
         samples_flat, logabsdet = self.conditional_flow.decode_and_logabsdet(
-            latents,
-            context.expand(*sample_shape, *context.shape),
-        )  # (*S, ..., K), (*S, ...)
+            Z,
+            H.expand(*sample_shape, *H.shape),
+        )  # (*S, ..., P), (*S, ...)
 
-        log_prob = (
-            -0.5 * (latents.square() + _LOG2PI).sum(dim=-1) - logabsdet
-        )  # (*S, ...)
+        log_prob = -0.5 * (Z.square() + _LOG2PI).sum(dim=-1) - logabsdet  # (*S, ...)
 
         samples = samples_flat.new_full(
             (*sample_shape, *M.shape),
             torch.nan,
-        )  # (*S, ..., T, D)
-        target_counts_by_time = M.sum(dim=-1)  # (..., T)
+        )  # (*S, ..., $K, D)
+        target_counts_by_time = M.sum(dim=-1)  # (..., $K)
         time_offsets = target_counts_by_time.cumsum(dim=-1) - target_counts_by_time
-        channel_offsets = M.cumsum(dim=-1) - 1  # (..., T, D)
+        channel_offsets = M.cumsum(dim=-1) - 1  # (..., $K, D)
         sample_positions = channel_offsets + time_offsets.unsqueeze(dim=-1)
         *batch_indices, time_indices, channel_indices = M.nonzero(as_tuple=True)
         flow_indices = (
