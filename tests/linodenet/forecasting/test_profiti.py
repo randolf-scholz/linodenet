@@ -31,72 +31,6 @@ class ProFITiTestConfig(NamedTuple):
     num_heads: int
 
 
-class TestProfiti(TestForecastingModel[ProFITi]):
-    r"""Shared forecasting-model tests for ProFITi."""
-
-    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
-    BATCH_SHAPE: ClassVar[tuple[int, ...]] = (4,)
-    STANDARD_CONFIG: ClassVar[ProFITiTestConfig] = ProFITiTestConfig(
-        input_dim=CONTEXT_SHAPE[0],
-        latent_dim=8,
-        num_layers=2,
-        num_heads=1,
-    )
-
-    @pytest.fixture
-    def model_config(self) -> ProFITiTestConfig:
-        r"""Configuration used to instantiate the ProFITi model under test."""
-        return self.STANDARD_CONFIG
-
-    def make_model(self, model_config: object, /) -> ProFITi:
-        r"""Instantiate a ProFITi model from :attr:`STANDARD_CONFIG`."""
-        if not isinstance(model_config, ProFITiTestConfig):
-            raise TypeError("model_config must be a ProFITiTestConfig.")
-        return ProFITi.from_config(
-            ProFITiConfig(
-                input_dim=model_config.input_dim,
-                latent_dim=model_config.latent_dim,
-                num_layers=model_config.num_layers,
-                num_heads=model_config.num_heads,
-            )
-        )
-
-    def forecast(
-        self,
-        model: ProFITi,
-        inputs: SequentialData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
-        r"""Return ProFITi target log densities for sequential forecasting inputs."""
-        log_prob = model.log_prob(
-            inputs.query_values,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            query_times=inputs.query_times,
-        )
-        event_ndim = inputs.query_values.ndim - inputs.query_times.ndim
-        log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
-        predictions = torch.where(inputs.query_values.isfinite(), log_prob, torch.nan)
-
-        assert predictions.shape == inputs.query_values.shape
-        assert predictions[inputs.query_mask].isfinite().all()
-        return (predictions,)
-
-    def loss(
-        self,
-        model: ProFITi,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
-        r"""Return ProFITi negative log likelihood for target values."""
-        (log_prob,) = predictions
-        regularizer = log_prob.new_zeros(())
-        for parameter in model.parameters():
-            regularizer = regularizer + parameter.sum()
-        return -log_prob[targets.isfinite()].mean() + 1e-6 * regularizer
-
-
 class _TargetContext(nn.Module):
     r"""Minimal context encoder for ProFITi wrapper tests."""
 
@@ -264,6 +198,60 @@ def test_triangular_attention_padding_invariance_with_nan_padding() -> None:
         assert parameter.grad.isfinite().all()
 
 
+def test_flow_sequence_encode_decode_roundtrip_with_logabsdet() -> None:
+    r"""Check that a sequence of ProFITi blocks is invertible."""
+    torch.manual_seed(0)
+    num_steps = 5
+    latent_dim = 4
+    flow = ConditionalFlowSequence(
+        [
+            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+        ]
+    )
+    context = torch.randn(num_steps, latent_dim)
+    x = torch.randn(num_steps)
+
+    y, forward_logabsdet = flow.encode_and_logabsdet(x, context)
+    xhat, inverse_logabsdet = flow.decode_and_logabsdet(y, context)
+
+    assert_close(xhat, x, atol=1e-5, rtol=1e-5)
+    assert_close(
+        forward_logabsdet + inverse_logabsdet,
+        torch.zeros_like(forward_logabsdet),
+        atol=1e-5,
+        rtol=1e-5,
+    )
+
+
+def test_flow_sequence_logabsdet_matches_dense_jacobian() -> None:
+    r"""Check a sequence of ProFITi blocks against a dense Jacobian."""
+    torch.manual_seed(0)
+    num_steps = 5
+    latent_dim = 4
+    flow = ConditionalFlowSequence(
+        [
+            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+        ]
+    )
+    context = torch.randn(num_steps, latent_dim)
+    x = torch.randn(num_steps)
+
+    _, actual = flow.encode_and_logabsdet(x, context)
+
+    def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
+        y, _ = flow.encode_and_logabsdet(z.reshape(num_steps), context)
+        return y.reshape(-1)
+
+    jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
+    _, expected = torch.linalg.slogdet(jacobian)
+
+    assert actual.isfinite()
+    assert expected.isfinite()
+    assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+
+
 class TestProFITiBlock:
     r"""Tests for ProFITi block transforms."""
 
@@ -351,264 +339,271 @@ class TestProFITiBlock:
         assert raw_context.grad.isfinite().all()
 
 
-def test_flow_sequence_encode_decode_roundtrip_with_logabsdet() -> None:
-    r"""Check that a sequence of ProFITi blocks is invertible."""
-    torch.manual_seed(0)
-    num_steps = 5
-    latent_dim = 4
-    flow = ConditionalFlowSequence(
-        [
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-        ]
-    )
-    context = torch.randn(num_steps, latent_dim)
-    x = torch.randn(num_steps)
+class TestProfiti(TestForecastingModel[ProFITi]):
+    r"""Shared forecasting-model tests for ProFITi."""
 
-    y, forward_logabsdet = flow.encode_and_logabsdet(x, context)
-    xhat, inverse_logabsdet = flow.decode_and_logabsdet(y, context)
-
-    assert_close(xhat, x, atol=1e-5, rtol=1e-5)
-    assert_close(
-        forward_logabsdet + inverse_logabsdet,
-        torch.zeros_like(forward_logabsdet),
-        atol=1e-5,
-        rtol=1e-5,
-    )
-
-
-def test_flow_sequence_logabsdet_matches_dense_jacobian() -> None:
-    r"""Check a sequence of ProFITi blocks against a dense Jacobian."""
-    torch.manual_seed(0)
-    num_steps = 5
-    latent_dim = 4
-    flow = ConditionalFlowSequence(
-        [
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-        ]
-    )
-    context = torch.randn(num_steps, latent_dim)
-    x = torch.randn(num_steps)
-
-    _, actual = flow.encode_and_logabsdet(x, context)
-
-    def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
-        y, _ = flow.encode_and_logabsdet(z.reshape(num_steps), context)
-        return y.reshape(-1)
-
-    jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
-    _, expected = torch.linalg.slogdet(jacobian)
-
-    assert actual.isfinite()
-    assert expected.isfinite()
-    assert_close(actual, expected, atol=1e-4, rtol=1e-4)
-
-
-def test_profiti_from_config_uses_grafiti_and_flow_sequence() -> None:
-    r"""Check that ProFITi.from_config wires the default submodules."""
-    config = ProFITiConfig(
-        input_dim=7,
-        num_heads=2,
-        latent_dim=12,
-        num_layers=3,
-    )
-
-    model = ProFITi.from_config(config)
-
-    assert isinstance(model.context_embedding, Grafiti)
-    assert model.context_embedding.channel_init.in_features == config.input_dim
-    assert model.context_embedding.latent_dim == config.latent_dim
-    assert model.context_embedding.num_heads == config.num_heads
-    assert model.context_embedding.num_layers == config.num_layers
-    assert isinstance(model.conditional_flow, ConditionalFlowSequence)
-    assert not isinstance(model.conditional_flow, nn.Identity)
-    assert len(model.conditional_flow) == config.num_layers
-    assert all(isinstance(layer, ProFITiBlock) for layer in model.conditional_flow)
-
-
-def test_profiti_sample_and_log_prob_uses_standard_normal_latent() -> None:
-    r"""Check ProFITi samples via the flow and returns transformed log-density."""
-    torch.manual_seed(0)
-    scale = 2.0
-    model = ProFITi(
-        context_embedding=_TargetContext(hidden_dim=3),
-        conditional_flow=_ScaleDecodeFlow(scale=scale),
-    )
-    context_times = torch.tensor([0.0, 1.0])
-    context_values = torch.tensor([[1.0, torch.nan], [2.0, 3.0]])
-    query_times = torch.tensor([2.0, 3.0, 4.0])
-    query_mask = torch.tensor(
-        [
-            [True, False],
-            [True, True],
-            [False, True],
-        ]
-    )
-
-    samples, log_prob = model.sample_and_log_prob(
-        5,
-        context_times=context_times,
-        context_values=context_values,
-        query_times=query_times,
-        query_mask=query_mask,
-    )
-
-    assert samples.shape == (5, *query_mask.shape)
-    assert log_prob.shape == (5,)
-    assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
-
-    latents = samples[:, query_mask] / scale
-    expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
-    expected = expected - query_mask.sum() * math.log(scale)
-    assert_close(log_prob, expected)
-
-    sample, log_prob = model.sample_and_log_prob(
-        context_times=context_times,
-        context_values=context_values,
-        query_times=query_times,
-        query_mask=query_mask,
-    )
-
-    assert sample.shape == query_mask.shape
-    assert log_prob.shape == ()
-    assert torch.equal(sample.isfinite(), query_mask)
-
-    latent = sample[query_mask] / scale
-    expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
-    expected = expected - query_mask.sum() * math.log(scale)
-    assert_close(log_prob, expected)
-
-
-def test_profiti_sample_and_log_prob_handles_batch_dimensions() -> None:
-    r"""Check ProFITi scatters flattened flow samples through batch dimensions."""
-    torch.manual_seed(0)
-    scale = 2.0
-    model = ProFITi(
-        context_embedding=_TargetContext(hidden_dim=3),
-        conditional_flow=_ScaleDecodeFlow(scale=scale),
-    )
-    context_times = torch.tensor([[0.0, 1.0], [0.0, 1.0]])
-    context_values = torch.tensor(
-        [
-            [[1.0, torch.nan], [2.0, 3.0]],
-            [[4.0, 5.0], [torch.nan, 6.0]],
-        ]
-    )
-    query_times = torch.tensor([[2.0, 3.0, 4.0], [2.0, 3.0, 4.0]])
-    query_mask = torch.tensor(
-        [
-            [[True, False], [True, True], [False, True]],
-            [[False, True], [True, False], [True, True]],
-        ]
-    )
-
-    samples, log_prob = model.sample_and_log_prob(
-        (2, 3),
-        context_times=context_times,
-        context_values=context_values,
-        query_times=query_times,
-        query_mask=query_mask,
-    )
-
-    assert samples.shape == (2, 3, *query_mask.shape)
-    assert log_prob.shape == (2, 3, 2)
-    assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
-
-    latents = torch.stack(
-        [samples[..., k, :, :][..., query_mask[k]] / scale for k in range(2)],
-        dim=-2,
-    )
-    expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
-    expected = expected - query_mask[0].sum() * math.log(scale)
-    assert_close(log_prob, expected)
-
-
-def test_profiti_log_prob_uses_finite_value_mask() -> None:
-    r"""Check ProFITi log_prob infers the target mask from finite values."""
-    scale = 2.0
-    model = ProFITi(
-        context_embedding=_TargetContext(hidden_dim=3),
-        conditional_flow=_ScaleDecodeFlow(scale=scale),
-    )
-    context_times = torch.tensor([0.0, 1.0])
-    context_values = torch.tensor([[1.0, torch.nan], [2.0, 3.0]])
-    query_times = torch.tensor([2.0, 3.0, 4.0])
-    value = torch.tensor(
-        [
-            [1.0, torch.nan],
-            [2.0, 3.0],
-            [torch.nan, 4.0],
-        ]
-    )
-
-    log_prob = model.log_prob(
-        value,
-        context_times=context_times,
-        context_values=context_values,
-        query_times=query_times,
-    )
-
-    query_mask = value.isfinite()
-    latent = value[query_mask] / scale
-    expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
-    expected = expected - query_mask.sum() * math.log(scale)
-    assert log_prob.shape == ()
-    assert_close(log_prob, expected)
-
-
-def test_profiti_variable_target_count_nan_padding_has_finite_gradients() -> None:
-    r"""Check ProFITi handles batches with variable target counts."""
-    torch.manual_seed(0)
-    config = ProFITiConfig(
-        input_dim=2,
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    BATCH_SHAPE: ClassVar[tuple[int, ...]] = (4,)
+    STANDARD_CONFIG: ClassVar[ProFITiTestConfig] = ProFITiTestConfig(
+        input_dim=CONTEXT_SHAPE[0],
+        latent_dim=8,
+        num_layers=2,
         num_heads=1,
-        latent_dim=4,
-        num_layers=1,
-    )
-    model = ProFITi.from_config(config)
-    context_times = torch.tensor(
-        [[0.0, 1.0], [0.0, 1.0]],
-    )
-    context_values = torch.randn(
-        2,
-        2,
-        config.input_dim,
-        requires_grad=True,
-    )
-    query_times = torch.tensor(
-        [[2.0, 3.0, 4.0], [2.0, 3.0, 4.0]],
-    )
-    query_mask = torch.tensor(
-        [
-            [[True, False], [True, True], [False, True]],
-            [[False, True], [False, False], [True, False]],
-        ]
     )
 
-    samples, log_prob = model.sample_and_log_prob(
-        3,
-        context_times=context_times,
-        context_values=context_values,
-        query_times=query_times,
-        query_mask=query_mask,
-    )
-    value_log_prob = model.log_prob(
-        samples[0].detach(),
-        context_times=context_times,
-        context_values=context_values,
-        query_times=query_times,
-    )
-    loss = samples.nansum() + log_prob.nansum() + value_log_prob.nansum()
-    loss.backward()
+    @pytest.fixture
+    def model_config(self) -> ProFITiTestConfig:
+        r"""Configuration used to instantiate the ProFITi model under test."""
+        return self.STANDARD_CONFIG
 
-    assert samples.shape == (3, *query_mask.shape)
-    assert log_prob.shape == (3, 2)
-    assert value_log_prob.shape == (2,)
-    assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
-    assert value_log_prob.isfinite().all()
-    assert context_values.grad is not None
-    assert context_values.grad.isfinite().all()
-    for name, parameter in model.named_parameters():
-        if parameter.grad is not None:
-            assert parameter.grad.isfinite().all(), name
+    def make_model(self, model_config: object, /) -> ProFITi:
+        r"""Instantiate a ProFITi model from :attr:`STANDARD_CONFIG`."""
+        if not isinstance(model_config, ProFITiTestConfig):
+            raise TypeError("model_config must be a ProFITiTestConfig.")
+        return ProFITi.from_config(
+            ProFITiConfig(
+                input_dim=model_config.input_dim,
+                latent_dim=model_config.latent_dim,
+                num_layers=model_config.num_layers,
+                num_heads=model_config.num_heads,
+            )
+        )
+
+    def forecast(
+        self,
+        model: ProFITi,
+        inputs: SequentialData,
+        /,
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return ProFITi target log densities for sequential forecasting inputs."""
+        log_prob = model.log_prob(
+            inputs.query_values,
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            query_times=inputs.query_times,
+        )
+        event_ndim = inputs.query_values.ndim - inputs.query_times.ndim
+        log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
+        predictions = torch.where(inputs.query_values.isfinite(), log_prob, torch.nan)
+
+        assert predictions.shape == inputs.query_values.shape
+        assert predictions[inputs.query_mask].isfinite().all()
+        return (predictions,)
+
+    def loss(
+        self,
+        model: ProFITi,
+        predictions: tuple[torch.Tensor, ...],
+        targets: torch.Tensor,
+    ) -> torch.Tensor:
+        r"""Return ProFITi negative log likelihood for target values."""
+        (log_prob,) = predictions
+        regularizer = log_prob.new_zeros(())
+        for parameter in model.parameters():
+            regularizer = regularizer + parameter.sum()
+        return -log_prob[targets.isfinite()].mean() + 1e-6 * regularizer
+
+    def test_from_config_uses_grafiti_and_flow_sequence(self) -> None:
+        r"""Check that ProFITi.from_config wires the default submodules."""
+        config = ProFITiConfig(
+            input_dim=7,
+            num_heads=2,
+            latent_dim=12,
+            num_layers=3,
+        )
+
+        model = ProFITi.from_config(config)
+
+        assert isinstance(model.context_embedding, Grafiti)
+        assert model.context_embedding.channel_init.in_features == config.input_dim
+        assert model.context_embedding.latent_dim == config.latent_dim
+        assert model.context_embedding.num_heads == config.num_heads
+        assert model.context_embedding.num_layers == config.num_layers
+        assert isinstance(model.conditional_flow, ConditionalFlowSequence)
+        assert not isinstance(model.conditional_flow, nn.Identity)
+        assert len(model.conditional_flow) == config.num_layers
+        assert all(isinstance(layer, ProFITiBlock) for layer in model.conditional_flow)
+
+    def test_sample_and_log_prob_uses_standard_normal_latent(self) -> None:
+        r"""Check ProFITi samples via the flow and returns transformed log-density."""
+        torch.manual_seed(0)
+        scale = 2.0
+        model = ProFITi(
+            context_embedding=_TargetContext(hidden_dim=3),
+            conditional_flow=_ScaleDecodeFlow(scale=scale),
+        )
+        context_times = torch.tensor([0.0, 1.0])
+        context_values = torch.tensor([[1.0, torch.nan], [2.0, 3.0]])
+        query_times = torch.tensor([2.0, 3.0, 4.0])
+        query_mask = torch.tensor(
+            [
+                [True, False],
+                [True, True],
+                [False, True],
+            ]
+        )
+
+        samples, log_prob = model.sample_and_log_prob(
+            5,
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+
+        assert samples.shape == (5, *query_mask.shape)
+        assert log_prob.shape == (5,)
+        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
+
+        latents = samples[:, query_mask] / scale
+        expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
+        expected = expected - query_mask.sum() * math.log(scale)
+        assert_close(log_prob, expected)
+
+        sample, log_prob = model.sample_and_log_prob(
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+
+        assert sample.shape == query_mask.shape
+        assert log_prob.shape == ()
+        assert torch.equal(sample.isfinite(), query_mask)
+
+        latent = sample[query_mask] / scale
+        expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
+        expected = expected - query_mask.sum() * math.log(scale)
+        assert_close(log_prob, expected)
+
+    def test_sample_and_log_prob_handles_batch_dimensions(self) -> None:
+        r"""Check ProFITi scatters flattened flow samples through batch dimensions."""
+        torch.manual_seed(0)
+        scale = 2.0
+        model = ProFITi(
+            context_embedding=_TargetContext(hidden_dim=3),
+            conditional_flow=_ScaleDecodeFlow(scale=scale),
+        )
+        context_times = torch.tensor([[0.0, 1.0], [0.0, 1.0]])
+        context_values = torch.tensor(
+            [
+                [[1.0, torch.nan], [2.0, 3.0]],
+                [[4.0, 5.0], [torch.nan, 6.0]],
+            ]
+        )
+        query_times = torch.tensor([[2.0, 3.0, 4.0], [2.0, 3.0, 4.0]])
+        query_mask = torch.tensor(
+            [
+                [[True, False], [True, True], [False, True]],
+                [[False, True], [True, False], [True, True]],
+            ]
+        )
+
+        samples, log_prob = model.sample_and_log_prob(
+            (2, 3),
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+
+        assert samples.shape == (2, 3, *query_mask.shape)
+        assert log_prob.shape == (2, 3, 2)
+        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
+
+        latents = torch.stack(
+            [samples[..., k, :, :][..., query_mask[k]] / scale for k in range(2)],
+            dim=-2,
+        )
+        expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
+        expected = expected - query_mask[0].sum() * math.log(scale)
+        assert_close(log_prob, expected)
+
+    def test_log_prob_uses_finite_value_mask(self) -> None:
+        r"""Check ProFITi log_prob infers the target mask from finite values."""
+        scale = 2.0
+        model = ProFITi(
+            context_embedding=_TargetContext(hidden_dim=3),
+            conditional_flow=_ScaleDecodeFlow(scale=scale),
+        )
+        context_times = torch.tensor([0.0, 1.0])
+        context_values = torch.tensor([[1.0, torch.nan], [2.0, 3.0]])
+        query_times = torch.tensor([2.0, 3.0, 4.0])
+        value = torch.tensor(
+            [
+                [1.0, torch.nan],
+                [2.0, 3.0],
+                [torch.nan, 4.0],
+            ]
+        )
+
+        log_prob = model.log_prob(
+            value,
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+        )
+
+        query_mask = value.isfinite()
+        latent = value[query_mask] / scale
+        expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
+        expected = expected - query_mask.sum() * math.log(scale)
+        assert log_prob.shape == ()
+        assert_close(log_prob, expected)
+
+    def test_variable_target_count_nan_padding_has_finite_gradients(self) -> None:
+        r"""Check ProFITi handles batches with variable target counts."""
+        torch.manual_seed(0)
+        config = ProFITiConfig(
+            input_dim=2,
+            num_heads=1,
+            latent_dim=4,
+            num_layers=1,
+        )
+        model = ProFITi.from_config(config)
+        context_times = torch.tensor(
+            [[0.0, 1.0], [0.0, 1.0]],
+        )
+        context_values = torch.randn(
+            2,
+            2,
+            config.input_dim,
+            requires_grad=True,
+        )
+        query_times = torch.tensor(
+            [[2.0, 3.0, 4.0], [2.0, 3.0, 4.0]],
+        )
+        query_mask = torch.tensor(
+            [
+                [[True, False], [True, True], [False, True]],
+                [[False, True], [False, False], [True, False]],
+            ]
+        )
+
+        samples, log_prob = model.sample_and_log_prob(
+            3,
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+        value_log_prob = model.log_prob(
+            samples[0].detach(),
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+        )
+        loss = samples.nansum() + log_prob.nansum() + value_log_prob.nansum()
+        loss.backward()
+
+        assert samples.shape == (3, *query_mask.shape)
+        assert log_prob.shape == (3, 2)
+        assert value_log_prob.shape == (2,)
+        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
+        assert value_log_prob.isfinite().all()
+        assert context_values.grad is not None
+        assert context_values.grad.isfinite().all()
+        for name, parameter in model.named_parameters():
+            if parameter.grad is not None:
+                assert parameter.grad.isfinite().all(), name
