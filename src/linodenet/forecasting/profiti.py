@@ -311,7 +311,7 @@ class ProFITi(nn.Module):
     """
 
     context_embedding: nn.Module
-    conditional_flow: nn.Module
+    conditional_flow: ConditionalTransform
 
     @classmethod
     def from_config(
@@ -325,9 +325,10 @@ class ProFITi(nn.Module):
 
         conditioning_module = Grafiti(
             input_dim=config.input_dim,
-            hidden_dim=config.latent_dim,
+            latent_dim=config.latent_dim,
             num_layers=config.num_layers,
             num_heads=config.num_heads,
+            output_mode="embeddings",
         )
 
         flow = ConditionalFlowSequence(
@@ -346,7 +347,7 @@ class ProFITi(nn.Module):
         self,
         *,
         context_embedding: nn.Module,
-        conditional_flow: nn.Module,
+        conditional_flow: ConditionalTransform,
     ) -> None:
         super().__init__()
         self.context_embedding = context_embedding
@@ -354,14 +355,82 @@ class ProFITi(nn.Module):
 
     def sample_and_log_prob(
         self,
-        num_samples: int = 1,
+        num_samples: int = 1,  # S
         *,
-        context_times: Tensor,
-        context_values: Tensor,
-        query_times: Tensor,
-        query_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        raise NotImplementedError
+        context_times: Tensor,  # (..., N)
+        context_values: Tensor,  # (..., N, D)
+        query_times: Tensor,  # (..., T)
+        query_mask: Tensor,  # (..., T, D), bool
+    ) -> tuple[Tensor, Tensor]:  # (S, ..., T, D), (S, ...)
+        *batch_shape, context_size, context_dim = context_values.shape  # B, N, D
+        query_size = query_times.shape[-1]  # T
+        assert query_mask.dtype == torch.bool
+        assert query_mask.shape == (*batch_shape, query_size, context_dim)
+
+        target_counts = query_mask.sum(dim=(-2, -1)).reshape(-1)  # (∏B)
+        if int(target_counts[0].item()) == 0:
+            raise ValueError("query_mask must select at least one target value.")
+
+        if not (target_counts == target_counts[0]).all().item():
+            raise ValueError(
+                "sample_and_log_prob requires the same number of target values "
+                "for each batch item."
+            )
+
+        time_points = torch.cat([context_times, query_times], dim=-1).nan_to_num(0.0)
+        # time_points: (..., N + T)
+        query_values = context_values.new_full(
+            (*batch_shape, query_size, context_dim),
+            torch.nan,
+        )  # (..., T, D)
+        conditioning_values = torch.cat([context_values, query_values], dim=-2)
+        # conditioning_values: (..., N + T, D)
+        target_mask = torch.cat([  # (..., N + T, D)
+            query_mask.new_zeros((*batch_shape, context_size, context_dim)),
+            query_mask,
+        ], dim=-2)  # fmt: skip
+
+        context = self.context_embedding(
+            time_points,
+            conditioning_values,
+            target_mask,
+        )  # (..., K, M), K = target_counts[0]
+
+        # sample from the latent distribution
+        latents = torch.randn(
+            (num_samples, *context.shape[:-1]),
+            dtype=context.dtype,
+            device=context.device,
+        )  # (S, ..., K)
+
+        # apply the conditional flow
+        samples_flat, logabsdet = self.conditional_flow.decode_and_logabsdet(
+            latents,
+            context.unsqueeze(dim=0).expand(num_samples, *context.shape),
+        )  # (S, ..., K), (S, ...)
+
+        log_prob = (
+            -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1) - logabsdet
+        )  # (S, ...)
+
+        num_batches = math.prod(batch_shape)  # ∏B
+        mask_flat = query_mask.reshape(num_batches, query_size * context_dim)
+        samples = samples_flat.new_full(
+            (num_samples, *query_mask.shape),
+            torch.nan,
+        )  # (S, ..., T, D)
+        sample_rows = samples.reshape(
+            num_samples, num_batches, query_size * context_dim
+        )  # (S, ∏B, T⋅D)
+        sample_positions = mask_flat.cumsum(dim=-1) - 1  # (∏B, T⋅D)
+        batch_indices, value_indices = mask_flat.nonzero(as_tuple=True)
+        sample_rows[:, batch_indices, value_indices] = samples_flat.reshape(
+            num_samples,
+            num_batches,
+            -1,
+        )[:, batch_indices, sample_positions[batch_indices, value_indices]]
+
+        return samples, log_prob
 
     def sample(
         self,

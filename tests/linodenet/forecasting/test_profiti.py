@@ -1,5 +1,7 @@
 r"""Tests for ProFITi components."""
 
+import math
+
 import torch
 from torch import nn
 from torch.func import grad, vmap
@@ -14,6 +16,48 @@ from linodenet.forecasting.profiti import (
     Shiesh,
     TriangularAttention,
 )
+
+
+class _TargetContext(nn.Module):
+    r"""Minimal context encoder for ProFITi wrapper tests."""
+
+    def __init__(self, hidden_dim: int) -> None:
+        super().__init__()
+        self.hidden_dim = hidden_dim
+
+    def forward(
+        self,
+        _time_points: torch.Tensor,
+        context_values: torch.Tensor,
+        target_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        *batch_shape, _, _ = target_mask.shape
+        max_targets = int(target_mask.sum(dim=(-2, -1)).max().item())
+        return context_values.new_zeros(*batch_shape, max_targets, self.hidden_dim)
+
+
+class _ScaleDecodeFlow(nn.Module):
+    r"""Affine conditional flow with a constant decode scale."""
+
+    def __init__(self, scale: float) -> None:
+        super().__init__()
+        self.scale = scale
+
+    def encode_and_logabsdet(
+        self,
+        x: torch.Tensor,
+        _context: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        logabsdet = x.new_full(x.shape[:-1], -x.shape[-1] * math.log(self.scale))
+        return x / self.scale, logabsdet
+
+    def decode_and_logabsdet(
+        self,
+        y: torch.Tensor,
+        _context: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        logabsdet = y.new_full(y.shape[:-1], y.shape[-1] * math.log(self.scale))
+        return self.scale * y, logabsdet
 
 
 def test_shiesh_encode_decode_roundtrip_with_logabsdet() -> None:
@@ -199,10 +243,48 @@ def test_profiti_from_config_uses_grafiti_and_flow_sequence() -> None:
 
     assert isinstance(model.context_embedding, Grafiti)
     assert model.context_embedding.channel_init.in_features == config.input_dim
-    assert model.context_embedding.hidden_dim == config.latent_dim
+    assert model.context_embedding.latent_dim == config.latent_dim
     assert model.context_embedding.num_heads == config.num_heads
     assert model.context_embedding.num_layers == config.num_layers
     assert isinstance(model.conditional_flow, ConditionalFlowSequence)
     assert not isinstance(model.conditional_flow, nn.Identity)
     assert len(model.conditional_flow) == config.num_layers
     assert all(isinstance(layer, ProFITiBlock) for layer in model.conditional_flow)
+
+
+def test_profiti_sample_and_log_prob_uses_standard_normal_latent() -> None:
+    r"""Check ProFITi samples via the flow and returns transformed log-density."""
+    torch.manual_seed(0)
+    scale = 2.0
+    model = ProFITi(
+        context_embedding=_TargetContext(hidden_dim=3),
+        conditional_flow=_ScaleDecodeFlow(scale=scale),
+    )
+    context_times = torch.tensor([0.0, 1.0])
+    context_values = torch.tensor([[1.0, torch.nan], [2.0, 3.0]])
+    query_times = torch.tensor([2.0, 3.0, 4.0])
+    query_mask = torch.tensor(
+        [
+            [True, False],
+            [True, True],
+            [False, True],
+        ]
+    )
+
+    samples, log_prob = model.sample_and_log_prob(
+        5,
+        context_times=context_times,
+        context_values=context_values,
+        query_times=query_times,
+        query_mask=query_mask,
+    )
+
+    assert samples.shape == (5, *query_mask.shape)
+    assert log_prob.shape == (5,)
+    assert samples[:, query_mask].isfinite().all()
+    assert samples[:, ~query_mask].isnan().all()
+
+    latents = samples[:, query_mask] / scale
+    expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
+    expected = expected - query_mask.sum() * math.log(scale)
+    assert_close(log_prob, expected)
