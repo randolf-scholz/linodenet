@@ -67,8 +67,8 @@ class Shiesh(nn.Module, Transform):
         if a <= 0:
             raise ValueError("a must be positive.")
 
-        self.t = nn.Parameter(torch.tensor(t), requires_grad=False)
-        self.a = nn.Parameter(torch.tensor(a), requires_grad=False)
+        self.register_buffer("t", torch.tensor(t))
+        self.register_buffer("a", torch.tensor(a))
 
     @staticmethod
     def _log_cosh(x: Tensor, /) -> Tensor:
@@ -428,10 +428,11 @@ class ProFITi(nn.Module):
 
         # (..., $K, D)
         Y = X.new_full((*batch_shape, query_size, context_dim), nan)
+        time_points = torch.cat([T, Q], dim=-1).nan_to_num(0.0)
 
         # use grafiti as an encoder (eq 16)
         H = self.context_embedding(
-            torch.cat([T, Q], dim=-1),  # (..., $N + $K)
+            time_points,  # (..., $N + $K)
             torch.cat([X, Y], dim=-2),  # (..., $N + $K, D)
             torch.cat(
                 [  # (..., $N + $K, D)
@@ -499,9 +500,10 @@ class ProFITi(nn.Module):
         assert value.shape == (*batch_shape, query_size, context_dim)
 
         Y = X.new_full((*batch_shape, query_size, context_dim), nan)
+        time_points = torch.cat([T, Q], dim=-1).nan_to_num(0.0)
 
         H = self.context_embedding(
-            torch.cat([T, Q], dim=-1),
+            time_points,
             torch.cat([X, Y], dim=-2),
             torch.cat(
                 [

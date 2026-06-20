@@ -1,7 +1,9 @@
 r"""Tests for ProFITi components."""
 
 import math
+from typing import ClassVar, NamedTuple
 
+import pytest
 import torch
 from torch import nn
 from torch.func import grad, vmap
@@ -16,6 +18,83 @@ from linodenet.forecasting.profiti import (
     Shiesh,
     TriangularAttention,
 )
+
+from .base import SequentialData, TestForecastingModel
+
+
+class ProFITiTestConfig(NamedTuple):
+    r"""Configuration used by shared ProFITi forecasting-model tests."""
+
+    input_dim: int
+    latent_dim: int
+    num_layers: int
+    num_heads: int
+
+
+class TestProfiti(TestForecastingModel[ProFITi]):
+    r"""Shared forecasting-model tests for ProFITi."""
+
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    BATCH_SHAPE: ClassVar[tuple[int, ...]] = (4,)
+    STANDARD_CONFIG: ClassVar[ProFITiTestConfig] = ProFITiTestConfig(
+        input_dim=CONTEXT_SHAPE[0],
+        latent_dim=8,
+        num_layers=2,
+        num_heads=1,
+    )
+
+    @pytest.fixture
+    def model_config(self) -> ProFITiTestConfig:
+        r"""Configuration used to instantiate the ProFITi model under test."""
+        return self.STANDARD_CONFIG
+
+    def make_model(self, model_config: object, /) -> ProFITi:
+        r"""Instantiate a ProFITi model from :attr:`STANDARD_CONFIG`."""
+        if not isinstance(model_config, ProFITiTestConfig):
+            raise TypeError("model_config must be a ProFITiTestConfig.")
+        return ProFITi.from_config(
+            ProFITiConfig(
+                input_dim=model_config.input_dim,
+                latent_dim=model_config.latent_dim,
+                num_layers=model_config.num_layers,
+                num_heads=model_config.num_heads,
+            )
+        )
+
+    def forecast(
+        self,
+        model: ProFITi,
+        inputs: SequentialData,
+        /,
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return ProFITi target log densities for sequential forecasting inputs."""
+        log_prob = model.log_prob(
+            inputs.query_values,
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            query_times=inputs.query_times,
+        )
+        event_ndim = inputs.query_values.ndim - inputs.query_times.ndim
+        log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
+        predictions = torch.where(inputs.query_values.isfinite(), log_prob, torch.nan)
+
+        assert predictions.shape == inputs.query_values.shape
+        assert predictions[inputs.query_mask].isfinite().all()
+        return (predictions,)
+
+    def loss(
+        self,
+        model: ProFITi,
+        predictions: tuple[torch.Tensor, ...],
+        targets: torch.Tensor,
+    ) -> torch.Tensor:
+        r"""Return ProFITi negative log likelihood for target values."""
+        (log_prob,) = predictions
+        regularizer = log_prob.new_zeros(())
+        for parameter in model.parameters():
+            regularizer = regularizer + parameter.sum()
+        return -log_prob[targets.isfinite()].mean() + 1e-6 * regularizer
 
 
 class _TargetContext(nn.Module):
@@ -185,90 +264,91 @@ def test_triangular_attention_padding_invariance_with_nan_padding() -> None:
         assert parameter.grad.isfinite().all()
 
 
-def test_profiti_block_encode_decode_roundtrip_with_logabsdet() -> None:
-    r"""Check that a ProFITi block encode/decode are inverse maps."""
-    torch.manual_seed(0)
-    num_steps = 5
-    latent_dim = 4
-    block = ProFITiBlock(latent_dim=latent_dim, num_layers=1)
-    context = torch.randn(num_steps, latent_dim)
-    x = torch.randn(num_steps)
+class TestProFITiBlock:
+    r"""Tests for ProFITi block transforms."""
 
-    y, forward_logabsdet = block.encode_and_logabsdet(x, context)
-    xhat, inverse_logabsdet = block.decode_and_logabsdet(y, context)
+    def test_encode_decode_roundtrip_with_logabsdet(self) -> None:
+        r"""Check that a ProFITi block encode/decode are inverse maps."""
+        torch.manual_seed(0)
+        num_steps = 5
+        latent_dim = 4
+        block = ProFITiBlock(latent_dim=latent_dim, num_layers=1)
+        context = torch.randn(num_steps, latent_dim)
+        x = torch.randn(num_steps)
 
-    assert_close(xhat, x, atol=1e-5, rtol=1e-5)
-    assert_close(
-        forward_logabsdet + inverse_logabsdet,
-        torch.zeros_like(forward_logabsdet),
-        atol=1e-5,
-        rtol=1e-5,
-    )
+        y, forward_logabsdet = block.encode_and_logabsdet(x, context)
+        xhat, inverse_logabsdet = block.decode_and_logabsdet(y, context)
 
+        assert_close(xhat, x, atol=1e-5, rtol=1e-5)
+        assert_close(
+            forward_logabsdet + inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=1e-5,
+            rtol=1e-5,
+        )
 
-def test_profiti_block_logabsdet_matches_dense_jacobian() -> None:
-    r"""Check a ProFITi block logabsdet against a dense Jacobian."""
-    torch.manual_seed(0)
-    num_steps = 5
-    latent_dim = 4
-    block = ProFITiBlock(latent_dim=latent_dim, num_layers=1)
-    context = torch.randn(num_steps, latent_dim)
-    x = torch.randn(num_steps)
+    def test_logabsdet_matches_dense_jacobian(self) -> None:
+        r"""Check a ProFITi block logabsdet against a dense Jacobian."""
+        torch.manual_seed(0)
+        num_steps = 5
+        latent_dim = 4
+        block = ProFITiBlock(latent_dim=latent_dim, num_layers=1)
+        context = torch.randn(num_steps, latent_dim)
+        x = torch.randn(num_steps)
 
-    _, actual = block.encode_and_logabsdet(x, context)
+        _, actual = block.encode_and_logabsdet(x, context)
 
-    def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
-        y, _ = block.encode_and_logabsdet(z.reshape(num_steps), context)
-        return y.reshape(-1)
+        def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
+            y, _ = block.encode_and_logabsdet(z.reshape(num_steps), context)
+            return y.reshape(-1)
 
-    jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
-    _, expected = torch.linalg.slogdet(jacobian)
+        jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
+        _, expected = torch.linalg.slogdet(jacobian)
 
-    assert actual.isfinite()
-    assert expected.isfinite()
-    assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+        assert actual.isfinite()
+        assert expected.isfinite()
+        assert_close(actual, expected, atol=1e-4, rtol=1e-4)
 
+    def test_variable_target_count_nan_padding_has_finite_gradients(self) -> None:
+        r"""Check batches with NaN-padded target embeddings have finite gradients."""
+        torch.manual_seed(0)
+        max_targets = 5
+        latent_dim = 4
+        block = ProFITiBlock(latent_dim=latent_dim, num_layers=1)
+        valid_mask = torch.tensor(
+            [
+                [True, True, True, True, True],
+                [True, True, True, False, False],
+            ]
+        )
+        raw_context = torch.randn(
+            2,
+            max_targets,
+            latent_dim,
+            requires_grad=True,
+        )
+        context = torch.where(
+            valid_mask.unsqueeze(-1),
+            raw_context,
+            torch.nan,
+        )
+        z = torch.randn(2, max_targets, requires_grad=True)
 
-def test_profiti_block_variable_target_count_nan_padding_has_finite_gradients() -> None:
-    r"""Check batches with NaN-padded target embeddings have finite gradients."""
-    torch.manual_seed(0)
-    max_targets = 5
-    latent_dim = 4
-    block = ProFITiBlock(latent_dim=latent_dim, num_layers=1)
-    valid_mask = torch.tensor(
-        [
-            [True, True, True, True, True],
-            [True, True, True, False, False],
-        ]
-    )
-    raw_context = torch.randn(
-        2,
-        max_targets,
-        latent_dim,
-        requires_grad=True,
-    )
-    context = torch.where(
-        valid_mask.unsqueeze(-1),
-        raw_context,
-        torch.nan,
-    )
-    z = torch.randn(2, max_targets, requires_grad=True)
+        y, logabsdet = block.encode_and_logabsdet(z, context)
+        loss = y.nansum() + logabsdet.nansum()
+        loss.backward()
 
-    y, logabsdet = block.encode_and_logabsdet(z, context)
-    loss = y.nansum() + logabsdet.nansum()
-    loss.backward()
+        assert y.shape == z.shape
+        assert logabsdet.shape == (2,)
 
-    assert y.shape == z.shape
-    assert logabsdet.shape == (2,)
+        for name, parameter in block.named_parameters():
+            if parameter.grad is not None:
+                assert parameter.grad.isfinite().all(), name
 
-    for name, parameter in block.named_parameters():
-        if parameter.grad is not None:
-            assert parameter.grad.isfinite().all(), name
-
-    assert z.grad is not None
-    assert z.grad.isfinite().all()
-    assert raw_context.grad is not None
-    assert raw_context.grad.isfinite().all()
+        assert z.grad is not None
+        assert z.grad.isfinite().all()
+        assert raw_context.grad is not None
+        assert raw_context.grad.isfinite().all()
 
 
 def test_flow_sequence_encode_decode_roundtrip_with_logabsdet() -> None:
