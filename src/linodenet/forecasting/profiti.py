@@ -392,7 +392,7 @@ class ProFITi(nn.Module):
         )  # (..., T, D)
 
         context = self.context_embedding(
-            torch.cat([T, Q], dim=-1).nan_to_num(0.0),  # (..., N + T)
+            torch.cat([T, Q], dim=-1),  # (..., N + T)
             torch.cat([X, query_values], dim=-2),  # (..., N + T, D)
             torch.cat(
                 [  # (..., N + T, D)
