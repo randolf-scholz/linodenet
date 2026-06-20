@@ -398,9 +398,9 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        context_times: Tensor,  # (..., $N)
-        context_values: Tensor,  # (..., $N, D)
-        query_times: Tensor,  # (..., $K)
+        context_times: Tensor,  # (..., $N), padded NaN
+        context_values: Tensor,  # (..., $N, D), padded NaN, sparse
+        query_times: Tensor,  # (..., $K), padded NaN
         query_mask: Tensor,  # (..., $K, D), bool
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
         # Note: Shape legend for the dense ProFITi sampling path
