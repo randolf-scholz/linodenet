@@ -161,16 +161,14 @@ class TriangularAttention(nn.Module):
 
     def encode_and_logabsdet(
         self,
-        query: Tensor,  # (..., $K, D)
-        key: Tensor,  # (..., $K, D)
-        value: Tensor,  # (..., $K, F)
+        query: Tensor,  # (..., $K, D), finite
+        key: Tensor,  # (..., $K, D), finite
+        value: Tensor,  # (..., $K, F), finite
         /,
         *,
         valid_mask: Tensor | None = None,  # (..., $K), bool
     ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
         scores = self._scores(query, key, valid_mask=valid_mask)  # (..., $K, $K)
-        if valid_mask is not None:
-            value = torch.where(valid_mask.unsqueeze(-1), value, 0.0)
         y = torch.einsum("...MN, ...NF -> ...MF", scores, value)
         # for a linear transform x -> Ax, the logabsdet is |A|
         # since A is triangular with positive diagonal, log|A| = sum(log(diag(A)))
@@ -187,8 +185,6 @@ class TriangularAttention(nn.Module):
         valid_mask: Tensor | None = None,  # (..., $K), bool
     ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
         scores = self._scores(query, key, valid_mask=valid_mask)  # (..., $K, $K)
-        if valid_mask is not None:
-            value = torch.where(valid_mask.unsqueeze(-1), value, 0.0)
         # solve Ax = y for x
         x = solve_triangular(scores, value, upper=False)
         logabsdet = -scores.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
@@ -457,21 +453,19 @@ class ProFITi(nn.Module):
 
         log_prob = -0.5 * (Z.square() + _LOG2PI).sum(dim=-1) - logabsdet  # (*S, ...)
 
-        samples = samples_flat.new_full(
-            (*sample_shape, *M.shape),
-            torch.nan,
-        )  # (*S, ..., $K, D)
         target_counts_by_time = M.sum(dim=-1)  # (..., $K)
-        time_offsets = target_counts_by_time.cumsum(dim=-1) - target_counts_by_time
         channel_offsets = M.cumsum(dim=-1) - 1  # (..., $K, D)
+        time_offsets = target_counts_by_time.cumsum(dim=-1) - target_counts_by_time
         sample_positions = channel_offsets + time_offsets.unsqueeze(dim=-1)
+
         *batch_indices, time_indices, channel_indices = M.nonzero(as_tuple=True)
-        flow_indices = (
-            *batch_indices,
-            sample_positions[*batch_indices, time_indices, channel_indices],
-        )
+        sample_indices = sample_positions[*batch_indices, time_indices, channel_indices]
+
+        samples = samples_flat.new_full(
+            (*sample_shape, *M.shape), torch.nan
+        )  # (*S, ..., $K, D)
         samples[..., *batch_indices, time_indices, channel_indices] = samples_flat[
-            ..., *flow_indices
+            ..., *batch_indices, sample_indices
         ]
 
         return samples, log_prob
