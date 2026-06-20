@@ -61,6 +61,8 @@ class Shiesh(nn.Module, Transform):
     """
 
     LOG2: Final[float] = math.log(2.0)
+    t: Tensor
+    a: Tensor
 
     def __init__(self, t: float = 1.0, a: float = 1.0) -> None:
         super().__init__()
