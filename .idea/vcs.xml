@@ -3,6 +3,7 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/Continuous-Recurrent-Units" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/GraFITi" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/ProFITi" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/diffrax" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/gru_ode_bayes" vcs="Git" />

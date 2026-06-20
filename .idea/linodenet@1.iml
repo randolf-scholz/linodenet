@@ -2,7 +2,7 @@
 <module external.system.id="pyproject.toml" type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$/third_party/GraFITi/baseline_experiments/linodenet/latent_linear_odes_with_neural-Supplementary Material/supplementary/linodenet">
-      <sourceFolder url="file://$MODULE_DIR$/third_party/GraFITi/baseline_experiments/linodenet/latent_linear_odes_with_neural-Supplementary Material/supplementary/linodenet/src" />
+      <sourceFolder url="file://$MODULE_DIR$/third_party/GraFITi/baseline_experiments/linodenet/latent_linear_odes_with_neural-Supplementary Material/supplementary/linodenet/src" isTestSource="false" />
     </content>
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
