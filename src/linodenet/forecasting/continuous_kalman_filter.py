@@ -173,7 +173,7 @@ class ContinuousKalmanFilter(nn.Module):
 
         # validate model
         self.validate_parameters()
-        self.validate_buffers()
+        self.validate_persistent_buffers()
 
     def validate_parameters(self) -> None:
         r"""Validate dimensions of parameters."""
@@ -213,14 +213,22 @@ class ContinuousKalmanFilter(nn.Module):
             "Initial covariance P0 not positive definite"
         )
 
+    def validate_persistent_buffers(self) -> None:
+        r"""Validate dimensions of persistent buffers."""
+        m = self.input_size
+        n = self.hidden_size
+        assert self.process_cov.shape == (n, n)
+        assert self.measurement_cov.shape == (m, m)
+        assert self.initial_cov.shape == (n, n)
+        assert self.identity_matrix.shape == (n, n)
+        assert self.van_loan_matrix.shape == (2 * n, 2 * n)
+
     def validate_buffers(self) -> None:
+        r"""Validate dimensions of buffers populated by the last forward pass."""
         m = self.input_size
         n = self.hidden_size
         bs = self.prior_latent_means.shape[:-1]
         # check shapes
-        assert self.process_cov.shape == (n, n)
-        assert self.measurement_cov.shape == (m, m)
-        assert self.initial_cov.shape == (n, n)
         assert self.prior_latent_means.shape == (*bs, n)
         assert self.prior_latent_covs.shape == (*bs, n, n)
         assert self.prior_target_means.shape == (*bs, m)
@@ -229,8 +237,6 @@ class ContinuousKalmanFilter(nn.Module):
         assert self.post_latent_covs.shape == (*bs, n, n)
         assert self.post_target_means.shape == (*bs, m)
         assert self.post_target_covs.shape == (*bs, m, m)
-        assert self.identity_matrix.shape == (n, n)
-        assert self.van_loan_matrix.shape == (2 * n, 2 * n)
 
     @torch.no_grad()
     def _sample_default_system_matrix(self) -> Tensor:
