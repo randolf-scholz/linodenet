@@ -1851,7 +1851,7 @@ class TestTriplet:
 
         _assert_batched_triplet_equal(actual, original)
 
-    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3), (1, 2, 3)])
+    @pytest.mark.parametrize("batch_shape", [(), (8,), (1, 2, 3)])
     def test_to_dense_roundtrip_batched_random(
         self,
         batch_shape: tuple[int, ...],

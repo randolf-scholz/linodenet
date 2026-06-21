@@ -1,7 +1,7 @@
 r"""Base test classes for forecasting models."""
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, Final, NamedTuple
+from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
@@ -47,7 +47,6 @@ class TestForecastingModel[M: nn.Module](ABC):
     MAX_STEPS: ClassVar[int] = 5
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
-    BATCH_SHAPE: Final[tuple[int, ...]] = (8,)
 
     @abstractmethod
     def make_model(self, model_config: object, /) -> M:
@@ -91,10 +90,13 @@ class TestForecastingModel[M: nn.Module](ABC):
         r"""Query value event shape."""
         return context_shape if self.OUTPUT_SHAPE is None else self.OUTPUT_SHAPE
 
-    @pytest.fixture
-    def batch_shape(self) -> tuple[int, ...]:
+    @pytest.fixture(
+        params=[(), (8,), (1, 2, 3)],
+        ids=["batch_shape=()", "batch_shape=(8,)", "batch_shape=(1,2,3)"],
+    )
+    def batch_shape(self, request: pytest.FixtureRequest) -> tuple[int, ...]:
         r"""Batch shape used for batched tests."""
-        return self.BATCH_SHAPE
+        return request.param
 
     @pytest.fixture
     def model_config(self) -> object:
