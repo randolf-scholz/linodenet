@@ -25,6 +25,16 @@ def _spd_expm(param: Tensor) -> Tensor:
     return matrix_exp(sym)
 
 
+def _as_mean(mean: ArrayLike | float, size: int) -> Tensor:
+    r"""Convert scalar, vector, or ``None`` input to a mean vector."""
+    value = torch.as_tensor(mean, dtype=torch.get_default_dtype())
+    if value.shape == ():
+        return value * torch.ones(size)
+    if value.shape == (size,):
+        return value
+    raise ValueError(f"Invalid mean shape: {value.shape}")
+
+
 def _as_covariance(covariance: ArrayLike | float, size: int) -> Tensor:
     r"""Convert scalar, matrix, or ``None`` input to a covariance matrix."""
     value = torch.as_tensor(covariance, dtype=torch.get_default_dtype())
@@ -123,9 +133,7 @@ class ContinuousKalmanFilter(nn.Module):
             requires_grad=learnable_cov,
         )
         self.initial_mean = nn.Parameter(
-            torch.zeros(hidden_size)
-            if initial_mean is None
-            else torch.as_tensor(initial_mean),
+            _as_mean(initial_mean, n),
             requires_grad=learnable_cov,
         )
         self._process_covariance_param = nn.Parameter(
