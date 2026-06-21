@@ -25,6 +25,7 @@ class TestModel(TestForecastingModel):
     r"""Tests for direct GRU-ODE-Bayes model construction."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     STANDARD_CONFIG: ClassVar[GRUODEBayesConfig] = GRUODEBayesConfig(
         input_size=CONTEXT_SHAPE[0],
         hidden_size=7,

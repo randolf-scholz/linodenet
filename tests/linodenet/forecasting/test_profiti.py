@@ -344,10 +344,9 @@ class TestProfiti(TestForecastingModel[ProFITi]):
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
-    BATCH_SHAPE: ClassVar[tuple[int, ...]] = (4,)
     STANDARD_CONFIG: ClassVar[ProFITiTestConfig] = ProFITiTestConfig(
         input_dim=CONTEXT_SHAPE[0],
-        latent_dim=8,
+        latent_dim=6,
         num_layers=2,
         num_heads=1,
     )
