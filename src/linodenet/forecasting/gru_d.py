@@ -35,6 +35,7 @@ class GRU_DCell(nn.Module):
         # zₖ = σ(W_z x̂ₖ + U_z ĥₖ₋₁ + V_z mₖ + b_z)        (14)
         # h̃ₖ = tanh(Wx̂ₖ + U (rₖ ⊙ ĥₖ₋₁) + Vmₖ + b)        (15)
         # hₖ = (1 − zₖ) ⊙ ĥₖ₋₁ + zₖ ⊙ h̃ₖ                  (16)
+        m = m.to(dtype=x_hat.dtype)  # convert bool to float
         u = torch.cat([x_hat, h_hat, m], dim=-1)
         r = torch.sigmoid(self.reset_gate(u))
         z = torch.sigmoid(self.update_gate(u))
@@ -128,13 +129,16 @@ class GRU_D(nn.Module):
         *,
         h0: Tensor | None = None,  # (..., H)
     ) -> Tensor:
+        *batch_shape, _ = times.shape
+
         mask = values.isfinite()  # (..., $N, D), observed values
-        # ∆tₖ = tₖ - tₖ₋₁; ∆t₁ = 0
+        valid_times = times.isfinite().unsqueeze(-1)  # (..., $N, 1)
+        times = times.nan_to_num(0.0)
         t0 = times[..., [0]]
-        increments = times.diff(dim=-1, prepend=t0)
+        # ∆tₖ = tₖ - tₖ₋₁; ∆t₁ = 0
+        increments = times.diff(dim=-1, prepend=t0).unsqueeze(-1)  # (..., $N, 1)
 
         # δ₀ = 0
-        *batch_shape, _ = times.shape
         delta = times.new_zeros(*batch_shape, self.input_size)
 
         # initialize h0
@@ -147,55 +151,61 @@ class GRU_D(nn.Module):
         x = self.empirical_mean.expand(*batch_shape, self.input_size)
 
         # iterate over observations
-        for m, x_obs, inc in zip(
+        for active, inc, m, x_obs in zip(
+            valid_times.unbind(-2),
+            increments.unbind(-2),
             mask.unbind(-2),
             values.unbind(-2),
-            increments.unbind(-1),
             strict=True,
         ):
             # δₖ = ⟦mₖ=1 ?  ∆tₖ : ∆tₖ + δₖ₋₁⟧;
-            step = inc.unsqueeze(-1)
-            delta = torch.where(m, step, delta + step)
+            delta = torch.where(active, torch.where(m, inc, delta + inc), delta)  # (..., D)  # fmt: skip
             # last observation (x_{t'})
-            x = torch.where(m, x_obs, x)
+            x = torch.where(active, torch.where(m, x_obs, x), x)  # (..., D)
 
             # γₜ = exp{ − max(0,Wᵧδₖ + bᵧ)}  (eq 10)
             # for γₓ, W_{γₓ} is diagonal
             # for γₕ, W_{γₕ} is full matrix
-            gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))
-            gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))
+            gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))  # (..., D)
+            gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))  # (..., H)
 
             # x̂ₜ = ⟦mₖ ? xₖ : γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃⟧  (eq. 11)
-            x_hat = torch.where(
+            x_hat = torch.where(  # (..., D)
                 m,
                 x_obs,
                 gamma_x * x + (1 - gamma_x) * self.empirical_mean,
             )
 
             # ĥₖ₋₁ = γ_{hₖ} ⊙ hₖ₋₁  (eq 12)
-            h_hat = gamma_h * h
+            h_hat = gamma_h * h  # (..., H)
 
             # GRU-D equations (13-16)
-            h = self.gru_d_cell(x_hat, h_hat, m.to(x_hat))
+            h_candidate = self.gru_d_cell(x_hat, h_hat, m)  # (..., H)
+            h = torch.where(active, h_candidate, h)  # (..., H)
 
         # Roll forward to query times with completely missing observations.
-        query_increments = query_times.diff(dim=-1, prepend=times[..., [-1]])
-        missing = torch.zeros(
-            *batch_shape, self.input_size, dtype=torch.bool, device=values.device
-        )
-        h_queries: list[Tensor] = []
+        time_mask = valid_times.squeeze(-1)  # (..., $N)
+        last_time_indices = time_mask.sum(dim=-1).clamp_min(1).unsqueeze(-1) - 1
+        last_times = torch.take_along_dim(times, last_time_indices, dim=-1)
 
-        for inc in query_increments.unbind(-1):
-            step = inc.unsqueeze(-1)
-            delta = delta + step
+        query_valid = query_times.isfinite()
+        query_times = query_times.nan_to_num(0.0)
+        query_increments = query_times.diff(dim=-1, prepend=last_times).unsqueeze(-1)
+        missing = mask.new_zeros(*batch_shape, self.input_size)
 
-            gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))
-            gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))
-            x_hat = gamma_x * x + (1 - gamma_x) * self.empirical_mean
-            h_hat = gamma_h * h
+        h_queries_list: list[Tensor] = []
 
-            h = self.gru_d_cell(x_hat, h_hat, missing.to(x_hat))
-            h_queries.append(h)
+        for inc in query_increments.unbind(-2):
+            delta = delta + inc  # (..., D)
 
-        query_states = torch.stack(h_queries, dim=-2)  # (..., $K, H)
-        return self.decoder(query_states)
+            gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))  # (..., D)
+            gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))  # (..., H)
+            x_hat = gamma_x * x + (1 - gamma_x) * self.empirical_mean  # (..., D)
+            h_hat = gamma_h * h  # (..., H)
+
+            h = self.gru_d_cell(x_hat, h_hat, missing)  # (..., H)
+            h_queries_list.append(h)
+
+        h_query = torch.stack(h_queries_list, dim=-2)  # (..., $K, H)
+        prediction = self.decoder(h_query)  # (..., $K, O)
+        return prediction.masked_fill(~query_valid.unsqueeze(-1), torch.nan)

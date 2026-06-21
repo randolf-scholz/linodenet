@@ -1,7 +1,7 @@
 r"""Base test classes for forecasting models."""
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, NamedTuple
+from typing import ClassVar, Final, NamedTuple
 
 import pytest
 import torch
@@ -45,9 +45,9 @@ class TestForecastingModel[M: nn.Module](ABC):
     SEED: ClassVar[int] = 0
     MIN_STEPS: ClassVar[int] = 2
     MAX_STEPS: ClassVar[int] = 5
-    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
-    BATCH_SHAPE: ClassVar[tuple[int, ...]] = (8,)
+    BATCH_SHAPE: Final[tuple[int, ...]] = (8,)
 
     @abstractmethod
     def make_model(self, model_config: object, /) -> M:
