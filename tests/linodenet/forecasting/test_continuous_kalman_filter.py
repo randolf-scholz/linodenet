@@ -47,11 +47,11 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             hidden_size,
             system_matrix=0.05 * torch.randn(hidden_size, hidden_size),
             observation_matrix=torch.randn(input_size, hidden_size),
-            process_covariance=0.2,
-            measurement_covariance=0.5,
+            process_noise=0.2,
+            measurement_noise=0.5,
             initial_mean=torch.randn(hidden_size),
             initial_covariance=2.0 * torch.eye(hidden_size),
-            learnable=True,
+            learnable_cov=True,
         )
 
     def forecast(
@@ -169,3 +169,24 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
 
         assert_close(model.post_latent_means, model.prior_latent_means)
         assert_close(model.post_latent_covs, model.prior_latent_covs)
+
+    def test_initial_time_defaults_to_first_time_step(self) -> None:
+        r"""Check default initial time matches the first time step."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        times = torch.tensor([0.0, 0.5, 1.0])
+        values = torch.randn(3, self.STANDARD_CONFIG.input_size)
+        context_mask = torch.ones_like(values, dtype=torch.bool)
+        query_mask = torch.ones_like(values, dtype=torch.bool)
+
+        default_mean, default_cov = model(times, values, context_mask, query_mask)
+        explicit_mean, explicit_cov = model(
+            times,
+            values,
+            context_mask,
+            query_mask,
+            initial_time=times[0],
+        )
+
+        assert_close(explicit_mean, default_mean)
+        assert_close(explicit_cov, default_cov)

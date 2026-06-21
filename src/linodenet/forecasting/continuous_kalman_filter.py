@@ -11,6 +11,20 @@ from torch import Tensor, einsum, nan, nn, stack
 from torch.linalg import matrix_exp
 
 
+def _log_spd(covariance: Tensor) -> Tensor:
+    r"""Return the symmetric matrix logarithm of a positive-definite matrix."""
+    covariance = (covariance + covariance.mT) / 2
+    eigvals, eigvecs = torch.linalg.eigh(covariance)
+    assert eigvals.min() > 0, "Covariance matrices must be positive definite."
+    return (eigvecs * eigvals.log().unsqueeze(dim=-2)) @ eigvecs.mT
+
+
+def _spd_expm(param: Tensor) -> Tensor:
+    r"""Map an unconstrained square matrix to a positive-definite matrix."""
+    sym = (param + param.mT) / 2
+    return matrix_exp(sym)
+
+
 class ContinuousKalmanFilter(nn.Module):
     r"""Continuous, time-invariant Kalman Filter.
 
@@ -23,17 +37,18 @@ class ContinuousKalmanFilter(nn.Module):
     hidden_size: Final[int]
     use_cholesky: Final[bool]
     batch_first: Final[bool]
+    learnable_cov: Final[bool]
 
     # PARAMETERS
     system_matrix: Tensor
     observation_matrix: Tensor
-    process_covariance: Tensor
-    measurement_covariance: Tensor
-    initial_time: Tensor
     initial_mean: Tensor
-    initial_covariance: Tensor
 
     # BUFFERS
+    initial_cov: Tensor
+    process_cov: Tensor
+    measurement_cov: Tensor
+
     prior_latent_means: Tensor
     r"""The (a priori) latent mean μₖ for the most recent forward pass."""
     prior_latent_covs: Tensor
@@ -60,15 +75,14 @@ class ContinuousKalmanFilter(nn.Module):
         input_size: int,
         hidden_size: int,
         *,
-        system_matrix: ArrayLike,  # [n, n]
-        observation_matrix: ArrayLike,  # [k, n]
-        process_covariance: ArrayLike | float,  # [n, n]
-        measurement_covariance: ArrayLike | float,  # [k, k]
-        initial_time: float = 0.0,
+        system_matrix: ArrayLike | None = None,  # [n, n]
+        observation_matrix: ArrayLike | None = None,  # [k, n]
+        process_noise: ArrayLike | float | None = None,  # [n, n]
+        measurement_noise: ArrayLike | float | None = None,  # [k, k]
         initial_mean: ArrayLike | None = None,  # [n]
         initial_covariance: ArrayLike | None = None,  # [n, n]
         use_cholesky: bool = False,
-        learnable: bool = False,
+        learnable_cov: bool = False,
         batch_first: bool = True,
     ) -> None:
         super().__init__()
@@ -76,55 +90,49 @@ class ContinuousKalmanFilter(nn.Module):
         self.input_size = input_size
         self.use_cholesky = use_cholesky
         self.batch_first = batch_first
+        self.learnable_cov = learnable_cov
         m = self.input_size
         n = self.hidden_size
+        process_noise = self._as_covariance(process_noise, n)
+        measurement_noise = self._as_covariance(measurement_noise, m)
+        initial_covariance = self._as_covariance(initial_covariance, n)
 
         # initialize parameters
         self.system_matrix = nn.Parameter(
             self._sample_default_system_matrix()
             if system_matrix is None
             else torch.as_tensor(system_matrix),
-            requires_grad=learnable,
+            requires_grad=learnable_cov,
         )
         self.observation_matrix = nn.Parameter(
             self._sample_default_observation_matrix()
             if observation_matrix is None
             else torch.as_tensor(observation_matrix),
-            requires_grad=learnable,
-        )
-        self.process_covariance = nn.Parameter(
-            torch.eye(hidden_size)
-            if process_covariance is None
-            else process_covariance * torch.eye(hidden_size)
-            if isinstance(process_covariance, (float, int))
-            else torch.as_tensor(process_covariance),
-            requires_grad=learnable,
-        )
-        self.measurement_covariance = nn.Parameter(
-            torch.eye(input_size)
-            if measurement_covariance is None
-            else measurement_covariance * torch.eye(input_size)
-            if isinstance(measurement_covariance, (float, int))
-            else torch.as_tensor(measurement_covariance),
-            requires_grad=learnable,
-        )
-        self.initial_time = nn.Parameter(
-            torch.tensor(initial_time), requires_grad=False
+            requires_grad=learnable_cov,
         )
         self.initial_mean = nn.Parameter(
             torch.zeros(hidden_size)
             if initial_mean is None
             else torch.as_tensor(initial_mean),
-            requires_grad=learnable,
+            requires_grad=learnable_cov,
         )
-        self.initial_covariance = nn.Parameter(
-            torch.eye(hidden_size)
-            if initial_covariance is None
-            else torch.as_tensor(initial_covariance),
-            requires_grad=learnable,
+        self._process_covariance_param = nn.Parameter(
+            _log_spd(process_noise),
+            requires_grad=learnable_cov,
+        )
+        self._measurement_covariance_param = nn.Parameter(
+            _log_spd(measurement_noise),
+            requires_grad=learnable_cov,
+        )
+        self._initial_covariance_param = nn.Parameter(
+            _log_spd(initial_covariance),
+            requires_grad=learnable_cov,
         )
 
         # register buffers
+        self.register_buffer("process_cov", process_noise.clone())
+        self.register_buffer("measurement_cov", measurement_noise.clone())
+        self.register_buffer("initial_cov", initial_covariance.clone())
         self.register_buffer("prior_latent_means", torch.empty(0, n))
         self.register_buffer("prior_latent_covs", torch.empty(0, n, n))
         self.register_buffer("prior_target_means", torch.empty(0, m))
@@ -135,7 +143,7 @@ class ContinuousKalmanFilter(nn.Module):
         self.register_buffer("post_target_covs", torch.empty(0, m, m))
         self.register_buffer("identity_matrix", torch.eye(n))
         self.register_buffer("van_loan_matrix", torch.empty(2 * n, 2 * n))
-        self.update_van_loan_matrix()
+        self.update_buffers()
 
         # validate model
         self.validate_parameters()
@@ -146,11 +154,14 @@ class ContinuousKalmanFilter(nn.Module):
         m = self.input_size
         n = self.hidden_size
         x = self.initial_mean
-        P = self.initial_covariance
+        P = self.initial_cov
         F = self.system_matrix
-        Q = self.process_covariance
+        Q = self.process_cov
         H = self.observation_matrix
-        R = self.measurement_covariance
+        R = self.measurement_cov
+        Q_param = self._process_covariance_param
+        R_param = self._measurement_covariance_param
+        P_param = self._initial_covariance_param
 
         assert F.shape == (n, n)
         assert Q.shape == (n, n)
@@ -158,11 +169,14 @@ class ContinuousKalmanFilter(nn.Module):
         assert R.shape == (m, m)
         assert x.shape == (n,)
         assert P.shape == (n, n)
+        assert Q_param.shape == (n, n)
+        assert R_param.shape == (m, m)
+        assert P_param.shape == (n, n)
 
         # check that covariance matrices are symmetric positive definite
         assert torch.allclose(Q, Q.mT), "Process noise Q not symmetric"
         assert torch.allclose(R, R.mT), "Measurement noise R not symmetric"
-        assert torch.allclose(P, P.mT), "Measurement noise R not symmetric"
+        assert torch.allclose(P, P.mT), "Initial covariance P0 not symmetric"
         assert torch.linalg.eigvalsh(Q).min() >= 0, (
             "Process noise Q not positive semidefinite"
         )
@@ -178,6 +192,9 @@ class ContinuousKalmanFilter(nn.Module):
         n = self.hidden_size
         bs = self.prior_latent_means.shape[:-1]
         # check shapes
+        assert self.process_cov.shape == (n, n)
+        assert self.measurement_cov.shape == (m, m)
+        assert self.initial_cov.shape == (n, n)
         assert self.prior_latent_means.shape == (*bs, n)
         assert self.prior_latent_covs.shape == (*bs, n, n)
         assert self.prior_target_means.shape == (*bs, m)
@@ -205,18 +222,30 @@ class ContinuousKalmanFilter(nn.Module):
         nn.init.kaiming_uniform_(t)
         return t
 
+    @staticmethod
+    def _as_covariance(covariance: ArrayLike | float | None, size: int) -> Tensor:
+        r"""Convert scalar, matrix, or ``None`` input to a covariance matrix."""
+        if covariance is None:
+            return torch.eye(size)
+        if isinstance(covariance, (float, int)):
+            return covariance * torch.eye(size)
+
+        tensor = torch.as_tensor(covariance)
+        return (
+            tensor
+            if tensor.is_floating_point()
+            else tensor.to(torch.get_default_dtype())
+        )
+
     def forward(
         self,
         times: Tensor,  # (..., $N + $K)
         values: Tensor,  # (..., $N + $K, D)
         context_mask: Tensor,  # (..., $N + $K, D), bool
         query_mask: Tensor,  # (..., $N + $K, D), bool
-        initial_state: tuple[
-            Tensor,  # t₀, ()
-            Tensor,  # μ₀, (..., D)
-            Tensor,  # Σ₀, (..., D, D)
-        ]
-        | None = None,
+        *,  # μ₀=(..., D) Σ₀=(..., D, D)
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., $N + $K, D), (..., $N + $K, D, D)
         r"""Filter and forecast over combined context/query time points.
 
@@ -225,14 +254,17 @@ class ContinuousKalmanFilter(nn.Module):
             values: Sparse observations at context time points.
             context_mask: Boolean mask selecting observed entries in ``values``.
             query_mask: Boolean mask selecting requested forecast entries.
-            initial_state: initial latent state $(t₀, μ₀, Σ₀)$
+            initial_state: Optional initial latent state $(μ₀, Σ₀)$.
+                If omitted, uses the model initial mean and covariance.
+            initial_time: Optional initial time $t₀$. If omitted, defaults to
+                the first time step.
 
         Returns:
             y_pred: Posterior predicted means $μ̂ₜ=\E[ŷₜ]$ at all time points.
             S_pred: Posterior predicted covariances $Σ̂ₜ=\Var[ŷₜ]$ at all time points.
         """
         # update cached tensors
-        self.update_van_loan_matrix()
+        self.update_buffers()
 
         # initialize mask over valid time steps:
         # those with finite time and at least one observation or query coordinate.
@@ -261,8 +293,9 @@ class ContinuousKalmanFilter(nn.Module):
         assert query_mask.dtype == torch.bool
 
         # initialize the state
-        t, x_pre, P_pre = (
-            (self.initial_time, self.initial_mean, self.initial_covariance)
+        t = times[0] if initial_time is None else initial_time
+        x_pre, P_pre = (
+            (self.initial_mean, self.initial_cov)
             if initial_state is None
             else initial_state
         )
@@ -339,10 +372,19 @@ class ContinuousKalmanFilter(nn.Module):
 
         return self.post_target_means, self.post_target_covs
 
+    def update_buffers(self) -> None:
+        r"""Refresh derived buffers from current parameters."""
+        if self.learnable_cov:
+            self.process_cov = _spd_expm(self._process_covariance_param)
+            self.measurement_cov = _spd_expm(self._measurement_covariance_param)
+            self.initial_cov = _spd_expm(self._initial_covariance_param)
+
+        self.update_van_loan_matrix()
+
     def update_van_loan_matrix(self) -> None:
         r"""Refresh the Van Loan block matrix from current dynamics parameters."""
         F = self.system_matrix
-        Q = self.process_covariance
+        Q = self.process_cov
         self.van_loan_matrix = torch.cat(  # [[F, Q], [0, -Fᵀ]]
             [  # [2n, 2n]
                 torch.cat([F, Q], dim=-1),
@@ -374,7 +416,7 @@ class ContinuousKalmanFilter(nn.Module):
     def decode_state(self, x: Tensor, P: Tensor) -> tuple[Tensor, Tensor]:
         r"""Decode latent mean and covariance to observation space."""
         H = self.observation_matrix
-        R = self.measurement_covariance
+        R = self.measurement_cov
         y = einsum("ij, ...j -> ...i", H, x)  # (*B, m)
         S = R + einsum("ik, ...kl, jl -> ...ij", H, P, H)  # (*B, m, m)
         return y, S
@@ -389,7 +431,7 @@ class ContinuousKalmanFilter(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         r"""Update latent mean and covariance with a sparse observation."""
         H = self.observation_matrix
-        R = self.measurement_covariance
+        R = self.measurement_cov
         M = mask.to(P.dtype)
         missing = (~mask).to(P.dtype)
         H_masked = M.unsqueeze(-1) * H
