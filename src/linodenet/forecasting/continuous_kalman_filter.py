@@ -226,32 +226,39 @@ class ContinuousKalmanFilter(nn.Module):
             y_pred: Posterior predicted means $μ̂ₜ=\E[ŷₜ]$ at all time points.
             S_pred: Posterior predicted covariances $Σ̂ₜ=\Var[ŷₜ]$ at all time points.
         """
-        num_steps = times.shape[-1]
-        bs = values.shape[:-2] if self.batch_first else values.shape[1:-1]
-
         m = self.input_size
         n = self.hidden_size
 
-        if initial_state is None:
-            t = self.initial_time
-            x_pre = self.initial_mean
-            P_pre = self.initial_covariance
-        else:
-            t, x_pre, P_pre = initial_state
+        if self.batch_first:
+            # Move the time axis to the front.
+            times = times.moveaxis(-1, 0)
+            values = values.moveaxis(-2, 0)
+            context_mask = context_mask.moveaxis(-2, 0)
+            query_mask = query_mask.moveaxis(-2, 0)
 
-        assert times.shape == (*bs, num_steps)
-        assert values.shape == (*bs, num_steps, m)
-        assert context_mask.shape == (*bs, num_steps, m)
-        assert query_mask.shape == (*bs, num_steps, m)
+        valid_time = times.isfinite() & (context_mask | query_mask).any(dim=-1)
+
+        # check the shapes
+        num_steps, *batch_shape, _ = values.shape
+        assert times.shape == (num_steps, *batch_shape)
+        assert values.shape == (num_steps, *batch_shape, m)
+        assert context_mask.shape == (num_steps, *batch_shape, m)
+        assert query_mask.shape == (num_steps, *batch_shape, m)
         assert context_mask.dtype == torch.bool
         assert query_mask.dtype == torch.bool
 
-        x_pre = x_pre.expand(*bs, n)
-        P_pre = P_pre.expand(*bs, n, n)
-
+        # initialize the state
+        t, x_pre, P_pre = (
+            (self.initial_time, self.initial_mean, self.initial_covariance)
+            if initial_state is None
+            else initial_state
+        )
+        x_pre = x_pre.expand(*batch_shape, n)
+        P_pre = P_pre.expand(*batch_shape, n, n)
         x_post = x_pre.clone()
         P_post = P_pre.clone()
 
+        # initialize the buffers
         prior_latent_means: list[Tensor] = []
         prior_latent_covs: list[Tensor] = []
         prior_predicted_means: list[Tensor] = []
@@ -261,16 +268,7 @@ class ContinuousKalmanFilter(nn.Module):
         post_predicted_means: list[Tensor] = []
         post_predicted_covs: list[Tensor] = []
 
-        valid_time = times.isfinite() & (context_mask | query_mask).any(dim=-1)
-
-        if self.batch_first:
-            # move the time axis to the front.
-            times = times.moveaxis(-1, 0)
-            values = values.moveaxis(-2, 0)
-            context_mask = context_mask.moveaxis(-2, 0)
-            valid_time = valid_time.moveaxis(-1, 0)
-
-        for t_obs, y_obs, mask, valid_step in zip(
+        for t_obs, y_obs, mask, active in zip(
             times,
             values,
             context_mask,
@@ -278,11 +276,10 @@ class ContinuousKalmanFilter(nn.Module):
             strict=True,
         ):
             # Within the loop we use batch-first.
-            valid_mean = valid_step.unsqueeze(dim=-1)
-            valid_covariance = valid_mean.unsqueeze(dim=-1)
-            delta = torch.where(valid_step, t_obs - t, torch.zeros_like(t_obs - t))
-            t = torch.where(valid_step, t_obs, t)
+            delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs - t))
+            t = torch.where(active, t_obs, t)
 
+            # propagate forward in time
             x_pre, P_pre = self.propagate_state(x_post, P_post, delta)
             prior_latent_means.append(x_pre)
             prior_latent_covs.append(P_pre)
@@ -294,8 +291,8 @@ class ContinuousKalmanFilter(nn.Module):
 
             # Update step
             x_update, P_update = self.update_state(x_pre, P_pre, y_obs, y_pre, mask)
-            x_post = torch.where(valid_mean, x_update, x_post)
-            P_post = torch.where(valid_covariance, P_update, P_post)
+            x_post = torch.where(active[..., None], x_update, x_post)
+            P_post = torch.where(active[..., None, None], P_update, P_post)
             post_latent_means.append(x_post)
             post_latent_covs.append(P_post)
 
