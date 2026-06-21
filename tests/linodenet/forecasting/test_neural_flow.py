@@ -22,7 +22,7 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
     r"""Shared forecasting-model tests for NeuralFlow."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)
-    BATCH_SHAPE: ClassVar[tuple[int, ...]] = (4,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     STANDARD_CONFIG: ClassVar[NeuralFlowConfig] = NeuralFlowConfig(
         input_size=CONTEXT_SHAPE[0],
         hidden_size=6,
