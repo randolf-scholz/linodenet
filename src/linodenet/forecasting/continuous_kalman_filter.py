@@ -100,7 +100,7 @@ class ContinuousKalmanFilter(nn.Module):
         *,
         system_matrix: ArrayLike | None = None,  # [n, n]
         observation_matrix: ArrayLike | None = None,  # [k, n]
-        process_noise: ArrayLike | float = 1.0,  # [n, n]
+        process_noise: ArrayLike | float = 0.1,  # [n, n]
         measurement_noise: ArrayLike | float = 1.0,  # [k, k]
         initial_mean: ArrayLike | float = 0.0,  # [n]
         initial_covariance: ArrayLike | float = 1.0,  # [n, n]
