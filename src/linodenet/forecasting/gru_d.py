@@ -7,10 +7,53 @@ Reference:
       | https://www.nature.com/articles/s41598-018-24271-9
 """
 
-__all__ = ["GRU_D"]
+__all__ = [
+    "GRU_D",
+    "GRU_DCell",
+    "DiagonalLinear",
+]
 
 import torch
 from torch import Tensor, nn
+
+
+class GRU_DCell(nn.Module):
+    r"""Modified GRU cell for GRU-D."""
+
+    def __init__(self, input_size: int, hidden_size: int) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+        self.reset_gate = nn.Linear(2 * input_size + hidden_size, hidden_size)
+        self.update_gate = nn.Linear(2 * input_size + hidden_size, hidden_size)
+        self.output_gate = nn.Linear(2 * input_size + hidden_size, hidden_size)
+
+    def forward(self, x_hat: Tensor, h_hat: Tensor, m: Tensor, /) -> Tensor:
+        # GRU update (eq 13-16)
+        # rₖ = σ(Wᵣ x̂ₖ + Uᵣĥₖ₋₁ + Vᵣmₖ + bᵣ)              (13)
+        # zₖ = σ(W_z x̂ₖ + U_z ĥₖ₋₁ + V_z mₖ + b_z)        (14)
+        # h̃ₖ = tanh(Wx̂ₖ + U (rₖ ⊙ ĥₖ₋₁) + Vmₖ + b)        (15)
+        # hₖ = (1 − zₖ) ⊙ ĥₖ₋₁ + zₖ ⊙ h̃ₖ                  (16)
+        u = torch.cat([x_hat, h_hat, m], dim=-1)
+        r = torch.sigmoid(self.reset_gate(u))
+        z = torch.sigmoid(self.update_gate(u))
+        v = torch.cat([x_hat, r * h_hat, m], dim=-1)
+        h_tilde = torch.tanh(self.output_gate(v))
+        return (1 - z) * h_hat + z * h_tilde
+
+
+class DiagonalLinear(nn.Module):
+    r"""Diagonal linear transformation."""
+
+    def __init__(self, in_features: int) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(in_features))
+        self.bias = nn.Parameter(torch.zeros(in_features))
+
+    def forward(self, arg: Tensor, /) -> Tensor:
+        # diag(W)x + b = w⊙x + b
+        return arg * self.weight + self.bias
 
 
 class GRU_D(nn.Module):
@@ -22,14 +65,10 @@ class GRU_D(nn.Module):
     ∆t₁ = 0
     δ₀ = 0
 
-
-
     rₖ = σ(Wᵣ xₖ + Uᵣhₖ₋₁ + bᵣ)  (3)
     zₖ = σ(W_z xₖ + U_z hₖ₋₁ + b_z )(4)tanh(Wx t + U (rt  h t −1) + b)
     h̃ₖ = tanh(Wxₖ + U (rₖ ⊙ h̃ₖ₋₁) + b)(5)
     hₖ = (1 − zₖ)⊙h̃ₖ₋₁ + zₖ⊙h̃ₖ
-
-
 
     GRU-D equations:
 
@@ -56,21 +95,74 @@ class GRU_D(nn.Module):
     GRU-D: x̂ₖ ← ⟦mₖ ? xₖ : γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃⟧  (imputation)
     """
 
+    empirical_mean: Tensor
+
     def __init__(
-        self, input_size, hidden_size, output_size, empirical_mean: Tensor
+        self,
+        input_size,
+        hidden_size,
+        output_size,
+        empirical_mean: Tensor,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
 
-        self.register_buffer("empirical_mean", None)
-        self.empirical_mean = empirical_mean  # (D, )
-        assert empirical_mean.shape == (self.input_size,)
+        self.register_buffer("empirical_mean", empirical_mean)
+        assert self.empirical_mean.shape == (self.input_size,)
 
-    def forward(self, t: Tensor, x: Tensor) -> Tensor:
-        m = ~x.isnan()  # observed mask
+        self.gamma_x_linear = DiagonalLinear(self.input_size)
+        self.gamma_h_linear = nn.Linear(self.input_size, self.hidden_size)
+
+        self.h0 = nn.Parameter(torch.zeros(self.hidden_size))
+        self.gru_d_cell = GRU_DCell(self.input_size, self.hidden_size)
+
+    def forward(
+        self,
+        times: Tensor,  # (..., $N)
+        values: Tensor,  # (..., $N, D)
+    ) -> Tensor:
+        mask = values.isfinite()  # (..., $N), observed values
         # ∆tₖ = tₖ - tₖ₋₁; ∆t₁ = 0
-        increments = t.diff(prepend=torch.zeros_like(t[..., 0]))
-        # δₖ = ⟦mₖ=1 ?  ∆tₖ : ∆tₖ + δₖ₋₁⟧; δ₀ = 0
-        raise NotImplementedError
+        t0 = times[..., [0]]
+        increments = times.diff(dim=-1, prepend=t0)
+
+        # δ₀ = 0
+        delta = torch.zeros_like(t0)
+        *batch_shape, _ = times.shape
+
+        h = self.h0.expand(*batch_shape, self.hidden_size)
+        h_values: list[Tensor] = []
+
+        # iterate over observations
+        for m, x, inc in zip(
+            mask.unbind(-2),
+            values.unbind(-2),
+            increments.unbind(-1),
+            strict=True,
+        ):
+            # δₖ = ⟦mₖ=1 ?  ∆tₖ : ∆tₖ + δₖ₋₁⟧;
+            delta = torch.where(m, inc, delta + inc)
+
+            # γₜ = exp{ − max(0,Wᵧδₖ + bᵧ)}  (eq 10)
+            # for γₓ, W_{γₓ} is diagonal
+            # for γₕ, W_{γₕ} is full matrix
+            gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))
+            gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))
+
+            # x̂ₜ = ⟦mₖ ? xₖ : γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃⟧  (eq. 11)
+            x_hat = torch.where(
+                m,
+                x,
+                gamma_x * x + (1 - gamma_x) * self.empirical_mean,
+            )
+
+            # ĥₖ₋₁ = γ_{hₖ} ⊙ hₖ₋₁  (eq 12)
+            h_hat = gamma_h * h
+
+            # GRU-D equations (13-16)
+            h = self.gru_d_cell(x_hat, h_hat, m)
+            h_values.append(h)
+
+        h_complete = torch.stack(h_values, dim=-2)  # (..., $N, H)
