@@ -36,19 +36,19 @@ class ContinuousKalmanFilter(nn.Module):
     # BUFFERS
     prior_latent_means: Tensor
     r"""The (a priori) latent mean μₖ for the most recent forward pass."""
-    prior_latent_covariances: Tensor
+    prior_latent_covs: Tensor
     r"""The (a priori) latent covariance Σₖ for the most recent forward pass."""
-    prior_predicted_means: Tensor
+    prior_target_means: Tensor
     r"""The (a priori) predicted mean $yₖ=Hμₖ$ for the most recent forward pass."""
-    prior_predicted_covariances: Tensor
+    prior_target_covs: Tensor
     r"""The (a priori) predicted covariance $Sₖ=HΣₖHᵀ+R$ for the most recent forward pass."""
-    posterior_latent_means: Tensor
+    post_latent_means: Tensor
     r"""The (a posteriori) mean μₖ' after measurement update for the most recent forward pass."""
-    posterior_latent_covariances: Tensor
+    post_latent_covs: Tensor
     r"""The (a posteriori) covariance Σₖ' after measurement update for the most recent forward pass."""
-    posterior_predicted_means: Tensor
+    post_target_means: Tensor
     r"""The (a posteriori) predicted mean yₖ'=Hμₖ' for the most recent forward pass."""
-    posterior_predicted_covariances: Tensor
+    post_target_covs: Tensor
     r"""The (a posteriori) predicted covariance Sₖ'=HΣₖ'Hᵀ+R for the most recent forward pass."""
 
     def __init__(
@@ -122,13 +122,13 @@ class ContinuousKalmanFilter(nn.Module):
 
         # register buffers
         self.register_buffer("prior_latent_means", torch.empty(0, n))
-        self.register_buffer("prior_latent_covariances", torch.empty(0, n, n))
-        self.register_buffer("prior_predicted_means", torch.empty(0, m))
-        self.register_buffer("prior_predicted_covariances", torch.empty(0, m, m))
-        self.register_buffer("posterior_latent_means", torch.empty(0, n))
-        self.register_buffer("posterior_latent_covariances", torch.empty(0, n, n))
-        self.register_buffer("posterior_predicted_means", torch.empty(0, m))
-        self.register_buffer("posterior_predicted_covariances", torch.empty(0, m, m))
+        self.register_buffer("prior_latent_covs", torch.empty(0, n, n))
+        self.register_buffer("prior_target_means", torch.empty(0, m))
+        self.register_buffer("prior_target_covs", torch.empty(0, m, m))
+        self.register_buffer("post_latent_means", torch.empty(0, n))
+        self.register_buffer("post_latent_covs", torch.empty(0, n, n))
+        self.register_buffer("post_target_means", torch.empty(0, m))
+        self.register_buffer("post_target_covs", torch.empty(0, m, m))
 
         # validate model
         self.validate_parameters()
@@ -176,13 +176,13 @@ class ContinuousKalmanFilter(nn.Module):
         bs = self.prior_latent_means.shape[:-1]
         # check shapes
         assert self.prior_latent_means.shape == (*bs, n)
-        assert self.prior_latent_covariances.shape == (*bs, n, n)
-        assert self.prior_predicted_means.shape == (*bs, m)
-        assert self.prior_predicted_covariances.shape == (*bs, m, m)
-        assert self.posterior_latent_means.shape == (*bs, n)
-        assert self.posterior_latent_covariances.shape == (*bs, n, n)
-        assert self.posterior_predicted_means.shape == (*bs, m)
-        assert self.posterior_predicted_covariances.shape == (*bs, m, m)
+        assert self.prior_latent_covs.shape == (*bs, n, n)
+        assert self.prior_target_means.shape == (*bs, m)
+        assert self.prior_target_covs.shape == (*bs, m, m)
+        assert self.post_latent_means.shape == (*bs, n)
+        assert self.post_latent_covs.shape == (*bs, n, n)
+        assert self.post_target_means.shape == (*bs, m)
+        assert self.post_target_covs.shape == (*bs, m, m)
 
     @torch.no_grad()
     def _sample_default_system_matrix(self) -> Tensor:
@@ -229,19 +229,15 @@ class ContinuousKalmanFilter(nn.Module):
         num_steps = times.shape[-1]
         bs = values.shape[:-2] if self.batch_first else values.shape[1:-1]
 
-        F = self.system_matrix
-        Q = self.process_covariance
-        R = self.measurement_covariance
-        H = self.observation_matrix
         m = self.input_size
         n = self.hidden_size
 
         if initial_state is None:
             t = self.initial_time
-            x = self.initial_mean
-            P = self.initial_covariance
+            x_pre = self.initial_mean
+            P_pre = self.initial_covariance
         else:
-            t, x, P = initial_state
+            t, x_pre, P_pre = initial_state
 
         assert times.shape == (*bs, num_steps)
         assert values.shape == (*bs, num_steps, m)
@@ -250,30 +246,21 @@ class ContinuousKalmanFilter(nn.Module):
         assert context_mask.dtype == torch.bool
         assert query_mask.dtype == torch.bool
 
-        x = x.expand(*bs, n)
-        P = P.expand(*bs, n, n)
+        x_pre = x_pre.expand(*bs, n)
+        P_pre = P_pre.expand(*bs, n, n)
 
-        x_new = x.clone()
-        P_new = P.clone()
+        x_post = x_pre.clone()
+        P_post = P_pre.clone()
 
         prior_latent_means: list[Tensor] = []
-        prior_latent_covariances: list[Tensor] = []
+        prior_latent_covs: list[Tensor] = []
         prior_predicted_means: list[Tensor] = []
-        prior_predicted_covariances: list[Tensor] = []
-        posterior_latent_means: list[Tensor] = []
-        posterior_latent_covariances: list[Tensor] = []
-        posterior_predicted_means: list[Tensor] = []
-        posterior_predicted_covariances: list[Tensor] = []
+        prior_predicted_covs: list[Tensor] = []
+        post_latent_means: list[Tensor] = []
+        post_latent_covs: list[Tensor] = []
+        post_predicted_means: list[Tensor] = []
+        post_predicted_covs: list[Tensor] = []
 
-        M = torch.cat(  # [[F, Q], [0, -Fᵀ]]
-            [  # [2n, 2n]
-                torch.cat([F, Q], dim=-1),
-                torch.cat([torch.zeros_like(F), -F.mT], dim=-1),
-            ],
-            dim=0,
-        )
-
-        latent_eye = torch.eye(n, device=values.device, dtype=values.dtype)
         valid_time = times.isfinite() & (
             context_mask.any(dim=-1) | query_mask.any(dim=-1)
         )
@@ -288,8 +275,9 @@ class ContinuousKalmanFilter(nn.Module):
         valid_slices = (
             valid_time.unbind(-1) if self.batch_first else valid_time.unbind(0)
         )
+        output_valid = valid_time if self.batch_first else valid_time.moveaxis(0, -1)
 
-        for t_obs, y_obs, obs_mask, query_mask_step, valid_step in zip(
+        for t_obs, y_obs, mask, query_mask_step, valid_step in zip(
             t_slices,
             y_slices,
             context_slices,
@@ -298,89 +286,128 @@ class ContinuousKalmanFilter(nn.Module):
             strict=True,
         ):
             # Within the loop we use batch-first.
-            valid = valid_step & (obs_mask.any(dim=-1) | query_mask_step.any(dim=-1))
+            valid = valid_step & (mask.any(dim=-1) | query_mask_step.any(dim=-1))
             valid_mean = valid.unsqueeze(dim=-1)
             valid_covariance = valid_mean.unsqueeze(dim=-1)
             delta = torch.where(valid, t_obs - t, torch.zeros_like(t_obs - t))
+            t = torch.where(valid, t_obs, t)
 
-            # concise implementation with a single matrix exponential. Possibly less efficient.
-            expMt = matrix_exp(M * delta[..., None, None])  # [[G, Φ], [0, G⁻ᵀ]]
-            G = expMt[..., :n, :n]
-            Phi = expMt[..., :n, n:]
-            x = einsum("...ij, ...j -> ...i", G, x_new)  # (*B, n)
-            P = Phi + einsum("...ik, ...kl, ...jl -> ...ij", G, P_new, G)  # (*B, n, n)
-            prior_latent_means.append(
-                torch.where(valid_mean, x, torch.full_like(x, nan))
-            )
-            prior_latent_covariances.append(
-                torch.where(valid_covariance, P, torch.full_like(P, nan))
-            )
+            x_pre, P_pre = self.propagate_state(x_post, P_post, delta)
+            prior_latent_means.append(x_pre)
+            prior_latent_covs.append(P_pre)
 
-            # Prediction step (use einsum to deal with batch dims)
-            y_hat = einsum("ij, ...j -> ...i", H, x)  # (*B, m)
-            S = R + einsum("ik, ...kl, jl -> ...ij", H, P, H)  # (*B, m, m)
-            prior_predicted_means.append(
-                torch.where(valid_mean, y_hat, torch.full_like(y_hat, nan))
-            )
-            prior_predicted_covariances.append(
-                torch.where(valid_covariance, S, torch.full_like(S, nan))
-            )
+            # make the prior prediction
+            y_pre, S_pre = self.decode_state(x_pre, P_pre)
+            prior_predicted_means.append(y_pre)
+            prior_predicted_covs.append(S_pre)
 
             # Update step
-            H_masked = obs_mask.unsqueeze(-1) * H
-            R_masked = obs_mask.unsqueeze(-1) * obs_mask.unsqueeze(
-                -2
-            ) * R + torch.diag_embed((~obs_mask).to(values.dtype))
-            S_masked = R_masked + einsum(
-                "...ik, ...kl, ...jl -> ...ij", H_masked, P, H_masked
-            )
-            r = torch.where(obs_mask, y_obs - y_hat, torch.zeros_like(y_hat))
-            K = torch.linalg.solve(S_masked.mT, H_masked @ P).mT  # (*B, n, m)
-            # update mean and covariance
-            x_update = x + einsum("...ij, ...j -> ...i", K, r)  # (*B, n)
-            I_KH = latent_eye - einsum("...ik, ...kj -> ...ij", K, H_masked)
-            P_update = einsum("...ik, ...kl, ...jl -> ...ij", I_KH, P, I_KH) + einsum(
-                "...ik, ...kl, ...jl -> ...ij", K, R_masked, K
-            )
-            x_new = torch.where(valid_mean, x_update, x_new)
-            P_new = torch.where(valid_covariance, P_update, P_new)
-            t = torch.where(valid, t_obs, t)
-            posterior_latent_means.append(
-                torch.where(valid_mean, x_new, torch.full_like(x_new, nan))
-            )
-            posterior_latent_covariances.append(
-                torch.where(valid_covariance, P_new, torch.full_like(P_new, nan))
-            )
+            x_update, P_update = self.update_state(x_pre, P_pre, y_obs, y_pre, mask)
+            x_post = torch.where(valid_mean, x_update, x_post)
+            P_post = torch.where(valid_covariance, P_update, P_post)
+            post_latent_means.append(x_post)
+            post_latent_covs.append(P_post)
 
-            # compute the posterior predicted mean and covariance
-            y_new = einsum("ij, ...j -> ...i", H, x_new)  # (*B, m)
-            S_new = R + einsum("ik, ...kl, jl -> ...ij", H, P_new, H)  # (*B, m, m)
-            posterior_predicted_means.append(
-                torch.where(valid_mean, y_new, torch.full_like(y_new, nan))
-            )
-            posterior_predicted_covariances.append(
-                torch.where(valid_covariance, S_new, torch.full_like(S_new, nan))
-            )
+            # make the posterior prediction
+            y_post, S_post = self.decode_state(x_post, P_post)
+            post_predicted_means.append(y_post)
+            post_predicted_covs.append(S_post)
+
+        mean_mask = output_valid.unsqueeze(dim=-1)
+        cov_mask = mean_mask.unsqueeze(dim=-1)
 
         self.prior_latent_means = stack(prior_latent_means, dim=-2)
-        self.prior_latent_covariances = stack(prior_latent_covariances, dim=-3)
-        self.prior_predicted_means = stack(prior_predicted_means, dim=-2)
-        self.prior_predicted_covariances = stack(prior_predicted_covariances, dim=-3)
-        self.posterior_latent_means = stack(posterior_latent_means, dim=-2)
-        self.posterior_latent_covariances = stack(posterior_latent_covariances, dim=-3)
-        self.posterior_predicted_means = stack(posterior_predicted_means, dim=-2)
-        self.posterior_predicted_covariances = stack(
-            posterior_predicted_covariances, dim=-3
-        )
+        self.prior_latent_covs = stack(prior_latent_covs, dim=-3)
+        self.prior_target_means = stack(prior_predicted_means, dim=-2)
+        self.prior_target_covs = stack(prior_predicted_covs, dim=-3)
+        self.post_latent_means = stack(post_latent_means, dim=-2)
+        self.post_latent_covs = stack(post_latent_covs, dim=-3)
+        self.post_target_means = stack(post_predicted_means, dim=-2)
+        self.post_target_covs = stack(post_predicted_covs, dim=-3)
+
+        self.prior_latent_means = self.prior_latent_means.masked_fill(~mean_mask, nan)
+        self.prior_latent_covs = self.prior_latent_covs.masked_fill(~cov_mask, nan)
+        self.prior_target_means = self.prior_target_means.masked_fill(~mean_mask, nan)
+        self.prior_target_covs = self.prior_target_covs.masked_fill(~cov_mask, nan)
+        self.post_latent_means = self.post_latent_means.masked_fill(~mean_mask, nan)
+        self.post_latent_covs = self.post_latent_covs.masked_fill(~cov_mask, nan)
+        self.post_target_means = self.post_target_means.masked_fill(~mean_mask, nan)
+        self.post_target_covs = self.post_target_covs.masked_fill(~cov_mask, nan)
+
         self.validate_buffers()
 
-        return self.posterior_predicted_means, self.posterior_predicted_covariances
+        return self.post_target_means, self.post_target_covs
+
+    def propagate_state(
+        self,
+        x: Tensor,
+        P: Tensor,
+        delta: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Propagate latent mean and covariance through continuous dynamics."""
+        F = self.system_matrix
+        Q = self.process_covariance
+        n = self.hidden_size
+        M = torch.cat(  # [[F, Q], [0, -Fᵀ]]
+            [  # [2n, 2n]
+                torch.cat([F, Q], dim=-1),
+                torch.cat([torch.zeros_like(F), -F.mT], dim=-1),
+            ],
+            dim=0,
+        )
+
+        # Concise implementation with a single matrix exponential.
+        expMt = matrix_exp(M * delta[..., None, None])  # [[G, Φ], [0, G⁻ᵀ]]
+        G = expMt[..., :n, :n]
+        Phi = expMt[..., :n, n:]
+
+        # Propagate mean and covariance.
+        x_new = einsum("...ij, ...j -> ...i", G, x)  # (*B, n)
+        P_new = Phi + einsum("...ik, ...kl, ...jl -> ...ij", G, P, G)  # (*B, n, n)
+        return x_new, P_new
+
+    def decode_state(self, x: Tensor, P: Tensor) -> tuple[Tensor, Tensor]:
+        r"""Decode latent mean and covariance to observation space."""
+        H = self.observation_matrix
+        R = self.measurement_covariance
+        y = einsum("ij, ...j -> ...i", H, x)  # (*B, m)
+        S = R + einsum("ik, ...kl, jl -> ...ij", H, P, H)  # (*B, m, m)
+        return y, S
+
+    def update_state(
+        self,
+        x: Tensor,
+        P: Tensor,
+        y: Tensor,
+        y_pred: Tensor,
+        mask: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Update latent mean and covariance with a sparse observation."""
+        H = self.observation_matrix
+        R = self.measurement_covariance
+        M = mask.to(P.dtype)
+        missing = (~mask).to(P.dtype)
+        H_masked = M.unsqueeze(-1) * H
+        R_masked = M.unsqueeze(-1) * M.unsqueeze(-2) * R + missing.diag_embed()
+
+        # Innovation residual: ignore unobserved coordinates.
+        r = torch.where(mask, y - y_pred, torch.zeros_like(y_pred))
+
+        # Kalman gain computation.
+        K = self._compute_kalman_gain(P, H_masked, R_masked)  # (*B, n, m)
+
+        # Mean update.
+        x_new = x + einsum("...ij, ...j -> ...i", K, r)  # (*B, n)
+
+        # Joseph covariance update.
+        P_new = self._joseph_update(P, K, H_masked, R_masked)
+        return x_new, P_new
 
     def _compute_kalman_gain(
         self,
         P: Tensor,
         H: Tensor,
-        S: Tensor,
+        R: Tensor,
     ) -> Tensor:
         """Compute Kalman gain K.
 
@@ -388,12 +415,14 @@ class ContinuousKalmanFilter(nn.Module):
 
         Args:
             P: Prior covariance Σₖ of shape (*B, n, n)
-            H: Observation matrix Hₖ of shape (m, n)
-            S: Innovation covariance Sₖ of shape (*B, m, m)
+            H: Masked observation matrix H of shape (*B, m, n)
+            R: Masked measurement covariance of shape (*B, m, m)
 
         Returns:
             K: Kalman gain of shape (*B, n, m)
         """
+        S = R + einsum("...ik, ...kl, ...jl -> ...ij", H, P, H)
+
         # Solve for K using Cholesky factors
         if self.use_cholesky:
             # S = LLᵀ ⟹ K = PHᵀL⁻ᵀL⁻¹
@@ -414,6 +443,7 @@ class ContinuousKalmanFilter(nn.Module):
         P: Tensor,
         K: Tensor,
         H: Tensor,
+        R: Tensor,
     ) -> Tensor:
         """Compute Joseph form update for covariance.
 
@@ -422,16 +452,16 @@ class ContinuousKalmanFilter(nn.Module):
         Args:
             P: Prior covariance Σₖ of shape (*B, n, n)
             K: Kalman gain K of shape (*B, n, m)
-            H: Observation matrix H of shape (m, n)
+            H: Masked observation matrix H of shape (*B, m, n)
+            R: Masked measurement covariance of shape (*B, m, m)
 
         Returns:
             P_new: Updated covariance Σₖ' of shape (*B, n, n)
         """
-        R = self.measurement_covariance
-        I = torch.eye(self.hidden_size, device=P.device)
-        I_KH = I - einsum("...ik, kj -> ...ij", K, H)  # (*B, n, n)
+        I = torch.eye(self.hidden_size, device=P.device, dtype=P.dtype)
+        I_KH = I - einsum("...ik, ...kj -> ...ij", K, H)  # (*B, n, n)
         P_new = (
             einsum("...ik, ...kl, ...jl -> ...ij", I_KH, P, I_KH)  # (*B, n, n)
-            + einsum("...ik, kl, ...jl -> ...ij", K, R, K)  # (*B, n, n)
+            + einsum("...ik, ...kl, ...jl -> ...ij", K, R, K)  # (*B, n, n)
         )
         return P_new

@@ -167,5 +167,5 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
 
         model(times, values, context_mask, query_mask)
 
-        assert_close(model.posterior_latent_means, model.prior_latent_means)
-        assert_close(model.posterior_latent_covariances, model.prior_latent_covariances)
+        assert_close(model.post_latent_means, model.prior_latent_means)
+        assert_close(model.post_latent_covs, model.prior_latent_covs)
