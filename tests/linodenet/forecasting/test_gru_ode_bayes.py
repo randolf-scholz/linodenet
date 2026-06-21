@@ -21,7 +21,7 @@ from linodenet.forecasting.gru_ode_bayes import (
 from .base import SequentialData, TestForecastingModel
 
 
-class TestModel(TestForecastingModel):
+class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
     r"""Tests for direct GRU-ODE-Bayes model construction."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
