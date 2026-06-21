@@ -2,15 +2,13 @@ r"""Discrete Kalman Filter implementation."""
 
 __all__ = ["ContinuousKalmanFilter"]
 
-from typing import Final, Optional
+from typing import Final
 
 import scipy
 import torch
 from numpy.typing import ArrayLike
 from torch import Tensor, einsum, nn, stack
 from torch.linalg import matrix_exp
-
-from signatures import signature
 
 
 class ContinuousKalmanFilter(nn.Module):
@@ -202,16 +200,17 @@ class ContinuousKalmanFilter(nn.Module):
         nn.init.kaiming_uniform_(t)
         return t
 
-    @signature(
-        "[(..., *Q), tuple[(..., *T), (..., *T, D)], Optional[(...), (..., D), (..., D, D)]] "
-        "-> [(..., *Q, D), (..., *Q, D, D)]"
-    )
     def forward(
         self,
-        query: Tensor,
-        context: tuple[Tensor, Tensor],
-        initial_state: Optional[tuple[Tensor, Tensor, Tensor]] = None,
-    ) -> tuple[Tensor, Tensor]:
+        query: Tensor,  # (..., *Q)
+        context: tuple[Tensor, Tensor],  # (..., *T), (..., *T, D)
+        initial_state: tuple[
+            Tensor,  # []
+            Tensor,  # (..., D)
+            Tensor,  # (..., D, D)
+        ]
+        | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (..., *Q, D), (..., *Q, D, D)
         r"""Predict ``n_steps`` into the future given observations.
 
         Args:
