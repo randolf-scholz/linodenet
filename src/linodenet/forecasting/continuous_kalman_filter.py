@@ -153,13 +153,9 @@ class ContinuousKalmanFilter(nn.Module):
         assert P.shape == (n, n)
 
         # check that covariance matrices are symmetric positive definite
-        assert torch.allclose(Q, Q.transpose(-1, -2)), "Process noise Q not symmetric"
-        assert torch.allclose(R, R.transpose(-1, -2)), (
-            "Measurement noise R not symmetric"
-        )
-        assert torch.allclose(P, P.transpose(-1, -2)), (
-            "Measurement noise R not symmetric"
-        )
+        assert torch.allclose(Q, Q.mT), "Process noise Q not symmetric"
+        assert torch.allclose(R, R.mT), "Measurement noise R not symmetric"
+        assert torch.allclose(P, P.mT), "Measurement noise R not symmetric"
         assert torch.linalg.eigvalsh(Q).min() >= 0, (
             "Process noise Q not positive semidefinite"
         )
