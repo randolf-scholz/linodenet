@@ -25,6 +25,18 @@ def _spd_expm(param: Tensor) -> Tensor:
     return matrix_exp(sym)
 
 
+def _as_covariance(covariance: ArrayLike | float, size: int) -> Tensor:
+    r"""Convert scalar, matrix, or ``None`` input to a covariance matrix."""
+    value = torch.as_tensor(covariance, dtype=torch.get_default_dtype())
+    if value.shape == ():
+        return value * torch.eye(size)
+    if value.shape == (size,):
+        return value.diag_embed()
+    if value.shape == (size, size):
+        return value
+    raise ValueError(f"Invalid covariance shape: {value.shape}")
+
+
 class ContinuousKalmanFilter(nn.Module):
     r"""Continuous, time-invariant Kalman Filter.
 
@@ -77,10 +89,10 @@ class ContinuousKalmanFilter(nn.Module):
         *,
         system_matrix: ArrayLike | None = None,  # [n, n]
         observation_matrix: ArrayLike | None = None,  # [k, n]
-        process_noise: ArrayLike | float | None = None,  # [n, n]
-        measurement_noise: ArrayLike | float | None = None,  # [k, k]
-        initial_mean: ArrayLike | None = None,  # [n]
-        initial_covariance: ArrayLike | None = None,  # [n, n]
+        process_noise: ArrayLike | float = 1.0,  # [n, n]
+        measurement_noise: ArrayLike | float = 1.0,  # [k, k]
+        initial_mean: ArrayLike | float = 0.0,  # [n]
+        initial_covariance: ArrayLike | float = 1.0,  # [n, n]
         use_cholesky: bool = False,
         learnable_cov: bool = False,
         batch_first: bool = True,
@@ -93,9 +105,9 @@ class ContinuousKalmanFilter(nn.Module):
         self.learnable_cov = learnable_cov
         m = self.input_size
         n = self.hidden_size
-        process_noise = self._as_covariance(process_noise, n)
-        measurement_noise = self._as_covariance(measurement_noise, m)
-        initial_covariance = self._as_covariance(initial_covariance, n)
+        process_noise = _as_covariance(process_noise, n)
+        measurement_noise = _as_covariance(measurement_noise, m)
+        initial_covariance = _as_covariance(initial_covariance, n)
 
         # initialize parameters
         self.system_matrix = nn.Parameter(
@@ -221,21 +233,6 @@ class ContinuousKalmanFilter(nn.Module):
         t = torch.randn(self.input_size, self.hidden_size)
         nn.init.kaiming_uniform_(t)
         return t
-
-    @staticmethod
-    def _as_covariance(covariance: ArrayLike | float | None, size: int) -> Tensor:
-        r"""Convert scalar, matrix, or ``None`` input to a covariance matrix."""
-        if covariance is None:
-            return torch.eye(size)
-        if isinstance(covariance, (float, int)):
-            return covariance * torch.eye(size)
-
-        tensor = torch.as_tensor(covariance)
-        return (
-            tensor
-            if tensor.is_floating_point()
-            else tensor.to(torch.get_default_dtype())
-        )
 
     def forward(
         self,
