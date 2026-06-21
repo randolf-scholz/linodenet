@@ -7,7 +7,7 @@ from typing import Final
 import scipy
 import torch
 from numpy.typing import ArrayLike
-from torch import Tensor, einsum, nn, stack
+from torch import Tensor, einsum, nan, nn, stack
 from torch.linalg import matrix_exp
 
 
@@ -202,15 +202,15 @@ class ContinuousKalmanFilter(nn.Module):
 
     def forward(
         self,
-        query: Tensor,  # (..., *Q)
-        context: tuple[Tensor, Tensor],  # (..., *T), (..., *T, D)
+        query: Tensor,  # (..., $K)
+        context: tuple[Tensor, Tensor],  # (..., $N), (..., $N, D)
         initial_state: tuple[
-            Tensor,  # []
-            Tensor,  # (..., D)
-            Tensor,  # (..., D, D)
+            Tensor,  # t₀, ()
+            Tensor,  # μ₀, (..., D)
+            Tensor,  # Σ₀, (..., D, D)
         ]
         | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., *Q, D), (..., *Q, D, D)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D, D)
         r"""Predict ``n_steps`` into the future given observations.
 
         Args:
@@ -232,7 +232,6 @@ class ContinuousKalmanFilter(nn.Module):
         H = self.observation_matrix
         m = self.input_size
         n = self.hidden_size
-        device = self.system_matrix.device
 
         if initial_state is None:
             t = self.initial_time
@@ -253,11 +252,8 @@ class ContinuousKalmanFilter(nn.Module):
         assert P.shape == (*bs, n, n)
 
         # pre-allocate outputs / variables
-        y_pred = torch.empty(*bs, n_steps, m, device=device)
-        S_pred = torch.empty(*bs, n_steps, m, m, device=device)
-        K = torch.empty(*bs, n, m, device=device)
-        S = torch.empty(*bs, m, m, device=device)
-        r = torch.empty(*bs, m, device=device)
+        y_pred = values.new_full((*bs, n_steps, m), nan)
+        S_pred = values.new_full((*bs, n_steps, m, m), nan)
         x_new = x.clone()
         P_new = P.clone()
 
@@ -274,47 +270,72 @@ class ContinuousKalmanFilter(nn.Module):
         M = torch.cat(  # [[F, Q], [0, -Fᵀ]]
             [  # [2n, 2n]
                 torch.cat([F, Q], dim=-1),
-                torch.cat([torch.zeros_like(F), -F.transpose(-1, -2)], dim=-1),
+                torch.cat([torch.zeros_like(F), -F.mT], dim=-1),
             ],
             dim=0,
         )
 
+        valid_context = times.isfinite() & values.isfinite().all(dim=-1)
         t_slices = times.unbind(-1) if self.batch_first else times.unbind(0)
         y_slices = values.unbind(-2) if self.batch_first else values.unbind(0)
-        for t_obs, y_obs in zip(t_slices, y_slices, strict=True):
+        valid_slices = (
+            valid_context.unbind(-1) if self.batch_first else valid_context.unbind(0)
+        )
+
+        for t_obs, y_obs, valid in zip(t_slices, y_slices, valid_slices, strict=True):
             # Within the loop we use batch-first.
-            delta = t_obs - t
-            t = t_obs
+            valid_mean = valid.unsqueeze(dim=-1)
+            valid_covariance = valid_mean.unsqueeze(dim=-1)
+            delta = torch.where(valid, t_obs - t, torch.zeros_like(t_obs - t))
 
             # concise implementation with a single matrix exponential. Possibly less efficient.
-            expMt = matrix_exp(M * delta)  # [[G, Φ], [0, G⁻ᵀ]]
-            G = expMt[:n, :n]
-            Phi = expMt[:n, n:]
-            x = einsum("ij, ...j -> ...i", G, x_new)  # (*B, n)
-            P = Phi + einsum("ik, ...kl, jl -> ...ij", G, P_new, G)  # (*B, n, n)
-            prior_latent_means.append(x)
-            prior_latent_covariances.append(P)
+            expMt = matrix_exp(M * delta[..., None, None])  # [[G, Φ], [0, G⁻ᵀ]]
+            G = expMt[..., :n, :n]
+            Phi = expMt[..., :n, n:]
+            x = einsum("...ij, ...j -> ...i", G, x_new)  # (*B, n)
+            P = Phi + einsum("...ik, ...kl, ...jl -> ...ij", G, P_new, G)  # (*B, n, n)
+            prior_latent_means.append(
+                torch.where(valid_mean, x, torch.full_like(x, nan))
+            )
+            prior_latent_covariances.append(
+                torch.where(valid_covariance, P, torch.full_like(P, nan))
+            )
 
             # Prediction step (use einsum to deal with batch dims)
             y_hat = einsum("ij, ...j -> ...i", H, x)  # (*B, m)
             S = R + einsum("ik, ...kl, jl -> ...ij", H, P, H)  # (*B, m, m)
-            prior_predicted_means.append(x)
-            prior_predicted_covariances.append(S)
+            prior_predicted_means.append(
+                torch.where(valid_mean, y_hat, torch.full_like(y_hat, nan))
+            )
+            prior_predicted_covariances.append(
+                torch.where(valid_covariance, S, torch.full_like(S, nan))
+            )
 
             # Update step
-            r = y_obs - y_hat  # innovation (*B, m)
+            r = y_obs.nan_to_num(0.0) - y_hat  # innovation (*B, m)
             K = self._compute_kalman_gain(P, H, S)  # (*B, n, m)
             # update mean and covariance
-            x_new = x + einsum("...ij, ...j -> ...i", K, r)  # (*B, n)
-            P_new = self._joseph_update(P, K, H)  # (*B, n, n)
-            posterior_latent_means.append(x_new)
-            posterior_latent_covariances.append(P_new)
+            x_update = x + einsum("...ij, ...j -> ...i", K, r)  # (*B, n)
+            P_update = self._joseph_update(P, K, H)  # (*B, n, n)
+            x_new = torch.where(valid_mean, x_update, x_new)
+            P_new = torch.where(valid_covariance, P_update, P_new)
+            t = torch.where(valid, t_obs, t)
+            posterior_latent_means.append(
+                torch.where(valid_mean, x_new, torch.full_like(x_new, nan))
+            )
+            posterior_latent_covariances.append(
+                torch.where(valid_covariance, P_new, torch.full_like(P_new, nan))
+            )
 
             # compute the posterior predicted mean and covariance
             y_new = einsum("ij, ...j -> ...i", H, x_new)  # (*B, m)
             S_new = R + einsum("ik, ...kl, jl -> ...ij", H, P_new, H)  # (*B, m, m)
-            posterior_predicted_means.append(y_new)
-            posterior_predicted_covariances.append(S_new)
+            posterior_predicted_means.append(
+                torch.where(valid_mean, y_new, torch.full_like(y_new, nan))
+            )
+            posterior_predicted_covariances.append(
+                torch.where(valid_covariance, S_new, torch.full_like(S_new, nan))
+            )
 
         # store buffers
         self.prior_latent_means = stack(prior_latent_means, dim=-2)
@@ -330,26 +351,33 @@ class ContinuousKalmanFilter(nn.Module):
         self.validate_buffers()
 
         q_slices = query.unbind(-1) if self.batch_first else query.unbind(0)
-        for q in q_slices:
+        for k, q in enumerate(q_slices):
             # Within the loop we use batch-first.
-            delta = q - t
-            t = q
+            valid = q.isfinite()
+            valid_mean = valid.unsqueeze(dim=-1)
+            valid_covariance = valid_mean.unsqueeze(dim=-1)
+            delta = torch.where(valid, q - t, torch.zeros_like(q - t))
 
             # concise implementation with a single matrix exponential. Possibly less efficient.
-            expMt = matrix_exp(M * delta)  # [[G, Φ], [0, G⁻ᵀ]]
-            G = expMt[:n, :n]
-            Phi = expMt[:n, n:]
-            x = einsum("ij, ...j -> ...i", G, x_new)  # (*B, n)
-            P = einsum("ik, ...kl, jl -> ...ij", G, P_new, G) + Phi  # (*B, n, n)
+            expMt = matrix_exp(M * delta[..., None, None])  # [[G, Φ], [0, G⁻ᵀ]]
+            G = expMt[..., :n, :n]
+            Phi = expMt[..., :n, n:]
+            x = einsum("...ij, ...j -> ...i", G, x_new)  # (*B, n)
+            P = einsum("...ik, ...kl, ...jl -> ...ij", G, P_new, G) + Phi  # (*B, n, n)
 
             # Prediction step (use einsum to deal with batch dims)
             y_hat = einsum("ij, ...j -> ...i", H, x)  # (*B, m)
             S = R + einsum("ik, ...kl, jl -> ...ij", H, P, H)  # (*B, m, m)
-            y_pred[..., t, :] = y_hat
-            S_pred[..., t, :, :] = S
+            y_pred[..., k, :] = torch.where(
+                valid_mean, y_hat, torch.full_like(y_hat, nan)
+            )
+            S_pred[..., k, :, :] = torch.where(
+                valid_covariance, S, torch.full_like(S, nan)
+            )
 
-            x_new = x
-            P_new = P
+            x_new = torch.where(valid_mean, x, x_new)
+            P_new = torch.where(valid_covariance, P, P_new)
+            t = torch.where(valid, q, t)
 
         return y_pred, S_pred
 
@@ -381,8 +409,8 @@ class ContinuousKalmanFilter(nn.Module):
         else:  # noqa: RET506
             # KS = PHᵀ ⟹ SᵀKᵀ = HP
             # NOTE: we can't use tensor.T for batched tensors.
-            Kt = torch.linalg.solve(S.transpose(-2, -1), H @ P)  # (*B, m, n)
-            K = Kt.transpose(-2, -1)  # (*B, n, m)
+            Kt = torch.linalg.solve(S.mT, H @ P)  # (*B, m, n)
+            K = Kt.mT  # (*B, n, m)
 
         return K
 
