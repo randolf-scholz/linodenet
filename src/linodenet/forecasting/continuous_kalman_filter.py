@@ -4,7 +4,6 @@ __all__ = ["ContinuousKalmanFilter"]
 
 from typing import Final
 
-import scipy
 import torch
 from numpy.typing import ArrayLike
 from torch import Tensor, einsum, nan, nn, stack
@@ -228,12 +227,17 @@ class ContinuousKalmanFilter(nn.Module):
 
     @torch.no_grad()
     def _sample_default_system_matrix(self) -> Tensor:
-        """Sample a random system matrix.
+        r"""Sample a random continuous-time system matrix.
 
-        We take an orthogonal matrix for stability.
+        A skew-symmetric generator has purely imaginary eigenvalues, hence
+        $\exp(tF)$ is orthogonal for the deterministic dynamics.
         """
-        orthogonal_matrix = scipy.stats.ortho_group.rvs(dim=self.hidden_size)
-        return torch.as_tensor(orthogonal_matrix, dtype=torch.float32)
+        matrix = torch.randn(
+            self.hidden_size,
+            self.hidden_size,
+            dtype=torch.get_default_dtype(),
+        )
+        return (matrix - matrix.mT) / (2 * self.hidden_size) ** 0.5
 
     @torch.no_grad()
     def _sample_default_observation_matrix(self) -> Tensor:

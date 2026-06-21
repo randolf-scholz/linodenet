@@ -170,6 +170,17 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         assert_close(model.post_latent_means, model.prior_latent_means)
         assert_close(model.post_latent_covs, model.prior_latent_covs)
 
+    def test_default_system_matrix_is_skew_symmetric(self) -> None:
+        r"""Check default continuous-time dynamics are norm-preserving."""
+        torch.manual_seed(0)
+        model = ContinuousKalmanFilter(
+            self.STANDARD_CONFIG.input_size,
+            self.STANDARD_CONFIG.hidden_size,
+        )
+
+        skew_residual = model.system_matrix + model.system_matrix.mT
+        assert_close(skew_residual, torch.zeros_like(skew_residual))
+
     def test_initial_time_defaults_to_first_time_step(self) -> None:
         r"""Check default initial time matches the first time step."""
         torch.manual_seed(0)
