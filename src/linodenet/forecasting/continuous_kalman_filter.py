@@ -231,8 +231,14 @@ class ContinuousKalmanFilter(nn.Module):
             y_pred: Posterior predicted means $μ̂ₜ=\E[ŷₜ]$ at all time points.
             S_pred: Posterior predicted covariances $Σ̂ₜ=\Var[ŷₜ]$ at all time points.
         """
-        m = self.input_size
-        n = self.hidden_size
+        # update cached tensors
+        self.update_van_loan_matrix()
+
+        # initialize mask over valid time steps:
+        # those with finite time and at least one observation or query coordinate.
+        valid_steps = times.isfinite() & (context_mask | query_mask).any(dim=-1)
+        mean_mask = valid_steps.unsqueeze(dim=-1)
+        cov_mask = mean_mask.unsqueeze(dim=-1)
 
         if self.batch_first:
             # Move the time axis to the front.
@@ -240,19 +246,19 @@ class ContinuousKalmanFilter(nn.Module):
             values = values.moveaxis(-2, 0)
             context_mask = context_mask.moveaxis(-2, 0)
             query_mask = query_mask.moveaxis(-2, 0)
-
-        valid_time = times.isfinite() & (context_mask | query_mask).any(dim=-1)
+            valid_steps = valid_steps.moveaxis(-1, 0)
 
         # check the shapes
+        m = self.input_size
+        n = self.hidden_size
         num_steps, *batch_shape, _ = values.shape
         assert times.shape == (num_steps, *batch_shape)
         assert values.shape == (num_steps, *batch_shape, m)
         assert context_mask.shape == (num_steps, *batch_shape, m)
         assert query_mask.shape == (num_steps, *batch_shape, m)
+        assert valid_steps.shape == (num_steps, *batch_shape)
         assert context_mask.dtype == torch.bool
         assert query_mask.dtype == torch.bool
-
-        self.update_van_loan_matrix()
 
         # initialize the state
         t, x_pre, P_pre = (
@@ -279,7 +285,7 @@ class ContinuousKalmanFilter(nn.Module):
             times,
             values,
             context_mask,
-            valid_time,
+            valid_steps,
             strict=True,
         ):
             # Within the loop we use batch-first.
@@ -308,20 +314,16 @@ class ContinuousKalmanFilter(nn.Module):
             post_predicted_means.append(y_post)
             post_predicted_covs.append(S_post)
 
-        stack_dim = -2 if self.batch_first else 0
+        stack_dim_mean = -2 if self.batch_first else 0
         stack_dim_cov = -3 if self.batch_first else 0
-        mean_mask = (
-            valid_time.moveaxis(0, -1) if self.batch_first else valid_time
-        ).unsqueeze(dim=-1)
-        cov_mask = mean_mask.unsqueeze(dim=-1)
 
-        self.prior_latent_means = stack(prior_latent_means, dim=stack_dim)
+        self.prior_latent_means = stack(prior_latent_means, dim=stack_dim_mean)
         self.prior_latent_covs = stack(prior_latent_covs, dim=stack_dim_cov)
-        self.prior_target_means = stack(prior_predicted_means, dim=stack_dim)
+        self.prior_target_means = stack(prior_predicted_means, dim=stack_dim_mean)
         self.prior_target_covs = stack(prior_predicted_covs, dim=stack_dim_cov)
-        self.post_latent_means = stack(post_latent_means, dim=stack_dim)
+        self.post_latent_means = stack(post_latent_means, dim=stack_dim_mean)
         self.post_latent_covs = stack(post_latent_covs, dim=stack_dim_cov)
-        self.post_target_means = stack(post_predicted_means, dim=stack_dim)
+        self.post_target_means = stack(post_predicted_means, dim=stack_dim_mean)
         self.post_target_covs = stack(post_predicted_covs, dim=stack_dim_cov)
 
         self.prior_latent_means = self.prior_latent_means.masked_fill(~mean_mask, nan)
