@@ -99,15 +99,16 @@ class GRU_D(nn.Module):
 
     def __init__(
         self,
-        input_size,
-        hidden_size,
-        output_size,
+        input_size: int,
+        hidden_size: int,
+        *,
         empirical_mean: Tensor,
+        output_size: int | None = None,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.output_size = output_size
+        self.output_size = input_size if output_size is None else output_size
 
         self.register_buffer("empirical_mean", empirical_mean)
         assert self.empirical_mean.shape == (self.input_size,)
@@ -117,33 +118,46 @@ class GRU_D(nn.Module):
 
         self.h0 = nn.Parameter(torch.zeros(self.hidden_size))
         self.gru_d_cell = GRU_DCell(self.input_size, self.hidden_size)
+        self.decoder = nn.Linear(self.hidden_size, self.output_size)
 
     def forward(
         self,
         times: Tensor,  # (..., $N)
         values: Tensor,  # (..., $N, D)
+        query_times: Tensor,  # (..., $K)
+        *,
+        h0: Tensor | None = None,  # (..., H)
     ) -> Tensor:
-        mask = values.isfinite()  # (..., $N), observed values
+        mask = values.isfinite()  # (..., $N, D), observed values
         # ∆tₖ = tₖ - tₖ₋₁; ∆t₁ = 0
         t0 = times[..., [0]]
         increments = times.diff(dim=-1, prepend=t0)
 
         # δ₀ = 0
-        delta = torch.zeros_like(t0)
         *batch_shape, _ = times.shape
+        delta = times.new_zeros(*batch_shape, self.input_size)
 
-        h = self.h0.expand(*batch_shape, self.hidden_size)
-        h_values: list[Tensor] = []
+        # initialize h0
+        h = (
+            self.h0.expand(*batch_shape, self.hidden_size)
+            if h0 is None
+            else h0.expand(*batch_shape, self.hidden_size)
+        )
+        # initialize x0 = x̃
+        x = self.empirical_mean.expand(*batch_shape, self.input_size)
 
         # iterate over observations
-        for m, x, inc in zip(
+        for m, x_obs, inc in zip(
             mask.unbind(-2),
             values.unbind(-2),
             increments.unbind(-1),
             strict=True,
         ):
             # δₖ = ⟦mₖ=1 ?  ∆tₖ : ∆tₖ + δₖ₋₁⟧;
-            delta = torch.where(m, inc, delta + inc)
+            step = inc.unsqueeze(-1)
+            delta = torch.where(m, step, delta + step)
+            # last observation (x_{t'})
+            x = torch.where(m, x_obs, x)
 
             # γₜ = exp{ − max(0,Wᵧδₖ + bᵧ)}  (eq 10)
             # for γₓ, W_{γₓ} is diagonal
@@ -154,7 +168,7 @@ class GRU_D(nn.Module):
             # x̂ₜ = ⟦mₖ ? xₖ : γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃⟧  (eq. 11)
             x_hat = torch.where(
                 m,
-                x,
+                x_obs,
                 gamma_x * x + (1 - gamma_x) * self.empirical_mean,
             )
 
@@ -162,7 +176,26 @@ class GRU_D(nn.Module):
             h_hat = gamma_h * h
 
             # GRU-D equations (13-16)
-            h = self.gru_d_cell(x_hat, h_hat, m)
-            h_values.append(h)
+            h = self.gru_d_cell(x_hat, h_hat, m.to(x_hat))
 
-        h_complete = torch.stack(h_values, dim=-2)  # (..., $N, H)
+        # Roll forward to query times with completely missing observations.
+        query_increments = query_times.diff(dim=-1, prepend=times[..., [-1]])
+        missing = torch.zeros(
+            *batch_shape, self.input_size, dtype=torch.bool, device=values.device
+        )
+        h_queries: list[Tensor] = []
+
+        for inc in query_increments.unbind(-1):
+            step = inc.unsqueeze(-1)
+            delta = delta + step
+
+            gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))
+            gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))
+            x_hat = gamma_x * x + (1 - gamma_x) * self.empirical_mean
+            h_hat = gamma_h * h
+
+            h = self.gru_d_cell(x_hat, h_hat, missing.to(x_hat))
+            h_queries.append(h)
+
+        query_states = torch.stack(h_queries, dim=-2)  # (..., $K, H)
+        return self.decoder(query_states)
