@@ -50,6 +50,8 @@ class ContinuousKalmanFilter(nn.Module):
     r"""The (a posteriori) predicted mean yₖ'=Hμₖ' for the most recent forward pass."""
     post_target_covs: Tensor
     r"""The (a posteriori) predicted covariance Sₖ'=HΣₖ'Hᵀ+R for the most recent forward pass."""
+    identity_matrix: Tensor
+    r"""The identity matrix Iₙ used in the Joseph covariance update."""
     van_loan_matrix: Tensor
     r"""The Van Loan block matrix $[[F,Q],[0,-Fᵀ]]$ used for propagation."""
 
@@ -131,6 +133,7 @@ class ContinuousKalmanFilter(nn.Module):
         self.register_buffer("post_latent_covs", torch.empty(0, n, n))
         self.register_buffer("post_target_means", torch.empty(0, m))
         self.register_buffer("post_target_covs", torch.empty(0, m, m))
+        self.register_buffer("identity_matrix", torch.eye(n))
         self.register_buffer("van_loan_matrix", torch.empty(2 * n, 2 * n))
         self.update_van_loan_matrix()
 
@@ -183,6 +186,7 @@ class ContinuousKalmanFilter(nn.Module):
         assert self.post_latent_covs.shape == (*bs, n, n)
         assert self.post_target_means.shape == (*bs, m)
         assert self.post_target_covs.shape == (*bs, m, m)
+        assert self.identity_matrix.shape == (n, n)
         assert self.van_loan_matrix.shape == (2 * n, 2 * n)
 
     @torch.no_grad()
@@ -457,8 +461,7 @@ class ContinuousKalmanFilter(nn.Module):
         Returns:
             P_new: Updated covariance Σₖ' of shape (*B, n, n)
         """
-        I = torch.eye(self.hidden_size, device=P.device, dtype=P.dtype)
-        I_KH = I - einsum("...ik, ...kj -> ...ij", K, H)  # (*B, n, n)
+        I_KH = self.identity_matrix - einsum("...ik, ...kj -> ...ij", K, H)
         P_new = (
             einsum("...ik, ...kl, ...jl -> ...ij", I_KH, P, I_KH)  # (*B, n, n)
             + einsum("...ik, ...kl, ...jl -> ...ij", K, R, K)  # (*B, n, n)
