@@ -50,6 +50,8 @@ class ContinuousKalmanFilter(nn.Module):
     r"""The (a posteriori) predicted mean yₖ'=Hμₖ' for the most recent forward pass."""
     post_target_covs: Tensor
     r"""The (a posteriori) predicted covariance Sₖ'=HΣₖ'Hᵀ+R for the most recent forward pass."""
+    van_loan_matrix: Tensor
+    r"""The Van Loan block matrix $[[F,Q],[0,-Fᵀ]]$ used for propagation."""
 
     def __init__(
         self,
@@ -129,6 +131,8 @@ class ContinuousKalmanFilter(nn.Module):
         self.register_buffer("post_latent_covs", torch.empty(0, n, n))
         self.register_buffer("post_target_means", torch.empty(0, m))
         self.register_buffer("post_target_covs", torch.empty(0, m, m))
+        self.register_buffer("van_loan_matrix", torch.empty(2 * n, 2 * n))
+        self.update_van_loan_matrix()
 
         # validate model
         self.validate_parameters()
@@ -179,6 +183,7 @@ class ContinuousKalmanFilter(nn.Module):
         assert self.post_latent_covs.shape == (*bs, n, n)
         assert self.post_target_means.shape == (*bs, m)
         assert self.post_target_covs.shape == (*bs, m, m)
+        assert self.van_loan_matrix.shape == (2 * n, 2 * n)
 
     @torch.no_grad()
     def _sample_default_system_matrix(self) -> Tensor:
@@ -243,6 +248,8 @@ class ContinuousKalmanFilter(nn.Module):
         assert context_mask.dtype == torch.bool
         assert query_mask.dtype == torch.bool
 
+        self.update_van_loan_matrix()
+
         # initialize the state
         t, x_pre, P_pre = (
             (self.initial_time, self.initial_mean, self.initial_covariance)
@@ -297,17 +304,21 @@ class ContinuousKalmanFilter(nn.Module):
             post_predicted_means.append(y_post)
             post_predicted_covs.append(S_post)
 
-        mean_mask = valid_time.moveaxis(0, -1).unsqueeze(dim=-1)
+        stack_dim = -2 if self.batch_first else 0
+        stack_dim_cov = -3 if self.batch_first else 0
+        mean_mask = (
+            valid_time.moveaxis(0, -1) if self.batch_first else valid_time
+        ).unsqueeze(dim=-1)
         cov_mask = mean_mask.unsqueeze(dim=-1)
 
-        self.prior_latent_means = stack(prior_latent_means, dim=-2)
-        self.prior_latent_covs = stack(prior_latent_covs, dim=-3)
-        self.prior_target_means = stack(prior_predicted_means, dim=-2)
-        self.prior_target_covs = stack(prior_predicted_covs, dim=-3)
-        self.post_latent_means = stack(post_latent_means, dim=-2)
-        self.post_latent_covs = stack(post_latent_covs, dim=-3)
-        self.post_target_means = stack(post_predicted_means, dim=-2)
-        self.post_target_covs = stack(post_predicted_covs, dim=-3)
+        self.prior_latent_means = stack(prior_latent_means, dim=stack_dim)
+        self.prior_latent_covs = stack(prior_latent_covs, dim=stack_dim_cov)
+        self.prior_target_means = stack(prior_predicted_means, dim=stack_dim)
+        self.prior_target_covs = stack(prior_predicted_covs, dim=stack_dim_cov)
+        self.post_latent_means = stack(post_latent_means, dim=stack_dim)
+        self.post_latent_covs = stack(post_latent_covs, dim=stack_dim_cov)
+        self.post_target_means = stack(post_predicted_means, dim=stack_dim)
+        self.post_target_covs = stack(post_predicted_covs, dim=stack_dim_cov)
 
         self.prior_latent_means = self.prior_latent_means.masked_fill(~mean_mask, nan)
         self.prior_latent_covs = self.prior_latent_covs.masked_fill(~cov_mask, nan)
@@ -322,17 +333,11 @@ class ContinuousKalmanFilter(nn.Module):
 
         return self.post_target_means, self.post_target_covs
 
-    def propagate_state(
-        self,
-        x: Tensor,
-        P: Tensor,
-        delta: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Propagate latent mean and covariance through continuous dynamics."""
+    def update_van_loan_matrix(self) -> None:
+        r"""Refresh the Van Loan block matrix from current dynamics parameters."""
         F = self.system_matrix
         Q = self.process_covariance
-        n = self.hidden_size
-        M = torch.cat(  # [[F, Q], [0, -Fᵀ]]
+        self.van_loan_matrix = torch.cat(  # [[F, Q], [0, -Fᵀ]]
             [  # [2n, 2n]
                 torch.cat([F, Q], dim=-1),
                 torch.cat([torch.zeros_like(F), -F.mT], dim=-1),
@@ -340,8 +345,18 @@ class ContinuousKalmanFilter(nn.Module):
             dim=0,
         )
 
+    def propagate_state(
+        self,
+        x: Tensor,
+        P: Tensor,
+        delta: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Propagate latent mean and covariance through continuous dynamics."""
+        n = self.hidden_size
+
         # Concise implementation with a single matrix exponential.
-        expMt = matrix_exp(M * delta[..., None, None])  # [[G, Φ], [0, G⁻ᵀ]]
+        # exp([[F, Q], [0, -Fᵀ]])  = [[G, Φ], [0, G⁻ᵀ]]
+        expMt = matrix_exp(self.van_loan_matrix * delta[..., None, None])
         G = expMt[..., :n, :n]
         Phi = expMt[..., :n, n:]
 
