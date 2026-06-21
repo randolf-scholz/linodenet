@@ -51,7 +51,9 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             measurement_noise=0.5,
             initial_mean=torch.randn(hidden_size),
             initial_covariance=2.0 * torch.eye(hidden_size),
-            learnable_cov=True,
+            initial_state_learnable=True,
+            process_noise_learnable=True,
+            observation_noise_learnable=True,
         )
 
     def forecast(

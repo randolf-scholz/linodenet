@@ -58,7 +58,9 @@ class ContinuousKalmanFilter(nn.Module):
     hidden_size: Final[int]
     use_cholesky: Final[bool]
     batch_first: Final[bool]
-    learnable_cov: Final[bool]
+    initial_state_learnable: Final[bool]
+    process_noise_learnable: Final[bool]
+    observation_noise_learnable: Final[bool]
 
     # PARAMETERS
     system_matrix: Tensor
@@ -103,7 +105,9 @@ class ContinuousKalmanFilter(nn.Module):
         initial_mean: ArrayLike | float = 0.0,  # [n]
         initial_covariance: ArrayLike | float = 1.0,  # [n, n]
         use_cholesky: bool = False,
-        learnable_cov: bool = False,
+        initial_state_learnable: bool = True,
+        process_noise_learnable: bool = False,
+        observation_noise_learnable: bool = False,
         batch_first: bool = True,
     ) -> None:
         super().__init__()
@@ -111,7 +115,9 @@ class ContinuousKalmanFilter(nn.Module):
         self.input_size = input_size
         self.use_cholesky = use_cholesky
         self.batch_first = batch_first
-        self.learnable_cov = learnable_cov
+        self.initial_state_learnable = initial_state_learnable
+        self.process_noise_learnable = process_noise_learnable
+        self.observation_noise_learnable = observation_noise_learnable
         m = self.input_size
         n = self.hidden_size
         process_noise = _as_covariance(process_noise, n)
@@ -123,29 +129,29 @@ class ContinuousKalmanFilter(nn.Module):
             self._sample_default_system_matrix()
             if system_matrix is None
             else torch.as_tensor(system_matrix),
-            requires_grad=learnable_cov,
+            requires_grad=True,
         )
         self.observation_matrix = nn.Parameter(
             self._sample_default_observation_matrix()
             if observation_matrix is None
             else torch.as_tensor(observation_matrix),
-            requires_grad=learnable_cov,
+            requires_grad=True,
         )
         self.initial_mean = nn.Parameter(
             _as_mean(initial_mean, n),
-            requires_grad=learnable_cov,
-        )
-        self._process_covariance_param = nn.Parameter(
-            _log_spd(process_noise),
-            requires_grad=learnable_cov,
-        )
-        self._measurement_covariance_param = nn.Parameter(
-            _log_spd(measurement_noise),
-            requires_grad=learnable_cov,
+            requires_grad=initial_state_learnable,
         )
         self._initial_covariance_param = nn.Parameter(
             _log_spd(initial_covariance),
-            requires_grad=learnable_cov,
+            requires_grad=initial_state_learnable,
+        )
+        self._process_covariance_param = nn.Parameter(
+            _log_spd(process_noise),
+            requires_grad=process_noise_learnable,
+        )
+        self._measurement_covariance_param = nn.Parameter(
+            _log_spd(measurement_noise),
+            requires_grad=observation_noise_learnable,
         )
 
         # register buffers
@@ -383,10 +389,9 @@ class ContinuousKalmanFilter(nn.Module):
 
     def update_buffers(self) -> None:
         r"""Refresh derived buffers from current parameters."""
-        if self.learnable_cov:
-            self.process_cov = _spd_expm(self._process_covariance_param)
-            self.measurement_cov = _spd_expm(self._measurement_covariance_param)
-            self.initial_cov = _spd_expm(self._initial_covariance_param)
+        self.process_cov = _spd_expm(self._process_covariance_param)
+        self.measurement_cov = _spd_expm(self._measurement_covariance_param)
+        self.initial_cov = _spd_expm(self._initial_covariance_param)
 
         self.update_van_loan_matrix()
 
