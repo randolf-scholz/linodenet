@@ -261,36 +261,27 @@ class ContinuousKalmanFilter(nn.Module):
         post_predicted_means: list[Tensor] = []
         post_predicted_covs: list[Tensor] = []
 
-        valid_time = times.isfinite() & (
-            context_mask.any(dim=-1) | query_mask.any(dim=-1)
-        )
-        t_slices = times.unbind(-1) if self.batch_first else times.unbind(0)
-        y_slices = values.unbind(-2) if self.batch_first else values.unbind(0)
-        context_slices = (
-            context_mask.unbind(-2) if self.batch_first else context_mask.unbind(0)
-        )
-        query_slices = (
-            query_mask.unbind(-2) if self.batch_first else query_mask.unbind(0)
-        )
-        valid_slices = (
-            valid_time.unbind(-1) if self.batch_first else valid_time.unbind(0)
-        )
-        output_valid = valid_time if self.batch_first else valid_time.moveaxis(0, -1)
+        valid_time = times.isfinite() & (context_mask | query_mask).any(dim=-1)
 
-        for t_obs, y_obs, mask, query_mask_step, valid_step in zip(
-            t_slices,
-            y_slices,
-            context_slices,
-            query_slices,
-            valid_slices,
+        if self.batch_first:
+            # move the time axis to the front.
+            times = times.moveaxis(-1, 0)
+            values = values.moveaxis(-2, 0)
+            context_mask = context_mask.moveaxis(-2, 0)
+            valid_time = valid_time.moveaxis(-1, 0)
+
+        for t_obs, y_obs, mask, valid_step in zip(
+            times,
+            values,
+            context_mask,
+            valid_time,
             strict=True,
         ):
             # Within the loop we use batch-first.
-            valid = valid_step & (mask.any(dim=-1) | query_mask_step.any(dim=-1))
-            valid_mean = valid.unsqueeze(dim=-1)
+            valid_mean = valid_step.unsqueeze(dim=-1)
             valid_covariance = valid_mean.unsqueeze(dim=-1)
-            delta = torch.where(valid, t_obs - t, torch.zeros_like(t_obs - t))
-            t = torch.where(valid, t_obs, t)
+            delta = torch.where(valid_step, t_obs - t, torch.zeros_like(t_obs - t))
+            t = torch.where(valid_step, t_obs, t)
 
             x_pre, P_pre = self.propagate_state(x_post, P_post, delta)
             prior_latent_means.append(x_pre)
@@ -313,7 +304,7 @@ class ContinuousKalmanFilter(nn.Module):
             post_predicted_means.append(y_post)
             post_predicted_covs.append(S_post)
 
-        mean_mask = output_valid.unsqueeze(dim=-1)
+        mean_mask = valid_time.moveaxis(0, -1).unsqueeze(dim=-1)
         cov_mask = mean_mask.unsqueeze(dim=-1)
 
         self.prior_latent_means = stack(prior_latent_means, dim=-2)
