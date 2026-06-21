@@ -202,31 +202,28 @@ class ContinuousKalmanFilter(nn.Module):
 
     def forward(
         self,
-        times: Tensor,  # (..., $N + $K)
-        values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, D), bool
+        query: Tensor,  # (..., $K)
+        context: tuple[Tensor, Tensor],  # (..., $N), (..., $N, D)
         initial_state: tuple[
             Tensor,  # t₀, ()
             Tensor,  # μ₀, (..., D)
             Tensor,  # Σ₀, (..., D, D)
         ]
         | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., $N + $K, D), (..., $N + $K, D, D)
-        r"""Filter and forecast over combined context/query time points.
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D, D)
+        r"""Predict ``n_steps`` into the future given observations.
 
         Args:
-            times: Combined context and query time points.
-            values: Sparse observations at context time points.
-            context_mask: Boolean mask selecting observed entries in ``values``.
-            query_mask: Boolean mask selecting requested forecast entries.
+            query: time points at which to forecast
+            context: known observations $(t, y)$
             initial_state: initial latent state $(t₀, μ₀, Σ₀)$
 
         Returns:
-            y_pred: Posterior predicted means $μ̂ₜ=\E[ŷₜ]$ at all time points.
-            S_pred: Posterior predicted covariances $Σ̂ₜ=\Var[ŷₜ]$ at all time points.
+            y_pred: Predicted means $μ̂ₜ=\E[ŷₜ]$ for each query time
+            S_pred: Predicted covariances $Σ̂ₜ=\Var[ŷₜ]$ for each query time
         """
-        num_steps = times.shape[-1]
+        n_steps = query.shape[-1]
+        times, values = context
         bs = values.shape[:-2] if self.batch_first else values.shape[1:-1]
 
         F = self.system_matrix
@@ -243,19 +240,24 @@ class ContinuousKalmanFilter(nn.Module):
         else:
             t, x, P = initial_state
 
-        assert times.shape == (*bs, num_steps)
-        assert values.shape == (*bs, num_steps, m)
-        assert context_mask.shape == (*bs, num_steps, m)
-        assert query_mask.shape == (*bs, num_steps, m)
-        assert context_mask.dtype == torch.bool
-        assert query_mask.dtype == torch.bool
+        assert x.shape in [(*bs, n), (n,)]
+        assert P.shape in [(*bs, n, n), (n, n)]
 
-        x = x.expand(*bs, n)
-        P = P.expand(*bs, n, n)
+        if x.shape == (n,):
+            x = x.expand(*bs, n)
+        if P.shape == (n, n):
+            P = P.expand(*bs, n, n)
 
+        assert x.shape == (*bs, n)
+        assert P.shape == (*bs, n, n)
+
+        # pre-allocate outputs / variables
+        y_pred = values.new_full((*bs, n_steps, m), nan)
+        S_pred = values.new_full((*bs, n_steps, m, m), nan)
         x_new = x.clone()
         P_new = P.clone()
 
+        # setup buffers
         prior_latent_means: list[Tensor] = []
         prior_latent_covariances: list[Tensor] = []
         prior_predicted_means: list[Tensor] = []
@@ -273,32 +275,15 @@ class ContinuousKalmanFilter(nn.Module):
             dim=0,
         )
 
-        latent_eye = torch.eye(n, device=values.device, dtype=values.dtype)
-        valid_time = times.isfinite() & (
-            context_mask.any(dim=-1) | query_mask.any(dim=-1)
-        )
+        valid_context = times.isfinite() & values.isfinite().all(dim=-1)
         t_slices = times.unbind(-1) if self.batch_first else times.unbind(0)
         y_slices = values.unbind(-2) if self.batch_first else values.unbind(0)
-        context_slices = (
-            context_mask.unbind(-2) if self.batch_first else context_mask.unbind(0)
-        )
-        query_slices = (
-            query_mask.unbind(-2) if self.batch_first else query_mask.unbind(0)
-        )
         valid_slices = (
-            valid_time.unbind(-1) if self.batch_first else valid_time.unbind(0)
+            valid_context.unbind(-1) if self.batch_first else valid_context.unbind(0)
         )
 
-        for t_obs, y_obs, obs_mask, query_mask_step, valid_step in zip(
-            t_slices,
-            y_slices,
-            context_slices,
-            query_slices,
-            valid_slices,
-            strict=True,
-        ):
+        for t_obs, y_obs, valid in zip(t_slices, y_slices, valid_slices, strict=True):
             # Within the loop we use batch-first.
-            valid = valid_step & (obs_mask.any(dim=-1) | query_mask_step.any(dim=-1))
             valid_mean = valid.unsqueeze(dim=-1)
             valid_covariance = valid_mean.unsqueeze(dim=-1)
             delta = torch.where(valid, t_obs - t, torch.zeros_like(t_obs - t))
@@ -327,21 +312,11 @@ class ContinuousKalmanFilter(nn.Module):
             )
 
             # Update step
-            H_masked = obs_mask.unsqueeze(-1) * H
-            R_masked = obs_mask.unsqueeze(-1) * obs_mask.unsqueeze(
-                -2
-            ) * R + torch.diag_embed((~obs_mask).to(values.dtype))
-            S_masked = R_masked + einsum(
-                "...ik, ...kl, ...jl -> ...ij", H_masked, P, H_masked
-            )
-            r = torch.where(obs_mask, y_obs - y_hat, torch.zeros_like(y_hat))
-            K = torch.linalg.solve(S_masked.mT, H_masked @ P).mT  # (*B, n, m)
+            r = y_obs.nan_to_num(0.0) - y_hat  # innovation (*B, m)
+            K = self._compute_kalman_gain(P, H, S)  # (*B, n, m)
             # update mean and covariance
             x_update = x + einsum("...ij, ...j -> ...i", K, r)  # (*B, n)
-            I_KH = latent_eye - einsum("...ik, ...kj -> ...ij", K, H_masked)
-            P_update = einsum("...ik, ...kl, ...jl -> ...ij", I_KH, P, I_KH) + einsum(
-                "...ik, ...kl, ...jl -> ...ij", K, R_masked, K
-            )
+            P_update = self._joseph_update(P, K, H)  # (*B, n, n)
             x_new = torch.where(valid_mean, x_update, x_new)
             P_new = torch.where(valid_covariance, P_update, P_new)
             t = torch.where(valid, t_obs, t)
@@ -362,6 +337,7 @@ class ContinuousKalmanFilter(nn.Module):
                 torch.where(valid_covariance, S_new, torch.full_like(S_new, nan))
             )
 
+        # store buffers
         self.prior_latent_means = stack(prior_latent_means, dim=-2)
         self.prior_latent_covariances = stack(prior_latent_covariances, dim=-3)
         self.prior_predicted_means = stack(prior_predicted_means, dim=-2)
@@ -374,7 +350,36 @@ class ContinuousKalmanFilter(nn.Module):
         )
         self.validate_buffers()
 
-        return self.posterior_predicted_means, self.posterior_predicted_covariances
+        q_slices = query.unbind(-1) if self.batch_first else query.unbind(0)
+        for k, q in enumerate(q_slices):
+            # Within the loop we use batch-first.
+            valid = q.isfinite()
+            valid_mean = valid.unsqueeze(dim=-1)
+            valid_covariance = valid_mean.unsqueeze(dim=-1)
+            delta = torch.where(valid, q - t, torch.zeros_like(q - t))
+
+            # concise implementation with a single matrix exponential. Possibly less efficient.
+            expMt = matrix_exp(M * delta[..., None, None])  # [[G, Φ], [0, G⁻ᵀ]]
+            G = expMt[..., :n, :n]
+            Phi = expMt[..., :n, n:]
+            x = einsum("...ij, ...j -> ...i", G, x_new)  # (*B, n)
+            P = einsum("...ik, ...kl, ...jl -> ...ij", G, P_new, G) + Phi  # (*B, n, n)
+
+            # Prediction step (use einsum to deal with batch dims)
+            y_hat = einsum("ij, ...j -> ...i", H, x)  # (*B, m)
+            S = R + einsum("ik, ...kl, jl -> ...ij", H, P, H)  # (*B, m, m)
+            y_pred[..., k, :] = torch.where(
+                valid_mean, y_hat, torch.full_like(y_hat, nan)
+            )
+            S_pred[..., k, :, :] = torch.where(
+                valid_covariance, S, torch.full_like(S, nan)
+            )
+
+            x_new = torch.where(valid_mean, x, x_new)
+            P_new = torch.where(valid_covariance, P, P_new)
+            t = torch.where(valid, q, t)
+
+        return y_pred, S_pred
 
     def _compute_kalman_gain(
         self,
