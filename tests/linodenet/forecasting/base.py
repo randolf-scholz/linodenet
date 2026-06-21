@@ -445,6 +445,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         initial_parameters = {
             name: parameter.detach().clone()
             for name, parameter in model.named_parameters()
+            if parameter.requires_grad
         }
 
         predictions = self.forecast(model, data)
@@ -457,6 +458,8 @@ class TestForecastingModel[M: nn.Module](ABC):
             loss.backward()
 
             for name, parameter in model.named_parameters():
+                if not parameter.requires_grad:
+                    continue
                 assert parameter.grad is not None, name
                 assert parameter.grad.isfinite().all(), name
                 assert parameter.grad.abs().sum() > 0, name
@@ -467,6 +470,8 @@ class TestForecastingModel[M: nn.Module](ABC):
         final_loss = self.loss(model, predictions, data.query_values)
 
         for name, parameter in model.named_parameters():
+            if not parameter.requires_grad:
+                continue
             assert not torch.equal(parameter, initial_parameters[name]), name
         assert final_loss < initial_loss
 
@@ -494,6 +499,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         initial_parameters = {
             name: parameter.detach().clone()
             for name, parameter in model.named_parameters()
+            if parameter.requires_grad
         }
 
         predictions = self.forecast(model, data)
@@ -506,6 +512,8 @@ class TestForecastingModel[M: nn.Module](ABC):
             loss.backward()
 
             for name, parameter in model.named_parameters():
+                if not parameter.requires_grad:
+                    continue
                 assert parameter.grad is not None, name
                 assert parameter.grad.isfinite().all(), name
                 assert parameter.grad.abs().sum() > 0, name
@@ -516,5 +524,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         final_loss = self.loss(model, predictions, data.query_values)
 
         for name, parameter in model.named_parameters():
+            if not parameter.requires_grad:
+                continue
             assert not torch.equal(parameter, initial_parameters[name]), name
         assert final_loss < initial_loss
