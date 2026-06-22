@@ -491,6 +491,10 @@ class ProFITi(nn.Module):
         context_values: Tensor,  # (..., $N, D), padded NaN, sparse
         query_times: Tensor,  # (..., $K), padded NaN
     ) -> Tensor:
+        r"""Compute the joint log-likelihood of the target values under the model.
+
+        .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
+        """
         T = context_times
         X = context_values
         Q = query_times
