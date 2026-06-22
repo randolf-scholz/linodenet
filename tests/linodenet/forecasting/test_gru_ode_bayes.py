@@ -88,29 +88,39 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
             query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
+            query_values=inputs.query_values,
         )
         combined = dense.to_combined()
-        posterior_mean, posterior_logvar = model(
-            combined.times,
-            combined.context_values,
-            combined.context_mask,
-            combined.query_mask,
+        assert combined.query_values is not None
+        log_prob = model.log_prob(
+            combined.query_values,
+            times=combined.times,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+            query_mask=combined.query_mask,
         )
+        posterior_mean = model.post_means
+        posterior_logvar = model.post_logvars
         query_steps = combined.query_mask.any(dim=-1)
         query_mean = posterior_mean[query_steps]
         query_logvar = posterior_logvar[query_steps]
+        query_log_prob = log_prob[query_steps]
         query_mean[~combined.query_mask[query_steps]] = nan
         query_logvar[~combined.query_mask[query_steps]] = nan
         pred_mean = torch.full_like(inputs.query_values, nan)
         pred_logvar = torch.full_like(inputs.query_values, nan)
+        pred_log_prob = inputs.query_values.new_full(inputs.query_times.shape, nan)
         pred_mean[inputs.query_mask] = query_mean
         pred_logvar[inputs.query_mask] = query_logvar
+        pred_log_prob[inputs.query_mask] = query_log_prob
 
         assert pred_mean.shape == inputs.query_values.shape
         assert pred_logvar.shape == inputs.query_values.shape
+        assert pred_log_prob.shape == inputs.query_times.shape
         assert pred_mean[inputs.query_mask].isfinite().all()
         assert pred_logvar[inputs.query_mask].isfinite().all()
-        return pred_mean, pred_logvar
+        assert pred_log_prob[inputs.query_mask].isfinite().all()
+        return pred_mean, pred_logvar, pred_log_prob.unsqueeze(-1).expand_as(pred_mean)
 
     def loss(
         self,
@@ -119,11 +129,10 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
         targets: torch.Tensor,
     ) -> torch.Tensor:
         r"""Return GRU-ODE-Bayes negative log-likelihood for predictions."""
-        pred_mean, pred_logvar = predictions
+        del model
+        _, _, pred_log_prob = predictions
         mask = targets.isfinite()
-        return (
-            model.nll_logvar(targets, pred_mean, pred_logvar, mask).sum() / mask.sum()
-        )
+        return -pred_log_prob[..., 0][mask.any(dim=-1)].sum() / mask.sum()
 
     def test_instantiation(self) -> None:
         config = self.STANDARD_CONFIG
@@ -396,7 +405,12 @@ class TestGRUODEBayes:
             context_mask,
             query_mask,
         )
-        expected = -model.nll_logvar(values, mean, logvar, query_mask).sum(dim=-1)
+        normal = torch.distributions.Normal(mean, torch.exp(0.5 * logvar))
+        expected = torch.where(
+            query_mask,
+            normal.log_prob(values.nan_to_num(0.0)),
+            0.0,
+        ).sum(dim=-1)
 
         assert log_prob.shape == times.shape
         torch.testing.assert_close(log_prob, expected)
@@ -468,12 +482,10 @@ class TestGRUODEBayes:
         )
         times = torch.tensor([[0.0, 0.5, 1.0], [0.0, 0.25, 0.75]])
         context_values = torch.randn(2, 3, 3)
-        context_mask = torch.tensor(
-            [
-                [[True, False, True], [False, False, False], [True, True, True]],
-                [[True, True, False], [True, False, True], [False, False, False]],
-            ]
-        )
+        context_mask = torch.tensor([
+            [[True, False, True ], [False, False, False], [True,  True,  True]],
+            [[True, True,  False], [True,  False, True ], [False, False, False]],
+        ])  # fmt: skip
         context_values = context_values.masked_fill(~context_mask, nan)
         query_mask = torch.tensor(
             [
@@ -489,12 +501,13 @@ class TestGRUODEBayes:
             context_mask=context_mask,
             query_mask=query_mask,
         )
-        expected = -model.nll_logvar(
+        expected = model.log_prob(
             samples,
-            model.post_means.expand(2, 3, *model.post_means.shape),
-            model.post_logvars.expand(2, 3, *model.post_logvars.shape),
-            query_mask.expand(2, 3, *query_mask.shape),
-        ).sum(dim=-1)
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
 
         assert samples.shape == (2, 3, *context_values.shape)
         assert log_prob.shape == (2, 3, *times.shape)
