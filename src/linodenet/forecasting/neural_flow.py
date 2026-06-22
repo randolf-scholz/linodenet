@@ -375,10 +375,6 @@ class ResNetFlow(ModuleSequence[ResNetFlowBlock]):
         self.input_size = input_size
         self.num_layers = num_layers
 
-    def step(self, delta: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for a single time delta."""
-        return self.forward(delta.unsqueeze(-1), state).squeeze(-2)
-
     def forward(self, deltas: Tensor, state: Tensor, /) -> Tensor:
         r"""Propagate ``state`` for each requested time delta."""
         deltas, x = _prepare_inputs(deltas, state, self.input_size)
@@ -495,10 +491,6 @@ class GRUFlow(ModuleSequence[GRUFlowBlock]):
         self.input_shape = (input_size,)
         self.input_size = input_size
         self.num_layers = num_layers
-
-    def step(self, delta: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for a single time delta."""
-        return self.forward(delta.unsqueeze(-1), state).squeeze(-2)
 
     def forward(self, deltas: Tensor, state: Tensor, /) -> Tensor:
         r"""Propagate ``state`` for each requested time delta."""
