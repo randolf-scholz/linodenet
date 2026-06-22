@@ -687,5 +687,5 @@ class NeuralFlow(GRU_ODE_Bayes):
         posterior_state: Tensor,
     ) -> Tensor:
         r"""Propagate a posterior state through the neural flow."""
-        trajectory = self.flow.forward(delta_time.unsqueeze(-1), posterior_state)
+        trajectory = self.flow(delta_time.unsqueeze(-1), posterior_state)
         return trajectory.squeeze(-2)
