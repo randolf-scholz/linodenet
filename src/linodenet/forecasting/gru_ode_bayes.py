@@ -22,6 +22,7 @@ __all__ = [
     "gaussian_kl",
     "gaussian_kl_logvar",
     "apply_masked",
+    "update_masked",
 ]
 
 import math
@@ -84,6 +85,31 @@ def apply_masked[R: Tensor | tuple[Tensor, ...]](
         y_flat[mask_flat] = y
         y_result.append(y_flat.reshape(*batch_shape, *y.shape[1:]))
     return tuple(y_result)  # type: ignore[return-value]
+
+
+def update_masked(
+    fn: Callable[..., Tensor],  # [*(..., *dᵢ)] -> (..., *e)
+    args: tuple[Tensor, ...],
+    *,
+    target: Tensor,  # (..., *e)
+    mask: Tensor,  # (...)
+) -> Tensor:  # (..., *e)
+    r"""Update ``target`` with ``fn`` applied to selected batch elements."""
+    assert mask.dtype == torch.bool
+    batch_shape = mask.shape
+    batch_rank = len(batch_shape)
+
+    event_shape = target.shape[batch_rank:]
+    assert target.shape == batch_shape + event_shape
+
+    mask_flat = mask.flatten()
+    ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
+
+    return (
+        target.reshape(-1, *event_shape)
+        .index_put([mask_flat], ys_flat)
+        .reshape(*batch_shape, *event_shape)
+    )
 
 
 class TorchODESolver(nn.Module):
@@ -647,26 +673,27 @@ class GRU_ODE_Bayes(nn.Module):
             # propagate to the next time step
             delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs - t))
             t = torch.where(active, t_obs, t)
-            prior_state = apply_masked(
-                self.propagate_state, (delta, post_state), active
+            prior_state = update_masked(
+                self.propagate_state,
+                (delta, post_state),
+                target=post_state,
+                mask=active,
             )
 
             # get the prior prediction
             prior_mean, prior_logvar = self.decoder(prior_state)
-            prior_mean = torch.where(active[..., None], prior_mean, nan)
-            prior_logvar = torch.where(active[..., None], prior_logvar, nan)
 
             # update the state
-            updated_state = apply_masked(
-                self.update_state, (prior_state, observation), mask
+            update_mask = active & mask
+            post_state = update_masked(
+                self.update_cell,
+                (prior_state, observation, prior_mean, prior_logvar),
+                target=prior_state,
+                mask=update_mask,
             )
-            next_state = torch.where(mask[..., None], updated_state, prior_state)
-            post_state = torch.where(active[..., None], next_state, post_state)
 
             # get the posterior prediciton
             post_mean, post_logvar = self.decoder(post_state)
-            post_mean = torch.where(active[..., None], post_mean, nan)
-            post_logvar = torch.where(active[..., None], post_logvar, nan)
 
             prior_means_list.append(prior_mean)
             prior_logvars_list.append(prior_logvar)
