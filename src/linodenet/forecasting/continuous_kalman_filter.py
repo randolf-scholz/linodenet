@@ -1,13 +1,21 @@
 r"""Discrete Kalman Filter implementation."""
 
-__all__ = ["ContinuousKalmanFilter"]
+__all__ = [
+    "ContinuousKalmanFilter",
+    "marginal_gaussian_log_prob",
+    "marginal_gaussian_sample",
+    "marginal_gaussian_sample_and_log_prob",
+]
 
+import math
 from typing import Final
 
 import torch
 from numpy.typing import ArrayLike
 from torch import Tensor, einsum, nan, nn, stack
 from torch.linalg import matrix_exp
+
+_LOG2PI = math.log(2.0 * math.pi)
 
 
 def _log_spd(covariance: Tensor) -> Tensor:
@@ -44,6 +52,141 @@ def _as_covariance(covariance: ArrayLike | float, size: int) -> Tensor:
     if value.shape == (size, size):
         return value
     raise ValueError(f"Invalid covariance shape: {value.shape}")
+
+
+def _masked_covariance(covariance: Tensor, mask: Tensor) -> Tensor:
+    r"""Restrict a dense covariance to the masked subspace."""
+    active = mask.unsqueeze(-1) & mask.unsqueeze(-2)
+    covariance = torch.where(active, covariance, torch.zeros_like(covariance))
+    covariance = covariance + (~mask).to(covariance.dtype).diag_embed()
+    return (covariance + covariance.mT) / 2
+
+
+def marginal_gaussian_log_prob(
+    values: Tensor,
+    *,
+    mean: Tensor,
+    cov: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    r"""Compute log-likelihoods of masked Gaussian marginals.
+
+    Args:
+        values: Dense values with shape `(..., D)`.
+        mean: Dense Gaussian means with shape `(..., D)`.
+        cov: Dense Gaussian covariance matrices with shape `(..., D, D)`.
+        mask: Boolean mask selecting the marginal dimensions to score, with
+            shape `(..., D)`.
+
+    Returns:
+        Log-likelihoods with shape `(...)`. Rows with no selected dimensions
+        have log-likelihood zero.
+    """
+    dim = values.shape[-1]
+    assert values.shape == mean.shape
+    assert cov.shape == (*values.shape, dim)
+    assert mask.shape == values.shape
+    assert mask.dtype == torch.bool
+
+    residual = torch.where(mask, values - mean, torch.zeros_like(values))
+    covariance = _masked_covariance(cov, mask)
+    scale_tril = torch.linalg.cholesky(covariance)
+    alpha = torch.cholesky_solve(residual.unsqueeze(-1), scale_tril).squeeze(-1)
+    quadratic = (residual * alpha).sum(dim=-1)
+    logdet = 2.0 * scale_tril.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+    num_dims = mask.sum(dim=-1).to(values.dtype)
+    return -0.5 * (quadratic + logdet + num_dims * _LOG2PI)
+
+
+def marginal_gaussian_sample(
+    size: int | tuple[int, ...] = (),
+    *,
+    mean: Tensor,
+    cov: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    r"""Sample from masked Gaussian marginals.
+
+    Args:
+        size: Sample shape.
+        mean: Dense Gaussian means with shape `(..., D)`.
+        cov: Dense Gaussian covariance matrices with shape `(..., D, D)`.
+        mask: Boolean mask selecting the marginal dimensions to sample, with
+            shape `(..., D)`.
+
+    Returns:
+        Samples with shape `(*size, ..., D)`, with unselected dimensions filled
+        with NaN.
+    """
+    dim = mean.shape[-1]
+    assert cov.shape == (*mean.shape, dim)
+    assert mask.shape == mean.shape
+    assert mask.dtype == torch.bool
+
+    sample_shape = (size,) if isinstance(size, int) else size
+    covariance = _masked_covariance(cov, mask)
+    scale_tril = torch.linalg.cholesky(covariance)
+    noise = torch.randn(
+        (*sample_shape, *mean.shape),
+        dtype=mean.dtype,
+        device=mean.device,
+    )
+    samples = torch.where(mask, mean, torch.zeros_like(mean)).expand(
+        *sample_shape,
+        *mean.shape,
+    ) + (
+        scale_tril.expand(*sample_shape, *scale_tril.shape) @ noise.unsqueeze(-1)
+    ).squeeze(-1)
+    return samples.masked_fill(~mask.expand(*sample_shape, *mask.shape), nan)
+
+
+def marginal_gaussian_sample_and_log_prob(
+    size: int | tuple[int, ...] = (),
+    *,
+    mean: Tensor,
+    cov: Tensor,
+    mask: Tensor,
+) -> tuple[Tensor, Tensor]:
+    r"""Sample from masked Gaussian marginals and compute log-likelihoods."""
+    dim = mean.shape[-1]
+    assert cov.shape == (*mean.shape, dim)
+    assert mask.shape == mean.shape
+    assert mask.dtype == torch.bool
+
+    sample_shape = (size,) if isinstance(size, int) else size
+    covariance = _masked_covariance(cov, mask)
+    scale_tril = torch.linalg.cholesky(covariance)
+    noise = torch.randn(
+        (*sample_shape, *mean.shape),
+        dtype=mean.dtype,
+        device=mean.device,
+    )
+    samples = torch.where(mask, mean, torch.zeros_like(mean)).expand(
+        *sample_shape,
+        *mean.shape,
+    ) + (
+        scale_tril.expand(*sample_shape, *scale_tril.shape) @ noise.unsqueeze(-1)
+    ).squeeze(-1)
+    samples = samples.masked_fill(~mask.expand(*sample_shape, *mask.shape), nan)
+
+    residual = torch.where(
+        mask.expand(*sample_shape, *mask.shape),
+        samples - mean.expand(*sample_shape, *mean.shape),
+        torch.zeros_like(samples),
+    )
+    alpha = torch.cholesky_solve(
+        residual.unsqueeze(-1),
+        scale_tril.expand(*sample_shape, *scale_tril.shape),
+    ).squeeze(-1)
+    quadratic = (residual * alpha).sum(dim=-1)
+    logdet = 2.0 * scale_tril.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+    num_dims = mask.sum(dim=-1).to(mean.dtype)
+    log_prob = -0.5 * (
+        quadratic
+        + logdet.expand(*sample_shape, *logdet.shape)
+        + num_dims.expand(*sample_shape, *num_dims.shape) * _LOG2PI
+    )
+    return samples, log_prob
 
 
 class ContinuousKalmanFilter(nn.Module):
@@ -259,6 +402,37 @@ class ContinuousKalmanFilter(nn.Module):
         nn.init.kaiming_uniform_(t)
         return t
 
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, D), bool
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,  # t₀, ()
+    ) -> Tensor:  # (*S, ..., $N + $K, D)
+        r"""Sample from the time-marginal distribution.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, cov = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return marginal_gaussian_sample(
+            sample_shape,
+            mean=mean,
+            cov=cov,
+            mask=query_mask,
+        )
+
     def sample_and_log_prob(
         self,
         size: int | tuple[int, ...] = (),  # *S
@@ -269,12 +443,26 @@ class ContinuousKalmanFilter(nn.Module):
         query_mask: Tensor,  # (..., $N + $K, D), bool
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $N + $K, D), (*S, ...)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $N + $K, D), (*S, ..., $N + $K)
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
-        .. math:: p_{marg} = ∏ₖ p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
-        raise NotImplementedError
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, cov = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return marginal_gaussian_sample_and_log_prob(
+            sample_shape,
+            mean=mean,
+            cov=cov,
+            mask=query_mask,
+        )
 
     def log_prob(
         self,
@@ -286,12 +474,31 @@ class ContinuousKalmanFilter(nn.Module):
         query_mask: Tensor,  # (..., $N + $K, D), bool
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> Tensor:
+    ) -> Tensor:  # (..., $N + $K)
         r"""Compute the time-marginal log-likelihood of the model.
 
-        .. math:: p_{marg} = ∏ₖ p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
-        raise NotImplementedError
+        mean, cov = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        num_extra_dims = values.ndim - mean.ndim
+        if num_extra_dims < 0 or values.shape[num_extra_dims:] != mean.shape:
+            raise ValueError(
+                f"Expected values.shape={mean.shape} with optional leading sample "
+                f"dimensions, got {values.shape}."
+            )
+        return marginal_gaussian_log_prob(
+            values,
+            mean=mean.expand(*values.shape),
+            cov=cov.expand(*values.shape[:-1], *cov.shape[-2:]),
+            mask=query_mask.expand(*values.shape),
+        )
 
     def forward(
         self,

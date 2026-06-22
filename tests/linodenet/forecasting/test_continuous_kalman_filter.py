@@ -4,13 +4,140 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
+from torch.distributions import MultivariateNormal
 from torch.nn import functional as F
 from torch.testing import assert_close
 
-from linodenet.forecasting.continuous_kalman_filter import ContinuousKalmanFilter
+from linodenet.forecasting.continuous_kalman_filter import (
+    ContinuousKalmanFilter,
+    marginal_gaussian_log_prob,
+    marginal_gaussian_sample,
+    marginal_gaussian_sample_and_log_prob,
+)
 from linodenet.forecasting.utils import BatchedCombinedArgs, BatchedDenseArgs
 
 from .base import SequentialData, TestForecastingModel
+
+
+def test_marginal_gaussian_log_prob_matches_explicit_subvectors() -> None:
+    r"""Check masked Gaussian scoring equals explicit marginal scoring."""
+    mean = torch.tensor([[1.0, -2.0, 0.5], [0.0, 3.0, -1.0]])
+    values = torch.tensor([[1.5, 10.0, -0.25], [99.0, 2.5, 10.0]])
+    cov = torch.tensor(
+        [
+            [
+                [2.0, 0.3, 0.4],
+                [0.3, 1.0, 0.2],
+                [0.4, 0.2, 1.5],
+            ],
+            [
+                [1.0, 0.1, 0.2],
+                [0.1, 2.0, 0.5],
+                [0.2, 0.5, 3.0],
+            ],
+        ]
+    )
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+
+    actual = marginal_gaussian_log_prob(values, mean=mean, cov=cov, mask=mask)
+    expected = torch.stack(
+        [
+            MultivariateNormal(
+                mean[0, [0, 2]],
+                covariance_matrix=cov[0][[0, 2]][:, [0, 2]],
+            ).log_prob(values[0, [0, 2]]),
+            MultivariateNormal(
+                mean[1, [1]],
+                covariance_matrix=cov[1][[1]][:, [1]],
+            ).log_prob(values[1, [1]]),
+        ]
+    )
+
+    assert_close(actual, expected)
+
+
+def test_marginal_gaussian_log_prob_zero_for_empty_mask() -> None:
+    r"""Check empty marginals have unit likelihood."""
+    values = torch.full((2, 3), torch.nan)
+    mean = torch.full((2, 3), torch.nan)
+    cov = torch.full((2, 3, 3), torch.nan)
+    mask = torch.zeros(2, 3, dtype=torch.bool)
+
+    actual = marginal_gaussian_log_prob(values, mean=mean, cov=cov, mask=mask)
+
+    assert_close(actual, torch.zeros(2))
+
+
+def test_marginal_gaussian_sample_uses_masked_marginals() -> None:
+    r"""Check masked Gaussian samples have sample shape and NaN padding."""
+    torch.manual_seed(0)
+    mean = torch.tensor([[1.0, -2.0, 0.5], [0.0, 3.0, -1.0]])
+    cov = torch.tensor(
+        [
+            [
+                [2.0, 0.3, 0.4],
+                [0.3, 1.0, 0.2],
+                [0.4, 0.2, 1.5],
+            ],
+            [
+                [1.0, 0.1, 0.2],
+                [0.1, 2.0, 0.5],
+                [0.2, 0.5, 3.0],
+            ],
+        ]
+    )
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+
+    samples = marginal_gaussian_sample((2, 3), mean=mean, cov=cov, mask=mask)
+    log_prob = marginal_gaussian_log_prob(
+        samples,
+        mean=mean.expand(2, 3, *mean.shape),
+        cov=cov.expand(2, 3, *cov.shape),
+        mask=mask.expand(2, 3, *mask.shape),
+    )
+
+    assert samples.shape == (2, 3, *mean.shape)
+    assert samples[..., mask].isfinite().all()
+    assert samples[..., ~mask].isnan().all()
+    assert log_prob.isfinite().all()
+
+
+def test_marginal_gaussian_sample_and_log_prob_reuses_samples() -> None:
+    r"""Check joint sampling/scoring matches standalone masked scoring."""
+    torch.manual_seed(0)
+    mean = torch.tensor([[1.0, -2.0, 0.5], [0.0, 3.0, -1.0]])
+    cov = torch.tensor(
+        [
+            [
+                [2.0, 0.3, 0.4],
+                [0.3, 1.0, 0.2],
+                [0.4, 0.2, 1.5],
+            ],
+            [
+                [1.0, 0.1, 0.2],
+                [0.1, 2.0, 0.5],
+                [0.2, 0.5, 3.0],
+            ],
+        ]
+    )
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+
+    samples, log_prob = marginal_gaussian_sample_and_log_prob(
+        (2, 3),
+        mean=mean,
+        cov=cov,
+        mask=mask,
+    )
+    expected = marginal_gaussian_log_prob(
+        samples,
+        mean=mean.expand(2, 3, *mean.shape),
+        cov=cov.expand(2, 3, *cov.shape),
+        mask=mask.expand(2, 3, *mask.shape),
+    )
+
+    assert samples.shape == (2, 3, *mean.shape)
+    assert log_prob.shape == (2, 3, *mean.shape[:-1])
+    assert_close(log_prob, expected)
 
 
 class KalmanFilterTestConfig(NamedTuple):
@@ -203,3 +330,133 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
 
         assert_close(explicit_mean, default_mean)
         assert_close(explicit_cov, default_cov)
+
+    def test_log_prob_returns_time_marginal_likelihoods(self) -> None:
+        r"""Check Kalman log-probabilities are returned per time step."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        dim = self.STANDARD_CONFIG.input_size
+        times = torch.tensor([0.0, 0.5, 1.0, 1.5])
+        context_values = torch.randn(4, dim)
+        context_mask = torch.tensor(
+            [
+                [True, True, False],
+                [True, False, True],
+                [False, False, False],
+                [True, True, True],
+            ]
+        )
+        context_values = context_values.masked_fill(~context_mask, torch.nan)
+        query_mask = torch.tensor(
+            [
+                [False, False, False],
+                [False, True, False],
+                [True, False, True],
+                [False, False, False],
+            ]
+        )
+        values = torch.randn(4, dim).masked_fill(~query_mask, torch.nan)
+
+        log_prob = model.log_prob(
+            values,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+        mean, cov = model(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+        )
+        expected = marginal_gaussian_log_prob(
+            values,
+            mean=mean,
+            cov=cov,
+            mask=query_mask,
+        )
+
+        assert log_prob.shape == times.shape
+        assert_close(log_prob, expected)
+        assert_close(log_prob[~query_mask.any(dim=-1)], torch.zeros(2))
+
+    def test_sample_returns_time_marginal_samples(self) -> None:
+        r"""Check Kalman samples have the requested sample and query shape."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        dim = self.STANDARD_CONFIG.input_size
+        times = torch.tensor([0.0, 0.5, 1.0])
+        context_values = torch.randn(3, dim)
+        context_mask = torch.tensor(
+            [
+                [True, False, True],
+                [False, False, False],
+                [True, True, False],
+            ]
+        )
+        context_values = context_values.masked_fill(~context_mask, torch.nan)
+        query_mask = torch.tensor(
+            [
+                [False, True, False],
+                [True, False, True],
+                [False, False, False],
+            ]
+        )
+
+        samples = model.sample(
+            5,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+
+        assert samples.shape == (5, *context_values.shape)
+        assert samples[:, query_mask].isfinite().all()
+        assert samples[:, ~query_mask].isnan().all()
+
+    def test_sample_and_log_prob_returns_time_marginal_likelihoods(self) -> None:
+        r"""Check Kalman samples and sample log-probabilities use query masks."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        dim = self.STANDARD_CONFIG.input_size
+        times = torch.tensor([[0.0, 0.5, 1.0], [0.0, 0.25, 0.75]])
+        context_values = torch.randn(2, 3, dim)
+        context_mask = torch.tensor(
+            [
+                [[True, False, True], [False, False, False], [True, True, True]],
+                [[True, True, False], [True, False, True], [False, False, False]],
+            ]
+        )
+        context_values = context_values.masked_fill(~context_mask, torch.nan)
+        query_mask = torch.tensor(
+            [
+                [[False, True, False], [True, False, True], [False, False, False]],
+                [[False, False, False], [False, True, False], [True, True, False]],
+            ]
+        )
+
+        samples, log_prob = model.sample_and_log_prob(
+            (2, 3),
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+        expected = marginal_gaussian_log_prob(
+            samples,
+            mean=model.post_target_means.expand(2, 3, *model.post_target_means.shape),
+            cov=model.post_target_covs.expand(2, 3, *model.post_target_covs.shape),
+            mask=query_mask.expand(2, 3, *query_mask.shape),
+        )
+
+        assert samples.shape == (2, 3, *context_values.shape)
+        assert log_prob.shape == (2, 3, *times.shape)
+        assert samples[..., query_mask].isfinite().all()
+        assert samples[..., ~query_mask].isnan().all()
+        assert_close(log_prob, expected)
+        assert_close(
+            log_prob[..., ~query_mask.any(dim=-1)],
+            torch.zeros_like(log_prob[..., ~query_mask.any(dim=-1)]),
+        )
