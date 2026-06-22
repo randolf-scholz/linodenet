@@ -4,6 +4,7 @@ from typing import ClassVar
 
 import pytest
 import torch
+from torch import nan
 
 from linodenet.forecasting.gru_ode_bayes import GRU_Bayes, GRU_ODE_Bayes
 from linodenet.forecasting.neural_flow import (
@@ -14,6 +15,7 @@ from linodenet.forecasting.neural_flow import (
     NeuralFlowConfig,
     ResNetFlow,
 )
+from linodenet.forecasting.utils import BatchedDenseArgs
 
 from .base import SequentialData, TestForecastingModel
 
@@ -55,13 +57,29 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         r"""Return NeuralFlow predictions for sequential forecasting inputs."""
         if not isinstance(model, NeuralFlow):
             raise TypeError("model must be a NeuralFlow.")
-        pred_mean, pred_logvar = model(
-            inputs.query_times,
-            inputs.context_times,
-            inputs.context_values,
-            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
+        dense = BatchedDenseArgs(
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
         )
+        combined = dense.to_combined()
+        posterior_mean, posterior_logvar = model(
+            combined.times,
+            combined.context_values,
+            combined.context_mask,
+            combined.query_mask,
+        )
+        query_steps = combined.query_mask.any(dim=-1)
+        query_mean = posterior_mean[query_steps]
+        query_logvar = posterior_logvar[query_steps]
+        query_mean[~combined.query_mask[query_steps]] = nan
+        query_logvar[~combined.query_mask[query_steps]] = nan
+        pred_mean = torch.full_like(inputs.query_values, nan)
+        pred_logvar = torch.full_like(inputs.query_values, nan)
+        pred_mean[inputs.query_mask] = query_mean
+        pred_logvar[inputs.query_mask] = query_logvar
 
         assert pred_mean.shape == inputs.query_values.shape
         assert pred_logvar.shape == inputs.query_values.shape
@@ -146,19 +164,34 @@ def test_flow_layers(
         time_net="TimeTanh",
         time_hidden_size=4,
     )
-    context_times = torch.tensor([[0.0, 0.3, 0.7], [0.0, 0.5, torch.nan]])
+    context_times = torch.tensor([[0.0, 0.3, 0.7], [0.0, 0.5, nan]])
     context_values = torch.randn(2, 3, 3)
-    context_values[1, 2] = torch.nan
-    query_times = torch.tensor([[1.0, 1.4], [0.8, torch.nan]])
+    context_values[1, 2] = nan
+    query_times = torch.tensor([[1.0, 1.4], [0.8, nan]])
     query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-    pred_mean, pred_logvar = model(
-        query_times,
-        context_times,
-        context_values,
-        query_mask=query_mask,
+    combined = BatchedDenseArgs(
+        context_times=context_times,
+        context_values=context_values,
         context_mask=context_values.isfinite(),
+        query_times=query_times,
+        query_mask=query_mask,
+    ).to_combined()
+    posterior_mean, posterior_logvar = model(
+        combined.times,
+        combined.context_values,
+        combined.context_mask,
+        combined.query_mask,
     )
+    query_steps = combined.query_mask.any(dim=-1)
+    query_mean = posterior_mean[query_steps]
+    query_logvar = posterior_logvar[query_steps]
+    query_mean[~combined.query_mask[query_steps]] = nan
+    query_logvar[~combined.query_mask[query_steps]] = nan
+    pred_mean = context_values.new_full((2, 2, 3), nan)
+    pred_logvar = context_values.new_full((2, 2, 3), nan)
+    pred_mean[query_mask.any(dim=-1)] = query_mean
+    pred_logvar[query_mask.any(dim=-1)] = query_logvar
 
     assert isinstance(model.flow, flow_type)
     assert pred_mean.shape == (2, 2, 3)

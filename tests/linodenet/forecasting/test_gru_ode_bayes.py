@@ -4,6 +4,7 @@ from typing import ClassVar
 
 import pytest
 import torch
+from torch import nan
 
 from linodenet.forecasting.gru_ode_bayes import (
     GRU_ODE,
@@ -17,6 +18,7 @@ from linodenet.forecasting.gru_ode_bayes import (
     gaussian_kl,
     gaussian_kl_logvar,
 )
+from linodenet.forecasting.utils import BatchedDenseArgs
 
 from .base import SequentialData, TestForecastingModel
 
@@ -80,13 +82,29 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
         self, model: GRU_ODE_Bayes, inputs: SequentialData, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-ODE-Bayes predictions for sequential forecasting inputs."""
-        pred_mean, pred_logvar = model(
-            inputs.query_times,
-            inputs.context_times,
-            inputs.context_values,
-            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
+        dense = BatchedDenseArgs(
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
         )
+        combined = dense.to_combined()
+        posterior_mean, posterior_logvar = model(
+            combined.times,
+            combined.context_values,
+            combined.context_mask,
+            combined.query_mask,
+        )
+        query_steps = combined.query_mask.any(dim=-1)
+        query_mean = posterior_mean[query_steps]
+        query_logvar = posterior_logvar[query_steps]
+        query_mean[~combined.query_mask[query_steps]] = nan
+        query_logvar[~combined.query_mask[query_steps]] = nan
+        pred_mean = torch.full_like(inputs.query_values, nan)
+        pred_logvar = torch.full_like(inputs.query_values, nan)
+        pred_mean[inputs.query_mask] = query_mean
+        pred_logvar[inputs.query_mask] = query_logvar
 
         assert pred_mean.shape == inputs.query_values.shape
         assert pred_logvar.shape == inputs.query_values.shape
@@ -192,48 +210,60 @@ class TestGRUODEBayes:
             update_cell=update_cell,
         )
 
-        context_times = torch.tensor(
-            [
-                [0.0, 0.5, 1.0],
-                [0.0, 0.25, torch.nan],
-            ]
-        )
+        context_times = torch.tensor([
+            [0.0, 0.5, 1.0],
+            [0.0, 0.25, nan],
+        ])  # fmt: skip
         context_values = torch.randn(2, 3, 3)
-        context_values[0, 1, 2] = torch.nan
-        context_values[1, 2] = torch.nan
+        context_values[0, 1, 2] = nan
+        context_values[1, 2] = nan
         context_mask = context_values.isfinite()
-        query_times = torch.tensor(
-            [
-                [1.2, 1.5],
-                [0.5, torch.nan],
-            ]
-        )
-        query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
+        query_times = torch.tensor([
+            [1.2, 1.5],
+            [0.5, nan],
+        ])  # fmt: skip
+        query_mask = query_times.isfinite().unsqueeze(-1).expand(context_values.shape)
 
-        pred_mean, pred_logvar = model(
-            query_times,
-            context_times,
-            context_values,
-            query_mask=query_mask,
+        combined = BatchedDenseArgs(
+            context_times=context_times,
+            context_values=context_values,
             context_mask=context_mask,
-        )
-        context_step_mask = context_mask.any(dim=-1)
+            query_times=query_times,
+            query_mask=query_mask,
+        ).to_combined()
 
-        assert pred_mean.shape == (2, 2, 3)
-        assert pred_logvar.shape == (2, 2, 3)
+        posterior_mean, posterior_logvar = model(
+            combined.times,
+            combined.context_values,
+            combined.context_mask,
+            combined.query_mask,
+        )
+        query_steps = combined.query_mask.any(dim=-1)
+        combined_step_mask = (combined.context_mask | combined.query_mask).any(dim=-1)
+        query_mean = posterior_mean[query_steps]
+        query_logvar = posterior_logvar[query_steps]
+        query_mean[~combined.query_mask[query_steps]] = nan
+        query_logvar[~combined.query_mask[query_steps]] = nan
+        pred_mean = context_values.new_full(context_values.shape, nan)
+        pred_logvar = context_values.new_full(context_values.shape, nan)
+        pred_mean[query_mask.any(dim=-1)] = query_mean
+        pred_logvar[query_mask.any(dim=-1)] = query_logvar
+
+        assert pred_mean.shape == context_values.shape
+        assert pred_logvar.shape == context_values.shape
         assert pred_mean[query_mask].isfinite().all()
         assert pred_logvar[query_mask].isfinite().all()
         assert pred_mean[~query_mask].isnan().all()
         assert pred_logvar[~query_mask].isnan().all()
 
-        assert model.prior_means.shape == (2, 3, 3)
-        assert model.prior_logvars.shape == (2, 3, 3)
-        assert model.posterior_means.shape == (2, 3, 3)
-        assert model.posterior_logvars.shape == (2, 3, 3)
-        assert model.prior_means[context_step_mask].isfinite().all()
-        assert model.posterior_logvars[context_step_mask].isfinite().all()
-        assert model.prior_means[~context_step_mask].isnan().all()
-        assert model.posterior_logvars[~context_step_mask].isnan().all()
+        assert model.prior_means.shape == combined.context_values.shape
+        assert model.prior_logvars.shape == combined.context_values.shape
+        assert model.post_means.shape == combined.context_values.shape
+        assert model.post_logvars.shape == combined.context_values.shape
+        assert model.prior_means[combined_step_mask].isfinite().all()
+        assert model.post_logvars[combined_step_mask].isfinite().all()
+        assert model.prior_means[~combined_step_mask].isnan().all()
+        assert model.post_logvars[~combined_step_mask].isnan().all()
 
     def test_apply_masked_update_state_with_empty_selection(self) -> None:
         r"""Check all-padding masks do not require forward-loop special cases."""
@@ -253,7 +283,7 @@ class TestGRUODEBayes:
             ),
         )
         state = torch.randn(2, 5)
-        observation = torch.full((2, 3), torch.nan)
+        observation = torch.full((2, 3), nan)
         mask = torch.zeros(2, dtype=torch.bool)
 
         result = apply_masked(model.update_state, (state, observation), mask)
@@ -267,8 +297,8 @@ class TestGRUODEBayes:
         var_pre = torch.tensor([[1.5, 0.4, 2.0], [0.8, 1.2, 0.7]])
         mu_post = torch.tensor([[0.2, 0.7, -0.8], [1.5, -0.1, 0.4]])
         var_post = torch.tensor([[1.1, 0.6, 1.4], [0.9, 1.5, 0.5]])
-        mu_obs = torch.tensor([[0.4, torch.nan, -1.2], [2.3, 0.2, 0.8]])
-        var_obs = torch.tensor([[0.3, torch.nan, 0.5], [0.2, 0.9, 0.4]])
+        mu_obs = torch.tensor([[0.4, nan, -1.2], [2.3, 0.2, 0.8]])
+        var_obs = torch.tensor([[0.3, nan, 0.5], [0.2, 0.9, 0.4]])
 
         valid = mu_obs.isfinite() & var_obs.isfinite()
         mu_obs_clean = mu_obs.nan_to_num(0.0)

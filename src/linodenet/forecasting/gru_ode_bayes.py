@@ -31,7 +31,7 @@ from typing import Any, Final
 
 import torch
 import torchode as to
-from torch import Tensor, nn
+from torch import Tensor, nan, nn
 
 
 def apply_masked[R: Tensor | tuple[Tensor, ...]](
@@ -375,9 +375,9 @@ class GRU_ODE_Bayes(nn.Module):
     r"""BUFFER: Prior predictive means from the last forward pass."""
     prior_logvars: Tensor
     r"""BUFFER: Prior predictive log-variances from the last forward pass."""
-    posterior_means: Tensor
+    post_means: Tensor
     r"""BUFFER: Posterior predictive means from the last forward pass."""
-    posterior_logvars: Tensor
+    post_logvars: Tensor
     r"""BUFFER: Posterior predictive log-variances from the last forward pass."""
 
     @classmethod
@@ -573,7 +573,7 @@ class GRU_ODE_Bayes(nn.Module):
     def update_state(
         self,
         prior_state: Tensor,  # (..., H)
-        observation: Tensor,  # (..., N)
+        observation: Tensor,  # (..., D)
     ) -> Tensor:  # (..., H)
         r"""Apply one Bayesian jump update to a prior latent state."""
         batch_shape = prior_state.shape[:-1]
@@ -585,67 +585,68 @@ class GRU_ODE_Bayes(nn.Module):
 
     def forward(
         self,
-        query_times: Tensor,  # (..., $K), possibly with trailing NaNs (padding)
-        context_times: Tensor,  # (..., $N), possibly with trailing NaNs (padding)
-        context_values: Tensor,  # (..., $N, D), possibly with NaNs
+        times: Tensor,  # (..., $N + $K), possibly with trailing NaNs (padding)
+        context_values: Tensor,  # (..., $N + $K, D), possibly with NaNs
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, D), bool
         *,
-        query_mask: Tensor,  # (..., $K, D), bool
-        context_mask: Tensor,  # (..., $N, D), bool
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
-        r"""Return predictive distribution parameters at ``query_times``.
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> tuple[Tensor, Tensor]:  # (..., $N + $K, D), (..., $N + $K, D)
+        r"""Filter and forecast over combined context/query time points.
 
         Context and query masks explicitly select valid feature-level entries.
         Context values outside ``context_mask`` are ignored.
         """
-        *batch_shape, num_steps = context_times.shape
-        query_size = query_times.shape[-1]
+        *batch_shape, num_steps = times.shape
         assert context_values.shape == (*batch_shape, num_steps, self.input_size)
         assert context_mask.shape == (*batch_shape, num_steps, self.input_size)
-        assert query_times.shape == (*batch_shape, query_size)
-        assert query_mask.shape == (*batch_shape, query_size, self.input_size)
+        assert query_mask.shape == (*batch_shape, num_steps, self.input_size)
         assert context_mask.dtype == torch.bool
         assert query_mask.dtype == torch.bool
 
-        context_values = context_values.masked_fill(~context_mask, torch.nan)
-        context_step_mask = context_mask.any(dim=-1)
-        query_step_mask = query_mask.any(dim=-1)
-        assert context_times[context_step_mask].isfinite().all()
-        assert query_times[query_step_mask].isfinite().all()
-
-        context_lengths = context_step_mask.sum(dim=-1)  # (...)
-        last_context_time = torch.take_along_dim(
-            context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
-        )
-        context_deltas = context_times.diff(prepend=context_times[..., [0]])
-        query_deltas = query_times.diff(prepend=last_context_time)
-        assert (context_deltas[context_step_mask] >= 0).all(), (
-            "context times not sorted"
-        )
-        assert (query_deltas[query_step_mask] >= 0).all(), "query times not sorted"
+        context_values = context_values.masked_fill(~context_mask, nan)
+        valid_steps = times.isfinite() & (context_mask | query_mask).any(dim=-1)
+        mean_mask = valid_steps.unsqueeze(dim=-1)
+        assert times[valid_steps].isfinite().all()
+        assert (times.diff(dim=-1)[valid_steps[..., 1:]] >= 0).all(), "times not sorted"
 
         # initialize 𝐡₀
-        post_state = self.initial_state.expand(*batch_shape, self.hidden_size)
+        t = times[..., 0] if initial_time is None else initial_time
+        post_state = self.initial_state if initial_state is None else initial_state
+        post_state = post_state.expand(*batch_shape, self.hidden_size)
 
         prior_means_list = []
         prior_logvars_list = []
         posterior_means_list = []
         posterior_logvars_list = []
 
-        for dt, observation, mask in zip(
-            context_deltas.unbind(dim=-1),
+        for t_obs, observation, context_step, active in zip(
+            times.unbind(dim=-1),
             context_values.unbind(dim=-2),
             context_mask.any(dim=-1).unbind(dim=-1),
+            valid_steps.unbind(dim=-1),
             strict=True,
         ):
-            prior_state = apply_masked(self.propagate_state, (dt, post_state), mask)
-            prior_mean, prior_logvar = apply_masked(self.decoder, (prior_state,), mask)
-
-            updated_state = apply_masked(
-                self.update_state, (prior_state, observation), mask
+            delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs - t))
+            t = torch.where(active, t_obs, t)
+            prior_state = apply_masked(
+                self.propagate_state, (delta, post_state), active
             )
-            post_state = torch.where(mask.unsqueeze(-1), updated_state, post_state)
+            prior_mean, prior_logvar = apply_masked(
+                self.decoder, (prior_state,), active
+            )
+            updated_state = apply_masked(
+                self.update_state, (prior_state, observation), context_step
+            )
+            next_state = torch.where(
+                context_step.unsqueeze(-1),
+                updated_state,
+                prior_state,
+            )
+            post_state = torch.where(active.unsqueeze(-1), next_state, post_state)
             posterior_mean, posterior_logvar = apply_masked(
-                self.decoder, (post_state,), mask
+                self.decoder, (post_state,), active
             )
 
             prior_means_list.append(prior_mean)
@@ -655,28 +656,15 @@ class GRU_ODE_Bayes(nn.Module):
 
         self.prior_means = torch.stack(prior_means_list, dim=-2)
         self.prior_logvars = torch.stack(prior_logvars_list, dim=-2)
-        self.posterior_means = torch.stack(posterior_means_list, dim=-2)
-        self.posterior_logvars = torch.stack(posterior_logvars_list, dim=-2)
+        self.post_means = torch.stack(posterior_means_list, dim=-2)
+        self.post_logvars = torch.stack(posterior_logvars_list, dim=-2)
 
-        pred_means_list = []
-        pred_logvars_list = []
-        state = post_state
-        for dt, mask, feature_mask in zip(
-            query_deltas.unbind(dim=-1),
-            query_mask.any(dim=-1).unbind(dim=-1),
-            query_mask.unbind(dim=-2),
-            strict=True,
-        ):
-            next_state = apply_masked(self.propagate_state, (dt, state), mask)
-            state = torch.where(mask.unsqueeze(-1), next_state, state)
-            pred_mean, pred_logvar = apply_masked(self.decoder, (state,), mask)
-            pred_means_list.append(pred_mean.masked_fill(~feature_mask, torch.nan))
-            pred_logvars_list.append(pred_logvar.masked_fill(~feature_mask, torch.nan))
+        self.prior_means = self.prior_means.masked_fill(~mean_mask, nan)
+        self.prior_logvars = self.prior_logvars.masked_fill(~mean_mask, nan)
+        self.post_means = self.post_means.masked_fill(~mean_mask, nan)
+        self.post_logvars = self.post_logvars.masked_fill(~mean_mask, nan)
 
-        return (
-            torch.stack(pred_means_list, dim=-2),
-            torch.stack(pred_logvars_list, dim=-2),
-        )
+        return self.post_means, self.post_logvars
 
 
 def gaussian_kl(
