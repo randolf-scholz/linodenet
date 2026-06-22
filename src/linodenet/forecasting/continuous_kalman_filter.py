@@ -259,10 +259,44 @@ class ContinuousKalmanFilter(nn.Module):
         nn.init.kaiming_uniform_(t)
         return t
 
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, D), bool
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,  # t₀, ()
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $N + $K, D), (*S, ...)
+        r"""Sample from the time-marginal distribution and yield log-probabilities.
+
+        .. math:: p_{marg} = ∏ₖ p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        raise NotImplementedError
+
+    def log_prob(
+        self,
+        values: Tensor,  # (..., $N + $K, D)
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, D), bool
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,  # t₀, ()
+    ) -> Tensor:
+        r"""Compute the time-marginal log-likelihood of the model.
+
+        .. math:: p_{marg} = ∏ₖ p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        raise NotImplementedError
+
     def forward(
         self,
         times: Tensor,  # (..., $N + $K)
-        values: Tensor,  # (..., $N + $K, D)
+        context_values: Tensor,  # (..., $N + $K, D)
         context_mask: Tensor,  # (..., $N + $K, D), bool
         query_mask: Tensor,  # (..., $N + $K, D), bool
         *,  # μ₀=(..., D) Σ₀=(..., D, D)
@@ -273,7 +307,7 @@ class ContinuousKalmanFilter(nn.Module):
 
         Args:
             times: Combined context and query time points.
-            values: Sparse observations at context time points.
+            context_values: Sparse observations at context time points.
             context_mask: Boolean mask selecting observed entries in ``values``.
             query_mask: Boolean mask selecting requested forecast entries.
             initial_state: Optional initial latent state $(μ₀, Σ₀)$.
@@ -297,7 +331,7 @@ class ContinuousKalmanFilter(nn.Module):
         if self.batch_first:
             # Move the time axis to the front.
             times = times.moveaxis(-1, 0)
-            values = values.moveaxis(-2, 0)
+            context_values = context_values.moveaxis(-2, 0)
             context_mask = context_mask.moveaxis(-2, 0)
             query_mask = query_mask.moveaxis(-2, 0)
             valid_steps = valid_steps.moveaxis(-1, 0)
@@ -305,9 +339,9 @@ class ContinuousKalmanFilter(nn.Module):
         # check the shapes
         m = self.input_size
         n = self.hidden_size
-        num_steps, *batch_shape, _ = values.shape
+        num_steps, *batch_shape, _ = context_values.shape
         assert times.shape == (num_steps, *batch_shape)
-        assert values.shape == (num_steps, *batch_shape, m)
+        assert context_values.shape == (num_steps, *batch_shape, m)
         assert context_mask.shape == (num_steps, *batch_shape, m)
         assert query_mask.shape == (num_steps, *batch_shape, m)
         assert valid_steps.shape == (num_steps, *batch_shape)
@@ -338,7 +372,7 @@ class ContinuousKalmanFilter(nn.Module):
 
         for t_obs, y_obs, mask, active in zip(
             times,
-            values,
+            context_values,
             context_mask,
             valid_steps,
             strict=True,
