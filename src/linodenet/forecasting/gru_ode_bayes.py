@@ -33,6 +33,77 @@ import torch
 import torchode as to
 from torch import Tensor, nan, nn
 
+_LOG2PI = math.log(2.0 * math.pi)
+
+
+def _marginal_logvar_gaussian_log_prob(
+    values: Tensor,
+    *,
+    mean: Tensor,
+    logvar: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    r"""Compute log-likelihoods of masked diagonal Gaussian marginals."""
+    assert values.shape == mean.shape == logvar.shape
+    assert mask.shape == values.shape
+    assert mask.dtype == torch.bool
+
+    centered = torch.where(mask, values - mean, torch.zeros_like(values))
+    safe_logvar = torch.where(mask, logvar, torch.zeros_like(logvar))
+    log_prob = -0.5 * (
+        centered.square() * torch.exp(-safe_logvar) + safe_logvar + _LOG2PI
+    )
+    return torch.where(mask, log_prob, torch.zeros_like(log_prob)).sum(dim=-1)
+
+
+def _marginal_logvar_gaussian_sample(
+    size: int | tuple[int, ...] = (),
+    *,
+    mean: Tensor,
+    logvar: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    r"""Sample from masked diagonal Gaussian marginals."""
+    assert mean.shape == logvar.shape
+    assert mask.shape == mean.shape
+    assert mask.dtype == torch.bool
+
+    sample_shape = (size,) if isinstance(size, int) else size
+    safe_mean = torch.where(mask, mean, torch.zeros_like(mean))
+    safe_logvar = torch.where(mask, logvar, torch.zeros_like(logvar))
+    noise = torch.randn(
+        (*sample_shape, *mean.shape),
+        dtype=mean.dtype,
+        device=mean.device,
+    )
+    samples = (
+        safe_mean.expand(*sample_shape, *mean.shape)
+        + torch.exp(0.5 * safe_logvar).expand(*sample_shape, *mean.shape) * noise
+    )
+    return samples.masked_fill(~mask.expand(*sample_shape, *mask.shape), nan)
+
+
+def _marginal_logvar_gaussian_sample_and_log_prob(
+    size: int | tuple[int, ...] = (),
+    *,
+    mean: Tensor,
+    logvar: Tensor,
+    mask: Tensor,
+) -> tuple[Tensor, Tensor]:
+    r"""Sample from masked diagonal Gaussian marginals and score the samples."""
+    samples = _marginal_logvar_gaussian_sample(
+        size,
+        mean=mean,
+        logvar=logvar,
+        mask=mask,
+    )
+    return samples, _marginal_logvar_gaussian_log_prob(
+        samples,
+        mean=mean.expand(*samples.shape),
+        logvar=logvar.expand(*samples.shape),
+        mask=mask.expand(*samples.shape),
+    )
+
 
 def update_masked(
     fn: Callable[..., Tensor],  # [*(..., *dᵢ)] -> (..., *e)
@@ -562,6 +633,104 @@ class GRU_ODE_Bayes(nn.Module):
         mean, logvar = self.decoder(prior_state)
 
         return self.update_cell(prior_state, observation, mean, logvar)
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, D), bool
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:  # (*S, ..., $N + $K, D)
+        r"""Sample from the time-marginal distribution.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, logvar = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return _marginal_logvar_gaussian_sample(
+            sample_shape,
+            mean=mean,
+            logvar=logvar,
+            mask=query_mask,
+        )
+
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, D), bool
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $N + $K, D), (*S, ..., $N + $K)
+        r"""Sample from the time-marginal distribution and yield log-probabilities.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, logvar = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return _marginal_logvar_gaussian_sample_and_log_prob(
+            sample_shape,
+            mean=mean,
+            logvar=logvar,
+            mask=query_mask,
+        )
+
+    def log_prob(
+        self,
+        values: Tensor,  # (..., $N + $K, D)
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, D), bool
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:  # (..., $N + $K)
+        r"""Compute the time-marginal log-likelihood of the model.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        mean, logvar = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        num_extra_dims = values.ndim - mean.ndim
+        if num_extra_dims < 0 or values.shape[num_extra_dims:] != mean.shape:
+            raise ValueError(
+                f"Expected values.shape={mean.shape} with optional leading sample "
+                f"dimensions, got {values.shape}."
+            )
+        return _marginal_logvar_gaussian_log_prob(
+            values,
+            mean=mean.expand(*values.shape),
+            logvar=logvar.expand(*values.shape),
+            mask=query_mask.expand(*values.shape),
+        )
 
     def forward(
         self,

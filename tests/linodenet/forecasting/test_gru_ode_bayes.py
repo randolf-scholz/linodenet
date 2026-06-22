@@ -299,11 +299,11 @@ class TestGRUODEBayes:
         )
         time_model.load_state_dict(batch_model.state_dict())
 
-        context_times = torch.tensor([[0.0, 0.5], [0.0, torch.nan]])
+        context_times = torch.tensor([[0.0, 0.5], [0.0, nan]])
         context_values = torch.randn(2, 2, 3)
-        context_values[0, 1, 2] = torch.nan
-        context_values[1, 1] = torch.nan
-        query_times = torch.tensor([[0.75, 1.0], [0.25, torch.nan]])
+        context_values[0, 1, 2] = nan
+        context_values[1, 1] = nan
+        query_times = torch.tensor([[0.75, 1.0], [0.25, nan]])
         query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
         combined = BatchedDenseArgs(
             context_times=context_times,
@@ -343,6 +343,167 @@ class TestGRUODEBayes:
             time_model.post_logvars.moveaxis(0, -2),
             batch_model.post_logvars,
             equal_nan=True,
+        )
+
+    def test_log_prob_returns_time_marginal_likelihoods(self) -> None:
+        r"""Check GRU-ODE-Bayes log-probabilities are returned per time step."""
+        torch.manual_seed(0)
+        model = GRU_ODE_Bayes(
+            input_size=3,
+            hidden_size=5,
+            decoder=Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7),
+            flow=ODE_Flow(
+                GRU_ODE(5),
+                TorchODESolver.new("euler", step_size=0.1),
+            ),
+            update_cell=GRU_Bayes(
+                input_size=3,
+                hidden_size=5,
+                feature_embedding_size=2,
+            ),
+        )
+        times = torch.tensor([0.0, 0.5, 1.0, 1.5])
+        context_values = torch.randn(4, 3)
+        context_mask = torch.tensor(
+            [
+                [True, True, False],
+                [True, False, True],
+                [False, False, False],
+                [True, True, True],
+            ]
+        )
+        context_values = context_values.masked_fill(~context_mask, nan)
+        query_mask = torch.tensor(
+            [
+                [False, False, False],
+                [False, True, False],
+                [True, False, True],
+                [False, False, False],
+            ]
+        )
+        values = torch.randn(4, 3).masked_fill(~query_mask, nan)
+
+        log_prob = model.log_prob(
+            values,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+        mean, logvar = model(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+        )
+        expected = -model.nll_logvar(values, mean, logvar, query_mask).sum(dim=-1)
+
+        assert log_prob.shape == times.shape
+        torch.testing.assert_close(log_prob, expected)
+        torch.testing.assert_close(log_prob[~query_mask.any(dim=-1)], torch.zeros(2))
+
+    def test_sample_returns_time_marginal_samples(self) -> None:
+        r"""Check GRU-ODE-Bayes samples have the requested sample and query shape."""
+        torch.manual_seed(0)
+        model = GRU_ODE_Bayes(
+            input_size=3,
+            hidden_size=5,
+            decoder=Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7),
+            flow=ODE_Flow(
+                GRU_ODE(5),
+                TorchODESolver.new("euler", step_size=0.1),
+            ),
+            update_cell=GRU_Bayes(
+                input_size=3,
+                hidden_size=5,
+                feature_embedding_size=2,
+            ),
+        )
+        times = torch.tensor([0.0, 0.5, 1.0])
+        context_values = torch.randn(3, 3)
+        context_mask = torch.tensor(
+            [
+                [True, False, True],
+                [False, False, False],
+                [True, True, False],
+            ]
+        )
+        context_values = context_values.masked_fill(~context_mask, nan)
+        query_mask = torch.tensor(
+            [
+                [False, True, False],
+                [True, False, True],
+                [False, False, False],
+            ]
+        )
+
+        samples = model.sample(
+            5,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+
+        assert samples.shape == (5, *context_values.shape)
+        assert samples[:, query_mask].isfinite().all()
+        assert samples[:, ~query_mask].isnan().all()
+
+    def test_sample_and_log_prob_returns_time_marginal_likelihoods(self) -> None:
+        r"""Check GRU-ODE-Bayes samples and log-probabilities use query masks."""
+        torch.manual_seed(0)
+        model = GRU_ODE_Bayes(
+            input_size=3,
+            hidden_size=5,
+            decoder=Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7),
+            flow=ODE_Flow(
+                GRU_ODE(5),
+                TorchODESolver.new("euler", step_size=0.1),
+            ),
+            update_cell=GRU_Bayes(
+                input_size=3,
+                hidden_size=5,
+                feature_embedding_size=2,
+            ),
+        )
+        times = torch.tensor([[0.0, 0.5, 1.0], [0.0, 0.25, 0.75]])
+        context_values = torch.randn(2, 3, 3)
+        context_mask = torch.tensor(
+            [
+                [[True, False, True], [False, False, False], [True, True, True]],
+                [[True, True, False], [True, False, True], [False, False, False]],
+            ]
+        )
+        context_values = context_values.masked_fill(~context_mask, nan)
+        query_mask = torch.tensor(
+            [
+                [[False, True, False], [True, False, True], [False, False, False]],
+                [[False, False, False], [False, True, False], [True, True, False]],
+            ]
+        )
+
+        samples, log_prob = model.sample_and_log_prob(
+            (2, 3),
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+        expected = -model.nll_logvar(
+            samples,
+            model.post_means.expand(2, 3, *model.post_means.shape),
+            model.post_logvars.expand(2, 3, *model.post_logvars.shape),
+            query_mask.expand(2, 3, *query_mask.shape),
+        ).sum(dim=-1)
+
+        assert samples.shape == (2, 3, *context_values.shape)
+        assert log_prob.shape == (2, 3, *times.shape)
+        assert samples[..., query_mask].isfinite().all()
+        assert samples[..., ~query_mask].isnan().all()
+        torch.testing.assert_close(log_prob, expected)
+        torch.testing.assert_close(
+            log_prob[..., ~query_mask.any(dim=-1)],
+            torch.zeros_like(log_prob[..., ~query_mask.any(dim=-1)]),
         )
 
     def test_update_masked_update_state_with_empty_selection(self) -> None:
