@@ -63,29 +63,39 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
             query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
+            query_values=inputs.query_values,
         )
         combined = dense.to_combined()
-        posterior_mean, posterior_logvar = model(
-            combined.times,
-            combined.context_values,
-            combined.context_mask,
-            combined.query_mask,
+        assert combined.query_values is not None
+        log_prob = model.log_prob(
+            combined.query_values,
+            times=combined.times,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+            query_mask=combined.query_mask,
         )
+        posterior_mean = model.post_means
+        posterior_logvar = model.post_logvars
         query_steps = combined.query_mask.any(dim=-1)
         query_mean = posterior_mean[query_steps]
         query_logvar = posterior_logvar[query_steps]
+        query_log_prob = log_prob[query_steps]
         query_mean[~combined.query_mask[query_steps]] = nan
         query_logvar[~combined.query_mask[query_steps]] = nan
         pred_mean = torch.full_like(inputs.query_values, nan)
         pred_logvar = torch.full_like(inputs.query_values, nan)
+        pred_log_prob = inputs.query_values.new_full(inputs.query_times.shape, nan)
         pred_mean[inputs.query_mask] = query_mean
         pred_logvar[inputs.query_mask] = query_logvar
+        pred_log_prob[inputs.query_mask] = query_log_prob
 
         assert pred_mean.shape == inputs.query_values.shape
         assert pred_logvar.shape == inputs.query_values.shape
+        assert pred_log_prob.shape == inputs.query_times.shape
         assert pred_mean[inputs.query_mask].isfinite().all()
         assert pred_logvar[inputs.query_mask].isfinite().all()
-        return pred_mean, pred_logvar
+        assert pred_log_prob[inputs.query_mask].isfinite().all()
+        return pred_mean, pred_logvar, pred_log_prob.unsqueeze(-1).expand_as(pred_mean)
 
     def loss(
         self,
@@ -94,11 +104,10 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         targets: torch.Tensor,
     ) -> torch.Tensor:
         r"""Return NeuralFlow negative log-likelihood for predictions."""
-        pred_mean, pred_logvar = predictions
+        del model
+        _, _, pred_log_prob = predictions
         mask = targets.isfinite()
-        return (
-            model.nll_logvar(targets, pred_mean, pred_logvar, mask).sum() / mask.sum()
-        )
+        return -pred_log_prob[..., 0][mask.any(dim=-1)].sum() / mask.sum()
 
     def test_instantiation_from_config(self) -> None:
         config = self.STANDARD_CONFIG

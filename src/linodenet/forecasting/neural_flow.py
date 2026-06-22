@@ -2,14 +2,13 @@ r"""Neural Flow state propagation operators and forecasting model.
 
 This module reimplements the flow operators used in the Neural Flows
 experiments without depending on :mod:`stribor`. The operator modules follow
-the structural state-propagation protocol used by ``linodenet.state_propagation``:
+the single-step propagation interface used by ``GRU_ODE_Bayes``:
 
-``forward(timedeltas, state) -> trajectory``
+``forward(delta_time, state) -> state``
 
-where ``timedeltas`` has shape ``(..., T)``, ``state`` has shape ``(..., D)``,
-and the returned trajectory has shape ``(..., T, D)``. The ``NeuralFlow``
-forecasting model adapts these operators to the GRU-ODE-Bayes forecasting
-interface.
+where ``delta_time`` has shape ``(...)`` and ``state`` has shape ``(..., D)``.
+The ``NeuralFlow`` forecasting model adapts these operators to the
+GRU-ODE-Bayes forecasting interface.
 """
 
 __all__ = [
@@ -158,21 +157,6 @@ class TimeEmbedding(nn.Module):
                 raise AssertionError("unreachable")
 
 
-def _prepare_inputs(
-    deltas: Tensor, state: Tensor, input_size: int
-) -> tuple[Tensor, Tensor]:
-    r"""Broadcast ``timedeltas`` and ``state`` to trajectory tensors."""
-    assert state.shape[-1] == input_size
-    assert deltas.ndim >= 1
-
-    batch_shape = torch.broadcast_shapes(deltas.shape[:-1], state.shape[:-1])
-    num_steps = deltas.shape[-1]
-    deltas = deltas.expand(*batch_shape, num_steps).unsqueeze(-1)
-    state = state.expand(*batch_shape, input_size).unsqueeze(-2)
-    state = state.expand(*batch_shape, num_steps, input_size)
-    return deltas, state
-
-
 def _ordered_mask(input_size: int, layer_index: int, /) -> Tensor:
     r"""Return the alternating ordered mask used by coupling layers."""
     if input_size == 1:
@@ -223,24 +207,29 @@ class CouplingFlowBlock(nn.Module):
             persistent=True,
         )
 
-    def _affine_parameters(self, deltas: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
+    def _affine_parameters(self, delta: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
+        # delta: (...), x: (..., H)
         mask = self.mask.to(device=x.device)
-        conditioner = torch.where(mask, x, torch.zeros_like(x))
-        params = self.net(torch.cat([conditioner, deltas], dim=-1))
-        params = params * self.time_net(deltas)
-        shift, log_scale = params.chunk(2, dim=-1)
+        conditioner = torch.where(mask, x, torch.zeros_like(x))  # (..., H)
+        inputs = torch.cat([conditioner, delta], dim=-1)  # (..., H+1)
+        params = self.net(inputs) * self.time_net(delta)  # (..., 2H)
+        shift, log_scale = params.chunk(2, dim=-1)  # (..., H), (..., H)
         log_scale = 0.8 * torch.tanh(log_scale)
         active = ~mask
         shift = torch.where(active, shift, torch.zeros_like(shift))
         log_scale = torch.where(active, log_scale, torch.zeros_like(log_scale))
         return shift, log_scale
 
-    def forward(self, deltas: Tensor, x: Tensor, /) -> Tensor:
-        shift, log_scale = self._affine_parameters(deltas, x)
+    def forward(self, delta: Tensor, x: Tensor, /) -> Tensor:
+        # [delta=(...), state=(..., H)] -> (..., H)
+        delta = delta[..., None]  # (..., 1)
+        shift, log_scale = self._affine_parameters(delta, x)
         return torch.exp(log_scale) * x + shift
 
-    def inverse(self, deltas: Tensor, y: Tensor, /) -> Tensor:
-        shift, log_scale = self._affine_parameters(deltas, y)
+    def inverse(self, delta: Tensor, y: Tensor, /) -> Tensor:
+        # [delta=(...), state=(..., H)] -> (..., H)
+        delta = delta[..., None]  # (..., 1)
+        shift, log_scale = self._affine_parameters(delta, y)
         return (y - shift) * torch.exp(-log_scale)
 
 
@@ -283,19 +272,19 @@ class CouplingFlow(ModuleSequence[CouplingFlowBlock]):
         self.input_size = input_size
         self.num_layers = num_layers
 
-    def forward(self, deltas: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for each requested time delta."""
-        deltas, x = _prepare_inputs(deltas, state, self.input_size)
+    def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for a single time delta."""
+        # [delta=(...), state=(..., H)] -> (..., H)
         for block in self:
-            x = block(deltas, x)
-        return x
+            state = block(delta, state)
+        return state
 
-    def inverse(self, deltas: Tensor, state: Tensor, /) -> Tensor:
-        r"""Apply the inverse flow for each requested time delta."""
-        deltas, x = _prepare_inputs(deltas, state, self.input_size)
+    def inverse(self, delta: Tensor, state: Tensor, /) -> Tensor:
+        r"""Apply the inverse flow for a single time delta."""
+        # [delta=(...), state=(..., H)] -> (..., H)
         for block in reversed(self):
-            x = block.inverse(deltas, x)
-        return x
+            state = block.inverse(delta, state)
+        return state
 
 
 class ResNetFlowBlock(nn.Module):
@@ -329,18 +318,23 @@ class ResNetFlowBlock(nn.Module):
         )
         self.residual_scale = 0.8 if invertible else 1.0
 
-    def forward(self, delta: Tensor, x: Tensor, /) -> Tensor:
-        residual = self.residual(torch.cat([x, delta], dim=-1))
+    def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
+        # [delta=(...), state=(..., H)] -> (..., H)
+        delta = delta[..., None]  # (..., 1)
+        inputs = torch.cat([state, delta], dim=-1)  # (..., H+1)
+        residual = self.residual(inputs)
         residual = self.residual_scale * torch.tanh(residual)
-        return x + self.time_net(delta) * residual
+        return state + self.time_net(delta) * residual
 
     def inverse(self, delta: Tensor, y: Tensor, /, *, iterations: int = 100) -> Tensor:
-        x = y
+        # [delta=(...), state=(..., H)] -> (..., H)
+        delta = delta[..., None]
         for _ in range(iterations):
-            residual = self.residual(torch.cat([x, delta], dim=-1))
+            inputs = torch.cat([y, delta], dim=-1)  # (..., H+1)
+            residual = self.residual(inputs)
             residual = self.residual_scale * torch.tanh(residual)
-            x = y - self.time_net(delta) * residual
-        return x
+            y = y - self.time_net(delta) * residual
+        return y
 
 
 class ResNetFlow(ModuleSequence[ResNetFlowBlock]):
@@ -375,26 +369,21 @@ class ResNetFlow(ModuleSequence[ResNetFlowBlock]):
         self.input_size = input_size
         self.num_layers = num_layers
 
-    def forward(self, deltas: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for each requested time delta."""
-        deltas, x = _prepare_inputs(deltas, state, self.input_size)
+    def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for a single time delta."""
+        # [delta=(...), state=(..., H)] -> (..., H)
         for block in self:
-            x = block(deltas, x)
-        return x
+            state = block(delta, state)
+        return state
 
     def inverse(
-        self,
-        delta: Tensor,
-        state: Tensor,
-        /,
-        *,
-        iterations: int = 100,
+        self, delta: Tensor, state: Tensor, /, *, iterations: int = 100
     ) -> Tensor:
-        r"""Apply the fixed-point inverse for each requested time delta."""
-        delta, x = _prepare_inputs(delta, state, self.input_size)
+        r"""Apply the fixed-point inverse for a single time delta."""
+        # [delta=(...), state=(..., H)] -> (..., H)
         for block in reversed(self):
-            x = block.inverse(delta, x, iterations=iterations)
-        return x
+            state = block.inverse(delta, state, iterations=iterations)
+        return state
 
 
 class GRUFlowBlock(nn.Module):
@@ -437,31 +426,31 @@ class GRUFlowBlock(nn.Module):
         self.alpha = 2 / 5
         self.beta = 4 / 5
 
-    def residual(self, deltas: Tensor, state: Tensor, /) -> Tensor:
+    def residual(self, delta: Tensor, state: Tensor, /) -> Tensor:
         r"""Return the GRU-style residual update."""
-        inp = torch.cat([state, deltas], dim=-1)
+        # delta: (..., 1), state: (..., H)
+        inp = torch.cat([state, delta], dim=-1)  # (..., H+1)
         reset = self.beta * torch.sigmoid(self.lin_hr(inp))
         update = self.alpha * torch.sigmoid(self.lin_hz(inp))
-        candidate = torch.tanh(self.lin_hh(torch.cat([reset * state, deltas], dim=-1)))
+        candidate_inp = torch.cat([reset * state, delta], dim=-1)  # (..., H+1)
+        candidate = torch.tanh(self.lin_hh(candidate_inp))
         return update * (candidate - state)
 
-    def forward(self, deltas: Tensor, state: Tensor, /) -> Tensor:
+    def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
         r"""Apply one GRU-flow block."""
-        return state + self.time_net(deltas) * self.residual(deltas, state)
+        # [delta=(...), state=(..., H)] -> (..., H)
+        delta = delta[..., None]  # (..., 1)
+        return state + self.time_net(delta) * self.residual(delta, state)
 
     def inverse(
-        self,
-        deltas: Tensor,
-        state: Tensor,
-        /,
-        *,
-        iterations: int = 100,
+        self, delta: Tensor, state: Tensor, /, *, iterations: int = 100
     ) -> Tensor:
         r"""Invert the block by fixed-point iteration."""
-        x = state
+        # [delta=(...), state=(..., H)] -> (..., H)
+        delta = delta[..., None]  # (..., 1)
         for _ in range(iterations):
-            x = state - self.time_net(deltas) * self.residual(deltas, x)
-        return x
+            state = state - self.time_net(delta) * self.residual(delta, state)
+        return state
 
 
 class GRUFlow(ModuleSequence[GRUFlowBlock]):
@@ -492,21 +481,21 @@ class GRUFlow(ModuleSequence[GRUFlowBlock]):
         self.input_size = input_size
         self.num_layers = num_layers
 
-    def forward(self, deltas: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for each requested time delta."""
-        deltas, x = _prepare_inputs(deltas, state, self.input_size)
+    def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
+        r"""Propagate ``state`` for a single time delta."""
+        # [delta=(...), state=(..., H)] -> (..., H)
         for block in self:
-            x = block(deltas, x)
-        return x
+            state = block(delta, state)
+        return state
 
     def inverse(
-        self, deltas: Tensor, state: Tensor, /, *, iterations: int = 100
+        self, delta: Tensor, state: Tensor, /, *, iterations: int = 100
     ) -> Tensor:
-        r"""Apply the fixed-point inverse for each requested time delta."""
-        deltas, x = _prepare_inputs(deltas, state, self.input_size)
+        r"""Apply the fixed-point inverse for a single time delta."""
+        # [delta=(...), state=(..., H)] -> (..., H)
         for block in reversed(self):
-            x = block.inverse(deltas, x, iterations=iterations)
-        return x
+            state = block.inverse(delta, state, iterations=iterations)
+        return state
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
