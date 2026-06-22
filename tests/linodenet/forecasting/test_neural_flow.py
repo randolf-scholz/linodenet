@@ -59,6 +59,8 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
             inputs.query_times,
             inputs.context_times,
             inputs.context_values,
+            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
+            context_mask=inputs.context_values.isfinite(),
         )
 
         assert pred_mean.shape == inputs.query_values.shape
@@ -148,9 +150,15 @@ def test_flow_layers(
     context_values = torch.randn(2, 3, 3)
     context_values[1, 2] = torch.nan
     query_times = torch.tensor([[1.0, 1.4], [0.8, torch.nan]])
+    query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-    pred_mean, pred_logvar = model(query_times, context_times, context_values)
-    query_mask = query_times.isfinite()
+    pred_mean, pred_logvar = model(
+        query_times,
+        context_times,
+        context_values,
+        query_mask=query_mask,
+        context_mask=context_values.isfinite(),
+    )
 
     assert isinstance(model.flow, flow_type)
     assert pred_mean.shape == (2, 2, 3)

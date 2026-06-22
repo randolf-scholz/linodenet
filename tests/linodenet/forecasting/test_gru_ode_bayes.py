@@ -84,6 +84,8 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
             inputs.query_times,
             inputs.context_times,
             inputs.context_values,
+            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
+            context_mask=inputs.context_values.isfinite(),
         )
 
         assert pred_mean.shape == inputs.query_values.shape
@@ -199,16 +201,23 @@ class TestGRUODEBayes:
         context_values = torch.randn(2, 3, 3)
         context_values[0, 1, 2] = torch.nan
         context_values[1, 2] = torch.nan
+        context_mask = context_values.isfinite()
         query_times = torch.tensor(
             [
                 [1.2, 1.5],
                 [0.5, torch.nan],
             ]
         )
+        query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-        pred_mean, pred_logvar = model(query_times, context_times, context_values)
-        query_mask = query_times.isfinite()
-        context_mask = context_times.isfinite()
+        pred_mean, pred_logvar = model(
+            query_times,
+            context_times,
+            context_values,
+            query_mask=query_mask,
+            context_mask=context_mask,
+        )
+        context_step_mask = context_mask.any(dim=-1)
 
         assert pred_mean.shape == (2, 2, 3)
         assert pred_logvar.shape == (2, 2, 3)
@@ -221,10 +230,10 @@ class TestGRUODEBayes:
         assert model.prior_logvars.shape == (2, 3, 3)
         assert model.posterior_means.shape == (2, 3, 3)
         assert model.posterior_logvars.shape == (2, 3, 3)
-        assert model.prior_means[context_mask].isfinite().all()
-        assert model.posterior_logvars[context_mask].isfinite().all()
-        assert model.prior_means[~context_mask].isnan().all()
-        assert model.posterior_logvars[~context_mask].isnan().all()
+        assert model.prior_means[context_step_mask].isfinite().all()
+        assert model.posterior_logvars[context_step_mask].isfinite().all()
+        assert model.prior_means[~context_step_mask].isnan().all()
+        assert model.posterior_logvars[~context_step_mask].isnan().all()
 
     def test_apply_masked_update_state_with_empty_selection(self) -> None:
         r"""Check all-padding masks do not require forward-loop special cases."""

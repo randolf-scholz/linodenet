@@ -588,27 +588,40 @@ class GRU_ODE_Bayes(nn.Module):
         query_times: Tensor,  # (..., $K), possibly with trailing NaNs (padding)
         context_times: Tensor,  # (..., $N), possibly with trailing NaNs (padding)
         context_values: Tensor,  # (..., $N, D), possibly with NaNs
+        *,
+        query_mask: Tensor,  # (..., $K, D), bool
+        context_mask: Tensor,  # (..., $N, D), bool
     ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
         r"""Return predictive distribution parameters at ``query_times``.
 
-        Padded time steps are represented by ``NaN`` times. Context values may
-        contain feature-level ``NaN`` entries; finite entries are used in the
-        Bayesian jump, missing entries are ignored.
+        Context and query masks explicitly select valid feature-level entries.
+        Context values outside ``context_mask`` are ignored.
         """
         *batch_shape, num_steps = context_times.shape
+        query_size = query_times.shape[-1]
         assert context_values.shape == (*batch_shape, num_steps, self.input_size)
+        assert context_mask.shape == (*batch_shape, num_steps, self.input_size)
+        assert query_times.shape == (*batch_shape, query_size)
+        assert query_mask.shape == (*batch_shape, query_size, self.input_size)
+        assert context_mask.dtype == torch.bool
+        assert query_mask.dtype == torch.bool
 
-        query_mask = query_times.isfinite()
-        context_mask = context_times.isfinite()
+        context_values = context_values.masked_fill(~context_mask, torch.nan)
+        context_step_mask = context_mask.any(dim=-1)
+        query_step_mask = query_mask.any(dim=-1)
+        assert context_times[context_step_mask].isfinite().all()
+        assert query_times[query_step_mask].isfinite().all()
 
-        context_lengths = context_mask.sum(dim=-1)  # (...)
+        context_lengths = context_step_mask.sum(dim=-1)  # (...)
         last_context_time = torch.take_along_dim(
             context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
         )
         context_deltas = context_times.diff(prepend=context_times[..., [0]])
         query_deltas = query_times.diff(prepend=last_context_time)
-        assert (context_deltas[context_mask] >= 0).all(), "context times not sorted"
-        assert (query_deltas[query_mask] >= 0).all(), "query times not sorted"
+        assert (context_deltas[context_step_mask] >= 0).all(), (
+            "context times not sorted"
+        )
+        assert (query_deltas[query_step_mask] >= 0).all(), "query times not sorted"
 
         # initialize 𝐡₀
         post_state = self.initial_state.expand(*batch_shape, self.hidden_size)
@@ -621,7 +634,7 @@ class GRU_ODE_Bayes(nn.Module):
         for dt, observation, mask in zip(
             context_deltas.unbind(dim=-1),
             context_values.unbind(dim=-2),
-            context_mask.unbind(dim=-1),
+            context_mask.any(dim=-1).unbind(dim=-1),
             strict=True,
         ):
             prior_state = apply_masked(self.propagate_state, (dt, post_state), mask)
@@ -648,16 +661,17 @@ class GRU_ODE_Bayes(nn.Module):
         pred_means_list = []
         pred_logvars_list = []
         state = post_state
-        for dt, mask in zip(
+        for dt, mask, feature_mask in zip(
             query_deltas.unbind(dim=-1),
-            query_mask.unbind(dim=-1),
+            query_mask.any(dim=-1).unbind(dim=-1),
+            query_mask.unbind(dim=-2),
             strict=True,
         ):
             next_state = apply_masked(self.propagate_state, (dt, state), mask)
             state = torch.where(mask.unsqueeze(-1), next_state, state)
             pred_mean, pred_logvar = apply_masked(self.decoder, (state,), mask)
-            pred_means_list.append(pred_mean)
-            pred_logvars_list.append(pred_logvar)
+            pred_means_list.append(pred_mean.masked_fill(~feature_mask, torch.nan))
+            pred_logvars_list.append(pred_logvar.masked_fill(~feature_mask, torch.nan))
 
         return (
             torch.stack(pred_means_list, dim=-2),
