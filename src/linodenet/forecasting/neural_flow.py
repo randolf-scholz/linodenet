@@ -209,15 +209,13 @@ class CouplingFlowBlock(nn.Module):
 
     def _affine_parameters(self, delta: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
         # delta: (...), x: (..., H)
-        mask = self.mask.to(device=x.device)
-        conditioner = torch.where(mask, x, torch.zeros_like(x))  # (..., H)
+        conditioner = torch.where(self.mask, x, torch.zeros_like(x))  # (..., H)
         inputs = torch.cat([conditioner, delta], dim=-1)  # (..., H+1)
         params = self.net(inputs) * self.time_net(delta)  # (..., 2H)
         shift, log_scale = params.chunk(2, dim=-1)  # (..., H), (..., H)
         log_scale = 0.8 * torch.tanh(log_scale)
-        active = ~mask
-        shift = torch.where(active, shift, torch.zeros_like(shift))
-        log_scale = torch.where(active, log_scale, torch.zeros_like(log_scale))
+        shift = torch.where(~self.mask, shift, torch.zeros_like(shift))
+        log_scale = torch.where(~self.mask, log_scale, torch.zeros_like(log_scale))
         return shift, log_scale
 
     def forward(self, delta: Tensor, x: Tensor, /) -> Tensor:
