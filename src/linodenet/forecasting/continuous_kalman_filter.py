@@ -195,6 +195,38 @@ class ContinuousKalmanFilter(nn.Module):
     .. math::
         ∂ₜxₜ &= Fxₜ + wₜ  &  wₜ &~ N(0, Qₜ)  \\
           yₜ &= Hxₜ + vₜ  &  vₜ &~ N(0, Rₜ)
+
+    ------------------ older docstring content ---------------
+        .. math::
+        x̂ₜ₊₁ &= x̂ₜ + Pₜ Hₜᵀ(Hₜ Pₜ   Hₜᵀ + Rₜ)⁻¹ (yₜ - Hₜ x̂ₜ) \\
+        Pₜ₊₁ &= Pₜ - Pₜ Hₜᵀ(Hₜ Pₜ⁻¹ Hₜᵀ + Rₜ)⁻¹ Hₜ Pₜ⁻¹
+
+    In the case of missing data:
+
+    Substitute $yₜ← Sₜ⋅yₜ$, $Hₜ ← Sₜ⋅Hₜ$ and $Rₜ ← Sₜ⋅Rₜ⋅Sₜᵀ$ where $Sₜ$
+    is the $mₜ×m$ projection matrix of the missing values. In this case:
+
+    .. math::
+        x̂' &= x̂ + P⋅Hᵀ⋅Sᵀ(SHPHᵀSᵀ + SRSᵀ)⁻¹ (Sy - SHx̂) \\
+           &= x̂ + P⋅Hᵀ⋅Sᵀ(S (HPHᵀ + R) Sᵀ)⁻¹ S(y - Hx̂) \\
+           &= x̂ + P⋅Hᵀ⋅(S⁺S)ᵀ (HPHᵀ + R)⁻¹ (S⁺S) (y - Hx̂) \\
+           &= x̂ + P⋅Hᵀ⋅∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂) \\
+        P' &= P - P⋅Hᵀ⋅Sᵀ(S H P⁻¹ Hᵀ Sᵀ + SRSᵀ)⁻¹ SH P⁻¹ \\
+           &= P - P⋅Hᵀ⋅(S⁺S)ᵀ (H P⁻¹ Hᵀ + R)⁻¹ (S⁺S) H P⁻¹ \\
+           &= P - P⋅Hᵀ⋅∏ₘᵀ (H P⁻¹ Hᵀ + R)⁻¹ ∏ₘ H P⁻¹
+
+
+    .. note::
+        The Kalman filter is a linear filter. The non-linear version is also possible,
+        the so called Extended Kalman-Filter. Here, the non-linearity is linearized at
+        the time of update.
+
+        ..math ::
+            x̂' &= x̂ + P⋅Hᵀ(HPHᵀ + R)⁻¹ (y - h(x̂)) \\
+            P' &= P -  P⋅Hᵀ(HPHᵀ + R)⁻¹ H P
+
+        where $H = \frac{∂h}{∂x}|_{x̂}$. Note that the EKF is generally not an optimal
+        filter.
     """
 
     input_size: Final[int]
