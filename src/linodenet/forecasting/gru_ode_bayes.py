@@ -655,9 +655,12 @@ class GRU_ODE_Bayes(nn.Module):
             prior_mean, prior_logvar = apply_masked(
                 self.decoder, (prior_state,), active
             )
+
             # update the state
             updated_state = apply_masked(
-                self.update_state, (prior_state, observation), mask
+                self.update_cell,
+                (prior_state, observation, prior_mean, prior_logvar),
+                mask,
             )
             next_state = torch.where(mask[..., None], updated_state, prior_state)
             post_state = torch.where(active[..., None], next_state, post_state)
