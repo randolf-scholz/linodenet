@@ -13,12 +13,16 @@ GRU-ODE-Bayes forecasting interface.
 
 __all__ = [
     "CouplingFlow",
+    "CouplingFlowBlock",
     "FlowModelName",
     "GRUFlow",
     "GRUFlowBlock",
+    "ModuleSequence",
     "NeuralFlow",
     "NeuralFlowConfig",
     "ResNetFlow",
+    "ResNetFlowBlock",
+    "TimeEmbedding",
     "TimeNetName",
 ]
 
@@ -96,7 +100,7 @@ class TimeEmbedding(nn.Module):
     """
 
     output_size: Final[int]
-    num_frequencies: Final[int | None]
+    num_frequencies: Final[int]
     kind: Final[TimeNetName]
     weight: Tensor
     frequencies: Tensor
@@ -109,30 +113,28 @@ class TimeEmbedding(nn.Module):
         num_frequencies: int | None = None,
     ) -> None:
         super().__init__()
+        if num_frequencies is None:
+            num_frequencies = output_size
+
         self.output_size = output_size
         self.num_frequencies = num_frequencies
         self.kind = kind
 
+        n = self.output_size
+        k = self.num_frequencies
+
         match kind:
             case "TimeLinear":
-                self.weight = nn.Parameter(torch.ones(output_size))
-                self.register_buffer("frequencies", torch.empty(0), persistent=False)
+                self.weight = nn.Parameter(torch.ones(n))
+                self.register_buffer("frequencies", None)
             case "TimeTanh":
-                self.weight = nn.Parameter(torch.ones(output_size))
-                self.register_buffer("frequencies", torch.empty(0), persistent=False)
+                self.weight = nn.Parameter(torch.ones(n))
+                self.register_buffer("frequencies", None)
             case "TimeFourier" | "TimeFourierBounded":
-                if num_frequencies is None:
-                    num_frequencies = output_size
-                self.weight = nn.Parameter(
-                    torch.empty(output_size, 2 * num_frequencies)
-                )
+                self.weight = nn.Parameter(torch.empty(n, 2 * k))
                 nn.init.xavier_uniform_(self.weight)
-                frequencies = torch.arange(
-                    1,
-                    num_frequencies + 1,
-                    dtype=torch.float32,
-                )
-                self.register_buffer("frequencies", frequencies, persistent=True)
+                frequencies = torch.arange(1, k + 1, dtype=torch.get_default_dtype())
+                self.register_buffer("frequencies", frequencies)
             case _:
                 raise ValueError(f"Unknown time network {kind!r}.")
 
@@ -144,13 +146,16 @@ class TimeEmbedding(nn.Module):
                 return deltas[..., None] * self.weight
             case "TimeTanh":
                 return torch.tanh(deltas[..., None] * self.weight)
-            case "TimeFourier" | "TimeFourierBounded":
-                angles = deltas[..., None] * self.frequencies.to(deltas)  # (..., F)
+            case "TimeFourier":
+                angles = deltas[..., None] * self.frequencies  # (..., F)
                 features = torch.cat([torch.sin(angles), torch.cos(angles) - 1], dim=-1)
                 output = torch.einsum("...h, oh -> ...o", features, self.weight)
-                if self.kind == "TimeFourierBounded":
-                    return torch.tanh(output)
                 return output
+            case "TimeFourierBounded":
+                angles = deltas[..., None] * self.frequencies  # (..., F)
+                features = torch.cat([torch.sin(angles), torch.cos(angles) - 1], dim=-1)
+                output = torch.einsum("...h, oh -> ...o", features, self.weight)
+                return torch.tanh(output)
             case _:
                 raise AssertionError("unreachable")
 
@@ -199,11 +204,7 @@ class CouplingFlowBlock(nn.Module):
             kind=time_net,
             num_frequencies=time_hidden_size,
         )
-        self.register_buffer(
-            "mask",
-            _ordered_mask(input_size, layer_index),
-            persistent=True,
-        )
+        self.register_buffer("mask", _ordered_mask(input_size, layer_index))
 
     def _affine_parameters(self, delta: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
         # delta: (...), x: (..., H)
