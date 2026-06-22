@@ -610,6 +610,8 @@ class ContinuousKalmanFilter(nn.Module):
             post_predicted_means.append(y_post)
             post_predicted_covs.append(S_post)
 
+        # TODO: consider optional backward pass with RTS smoother
+
         stack_dim_mean = -2 if self.batch_first else 0
         stack_dim_cov = -3 if self.batch_first else 0
 
