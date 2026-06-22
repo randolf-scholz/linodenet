@@ -27,7 +27,7 @@ __all__ = [
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Final, Protocol
+from typing import Any, Final
 
 import torch
 import torchode as to
