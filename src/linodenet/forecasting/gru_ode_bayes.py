@@ -246,19 +246,6 @@ class ODE_Flow(nn.Module):
         return self.forward(delta_time, state)
 
 
-class StateFlow(Protocol):
-    r"""One-step state propagation protocol used by forecasting models."""
-
-    def step(
-        self,
-        delta_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
-        /,
-    ) -> Tensor:  # (..., H)
-        r"""Propagate ``state`` for a single time delta."""
-        ...
-
-
 class GRU_ODE(nn.Module):
     r"""GRU-ODE $d𝐡(t)/dt = (1-𝐳(t))⊙(𝐠(t)-𝐡(t)).
 
@@ -521,7 +508,7 @@ class GRU_ODE_Bayes(nn.Module):
         hidden_size: int,
         *,
         decoder: nn.Module,
-        flow: StateFlow,
+        flow: nn.Module,
         update_cell: nn.Module,
         batch_first: bool = True,
     ) -> None:
@@ -555,28 +542,6 @@ class GRU_ODE_Bayes(nn.Module):
             nn.init.xavier_uniform_(module.weight)
             if module.bias is not None:
                 module.bias.data.fill_(0.05)
-
-    @staticmethod
-    def nll_logvar(
-        values: Tensor,
-        mean: Tensor,
-        logvar: Tensor,
-        mask: Tensor | None = None,
-    ) -> Tensor:
-        r"""Return elementwise diagonal Gaussian NLL from log-variances."""
-        if values.shape != mean.shape or values.shape != logvar.shape:
-            raise ValueError("values, mean, and logvar must have equal shapes.")
-        if mask is None:
-            mask = values.isfinite()
-        elif mask.shape != values.shape:
-            raise ValueError("mask must match values shape.")
-
-        valid = mask.bool()
-        centered = torch.where(valid, values.nan_to_num(0.0) - mean, 0.0)
-        nll = 0.5 * (
-            centered.square() * torch.exp(-logvar) + logvar + math.log(2 * math.pi)
-        )
-        return torch.where(valid, nll, 0.0)
 
     @staticmethod
     def gaussian_bayes_kl_logvar(
@@ -641,7 +606,7 @@ class GRU_ODE_Bayes(nn.Module):
         posterior_state: Tensor,  # (..., H)
     ) -> Tensor:  # (..., H)
         r"""Propagate a posterior state through the continuous GRU-ODE dynamics."""
-        return self.flow.step(delta_time, posterior_state)
+        return self.flow(delta_time, posterior_state)
 
     def update_state(
         self,

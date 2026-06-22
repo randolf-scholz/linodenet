@@ -50,7 +50,8 @@ class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
     if TYPE_CHECKING:
         _modules: Mapping[str, M]  # type: ignore[override]
 
-        def __init__(self, modules: Iterable[M] = (), /) -> None: ...
+        # noinspection PyMissingConstructor
+        def __init__(self, _: Iterable[M] = (), /) -> None: ...
         def __iter__(self) -> Iterator[M]: ...
 
     @overload
@@ -161,13 +162,8 @@ def _prepare_inputs(
     deltas: Tensor, state: Tensor, input_size: int
 ) -> tuple[Tensor, Tensor]:
     r"""Broadcast ``timedeltas`` and ``state`` to trajectory tensors."""
-    if state.shape[-1] != input_size:
-        raise ValueError(
-            f"state has incompatible last dimension: expected {input_size}, "
-            f"got {state.shape[-1]}."
-        )
-    if deltas.ndim < 1:
-        raise ValueError("timedeltas must have at least one dimension.")
+    assert state.shape[-1] == input_size
+    assert deltas.ndim >= 1
 
     batch_shape = torch.broadcast_shapes(deltas.shape[:-1], state.shape[:-1])
     num_steps = deltas.shape[-1]
@@ -286,10 +282,6 @@ class CouplingFlow(ModuleSequence[CouplingFlowBlock]):
         self.input_shape = (input_size,)
         self.input_size = input_size
         self.num_layers = num_layers
-
-    def step(self, deltas: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for a single time delta."""
-        return self.forward(deltas.unsqueeze(-1), state).squeeze(-2)
 
     def forward(self, deltas: Tensor, state: Tensor, /) -> Tensor:
         r"""Propagate ``state`` for each requested time delta."""
