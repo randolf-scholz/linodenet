@@ -652,28 +652,26 @@ class GRU_ODE_Bayes(nn.Module):
             )
 
             # get the prior prediction
-            prior_mean, prior_logvar = apply_masked(
-                self.decoder, (prior_state,), active
-            )
+            prior_mean, prior_logvar = self.decoder(prior_state)
+            prior_mean = torch.where(active[..., None], prior_mean, nan)
+            prior_logvar = torch.where(active[..., None], prior_logvar, nan)
 
             # update the state
             updated_state = apply_masked(
-                self.update_cell,
-                (prior_state, observation, prior_mean, prior_logvar),
-                mask,
+                self.update_state, (prior_state, observation), mask
             )
             next_state = torch.where(mask[..., None], updated_state, prior_state)
             post_state = torch.where(active[..., None], next_state, post_state)
 
             # get the posterior prediciton
-            posterior_mean, posterior_logvar = apply_masked(
-                self.decoder, (post_state,), active
-            )
+            post_mean, post_logvar = self.decoder(post_state)
+            post_mean = torch.where(active[..., None], post_mean, nan)
+            post_logvar = torch.where(active[..., None], post_logvar, nan)
 
             prior_means_list.append(prior_mean)
             prior_logvars_list.append(prior_logvar)
-            post_means_list.append(posterior_mean)
-            post_logvars_list.append(posterior_logvar)
+            post_means_list.append(post_mean)
+            post_logvars_list.append(post_logvar)
 
         stack_dim = -2 if self.batch_first else 0
         self.prior_means = torch.stack(prior_means_list, dim=stack_dim)
