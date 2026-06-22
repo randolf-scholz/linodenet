@@ -138,16 +138,14 @@ class TimeEmbedding(nn.Module):
 
     def forward(self, deltas: Tensor, /) -> Tensor:
         r"""Return a time-dependent multiplicative gate."""
-        if deltas.shape[-1] != 1:
-            raise ValueError("timedeltas must have a trailing singleton dimension.")
-
+        # deltas: (...), output: (..., E)
         match self.kind:
             case "TimeLinear":
-                return deltas * self.weight
+                return deltas[..., None] * self.weight
             case "TimeTanh":
-                return torch.tanh(deltas * self.weight)
+                return torch.tanh(deltas[..., None] * self.weight)
             case "TimeFourier" | "TimeFourierBounded":
-                angles = deltas * self.frequencies.to(deltas)
+                angles = deltas[..., None] * self.frequencies.to(deltas)  # (..., F)
                 features = torch.cat([torch.sin(angles), torch.cos(angles) - 1], dim=-1)
                 output = torch.einsum("...h, oh -> ...o", features, self.weight)
                 if self.kind == "TimeFourierBounded":
@@ -210,7 +208,7 @@ class CouplingFlowBlock(nn.Module):
     def _affine_parameters(self, delta: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
         # delta: (...), x: (..., H)
         conditioner = torch.where(self.mask, x, torch.zeros_like(x))  # (..., H)
-        inputs = torch.cat([conditioner, delta], dim=-1)  # (..., H+1)
+        inputs = torch.cat([conditioner, delta[..., None]], dim=-1)  # (..., H+1)
         params = self.net(inputs) * self.time_net(delta)  # (..., 2H)
         shift, log_scale = params.chunk(2, dim=-1)  # (..., H), (..., H)
         log_scale = 0.8 * torch.tanh(log_scale)
@@ -220,13 +218,11 @@ class CouplingFlowBlock(nn.Module):
 
     def forward(self, delta: Tensor, x: Tensor, /) -> Tensor:
         # [delta=(...), state=(..., H)] -> (..., H)
-        delta = delta[..., None]  # (..., 1)
         shift, log_scale = self._affine_parameters(delta, x)
         return torch.exp(log_scale) * x + shift
 
     def inverse(self, delta: Tensor, y: Tensor, /) -> Tensor:
         # [delta=(...), state=(..., H)] -> (..., H)
-        delta = delta[..., None]  # (..., 1)
         shift, log_scale = self._affine_parameters(delta, y)
         return (y - shift) * torch.exp(-log_scale)
 
@@ -318,17 +314,15 @@ class ResNetFlowBlock(nn.Module):
 
     def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
         # [delta=(...), state=(..., H)] -> (..., H)
-        delta = delta[..., None]  # (..., 1)
-        inputs = torch.cat([state, delta], dim=-1)  # (..., H+1)
+        inputs = torch.cat([state, delta[..., None]], dim=-1)  # (..., H+1)
         residual = self.residual(inputs)
         residual = self.residual_scale * torch.tanh(residual)
         return state + self.time_net(delta) * residual
 
     def inverse(self, delta: Tensor, y: Tensor, /, *, iterations: int = 100) -> Tensor:
         # [delta=(...), state=(..., H)] -> (..., H)
-        delta = delta[..., None]
         for _ in range(iterations):
-            inputs = torch.cat([y, delta], dim=-1)  # (..., H+1)
+            inputs = torch.cat([y, delta[..., None]], dim=-1)  # (..., H+1)
             residual = self.residual(inputs)
             residual = self.residual_scale * torch.tanh(residual)
             y = y - self.time_net(delta) * residual
@@ -437,17 +431,17 @@ class GRUFlowBlock(nn.Module):
     def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
         r"""Apply one GRU-flow block."""
         # [delta=(...), state=(..., H)] -> (..., H)
-        delta = delta[..., None]  # (..., 1)
-        return state + self.time_net(delta) * self.residual(delta, state)
+        return state + self.time_net(delta) * self.residual(delta[..., None], state)
 
     def inverse(
         self, delta: Tensor, state: Tensor, /, *, iterations: int = 100
     ) -> Tensor:
         r"""Invert the block by fixed-point iteration."""
         # [delta=(...), state=(..., H)] -> (..., H)
-        delta = delta[..., None]  # (..., 1)
         for _ in range(iterations):
-            state = state - self.time_net(delta) * self.residual(delta, state)
+            state = state - self.time_net(delta) * self.residual(
+                delta[..., None], state
+            )
         return state
 
 
