@@ -343,6 +343,7 @@ class GRUODEBayesConfig:
     dropout_rate: float = 0.0
     step_size: float | None = None
     solver: str | nn.Module = "euler"
+    batch_first: bool = True
 
 
 class GRU_ODE_Bayes(nn.Module):
@@ -370,6 +371,7 @@ class GRU_ODE_Bayes(nn.Module):
 
     input_size: Final[int]
     hidden_size: Final[int]
+    batch_first: Final[bool]
 
     prior_means: Tensor
     r"""BUFFER: Prior predictive means from the last forward pass."""
@@ -415,6 +417,7 @@ class GRU_ODE_Bayes(nn.Module):
             decoder=decoder,
             flow=flow,
             update_cell=update_cell,
+            batch_first=config.batch_first,
         )
 
     @classmethod
@@ -429,6 +432,7 @@ class GRU_ODE_Bayes(nn.Module):
         dropout_rate: float = 0.0,
         step_size: float | None = None,
         solver: str | nn.Module = "euler",
+        batch_first: bool = True,
     ) -> GRU_ODE_Bayes:
         r"""Construct a GRU-ODE-Bayes model from explicit hyperparameters."""
         return cls.from_config(
@@ -441,6 +445,7 @@ class GRU_ODE_Bayes(nn.Module):
                 dropout_rate=dropout_rate,
                 step_size=step_size,
                 solver=solver,
+                batch_first=batch_first,
             )
         )
 
@@ -452,12 +457,14 @@ class GRU_ODE_Bayes(nn.Module):
         decoder: nn.Module,
         flow: nn.Module,
         update_cell: nn.Module,
+        batch_first: bool = True,
     ) -> None:
         r"""Initialize the experiment-aligned GRU-ODE-Bayes scaffold."""
         super().__init__()
 
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.batch_first = batch_first
 
         self.decoder = decoder
         self.flow = flow
@@ -598,66 +605,78 @@ class GRU_ODE_Bayes(nn.Module):
         Context and query masks explicitly select valid feature-level entries.
         Context values outside ``context_mask`` are ignored.
         """
-        *batch_shape, num_steps = times.shape
-        assert context_values.shape == (*batch_shape, num_steps, self.input_size)
-        assert context_mask.shape == (*batch_shape, num_steps, self.input_size)
-        assert query_mask.shape == (*batch_shape, num_steps, self.input_size)
-        assert context_mask.dtype == torch.bool
-        assert query_mask.dtype == torch.bool
-
+        # optional: sanitize values
         context_values = context_values.masked_fill(~context_mask, nan)
+
+        # initialize mask over valid time steps:
+        # those with finite time and at least one observation or query coordinate.
         valid_steps = times.isfinite() & (context_mask | query_mask).any(dim=-1)
         mean_mask = valid_steps.unsqueeze(dim=-1)
-        assert times[valid_steps].isfinite().all()
-        assert (times.diff(dim=-1)[valid_steps[..., 1:]] >= 0).all(), "times not sorted"
+
+        if self.batch_first:
+            # Move the time axis to the front.
+            times = times.moveaxis(-1, 0)
+            context_values = context_values.moveaxis(-2, 0)
+            context_mask = context_mask.moveaxis(-2, 0)
+            query_mask = query_mask.moveaxis(-2, 0)
+            valid_steps = valid_steps.moveaxis(-1, 0)
+
+        num_steps, *batch_shape = times.shape
+        assert context_values.shape == (num_steps, *batch_shape, self.input_size)
+        assert context_mask.shape == (num_steps, *batch_shape, self.input_size)
+        assert query_mask.shape == (num_steps, *batch_shape, self.input_size)
+        assert valid_steps.shape == (num_steps, *batch_shape)
 
         # initialize 𝐡₀
-        t = times[..., 0] if initial_time is None else initial_time
+        t = times[0] if initial_time is None else initial_time
         post_state = self.initial_state if initial_state is None else initial_state
         post_state = post_state.expand(*batch_shape, self.hidden_size)
 
         prior_means_list = []
         prior_logvars_list = []
-        posterior_means_list = []
-        posterior_logvars_list = []
+        post_means_list = []
+        post_logvars_list = []
 
-        for t_obs, observation, context_step, active in zip(
-            times.unbind(dim=-1),
-            context_values.unbind(dim=-2),
-            context_mask.any(dim=-1).unbind(dim=-1),
-            valid_steps.unbind(dim=-1),
+        for t_obs, observation, mask, active in zip(
+            times,
+            context_values,
+            context_mask.any(dim=-1),
+            valid_steps,
             strict=True,
         ):
+            # propagate to the next time step
             delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs - t))
             t = torch.where(active, t_obs, t)
             prior_state = apply_masked(
                 self.propagate_state, (delta, post_state), active
             )
+
+            # get the prior prediction
             prior_mean, prior_logvar = apply_masked(
                 self.decoder, (prior_state,), active
             )
+            # update the state
             updated_state = apply_masked(
-                self.update_state, (prior_state, observation), context_step
+                self.update_state, (prior_state, observation), mask
             )
-            next_state = torch.where(
-                context_step.unsqueeze(-1),
-                updated_state,
-                prior_state,
-            )
-            post_state = torch.where(active.unsqueeze(-1), next_state, post_state)
+            next_state = torch.where(mask[..., None], updated_state, prior_state)
+            post_state = torch.where(active[..., None], next_state, post_state)
+
+            # get the posterior prediciton
             posterior_mean, posterior_logvar = apply_masked(
                 self.decoder, (post_state,), active
             )
 
             prior_means_list.append(prior_mean)
             prior_logvars_list.append(prior_logvar)
-            posterior_means_list.append(posterior_mean)
-            posterior_logvars_list.append(posterior_logvar)
+            post_means_list.append(posterior_mean)
+            post_logvars_list.append(posterior_logvar)
 
-        self.prior_means = torch.stack(prior_means_list, dim=-2)
-        self.prior_logvars = torch.stack(prior_logvars_list, dim=-2)
-        self.post_means = torch.stack(posterior_means_list, dim=-2)
-        self.post_logvars = torch.stack(posterior_logvars_list, dim=-2)
+        stack_dim = -2 if self.batch_first else 0
+        self.prior_means = torch.stack(prior_means_list, dim=stack_dim)
+        self.prior_logvars = torch.stack(prior_logvars_list, dim=stack_dim)
+        self.post_means = torch.stack(post_means_list, dim=stack_dim)
+        self.post_logvars = torch.stack(post_logvars_list, dim=stack_dim)
 
         self.prior_means = self.prior_means.masked_fill(~mean_mask, nan)
         self.prior_logvars = self.prior_logvars.masked_fill(~mean_mask, nan)

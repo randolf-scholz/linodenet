@@ -222,7 +222,7 @@ class TestGRUODEBayes:
             [1.2, 1.5],
             [0.5, nan],
         ])  # fmt: skip
-        query_mask = query_times.isfinite().unsqueeze(-1).expand(context_values.shape)
+        query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
         combined = BatchedDenseArgs(
             context_times=context_times,
@@ -244,13 +244,13 @@ class TestGRUODEBayes:
         query_logvar = posterior_logvar[query_steps]
         query_mean[~combined.query_mask[query_steps]] = nan
         query_logvar[~combined.query_mask[query_steps]] = nan
-        pred_mean = context_values.new_full(context_values.shape, nan)
-        pred_logvar = context_values.new_full(context_values.shape, nan)
+        pred_mean = context_values.new_full(query_mask.shape, nan)
+        pred_logvar = context_values.new_full(query_mask.shape, nan)
         pred_mean[query_mask.any(dim=-1)] = query_mean
         pred_logvar[query_mask.any(dim=-1)] = query_logvar
 
-        assert pred_mean.shape == context_values.shape
-        assert pred_logvar.shape == context_values.shape
+        assert pred_mean.shape == query_mask.shape
+        assert pred_logvar.shape == query_mask.shape
         assert pred_mean[query_mask].isfinite().all()
         assert pred_logvar[query_mask].isfinite().all()
         assert pred_mean[~query_mask].isnan().all()
@@ -264,6 +264,86 @@ class TestGRUODEBayes:
         assert model.post_logvars[combined_step_mask].isfinite().all()
         assert model.prior_means[~combined_step_mask].isnan().all()
         assert model.post_logvars[~combined_step_mask].isnan().all()
+
+    def test_batch_first_false_matches_batch_first_true(self) -> None:
+        r"""Check time-major inputs match batch-first inputs."""
+        torch.manual_seed(0)
+        batch_model = GRU_ODE_Bayes(
+            input_size=3,
+            hidden_size=5,
+            decoder=Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7),
+            flow=ODE_Flow(
+                GRU_ODE(5),
+                TorchODESolver.new("euler", step_size=0.1),
+            ),
+            update_cell=GRU_Bayes(
+                input_size=3,
+                hidden_size=5,
+                feature_embedding_size=2,
+            ),
+        )
+        time_model = GRU_ODE_Bayes(
+            input_size=3,
+            hidden_size=5,
+            decoder=Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7),
+            flow=ODE_Flow(
+                GRU_ODE(5),
+                TorchODESolver.new("euler", step_size=0.1),
+            ),
+            update_cell=GRU_Bayes(
+                input_size=3,
+                hidden_size=5,
+                feature_embedding_size=2,
+            ),
+            batch_first=False,
+        )
+        time_model.load_state_dict(batch_model.state_dict())
+
+        context_times = torch.tensor([[0.0, 0.5], [0.0, torch.nan]])
+        context_values = torch.randn(2, 2, 3)
+        context_values[0, 1, 2] = torch.nan
+        context_values[1, 1] = torch.nan
+        query_times = torch.tensor([[0.75, 1.0], [0.25, torch.nan]])
+        query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
+        combined = BatchedDenseArgs(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_values.isfinite(),
+            query_times=query_times,
+            query_mask=query_mask,
+        ).to_combined()
+
+        batch_mean, batch_logvar = batch_model(
+            combined.times,
+            combined.context_values,
+            combined.context_mask,
+            combined.query_mask,
+        )
+        time_mean, time_logvar = time_model(
+            combined.times.mT,
+            combined.context_values.moveaxis(-2, 0),
+            combined.context_mask.moveaxis(-2, 0),
+            combined.query_mask.moveaxis(-2, 0),
+        )
+
+        torch.testing.assert_close(
+            time_mean.moveaxis(0, -2), batch_mean, equal_nan=True
+        )
+        torch.testing.assert_close(
+            time_logvar.moveaxis(0, -2),
+            batch_logvar,
+            equal_nan=True,
+        )
+        torch.testing.assert_close(
+            time_model.prior_means.moveaxis(0, -2),
+            batch_model.prior_means,
+            equal_nan=True,
+        )
+        torch.testing.assert_close(
+            time_model.post_logvars.moveaxis(0, -2),
+            batch_model.post_logvars,
+            equal_nan=True,
+        )
 
     def test_apply_masked_update_state_with_empty_selection(self) -> None:
         r"""Check all-padding masks do not require forward-loop special cases."""
