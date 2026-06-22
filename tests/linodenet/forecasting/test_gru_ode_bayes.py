@@ -14,9 +14,9 @@ from linodenet.forecasting.gru_ode_bayes import (
     GRUODEBayesConfig,
     ODE_Flow,
     TorchODESolver,
-    apply_masked,
     gaussian_kl,
     gaussian_kl_logvar,
+    update_masked,
 )
 from linodenet.forecasting.utils import BatchedDenseArgs
 
@@ -345,7 +345,7 @@ class TestGRUODEBayes:
             equal_nan=True,
         )
 
-    def test_apply_masked_update_state_with_empty_selection(self) -> None:
+    def test_update_masked_update_state_with_empty_selection(self) -> None:
         r"""Check all-padding masks do not require forward-loop special cases."""
         torch.manual_seed(0)
         model = GRU_ODE_Bayes(
@@ -366,10 +366,15 @@ class TestGRUODEBayes:
         observation = torch.full((2, 3), nan)
         mask = torch.zeros(2, dtype=torch.bool)
 
-        result = apply_masked(model.update_state, (state, observation), mask)
+        result = update_masked(
+            model.update_state,
+            (state, observation),
+            target=state,
+            mask=mask,
+        )
 
         assert result.shape == state.shape
-        assert result.isnan().all()
+        torch.testing.assert_close(result, state)
 
     def test_gaussian_bayes_kl_logvar_matches_variance_formula(self) -> None:
         r"""Test the paper-side KL term against the direct variance formula."""

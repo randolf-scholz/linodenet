@@ -21,7 +21,6 @@ __all__ = [
     "TorchODESolver",
     "gaussian_kl",
     "gaussian_kl_logvar",
-    "apply_masked",
     "update_masked",
 ]
 
@@ -33,58 +32,6 @@ from typing import Any, Final
 import torch
 import torchode as to
 from torch import Tensor, nan, nn
-
-
-def apply_masked[R: Tensor | tuple[Tensor, ...]](
-    fn: Callable[..., R],  # [*(..., *dᵢ)] -> [*(..., *eᵢ)]
-    args: tuple[Tensor, ...],
-    mask: Tensor,  # (...)
-    *,
-    fill_value: float = float("nan"),
-) -> R:  # *(..., *eᵢ)
-    r"""Apply fn only to selected batch elements.
-
-    Args:
-        fn: Function to apply. Must accept tensors with shared batch shape.
-        args: The arguments to fn. Must all have the same batch shape.
-        mask: The boolean mask indicating which batch elements to apply fn to. Must have the same batch shape as args.
-        fill_value: The value to fill masked out batch elements with.
-    """
-    batch_shape = mask.shape
-    B = batch_shape.numel() if batch_shape else 1
-    mask_flat = mask.reshape(B).bool()  # [B]
-
-    xs_flat = []
-    for x in args:
-        event_shape = x.shape[len(batch_shape) :]
-        assert x.shape == batch_shape + event_shape
-        xs_flat.append(x.reshape(-1, *event_shape))
-
-    # apply fn over selected batch elements
-    ys_flat = fn(*(x[mask_flat] for x in xs_flat))
-
-    if isinstance(ys_flat, Tensor):
-        result = torch.full(
-            (B, *ys_flat.shape[1:]),
-            fill_value,
-            dtype=ys_flat.dtype,
-            device=ys_flat.device,
-        )
-        result[mask_flat] = ys_flat
-        result = result.reshape(*batch_shape, *result.shape[1:])
-        return result  # type: ignore[return-value]
-
-    y_result: list[Tensor] = []
-    for y in ys_flat:
-        y_flat = torch.full(
-            (B, *y.shape[1:]),
-            fill_value,
-            dtype=y.dtype,
-            device=y.device,
-        )
-        y_flat[mask_flat] = y
-        y_result.append(y_flat.reshape(*batch_shape, *y.shape[1:]))
-    return tuple(y_result)  # type: ignore[return-value]
 
 
 def update_masked(
