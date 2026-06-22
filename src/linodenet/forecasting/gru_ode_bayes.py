@@ -27,7 +27,7 @@ __all__ = [
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 import torch
 import torchode as to
@@ -235,6 +235,28 @@ class ODE_Flow(nn.Module):
     ) -> Tensor:  # (..., H)
         r"""Propagate ``state`` for ``delta_time``."""
         return self.solver(self.vector_field, delta_time, state)
+
+    def step(
+        self,
+        delta_time: Tensor,  # (...)
+        state: Tensor,  # (..., H)
+        /,
+    ) -> Tensor:  # (..., H)
+        r"""Propagate ``state`` for a single time delta."""
+        return self.forward(delta_time, state)
+
+
+class StateFlow(Protocol):
+    r"""One-step state propagation protocol used by forecasting models."""
+
+    def step(
+        self,
+        delta_time: Tensor,  # (...)
+        state: Tensor,  # (..., H)
+        /,
+    ) -> Tensor:  # (..., H)
+        r"""Propagate ``state`` for a single time delta."""
+        ...
 
 
 class GRU_ODE(nn.Module):
@@ -499,7 +521,7 @@ class GRU_ODE_Bayes(nn.Module):
         hidden_size: int,
         *,
         decoder: nn.Module,
-        flow: nn.Module,
+        flow: StateFlow,
         update_cell: nn.Module,
         batch_first: bool = True,
     ) -> None:
@@ -619,7 +641,7 @@ class GRU_ODE_Bayes(nn.Module):
         posterior_state: Tensor,  # (..., H)
     ) -> Tensor:  # (..., H)
         r"""Propagate a posterior state through the continuous GRU-ODE dynamics."""
-        return self.flow(delta_time, posterior_state)
+        return self.flow.step(delta_time, posterior_state)
 
     def update_state(
         self,
